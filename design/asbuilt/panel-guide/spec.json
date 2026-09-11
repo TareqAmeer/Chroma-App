@@ -1,7 +1,7 @@
 {
   "id": "panel-guide",
   "group": "C",
-  "generatedAt": "2026-09-11T16:38:58.185Z",
+  "generatedAt": "2026-09-11T17:50:51.099Z",
   "hasToggle": false,
   "tree": {
     "tag": "div",
@@ -63046,5 +63046,241 @@
       "prop": "boxShadow",
       "value": "none"
     }
-  ]
+  ],
+  "matrix": {
+    "dimensions": {
+      "states": [
+        "rest"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "widths": [
+        "1440x900",
+        "1200x800",
+        "1024x768",
+        "960x760",
+        "900x760",
+        "820x700",
+        "768x1024",
+        "760x700",
+        "700x700",
+        "390x844"
+      ],
+      "sidebars": [
+        "n/a"
+      ]
+    },
+    "entries": [
+      {
+        "key": "rest|dark|1440x900|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "d48a4ddf5c42ae9e",
+        "path": "design/asbuilt-full/panel-guide/d48a4ddf5c42ae9e.webp"
+      },
+      {
+        "key": "rest|dark|1200x800|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "21f53be88b8f29b8",
+        "path": "design/asbuilt-full/panel-guide/21f53be88b8f29b8.webp"
+      },
+      {
+        "key": "rest|dark|1024x768|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "7cb97cd2885c1682",
+        "path": "design/asbuilt-full/panel-guide/7cb97cd2885c1682.webp"
+      },
+      {
+        "key": "rest|dark|960x760|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "3c843bdba081ab18",
+        "path": "design/asbuilt-full/panel-guide/3c843bdba081ab18.webp"
+      },
+      {
+        "key": "rest|dark|900x760|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "8c119199323d7afb",
+        "path": "design/asbuilt-full/panel-guide/8c119199323d7afb.webp"
+      },
+      {
+        "key": "rest|dark|820x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "b8476fab5511246c",
+        "path": "design/asbuilt-full/panel-guide/b8476fab5511246c.webp"
+      },
+      {
+        "key": "rest|dark|768x1024|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "f750cb8a3151bc29",
+        "path": "design/asbuilt-full/panel-guide/f750cb8a3151bc29.webp"
+      },
+      {
+        "key": "rest|dark|760x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "0e93464bdfdd1154",
+        "path": "design/asbuilt-full/panel-guide/0e93464bdfdd1154.webp"
+      },
+      {
+        "key": "rest|dark|700x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "396eba31feb62a55",
+        "path": "design/asbuilt-full/panel-guide/396eba31feb62a55.webp"
+      },
+      {
+        "key": "rest|dark|390x844|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "1ca68c00082332f5",
+        "path": "design/asbuilt-full/panel-guide/1ca68c00082332f5.webp"
+      },
+      {
+        "key": "rest|light|1440x900|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "602b317d9fd73c87",
+        "path": "design/asbuilt-full/panel-guide/602b317d9fd73c87.webp"
+      },
+      {
+        "key": "rest|light|1200x800|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "a94afd6a8d43b19f",
+        "path": "design/asbuilt-full/panel-guide/a94afd6a8d43b19f.webp"
+      },
+      {
+        "key": "rest|light|1024x768|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "9e32d18ac931bf04",
+        "path": "design/asbuilt-full/panel-guide/9e32d18ac931bf04.webp"
+      },
+      {
+        "key": "rest|light|960x760|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "196de4096478d0fc",
+        "path": "design/asbuilt-full/panel-guide/196de4096478d0fc.webp"
+      },
+      {
+        "key": "rest|light|900x760|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "8542d5756ad22807",
+        "path": "design/asbuilt-full/panel-guide/8542d5756ad22807.webp"
+      },
+      {
+        "key": "rest|light|820x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "a2ec5bdf3b1f25c0",
+        "path": "design/asbuilt-full/panel-guide/a2ec5bdf3b1f25c0.webp"
+      },
+      {
+        "key": "rest|light|768x1024|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "d227a31845f0ea7e",
+        "path": "design/asbuilt-full/panel-guide/d227a31845f0ea7e.webp"
+      },
+      {
+        "key": "rest|light|760x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "45c4ee5a8b361cb1",
+        "path": "design/asbuilt-full/panel-guide/45c4ee5a8b361cb1.webp"
+      },
+      {
+        "key": "rest|light|700x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "613db3dc29a071f3",
+        "path": "design/asbuilt-full/panel-guide/613db3dc29a071f3.webp"
+      },
+      {
+        "key": "rest|light|390x844|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "0df2c29542c15172",
+        "path": "design/asbuilt-full/panel-guide/0df2c29542c15172.webp"
+      }
+    ]
+  },
+  "contactSheets": {
+    "dark": [
+      "contact-dark.webp"
+    ],
+    "light": [
+      "contact-light.webp"
+    ]
+  }
 }

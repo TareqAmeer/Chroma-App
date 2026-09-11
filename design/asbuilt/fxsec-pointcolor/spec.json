@@ -1,7 +1,7 @@
 {
   "id": "fxsec-pointcolor",
   "group": "A",
-  "generatedAt": "2026-09-11T16:23:54.040Z",
+  "generatedAt": "2026-09-11T17:44:21.803Z",
   "hasToggle": true,
   "tree": {
     "tag": "div",
@@ -1533,23 +1533,33 @@
                   },
                   "borderRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderTopLeftRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderTopRightRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderBottomLeftRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderBottomRightRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "transitionDuration": {
                     "value": "0s",
@@ -4211,46 +4221,6 @@
       "classes": [
         "fx-info-i"
       ],
-      "prop": "borderRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-info-i"
-      ],
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-info-i"
-      ],
-      "prop": "borderTopRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-info-i"
-      ],
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-info-i"
-      ],
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-info-i"
-      ],
       "prop": "transitionDuration",
       "value": "0s"
     },
@@ -5246,5 +5216,763 @@
       "prop": "boxShadow",
       "value": "none"
     }
-  ]
+  ],
+  "matrix": {
+    "dimensions": {
+      "states": [
+        "rest",
+        "hover"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "widths": [
+        "1440x900",
+        "1200x800",
+        "1024x768",
+        "960x760",
+        "900x760",
+        "820x700",
+        "768x1024",
+        "760x700",
+        "700x700",
+        "390x844"
+      ],
+      "sidebars": [
+        "expanded",
+        "collapsed"
+      ]
+    },
+    "entries": [
+      {
+        "key": "rest|dark|1440x900|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "rest|dark|1440x900|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|1200x800|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "rest|dark|1200x800|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|1024x768|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "rest|dark|1024x768|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|960x760|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "rest|dark|960x760|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|900x760|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "rest|dark|900x760|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|820x700|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "rest|dark|820x700|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|768x1024|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "rest|dark|768x1024|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|760x700|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "rest|dark|760x700|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|700x700|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "8cc06cdf7207ce5b",
+        "path": "design/asbuilt-full/fxsec-pointcolor/8cc06cdf7207ce5b.webp"
+      },
+      {
+        "key": "rest|dark|390x844|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "ab1d9ad24ec5d78f",
+        "path": "design/asbuilt-full/fxsec-pointcolor/ab1d9ad24ec5d78f.webp"
+      },
+      {
+        "key": "rest|light|1440x900|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "rest|light|1440x900|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|1200x800|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "rest|light|1200x800|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|1024x768|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "rest|light|1024x768|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|960x760|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "rest|light|960x760|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|900x760|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "rest|light|900x760|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|820x700|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "rest|light|820x700|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|768x1024|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "rest|light|768x1024|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|760x700|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "rest|light|760x700|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|700x700|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "949355dd437c9cb7",
+        "path": "design/asbuilt-full/fxsec-pointcolor/949355dd437c9cb7.webp"
+      },
+      {
+        "key": "rest|light|390x844|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "979b8c4eeb2cdcda",
+        "path": "design/asbuilt-full/fxsec-pointcolor/979b8c4eeb2cdcda.webp"
+      },
+      {
+        "key": "hover|dark|1440x900|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "hover|dark|1440x900|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|1200x800|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "hover|dark|1200x800|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|1024x768|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "hover|dark|1024x768|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|960x760|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "hover|dark|960x760|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|900x760|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "hover|dark|900x760|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|820x700|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "hover|dark|820x700|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|768x1024|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "hover|dark|768x1024|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|760x700|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "dc211d51337124ec",
+        "path": "design/asbuilt-full/fxsec-pointcolor/dc211d51337124ec.webp"
+      },
+      {
+        "key": "hover|dark|760x700|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|700x700|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "8cc06cdf7207ce5b",
+        "path": "design/asbuilt-full/fxsec-pointcolor/8cc06cdf7207ce5b.webp"
+      },
+      {
+        "key": "hover|dark|390x844|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "ab1d9ad24ec5d78f",
+        "path": "design/asbuilt-full/fxsec-pointcolor/ab1d9ad24ec5d78f.webp"
+      },
+      {
+        "key": "hover|light|1440x900|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "hover|light|1440x900|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|1200x800|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "hover|light|1200x800|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|1024x768|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "hover|light|1024x768|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|960x760|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "hover|light|960x760|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|900x760|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "hover|light|900x760|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|820x700|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "hover|light|820x700|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|768x1024|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "hover|light|768x1024|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|760x700|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "1077d7951fc8c4b2",
+        "path": "design/asbuilt-full/fxsec-pointcolor/1077d7951fc8c4b2.webp"
+      },
+      {
+        "key": "hover|light|760x700|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|700x700|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "949355dd437c9cb7",
+        "path": "design/asbuilt-full/fxsec-pointcolor/949355dd437c9cb7.webp"
+      },
+      {
+        "key": "hover|light|390x844|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "979b8c4eeb2cdcda",
+        "path": "design/asbuilt-full/fxsec-pointcolor/979b8c4eeb2cdcda.webp"
+      }
+    ]
+  },
+  "contactSheets": {
+    "dark": [
+      "contact-dark.webp"
+    ],
+    "light": [
+      "contact-light.webp"
+    ]
+  }
 }

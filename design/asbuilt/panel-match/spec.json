@@ -1,7 +1,7 @@
 {
   "id": "panel-match",
   "group": "C",
-  "generatedAt": "2026-09-11T16:38:01.060Z",
+  "generatedAt": "2026-09-11T17:41:32.048Z",
   "hasToggle": false,
   "tree": {
     "tag": "div",
@@ -8766,5 +8766,241 @@
       "prop": "boxShadow",
       "value": "none"
     }
-  ]
+  ],
+  "matrix": {
+    "dimensions": {
+      "states": [
+        "rest"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "widths": [
+        "1440x900",
+        "1200x800",
+        "1024x768",
+        "960x760",
+        "900x760",
+        "820x700",
+        "768x1024",
+        "760x700",
+        "700x700",
+        "390x844"
+      ],
+      "sidebars": [
+        "n/a"
+      ]
+    },
+    "entries": [
+      {
+        "key": "rest|dark|1440x900|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "11428847fe0ca3fa",
+        "path": "design/asbuilt-full/panel-match/11428847fe0ca3fa.webp"
+      },
+      {
+        "key": "rest|dark|1200x800|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "3c29d489853638e8",
+        "path": "design/asbuilt-full/panel-match/3c29d489853638e8.webp"
+      },
+      {
+        "key": "rest|dark|1024x768|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "9c67d0f8ed071e04",
+        "path": "design/asbuilt-full/panel-match/9c67d0f8ed071e04.webp"
+      },
+      {
+        "key": "rest|dark|960x760|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "82bed4a5fd365ae5",
+        "path": "design/asbuilt-full/panel-match/82bed4a5fd365ae5.webp"
+      },
+      {
+        "key": "rest|dark|900x760|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "62c39afb8728372c",
+        "path": "design/asbuilt-full/panel-match/62c39afb8728372c.webp"
+      },
+      {
+        "key": "rest|dark|820x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "6034c960d25e9c54",
+        "path": "design/asbuilt-full/panel-match/6034c960d25e9c54.webp"
+      },
+      {
+        "key": "rest|dark|768x1024|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "2abc6e0674bf123a",
+        "path": "design/asbuilt-full/panel-match/2abc6e0674bf123a.webp"
+      },
+      {
+        "key": "rest|dark|760x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "f40bd4c283111978",
+        "path": "design/asbuilt-full/panel-match/f40bd4c283111978.webp"
+      },
+      {
+        "key": "rest|dark|700x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "87b69ac91e65befd",
+        "path": "design/asbuilt-full/panel-match/87b69ac91e65befd.webp"
+      },
+      {
+        "key": "rest|dark|390x844|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "0835107c6f9a98ae",
+        "path": "design/asbuilt-full/panel-match/0835107c6f9a98ae.webp"
+      },
+      {
+        "key": "rest|light|1440x900|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "1f20477b6d724e5b",
+        "path": "design/asbuilt-full/panel-match/1f20477b6d724e5b.webp"
+      },
+      {
+        "key": "rest|light|1200x800|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "57f7177081ad88d8",
+        "path": "design/asbuilt-full/panel-match/57f7177081ad88d8.webp"
+      },
+      {
+        "key": "rest|light|1024x768|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "6068e719b426da21",
+        "path": "design/asbuilt-full/panel-match/6068e719b426da21.webp"
+      },
+      {
+        "key": "rest|light|960x760|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "5ecf11207704b077",
+        "path": "design/asbuilt-full/panel-match/5ecf11207704b077.webp"
+      },
+      {
+        "key": "rest|light|900x760|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "7c8d99d3c0573ba5",
+        "path": "design/asbuilt-full/panel-match/7c8d99d3c0573ba5.webp"
+      },
+      {
+        "key": "rest|light|820x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "baeb633fe423cbbb",
+        "path": "design/asbuilt-full/panel-match/baeb633fe423cbbb.webp"
+      },
+      {
+        "key": "rest|light|768x1024|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "201635522ed2030d",
+        "path": "design/asbuilt-full/panel-match/201635522ed2030d.webp"
+      },
+      {
+        "key": "rest|light|760x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "cce9c6ead45047ab",
+        "path": "design/asbuilt-full/panel-match/cce9c6ead45047ab.webp"
+      },
+      {
+        "key": "rest|light|700x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "114b5cd01d2dd9c9",
+        "path": "design/asbuilt-full/panel-match/114b5cd01d2dd9c9.webp"
+      },
+      {
+        "key": "rest|light|390x844|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "64487ebff11b36a0",
+        "path": "design/asbuilt-full/panel-match/64487ebff11b36a0.webp"
+      }
+    ]
+  },
+  "contactSheets": {
+    "dark": [
+      "contact-dark.webp"
+    ],
+    "light": [
+      "contact-light.webp"
+    ]
+  }
 }

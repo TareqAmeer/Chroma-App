@@ -1,7 +1,7 @@
 {
   "id": "fxsec-hsl",
   "group": "A",
-  "generatedAt": "2026-09-11T16:23:37.806Z",
+  "generatedAt": "2026-09-11T17:43:29.626Z",
   "hasToggle": true,
   "tree": {
     "tag": "div",
@@ -2577,23 +2577,33 @@
                       },
                       "borderRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "transitionDuration": {
                         "value": "0s",
@@ -2807,23 +2817,33 @@
                       },
                       "borderRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "transitionDuration": {
                         "value": "0s",
@@ -3037,23 +3057,33 @@
                       },
                       "borderRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "transitionDuration": {
                         "value": "0s",
@@ -3267,23 +3297,33 @@
                       },
                       "borderRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "transitionDuration": {
                         "value": "0s",
@@ -3497,23 +3537,33 @@
                       },
                       "borderRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "transitionDuration": {
                         "value": "0s",
@@ -3727,23 +3777,33 @@
                       },
                       "borderRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "transitionDuration": {
                         "value": "0s",
@@ -3957,23 +4017,33 @@
                       },
                       "borderRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "transitionDuration": {
                         "value": "0s",
@@ -4187,23 +4257,33 @@
                       },
                       "borderRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderTopRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomLeftRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "borderBottomRightRadius": {
                         "value": "50%",
-                        "token": null
+                        "token": "/radius/circle",
+                        "appVar": "--r-circle",
+                        "role": "radius.circle"
                       },
                       "transitionDuration": {
                         "value": "0s",
@@ -8954,28 +9034,219 @@
     },
     {
       "tag": "span",
-      "prop": "borderRadius",
-      "value": "50%"
+      "prop": "transitionDuration",
+      "value": "0s"
     },
     {
       "tag": "span",
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
+      "prop": "transitionTimingFunction",
+      "value": "ease"
     },
     {
       "tag": "span",
-      "prop": "borderTopRightRadius",
-      "value": "50%"
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "borderColor",
+      "value": "rgb(0, 0, 0) rgb(0, 0, 0) rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "fontSize",
+      "value": "13.3333px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "fontFamily",
+      "value": "Arial"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "paddingTop",
+      "value": "5px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "paddingRight",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "paddingBottom",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "paddingLeft",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
     },
     {
       "tag": "span",
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
     },
     {
       "tag": "span",
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
+      "prop": "fontSize",
+      "value": "13.3333px"
+    },
+    {
+      "tag": "span",
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "span",
+      "prop": "fontFamily",
+      "value": "Arial"
+    },
+    {
+      "tag": "span",
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "prop": "columnGap",
+      "value": "normal"
     },
     {
       "tag": "span",
@@ -9195,28 +9466,219 @@
     },
     {
       "tag": "span",
-      "prop": "borderRadius",
-      "value": "50%"
+      "prop": "transitionDuration",
+      "value": "0s"
     },
     {
       "tag": "span",
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
+      "prop": "transitionTimingFunction",
+      "value": "ease"
     },
     {
       "tag": "span",
-      "prop": "borderTopRightRadius",
-      "value": "50%"
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "borderColor",
+      "value": "rgb(0, 0, 0) rgb(0, 0, 0) rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "fontSize",
+      "value": "13.3333px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "fontFamily",
+      "value": "Arial"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "paddingTop",
+      "value": "5px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "paddingRight",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "paddingBottom",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "paddingLeft",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
     },
     {
       "tag": "span",
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
     },
     {
       "tag": "span",
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
+      "prop": "fontSize",
+      "value": "13.3333px"
+    },
+    {
+      "tag": "span",
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "span",
+      "prop": "fontFamily",
+      "value": "Arial"
+    },
+    {
+      "tag": "span",
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "prop": "columnGap",
+      "value": "normal"
     },
     {
       "tag": "span",
@@ -9436,28 +9898,219 @@
     },
     {
       "tag": "span",
-      "prop": "borderRadius",
-      "value": "50%"
+      "prop": "transitionDuration",
+      "value": "0s"
     },
     {
       "tag": "span",
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
+      "prop": "transitionTimingFunction",
+      "value": "ease"
     },
     {
       "tag": "span",
-      "prop": "borderTopRightRadius",
-      "value": "50%"
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "borderColor",
+      "value": "rgb(0, 0, 0) rgb(0, 0, 0) rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "fontSize",
+      "value": "13.3333px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "fontFamily",
+      "value": "Arial"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "paddingTop",
+      "value": "5px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "paddingRight",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "paddingBottom",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "paddingLeft",
+      "value": "6px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "hsl-chip"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
     },
     {
       "tag": "span",
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
     },
     {
       "tag": "span",
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
+      "prop": "fontSize",
+      "value": "13.3333px"
+    },
+    {
+      "tag": "span",
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "span",
+      "prop": "fontFamily",
+      "value": "Arial"
+    },
+    {
+      "tag": "span",
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "span",
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "span",
+      "prop": "columnGap",
+      "value": "normal"
     },
     {
       "tag": "span",
@@ -9677,31 +10330,6 @@
     },
     {
       "tag": "span",
-      "prop": "borderRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderTopRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
       "prop": "transitionDuration",
       "value": "0s"
     },
@@ -9915,754 +10543,6 @@
       "tag": "span",
       "prop": "columnGap",
       "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "borderRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderTopRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "transitionDuration",
-      "value": "0s"
-    },
-    {
-      "tag": "span",
-      "prop": "transitionTimingFunction",
-      "value": "ease"
-    },
-    {
-      "tag": "span",
-      "prop": "boxShadow",
-      "value": "none"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "backgroundColor",
-      "value": "rgba(0, 0, 0, 0)"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "borderColor",
-      "value": "rgb(0, 0, 0) rgb(0, 0, 0) rgba(0, 0, 0, 0)"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "fontSize",
-      "value": "13.3333px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "fontWeight",
-      "value": "400"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "fontFamily",
-      "value": "Arial"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "lineHeight",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "letterSpacing",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "paddingTop",
-      "value": "5px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "paddingRight",
-      "value": "6px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "paddingBottom",
-      "value": "6px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "paddingLeft",
-      "value": "6px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "gap",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "rowGap",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "columnGap",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "transitionDuration",
-      "value": "0s"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "transitionTimingFunction",
-      "value": "ease"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
-    },
-    {
-      "tag": "span",
-      "prop": "backgroundColor",
-      "value": "rgba(0, 0, 0, 0)"
-    },
-    {
-      "tag": "span",
-      "prop": "fontSize",
-      "value": "13.3333px"
-    },
-    {
-      "tag": "span",
-      "prop": "fontWeight",
-      "value": "400"
-    },
-    {
-      "tag": "span",
-      "prop": "fontFamily",
-      "value": "Arial"
-    },
-    {
-      "tag": "span",
-      "prop": "lineHeight",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "letterSpacing",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "paddingTop",
-      "value": "0px"
-    },
-    {
-      "tag": "span",
-      "prop": "paddingRight",
-      "value": "0px"
-    },
-    {
-      "tag": "span",
-      "prop": "paddingBottom",
-      "value": "0px"
-    },
-    {
-      "tag": "span",
-      "prop": "paddingLeft",
-      "value": "0px"
-    },
-    {
-      "tag": "span",
-      "prop": "gap",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "rowGap",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "columnGap",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "borderRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderTopRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "transitionDuration",
-      "value": "0s"
-    },
-    {
-      "tag": "span",
-      "prop": "transitionTimingFunction",
-      "value": "ease"
-    },
-    {
-      "tag": "span",
-      "prop": "boxShadow",
-      "value": "none"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "backgroundColor",
-      "value": "rgba(0, 0, 0, 0)"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "borderColor",
-      "value": "rgb(0, 0, 0) rgb(0, 0, 0) rgba(0, 0, 0, 0)"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "fontSize",
-      "value": "13.3333px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "fontWeight",
-      "value": "400"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "fontFamily",
-      "value": "Arial"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "lineHeight",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "letterSpacing",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "paddingTop",
-      "value": "5px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "paddingRight",
-      "value": "6px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "paddingBottom",
-      "value": "6px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "paddingLeft",
-      "value": "6px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "gap",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "rowGap",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "columnGap",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "transitionDuration",
-      "value": "0s"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "transitionTimingFunction",
-      "value": "ease"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
-    },
-    {
-      "tag": "span",
-      "prop": "backgroundColor",
-      "value": "rgba(0, 0, 0, 0)"
-    },
-    {
-      "tag": "span",
-      "prop": "fontSize",
-      "value": "13.3333px"
-    },
-    {
-      "tag": "span",
-      "prop": "fontWeight",
-      "value": "400"
-    },
-    {
-      "tag": "span",
-      "prop": "fontFamily",
-      "value": "Arial"
-    },
-    {
-      "tag": "span",
-      "prop": "lineHeight",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "letterSpacing",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "paddingTop",
-      "value": "0px"
-    },
-    {
-      "tag": "span",
-      "prop": "paddingRight",
-      "value": "0px"
-    },
-    {
-      "tag": "span",
-      "prop": "paddingBottom",
-      "value": "0px"
-    },
-    {
-      "tag": "span",
-      "prop": "paddingLeft",
-      "value": "0px"
-    },
-    {
-      "tag": "span",
-      "prop": "gap",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "rowGap",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "columnGap",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "borderRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderTopRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "transitionDuration",
-      "value": "0s"
-    },
-    {
-      "tag": "span",
-      "prop": "transitionTimingFunction",
-      "value": "ease"
-    },
-    {
-      "tag": "span",
-      "prop": "boxShadow",
-      "value": "none"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "backgroundColor",
-      "value": "rgba(0, 0, 0, 0)"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "borderColor",
-      "value": "rgb(0, 0, 0) rgb(0, 0, 0) rgba(0, 0, 0, 0)"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "fontSize",
-      "value": "13.3333px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "fontWeight",
-      "value": "400"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "fontFamily",
-      "value": "Arial"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "lineHeight",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "letterSpacing",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "paddingTop",
-      "value": "5px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "paddingRight",
-      "value": "6px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "paddingBottom",
-      "value": "6px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "paddingLeft",
-      "value": "6px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "gap",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "rowGap",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "columnGap",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "transitionDuration",
-      "value": "0s"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "transitionTimingFunction",
-      "value": "ease"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "hsl-chip"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
-    },
-    {
-      "tag": "span",
-      "prop": "backgroundColor",
-      "value": "rgba(0, 0, 0, 0)"
-    },
-    {
-      "tag": "span",
-      "prop": "fontSize",
-      "value": "13.3333px"
-    },
-    {
-      "tag": "span",
-      "prop": "fontWeight",
-      "value": "400"
-    },
-    {
-      "tag": "span",
-      "prop": "fontFamily",
-      "value": "Arial"
-    },
-    {
-      "tag": "span",
-      "prop": "lineHeight",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "letterSpacing",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "paddingTop",
-      "value": "0px"
-    },
-    {
-      "tag": "span",
-      "prop": "paddingRight",
-      "value": "0px"
-    },
-    {
-      "tag": "span",
-      "prop": "paddingBottom",
-      "value": "0px"
-    },
-    {
-      "tag": "span",
-      "prop": "paddingLeft",
-      "value": "0px"
-    },
-    {
-      "tag": "span",
-      "prop": "gap",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "rowGap",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "columnGap",
-      "value": "normal"
-    },
-    {
-      "tag": "span",
-      "prop": "borderRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderTopRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "span",
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
     },
     {
       "tag": "span",
@@ -13249,5 +13129,763 @@
       "prop": "boxShadow",
       "value": "none"
     }
-  ]
+  ],
+  "matrix": {
+    "dimensions": {
+      "states": [
+        "rest",
+        "hover"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "widths": [
+        "1440x900",
+        "1200x800",
+        "1024x768",
+        "960x760",
+        "900x760",
+        "820x700",
+        "768x1024",
+        "760x700",
+        "700x700",
+        "390x844"
+      ],
+      "sidebars": [
+        "expanded",
+        "collapsed"
+      ]
+    },
+    "entries": [
+      {
+        "key": "rest|dark|1440x900|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "rest|dark|1440x900|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|1200x800|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "rest|dark|1200x800|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|1024x768|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "rest|dark|1024x768|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|960x760|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "rest|dark|960x760|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|900x760|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "rest|dark|900x760|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|820x700|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "rest|dark|820x700|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|768x1024|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "rest|dark|768x1024|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|760x700|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "rest|dark|760x700|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|700x700|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "3aed642e293e5ff5",
+        "path": "design/asbuilt-full/fxsec-hsl/3aed642e293e5ff5.webp"
+      },
+      {
+        "key": "rest|dark|390x844|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "8a797366ff423a51",
+        "path": "design/asbuilt-full/fxsec-hsl/8a797366ff423a51.webp"
+      },
+      {
+        "key": "rest|light|1440x900|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "rest|light|1440x900|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|1200x800|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "rest|light|1200x800|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|1024x768|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "rest|light|1024x768|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|960x760|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "rest|light|960x760|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|900x760|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "rest|light|900x760|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|820x700|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "rest|light|820x700|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|768x1024|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "rest|light|768x1024|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|760x700|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "rest|light|760x700|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|700x700|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "8ebe73735f4f762d",
+        "path": "design/asbuilt-full/fxsec-hsl/8ebe73735f4f762d.webp"
+      },
+      {
+        "key": "rest|light|390x844|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "234f50b76bdec830",
+        "path": "design/asbuilt-full/fxsec-hsl/234f50b76bdec830.webp"
+      },
+      {
+        "key": "hover|dark|1440x900|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "hover|dark|1440x900|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|1200x800|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "hover|dark|1200x800|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|1024x768|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "hover|dark|1024x768|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|960x760|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "hover|dark|960x760|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|900x760|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "hover|dark|900x760|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|820x700|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "hover|dark|820x700|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|768x1024|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "hover|dark|768x1024|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|760x700|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "48150d6ed0192ffb",
+        "path": "design/asbuilt-full/fxsec-hsl/48150d6ed0192ffb.webp"
+      },
+      {
+        "key": "hover|dark|760x700|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|700x700|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "3aed642e293e5ff5",
+        "path": "design/asbuilt-full/fxsec-hsl/3aed642e293e5ff5.webp"
+      },
+      {
+        "key": "hover|dark|390x844|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "8a797366ff423a51",
+        "path": "design/asbuilt-full/fxsec-hsl/8a797366ff423a51.webp"
+      },
+      {
+        "key": "hover|light|1440x900|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "hover|light|1440x900|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|1200x800|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "hover|light|1200x800|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|1024x768|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "hover|light|1024x768|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|960x760|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "hover|light|960x760|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|900x760|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "hover|light|900x760|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|820x700|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "hover|light|820x700|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|768x1024|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "hover|light|768x1024|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|760x700|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "13b070f0c8adda71",
+        "path": "design/asbuilt-full/fxsec-hsl/13b070f0c8adda71.webp"
+      },
+      {
+        "key": "hover|light|760x700|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|700x700|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "8ebe73735f4f762d",
+        "path": "design/asbuilt-full/fxsec-hsl/8ebe73735f4f762d.webp"
+      },
+      {
+        "key": "hover|light|390x844|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "234f50b76bdec830",
+        "path": "design/asbuilt-full/fxsec-hsl/234f50b76bdec830.webp"
+      }
+    ]
+  },
+  "contactSheets": {
+    "dark": [
+      "contact-dark.webp"
+    ],
+    "light": [
+      "contact-light.webp"
+    ]
+  }
 }

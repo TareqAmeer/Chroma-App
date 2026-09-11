@@ -1,7 +1,7 @@
 {
   "id": "fx-settings-menu",
   "group": "B",
-  "generatedAt": "2026-09-11T16:38:06.924Z",
+  "generatedAt": "2026-09-11T17:41:34.427Z",
   "hasToggle": false,
   "tree": {
     "tag": "div",
@@ -12582,5 +12582,643 @@
       "prop": "boxShadow",
       "value": "none"
     }
-  ]
+  ],
+  "matrix": {
+    "dimensions": {
+      "states": [
+        "rest",
+        "hover",
+        "disabled"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "widths": [
+        "1440x900",
+        "1200x800",
+        "1024x768",
+        "960x760",
+        "900x760",
+        "820x700",
+        "768x1024",
+        "760x700",
+        "700x700",
+        "390x844"
+      ],
+      "sidebars": [
+        "n/a"
+      ]
+    },
+    "entries": [
+      {
+        "key": "rest|dark|1440x900|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "e315a1bc1fc20a79",
+        "path": "design/asbuilt-full/fx-settings-menu/e315a1bc1fc20a79.webp"
+      },
+      {
+        "key": "rest|dark|1200x800|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "e315a1bc1fc20a79",
+        "path": "design/asbuilt-full/fx-settings-menu/e315a1bc1fc20a79.webp"
+      },
+      {
+        "key": "rest|dark|1024x768|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "65a51ece47d80882",
+        "path": "design/asbuilt-full/fx-settings-menu/65a51ece47d80882.webp"
+      },
+      {
+        "key": "rest|dark|960x760|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "65a51ece47d80882",
+        "path": "design/asbuilt-full/fx-settings-menu/65a51ece47d80882.webp"
+      },
+      {
+        "key": "rest|dark|900x760|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "65a51ece47d80882",
+        "path": "design/asbuilt-full/fx-settings-menu/65a51ece47d80882.webp"
+      },
+      {
+        "key": "rest|dark|820x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "65a51ece47d80882",
+        "path": "design/asbuilt-full/fx-settings-menu/65a51ece47d80882.webp"
+      },
+      {
+        "key": "rest|dark|768x1024|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "e315a1bc1fc20a79",
+        "path": "design/asbuilt-full/fx-settings-menu/e315a1bc1fc20a79.webp"
+      },
+      {
+        "key": "rest|dark|760x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "65a51ece47d80882",
+        "path": "design/asbuilt-full/fx-settings-menu/65a51ece47d80882.webp"
+      },
+      {
+        "key": "rest|dark|700x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "86f1b02f6e2f708f",
+        "path": "design/asbuilt-full/fx-settings-menu/86f1b02f6e2f708f.webp"
+      },
+      {
+        "key": "rest|dark|390x844|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "c291c1cbea9cab19",
+        "path": "design/asbuilt-full/fx-settings-menu/c291c1cbea9cab19.webp"
+      },
+      {
+        "key": "rest|light|1440x900|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "fe9ab5eaa4508ed0",
+        "path": "design/asbuilt-full/fx-settings-menu/fe9ab5eaa4508ed0.webp"
+      },
+      {
+        "key": "rest|light|1200x800|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "fe9ab5eaa4508ed0",
+        "path": "design/asbuilt-full/fx-settings-menu/fe9ab5eaa4508ed0.webp"
+      },
+      {
+        "key": "rest|light|1024x768|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "7d8f2c1c08b9b49e",
+        "path": "design/asbuilt-full/fx-settings-menu/7d8f2c1c08b9b49e.webp"
+      },
+      {
+        "key": "rest|light|960x760|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "7d8f2c1c08b9b49e",
+        "path": "design/asbuilt-full/fx-settings-menu/7d8f2c1c08b9b49e.webp"
+      },
+      {
+        "key": "rest|light|900x760|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "7d8f2c1c08b9b49e",
+        "path": "design/asbuilt-full/fx-settings-menu/7d8f2c1c08b9b49e.webp"
+      },
+      {
+        "key": "rest|light|820x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "7d8f2c1c08b9b49e",
+        "path": "design/asbuilt-full/fx-settings-menu/7d8f2c1c08b9b49e.webp"
+      },
+      {
+        "key": "rest|light|768x1024|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "fe9ab5eaa4508ed0",
+        "path": "design/asbuilt-full/fx-settings-menu/fe9ab5eaa4508ed0.webp"
+      },
+      {
+        "key": "rest|light|760x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "7d8f2c1c08b9b49e",
+        "path": "design/asbuilt-full/fx-settings-menu/7d8f2c1c08b9b49e.webp"
+      },
+      {
+        "key": "rest|light|700x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "4dd69202cd800ac7",
+        "path": "design/asbuilt-full/fx-settings-menu/4dd69202cd800ac7.webp"
+      },
+      {
+        "key": "rest|light|390x844|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "453e20d3d17e7eea",
+        "path": "design/asbuilt-full/fx-settings-menu/453e20d3d17e7eea.webp"
+      },
+      {
+        "key": "hover|dark|1440x900|n/a",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "28f7f5b3218d336f",
+        "path": "design/asbuilt-full/fx-settings-menu/28f7f5b3218d336f.webp"
+      },
+      {
+        "key": "hover|dark|1200x800|n/a",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "8305e37ac3d168d0",
+        "path": "design/asbuilt-full/fx-settings-menu/8305e37ac3d168d0.webp"
+      },
+      {
+        "key": "hover|dark|1024x768|n/a",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "65a51ece47d80882",
+        "path": "design/asbuilt-full/fx-settings-menu/65a51ece47d80882.webp"
+      },
+      {
+        "key": "hover|dark|960x760|n/a",
+        "state": "hover",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "65a51ece47d80882",
+        "path": "design/asbuilt-full/fx-settings-menu/65a51ece47d80882.webp"
+      },
+      {
+        "key": "hover|dark|900x760|n/a",
+        "state": "hover",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "7c32188af2c47f95",
+        "path": "design/asbuilt-full/fx-settings-menu/7c32188af2c47f95.webp"
+      },
+      {
+        "key": "hover|dark|820x700|n/a",
+        "state": "hover",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "7c32188af2c47f95",
+        "path": "design/asbuilt-full/fx-settings-menu/7c32188af2c47f95.webp"
+      },
+      {
+        "key": "hover|dark|768x1024|n/a",
+        "state": "hover",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "28f7f5b3218d336f",
+        "path": "design/asbuilt-full/fx-settings-menu/28f7f5b3218d336f.webp"
+      },
+      {
+        "key": "hover|dark|760x700|n/a",
+        "state": "hover",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "7c32188af2c47f95",
+        "path": "design/asbuilt-full/fx-settings-menu/7c32188af2c47f95.webp"
+      },
+      {
+        "key": "hover|dark|700x700|n/a",
+        "state": "hover",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "86f1b02f6e2f708f",
+        "path": "design/asbuilt-full/fx-settings-menu/86f1b02f6e2f708f.webp"
+      },
+      {
+        "key": "hover|dark|390x844|n/a",
+        "state": "hover",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "bf9e94d43c1423d1",
+        "path": "design/asbuilt-full/fx-settings-menu/bf9e94d43c1423d1.webp"
+      },
+      {
+        "key": "hover|light|1440x900|n/a",
+        "state": "hover",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "68c1f022d38aaae7",
+        "path": "design/asbuilt-full/fx-settings-menu/68c1f022d38aaae7.webp"
+      },
+      {
+        "key": "hover|light|1200x800|n/a",
+        "state": "hover",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "68c1f022d38aaae7",
+        "path": "design/asbuilt-full/fx-settings-menu/68c1f022d38aaae7.webp"
+      },
+      {
+        "key": "hover|light|1024x768|n/a",
+        "state": "hover",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "ad0fe0a239683b8f",
+        "path": "design/asbuilt-full/fx-settings-menu/ad0fe0a239683b8f.webp"
+      },
+      {
+        "key": "hover|light|960x760|n/a",
+        "state": "hover",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "c3d6f34a29db470e",
+        "path": "design/asbuilt-full/fx-settings-menu/c3d6f34a29db470e.webp"
+      },
+      {
+        "key": "hover|light|900x760|n/a",
+        "state": "hover",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "c3d6f34a29db470e",
+        "path": "design/asbuilt-full/fx-settings-menu/c3d6f34a29db470e.webp"
+      },
+      {
+        "key": "hover|light|820x700|n/a",
+        "state": "hover",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "c3d6f34a29db470e",
+        "path": "design/asbuilt-full/fx-settings-menu/c3d6f34a29db470e.webp"
+      },
+      {
+        "key": "hover|light|768x1024|n/a",
+        "state": "hover",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "68c1f022d38aaae7",
+        "path": "design/asbuilt-full/fx-settings-menu/68c1f022d38aaae7.webp"
+      },
+      {
+        "key": "hover|light|760x700|n/a",
+        "state": "hover",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "c3d6f34a29db470e",
+        "path": "design/asbuilt-full/fx-settings-menu/c3d6f34a29db470e.webp"
+      },
+      {
+        "key": "hover|light|700x700|n/a",
+        "state": "hover",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "4dd69202cd800ac7",
+        "path": "design/asbuilt-full/fx-settings-menu/4dd69202cd800ac7.webp"
+      },
+      {
+        "key": "hover|light|390x844|n/a",
+        "state": "hover",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "c83e20465852e1cd",
+        "path": "design/asbuilt-full/fx-settings-menu/c83e20465852e1cd.webp"
+      },
+      {
+        "key": "disabled|dark|1440x900|n/a",
+        "state": "disabled",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "e315a1bc1fc20a79",
+        "path": "design/asbuilt-full/fx-settings-menu/e315a1bc1fc20a79.webp"
+      },
+      {
+        "key": "disabled|dark|1200x800|n/a",
+        "state": "disabled",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "e315a1bc1fc20a79",
+        "path": "design/asbuilt-full/fx-settings-menu/e315a1bc1fc20a79.webp"
+      },
+      {
+        "key": "disabled|dark|1024x768|n/a",
+        "state": "disabled",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "65a51ece47d80882",
+        "path": "design/asbuilt-full/fx-settings-menu/65a51ece47d80882.webp"
+      },
+      {
+        "key": "disabled|dark|960x760|n/a",
+        "state": "disabled",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "65a51ece47d80882",
+        "path": "design/asbuilt-full/fx-settings-menu/65a51ece47d80882.webp"
+      },
+      {
+        "key": "disabled|dark|900x760|n/a",
+        "state": "disabled",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "65a51ece47d80882",
+        "path": "design/asbuilt-full/fx-settings-menu/65a51ece47d80882.webp"
+      },
+      {
+        "key": "disabled|dark|820x700|n/a",
+        "state": "disabled",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "65a51ece47d80882",
+        "path": "design/asbuilt-full/fx-settings-menu/65a51ece47d80882.webp"
+      },
+      {
+        "key": "disabled|dark|768x1024|n/a",
+        "state": "disabled",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "e315a1bc1fc20a79",
+        "path": "design/asbuilt-full/fx-settings-menu/e315a1bc1fc20a79.webp"
+      },
+      {
+        "key": "disabled|dark|760x700|n/a",
+        "state": "disabled",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "65a51ece47d80882",
+        "path": "design/asbuilt-full/fx-settings-menu/65a51ece47d80882.webp"
+      },
+      {
+        "key": "disabled|dark|700x700|n/a",
+        "state": "disabled",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "02d4012e3254dece",
+        "path": "design/asbuilt-full/fx-settings-menu/02d4012e3254dece.webp"
+      },
+      {
+        "key": "disabled|dark|390x844|n/a",
+        "state": "disabled",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "bf9e94d43c1423d1",
+        "path": "design/asbuilt-full/fx-settings-menu/bf9e94d43c1423d1.webp"
+      },
+      {
+        "key": "disabled|light|1440x900|n/a",
+        "state": "disabled",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "fe9ab5eaa4508ed0",
+        "path": "design/asbuilt-full/fx-settings-menu/fe9ab5eaa4508ed0.webp"
+      },
+      {
+        "key": "disabled|light|1200x800|n/a",
+        "state": "disabled",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "fe9ab5eaa4508ed0",
+        "path": "design/asbuilt-full/fx-settings-menu/fe9ab5eaa4508ed0.webp"
+      },
+      {
+        "key": "disabled|light|1024x768|n/a",
+        "state": "disabled",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "7d8f2c1c08b9b49e",
+        "path": "design/asbuilt-full/fx-settings-menu/7d8f2c1c08b9b49e.webp"
+      },
+      {
+        "key": "disabled|light|960x760|n/a",
+        "state": "disabled",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "7d8f2c1c08b9b49e",
+        "path": "design/asbuilt-full/fx-settings-menu/7d8f2c1c08b9b49e.webp"
+      },
+      {
+        "key": "disabled|light|900x760|n/a",
+        "state": "disabled",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "7d8f2c1c08b9b49e",
+        "path": "design/asbuilt-full/fx-settings-menu/7d8f2c1c08b9b49e.webp"
+      },
+      {
+        "key": "disabled|light|820x700|n/a",
+        "state": "disabled",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "7d8f2c1c08b9b49e",
+        "path": "design/asbuilt-full/fx-settings-menu/7d8f2c1c08b9b49e.webp"
+      },
+      {
+        "key": "disabled|light|768x1024|n/a",
+        "state": "disabled",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "fe9ab5eaa4508ed0",
+        "path": "design/asbuilt-full/fx-settings-menu/fe9ab5eaa4508ed0.webp"
+      },
+      {
+        "key": "disabled|light|760x700|n/a",
+        "state": "disabled",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "7d8f2c1c08b9b49e",
+        "path": "design/asbuilt-full/fx-settings-menu/7d8f2c1c08b9b49e.webp"
+      },
+      {
+        "key": "disabled|light|700x700|n/a",
+        "state": "disabled",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "baf02660081bfea5",
+        "path": "design/asbuilt-full/fx-settings-menu/baf02660081bfea5.webp"
+      },
+      {
+        "key": "disabled|light|390x844|n/a",
+        "state": "disabled",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "c83e20465852e1cd",
+        "path": "design/asbuilt-full/fx-settings-menu/c83e20465852e1cd.webp"
+      }
+    ]
+  },
+  "contactSheets": {
+    "dark": [
+      "contact-dark.webp"
+    ],
+    "light": [
+      "contact-light.webp"
+    ]
+  }
 }

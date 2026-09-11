@@ -1,7 +1,7 @@
 {
   "id": "fx-ask-modal",
   "group": "B",
-  "generatedAt": "2026-09-11T16:38:25.481Z",
+  "generatedAt": "2026-09-11T17:41:50.812Z",
   "hasToggle": false,
   "tree": {
     "tag": "dialog",
@@ -1442,5 +1442,643 @@
       "prop": "boxShadow",
       "value": "rgba(255, 255, 255, 0.35) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.25) 0px 1px 2px 0px"
     }
-  ]
+  ],
+  "matrix": {
+    "dimensions": {
+      "states": [
+        "rest",
+        "longText",
+        "empty"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "widths": [
+        "1440x900",
+        "1200x800",
+        "1024x768",
+        "960x760",
+        "900x760",
+        "820x700",
+        "768x1024",
+        "760x700",
+        "700x700",
+        "390x844"
+      ],
+      "sidebars": [
+        "n/a"
+      ]
+    },
+    "entries": [
+      {
+        "key": "rest|dark|1440x900|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "5fc17b4a6ece12cb",
+        "path": "design/asbuilt-full/fx-ask-modal/5fc17b4a6ece12cb.webp"
+      },
+      {
+        "key": "rest|dark|1200x800|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "5fc17b4a6ece12cb",
+        "path": "design/asbuilt-full/fx-ask-modal/5fc17b4a6ece12cb.webp"
+      },
+      {
+        "key": "rest|dark|1024x768|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "5fc17b4a6ece12cb",
+        "path": "design/asbuilt-full/fx-ask-modal/5fc17b4a6ece12cb.webp"
+      },
+      {
+        "key": "rest|dark|960x760|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "5fc17b4a6ece12cb",
+        "path": "design/asbuilt-full/fx-ask-modal/5fc17b4a6ece12cb.webp"
+      },
+      {
+        "key": "rest|dark|900x760|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "5fc17b4a6ece12cb",
+        "path": "design/asbuilt-full/fx-ask-modal/5fc17b4a6ece12cb.webp"
+      },
+      {
+        "key": "rest|dark|820x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "5fc17b4a6ece12cb",
+        "path": "design/asbuilt-full/fx-ask-modal/5fc17b4a6ece12cb.webp"
+      },
+      {
+        "key": "rest|dark|768x1024|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "5cbc97d5a4d942c2",
+        "path": "design/asbuilt-full/fx-ask-modal/5cbc97d5a4d942c2.webp"
+      },
+      {
+        "key": "rest|dark|760x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "5cbc97d5a4d942c2",
+        "path": "design/asbuilt-full/fx-ask-modal/5cbc97d5a4d942c2.webp"
+      },
+      {
+        "key": "rest|dark|700x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "ba277e21fcfa038a",
+        "path": "design/asbuilt-full/fx-ask-modal/ba277e21fcfa038a.webp"
+      },
+      {
+        "key": "rest|dark|390x844|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "770f7ecc9b69af4b",
+        "path": "design/asbuilt-full/fx-ask-modal/770f7ecc9b69af4b.webp"
+      },
+      {
+        "key": "rest|light|1440x900|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "cc457471c39d3f99",
+        "path": "design/asbuilt-full/fx-ask-modal/cc457471c39d3f99.webp"
+      },
+      {
+        "key": "rest|light|1200x800|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "cc457471c39d3f99",
+        "path": "design/asbuilt-full/fx-ask-modal/cc457471c39d3f99.webp"
+      },
+      {
+        "key": "rest|light|1024x768|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "cc457471c39d3f99",
+        "path": "design/asbuilt-full/fx-ask-modal/cc457471c39d3f99.webp"
+      },
+      {
+        "key": "rest|light|960x760|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "cc457471c39d3f99",
+        "path": "design/asbuilt-full/fx-ask-modal/cc457471c39d3f99.webp"
+      },
+      {
+        "key": "rest|light|900x760|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "cc457471c39d3f99",
+        "path": "design/asbuilt-full/fx-ask-modal/cc457471c39d3f99.webp"
+      },
+      {
+        "key": "rest|light|820x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "cc457471c39d3f99",
+        "path": "design/asbuilt-full/fx-ask-modal/cc457471c39d3f99.webp"
+      },
+      {
+        "key": "rest|light|768x1024|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "ef72e5e0b32c3ea9",
+        "path": "design/asbuilt-full/fx-ask-modal/ef72e5e0b32c3ea9.webp"
+      },
+      {
+        "key": "rest|light|760x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "ef72e5e0b32c3ea9",
+        "path": "design/asbuilt-full/fx-ask-modal/ef72e5e0b32c3ea9.webp"
+      },
+      {
+        "key": "rest|light|700x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "62a09708a2dc9563",
+        "path": "design/asbuilt-full/fx-ask-modal/62a09708a2dc9563.webp"
+      },
+      {
+        "key": "rest|light|390x844|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "2b4672c9019ecb70",
+        "path": "design/asbuilt-full/fx-ask-modal/2b4672c9019ecb70.webp"
+      },
+      {
+        "key": "longText|dark|1440x900|n/a",
+        "state": "longText",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "acb3f655cb873e48",
+        "path": "design/asbuilt-full/fx-ask-modal/acb3f655cb873e48.webp"
+      },
+      {
+        "key": "longText|dark|1200x800|n/a",
+        "state": "longText",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "acb3f655cb873e48",
+        "path": "design/asbuilt-full/fx-ask-modal/acb3f655cb873e48.webp"
+      },
+      {
+        "key": "longText|dark|1024x768|n/a",
+        "state": "longText",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "acb3f655cb873e48",
+        "path": "design/asbuilt-full/fx-ask-modal/acb3f655cb873e48.webp"
+      },
+      {
+        "key": "longText|dark|960x760|n/a",
+        "state": "longText",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "acb3f655cb873e48",
+        "path": "design/asbuilt-full/fx-ask-modal/acb3f655cb873e48.webp"
+      },
+      {
+        "key": "longText|dark|900x760|n/a",
+        "state": "longText",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "acb3f655cb873e48",
+        "path": "design/asbuilt-full/fx-ask-modal/acb3f655cb873e48.webp"
+      },
+      {
+        "key": "longText|dark|820x700|n/a",
+        "state": "longText",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "acb3f655cb873e48",
+        "path": "design/asbuilt-full/fx-ask-modal/acb3f655cb873e48.webp"
+      },
+      {
+        "key": "longText|dark|768x1024|n/a",
+        "state": "longText",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "d1058e4abaffddcb",
+        "path": "design/asbuilt-full/fx-ask-modal/d1058e4abaffddcb.webp"
+      },
+      {
+        "key": "longText|dark|760x700|n/a",
+        "state": "longText",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "d1058e4abaffddcb",
+        "path": "design/asbuilt-full/fx-ask-modal/d1058e4abaffddcb.webp"
+      },
+      {
+        "key": "longText|dark|700x700|n/a",
+        "state": "longText",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "873a3890afe6dd81",
+        "path": "design/asbuilt-full/fx-ask-modal/873a3890afe6dd81.webp"
+      },
+      {
+        "key": "longText|dark|390x844|n/a",
+        "state": "longText",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "8017985e15f67cdf",
+        "path": "design/asbuilt-full/fx-ask-modal/8017985e15f67cdf.webp"
+      },
+      {
+        "key": "longText|light|1440x900|n/a",
+        "state": "longText",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "47d65bc74e1c1870",
+        "path": "design/asbuilt-full/fx-ask-modal/47d65bc74e1c1870.webp"
+      },
+      {
+        "key": "longText|light|1200x800|n/a",
+        "state": "longText",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "47d65bc74e1c1870",
+        "path": "design/asbuilt-full/fx-ask-modal/47d65bc74e1c1870.webp"
+      },
+      {
+        "key": "longText|light|1024x768|n/a",
+        "state": "longText",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "47d65bc74e1c1870",
+        "path": "design/asbuilt-full/fx-ask-modal/47d65bc74e1c1870.webp"
+      },
+      {
+        "key": "longText|light|960x760|n/a",
+        "state": "longText",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "47d65bc74e1c1870",
+        "path": "design/asbuilt-full/fx-ask-modal/47d65bc74e1c1870.webp"
+      },
+      {
+        "key": "longText|light|900x760|n/a",
+        "state": "longText",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "47d65bc74e1c1870",
+        "path": "design/asbuilt-full/fx-ask-modal/47d65bc74e1c1870.webp"
+      },
+      {
+        "key": "longText|light|820x700|n/a",
+        "state": "longText",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "47d65bc74e1c1870",
+        "path": "design/asbuilt-full/fx-ask-modal/47d65bc74e1c1870.webp"
+      },
+      {
+        "key": "longText|light|768x1024|n/a",
+        "state": "longText",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "e59fd840014665ff",
+        "path": "design/asbuilt-full/fx-ask-modal/e59fd840014665ff.webp"
+      },
+      {
+        "key": "longText|light|760x700|n/a",
+        "state": "longText",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "e59fd840014665ff",
+        "path": "design/asbuilt-full/fx-ask-modal/e59fd840014665ff.webp"
+      },
+      {
+        "key": "longText|light|700x700|n/a",
+        "state": "longText",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "637be247c14157b7",
+        "path": "design/asbuilt-full/fx-ask-modal/637be247c14157b7.webp"
+      },
+      {
+        "key": "longText|light|390x844|n/a",
+        "state": "longText",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "d9a563c4e35f5ef6",
+        "path": "design/asbuilt-full/fx-ask-modal/d9a563c4e35f5ef6.webp"
+      },
+      {
+        "key": "empty|dark|1440x900|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "5fc17b4a6ece12cb",
+        "path": "design/asbuilt-full/fx-ask-modal/5fc17b4a6ece12cb.webp"
+      },
+      {
+        "key": "empty|dark|1200x800|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "5fc17b4a6ece12cb",
+        "path": "design/asbuilt-full/fx-ask-modal/5fc17b4a6ece12cb.webp"
+      },
+      {
+        "key": "empty|dark|1024x768|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "5fc17b4a6ece12cb",
+        "path": "design/asbuilt-full/fx-ask-modal/5fc17b4a6ece12cb.webp"
+      },
+      {
+        "key": "empty|dark|960x760|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "5fc17b4a6ece12cb",
+        "path": "design/asbuilt-full/fx-ask-modal/5fc17b4a6ece12cb.webp"
+      },
+      {
+        "key": "empty|dark|900x760|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "5fc17b4a6ece12cb",
+        "path": "design/asbuilt-full/fx-ask-modal/5fc17b4a6ece12cb.webp"
+      },
+      {
+        "key": "empty|dark|820x700|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "5fc17b4a6ece12cb",
+        "path": "design/asbuilt-full/fx-ask-modal/5fc17b4a6ece12cb.webp"
+      },
+      {
+        "key": "empty|dark|768x1024|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "5cbc97d5a4d942c2",
+        "path": "design/asbuilt-full/fx-ask-modal/5cbc97d5a4d942c2.webp"
+      },
+      {
+        "key": "empty|dark|760x700|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "5cbc97d5a4d942c2",
+        "path": "design/asbuilt-full/fx-ask-modal/5cbc97d5a4d942c2.webp"
+      },
+      {
+        "key": "empty|dark|700x700|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "ba277e21fcfa038a",
+        "path": "design/asbuilt-full/fx-ask-modal/ba277e21fcfa038a.webp"
+      },
+      {
+        "key": "empty|dark|390x844|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "770f7ecc9b69af4b",
+        "path": "design/asbuilt-full/fx-ask-modal/770f7ecc9b69af4b.webp"
+      },
+      {
+        "key": "empty|light|1440x900|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "cc457471c39d3f99",
+        "path": "design/asbuilt-full/fx-ask-modal/cc457471c39d3f99.webp"
+      },
+      {
+        "key": "empty|light|1200x800|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "cc457471c39d3f99",
+        "path": "design/asbuilt-full/fx-ask-modal/cc457471c39d3f99.webp"
+      },
+      {
+        "key": "empty|light|1024x768|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "cc457471c39d3f99",
+        "path": "design/asbuilt-full/fx-ask-modal/cc457471c39d3f99.webp"
+      },
+      {
+        "key": "empty|light|960x760|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "cc457471c39d3f99",
+        "path": "design/asbuilt-full/fx-ask-modal/cc457471c39d3f99.webp"
+      },
+      {
+        "key": "empty|light|900x760|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "cc457471c39d3f99",
+        "path": "design/asbuilt-full/fx-ask-modal/cc457471c39d3f99.webp"
+      },
+      {
+        "key": "empty|light|820x700|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "cc457471c39d3f99",
+        "path": "design/asbuilt-full/fx-ask-modal/cc457471c39d3f99.webp"
+      },
+      {
+        "key": "empty|light|768x1024|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "ef72e5e0b32c3ea9",
+        "path": "design/asbuilt-full/fx-ask-modal/ef72e5e0b32c3ea9.webp"
+      },
+      {
+        "key": "empty|light|760x700|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "ef72e5e0b32c3ea9",
+        "path": "design/asbuilt-full/fx-ask-modal/ef72e5e0b32c3ea9.webp"
+      },
+      {
+        "key": "empty|light|700x700|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "62a09708a2dc9563",
+        "path": "design/asbuilt-full/fx-ask-modal/62a09708a2dc9563.webp"
+      },
+      {
+        "key": "empty|light|390x844|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "2b4672c9019ecb70",
+        "path": "design/asbuilt-full/fx-ask-modal/2b4672c9019ecb70.webp"
+      }
+    ]
+  },
+  "contactSheets": {
+    "dark": [
+      "contact-dark.webp"
+    ],
+    "light": [
+      "contact-light.webp"
+    ]
+  }
 }

@@ -1,7 +1,7 @@
 {
   "id": "fxsec-export",
   "group": "A",
-  "generatedAt": "2026-09-11T16:25:24.129Z",
+  "generatedAt": "2026-09-11T17:48:23.858Z",
   "hasToggle": true,
   "tree": {
     "tag": "div",
@@ -1416,23 +1416,33 @@
                   },
                   "borderRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderTopLeftRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderTopRightRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderBottomLeftRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderBottomRightRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "transitionDuration": {
                     "value": "0s",
@@ -3767,7 +3777,8 @@
             "id": "tg-exp-wm",
             "dataFxsec": "export",
             "classes": [
-              "fx-toggle"
+              "fx-toggle",
+              "on"
             ],
             "style": {
               "color": {
@@ -3777,8 +3788,10 @@
                 "role": "surface.page"
               },
               "backgroundColor": {
-                "value": "rgba(255, 255, 255, 0.12)",
-                "token": null
+                "value": "rgb(97, 160, 175)",
+                "token": "/color/action/primary",
+                "appVar": "--acc",
+                "role": "action.primary"
               },
               "borderColor": {
                 "value": "rgba(0, 0, 0, 0)",
@@ -3867,7 +3880,7 @@
                 "token": null
               },
               "boxShadow": {
-                "value": "rgba(0, 0, 0, 0.25) 0px 1px 2px 0px inset",
+                "value": "rgba(0, 0, 0, 0.15) 0px 1px 2px 0px inset",
                 "token": null
               }
             },
@@ -4114,7 +4127,131 @@
                 "token": null
               }
             },
-            "children": []
+            "children": [
+              {
+                "tag": "input",
+                "id": "exp-wm-text",
+                "dataFxsec": "export",
+                "classes": [
+                  "vinput"
+                ],
+                "style": {
+                  "color": {
+                    "value": "rgb(255, 255, 255)",
+                    "token": "/color/surface/page",
+                    "appVar": "--bg",
+                    "role": "surface.page"
+                  },
+                  "backgroundColor": {
+                    "value": "rgb(37, 37, 39)",
+                    "token": "/color/surface/panelAlt",
+                    "appVar": "--sur2",
+                    "role": "surface.panel-alt"
+                  },
+                  "borderColor": {
+                    "value": "rgba(255, 255, 255, 0.12)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(255, 255, 255)",
+                    "token": "/color/surface/page",
+                    "appVar": "--bg",
+                    "role": "surface.page"
+                  },
+                  "fontSize": {
+                    "value": "11px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "ui-monospace, \"SF Mono\", Menlo, \"Courier New\", monospace",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "10px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "6px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "10px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "5px",
+                    "token": "/designSystem/radius_xs",
+                    "appVar": "--radius-xs",
+                    "role": "radius.xs"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              }
+            ]
           },
           {
             "tag": "div",
@@ -4236,7 +4373,360 @@
                 "token": null
               }
             },
-            "children": []
+            "children": [
+              {
+                "tag": "div",
+                "dataFxsec": "export",
+                "classes": [
+                  "fx-label"
+                ],
+                "text": "Opacity",
+                "style": {
+                  "color": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "outlineColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "fontSize": {
+                    "value": "12px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "18px",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              },
+              {
+                "tag": "input",
+                "id": "sl-exp-wm-op",
+                "dataFxsec": "export",
+                "classes": [
+                  "fx-slider"
+                ],
+                "style": {
+                  "color": {
+                    "value": "rgb(16, 16, 16)",
+                    "token": null
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(16, 16, 16)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(16, 16, 16)",
+                    "token": null
+                  },
+                  "fontSize": {
+                    "value": "13.3333px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "Arial",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "0px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderTopRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "0px",
+                    "token": "/designSystem/radius_none",
+                    "appVar": "--radius-none",
+                    "role": "radius.none"
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              },
+              {
+                "tag": "div",
+                "id": "vl-exp-wm-op",
+                "dataFxsec": "export",
+                "classes": [
+                  "fx-val"
+                ],
+                "text": "55",
+                "style": {
+                  "color": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "backgroundColor": {
+                    "value": "rgba(0, 0, 0, 0)",
+                    "token": null
+                  },
+                  "borderColor": {
+                    "value": "rgb(204, 204, 204) rgb(204, 204, 204) rgb(97, 160, 175)",
+                    "token": null
+                  },
+                  "outlineColor": {
+                    "value": "rgb(204, 204, 204)",
+                    "token": "/color/text/muted",
+                    "appVar": "--mut",
+                    "role": "text.muted"
+                  },
+                  "fontSize": {
+                    "value": "12px",
+                    "token": null
+                  },
+                  "fontWeight": {
+                    "value": "400",
+                    "token": null
+                  },
+                  "fontFamily": {
+                    "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+                    "token": null
+                  },
+                  "lineHeight": {
+                    "value": "18px",
+                    "token": null
+                  },
+                  "letterSpacing": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "paddingTop": {
+                    "value": "1px",
+                    "token": null
+                  },
+                  "paddingRight": {
+                    "value": "2px",
+                    "token": null
+                  },
+                  "paddingBottom": {
+                    "value": "1px",
+                    "token": null
+                  },
+                  "paddingLeft": {
+                    "value": "2px",
+                    "token": null
+                  },
+                  "gap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "rowGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "columnGap": {
+                    "value": "normal",
+                    "token": null
+                  },
+                  "borderRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderTopLeftRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderTopRightRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderBottomLeftRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "borderBottomRightRadius": {
+                    "value": "3px",
+                    "token": null
+                  },
+                  "transitionDuration": {
+                    "value": "0s",
+                    "token": null
+                  },
+                  "transitionTimingFunction": {
+                    "value": "ease",
+                    "token": null
+                  },
+                  "boxShadow": {
+                    "value": "none",
+                    "token": null
+                  }
+                },
+                "children": []
+              }
+            ]
           }
         ]
       },
@@ -10026,46 +10516,6 @@
       "classes": [
         "fx-info-i"
       ],
-      "prop": "borderRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-info-i"
-      ],
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-info-i"
-      ],
-      "prop": "borderTopRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-info-i"
-      ],
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-info-i"
-      ],
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-info-i"
-      ],
       "prop": "transitionDuration",
       "value": "0s"
     },
@@ -12774,16 +13224,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
-      ],
-      "prop": "backgroundColor",
-      "value": "rgba(255, 255, 255, 0.12)"
-    },
-    {
-      "tag": "div",
-      "id": "tg-exp-wm",
-      "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderColor",
       "value": "rgba(0, 0, 0, 0)"
@@ -12792,7 +13234,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "fontSize",
       "value": "16px"
@@ -12801,7 +13244,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "fontWeight",
       "value": "400"
@@ -12810,7 +13254,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "fontFamily",
       "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
@@ -12819,7 +13264,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "lineHeight",
       "value": "24px"
@@ -12828,7 +13274,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "letterSpacing",
       "value": "normal"
@@ -12837,7 +13284,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "paddingTop",
       "value": "0px"
@@ -12846,7 +13294,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "paddingRight",
       "value": "0px"
@@ -12855,7 +13304,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "paddingBottom",
       "value": "0px"
@@ -12864,7 +13314,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "paddingLeft",
       "value": "0px"
@@ -12873,7 +13324,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "gap",
       "value": "normal"
@@ -12882,7 +13334,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "rowGap",
       "value": "normal"
@@ -12891,7 +13344,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "columnGap",
       "value": "normal"
@@ -12900,7 +13354,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderRadius",
       "value": "9px"
@@ -12909,7 +13364,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderTopLeftRadius",
       "value": "9px"
@@ -12918,7 +13374,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderTopRightRadius",
       "value": "9px"
@@ -12927,7 +13384,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderBottomLeftRadius",
       "value": "9px"
@@ -12936,7 +13394,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "borderBottomRightRadius",
       "value": "9px"
@@ -12945,7 +13404,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "transitionDuration",
       "value": "0s"
@@ -12954,7 +13414,8 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
@@ -12963,10 +13424,11 @@
       "tag": "div",
       "id": "tg-exp-wm",
       "classes": [
-        "fx-toggle"
+        "fx-toggle",
+        "on"
       ],
       "prop": "boxShadow",
-      "value": "rgba(0, 0, 0, 0.25) 0px 1px 2px 0px inset"
+      "value": "rgba(0, 0, 0, 0.15) 0px 1px 2px 0px inset"
     },
     {
       "tag": "div",
@@ -13188,6 +13650,150 @@
       "tag": "div",
       "classes": [
         "vrow"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "borderColor",
+      "value": "rgba(255, 255, 255, 0.12)"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "fontSize",
+      "value": "11px"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "fontFamily",
+      "value": "ui-monospace, \"SF Mono\", Menlo, \"Courier New\", monospace"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "paddingTop",
+      "value": "6px"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "paddingRight",
+      "value": "10px"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "paddingBottom",
+      "value": "6px"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "paddingLeft",
+      "value": "10px"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "input",
+      "id": "exp-wm-text",
+      "classes": [
+        "vinput"
       ],
       "prop": "boxShadow",
       "value": "none"
@@ -13316,6 +13922,503 @@
       "tag": "div",
       "classes": [
         "fx-row"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "lineHeight",
+      "value": "18px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-label"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "color",
+      "value": "rgb(16, 16, 16)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "borderColor",
+      "value": "rgb(16, 16, 16)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "outlineColor",
+      "value": "rgb(16, 16, 16)"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "fontSize",
+      "value": "13.3333px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "fontFamily",
+      "value": "Arial"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "input",
+      "id": "sl-exp-wm-op",
+      "classes": [
+        "fx-slider"
+      ],
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderColor",
+      "value": "rgb(204, 204, 204) rgb(204, 204, 204) rgb(97, 160, 175)"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "fontSize",
+      "value": "12px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "lineHeight",
+      "value": "18px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingTop",
+      "value": "1px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingRight",
+      "value": "2px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingBottom",
+      "value": "1px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "paddingLeft",
+      "value": "2px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderTopLeftRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderTopRightRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderBottomLeftRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "borderBottomRightRadius",
+      "value": "3px"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
+      ],
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "div",
+      "id": "vl-exp-wm-op",
+      "classes": [
+        "fx-val"
       ],
       "prop": "boxShadow",
       "value": "none"
@@ -17849,5 +18952,1124 @@
       "prop": "boxShadow",
       "value": "none"
     }
-  ]
+  ],
+  "matrix": {
+    "dimensions": {
+      "states": [
+        "rest",
+        "hover",
+        "longText"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "widths": [
+        "1440x900",
+        "1200x800",
+        "1024x768",
+        "960x760",
+        "900x760",
+        "820x700",
+        "768x1024",
+        "760x700",
+        "700x700",
+        "390x844"
+      ],
+      "sidebars": [
+        "expanded",
+        "collapsed"
+      ]
+    },
+    "entries": [
+      {
+        "key": "rest|dark|1440x900|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "02b504b92597a988",
+        "path": "design/asbuilt-full/fxsec-export/02b504b92597a988.webp"
+      },
+      {
+        "key": "rest|dark|1440x900|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|1200x800|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "7bbbb09aa76e4f0f",
+        "path": "design/asbuilt-full/fxsec-export/7bbbb09aa76e4f0f.webp"
+      },
+      {
+        "key": "rest|dark|1200x800|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|1024x768|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "f7975a575ec685da",
+        "path": "design/asbuilt-full/fxsec-export/f7975a575ec685da.webp"
+      },
+      {
+        "key": "rest|dark|1024x768|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|960x760|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "d8eb6a19867dbb67",
+        "path": "design/asbuilt-full/fxsec-export/d8eb6a19867dbb67.webp"
+      },
+      {
+        "key": "rest|dark|960x760|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|900x760|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "d8eb6a19867dbb67",
+        "path": "design/asbuilt-full/fxsec-export/d8eb6a19867dbb67.webp"
+      },
+      {
+        "key": "rest|dark|900x760|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|820x700|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "9079e48b6b613de5",
+        "path": "design/asbuilt-full/fxsec-export/9079e48b6b613de5.webp"
+      },
+      {
+        "key": "rest|dark|820x700|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|768x1024|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "da7efc236c0c3b41",
+        "path": "design/asbuilt-full/fxsec-export/da7efc236c0c3b41.webp"
+      },
+      {
+        "key": "rest|dark|768x1024|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|760x700|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "9079e48b6b613de5",
+        "path": "design/asbuilt-full/fxsec-export/9079e48b6b613de5.webp"
+      },
+      {
+        "key": "rest|dark|760x700|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|700x700|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "c0d9dfc9e68c0810",
+        "path": "design/asbuilt-full/fxsec-export/c0d9dfc9e68c0810.webp"
+      },
+      {
+        "key": "rest|dark|390x844|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "0af3a0e4131341f4",
+        "path": "design/asbuilt-full/fxsec-export/0af3a0e4131341f4.webp"
+      },
+      {
+        "key": "rest|light|1440x900|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "ffcbc6a140bd8933",
+        "path": "design/asbuilt-full/fxsec-export/ffcbc6a140bd8933.webp"
+      },
+      {
+        "key": "rest|light|1440x900|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|1200x800|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "3fb7323d3df9a2f4",
+        "path": "design/asbuilt-full/fxsec-export/3fb7323d3df9a2f4.webp"
+      },
+      {
+        "key": "rest|light|1200x800|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|1024x768|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "7d42bb7c46630d51",
+        "path": "design/asbuilt-full/fxsec-export/7d42bb7c46630d51.webp"
+      },
+      {
+        "key": "rest|light|1024x768|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|960x760|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "feae7ac7597d270b",
+        "path": "design/asbuilt-full/fxsec-export/feae7ac7597d270b.webp"
+      },
+      {
+        "key": "rest|light|960x760|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|900x760|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "feae7ac7597d270b",
+        "path": "design/asbuilt-full/fxsec-export/feae7ac7597d270b.webp"
+      },
+      {
+        "key": "rest|light|900x760|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|820x700|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "54a33f0ef7c046e2",
+        "path": "design/asbuilt-full/fxsec-export/54a33f0ef7c046e2.webp"
+      },
+      {
+        "key": "rest|light|820x700|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|768x1024|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "ad360aa68e5115dd",
+        "path": "design/asbuilt-full/fxsec-export/ad360aa68e5115dd.webp"
+      },
+      {
+        "key": "rest|light|768x1024|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|760x700|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "54a33f0ef7c046e2",
+        "path": "design/asbuilt-full/fxsec-export/54a33f0ef7c046e2.webp"
+      },
+      {
+        "key": "rest|light|760x700|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|700x700|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "12cecbe0a850301b",
+        "path": "design/asbuilt-full/fxsec-export/12cecbe0a850301b.webp"
+      },
+      {
+        "key": "rest|light|390x844|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "d2dd78a824274372",
+        "path": "design/asbuilt-full/fxsec-export/d2dd78a824274372.webp"
+      },
+      {
+        "key": "hover|dark|1440x900|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "02b504b92597a988",
+        "path": "design/asbuilt-full/fxsec-export/02b504b92597a988.webp"
+      },
+      {
+        "key": "hover|dark|1440x900|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|1200x800|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "7bbbb09aa76e4f0f",
+        "path": "design/asbuilt-full/fxsec-export/7bbbb09aa76e4f0f.webp"
+      },
+      {
+        "key": "hover|dark|1200x800|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|1024x768|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "f7975a575ec685da",
+        "path": "design/asbuilt-full/fxsec-export/f7975a575ec685da.webp"
+      },
+      {
+        "key": "hover|dark|1024x768|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|960x760|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "d8eb6a19867dbb67",
+        "path": "design/asbuilt-full/fxsec-export/d8eb6a19867dbb67.webp"
+      },
+      {
+        "key": "hover|dark|960x760|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|900x760|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "d8eb6a19867dbb67",
+        "path": "design/asbuilt-full/fxsec-export/d8eb6a19867dbb67.webp"
+      },
+      {
+        "key": "hover|dark|900x760|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|820x700|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "9079e48b6b613de5",
+        "path": "design/asbuilt-full/fxsec-export/9079e48b6b613de5.webp"
+      },
+      {
+        "key": "hover|dark|820x700|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|768x1024|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "da7efc236c0c3b41",
+        "path": "design/asbuilt-full/fxsec-export/da7efc236c0c3b41.webp"
+      },
+      {
+        "key": "hover|dark|768x1024|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|760x700|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "9079e48b6b613de5",
+        "path": "design/asbuilt-full/fxsec-export/9079e48b6b613de5.webp"
+      },
+      {
+        "key": "hover|dark|760x700|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|700x700|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "c0d9dfc9e68c0810",
+        "path": "design/asbuilt-full/fxsec-export/c0d9dfc9e68c0810.webp"
+      },
+      {
+        "key": "hover|dark|390x844|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "0af3a0e4131341f4",
+        "path": "design/asbuilt-full/fxsec-export/0af3a0e4131341f4.webp"
+      },
+      {
+        "key": "hover|light|1440x900|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "ffcbc6a140bd8933",
+        "path": "design/asbuilt-full/fxsec-export/ffcbc6a140bd8933.webp"
+      },
+      {
+        "key": "hover|light|1440x900|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|1200x800|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "3fb7323d3df9a2f4",
+        "path": "design/asbuilt-full/fxsec-export/3fb7323d3df9a2f4.webp"
+      },
+      {
+        "key": "hover|light|1200x800|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|1024x768|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "7d42bb7c46630d51",
+        "path": "design/asbuilt-full/fxsec-export/7d42bb7c46630d51.webp"
+      },
+      {
+        "key": "hover|light|1024x768|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|960x760|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "feae7ac7597d270b",
+        "path": "design/asbuilt-full/fxsec-export/feae7ac7597d270b.webp"
+      },
+      {
+        "key": "hover|light|960x760|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|900x760|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "feae7ac7597d270b",
+        "path": "design/asbuilt-full/fxsec-export/feae7ac7597d270b.webp"
+      },
+      {
+        "key": "hover|light|900x760|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|820x700|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "54a33f0ef7c046e2",
+        "path": "design/asbuilt-full/fxsec-export/54a33f0ef7c046e2.webp"
+      },
+      {
+        "key": "hover|light|820x700|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|768x1024|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "ad360aa68e5115dd",
+        "path": "design/asbuilt-full/fxsec-export/ad360aa68e5115dd.webp"
+      },
+      {
+        "key": "hover|light|768x1024|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|760x700|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "54a33f0ef7c046e2",
+        "path": "design/asbuilt-full/fxsec-export/54a33f0ef7c046e2.webp"
+      },
+      {
+        "key": "hover|light|760x700|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|700x700|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "fdc4acb4cc450169",
+        "path": "design/asbuilt-full/fxsec-export/fdc4acb4cc450169.webp"
+      },
+      {
+        "key": "hover|light|390x844|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "d2dd78a824274372",
+        "path": "design/asbuilt-full/fxsec-export/d2dd78a824274372.webp"
+      },
+      {
+        "key": "longText|dark|1440x900|expanded",
+        "state": "longText",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "f0d6982002c547b3",
+        "path": "design/asbuilt-full/fxsec-export/f0d6982002c547b3.webp"
+      },
+      {
+        "key": "longText|dark|1440x900|collapsed",
+        "state": "longText",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|dark|1200x800|expanded",
+        "state": "longText",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "541f72b434f76f2b",
+        "path": "design/asbuilt-full/fxsec-export/541f72b434f76f2b.webp"
+      },
+      {
+        "key": "longText|dark|1200x800|collapsed",
+        "state": "longText",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|dark|1024x768|expanded",
+        "state": "longText",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "cb0600cd24da2170",
+        "path": "design/asbuilt-full/fxsec-export/cb0600cd24da2170.webp"
+      },
+      {
+        "key": "longText|dark|1024x768|collapsed",
+        "state": "longText",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|dark|960x760|expanded",
+        "state": "longText",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "f4eeba85a5e18433",
+        "path": "design/asbuilt-full/fxsec-export/f4eeba85a5e18433.webp"
+      },
+      {
+        "key": "longText|dark|960x760|collapsed",
+        "state": "longText",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|dark|900x760|expanded",
+        "state": "longText",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "f4eeba85a5e18433",
+        "path": "design/asbuilt-full/fxsec-export/f4eeba85a5e18433.webp"
+      },
+      {
+        "key": "longText|dark|900x760|collapsed",
+        "state": "longText",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|dark|820x700|expanded",
+        "state": "longText",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "1289c8fab5d66fa2",
+        "path": "design/asbuilt-full/fxsec-export/1289c8fab5d66fa2.webp"
+      },
+      {
+        "key": "longText|dark|820x700|collapsed",
+        "state": "longText",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|dark|768x1024|expanded",
+        "state": "longText",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "c1d89eec78d3b66e",
+        "path": "design/asbuilt-full/fxsec-export/c1d89eec78d3b66e.webp"
+      },
+      {
+        "key": "longText|dark|768x1024|collapsed",
+        "state": "longText",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|dark|760x700|expanded",
+        "state": "longText",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "1289c8fab5d66fa2",
+        "path": "design/asbuilt-full/fxsec-export/1289c8fab5d66fa2.webp"
+      },
+      {
+        "key": "longText|dark|760x700|collapsed",
+        "state": "longText",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|dark|700x700|expanded",
+        "state": "longText",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "8d3fcbf84baede8c",
+        "path": "design/asbuilt-full/fxsec-export/8d3fcbf84baede8c.webp"
+      },
+      {
+        "key": "longText|dark|390x844|expanded",
+        "state": "longText",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "5b85d06a78225af7",
+        "path": "design/asbuilt-full/fxsec-export/5b85d06a78225af7.webp"
+      },
+      {
+        "key": "longText|light|1440x900|expanded",
+        "state": "longText",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "7d5f1ab0744b482d",
+        "path": "design/asbuilt-full/fxsec-export/7d5f1ab0744b482d.webp"
+      },
+      {
+        "key": "longText|light|1440x900|collapsed",
+        "state": "longText",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|light|1200x800|expanded",
+        "state": "longText",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "0faffc118474004b",
+        "path": "design/asbuilt-full/fxsec-export/0faffc118474004b.webp"
+      },
+      {
+        "key": "longText|light|1200x800|collapsed",
+        "state": "longText",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|light|1024x768|expanded",
+        "state": "longText",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "f701f8d1bb2820a1",
+        "path": "design/asbuilt-full/fxsec-export/f701f8d1bb2820a1.webp"
+      },
+      {
+        "key": "longText|light|1024x768|collapsed",
+        "state": "longText",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|light|960x760|expanded",
+        "state": "longText",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "838bcd9acf2d119b",
+        "path": "design/asbuilt-full/fxsec-export/838bcd9acf2d119b.webp"
+      },
+      {
+        "key": "longText|light|960x760|collapsed",
+        "state": "longText",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|light|900x760|expanded",
+        "state": "longText",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "838bcd9acf2d119b",
+        "path": "design/asbuilt-full/fxsec-export/838bcd9acf2d119b.webp"
+      },
+      {
+        "key": "longText|light|900x760|collapsed",
+        "state": "longText",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|light|820x700|expanded",
+        "state": "longText",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "beb99dd9f6d16370",
+        "path": "design/asbuilt-full/fxsec-export/beb99dd9f6d16370.webp"
+      },
+      {
+        "key": "longText|light|820x700|collapsed",
+        "state": "longText",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|light|768x1024|expanded",
+        "state": "longText",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "066e264b27d424a3",
+        "path": "design/asbuilt-full/fxsec-export/066e264b27d424a3.webp"
+      },
+      {
+        "key": "longText|light|768x1024|collapsed",
+        "state": "longText",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|light|760x700|expanded",
+        "state": "longText",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "beb99dd9f6d16370",
+        "path": "design/asbuilt-full/fxsec-export/beb99dd9f6d16370.webp"
+      },
+      {
+        "key": "longText|light|760x700|collapsed",
+        "state": "longText",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "longText|light|700x700|expanded",
+        "state": "longText",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "1fca1facd2209971",
+        "path": "design/asbuilt-full/fxsec-export/1fca1facd2209971.webp"
+      },
+      {
+        "key": "longText|light|390x844|expanded",
+        "state": "longText",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "d0b51cb0f5dc647e",
+        "path": "design/asbuilt-full/fxsec-export/d0b51cb0f5dc647e.webp"
+      }
+    ]
+  },
+  "contactSheets": {
+    "dark": [
+      "contact-dark.webp"
+    ],
+    "light": [
+      "contact-light.webp"
+    ]
+  }
 }

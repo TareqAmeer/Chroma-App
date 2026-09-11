@@ -1,7 +1,7 @@
 {
   "id": "fx-split-popover",
   "group": "B",
-  "generatedAt": "2026-09-11T16:38:14.835Z",
+  "generatedAt": "2026-09-11T17:41:41.184Z",
   "hasToggle": false,
   "tree": {
     "tag": "div",
@@ -1016,5 +1016,442 @@
       "prop": "boxShadow",
       "value": "none"
     }
-  ]
+  ],
+  "matrix": {
+    "dimensions": {
+      "states": [
+        "rest",
+        "empty"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "widths": [
+        "1440x900",
+        "1200x800",
+        "1024x768",
+        "960x760",
+        "900x760",
+        "820x700",
+        "768x1024",
+        "760x700",
+        "700x700",
+        "390x844"
+      ],
+      "sidebars": [
+        "n/a"
+      ]
+    },
+    "entries": [
+      {
+        "key": "rest|dark|1440x900|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "72cc1dbf9ed34c9d",
+        "path": "design/asbuilt-full/fx-split-popover/72cc1dbf9ed34c9d.webp"
+      },
+      {
+        "key": "rest|dark|1200x800|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "72cc1dbf9ed34c9d",
+        "path": "design/asbuilt-full/fx-split-popover/72cc1dbf9ed34c9d.webp"
+      },
+      {
+        "key": "rest|dark|1024x768|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "72cc1dbf9ed34c9d",
+        "path": "design/asbuilt-full/fx-split-popover/72cc1dbf9ed34c9d.webp"
+      },
+      {
+        "key": "rest|dark|960x760|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "72cc1dbf9ed34c9d",
+        "path": "design/asbuilt-full/fx-split-popover/72cc1dbf9ed34c9d.webp"
+      },
+      {
+        "key": "rest|dark|900x760|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "72cc1dbf9ed34c9d",
+        "path": "design/asbuilt-full/fx-split-popover/72cc1dbf9ed34c9d.webp"
+      },
+      {
+        "key": "rest|dark|820x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "b0bca9a089b325b2",
+        "path": "design/asbuilt-full/fx-split-popover/b0bca9a089b325b2.webp"
+      },
+      {
+        "key": "rest|dark|768x1024|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "5787334290e8b0cb",
+        "path": "design/asbuilt-full/fx-split-popover/5787334290e8b0cb.webp"
+      },
+      {
+        "key": "rest|dark|760x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "5787334290e8b0cb",
+        "path": "design/asbuilt-full/fx-split-popover/5787334290e8b0cb.webp"
+      },
+      {
+        "key": "rest|dark|700x700|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "2a3cc3f9f4a8f63b",
+        "path": "design/asbuilt-full/fx-split-popover/2a3cc3f9f4a8f63b.webp"
+      },
+      {
+        "key": "rest|dark|390x844|n/a",
+        "state": "rest",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "3630f30272c3022f",
+        "path": "design/asbuilt-full/fx-split-popover/3630f30272c3022f.webp"
+      },
+      {
+        "key": "rest|light|1440x900|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "b323a87c2d39537f",
+        "path": "design/asbuilt-full/fx-split-popover/b323a87c2d39537f.webp"
+      },
+      {
+        "key": "rest|light|1200x800|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "b323a87c2d39537f",
+        "path": "design/asbuilt-full/fx-split-popover/b323a87c2d39537f.webp"
+      },
+      {
+        "key": "rest|light|1024x768|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "b323a87c2d39537f",
+        "path": "design/asbuilt-full/fx-split-popover/b323a87c2d39537f.webp"
+      },
+      {
+        "key": "rest|light|960x760|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "a156869a0421e4ee",
+        "path": "design/asbuilt-full/fx-split-popover/a156869a0421e4ee.webp"
+      },
+      {
+        "key": "rest|light|900x760|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "4a11f53142c16c7e",
+        "path": "design/asbuilt-full/fx-split-popover/4a11f53142c16c7e.webp"
+      },
+      {
+        "key": "rest|light|820x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "f19112b7921c4e7c",
+        "path": "design/asbuilt-full/fx-split-popover/f19112b7921c4e7c.webp"
+      },
+      {
+        "key": "rest|light|768x1024|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "107a375d94565c0a",
+        "path": "design/asbuilt-full/fx-split-popover/107a375d94565c0a.webp"
+      },
+      {
+        "key": "rest|light|760x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "64a47b10641caf3a",
+        "path": "design/asbuilt-full/fx-split-popover/64a47b10641caf3a.webp"
+      },
+      {
+        "key": "rest|light|700x700|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "b5f92da2f431f017",
+        "path": "design/asbuilt-full/fx-split-popover/b5f92da2f431f017.webp"
+      },
+      {
+        "key": "rest|light|390x844|n/a",
+        "state": "rest",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "df08c5b48581fa72",
+        "path": "design/asbuilt-full/fx-split-popover/df08c5b48581fa72.webp"
+      },
+      {
+        "key": "empty|dark|1440x900|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "4ea1a170b9a89ac8",
+        "path": "design/asbuilt-full/fx-split-popover/4ea1a170b9a89ac8.webp"
+      },
+      {
+        "key": "empty|dark|1200x800|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "4ea1a170b9a89ac8",
+        "path": "design/asbuilt-full/fx-split-popover/4ea1a170b9a89ac8.webp"
+      },
+      {
+        "key": "empty|dark|1024x768|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "4ea1a170b9a89ac8",
+        "path": "design/asbuilt-full/fx-split-popover/4ea1a170b9a89ac8.webp"
+      },
+      {
+        "key": "empty|dark|960x760|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "76c42609ba955e57",
+        "path": "design/asbuilt-full/fx-split-popover/76c42609ba955e57.webp"
+      },
+      {
+        "key": "empty|dark|900x760|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "70e308a8361d1944",
+        "path": "design/asbuilt-full/fx-split-popover/70e308a8361d1944.webp"
+      },
+      {
+        "key": "empty|dark|820x700|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "5ac2034513691df7",
+        "path": "design/asbuilt-full/fx-split-popover/5ac2034513691df7.webp"
+      },
+      {
+        "key": "empty|dark|768x1024|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "46eb90df0512e3f3",
+        "path": "design/asbuilt-full/fx-split-popover/46eb90df0512e3f3.webp"
+      },
+      {
+        "key": "empty|dark|760x700|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "c2d502c083b8cdc7",
+        "path": "design/asbuilt-full/fx-split-popover/c2d502c083b8cdc7.webp"
+      },
+      {
+        "key": "empty|dark|700x700|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "2a3cc3f9f4a8f63b",
+        "path": "design/asbuilt-full/fx-split-popover/2a3cc3f9f4a8f63b.webp"
+      },
+      {
+        "key": "empty|dark|390x844|n/a",
+        "state": "empty",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "3630f30272c3022f",
+        "path": "design/asbuilt-full/fx-split-popover/3630f30272c3022f.webp"
+      },
+      {
+        "key": "empty|light|1440x900|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "n/a",
+        "hash": "b323a87c2d39537f",
+        "path": "design/asbuilt-full/fx-split-popover/b323a87c2d39537f.webp"
+      },
+      {
+        "key": "empty|light|1200x800|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "n/a",
+        "hash": "b323a87c2d39537f",
+        "path": "design/asbuilt-full/fx-split-popover/b323a87c2d39537f.webp"
+      },
+      {
+        "key": "empty|light|1024x768|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "n/a",
+        "hash": "b323a87c2d39537f",
+        "path": "design/asbuilt-full/fx-split-popover/b323a87c2d39537f.webp"
+      },
+      {
+        "key": "empty|light|960x760|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "a156869a0421e4ee",
+        "path": "design/asbuilt-full/fx-split-popover/a156869a0421e4ee.webp"
+      },
+      {
+        "key": "empty|light|900x760|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "n/a",
+        "hash": "4a11f53142c16c7e",
+        "path": "design/asbuilt-full/fx-split-popover/4a11f53142c16c7e.webp"
+      },
+      {
+        "key": "empty|light|820x700|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "f19112b7921c4e7c",
+        "path": "design/asbuilt-full/fx-split-popover/f19112b7921c4e7c.webp"
+      },
+      {
+        "key": "empty|light|768x1024|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "n/a",
+        "hash": "107a375d94565c0a",
+        "path": "design/asbuilt-full/fx-split-popover/107a375d94565c0a.webp"
+      },
+      {
+        "key": "empty|light|760x700|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "64a47b10641caf3a",
+        "path": "design/asbuilt-full/fx-split-popover/64a47b10641caf3a.webp"
+      },
+      {
+        "key": "empty|light|700x700|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "n/a",
+        "hash": "b5f92da2f431f017",
+        "path": "design/asbuilt-full/fx-split-popover/b5f92da2f431f017.webp"
+      },
+      {
+        "key": "empty|light|390x844|n/a",
+        "state": "empty",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "n/a",
+        "hash": "df08c5b48581fa72",
+        "path": "design/asbuilt-full/fx-split-popover/df08c5b48581fa72.webp"
+      }
+    ]
+  },
+  "contactSheets": {
+    "dark": [
+      "contact-dark.webp"
+    ],
+    "light": [
+      "contact-light.webp"
+    ]
+  }
 }

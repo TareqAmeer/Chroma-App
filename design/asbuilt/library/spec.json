@@ -1,7 +1,7 @@
 {
   "id": "library",
   "group": "E",
-  "generatedAt": "2026-09-11T16:38:23.572Z",
+  "generatedAt": "2026-09-11T17:41:42.675Z",
   "hasToggle": false,
   "tree": {
     "tag": "div",
@@ -558,32 +558,32 @@
                       },
                       "borderRadius": {
                         "value": "9999px",
-                        "token": "/designSystem/radius_pill",
-                        "appVar": "--radius-pill",
+                        "token": "/radius/pill",
+                        "appVar": "--r-pill",
                         "role": "radius.pill"
                       },
                       "borderTopLeftRadius": {
                         "value": "9999px",
-                        "token": "/designSystem/radius_pill",
-                        "appVar": "--radius-pill",
+                        "token": "/radius/pill",
+                        "appVar": "--r-pill",
                         "role": "radius.pill"
                       },
                       "borderTopRightRadius": {
                         "value": "9999px",
-                        "token": "/designSystem/radius_pill",
-                        "appVar": "--radius-pill",
+                        "token": "/radius/pill",
+                        "appVar": "--r-pill",
                         "role": "radius.pill"
                       },
                       "borderBottomLeftRadius": {
                         "value": "9999px",
-                        "token": "/designSystem/radius_pill",
-                        "appVar": "--radius-pill",
+                        "token": "/radius/pill",
+                        "appVar": "--r-pill",
                         "role": "radius.pill"
                       },
                       "borderBottomRightRadius": {
                         "value": "9999px",
-                        "token": "/designSystem/radius_pill",
-                        "appVar": "--radius-pill",
+                        "token": "/radius/pill",
+                        "appVar": "--r-pill",
                         "role": "radius.pill"
                       },
                       "transitionDuration": {
@@ -2362,32 +2362,32 @@
                       },
                       "borderRadius": {
                         "value": "9999px",
-                        "token": "/designSystem/radius_pill",
-                        "appVar": "--radius-pill",
+                        "token": "/radius/pill",
+                        "appVar": "--r-pill",
                         "role": "radius.pill"
                       },
                       "borderTopLeftRadius": {
                         "value": "9999px",
-                        "token": "/designSystem/radius_pill",
-                        "appVar": "--radius-pill",
+                        "token": "/radius/pill",
+                        "appVar": "--r-pill",
                         "role": "radius.pill"
                       },
                       "borderTopRightRadius": {
                         "value": "9999px",
-                        "token": "/designSystem/radius_pill",
-                        "appVar": "--radius-pill",
+                        "token": "/radius/pill",
+                        "appVar": "--r-pill",
                         "role": "radius.pill"
                       },
                       "borderBottomLeftRadius": {
                         "value": "9999px",
-                        "token": "/designSystem/radius_pill",
-                        "appVar": "--radius-pill",
+                        "token": "/radius/pill",
+                        "appVar": "--r-pill",
                         "role": "radius.pill"
                       },
                       "borderBottomRightRadius": {
                         "value": "9999px",
-                        "token": "/designSystem/radius_pill",
-                        "appVar": "--radius-pill",
+                        "token": "/radius/pill",
+                        "appVar": "--r-pill",
                         "role": "radius.pill"
                       },
                       "transitionDuration": {
@@ -3321,32 +3321,32 @@
                   },
                   "borderRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "borderTopLeftRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "borderTopRightRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "borderBottomLeftRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "borderBottomRightRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "transitionDuration": {
@@ -5009,32 +5009,32 @@
                   },
                   "borderRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "borderTopLeftRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "borderTopRightRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "borderBottomLeftRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "borderBottomRightRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "transitionDuration": {
@@ -5249,32 +5249,32 @@
                   },
                   "borderRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "borderTopLeftRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "borderTopRightRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "borderBottomLeftRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "borderBottomRightRadius": {
                     "value": "9999px",
-                    "token": "/designSystem/radius_pill",
-                    "appVar": "--radius-pill",
+                    "token": "/radius/pill",
+                    "appVar": "--r-pill",
                     "role": "radius.pill"
                   },
                   "transitionDuration": {
@@ -19597,23 +19597,33 @@
                   },
                   "borderRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderTopLeftRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderTopRightRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderBottomLeftRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderBottomRightRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "transitionDuration": {
                     "value": "0s",
@@ -19828,23 +19838,33 @@
                   },
                   "borderRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderTopLeftRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderTopRightRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderBottomLeftRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderBottomRightRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "transitionDuration": {
                     "value": "0s",
@@ -20059,23 +20079,33 @@
                   },
                   "borderRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderTopLeftRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderTopRightRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderBottomLeftRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderBottomRightRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "transitionDuration": {
                     "value": "0s",
@@ -20290,23 +20320,33 @@
                   },
                   "borderRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderTopLeftRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderTopRightRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderBottomLeftRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "borderBottomRightRadius": {
                     "value": "50%",
-                    "token": null
+                    "token": "/radius/circle",
+                    "appVar": "--r-circle",
+                    "role": "radius.circle"
                   },
                   "transitionDuration": {
                     "value": "0s",
@@ -64023,8 +64063,8 @@
         "lib-chip",
         "lib-iconchip"
       ],
-      "prop": "borderRadius",
-      "value": "50%"
+      "prop": "transitionDuration",
+      "value": "0s"
     },
     {
       "tag": "button",
@@ -64032,8 +64072,8 @@
         "lib-chip",
         "lib-iconchip"
       ],
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
+      "prop": "transitionTimingFunction",
+      "value": "ease"
     },
     {
       "tag": "button",
@@ -64041,8 +64081,88 @@
         "lib-chip",
         "lib-iconchip"
       ],
-      "prop": "borderTopRightRadius",
-      "value": "50%"
+      "prop": "boxShadow",
+      "value": "none"
+    },
+    {
+      "tag": "svg",
+      "prop": "backgroundColor",
+      "value": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "tag": "svg",
+      "prop": "fontSize",
+      "value": "10px"
+    },
+    {
+      "tag": "svg",
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "svg",
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "svg",
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "svg",
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "svg",
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "svg",
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "svg",
+      "prop": "gap",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "rowGap",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "columnGap",
+      "value": "normal"
+    },
+    {
+      "tag": "svg",
+      "prop": "transitionDuration",
+      "value": "0s"
+    },
+    {
+      "tag": "svg",
+      "prop": "transitionTimingFunction",
+      "value": "ease"
+    },
+    {
+      "tag": "svg",
+      "prop": "boxShadow",
+      "value": "none"
     },
     {
       "tag": "button",
@@ -64050,8 +64170,8 @@
         "lib-chip",
         "lib-iconchip"
       ],
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
+      "prop": "borderColor",
+      "value": "rgba(255, 255, 255, 0.14)"
     },
     {
       "tag": "button",
@@ -64059,8 +64179,107 @@
         "lib-chip",
         "lib-iconchip"
       ],
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
+      "prop": "fontSize",
+      "value": "10px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "lib-chip",
+        "lib-iconchip"
+      ],
+      "prop": "fontWeight",
+      "value": "400"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "lib-chip",
+        "lib-iconchip"
+      ],
+      "prop": "fontFamily",
+      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "lib-chip",
+        "lib-iconchip"
+      ],
+      "prop": "lineHeight",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "lib-chip",
+        "lib-iconchip"
+      ],
+      "prop": "letterSpacing",
+      "value": "normal"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "lib-chip",
+        "lib-iconchip"
+      ],
+      "prop": "paddingTop",
+      "value": "0px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "lib-chip",
+        "lib-iconchip"
+      ],
+      "prop": "paddingRight",
+      "value": "0px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "lib-chip",
+        "lib-iconchip"
+      ],
+      "prop": "paddingBottom",
+      "value": "0px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "lib-chip",
+        "lib-iconchip"
+      ],
+      "prop": "paddingLeft",
+      "value": "0px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "lib-chip",
+        "lib-iconchip"
+      ],
+      "prop": "gap",
+      "value": "4px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "lib-chip",
+        "lib-iconchip"
+      ],
+      "prop": "rowGap",
+      "value": "4px"
+    },
+    {
+      "tag": "button",
+      "classes": [
+        "lib-chip",
+        "lib-iconchip"
+      ],
+      "prop": "columnGap",
+      "value": "4px"
     },
     {
       "tag": "button",
@@ -64292,51 +64511,6 @@
         "lib-chip",
         "lib-iconchip"
       ],
-      "prop": "borderRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderTopRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
       "prop": "transitionDuration",
       "value": "0s"
     },
@@ -64554,320 +64728,6 @@
       ],
       "prop": "columnGap",
       "value": "4px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderTopRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "transitionDuration",
-      "value": "0s"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "transitionTimingFunction",
-      "value": "ease"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
-    },
-    {
-      "tag": "svg",
-      "prop": "backgroundColor",
-      "value": "rgba(0, 0, 0, 0)"
-    },
-    {
-      "tag": "svg",
-      "prop": "fontSize",
-      "value": "10px"
-    },
-    {
-      "tag": "svg",
-      "prop": "fontWeight",
-      "value": "400"
-    },
-    {
-      "tag": "svg",
-      "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
-    },
-    {
-      "tag": "svg",
-      "prop": "lineHeight",
-      "value": "normal"
-    },
-    {
-      "tag": "svg",
-      "prop": "letterSpacing",
-      "value": "normal"
-    },
-    {
-      "tag": "svg",
-      "prop": "paddingTop",
-      "value": "0px"
-    },
-    {
-      "tag": "svg",
-      "prop": "paddingRight",
-      "value": "0px"
-    },
-    {
-      "tag": "svg",
-      "prop": "paddingBottom",
-      "value": "0px"
-    },
-    {
-      "tag": "svg",
-      "prop": "paddingLeft",
-      "value": "0px"
-    },
-    {
-      "tag": "svg",
-      "prop": "gap",
-      "value": "normal"
-    },
-    {
-      "tag": "svg",
-      "prop": "rowGap",
-      "value": "normal"
-    },
-    {
-      "tag": "svg",
-      "prop": "columnGap",
-      "value": "normal"
-    },
-    {
-      "tag": "svg",
-      "prop": "transitionDuration",
-      "value": "0s"
-    },
-    {
-      "tag": "svg",
-      "prop": "transitionTimingFunction",
-      "value": "ease"
-    },
-    {
-      "tag": "svg",
-      "prop": "boxShadow",
-      "value": "none"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderColor",
-      "value": "rgba(255, 255, 255, 0.14)"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "fontSize",
-      "value": "10px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "fontWeight",
-      "value": "400"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "lineHeight",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "letterSpacing",
-      "value": "normal"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "paddingTop",
-      "value": "0px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "paddingRight",
-      "value": "0px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "paddingBottom",
-      "value": "0px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "paddingLeft",
-      "value": "0px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "gap",
-      "value": "4px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "rowGap",
-      "value": "4px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "columnGap",
-      "value": "4px"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderTopLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderTopRightRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderBottomLeftRadius",
-      "value": "50%"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "lib-chip",
-        "lib-iconchip"
-      ],
-      "prop": "borderBottomRightRadius",
-      "value": "50%"
     },
     {
       "tag": "button",
@@ -91179,6 +91039,850 @@
       ],
       "prop": "boxShadow",
       "value": "none"
+    }
+  ],
+  "matrix": {
+    "dimensions": {
+      "states": [
+        "rest",
+        "loaded"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "widths": [
+        "1440x900",
+        "1200x800",
+        "1024x768",
+        "960x760",
+        "900x760",
+        "820x700",
+        "768x1024",
+        "760x700",
+        "700x700",
+        "390x844"
+      ],
+      "sidebars": [
+        "docked",
+        "full"
+      ]
+    },
+    "entries": [
+      {
+        "key": "rest|dark|1440x900|docked",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "docked",
+        "hash": "4455b5448a7ff4c2",
+        "path": "design/asbuilt-full/library/4455b5448a7ff4c2.webp"
+      },
+      {
+        "key": "rest|dark|1440x900|full",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "full",
+        "hash": "a4ae49a3b78e6a5d",
+        "path": "design/asbuilt-full/library/a4ae49a3b78e6a5d.webp"
+      },
+      {
+        "key": "rest|dark|1200x800|docked",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "docked",
+        "hash": "8571c56939a74b98",
+        "path": "design/asbuilt-full/library/8571c56939a74b98.webp"
+      },
+      {
+        "key": "rest|dark|1200x800|full",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "full",
+        "hash": "478300fd7a0a2c96",
+        "path": "design/asbuilt-full/library/478300fd7a0a2c96.webp"
+      },
+      {
+        "key": "rest|dark|1024x768|docked",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "docked",
+        "hash": "e9352d3b78fa26f3",
+        "path": "design/asbuilt-full/library/e9352d3b78fa26f3.webp"
+      },
+      {
+        "key": "rest|dark|1024x768|full",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "full",
+        "hash": "f5d688fa49a18762",
+        "path": "design/asbuilt-full/library/f5d688fa49a18762.webp"
+      },
+      {
+        "key": "rest|dark|960x760|docked",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "docked",
+        "hash": "89923c4092210570",
+        "path": "design/asbuilt-full/library/89923c4092210570.webp"
+      },
+      {
+        "key": "rest|dark|960x760|full",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "full",
+        "hash": "14e08e0c8bf1613a",
+        "path": "design/asbuilt-full/library/14e08e0c8bf1613a.webp"
+      },
+      {
+        "key": "rest|dark|900x760|docked",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "docked",
+        "hash": "89923c4092210570",
+        "path": "design/asbuilt-full/library/89923c4092210570.webp"
+      },
+      {
+        "key": "rest|dark|900x760|full",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "full",
+        "hash": "f59eb71598273bba",
+        "path": "design/asbuilt-full/library/f59eb71598273bba.webp"
+      },
+      {
+        "key": "rest|dark|820x700|docked",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "docked",
+        "hash": "b720cc530b993049",
+        "path": "design/asbuilt-full/library/b720cc530b993049.webp"
+      },
+      {
+        "key": "rest|dark|820x700|full",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "full",
+        "hash": "b0c70b9f42345718",
+        "path": "design/asbuilt-full/library/b0c70b9f42345718.webp"
+      },
+      {
+        "key": "rest|dark|768x1024|docked",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "docked",
+        "hash": "6641538a5b1d6841",
+        "path": "design/asbuilt-full/library/6641538a5b1d6841.webp"
+      },
+      {
+        "key": "rest|dark|768x1024|full",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "full",
+        "hash": "9585711549f4a942",
+        "path": "design/asbuilt-full/library/9585711549f4a942.webp"
+      },
+      {
+        "key": "rest|dark|760x700|docked",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "docked",
+        "hash": "b720cc530b993049",
+        "path": "design/asbuilt-full/library/b720cc530b993049.webp"
+      },
+      {
+        "key": "rest|dark|760x700|full",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "full",
+        "hash": "b75ffb68f1849b0a",
+        "path": "design/asbuilt-full/library/b75ffb68f1849b0a.webp"
+      },
+      {
+        "key": "rest|dark|700x700|docked",
+        "state": "rest",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "docked",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|390x844|docked",
+        "state": "rest",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "docked",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|1440x900|docked",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "docked",
+        "hash": "7873ce90052a5f62",
+        "path": "design/asbuilt-full/library/7873ce90052a5f62.webp"
+      },
+      {
+        "key": "rest|light|1440x900|full",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "full",
+        "hash": "09b7c77a38ad36f7",
+        "path": "design/asbuilt-full/library/09b7c77a38ad36f7.webp"
+      },
+      {
+        "key": "rest|light|1200x800|docked",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "docked",
+        "hash": "f77a279e3fcf14ab",
+        "path": "design/asbuilt-full/library/f77a279e3fcf14ab.webp"
+      },
+      {
+        "key": "rest|light|1200x800|full",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "full",
+        "hash": "29081781eeb50c36",
+        "path": "design/asbuilt-full/library/29081781eeb50c36.webp"
+      },
+      {
+        "key": "rest|light|1024x768|docked",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "docked",
+        "hash": "96264fd5db199f72",
+        "path": "design/asbuilt-full/library/96264fd5db199f72.webp"
+      },
+      {
+        "key": "rest|light|1024x768|full",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "full",
+        "hash": "d583cf69ab0e00b0",
+        "path": "design/asbuilt-full/library/d583cf69ab0e00b0.webp"
+      },
+      {
+        "key": "rest|light|960x760|docked",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "docked",
+        "hash": "50be0ccdc8c6abf5",
+        "path": "design/asbuilt-full/library/50be0ccdc8c6abf5.webp"
+      },
+      {
+        "key": "rest|light|960x760|full",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "full",
+        "hash": "50fecb7cba918075",
+        "path": "design/asbuilt-full/library/50fecb7cba918075.webp"
+      },
+      {
+        "key": "rest|light|900x760|docked",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "docked",
+        "hash": "50be0ccdc8c6abf5",
+        "path": "design/asbuilt-full/library/50be0ccdc8c6abf5.webp"
+      },
+      {
+        "key": "rest|light|900x760|full",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "full",
+        "hash": "65d32a5f077a6a90",
+        "path": "design/asbuilt-full/library/65d32a5f077a6a90.webp"
+      },
+      {
+        "key": "rest|light|820x700|docked",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "docked",
+        "hash": "a1e22447c286234b",
+        "path": "design/asbuilt-full/library/a1e22447c286234b.webp"
+      },
+      {
+        "key": "rest|light|820x700|full",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "full",
+        "hash": "611045047714937c",
+        "path": "design/asbuilt-full/library/611045047714937c.webp"
+      },
+      {
+        "key": "rest|light|768x1024|docked",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "docked",
+        "hash": "917c7f4fd2621409",
+        "path": "design/asbuilt-full/library/917c7f4fd2621409.webp"
+      },
+      {
+        "key": "rest|light|768x1024|full",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "full",
+        "hash": "15919ff857c29a63",
+        "path": "design/asbuilt-full/library/15919ff857c29a63.webp"
+      },
+      {
+        "key": "rest|light|760x700|docked",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "docked",
+        "hash": "a1e22447c286234b",
+        "path": "design/asbuilt-full/library/a1e22447c286234b.webp"
+      },
+      {
+        "key": "rest|light|760x700|full",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "full",
+        "hash": "c5a83fc33e7e65b5",
+        "path": "design/asbuilt-full/library/c5a83fc33e7e65b5.webp"
+      },
+      {
+        "key": "rest|light|700x700|docked",
+        "state": "rest",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "docked",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|390x844|docked",
+        "state": "rest",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "docked",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "loaded|dark|1440x900|docked",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "docked",
+        "hash": "4455b5448a7ff4c2",
+        "path": "design/asbuilt-full/library/4455b5448a7ff4c2.webp"
+      },
+      {
+        "key": "loaded|dark|1440x900|full",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "full",
+        "hash": "a4ae49a3b78e6a5d",
+        "path": "design/asbuilt-full/library/a4ae49a3b78e6a5d.webp"
+      },
+      {
+        "key": "loaded|dark|1200x800|docked",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "docked",
+        "hash": "8571c56939a74b98",
+        "path": "design/asbuilt-full/library/8571c56939a74b98.webp"
+      },
+      {
+        "key": "loaded|dark|1200x800|full",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "full",
+        "hash": "478300fd7a0a2c96",
+        "path": "design/asbuilt-full/library/478300fd7a0a2c96.webp"
+      },
+      {
+        "key": "loaded|dark|1024x768|docked",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "docked",
+        "hash": "e9352d3b78fa26f3",
+        "path": "design/asbuilt-full/library/e9352d3b78fa26f3.webp"
+      },
+      {
+        "key": "loaded|dark|1024x768|full",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "full",
+        "hash": "f5d688fa49a18762",
+        "path": "design/asbuilt-full/library/f5d688fa49a18762.webp"
+      },
+      {
+        "key": "loaded|dark|960x760|docked",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "docked",
+        "hash": "89923c4092210570",
+        "path": "design/asbuilt-full/library/89923c4092210570.webp"
+      },
+      {
+        "key": "loaded|dark|960x760|full",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "full",
+        "hash": "14e08e0c8bf1613a",
+        "path": "design/asbuilt-full/library/14e08e0c8bf1613a.webp"
+      },
+      {
+        "key": "loaded|dark|900x760|docked",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "docked",
+        "hash": "89923c4092210570",
+        "path": "design/asbuilt-full/library/89923c4092210570.webp"
+      },
+      {
+        "key": "loaded|dark|900x760|full",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "full",
+        "hash": "f59eb71598273bba",
+        "path": "design/asbuilt-full/library/f59eb71598273bba.webp"
+      },
+      {
+        "key": "loaded|dark|820x700|docked",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "docked",
+        "hash": "b720cc530b993049",
+        "path": "design/asbuilt-full/library/b720cc530b993049.webp"
+      },
+      {
+        "key": "loaded|dark|820x700|full",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "full",
+        "hash": "b0c70b9f42345718",
+        "path": "design/asbuilt-full/library/b0c70b9f42345718.webp"
+      },
+      {
+        "key": "loaded|dark|768x1024|docked",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "docked",
+        "hash": "6641538a5b1d6841",
+        "path": "design/asbuilt-full/library/6641538a5b1d6841.webp"
+      },
+      {
+        "key": "loaded|dark|768x1024|full",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "full",
+        "hash": "9585711549f4a942",
+        "path": "design/asbuilt-full/library/9585711549f4a942.webp"
+      },
+      {
+        "key": "loaded|dark|760x700|docked",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "docked",
+        "hash": "b720cc530b993049",
+        "path": "design/asbuilt-full/library/b720cc530b993049.webp"
+      },
+      {
+        "key": "loaded|dark|760x700|full",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "full",
+        "hash": "b75ffb68f1849b0a",
+        "path": "design/asbuilt-full/library/b75ffb68f1849b0a.webp"
+      },
+      {
+        "key": "loaded|dark|700x700|docked",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "docked",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "loaded|dark|390x844|docked",
+        "state": "loaded",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "docked",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "loaded|light|1440x900|docked",
+        "state": "loaded",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "docked",
+        "hash": "7873ce90052a5f62",
+        "path": "design/asbuilt-full/library/7873ce90052a5f62.webp"
+      },
+      {
+        "key": "loaded|light|1440x900|full",
+        "state": "loaded",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "full",
+        "hash": "09b7c77a38ad36f7",
+        "path": "design/asbuilt-full/library/09b7c77a38ad36f7.webp"
+      },
+      {
+        "key": "loaded|light|1200x800|docked",
+        "state": "loaded",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "docked",
+        "hash": "f77a279e3fcf14ab",
+        "path": "design/asbuilt-full/library/f77a279e3fcf14ab.webp"
+      },
+      {
+        "key": "loaded|light|1200x800|full",
+        "state": "loaded",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "full",
+        "hash": "29081781eeb50c36",
+        "path": "design/asbuilt-full/library/29081781eeb50c36.webp"
+      },
+      {
+        "key": "loaded|light|1024x768|docked",
+        "state": "loaded",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "docked",
+        "hash": "96264fd5db199f72",
+        "path": "design/asbuilt-full/library/96264fd5db199f72.webp"
+      },
+      {
+        "key": "loaded|light|1024x768|full",
+        "state": "loaded",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "full",
+        "hash": "d583cf69ab0e00b0",
+        "path": "design/asbuilt-full/library/d583cf69ab0e00b0.webp"
+      },
+      {
+        "key": "loaded|light|960x760|docked",
+        "state": "loaded",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "docked",
+        "hash": "50be0ccdc8c6abf5",
+        "path": "design/asbuilt-full/library/50be0ccdc8c6abf5.webp"
+      },
+      {
+        "key": "loaded|light|960x760|full",
+        "state": "loaded",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "full",
+        "hash": "50fecb7cba918075",
+        "path": "design/asbuilt-full/library/50fecb7cba918075.webp"
+      },
+      {
+        "key": "loaded|light|900x760|docked",
+        "state": "loaded",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "docked",
+        "hash": "50be0ccdc8c6abf5",
+        "path": "design/asbuilt-full/library/50be0ccdc8c6abf5.webp"
+      },
+      {
+        "key": "loaded|light|900x760|full",
+        "state": "loaded",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "full",
+        "hash": "65d32a5f077a6a90",
+        "path": "design/asbuilt-full/library/65d32a5f077a6a90.webp"
+      },
+      {
+        "key": "loaded|light|820x700|docked",
+        "state": "loaded",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "docked",
+        "hash": "a1e22447c286234b",
+        "path": "design/asbuilt-full/library/a1e22447c286234b.webp"
+      },
+      {
+        "key": "loaded|light|820x700|full",
+        "state": "loaded",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "full",
+        "hash": "611045047714937c",
+        "path": "design/asbuilt-full/library/611045047714937c.webp"
+      },
+      {
+        "key": "loaded|light|768x1024|docked",
+        "state": "loaded",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "docked",
+        "hash": "917c7f4fd2621409",
+        "path": "design/asbuilt-full/library/917c7f4fd2621409.webp"
+      },
+      {
+        "key": "loaded|light|768x1024|full",
+        "state": "loaded",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "full",
+        "hash": "15919ff857c29a63",
+        "path": "design/asbuilt-full/library/15919ff857c29a63.webp"
+      },
+      {
+        "key": "loaded|light|760x700|docked",
+        "state": "loaded",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "docked",
+        "hash": "a1e22447c286234b",
+        "path": "design/asbuilt-full/library/a1e22447c286234b.webp"
+      },
+      {
+        "key": "loaded|light|760x700|full",
+        "state": "loaded",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "full",
+        "hash": "c5a83fc33e7e65b5",
+        "path": "design/asbuilt-full/library/c5a83fc33e7e65b5.webp"
+      },
+      {
+        "key": "loaded|light|700x700|docked",
+        "state": "loaded",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "docked",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "loaded|light|390x844|docked",
+        "state": "loaded",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "docked",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      }
+    ]
+  },
+  "contactSheets": {
+    "dark": [
+      "contact-dark.webp"
+    ],
+    "light": [
+      "contact-light.webp"
+    ]
+  },
+  "scenarios": [
+    {
+      "key": "library-empty|dark",
+      "name": "library-empty",
+      "theme": "dark",
+      "hash": "4455b5448a7ff4c2",
+      "path": "design/asbuilt-full/library/4455b5448a7ff4c2.webp"
+    },
+    {
+      "key": "library-empty|light",
+      "name": "library-empty",
+      "theme": "light",
+      "hash": "7873ce90052a5f62",
+      "path": "design/asbuilt-full/library/7873ce90052a5f62.webp"
+    },
+    {
+      "key": "library-grid-view|dark",
+      "name": "library-grid-view",
+      "theme": "dark",
+      "hash": "4455b5448a7ff4c2",
+      "path": "design/asbuilt-full/library/4455b5448a7ff4c2.webp"
+    },
+    {
+      "key": "library-grid-view|light",
+      "name": "library-grid-view",
+      "theme": "light",
+      "hash": "7873ce90052a5f62",
+      "path": "design/asbuilt-full/library/7873ce90052a5f62.webp"
+    },
+    {
+      "key": "library-list-view|dark",
+      "name": "library-list-view",
+      "theme": "dark",
+      "hash": "4455b5448a7ff4c2",
+      "path": "design/asbuilt-full/library/4455b5448a7ff4c2.webp"
+    },
+    {
+      "key": "library-list-view|light",
+      "name": "library-list-view",
+      "theme": "light",
+      "hash": "7873ce90052a5f62",
+      "path": "design/asbuilt-full/library/7873ce90052a5f62.webp"
+    },
+    {
+      "key": "library-multi-select|dark",
+      "name": "library-multi-select",
+      "theme": "dark",
+      "hash": "4455b5448a7ff4c2",
+      "path": "design/asbuilt-full/library/4455b5448a7ff4c2.webp"
+    },
+    {
+      "key": "library-multi-select|light",
+      "name": "library-multi-select",
+      "theme": "light",
+      "hash": "7873ce90052a5f62",
+      "path": "design/asbuilt-full/library/7873ce90052a5f62.webp"
+    },
+    {
+      "key": "library-lightroom-connected|dark",
+      "name": "library-lightroom-connected",
+      "theme": "dark",
+      "hash": "4455b5448a7ff4c2",
+      "path": "design/asbuilt-full/library/4455b5448a7ff4c2.webp"
+    },
+    {
+      "key": "library-lightroom-connected|light",
+      "name": "library-lightroom-connected",
+      "theme": "light",
+      "hash": "7873ce90052a5f62",
+      "path": "design/asbuilt-full/library/7873ce90052a5f62.webp"
+    },
+    {
+      "key": "library-large|dark",
+      "name": "library-large",
+      "theme": "dark",
+      "skipped": true,
+      "reason": "no large-library fixture/mock wired into this script (would need a ?libn=N mock like test/library_dock_states.mjs uses, not implemented this pass)"
+    },
+    {
+      "key": "library-large|light",
+      "name": "library-large",
+      "theme": "light",
+      "skipped": true,
+      "reason": "no large-library fixture/mock wired into this script (would need a ?libn=N mock like test/library_dock_states.mjs uses, not implemented this pass)"
     }
   ]
 }

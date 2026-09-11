@@ -1,7 +1,7 @@
 {
   "id": "fxsec-info",
   "group": "A",
-  "generatedAt": "2026-09-11T16:25:26.081Z",
+  "generatedAt": "2026-09-11T17:48:25.751Z",
   "hasToggle": false,
   "tree": {
     "tag": "div",
@@ -2529,5 +2529,763 @@
       "prop": "boxShadow",
       "value": "none"
     }
-  ]
+  ],
+  "matrix": {
+    "dimensions": {
+      "states": [
+        "rest",
+        "hover"
+      ],
+      "themes": [
+        "dark",
+        "light"
+      ],
+      "widths": [
+        "1440x900",
+        "1200x800",
+        "1024x768",
+        "960x760",
+        "900x760",
+        "820x700",
+        "768x1024",
+        "760x700",
+        "700x700",
+        "390x844"
+      ],
+      "sidebars": [
+        "expanded",
+        "collapsed"
+      ]
+    },
+    "entries": [
+      {
+        "key": "rest|dark|1440x900|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "abaeee8a85d634be",
+        "path": "design/asbuilt-full/fxsec-info/abaeee8a85d634be.webp"
+      },
+      {
+        "key": "rest|dark|1440x900|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|1200x800|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "abaeee8a85d634be",
+        "path": "design/asbuilt-full/fxsec-info/abaeee8a85d634be.webp"
+      },
+      {
+        "key": "rest|dark|1200x800|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|1024x768|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "abaeee8a85d634be",
+        "path": "design/asbuilt-full/fxsec-info/abaeee8a85d634be.webp"
+      },
+      {
+        "key": "rest|dark|1024x768|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|960x760|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "87dc1c8f0532356c",
+        "path": "design/asbuilt-full/fxsec-info/87dc1c8f0532356c.webp"
+      },
+      {
+        "key": "rest|dark|960x760|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|900x760|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "15de2f5d3a358355",
+        "path": "design/asbuilt-full/fxsec-info/15de2f5d3a358355.webp"
+      },
+      {
+        "key": "rest|dark|900x760|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|820x700|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "e0189b4f3a586eb4",
+        "path": "design/asbuilt-full/fxsec-info/e0189b4f3a586eb4.webp"
+      },
+      {
+        "key": "rest|dark|820x700|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|768x1024|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "f8acd42709f648da",
+        "path": "design/asbuilt-full/fxsec-info/f8acd42709f648da.webp"
+      },
+      {
+        "key": "rest|dark|768x1024|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|760x700|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "d7122759584d1a3b",
+        "path": "design/asbuilt-full/fxsec-info/d7122759584d1a3b.webp"
+      },
+      {
+        "key": "rest|dark|760x700|collapsed",
+        "state": "rest",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|dark|700x700|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "e9c01a4e3dc5411e",
+        "path": "design/asbuilt-full/fxsec-info/e9c01a4e3dc5411e.webp"
+      },
+      {
+        "key": "rest|dark|390x844|expanded",
+        "state": "rest",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "88d9b079c0321c36",
+        "path": "design/asbuilt-full/fxsec-info/88d9b079c0321c36.webp"
+      },
+      {
+        "key": "rest|light|1440x900|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "4cd13cd9d9ddbd1f",
+        "path": "design/asbuilt-full/fxsec-info/4cd13cd9d9ddbd1f.webp"
+      },
+      {
+        "key": "rest|light|1440x900|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|1200x800|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "4cd13cd9d9ddbd1f",
+        "path": "design/asbuilt-full/fxsec-info/4cd13cd9d9ddbd1f.webp"
+      },
+      {
+        "key": "rest|light|1200x800|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|1024x768|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "4cd13cd9d9ddbd1f",
+        "path": "design/asbuilt-full/fxsec-info/4cd13cd9d9ddbd1f.webp"
+      },
+      {
+        "key": "rest|light|1024x768|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|960x760|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "c7c7e9ed525b8ecc",
+        "path": "design/asbuilt-full/fxsec-info/c7c7e9ed525b8ecc.webp"
+      },
+      {
+        "key": "rest|light|960x760|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|900x760|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "59ed2e2dc630e5de",
+        "path": "design/asbuilt-full/fxsec-info/59ed2e2dc630e5de.webp"
+      },
+      {
+        "key": "rest|light|900x760|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|820x700|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "abd876ecb9f952e1",
+        "path": "design/asbuilt-full/fxsec-info/abd876ecb9f952e1.webp"
+      },
+      {
+        "key": "rest|light|820x700|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|768x1024|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "223aaa460ba69b0a",
+        "path": "design/asbuilt-full/fxsec-info/223aaa460ba69b0a.webp"
+      },
+      {
+        "key": "rest|light|768x1024|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|760x700|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "31528f69f313e943",
+        "path": "design/asbuilt-full/fxsec-info/31528f69f313e943.webp"
+      },
+      {
+        "key": "rest|light|760x700|collapsed",
+        "state": "rest",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "rest|light|700x700|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "7ca1fa7d4847e5b7",
+        "path": "design/asbuilt-full/fxsec-info/7ca1fa7d4847e5b7.webp"
+      },
+      {
+        "key": "rest|light|390x844|expanded",
+        "state": "rest",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "8c4b7f0f20fb3bbb",
+        "path": "design/asbuilt-full/fxsec-info/8c4b7f0f20fb3bbb.webp"
+      },
+      {
+        "key": "hover|dark|1440x900|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "abaeee8a85d634be",
+        "path": "design/asbuilt-full/fxsec-info/abaeee8a85d634be.webp"
+      },
+      {
+        "key": "hover|dark|1440x900|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|1200x800|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "abaeee8a85d634be",
+        "path": "design/asbuilt-full/fxsec-info/abaeee8a85d634be.webp"
+      },
+      {
+        "key": "hover|dark|1200x800|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|1024x768|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "abaeee8a85d634be",
+        "path": "design/asbuilt-full/fxsec-info/abaeee8a85d634be.webp"
+      },
+      {
+        "key": "hover|dark|1024x768|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|960x760|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "87dc1c8f0532356c",
+        "path": "design/asbuilt-full/fxsec-info/87dc1c8f0532356c.webp"
+      },
+      {
+        "key": "hover|dark|960x760|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|900x760|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "15de2f5d3a358355",
+        "path": "design/asbuilt-full/fxsec-info/15de2f5d3a358355.webp"
+      },
+      {
+        "key": "hover|dark|900x760|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|820x700|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "e0189b4f3a586eb4",
+        "path": "design/asbuilt-full/fxsec-info/e0189b4f3a586eb4.webp"
+      },
+      {
+        "key": "hover|dark|820x700|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|768x1024|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "f8acd42709f648da",
+        "path": "design/asbuilt-full/fxsec-info/f8acd42709f648da.webp"
+      },
+      {
+        "key": "hover|dark|768x1024|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|760x700|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "d7122759584d1a3b",
+        "path": "design/asbuilt-full/fxsec-info/d7122759584d1a3b.webp"
+      },
+      {
+        "key": "hover|dark|760x700|collapsed",
+        "state": "hover",
+        "theme": "dark",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|dark|700x700|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "e9c01a4e3dc5411e",
+        "path": "design/asbuilt-full/fxsec-info/e9c01a4e3dc5411e.webp"
+      },
+      {
+        "key": "hover|dark|390x844|expanded",
+        "state": "hover",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "88d9b079c0321c36",
+        "path": "design/asbuilt-full/fxsec-info/88d9b079c0321c36.webp"
+      },
+      {
+        "key": "hover|light|1440x900|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "expanded",
+        "hash": "4cd13cd9d9ddbd1f",
+        "path": "design/asbuilt-full/fxsec-info/4cd13cd9d9ddbd1f.webp"
+      },
+      {
+        "key": "hover|light|1440x900|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 1440,
+        "height": 900,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|1200x800|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "expanded",
+        "hash": "4cd13cd9d9ddbd1f",
+        "path": "design/asbuilt-full/fxsec-info/4cd13cd9d9ddbd1f.webp"
+      },
+      {
+        "key": "hover|light|1200x800|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 1200,
+        "height": 800,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|1024x768|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "expanded",
+        "hash": "4cd13cd9d9ddbd1f",
+        "path": "design/asbuilt-full/fxsec-info/4cd13cd9d9ddbd1f.webp"
+      },
+      {
+        "key": "hover|light|1024x768|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 1024,
+        "height": 768,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|960x760|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "c7c7e9ed525b8ecc",
+        "path": "design/asbuilt-full/fxsec-info/c7c7e9ed525b8ecc.webp"
+      },
+      {
+        "key": "hover|light|960x760|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 960,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|900x760|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "expanded",
+        "hash": "59ed2e2dc630e5de",
+        "path": "design/asbuilt-full/fxsec-info/59ed2e2dc630e5de.webp"
+      },
+      {
+        "key": "hover|light|900x760|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 900,
+        "height": 760,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|820x700|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "abd876ecb9f952e1",
+        "path": "design/asbuilt-full/fxsec-info/abd876ecb9f952e1.webp"
+      },
+      {
+        "key": "hover|light|820x700|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 820,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|768x1024|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "expanded",
+        "hash": "223aaa460ba69b0a",
+        "path": "design/asbuilt-full/fxsec-info/223aaa460ba69b0a.webp"
+      },
+      {
+        "key": "hover|light|768x1024|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 768,
+        "height": 1024,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|760x700|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "31528f69f313e943",
+        "path": "design/asbuilt-full/fxsec-info/31528f69f313e943.webp"
+      },
+      {
+        "key": "hover|light|760x700|collapsed",
+        "state": "hover",
+        "theme": "light",
+        "width": 760,
+        "height": 700,
+        "sidebar": "collapsed",
+        "skipped": true,
+        "reason": "not visible in this combo"
+      },
+      {
+        "key": "hover|light|700x700|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 700,
+        "height": 700,
+        "sidebar": "expanded",
+        "hash": "7ca1fa7d4847e5b7",
+        "path": "design/asbuilt-full/fxsec-info/7ca1fa7d4847e5b7.webp"
+      },
+      {
+        "key": "hover|light|390x844|expanded",
+        "state": "hover",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "sidebar": "expanded",
+        "hash": "8c4b7f0f20fb3bbb",
+        "path": "design/asbuilt-full/fxsec-info/8c4b7f0f20fb3bbb.webp"
+      }
+    ]
+  },
+  "contactSheets": {
+    "dark": [
+      "contact-dark.webp"
+    ],
+    "light": [
+      "contact-light.webp"
+    ]
+  }
 }
