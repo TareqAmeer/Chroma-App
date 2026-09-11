@@ -920,12 +920,12 @@
     },
     "T38": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[testing-tool gap audit, 2026-09-11] no test feeds a corrupt .cube LUT, a truncated RW2, or an oversized/zero-byte image and asserts a clean user-facing error instead of a silent hang or crash — exactly the failure shape the hang-diagnose skill and editor_hang_diagnose.mjs (T28) exist to clean up AFTER the fact, with nothing catching it before ship.",
       "wireframeRef": null,
-      "check": null,
+      "check": "test/editor_fuzz_input.mjs",
       "panel": null,
-      "note": "A small corpus of deliberately malformed fixtures (truncated PNG, a .cube with a wrong LUT_3D_SIZE header, a 0-byte file) run through the real load paths, asserting a bounded time-to-error and a visible toast/log rather than a hang (reuse editor_hang_diagnose.mjs's Debugger.pause polling as the hang detector)."
+      "note": "A small corpus of deliberately malformed fixtures (truncated PNG, a .cube with a wrong LUT_3D_SIZE header, a 0-byte file) run through the real load paths, asserting a bounded time-to-error and a visible toast/log rather than a hang (reuse editor_hang_diagnose.mjs's Debugger.pause polling as the hang detector). CLOSED 2026-09-11: test/editor_fuzz_input.mjs runs 7 adversarial fixtures (garbage .cube text, a truncated .cube header, a huge claimed LUT_3D_SIZE, a zero-byte .cube, a truncated PNG, a zero-byte image, a mislabeled non-image .png) through the real hf()/loadFXImages() entry points with a generous 8s per-case timeout via Promise.race, asserting each settles (a caught/reported error is a PASS — only a HANG or an uncaught page error is a finding). Wired as `npm run editor:fuzz-input` and into editor:gates. Verified live: passes clean, ~3.8s/case."
     },
     "T39": {
       "category": "tooling-gap",

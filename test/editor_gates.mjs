@@ -122,6 +122,10 @@ const GATES = [
   // T37 (editor_ux_spec.json): saves a session with several feature families touched, does a
   // REAL page reload (not a same-context snapshot re-apply), and diffs restored state.
   { name: 'editor:session-roundtrip', cmd: ['node', 'test/editor_session_roundtrip.mjs'] },
+  // T38 (editor_ux_spec.json): feeds malformed .cube/image fixtures through the real load paths,
+  // asserting a bounded settle time and no uncaught error — the before-ship half of what
+  // editor_hang_diagnose.mjs (T28) exists to clean up after a hang is already reported live.
+  { name: 'editor:fuzz-input', cmd: ['node', 'test/editor_fuzz_input.mjs'] },
 ];
 
 const verbose = process.argv.includes('--verbose');
