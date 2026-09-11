@@ -342,6 +342,7 @@ async function shootIfVisible(entry, filename, dir) {
   }, entry.selector);
   if (!visible) return false;
   const elHandle = await page.$(entry.selector);
+  if (!elHandle) return false; // same transient-element race as captureBuffer() below
   await elHandle.screenshot({ path: path.join(dir, filename), type: 'webp', quality: 90 });
   return true;
 }
@@ -548,6 +549,12 @@ if (!NO_MATRIX) {
     // (export progress bar, panel-close grid-column transition, …) that otherwise made
     // elementHandle.screenshot()'s "wait for stable" check exceed the 4000ms default timeout.
     const elHandle = await page.$(entry.selector);
+    // fx-toast (and anything else transient) can disappear in the gap between the visibility
+    // check above and this re-query — page.$() then returns null. Treat that race as "not
+    // visible" too, not a crash (group B found this: 11 combos threw "Cannot read properties of
+    // null" on fx-toast, which only holds ~1900ms and easily loses that race once theme/width/
+    // sidebar setup eats into the window).
+    if (!elHandle) return null;
     return elHandle.screenshot({ type: 'webp', quality: 85, timeout: 10000 });
   }
 
@@ -576,6 +583,10 @@ if (!NO_MATRIX) {
     if (!entry.selector) continue;
     const spec = await loadSpec(entry.id);
     spec.matrix = spec.matrix || { dimensions: {}, entries: [] };
+    // `failed` entries are deliberately NOT "done" — resuming should retry them, not lock in a
+    // transient flake forever. Drop them from both the resumability set and the stored entries
+    // (a retry that succeeds replaces the failed record; a retry that fails again re-appends it).
+    spec.matrix.entries = spec.matrix.entries.filter((e) => !e.failed);
     const doneKeys = new Set(spec.matrix.entries.map((e) => e.key));
     const states = Object.entries(entry.states || {}).filter(([, fired]) => fired === true).map(([k]) => k);
     if (!states.length) states.push('rest');
@@ -719,6 +730,7 @@ if (!NO_MATRIX) {
   async function captureScenario(entry, name, driver) {
     const spec = await loadSpec(entry.id);
     spec.scenarios = spec.scenarios || [];
+    spec.scenarios = spec.scenarios.filter((s) => !s.failed); // same "failed isn't done" rule as the matrix
     const already = new Set(spec.scenarios.map((s) => s.key));
     for (const theme of THEMES) {
       const key = `${name}|${theme}`;
