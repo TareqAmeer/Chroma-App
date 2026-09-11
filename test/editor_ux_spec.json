@@ -938,12 +938,12 @@
     },
     "T40": {
       "category": "tooling-gap",
-      "status": "backlog",
+      "status": "fixed",
       "source": "[testing-tool gap audit, 2026-09-11] the app can be opened in two tabs against the same IndexedDB (lutcache, session store) — a realistic user mistake — and nothing tests concurrent-write behaviour between them; today's outcome is undefined.",
       "wireframeRef": null,
-      "check": null,
+      "check": "test/editor_crosstab_check.mjs",
       "panel": null,
-      "note": "Two Playwright pages against the same origin, one writing a LUT-cache entry / session save while the other reads, asserting no corruption and a defined (even if 'last write wins') outcome rather than an undefined one."
+      "note": "Two Playwright pages against the same origin, one writing a LUT-cache entry / session save while the other reads, asserting no corruption and a defined (even if 'last write wins') outcome rather than an undefined one. CLOSED 2026-09-11: test/editor_crosstab_check.mjs opens two tabs in the same browser context, writes a lutcache entry from tab A, confirms tab B reads it back correctly, then has both tabs write DIFFERENT values to the SAME key concurrently and asserts the final value is exactly one of the two writes (not a corrupted in-between state) with no uncaught error in either tab. Wired as `npm run editor:crosstab-check` and into editor:gates. Verified live: passes clean."
     },
     "T41": {
       "category": "tooling-gap",

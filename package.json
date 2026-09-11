@@ -46,6 +46,7 @@
     "editor:fuzz-input": "node test/editor_fuzz_input.mjs",
     "editor:canvas-resize-leak": "node test/editor_canvas_resize_leak.mjs",
     "editor:offline-check": "node test/editor_offline_check.mjs",
+    "editor:crosstab-check": "node test/editor_crosstab_check.mjs",
     "editor:fast-check": "node test/editor_snap_lists_check.mjs && node test/editor_html_validity_check.mjs",
     "editor:token-check": "node test/editor_token_check.mjs",
     "editor:gates": "node test/editor_gates.mjs"

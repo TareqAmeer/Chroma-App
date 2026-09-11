@@ -138,6 +138,9 @@ const GATES = [
   // page reload while offline, which this test found genuinely doesn't work today (no Cache
   // Storage layer in coi-serviceworker.min.js) and logs as a note rather than failing on it.
   { name: 'editor:offline-check', cmd: ['node', 'test/editor_offline_check.mjs'] },
+  // T40 (editor_ux_spec.json): two tabs against the same IndexedDB — a real user mistake — write/
+  // read/race-checked for corruption, not just "does it throw".
+  { name: 'editor:crosstab-check', cmd: ['node', 'test/editor_crosstab_check.mjs'] },
 ];
 
 const verbose = process.argv.includes('--verbose');
