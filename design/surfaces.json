@@ -75,12 +75,54 @@
       "wireframeFile": null,
       "group": "C",
       "covers": [
-        "cl-secnav",
         "cl-tray-hint",
         "cl-shape-hint",
-        "cl-cellpanel",
         "cl-empty"
       ]
+    },
+    {
+      "id": "cl-secnav",
+      "kind": "chrome",
+      "selector": "#cl-secnav",
+      "openSteps": [
+        {
+          "eval": "switchTab('collage')"
+        },
+        {
+          "width": 390,
+          "height": 844
+        },
+        {
+          "eval": "clSelectCell(0)"
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "C"
+    },
+    {
+      "id": "cl-cellpanel",
+      "kind": "chrome",
+      "selector": "#cl-cellpanel",
+      "openSteps": [
+        {
+          "eval": "switchTab('collage')"
+        },
+        {
+          "eval": "clSelectCell(0)"
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "C"
     },
     {
       "id": "panel-guide",
@@ -98,10 +140,7 @@
       },
       "wireframe": false,
       "wireframeFile": null,
-      "group": "C",
-      "covers": [
-        "fx-info"
-      ]
+      "group": "C"
     },
     {
       "id": "fxsec-image",
@@ -192,9 +231,33 @@
       "wireframeFile": null,
       "group": "A",
       "covers": [
-        "row-nr-high-progress",
-        "nr-high-progress-bar",
         "nr-gate-hint"
+      ]
+    },
+    {
+      "id": "row-nr-high-progress",
+      "kind": "chrome",
+      "selector": "#row-nr-high-progress",
+      "openSteps": [
+        {
+          "eval": "(function(){switchTab('fx');fxSection('nr', true);})()"
+        },
+        {
+          "eval": "(function(){var it=(typeof curItem==='function')?curItem():null;if(it)it.rawFile=it.rawFile||{mock:true};window.chromasmithDenoiseHigh=function(f,onProgress){if(onProgress)onProgress(5,10);return new Promise(function(){});};fxDenoiseNowClicked();})()"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "A",
+      "covers": [
+        "nr-high-progress-bar"
       ]
     },
     {
@@ -322,6 +385,12 @@
       "openSteps": [
         {
           "eval": "fxSection('local', true)"
+        },
+        {
+          "eval": "(function(){if(typeof mskAdd==='function'&&typeof fxState!=='undefined'&&!fxState.masks.length)mskAdd('radial');})()"
+        },
+        {
+          "eval": "(function(){if(typeof mskSetPreviewMode==='function')mskSetPreviewMode('select');})()"
         },
         {
           "wait": 150
@@ -606,6 +675,9 @@
           "eval": "fxSection('export', true)"
         },
         {
+          "eval": "(function(){var pb=document.getElementById('fx-export-prog'),bar=document.getElementById('fx-export-prog-bar');if(pb)pb.style.display='block';if(bar)bar.style.width='45%';})()"
+        },
+        {
           "wait": 150
         }
       ],
@@ -646,7 +718,10 @@
       "kind": "fxsec",
       "wireframe": false,
       "wireframeFile": null,
-      "group": "A"
+      "group": "A",
+      "covers": [
+        "fx-info"
+      ]
     },
     {
       "id": "fx-settings-menu",
@@ -667,11 +742,45 @@
       "kind": "menu",
       "wireframe": false,
       "wireframeFile": null,
-      "group": "B",
-      "covers": [
-        "fx-settings-split-list",
-        "fx-settings-history-list"
-      ]
+      "group": "B"
+    },
+    {
+      "id": "fx-settings-split-list",
+      "openSteps": [
+        {
+          "eval": "settingsToggle(); settingsShowCat('split')"
+        }
+      ],
+      "selector": "#fx-settings-split-list",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true
+      },
+      "note": null,
+      "kind": "menu",
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "B"
+    },
+    {
+      "id": "fx-settings-history-list",
+      "openSteps": [
+        {
+          "eval": "settingsToggle(); settingsShowCat('history')"
+        }
+      ],
+      "selector": "#fx-settings-history-list",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": true
+      },
+      "note": null,
+      "kind": "menu",
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "B"
     },
     {
       "id": "fx-tools-menu",
@@ -757,11 +866,49 @@
       "kind": "menu",
       "wireframe": false,
       "wireframeFile": null,
+      "group": "B"
+    },
+    {
+      "id": "ic-split",
+      "kind": "chrome",
+      "selector": "#btn-split",
+      "openSteps": [
+        {
+          "eval": "(function(){switchTab('fx');document.body.classList.remove('deskx','lib-full');if(typeof relocatePreviewTools==='function')relocatePreviewTools(false,true);if(typeof fxSplit!=='undefined'&&!fxSplit&&typeof toggleSplit==='function')toggleSplit();})()"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
       "group": "B",
-      "covers": [
-        "ic-split",
-        "ic-splitmenu"
-      ]
+      "note": "reachable only outside body.deskx (a plain 700-899px-wide desktop window, or Tauri narrow) — the surface_capture.mjs harness always loads with ?deskx=1 which forces deskx permanently regardless of viewport width, so openSteps removes the class directly to reach this real, otherwise-untestable state (S6d chunk B)."
+    },
+    {
+      "id": "ic-splitmenu",
+      "kind": "chrome",
+      "selector": "#btn-split-menu",
+      "openSteps": [
+        {
+          "eval": "(function(){switchTab('fx');document.body.classList.remove('deskx','lib-full');if(typeof relocatePreviewTools==='function')relocatePreviewTools(false,true);})()"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "B",
+      "note": "same deskx-hidden trigger-icon class as ic-split — see that entry's note."
     },
     {
       "id": "fx-timeline-popover",
@@ -784,10 +931,73 @@
       "kind": "menu",
       "wireframe": false,
       "wireframeFile": null,
+      "group": "B"
+    },
+    {
+      "id": "ic-timeline",
+      "kind": "chrome",
+      "selector": "#btn-history",
+      "openSteps": [
+        {
+          "eval": "(function(){switchTab('fx');document.body.classList.remove('deskx','lib-full');if(typeof relocatePreviewTools==='function')relocatePreviewTools(false,true);})()"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "B",
+      "note": "same deskx-hidden trigger-icon class as ic-split — see that entry's note."
+    },
+    {
+      "id": "hdr-about",
+      "kind": "chrome",
+      "selector": "#hdr-about",
+      "openSteps": [
+        {
+          "eval": "(function(){switchTab('fx');document.body.classList.remove('deskx','lib-full');})()"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "B",
+      "note": "hdr-info's real parent: `header{display:none}` under body.deskx, which the surface_capture.mjs harness forces on permanently via ?deskx=1 — see ic-split's note. surfaces.json previously listed hdr-info as part of fx-deskbar's covers, but it isn't in that DOM subtree at all; it's the About icon inside the app header (#hdr-about), a separate element entirely."
+    },
+    {
+      "id": "db-history-wrap",
+      "kind": "chrome",
+      "selector": "#db-history-wrap",
+      "openSteps": [
+        {
+          "eval": "(function(){switchTab('fx');document.body.classList.remove('deskx','lib-full');window.chromasmithGetExportHistory=window.chromasmithGetExportHistory||(function(){return [];});if(typeof fxUpdateHistoryBtn==='function')fxUpdateHistoryBtn();})()"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
       "group": "B",
       "covers": [
-        "ic-timeline"
-      ]
+        "db-history"
+      ],
+      "note": "also gated on window.chromasmithGetExportHistory being a function (desktop/Tauri bridge, absent in the plain-browser test harness) — mocked here — on top of the deskx-hidden class (see ic-split's note)."
     },
     {
       "id": "cs-modal",
@@ -890,15 +1100,38 @@
       "opened": true,
       "openSteps": [
         {
-          "eval": "resize viewport to <=700px width, applyFxLayout()"
+          "width": 390,
+          "height": 844
         }
       ],
       "wireframe": false,
       "wireframeFile": null,
+      "group": "D"
+    },
+    {
+      "id": "fx-sheet-handle",
+      "kind": "chrome",
+      "selector": "#fx-sheet-handle",
+      "openSteps": [
+        {
+          "width": 390,
+          "height": 844
+        },
+        {
+          "eval": "if(typeof fxSection==='function')fxSection('looks')"
+        },
+        {
+          "wait": 200
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
       "group": "D",
-      "covers": [
-        "fx-sheet-handle"
-      ]
+      "note": "mobile-sheet's own kind ('layout') isn't wired into any surface_capture.mjs loop (pre-existing, out of this chunk's scope — its covers entry only ever affected the structural coverage check, never produced real images), so fx-sheet-handle needs a real openSteps path of its own: mobile width + opening a NON-default section (fxSection('image',true) is called at init with noSheet, so 'image' would already be sec-active and toggle the sheet CLOSED per fxSection's close-vs-open branch — 'looks' avoids that, same lesson as the S6/groups-B-E entry)."
     },
     {
       "id": "library",
@@ -943,15 +1176,35 @@
       "wireframeFile": null,
       "group": "A",
       "covers": [
-        "hdr-info",
-        "step-history",
         "fx-deskbar-left",
         "fx-deskbar-title",
         "fx-deskbar-right",
-        "fx-deskbar-tools",
-        "db-history-wrap",
-        "db-history"
+        "fx-deskbar-tools"
       ]
+    },
+    {
+      "id": "step-history",
+      "kind": "chrome",
+      "selector": "#step-history",
+      "openSteps": [
+        {
+          "eval": "switchTab('match')"
+        },
+        {
+          "eval": "(function(){ST.history.push({ver:getNextVer(),lut:null,xmp:'',summary:['Surface-capture mock entry'],deviceFile:null,prevVer:null});renderHistory();})()"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "C",
+      "note": "surfaces.json previously listed step-history as part of fx-deskbar's covers, but it isn't in that DOM subtree at all — it's the LUT-generation version history on the Match & Refine page (#panel-match), a completely different feature. Mocked a history entry via ST.history.push()+renderHistory() rather than driving a real startMatch() run (needs real before/target images and a LUT fit)."
     },
     {
       "id": "fx-toolrail",
@@ -964,10 +1217,28 @@
       },
       "wireframe": false,
       "wireframeFile": null,
+      "group": "A"
+    },
+    {
+      "id": "fx-rail-show",
+      "kind": "chrome",
+      "selector": "#fx-rail-show",
+      "openSteps": [
+        {
+          "eval": "(function(){switchTab('fx');document.body.classList.add('deskx');if(typeof railMode==='function')railMode('hidden');})()"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
       "group": "A",
-      "covers": [
-        "fx-rail-show"
-      ]
+      "note": "surfaces.json previously listed fx-rail-show as part of fx-toolrail's covers, but the two are mutually exclusive: railMode('hidden') sets #fx-toolrail to display:none and shows this floating re-show button in its place (a sibling, not a child) — captured as its own state instead."
     },
     {
       "id": "lib-main",
@@ -1081,7 +1352,8 @@
       "selector": "#lib-grid",
       "openSteps": [
         {
-          "eval": "resize viewport to <=700px width, applyFxLayout()"
+          "width": 390,
+          "height": 844
         }
       ],
       "opened": true,
@@ -1098,7 +1370,8 @@
       "selector": "#fx-rail-foot",
       "openSteps": [
         {
-          "eval": "resize viewport to <=700px width, applyFxLayout()"
+          "width": 390,
+          "height": 844
         }
       ],
       "opened": true,
@@ -1115,7 +1388,8 @@
       "selector": "#fx-actionbar",
       "openSteps": [
         {
-          "eval": "resize viewport to <=700px width, applyFxLayout()"
+          "width": 390,
+          "height": 844
         }
       ],
       "opened": true,
@@ -1132,7 +1406,8 @@
       "selector": "#fx-secnav",
       "openSteps": [
         {
-          "eval": "resize viewport to <=700px width, applyFxLayout()"
+          "width": 390,
+          "height": 844
         }
       ],
       "opened": true,

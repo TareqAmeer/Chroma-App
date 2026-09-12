@@ -571,3 +571,64 @@ call `ui:test`) will currently fail on that until it's fixed.
   commits are held until S6d fixes them — intended, this is the alert that was missing.
 - S6d prompt added to sessions.md. Review page must now show "N of M captured" + the uncaptured list.
 
+**S6d chunk B — settings/popover/progress overlays — 2026-09-12 — done, 19/19 resolved, 0 unreachable**
+- Scope: the 19 `COVERS_HIDES_SURFACE` items under panel-collage, panel-guide, fxsec-nr, fxsec-local,
+  fxsec-export, fx-settings-menu, fx-split-popover, fx-timeline-popover, mobile-sheet, fx-deskbar,
+  fx-toolrail. 9 became own `design/surfaces.json` entries with real capture images (cl-secnav,
+  cl-cellpanel, fx-settings-split-list, fx-settings-history-list, ic-split, ic-splitmenu, ic-timeline,
+  fx-sheet-handle, hdr-about→hdr-info, step-history, db-history-wrap→db-history, fx-rail-show,
+  row-nr-high-progress→nr-high-progress-bar — 13 surfaces, 26 images); 4 resolved as metadata-only
+  `covers` once their parent's openSteps were fixed to actually put them on screen (fx-info under
+  fxsec-info not panel-guide, msk-prevmode-hint/msk-col-picker under fxsec-local, fx-export-prog-bar
+  under fxsec-export, db-history folded under its own new db-history-wrap).
+- **3 surfaces.json entries were flat-out mislabeled, found only by reading the DOM, not guessed**:
+  `fx-info` (panel-guide's covers) and `step-history` (fx-deskbar's covers) aren't in those parents'
+  DOM subtrees at all — `#fx-info` is the Editor's own Info&Metadata section status line
+  (`.fx-ctrl[data-fxsec="info"]`, reused as a caption for crop/loupe/export states too), and
+  `#step-history` is the Match & Refine page's LUT-version history — moved to their real parents.
+  `fx-rail-show` (fx-toolrail's covers) is mutually EXCLUSIVE with #fx-toolrail (`railMode('hidden')`
+  sets `#fx-toolrail{display:none}` and shows this floating re-show button as a sibling, not a
+  child) — captured as its own state instead.
+  `hdr-info`/`ic-split`/`ic-splitmenu`/`ic-timeline`/`db-history-wrap` are real but only visible
+  outside `body.deskx` (header and 4 deskbar buttons are `display:none!important` under deskx) —
+  and `test/surface_capture.mjs` always loads with `?deskx=1`, which forces deskx PERMANENTLY
+  regardless of viewport width (an explicit early-return in the app's own `_applyDeskxWidth`), so no
+  amount of resizing reaches them. openSteps for these 5 explicitly `classList.remove('deskx')` to
+  reach the real, otherwise-untestable non-deskx desktop layout (a plain 700–899px window, or
+  Tauri narrow) — documented per-surface via a `note` field so a future session doesn't "fix" it
+  back to deskx.
+- **1 real, pre-existing test-harness bug fixed, found by a live capture failing first**: 5
+  `surfaces.json` entries (mobile-sheet, lib-grid, fx-rail-foot, fx-actionbar, fx-secnav) carried an
+  `openSteps` eval that was plain-English text, not JS — `"resize viewport to <=700px width,
+  applyFxLayout()"` — which `page.evaluate()` has always thrown a SyntaxError on
+  (confirmed live: `--only=fx-secnav` failed 2/2 with "Unexpected identifier 'viewport'" before any
+  of this chunk's own changes). Also, `mobile-sheet`'s kind (`"layout"`) was never wired into any
+  `surface_capture.mjs` loop at all (not `fxsecEntries`, not `OTHER_KINDS`, not `kind==='page'`), so
+  it silently produced zero real capture images despite `opened:true` — same class of gap as chunk
+  A's fx-hist/fx-more-menu finding. Fixed `runStep()` to support a real `{width,height}` step
+  (Playwright `setViewportSize` + `applyFxLayout()`/`applyClLayout()`, not reachable from inside
+  `page.evaluate`) and replaced all 5 broken eval strings with it; made `fx-sheet-handle` its own
+  `kind:"chrome"` surface (mobile-sheet's own images remain unfixed, pre-existing, out of scope).
+  `fx-secnav` needed a `MIN_OPEN_HEIGHT` override too (real height 21px, a thin section-nav strip).
+- **1 order-dependency bug found via a full-batch run failing after an isolated run passed** (same
+  toggle/order class as chunk A's `toggleSplit()`/`fxVideoGuidesToggle()` finding): `fx-rail-show`
+  and `row-nr-high-progress` passed alone but failed `w=0 h=0` in the full 19-item batch — an
+  earlier-run surface's openSteps had switched the active top-level tab away from `panel-fx`
+  (`step-history`'s `switchTab('match')`) or removed `body.deskx` (the 5 notes above) and nothing
+  downstream restored it. Fixed by making every new surface's own openSteps self-sufficient
+  (`switchTab('fx')` + `classList.add('deskx')` where needed) instead of assuming a prior item left
+  the right state — 6 more `MIN_OPEN_HEIGHT` overrides added for genuinely-short-but-real elements
+  (icon buttons, a 4px progress row) that the default 40px floor wrongly flagged as closed.
+- Verified live: read 3 of the new webps directly — `fx-settings-split-list/open_dark_crop.webp`
+  shows the Compare sub-pane (Split before/after, Original, Pinned, Exports), `ic-splitmenu/
+  open_dark_crop.webp` shows the split-menu chevron trigger visible outside deskx,
+  `row-nr-high-progress/open_dark_crop.webp` shows a partially-filled blue progress bar mid-denoise.
+  All genuinely open/visible, not blank/closed.
+- Final: 19/19 resolved (13 own-surfaces × 2 themes = 26 images captured, 0 failed on the final
+  full-batch run; 6 resolved as parent-covers metadata with no separate images needed), 0
+  unreachable, 0 approval-needed — no "Needs user approval to skip" heading existed yet to append to.
+- Not run: `surface_coverage_check`/`capture_audit` full gates (still fail on the library group + 8
+  NOT_CAPTURED items from separate S6d chunks, expected — not this chunk's bug). Directly confirmed
+  via `node test/surface_coverage_check.mjs --json` that none of this chunk's 19 ids appear in the
+  `integrity` findings list any more (28 remain, all outside this chunk's scope).
+

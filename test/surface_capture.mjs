@@ -151,6 +151,22 @@ async function runStep(step) {
   else if (step.eval) await page.evaluate(step.eval);
   else if (step.wait) await page.waitForTimeout(step.wait);
   else if (step.key) await page.keyboard.press(step.key);
+  // { width, height }: an actual viewport resize (Playwright API, not reachable from inside
+  // page.evaluate) followed by applyFxLayout()/applyClLayout() so the responsive breakpoints
+  // (mobile-fx/mobile-cl, deskx) re-evaluate against the new size. Several surfaces.json entries
+  // (mobile-sheet, fx-actionbar, fx-secnav) used to carry a plain-English eval STRING here
+  // ("resize viewport to <=700px width, applyFxLayout()") which is not valid JS — page.evaluate
+  // threw a SyntaxError on every run, so those three never produced a real image (S6d chunk B
+  // found this live: `--only=fx-secnav` failed 2/2 with "Unexpected identifier 'viewport'").
+  else if (step.width) {
+    await page.setViewportSize({ width: step.width, height: step.height || 900 });
+    await page.waitForTimeout(150);
+    await page.evaluate(() => {
+      if (typeof applyFxLayout === 'function') applyFxLayout();
+      if (typeof applyClLayout === 'function') applyClLayout();
+    });
+    await page.waitForTimeout(150);
+  }
 }
 async function closeAnyOverlay() {
   await page.keyboard.press('Escape').catch(() => {});
@@ -394,7 +410,7 @@ const OTHER_KINDS = new Set(['menu', 'modal', 'confirm', 'toast', 'chrome']);
 // A handful of 'other' surfaces are real UI but genuinely shorter than the default 40px openness
 // threshold (a one-line video-info badge, a 28px-tall video thumbnail strip) — assertVisibleTaller
 // would wrongly fail them as "looks closed" otherwise.
-const MIN_OPEN_HEIGHT = { 'fx-clip-info': 10, 'vid-thumbstrip': 20 };
+const MIN_OPEN_HEIGHT = { 'fx-clip-info': 10, 'vid-thumbstrip': 20, 'fx-secnav': 18, 'hdr-about': 28, 'ic-split': 28, 'ic-splitmenu': 28, 'ic-timeline': 28, 'db-history-wrap': 26, 'fx-sheet-handle': 16, 'fx-rail-show': 24, 'row-nr-high-progress': 3 };
 // Other pages (Match, Colour Copy, Collage, Guide) aren't part of the Editor/Library CORE set but
 // still need a look — desktop-only, default layout, both themes, same as menus/dialogs, per the
 // instruction's "menus, dialogs, overlays and other surfaces" bucket.
