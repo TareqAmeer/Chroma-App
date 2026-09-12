@@ -4870,7 +4870,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-11a';
+const BUILD='2026-09-12a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -22147,6 +22147,141 @@ function clExport(){
   });
   cv.toBlob(b=>{if(!b){log('Export failed','err');return;}const url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download='collage.jpg';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);log('Collage exported ('+W+'×'+H+')','ok');},'image/jpeg',0.95);
 }
+// ══ ?catalog=1 — component catalogue (docs/ui-workflow/STATE.md S1(d)) ══════════════════════
+// No refactor: reuses the real app's own <style> tag (already loaded) and clones REAL section
+// markup out of the already-booted app (so .seg's options, real onclick wiring, real computed
+// styles are all genuine) instead of hand-authoring component HTML. Renders one theme per load
+// (toggle with fxSetTheme(), same as every other test harness) — hover/focus are driven live by
+// Playwright on the "rest" instance, not simulated with extra classes.
+// ?catalog=1&panel=<fxsec> shows just that one .fx-ctrl section, states below still apply to it.
+function _catStub(root){
+  [root,...root.querySelectorAll('*')].forEach(el=>{
+    ['onclick','oninput','onchange','onkeydown','onkeyup','onmousedown'].forEach(a=>{if(el.hasAttribute(a))el.removeAttribute(a);});
+    el.onclick=el.oninput=el.onchange=null;
+  });
+}
+function _catLongText(el){
+  if(!el)return;
+  const t=el.matches&&el.matches('input,textarea')?null:el;
+  if(t)t.textContent='A very long label that wraps across multiple lines to stress the layout width';
+}
+function _catState(clone,state){
+  // Applied to the CLONE, never the live app node.
+  if(state==='disabled'){
+    const ctl=clone.matches('input,select,button')?clone:clone.querySelector('input,select,button');
+    if(ctl)ctl.disabled=true; else clone.classList.add('is-cat-disabled'); // no native control on this node (e.g. .fx-sub) — nothing to disable, kept as rest
+  } else if(state==='modified'){
+    if(clone.matches('.fx-row'))clone.classList.add('fx-mod');
+    else if(clone.matches('.fx-ctrl')){const r=clone.querySelector('.fx-row');if(r)r.classList.add('fx-mod');}
+    else if(clone.matches('.fx-toggle'))clone.classList.add('on');
+    else if(clone.matches('.seg')){const b=clone.querySelector('button');if(b){clone.querySelectorAll('button.on').forEach(x=>x.classList.remove('on'));b.classList.add('on');}}
+    else clone.classList.add('is-cat-modified'); // btn/fx-sub/fx-info-i have no distinct "modified" visual — rest stands in
+  } else if(state==='longlabel'){
+    if(clone.matches('.fx-info-i')){
+      // A 14x14 icon has no visible label text of its own (its "label" is the tooltip) — stress
+      // the title instead of overwriting the "i" glyph, which would just look broken.
+      clone.title='A very long tooltip label that would wrap across multiple lines to stress the layout width if it were shown on screen instead of on hover';
+      return;
+    }
+    const lbl=clone.matches('.fx-ctrl')?clone.querySelector('.fx-ctrl-title'):
+               clone.matches('.fx-row')?clone.querySelector('.fx-label'):
+               clone.matches('.btn')?clone:
+               clone.matches('.fx-sub')?clone:null;
+    if(lbl){
+      // Keep any child controls (toggle/info-i) — only rewrite the label's own leading text node.
+      const walker=[...lbl.childNodes].find(n=>n.nodeType===3);
+      if(walker)walker.textContent='A very long label that wraps across multiple lines to stress the layout width';
+      else lbl.textContent='A very long label that wraps across multiple lines to stress the layout width';
+    }
+  }
+}
+function _catItem(label,key,srcSel,state){
+  const wrap=document.createElement('div');wrap.className='cat-item';
+  wrap.innerHTML='<div class="cat-item-label">'+label+' — '+state+'</div>';
+  const src=document.querySelector(srcSel);
+  if(!src){wrap.innerHTML+='<div class="cat-missing">missing selector: '+srcSel+'</div>';return wrap;}
+  const clone=src.cloneNode(true);
+  clone.removeAttribute('id');clone.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));
+  clone.classList.add('sec-active'); // .fx-ctrl is display:none without it under body.fx-single (S1(d))
+  _catStub(clone);
+  _catState(clone,state);
+  clone.setAttribute('data-cat',key+'-'+state);
+  wrap.appendChild(clone);
+  return wrap;
+}
+function buildCatalogPage(){
+  document.body.classList.add('catalog-mode');
+  const css=document.createElement('style');
+  css.textContent='body.catalog-mode>*:not(#catalog-root){display:none!important}'
+    +'#catalog-root{padding:24px;display:flex;flex-direction:column;gap:20px;max-width:920px;margin:0 auto;background:var(--bg);min-height:100vh}'
+    +'#catalog-root .cat-item{border:1px solid var(--bdr);border-radius:8px;padding:14px;background:var(--sur)}'
+    +'#catalog-root .cat-item-label{font-family:var(--sans);font-size:11px;color:var(--mut);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}'
+    +'#catalog-root .cat-missing{font-family:var(--mono);font-size:11px;color:var(--err)}'
+    +'#catalog-root .cat-group-title{font-family:var(--sans);font-size:16px;font-weight:600;color:var(--txt);margin:8px 0 -6px}'
+    // A clone's .sec-active is added for parity with real markup (:has(.fx-mod) reset-icon rules
+    // key off it too), but the app's own fxSection() does a GLOBAL
+    // querySelectorAll('.fx-ctrl.sec-active').forEach(remove) on boot, which wipes it straight
+    // back off these clones (they're real .fx-ctrl nodes to that selector). Force visibility
+    // inside #catalog-root directly instead of depending on winning that race.
+    +'#catalog-root .fx-ctrl{display:block!important}';
+  document.head.appendChild(css);
+  const root=document.createElement('div');root.id='catalog-root';
+  document.body.appendChild(root);
+  const params=new URLSearchParams(location.search);
+  const onlyPanel=params.get('panel');
+  const STATES=['rest','disabled','modified','longlabel'];
+  // Real source elements to clone from, per S1(d)'s tested Retouch pairing plus one .bpri/.fx-sub
+  // instance (contract: "the older .bpri is still used by 10 elements, so include both").
+  const COMPONENTS=[
+    ['.fx-ctrl (section card)','fx-ctrl','.fx-ctrl[data-fxsec="retouch"]'],
+    ['.fx-row (slider row)','fx-row','#sl-heal-size'],
+    ['.fx-toggle','fx-toggle','#tg-retouch'],
+    ['.fx-sub','fx-sub','.fx-ctrl[data-fxsec="export"] .fx-sub'],
+    ['.btn.fx-btn-primary','fx-btn-primary','#btn-heal-paint'],
+    ['.bpri','bpri','#btn-fx-export'],
+    ['.seg (selectToSeg)','seg','#seg-heal-mode'],
+    ['.fx-info-i','fx-info-i','#ff-retouch .fx-info-i'],
+  ];
+  function resolveSel(sel){
+    // .fx-row/.fx-toggle/.fx-sub sources above are given as a descendant selector rooted at an
+    // id — walk up to the actual real component root to clone the whole real row/card, not just
+    // the input/switch inside it.
+    const el=document.querySelector(sel);
+    if(!el)return null;
+    if(sel==='#sl-heal-size')return el.closest('.fx-row');
+    if(sel==='#tg-retouch')return el; // .fx-toggle itself
+    return el;
+  }
+  COMPONENTS.forEach(([label,key,sel])=>{
+    if(onlyPanel)return; // panel mode below shows one section instead of the component grid
+    const title=document.createElement('div');title.className='cat-group-title';title.textContent=label;
+    root.appendChild(title);
+    STATES.forEach(state=>{
+      const realSel=sel==='#sl-heal-size'?null:sel;
+      const src=sel==='#sl-heal-size'?document.querySelector(sel)?.closest('.fx-row'):document.querySelector(sel);
+      if(!src){root.appendChild(_catItem(label,key,sel,state));return;}
+      const wrap=document.createElement('div');wrap.className='cat-item';
+      wrap.innerHTML='<div class="cat-item-label">'+label+' — '+state+'</div>';
+      const clone=src.cloneNode(true);
+      clone.removeAttribute('id');clone.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
+      clone.classList.add('sec-active');
+      _catStub(clone);_catState(clone,state);
+      clone.setAttribute('data-cat',key+'-'+state);
+      wrap.appendChild(clone);root.appendChild(wrap);
+    });
+  });
+  if(onlyPanel){
+    const src=document.querySelector('.fx-ctrl[data-fxsec="'+onlyPanel+'"]');
+    if(!src){root.innerHTML='<div class="cat-missing">no .fx-ctrl[data-fxsec="'+onlyPanel+'"]</div>';return;}
+    const clone=src.cloneNode(true);
+    clone.querySelectorAll('[id]').forEach(n=>{}); // keep ids for panel mode — selectToSeg-built .seg content already baked in via clone
+    clone.classList.add('sec-active');
+    _catStub(clone);
+    clone.setAttribute('data-cat','panel-'+onlyPanel);
+    root.appendChild(clone);
+  }
+}
+if(/[?&]catalog=1/.test(location.search))buildCatalogPage();
 </script>
 </body>
 </html>

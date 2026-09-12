@@ -801,3 +801,33 @@ call `ui:test`) will currently fail on that until it's fixed.
 - Verified the original 62 surfaces' data/UI are unchanged: same DATA object shape, same
   `ALL_IDS`/triage/db wiring; `read_db` on collection `triage` returned zero documents both
   before and after (no triage decisions had been saved yet, so nothing was at risk of loss).
+
+**Component catalogue (`?catalog=1`) — 2026-09-12 — done**
+- `?catalog=1` added to `chromasmith-22.html` (`buildCatalogPage()`, end of the main `<script>`):
+  boots the real app, then clones REAL live post-boot DOM (not hand-authored markup) for each
+  shared component — `.fx-ctrl`/`.fx-row`/`.fx-toggle`/`.fx-sub`/`.btn.fx-btn-primary`/`.bpri`/
+  `.seg`/`.fx-info-i` — into `#catalog-root`, hiding the rest of the page via
+  `body.catalog-mode>*:not(#catalog-root){display:none!important}`. `?catalog=1&panel=<fxsec>`
+  clones one whole `.fx-ctrl[data-fxsec=...]` section instead of the component grid.
+- Real bug hit while building it: `clone.classList.add('sec-active')` was silently wiped —
+  `fxSection()`'s boot call does a GLOBAL `querySelectorAll('.fx-ctrl.sec-active').forEach(remove)`
+  which also matches catalog clones (real `.fx-ctrl` nodes to that selector), racing after
+  `buildCatalogPage()` ran. Fixed by force-showing with `#catalog-root .fx-ctrl{display:block!important}`
+  instead of depending on winning that race — `.sec-active` is still added for parity with real
+  markup (`:has(.fx-mod)` reset-icon rules key off it) but visibility no longer depends on it.
+- States: rest/disabled/modified/longlabel are baked into the clone's markup by `_catState()`
+  (disabled → real `disabled` attr on the first control found; modified → `.fx-mod`/`.on` per
+  component; longlabel → rewrites the label's leading text node, or the `title` for `.fx-info-i`
+  since its own visible content is just "i"). hover/focus are NOT separate markup — driven live
+  by Playwright against the "rest" instance (real `:hover`/`:focus-visible`, no simulation).
+- `test/catalog_visual.mjs` (Playwright-runner test, added to `playwright.config.mjs`'s
+  `testMatch` and to `test/editor_gates.mjs` as `editor:catalog-visual`, blocking): one
+  `toHaveScreenshot()` per component x state x theme (`fxSetTheme()`) = 96 screenshots + 4
+  no-console-error/panel-mode checks = 100 tests. Baselines committed
+  (`test/catalog_visual.mjs-snapshots/*-darwin.png`, this Mac is Intel/x86_64 per
+  `user_hardware` memory) — **CI (macos-latest) needs to generate and commit its own run once**;
+  today's baseline is darwin-only and untested against CI's actual runner image.
+- Verified live: 100/100 pass clean; planted a 1px `.fx-row` padding regression
+  (`padding-left:1px` on `.fx-row`'s base rule) — correctly failed all 12 `fx-row` variants
+  (rest/disabled/modified/longlabel/hover/focus x dark/light) with pixel diffs; reverted, 2/2
+  spot-recheck (`fx-row — rest`, both themes) passed clean again.

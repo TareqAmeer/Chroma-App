@@ -212,6 +212,11 @@ const GATES = [
   // verify_tokens.py re-parses all three source blocks and asserts every declared CSS var is
   // either in design/tokens.json or documented in design/token-conflicts.md. Blocking.
   { name: 'editor:tokens-verify', cmd: ['bash', '-c', 'if [ -x .calibvenv/bin/python3 ]; then .calibvenv/bin/python3 design/verify_tokens.py; else python3 design/verify_tokens.py; fi'] },
+  // ?catalog=1 component catalogue (docs/ui-workflow/STATE.md S1(d)): one toHaveScreenshot() per
+  // shared component class x state (test/catalog_visual.mjs). Blocking — baselines are committed
+  // and a pixel-level regression in any shared component should fail the same way any other
+  // wireframe-diff gate here does.
+  { name: 'editor:catalog-visual', cmd: ['npx', 'playwright', 'test', 'test/catalog_visual.mjs', '--config=playwright.config.mjs'] },
 ];
 
 const verbose = process.argv.includes('--verbose');
