@@ -505,6 +505,61 @@ call `ui:test`) will currently fail on that until it's fixed.
   than leaving splash uncapturable on the review page.
 
 
+**S6d chunk A — panel-fx overlays — 2026-09-12 — done, 13/13 captured, 0 unreachable**
+- Scope: the 13 `COVERS_HIDES_SURFACE` items under `panel-fx` (fx-clip-info, fx-mask-overlay,
+  fx-ahroi-overlay, msk-paint-overlay, fx-guides-overlay, fx-split-line, fx-crop-overlay,
+  fx-filmstrip, vid-thumbstrip, fx-bgmenu-color, fx-bgmenu-reset) plus the 2 standalone
+  NOT_CAPTURED items (fx-hist, fx-more-menu — turned out already captured, see below).
+  Removed all 11 from `panel-fx.covers`. 9 became their own `design/surfaces.json` entries
+  (kind `chrome`); fx-bgmenu-color/fx-bgmenu-reset folded into one new menu surface `fx-bgmenu`
+  (real DOM node has no id, only class `.fx-bgmenu` — same "covers" pattern as fx-split-popover).
+  All 13 real functions found by reading source, not guessed: `mskAdd('radial'|'brush')` (masks,
+  needs `fxSection('local')` first), `ahRoiArm()`+a synthetic PointerEvent drag on `#fx-zoom-wrap`
+  (ahroi), `toggleSplit()` (split-line — confirmed distinct from `fxToggleSplitMenu()`'s popover),
+  `cropToggle()` (crop), `fxVideoGuidesToggle()`/`#btn-vid-guides` (guides-overlay is VIDEO-ONLY,
+  not a general photo grid), `editorBgOpenMenu()`/`#btn-editor-bg` (bgmenu), multi-photo
+  `loadFXImages([f1,f2])` in one call (filmstrip — `installFXImages` replaces `fxImages` wholesale,
+  a second call does not append), video fixture load alone (clip-info, vid-thumbstrip fill
+  automatically once `curItem().kind==='video'`).
+- **3 real bugs found and fixed, all via a live-app capture run failing first, not guessed**:
+  (1) `test/surface_capture.mjs`'s own static server had no `.mp4` MIME type entry — blocked
+  every video-fixture load (404), same class of gap S6b already hit for `.mjs`. (2) The script's
+  `OTHER_KINDS` set (menu/modal/confirm/toast) never included kind `chrome` — so `fx-hist` and
+  `fx-more-menu` from the earlier "Coverage gap-fill" session had spec.json/block.dc.html but
+  **zero actual images** the whole time, despite that session's log claiming "captured with the
+  full matrix". Added `chrome` to `OTHER_KINDS` (needed for this chunk's 9 new `chrome`-kind
+  surfaces). Backfilling fx-hist/fx-more-menu's own images is blocked by a separate pre-existing
+  gap, not fixed here: both still have `opened:null` in surfaces.json from the gap-fill session,
+  and the script skips anything not `opened:true` — confirmed via a live `--only=fx-hist,
+  fx-more-menu` run (both skipped, "not live-capturable this pass"), left as a real, now-diagnosed
+  backlog item for whoever next touches those two ids, not part of this chunk's 13.
+  (3) `assertVisibleTaller`'s hardcoded 40px floor wrongly failed two genuinely-shorter-but-real
+  surfaces (`fx-clip-info` ~1 text line, `vid-thumbstrip` CSS `height:28px`) — added a
+  per-id `MIN_OPEN_HEIGHT` override map instead of loosening the floor globally.
+- **2 more real bugs found via a failed first capture pass (order/idempotency, not scripting
+  typos)**: `fxVideoGuidesToggle()` and `toggleSplit()` are bare boolean flips — this script's
+  "menus/dialogs/overlays" loop runs each entry's `openSteps` once per theme (dark, then light)
+  against the SAME persistent DOM, so the light-theme run flipped both back OFF instead of
+  re-opening them (both failed with "not visible, w=0 h=0", light-theme only). Fixed by having
+  openSteps check current state before toggling. Separately, `fx-mask-overlay`/`msk-paint-overlay`
+  failed on BOTH themes: `fxUpdateClipInfoUI` (chromasmith-22.html ~14001) sets the whole 'local'
+  (Masks) section to `display:none` while `curItem().kind==='video'` — since the video-fixture
+  surfaces (clip-info/guides-overlay/vid-thumbstrip) sit earlier in `surfaces.json` and left a
+  video as the loaded item, the Masks panel was hidden for anything capturing after them in the
+  same run. Fixed by having these two openSteps reload a still photo first, so they don't depend
+  on capture order.
+- Verified live (not just asserts): read 3 of the new webps directly — `fx-crop-overlay/
+  open_dark.webp` shows the crop box with corner handles + 3×3 grid over the photo,
+  `fx-bgmenu/open_dark.webp` shows the popover with its color swatch + Reset button,
+  `fx-filmstrip/open_dark.webp` shows 2 distinct numbered thumbnails (portrait.png + gradient.png).
+  All genuinely open, not blank/closed.
+- Final: 13/13 captured (dark+light hero+crop each, `design/asbuilt/<id>/`), 0 unreachable, 0
+  approval-needed. `node test/surface_capture.mjs --only=<all 10 surface ids>` final run:
+  captured=8 failed=0 for the last retry batch; combined with the first successful batch, all
+  10 new/changed surface entries (9 own-surface + fx-bgmenu) pass individually.
+- Not run: `surface_coverage_check`/`capture_audit` full gates (still fail on the other 43 items
+  from separate S6d chunks, expected — not this chunk's bug).
+
 **Coverage loopholes closed — 2026-09-11 (planning session)**
 - User found the review page still missing many elements, with no alert. Two loopholes: (1) the gap-fill
   (946f6b1) put 46 hidden surfaces (overlays, filmstrip, history, Library menus, empty Library, batch bar…)

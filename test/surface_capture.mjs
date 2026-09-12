@@ -110,7 +110,7 @@ const server = createServer(async (req, res) => {
     const u = decodeURIComponent(req.url.split('?')[0]);
     const d = await readFile(path.join(ROOT, u.slice(1)));
     const ext = path.extname(u);
-    const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.otf': 'font/otf', '.wasm': 'application/wasm' };
+    const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.otf': 'font/otf', '.wasm': 'application/wasm', '.mp4': 'video/mp4' };
     res.writeHead(200, { 'Content-Type': types[ext] || 'application/octet-stream' });
     res.end(d);
   } catch { res.writeHead(404); res.end(); }
@@ -385,7 +385,16 @@ const THEMES = ['dark', 'light'];
 const panelFx = targets.find((t) => t.id === 'panel-fx');
 const library = targets.find((t) => t.id === 'library');
 const fxsecEntries = targets.filter((t) => t.kind === 'fxsec');
-const OTHER_KINDS = new Set(['menu', 'modal', 'confirm', 'toast']);
+// 'chrome' surfaces (fx-hist, fx-more-menu from the earlier coverage gap-fill pass, plus S6d's
+// video/overlay surfaces below) were never in this set — they got spec.json/block.dc.html via the
+// "spec.json / block.dc.html for every target" loop further down, but ZERO actual images, since
+// that loop is the only place their kind was ever referenced. Adding 'chrome' here is a real fix,
+// not new behaviour: it's the same open-and-shoot path 'menu'/'modal' already use.
+const OTHER_KINDS = new Set(['menu', 'modal', 'confirm', 'toast', 'chrome']);
+// A handful of 'other' surfaces are real UI but genuinely shorter than the default 40px openness
+// threshold (a one-line video-info badge, a 28px-tall video thumbnail strip) — assertVisibleTaller
+// would wrongly fail them as "looks closed" otherwise.
+const MIN_OPEN_HEIGHT = { 'fx-clip-info': 10, 'vid-thumbstrip': 20 };
 // Other pages (Match, Colour Copy, Collage, Guide) aren't part of the Editor/Library CORE set but
 // still need a look — desktop-only, default layout, both themes, same as menus/dialogs, per the
 // instruction's "menus, dialogs, overlays and other surfaces" bucket.
@@ -517,7 +526,8 @@ for (const item of plan.other) {
       for (const step of item.entry.openSteps) await runStep(step);
     }
     await page.waitForTimeout(200);
-    await assertVisibleTaller(item.entry.selector, item.entry.id === 'fx-toast' ? 24 : 40);
+    const minH = item.entry.id === 'fx-toast' ? 24 : (MIN_OPEN_HEIGHT[item.entry.id] ?? 40);
+    await assertVisibleTaller(item.entry.selector, minH);
     const dir = path.join(ROOT, 'design/asbuilt', item.entry.id);
     await shoot(item.entry.selector, path.join(dir, `open_${item.theme}.webp`));
     await shootCrop(item.entry.selector, path.join(dir, `open_${item.theme}_crop.webp`));

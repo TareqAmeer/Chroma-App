@@ -19,19 +19,7 @@
       "wireframe": true,
       "wireframeFile": "Editor (Developer) View.dc.html",
       "group": "A",
-      "covers": [
-        "fx-clip-info",
-        "fx-mask-overlay",
-        "fx-ahroi-overlay",
-        "msk-paint-overlay",
-        "fx-guides-overlay",
-        "fx-split-line",
-        "fx-crop-overlay",
-        "fx-filmstrip",
-        "vid-thumbstrip",
-        "fx-bgmenu-color",
-        "fx-bgmenu-reset"
-      ]
+      "covers": []
     },
     {
       "id": "panel-match",
@@ -1353,6 +1341,275 @@
       "wireframeFile": null,
       "note": "openImportPanel(cardPath) needs a real inserted card/volume path and is closure-local; no libtest hook exposes it. Unreachable this pass.",
       "unreachable": true
+    },
+    {
+      "id": "fx-clip-info",
+      "kind": "chrome",
+      "group": "A",
+      "selector": "#fx-clip-info",
+      "label": "Video clip info badges",
+      "openSteps": [
+        {
+          "eval": "(async()=>{\n  await new Promise(r=>{if(typeof switchTab==='function'){switchTab('fx');}r();});\n  const resp=await fetch('/test/fixtures/video_tiny.mp4');\n  const blob=await resp.blob();\n  const file=new File([blob],'video_tiny.mp4',{type:'video/mp4'});\n  if(typeof window.loadFXImages==='function') await window.loadFXImages([file]);\n})()"
+        },
+        {
+          "wait": 600
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "Only fills/shows for a loaded VIDEO item (fxUpdateClipInfoUI, chromasmith-22.html:14021) -- real path: loadFXImages([video_tiny.mp4 File]), no button click needed, the badge line renders as soon as curItem().kind==='video'."
+    },
+    {
+      "id": "fx-guides-overlay",
+      "kind": "chrome",
+      "group": "A",
+      "selector": "#fx-guides-overlay",
+      "label": "Video rule-of-thirds / safe-area guides",
+      "openSteps": [
+        {
+          "eval": "(async()=>{\n  const resp=await fetch('/test/fixtures/video_tiny.mp4');\n  const blob=await resp.blob();\n  const file=new File([blob],'video_tiny.mp4',{type:'video/mp4'});\n  if(typeof window.loadFXImages==='function') await window.loadFXImages([file]);\n})()"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "eval": "(function(){const ov=document.getElementById('fx-guides-overlay');if(ov&&ov.style.display==='none'&&typeof fxVideoGuidesToggle==='function')fxVideoGuidesToggle();})()"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "Video-only overlay (chromasmith-22.html:9040 fxVideoGuidesToggle, bound to #btn-vid-guides at line 2622) -- the earlier guess that this was a general photo guide grid was wrong; it only exists for the video transport toolbar. openSteps check current display state before toggling (idempotent) since fxVideoGuidesToggle() is a bare flip and this entry's openSteps run twice (once per theme)."
+    },
+    {
+      "id": "vid-thumbstrip",
+      "kind": "chrome",
+      "group": "A",
+      "selector": "#vid-thumbstrip",
+      "label": "Video frame thumbnail strip",
+      "openSteps": [
+        {
+          "eval": "(async()=>{\n  await new Promise(r=>{if(typeof switchTab==='function'){switchTab('fx');}r();});\n  const resp=await fetch('/test/fixtures/video_tiny.mp4');\n  const blob=await resp.blob();\n  const file=new File([blob],'video_tiny.mp4',{type:'video/mp4'});\n  if(typeof window.loadFXImages==='function') await window.loadFXImages([file]);\n})()"
+        },
+        {
+          "wait": 1200
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "Fills automatically as frames decode (fxVideoBuildThumbs, chromasmith-22.html:9134) once a video item is loaded -- no click needed. Longer settle wait than the other two video surfaces since thumbnails decode progressively."
+    },
+    {
+      "id": "fx-mask-overlay",
+      "kind": "chrome",
+      "group": "A",
+      "selector": "#fx-mask-overlay",
+      "label": "Mask shape overlay (radial/linear)",
+      "openSteps": [
+        {
+          "eval": "(async()=>{\n  const resp=await fetch('/test/fixtures/portrait.png');\n  const blob=await resp.blob();\n  const file=new File([blob],'portrait.png',{type:'image/png'});\n  if(typeof window.loadFXImages==='function') await window.loadFXImages([file]);\n})()"
+        },
+        {
+          "wait": 400
+        },
+        {
+          "eval": "if(typeof fxSection==='function'){const active=document.querySelector('.fx-ctrl.sec-active'); if(!active||active.dataset.fxsec!=='local') fxSection('local');}"
+        },
+        {
+          "wait": 150
+        },
+        {
+          "eval": "if(typeof mskAdd==='function') mskAdd('radial');"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "mskOverlaySync (chromasmith-22.html:14574) only draws the SVG shape for radial/linear mask types, and only while the Masks panel is actually visible on screen -- real path: open the 'local' section (fxSection is a close/open toggle keyed on already-active, per S6b's lesson) then mskAdd('radial'). Reloads portrait.png first: chromasmith-22.html's fxUpdateClipInfoUI hides the whole 'local' (Masks) section while curItem().kind==='video', so this surface must not run right after a video-loaded capture without resetting back to a photo."
+    },
+    {
+      "id": "msk-paint-overlay",
+      "kind": "chrome",
+      "group": "A",
+      "selector": "#msk-paint-overlay",
+      "label": "Brush mask paint overlay",
+      "openSteps": [
+        {
+          "eval": "(async()=>{\n  const resp=await fetch('/test/fixtures/portrait.png');\n  const blob=await resp.blob();\n  const file=new File([blob],'portrait.png',{type:'image/png'});\n  if(typeof window.loadFXImages==='function') await window.loadFXImages([file]);\n})()"
+        },
+        {
+          "wait": 400
+        },
+        {
+          "eval": "if(typeof fxSection==='function'){const active=document.querySelector('.fx-ctrl.sec-active'); if(!active||active.dataset.fxsec!=='local') fxSection('local');}"
+        },
+        {
+          "wait": 150
+        },
+        {
+          "eval": "if(typeof mskAdd==='function') mskAdd('brush');"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "Same mechanism as fx-mask-overlay but for a 'brush' mask, which mskOverlaySync (chromasmith-22.html:14585) routes to mskPaintOverlaySync/#msk-paint-overlay instead of the SVG shape overlay. Reloads portrait.png first: chromasmith-22.html's fxUpdateClipInfoUI hides the whole 'local' (Masks) section while curItem().kind==='video', so this surface must not run right after a video-loaded capture without resetting back to a photo."
+    },
+    {
+      "id": "fx-ahroi-overlay",
+      "kind": "chrome",
+      "group": "A",
+      "selector": "#fx-ahroi-overlay",
+      "label": "Auto-level manual ROI box",
+      "openSteps": [
+        {
+          "eval": "if(typeof fxSection==='function'){const active=document.querySelector('.fx-ctrl.sec-active'); if(!active||active.dataset.fxsec!=='crop') fxSection('crop');}"
+        },
+        {
+          "wait": 150
+        },
+        {
+          "eval": "if(typeof ahRoiArm==='function') ahRoiArm();"
+        },
+        {
+          "eval": "(function(){\n  const wrap=document.getElementById('fx-zoom-wrap');if(!wrap)return;\n  const r=wrap.getBoundingClientRect();\n  const x0=r.left+r.width*0.3,y0=r.top+r.height*0.3,x1=r.left+r.width*0.6,y1=r.top+r.height*0.6;\n  wrap.dispatchEvent(new PointerEvent('pointerdown',{clientX:x0,clientY:y0,bubbles:true}));\n  wrap.dispatchEvent(new PointerEvent('pointermove',{clientX:x1,clientY:y1,bubbles:true}));\n})()"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "Button (#btn-ah-roi, ahRoiArm, chromasmith-22.html:17744) only arms drag mode -- the overlay itself only appears once a real pointerdown/pointermove drag happens on #fx-zoom-wrap (chromasmith-22.html:17758), so openSteps arms it then dispatches a synthetic PointerEvent drag rather than guessing at a CSS-only trigger. Lives in the 'crop' (Transform) section, not its own."
+    },
+    {
+      "id": "fx-split-line",
+      "kind": "chrome",
+      "group": "A",
+      "selector": "#fx-split-line",
+      "label": "Before/after split-view divider",
+      "openSteps": [
+        {
+          "eval": "if(typeof fxSplit!=='undefined'&&!fxSplit&&typeof toggleSplit==='function') toggleSplit();"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "Real function is toggleSplit() (chromasmith-22.html:15046, bound to #btn-split) -- confirmed distinct from fxToggleSplitMenu()/#fx-split-popover (the 'compare source' picker popover), which is a different feature despite the similar name. Guarded on the fxSplit flag since toggleSplit() is a bare flip and this entry's openSteps run twice (once per theme)."
+    },
+    {
+      "id": "fx-crop-overlay",
+      "kind": "chrome",
+      "group": "A",
+      "selector": "#fx-crop-overlay",
+      "label": "Crop tool overlay",
+      "openSteps": [
+        {
+          "eval": "if(typeof fxSection==='function'){const active=document.querySelector('.fx-ctrl.sec-active'); if(!active||active.dataset.fxsec!=='crop') fxSection('crop');}"
+        },
+        {
+          "wait": 150
+        },
+        {
+          "eval": "if(typeof cropToggle==='function') cropToggle();"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "cropToggle() (chromasmith-22.html:17890, bound to #btn-crop in the 'crop'/Transform section) calls cropEnter() the first time, which adds .on to #fx-crop-overlay (line 17911)."
+    },
+    {
+      "id": "fx-filmstrip",
+      "kind": "chrome",
+      "group": "A",
+      "selector": "#fx-filmstrip",
+      "label": "Multi-photo filmstrip",
+      "openSteps": [
+        {
+          "eval": "(async()=>{\n  const [r1,r2]=await Promise.all([fetch('/test/fixtures/portrait.png'),fetch('/test/fixtures/gradient.png')]);\n  const [b1,b2]=await Promise.all([r1.blob(),r2.blob()]);\n  const f1=new File([b1],'portrait.png',{type:'image/png'});\n  const f2=new File([b2],'gradient.png',{type:'image/png'});\n  if(typeof window.loadFXImages==='function') await window.loadFXImages([f1,f2]);\n})()"
+        },
+        {
+          "wait": 600
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "buildFilmstrip() (chromasmith-22.html:17267) only shows the strip when fxImages.length>1 -- installFXImages replaces fxImages wholesale (fxImages=entries), so a second loadFXImages call would NOT append to a first; both fixtures must be passed in one loadFXImages([...]) call."
+    },
+    {
+      "id": "fx-bgmenu",
+      "kind": "menu",
+      "group": "A",
+      "selector": ".fx-bgmenu",
+      "label": "Editor background colour menu",
+      "openSteps": [
+        {
+          "click": "#btn-editor-bg"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "note": "editorBgOpenMenu() (chromasmith-22.html:10755) builds the whole .fx-bgmenu popover -- including its #fx-bgmenu-color/#fx-bgmenu-reset children -- fresh on each open, so it's captured as one menu surface (same pattern as fx-split-popover covering ic-split/ic-splitmenu) rather than as two separate always-together children.",
+      "covers": [
+        "fx-bgmenu-color",
+        "fx-bgmenu-reset"
+      ]
     }
   ]
 }
