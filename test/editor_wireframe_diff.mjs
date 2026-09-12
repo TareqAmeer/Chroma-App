@@ -9,12 +9,21 @@
 // both themes, and reports a computed-style mismatch table + screenshots.
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapture,
   toRecords, writeReport, recheck, printRecheck } from './wireframe_diff_lib.mjs';
 import { loadAllowlist, isAccepted, hardGate } from './wireframe_checks_lib.mjs';
-import { SECTION_PAIRS } from './generated_pairs.mjs';
+import { SECTION_PAIRS, CONTROL_PAIRS } from './generated_pairs.mjs';
+
+// ── --panel <id> --json: scoped single-pass diff for one panel, used by the Stop hook ─────────
+// (docs/ui-workflow/STATE.md). Fast (one theme, no-photo, CONTROL_PAIRS for that panel only)
+// instead of the full 21s sweep below. Emits ONLY [{selector, prop, expected, actual,
+// expectedToken}] to stdout and exits 1 if any mismatch, 0 if clean — no other console output.
+const argv = process.argv.slice(2);
+const panelFlagIdx = argv.indexOf('--panel');
+const PANEL_ID = panelFlagIdx >= 0 ? argv[panelFlagIdx + 1] : null;
+const JSON_MODE = argv.includes('--json');
 
 const REPORT_PATH = 'test/output/editor_wireframe_diff_report.json';
 // Findings are ZONE-qualified as `[zone] [theme] label: prop — ...` so the shared allowlist's
@@ -91,7 +100,13 @@ const LONGHANDS = {
   boxShadow: ['box-shadow'],
   height: ['height'],
   width: ['width'],
+  padding: ['padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left'],
+  gap: ['gap', 'row-gap', 'column-gap'],
 };
+// Scoped (--panel) mode checks padding/gap too — the repo-wide PROPS above deliberately drops
+// them (unresolved container-padding-vs-gap convention question, see comment above) but a
+// per-panel dev-loop check still needs to catch a real spacing regression while it's being made.
+const SCOPED_PROPS = [...PROPS, 'padding', 'gap'];
 async function authoredProps(page, selectorMap) {
   return page.evaluate(({ selectorMap, LONGHANDS, INHERITED }) => {
     INHERITED = new Set(INHERITED);
@@ -133,7 +148,7 @@ async function authoredProps(page, selectorMap) {
   }, { selectorMap, LONGHANDS, INHERITED: Array.from(INHERITED) });
 }
 
-async function extract(page, selectorMap) {
+async function extract(page, selectorMap, props = PROPS) {
   return page.evaluate(({ selectorMap, PROPS }) => {
     // ⚠️ RESOLVED 2026-09-10 (was UNRESOLVED as of 2026-09-08 — see test/editor_gates.mjs's E7
     // comment for the full repro/fix). The forced reflow below was a partial, luck-based
@@ -151,7 +166,7 @@ async function extract(page, selectorMap) {
       out[key] = Object.fromEntries(PROPS.map((p) => [p, cs[p]]));
     }
     return out;
-  }, { selectorMap, PROPS });
+  }, { selectorMap, PROPS: props });
 }
 
 // Rail item ORDER is the thing UI_SPEC.md names explicitly (Looks/Adjust/Color/Detail/Retouch/
@@ -177,6 +192,122 @@ async function loadImage(page) {
   }, b64);
   await page.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages && fxImages.length > 0, { timeout: 10000 }).catch(() => {});
   await page.waitForTimeout(300);
+}
+
+// Index-path from a `.tp-panel[data-panel]` root to a descendant, filtering SCRIPT/STYLE the same
+// way test/wireframe_spec_extract.mjs does when it builds design/specs/<panel>.json's tree — so
+// the same path indexes into that tree to find the node's expectedToken.
+async function pathToPanelRoot(page, panelRootSel, targetSel) {
+  return page.evaluate(({ panelRootSel, targetSel }) => {
+    const root = document.querySelector(panelRootSel);
+    const target = document.querySelector(targetSel);
+    if (!root || !target) return null;
+    const path = [];
+    let el = target;
+    while (el && el !== root) {
+      const parent = el.parentElement;
+      if (!parent) return null;
+      const siblings = [...parent.children].filter((c) => c.tagName !== 'SCRIPT' && c.tagName !== 'STYLE');
+      const idx = siblings.indexOf(el);
+      if (idx < 0) return null;
+      path.unshift(idx);
+      el = parent;
+    }
+    if (el !== root) return null;
+    return path;
+  }, { panelRootSel, targetSel });
+}
+function walkSpecTree(tree, path) {
+  let node = tree;
+  for (const idx of path) {
+    if (!node || !node.children || !node.children[idx]) return null;
+    node = node.children[idx];
+  }
+  return node;
+}
+
+if (PANEL_ID) {
+  const specPath = path.join(ROOT, 'design', 'specs', `${PANEL_ID}.json`);
+  let spec = null;
+  try { spec = JSON.parse(await readFile(specPath, 'utf8')); } catch { /* no spec — expectedToken stays null */ }
+  const pairs = CONTROL_PAIRS.filter((p) => p.panel === PANEL_ID);
+  const b1 = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
+  const panelRootSel = `.tp-panel[data-panel="${PANEL_ID}"]`;
+
+  const wf = await b1.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
+  await wf.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
+  await settleForCapture(wf);
+  const wfSelMap = Object.fromEntries(pairs.map((p, i) => [String(i), p.wf]));
+  const wfStyles = await extract(wf, wfSelMap, SCOPED_PROPS);
+  const wfAuthored = await authoredProps(wf, wfSelMap);
+  const wfPaths = {};
+  for (let i = 0; i < pairs.length; i++) wfPaths[i] = await pathToPanelRoot(wf, panelRootSel, pairs[i].wf);
+  await wf.close();
+
+  const app = await b1.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
+  await app.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&deskx=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await app.waitForTimeout(1500);
+  await app.evaluate(() => {
+    document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); });
+    if (typeof applyFxLayout === 'function') applyFxLayout();
+  });
+  await app.keyboard.press('Escape');
+  await app.waitForTimeout(150);
+  await settleForCapture(app);
+  const appSelMap = Object.fromEntries(pairs.map((p, i) => [String(i), p.app]));
+  const appStyles = await extract(app, appSelMap, SCOPED_PROPS);
+  await app.close();
+  await b1.close();
+  server.close();
+
+  const found = [];
+  for (let i = 0; i < pairs.length; i++) {
+    const key = String(i);
+    const w = wfStyles[key], a = appStyles[key];
+    if (!w || !a) continue;
+    const authored = wfAuthored[key] || [];
+    const specNode = spec && wfPaths[i] ? walkSpecTree(spec.tree, wfPaths[i]) : null;
+    for (const p of SCOPED_PROPS) {
+      if (!authored.includes(p)) continue;
+      const wv = p === 'fontFamily' ? normFont(w[p]) : w[p];
+      const av = p === 'fontFamily' ? normFont(a[p]) : a[p];
+      if (near(wv, av)) continue;
+      const tok = specNode?.style?.[p];
+      found.push({
+        key: `${pairs[i].app}|${p}`,
+        selector: pairs[i].app,
+        prop: p,
+        expected: w[p],
+        actual: a[p],
+        expectedToken: tok?.token ?? tok?.appVar ?? null,
+      });
+    }
+  }
+
+  // Baseline: this repo-wide sweep's PROPS deliberately excludes padding/gap (unresolved
+  // convention question, comment above) and CONTROL_PAIRS has never been diffed/allowlisted at
+  // all before this — so a naive first run would report every pre-existing, untriaged gap as a
+  // "defect", not just a real new regression. Auto-seed a per-panel baseline from the first run
+  // (nothing planted yet) and only report a finding whose ACTUAL value has moved since that
+  // baseline — not just whose key is new — so a further drift on an already-known-mismatched
+  // prop (e.g. the app's pre-existing 9px-vs-0px padding gap drifting to some other value) still
+  // gets caught; a bare key-presence check would silently swallow that, since the key was already
+  // "known bad" at seed time. Keyed by selector+prop, same idea as recheck()/writeReport() above.
+  const baselinePath = path.join(ROOT, 'test', 'output', 'panel_diff_baseline', `${PANEL_ID}.json`);
+  let baseline = null;
+  try { baseline = JSON.parse(await readFile(baselinePath, 'utf8')).entries; } catch { /* first run */ }
+  if (!baseline) {
+    await mkdir(path.dirname(baselinePath), { recursive: true });
+    const entries = Object.fromEntries(found.map((f) => [f.key, f.actual]));
+    await writeFile(baselinePath, JSON.stringify({ generatedAt: new Date().toISOString(), entries }, null, 2));
+    if (JSON_MODE) console.log('[]');
+    else console.log('(baseline seeded — nothing to compare against yet, re-run after a real change)');
+    process.exit(0);
+  }
+  const out = found.filter((f) => baseline[f.key] === undefined || baseline[f.key] !== f.actual).map(({ key, ...rest }) => rest);
+  if (JSON_MODE) console.log(JSON.stringify(out));
+  else console.log(out);
+  process.exit(out.length ? 1 : 0);
 }
 
 const b = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
