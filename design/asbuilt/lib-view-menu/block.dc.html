@@ -1,0 +1,41 @@
+<div class="tp-panel active" data-panel="lib-view-menu">
+
+          <div class="fx-settings-cats" id="lib-settings-cats"><button type="button" class="fx-settings-cat active" data-cat="library">Library</button><button type="button" class="fx-settings-cat" data-cat="thumbnails">Thumbnails</button><button type="button" class="fx-settings-cat" data-cat="metadata">Metadata</button><button type="button" class="fx-settings-cat" data-cat="panels">Panels</button><button type="button" class="fx-settings-cat" data-cat="appearance">Appearance</button></div>
+          <div class="fx-settings-page" id="lib-settings-page">
+            <div class="fx-settings-pane active" id="lib-cat-library">
+              <button class="lib-btn opt-action" id="lib-pick" title="Choose root folder"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.6.8l.9 1.2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg><span>Choose folder…</span></button>
+              <button class="lib-btn opt-action" id="lib-gphotos" title="Import from Google Photos"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.1 11.2 3.9 3.9 0 0 0 6.5 19z"></path></svg><span>Import from Google Photos…</span></button>
+              <button class="lib-btn opt-action" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg><span>Recent folders…</span></button>
+              <button class="lib-btn opt-action" id="lib-info-btn" title="Get Info for the selected photo — I"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg><span>Get Info</span></button>
+              <button class="lib-btn opt-action" id="lib-expand" title="Full-window view — G"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"></path></svg><span>Full-window view</span></button>
+              <button class="lib-btn opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" opacity=".55"></path></svg><span>Compare view</span></button>
+            </div>
+            <div class="fx-settings-pane" id="lib-cat-thumbnails">
+              <div class="opt" id="lib-hideicons"><span>Hide flag &amp; type icons</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+              <div class="opt" id="lib-zerogap"><span>No spacing between photos</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+              <div class="opt" id="lib-showtitle"><span>Show title</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+              <!-- #10/#11: no leading icon — every other option row in this menu (metadata/theme/
+                   panels) is icon-less; this one's <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg> was its own inconsistency,
+                   confirmed by wireframe_inventory.mjs's self-consistency check. -->
+              <button class="lib-btn opt-action opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to)."><span>Real aspect ratio</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button>
+            </div>
+            <div class="fx-settings-pane" id="lib-cat-metadata">
+              <select id="lib-metadisp" style="display:none">
+                <option value="off">Off</option>
+                <option value="hover">On hover</option>
+                <option value="always">Always on</option>
+              </select>
+              <div class="opt sel" data-metaval="off"><span>Off</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+              <div class="opt" data-metaval="always"><span>Always on</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+              <div class="opt" data-metaval="hover"><span>On hover</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+            </div>
+            <div class="fx-settings-pane" id="lib-cat-panels">
+              <button class="lib-btn opt-action opt-toggle on" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)"><span>Show sidebar</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button>
+            </div>
+            <div class="fx-settings-pane" id="lib-cat-appearance">
+              <div class="opt sel" data-theme="dark"><span>Dark</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+              <div class="opt" data-theme="light"><span>Light</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+            </div>
+          </div>
+        
+</div>

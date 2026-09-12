@@ -1,0 +1,31 @@
+<div class="tp-panel active" data-panel="lib-sort-menu">
+
+          <div class="grp-label">Sort by</div>
+          <select id="lib-sort" style="display:none">
+            <option value="name">Name</option>
+            <option value="mtime">Date modified</option>
+            <option value="date">Date taken</option>
+            <option value="iso">ISO</option>
+            <option value="shutter">Shutter speed</option>
+            <option value="aperture">Aperture</option>
+            <option value="focal">Focal length</option>
+            <option value="camera">Camera</option>
+            <option value="edited">Edit status</option>
+            
+            <option value="editedts">Date edited</option>
+          </select>
+          <!-- #13: matches the wireframe's own 3 keys (Library View.html:238-241) exactly —
+               Name/Rating/Camera stay reachable via the list-view's own column headers
+               (data-sort on .lib-lh-cell), a separate real feature the wireframe's mock has no
+               equivalent surface for, so removing them from just this menu keeps the feature
+               without keeping the menu's own divergence from the wireframe. "Date added" reuses
+               the existing 'mtime' sort key (file mtime) — the closest available proxy; there is
+               no distinct added-to-catalog timestamp anywhere in this app. -->
+          <div class="opt sel" data-sortval="date"><span>Date taken</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div><div class="opt" data-sortval="mtime"><span>Date added</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div><div class="opt" data-sortval="editedts"><span>Date edited</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+          <hr>
+          <!-- Newest first / Oldest first radio pair, replacing the old single "Reverse order"
+               toggle — Library View.html:244-245, copied literally. -->
+          <div class="opt" data-sortdir="desc"><span>Newest first</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+          <div class="opt sel" data-sortdir="asc"><span>Oldest first</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
+        
+</div>

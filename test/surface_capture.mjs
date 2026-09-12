@@ -167,6 +167,24 @@ async function runStep(step) {
     });
     await page.waitForTimeout(150);
   }
+  // { reloadQuery: '&liboffline=1' }: a full page.goto with extra query params appended to the
+  // boot URL, then the SAME dismiss/layout/photo-load sequence the initial boot does above —
+  // needed for surfaces whose only real trigger is a libtest mock query flag baked in at load
+  // time (?liboffline=1, ?libhangthumb=all), not reachable from a running page via eval/click.
+  // S6d chunk C: lib-offline-bar and lib-thumb-progress both needed this. Only use this on a
+  // surface run in its own `--only=` batch — it leaves the mock flag (and any resulting stuck
+  // state, e.g. a permanently-hung thumbnail queue) set for the rest of that page session.
+  else if (step.reloadQuery) {
+    await page.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&deskx=1${step.reloadQuery}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => {
+      document.querySelectorAll('button').forEach((btn) => { if (btn.textContent.trim() === 'Got it') btn.click(); });
+      if (typeof applyFxLayout === 'function') applyFxLayout();
+    });
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+    await loadPhoto();
+  }
 }
 async function closeAnyOverlay() {
   await page.keyboard.press('Escape').catch(() => {});
@@ -410,7 +428,11 @@ const OTHER_KINDS = new Set(['menu', 'modal', 'confirm', 'toast', 'chrome']);
 // A handful of 'other' surfaces are real UI but genuinely shorter than the default 40px openness
 // threshold (a one-line video-info badge, a 28px-tall video thumbnail strip) — assertVisibleTaller
 // would wrongly fail them as "looks closed" otherwise.
-const MIN_OPEN_HEIGHT = { 'fx-clip-info': 10, 'vid-thumbstrip': 20, 'fx-secnav': 18, 'hdr-about': 28, 'ic-split': 28, 'ic-splitmenu': 28, 'ic-timeline': 28, 'db-history-wrap': 26, 'fx-sheet-handle': 16, 'fx-rail-show': 24, 'row-nr-high-progress': 3 };
+const MIN_OPEN_HEIGHT = { 'fx-clip-info': 10, 'vid-thumbstrip': 20, 'fx-secnav': 18, 'hdr-about': 28, 'ic-split': 28, 'ic-splitmenu': 28, 'ic-timeline': 28, 'db-history-wrap': 26, 'fx-sheet-handle': 16, 'fx-rail-show': 24, 'row-nr-high-progress': 3,
+  // S6d chunk C: genuinely short-but-real Library elements the default 40px floor wrongly flags.
+  'lib-cat-panels': 20, 'lib-offline-bar': 24, 'imp-bar': 4,
+  // #lib-dock-reopen is a real 28x28 fixed icon button (library-ui.js ~1782), not a broken open.
+  'lib-dock-reopen': 20 };
 // Other pages (Match, Colour Copy, Collage, Guide) aren't part of the Editor/Library CORE set but
 // still need a look — desktop-only, default layout, both themes, same as menus/dialogs, per the
 // instruction's "menus, dialogs, overlays and other surfaces" bucket.

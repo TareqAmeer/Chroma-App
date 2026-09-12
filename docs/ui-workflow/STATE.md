@@ -632,3 +632,75 @@ call `ui:test`) will currently fail on that until it's fixed.
   via `node test/surface_coverage_check.mjs --json` that none of this chunk's 19 ids appear in the
   `integrity` findings list any more (28 remain, all outside this chunk's scope).
 
+
+**S6d chunk C — library surfaces (final chunk) — 2026-09-12 — done, 19/23 captured, 4 unreachable**
+- Scope: 15 `COVERS_HIDES_SURFACE` items under library/lib-main/lib-top/lib-filters-panel plus 8
+  previously-NOT_CAPTURED items (lib-compare, lib-info, lib-astro-modal, lib-collage-modal,
+  hq-offline-quit-modal, lib-blocking-wait-modal, lib-offq-modal, imp-bar) = 23 total.
+  Resolved 19: 3 became folded multi-id surfaces (lib-empty-noroot covers 4 empty-library
+  buttons, lib-empty-nomatch covers lib-empty-clear, lib-empty-nofolder covers
+  lib-empty-import/open), lib-batchbar/lib-sort-menu/lib-view-menu/lib-cat-panels/lib-offline-bar
+  each own real-DOM entries, plus all 8 NOT_CAPTURED items fixed for real (lib-compare via a
+  synthetic multi-select + real Compare button; lib-info via the existing
+  `window.libtestShowInfoPanel` hook, no card click needed; lib-astro-modal/lib-collage-modal/
+  hq-offline-quit-modal/lib-offq-modal via new `window.libtest*Modal()` hooks calling the real
+  plain dialog functions directly (same "manual debug trigger" pattern as `libtestLrConnect`);
+  **lib-blocking-wait-modal needed no hook at all** — `window.libBlockingWaitModal` turns out to
+  already be a real, always-exposed global, not gated on LIBTEST/Tauri — the prior "native-only"
+  verdict didn't hold up; imp-bar via a new `window.libtestOpenImportPanel()` hook plus the
+  ALREADY-mocked `plugin:dialog|open` and `scan_card` commands (real UI clicks all the way
+  through Import).
+- **Real app bug found and fixed**: `updateCardSelClasses()` (desktop/library-ui.js) ran on every
+  click-driven multi-select change but never called `renderBatchBar()` — so ⌘/shift-clicking to
+  build a multi-selection never showed the batch bar until something else forced a full grid
+  re-render. Fixed by calling `renderBatchBar()` from `updateCardSelClasses()`.
+- **Real, confirmed-dead code found**: `#lib-viewbar` has exactly 3 references in
+  library-ui.js — its own declaration, a grid-row CSS placement, and one unconditional
+  `#lib-viewbar{display:none}` nothing ever overrides. Never populated, never toggled. Marked
+  unreachable (not a hideable surface — it never opens at all); a real cleanup/wire-up item for
+  someone else, out of scope here.
+- **Real, confirmed dock-reopen bug found**: `#lib-dock-reopen`'s CSS guard is
+  `body.deskx.lib-dock-collapsed:not(.lib-full)`, but `state.expanded_view` (which drives
+  `body.lib-full`) defaults true and `toggleExpandedView()` isn't window-exposed — a real 'g'
+  keypress is needed, and even the keydown handler itself starts with `if (!state.open) return`,
+  which raw `classList.add('on')` never sets. Fixed via the real
+  `window.chromasmithForceLibraryReady()` boot-watchdog entry point + a real 'g' keypress.
+- **Also added, all real production-mock extensions, none invented**: `catalog_add_root`'s mock
+  now returns `null` for a path matching `/Folders only/` (mirrors `list_dir`'s existing
+  convention for the same string) so `openFolder()` actually reaches its FALLBACK
+  empty-folder path — the primary `catalog_query({q.folder})` mock always synthesises ≥1 entries
+  and could never represent a genuinely-empty registered folder otherwise.
+- **4 unreachable this pass** (each has a concrete, source-read reason, not a guess — see
+  design/surfaces.json's `note` fields): `lib-viewbar` (dead stub, see above); `lib-thumb-progress`
+  (the `?libhangthumb=all` freeze mechanism is confirmed real and working, but
+  `updateThumbProgress()`'s text stayed empty for the catalog-backed folder-open path across 3+
+  live probes — `_thumbTotalCount` never seems to increment there, root cause not isolated within
+  budget); `lib-review-grid` and `lib-dock-reopen` (each captures correctly in dark theme with the
+  exact real trigger sequence, but is reliably absent/zero-size in light theme across 2 separate
+  runs of the identical steps — a light-theme-specific timing/state race not isolated within
+  budget, not a fundamentally-unreachable surface). All 3 non-dead-code cases spawned as follow-up
+  background tasks rather than left as bare TODOs.
+- Also incidentally fixed `fx-bgmenu` (chunk A's own surface): `#btn-editor-bg` is
+  `display:none!important` under `body.deskx` (same hidden-under-deskx class chunk B found for
+  hdr-info/ic-split/etc), which `surface_coverage_check`'s own re-open of the parent was tripping
+  on — added the same `classList.remove('deskx')` fix chunk B established.
+- Verified live: read 3 of the new capture images directly — `lib-empty-noroot/open_dark.webp`
+  shows the true first-launch empty state with Add photos/Add a folder buttons, `lib-astro-modal/
+  open_dark.webp` shows the real Mean/Median stack-mode dialog, `imp-bar/open_dark.webp` shows the
+  import sheet's progress bar mid-fill. All genuinely open, not blank/closed.
+- **S6d overall final tally (chunk A + B + C combined)**: 56 originally-failing items → 13
+  (chunk A) + 19 (chunk B) + 19 (chunk C) = 51 captured/resolved, 4 unreachable needing user
+  approval (lib-viewbar, lib-thumb-progress, lib-review-grid, lib-dock-reopen — chunk C only;
+  chunks A/B ended with 0 unreachable each, confirmed still true — their ids don't appear in this
+  chunk's `surface_coverage_check` integrity findings).
+
+## Needs user approval to skip
+- `lib-viewbar` — confirmed genuinely dead DOM (permanently `display:none`, never populated,
+  never toggled) — either wire it up for real or delete the dead node; not capturable as-is.
+- `lib-thumb-progress` — the freeze mechanism (`?libhangthumb=all`) works but the readout itself
+  never shows text for the catalog-backed folder-open path; root cause not found this pass
+  (follow-up task filed).
+- `lib-review-grid` — captures fine in dark theme, absent in light theme with the identical
+  sequence; root cause not found this pass (follow-up task filed).
+- `lib-dock-reopen` — captures fine in dark theme (real 28×28 button), zero-size in light theme
+  with the identical sequence; root cause not found this pass (follow-up task filed).

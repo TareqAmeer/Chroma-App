@@ -212,7 +212,13 @@
       // Photos" is screenshot-verifiable without a real SQLite catalog behind it. Every 7th
       // entry is marked offline, matching the plan's libtest convention for exercising the
       // offline card state in a plain browser.
-      case 'catalog_add_root': return Promise.resolve({ id: 1, volume_id: 1, rel_path: '', kind: 'originals', abs_path: A.path, requested_rel_path: '' });
+      // Same "Folders only" convention list_dir's own mock above already uses for a
+      // real-empty/inaccessible folder — here it simulates catalog registration itself failing
+      // (a folder outside any allowed root), which is what actually forces openFolder() onto its
+      // FALLBACK list_dir path (S6d chunk C: lib-empty-nofolder needed this — the primary
+      // catalog_query({q.folder}) mock below always synthesises >=1 entries and cannot represent
+      // a genuinely-empty registered folder).
+      case 'catalog_add_root': return /Folders only/.test(String(A.path || '')) ? Promise.resolve(null) : Promise.resolve({ id: 1, volume_id: 1, rel_path: '', kind: 'originals', abs_path: A.path, requested_rel_path: '' });
       case 'catalog_scan': return Promise.resolve({ scanned: 0, added: 0, marked_absent: 0 });
       case 'catalog_note_deleted': return Promise.resolve((A.paths || []).length);
       case 'get_quicklook_preview': return Promise.resolve(png);
@@ -4369,6 +4375,12 @@
   let selectAnchor = -1;
   function updateCardSelClasses() {
     grid.querySelectorAll('.lib-card').forEach((c) => c.classList.toggle('multi', state.selected.has(c.dataset.path)));
+    // Real bug found while capturing lib-batchbar (S6d chunk C): this ran on every click-driven
+    // selection change but never called renderBatchBar(), which only fired from a full
+    // renderGridTail(). So ⌘/shift-clicking to build a multi-selection never showed the batch
+    // bar until something else forced a full grid re-render (scroll, filter change) — the bar
+    // the user actually needs right after selecting silently didn't appear.
+    renderBatchBar();
   }
   // Single click opens the editor immediately (no double-click needed). ⌘/Ctrl-click instead
   // multi-selects WITHOUT opening, building up a batch; ⌘/Ctrl-double-click opens that whole
@@ -8409,6 +8421,36 @@
     // Same reasoning: Quick Look's real trigger (Space) is gated on state.open, which the
     // docked/deskx harness never sets.
     window.libtestShowQuickLook = (path) => showQuickLook(path);
+    // Same reasoning again (S6d chunk C, imp-bar): openImportPanel() is real and reachable from
+    // a real DOM row (.lib-card-row[data-card]), but that row only appears once a removable
+    // volume with a DCIM folder shows up via refreshVolumes()'s own invoke('list_volumes'),
+    // which this file has no mock for — so under libtest a card can never actually mount. This
+    // calls the exact same real function with a synthetic path instead of inventing a UI. The
+    // progress fill itself still can't be exercised for real: the real fill comes from a Tauri
+    // 'ingest-progress' event this mock's window.__TAURI__.event.listen stub never fires, so the
+    // bar renders at 0% width after a real Import click — call libtestFillImportBar() right
+    // after to see what a mid-import frame looks like.
+    window.libtestOpenImportPanel = (path) => openImportPanel(path || '/test/CARD_A');
+    window.libtestFillImportBar = (pct) => { const el = document.getElementById('imp-bar'); if (el) el.style.width = `${pct ?? 42}%`; };
+    // Same reasoning again (S6d chunk C, lib-astro-modal/lib-collage-modal): both are real,
+    // reachable only from the multi-select context menu's Merge submenu (astro) or the
+    // create-collage action (collage) — many real clicks deep through a dynamically-built menu
+    // tree for what's ultimately a plain synchronous <dialog>.showModal() either way. These call
+    // the exact real functions with no menu/selection prerequisite.
+    window.libtestAstroModal = () => { astroStackModeModal(); };
+    window.libtestCollageModal = (n) => { collageTemplateModal(n || 2); };
+    // Same reasoning again (S6d chunk C, lib-empty/-addphotos/-addfolder/-gphotos): the true
+    // first-launch empty state is real (renderLibraryNoRoot) and IS reachable at boot time via
+    // ?libnoroot=1 (state.root's own init above), but there's no way to reach it later in an
+    // already-booted page without a full reload — this calls the exact same real function.
+    window.libtestClearRoot = () => { state.root = ''; renderLibraryNoRoot(); };
+    // Same reasoning again (S6d chunk C, hq-offline-quit-modal / lib-offq-modal): both are real
+    // plain functions, gated only on the NATIVE event that normally opens them (a Tauri
+    // window-close intercept, and a reconnect-conflict poll) which this file explicitly never
+    // wires up under LIBTEST/no-__TAURI__ — not on anything about the dialog itself. Calling the
+    // function directly is the real modal, just skipping the native trigger a browser can't fire.
+    window.libtestHqOfflineQuitModal = () => { hqOfflineQuitBlockedModal(); };
+    window.libtestOfflineQueueConflictModal = (n) => { offlineQueueConflictModal(n || 3); };
   }
 
   /// Mirrors a catalog-scan progress event onto the BOOT SPLASH specifically — separate from the

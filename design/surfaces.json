@@ -887,7 +887,7 @@
       "wireframe": false,
       "wireframeFile": null,
       "group": "B",
-      "note": "reachable only outside body.deskx (a plain 700-899px-wide desktop window, or Tauri narrow) — the surface_capture.mjs harness always loads with ?deskx=1 which forces deskx permanently regardless of viewport width, so openSteps removes the class directly to reach this real, otherwise-untestable state (S6d chunk B)."
+      "note": "reachable only outside body.deskx (a plain 700-899px-wide desktop window, or Tauri narrow) \u2014 the surface_capture.mjs harness always loads with ?deskx=1 which forces deskx permanently regardless of viewport width, so openSteps removes the class directly to reach this real, otherwise-untestable state (S6d chunk B)."
     },
     {
       "id": "ic-splitmenu",
@@ -908,7 +908,7 @@
       "wireframe": false,
       "wireframeFile": null,
       "group": "B",
-      "note": "same deskx-hidden trigger-icon class as ic-split — see that entry's note."
+      "note": "same deskx-hidden trigger-icon class as ic-split \u2014 see that entry's note."
     },
     {
       "id": "fx-timeline-popover",
@@ -952,7 +952,7 @@
       "wireframe": false,
       "wireframeFile": null,
       "group": "B",
-      "note": "same deskx-hidden trigger-icon class as ic-split — see that entry's note."
+      "note": "same deskx-hidden trigger-icon class as ic-split \u2014 see that entry's note."
     },
     {
       "id": "hdr-about",
@@ -973,7 +973,7 @@
       "wireframe": false,
       "wireframeFile": null,
       "group": "B",
-      "note": "hdr-info's real parent: `header{display:none}` under body.deskx, which the surface_capture.mjs harness forces on permanently via ?deskx=1 — see ic-split's note. surfaces.json previously listed hdr-info as part of fx-deskbar's covers, but it isn't in that DOM subtree at all; it's the About icon inside the app header (#hdr-about), a separate element entirely."
+      "note": "hdr-info's real parent: `header{display:none}` under body.deskx, which the surface_capture.mjs harness forces on permanently via ?deskx=1 \u2014 see ic-split's note. surfaces.json previously listed hdr-info as part of fx-deskbar's covers, but it isn't in that DOM subtree at all; it's the About icon inside the app header (#hdr-about), a separate element entirely."
     },
     {
       "id": "db-history-wrap",
@@ -997,7 +997,7 @@
       "covers": [
         "db-history"
       ],
-      "note": "also gated on window.chromasmithGetExportHistory being a function (desktop/Tauri bridge, absent in the plain-browser test harness) — mocked here — on top of the deskx-hidden class (see ic-split's note)."
+      "note": "also gated on window.chromasmithGetExportHistory being a function (desktop/Tauri bridge, absent in the plain-browser test harness) \u2014 mocked here \u2014 on top of the deskx-hidden class (see ic-split's note)."
     },
     {
       "id": "cs-modal",
@@ -1131,7 +1131,7 @@
       "wireframe": false,
       "wireframeFile": null,
       "group": "D",
-      "note": "mobile-sheet's own kind ('layout') isn't wired into any surface_capture.mjs loop (pre-existing, out of this chunk's scope — its covers entry only ever affected the structural coverage check, never produced real images), so fx-sheet-handle needs a real openSteps path of its own: mobile width + opening a NON-default section (fxSection('image',true) is called at init with noSheet, so 'image' would already be sec-active and toggle the sheet CLOSED per fxSection's close-vs-open branch — 'looks' avoids that, same lesson as the S6/groups-B-E entry)."
+      "note": "mobile-sheet's own kind ('layout') isn't wired into any surface_capture.mjs loop (pre-existing, out of this chunk's scope \u2014 its covers entry only ever affected the structural coverage check, never produced real images), so fx-sheet-handle needs a real openSteps path of its own: mobile width + opening a NON-default section (fxSection('image',true) is called at init with noSheet, so 'image' would already be sec-active and toggle the sheet CLOSED per fxSection's close-vs-open branch \u2014 'looks' avoids that, same lesson as the S6/groups-B-E entry)."
     },
     {
       "id": "library",
@@ -1151,17 +1151,7 @@
       "wireframe": true,
       "wireframeFile": "Library View.html",
       "group": "E",
-      "covers": [
-        "lib-empty",
-        "lib-empty-addphotos",
-        "lib-empty-addfolder",
-        "lib-empty-gphotos",
-        "lib-empty-clear",
-        "lib-empty-import",
-        "lib-empty-open",
-        "lib-batchbar",
-        "lib-review-grid"
-      ]
+      "covers": []
     },
     {
       "id": "fx-deskbar",
@@ -1204,7 +1194,7 @@
       "wireframe": false,
       "wireframeFile": null,
       "group": "C",
-      "note": "surfaces.json previously listed step-history as part of fx-deskbar's covers, but it isn't in that DOM subtree at all — it's the LUT-generation version history on the Match & Refine page (#panel-match), a completely different feature. Mocked a history entry via ST.history.push()+renderHistory() rather than driving a real startMatch() run (needs real before/target images and a LUT fit)."
+      "note": "surfaces.json previously listed step-history as part of fx-deskbar's covers, but it isn't in that DOM subtree at all \u2014 it's the LUT-generation version history on the Match & Refine page (#panel-match), a completely different feature. Mocked a history entry via ST.history.push()+renderHistory() rather than driving a real startMatch() run (needs real before/target images and a LUT fit)."
     },
     {
       "id": "fx-toolrail",
@@ -1238,7 +1228,7 @@
       "wireframe": false,
       "wireframeFile": null,
       "group": "A",
-      "note": "surfaces.json previously listed fx-rail-show as part of fx-toolrail's covers, but the two are mutually exclusive: railMode('hidden') sets #fx-toolrail to display:none and shows this floating re-show button in its place (a sibling, not a child) — captured as its own state instead."
+      "note": "surfaces.json previously listed fx-rail-show as part of fx-toolrail's covers, but the two are mutually exclusive: railMode('hidden') sets #fx-toolrail to display:none and shows this floating re-show button in its place (a sibling, not a child) \u2014 captured as its own state instead."
     },
     {
       "id": "lib-main",
@@ -1256,10 +1246,7 @@
       "wireframe": false,
       "wireframeFile": null,
       "group": "E",
-      "covers": [
-        "lib-thumb-progress",
-        "lib-dock-reopen"
-      ]
+      "covers": []
     },
     {
       "id": "lib-top",
@@ -1280,11 +1267,7 @@
       "covers": [
         "lib-top-left",
         "lib-top-center",
-        "lib-top-right",
-        "lib-sort-menu",
-        "lib-view-menu",
-        "lib-viewbar",
-        "lib-offline-bar"
+        "lib-top-right"
       ]
     },
     {
@@ -1304,7 +1287,6 @@
       "wireframeFile": null,
       "group": "E",
       "covers": [
-        "lib-cat-panels",
         "lib-filters-panel-head"
       ]
     },
@@ -1479,19 +1461,43 @@
       "label": "Library Compare mode",
       "openSteps": [
         {
-          "eval": "void (typeof enterCompareMode === 'function');"
+          "reloadQuery": ""
+        },
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        },
+        {
+          "wait": 400
+        },
+        {
+          "eval": "(function(){var cards=[...document.querySelectorAll('#lib-grid .lib-card .lib-thumb-wrap')];if(cards.length<2)return;cards[0].dispatchEvent(new MouseEvent('click',{bubbles:true}));cards[1].dispatchEvent(new MouseEvent('click',{bubbles:true,metaKey:true,ctrlKey:true}));})()"
+        },
+        {
+          "wait": 150
+        },
+        {
+          "click": "#lib-view-menu-btn"
+        },
+        {
+          "wait": 150
+        },
+        {
+          "click": "#lib-compare-btn"
+        },
+        {
+          "wait": 300
         }
       ],
-      "opened": null,
+      "opened": true,
       "states": {},
       "wireframe": false,
       "wireframeFile": null,
-      "note": "enterCompareMode() needs >=1 selected photo and is not exposed on window (closure-local in desktop/library-ui.js) -- no direct page.evaluate call path found within this pass's time budget; selector kept so coverage passes, capture will show 0 visible states until a real trigger (select photos, click the real Compare UI action) is wired up.",
-      "unreachable": true,
+      "unreachable": false,
       "covers": [
         "lib-compare-bar",
         "lib-compare-panes"
-      ]
+      ],
+      "note": "S6d chunk C: real path found \u2014 select 2 cards via synthetic click/metaKey-click (real handleCardClick modifier branch), open #lib-view-menu-btn, click the real #lib-compare-btn (enterCompareMode())."
     },
     {
       "id": "lib-info",
@@ -1501,22 +1507,28 @@
       "label": "Library Info panel",
       "openSteps": [
         {
-          "eval": "document.getElementById('lib-overlay')?.classList.add('on','full')"
+          "reloadQuery": ""
+        },
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
         },
         {
           "wait": 300
         },
         {
-          "click": "#lib-grid .lib-card"
+          "eval": "window.libtestShowInfoPanel && window.libtestShowInfoPanel('/test/AllPhotos/IMG_1001.RW2')"
         },
         {
-          "wait": 200
+          "wait": 250
         },
         {
-          "eval": "window.__libInfo && window.__libInfo(true)"
+          "eval": "(function(){var el=document.getElementById('lib-info-kw-add'); if(!el)return; el.value='sunset'; el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));})()"
+        },
+        {
+          "wait": 250
         }
       ],
-      "opened": null,
+      "opened": true,
       "states": {
         "rest": true
       },
@@ -1527,8 +1539,8 @@
         "lib-info-kw-chips",
         "lib-info-kw-add"
       ],
-      "unreachable": true,
-      "note": "window.__libInfo(true) after selecting a .lib-card (real class, desktop/library-ui.js:2698 etc) worked in an isolated debug script (Library opened fresh, nothing else loaded), but the same steps time out waiting for '.lib-card' in this task's actual replay context (editor already has a photo loaded via loadFXImages() before this surface's openSteps run) -- the grid likely renders differently once the app has switched away from a fresh Library-first boot. Stopped after 3 debugging attempts per STATE.md's 2-attempt rule; recorded as unreachable this pass rather than pushing further. openSteps kept as the best-known approach for whoever picks this up next."
+      "unreachable": false,
+      "note": "S6d chunk C: window.libtestShowInfoPanel(path) (desktop/library-ui.js, real libtest hook) sets _kbCursor+showInfo directly and calls the real renderInfoPanel() \u2014 no card click/selection needed, sidesteps the earlier timeout waiting on '.lib-card'."
     },
     {
       "id": "lib-astro-modal",
@@ -1536,13 +1548,26 @@
       "group": "E",
       "selector": "#lib-astro-modal",
       "label": "Astro stack-mode modal",
-      "openSteps": [],
-      "opened": null,
+      "openSteps": [
+        {
+          "reloadQuery": ""
+        },
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        },
+        {
+          "eval": "window.libtestAstroModal && window.libtestAstroModal()"
+        },
+        {
+          "wait": 200
+        }
+      ],
+      "opened": true,
       "states": {},
       "wireframe": false,
       "wireframeFile": null,
-      "note": "astroStackModeModal() only fires during real astro-stack-sequence detection on import; no manual/libtest trigger exists. Unreachable this pass.",
-      "unreachable": true
+      "unreachable": false,
+      "note": "S6d chunk C: astroStackModeModal() is a real, plain synchronous-dialog function reachable only through the multi-select Merge submenu; added window.libtestAstroModal() to call it directly (same 'manual debug trigger' pattern as window.libtestLrConnect())."
     },
     {
       "id": "lib-collage-modal",
@@ -1550,13 +1575,26 @@
       "group": "E",
       "selector": "#lib-collage-modal",
       "label": "Collage template picker modal",
-      "openSteps": [],
-      "opened": null,
+      "openSteps": [
+        {
+          "reloadQuery": ""
+        },
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        },
+        {
+          "eval": "window.libtestCollageModal && window.libtestCollageModal(2)"
+        },
+        {
+          "wait": 200
+        }
+      ],
+      "opened": true,
       "states": {},
       "wireframe": false,
       "wireframeFile": null,
-      "note": "collageTemplateModal(n) is closure-local (not on window); reaching it needs selecting N library photos and clicking the real collage-creation UI action, not wired up this pass. Unreachable.",
-      "unreachable": true
+      "unreachable": false,
+      "note": "S6d chunk C: same fix as lib-astro-modal \u2014 window.libtestCollageModal(n) calls the real collageTemplateModal(n) directly."
     },
     {
       "id": "hq-offline-quit-modal",
@@ -1564,13 +1602,23 @@
       "group": "E",
       "selector": "#hq-offline-quit-modal",
       "label": "Offline-cache quit-block modal",
-      "openSteps": [],
-      "opened": null,
+      "openSteps": [
+        {
+          "reloadQuery": ""
+        },
+        {
+          "eval": "window.libtestHqOfflineQuitModal && window.libtestHqOfflineQuitModal()"
+        },
+        {
+          "wait": 200
+        }
+      ],
+      "opened": true,
       "states": {},
       "wireframe": false,
       "wireframeFile": null,
-      "note": "Fires only from a Tauri native window-close IPC event (main.rs hq_offline_active check) -- requires the desktop shell, not reachable in a browser-only Playwright harness.",
-      "unreachable": true
+      "unreachable": false,
+      "note": "S6d chunk C: hqOfflineQuitBlockedModal() is a real plain function, gated only on a Tauri window-close event this file explicitly never listens for under LIBTEST \u2014 the dialog itself has no native dependency. Added window.libtestHqOfflineQuitModal() to call it directly."
     },
     {
       "id": "lib-blocking-wait-modal",
@@ -1578,16 +1626,27 @@
       "group": "E",
       "selector": "#lib-blocking-wait-modal",
       "label": "Blocking-wait modal (offline queue)",
-      "openSteps": [],
-      "opened": null,
+      "openSteps": [
+        {
+          "reloadQuery": ""
+        },
+        {
+          "eval": "window.libBlockingWaitModal && window.libBlockingWaitModal.show('Preparing offline photos\u2026')"
+        },
+        {
+          "eval": "window.libBlockingWaitModal && window.libBlockingWaitModal.update({done:14,total:32,current:'IMG_1042.RW2'})"
+        },
+        {
+          "wait": 200
+        }
+      ],
+      "opened": true,
       "states": {},
       "wireframe": false,
       "wireframeFile": null,
-      "note": "Tied to the native offline-queue backend flow; no manual/libtest trigger found. Unreachable this pass.",
-      "unreachable": true,
-      "covers": [
-        "lib-bwm-bar"
-      ]
+      "unreachable": false,
+      "covers": [],
+      "note": "S6d chunk C: window.libBlockingWaitModal is ALREADY a real, always-exposed global (not gated on LIBTEST/Tauri at all) \u2014 .show(label) opens it directly, no hook needed. Prior 'native-only' verdict didn't hold up."
     },
     {
       "id": "lib-offq-modal",
@@ -1595,13 +1654,23 @@
       "group": "E",
       "selector": "#lib-offq-modal",
       "label": "Offline-queue modal",
-      "openSteps": [],
-      "opened": null,
+      "openSteps": [
+        {
+          "reloadQuery": ""
+        },
+        {
+          "eval": "window.libtestOfflineQueueConflictModal && window.libtestOfflineQueueConflictModal(3)"
+        },
+        {
+          "wait": 200
+        }
+      ],
+      "opened": true,
       "states": {},
       "wireframe": false,
       "wireframeFile": null,
-      "note": "Tied to the native offline-queue backend flow; no manual/libtest trigger found. Unreachable this pass.",
-      "unreachable": true
+      "unreachable": false,
+      "note": "S6d chunk C: offlineQueueConflictModal(n) is a real plain function, gated only on a reconnect-poll this file never runs under LIBTEST \u2014 added window.libtestOfflineQueueConflictModal(n) to call it directly."
     },
     {
       "id": "imp-bar",
@@ -1609,13 +1678,44 @@
       "group": "E",
       "selector": "#imp-bar",
       "label": "Import progress bar",
-      "openSteps": [],
-      "opened": null,
+      "openSteps": [
+        {
+          "reloadQuery": ""
+        },
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        },
+        {
+          "eval": "window.libtestOpenImportPanel && window.libtestOpenImportPanel()"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "click": "#imp-dest-pick"
+        },
+        {
+          "wait": 200
+        },
+        {
+          "click": "#imp-go"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "eval": "window.libtestFillImportBar && window.libtestFillImportBar(55)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
       "states": {},
       "wireframe": false,
       "wireframeFile": null,
-      "note": "openImportPanel(cardPath) needs a real inserted card/volume path and is closure-local; no libtest hook exposes it. Unreachable this pass.",
-      "unreachable": true
+      "unreachable": false,
+      "note": "S6d chunk C: real path \u2014 window.libtestOpenImportPanel() calls the real openImportPanel() (only missing a real mounted-card DOM row, which has no libtest mock); #imp-dest-pick/#imp-go are real buttons (plugin:dialog|open IS mocked, at desktop/library-ui.js ~line 203); the bar's fill itself can't come from a real event (window.__TAURI__.event.listen is a libtest no-op stub) so libtestFillImportBar(pct) sets it directly to show a mid-progress frame."
     },
     {
       "id": "fx-clip-info",
@@ -1868,6 +1968,12 @@
       "label": "Editor background colour menu",
       "openSteps": [
         {
+          "eval": "document.body.classList.remove('deskx')"
+        },
+        {
+          "wait": 100
+        },
+        {
           "click": "#btn-editor-bg"
         },
         {
@@ -1880,11 +1986,368 @@
       },
       "wireframe": false,
       "wireframeFile": null,
-      "note": "editorBgOpenMenu() (chromasmith-22.html:10755) builds the whole .fx-bgmenu popover -- including its #fx-bgmenu-color/#fx-bgmenu-reset children -- fresh on each open, so it's captured as one menu surface (same pattern as fx-split-popover covering ic-split/ic-splitmenu) rather than as two separate always-together children.",
+      "note": "editorBgOpenMenu() (chromasmith-22.html:10755) builds the whole .fx-bgmenu popover -- including its #fx-bgmenu-color/#fx-bgmenu-reset children -- fresh on each open, so it's captured as one menu surface (same pattern as fx-split-popover covering ic-split/ic-splitmenu) rather than as two separate always-together children. UPDATE (S6d chunk C, incidental fix): #btn-editor-bg is display:none!important under body.deskx (chromasmith-22.html:969), same class of bug chunk B found for hdr-info/ic-split/etc \u2014 surface_coverage_check runs this openSteps itself and failed on the hidden button; added classList.remove('deskx') per chunk B's established fix.",
       "covers": [
         "fx-bgmenu-color",
         "fx-bgmenu-reset"
       ]
+    },
+    {
+      "id": "lib-empty-noroot",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-empty",
+      "label": "Library empty \u2014 no root set (first launch)",
+      "openSteps": [
+        {
+          "reloadQuery": ""
+        },
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on')"
+        },
+        {
+          "eval": "window.libtestClearRoot && window.libtestClearRoot()"
+        },
+        {
+          "wait": 200
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [
+        "lib-empty",
+        "lib-empty-addphotos",
+        "lib-empty-addfolder",
+        "lib-empty-gphotos"
+      ],
+      "note": "S6d chunk C: the true first-launch state (renderLibraryNoRoot()) is real and reachable at boot via ?libnoroot=1; added window.libtestClearRoot() to reach it mid-session too. All 4 covered ids are real buttons/links inside this one render."
+    },
+    {
+      "id": "lib-empty-nomatch",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-empty",
+      "label": "Library empty \u2014 search/filter matched nothing",
+      "openSteps": [
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        },
+        {
+          "wait": 400
+        },
+        {
+          "eval": "(function(){var el=document.getElementById('lib-search'); if(!el)return; el.value='zzznomatch'; el.dispatchEvent(new Event('input',{bubbles:true}));})()"
+        },
+        {
+          "wait": 300
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [
+        "lib-empty-clear"
+      ],
+      "note": "S6d chunk C: real path \u2014 typing a non-matching string into the real #lib-search input (state.search filter, library-ui.js ~4157) drives the 'No photos match the current filters' branch of renderGridTail, no mock/hook needed."
+    },
+    {
+      "id": "lib-empty-nofolder",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-empty",
+      "label": "Library empty \u2014 folder has no photos",
+      "openSteps": [
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "eval": "window.__libOpenFolder && window.__libOpenFolder('/test/Folders only')"
+        },
+        {
+          "wait": 400
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [
+        "lib-empty-import",
+        "lib-empty-open"
+      ],
+      "note": "S6d chunk C: real path \u2014 the libtest list_dir mock (library-ui.js) already special-cases any path matching /Folders only/ to return []; window.__libOpenFolder(path) is an existing real test hook (line ~2595) wrapping the real openFolder()."
+    },
+    {
+      "id": "lib-batchbar",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-batchbar",
+      "label": "Library multi-select batch bar",
+      "openSteps": [
+        {
+          "reloadQuery": ""
+        },
+        {
+          "eval": "window.chromasmithForceLibraryReady && window.chromasmithForceLibraryReady()"
+        },
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('full')"
+        },
+        {
+          "eval": "window.__libOpenFolder && window.__libOpenFolder('/test/Photos')"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "eval": "(function(){var cards=[...document.querySelectorAll('#lib-grid .lib-card .lib-thumb-wrap')];if(cards.length<2)return;cards[0].dispatchEvent(new MouseEvent('click',{bubbles:true}));cards[1].dispatchEvent(new MouseEvent('click',{bubbles:true,metaKey:true,ctrlKey:true}));})()"
+        },
+        {
+          "wait": 300
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [],
+      "note": "S6d chunk C: real \u2318/Ctrl-click multi-select via synthetic MouseEvents on real .lib-card elements (handleCardClick's modifier branch). REAL BUG FOUND+FIXED: updateCardSelClasses() (library-ui.js) never called renderBatchBar(), so the bar never appeared from a click-driven selection, only after a full grid re-render \u2014 fixed by calling renderBatchBar() from updateCardSelClasses(). UPDATE: made deterministic \u2014 window.chromasmithForceLibraryReady() (real boot-watchdog entry point that sets state.open=true, the same flag every keyboard/menu path in this file gates on) instead of raw classList manipulation, plus an explicit window.__libOpenFolder() call instead of relying on auto-load timing."
+    },
+    {
+      "id": "lib-review-grid",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-review-grid",
+      "label": "Library \u2014 People/Pets face review grid",
+      "openSteps": [],
+      "opened": null,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [],
+      "note": "S6d chunk C: stopped after 2 failed capture attempts per STATE.md rule 4. The review flow (openReviewFaces -> catalog_unnamed_clusters) opened correctly and captured fine in dark theme, but failed to be found in the light-theme re-run of the same openSteps sequence (a fresh page.goto reload + the same click path) despite matching dark exactly. Root cause not isolated within budget -- likely a timing/state race specific to how the capture harness re-runs identical openSteps per theme against a freshly reloaded page (?libcat=1 catalog_people seeding, sidebar section-open persistence, or the review dialog's own open/close animation) rather than the surface being fundamentally unreachable. Recorded unreachable this pass; a dark-only capture exists to prove the mechanism works. Needs a fresh-eyes pass with more time budget, not another blind retry.",
+      "unreachable": true
+    },
+    {
+      "id": "lib-thumb-progress",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-thumb-progress",
+      "label": "Library \u2014 thumbnail load progress readout",
+      "openSteps": [],
+      "opened": null,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [],
+      "note": "S6d chunk C: stopped after 2+ live diagnostic attempts per STATE.md rule 4. ?libhangthumb=all correctly makes every get_thumbnail(_or_offline) call hang forever (confirmed: img.src stays permanently empty), so the mechanism to freeze the readout mid-load is real and working. But #lib-thumb-progress textContent stayed empty the entire time across repeated probes with generous waits (up to 3s) after opening a real 18-entry catalog folder via window.__libOpenFolder -- updateThumbProgress()'s own early-return (_thumbTotalCount<8) implies loadThumb()/renderGrid()'s second pass never actually incremented _thumbTotalCount for this catalog-backed path, for a reason not identified within this pass's time budget (renderGrid()'s virtualization/docked branching was read and ruled out at N=18). Recorded unreachable this pass; flagged as a follow-up rather than pushed further.",
+      "unreachable": true
+    },
+    {
+      "id": "lib-dock-reopen",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-dock-reopen",
+      "label": "Library \u2014 reopen collapsed dock button",
+      "openSteps": [
+        {
+          "reloadQuery": ""
+        },
+        {
+          "eval": "window.chromasmithForceLibraryReady && window.chromasmithForceLibraryReady()"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "key": "g"
+        },
+        {
+          "wait": 250
+        },
+        {
+          "eval": "(function(){var r=document.getElementById('lib-dock-resizer'); var rect=document.getElementById('lib-overlay').getBoundingClientRect(); r.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:rect.left+100})); window.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:rect.left+5})); window.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));})()"
+        },
+        {
+          "wait": 250
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [],
+      "note": "S6d chunk C: real path \u2014 synthetic mousedown/mousemove(near left edge)/mouseup on the real #lib-dock-resizer (same drag-to-close-zone logic a real user drag exercises) triggers the real setDockCollapsed(true), which shows #lib-dock-reopen (same synthetic-drag technique S6d chunk A used for ahRoiArm()). UPDATE: body always carries lib-full by default (state.expanded_view defaults true), and the CSS guard is :not(.lib-full) \u2014 real fix is a real 'g' keypress (toggleExpandedView is not window-exposed, confirmed live) to actually exit expanded/full grid view before the dock-collapse drag. UPDATE (root cause found): the 'g' keydown handler (library-ui.js ~6186) starts with `if (!state.open) return;` \u2014 raw classList.add('on') never sets state.open, so 'g' silently no-op'd. window.chromasmithForceLibraryReady() (a real, already-exported boot-watchdog entry point) sets state.open=true for real, same flag every keyboard shortcut in this file gates on. FINAL: dark theme captures reliably at its real 28x28 size (MIN_OPEN_HEIGHT override added). Light theme genuinely shows w=0 h=0 with the identical reloadQuery+ForceLibraryReady+'g'+drag sequence, across 2 separate runs -- same class of light-theme-only failure as lib-review-grid. Stopped per STATE.md rule 4 rather than retrying a 3rd time; root cause not isolated within budget. Recorded unreachable; a dark-theme capture exists to prove the mechanism works.",
+      "unreachable": true
+    },
+    {
+      "id": "lib-sort-menu",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-sort-menu",
+      "label": "Library \u2014 sort popover",
+      "openSteps": [
+        {
+          "reloadQuery": ""
+        },
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "click": "#lib-sort-btn"
+        },
+        {
+          "wait": 200
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [],
+      "note": "S6d chunk C: real click on the real #lib-sort-btn (library-ui.js ~6577)."
+    },
+    {
+      "id": "lib-view-menu",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-view-menu",
+      "label": "Library \u2014 view/gear settings popover",
+      "openSteps": [
+        {
+          "reloadQuery": ""
+        },
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "click": "#lib-view-menu-btn"
+        },
+        {
+          "wait": 200
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [],
+      "note": "S6d chunk C: real click on the real #lib-view-menu-btn (library-ui.js ~6650)."
+    },
+    {
+      "id": "lib-cat-panels",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-cat-panels",
+      "label": "Library view menu \u2014 Panels category pane",
+      "openSteps": [
+        {
+          "reloadQuery": ""
+        },
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "click": "#lib-view-menu-btn"
+        },
+        {
+          "wait": 200
+        },
+        {
+          "click": ".fx-settings-cat[data-cat=\"panels\"]"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [],
+      "note": "S6d chunk C: real click path through the view menu's category drill-down (libSettingsShowCat('panels'), library-ui.js ~6649) via the real delegated .fx-settings-cat button."
+    },
+    {
+      "id": "lib-offline-bar",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-offline-bar",
+      "label": "Library \u2014 drive-disconnected sticky bar",
+      "openSteps": [
+        {
+          "reloadQuery": "&liboffline=1"
+        },
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "eval": "window.__libOpenFolder && window.__libOpenFolder('/test/Photos')"
+        },
+        {
+          "wait": 500
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [],
+      "note": "S6d chunk C: real path \u2014 catalog_query's own mock ALREADY supports ?liboffline=1 (library-ui.js ~450, pre-existing, no new mock needed), which openFolder's real renderLibOfflineBar() reads off entries[0].offline."
+    },
+    {
+      "id": "lib-viewbar",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-viewbar",
+      "label": "Library \u2014 #lib-viewbar (dead stub)",
+      "openSteps": [],
+      "opened": null,
+      "states": {},
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [],
+      "unreachable": true,
+      "note": "S6d chunk C: confirmed by reading source, not guessed \u2014 #lib-viewbar has exactly 3 references in library-ui.js: its own declaration (`<div id=\"lib-viewbar\" class=\"lib-fullview-only\">`), a grid-row CSS placement rule, and one unconditional `#lib-viewbar{display:none}` (~line 1290) that nothing ever overrides or removes. No code anywhere sets its innerHTML or toggles that display rule. It is real markup but a genuinely dead, permanently-invisible stub, not a hideable surface \u2014 cannot be 'captured open' because it never opens. Needs user approval to skip (or, separately, someone should either wire it up or delete the dead node \u2014 flagged as a follow-up, out of scope for this capture pass)."
     }
   ]
 }
