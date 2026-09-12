@@ -165,6 +165,13 @@ for (const s of surfaces) {
         if (st.eval) await pg.evaluate(`void (${st.eval})`);
         else if (st.click) await pg.click(st.click, { timeout: 2000 });
         else if (st.wait) await pg.waitForTimeout(st.wait);
+        // { reloadQuery }: this loop already reloads + loads a photo fresh at the top of every
+        // surface's iteration (lines above), so a bare reloadQuery step here is a no-op by
+        // design — it exists in surfaces.json for surface_capture.mjs's session-reuse model,
+        // not because this covers-check needs it too. Recognizing it (instead of silently
+        // falling through every branch above) avoids it masquerading as "a broken step" in the
+        // comment below when someone reads this loop next to surface_capture.mjs's version.
+        else if (st.reloadQuery !== undefined) { /* no-op: already fresh for this surface */ }
       } catch { /* a broken step shows up as the parent not being visible below */ }
     }
     await pg.waitForTimeout(300);

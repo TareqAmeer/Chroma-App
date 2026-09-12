@@ -1968,13 +1968,7 @@
       "label": "Editor background colour menu",
       "openSteps": [
         {
-          "eval": "document.body.classList.remove('deskx')"
-        },
-        {
-          "wait": 100
-        },
-        {
-          "click": "#btn-editor-bg"
+          "eval": "(function(){const w=document.getElementById('fx-wrap');const r=w.getBoundingClientRect();w.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+r.width/2,clientY:r.top+r.height/2}));})()"
         },
         {
           "wait": 150
@@ -1986,7 +1980,7 @@
       },
       "wireframe": false,
       "wireframeFile": null,
-      "note": "editorBgOpenMenu() (chromasmith-22.html:10755) builds the whole .fx-bgmenu popover -- including its #fx-bgmenu-color/#fx-bgmenu-reset children -- fresh on each open, so it's captured as one menu surface (same pattern as fx-split-popover covering ic-split/ic-splitmenu) rather than as two separate always-together children. UPDATE (S6d chunk C, incidental fix): #btn-editor-bg is display:none!important under body.deskx (chromasmith-22.html:969), same class of bug chunk B found for hdr-info/ic-split/etc \u2014 surface_coverage_check runs this openSteps itself and failed on the hidden button; added classList.remove('deskx') per chunk B's established fix.",
+      "note": "editorBgOpenMenu() (chromasmith-22.html:10755) builds the whole .fx-bgmenu popover -- including its #fx-bgmenu-color/#fx-bgmenu-reset children -- fresh on each open, so it's captured as one menu surface (same pattern as fx-split-popover covering ic-split/ic-splitmenu) rather than as two separate always-together children. UPDATE (S6d chunk C, incidental fix, LATER REVERTED): chunk C changed openSteps to classList.remove('deskx') + click #btn-editor-bg, reasoning the button was display:none!important under body.deskx (chromasmith-22.html:969). That masked a worse problem: #btn-editor-bg is intentionally hidden under body.deskx because the real interaction path in desktop/docked mode is right-click on the empty canvas background (per the button's own tooltip and the contextmenu handler at chromasmith-22.html:10778-10785) -- removing 'deskx' altered the grid layout so #lib-side (docked library sidebar) started intercepting pointer events over #btn-editor-bg's old position, which is why fx-bgmenu-color/-reset showed as COVERS_HIDES_SURFACE failures afterward (the click never actually opened the menu). Fixed by dispatching a synthetic contextmenu event on #fx-wrap directly, matching production's own right-click affordance, with no class changes and no layout side effects. Verified live: menu + both children present after this openSteps runs, with body.deskx left untouched.",
       "covers": [
         "fx-bgmenu-color",
         "fx-bgmenu-reset"

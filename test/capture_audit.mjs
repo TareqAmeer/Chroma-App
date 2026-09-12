@@ -86,8 +86,17 @@ for (const entry of surfacesDoc.surfaces) {
   try { actualFiles = (await readdir(dir)).filter((f) => f.endsWith('.webp')); } catch { /* no dir at all */ }
 
   if (expected === null) {
-    if (actualFiles.length) findings.push({ id: entry.id, kind: 'UNEXPECTED_IMAGES', detail: `${actualFiles.length} images present for a chrome/layout surface judged from whole-window shots — should have none: ${actualFiles.join(',')}` });
-    surfaceResults.push({ id: entry.id, ok: actualFiles.length === 0 });
+    // 2026-09-12: S6d chunks A/B/C gave a real "open_dark/open_light(+crop)" capture to small
+    // kind:"chrome" elements too (icons/menus-within-chrome like ic-split, fx-secnav, hdr-about)
+    // whose real appearance only shows in a specific state, not just from the whole-window shot —
+    // the same reasoning the OTHER_KINDS set already applies to menu/modal/confirm/toast. This
+    // table just hadn't been told "chrome" can legitimately do that too. Accept it when the files
+    // on disk are EXACTLY that recognized open_* shape (not a looser check — an actual stray file
+    // still fails below), rather than flag every one of them as unexpected.
+    const chromeOpenSet = ['open_dark.webp', 'open_dark_crop.webp', 'open_light.webp', 'open_light_crop.webp'];
+    const isRecognizedChromeCapture = entry.kind === 'chrome' && actualFiles.length === chromeOpenSet.length && chromeOpenSet.every((f) => actualFiles.includes(f));
+    if (actualFiles.length && !isRecognizedChromeCapture) findings.push({ id: entry.id, kind: 'UNEXPECTED_IMAGES', detail: `${actualFiles.length} images present for a chrome/layout surface judged from whole-window shots — should have none: ${actualFiles.join(',')}` });
+    surfaceResults.push({ id: entry.id, ok: actualFiles.length === 0 || isRecognizedChromeCapture });
     continue;
   }
   if (entry.opened !== true) {

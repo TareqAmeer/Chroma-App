@@ -704,3 +704,36 @@ call `ui:test`) will currently fail on that until it's fixed.
   sequence; root cause not found this pass (follow-up task filed).
 - `lib-dock-reopen` — captures fine in dark theme (real 28×28 button), zero-size in light theme
   with the identical sequence; root cause not found this pass (follow-up task filed).
+
+**S6d: review page republished with all chunk A/B/C captures — 2026-09-12**
+- Main Surface Triage artifact (https://claude.ai/code/artifact/65fe070e-5a71-455a-a2a5-3c24f0291e61)
+  and its Crops companion (https://claude.ai/code/artifact/5e25791a-0d72-475f-b4fe-73311f7db1fc)
+  republished with all 35 new/changed surfaces from chunks A/B/C (31 fully captured, 2 partial
+  dark-only, 2 with zero images). Final tally: **84 of 98 surfaces captured**. Main page now 242
+  published files, Crops page 185 — both comfortably under the 256 cap, so no crops needed to move
+  or be dropped. A new callout under the page's `<h1>` lists all 14 open gaps by id with their real
+  reason (pulled from `design/surfaces.json`'s notes), so nothing stays silent.
+- **fx-bgmenu regression: real, and fixed.** Chunk C's `classList.remove('deskx')` + click
+  `#btn-editor-bg` broke the layout so `#lib-side` intercepted the click, which is why
+  `fx-bgmenu-color`/`fx-bgmenu-reset` showed as `COVERS_HIDES_SURFACE`. `#btn-editor-bg` is
+  intentionally hidden under `body.deskx` — production's real path is right-click on the empty
+  canvas. Fixed `design/surfaces.json`'s `fx-bgmenu` openSteps to dispatch a synthetic
+  `contextmenu` on `#fx-wrap` instead, matching the real interaction, no class changes. Verified
+  live via `node test/surface_capture.mjs --only=fx-bgmenu` (2/2 captured) and a full
+  `surface_coverage_check.mjs` re-run (fx-bgmenu-color/-reset no longer appear in `integrity`).
+- **capture_audit.mjs classification bug: fixed.** Its `kind:"chrome"` lookup assumed chrome-kind
+  surfaces never get dedicated images, so it flagged 32 legitimate S6d chrome-kind captures
+  (ic-split, fx-secnav, hdr-about, etc.) as `UNEXPECTED_IMAGES`. Extended the check to accept the
+  exact 4-file `open_dark/open_light(+crop)` shape for `kind:"chrome"` too — same reasoning it
+  already applied to menu/modal/confirm/toast. Re-run dropped findings from 32 to 2 real ones
+  (`lib-review-grid`, `lib-dock-reopen` — both already known partial/unreachable).
+- Also made `surface_coverage_check.mjs`'s covers-verification loop recognize a bare `reloadQuery`
+  step as an explicit no-op (it already reloads fresh per-surface) instead of silently falling
+  through every branch, for clarity next to `surface_capture.mjs`'s version. `lib-compare-bar`/
+  `lib-compare-panes` still show `COVERS_HIDES_SURFACE` — traced to the harness not replicating
+  `surface_capture.mjs`'s exact pre-state before `lib-compare`'s openSteps; real images already
+  exist in `design/asbuilt/lib-compare` (confirmed by `capture_audit`), so this is a harness gap,
+  not a missing capture. Left as backlog, noted in the review page's gap callout.
+- Verified the original 62 surfaces' data/UI are unchanged: same DATA object shape, same
+  `ALL_IDS`/triage/db wiring; `read_db` on collection `triage` returned zero documents both
+  before and after (no triage decisions had been saved yet, so nothing was at risk of loss).
