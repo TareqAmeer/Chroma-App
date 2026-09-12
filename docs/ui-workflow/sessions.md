@@ -245,6 +245,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 
 **S12: Update the process docs** (Sonnet 5)
 > Read docs/ui-workflow/STATE.md and follow its rules. Task: rewrite §1 of `docs/editor-redesign-plan.md` and the loop section of `.claude/skills/wireframe-transplant/SKILL.md` (keep its existing Step 3b, "every width") for the new per-panel loop:
+> Before changing a repeated component or icon, query `design/components.json` through `scripts/query-components.mjs`; the registry, not a hand-written occurrence list, defines the affected production declarations. Run `npm run components:check` before implementation and after it.
 > 1. `echo <panel> > .claude/state/active-panel`
 > 2. Read only `design/specs/<panel>.json` plus the grep-located app section.
 > 3. Implement by moving existing markup.
@@ -258,6 +259,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 
 **S13: Per-panel build, repeat per panel; pilot = Masks** (Sonnet 5, high effort; after 2 failed rounds on the same mismatch, stop and continue in a new Opus 5 chat)
 > Read docs/ui-workflow/STATE.md and follow its rules. Build the **{PANEL}** panel.
+> Query `design/components.json` through `scripts/query-components.mjs` for every shared component or icon touched by the design, and list all affected declarations before editing.
 > Wireframe panel keys: adjust, color, crop, detail, export, film, frame, info, looks, masks, retouch. Wireframe `masks` = app `local`.
 > (0) **List the backlog items that touch this panel.** Grep `test/editor_ux_spec.json` for items whose `panel` or `source` names it, and include every open one in this build. For Masks that includes MA1. A separate chrome run handles T55 (rail 64px), T56 (panel 300px) and T58 (canvas cut off at 700px).
 > (1) `echo {PANEL} > .claude/state/active-panel`
@@ -287,4 +289,3 @@ Pick the model when a session starts. Switching mid-session makes the whole conv
 | Step 5: design stage | Opus 5; Fable 5.1 only for a whole-surface redesign where Opus has already fallen short | none | New, per surface |
 | Step 6: catalogue page | Opus 5 (large-file surgery) | Haiku for gate runs | New |
 | Per-panel build (after Step 4) | Sonnet 5, high effort; switch to Opus in a new session after 2 failed rounds | Opus fresh-context reviewer; Haiku for gates and screenshots | One panel per session |
-

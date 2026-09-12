@@ -209,6 +209,9 @@ const GATES = [
   // tokens.json/token-layout.json drift). Blocking — a drifted token silently reverts on the
   // next build-tokens run otherwise.
   { name: 'editor:tokens-check', cmd: ['node', 'scripts/build-tokens.mjs', '--check'] },
+  // Generated app-wide map from component families and semantic icons to their production
+  // declarations. Keeps requests such as "change every toggle" from relying on a hand list.
+  { name: 'editor:components-check', cmd: ['node', 'scripts/build-component-registry.mjs', '--check'] },
   // verify_tokens.py re-parses all three source blocks and asserts every declared CSS var is
   // either in design/tokens.json or documented in design/token-conflicts.md. Blocking.
   { name: 'editor:tokens-verify', cmd: ['bash', '-c', 'if [ -x .calibvenv/bin/python3 ]; then .calibvenv/bin/python3 design/verify_tokens.py; else python3 design/verify_tokens.py; fi'] },

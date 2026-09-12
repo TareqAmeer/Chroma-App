@@ -831,3 +831,11 @@ call `ui:test`) will currently fail on that until it's fixed.
   (`padding-left:1px` on `.fx-row`'s base rule) — correctly failed all 12 `fx-row` variants
   (rest/disabled/modified/longlabel/hover/focus x dark/light) with pixel diffs; reverted, 2/2
   spot-recheck (`fx-row — rest`, both themes) passed clean again.
+
+**Component registry — 2026-09-12 — done**
+- Confirmed no registry existed: the catalogue covered 8 visual examples; surface, panel-control and icon inventories were disconnected.
+- `scripts/build-component-registry.mjs` generates `design/components.json` from both production UI sources: 765 source-locatable family registrations across 13 families, including 23 toggles and 90 semantic icon calls.
+- `heart` resolves to 3 exact declarations in `desktop/library-ui.js`; all instances include source+line and a stable selector where production markup supplies one.
+- Coverage debt is explicit: 22 dynamic declarations and 124 registrations without a stable selector remain source-locatable and cannot silently count as selector-covered.
+- `scripts/query-components.mjs` gives small offline `--summary`, `--family`, `--icon`, or `--text` results so agents do not read the 10,000-line registry.
+- `editor:components-check` is blocking in `editor:gates`; `components:build`/`components:check` are npm commands. S12/S13 prompts now require registry queries for shared-component work.
