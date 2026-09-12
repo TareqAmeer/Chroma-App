@@ -14,6 +14,7 @@ import path from 'node:path';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS, settleForCapture,
   toRecords, writeReport, recheck, printRecheck } from './wireframe_diff_lib.mjs';
 import { loadAllowlist, isAccepted, hardGate } from './wireframe_checks_lib.mjs';
+import { SECTION_PAIRS } from './generated_pairs.mjs';
 
 const REPORT_PATH = 'test/output/editor_wireframe_diff_report.json';
 // Findings are ZONE-qualified as `[zone] [theme] label: prop — ...` so the shared allowlist's
@@ -37,80 +38,10 @@ await new Promise((r) => server.on('listening', r));
 const port = server.address().port;
 
 const VIEWPORT = { width: 1440, height: 900 };
-// wireframe selector -> { app: appSelector, label, zone }. One row per topbar/rail/panel element
-// named in UI_SPEC.md's Editor zones. `zone` drives allowlist scoping (see ACCEPTED above).
-const PAIRS = {
-  '.topbar': { app: '#fx-deskbar', label: 'topbar', zone: 'topbar' },
-  // 2026-09-09 (3.1.1): the app now has a real wrapper (.fx-undogrp) matching the wireframe's
-  // .undogrp — was pointed at #fx-deskbar as a stand-in before this existed.
-  '.tb-left .undogrp': { app: '.fx-undogrp', label: 'undo/redo cluster', zone: 'topbar' },
-  '.zoomctl': { app: '#fx-zoom-ctrl', label: 'zoom control', zone: 'zoom' },
-  // 2026-09-09: Tools/View/⋯ merged into one settings gear docked at the far right (after
-  // Export, matching the Library top bar's own order) — #fx-tools no longer exists standalone.
-  '#btn-tools': { app: '#fx-settings .fx-db', label: 'Settings button (was Tools)', zone: 'topbar' },
-  '#btn-allfx': { app: '.js-allfx', label: 'All FX button', zone: 'topbar' },
-  '.btn-export': { app: '#btn-fx-export, [onclick*="exportFX"]', label: 'Export button', zone: 'topbar' },
-  '.rail': { app: '#fx-toolrail', label: 'tool rail', zone: 'rail' },
-  '.toolpanel': { app: '.fx-panel', label: 'tool panel', zone: 'panel' },
-  '.filmstrip': { app: '#lib-overlay:not(.full)', label: 'filmstrip (docked library)', zone: 'filmstrip' },
-  '.statusbar': { app: '#fx-statusbar', label: 'status bar', zone: 'statusbar' }, // app equivalent added in Phase F — until then this is a real "missing" finding, not a placeholder mapping
-  // 2026-09-10 — first implemented panel of the redesign (docs/editor-redesign-plan.md). The
-  // wireframe panel IS the spec now (Stage 4 merge, test/panel_proposals.mjs), so this maps its
-  // real container straight to the app's real container rather than to any specific child —
-  // per-control fidelity is what editor_wireframe_behaviour.mjs's new retouch tests check.
-  '.tp-panel[data-panel="retouch"]': { app: '.fx-ctrl[data-fxsec="retouch"]', label: 'retouch panel', zone: 'retouch-panel' },
-  // 2026-09-10 — Detail panel (Stage 4 merge). Unlike Retouch, this panel groups three
-  // pre-existing app sections (nr/lens/deconv) rather than one — no single app container spans
-  // them, so each wireframe .grp maps to its own real .fx-ctrl card.
-  '.tp-panel[data-panel="detail"] .grp[data-fxsec="nr"]': { app: '.fx-ctrl[data-fxsec="nr"]', label: 'noise reduction section', zone: 'detail-panel' },
-  '.tp-panel[data-panel="detail"] .grp[data-fxsec="lens"]': { app: '.fx-ctrl[data-fxsec="lens"]', label: 'lens correction section', zone: 'detail-panel' },
-  '.tp-panel[data-panel="detail"] .grp[data-fxsec="deconv"]': { app: '.fx-ctrl[data-fxsec="deconv"]', label: 'deconvolution section', zone: 'detail-panel' },
-  // 2026-09-10 — Film panel (Stage 4 merge). Same shape as Detail: five pre-existing app
-  // sections (grain/hal/bloom/art/vig), no single app container spans them.
-  '.tp-panel[data-panel="film"] .grp[data-fxsec="grain"]': { app: '.fx-ctrl[data-fxsec="grain"]', label: 'film grain section', zone: 'film-panel' },
-  '.tp-panel[data-panel="film"] .grp[data-fxsec="hal"]': { app: '.fx-ctrl[data-fxsec="hal"]', label: 'halation section', zone: 'film-panel' },
-  '.tp-panel[data-panel="film"] .grp[data-fxsec="bloom"]': { app: '.fx-ctrl[data-fxsec="bloom"]', label: 'bloom section', zone: 'film-panel' },
-  '.tp-panel[data-panel="film"] .grp[data-fxsec="art"]': { app: '.fx-ctrl[data-fxsec="art"]', label: 'film artifacts section', zone: 'film-panel' },
-  '.tp-panel[data-panel="film"] .grp[data-fxsec="vig"]': { app: '.fx-ctrl[data-fxsec="vig"]', label: 'vignette section', zone: 'film-panel' },
-  // 2026-09-10 — Frame panel (Stage 4 merge). Two pre-existing app sections (borders, canvas).
-  '.tp-panel[data-panel="frame"] .grp[data-fxsec="borders"]': { app: '.fx-ctrl[data-fxsec="borders"]', label: 'border section', zone: 'frame-panel' },
-  '.tp-panel[data-panel="frame"] .grp[data-fxsec="canvas"]': { app: '.fx-ctrl[data-fxsec="canvas"]', label: 'canvas section', zone: 'frame-panel' },
-  // 2026-09-10 — Crop panel (Stage 4 merge). One real app section (crop), regrouped into
-  // "Aspect ratio" / "Transform" subheads within the same card — see spec CR1 for why the
-  // aspect-ratio picker itself (chips, not the proposal's checklist) was kept as-is.
-  '.tp-panel[data-panel="crop"] .grp[data-fxsec="crop"]': { app: '.fx-ctrl[data-fxsec="crop"]', label: 'crop panel', zone: 'crop-panel' },
-  // 2026-09-10 — Export panel (Stage 4 merge). One real app section, but a much bigger one than
-  // the proposal covers — Save/Load session, Styles, and Google Photos are real, shipped
-  // features with no equivalent in the design at all (tracked as R11, not this pass's scope).
-  '.tp-panel[data-panel="export"]': { app: '.fx-ctrl[data-fxsec="export"]', label: 'export panel', zone: 'export-panel' },
-  // 2026-09-10 — Info panel (Stage 4 merge). #fx-info (EXIF)/#fx-people are dynamically built by
-  // showExif()/fxRenderPeoplePanel() from real photo data — already in the metadata-then-people
-  // order the user asked for, in an earlier fix that predates this redesign pass, so no app change
-  // was needed here beyond confirming it. The wireframe's third group, Keywords, has no real
-  // implementation yet (R12) — its backend exists (library-ui.js's addKeywordToPhoto/
-  // removeKeywordFromPhoto/catalog_keywords) but is private to that file's closure, not bridged
-  // to the Editor, so it is deliberately excluded from this mapping rather than compared against
-  // nothing.
-  '.tp-panel[data-panel="info"]': { app: '.fx-ctrl[data-fxsec="info"]', label: 'info panel', zone: 'info-panel' },
-  // 2026-09-10 — Color panel (Stage 4 merge). Four pre-existing app sections; wheels was
-  // homeless (spec D2) until this pass wired it into FX_GROUPS.color.members.
-  '.tp-panel[data-panel="color"] .grp[data-fxsec="curves"]': { app: '.fx-ctrl[data-fxsec="curves"]', label: 'tone curves section', zone: 'color-panel' },
-  '.tp-panel[data-panel="color"] .grp[data-fxsec="hsl"]': { app: '.fx-ctrl[data-fxsec="hsl"]', label: 'color mixer section', zone: 'color-panel' },
-  '.tp-panel[data-panel="color"] .grp[data-fxsec="pointcolor"]': { app: '.fx-ctrl[data-fxsec="pointcolor"]', label: 'point color section', zone: 'color-panel' },
-  '.tp-panel[data-panel="color"] .grp[data-fxsec="wheels"]': { app: '.fx-ctrl[data-fxsec="wheels"]', label: 'colour wheels section', zone: 'color-panel' },
-  // Adjust panel — one flat panel (exposure/contrast/tone-region sliders + demosaic select), one
-  // real app section. Same whole-panel-to-whole-card shape as retouch/export/info above.
-  '.tp-panel[data-panel="adjust"]': { app: '.fx-ctrl[data-fxsec="adjust"]', label: 'adjust panel', zone: 'adjust-panel' },
-  // Looks panel — the preset gallery. Whole panel to whole card; the 113-entry preset LIST itself
-  // is dynamic content, same "nothing to structurally diff" shape as Masks (T29) — this PAIRS
-  // entry only covers the panel's own static chrome (search box, gallery grid container etc.).
-  '.tp-panel[data-panel="looks"]': { app: '.fx-ctrl[data-fxsec="looks"]', label: 'looks panel', zone: 'looks-panel' },
-  // Masks panel — app key is 'local' (PANEL_ALIAS in editor_coverage.mjs), wireframe key is
-  // 'masks'. Whole panel to whole card, same reasoning as Looks: mskRebuild()'s actual mask-row
-  // content is 100% dynamic (T29, editor_ux_spec.json) — editor_wireframe_behaviour.mjs's MA1
-  // baseline tests are the real coverage for what's inside, this entry just anchors the container.
-  '.tp-panel[data-panel="masks"]': { app: '.fx-ctrl[data-fxsec="local"]', label: 'masks panel', zone: 'masks-panel' },
-};
+// wireframe selector -> { app: appSelector, label, zone }. Imported from the generated file
+// (scripts/generate_pairs.mjs) which follows S1(b) rule: one entry per .grp[data-fxsec], else
+// whole panel -> .fx-ctrl[data-fxsec=<key>]. Labels are hand-written in the generator's LABELS map.
+const PAIRS = SECTION_PAIRS;
 // T9 (editor_ux_spec.json): 'width' added 2026-09-10 — a row could match on every OTHER
 // property yet still be visibly cramped or oversized because its spacing drifted from the
 // wireframe, with no gate on that class of regression at all before this.

@@ -25,14 +25,14 @@
 //   node test/editor_coverage.mjs            # table + summary, exit 0
 //   node test/editor_coverage.mjs --json     # machine-readable
 //   node test/editor_coverage.mjs --strict   # exit 1 if a DESIGNED panel is unchecked
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
+import { SECTION_PAIRS } from './generated_pairs.mjs';
 
 const ROOT = process.cwd();
 const APP = path.join(ROOT, 'chromasmith-22.html');
 const WF = path.join(ROOT, 'chromasmith-design/project/Editor (Developer) View.dc.html');
 const SPEC = path.join(ROOT, 'test/editor_ux_spec.json');
-const DIFF = path.join(ROOT, 'test/editor_wireframe_diff.mjs');
 const BEHAV = path.join(ROOT, 'test/editor_wireframe_behaviour.mjs');
 
 const argv = new Set(process.argv.slice(2));
@@ -42,7 +42,6 @@ const strict = argv.has('--strict');
 const app = readFileSync(APP, 'utf8');
 const wf = readFileSync(WF, 'utf8');
 const spec = JSON.parse(readFileSync(SPEC, 'utf8'));
-const diffSrc = readFileSync(DIFF, 'utf8');
 const behavSrc = readFileSync(BEHAV, 'utf8');
 
 // ── App side ────────────────────────────────────────────────────────────────────────────────
@@ -87,9 +86,8 @@ for (const m of wf.matchAll(/data-panel="([a-z]+)"/g)) {
 }
 
 // ── Check coverage ──────────────────────────────────────────────────────────────────────────
-// PAIRS keys are wireframe selectors; a panel is "in PAIRS" when some entry targets it.
-const pairsBlock = diffSrc.slice(diffSrc.indexOf('const PAIRS'), diffSrc.indexOf('const PROPS'));
-const pairsSelectors = [...pairsBlock.matchAll(/'([^']+)':\s*\{\s*app:/g)].map((m) => m[1]);
+// PAIRS selectors — now imported directly from generated_pairs.mjs rather than regex-parsed.
+const pairsSelectors = Object.keys(SECTION_PAIRS);
 const specItems = Object.entries(spec.items || {});
 
 // The wireframe and the app disagree on a few NAMES for the same thing. Only genuine synonyms
@@ -105,7 +103,7 @@ function mentions(src, key) {
 }
 
 function coverageFor(key) {
-  const inPairs = pairsSelectors.some((s) => mentions(s, key)) || pairsBlock.includes(`data-panel="${key}"`);
+  const inPairs = pairsSelectors.some((s) => mentions(s, key) || s.includes(`data-panel="${key}"`));
   // Spec attribution is by the item's OWN fields — its controlled-vocabulary `category`, or an
   // explicit `panel` field — never by scanning source/note prose. Free-text matching was tried
   // and immediately produced false positives: a single item whose note explains a decision
@@ -205,8 +203,26 @@ const orphans = appSections.filter((s) => !claimed.has(s));
 // Wireframe panels with no app section behind them.
 const emptyPanels = rows.filter((r) => r.appSections.length === 0).map((r) => r.key);
 
+// ── Per-surface coverage (task 4) ──────────────────────────────────────────────────────────
+const SURFACES_PATH = path.join(ROOT, 'design/surfaces.json');
+const SPECS_DIR = path.join(ROOT, 'design/specs');
+const GENERATED_PAIRS_PATH = path.join(ROOT, 'test/generated_pairs.mjs');
+let surfaces = [];
+try { surfaces = JSON.parse(readFileSync(SURFACES_PATH, 'utf8')).surfaces || []; } catch { /* no surfaces.json */ }
+
+const specFiles = new Set();
+try { for (const f of readdirSync(SPECS_DIR)) if (f.endsWith('.json')) specFiles.add(f.replace('.json','')); } catch {}
+
+const surfaceRows = surfaces.map(s => {
+  const hasWireframe = Boolean(s.wireframe);
+  // panel-fx is the Editor page — specs are per-panel, so check if any panel spec exists
+  const hasSpec = hasWireframe && (s.id === 'panel-fx' ? specFiles.size > 0 : specFiles.has(s.id));
+  const hasPairs = hasWireframe && existsSync(GENERATED_PAIRS_PATH);
+  return { id: s.id, kind: s.kind, hasWireframe, hasSpec, hasPairs };
+});
+
 if (asJson) {
-  console.log(JSON.stringify({ rows, orphans, emptyPanels, railTabs, appSections }, null, 2));
+  console.log(JSON.stringify({ rows, orphans, emptyPanels, railTabs, appSections, surfaceRows }, null, 2));
 } else {
   const pad = (s, n) => String(s).padEnd(n);
   console.log('\nEDITOR DESIGN COVERAGE\n' + '='.repeat(78));
@@ -256,6 +272,19 @@ if (asJson) {
       console.log(`  ${r.key}: ${r.controlCoverage.tested}/${r.controlCoverage.total} tested — untested: ${r.controlCoverage.untested.join(', ')}`);
     }
   }
+  // Per-surface coverage table
+  if (surfaceRows.length) {
+    console.log('\nSURFACE COVERAGE\n' + '='.repeat(60));
+    console.log(pad('surface', 30) + pad('kind', 10) + pad('wireframe', 12) + pad('spec', 8) + 'pairs');
+    console.log('-'.repeat(60));
+    for (const s of surfaceRows) {
+      console.log(pad(s.id, 30) + pad(s.kind, 10) + pad(s.hasWireframe ? 'yes' : 'no design yet', 12) + pad(s.hasSpec ? 'yes' : '-', 8) + (s.hasPairs ? 'yes' : '-'));
+    }
+    console.log('-'.repeat(60));
+    const withWf = surfaceRows.filter(s => s.hasWireframe);
+    console.log(`${withWf.length}/${surfaceRows.length} surfaces have wireframes`);
+  }
+
   console.log('');
   if (strict && unchecked.length) {
     console.log('RESULT: FAIL (--strict: a designed panel must have a PAIRS entry and a behaviour test)');
