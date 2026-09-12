@@ -560,6 +560,70 @@ call `ui:test`) will currently fail on that until it's fixed.
 - Not run: `surface_coverage_check`/`capture_audit` full gates (still fail on the other 43 items
   from separate S6d chunks, expected — not this chunk's bug).
 
+**proposal_validate.mjs + design-stage.md — 2026-09-12 — done**
+- `test/proposal_validate.mjs <file> [--json]`: runs on a `panels/*.compare.html` PROPOSED column
+  (via `<div class="col proposed">` extraction) or a whole `.dc.html` file. Hard fail: a slider/
+  checkbox/select/`ratioList()` row whose label, kind or numeric range matches nothing in
+  `test/output/panel_inventory.json`, scoped to the file's own panel (a `PANEL_SECTIONS` map, e.g.
+  film→grain/hal/bloom/art/vig) — pooling across the WHOLE app instead produced a false negative
+  (a fabricated Halation "Strength" 0-100 slider silently matched an unrelated real "Strength"
+  slider in Looks/LUT-mix by coincidence); or a colour (inline `style=`, or any `<style>` rule whose
+  selector contains `.wf`, i.e. `PROPOSAL_CSS`'s own prefix — page-shell CSS like the changes-list
+  badge colours is deliberately excluded, it isn't authored proposal content) matching no
+  `design/tokens.json` value (rgb/rgba compared by channel triple, alpha-agnostic, so a translucent
+  wash of a real token like `rgba(135,15,19,.16)` over `--red-oxide` correctly passes). Report only:
+  spacing/size/radius px literals not in the dimension token pool.
+- Verified against the two named commits by checking out `panels/{color,crop,detail,film,frame}
+  .compare.html` at `<commit>^`/`<commit>`: **every fabrication named in the two commit messages is
+  flagged before the fix and gone after** — Detail's invented "Vignetting" slider + 3-slider Lens
+  replacement, Frame's swapped/invented border colours (`#101014`) and invented ratio suffixes
+  ("4:5 Instagram" etc.), Crop's invented eleven-ratio list, Film's invented Halation
+  Strength/Radius/Threshold sliders and Bloom Strength/Threshold, Color's invented HSL band hex
+  values and the invented `#e79a9d` danger-button colour. Residual fails on the FIXED versions are
+  real, separate, still-open issues (not what these commits fixed) — Lens's Chromatic
+  aberration/Scale range mismatches against `panel_inventory.json`, the "Lens" sub-field label vs.
+  the real select's "Manual lens" label, and colours from real app JS constants (`HSL_COLS`,
+  `CV_BGS`) that were never promoted into `design/tokens.json` — left as real gaps, not validator
+  bugs; noted in the tool's own header comment and below.
+- Ran on all 9 current `panels/*.compare.html` PROPOSED columns (today's tree, already reviewed/
+  approved content, not new work): **6 of 9 clean (0 hard fails): crop, export, film, info, retouch,
+  detail is 3/9's worth of real residual issues** — full list:
+  - **color.compare.html** — 11 fails, all pre-existing/known: 3 slider-label misses (`Shadow/
+    Midtone/Highlight brightness` — a deliberate approved rename of the wheels' real "Shadow
+    (Lift)"/etc. labels, not fabrication, but the validator has no alias table so it still flags a
+    renamed real control) + 8 `HSL_COLS` hex colours (real app constant, never a token — see below).
+  - **detail.compare.html** — 3 fails: Chromatic aberration/Scale range mismatches (real, pre-
+    existing `panel_inventory.json` vs. proposal disagreement, not caught by either 247110c or
+    8eed9f0) + "Lens" select label (see above).
+  - **frame.compare.html** — 5 fails: `CV_BGS`'s 5 non-black/white swatch colours (`#141414`,
+    `#f5f0e8`, `#d4903a`, `#4a5d73`, `#7a3b3b`) — real app palette constant, never a token.
+  - **masks.compare.html** — 9 fails: Feather/Range/Amount/Exposure/Contrast/Temp/Saturation/
+    Texture sliders + an Invert checkbox all miss, because `panel_inventory.json`'s `local` section
+    was extracted with NO mask selected — the per-mask-type controls never mounted during Stage 1's
+    live extraction, so they're absent from the inventory entirely. Not a proposal problem; a
+    `panel_extract.mjs` coverage gap (select/create a mask before extracting `local`) for whoever
+    next touches masks.
+  - **Structural finding, not a bug to fix in the validator**: `HSL_COLS` and `CV_BGS` are real,
+    already-shipped app colour constants (`chromasmith-22.html`, JS arrays) that were never
+    promoted into `design/tokens.json` (S3/S4 only covered `:root`/`body.light`/library-ui.js's DS
+    block). Any design proposal that legitimately reuses them — which `panel_proposals.mjs`'s own
+    "kept, real CV_BGS palette"/"real HSL_COLS" comments say these should — will always hard-fail
+    the literal "colour must be a tokens.json value" rule as written. Flagging here rather than
+    silently loosening the rule to pass; a real fix is adding these two families to
+    `design/tokens.json` (a `design/token-conflicts.md`-tracked decision, out of scope for this
+    session).
+- `docs/ui-workflow/design-stage.md`: one-page how-to for a Redesign-marked surface — start the
+  canvas from that surface's `design/asbuilt/<id>/` (`block.dc.html`, `spec.json`) + `tokens.json`
+  (per the `design` skill's own §0, "match the existing app pixel-perfectly, from real source");
+  required state artboards (rest + edited at minimum, only states `surfaces.json` actually records
+  firing); running `proposal_validate.mjs` before treating a canvas as reviewable; merging via
+  `data-app` links (already-established convention, confirmed present in the approved
+  `Editor (Developer) View.dc.html`, e.g. `data-app="#sl-adj-exp"` / `data-app="none"` + `data-note`
+  for no-match controls). Explicit "what it does NOT support" section per the task's instruction:
+  no Figma/live-app import (must work from repo files), no DS colour-token picker or tweaks-agent
+  loop (claude.ai/design backend only), no cross-artboard element drag, canvases don't self-update
+  after publish.
+
 **Coverage loopholes closed — 2026-09-11 (planning session)**
 - User found the review page still missing many elements, with no alert. Two loopholes: (1) the gap-fill
   (946f6b1) put 46 hidden surfaces (overlays, filmstrip, history, Library menus, empty Library, batch bar…)
