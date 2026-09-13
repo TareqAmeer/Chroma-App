@@ -471,21 +471,6 @@
       "hadSemi": true
     },
     {
-      "var": "--op-9",
-      "pre": "",
-      "hadSemi": true
-    },
-    {
-      "var": "--op-10",
-      "pre": "",
-      "hadSemi": true
-    },
-    {
-      "var": "--op-11",
-      "pre": "",
-      "hadSemi": true
-    },
-    {
       "var": "--ls-1",
       "pre": "\n  /* Tracking ramp (T-ls): audited from 7 raw letter-spacing literals on uppercase eyebrow\n     labels — see design/tokens.json letterSpacing for the full audit. */\n  ",
       "hadSemi": true

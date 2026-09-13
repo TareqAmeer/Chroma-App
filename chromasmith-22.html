@@ -127,7 +127,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   /* State-layer / translucency ramp (T-op): audited from 13 raw opacity literals — see
      design/tokens.json opacity for the full audit, per-step role and the disabled-state
      consolidation note. */
-  --op-1:0.3;--op-2:0.32;--op-3:0.35;--op-4:0.4;--op-5:0.42;--op-6:0.6;--op-7:0.65;--op-8:0.7;--op-9:0.75;--op-10:0.85;--op-11:0.9;
+  --op-1:0.32;--op-2:0.4;--op-3:0.6;--op-4:0.65;--op-5:0.7;--op-6:0.75;--op-7:0.85;--op-8:0.9;
   /* Tracking ramp (T-ls): audited from 7 raw letter-spacing literals on uppercase eyebrow
      labels — see design/tokens.json letterSpacing for the full audit. */
   --ls-1:0.03em;--ls-2:0.04em;--ls-3:0.05em;--ls-4:0.06em;--ls-5:0.08em;--ls-6:0.1em;--ls-7:0.11em;
@@ -179,7 +179,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .chip-tap{margin-top:0}
 .btn{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:var(--sp-2) 14px;border-radius:var(--r-sm);border:1px solid;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease,transform .1s ease,box-shadow .15s ease;display:flex;align-items:center;gap:6px;white-space:nowrap}
-.btn:disabled{opacity:var(--op-1);cursor:not-allowed}
+.btn:disabled{opacity:var(--op-2);cursor:not-allowed}
 .btn:active:not(:disabled){transform:scale(.96)}
 .bpri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600;box-shadow:inset 0 1px 0 var(--scrim-w1),0 1px 2px var(--scrim-b1)}
 .bpri:not(:disabled):hover{filter:brightness(1.15)}
@@ -223,7 +223,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .hsl-t tr:last-child td{border-bottom:none}
 .div-sep{display:flex;align-items:center;gap:var(--sp-2);margin:16px 0 12px;font-family:var(--sans);font-size:var(--fs-2);font-weight:600;color:var(--mut);letter-spacing:0}
 .div-sep::before,.div-sep::after{content:'';flex:1;height:1px;background:var(--bdr)}
-.opt-dz{border-style:dashed;opacity:var(--op-8)}
+.opt-dz{border-style:dashed;opacity:var(--op-5)}
 /* FX TAB */
 .fx-layout{display:grid;grid-template-columns:640px 1fr;gap:16px;align-items:start}
 .fx-panel{column-count:2;column-gap:var(--sp-2)}
@@ -235,7 +235,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-ctrl[data-fxsec="looks"]{column-span:all}
 /* Detail/Highlight-Desat are real no-ops while both NR gate sliders (Luminance, Color) sit at 0
    — the shader skips the whole NR pass then. Dim them so that's visible instead of silent. */
-.nr-gated.gate-off{opacity:var(--op-4)}
+.nr-gated.gate-off{opacity:var(--op-2)}
 #panel-fx .dz{min-height:54px;padding:var(--sp-3) 14px}
 #dz-fx-img:not(.loaded){border-color:var(--acc);border-style:solid;background:var(--tint-1)}
 #dz-fx-img:not(.loaded):hover{background:var(--tint-2)}
@@ -268,7 +268,7 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
    always laid out now and simply dimmed, so you can see what the section offers before turning
    it on, and touching any control switches it on for you (see the ff-off handler in JS). */
 .fx-fields{margin-top:8px;display:flex;flex-direction:column;gap:6px;transition:opacity var(--dur-2) var(--ease)}
-.fx-fields.ff-off{opacity:var(--op-5)}
+.fx-fields.ff-off{opacity:var(--op-2)}
 .fx-fields.ff-off .fx-ctrl-title,.fx-fields.ff-off .msk-group-hd{color:var(--mut)}
 .fx-hint{font-size:var(--fs-2);color:var(--mut);line-height:var(--lh-base);margin:-2px 0 8px}
 /* Round info button — sits on a label or a button, never on its own line (panel redesign,
@@ -363,7 +363,7 @@ body.mobile-fx .fx-slider{touch-action:pan-x}
 /* A slider that differs from its factory default gets a dot, so a loaded recipe is legible at a
    glance instead of needing every section opened and compared. */
 .fx-row.fx-mod>.fx-label::after{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;
-  background:var(--acc);margin-left:var(--sp-1);vertical-align:middle;opacity:var(--op-10)}
+  background:var(--acc);margin-left:var(--sp-1);vertical-align:middle;opacity:var(--op-7)}
 .fx-val[contenteditable]{cursor:text;border-radius:3px;outline:none;padding:1px 2px}
 .fx-val[contenteditable]:hover{background:var(--sur2)}
 .fx-val[contenteditable]:focus{background:var(--sur2);box-shadow:0 0 0 1px var(--acc);color:var(--txt);text-align:center;min-width:40px}
@@ -450,7 +450,7 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .msk-more-it{display:flex;align-items:center;gap:var(--sp-2);width:100%;min-height:30px;padding:0 var(--sp-2);background:none;
   border:none;border-radius:6px;cursor:pointer;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);text-align:left}
 .msk-more-it:hover:not(:disabled){background:var(--sur2)}
-.msk-more-it:disabled{opacity:var(--op-3);cursor:default}
+.msk-more-it:disabled{opacity:var(--op-2);cursor:default}
 .msk-more-it.on{color:var(--acc)}
 .msk-more-it.danger{color:var(--err)}
 .msk-more-sep{height:1px;background:var(--bdr);margin:4px 6px}
@@ -481,7 +481,7 @@ body.mobile-fx .pc-chip{width:36px;height:36px}
    over it — one per band — that select a band and show a pale grey overlay, matching the
    draft's Darkroom-style reference instead of the previous 8 discrete band-coloured bars. */
 #hsl-hist{position:relative;display:flex;align-items:flex-end;gap:1px;height:110px;padding:0 1px;background:var(--sur2);border-radius:var(--r) var(--r) 0 0;overflow:hidden}
-.hsl-hist-bar{flex:1 1 0;min-width:2px;border-radius:2px 2px 0 0;pointer-events:none;opacity:var(--op-11)}
+.hsl-hist-bar{flex:1 1 0;min-width:2px;border-radius:2px 2px 0 0;pointer-events:none;opacity:var(--op-8)}
 .hsl-hist-zone{position:absolute;top:0;bottom:0;border:0;background:transparent;cursor:pointer;padding:0}
 .hsl-hist-zone:hover,.hsl-hist-zone.on{background:linear-gradient(180deg,var(--tint-3),var(--tint-1) 62%,transparent)}
 /* Color Mixer sliders: gradient track (Hue = fixed rainbow; Sat/Lum tinted per selected band
@@ -499,7 +499,7 @@ body.mobile-fx .pc-chip{width:36px;height:36px}
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cccccc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 8px center;background-size:12px}
 .fx-select:hover{background-color:var(--hov)}
-.fx-select:disabled{opacity:var(--op-4);pointer-events:none;cursor:default}
+.fx-select:disabled{opacity:var(--op-2);pointer-events:none;cursor:default}
 body.light .fx-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237a7a7a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")}
 body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-canvas-wrap{background:#000;border-radius:var(--r);overflow:hidden;position:relative;min-height:300px;display:flex;align-items:center;justify-content:center}
@@ -508,7 +508,7 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 #fx-canvas-orig{display:none;position:absolute;top:0;left:0;pointer-events:none}
 .fx-split-line{display:none;position:absolute;top:0;bottom:0;width:3px;background:var(--scrim-w4);cursor:col-resize;z-index:var(--z-sticky)}
 .fx-split-knob{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 2px 8px var(--scrim-b5);display:flex;align-items:center;justify-content:center;font-size:var(--fs-2);color:#000;user-select:none}
-#fx-hist{display:none;position:absolute;bottom:8px;right:8px;border-radius:4px;background:var(--scrim-b3);opacity:var(--op-11);pointer-events:none}
+#fx-hist{display:none;position:absolute;bottom:8px;right:8px;border-radius:4px;background:var(--scrim-b3);opacity:var(--op-8);pointer-events:none}
 .fx-zoom-wrap{transform-origin:0 0;cursor:grab;touch-action:none}
 .fx-zoom-wrap.dragging{cursor:grabbing}
 .fx-zoom-ctrl{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:2px;background:var(--scrim-b4);border:1px solid var(--bdr);border-radius:6px;padding:2px;z-index:var(--z-sticky);font-family:var(--sans);font-variant-numeric:tabular-nums}
@@ -532,7 +532,7 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:var(--sp-8);position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:4px;z-index:var(--z-raise)}
 .ni-logo{font-family:var(--display);font-size:var(--fs-7);letter-spacing:var(--ls-7);color:var(--acc);font-style:italic;margin-bottom:2px}
 .ni-sub{font-family:var(--sans);font-size:var(--fs-1);letter-spacing:0;color:var(--mut)}
-.ni-build{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);opacity:var(--op-8)}
+.ni-build{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);opacity:var(--op-5)}
 .ni-hint{font-size:12px;color:var(--mut);margin-top:14px}
 #fx-preview-tools{position:absolute;right:8px;top:8px;margin:0!important;z-index:var(--z-sticky)}
 /* multi-photo filmstrip — switch which loaded photo is previewed */
@@ -559,7 +559,7 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .look-cell.sel{border-color:var(--acc)}
 /* A look whose vendor/luts/ fetch failed (offline before the warm-up finished). Marked rather
    than removed, so the cell keeps its place and retries on the next gallery rebuild. */
-.look-cell-err{opacity:var(--op-4)}
+.look-cell-err{opacity:var(--op-2)}
 .look-cell-err::after{content:"offline";position:absolute;inset:auto 0 18px 0;text-align:center;font-size:var(--fs-2);color:var(--mut)}
 .look-cell canvas{display:block;width:100%;height:auto}
 .look-cell .look-nm{font-family:var(--mono);font-size:var(--fs-2);color:var(--txt);padding:2px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--scrim-b3)}
@@ -576,13 +576,13 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
    actually asking to be fixed — the coordinate math itself was already correct. */
 #fx-mask-overlay{position:absolute;display:none;touch-action:none;overflow:hidden}
 #fx-mask-overlay.on{display:block}
-.msk-dim{fill:#000;opacity:var(--op-6);pointer-events:none}
+.msk-dim{fill:#000;opacity:var(--op-3);pointer-events:none}
 .msk-scribble-dot{pointer-events:none}
 .msk-shape{fill:none;stroke:#fff;stroke-width:.003;vector-effect:non-scaling-stroke;pointer-events:none}
 .msk-shape.filled{fill:none;stroke:var(--ok);stroke-width:.005}
-.msk-feather{fill:none;stroke:#fff;stroke-width:.0015;stroke-dasharray:.01 .008;opacity:var(--op-7);vector-effect:non-scaling-stroke;pointer-events:none}
-.msk-feather-mid{stroke-dasharray:none;opacity:var(--op-11)}
-.msk-feather-50{fill:none;stroke:#fff;stroke-width:.001;stroke-dasharray:.004 .01;opacity:var(--op-2);vector-effect:non-scaling-stroke;pointer-events:none}
+.msk-feather{fill:none;stroke:#fff;stroke-width:.0015;stroke-dasharray:.01 .008;opacity:var(--op-4);vector-effect:non-scaling-stroke;pointer-events:none}
+.msk-feather-mid{stroke-dasharray:none;opacity:var(--op-8)}
+.msk-feather-50{fill:none;stroke:#fff;stroke-width:.001;stroke-dasharray:.004 .01;opacity:var(--op-1);vector-effect:non-scaling-stroke;pointer-events:none}
 .msk-handle{fill:#fff;stroke:#000;stroke-width:.0015;vector-effect:non-scaling-stroke;cursor:grab;pointer-events:auto}
 .msk-handle.rot{fill:var(--acc,#e8a33d);cursor:alias}
 .msk-handle:active{cursor:grabbing}
@@ -594,7 +594,7 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
    brush-mask equivalent of the radial/linear shape overlay above; same mskPreviewMode segmented
    control (Overlay/Isolate/Off) drives both, and "O" toggles it — see mskOverlaySync(). */
 #msk-paint-overlay{position:absolute;display:none;pointer-events:none} /* smooth (default) upscale — m.px is already a soft-falloff gradient, not a hard mask */
-.msk-dragging{opacity:var(--op-4)}
+.msk-dragging{opacity:var(--op-2)}
 #msk-paint-overlay.on{display:block}
 /* Live brush cursor: a ring at the ACTUAL painted radius (matches mskPaintAt's soft falloff),
    only shown while "Paint" is armed — previously the brush had no visible size/position at all
@@ -934,7 +934,7 @@ body.mobile-fx #fx-fab-export{display:flex;align-items:center;justify-content:ce
   position:fixed;right:14px;bottom:calc(64px + max(10px,var(--sab)));z-index:var(--z-float);
   width:50px;height:50px;border-radius:50%;background:var(--acc);color:#000;border:none;
   box-shadow:var(--lift-2);cursor:pointer}
-body.mobile-fx #fx-fab-export:disabled{opacity:var(--op-4);background:var(--sur2);color:var(--mut)}
+body.mobile-fx #fx-fab-export:disabled{opacity:var(--op-2);background:var(--sur2);color:var(--mut)}
 body.mobile-fx #fx-fab-export .fx-act-ic{font-size:var(--fs-6)}
 body.mobile-fx.sheet-open #fx-fab-export{display:none} /* the sheet already has its own controls in reach */
 .fx-sec-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:none;border:none;color:var(--mut);cursor:pointer;padding:6px 12px;font-family:var(--mono);border-radius:8px;min-width:60px;min-height:44px}
@@ -956,11 +956,11 @@ body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:
 .fx-db.fx-db-icon{border-radius:8px;height:30px;width:30px;padding:0}
 .fx-db:hover{border-color:var(--mut)}
 /* 3.1.2 — matches the wireframe's .ibtn.disabled (Editor (Developer) View.dc.html:40). */
-.fx-db:disabled{opacity:var(--op-3);pointer-events:none;cursor:default}
+.fx-db:disabled{opacity:var(--op-2);pointer-events:none;cursor:default}
 /* "Show original" is a .db-btn, not a .fx-db, so it needs its own disabled treatment — wired
    alongside Undo/Redo in fxSyncTopbarDisabled() (2026-09-10), same fxHistIdx<=0 signal ("nothing
    to compare against yet" = the same state that disables Undo). */
-.db-btn:disabled{opacity:var(--op-3);pointer-events:none;cursor:default}
+.db-btn:disabled{opacity:var(--op-2);pointer-events:none;cursor:default}
 /* 3.1.1 originally matched the wireframe's bordered .undogrp pill (one outer border/radius, a
    hairline divider between the two buttons). 2026-09-10: dropped per explicit request — plain
    adjacent icon buttons, same as every other pair in the bar, no enclosing box. */
@@ -11047,7 +11047,7 @@ function cpOpen(){
     const filtered=_cpFilter(cmds,input.value);
     if(_cpIdx>=filtered.length)_cpIdx=Math.max(0,filtered.length-1);
     list.innerHTML=filtered.map((c,i)=>`<div class="cp-row" data-i="${i}" style="padding:8px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;font-size:13px;${i===_cpIdx?'background:var(--acc);color:#fff':'color:var(--txt)'}">`
-      +`<span>${c.label}</span><span style="font-family:var(--mono);font-size:10px;opacity:var(--op-7)">${c.group}</span></div>`).join('')
+      +`<span>${c.label}</span><span style="font-family:var(--mono);font-size:10px;opacity:var(--op-4)">${c.group}</span></div>`).join('')
       ||'<div style="padding:14px;font-size:12px;color:var(--mut);font-family:var(--mono)">No matches</div>';
     list.querySelectorAll('.cp-row').forEach(row=>{
       row.onmouseenter=()=>{_cpIdx=parseInt(row.dataset.i,10);render();};
@@ -14000,8 +14000,8 @@ function mskCrEyedropperClick(e){
 // purity had NOT been touched silently moved both — this makes the coupling visible and gives a
 // one-click way back to it after diverging them on purpose.
 function _mskCrLinkNote(m){
-  if(m.crRangeC==null)return '<div class="msk-hint" style="opacity:var(--op-9)">Linked to Hue range — drag it to set an independent value.</div>';
-  return '<div class="msk-hint" style="opacity:var(--op-9)">Independent of Hue range. <a href="javascript:void(0)" onclick="mskCrRelink()">Re-link</a></div>';
+  if(m.crRangeC==null)return '<div class="msk-hint" style="opacity:var(--op-6)">Linked to Hue range — drag it to set an independent value.</div>';
+  return '<div class="msk-hint" style="opacity:var(--op-6)">Independent of Hue range. <a href="javascript:void(0)" onclick="mskCrRelink()">Re-link</a></div>';
 }
 function mskCrRelink(){const m=fxState.masks[mskSel];if(!m)return;m.crRangeC=null;mskSrcVDebounced();mskRebuild();fxUpdate();}
 function mskCrToggle(el){
