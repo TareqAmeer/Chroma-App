@@ -134,7 +134,7 @@ for (const e of catalogue.dimension) {
   const v = String(e.value).trim().toLowerCase();
   if (/^-?\d+(\.\d+)?px$/.test(v)) pxTokens.add(v);
 }
-const ALLOW_SPACING_PX = new Set(['0px', '1px', '2px']); // hairline/reset values, not a token concept
+const ALLOW_SPACING_PX = new Set(['0px', '1px', '2px', '-1px', '-2px']); // hairline/reset values and small negative visual nudges, not a token concept
 // Also fold in design/tokens.json's font values (source of truth even if a :root var name doesn't
 // self-describe as font-ish, e.g. --font-text / --font-display already caught above by name, but
 // catch any dimension-typed size token too).

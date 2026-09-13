@@ -734,8 +734,7 @@
       --font-display:"SF Pro Display",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
       --font-text:"SF Pro Text",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
       --weight-light:300;--weight-regular:400;--weight-semibold:600;--weight-bold:700;
-      --space-xxs:4px;--space-xs:8px;--space-sm:12px;--space-md:17px;--space-lg:24px;--space-xl:32px;
-      --radius-none:0px;--radius-xs:5px;--radius-sm:8px;--radius-md:11px;--radius-lg:18px;--radius-pill:9999px;--radius-full:9999px;
+      --radius-xs:5px;--radius-sm:8px;--radius-pill:9999px;
       --shadow-product:rgba(0,0,0,.22) 3px 5px 30px 0;
       --ring-hairline:inset 0 0 0 1px var(--hairline-alpha);--focus-ring:0 0 0 2px var(--primary-focus);
       --ease-standard:cubic-bezier(.4,0,.6,1);--duration-press:120ms;--duration-fade:300ms;

@@ -87,7 +87,7 @@ for (const { selector, body } of ruleBodies) {
     if (/^(border-radius|gap|padding|margin|row-gap|column-gap)$/i.test(prop) || /^border(-top|-bottom|-left|-right)?(-left|-right)?-radius$/i.test(prop)) {
       const pxMatches = rawVal.match(/-?\d+(\.\d+)?px/g) || [];
       for (const px of pxMatches) {
-        if (px === '0px' || px === '1px' || px === '2px') continue; // hairline/reset values, not a token concept
+        if (px === '0px' || px === '1px' || px === '2px' || px === '-1px' || px === '-2px') continue; // hairline/reset values and small negative visual nudges, not a token concept
         if (!pxTokens.has(px)) findings.push({ kind: 'spacing', selector, prop, value: px });
       }
     }

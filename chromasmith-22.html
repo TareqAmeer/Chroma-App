@@ -75,7 +75,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
      to their hardcoded fallbacks — off-palette, and immune to the light theme. A hover has to
      be a translucent OVERLAY rather than a flat surface token: these rows sit ON --sur2
      already (the history/recents popovers), so hovering to --sur2 would be invisible. */
-  --r-sm:6px;--hov:rgba(255,255,255,.08);
+  --r-sm:6px;--r-pill:9999px;--hov:rgba(255,255,255,.08);
   /* ── TYPE ──────────────────────────────────────────────────────────────────────────────────
      ⚠️ --mono is for NUMERALS, code and the build stamp. It is not a UI voice. It used to be:
      81 uses against 8 of --sans, with 23 `text-transform:uppercase` rules on top, which made
@@ -93,7 +93,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   --fs-0:12px;--fs-1:12px;--fs-2:12px;--fs-3:14px;--fs-4:17px;--fs-6:21px;--fs-7:24px;
   /* Spacing rhythm — replaces ad-hoc 2/3/4/6/7/9/10/14/18px values, which is why rows read as
      subtly uneven even when each one looked fine on its own. */
-  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;--sp-7:32px;--sp-8:40px;--sp-9:60px;--sp-10:84px;--sp-11:100px;
   --ease:cubic-bezier(.2,.8,.3,1);--dur-1:120ms;--dur-2:200ms;
   /* Safe-area insets as overridable custom props: layout rules use var(--sat)/var(--sab)
      instead of env() directly, so desktop-Chrome testing can inject real iPhone values
@@ -136,7 +136,7 @@ header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-item
 .logo-img{height:28px;width:auto;display:block}
 .logo .sub{color:var(--mut);font-size:var(--fs-1);font-family:var(--sans);letter-spacing:0;font-style:normal}
 .logo-glow{text-shadow:0 0 4px rgba(212,144,58,.55),0 0 12px rgba(212,144,58,.45),0 0 22px rgba(224,84,84,.35),0 0 2px rgba(255,210,150,.6)}
-.hdr-right{display:flex;align-items:center;gap:10px}
+.hdr-right{display:flex;align-items:center;gap:var(--sp-2)}
 .bstamp{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);letter-spacing:.04em;cursor:pointer}
 .hdr-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);cursor:pointer;padding:6px;transition:all .15s}
 .hdr-btn:hover{border-color:var(--mut)}
@@ -144,17 +144,17 @@ header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-item
 .hdr-ic svg{display:block}
 .badge{font-family:var(--mono);font-size:var(--fs-2);color:#fff;background:var(--ok);border:1px solid var(--ok);padding:3px 8px;border-radius:3px;letter-spacing:.06em}
 .tabs{display:flex;border-bottom:1px solid var(--bdr);padding:0 24px;background:var(--sur);overflow-x:auto;touch-action:pan-x;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
-.tab{flex:0 0 auto;padding:12px 18px;font-size:var(--fs-2);font-weight:500;letter-spacing:0;font-family:var(--sans);color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color var(--dur-1) var(--ease);white-space:nowrap}
+.tab{flex:0 0 auto;padding:12px var(--sp-4);font-size:var(--fs-2);font-weight:500;letter-spacing:0;font-family:var(--sans);color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color var(--dur-1) var(--ease);white-space:nowrap}
 .tab:hover{color:var(--txt)}.tab.active{color:var(--acc);border-bottom-color:var(--acc)}
-main{max-width:1180px;margin:0 auto;padding:24px 20px 100px}
+main{max-width:1180px;margin:0 auto;padding:24px 20px var(--sp-11)}
 main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .panel{display:none}.panel.active{display:block}
 .card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:20px;margin-bottom:14px;box-shadow:var(--lift-1)}
 .ctitle{font-family:var(--sans);font-weight:600;font-size:var(--fs-3);letter-spacing:0;color:var(--txt);margin-bottom:14px;display:flex;align-items:center;gap:8px}
 .ctitle::after{content:'';flex:1;height:1px;background:var(--bdr)}
 .cver{font-family:var(--mono);font-size:var(--fs-2);color:var(--acc);background:var(--tint-2);border:1px solid var(--tint-4);padding:2px 8px;border-radius:3px;margin-left:auto}
-.dg2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.dg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.dg2{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-2)}
+.dg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-2)}
 .dz{background:var(--sur2);border:1px dashed var(--bdr);border-radius:var(--r);padding:22px 14px;text-align:center;cursor:pointer;transition:all .15s;position:relative;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
 .dz:hover,.dz.over{border-color:var(--acc);background:var(--tint-1)}.dz.loaded{border-style:solid;border-color:var(--ok);background:var(--ok)}.dz.loaded .dz-lb,.dz.loaded .dz-sb{color:#fff}
 .dz input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
@@ -164,7 +164,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .dz-fn{font-family:var(--mono);font-size:var(--fs-2);color:var(--ok);word-break:break-all;max-width:92%;margin-top:2px}.dz.loaded .dz-fn{color:#fff}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .chip-tap{margin-top:0}
-.btn{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:9px 14px;border-radius:5px;border:1px solid;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease,transform .1s ease,box-shadow .15s ease;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.btn{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:var(--sp-2) 14px;border-radius:5px;border:1px solid;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease,transform .1s ease,box-shadow .15s ease;display:flex;align-items:center;gap:6px;white-space:nowrap}
 .btn:disabled{opacity:.3;cursor:not-allowed}
 .btn:active:not(:disabled){transform:scale(.96)}
 .bpri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600;box-shadow:inset 0 1px 0 var(--scrim-w1),0 1px 2px var(--scrim-b1)}
@@ -173,18 +173,18 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .bgh{background:var(--sur2);border-color:var(--bdr);color:var(--mut)}.bgh:not(:disabled):hover{border-color:var(--txt);color:var(--txt);background:var(--sur)}.bgh.on{border-color:#61a0af;color:#fff;background:#61a0af}
 /* .bdot removed: a decorative leading dot on every single button, carrying no meaning and
    pushing every label off-centre. State is now shown by the button's own .on treatment. */
-.pb{height:3px;background:var(--bdr);border-radius:2px;margin-top:10px;overflow:hidden;display:none}
+.pb{height:3px;background:var(--bdr);border-radius:2px;margin-top:var(--sp-2);overflow:hidden;display:none}
 .pf{height:100%;background:var(--acc);border-radius:2px;transition:width .25s;width:0%}
-.vrow{display:flex;gap:8px;align-items:center;margin-top:10px}
+.vrow{display:flex;gap:8px;align-items:center;margin-top:var(--sp-2)}
 .vlb{font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);letter-spacing:0}
-.vinput{background:var(--sur2);border:1px solid var(--bdr);border-radius:5px;padding:6px 10px;color:var(--txt);font-family:var(--mono);font-size:var(--fs-2);width:180px}
+.vinput{background:var(--sur2);border:1px solid var(--bdr);border-radius:5px;padding:6px var(--sp-2);color:var(--txt);font-family:var(--mono);font-size:var(--fs-2);width:180px}
 .vinput:focus{outline:none;border-color:var(--acc)}
 .step-card{border:1px solid var(--bdr);border-radius:var(--r);margin-bottom:12px;overflow:hidden;box-shadow:var(--lift-1)}
-.step-hdr{background:var(--sur2);padding:9px 14px;display:flex;align-items:center;gap:9px;font-family:var(--sans);font-weight:600;font-size:12px}
+.step-hdr{background:var(--sur2);padding:var(--sp-2) 14px;display:flex;align-items:center;gap:var(--sp-2);font-family:var(--sans);font-weight:600;font-size:12px}
 .step-badge{background:var(--tint-3);border:1px solid var(--tint-5);color:var(--acc);padding:2px 8px;border-radius:3px;font-size:var(--fs-2);font-family:var(--mono)}
 .step-body{padding:14px}
 .sum-box{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 14px;margin-top:12px;box-shadow:var(--lift-1)}
-.sum-title{font-family:var(--sans);font-size:var(--fs-2);font-weight:600;letter-spacing:0;color:var(--mut);margin-bottom:7px}
+.sum-title{font-family:var(--sans);font-size:var(--fs-2);font-weight:600;letter-spacing:0;color:var(--mut);margin-bottom:var(--sp-2)}
 .sum-list{list-style:none;display:flex;flex-direction:column;gap:4px}
 .sum-list li{font-size:12px;color:var(--txt);display:flex;align-items:baseline;gap:8px}
 .sum-list li::before{content:'→';color:var(--acc);flex-shrink:0;font-size:var(--fs-1)}
@@ -194,26 +194,26 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .sl-cb{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
 .sl-line{position:absolute;top:0;bottom:0;width:2px;background:var(--scrim-w3);transform:translateX(-50%);pointer-events:none}
 .sl-knob{position:absolute;top:50%;transform:translate(-50%,-50%);width:32px;height:32px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:col-resize;box-shadow:0 2px 10px var(--scrim-b5)}
-.sl-lbl{position:absolute;bottom:7px;background:var(--scrim-b5);color:#fff;font-family:var(--sans);font-size:var(--fs-1);padding:2px 7px;border-radius:3px;pointer-events:none;letter-spacing:.04em}
+.sl-lbl{position:absolute;bottom:7px;background:var(--scrim-b5);color:#fff;font-family:var(--sans);font-size:var(--fs-1);padding:2px var(--sp-2);border-radius:3px;pointer-events:none;letter-spacing:.04em}
 .sl-ll{left:7px}.sl-lr{right:7px}
-.sl-cap{font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);text-align:center;padding:3px 0 9px;letter-spacing:0}
+.sl-cap{font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);text-align:center;padding:3px 0 var(--sp-2);letter-spacing:0}
 .sl-ph{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:28px 16px;text-align:center;color:var(--mut);font-size:12px;min-height:100px;display:flex;align-items:center;justify-content:center}
 .sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-top:8px}
-.si{background:var(--sur2);border:1px solid var(--bdr);border-radius:5px;padding:6px 9px}
+.si{background:var(--sur2);border:1px solid var(--bdr);border-radius:5px;padding:6px var(--sp-2)}
 .sk{font-family:var(--sans);font-size:var(--fs-1);font-weight:500;letter-spacing:0;color:var(--mut)}
 .sv{font-family:var(--sans);font-size:var(--fs-3);font-variant-numeric:tabular-nums;color:var(--txt);margin-top:1px}
 .sv.pos,.sv.neg{color:var(--txt)}
-.hsl-t{width:100%;border-collapse:collapse;margin-top:7px;font-family:var(--mono);font-size:var(--fs-2)}
-.hsl-t th{text-align:left;color:var(--mut);font-weight:var(--fw-regular);padding:3px 7px;border-bottom:1px solid var(--bdr);font-size:var(--fs-1);letter-spacing:0}
-.hsl-t td{padding:3px 7px;border-bottom:1px solid rgba(37,37,48,.5)}
+.hsl-t{width:100%;border-collapse:collapse;margin-top:var(--sp-2);font-family:var(--mono);font-size:var(--fs-2)}
+.hsl-t th{text-align:left;color:var(--mut);font-weight:var(--fw-regular);padding:3px var(--sp-2);border-bottom:1px solid var(--bdr);font-size:var(--fs-1);letter-spacing:0}
+.hsl-t td{padding:3px var(--sp-2);border-bottom:1px solid rgba(37,37,48,.5)}
 .hsl-t tr:last-child td{border-bottom:none}
-.div-sep{display:flex;align-items:center;gap:9px;margin:16px 0 12px;font-family:var(--sans);font-size:var(--fs-2);font-weight:600;color:var(--mut);letter-spacing:0}
+.div-sep{display:flex;align-items:center;gap:var(--sp-2);margin:16px 0 12px;font-family:var(--sans);font-size:var(--fs-2);font-weight:600;color:var(--mut);letter-spacing:0}
 .div-sep::before,.div-sep::after{content:'';flex:1;height:1px;background:var(--bdr)}
 .opt-dz{border-style:dashed;opacity:.7}
 /* FX TAB */
 .fx-layout{display:grid;grid-template-columns:640px 1fr;gap:16px;align-items:start}
-.fx-panel{column-count:2;column-gap:10px}
-.fx-ctrl{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:10px;break-inside:avoid;margin-bottom:18px;box-shadow:var(--lift-1)}
+.fx-panel{column-count:2;column-gap:var(--sp-2)}
+.fx-ctrl{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:var(--sp-2);break-inside:avoid;margin-bottom:var(--sp-4);box-shadow:var(--lift-1)}
 /* Tall cards (the 46+-preset Looks gallery) can hit a multicol layout edge case where a
    break-inside:avoid child still gets column-formatting-context box sizing quirks even at
    column-count:1, rendering its content outside the visible panel. column-span:all fully
@@ -222,15 +222,15 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 /* Detail/Highlight-Desat are real no-ops while both NR gate sliders (Luminance, Color) sit at 0
    — the shader skips the whole NR pass then. Dim them so that's visible instead of silent. */
 .nr-gated.gate-off{opacity:.4}
-#panel-fx .dz{min-height:54px;padding:11px 14px}
+#panel-fx .dz{min-height:54px;padding:var(--sp-3) 14px}
 #dz-fx-img:not(.loaded){border-color:var(--acc);border-style:solid;background:var(--tint-1)}
 #dz-fx-img:not(.loaded):hover{background:var(--tint-2)}
 #dz-fx-img:not(.loaded) .dz-ic,#dz-fx-img:not(.loaded) .dz-lb{color:var(--acc)}
 #panel-fx .dz-ic{font-size:var(--fs-4)}
-.fx-ctrl-title{font-family:var(--sans);font-size:var(--fs-1);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--txt);margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;cursor:pointer;gap:6px}
+.fx-ctrl-title{font-family:var(--sans);font-size:var(--fs-1);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--txt);margin-bottom:12px;padding-bottom:var(--sp-2);border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;cursor:pointer;gap:6px}
 .fx-ctrl-chev{display:inline-flex;flex-shrink:0;transform:rotate(0deg);transition:transform var(--dur-1) var(--ease);margin-right:2px}
 .fx-ctrl.fx-sec-collapsed .fx-ctrl-chev{transform:rotate(-90deg)}
-.fx-ctrl.fx-sec-collapsed>.fx-ctrl-title{margin-bottom:0;padding-bottom:10px;border-bottom:1px solid var(--bdr)}
+.fx-ctrl.fx-sec-collapsed>.fx-ctrl-title{margin-bottom:0;padding-bottom:var(--sp-2);border-bottom:1px solid var(--bdr)}
 .fx-ctrl.fx-sec-collapsed>:not(.fx-ctrl-title){display:none}
 .fx-toggle{width:var(--ctl-toggle-w);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--bdr);position:relative;cursor:pointer;transition:background var(--dur-2) ease;flex-shrink:0;box-shadow:none;border:1px solid transparent}
 /* T45 (editor_ux_spec.json): under forced-colors (Windows High Contrast) mode, the browser can
@@ -294,7 +294,7 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
 /* Two-line slider layout: label + value share a top row, the track spans full width below —
    DOM order (label, slider, val) is unchanged, `order` just re-flows them visually so the
    existing contenteditable tap-to-type value div needs no markup changes. */
-.fx-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 8px;margin-bottom:7px;min-height:20px}
+.fx-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 8px;margin-bottom:var(--sp-2);min-height:20px}
 .fx-row:last-child{margin-bottom:0}
 /* ⚠️ The `order` values below are a THREE-slot scheme (label · value · track) and every direct
    child must be assigned one. Without this base rule an unordered child keeps the flex default
@@ -380,8 +380,8 @@ body.mobile-fx .hsl-chip{border-width:3px}
    scope selector and export quality. 28px tall so it clears the pointer-target floor the UI
    audit enforces — the old 22px was the most-clicked undersized control in the editor. */
 .seg{display:inline-flex;align-items:stretch;background:var(--sur2);border:1px solid var(--bdr);
-  border-radius:7px;padding:2px;gap:2px;overflow:hidden}
-.seg>button{flex:1 1 auto;min-height:28px;padding:0 10px;border:none;border-radius:5px;cursor:pointer;
+  border-radius:var(--r);padding:2px;gap:2px;overflow:hidden}
+.seg>button{flex:1 1 auto;min-height:28px;padding:0 var(--sp-2);border:none;border-radius:5px;cursor:pointer;
   background:transparent;color:var(--mut);font-family:var(--sans);font-size:var(--fs-2);font-weight:500;
   white-space:nowrap;transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
 .seg>button:hover{color:var(--txt)}
@@ -405,7 +405,7 @@ body.mobile-fx .hsl-chip{border-width:3px}
 .msk-group-note{margin-left:auto;font-size:var(--fs-0);letter-spacing:0;text-transform:none;color:var(--acc)}
 .msk-group-bd{padding:2px 0 var(--sp-3)}
 /* Guided Skin Tone steps */
-.msk-step{display:flex;align-items:center;gap:7px;margin:var(--sp-3) 0 var(--sp-1);font-size:var(--fs-3);font-weight:600;color:var(--txt)}
+.msk-step{display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-3) 0 var(--sp-1);font-size:var(--fs-3);font-weight:600;color:var(--txt)}
 .msk-group-bd>.msk-step:first-child{margin-top:2px}
 .msk-step-n{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;
   background:var(--sur2);border:1px solid var(--bdr);color:var(--mut);font-size:var(--fs-0);font-weight:700;flex:0 0 auto}
@@ -420,7 +420,7 @@ body.mobile-fx .hsl-chip{border-width:3px}
   font-size:var(--fs-2);font-weight:700;color:var(--scrim-b4);text-shadow:0 0 2px var(--scrim-w2)}
 .msk-mst .msk-swatch.rec{outline:1px dashed var(--scrim-w1);outline-offset:2px}
 .msk-presets{gap:var(--sp-1)}
-.msk-preset{flex:1 1 calc(50% - var(--sp-1));min-width:0;justify-content:center;font-size:var(--fs-1);padding:7px 6px}
+.msk-preset{flex:1 1 calc(50% - var(--sp-1));min-width:0;justify-content:center;font-size:var(--fs-1);padding:var(--sp-2) 6px}
 .msk-seg{width:100%;margin:var(--sp-1) 0 var(--sp-2)}
 .msk-adv-hd{display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;color:var(--mut);
   font-family:var(--sans);font-size:var(--fs-1);font-weight:600;padding:var(--sp-2) 0 var(--sp-1);min-height:28px}
@@ -431,8 +431,8 @@ body.mobile-fx .hsl-chip{border-width:3px}
 /* "..." menu */
 .msk-more-menu{position:fixed;z-index:5000;min-width:230px;background:var(--glass-bg);
   -webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
-  border:1px solid var(--bdr);border-radius:9px;padding:4px;box-shadow:var(--lift-2)}
-.msk-more-it{display:flex;align-items:center;gap:9px;width:100%;min-height:30px;padding:0 9px;background:none;
+  border:1px solid var(--bdr);border-radius:var(--r);padding:4px;box-shadow:var(--lift-2)}
+.msk-more-it{display:flex;align-items:center;gap:var(--sp-2);width:100%;min-height:30px;padding:0 var(--sp-2);background:none;
   border:none;border-radius:6px;cursor:pointer;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);text-align:left}
 .msk-more-it:hover:not(:disabled){background:var(--sur2)}
 .msk-more-it:disabled{opacity:.35;cursor:default}
@@ -441,7 +441,7 @@ body.mobile-fx .hsl-chip{border-width:3px}
 .msk-more-sep{height:1px;background:var(--bdr);margin:4px 6px}
 /* "+ Mask" menu group headers — same menu, same rows (.msk-more-it), just labelled sections
    (Shape / Paint / AI / Range) instead of one flat list of 8 peers. */
-.msk-more-hd{font-size:var(--fs-1);font-weight:600;color:var(--mut);padding:6px 9px 2px}
+.msk-more-hd{font-size:var(--fs-1);font-weight:600;color:var(--mut);padding:6px var(--sp-2) 2px}
 /* Inline icons inside text buttons must never absorb the flex squeeze — a shrunk 14px glyph next
    to a full-size label looks like a rendering fault. */
 .btn>svg,.msk-more-it>svg{flex:0 0 auto}
@@ -479,7 +479,7 @@ body.mobile-fx .pc-chip{width:36px;height:36px}
    a real native <select> reskinned to look like it (fixed 32px pill height, 8px radius, a
    pill-role border, a custom chevron replacing the native arrow) rather than replaced with a
    fake button, so keyboard/accessibility/native-picker behavior is untouched. */
-.fx-select{background:var(--sur2);border:1px solid var(--bdr-pill);border-radius:8px;height:32px;padding:0 26px 0 9px;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);flex:1;cursor:pointer;min-width:0;box-sizing:border-box;text-overflow:ellipsis;overflow:hidden;
+.fx-select{background:var(--sur2);border:1px solid var(--bdr-pill);border-radius:8px;height:32px;padding:0 var(--sp-6) 0 var(--sp-2);color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);flex:1;cursor:pointer;min-width:0;box-sizing:border-box;text-overflow:ellipsis;overflow:hidden;
   appearance:none;-webkit-appearance:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cccccc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 8px center;background-size:12px}
@@ -498,7 +498,7 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-zoom-wrap.dragging{cursor:grabbing}
 .fx-zoom-ctrl{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:2px;background:var(--scrim-b4);border:1px solid var(--bdr);border-radius:6px;padding:2px;z-index:11;font-family:var(--sans);font-variant-numeric:tabular-nums}
 .fx-zoom-ctrl #fx-zoom-slider{width:70px}
-.fx-zoom-ctrl button{background:none;border:none;color:var(--txt);cursor:pointer;font-size:12px;padding:3px 7px;border-radius:4px;line-height:1}
+.fx-zoom-ctrl button{background:none;border:none;color:var(--txt);cursor:pointer;font-size:12px;padding:3px var(--sp-2);border-radius:4px;line-height:1}
 .fx-zoom-ctrl button:hover{background:rgba(255,255,255,.12)}
 /* 2026-09-10: dropped #btn-fx-fullres from this selector — it no longer lives inside
    .fx-zoom-ctrl under deskx (relocatePreviewTools() moves it to the left cluster instead), so
@@ -514,7 +514,7 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
    listener below. */
 .fx-zoom-ctrl #fx-zoom-pct{font-size:var(--fs-2);color:var(--mut);min-width:36px;text-align:center;cursor:default;opacity:0;transition:opacity .1s}
 .fx-zoom-ctrl.active #fx-zoom-pct{opacity:1}
-.fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:40px;position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:4px;z-index:2}
+.fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:var(--sp-8);position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:4px;z-index:2}
 .ni-logo{font-family:var(--display);font-size:var(--fs-7);letter-spacing:.11em;color:var(--acc);font-style:italic;margin-bottom:2px}
 .ni-sub{font-family:var(--sans);font-size:var(--fs-1);letter-spacing:0;color:var(--mut)}
 .ni-build{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);opacity:.7}
@@ -601,23 +601,23 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
 /* GUIDE TAB */
 .guide{max-width:880px;margin:0 auto;line-height:var(--lh-base);font-size:var(--fs-3);color:var(--txt)}
 .guide h1{font-family:var(--serif,Georgia,serif);font-size:var(--fs-7);font-weight:600;margin:0 0 6px}
-.guide .lede{color:var(--mut);font-size:14px;margin:0 0 26px}
-.guide h2{font-family:var(--sans);font-size:var(--fs-4);font-weight:600;letter-spacing:0;color:var(--acc);margin:34px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--bdr)}
+.guide .lede{color:var(--mut);font-size:14px;margin:0 0 var(--sp-6)}
+.guide h2{font-family:var(--sans);font-size:var(--fs-4);font-weight:600;letter-spacing:0;color:var(--acc);margin:var(--sp-7) 0 12px;padding-bottom:var(--sp-2);border-bottom:1px solid var(--bdr)}
 .guide h3{font-size:var(--fs-3);font-weight:600;margin:20px 0 6px;color:var(--txt)}
 .guide p{margin:0 0 12px}
 .guide ul{margin:0 0 14px;padding-left:0;list-style:none}
-.guide li{margin:0 0 9px;padding-left:16px;position:relative}
+.guide li{margin:0 0 var(--sp-2);padding-left:16px;position:relative}
 .guide li::before{content:'›';position:absolute;left:0;color:var(--acc);font-weight:700}
 .guide b{color:var(--txt);font-weight:600}
 .guide code,.guide kbd{font-family:var(--mono);font-size:12px;background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:1px 5px;color:var(--acc2)}
 .guide .gcard{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:16px 20px;margin:0 0 14px}
-.guide .gnote{background:var(--sur2);border-left:2px solid var(--acc);border-radius:0 5px 5px 0;padding:10px 14px;margin:14px 0;font-size:var(--fs-2);color:var(--mut)}
+.guide .gnote{background:var(--sur2);border-left:2px solid var(--acc);border-radius:0 5px 5px 0;padding:var(--sp-2) 14px;margin:14px 0;font-size:var(--fs-2);color:var(--mut)}
 .guide .faq-q{font-weight:600;color:var(--txt);margin:16px 0 4px}
 .guide .faq-a{color:var(--mut);margin:0 0 12px}
 .guide .toc{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}
-.guide .toc a{font-family:var(--mono);font-size:var(--fs-2);text-decoration:none;color:var(--acc);border:1px solid var(--bdr);border-radius:5px;padding:5px 11px;background:var(--sur)}
+.guide .toc a{font-family:var(--mono);font-size:var(--fs-2);text-decoration:none;color:var(--acc);border:1px solid var(--bdr);border-radius:5px;padding:5px var(--sp-3);background:var(--sur)}
 .guide .toc a:hover{border-color:var(--acc);background:var(--sur2)}
-#log-area{display:none;background:var(--sur);border-top:1px solid var(--bdr);padding:7px 22px;max-height:66px;overflow-y:auto;position:sticky;bottom:0}
+#log-area{display:none;background:var(--sur);border-top:1px solid var(--bdr);padding:var(--sp-2) 22px;max-height:66px;overflow-y:auto;position:sticky;bottom:0}
 body.log-on #log-area{display:block}
 /* Diagnostics card + status cap + mobile-only chrome hidden by default */
 #status-cap,#fx-actionbar,#fx-secnav{display:none}
@@ -629,7 +629,7 @@ body.diag-on .fx-diag{display:block}
    of this is a .btn, hence display:flex rather than block. */
 .diag-only{display:none}
 body.diag-on .diag-only{display:flex}
-.ll{font-family:var(--mono);font-size:var(--fs-2);padding:2px 0;display:flex;gap:9px}
+.ll{font-family:var(--mono);font-size:var(--fs-2);padding:2px 0;display:flex;gap:var(--sp-2)}
 .lt{color:var(--mut);flex-shrink:0}.lm{color:var(--txt)}
 .lm.ok{color:var(--ok)}.lm.err{color:var(--err)}.lm.info{color:var(--acc2)}.lm.warn{color:var(--acc)}
 /* Metadata panel (DRK-style): labeled rows + a 4-across icon chip strip. Top-level on
@@ -638,12 +638,12 @@ body.diag-on .diag-only{display:flex}
 @keyframes fxspin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .fx-exif-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:8px 0;
   border:1px solid var(--bdr);border-radius:8px;overflow:hidden}
-.fx-exif-chip{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 2px;
+.fx-exif-chip{display:flex;flex-direction:column;align-items:center;gap:4px;padding:var(--sp-2) 2px;
   background:var(--sur2);font-family:var(--sans);font-size:var(--fs-2);color:var(--txt);min-width:0}
 .fx-exif-chip+.fx-exif-chip{border-left:1px solid var(--bdr)}
 .fx-exif-chip-lb{font-size:var(--fs-1);color:var(--mut);letter-spacing:0;line-height:1}
-.fx-exif-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
-  padding:7px 0;border-top:1px solid var(--bdr);font-family:var(--sans);font-size:12px}
+.fx-exif-row{display:flex;justify-content:space-between;align-items:baseline;gap:var(--sp-2);
+  padding:var(--sp-2) 0;border-top:1px solid var(--bdr);font-family:var(--sans);font-size:12px}
 .fx-exif-row:first-child{border-top:none}
 .fx-exif-row .fx-exif-lb{color:var(--mut);flex-shrink:0}
 .fx-exif-row .fx-exif-val{color:var(--txt);text-align:right;word-break:break-word;min-width:0}
@@ -651,7 +651,7 @@ body.diag-on .diag-only{display:flex}
    Library Info panel's own vocabulary: solid chip = confirmed, dashed = detected-but-unassigned. */
 .fx-people-row{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0;border-top:1px solid var(--bdr)}
 .fx-people-row:first-child{border-top:none}
-.fx-people-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px 3px 3px;border-radius:999px;
+.fx-people-chip{display:inline-flex;align-items:center;gap:6px;padding:3px var(--sp-2) 3px 3px;border-radius:var(--r-pill);
   background:var(--sur2);border:1px solid var(--bdr);font-size:var(--fs-2);color:var(--txt);cursor:pointer}
 .fx-people-chip.unnamed{background:transparent;border-style:dashed;color:var(--mut)}
 .fx-people-ava{width:18px;height:18px;border-radius:50%;flex:0 0 auto;overflow:hidden;background:var(--sur);position:relative}
@@ -690,14 +690,14 @@ body.diag-on .diag-only{display:flex}
   #status-cap{display:block;position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:#000;z-index:2000}
   /* Bigger touch targets for the zoom overlay + editable values */
   .fx-zoom-ctrl{gap:4px;padding:3px}
-  .fx-zoom-ctrl button{padding:9px 13px;font-size:14px}
+  .fx-zoom-ctrl button{padding:var(--sp-2) var(--sp-3);font-size:14px}
   .fx-zoom-ctrl #fx-zoom-pct{font-size:12px;min-width:44px}
   .fx-val{min-height:26px;display:flex;align-items:center;justify-content:flex-end;font-size:var(--fs-2)}
   .fx-val[contenteditable]:focus{justify-content:center;min-width:52px}
   /* On the non-FX tabs the header just shows the title + subtitle; build / theme / log /
      status move to a slim fixed bar at the bottom so the top stays clean. */
   body:not(.mobile-fx) header{padding-top:env(safe-area-inset-top);height:auto;min-height:56px}
-  body:not(.mobile-fx) .hdr-right{position:fixed;left:0;right:0;bottom:0;justify-content:center;gap:16px;background:var(--sur);border-top:1px solid var(--bdr);padding:9px 14px calc(9px + env(safe-area-inset-bottom));z-index:1500}
+  body:not(.mobile-fx) .hdr-right{position:fixed;left:0;right:0;bottom:0;justify-content:center;gap:16px;background:var(--sur);border-top:1px solid var(--bdr);padding:var(--sp-2) 14px calc(var(--sp-2) + env(safe-area-inset-bottom));z-index:1500}
   body:not(.mobile-fx) main{padding-bottom:70px}
   body:not(.mobile-fx) #log-area{bottom:54px}}
 
@@ -719,7 +719,7 @@ body.mobile-fx{height:var(--app-h,100svh);min-height:0;display:flex;flex-directi
 body.mobile-fx header{display:none}
 body.mobile-fx .tabs{flex:0 0 auto}
 body.mobile-fx main{flex:1;min-height:0;min-width:0;display:flex;padding:0!important;margin:0;max-width:100vw;overflow:hidden}
-body.mobile-fx .tab{padding-top:8px;padding-bottom:9px}
+body.mobile-fx .tab{padding-top:8px;padding-bottom:var(--sp-2)}
 body.mobile-fx #panel-fx.panel.active{display:flex;flex:1;min-height:0;min-width:0;width:100%;max-width:100%}
 body.mobile-fx .fx-layout{display:flex;flex-direction:column;align-items:stretch;flex:1;min-height:0;min-width:0;gap:0;width:100%;max-width:100%}
 /* PREVIEW-FIRST layout (INS-style): the photo fills all space between the tab row and
@@ -740,7 +740,7 @@ body.mobile-fx .fx-canvas-wrap{flex:1 1 auto;height:auto;min-height:120px}
 body.mobile-fx #fx-canvas{object-fit:contain}
 /* bottom sheet = the tool panel; height animates 0 ↔ 34vh, flex gives the freed space
    back to the photo. Drag-handle row (#fx-sheet-handle) closes it. */
-body.mobile-fx .fx-panel{flex:0 0 auto;min-height:0;height:0;overflow:hidden;column-count:auto;column-width:auto;padding:0 10px;background:var(--sur);border-radius:14px 14px 0 0;box-shadow:0 -6px 24px var(--scrim-b3);transition:height .28s ease}
+body.mobile-fx .fx-panel{flex:0 0 auto;min-height:0;height:0;overflow:hidden;column-count:auto;column-width:auto;padding:0 var(--sp-2);background:var(--sur);border-radius:14px 14px 0 0;box-shadow:0 -6px 24px var(--scrim-b3);transition:height .28s ease}
 /* NOTE: plain 34vh for the ANIMATED value — Chrome refuses to interpolate a height
    transition to a min()/calc() endpoint (sticks at 0), so the real size cap lives in
    max-height (never transitioned → min()/calc() on the JS-owned --app-h is safe there).
@@ -753,7 +753,7 @@ body.mobile-fx.sheet-open .fx-panel{height:34vh;max-height:min(360px,calc(var(--
 /* INS-style: get the chrome out of the way while a tool is actually being edited — the top
    action bar shrinks (still fully usable, just less visually prominent) once a sheet is open. */
 body.mobile-fx.sheet-open #fx-actionbar{padding:4px 6px 2px}
-body.mobile-fx.sheet-open .fx-act{padding:4px 10px;min-height:38px}
+body.mobile-fx.sheet-open .fx-act{padding:4px var(--sp-2);min-height:38px}
 body.mobile-fx.sheet-open .fx-act-ic{font-size:var(--fs-4)}
 /* Per-section reset control (injected once at boot, see the bottom of the script) — INS
    shows an explicit discard (✕) per tool sub-panel; sliders here apply live with no separate
@@ -809,7 +809,7 @@ body.fx-deskb .fx-ctrl.fx-has-curveedit > .fx-ctrl-title .fx-ctrl-title-reset-se
 .fx-ctrl[data-fxsec="curves"].fx-curve-param-mode .fx-ctrl-title-reset-scoped,
 .fx-ctrl[data-fxsec="curves"].fx-curve-param-mode .fx-ctrl-title-reset-sep{display:none!important}
 #fx-sheet-handle{display:none}
-body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:9px 0 7px;position:sticky;top:0;background:var(--sur);z-index:5;cursor:pointer}
+body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:var(--sp-2) 0 var(--sp-2);position:sticky;top:0;background:var(--sur);z-index:5;cursor:pointer}
 body.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:38px;height:4px;border-radius:2px;background:var(--bdr)}
 /* ── dynamic-feel polish (INS/DRK-style) ── */
 /* tool-panel content slides up + fades as you switch tools in the open sheet */
@@ -844,10 +844,10 @@ canvas,img{-webkit-user-drag:none}
    them). Mobile keeps bottom-center — there's no thumbnail grid under it there, and centered
    reads better above the mobile action bar it's already offset for via --toast-b. */
 #fx-toast{position:fixed;right:24px;bottom:calc(var(--toast-b,24px) + env(safe-area-inset-bottom));
-  transform:translateY(8px);display:flex;align-items:center;gap:9px;
+  transform:translateY(8px);display:flex;align-items:center;gap:var(--sp-2);
   background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
   border:1px solid var(--bdr);color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);
-  letter-spacing:0;line-height:var(--lh-base);padding:10px 15px;border-radius:10px;opacity:0;pointer-events:none;
+  letter-spacing:0;line-height:var(--lh-base);padding:var(--sp-2) var(--sp-4);border-radius:var(--r);opacity:0;pointer-events:none;
   transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1.15);z-index:3000;
   max-width:min(82vw,420px);text-align:left;box-shadow:var(--lift-2)}
 #fx-toast::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--mut);flex:0 0 auto}
@@ -860,13 +860,13 @@ body.mobile-fx{--toast-b:98px}
 body.mobile-fx #fx-toast{left:50%;right:auto;transform:translateX(-50%) translateY(8px)}
 body.mobile-fx #fx-toast.show{transform:translateX(-50%) translateY(0)}
 /* slider polish: bigger touch targets + a value bubble above the thumb while dragging */
-#fx-sl-bubble{position:fixed;transform:translateX(-50%);background:var(--acc);color:#000;font-family:var(--mono);font-size:var(--fs-2);font-weight:600;padding:3px 8px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .15s;z-index:3000}
+#fx-sl-bubble{position:fixed;transform:translateX(-50%);background:var(--acc);color:#000;font-family:var(--mono);font-size:var(--fs-2);font-weight:600;padding:3px 8px;border-radius:var(--r);opacity:0;pointer-events:none;transition:opacity .15s;z-index:3000}
 body.mobile-fx .fx-slider{min-height:34px}
 body.mobile-fx .fx-slider::-webkit-slider-thumb{width:22px;height:22px}
 /* mobile: the editor IS the app — web tabs live behind the ⋯ sheet */
 body.mobile-fx .tabs{display:none}
 body.mobile-fx .ni-hint{display:none}
-#fx-add-btn{display:flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:50%;background:var(--acc);color:#000;font-size:var(--fs-7);line-height:1;border:none;cursor:pointer;margin:18px auto 6px;box-shadow:0 4px 22px var(--tint-6)}
+#fx-add-btn{display:flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:50%;background:var(--acc);color:#000;font-size:var(--fs-7);line-height:1;border:none;cursor:pointer;margin:var(--sp-4) auto 6px;box-shadow:0 4px 22px var(--tint-6)}
 #fx-add-btn:active{transform:scale(.94)}
 .ni-add-lb{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;color:var(--acc);letter-spacing:0}
 #fx-more-menu{position:fixed;inset:0;background:var(--scrim-b4);z-index:2500;display:flex;align-items:flex-end}
@@ -876,7 +876,7 @@ body.mobile-fx .ni-hint{display:none}
 body.mobile-fx .fx-sec-btn.on{background:var(--tint-2)}
 /* export overlay (mobile): dim + big progress + cancel */
 #fx-exp-ov{position:fixed;inset:0;background:var(--scrim-b4);z-index:2600;display:flex;align-items:flex-end;justify-content:center}
-#fx-exp-ov .eo-box{background:var(--sur);border-radius:14px 14px 0 0;width:100%;padding:16px 16px calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;align-items:center}
+#fx-exp-ov .eo-box{background:var(--sur);border-radius:14px 14px 0 0;width:100%;padding:16px 16px calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:var(--sp-2);align-items:center}
 #fx-exp-ov .eo-txt{font-family:var(--mono);font-size:var(--fs-2);color:var(--txt)}
 #fx-exp-ov .eo-bar{width:100%;height:5px;background:var(--bdr);border-radius:3px;overflow:hidden}
 #fx-exp-ov #eo-fill{height:100%;width:0;background:var(--acc);transition:width .15s}
@@ -899,9 +899,9 @@ body.mobile-fx #fx-preview-tools{left:auto;right:8px;top:8px;bottom:auto;transfo
 .fx-mini{padding:5px 8px!important;min-height:0!important;font-size:var(--fs-2)!important;letter-spacing:.04em;background:var(--scrim-b4);border-color:var(--bdr)}
 body.mobile-fx #fx-crop-tools{order:5;margin:6px 0 0}
 /* action bar directly below the image */
-body.mobile-fx #fx-actionbar{display:flex;gap:0;padding:10px 4px;justify-content:space-between}
+body.mobile-fx #fx-actionbar{display:flex;gap:0;padding:var(--sp-2) 4px;justify-content:space-between}
 .fx-act{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:none;border:none;color:var(--txt);padding:8px 14px;min-width:44px;min-height:44px;cursor:pointer;font-family:var(--mono)}
-.fx-act:active{background:var(--sur2);border-radius:9px}
+.fx-act:active{background:var(--sur2);border-radius:var(--r)}
 .fx-act-ic{font-size:var(--fs-7);line-height:1}
 .fx-act-lb{display:none}
 .fx-act-pri .fx-act-ic{color:var(--acc)}
@@ -930,8 +930,8 @@ body.mobile-fx.sheet-open #fx-fab-export{display:none} /* the sheet already has 
 .fx-sec-ic svg,.fx-rail-ic svg,.fx-db-ic svg{display:block}
 /* ── DESKTOP "one tool at a time" editor (body.fx-deskb) ── */
 #fx-deskbar,#fx-toolrail{display:none}
-body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:8px 10px;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);position:sticky;top:8px;z-index:20}
-.fx-db{display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;flex:0 0 auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:8px 12px;cursor:pointer;transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
+body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:8px var(--sp-2);background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);position:sticky;top:8px;z-index:20}
+.fx-db{display:inline-flex;align-items:center;justify-content:center;gap:var(--sp-2);white-space:nowrap;flex:0 0 auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:8px 12px;cursor:pointer;transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
 /* Editor (Developer) View.dc.html:44's .pillbtn (#btn-allfx) — pill radius, transparent fill
    (outline only), 28px height, regular weight — distinct from the filled-tile treatment shared
    .fx-db gives every other deskbar button. */
@@ -965,7 +965,7 @@ body.deskx .fx-db-icon{padding:5px}
 .flag-btn-green.on{color:#fff;background:var(--ok);border-color:var(--ok)}
 .flag-btn-red.on{color:#fff;background:var(--err);border-color:var(--err)}
 .flag-btn-fav.on{color:#fff;background:var(--err);border-color:var(--err)}
-.fx-db-icon{padding:8px 10px}
+.fx-db-icon{padding:8px var(--sp-2)}
 .fx-db-icon .fx-db-ic{color:var(--txt)}
 /* ══ ONE BUTTON HEIGHT IN THE TOP BAR ════════════════════════════════════════════════════════
    Measured before this: the 44px deskbar contained controls at 18, 24, 25, 27 AND 30px tall,
@@ -1000,7 +1000,7 @@ body.deskx #fx-settings{margin-left:var(--sp-2);padding-left:var(--sp-2);border-
 /* Zoom cluster: was bare 18px text controls with no button affordance at all. */
 .zc-ic{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px}
 body.deskx .fx-zoom-ctrl{position:static;background:transparent;border:none;padding:0;gap:1px}
-body.deskx .fx-zoom-ctrl button:not(.flag-btn){height:28px;min-width:28px;font-size:var(--fs-1);font-weight:500;padding:0 9px;white-space:nowrap;flex:0 0 auto}
+body.deskx .fx-zoom-ctrl button:not(.flag-btn){height:28px;min-width:28px;font-size:var(--fs-1);font-weight:500;padding:0 var(--sp-2);white-space:nowrap;flex:0 0 auto}
 body.deskx .fx-zoom-ctrl .flag-btn{width:32px;height:32px;min-width:32px;padding:0}
 /* Library-style minus/slider/plus: the two step buttons are icon-only, so they get the tight
    .zc-ic footprint instead of the 0 9px text padding every other zoom-ctrl button uses. */
@@ -1040,7 +1040,7 @@ body.deskx.fx-deskbar-tight2 #btn-export-db .fx-db-lb{display:none}
 body.deskx.fx-deskbar-tight2 #btn-export-db{padding:0;width:28px}
 body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
 body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:sticky;top:calc(var(--deskbar-h, 58px) + 16px);align-self:start;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:6px}
-.fx-rail-btn{display:flex;align-items:center;gap:10px;width:120px;background:none;border:none;border-radius:var(--r-sm);color:var(--mut);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:9px 10px;text-align:left;transition:color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
+.fx-rail-btn{display:flex;align-items:center;gap:var(--sp-2);width:120px;background:none;border:none;border-radius:var(--r-sm);color:var(--mut);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:var(--sp-2) var(--sp-2);text-align:left;transition:color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
 .fx-rail-btn:hover{background:var(--sur2);color:var(--txt)}
 .fx-rail-btn.on{background:var(--tint-2);color:var(--acc)}
 .fx-rail-btn .fx-rail-ic{display:inline-flex;flex-shrink:0}
@@ -1097,7 +1097,7 @@ body.deskx{--deskx-topbar-h:44px}
 body.deskx header,body.deskx .tabs,body.deskx #fx-filmstrip{display:none}
 body.deskx main{max-width:none;margin:0;padding:var(--deskx-topbar-h) 0 0}
 body.deskx.fx-deskb main{overflow:hidden;height:100vh}
-body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:60px 24px 100px}
+body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:var(--sp-9) 24px var(--sp-11)}
 /* 2026-09-10 (3.1.9/3.1.10): a real 3-column grid — Editor (Developer) View.dc.html's own
    .topbar is 1fr auto auto 1fr-ish grid, not a flex row with the title floated on top. Grid
    tracks physically cannot overlap, so this fixes the collision class rather than just today's
@@ -1106,7 +1106,7 @@ body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:60px 24px 10
    position:absolute centering for the older body.fx-deskb-only flex layout, untouched. */
 body.deskx #fx-deskbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:8px;
   position:fixed;top:0;left:0;right:0;z-index:3000;height:var(--deskx-topbar-h);
-  margin:0;padding:0 12px 0 84px;border:none;border-bottom:1px solid var(--bdr-panel);border-radius:0;
+  margin:0;padding:0 12px 0 var(--sp-10);border:none;border-bottom:1px solid var(--bdr-panel);border-radius:0;
   background:var(--glass-bg);
   /* Only the bottom edge has real width, but with border-color unset on the other three sides
      it computes to currentColor, not var(--bdr-panel) — see the identical #lib-overlay fix and
@@ -1148,7 +1148,7 @@ body.lib-full #fx-deskbar{display:none}
    its editor content instead, so the top bar (and its ⋯ menu, the only way back) persists. */
 body.deskx #panel-fx:not(.active){display:block}
 body.deskx #panel-fx:not(.active) .fx-layout{display:none}
-body.deskx .fx-db{padding:5px 10px}
+body.deskx .fx-db{padding:5px var(--sp-2)}
 /* Grid columns are transitioned so opening/closing the panel (or the library dock resizing)
    reflows the photo smoothly instead of snapping — panel toggling is the app's most frequent
    desktop interaction, so this is worth the extra rule. renderPreview() is deliberately NOT
@@ -1206,7 +1206,7 @@ body.deskx .fx-edge:hover::after,body.deskx .fx-edge:focus-visible::after{backgr
    width change itself. */
 body.deskx.rail-icons{--rail-w:44px}
 body.deskx.rail-icons #fx-toolrail .fx-rail-lb{display:none}
-body.deskx.rail-icons #fx-toolrail .fx-rail-btn{padding:11px 3px}
+body.deskx.rail-icons #fx-toolrail .fx-rail-btn{padding:var(--sp-3) 3px}
 body.deskx.rail-hidden{--rail-w:0px}
 body.deskx.rail-hidden #fx-toolrail{display:none}
 /* Foot of the rail: one button that narrows it a step (labels -> icons) and puts them back.
@@ -1242,7 +1242,7 @@ body.deskx .fx-preview-col{grid-column:2;order:1;position:static;top:auto;align-
 /* Editor (Developer) View.dc.html's .toolpanel/.rail both use --surface-tile-1 (same as the
    topbar/statusbar's --bg), not --surface-tile-2/--sur — and carry no box-shadow at all. */
 body.deskx .fx-panel{grid-column:3;order:2;max-height:none;height:100%;columns:initial;
-  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;border-left:1px solid var(--bdr-panel);padding:22px 10px 10px;box-sizing:border-box;
+  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;border-left:1px solid var(--bdr-panel);padding:22px var(--sp-2) var(--sp-2);box-sizing:border-box;
   background:var(--bg);box-shadow:none;
   /* See #fx-deskbar's identical comment — only the left edge has real width. */
   border-color:var(--bdr-panel)}
@@ -1262,7 +1262,7 @@ body.deskx .fx-rail-btn.on::before{content:'';position:absolute;left:-4px;top:7p
   border-radius:0 2px 2px 0;background:var(--acc)}
 /* Group separators mirroring FX_GROUPS (Light · Colour · Detail · Film · Frame · Masks · Output),
    inserted by buildToolRail. */
-body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px 10px;flex:0 0 auto}
+body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px var(--sp-2);flex:0 0 auto}
 /* Reverted: a border/frame drawn around the PHOTO itself looked like a matte applied to the
    image (indistinguishable from the app's own Borders FX), which is not what was asked for —
    "border" meant panel separation (library <-> editor), not framing the canvas. Back to
@@ -1270,7 +1270,7 @@ body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px 10px;flex:0 
 body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:#000;border:none;border-radius:0;margin:0}
 body.deskx #fx-canvas{max-height:none}
 body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:30;
-  background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:8px 12px}
+  background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:8px 12px}
 body.deskx .fx-preview-col{position:relative}
 /* 2026-09-10: was force-shown under deskx ("display:inline-flex!important") — the wireframe's
    left cluster has no library/folder icon at all. The settings menu's ⋯ section already carries
@@ -1294,7 +1294,7 @@ body.deskx #db-lib-btn{display:none}
 body.deskx #fx-settings{display:inline-flex}
 #fx-settings-menu{display:none;position:fixed;top:46px;right:12px;z-index:4500;
   background:var(--glass-bg);
-  border:1px solid var(--bdr);border-radius:10px;box-shadow:var(--lift-2);overflow:hidden}
+  border:1px solid var(--bdr);border-radius:var(--r);box-shadow:var(--lift-2);overflow:hidden}
 #fx-settings-menu.on{display:flex;align-items:stretch}
 /* #fx-settings-cats/#fx-settings-page also match the .fx-settings-cats/.fx-settings-page
    CLASSES (not just these ids) so Library's gear menu (desktop/library-ui.js, #lib-settings-cats/
@@ -1304,7 +1304,7 @@ body.deskx #fx-settings{display:inline-flex}
 #fx-settings-cats,.fx-settings-cats{display:flex;flex-direction:column;gap:2px;width:150px;flex:0 0 auto;
   border-right:1px solid var(--bdr);padding:5px;overflow-y:auto;max-height:70vh}
 .fx-settings-cat{display:block;width:100%;text-align:left;background:none;border:none;border-radius:6px;
-  color:var(--txt);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);letter-spacing:0;padding:9px 10px}
+  color:var(--txt);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);letter-spacing:0;padding:var(--sp-2) var(--sp-2)}
 .fx-settings-cat:hover{background:var(--sur2)}
 .fx-settings-cat.active{background:var(--sur2);color:var(--acc);font-weight:600}
 #fx-settings-page,.fx-settings-page{width:260px;flex:0 0 auto;padding:5px;overflow-y:auto;max-height:70vh}
@@ -1312,7 +1312,7 @@ body.deskx #fx-settings{display:inline-flex}
 .fx-settings-pane.active{display:block}
 .fx-ovf-item{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;border-radius:6px;
   color:var(--txt);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);letter-spacing:0;
-  padding:9px 10px;text-align:left}
+  padding:var(--sp-2) var(--sp-2);text-align:left}
 .fx-ovf-item:hover{background:var(--sur2)}
 .fx-ovf-item.dim{color:var(--mut);cursor:default}
 .fx-ovf-sep{height:1px;background:var(--bdr);margin:4px 2px}
@@ -1389,9 +1389,9 @@ body.light .lib-cmp-head select{background:var(--sur2)}
 body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 /* ── COLLAGE TAB ── */
 .cl-layout{display:grid;grid-template-columns:330px 1fr;gap:16px;align-items:start}
-.cl-controls{display:flex;flex-direction:column;gap:10px}
+.cl-controls{display:flex;flex-direction:column;gap:var(--sp-2)}
 .cl-controls .fx-ctrl{margin-bottom:0}
-.cl-stage{position:relative;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);height:calc(100vh - 170px);min-height:380px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:18px;position:sticky;top:16px}
+.cl-stage{position:relative;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);height:calc(100vh - 170px);min-height:380px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:var(--sp-4);position:sticky;top:16px}
 .cl-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:var(--fs-2);pointer-events:none}
 #cl-frame{position:relative;box-shadow:0 6px 30px var(--scrim-b2);display:none}
 .cl-cell{position:absolute;overflow:hidden;cursor:pointer;background:transparent}
@@ -1434,7 +1434,7 @@ body.mobile-cl #panel-collage.panel.active{display:flex;flex:1;min-height:0;min-
 body.mobile-cl .cl-layout{display:flex;flex-direction:column;align-items:stretch;flex:1;min-height:0;min-width:0;gap:0;width:100%}
 body.mobile-cl .cl-stage{order:0;flex:0 0 auto;height:46vh;position:static;border-radius:0;border:none;border-bottom:1px solid var(--bdr);padding:8px}
 body.mobile-cl #cl-secnav{order:1;display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:6px 6px;border-bottom:1px solid var(--bdr);background:var(--sur);flex:0 0 auto}
-body.mobile-cl .cl-controls{order:2;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 10px 28px}
+body.mobile-cl .cl-controls{order:2;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:var(--sp-2) var(--sp-2) 28px}
 body.mobile-cl .cl-controls .fx-ctrl{display:none}
 body.mobile-cl .cl-controls .fx-ctrl.cl-sec-active{display:block}
 .cl-sec-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;color:var(--mut);cursor:pointer;padding:4px 8px;font-family:var(--mono);border-radius:6px;min-width:58px}
