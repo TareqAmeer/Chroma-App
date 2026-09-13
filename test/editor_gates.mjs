@@ -219,8 +219,82 @@ const GATES = [
   // shared component class x state (test/catalog_visual.mjs). Blocking — baselines are committed
   // and a pixel-level regression in any shared component should fail the same way any other
   // wireframe-diff gate here does.
-  { name: 'editor:catalog-visual', cmd: ['npx', 'playwright', 'test', 'test/catalog_visual.mjs', '--config=playwright.config.mjs'] },
+  { name: 'editor:catalog-visual', cmd: ['npx', 'playwright', 'test', 'test/catalog_visual.mjs', '--config=playwright.catalog.config.mjs'] },
 ];
+
+// ── Situational activation (added 2026-09-13) ───────────────────────────────────────────────
+// The single-file architecture (chromasmith-22.html is the whole app) means a per-file git-diff
+// heuristic mostly can't tell these gates apart — nearly all 30 read that one file, so "did the
+// relevant file change" would almost always answer yes and run everything anyway, which is the
+// slow case this exists to help with. What actually varies by situation is which CONCERN you're
+// touching, so gates are tagged by concern instead, and `--only=`/`--skip=` (comma-separated,
+// gate names and/or tags, freely mixed) let a human or an agent select what's relevant to what
+// they're doing — e.g. `--only=visual` after a pure CSS/layout change, `--only=tokens` after
+// editing design/tokens.json, `--skip=behavior,a11y` when iterating on typography. This is
+// opt-in and additive: no flags = every gate runs, exactly as before — `npm test`, CI, and the
+// pre-commit hook all call this with no flags, so none of them get any less strict from this.
+const GATE_TAGS = {
+  'editor:inventory': ['structural', 'wireframe'],
+  'editor:responsive': ['structural', 'wireframe', 'layout'],
+  'editor:coverage': ['structural', 'wireframe'],
+  'editor:wireframe-diff': ['structural', 'wireframe', 'visual'],
+  'editor:snap-check': ['structural'],
+  'editor:html-check': ['structural'],
+  'editor:self-reschedule-check': ['structural'],
+  'editor:native-gate-check': ['structural'],
+  'editor:keyboard-check': ['structural', 'a11y'],
+  'editor:token-check': ['tokens'],
+  'editor:webkit-smoke': ['behavior', 'render'],
+  'editor:undo-stress': ['behavior'],
+  'editor:session-roundtrip': ['behavior'],
+  'editor:fuzz-input': ['behavior'],
+  'editor:canvas-resize-leak': ['behavior', 'perf'],
+  'editor:offline-check': ['behavior'],
+  'editor:crosstab-check': ['behavior'],
+  'editor:axe-check': ['a11y'],
+  'editor:icon-check': ['tokens', 'structural'],
+  'editor:motion-token-check': ['tokens'],
+  'editor:forced-colors-check': ['a11y'],
+  'editor:hover-focus-matrix': ['a11y', 'layout'],
+  'editor:empty-error-states': ['a11y', 'layout'],
+  'editor:zoom-check': ['layout'],
+  'editor:long-string-check': ['layout'],
+  'editor:hidpi-check': ['render'],
+  'editor:surface-coverage': ['structural', 'wireframe'],
+  'editor:cvd-check': ['a11y'],
+  'editor:tokens-check': ['tokens'],
+  'editor:components-check': ['structural', 'tokens'],
+  'editor:tokens-verify': ['tokens'],
+  'editor:catalog-visual': ['visual'],
+};
+for (const gate of GATES) gate.tags = GATE_TAGS[gate.name] || [];
+
+function parseList(flagPrefix) {
+  const arg = process.argv.find((a) => a.startsWith(flagPrefix));
+  if (!arg) return null;
+  return arg.slice(flagPrefix.length).split(',').map((s) => s.trim()).filter(Boolean);
+}
+const onlyList = parseList('--only=');
+const skipList = parseList('--skip=');
+function gateSelected(gate) {
+  const matches = (list) => list.includes(gate.name) || gate.tags.some((t) => list.includes(t));
+  if (onlyList && !matches(onlyList)) return false;
+  if (skipList && matches(skipList)) return false;
+  return true;
+}
+const skippedByFilter = GATES.filter((g) => !gateSelected(g));
+const ACTIVE_GATES = GATES.filter(gateSelected);
+if (onlyList || skipList) {
+  console.log(`Situational run: ${ACTIVE_GATES.length}/${GATES.length} gates selected` +
+    (onlyList ? ` (--only=${onlyList.join(',')})` : '') +
+    (skipList ? ` (--skip=${skipList.join(',')})` : ''));
+  if (skippedByFilter.length) console.log(`  not run: ${skippedByFilter.map((g) => g.name).join(', ')}`);
+  if (!ACTIVE_GATES.length) {
+    console.log('No gates matched — check the tag/name spelling. Known tags: ' +
+      [...new Set(Object.values(GATE_TAGS).flat())].sort().join(', '));
+    process.exit(1);
+  }
+}
 
 const verbose = process.argv.includes('--verbose');
 
@@ -262,15 +336,15 @@ function runGate(gate) {
 // A small worker-pool, not Promise.all(GATES.map(...)) — that would launch all 30 at once.
 // Results are collected in GATES order regardless of completion order, so the summary table
 // below is stable and diffable between runs the way the old sequential version was.
-const results = new Array(GATES.length);
+const results = new Array(ACTIVE_GATES.length);
 let nextIndex = 0;
 async function worker() {
-  while (nextIndex < GATES.length) {
+  while (nextIndex < ACTIVE_GATES.length) {
     const i = nextIndex++;
-    results[i] = await runGate(GATES[i]);
+    results[i] = await runGate(ACTIVE_GATES[i]);
   }
 }
-await Promise.all(Array.from({ length: Math.min(CONCURRENCY, GATES.length) }, worker));
+await Promise.all(Array.from({ length: Math.min(CONCURRENCY, ACTIVE_GATES.length) }, worker));
 
 for (const r of results) {
   // Only a FAILING gate dumps its output. A passing gate's full log is noise that pushes the
@@ -297,8 +371,9 @@ if (blocking.length) {
   process.exit(1);
 }
 const warned = results.filter((r) => !r.ok);
+const skipNote = skippedByFilter.length ? ` (${skippedByFilter.length} gate(s) not selected this run — not the same as passing)` : '';
 if (warned.length) {
-  console.log(`RESULT: PASS (with ${warned.length} advisory warning(s): ${warned.map((r) => r.name).join(', ')})\n`);
+  console.log(`RESULT: PASS (with ${warned.length} advisory warning(s): ${warned.map((r) => r.name).join(', ')})${skipNote}\n`);
 } else {
-  console.log('RESULT: PASS\n');
+  console.log(`RESULT: PASS${skipNote}\n`);
 }

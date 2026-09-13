@@ -14,6 +14,35 @@ this closes the desktop-engine gap — every check here drives Chromium, not the
 Tauri desktop app renders with. A green run means no Chromium-visible regression, not that the
 actual `.app` is unaffected.
 
+## Running fewer gates on purpose (added 2026-09-13)
+
+`editor:gates` runs its ~30 gates through a small worker pool (4 at a time by default — every
+gate binds an ephemeral port, so this is safe; override with `--jobs=N`), which cut a full run
+from ~15-20 minutes to a few minutes on an 8-core machine. `test/catalog_visual.mjs` (the shared-
+component screenshot suite) got its own `playwright.catalog.config.mjs` with `fullyParallel` and
+4 workers for the same reason — it used to be forced onto one worker per file by the shared
+`playwright.config.mjs` (which needs `fullyParallel:false` for its OTHER suites, which mutate
+shared localStorage/theme state) and was the single longest-running gate at ~13 minutes serial.
+
+That parallelism is still every gate, every time. When you already know what you're touching,
+narrow the run instead — every gate carries one or more tags (`structural`, `wireframe`, `tokens`,
+`a11y`, `layout`, `behavior`, `render`, `visual`, `perf`; see `GATE_TAGS` in `test/editor_gates.mjs`),
+and `--only=`/`--skip=` (comma-separated, gate names and tags freely mixed) select by them:
+
+```sh
+node test/editor_gates.mjs --only=visual,layout,render   # or: npm run editor:gates:visual
+node test/editor_gates.mjs --only=tokens                 # or: npm run editor:gates:tokens
+node test/editor_gates.mjs --skip=behavior,a11y          # iterating on typography/layout only
+```
+
+This is opt-in and additive — `npm test`, CI, and the pre-commit hook all call `editor:gates`
+with no flags, so none of them get any less strict from this existing. A single-file architecture
+(chromasmith-22.html is the whole app) means most gates DO depend on that one file, so an
+automatic git-diff-based skip would rarely trigger — this is a judgment call for whoever's running
+it (a person, or an agent that knows what it just changed), not a heuristic. The summary always
+says how many gates were selected and names the ones that weren't, so a narrowed run is never
+mistaken for a full pass.
+
 **`test/ui_audit.mjs`** walks every tool section at 1440×820 / 1600×1000 / 1280×720 in `?deskx=1`,
 **plus a separate 375×812 phone pass** (2026-08-15). The phone pass loads its own page WITHOUT
 `?deskx=1` and audits the bottom sheet: under 700px the app is a different shell entirely
