@@ -9,4 +9,4 @@ Create a draft-only, vendor-neutral specification from one bounded component fam
 
 Read the canonical repository workflow before analysis: [workflow](references/workflow.md). It defines the required evidence separation, repository queries, JSON output, review, validation, and stop conditions. The repository reference-to-spec workflow is authoritative.
 
-Do not implement production UI, redesign the reference, create a Color specification, edit contracts or baselines, or approve a design. Recommend separate chats for analysis, approval recording, implementation, and independent review.
+Work in the order measure → specify → approve → implement → verify → record. This skill covers only measure and specify: approval, implementation, and verification need separate authorization. Do not implement production UI, redesign the reference, create a Color specification, edit contracts or baselines, or approve a design. Recommend separate chats for analysis, approval recording, implementation, and independent review.

@@ -957,3 +957,10 @@ Decision gate: user must choose the existing draft as pilot basis, supply a new 
 # Claude compatibility: `.claude/skills/chroma-visual-to-spec` is a thin entrypoint to the same vendor-neutral workflow and JSON format.
 # Deterministic tooling: installed `pngjs` supports PNG dimensions and RGBA samples; WebP, semantic tokens, and non-pixel effects require recorded limitations.
 # Validation: components registry, contracts, and reference-spec checks passed before this skill was added; final focused checks are required after edits.
+
+**Visual-to-spec tooling benchmark — 2026-09-13**
+- Tested screenshot-to-design-system, Design DNA, visual-parity, and visual-to-spec against the Color PNG; commits and licenses are recorded in `visual-to-spec-tool-benchmark.md`.
+- Accepted SHA-256 crop manifests, pixel statistics, explicit stage boundaries, and same-size pixelmatch/raw-delta evidence using existing dependencies.
+- Rejected generic component completion and screenshot-derived semantic/typographic/responsive/accessibility claims; browser capture and annotation remain deferred.
+- Added deterministic PNG measurement/comparison negative-path checks; no schema, production UI, Color design, baseline, or capture changed.
+- Limitations: PNG pixels cannot establish intended tokens, fonts, hidden states, accessibility, motion, or visual correctness.
