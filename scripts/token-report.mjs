@@ -11,6 +11,7 @@
 // legitimate one-off (e.g. `line-height: 1` as a CSS keyword-ish reset) is not auto-allowlisted;
 // triage findings same as the color/spacing check.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { FAMILY_TO_CATALOG_KEY, LIBRARY_ONLY_CATALOG_KEYS, CATALOG_KEYS_WITH_SHIM, buildAsbuiltIndex } from './component-catalog-map.mjs';
 
 const tokensDoc = JSON.parse(readFileSync('design/tokens.json', 'utf8'));
 const html = readFileSync('chromasmith-22.html', 'utf8');
@@ -586,38 +587,10 @@ function borderWidthRows() {
   });
 }
 
-// Maps a design/components.json family name to its chromasmith-22.html buildCatalogPage()
-// COMPONENTS key (chromasmith-22.html:22346-22362) so the report can embed a live
-// ?catalog=1&live=1&only=<key> iframe instead of a text row. null = no catalog entry exists yet
-// because the family lives only in desktop/library-ui.js (chip, search-input, menu — the Library
-// UI isn't loaded by the plain web build the catalogue clones from; see
-// docs/ui-workflow/component-visuals-plan.md §0/§1) — shown as an explicit placeholder, not
-// silently dropped, so a reader can tell "not built yet" from "genuinely has no visual".
-const FAMILY_TO_CATALOG_KEY = {
-  'section-card': 'fx-ctrl',
-  'control-row': 'fx-row',
-  toggle: 'fx-toggle',
-  slider: 'slider',
-  select: 'select',
-  'segmented-control': 'seg',
-  button: 'btn',
-  'icon-button': 'btn-icon',
-  chip: 'chip',
-  'info-button': 'fx-info-i',
-  'search-input': 'search-input',
-  menu: 'menu',
-  icon: null, // rendered separately in iconSections() — real SVG glyphs, not a DOM clone
-};
-// chip/search-input/menu live only in desktop/library-ui.js (confirmed live: their selectors
-// resolve under desktop/dist/index.html?libtest=1, never under the plain web build — see
-// docs/ui-workflow/component-visuals-plan.md §0/§1) — those 3 embed against the desktop build
-// instead of chromasmith-22.html, with &libtest=1 so library-ui.js's own top-of-file gate
-// (`if (!window.__TAURI__ && !LIBTEST) return;`) doesn't no-op it.
-const LIBRARY_ONLY_CATALOG_KEYS = new Set(['chip', 'search-input', 'menu']);
-// Families whose LIVE_WIRE shim (chromasmith-22.html:22367-22395) makes the embed clickable, not
-// just visually rendered — everything else (native slider drag/select open, or hover-only
-// button/icon-button/info-button) is still live-embedded but has no click affordance to badge.
-const CATALOG_KEYS_WITH_SHIM = new Set(['fx-toggle', 'fx-ctrl', 'seg']);
+// FAMILY_TO_CATALOG_KEY / LIBRARY_ONLY_CATALOG_KEYS / CATALOG_KEYS_WITH_SHIM live in
+// scripts/component-catalog-map.mjs — shared with scripts/component-visuals-check.mjs so the
+// report and its gate can never silently drift apart on which family maps to which catalogue key.
+const asbuiltIndex = await buildAsbuiltIndex(process.cwd(), componentFamilies);
 
 function componentSections() {
   const families = componentFamilies.slice().sort((a, b) => b.instances.length - a.instances.length);
@@ -632,6 +605,18 @@ function componentSections() {
            ${CATALOG_KEYS_WITH_SHIM.has(catalogKey) ? '<div class="comp-embed-badge">click to try</div>' : ''}
          </div>`
       : `<div class="comp-no-embed">Rendered above in the Icons tab (real SVG glyphs, not a DOM clone) — see the Icons count.</div>`;
+    // design/asbuilt/ cross-reference (component-visuals-plan.md §0): up to 3 production surfaces
+    // that already contain this family, reusing the S6c capture pass's own screenshots — never a
+    // second capture pass for the same pixels.
+    const asbuiltHits = (asbuiltIndex.get(f.name) || []).filter((h) => h.screenshot);
+    const asbuiltRow = asbuiltHits.length
+      ? `<div class="comp-asbuilt-row">
+           <div class="comp-asbuilt-label">Also seen in ${asbuiltIndex.get(f.name).length} production surface${asbuiltIndex.get(f.name).length === 1 ? '' : 's'}:</div>
+           <div class="comp-asbuilt-thumbs">
+             ${asbuiltHits.slice(0, 3).map((h) => `<a href="../design/asbuilt/${esc(h.surfaceId)}/${esc(h.screenshot)}" target="_blank" title="${esc(h.surfaceId)} (${h.matchCount} match${h.matchCount === 1 ? '' : 'es'})"><img class="comp-asbuilt-thumb" loading="lazy" src="../design/asbuilt/${esc(h.surfaceId)}/${esc(h.screenshot)}" alt="${esc(h.surfaceId)}"></a>`).join('')}
+           </div>
+         </div>`
+      : '';
     return `
     <div class="comp-card">
       ${embed}
@@ -639,6 +624,7 @@ function componentSections() {
         <div class="comp-name">${esc(f.name)}<div class="comp-sub">${esc(f.appleComponent || '')}</div></div>
         <div class="comp-selectors">${(f.selectors || []).map((s) => `<code>${esc(s)}</code>`).join(' ')}</div>
         <div class="comp-count">${f.instances.length} instance${f.instances.length === 1 ? '' : 's'}</div>
+        ${asbuiltRow}
       </div>
     </div>`;
   }).join('');
@@ -797,6 +783,10 @@ const out = `<!doctype html>
   .comp-sub { font-weight:400; opacity:.55; font-size:11px; }
   .comp-selectors code { font-family:ui-monospace,monospace; font-size:11px; background:rgba(128,128,128,.12); padding:1px 5px; border-radius:4px; margin:4px 4px 0 0; display:inline-block; }
   .comp-count { font-family:ui-monospace,monospace; opacity:.7; font-size:12px; margin-top:4px; }
+  .comp-asbuilt-row { margin-top:8px; padding-top:8px; border-top:1px solid rgba(128,128,128,.15); }
+  .comp-asbuilt-label { font-size:10px; opacity:.55; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
+  .comp-asbuilt-thumbs { display:flex; gap:6px; }
+  .comp-asbuilt-thumb { height:44px; border-radius:4px; border:1px solid rgba(128,128,128,.25); object-fit:cover; }
   .issue-list { max-height:340px; overflow-y:auto; font-size:12px; }
   .issue-row { padding:4px 0; border-bottom:1px dotted rgba(128,128,128,.15); word-break:break-all; }
   .issue-row code { font-family:ui-monospace,monospace; opacity:.75; }

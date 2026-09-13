@@ -71,7 +71,7 @@
     "tokens:verify": "if [ -x .calibvenv/bin/python3 ]; then .calibvenv/bin/python3 design/verify_tokens.py; else python3 design/verify_tokens.py; fi",
     "tokens:gates": "npm run tokens:check && npm run tokens:verify",
     "components:build": "node scripts/build-component-registry.mjs && node test/component_runtime_check.mjs",
-    "components:check": "node scripts/build-component-registry.mjs --check && node test/component_runtime_check.mjs --check",
+    "components:check": "node scripts/build-component-registry.mjs --check && node test/component_runtime_check.mjs --check && node scripts/component-visuals-check.mjs",
     "components:contracts:scaffold": "node scripts/scaffold-component-contracts.mjs",
     "components:contracts:check": "node scripts/scaffold-component-contracts.mjs --check",
     "reference:spec:validate": "node scripts/validate-reference-spec.mjs",

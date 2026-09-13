@@ -37,8 +37,21 @@ up — confirmed via a stale-content mismatch during this pass, not assumed.
 `chromasmith-22.html` (or ~equivalent `desktop/dist/index.html`) independently — 9 live cards
 took ~5s to all reach `readyState:'complete'` on a fast local server, and production/CI use
 should confirm this stays acceptable before adding more embeds or enabling this by default
-outside local dev review. §0 (asbuilt reuse) and §4 (maintenance gates) below are still
-design-only, not yet built.
+outside local dev review.
+
+**§0 and §4 done (2026-09-14).** `scripts/component-catalog-map.mjs` is now the single shared
+source for the family→catalog-key mapping (previously inline in `token-report.mjs`) plus a
+`buildAsbuiltIndex()` helper that walks every `design/asbuilt/<id>/spec.json` element tree and
+matches each family's real selectors against it — no new screenshots, purely indexing the S6c
+pass's existing captures. The report now shows up to 3 "also seen in production" thumbnails per
+family card, sourced straight from `design/asbuilt/`; 12 of 13 families got at least one hit (only
+`icon` has none, expected — it's not a DOM-clonable selector). `scripts/component-visuals-check.mjs`
+gates the mapping itself: every `design/components.json` family must have an entry in
+`FAMILY_TO_CATALOG_KEY` (even if explicitly `null`), and every non-null catalog key must still
+exist in `chromasmith-22.html`'s `COMPONENTS` array — verified this actually catches drift by
+deliberately typo'ing a mapping and confirming the check fails with the exact family/key named,
+then restoring it and confirming a clean pass. Wired into `npm run components:check` as its third
+step. `node test/export_harness.mjs` still renders all 30 fixtures clean after this pass.
 
 ## 0. Screenshots already exist — check before capturing anything new
 
