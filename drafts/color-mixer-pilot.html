@@ -6,46 +6,57 @@
   <title>Color Mixer — pilot</title>
   <!-- Toggle structure adapted from "Switch" by neitt0, Uiverse (MIT License): https://uiverse.io/neitt0/odd-hound-66 -->
   <style>
-    :root { color-scheme: dark; --canvas:#181818; --panel:#1f1f1f; --text:#c7c7c7; --muted:#8d8d8d; --line:#2c2c2c; --white:#f7f7f7; }
+    @import url("../vendor/ds/tokens/fonts.css");
+    @import url("../vendor/ds/tokens/spacing.css");
+    @import url("../vendor/ds/tokens/colors.css");
+    @import url("../vendor/ds/tokens/radius.css");
+    :root { color-scheme:dark; --canvas:var(--surface-tile-1); --panel:var(--surface-tile-2); --text:var(--text-on-dark-muted); --muted:var(--text-on-dark-muted); --white:var(--text-on-dark); }
     * { box-sizing:border-box; }
-    body { min-height:100vh; margin:0; display:grid; place-items:center; background:var(--canvas); color:var(--text); font:400 18px/1.25 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-    .pilot { width:min(100%, 620px); padding:28px clamp(20px,5vw,40px) 34px; background:var(--panel); }
-    .mixer-header { min-height:48px; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--line); padding-bottom:16px; }
-    .mixer-header h1 { margin:0 auto 0 0; font-size:17px; letter-spacing:.12em; text-transform:uppercase; color:var(--white); }
+    body { min-height:100vh; margin:0; display:grid; place-items:center; background:var(--canvas); color:var(--text); font:400 18px/1.25 "SF Pro Text",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    .pilot { width:min(100%, 620px); padding:var(--space-xl); background:var(--panel); }
+    .mixer-header { min-height:var(--height-global-nav); display:flex; align-items:center; gap:var(--space-sm); }
+    .expand-button { width:var(--space-lg); height:var(--height-global-nav); padding:0; border:0; background:none; color:var(--white); cursor:pointer; font-size:21px; line-height:1; transform:rotate(90deg); transition:transform .16s ease; }
+    .pilot.collapsed .expand-button { transform:rotate(0); }
+    .mixer-header h1 { margin:0 auto 0 0; font:600 17px/1 "SF Pro Display","SF Pro Text",sans-serif; letter-spacing:.12em; text-transform:uppercase; color:var(--white); }
     .reset-actions { display:flex; align-items:center; min-width:70px; justify-content:flex-end; visibility:hidden; opacity:0; transition:opacity .16s ease; }
     .reset-actions.visible { visibility:visible; opacity:1; }
     .reset-actions button { appearance:none; border:0; padding:4px 5px; background:none; color:var(--text); font:inherit; font-size:13px; cursor:pointer; }
     .reset-actions button:hover { color:var(--white); }
     .reset-actions span { color:#575757; }
-    .switch { font-size:17px; position:relative; display:inline-block; width:8em; height:4em; flex:0 0 auto; }
+    .switch { font-size:5.5px; position:relative; display:inline-block; width:8em; height:4em; flex:0 0 auto; }
     .switch input { opacity:0; width:0; height:0; }
     .toggle-slider { position:absolute; inset:0; cursor:pointer; background:#4b4b4b; transition:.4s; }
     .toggle-slider::before { position:absolute; content:""; inset:0 auto auto 0; width:4em; height:4em; background:#fff; transition:.2s cubic-bezier(.75,.02,.86,1.31); transform-origin:bottom right; }
     .switch input:checked + .toggle-slider { background:#61a0af; }
     .switch input:checked + .toggle-slider::before { transform:translateX(0em) rotate(90deg); }
     .switch input:focus-visible + .toggle-slider { outline:2px solid #fff; outline-offset:3px; }
-    .content { padding-top:22px; transition:opacity .16s ease; }
-    .pilot.disabled .content { opacity:.42; pointer-events:none; }
-    .histogram { height:96px; display:flex; align-items:flex-end; gap:2px; padding:0 1px 13px; background:#1c1c1c; border-radius:7px 7px 0 0; }
-    .histogram button { appearance:none; flex:1 1 0; min-width:2px; border:0; border-radius:3px 3px 0 0; padding:0; opacity:.7; cursor:pointer; }
-    .histogram button:hover,.histogram button[aria-pressed="true"] { opacity:1; }
-    .band-row { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:clamp(6px,2.2vw,18px); padding:16px 0 25px; align-items:center; }
+    .content { padding-top:var(--space-lg); transition:opacity .16s ease; }
+    .pilot.collapsed .content { display:none; }
+    .pilot.disabled .content { opacity:.72; }
+    .histogram { height:150px; position:relative; display:flex; align-items:flex-end; gap:2px; padding:0 1px var(--space-sm); background:var(--surface-tile-3); border-radius:var(--radius-utility) var(--radius-utility) 0 0; overflow:hidden; }
+    .histogram .hist-bar { appearance:none; flex:1 1 0; min-width:2px; border:0; border-radius:3px 3px 0 0; padding:0; opacity:.9; pointer-events:none; }
+    .hist-zone { position:absolute; top:0; bottom:0; z-index:2; border:0; background:transparent; cursor:pointer; }
+    .hist-zone:hover,.hist-zone[aria-pressed="true"] { background:rgba(197,197,197,.22); }
+    .band-row { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:var(--space-sm); padding:var(--space-md) 0 var(--space-lg); align-items:center; }
     .band { width:100%; max-width:44px; aspect-ratio:1; justify-self:center; border-radius:50%; border:4px solid var(--band); background:transparent; padding:0; cursor:pointer; transition:transform .12s ease, box-shadow .12s ease; }
     .band:hover { transform:scale(1.05); }
     .band[aria-pressed="true"] { box-shadow:0 0 0 2px var(--white); }
     .band.edited { background:linear-gradient(135deg,var(--before) 0 49.4%,var(--after) 50.6% 100%); }
-    .controls { display:grid; gap:23px; }
-    .control { display:grid; grid-template-columns:minmax(0,1fr) 5ch; gap:8px 16px; align-items:center; }
+    .controls { display:grid; gap:var(--space-lg); }
+    .control { display:grid; grid-template-columns:minmax(0,1fr) 5ch; gap:var(--space-xs) var(--space-md); align-items:center; }
     .control label { color:#bdbdbd; font-size:17px; }
-    .value { width:5ch; height:30px; justify-self:end; appearance:textfield; border:0; border-radius:4px; outline:0; background:transparent; color:#c9c9c9; font:400 17px/30px ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric:tabular-nums; text-align:right; padding:0; }
+    .value { width:5ch; height:30px; justify-self:end; appearance:textfield; border:0; border-radius:4px; outline:0; background:transparent; color:#c9c9c9; font:400 17px/30px "SF Pro Text",sans-serif; font-variant-numeric:tabular-nums; text-align:right; padding:0; }
     .value::-webkit-inner-spin-button,.value::-webkit-outer-spin-button { appearance:none; margin:0; }
     .value:focus-visible { outline:2px solid #777; outline-offset:2px; }
-    input[type="range"] { grid-column:1 / -1; width:100%; height:24px; margin:-7px 0 0; appearance:none; -webkit-appearance:none; background:transparent; cursor:pointer; }
-    input[type="range"]::-webkit-slider-runnable-track { height:3px; border-radius:3px; background:var(--track); }
-    input[type="range"]::-moz-range-track { height:3px; border-radius:3px; background:var(--track); }
-    input[type="range"]::-webkit-slider-thumb { width:20px; height:20px; margin-top:-8.5px; appearance:none; -webkit-appearance:none; border:3px solid #ececec; border-radius:50%; background:var(--panel); box-shadow:inset 0 0 0 5px var(--knob), 0 0 0 1px #555; }
-    input[type="range"]::-moz-range-thumb { width:14px; height:14px; border:3px solid #ececec; border-radius:50%; background:var(--knob); box-shadow:0 0 0 1px #555; }
-    .hint { margin:26px 0 0; color:var(--muted); font-size:12px; line-height:1.45; }
+    .slider-shell { grid-column:1 / -1; position:relative; height:28px; margin:-9px 0 0; --line-left:50%; --line-width:0%; background:var(--track) center / 100% 3px no-repeat; }
+    .slider-shell::before { position:absolute; z-index:2; content:""; top:5px; left:calc(50% - 2px); width:5px; height:5px; border-radius:50%; background:#8c8c8c; }
+    .slider-shell::after { position:absolute; z-index:1; content:""; top:13px; left:var(--line-left); width:var(--line-width); height:3px; border-radius:3px; background:#f4f4f4; pointer-events:none; }
+    input[type="range"] { position:relative; z-index:3; width:100%; height:28px; margin:0; appearance:none; -webkit-appearance:none; background:transparent; cursor:pointer; }
+    input[type="range"]::-webkit-slider-runnable-track { height:3px; border-radius:3px; background:transparent; }
+    input[type="range"]::-moz-range-track { height:3px; border-radius:3px; background:transparent; }
+    input[type="range"]::-webkit-slider-thumb { width:28px; height:28px; margin-top:-12.5px; appearance:none; -webkit-appearance:none; border:3px solid #ececec; border-radius:50%; background:var(--panel); box-shadow:inset 0 0 0 8px var(--knob), 0 0 0 1px #555; }
+    input[type="range"]::-moz-range-thumb { width:22px; height:22px; border:3px solid #ececec; border-radius:50%; background:var(--knob); box-shadow:0 0 0 1px #555; }
+    .hint { margin:var(--space-lg) 0 0; color:var(--muted); font-size:12px; line-height:1.45; }
     @media (max-width:360px) { .pilot { padding-inline:16px; } .band-row { gap:4px; } .band { border-width:3px; } .control { gap:8px; } }
     @media (prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none!important; } }
   </style>
@@ -53,17 +64,17 @@
 <body>
   <main class="pilot" id="pilot">
     <header class="mixer-header">
-      <h1>Color Mixer</h1>
+      <button class="expand-button" id="expand" type="button" aria-expanded="true" aria-controls="mixerContent" title="Collapse Color Mixer">›</button><h1>Color Mixer</h1>
       <div class="reset-actions" id="resetActions" aria-label="Reset adjustments"><button type="button" id="resetBand">Reset</button><span aria-hidden="true">|</span><button type="button" id="resetAll">All</button></div>
       <label class="switch" aria-label="Enable Color Mixer"><input id="enabled" type="checkbox" checked><span class="toggle-slider"></span></label>
     </header>
-    <section class="content" aria-label="Color Mixer controls">
+    <section class="content" id="mixerContent" aria-label="Color Mixer controls">
       <div class="histogram" id="histogram" aria-label="Color distribution"></div>
       <div class="band-row" id="bandRow" aria-label="Color bands"></div>
       <div class="controls">
-        <div class="control"><label for="hue">Hue</label><input class="value" id="hueValue" type="number" min="-100" max="100" value="0" inputmode="numeric"><input id="hue" type="range" min="-100" max="100" value="0"></div>
-        <div class="control"><label for="saturation">Saturation</label><input class="value" id="saturationValue" type="number" min="-100" max="100" value="0" inputmode="numeric"><input id="saturation" type="range" min="-100" max="100" value="0"></div>
-        <div class="control"><label for="luminance">Luminance</label><input class="value" id="luminanceValue" type="number" min="-100" max="100" value="0" inputmode="numeric"><input id="luminance" type="range" min="-100" max="100" value="0"></div>
+        <div class="control"><label for="hue">Hue</label><input class="value" id="hueValue" type="number" min="-100" max="100" value="0" inputmode="numeric"><div class="slider-shell"><input id="hue" type="range" min="-100" max="100" value="0"></div></div>
+        <div class="control"><label for="saturation">Saturation</label><input class="value" id="saturationValue" type="number" min="-100" max="100" value="0" inputmode="numeric"><div class="slider-shell"><input id="saturation" type="range" min="-100" max="100" value="0"></div></div>
+        <div class="control"><label for="luminance">Luminance</label><input class="value" id="luminanceValue" type="number" min="-100" max="100" value="0" inputmode="numeric"><div class="slider-shell"><input id="luminance" type="range" min="-100" max="100" value="0"></div></div>
       </div>
       <p class="hint">Pilot only. Select a band, then drag a slider or type a value to test the diagonal before/after state.</p>
     </section>
@@ -88,17 +99,29 @@
     }
     function edited(name) { return ids.some(key => state[name][key] !== 0); }
     function anyEdited() { return bands.some(([name]) => edited(name)); }
+    function enableMixer() {
+      const toggle = document.querySelector('#enabled');
+      toggle.checked = true;
+      document.querySelector('#pilot').classList.remove('disabled');
+    }
     function drawHistogram() {
       histogram.replaceChildren();
       const heights = [12,19,10,31,18,8,13,37,55,71,36,21,15,9,7,6,5,6,5,4,5,7,8,7,5,4,5,5,6,8,13,31,19,8,5,4,4,5,6,5,4,5,7,6,5,5,6,4,5,5,6,5,4,5,4,5,4,3,4,4,5,4,3,4];
-      heights.forEach((height,index) => { const b = bands[Math.floor(index / 8)]; const button = document.createElement('button'); button.type='button'; button.style.height=`${height}px`; button.style.background=b[1]; button.title=`Select ${b[0]}`; button.setAttribute('aria-label',`Select ${b[0]}`); button.setAttribute('aria-pressed',String(b[0]===selected)); button.onclick=() => select(b[0]); histogram.append(button); });
+      heights.forEach((height,index) => { const hue = Math.round(index / (heights.length - 1) * 330); const bar = document.createElement('span'); bar.className='hist-bar'; bar.style.height=`${Math.round(height * 1.55)}px`; bar.style.background=`linear-gradient(180deg,hsl(${hue} 82% 61%),hsl(${hue} 72% 36%))`; histogram.append(bar); });
+      bands.forEach(([name],index) => { const zone=document.createElement('button'); zone.type='button'; zone.className='hist-zone'; zone.style.left=`${index * 12.5}%`; zone.style.width='12.5%'; zone.title=`Select ${name}`; zone.setAttribute('aria-label',`Select ${name}`); zone.setAttribute('aria-pressed',String(name===selected)); zone.onmouseenter=()=>select(name); zone.onclick=()=>select(name); histogram.append(zone); });
     }
     function drawBands() {
       bandRow.replaceChildren();
       bands.forEach(([name,color]) => { const button = document.createElement('button'); button.type='button'; button.className=`band${edited(name)?' edited':''}`; button.style.setProperty('--band',color); button.style.setProperty('--before',colorFor(name,false)); button.style.setProperty('--after',colorFor(name,true)); button.title=name; button.setAttribute('aria-label',`${name}${edited(name)?', edited':''}`); button.setAttribute('aria-pressed',String(name===selected)); button.onclick=()=>select(name); bandRow.append(button); });
     }
     function drawControls() {
-      ids.forEach(key => { const range=document.querySelector(`#${key}`), value=document.querySelector(`#${key}Value`), v=state[selected][key]; range.value=v; value.value=v; });
+      ids.forEach(key => {
+        const range=document.querySelector(`#${key}`), value=document.querySelector(`#${key}Value`), v=state[selected][key], pos=(v+100)/2;
+        range.value=v; value.value=v;
+        const shell=range.closest('.slider-shell');
+        shell.style.setProperty('--line-left',`${Math.min(50,pos)}%`);
+        shell.style.setProperty('--line-width',`${Math.abs(pos-50)}%`);
+      });
       const color = colorFor(selected,true);
       document.querySelector('#hue').style.setProperty('--track','linear-gradient(90deg,#39d7db,#4178ff,#bc28ca)');
       document.querySelector('#hue').style.setProperty('--knob',color);
@@ -106,15 +129,23 @@
       document.querySelector('#saturation').style.setProperty('--knob',color);
       document.querySelector('#luminance').style.setProperty('--track',`linear-gradient(90deg,#262626,${color},#ddd)`);
       document.querySelector('#luminance').style.setProperty('--knob',color);
+      ids.forEach(key => document.querySelector(`#${key}`).closest('.slider-shell').style.setProperty('--track',document.querySelector(`#${key}`).style.getPropertyValue('--track')));
       document.querySelector('#resetActions').classList.toggle('visible',anyEdited());
     }
     function render() { drawHistogram(); drawBands(); drawControls(); }
-    function select(name) { selected=name; render(); }
-    function setValue(key, raw) { const v=Math.max(-100,Math.min(100,Number(raw) || 0)); state[selected][key]=v; render(); }
-    ids.forEach(key => { document.querySelector(`#${key}`).addEventListener('input',e=>setValue(key,e.target.value)); document.querySelector(`#${key}Value`).addEventListener('change',e=>setValue(key,e.target.value)); });
+    function select(name) { enableMixer(); selected=name; render(); }
+    function setValue(key, raw) { enableMixer(); const v=Math.max(-100,Math.min(100,Number(raw) || 0)); state[selected][key]=v; render(); }
+    ids.forEach(key => {
+      const range=document.querySelector(`#${key}`), value=document.querySelector(`#${key}Value`);
+      range.addEventListener('input',e=>setValue(key,e.target.value));
+      range.addEventListener('dblclick',e=>{ e.preventDefault(); setValue(key,0); });
+      value.addEventListener('input',e=>setValue(key,e.target.value));
+      value.addEventListener('change',e=>setValue(key,e.target.value));
+    });
     document.querySelector('#resetBand').onclick=()=>{ ids.forEach(k=>state[selected][k]=0); render(); };
     document.querySelector('#resetAll').onclick=()=>{ bands.forEach(([name])=>ids.forEach(k=>state[name][k]=0)); render(); };
     document.querySelector('#enabled').onchange=e=>document.querySelector('#pilot').classList.toggle('disabled',!e.target.checked);
+    document.querySelector('#expand').onclick=()=>{ const pilot=document.querySelector('#pilot'), collapsed=pilot.classList.toggle('collapsed'); const button=document.querySelector('#expand'); button.setAttribute('aria-expanded',String(!collapsed)); button.title=collapsed?'Expand Color Mixer':'Collapse Color Mixer'; };
     render();
   </script>
 </body>

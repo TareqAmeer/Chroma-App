@@ -1,0 +1,66 @@
+{
+  "asset": {
+    "path": "/var/folders/6s/sd2nq00x4f1f7t5fcrx67lrw0000gn/T/codex-clipboard-d5cb5a40-720c-4272-b75f-c5ab4cb3995b.png",
+    "sha256": "5b925174f9e12f4aa0544f297c1f987320203a857f9a9f962316a16e69b0370b",
+    "format": "png",
+    "dimensions": {
+      "width": 571,
+      "height": 208
+    }
+  },
+  "samples": [
+    {
+      "x": 51,
+      "y": 201,
+      "rgba": [
+        133,
+        45,
+        34,
+        255
+      ]
+    },
+    {
+      "x": 401,
+      "y": 201,
+      "rgba": [
+        0,
+        54,
+        245,
+        255
+      ]
+    }
+  ],
+  "crops": [
+    {
+      "id": "histogram",
+      "rect": {
+        "x": 16,
+        "y": 7,
+        "width": 544,
+        "height": 201
+      },
+      "pixelStatistics": {
+        "pixelCount": 109344,
+        "rgbaMean": [
+          37.292782411472054,
+          35.2834174714662,
+          35.25856928592332,
+          255
+        ],
+        "rgbaMin": [
+          0,
+          26,
+          26,
+          255
+        ],
+        "rgbaMax": [
+          142,
+          159,
+          248,
+          255
+        ]
+      }
+    }
+  ],
+  "method": "pngjs PNG decode; exact RGBA byte samples and source-image crop rectangles"
+}

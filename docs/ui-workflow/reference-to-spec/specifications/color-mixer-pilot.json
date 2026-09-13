@@ -10,7 +10,8 @@
     },
     "views": [
       {"id":"current-full","kind":"full","assetRef":"/var/folders/6s/sd2nq00x4f1f7t5fcrx67lrw0000gn/T/codex-clipboard-09b5bdd4-3fb5-4b35-b240-0b0d14c614a3.png","description":"Existing Color Mixer presentation.","visibleScope":"Header, histogram, bands, three controls, and reset buttons."},
-      {"id":"darkroom-full","kind":"full","assetRef":"/Users/tareqameer/Downloads/Screenshot 2026-09-13 at 9.21.28 AM.png","description":"Darkroom reference for thin histogram bars, circle treatment, and slider styling.","visibleScope":"Histogram, eight circles, and three controls."}
+      {"id":"darkroom-full","kind":"full","assetRef":"/Users/tareqameer/Downloads/Screenshot 2026-09-13 at 9.21.28 AM.png","description":"Darkroom reference for thin histogram bars, circle treatment, and slider styling.","visibleScope":"Histogram, eight circles, and three controls."},
+      {"id":"darkroom-histogram","kind":"crop","assetRef":"/var/folders/6s/sd2nq00x4f1f7t5fcrx67lrw0000gn/T/codex-clipboard-d5cb5a40-720c-4272-b75f-c5ab4cb3995b.png","description":"Close reference for histogram height, colour progression, and selected-band overlay.","visibleScope":"Histogram only."}
     ]
   },
   "scope": {"componentFamily":"slider","registryScope":{"includedSubfamilies":["toggle","band selector","numeric value","reset actions"],"excludedFamilies":["production renderer","other Color Mixer instances"],"notes":"An isolated interactive HTML pilot only; it does not alter chromasmith-22.html."}},
@@ -20,7 +21,8 @@
       {"id":"obs-darkroom-eight","viewId":"darkroom-full","area":"geometry-spacing","fact":"The Darkroom view visibly presents eight circles in one horizontal row.","sourceClass":"reference","sourceRef":"darkroom-full","certainty":"directly-visible"},
       {"id":"obs-darkroom-outline","viewId":"darkroom-full","area":"color-contrast","fact":"Unedited circles are visibly dark inside with colored outlines; the selected circle has a white outer ring and a diagonal fill.","sourceClass":"reference","sourceRef":"darkroom-full","certainty":"directly-visible"},
       {"id":"obs-darkroom-bars","viewId":"darkroom-full","area":"geometry-spacing","fact":"The histogram uses thin, separated vertical bars rather than wide blocks.","sourceClass":"reference","sourceRef":"darkroom-full","certainty":"directly-visible"},
-      {"id":"obs-darkroom-size","viewId":"darkroom-full","area":"geometry-spacing","fact":"The Darkroom source image measures 586 by 618 pixels; deterministic measurement is recorded in the Darkroom evidence JSON.","measurement":{"value":"586 × 618","unit":"px"},"sourceClass":"reference","sourceRef":"darkroom-full","certainty":"directly-visible"}
+      {"id":"obs-darkroom-size","viewId":"darkroom-full","area":"geometry-spacing","fact":"The Darkroom source image measures 586 by 618 pixels; deterministic measurement is recorded in the Darkroom evidence JSON.","measurement":{"value":"586 × 618","unit":"px"},"sourceClass":"reference","sourceRef":"darkroom-full","certainty":"directly-visible"},
+      {"id":"obs-histogram-overlay","viewId":"darkroom-histogram","area":"color-contrast","fact":"The close histogram reference visibly shows a pale grey vertical overlay for the selected colour range over a continuous spectrum of coloured bars.","sourceClass":"reference","sourceRef":"darkroom-histogram","certainty":"directly-visible"}
     ],
     "repositoryEvidence": [
       {"id":"repo-current-controls","claim":"The live Color Mixer has three gradient range inputs and two bordered reset buttons.","locator":"chromasmith-22.html:1986-1999","sourceClass":"repository_evidence"},
@@ -38,7 +40,8 @@
       {"id":"decision-bands","decision":"Keep the current eight color bands.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 2"},
       {"id":"decision-unedited","decision":"Unedited circles use a colored outline and transparent/dark center.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 3"},
       {"id":"decision-edited","decision":"Edited circles use a diagonal original-color/new-color split.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 4"},
-      {"id":"decision-interaction","decision":"The standalone HTML draft must be interactive for testing.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 5"}
+      {"id":"decision-interaction","decision":"The standalone HTML draft must be interactive for testing.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 5"},
+      {"id":"decision-pilot-refinement","decision":"Keep all unrequested typography, spacing, and foundational styling on approved design tokens; add the specified Darkroom histogram and slider interactions to the pilot only.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User request, 2026-09-13"}
     ],
     "unresolvedQuestions":[]
   },
@@ -47,7 +50,7 @@
     "typography":[],
     "colorsContrastRoles":[{"id":"colors-band-state","statement":"Use a dark center for an unedited band and a diagonal original/new-color fill only when that band's value is non-zero.","sourceClass":"proposal","sourceRef":"User request","basedOn":["obs-darkroom-outline"]}],
     "icons":[],
-    "motionInteraction":[{"id":"interaction-reset","statement":"Reveal text-only Reset | All actions after an edit; preserve header space so this state change cannot shift neighboring controls.","sourceClass":"proposal","sourceRef":"User request","basedOn":["obs-current-eight"]}],
+    "motionInteraction":[{"id":"interaction-reset","statement":"Reveal text-only Reset | All actions after an edit; preserve header space so this state change cannot shift neighboring controls.","sourceClass":"proposal","sourceRef":"User request","basedOn":["obs-current-eight"]},{"id":"interaction-histogram","statement":"The histogram's full colour-range zones select a band on hover or click, and show a pale grey selected-range overlay.","sourceClass":"proposal","sourceRef":"User request","basedOn":["obs-histogram-overlay"]}],
     "responsiveBehavior":[{"id":"responsive-eight","statement":"At all supported pilot widths, eight bands remain in one row; controls may shrink but do not wrap.","sourceClass":"proposal","sourceRef":"User request","basedOn":["obs-darkroom-eight"]}],
     "accessibility":[{"id":"a11y-native-controls","statement":"Use native checkbox, range, and number inputs with visible labels and focus styles in the pilot.","sourceClass":"proposal","sourceRef":"User request","basedOn":["repo-slider-family"]}],
     "targets":[{"id":"target-draft","statement":"Create drafts/color-mixer-pilot.html only; do not update the live HTML application.","sourceClass":"proposal","sourceRef":"User request","basedOn":["repo-current-controls"]}],
