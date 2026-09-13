@@ -33,10 +33,10 @@
     .content { padding-top:var(--space-lg); transition:opacity .16s ease; }
     .pilot.collapsed .content { display:none; }
     .pilot.disabled .content { opacity:.72; }
-    .histogram { height:150px; position:relative; display:flex; align-items:flex-end; gap:2px; padding:0 1px var(--space-sm); background:var(--surface-tile-3); border-radius:var(--radius-utility) var(--radius-utility) 0 0; overflow:hidden; }
-    .histogram .hist-bar { appearance:none; flex:1 1 0; min-width:2px; border:0; border-radius:3px 3px 0 0; padding:0; opacity:.9; pointer-events:none; }
-    .hist-zone { position:absolute; top:0; bottom:0; z-index:2; border:0; background:transparent; cursor:pointer; }
-    .hist-zone:hover,.hist-zone[aria-pressed="true"] { background:rgba(197,197,197,.22); }
+    .histogram { height:150px; position:relative; display:flex; align-items:flex-end; gap:2px; padding:0 1px; background:var(--surface-tile-3); border-radius:var(--radius-utility) var(--radius-utility) 0 0; overflow:hidden; }
+    .histogram .hist-bar { position:relative; z-index:2; appearance:none; flex:1 1 0; min-width:2px; border:0; border-radius:3px 3px 0 0; padding:0; opacity:.9; pointer-events:none; }
+    .hist-zone { position:absolute; top:0; bottom:0; z-index:1; border:0; background:transparent; cursor:pointer; }
+    .hist-zone:hover,.hist-zone[aria-pressed="true"] { background:linear-gradient(180deg,rgba(197,197,197,.28),rgba(197,197,197,.12) 62%,transparent); }
     .band-row { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:var(--space-sm); padding:var(--space-md) 0 var(--space-lg); align-items:center; }
     .band { width:100%; max-width:44px; aspect-ratio:1; justify-self:center; border-radius:50%; border:4px solid var(--band); background:transparent; padding:0; cursor:pointer; transition:transform .12s ease, box-shadow .12s ease; }
     .band:hover { transform:scale(1.05); }
@@ -108,7 +108,7 @@
       histogram.replaceChildren();
       const heights = [12,19,10,31,18,8,13,37,55,71,36,21,15,9,7,6,5,6,5,4,5,7,8,7,5,4,5,5,6,8,13,31,19,8,5,4,4,5,6,5,4,5,7,6,5,5,6,4,5,5,6,5,4,5,4,5,4,3,4,4,5,4,3,4];
       heights.forEach((height,index) => { const hue = Math.round(index / (heights.length - 1) * 330); const bar = document.createElement('span'); bar.className='hist-bar'; bar.style.height=`${Math.round(height * 1.55)}px`; bar.style.background=`linear-gradient(180deg,hsl(${hue} 82% 61%),hsl(${hue} 72% 36%))`; histogram.append(bar); });
-      bands.forEach(([name],index) => { const zone=document.createElement('button'); zone.type='button'; zone.className='hist-zone'; zone.style.left=`${index * 12.5}%`; zone.style.width='12.5%'; zone.title=`Select ${name}`; zone.setAttribute('aria-label',`Select ${name}`); zone.setAttribute('aria-pressed',String(name===selected)); zone.onmouseenter=()=>select(name); zone.onclick=()=>select(name); histogram.append(zone); });
+      bands.forEach(([name],index) => { const zone=document.createElement('button'); zone.type='button'; zone.className='hist-zone'; zone.style.left=`${index * 12.5}%`; zone.style.width='12.5%'; zone.title=`Select ${name}`; zone.setAttribute('aria-label',`Select ${name}`); zone.setAttribute('aria-pressed',String(name===selected)); zone.onmouseenter=()=>select(name,false); zone.onclick=()=>select(name,true); histogram.append(zone); });
     }
     function drawBands() {
       bandRow.replaceChildren();
@@ -124,16 +124,16 @@
       });
       const color = colorFor(selected,true);
       document.querySelector('#hue').style.setProperty('--track','linear-gradient(90deg,#39d7db,#4178ff,#bc28ca)');
-      document.querySelector('#hue').style.setProperty('--knob',color);
+      document.querySelector('#hue').style.setProperty('--knob',state[selected].hue === 0 ? 'var(--panel)' : color);
       document.querySelector('#saturation').style.setProperty('--track',`linear-gradient(90deg,#777,${color})`);
-      document.querySelector('#saturation').style.setProperty('--knob',color);
+      document.querySelector('#saturation').style.setProperty('--knob',state[selected].saturation === 0 ? 'var(--panel)' : color);
       document.querySelector('#luminance').style.setProperty('--track',`linear-gradient(90deg,#262626,${color},#ddd)`);
-      document.querySelector('#luminance').style.setProperty('--knob',color);
+      document.querySelector('#luminance').style.setProperty('--knob',state[selected].luminance === 0 ? 'var(--panel)' : color);
       ids.forEach(key => document.querySelector(`#${key}`).closest('.slider-shell').style.setProperty('--track',document.querySelector(`#${key}`).style.getPropertyValue('--track')));
       document.querySelector('#resetActions').classList.toggle('visible',anyEdited());
     }
     function render() { drawHistogram(); drawBands(); drawControls(); }
-    function select(name) { enableMixer(); selected=name; render(); }
+    function select(name, enable=true) { if(enable) enableMixer(); selected=name; render(); }
     function setValue(key, raw) { enableMixer(); const v=Math.max(-100,Math.min(100,Number(raw) || 0)); state[selected][key]=v; render(); }
     ids.forEach(key => {
       const range=document.querySelector(`#${key}`), value=document.querySelector(`#${key}Value`);
