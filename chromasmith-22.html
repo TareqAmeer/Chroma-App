@@ -448,6 +448,17 @@ body.mobile-fx .pc-chip{width:36px;height:36px}
 .fx-slider-grad{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;background:linear-gradient(to right,#ff5b5b,#ff9f43,#ffd43b,#51cf66,#3bc9db,#4d8bff,#9775fa,#f06595,#ff5b5b)}
 .fx-slider-grad::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 0 3px rgba(0,0,0,.5)}
 .fx-slider-grad::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#fff;border:none;box-shadow:0 0 3px rgba(0,0,0,.5)}
+/* MetalForge liquid-progress pilot — deliberately limited to the Color Mixer's three
+   registry-listed HSL ranges (#sl-hsl-h/#sl-hsl-s/#sl-hsl-l). The native gradients remain
+   beneath this transparent Canvas 2D luminance layer, so Hue/Saturation/Luminance information
+   and the actual range input remain intact. */
+#ff-hsl.hsl-metal-pilot{position:relative;isolation:isolate}
+#hsl-metal-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+#ff-hsl.hsl-metal-pilot>.fx-row,#ff-hsl.hsl-metal-pilot>.btn-row,#ff-hsl.hsl-metal-pilot>#hsl-hist,#ff-hsl.hsl-metal-pilot>#hsl-chips{position:relative;z-index:3}
+#ff-hsl.hsl-metal-pilot .fx-slider-grad::-webkit-slider-thumb{opacity:0}
+#ff-hsl.hsl-metal-pilot .fx-slider-grad::-moz-range-thumb{opacity:0}
+#ff-hsl.hsl-metal-pilot .fx-row:has(.fx-slider-grad:focus-visible)::after{content:'';position:absolute;left:-4px;right:-4px;bottom:-3px;height:18px;border:1px solid var(--acc);border-radius:var(--r,4px);pointer-events:none}
+@media (prefers-reduced-motion:reduce){#hsl-metal-canvas{display:none}#ff-hsl.hsl-metal-pilot .fx-slider-grad::-webkit-slider-thumb{opacity:1}#ff-hsl.hsl-metal-pilot .fx-slider-grad::-moz-range-thumb{opacity:1}}
 /* 3.4.2: matches the wireframe's .select-btn idiom (Editor (Developer) View.dc.html:123-127) —
    a real native <select> reskinned to look like it (fixed 32px pill height, 8px radius, a
    pill-role border, a custom chevron replacing the native arrow) rather than replaced with a
@@ -10590,6 +10601,7 @@ function hslSyncUI(){
   const col=HSL_COLS[hslBand];
   const slS=document.getElementById('sl-hsl-s');if(slS)slS.style.background='linear-gradient(to right,#888,'+col+')';
   const slL=document.getElementById('sl-hsl-l');if(slL)slL.style.background='linear-gradient(to right,#000,'+col+',#fff)';
+  hslMetalPilot.sync();
 }
 function hslSlider(k,v){
   fxState.hsl[k][hslBand]=parseFloat(v)||0;
@@ -16807,6 +16819,38 @@ function fxPaintAllSliders(root){(root||document).querySelectorAll('input.fx-sli
 // Delegated so dynamically-built rows need no wiring. `input` does not bubble from all engines'
 // range elements historically, hence capture.
 document.addEventListener('input',e=>{if(e.target&&e.target.classList&&e.target.classList.contains('fx-slider'))fxPaintSlider(e.target);},true);
+// ── Color Mixer liquid-progress pilot ───────────────────────────────────────────────────────
+// A single Canvas belongs to #ff-hsl, not to every range. It is decorative (aria-hidden and
+// pointer-events:none): the three registry-listed native HSL inputs keep all hit testing,
+// keyboard operation, input/change events, undo, state persistence, and accessibility.
+const hslMetalPilot=(()=>{
+  const ids=['sl-hsl-h','sl-hsl-s','sl-hsl-l'];
+  let host,cv,ctx,states=new Map(),raf=0,last=0,dragging=false,reduce=false,resizeObserver;
+  const timings=[];
+  const motion=typeof matchMedia==='function'?matchMedia('(prefers-reduced-motion: reduce)'):null;
+  const pct=sl=>{const a=+sl.min,b=+sl.max;return b>a?(+sl.value-a)/(b-a):0;};
+  function visualState(sl){let s=states.get(sl);if(!s){const p=pct(sl);s={target:p,visual:p,velocity:0,settle:0};states.set(sl,s);}return s;}
+  function resize(){if(!host||!cv)return;const r=host.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2),w=Math.max(1,Math.round(r.width*d)),h=Math.max(1,Math.round(r.height*d));if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;cv.style.width=r.width+'px';cv.style.height=r.height+'px';}ctx.setTransform(d,0,0,d,0,0);draw(performance.now());}
+  function color(name){return getComputedStyle(host).getPropertyValue(name).trim();}
+  function draw(now){
+    if(!ctx||!host)return;const started=performance.now(),hr=host.getBoundingClientRect();ctx.clearRect(0,0,hr.width,hr.height);const acc=color('--acc'),txt=color('--txt');
+    for(const sl of ids.map(id=>document.getElementById(id)).filter(Boolean)){
+      const r=sl.getBoundingClientRect(),s=visualState(sl),x0=r.left-hr.left,x1=x0+r.width,y=r.top-hr.top+r.height*.5,p=Math.max(0,Math.min(1,s.visual)),x=x0+(x1-x0)*p;
+      if(p<=.001)continue;
+      const speed=Math.min(1,Math.abs(s.velocity)*5),end=Math.min(p,1-p)*Math.min(r.width,42),squash=end<9?(9-end)/9*.65:0,amp=reduce?0:(1.2+speed*4)*(1-squash*.35),phase=now*.012+(sl.id==='sl-hsl-s'?1.8:sl.id==='sl-hsl-l'?3.7:0);
+      // Fill is translucent: the semantic HSL gradient below remains legible.
+      ctx.save();ctx.beginPath();ctx.rect(x0,y-8,Math.max(0,x-x0),16);ctx.clip();ctx.globalAlpha=.28;ctx.fillStyle=acc;ctx.fillRect(x0,y-2,x-x0,4);ctx.restore();
+      const haze=ctx.createRadialGradient(x,y,0,x,y,18+speed*12);haze.addColorStop(0,acc);haze.addColorStop(.22,acc);haze.addColorStop(1,'transparent');ctx.globalAlpha=reduce?.32:.20+speed*.16;ctx.fillStyle=haze;ctx.fillRect(Math.max(x0,x-36),y-20,72,40);
+      const wave=Math.sin(phase)*amp+Math.sin(phase*1.73+1.2)*amp*.45;ctx.globalAlpha=1;ctx.fillStyle=acc;ctx.beginPath();ctx.ellipse(x,y+wave*.18,Math.max(3,5.8-squash*2),Math.max(3.4,6.6+squash*2),0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=.78;ctx.fillStyle=txt;ctx.beginPath();ctx.ellipse(x-1.2,y+wave*.12,Math.max(1.4,2.6-squash),Math.max(2,3.2+squash*.5),0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+    }
+    timings.push(performance.now()-started);if(timings.length>180)timings.shift();
+  }
+  function tick(now){const dt=Math.min(.05,Math.max(.001,(now-last||16)/1000));last=now;let active=false;for(const [sl,s] of states){s.target=pct(sl);if(reduce){s.visual=s.target;s.velocity=0;s.settle=0;continue;}const before=s.visual;if(dragging&&document.activeElement===sl)s.visual=s.target;else s.visual+=(s.target-s.visual)*Math.min(1,dt*8);s.velocity=(s.visual-before)/dt;s.settle=Math.abs(s.target-s.visual)+Math.abs(s.velocity)*.012;if(s.settle>.001)active=true;}draw(now);raf=active?requestAnimationFrame(tick):0;}
+  function schedule(){if(reduce){draw(performance.now());return;}if(!raf)raf=requestAnimationFrame(tick);}
+  function input(e){if(!e.target||!ids.includes(e.target.id))return;const s=visualState(e.target);s.target=pct(e.target);if(dragging&&document.activeElement===e.target)s.visual=s.target;schedule();}
+  function init(){host=document.getElementById('ff-hsl');if(!host||host.dataset.metalPilot)return;host.dataset.metalPilot='1';host.classList.add('hsl-metal-pilot');cv=document.createElement('canvas');cv.id='hsl-metal-canvas';cv.setAttribute('aria-hidden','true');host.prepend(cv);ctx=cv.getContext('2d',{alpha:true});ids.forEach(id=>{const sl=document.getElementById(id);if(!sl)return;visualState(sl);sl.addEventListener('pointerdown',()=>{dragging=true;},true);sl.addEventListener('pointerup',()=>{dragging=false;schedule();},true);sl.addEventListener('pointercancel',()=>{dragging=false;schedule();},true);});document.addEventListener('input',input,true);resizeObserver=new ResizeObserver(resize);resizeObserver.observe(host);if(motion){reduce=motion.matches;motion.addEventListener('change',e=>{reduce=e.matches;if(reduce&&raf){cancelAnimationFrame(raf);raf=0;}schedule();});}resize();}
+  return {init,sync:()=>{ids.forEach(id=>{const sl=document.getElementById(id);if(sl)visualState(sl).target=pct(sl);});schedule();},metrics:()=>{const a=timings.slice().sort((a,b)=>a-b);return {samples:a.length,p95:a[Math.max(0,Math.ceil(a.length*.95)-1)]||0,active:!!raf,reduced:reduce};}};
+})();
 function initSliderErgonomics(){
   // ── Click the value to type one ──
   document.addEventListener('click',e=>{
@@ -21501,6 +21545,7 @@ initDcpSelect();    // populate RAW profile dropdown (persisted choice)
 initCompareButton(); // wire "hold to compare" before/after
 _crvInit();          // tone-curve editor (pointer handlers + initial bake/draw)
 hslSyncUI();     // HSL mixer band chips + slider values/gradient tracks
+hslMetalPilot.init();
 mskRebuild();        // local-adjustment mask list
 cvBuildChips();      // canvas ratio chips + background swatches
 selectToSeg('sel-heal-mode','seg-heal-mode'); // Retouch Heal|Clone (panel redesign)
