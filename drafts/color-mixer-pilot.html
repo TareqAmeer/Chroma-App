@@ -49,7 +49,7 @@
     .value::-webkit-inner-spin-button,.value::-webkit-outer-spin-button { appearance:none; margin:0; }
     .value:focus-visible { outline:2px solid #777; outline-offset:2px; }
     .slider-shell { grid-column:1 / -1; position:relative; height:28px; margin:-9px 0 0; --line-left:50%; --line-width:0%; background:var(--track) center / 100% 3px no-repeat; }
-    .slider-shell::before { position:absolute; z-index:2; content:""; top:2px; left:calc(50% - 2px); width:5px; height:5px; border-radius:50%; background:#8c8c8c; }
+    .slider-shell::before { position:absolute; z-index:2; content:""; top:0; left:calc(50% - 2px); width:5px; height:5px; border-radius:50%; background:#8c8c8c; }
     .slider-shell::after { position:absolute; z-index:1; content:""; top:13px; left:var(--line-left); width:var(--line-width); height:3px; border-radius:3px; background:#f4f4f4; pointer-events:none; }
     input[type="range"] { position:relative; z-index:3; width:100%; height:28px; margin:0; appearance:none; -webkit-appearance:none; background:transparent; cursor:pointer; }
     input[type="range"]::-webkit-slider-runnable-track { height:3px; border-radius:3px; background:transparent; }
@@ -86,6 +86,7 @@
     ];
     const state = Object.fromEntries(bands.map(([name]) => [name,{hue:0,saturation:0,luminance:0}]));
     let selected = 'Red';
+    let previewBand = null;
     const ids = ['hue','saturation','luminance'];
     const rollSpeed = 6;
     const histogram = document.querySelector('#histogram');
@@ -100,6 +101,7 @@
     }
     function edited(name) { return ids.some(key => state[name][key] !== 0); }
     function anyEdited() { return bands.some(([name]) => edited(name)); }
+    function activeBand() { return previewBand || selected; }
     function enableMixer() {
       const toggle = document.querySelector('#enabled');
       toggle.checked = true;
@@ -109,41 +111,44 @@
       histogram.replaceChildren();
       const heights = [12,19,10,31,18,8,13,37,55,71,36,21,15,9,7,6,5,6,5,4,5,7,8,7,5,4,5,5,6,8,13,31,19,8,5,4,4,5,6,5,4,5,7,6,5,5,6,4,5,5,6,5,4,5,4,5,4,3,4,4,5,4,3,4];
       heights.forEach((height,index) => { const hue = Math.round(index / (heights.length - 1) * 330); const bar = document.createElement('span'); bar.className='hist-bar'; bar.style.height=`${Math.round(height * 1.55)}px`; bar.style.background=`linear-gradient(180deg,hsl(${hue} 82% 61%),hsl(${hue} 72% 36%))`; histogram.append(bar); });
-      bands.forEach(([name],index) => { const zone=document.createElement('button'); zone.type='button'; zone.className='hist-zone'; zone.style.left=`${index * 12.5}%`; zone.style.width='12.5%'; zone.title=`Select ${name}`; zone.setAttribute('aria-label',`Select ${name}`); zone.setAttribute('aria-pressed',String(name===selected)); zone.onmouseenter=()=>select(name,false); zone.onclick=()=>select(name,true); histogram.append(zone); });
+      bands.forEach(([name],index) => { const zone=document.createElement('button'); zone.type='button'; zone.className='hist-zone'; zone.style.left=`${index * 12.5}%`; zone.style.width='12.5%'; zone.title=`Select ${name}`; zone.setAttribute('aria-label',`Select ${name}`); zone.setAttribute('aria-pressed',String(name===activeBand())); zone.onclick=()=>select(name,true); histogram.append(zone); });
     }
     function drawBands() {
       bandRow.replaceChildren();
-      bands.forEach(([name,color]) => { const button = document.createElement('button'); button.type='button'; button.className=`band${edited(name)?' edited':''}`; button.style.setProperty('--band',color); button.style.setProperty('--before',colorFor(name,false)); button.style.setProperty('--after',colorFor(name,true)); button.title=name; button.setAttribute('aria-label',`${name}${edited(name)?', edited':''}`); button.setAttribute('aria-pressed',String(name===selected)); button.onclick=()=>select(name); bandRow.append(button); });
+      bands.forEach(([name,color]) => { const button = document.createElement('button'); button.type='button'; button.className=`band${edited(name)?' edited':''}`; button.style.setProperty('--band',color); button.style.setProperty('--before',colorFor(name,false)); button.style.setProperty('--after',colorFor(name,true)); button.title=name; button.setAttribute('aria-label',`${name}${edited(name)?', edited':''}`); button.setAttribute('aria-pressed',String(name===activeBand())); button.onclick=()=>select(name); bandRow.append(button); });
     }
     function drawControls() {
       ids.forEach(key => {
-        const range=document.querySelector(`#${key}`), value=document.querySelector(`#${key}Value`), v=state[selected][key], pos=(v+100)/2;
+        const range=document.querySelector(`#${key}`), value=document.querySelector(`#${key}Value`), v=state[activeBand()][key], pos=(v+100)/2;
         range.value=v; value.value=v;
         const shell=range.closest('.slider-shell');
         shell.style.setProperty('--line-left',`${Math.min(50,pos)}%`);
         shell.style.setProperty('--line-width',`${Math.abs(pos-50)}%`);
         range.style.setProperty('--roll',`${v * rollSpeed}deg`);
       });
-      const color = colorFor(selected,true);
+      const band=activeBand(), color = colorFor(band,true);
       document.querySelector('#hue').style.setProperty('--track','linear-gradient(90deg,#39d7db,#4178ff,#bc28ca)');
-      document.querySelector('#hue').style.setProperty('--knob',state[selected].hue === 0 ? 'var(--panel)' : color);
+      document.querySelector('#hue').style.setProperty('--knob',state[band].hue === 0 ? 'var(--panel)' : color);
       document.querySelector('#saturation').style.setProperty('--track',`linear-gradient(90deg,#777,${color})`);
-      document.querySelector('#saturation').style.setProperty('--knob',state[selected].saturation === 0 ? 'var(--panel)' : color);
+      document.querySelector('#saturation').style.setProperty('--knob',state[band].saturation === 0 ? 'var(--panel)' : color);
       document.querySelector('#luminance').style.setProperty('--track',`linear-gradient(90deg,#262626,${color},#ddd)`);
-      document.querySelector('#luminance').style.setProperty('--knob',state[selected].luminance === 0 ? 'var(--panel)' : color);
+      document.querySelector('#luminance').style.setProperty('--knob',state[band].luminance === 0 ? 'var(--panel)' : color);
       ids.forEach(key => document.querySelector(`#${key}`).closest('.slider-shell').style.setProperty('--track',document.querySelector(`#${key}`).style.getPropertyValue('--track')));
       document.querySelector('#resetActions').classList.toggle('visible',anyEdited());
     }
     function render() { drawHistogram(); drawBands(); drawControls(); }
-    function select(name, enable=true) { if(enable) enableMixer(); selected=name; render(); }
+    function select(name, enable=true) { if(enable) enableMixer(); selected=name; previewBand=null; render(); }
     function setValue(key, raw) { enableMixer(); const v=Math.max(-100,Math.min(100,Number(raw) || 0)); state[selected][key]=v; render(); }
     ids.forEach(key => {
       const range=document.querySelector(`#${key}`), value=document.querySelector(`#${key}Value`);
       range.addEventListener('input',e=>setValue(key,e.target.value));
       range.addEventListener('dblclick',e=>{ e.preventDefault(); setValue(key,0); });
+      range.addEventListener('wheel',e=>{ if(Math.abs(e.deltaX)<=Math.abs(e.deltaY)) return; e.preventDefault(); setValue(key,Number(range.value)+Math.sign(e.deltaX)); },{passive:false});
       value.addEventListener('input',e=>setValue(key,e.target.value));
       value.addEventListener('change',e=>setValue(key,e.target.value));
     });
+    histogram.addEventListener('pointermove',e=>{ const rect=histogram.getBoundingClientRect(), index=Math.max(0,Math.min(7,Math.floor((e.clientX-rect.left)/rect.width*8))), name=bands[index][0]; if(previewBand!==name){ previewBand=name; render(); } });
+    histogram.addEventListener('pointerleave',()=>{ if(previewBand){ previewBand=null; render(); } });
     document.querySelector('#resetBand').onclick=()=>{ ids.forEach(k=>state[selected][k]=0); render(); };
     document.querySelector('#resetDivider').onclick=()=>{ ids.forEach(k=>state[selected][k]=0); render(); };
     document.querySelector('#resetAll').onclick=()=>{ bands.forEach(([name])=>ids.forEach(k=>state[name][k]=0)); render(); };
