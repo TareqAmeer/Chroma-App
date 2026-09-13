@@ -7,26 +7,38 @@ selectors, instance count). This plan covers replacing that with real rendered v
 consistency, what AI-assisted ("vibe coding") teams recommend for avoiding component sprawl,
 and the resulting maintenance process for this repo.
 
-**Implementation status (2026-09-13): §5a done for the web-servable families.** 9 of 13
-`design/components.json` families (section-card, control-row, toggle, slider, select,
-segmented-control, button, icon-button, info-button) now render as live `<iframe>` embeds in
-the report — real DOM/CSS cloned out of `chromasmith-22.html` via a new `?catalog=1&live=1`
-mode, with a small per-family shim (`LIVE_WIRE` in `buildCatalogPage()`) reproducing just the
-class/attribute change a click drives, never the real app's global functions or shared
-localStorage. Verified live end-to-end: clicking the embedded toggle/section-chevron/segmented
-control flips the clone's class with no effect on the real hidden app instance sharing the page
-(checked `#tg-retouch`/`#seg-heal-mode` stayed untouched after clicking their clones), and
-`node test/export_harness.mjs` still renders all 30 fixtures with no GLSL compile error after
-the edit. **chip, search-input, and menu remain text-only placeholders** — validated live in a
-browser that those 3 families' markup exists only in `desktop/library-ui.js`
-(`desktop/dist/index.html?libtest=1` + `chromasmithForceLibraryReady()` + `#lib-overlay.on.full`
-resolves them; the plain web build never does) — extending the catalogue to them needs a second,
-desktop-dist-targeted embed path, deferred rather than guessed at. **New scaling caveat found
-during verification**: each embed iframe loads the full ~17.7MB `chromasmith-22.html`
-independently — 9 live cards took ~5s to all reach `readyState:'complete'` on a fast local
-server, and production/CI use should confirm this stays acceptable before adding more embeds or
-enabling this by default outside local dev review. §1 (asbuilt reuse) and §4 (maintenance gates)
-below are still design-only, not yet built.
+**Implementation status (2026-09-13): §5a done for all 12 embeddable families.** 12 of 13
+`design/components.json` families (everything except `icon`, which is real SVG glyphs rendered
+separately in the Icons tab, not a DOM clone) now render as live `<iframe>` embeds in the report —
+real DOM/CSS cloned out of the app via a new `?catalog=1&live=1` mode, with a small per-family
+shim (`LIVE_WIRE` in `buildCatalogPage()`) reproducing just the class/attribute change a click
+drives, never the real app's global functions or shared localStorage. Verified live end-to-end:
+clicking the embedded toggle/section-chevron/segmented control flips the clone's class with no
+effect on the real hidden app instance sharing the page (checked `#tg-retouch`/`#seg-heal-mode`
+stayed untouched after clicking their clones), and `node test/export_harness.mjs` still renders
+all 30 fixtures with no GLSL compile error after the edit.
+
+`chip`, `search-input`, and `menu` needed a second embed path: confirmed live that those 3
+families' markup exists only in `desktop/library-ui.js`, gated by that file's own
+`if (!window.__TAURI__ && !LIBTEST) return;` (`LIBTEST` = `?libtest=1` in the URL, read once at
+parse time) — so their report cards embed `../desktop/dist/index.html?catalog=1&live=1&libtest=1`
+instead of `../chromasmith-22.html`. Two follow-on fixes this needed, both found by testing
+against the real desktop build rather than assumed: (1) `buildCatalogPage()`'s own trigger had to
+move from synchronous (ran before `library-ui.js`'s `<script src>` tag, further down the body,
+had even executed) to deferred on `window.load`, guarded so `chromasmith-22.html` is unaffected
+since the guard condition (`chromasmithForceLibraryReady` existing) is never true there; (2)
+`.lib-menu` is shown by a `.open` class, not the `.sec-active` class every other family uses, and
+is `position:absolute` against its real `#lib-overlay` ancestor — a new `FORCE_VISIBLE` map (one
+entry, `menu`) adds `.open` and resets `position:static` on the clone. `bash build-desktop.sh`
+must be re-run after any `chromasmith-22.html` catalog-mode edit for `desktop/dist/` to pick it
+up — confirmed via a stale-content mismatch during this pass, not assumed.
+
+**Scaling caveat found during verification**: each embed iframe loads the full ~17.7MB
+`chromasmith-22.html` (or ~equivalent `desktop/dist/index.html`) independently — 9 live cards
+took ~5s to all reach `readyState:'complete'` on a fast local server, and production/CI use
+should confirm this stays acceptable before adding more embeds or enabling this by default
+outside local dev review. §0 (asbuilt reuse) and §4 (maintenance gates) below are still
+design-only, not yet built.
 
 ## 0. Screenshots already exist — check before capturing anything new
 

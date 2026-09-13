@@ -22423,6 +22423,15 @@ function buildCatalogPage(){
       }));
     },
   };
+  // .fx-ctrl's own "sec-active" (added unconditionally below) is enough to make it visible — but
+  // .lib-menu is shown/hidden by a DIFFERENT class (.open, desktop/library-ui.js:1013) that
+  // sec-active doesn't touch, so it would otherwise clone in with its real closed-by-default
+  // display:none. Menus are also position:absolute against their real #lib-overlay ancestor
+  // (top:36px;right:0) — reset to static so the clone lays out in-flow in its own card instead of
+  // pinning to a corner of whatever ends up its positioned ancestor once detached.
+  const FORCE_VISIBLE={
+    'menu':(clone)=>{clone.classList.add('open');clone.style.position='static';},
+  };
   function resolveSel(sel){
     // .fx-row/.fx-toggle/.fx-sub sources above are given as a descendant selector rooted at an
     // id — walk up to the actual real component root to clone the whole real row/card, not just
@@ -22442,6 +22451,7 @@ function buildCatalogPage(){
     const clone=src.cloneNode(true);
     clone.removeAttribute('id');clone.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
     clone.classList.add('sec-active');
+    if(FORCE_VISIBLE[key])FORCE_VISIBLE[key](clone);
     _catStub(clone);_catState(clone,state);
     if(live&&LIVE_WIRE[key])LIVE_WIRE[key](clone);
     clone.setAttribute('data-cat',key+'-'+state);
