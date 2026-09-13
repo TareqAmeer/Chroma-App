@@ -345,39 +345,44 @@ function colorSections() {
 }
 
 function typographyRows() {
-  const sizeByPath = catalogue.fontSize;
-  return sizeByPath.map((e) => {
-    const px = parseFloat(e.value) || 16;
-    return `
+  return `
+    <div class="subhead">Font sizes — 1:1 duplicates merged</div>
+    ${groupedTypeRows(
+      catalogue.fontSize.map((e) => ({ name: e.path, value: e.value })),
+      (value) => `font-size:${parseFloat(value) || 16}px`,
+    )}
+    <div class="subhead">Font families — typography &amp; designSystem combined, 1:1 duplicates merged</div>
+    ${groupedTypeRows(
+      catalogue.fontFamily.filter((e) => !isAliasEntry(e)).map((e) => ({ name: e.path, value: resolveAny(e.value) })),
+      (value) => `font-family:${esc(value)}`,
+    )}
+    <div class="subhead">Font weights — typography &amp; designSystem combined, 1:1 duplicates merged</div>
+    ${groupedTypeRows(
+      catalogue.fontWeight.map((e) => ({ name: e.path, value: String(e.value) })),
+      (value) => `font-weight:${esc(value)}`,
+      (value) => `weight ${esc(value)}`,
+    )}`;
+}
+
+// Font families/weights have the same "same value, two names" pattern as colors (a typography/*
+// token and a designSystem/* token both declaring the identical face or weight) — quote style
+// ('SF Pro Text' vs "SF Pro Text") differs but is CSS-equivalent, so normalize before grouping.
+function normalizeFontValue(v) { return String(v).trim().replace(/"/g, "'").toLowerCase(); }
+function groupedTypeRows(items, sampleStyle, detailLabel) {
+  const byValue = new Map(); // normalized value -> { value, names: [] }
+  for (const { name, value } of items) {
+    const key = normalizeFontValue(value);
+    if (!byValue.has(key)) byValue.set(key, { value, names: [] });
+    byValue.get(key).names.push(name);
+  }
+  return [...byValue.values()].map(({ value, names }) => `
     <div class="type-row">
       <div class="type-meta">
-        <div class="type-path">${esc(e.path)}</div>
-        <div class="type-detail">${esc(e.value)}</div>
+        <div class="type-detail">${detailLabel ? detailLabel(value) : esc(value)}</div>
+        ${names.map((n) => `<div class="type-path">${esc(n)}</div>`).join('')}
       </div>
-      <div class="type-sample" style="font-size:${px}px">The quick brown fox jumps over the lazy dog</div>
-    </div>`;
-  }).join('') + `
-    <div class="subhead">Font families</div>
-    ${catalogue.fontFamily.filter((e) => !isAliasEntry(e)).map((e) => {
-      const resolved = resolveAny(e.value);
-      return `
-    <div class="type-row">
-      <div class="type-meta">
-        <div class="type-path">${esc(e.path)}</div>
-        <div class="type-detail">${esc(resolved)}</div>
-      </div>
-      <div class="type-sample" style="font-family:${esc(resolved)}">The quick brown fox jumps over the lazy dog</div>
-    </div>`;
-    }).join('')}
-    <div class="subhead">Font weights</div>
-    ${catalogue.fontWeight.map((e) => `
-    <div class="type-row">
-      <div class="type-meta">
-        <div class="type-path">${esc(e.path)}</div>
-        <div class="type-detail">weight ${esc(e.value)}</div>
-      </div>
-      <div class="type-sample" style="font-weight:${esc(e.value)}">The quick brown fox jumps over the lazy dog</div>
-    </div>`).join('')}`;
+      <div class="type-sample" style="${sampleStyle(value)}">The quick brown fox jumps over the lazy dog</div>
+    </div>`).join('');
 }
 
 function layoutRows() {
@@ -490,12 +495,16 @@ const generatedAt = new Date().toISOString();
 const out = `<!doctype html>
 <html><head><meta charset="utf-8"><title>Chromasmith Token Report</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { margin:0; font-family:-apple-system,system-ui,sans-serif; background:#fff; color:#111; }
-  @media (prefers-color-scheme: dark) { body { background:#1a1a1a; color:#eee; } }
-  header { padding:20px 28px 0; }
+  :root { color-scheme: light dark; --rep-bg:#fff; --rep-fg:#111; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --rep-bg:#1a1a1a; --rep-fg:#eee; } }
+  :root[data-theme="dark"] { --rep-bg:#1a1a1a; --rep-fg:#eee; }
+  :root[data-theme="light"] { --rep-bg:#fff; --rep-fg:#111; }
+  body { margin:0; font-family:-apple-system,system-ui,sans-serif; background:var(--rep-bg); color:var(--rep-fg); }
+  header { padding:20px 28px 0; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
   h1 { font-size:20px; margin:0 0 4px; }
   .meta { color:#888; font-size:12px; margin-bottom:16px; }
+  #theme-toggle { flex:none; background:none; border:1px solid rgba(128,128,128,.35); border-radius:8px; font:inherit; font-size:13px; padding:6px 12px; cursor:pointer; color:inherit; }
+  #theme-toggle:hover { border-color:rgba(128,128,128,.6); }
   nav { display:flex; gap:24px; padding:0 28px; border-bottom:1px solid rgba(128,128,128,.25); }
   nav button { background:none; border:none; font:inherit; font-size:15px; padding:10px 0; cursor:pointer; color:inherit; opacity:.55; border-bottom:2px solid transparent; }
   nav button.active { opacity:1; border-bottom-color:#0066cc; font-weight:600; }
@@ -556,8 +565,11 @@ const out = `<!doctype html>
 </head>
 <body>
 <header>
-  <h1>Chromasmith Token Report</h1>
-  <div class="meta">Generated ${generatedAt} from design/tokens.json + chromasmith-22.html — re-run <code>node scripts/token-report.mjs</code> to refresh.</div>
+  <div>
+    <h1>Chromasmith Token Report</h1>
+    <div class="meta">Generated ${generatedAt} from design/tokens.json + chromasmith-22.html — re-run <code>node scripts/token-report.mjs</code> to refresh.</div>
+  </div>
+  <button id="theme-toggle" onclick="toggleReportTheme()">Toggle theme</button>
 </header>
 <nav>
   <button data-tab="colors" class="active">Colors <span class="count">${catalogue.color.filter((e) => !isAliasEntry(e)).length}</span></button>
@@ -576,6 +588,26 @@ const out = `<!doctype html>
   <div class="panel" id="panel-violations">${violationRows()}</div>
 </main>
 <script>
+(function initReportTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem('token-report-theme'); } catch {}
+  if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
+  updateThemeToggleLabel();
+})();
+function updateThemeToggleLabel() {
+  const btn = document.getElementById('theme-toggle');
+  const current = document.documentElement.dataset.theme
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  btn.textContent = current === 'dark' ? 'Switch to light' : 'Switch to dark';
+}
+function toggleReportTheme() {
+  const current = document.documentElement.dataset.theme
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('token-report-theme', next); } catch {}
+  updateThemeToggleLabel();
+}
 document.querySelectorAll('nav button').forEach((b) => {
   b.addEventListener('click', () => {
     document.querySelectorAll('nav button').forEach((x) => x.classList.remove('active'));
