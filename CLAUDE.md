@@ -206,8 +206,8 @@ carrying it in every turn:
   virtualisation/hashing fixes, determinism rules), plus the two gates known to be flaky on this
   machine. Load before touching any test file; §2 above has just the run commands.
 - **[docs/editor-redesign-plan.md](docs/editor-redesign-plan.md)** — the Editor redesign process:
-  who designs what, the per-panel loop (design → `PAIRS` entry → spec item → behaviour test →
-  implement → gates), the order of work, and what each check can and cannot see. **Load this
+  the evidence-driven component and per-panel loop, its focused checks, the order of work, and
+  what each check can and cannot see. **Load this
   before any Editor layout/style work** — it supersedes HANDOVER_EDITOR.md's ordering, which
   predates the tooling now in place. `npm run editor:coverage` is its live status view.
 - **[HANDOVER_EDITOR.md](HANDOVER_EDITOR.md)** — history of how that tooling got here: the
@@ -235,4 +235,3 @@ carrying it in every turn:
 
 See [calib/CLAUDE.md](calib/CLAUDE.md) for chart zone pixel coordinates and the
 full halation/grain/Fujify calibration method.
-

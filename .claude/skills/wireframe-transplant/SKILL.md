@@ -105,6 +105,23 @@ layout mode, add it as an axis of that test's layout matrix in the same commit �
 sidebar), give it its own entry in `design/surfaces.json` (`surface_coverage_check.mjs`).
 See docs/process-lessons.md #18 for the bug that made this a rule.
 
+## Per-component and per-panel loop
+
+Follow the canonical evidence and implementation process in
+`docs/editor-redesign-plan.md` §1 with any coding assistant. In order: query the exact family and
+affected declarations with `node scripts/query-components.mjs`; run `npm run components:check`
+before editing; read only the relevant family contract; create and approve a reference
+specification before implementing when a visual reference is involved; record the active panel;
+read only its approved panel/reference specification and the grep-located production section;
+implement with existing markup and shared components; run the focused typed diff and panel
+checks; capture the required panel pair; request independent review in a fresh chat using only the
+approved specification, affected files, and validation evidence; then rerun the registry and
+focused validations. Commit implementation and validation evidence separately when appropriate.
+
+The typed diff command is `node test/editor_wireframe_diff.mjs --panel <panel> --json`; the panel
+pair capture command is `node test/panel_pair_shots.mjs --panel <panel>`. The latter creates
+screenshots. Preserve Step 3b's every-width rule for layout changes.
+
 ## Step 4 — verify against the real app build, not just the harness
 
 `bash build-desktop.sh` stages `desktop/dist/` for the `?libtest=1`

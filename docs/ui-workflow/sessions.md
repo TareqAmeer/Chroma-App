@@ -243,49 +243,21 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > Write `test/catalog_visual.mjs` as a Playwright test with `toHaveScreenshot()` per component and state. Add it to `testMatch` in `playwright.config.mjs`; the config only runs files that match there. Add it to `test/editor_gates.mjs`. Baselines are per-platform (Playwright adds the OS to the file name); commit this Mac's, and note in STATE.md that CI needs its own.
 > Done when the catalogue has no console errors, the baselines are committed, and a planted 1px `.fx-row` padding change fails the test (then revert it).
 
-**S12: Update the process docs** (Sonnet 5)
-> Read docs/ui-workflow/STATE.md and follow its rules. Task: rewrite §1 of `docs/editor-redesign-plan.md` and the loop section of `.claude/skills/wireframe-transplant/SKILL.md` (keep its existing Step 3b, "every width") for the new per-panel loop:
-> Before changing a repeated component or icon, query `design/components.json` through `scripts/query-components.mjs`; the registry, not a hand-written occurrence list, defines the affected production declarations. Run `npm run components:check` before implementation and after it.
-> 1. `echo <panel> > .claude/state/active-panel`
-> 2. Read only `design/specs/<panel>.json` plus the grep-located app section.
-> 3. Implement by moving existing markup.
-> 4. The Stop hook's typed diff blocks the turn from ending until mismatches are fixed.
-> 5. Run `panel_pair_shots.mjs --panel <panel>`.
-> 6. A fresh-context reviewer subagent checks against the spec.
-> 7. Commit implementation and tests separately.
->
-> Also update CLAUDE.md §5's `editor-redesign-plan.md` pointer if its description changes.
-> Done when every script, flag and path named in both files exists. A Haiku subagent runs each named command with `--help`, or on one panel, and reports any that fail.
+**S12: Step 12 documentation update**
+> Use a new chat for this documentation task. Read only the requested ranges in `docs/ui-workflow/STATE.md`, `docs/ui-workflow/sessions.md`, `docs/editor-redesign-plan.md`, `.claude/skills/wireframe-transplant/SKILL.md`, `CLAUDE.md`, the component registry/contract/reference workflow READMEs, and package scripts. Update the canonical per-component/per-panel process and this S12/S13 guidance. Keep the workflow vendor-neutral, preserve Step 3b's every-width rule, change the upcoming pilot to Color, and retain Masks as historical evidence. Verify all paths and commands that the changed process names; run the focused documentation checks. Use no more than 5 percentage points of the five-hour usage allowance; check usage before work and before optional work. Stop if a documented process conflicts with an executable command; report the conflict instead of inventing a replacement.
 
-**S13: Per-panel build, repeat per panel; pilot = Masks** (Sonnet 5, high effort; after 2 failed rounds on the same mismatch, stop and continue in a new Opus 5 chat)
-> Read docs/ui-workflow/STATE.md and follow its rules. Build the **{PANEL}** panel.
-> Query `design/components.json` through `scripts/query-components.mjs` for every shared component or icon touched by the design, and list all affected declarations before editing.
-> Wireframe panel keys: adjust, color, crop, detail, export, film, frame, info, looks, masks, retouch. Wireframe `masks` = app `local`.
-> (0) **List the backlog items that touch this panel.** Grep `test/editor_ux_spec.json` for items whose `panel` or `source` names it, and include every open one in this build. For Masks that includes MA1. A separate chrome run handles T55 (rail 64px), T56 (panel 300px) and T58 (canvas cut off at 700px).
-> (1) `echo {PANEL} > .claude/state/active-panel`
-> (2) Read only `design/specs/{PANEL}.json` and the matching `chromasmith-22.html` section; locate it with grep, never read the whole file.
-> (3) Implement by moving the existing markup, not rewriting it.
-> (4) Let the Stop hook's diff drive the fixes. Full `npm run editor:gates` runs go to a Haiku subagent that reports failures beyond the baseline only.
-> (5) Run `node test/panel_pair_shots.mjs --panel {PANEL}`, and have a fresh-context Opus reviewer subagent compare the images with the spec and report only real mismatches.
-> (6) Commit the implementation and tests separately, set each backlog item you finished to `fixed`, then delete `active-panel`.
->
-> Record in STATE.md: rounds used, reviewer findings, backlog items closed, and anything the spec got wrong.
+**S13: Per-panel implementation, repeat per panel; pilot = Color**
+> Use a new chat for this Color implementation. Every component-contract review, reference analysis, implementation, and independent review also gets its own new chat. Read `docs/ui-workflow/STATE.md` and follow its current process; earlier Masks work remains historical workflow evidence and does not change this pilot. Identify the Color component family and every affected declaration with `scripts/query-components.mjs`, then run `npm run components:check` before editing. Read only the relevant family contract. If a visual reference is involved, create its reference specification, resolve open questions, and obtain approval before implementation. Record the active panel in this task's prompt or notes. Read only the approved panel/reference spec and the grep-located production section. Implement with existing markup and shared components. Run the focused typed diff and panel checks, capture the panel pair, and request review in a separate fresh chat with no implementation context beyond the approved spec, affected files, and validation evidence. Rerun the registry and focused validations; record rounds, review findings, closed backlog items, and spec corrections in STATE.md. Commit implementation and validation evidence separately when appropriate. Use no more than 5 percentage points of the five-hour usage allowance; check usage before work and before optional work. Do not run unrelated gates or broaden the panel scope.
 
 **S13-chrome: App frame fixes** (Sonnet 5; one run, after S9)
 > Same loop as S13, for the items that aren't a panel: T55 (tool rail 64px; the mismatch appears in light mode only, so find out why first), T56 (tool panel 300px, probably the same cause), T58 (photo preview cut off at a 700px window), T59 (Library thumbnails cut off at 640px with a 420px sidebar) and T57 (square / original-size thumbnails; read its note first). `editor_responsive_qa.mjs` and `library_responsive_qa.mjs` must stay clean, and each item's allowlist entry is removed when it's fixed.
 
 ## Model per session
-Relative cost per token: Haiku 4.5 = 1×, Sonnet 5 = 2×, Opus 5 = 5×, Fable 5.1 = 10×.
-Pick the model when a session starts. Switching mid-session makes the whole conversation be re-read at full price, because the saved (cached) context only works for the model that built it.
+Use one new chat for each component contract, reference analysis, implementation, and independent
+review. Every task prompt must state an explicit five-hour usage cap and require a usage check
+before work and before optional work. Keep review independent: its only implementation context is
+the approved specification, affected files, and validation evidence.
 
-| Phase | Main session | Helpers (subagents) | Session |
-|---|---|---|---|
-| Spike | Opus 5, high effort | Haiku to run scripts and summarise output | New; its findings go into STATE.md |
-| Step 1: pause gates, fix stale docs | Sonnet 5 | none | New, short |
-| Step 2: token bridge | Opus 5 for the role mapping, then Sonnet 5 for the generator script | none | New |
-| Phase 0: inventory and capture | Sonnet 5 writes the scripts | Haiku runs the captures and reports counts | New; one session per surface group |
-| Step 3: spec extract and generated `PAIRS` | Opus 5 | Haiku for gate runs | New |
-| Step 4: typed diff and Stop hook | Sonnet 5 | none | New |
-| Step 5: design stage | Opus 5; Fable 5.1 only for a whole-surface redesign where Opus has already fallen short | none | New, per surface |
-| Step 6: catalogue page | Opus 5 (large-file surgery) | Haiku for gate runs | New |
-| Per-panel build (after Step 4) | Sonnet 5, high effort; switch to Opus in a new session after 2 failed rounds | Opus fresh-context reviewer; Haiku for gates and screenshots | One panel per session |
+Optional model guidance is role-based: Luna for deterministic checks and small documentation
+changes; Terra for bounded implementation; Astra only for difficult visual interpretation or
+unresolved review. Do not require subagents or a particular vendor's helper feature.

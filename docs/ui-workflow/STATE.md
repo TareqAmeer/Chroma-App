@@ -936,3 +936,16 @@ call `ui:test`) will currently fail on that until it's fixed.
 - Reference observations, repository evidence, design rules, proposals, user decisions, and approval are separate; missing states and unresolved questions stay explicit.
 - Specs name a contract family; the validator resolves its existing contract and rejects unsupported families or approval with open questions.
 - Added one-file and all-specification npm validation commands; implementation requires explicit user approval and acceptance criteria.
+
+**Step 12 — process documentation updated — 2026-09-13**
+- Updated `docs/editor-redesign-plan.md`, `.claude/skills/wireframe-transplant/SKILL.md`,
+  `docs/ui-workflow/sessions.md`, and the now-inaccurate pointer in `CLAUDE.md`.
+- Confirmed `npm run components:check`, `npm run components:contracts:check`, and
+  `npm run reference:spec:validate:all` pass. Query, family-contract, template-validation, and
+  path checks passed; screenshot capture and browser-based typed-diff execution were not run in
+  this documentation-only step.
+- Found stale references to `.claude/state/active-panel` (not present in the starting tree) and
+  `editor:wireframe-diff` (not an npm script; the direct test file exists). The canonical loop
+  records the active panel in task notes. The script's runtime invocation remains unverified here.
+- The upcoming per-panel pilot is **Color**. Masks remains historical evidence; no Color
+  implementation or product artifact changed.

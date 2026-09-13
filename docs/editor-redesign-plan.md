@@ -33,53 +33,44 @@ Run `npm run editor:coverage` for the current state. Today:
 
 ## 1. The division of labour
 
-**You design. I wire and implement. A machine decides whether it matches.**
+Use this same evidence-driven loop with Codex, Claude, or another coding assistant. Commands and
+repository evidence are shared; no vendor-specific helper or subagent is required. Complete one
+component or panel at a time:
 
-The third part is the one that has failed before, in both directions: a model judging its own
-screenshot reported success on broken UI, and a property-only check reported PASS while whole
-elements were missing. Neither of those is in this loop.
+1. Identify the exact component family and affected declarations with
+   `node scripts/query-components.mjs --family <family>` (and `--icon <name>` for a semantic icon).
+   Record the source files, lines, and selectors that the query returns.
+2. Run `npm run components:check` before editing.
+3. Read only `docs/ui-workflow/component-contracts/contracts/<family>.json` for the family being
+   changed. Treat draft observations as evidence, not approved design decisions.
+4. If a visual reference is involved, create a reference specification using
+   `docs/ui-workflow/reference-to-spec/README.md` and its template, resolve its approval-blocking
+   questions, and obtain approval before implementation.
+5. Record the active panel in the task prompt or task notes.
+6. Read only the approved panel specification and, when applicable, the approved reference
+   specification, plus the grep-located production section needed for the named targets. Do not
+   read the production file in full.
+7. Implement with existing markup and shared components; move existing markup when possible.
+8. Run the focused typed diff, `node test/editor_wireframe_diff.mjs --panel <panel> --json`, and
+   the panel-specific checks required by the approved specification. For layout changes, preserve
+   the every-width requirement in §3 and in the wireframe-transplant skill.
+9. Capture the panel pair with `node test/panel_pair_shots.mjs --panel <panel>`.
+10. Review the result against explicit acceptance criteria in a fresh, separate chat. Give the
+    reviewer no implementation context beyond the approved specification, affected files, and
+    validation evidence. The reviewer reports mismatches against those criteria.
+11. Run `npm run components:check` and the focused contract/specification validations again.
+12. Commit implementation and validation evidence separately when that separation is useful.
 
-### What you do, per panel
+The query is authoritative for source-locatable shared declarations; dynamic declarations and
+instances without stable selectors remain visible coverage debt and must be considered. Component
+contract validation is `node scripts/validate-component-contracts.mjs --family <family>`. A
+reference specification is checked with `npm run reference:spec:validate -- <spec-path>`.
 
-Fill in the placeholder panel in `chromasmith-design/project/Editor (Developer) View.dc.html`.
-It is a real HTML file — edit it directly, or through Claude Design's canvas, whichever you
-prefer. Two requirements, both cheap and both load-bearing:
+### Optional model guidance
 
-1. **Use the wireframe's own `_ds` tokens** for colour, type and spacing. A hard-coded hex is
-   how token drift enters, and token drift is the single biggest category in the existing
-   backlog (see `test/editor_wireframe_accepted.json` — nearly every entry is one border token
-   used in the wrong role).
-2. **Draw every state you care about**, not just the resting one. Hover, active, disabled,
-   empty, and the long-content case. Anything you don't draw, I will invent, and my invention is
-   what you'll be correcting later at ten times the cost.
-
-You do **not** need to write a spec, a token table, or measurements. That was tried and it did
-not help — the numbers get read off the wireframe programmatically.
-
-### What I do, per panel
-
-In this order, and none of it is optional:
-
-1. **Add a `PAIRS` entry** in `test/editor_wireframe_diff.mjs` mapping the wireframe panel to
-   its app counterpart. This is what makes the panel's 12 properties machine-comparable. Without
-   it, the panel is invisible to every check.
-2. **Add spec items** to `test/editor_ux_spec.json` — one per discrete change, each with a
-   stable ID and a named `check`. An item with `check: null` is an item that will not get
-   verified.
-3. **Add behaviour tests** to `test/editor_wireframe_behaviour.mjs` for anything clickable,
-   draggable or keyboard-driven in the panel. **This is the step that protects a re-layout.**
-   Moving markup is what silently severs wiring, and the Editor has ~10 interaction tests where
-   the Library has 78. Every control I move needs a test asserting it still does something
-   *before* I move it.
-4. **Implement**, moving existing markup rather than rewriting it — see §3.
-5. **Run `npm run editor:gates`** and iterate until green.
-6. **Screenshot the result and look at it.** Not to measure — to catch the class of defect no
-   check has an opinion about (something ugly, something in a nonsensical place).
-   ⚠️ T25 (editor_ux_spec.json, 2026-09-10): this step was done for Retouch and then skipped for
-   every panel implemented after it (Detail/Film/Frame/Crop/Color) — every automated check here
-   explicitly disclaims it cannot see "something ugly or in a nonsensical place", and that
-   disclaimer is only honored if this step actually happens, per panel, not once at the end.
-   Do it before moving to the next panel, not batched later.
+Use Luna for deterministic checks and small documentation changes, Terra for bounded
+implementation, and Astra only for difficult visual interpretation or unresolved review. These
+are optional role suggestions; the workflow, checks, and evidence do not depend on a model choice.
 
 ---
 
