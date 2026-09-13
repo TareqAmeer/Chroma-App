@@ -39,3 +39,17 @@ counted as covered.
 The `appleComponent` field maps a family to the closest component defined by
 `chromasmith-design/project/design.md`. `null` means the Apple-derived file does not define that
 app-specific component. Create and approve a component contract for it before redesigning it.
+
+## Component contracts
+
+`docs/ui-workflow/component-contracts/` is the review layer above this generated source map.
+Contracts keep generated observations (including registry locations) separate from authored
+targets and approval metadata. For the current toggle review, use:
+
+```bash
+node scripts/validate-component-contracts.mjs --family toggle
+```
+
+This is documentation validation, not an application gate. It neither creates an approval nor
+promotes a baseline; Phase 3 begins only after the contract’s explicit review questions are
+resolved.

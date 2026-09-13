@@ -891,3 +891,35 @@ call `ui:test`) will currently fail on that until it's fixed.
   on every entry; the four surfaces now carry `approvedBy:"user"`. This approval does not hide
   the separately reported dark light-theme `hq-offline-quit-modal` capture or the two Compare
   child integrity failures.
+
+**Phase 2A — toggle contract — 2026-09-13 — awaiting review**
+- Proceeded only after the user explicitly approved continuing despite the still-open Phase 1
+  `hq-offline-quit-modal` light-theme mismatch and `lib-compare-bar`/`lib-compare-panes`
+  integrity failures. That approval is reliance for this documentation pass only; it does not
+  approve, suppress, or repair those Phase 1 findings.
+- Added the vendor-neutral contract system at
+  `docs/ui-workflow/component-contracts/`: `schema.json` records the common machine-readable
+  shape; `contracts/toggle.json` is the sole real-family contract; and
+  `scripts/validate-component-contracts.mjs` runs it offline. Generated observations and registry
+  locations are separate from authored decisions/targets/questions/approval. Refresh mode updates
+  observations only and checks the authored digest; neither it nor validation can approve a
+  contract or write a baseline. `component-registry.md` documents the location and command.
+- Toggle evidence is intentionally discrepant, not normalized: the registry query resolves **23**
+  source registrations (21 Editor `.fx-toggle`, two Library `.opt-toggle` menu buttons), while
+  saved runtime evidence contains **13** appearances: catalogue Retouch plus `#tg-local` across
+  Masks dynamic states, Library-full, and mobile. Thus runtime does not establish distinct live
+  coverage for every source registration or either Library menu toggle. The contract also records
+  the two presentations, real `.on` state/keyboard pointer behavior, dark/light token behavior,
+  forced-colors/reduced-motion handling, raw geometry/motion literals, catalogue-only synthetic
+  states, and the 32×18 desktop switch versus 44px target-rule exception.
+- Focused checks passed: `node scripts/build-component-registry.mjs --check` (765 instances),
+  `node scripts/query-components.mjs --family toggle` (23), `node --check
+  scripts/validate-component-contracts.mjs`, contract validation for `--all` and `--family
+  toggle` (23 registry / 13 runtime), changed-JSON parsing, and `git diff --check`. No production
+  toggle, other component, application gate, commit, or push was changed.
+- **User decisions — 2026-09-13:** keep `.opt-toggle` within the toggle family; make 44px the
+  minimum interaction target; migrate geometry/motion to design tokens; and require live testing
+  and validation in every relevant context (Editor, Library menus, mobile, dynamically created
+  variants). These decisions do **not** approve the overall contract structure or authorize
+  production changes. Phase 3 remains blocked pending that separate approval and exact
+  token/interaction implementation proposals.

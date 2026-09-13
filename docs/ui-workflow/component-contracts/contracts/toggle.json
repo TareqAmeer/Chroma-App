@@ -1,0 +1,656 @@
+{
+  "schemaVersion": 1,
+  "family": "toggle",
+  "purpose": "Record the current, source-backed toggle family and the decisions required before any family-wide redesign.",
+  "status": "proposed",
+  "observations": {
+    "generatedBy": "scripts/validate-component-contracts.mjs --refresh-observations",
+    "generatedAt": "2026-09-13T03:50:52.449Z",
+    "registry": {
+      "query": "node scripts/query-components.mjs --family toggle",
+      "expectedCount": 23,
+      "locations": [
+        {
+          "key": "chromasmith-22.html:1876:toggle",
+          "source": "chromasmith-22.html",
+          "line": 1876,
+          "selector": "#tg-adjust",
+          "id": "tg-adjust",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:1927:toggle",
+          "source": "chromasmith-22.html",
+          "line": 1927,
+          "selector": "#tg-demosaic-ahd",
+          "id": "tg-demosaic-ahd",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:1950:toggle",
+          "source": "chromasmith-22.html",
+          "line": 1950,
+          "selector": "#tg-curves",
+          "id": "tg-curves",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:1988:toggle",
+          "source": "chromasmith-22.html",
+          "line": 1988,
+          "selector": "#tg-hsl",
+          "id": "tg-hsl",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2003:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2003,
+          "selector": "#tg-wheels",
+          "id": "tg-wheels",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2033:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2033,
+          "selector": "#tg-pointcolor",
+          "id": "tg-pointcolor",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2055:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2055,
+          "selector": "#tg-local",
+          "id": "tg-local",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2094:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2094,
+          "selector": "#tg-lens-auto",
+          "id": "tg-lens-auto",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2190:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2190,
+          "selector": "#tg-grain",
+          "id": "tg-grain",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2222:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2222,
+          "selector": "#tg-art",
+          "id": "tg-art",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2233:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2233,
+          "selector": "#tg-hal",
+          "id": "tg-hal",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2238:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2238,
+          "selector": "#tg-hal-white",
+          "id": "tg-hal-white",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2239:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2239,
+          "selector": "#tg-hal-noremjet",
+          "id": "tg-hal-noremjet",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2240:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2240,
+          "selector": "#tg-hal-extreme",
+          "id": "tg-hal-extreme",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2245:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2245,
+          "selector": "#tg-bloom",
+          "id": "tg-bloom",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2254:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2254,
+          "selector": "#tg-vig",
+          "id": "tg-vig",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2261:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2261,
+          "selector": "#tg-borders",
+          "id": "tg-borders",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2286:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2286,
+          "selector": "#tg-retouch",
+          "id": "tg-retouch",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2310:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2310,
+          "selector": "#tg-canvas",
+          "id": "tg-canvas",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2384:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2384,
+          "selector": "#tg-exp-wm",
+          "id": "tg-exp-wm",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "chromasmith-22.html:2459:toggle",
+          "source": "chromasmith-22.html",
+          "line": 2459,
+          "selector": "#tg-gp-save",
+          "id": "tg-gp-save",
+          "classes": [
+            "fx-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "desktop/library-ui.js:1940:toggle",
+          "source": "desktop/library-ui.js",
+          "line": 1940,
+          "selector": "#lib-aspect-toggle",
+          "id": "lib-aspect-toggle",
+          "classes": [
+            "lib-btn",
+            "opt-action",
+            "opt-toggle"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "desktop/library-ui.js:1953:toggle",
+          "source": "desktop/library-ui.js",
+          "line": 1953,
+          "selector": "#lib-tree-toggle",
+          "id": "lib-tree-toggle",
+          "classes": [
+            "lib-btn",
+            "opt-action",
+            "opt-toggle"
+          ],
+          "dynamic": false
+        }
+      ]
+    },
+    "runtime": {
+      "appearanceCount": 13,
+      "distinctSemantics": [
+        "#tg-local",
+        "[aria-label=\"Retouch\"]"
+      ],
+      "states": [
+        "catalog",
+        "editor:masks-ai",
+        "editor:masks-brush",
+        "editor:masks-coat",
+        "editor:masks-color",
+        "editor:masks-depth",
+        "editor:masks-linear",
+        "editor:masks-lum",
+        "editor:masks-radial",
+        "editor:masks-skin",
+        "editor:masks-sky",
+        "library:full",
+        "mobile"
+      ],
+      "instances": [
+        {
+          "family": "toggle",
+          "state": "catalog",
+          "semantic": "[aria-label=\"Retouch\"]",
+          "selector": "[aria-label=\"Retouch\"]",
+          "tag": "div",
+          "classes": [
+            "fx-toggle"
+          ],
+          "label": "Retouch",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "toggle",
+          "state": "editor:masks-ai",
+          "semantic": "#tg-local",
+          "selector": "#tg-local",
+          "tag": "div",
+          "classes": [
+            "fx-toggle",
+            "on"
+          ],
+          "label": "Masks",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2055:toggle"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "toggle",
+          "state": "editor:masks-brush",
+          "semantic": "#tg-local",
+          "selector": "#tg-local",
+          "tag": "div",
+          "classes": [
+            "fx-toggle",
+            "on"
+          ],
+          "label": "Masks",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2055:toggle"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "toggle",
+          "state": "editor:masks-coat",
+          "semantic": "#tg-local",
+          "selector": "#tg-local",
+          "tag": "div",
+          "classes": [
+            "fx-toggle",
+            "on"
+          ],
+          "label": "Masks",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2055:toggle"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "toggle",
+          "state": "editor:masks-color",
+          "semantic": "#tg-local",
+          "selector": "#tg-local",
+          "tag": "div",
+          "classes": [
+            "fx-toggle",
+            "on"
+          ],
+          "label": "Masks",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2055:toggle"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "toggle",
+          "state": "editor:masks-depth",
+          "semantic": "#tg-local",
+          "selector": "#tg-local",
+          "tag": "div",
+          "classes": [
+            "fx-toggle",
+            "on"
+          ],
+          "label": "Masks",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2055:toggle"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "toggle",
+          "state": "editor:masks-linear",
+          "semantic": "#tg-local",
+          "selector": "#tg-local",
+          "tag": "div",
+          "classes": [
+            "fx-toggle",
+            "on"
+          ],
+          "label": "Masks",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2055:toggle"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "toggle",
+          "state": "editor:masks-lum",
+          "semantic": "#tg-local",
+          "selector": "#tg-local",
+          "tag": "div",
+          "classes": [
+            "fx-toggle",
+            "on"
+          ],
+          "label": "Masks",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2055:toggle"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "toggle",
+          "state": "editor:masks-radial",
+          "semantic": "#tg-local",
+          "selector": "#tg-local",
+          "tag": "div",
+          "classes": [
+            "fx-toggle",
+            "on"
+          ],
+          "label": "Masks",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2055:toggle"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "toggle",
+          "state": "editor:masks-skin",
+          "semantic": "#tg-local",
+          "selector": "#tg-local",
+          "tag": "div",
+          "classes": [
+            "fx-toggle",
+            "on"
+          ],
+          "label": "Masks",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2055:toggle"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "toggle",
+          "state": "editor:masks-sky",
+          "semantic": "#tg-local",
+          "selector": "#tg-local",
+          "tag": "div",
+          "classes": [
+            "fx-toggle",
+            "on"
+          ],
+          "label": "Masks",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2055:toggle"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "toggle",
+          "state": "library:full",
+          "semantic": "#tg-local",
+          "selector": "#tg-local",
+          "tag": "div",
+          "classes": [
+            "fx-toggle",
+            "on"
+          ],
+          "label": "Masks",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2055:toggle"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "toggle",
+          "state": "mobile",
+          "semantic": "#tg-local",
+          "selector": "#tg-local",
+          "tag": "div",
+          "classes": [
+            "fx-toggle",
+            "on"
+          ],
+          "label": "Masks",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2055:toggle"
+          ],
+          "unresolved": false
+        }
+      ]
+    }
+  },
+  "authored": {
+    "identity": {
+      "family": "toggle",
+      "subfamilies": [
+        "Editor custom switch (.fx-toggle)",
+        "Library persistent menu toggle (.opt-toggle)"
+      ],
+      "designSystemComponent": null,
+      "designSystemEvidence": "chromasmith-design/project/design.md contains no Toggle component; component registry maps toggle to null."
+    },
+    "semantics": {
+      "editor": "A div enhanced after boot to role=switch, tabindex=0, and aria-checked; the .on class is the state source.",
+      "library": "A native button in the View settings menu; .on exposes a checkmark rather than a switch track.",
+      "mismatch": "One registry family contains two interaction presentations. A future shared contract must decide whether that is intentional family scope or two families."
+    },
+    "anatomy": {
+      "editor": [
+        "track",
+        "thumb pseudo-element",
+        "optional adjacent/containing label",
+        "state class .on"
+      ],
+      "library": [
+        "button row",
+        "text span",
+        "check SVG",
+        "state class .on"
+      ]
+    },
+    "variants": [
+      "section master",
+      "row-level option",
+      "catalogue clone",
+      "Library menu persistent option"
+    ],
+    "themes": {
+      "current": "Editor track uses --bdr off and --acc on; token values change in dark/light. Library check stroke uses --primary.",
+      "proposed": "No visual target proposed."
+    },
+    "states": {
+      "current": [
+        "off",
+        "on",
+        "keyboard focus-visible",
+        "forced-colors",
+        "reduced-motion",
+        "catalogue rest",
+        "catalogue modified"
+      ],
+      "evidenceLimit": "Catalogue disabled and long-label states are synthetic clones; no claim is made that every production toggle has a disabled state."
+    },
+    "responsiveDimensions": {
+      "desktopEditor": "32x18px track; 14px thumb; visual target is smaller than global 44px minimum hit-target rule.",
+      "mobileEditor": "44x24px track; 20px thumb under body.mobile-fx.",
+      "library": "Menu row dimensions are inherited from the Library option-row system; no runtime measurement was captured in the component runtime registry."
+    },
+    "tokens": {
+      "references": [
+        "color.border.default",
+        "color.action.primary",
+        "motion.ease",
+        "motion.durationFast"
+      ],
+      "rawLiterals": [
+        "32px",
+        "18px",
+        "14px",
+        "#fff",
+        "0.18s",
+        "cubic-bezier(.34,1.4,.64,1)",
+        "rgba(0,0,0,.25)",
+        "rgba(0,0,0,.4)"
+      ],
+      "exception": "CSS transition values and switch geometry are raw literals, not design tokens. This contract records them; it does not normalize them."
+    },
+    "typography": {
+      "current": "Editor switch has no visible text; its accessible name is derived from row label or section title. Library menu control inherits menu-row typography.",
+      "proposed": "No typography change proposed."
+    },
+    "motion": {
+      "current": "Track background transitions over .18s ease; thumb left transitions over .18s with cubic-bezier(.34,1.4,.64,1). Global reduced-motion overrides transition duration.",
+      "proposed": "No motion target proposed; review whether raw spring-like thumb motion is compatible with the design system’s restrained motion rule."
+    },
+    "keyboardPointer": {
+      "pointer": "Editor inline onclick handlers toggle .on; a dimmed off section auto-enables before the control action. Library buttons retain native button activation.",
+      "keyboard": "Editor enhancer maps Enter and Space to click; Library uses native button keyboard behavior."
+    },
+    "accessibility": {
+      "editor": "Boot enhancer adds role=switch, aria-checked, tabindex, derived aria-label, and a MutationObserver to synchronize aria-checked with .on. Forced-colors adds CanvasText border.",
+      "knownRisk": "32x18 desktop visual/interaction box conflicts with documented 44px minimum target; no invisible enlargement is proposed without approval."
+    },
+    "systemDesignRules": [
+      "Design.md has no Toggle specification; do not infer an Apple-style final switch.",
+      "Use one interactive colour; selected state must remain legible in dark and light modes.",
+      "Respect reduced motion and forced-colors behavior.",
+      "Minimum hit target is 44px except documented exceptions; current desktop switch is unresolved."
+    ],
+    "exceptions": [
+      "Registry source family combines Editor switch and Library checked menu option.",
+      "Runtime registry proves only catalogue and Masks appearances; it does not prove every source declaration or either Library menu option.",
+      "Current catalogue covers a Retouch clone and synthetic state matrix, not every source instance."
+    ],
+    "currentVsProposed": {
+      "current": "Two presentations, 23 source registrations, 13 saved runtime appearances, raw geometry/motion literals, and no Design.md Toggle definition.",
+      "proposed": "Keep .opt-toggle in the toggle family; establish a 44px minimum interaction target; and migrate switch geometry/motion to design tokens after live coverage is completed. No production UI, baseline, or overall contract approval is created in Phase 2A."
+    },
+    "userDecisions": {
+      "recordedAt": "2026-09-13",
+      "familyScope": "Keep .opt-toggle in the toggle family.",
+      "interactionTarget": "44px minimum interaction target.",
+      "tokenization": "Switch geometry and motion should become design tokens.",
+      "coverageRequirement": "Live testing and validation is mandatory for every relevant context: Editor, Library menus, mobile, and dynamically created variants.",
+      "approvalBoundary": "These decisions do not approve the overall contract structure or authorize production UI changes."
+    },
+    "references": [
+      "docs/ui-workflow/component-registry.md",
+      "chromasmith-design/project/design.md",
+      "chromasmith-22.html:222",
+      "chromasmith-22.html:10114",
+      "chromasmith-22.html:21717",
+      "desktop/library-ui.js:1940",
+      "desktop/library-ui.js:1953",
+      "test/catalog_visual.mjs"
+    ],
+    "questions": [
+      "Which named geometry and motion tokens, and which exact values, should Phase 3 propose after live coverage passes?",
+      "What exact 44px interaction implementation preserves the approved visual geometry across Editor, Library menus, mobile, and dynamic variants?"
+    ]
+  },
+  "validation": {
+    "commands": [
+      "node scripts/build-component-registry.mjs --check",
+      "node scripts/query-components.mjs --family toggle",
+      "node scripts/validate-component-contracts.mjs --all",
+      "node scripts/validate-component-contracts.mjs --family toggle",
+      "node --check scripts/validate-component-contracts.mjs"
+    ],
+    "scope": "Offline contract/registry validation only; not an application gate."
+  },
+  "approval": null,
+  "authoredDigest": "1a06fb2c4ad9c5755a58311013dcbb77aec8638b7a47a2dcc6ea1519c553d9b7"
+}

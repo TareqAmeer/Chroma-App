@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Chromasmith component contract",
+  "type": "object",
+  "required": ["schemaVersion", "family", "purpose", "status", "observations", "authored", "validation", "approval"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "family": { "type": "string", "minLength": 1 },
+    "purpose": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["draft", "proposed", "approved", "retired"] },
+    "observations": { "type": "object" },
+    "authored": { "type": "object" },
+    "validation": { "type": "object" },
+    "approval": { "type": ["object", "null"] },
+    "authoredDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": true
+}
