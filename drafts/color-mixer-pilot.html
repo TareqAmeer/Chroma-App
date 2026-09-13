@@ -21,8 +21,8 @@
     .reset-actions { display:flex; align-items:center; min-width:70px; justify-content:flex-end; visibility:hidden; opacity:0; transition:opacity .16s ease; }
     .reset-actions.visible { visibility:visible; opacity:1; }
     .reset-actions button { appearance:none; border:0; padding:4px 5px; background:none; color:var(--text); font:inherit; font-size:13px; cursor:pointer; }
+    .reset-actions .separator { padding-inline:2px; color:#575757; }
     .reset-actions button:hover { color:var(--white); }
-    .reset-actions span { color:#575757; }
     .switch { font-size:5.5px; position:relative; display:inline-block; width:8em; height:4em; flex:0 0 auto; }
     .switch input { opacity:0; width:0; height:0; }
     .toggle-slider { position:absolute; inset:0; cursor:pointer; background:#4b4b4b; transition:.4s; }
@@ -49,7 +49,7 @@
     .value::-webkit-inner-spin-button,.value::-webkit-outer-spin-button { appearance:none; margin:0; }
     .value:focus-visible { outline:2px solid #777; outline-offset:2px; }
     .slider-shell { grid-column:1 / -1; position:relative; height:28px; margin:-9px 0 0; --line-left:50%; --line-width:0%; background:var(--track) center / 100% 3px no-repeat; }
-    .slider-shell::before { position:absolute; z-index:2; content:""; top:5px; left:calc(50% - 2px); width:5px; height:5px; border-radius:50%; background:#8c8c8c; }
+    .slider-shell::before { position:absolute; z-index:2; content:""; top:2px; left:calc(50% - 2px); width:5px; height:5px; border-radius:50%; background:#8c8c8c; }
     .slider-shell::after { position:absolute; z-index:1; content:""; top:13px; left:var(--line-left); width:var(--line-width); height:3px; border-radius:3px; background:#f4f4f4; pointer-events:none; }
     input[type="range"] { position:relative; z-index:3; width:100%; height:28px; margin:0; appearance:none; -webkit-appearance:none; background:transparent; cursor:pointer; }
     input[type="range"]::-webkit-slider-runnable-track { height:3px; border-radius:3px; background:transparent; }
@@ -65,7 +65,7 @@
   <main class="pilot" id="pilot">
     <header class="mixer-header">
       <button class="expand-button" id="expand" type="button" aria-expanded="true" aria-controls="mixerContent" title="Collapse Color Mixer">›</button><h1>Color Mixer</h1>
-      <div class="reset-actions" id="resetActions" aria-label="Reset adjustments"><button type="button" id="resetBand">Reset</button><span aria-hidden="true">|</span><button type="button" id="resetAll">All</button></div>
+      <div class="reset-actions" id="resetActions" aria-label="Reset adjustments"><button type="button" id="resetBand">Reset</button><button class="separator" type="button" id="resetDivider" aria-label="Reset current color">|</button><button type="button" id="resetAll">All</button></div>
       <label class="switch" aria-label="Enable Color Mixer"><input id="enabled" type="checkbox" checked><span class="toggle-slider"></span></label>
     </header>
     <section class="content" id="mixerContent" aria-label="Color Mixer controls">
@@ -75,7 +75,6 @@
         <div class="control"><label for="hue">Hue</label><input class="value" id="hueValue" type="number" min="-100" max="100" value="0" inputmode="numeric"><div class="slider-shell"><input id="hue" type="range" min="-100" max="100" value="0"></div></div>
         <div class="control"><label for="saturation">Saturation</label><input class="value" id="saturationValue" type="number" min="-100" max="100" value="0" inputmode="numeric"><div class="slider-shell"><input id="saturation" type="range" min="-100" max="100" value="0"></div></div>
         <div class="control"><label for="luminance">Luminance</label><input class="value" id="luminanceValue" type="number" min="-100" max="100" value="0" inputmode="numeric"><div class="slider-shell"><input id="luminance" type="range" min="-100" max="100" value="0"></div></div>
-        <div class="control"><label for="rollSpeed">Roll speed</label><input class="value" id="rollSpeedValue" type="number" min="0" max="12" value="4" inputmode="numeric"><div class="slider-shell"><input id="rollSpeed" type="range" min="0" max="12" value="4"></div></div>
       </div>
       <p class="hint">Pilot only. Select a band, then drag a slider or type a value to test the diagonal before/after state.</p>
     </section>
@@ -88,7 +87,7 @@
     const state = Object.fromEntries(bands.map(([name]) => [name,{hue:0,saturation:0,luminance:0}]));
     let selected = 'Red';
     const ids = ['hue','saturation','luminance'];
-    let rollSpeed = 4;
+    const rollSpeed = 6;
     const histogram = document.querySelector('#histogram');
     const bandRow = document.querySelector('#bandRow');
     function colorFor(name, adjusted) {
@@ -132,13 +131,6 @@
       document.querySelector('#saturation').style.setProperty('--knob',state[selected].saturation === 0 ? 'var(--panel)' : color);
       document.querySelector('#luminance').style.setProperty('--track',`linear-gradient(90deg,#262626,${color},#ddd)`);
       document.querySelector('#luminance').style.setProperty('--knob',state[selected].luminance === 0 ? 'var(--panel)' : color);
-      const speedRange=document.querySelector('#rollSpeed'), speedValue=document.querySelector('#rollSpeedValue');
-      speedRange.value=rollSpeed; speedValue.value=rollSpeed;
-      speedRange.style.setProperty('--track','linear-gradient(90deg,#555,var(--accent))');
-      speedRange.style.setProperty('--knob','var(--white)');
-      speedRange.closest('.slider-shell').style.setProperty('--line-left','50%');
-      speedRange.closest('.slider-shell').style.setProperty('--line-width',`${rollSpeed / 12 * 50}%`);
-      speedRange.style.setProperty('--roll','0deg');
       ids.forEach(key => document.querySelector(`#${key}`).closest('.slider-shell').style.setProperty('--track',document.querySelector(`#${key}`).style.getPropertyValue('--track')));
       document.querySelector('#resetActions').classList.toggle('visible',anyEdited());
     }
@@ -152,10 +144,8 @@
       value.addEventListener('input',e=>setValue(key,e.target.value));
       value.addEventListener('change',e=>setValue(key,e.target.value));
     });
-    function setRollSpeed(raw) { rollSpeed=Math.max(0,Math.min(12,Number(raw) || 0)); render(); }
-    document.querySelector('#rollSpeed').addEventListener('input',e=>setRollSpeed(e.target.value));
-    document.querySelector('#rollSpeedValue').addEventListener('input',e=>setRollSpeed(e.target.value));
     document.querySelector('#resetBand').onclick=()=>{ ids.forEach(k=>state[selected][k]=0); render(); };
+    document.querySelector('#resetDivider').onclick=()=>{ ids.forEach(k=>state[selected][k]=0); render(); };
     document.querySelector('#resetAll').onclick=()=>{ bands.forEach(([name])=>ids.forEach(k=>state[name][k]=0)); render(); };
     document.querySelector('#enabled').onchange=e=>document.querySelector('#pilot').classList.toggle('disabled',!e.target.checked);
     document.querySelector('#expand').onclick=()=>{ const pilot=document.querySelector('#pilot'), collapsed=pilot.classList.toggle('collapsed'); const button=document.querySelector('#expand'); button.setAttribute('aria-expanded',String(!collapsed)); button.title=collapsed?'Expand Color Mixer':'Collapse Color Mixer'; };
