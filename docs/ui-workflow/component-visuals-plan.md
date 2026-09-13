@@ -7,7 +7,35 @@ selectors, instance count). This plan covers replacing that with real rendered v
 consistency, what AI-assisted ("vibe coding") teams recommend for avoiding component sprawl,
 and the resulting maintenance process for this repo.
 
-## 1. What it takes to show real visuals, not text
+## 0. Screenshots already exist — check before capturing anything new
+
+Before generating anything, checked whether the design workflow already captured this.
+`design/asbuilt/` already holds **96 surfaces / ~470 webp images** from the S6c capture pass
+(`test/surface_capture.mjs`, audited by `test/capture_audit.mjs`, per-surface plan in
+`docs/ui-workflow/STATE.md`): light + dark, full + cropped, each with a `spec.json` that records
+computed color/typography/spacing values **already mapped to their token names**
+(`design/asbuilt/imp-bar/spec.json` — e.g. `backgroundColor → /color/action/primary → --acc`).
+That is a more complete version of what §1 originally proposed building — reuse it, don't
+recapture it.
+
+The gap is **granularity and identity, not existence**:
+- `design/asbuilt/` is keyed by *surface* id (`fxsec-adjust`, `cs-modal`, `fx-toast`, `imp-bar` —
+  96 named panels/menus/modals), matching `docs/ui-workflow/STATE.md`'s capture plan.
+- `design/components.json` is keyed by *family* id (`section-card`, `control-row`, `fx-toggle` —
+  29 reusable atoms), matching the token report's Components tab.
+- The two taxonomies overlap (a `fx-toggle` atom appears inside many of the 96 surfaces) but
+  neither indexes the other today. `?catalog=1` (§1 below) is the only place atoms are shown in
+  isolation, and only for 8 of the 29 families.
+
+Revised plan for the report: **first build the family↔surface cross-reference** (which
+`design/asbuilt/<id>/spec.json` trees contain a given family's selector — a tree-walk over
+already-captured `spec.json`, no new screenshots), and reuse those existing webp crops directly
+in the report wherever a family already appears in one. Only fall back to generating a fresh
+`?catalog=1` capture (§1) for a family that never appears in any of the 96 captured surfaces
+(e.g. a Library-only or Guide-tab atom the S6c pass didn't reach). This cuts new capture work to
+whatever's left uncovered, not all 29 families.
+
+## 1. What it takes to show real visuals, not text (for the families §0 doesn't already cover)
 
 The app already has the right mechanism — do not re-derive component visuals by hand (violates
 the reference-to-spec rule in `docs/ui-workflow/reference-to-spec/`: use the app's own
@@ -138,10 +166,101 @@ governance writeups — see search results in this session for source links.])
   `editor:gates` (already rebuilds `desktop/dist/` first, per root CLAUDE.md §2) so nothing
   gates against stale code.
 
+## 5. Animation review — nothing captures this today
+
+Checked `editor:motion-token-check` (`test/editor_motion_token_check.mjs`): it only verifies
+that `transition-duration`/`transition-timing-function` values resolve to `--dur-*`/`--ease`
+tokens instead of raw literals. It never plays the animation — a smooth transition and a janky
+one that happen to use the same token pass identically. No existing gate or capture (`asbuilt`
+included — those are static webp) shows motion; `docs/ui-workflow/STATE.md` says so explicitly
+("PNG pixels cannot establish intended tokens, fonts, hidden states, accessibility, **motion**,
+or visual correctness"). This is a real gap, not a duplicate of existing tooling.
+
+**Components in this app with real, reviewable motion** (grepped every `transition:`/`@keyframes`
+in `chromasmith-22.html`):
+- `.fx-toggle` — the switch knob uses a custom overshoot easing,
+  `cubic-bezier(.75,.02,.86,1.31)` (line 245), distinct from the rest of the app's standard
+  `var(--ease)` — worth watching at real speed to judge whether the overshoot reads as lively or
+  glitchy.
+- `.fx-ctrl-chev` / `.msk-group-chev` / `.fx-preset-chev` — section/group disclosure chevrons,
+  simple rotate transitions.
+- `fxSecIn` keyframe — mobile section-card entrance (opacity + translateY), `.18s ease`.
+- `.fx-split-popover` — entrance uses `cubic-bezier(.2,.8,.3,1.15)`, another custom (slightly
+  overshooting) curve worth checking against the toggle's for consistency.
+- `body.mobile-fx .fx-panel` — bottom-sheet open/close height transition, `.28s ease`.
+- `.fx-layout` grid-template-columns transition (desktop panel resize), `.2s ease`.
+- Progress fills (`#eo-fill`, `#fx-export-prog-bar`, `#nr-high-progress-bar`, `#boot-splash-bar`)
+  and the `fxspin` spinner keyframe.
+- Compliant already: line 460 zeroes every `transition-duration`/`animation-duration` under
+  `prefers-reduced-motion` — matches the Apple/Material guidance in §5b below, nothing to fix
+  there.
+
+### 5a. How to actually capture motion for review
+
+Playwright (already the driver for `test/component_runtime_check.mjs` and `surface_capture.mjs`)
+can record video per page (`context.video`) or do a CDP screencast — either gives real frames,
+not a described transition. Plan:
+1. For each animated selector above, script the real trigger (click the toggle, open the
+   popover, expand the section) inside a short Playwright run, recording a 1–2s clip through the
+   transition.
+2. Save as `design/asbuilt/<id>/motion.webm` (or a re-encoded GIF for easy inline embedding),
+   next to that surface's existing static webp captures from §0 — same directory, same review
+   flow, no new taxonomy.
+3. Pull real frame timestamps from the trace (not just the declared `--dur-*` token) to flag
+   **dropped frames or a rendered duration that drifts from the declared one** — a token-correct
+   transition can still stutter under real paint cost, which `motion-token-check` cannot see.
+4. Review is manual (a human judging "smooth" is not something a pixel-diff threshold captures
+   well) — the report's job is surfacing the clip next to its declared duration/easing token so
+   you can watch it and flag anything that needs re-tuning, not auto-passing/failing it.
+
+### 5b. How others handle animation review
+
+- **Material Design 3**: ships explicit **duration tiers** (`short1`=50ms … up through `long4`/
+  `extra-long4`) and two **easing families**, "Standard" (short/inexpensive, non-attention-
+  grabbing motion) vs "Emphasized" (bigger, choreographed transitions) — every component's
+  motion spec cites one of these named tokens, never a bespoke curve per component. This repo
+  has the same *shape* (`--dur-1`/`--dur-2`/`--ease`) but the toggle and split-popover above have
+  their own one-off `cubic-bezier(...)` outside that scale — worth deciding whether those are
+  intentional "emphasized" exceptions or drift.
+  ([Easing and duration – Material Design 3](https://m3.material.io/styles/motion/easing-and-duration/tokens-specs))
+- **Apple HIG**: keep motion subtle and infrequent — system components already animate
+  consistently, so custom motion should be reserved for moments that need it, and must respect
+  Reduce Motion (crossfade instead of slide, no autoplay) — already satisfied here (§5 above).
+  ([Motion – Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/foundations/motion))
+- **Storybook + Chromatic** (the closest analogue to "review a component's animation before
+  shipping"): Chromatic snapshots every story in a real browser, waiting for animations to settle
+  before diffing — but for pixel-diff purposes it **disables** animation entirely and instead
+  uses interaction "play" functions plus a human review dashboard (accept/deny per changed story)
+  for anything animation-related, because pixel-diffing mid-animation is inherently noisy. The
+  transferable idea isn't the tool, it's the pattern: **separate the deterministic gate (token
+  literal check — already have it) from the human judgment call (does this look right — needs a
+  clip, not a still)**, and keep both, rather than trying to make one check do both jobs.
+  ([Chromatic Storybook visual testing guide](https://qaskills.sh/blog/chromatic-storybook-visual-testing-guide))
+
+### 5c. What to add
+
+- A `motion.webm`/`.gif` per animated selector in §5, generated by the Playwright step in §5a,
+  reusing `design/asbuilt/<id>/` so it lives with that surface's existing static evidence.
+  Priority order: `.fx-toggle` (custom easing, high interaction frequency) → `.fx-split-popover`
+  → mobile sheet open/close → section chevrons/`fxSecIn` → progress fills/spinner (lowest
+  priority — simple linear/width fills, least likely to look wrong).
+- Embed those clips in the token report next to the family's static thumbnail (§1/§4) whenever
+  `design/tokens.json`'s `--dur-*`/`--ease` values changed, so a token-scale change shows its
+  real on-screen effect, not just the new number.
+- Flag the two one-off `cubic-bezier` curves (toggle, split-popover) in the report as "custom
+  easing, not on the `--ease`/`--dur-*` scale" — visible today only by reading source; the
+  report should call this out the way it already calls out color/spacing literals.
+
 ## Completeness check
 
 Every family in `design/components.json` (currently 29) gets a catalogue entry, a screenshot
 per state × theme, and a computed-value row — `families.length` from the same JSON this doc's
 plan reads is the literal count to match, not a hand-typed list. `npm run components:check`
 already fails on registry drift; the new visual step should fail the same way when a family in
-that JSON has no corresponding screenshot.
+that JSON has no corresponding screenshot (reused from `design/asbuilt/` per §0, or freshly
+captured per §1 only when no existing surface contains it).
+
+Every selector with a non-token-default `transition`/`@keyframes` declaration in
+`chromasmith-22.html` (the literal grep list in §5 — re-run that grep, don't hand-maintain the
+list) gets a `motion.webm` clip. That grep is the completeness scan for animation coverage the
+same way `families.length` is for the static catalogue.
