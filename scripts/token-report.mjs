@@ -35,7 +35,7 @@ function categorizeRole(role) {
 }
 const CATEGORY_LABEL = { brand: 'Brand & Accent', surfaces: 'Surfaces', text: 'Text', borders: 'Borders & Hairlines', scrims: 'Scrims & Shadows', other: 'Other' };
 
-const catalogue = { color: [], fontFamily: [], fontSize: [], fontWeight: [], lineHeight: [], dimension: [], zIndex: [], other: [] };
+const catalogue = { color: [], fontFamily: [], fontSize: [], fontWeight: [], lineHeight: [], dimension: [], zIndex: [], opacity: [], letterSpacing: [], borderWidth: [], other: [] };
 (function walk(o, path) {
   if (Array.isArray(o)) return;
   if (o && typeof o === 'object') {
@@ -53,6 +53,9 @@ const catalogue = { color: [], fontFamily: [], fontSize: [], fontWeight: [], lin
       else if (o.$type === 'dimension' && /(^|\/)typography\/size(\/|$)/.test(path)) catalogue.fontSize.push(entry);
       else if (o.$type === 'number' && /(^|\/)typography\/lineHeight(\/|$)/.test(path)) catalogue.lineHeight.push(entry);
       else if (o.$type === 'number' && /(^|\/)zIndex(\/|$)/.test(path)) catalogue.zIndex.push(entry);
+      else if (o.$type === 'number' && /(^|\/)opacity(\/|$)/.test(path)) catalogue.opacity.push(entry);
+      else if (o.$type === 'number' && /(^|\/)letterSpacing(\/|$)/.test(path)) catalogue.letterSpacing.push(entry);
+      else if (o.$type === 'dimension' && /(^|\/)borderWidth(\/|$)/.test(path)) catalogue.borderWidth.push(entry);
       else if (o.$type === 'dimension') catalogue.dimension.push(entry);
       else catalogue.other.push(entry);
       return;
@@ -236,6 +239,45 @@ for (const { selector, body } of ruleBodies) {
     const rawVal = m[2].trim();
     if (rawVal.includes('var(--') || /^auto$/i.test(rawVal)) continue;
     zIndexFindings.push({ kind: 'z-index', selector, prop: 'z-index', value: rawVal });
+  }
+}
+
+const opacityFindings = [];
+for (const { selector, body } of ruleBodies) {
+  for (const decl of body.split(';')) {
+    const m = decl.match(/^\s*(opacity)\s*:\s*(.+?)\s*$/i);
+    if (!m) continue;
+    const rawVal = m[2].trim();
+    if (rawVal.includes('var(--')) continue;
+    const n = parseFloat(rawVal);
+    if (n === 0 || n === 1) continue; // boundary values stay plain literals, same as z-index:auto
+    opacityFindings.push({ kind: 'opacity', selector, prop: 'opacity', value: rawVal });
+  }
+}
+
+const letterSpacingFindings = [];
+for (const { selector, body } of ruleBodies) {
+  for (const decl of body.split(';')) {
+    const m = decl.match(/^\s*(letter-spacing)\s*:\s*(.+?)\s*$/i);
+    if (!m) continue;
+    const rawVal = m[2].trim();
+    if (rawVal.includes('var(--') || /^0(px|em)?$/i.test(rawVal) || /^normal$/i.test(rawVal)) continue;
+    letterSpacingFindings.push({ kind: 'letter-spacing', selector, prop: 'letter-spacing', value: rawVal });
+  }
+}
+
+const borderWidthFindings = [];
+for (const { selector, body } of ruleBodies) {
+  for (const decl of body.split(';')) {
+    const m = decl.match(/^\s*(border(?:-(?:top|bottom|left|right))?|outline(?:-width)?)\s*:\s*(.+?)\s*$/i);
+    if (!m) continue;
+    const [, prop, rawVal] = m;
+    if (rawVal.includes('var(--')) continue;
+    const widthMatches = rawVal.match(/(?<![\d.])(\d+(\.\d+)?)px/g) || [];
+    for (const w of widthMatches) {
+      if (w === '1px') continue; // the app's plain-literal default, not part of the scale
+      borderWidthFindings.push({ kind: 'border-width', selector, prop, value: w });
+    }
   }
 }
 
@@ -480,6 +522,70 @@ function zIndexRows() {
     ${findingsHtml}`;
 }
 
+// Generic "numbered ramp" section: a bar-chart list of the scale's tokens (linear width, 0-1
+// input already normalized to a max) plus an unapproved-literal findings list below it. Used by
+// opacity/letter-spacing/border-width, which are all short ascending ramps like z-index but
+// don't need z-index's log scale (their value ranges are already narrow).
+function rampSection({ entries, findings, unit, subhead, findingsLabel, maxValue, fmt }) {
+  const tokenRows = entries.slice().sort((a, b) => parseFloat(a.value) - parseFloat(b.value)).map((e) => {
+    const v = parseFloat(e.value) || 0;
+    const pct = Math.max(4, (v / maxValue) * 100);
+    return `
+    <div class="layout-row">
+      <div class="layout-path">${esc(e.path)}</div>
+      <div class="layout-bar-wrap"><div class="layout-bar" style="width:${pct}%"></div></div>
+      <div class="layout-val">${esc(fmt ? fmt(e.value) : e.value)}</div>
+    </div>`;
+  }).join('');
+  const findingsHtml = findings.length
+    ? findings.map((f) => `
+    <div class="viol-row">
+      <div class="viol-kind">${esc(f.kind)}</div>
+      <div class="viol-selector">${esc(f.selector)}</div>
+      <div class="viol-decl">${esc(f.prop)}: ${esc(f.value)}</div>
+    </div>`).join('')
+    : `<div class="empty-inline">No raw ${esc(unit)} literals found outside the token scale.</div>`;
+  return `
+    <div class="subhead">${subhead}</div>
+    ${tokenRows}
+    <div class="subhead">${findingsLabel}</div>
+    ${findingsHtml}`;
+}
+
+function opacityRows() {
+  return rampSection({
+    entries: catalogue.opacity,
+    findings: opacityFindings,
+    unit: 'opacity',
+    maxValue: 1,
+    subhead: 'State-layer / translucency ramp — audited from every raw opacity literal in chromasmith-22.html (0 and 1 stay plain literals, same convention as z-index:auto)',
+    findingsLabel: 'Unapproved opacity literals in &lt;style&gt; rules (not var(--op-*), not 0/1)',
+  });
+}
+
+function letterSpacingRows() {
+  return rampSection({
+    entries: catalogue.letterSpacing,
+    findings: letterSpacingFindings,
+    unit: 'letter-spacing',
+    maxValue: 0.11,
+    fmt: (v) => v,
+    subhead: 'Tracking ramp — audited from every raw letter-spacing literal on uppercase eyebrow labels (letter-spacing:0 stays a plain literal)',
+    findingsLabel: 'Unapproved letter-spacing literals in &lt;style&gt; rules (not var(--ls-*), not 0/normal)',
+  });
+}
+
+function borderWidthRows() {
+  return rampSection({
+    entries: catalogue.borderWidth,
+    findings: borderWidthFindings,
+    unit: 'border-width',
+    maxValue: 4,
+    subhead: 'Border-width ramp — the 4 non-1px widths found in the app (1px itself stays a plain literal — 130+ uses, not sprawl)',
+    findingsLabel: 'Unapproved non-1px border/outline widths in &lt;style&gt; rules (not var(--bw-*))',
+  });
+}
+
 // Maps a design/components.json family name to its chromasmith-22.html buildCatalogPage()
 // COMPONENTS key (chromasmith-22.html:22346-22362) so the report can embed a live
 // ?catalog=1&live=1&only=<key> iframe instead of a text row. null = no catalog entry exists yet
@@ -496,12 +602,18 @@ const FAMILY_TO_CATALOG_KEY = {
   'segmented-control': 'seg',
   button: 'btn',
   'icon-button': 'btn-icon',
-  chip: null,
+  chip: 'chip',
   'info-button': 'fx-info-i',
-  'search-input': null,
-  menu: null,
+  'search-input': 'search-input',
+  menu: 'menu',
   icon: null, // rendered separately in iconSections() — real SVG glyphs, not a DOM clone
 };
+// chip/search-input/menu live only in desktop/library-ui.js (confirmed live: their selectors
+// resolve under desktop/dist/index.html?libtest=1, never under the plain web build — see
+// docs/ui-workflow/component-visuals-plan.md §0/§1) — those 3 embed against the desktop build
+// instead of chromasmith-22.html, with &libtest=1 so library-ui.js's own top-of-file gate
+// (`if (!window.__TAURI__ && !LIBTEST) return;`) doesn't no-op it.
+const LIBRARY_ONLY_CATALOG_KEYS = new Set(['chip', 'search-input', 'menu']);
 // Families whose LIVE_WIRE shim (chromasmith-22.html:22367-22395) makes the embed clickable, not
 // just visually rendered — everything else (native slider drag/select open, or hover-only
 // button/icon-button/info-button) is still live-embedded but has no click affordance to badge.
@@ -511,14 +623,15 @@ function componentSections() {
   const families = componentFamilies.slice().sort((a, b) => b.instances.length - a.instances.length);
   const familyCards = families.map((f) => {
     const catalogKey = FAMILY_TO_CATALOG_KEY[f.name];
+    const embedBase = LIBRARY_ONLY_CATALOG_KEYS.has(catalogKey)
+      ? '../desktop/dist/index.html?catalog=1&live=1&libtest=1&only='
+      : '../chromasmith-22.html?catalog=1&live=1&only=';
     const embed = catalogKey
       ? `<div class="comp-embed-wrap">
-           <iframe class="comp-embed" loading="lazy" title="${esc(f.name)} — live" src="../chromasmith-22.html?catalog=1&live=1&only=${encodeURIComponent(catalogKey)}"></iframe>
+           <iframe class="comp-embed" loading="lazy" title="${esc(f.name)} — live" src="${embedBase}${encodeURIComponent(catalogKey)}"></iframe>
            ${CATALOG_KEYS_WITH_SHIM.has(catalogKey) ? '<div class="comp-embed-badge">click to try</div>' : ''}
          </div>`
-      : f.name === 'icon'
-        ? `<div class="comp-no-embed">Rendered above in the Icons tab (real SVG glyphs, not a DOM clone) — see the Icons count.</div>`
-        : `<div class="comp-no-embed">No catalogue entry yet — ${esc(f.name)} lives only in desktop/library-ui.js (Library UI), not the plain web build this page clones from. See docs/ui-workflow/component-visuals-plan.md.</div>`;
+      : `<div class="comp-no-embed">Rendered above in the Icons tab (real SVG glyphs, not a DOM clone) — see the Icons count.</div>`;
     return `
     <div class="comp-card">
       ${embed}
@@ -609,8 +722,12 @@ function violationRows() {
     ...colorFindings.map((f) => ({ kind: `color (${CATEGORY_LABEL[f.category]})`, selector: f.selector, prop: f.prop, value: f.value })),
     ...spacingFindings,
     ...findings,
+    ...zIndexFindings,
+    ...opacityFindings,
+    ...letterSpacingFindings,
+    ...borderWidthFindings,
   ];
-  if (!all.length) return `<div class="empty">No color, spacing, or font literals found outside the token set. PASS.</div>`;
+  if (!all.length) return `<div class="empty">No color, spacing, font, z-index, opacity, letter-spacing, or border-width literals found outside the token set. PASS.</div>`;
   return all.map((f) => `
     <div class="viol-row">
       <div class="viol-kind">${esc(f.kind)}</div>
@@ -709,15 +826,21 @@ const out = `<!doctype html>
   <button data-tab="typography">Typography <span class="count">${catalogue.fontFamily.filter((e) => !isAliasEntry(e)).length + catalogue.fontSize.length + catalogue.fontWeight.length}</span></button>
   <button data-tab="layout">Layout <span class="count">${catalogue.dimension.length}</span></button>
   <button data-tab="zindex">Z-Index <span class="count">${catalogue.zIndex.length}</span></button>
+  <button data-tab="opacity">Opacity <span class="count">${catalogue.opacity.length}</span></button>
+  <button data-tab="letterspacing">Letter-Spacing <span class="count">${catalogue.letterSpacing.length}</span></button>
+  <button data-tab="borderwidth">Border-Width <span class="count">${catalogue.borderWidth.length}</span></button>
   <button data-tab="components">Components <span class="count">${componentFamilies.length}</span></button>
   <button data-tab="icons">Icons <span class="count">${iconEntries.length}</span></button>
-  <button data-tab="violations">Violations <span class="count">${findings.length + colorFindings.length + spacingFindings.length + zIndexFindings.length}</span></button>
+  <button data-tab="violations">Violations <span class="count">${findings.length + colorFindings.length + spacingFindings.length + zIndexFindings.length + opacityFindings.length + letterSpacingFindings.length + borderWidthFindings.length}</span></button>
 </nav>
 <main>
   <div class="panel active" id="panel-colors">${colorSections()}</div>
   <div class="panel" id="panel-typography">${typographyRows()}</div>
   <div class="panel" id="panel-layout">${layoutRows()}</div>
   <div class="panel" id="panel-zindex">${zIndexRows()}</div>
+  <div class="panel" id="panel-opacity">${opacityRows()}</div>
+  <div class="panel" id="panel-letterspacing">${letterSpacingRows()}</div>
+  <div class="panel" id="panel-borderwidth">${borderWidthRows()}</div>
   <div class="panel" id="panel-components">${componentSections()}</div>
   <div class="panel" id="panel-icons">${iconSections()}</div>
   <div class="panel" id="panel-violations">${violationRows()}</div>

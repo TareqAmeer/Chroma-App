@@ -428,6 +428,116 @@
     {
       "var": "--z-splash",
       "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--op-1",
+      "pre": "\n  /* State-layer / translucency ramp (T-op): audited from 13 raw opacity literals — see\n     design/tokens.json opacity for the full audit, per-step role and the disabled-state\n     consolidation note. */\n  ",
+      "hadSemi": true
+    },
+    {
+      "var": "--op-2",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--op-3",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--op-4",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--op-5",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--op-6",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--op-7",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--op-8",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--op-9",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--op-10",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--op-11",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--ls-1",
+      "pre": "\n  /* Tracking ramp (T-ls): audited from 7 raw letter-spacing literals on uppercase eyebrow\n     labels — see design/tokens.json letterSpacing for the full audit. */\n  ",
+      "hadSemi": true
+    },
+    {
+      "var": "--ls-2",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--ls-3",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--ls-4",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--ls-5",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--ls-6",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--ls-7",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--bw-1",
+      "pre": "\n  /* Border-width ramp (T-bw): the 4 non-1px widths found in the app — see design/tokens.json\n     borderWidth for the full audit (1px itself stays a plain literal, not a token). */\n  ",
+      "hadSemi": true
+    },
+    {
+      "var": "--bw-2",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--bw-3",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--bw-4",
+      "pre": "",
       "hadSemi": false
     }
   ],
