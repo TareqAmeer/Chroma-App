@@ -313,6 +313,11 @@
     {
       "var": "--tint-6",
       "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--err-border",
+      "pre": "",
       "hadSemi": false
     }
   ],

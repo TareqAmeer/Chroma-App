@@ -115,7 +115,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   --scrim-b1:rgba(0,0,0,.25);--scrim-b2:rgba(0,0,0,.35);--scrim-b3:rgba(0,0,0,.45);--scrim-b4:rgba(0,0,0,.55);--scrim-b5:rgba(0,0,0,.65);--scrim-w1:rgba(255,255,255,.35);--scrim-w2:rgba(255,255,255,.5);--scrim-w3:rgba(255,255,255,.65);--scrim-w4:rgba(255,255,255,.85);
   /* Mist-blue accent tint ramp (T-tint): same discipline as the scrim scale above, but keyed
      to --acc's mist-blue RGB for active/selected/hover states instead of neutral black/white. */
-  --tint-1:rgba(97,160,175,.08);--tint-2:rgba(97,160,175,.12);--tint-3:rgba(97,160,175,.18);--tint-4:rgba(97,160,175,.25);--tint-5:rgba(97,160,175,.35);--tint-6:rgba(97,160,175,.45)/* TOKENS:ROOT:END */}
+  --tint-1:rgba(97,160,175,.08);--tint-2:rgba(97,160,175,.12);--tint-3:rgba(97,160,175,.18);--tint-4:rgba(97,160,175,.25);--tint-5:rgba(97,160,175,.35);--tint-6:rgba(97,160,175,.45);--err-border:rgba(135,15,19,.45)/* TOKENS:ROOT:END */}
 body.light{--glass-bg:#ffffff}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100%;overflow-x:clip}
@@ -850,7 +850,7 @@ canvas,img{-webkit-user-drag:none}
 #fx-toast.show{opacity:1;transform:translateY(0)}
 #fx-toast.ok::before{background:var(--ok)}
 #fx-toast.err::before{background:var(--err)}
-#fx-toast.err{border-color:rgba(135,15,19,.45)}
+#fx-toast.err{border-color:var(--err-border)}
 /* Clears the mobile action bar; every other layout wants it near the bottom edge. */
 body.mobile-fx{--toast-b:98px}
 body.mobile-fx #fx-toast{left:50%;right:auto;transform:translateX(-50%) translateY(8px)}
@@ -1390,7 +1390,7 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-stage{position:relative;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);height:calc(100vh - 170px);min-height:380px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:18px;position:sticky;top:16px}
 .cl-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:13px;pointer-events:none}
 #cl-frame{position:relative;box-shadow:0 6px 30px var(--scrim-b2);display:none}
-.cl-cell{position:absolute;overflow:hidden;cursor:pointer;background:rgba(255,255,255,.03)}
+.cl-cell{position:absolute;overflow:hidden;cursor:pointer;background:transparent}
 .cl-cell.sel{outline:2px solid var(--acc);outline-offset:-2px;z-index:4;touch-action:none}
 #cl-dz.hot{border-style:solid;border-color:var(--acc);background:var(--tint-1)}
 #cl-dz.hot .dz-ic,#cl-dz.hot .dz-lb{color:var(--acc)}
@@ -1402,7 +1402,7 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-div{position:absolute;z-index:5;background:transparent}
 .cl-div.v{cursor:col-resize;width:12px;margin-left:-6px}
 .cl-div.h{cursor:row-resize;height:12px;margin-top:-6px}
-.cl-div::after{content:'';position:absolute;background:rgba(255,255,255,.001);transition:background .15s}
+.cl-div::after{content:'';position:absolute;background:transparent;transition:background .15s}
 .cl-div.v::after{left:5px;width:2px;top:0;bottom:0}
 .cl-div.h::after{top:5px;height:2px;left:0;right:0}
 .cl-div:hover::after{background:var(--acc)}
