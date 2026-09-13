@@ -3387,6 +3387,22 @@
           if (typeof applyRawDefaults === 'function') applyRawDefaults();
           fxUpdate();
         } catch (e) { console.error('restore recipe', e); }
+      } else if (cached && typeof window.chromasmithApplyPristineDefault === 'function') {
+        // No saved recipe (e.g. right after "Reset edit"/⌘⇧R) AND this photo was served from
+        // the in-memory `cached` branch above — that branch calls installFXImages() directly
+        // instead of loadFXImages(), which is the ONLY place that normally reverts the live
+        // editor to `_fxPristineDefault` on a genuinely different load key (see loadFXImages'
+        // own comment). Skipping loadFXImages here is a deliberate perf win — the whole point
+        // of `cached` is no re-decode — but it means fxState/the sliders are simply whatever
+        // was left over from the edit session the user just reset: "Reset edit" correctly
+        // blanks the on-disk sidecar recipe and greys out the menu item, but without this the
+        // ACTUAL RENDER never reverts, since nothing else re-applies defaults when there's no
+        // recipe to restore. See test/probe_reset_cached_reopen.mjs.
+        try {
+          window.chromasmithApplyPristineDefault();
+          if (typeof applyRawDefaults === 'function') applyRawDefaults();
+          fxUpdate();
+        } catch (e) { console.error('reset to defaults', e); }
       }
       // Real metadata (camera/lens/shutter/aperture/iso/date) via rawler on the Rust side —
       // the editor's own RW2 branch attaches none, so without this #fx-exif stays empty.

@@ -21615,6 +21615,11 @@ function dustModeBuildChips(){
 }
 dustModeBuildChips();
 _fxPristineDefault=getUISnapshot(); // factory-default UI state, captured before loadSession touches it
+// Exposed for the native-shell Library (desktop/library-ui.js's openInEditorInner): reopening an
+// already-cached photo (skipping loadFXImages, which is the only other place _fxPristineDefault
+// gets applied) after a sidecar "Reset edit" has no recipe to restore, so without an explicit
+// call here the live editor state simply keeps whatever the previous edit session left it at.
+window.chromasmithApplyPristineDefault=()=>{if(_fxPristineDefault)applyUISnapshot(_fxPristineDefault);};
 initSliderErgonomics(); // numeric entry, keyboard nudge, modified-from-default dots
 loadSession();       // restore saved slider state (silent — no image loaded yet)
 styleListRefresh();  // populate the Styles list from localStorage
