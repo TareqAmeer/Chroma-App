@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "id": "color-slider-gooey",
+  "reference": {
+    "provenance": {
+      "origin": "liquid-gooey official source and demo documentation",
+      "creator": "Jakub Antalik",
+      "capturedAt": "2026-09-13",
+      "usageNotes": "Source audit pinned to 422180dd7a5ac646c85deedc65500c4a74339127. No screenshot is used as proof of motion or Safari compatibility."
+    },
+    "views": [
+      { "id": "move-source", "kind": "other", "assetRef": "https://github.com/Jakubantalik/Libraries/tree/422180dd7a5ac646c85deedc65500c4a74339127/packages/liquid-gooey", "description": "Package source, README, and package-level MIT license.", "visibleScope": "Move effect behavior and implementation claims; not a Chroma visual reference." },
+      { "id": "prototype", "kind": "state", "assetRef": "design/prototypes/color-slider-gooey/index.html", "description": "Isolated native-range comparison study.", "visibleScope": "Normal and proposed plain/HSL slider states." }
+    ]
+  },
+  "scope": {
+    "componentFamily": "slider",
+    "registryScope": { "includedSubfamilies": [".fx-slider", ".fx-slider-grad", "#sl-hsl-h", "#sl-hsl-s", "#sl-hsl-l"], "excludedFamilies": ["control-row", "section-card", "button", "all non-Color sliders"], "notes": "The registry query reports 91 slider declarations; Color-specific functional gradients are at chromasmith-22.html:1992-1994 and 2042-2044." }
+  },
+  "generated": {
+    "visibleObservations": [
+      { "id": "obs-native-content", "viewId": "prototype", "area": "accessibility", "fact": "The visible labels, tabular values, focus ring, and native range input are separate from the SVG silhouette.", "sourceClass": "reference", "sourceRef": "prototype", "certainty": "directly-visible" },
+      { "id": "obs-fallback", "viewId": "prototype", "area": "motion-interaction", "fact": "The prototype exposes normal and proposed controls side by side and can immediately hide the decorative SVG layer.", "sourceClass": "reference", "sourceRef": "prototype", "certainty": "directly-visible" }
+    ],
+    "repositoryEvidence": [
+      { "id": "repo-contract", "claim": "The existing slider component contract is proposed and describes continuous tonal and colour adjustment with a visible value.", "locator": "docs/ui-workflow/component-contracts/contracts/slider.json", "sourceClass": "repository_evidence" },
+      { "id": "repo-registry", "claim": "The component registry identifies 91 slider declarations, including Color functional-gradient declarations #sl-hsl-h/#sl-hsl-s/#sl-hsl-l.", "locator": "node scripts/query-components.mjs --family slider; chromasmith-22.html:1992-1994", "sourceClass": "repository_evidence" },
+      { "id": "repo-geometry", "claim": "Existing .fx-slider uses a 16px visual control and mobile rules raise its interactive height; the prototype preserves a 44px range hit area without increasing the 3px visible track.", "locator": "chromasmith-22.html:306-316, 659, 813-814", "sourceClass": "repository_evidence" },
+      { "id": "repo-gradient", "claim": "Existing .fx-slider-grad supplies the functional HSL gradient and a 16px round thumb.", "locator": "chromasmith-22.html:446-450", "sourceClass": "repository_evidence" },
+      { "id": "lib-layers", "claim": "At the audited source commit, liquid-gooey separates a filtered SVG silhouette below from unfiltered interactive content above.", "locator": "Jakubantalik/Libraries@422180dd7a5ac646c85deedc65500c4a74339127 packages/liquid-gooey/README.md:226-229", "sourceClass": "repository_evidence" },
+      { "id": "lib-motion", "claim": "At the audited source commit, move uses a trailing satellite and motion observation; reduced motion snaps immediately and source cleanup cancels rAF/disconnects observers.", "locator": "Jakubantalik/Libraries@422180dd7a5ac646c85deedc65500c4a74339127 packages/liquid-gooey/src/observer.ts, src/hooks.ts", "sourceClass": "repository_evidence" }
+    ],
+    "stateCoverage": { "shown": [
+      { "id": "default", "state": "default", "sourceClass": "reference", "sourceRef": "prototype" }, { "id": "changed", "state": "changed", "sourceClass": "reference", "sourceRef": "prototype" }, { "id": "disabled", "state": "disabled", "sourceClass": "reference", "sourceRef": "prototype" }, { "id": "focus", "state": "keyboard focus", "sourceClass": "reference", "sourceRef": "prototype" }
+    ], "missing": [ { "id": "drag-capture", "state": "focused browser evidence of continuous drag", "sourceClass": "reference", "sourceRef": "prototype" } ] },
+    "variantCoverage": { "shown": [ { "id": "light", "state": "light", "sourceClass": "reference", "sourceRef": "prototype" }, { "id": "dark", "state": "dark", "sourceClass": "reference", "sourceRef": "prototype" }, { "id": "plain", "state": "plain luminance", "sourceClass": "reference", "sourceRef": "prototype" }, { "id": "hsl", "state": "functional HSL gradient", "sourceClass": "reference", "sourceRef": "prototype" } ], "missing": [ { "id": "webkit", "state": "Safari/WebKit runtime evidence", "sourceClass": "reference", "sourceRef": "prototype" }, { "id": "narrow", "state": "narrow mobile capture", "sourceClass": "reference", "sourceRef": "prototype" } ] }
+  },
+  "authored": {
+    "applicableDesignRules": [
+      { "id": "rule-motion", "rule": "Motion is restrained and short; nothing bounces or auto-plays.", "sourceClass": "repository_evidence", "sourceRef": "chromasmith-design/project/design.md: Animation" },
+      { "id": "rule-focus", "rule": "Focus uses a 2px ring at a 2px offset and the minimum hit target is 44px.", "sourceClass": "repository_evidence", "sourceRef": "chromasmith-design/project/design.md: Shadows and Layout rules" },
+      { "id": "rule-color", "rule": "Use the existing Mist Blue/Slate Blue action colour by theme; do not introduce a decorative accent.", "sourceClass": "repository_evidence", "sourceRef": "chromasmith-design/project/design.md: Visual foundations; design/tokens.json color.action.primary" }
+    ],
+    "proposedInterpretations": [
+      { "id": "proposal-surface", "statement": "Apply the effect only as an optional SVG silhouette beneath a native range input, never to labels, values, focus indicators, or HSL gradient pixels.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["lib-layers", "rule-focus"] },
+      { "id": "proposal-settings", "statement": "Start with trail 0.28, SVG blur 3px, no wobble, and a 180ms damped settle; these are deliberately more restrained than the library defaults.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["lib-motion", "rule-motion"] },
+      { "id": "proposal-fallback", "statement": "If SVG filters, feature detection, or a required browser behavior is unavailable, hide the surface immediately and retain the normal Chroma slider unchanged.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["repo-contract"] }
+    ],
+    "userDecisions": [
+      { "id": "decision-prototype-only", "decision": "Evaluate an isolated Color-slider prototype; do not migrate Chroma to React or production implementation.", "decidedBy": "user", "decidedAt": "2026-09-13", "sourceClass": "user_decision", "sourceRef": "user request" } ],
+    "unresolvedQuestions": [
+      { "id": "decision-keep", "question": "Keep or reject the effect after review?", "blocksApproval": true }, { "id": "decision-strength", "question": "Which trail/softness level is preferred?", "blocksApproval": true }, { "id": "decision-scope", "question": "Apply to plain sliders, functional-gradient sliders, or both?", "blocksApproval": true }, { "id": "decision-timing", "question": "Show it only while dragging or also during settling?", "blocksApproval": true }
+    ]
+  },
+  "implementation": {
+    "geometrySpacing": [ { "id": "geometry", "statement": "Keep the visible 3px track and 16px thumb geometry; put the real range in a 44px row-local interaction area.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["repo-geometry"] } ],
+    "typography": [ { "id": "type", "statement": "Preserve Chroma’s SF Pro Text stack, existing label treatment, and tabular numeric value styling.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["repo-contract"] } ],
+    "colorsContrastRoles": [ { "id": "colors", "statement": "Use current dark/light Chroma tokens and preserve functional HSL gradients; the liquid uses the existing action token only.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["rule-color", "repo-gradient"] } ],
+    "icons": [],
+    "motionInteraction": [ { "id": "motion", "statement": "Decorative movement follows input changes, stops its rAF after settling, and is disabled under prefers-reduced-motion.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["lib-motion", "rule-motion"] } ],
+    "responsiveBehavior": [ { "id": "responsive", "statement": "At narrow width, comparison panels stack; each slider remains row-bounded with no clipping or layout shift.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["repo-geometry"] } ],
+    "accessibility": [ { "id": "a11y", "statement": "The native range owns keyboard handling, focus, ARIA name, value behavior, and pointer hit target; SVG is aria-hidden and pointer-events:none.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["lib-layers"] } ],
+    "targets": [ { "id": "target", "statement": "Future production work, if approved, binds to the slider contract and Color declarations identified by the registry; this prototype touches no production target.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["repo-contract", "repo-registry"] } ],
+    "acceptanceCriteria": [
+      { "id": "ac-states", "criterion": "Default, changed, dragging, keyboard-focus, disabled, reduced-motion, light, dark, and mobile-width states retain labels/values without blur or layout shift.", "verification": "Focused browser screenshots and keyboard checks." },
+      { "id": "ac-bounds", "criterion": "No effect overlaps, clips, or moves outside its slider row; the 44px target remains usable.", "verification": "DOM bounding-box assertions and screenshots." },
+      { "id": "ac-fallback", "criterion": "Missing SVG filter support immediately renders the normal slider with no behavior regression.", "verification": "Feature-detection test." },
+      { "id": "ac-native", "criterion": "Native range input remains the real accessible control.", "verification": "Keyboard, focus, and accessibility-tree checks." }
+    ]
+  },
+  "validation": { "requiredScreenshots": ["normal versus gooey same size", "dark and light", "default and changed", "keyboard focus", "disabled", "reduced motion", "narrow mobile"], "evidence": [ { "id": "validation-plan", "statement": "Use equal-size captures for reference:compare as pixel-difference evidence only; run Chromium and Playwright WebKit when available and record browser uncertainty rather than infer Safari support.", "sourceClass": "proposal", "sourceRef": "user request", "basedOn": ["repo-geometry", "lib-layers"] } ] },
+  "approval": { "status": "draft", "approvedBy": "", "approvedAt": "", "userDecisionRefs": [] }
+}

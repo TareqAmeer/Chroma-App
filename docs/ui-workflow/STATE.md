@@ -31,6 +31,11 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
 
 ## Session log
 <!-- S1, S2, … append below. Format: **Sx — date — verdict**, then ≤10 lines. -->
+**Color-slider gooey — 2026-09-13 — draft prototype**
+- Added isolated HTML/CSS/SVG/JS study at `design/prototypes/color-slider-gooey/`; no production UI or dependencies changed.
+- Draft reference specification and concise review record source behavior, fallback, and required human decisions.
+- Source audit pinned official liquid-gooey MIT package at `422180dd7a5ac646c85deedc65500c4a74339127`; WebKit evidence remains unrecorded.
+
 **S1 — 2026-09-11 — (a) works w/ caveat · (b) works w/ caveat · (c) works w/ caveat · (d) works w/ caveat (no refactor)**
 - (a) Token mapping, authored non-trivial decls. Retouch 95: by value 44 exact/17 ambiguous/28 none (+6 font-weight, no app weight tokens); role-aware (fontSize→--fs-*, padding/gap→--sp-*, radius→--r*) 53/0/36. Export 248: by value 119/47/66 (+16); role-aware 128/0/104. Only 11/95 and 23/248 decls use a `_ds` var() — the wireframe is mostly literals, so `_ds` names are NOT a usable bridge; match on computed value + property role. No-match causes: off-grid spacing (2/6/7/9/10/14px), control heights (4–32px, app has no size tokens), pill radius (9999px/50%), letter-spacing .8px, 0.15s (app has 120/200ms), 3 colours (on-primary text rgb(16,34,42), rgba(255,255,255,.28), danger rgba(135,15,19,.16/.5)).
 - (b) Rule "one entry per `.grp[data-fxsec]`, else whole panel→`.fx-ctrl[data-fxsec=<key>]`, alias masks→local" regenerates Retouch exactly (0 field diffs), 20/21 panels overall in 0.6s. Info differs (wireframe grp keys info-meta/info-people aren't app sections). `label` isn't derivable. Per-CONTROL pairs can't be generated: wireframe controls carry no ids/hooks (Retouch block has none).
