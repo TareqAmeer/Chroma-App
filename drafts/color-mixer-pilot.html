@@ -38,7 +38,7 @@
     .hist-zone { position:absolute; top:0; bottom:0; z-index:1; border:0; background:transparent; cursor:pointer; }
     .hist-zone:hover,.hist-zone[aria-pressed="true"] { background:linear-gradient(180deg,rgba(197,197,197,.28),rgba(197,197,197,.12) 62%,transparent); }
     .band-row { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:var(--space-sm); padding:var(--space-md) 0 var(--space-lg); align-items:center; }
-    .band { width:100%; max-width:44px; aspect-ratio:1; justify-self:center; border-radius:50%; border:4px solid var(--band); background:transparent; padding:0; cursor:pointer; transition:transform .12s ease, box-shadow .12s ease; }
+    .band { width:100%; max-width:44px; aspect-ratio:1; justify-self:center; border-radius:0; border:4px solid var(--band); background:transparent; padding:0; cursor:pointer; transition:transform .12s ease, box-shadow .12s ease; }
     .band:hover { transform:scale(1.05); }
     .band[aria-pressed="true"] { box-shadow:0 0 0 2px var(--white); }
     .band.edited { background:linear-gradient(135deg,var(--before) 0 49.4%,var(--after) 50.6% 100%); }
@@ -54,8 +54,8 @@
     input[type="range"] { position:relative; z-index:3; width:100%; height:28px; margin:0; appearance:none; -webkit-appearance:none; background:transparent; cursor:pointer; }
     input[type="range"]::-webkit-slider-runnable-track { height:3px; border-radius:3px; background:transparent; }
     input[type="range"]::-moz-range-track { height:3px; border-radius:3px; background:transparent; }
-    input[type="range"]::-webkit-slider-thumb { width:28px; height:28px; margin-top:-12.5px; appearance:none; -webkit-appearance:none; border:3px solid #ececec; border-radius:50%; background:var(--panel); box-shadow:inset 0 0 0 8px var(--knob), 0 0 0 1px #555; }
-    input[type="range"]::-moz-range-thumb { width:22px; height:22px; border:3px solid #ececec; border-radius:50%; background:var(--knob); box-shadow:0 0 0 1px #555; }
+    input[type="range"]::-webkit-slider-thumb { width:28px; height:28px; margin-top:-12.5px; appearance:none; -webkit-appearance:none; border:3px solid #ececec; border-radius:0; background:var(--panel); box-shadow:inset 0 0 0 8px var(--knob), 0 0 0 1px #555; transform:rotate(var(--roll,0deg)); transition:transform .12s linear; }
+    input[type="range"]::-moz-range-thumb { width:22px; height:22px; border:3px solid #ececec; border-radius:0; background:var(--knob); box-shadow:0 0 0 1px #555; transform:rotate(var(--roll,0deg)); transition:transform .12s linear; }
     .hint { margin:var(--space-lg) 0 0; color:var(--muted); font-size:12px; line-height:1.45; }
     @media (max-width:360px) { .pilot { padding-inline:16px; } .band-row { gap:4px; } .band { border-width:3px; } .control { gap:8px; } }
     @media (prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none!important; } }
@@ -75,6 +75,7 @@
         <div class="control"><label for="hue">Hue</label><input class="value" id="hueValue" type="number" min="-100" max="100" value="0" inputmode="numeric"><div class="slider-shell"><input id="hue" type="range" min="-100" max="100" value="0"></div></div>
         <div class="control"><label for="saturation">Saturation</label><input class="value" id="saturationValue" type="number" min="-100" max="100" value="0" inputmode="numeric"><div class="slider-shell"><input id="saturation" type="range" min="-100" max="100" value="0"></div></div>
         <div class="control"><label for="luminance">Luminance</label><input class="value" id="luminanceValue" type="number" min="-100" max="100" value="0" inputmode="numeric"><div class="slider-shell"><input id="luminance" type="range" min="-100" max="100" value="0"></div></div>
+        <div class="control"><label for="rollSpeed">Roll speed</label><input class="value" id="rollSpeedValue" type="number" min="0" max="12" value="4" inputmode="numeric"><div class="slider-shell"><input id="rollSpeed" type="range" min="0" max="12" value="4"></div></div>
       </div>
       <p class="hint">Pilot only. Select a band, then drag a slider or type a value to test the diagonal before/after state.</p>
     </section>
@@ -87,6 +88,7 @@
     const state = Object.fromEntries(bands.map(([name]) => [name,{hue:0,saturation:0,luminance:0}]));
     let selected = 'Red';
     const ids = ['hue','saturation','luminance'];
+    let rollSpeed = 4;
     const histogram = document.querySelector('#histogram');
     const bandRow = document.querySelector('#bandRow');
     function colorFor(name, adjusted) {
@@ -121,6 +123,7 @@
         const shell=range.closest('.slider-shell');
         shell.style.setProperty('--line-left',`${Math.min(50,pos)}%`);
         shell.style.setProperty('--line-width',`${Math.abs(pos-50)}%`);
+        range.style.setProperty('--roll',`${v * rollSpeed}deg`);
       });
       const color = colorFor(selected,true);
       document.querySelector('#hue').style.setProperty('--track','linear-gradient(90deg,#39d7db,#4178ff,#bc28ca)');
@@ -129,6 +132,13 @@
       document.querySelector('#saturation').style.setProperty('--knob',state[selected].saturation === 0 ? 'var(--panel)' : color);
       document.querySelector('#luminance').style.setProperty('--track',`linear-gradient(90deg,#262626,${color},#ddd)`);
       document.querySelector('#luminance').style.setProperty('--knob',state[selected].luminance === 0 ? 'var(--panel)' : color);
+      const speedRange=document.querySelector('#rollSpeed'), speedValue=document.querySelector('#rollSpeedValue');
+      speedRange.value=rollSpeed; speedValue.value=rollSpeed;
+      speedRange.style.setProperty('--track','linear-gradient(90deg,#555,var(--accent))');
+      speedRange.style.setProperty('--knob','var(--white)');
+      speedRange.closest('.slider-shell').style.setProperty('--line-left','50%');
+      speedRange.closest('.slider-shell').style.setProperty('--line-width',`${rollSpeed / 12 * 50}%`);
+      speedRange.style.setProperty('--roll','0deg');
       ids.forEach(key => document.querySelector(`#${key}`).closest('.slider-shell').style.setProperty('--track',document.querySelector(`#${key}`).style.getPropertyValue('--track')));
       document.querySelector('#resetActions').classList.toggle('visible',anyEdited());
     }
@@ -142,6 +152,9 @@
       value.addEventListener('input',e=>setValue(key,e.target.value));
       value.addEventListener('change',e=>setValue(key,e.target.value));
     });
+    function setRollSpeed(raw) { rollSpeed=Math.max(0,Math.min(12,Number(raw) || 0)); render(); }
+    document.querySelector('#rollSpeed').addEventListener('input',e=>setRollSpeed(e.target.value));
+    document.querySelector('#rollSpeedValue').addEventListener('input',e=>setRollSpeed(e.target.value));
     document.querySelector('#resetBand').onclick=()=>{ ids.forEach(k=>state[selected][k]=0); render(); };
     document.querySelector('#resetAll').onclick=()=>{ bands.forEach(([name])=>ids.forEach(k=>state[name][k]=0)); render(); };
     document.querySelector('#enabled').onchange=e=>document.querySelector('#pilot').classList.toggle('disabled',!e.target.checked);
