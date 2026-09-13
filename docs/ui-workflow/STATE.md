@@ -927,6 +927,6 @@ call `ui:test`) will currently fail on that until it's fixed.
 **Phase 2B — contract scaffolds — 2026-09-13**
 - Added deterministic, observation-only scaffolding for 12 non-toggle families; all 13 registry families now have contracts.
 - Generated drafts record registration/runtime counts, overlap, variants, and explicit evidence gaps; drafts are not design approval.
-- **Slider contract — proposed:** Color Mixer HSL, Point Color, and Color Wheels presentations documented from targeted source, registry, and saved Color surfaces.
-- Current slider evidence: 91 registrations / 47 appearances; 84 registrations unlinked and 30 runtime records unresolved. Color mobile, changed, keyboard, and assistive-technology states remain gaps.
-- Proposed system mapping records 44px target, one-colour/focus/type/motion rules, and token roles; exact geometry, focus treatment, accessibility wording, and typography remain user decisions. No production tokens or UI changed.
+- **Slider contract — proposed:** Color Mixer HSL, Point Color, and Color Wheels documented from targeted source, registry, and saved Color surfaces; current gaps remain mobile, changed, keyboard, and assistive-technology states.
+- User decisions recorded: Slate/Mist changed-state fills retain functional HSL gradients; use a 44px target unless validation finds a concrete issue; associate visible labels and expose native values.
+- Recommended mapping uses existing 12px/400 SF Pro Text labels, tabular values, 4px label/control separation, and documented focus/motion rules. No production tokens or UI changed.

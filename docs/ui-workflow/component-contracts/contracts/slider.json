@@ -2981,7 +2981,7 @@
     ],
     "themes": {
       "current": "Saved Color surface captures exist in dark and light variants. Source uses shared slider styling plus app theme variables; the Color screenshots directly show dark HSL and wheel controls. Registry evidence does not link all Color controls to runtime appearances in either theme.",
-      "proposed": "Use the system's single interactive colour for changed/focused control chrome: Slate Blue on light surfaces and Mist Blue on near-black. Preserve hue/saturation/luminance spectrum gradients only as functional colour data, not as a second brand accent. Validate legibility in both themes."
+      "proposed": "Use Slate Blue (#224455) for changed-state fill on light surfaces and Mist Blue (#61a0af) on near-black. Preserve hue/saturation/luminance spectrum gradients as functional colour data, not as a second brand accent. Use the design.md #2a5468 focus ring in both themes, and verify its contrast on near-black."
     },
     "states": {
       "current": [
@@ -2994,7 +2994,7 @@
     },
     "responsiveDimensions": {
       "current": "Source sets the generic range input height to 16px, the generic track to 3px, and the generic thumb to 13px; gradient sliders override visual height to 5px and thumb size to 16px. The mobile rule sets .fx-slider height to 28px and touch-action: pan-x. The captured Color panels are 220px/440px panel surfaces, not evidence of phone hit-area geometry.",
-      "proposed": "Preserve the visual footprint across breakpoints while providing at least the design.md 44px interaction target. Exact track, thumb, and hit-area geometry remains undecided pending mobile and pointer validation."
+      "proposed": "Keep the current 3px neutral track and 13px thumb for plain sliders, and 5px gradient track and 16px thumb for colour sliders. Provide a 44px minimum interaction target without changing that visual footprint; the user chose 44px unless validation finds a concrete layout or usability issue. Use the design.md 8px spacing scale and its 4px sub-base for label/control separation. Validate on mobile and pointer input."
     },
     "tokens": {
       "references": [
@@ -3031,17 +3031,18 @@
         "slider.focus.offset",
         "slider.motion.duration",
         "slider.motion.easing",
-        "slider.motion.reduced"
+        "slider.motion.reduced",
+        "slider.typography.valueNumeric"
       ],
-      "exception": "Functional spectrum/tint gradients encode the adjusted colour parameter. They remain data encoding; the interactive changed/focus signal should follow the one-colour system rule. Proposed roles are contract vocabulary only and add no production tokens."
+      "exception": "Recommended role mapping: track 3px/5px and thumbs 13px/16px preserve the observed plain/gradient presentations; hit target 44px; label/value SF Pro Text 12px/400 with tabular figures; label/control gap 4px; light/dark changed fill Slate Blue #224455 / Mist Blue #61a0af; focus ring 2px with 2px offset in #2a5468 per design.md; direct value updates with no added transition and reduced-motion override. Functional spectrum/tint gradients encode the adjusted colour parameter. These are proposed contract values only and add no production tokens."
     },
     "typography": {
       "current": "Color Mixer and Point Color labels are Hue, Saturation, and Luminance; Point Color also has Range. Wheel labels are Shadows (Lift), Midtones (Gamma), and Highlights (Gain). Source places a separate .fx-val numeric readout beside each range input. Captures show numeric values, including 0 and Range 35. The saved HSL surface record measures the parameter labels at 12px SF Pro Text, weight 400; the numeric-value typography is not established by these surface records.",
-      "proposed": "Use SF Pro Text and the design.md weight ladder (300/400/600/700; no 500). Define label and numeric-value roles; keep tabular alignment for changing numbers. Exact size, weight, and contrast require a reviewed target."
+      "proposed": "Use SF Pro Text 12px/400 for labels, matching the saved Color surface record; use the same 12px/400 treatment with tabular figures for values. Use only the design.md weight ladder (300/400/600/700; no 500). Verify value alignment and contrast in both themes."
     },
     "motion": {
       "current": "Input handlers update adjustments directly on input. The generic thumb grows to 1.12 while active; no slider-specific easing or transition is set. The global reduced-motion rule shortens transitions and animations to .01ms.",
-      "proposed": "Keep value and image feedback direct while dragging. Tokenize any future transition duration/easing and remove nonessential movement when reduced motion is requested; do not add spring or bounce motion."
+      "proposed": "Keep value and image feedback direct while dragging, with no added slider transition. Retain the existing active-thumb affordance only if it remains legible and does not impede the 44px target; suppress nonessential movement for reduced motion and do not add spring or bounce motion."
     },
     "keyboardPointer": {
       "pointer": "Source uses native input[type=range] controls with horizontal tracks; generic mobile CSS sets touch-action: pan-x. Exact touch gesture and hit-area behavior for Color controls has not been interaction-tested.",
@@ -3060,11 +3061,11 @@
     ],
     "proposedTargets": {
       "scope": "Consistent Color-workflow slider behavior across Color Mixer, Point Color, and Color Wheels.",
-      "labeling": "Every range input has a programmatically associated name matching its visible parameter label.",
-      "value": "Expose current value and bounds through the native range semantics; keep the visible numeric readout synchronized.",
-      "interaction": "Provide a 44px minimum interaction target without changing the current visual track/thumb footprint; validate pointer, touch, and keyboard input.",
-      "focus": "Use the design.md focus treatment after confirming legibility against both light and near-black panel surfaces.",
-      "feedback": "Use the single interactive colour for changed/focus chrome while retaining only necessary colour-parameter gradients.",
+      "labeling": "Associate every range input with its visible parameter label; expose its current value and bounds through native range semantics and keep the visible numeric readout synchronized without a duplicate live announcement.",
+      "value": "Use the native range value as the accessible current value and keep the adjacent visible value synchronized.",
+      "interaction": "Provide a 44px minimum interaction target without changing the current visual track/thumb footprint; accept different geometry only if validation demonstrates a concrete layout or usability issue.",
+      "focus": "Use the design.md 2px #2a5468 focus ring at 2px offset and verify contrast in both themes.",
+      "feedback": "Use Slate Blue #224455 on light surfaces and Mist Blue #61a0af on near-black for changed-state fill; preserve functional HSL gradients. Apply the documented #2a5468 focus ring.",
       "motion": "Keep updates immediate; make any nonessential transition obey reduced motion."
     },
     "decisions": [],
@@ -3076,9 +3077,18 @@
     ],
     "currentVsProposed": {
       "current": "Color has three slider presentations: three HSL controls per selected band in Color Mixer, three per-wheel luminance controls, and four Point Color controls revealed after sampling. Inputs are native ranges with source-defined bounds and separate visible values. Current source has no explicit accessible names on these Color inputs, amber modified/focus styling, small visual track/thumb geometry, and only generic mobile sizing/touch CSS. Saved captures show resting default states, including the empty Point Color state.",
-      "proposed": "Provide a common, named, keyboard/touch/pointer-operable range interaction with synchronized value, at least a 44px target, system focus and colour roles, and restrained reduced-motion behavior. Preserve distinct functional gradients and each workflow's evidenced ranges. This is a proposed contract, not approval or production implementation."
+      "proposed": "Provide a common, named, keyboard/touch/pointer-operable range interaction with synchronized accessible value, a 44px target, changed-state Slate/Mist fills, the documented #2a5468 focus ring, 12px/400 SF Pro Text labels and tabular 12px/400 values, 4px label/control separation, and restrained reduced-motion behavior. Preserve the observed functional gradients and each workflow's evidenced ranges. This is a proposed contract, not approval or production implementation."
     },
-    "userDecisions": [],
+    "userDecisions": [
+      {
+        "recordedAt": "2026-09-13",
+        "colorTreatment": "Use Slate Blue on light and Mist Blue on dark for changed-state fill; retain functional HSL gradients and use the documented #2a5468 focus ring.",
+        "interactionTarget": "Use a 44px minimum target unless validation finds a concrete issue.",
+        "accessibleNameAndValue": "Associate the visible label and expose the current value accessibly.",
+        "typographyAndTokens": "Proceed with the contract recommendation; validate exact mapping against existing system and surface evidence.",
+        "approvalBoundary": "These choices inform this proposed contract and do not approve production implementation."
+      }
+    ],
     "references": [
       "chromasmith-design/project/design.md",
       "docs/ui-workflow/component-contracts/README.md",
@@ -3097,10 +3107,8 @@
       "design/asbuilt/fxsec-wheels/"
     ],
     "questions": [
-      "Should the existing amber modified/focus treatment be replaced with the documented Slate/Mist Blue system treatment, and how should the functional HSL gradients remain distinct from interactive-state colour?",
-      "What track, thumb, spacing, and 44px hit-target geometry should be standardized, especially for gradient sliders on mobile?",
-      "Should each Color range input be associated with its visible .fx-label and expose the visible numeric value as its accessible current value; what screen-reader wording/announcement is required?",
-      "Which exact typography and token values should the proposed slider roles use after the Color controls are validated in light, dark, mobile, keyboard, and assistive-technology contexts?"
+      "Does testing reveal a concrete layout or usability issue with a 44px interaction target while preserving the current visual track/thumb geometry?",
+      "Do light/dark contrast, keyboard, mobile touch, or assistive-technology checks require adjustments to the proposed focus colour, tabular value treatment, or label/readout association?"
     ]
   },
   "validation": {
@@ -3111,5 +3119,5 @@
     "scope": "Registry and saved-surface evidence reviewed for a proposed Color-workflow contract; incomplete runtime coverage, not a production gate."
   },
   "approval": null,
-  "authoredDigest": "6383ec645855453063edf5e32e1aea5ce89030b2d1fa2ff8566e734818b12b6a"
+  "authoredDigest": "1c96fd9d5ec4ce9827573621a86f20bb1fb13e5461000eb1f0101c1aeef473bb"
 }
