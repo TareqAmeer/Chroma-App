@@ -953,3 +953,7 @@ call `ui:test`) will currently fail on that until it's fixed.
 **Color pilot readiness audit — 2026-09-13:** Recorded current composition, captures, contracts, earlier implementation, and open Color backlog in `docs/ui-workflow/color-pilot-readiness.md`.
 Existing Color comparison and extracted spec are generated drafts/evidence, not approved design; no production UI or visual direction changed.
 Decision gate: user must choose the existing draft as pilot basis, supply a new reference, or name one component for targeted redesign.
+# Visual-to-spec skill: `.agents/skills/chroma-visual-to-spec` creates draft-only, measured reference specifications; it never implements or approves UI.
+# Claude compatibility: `.claude/skills/chroma-visual-to-spec` is a thin entrypoint to the same vendor-neutral workflow and JSON format.
+# Deterministic tooling: installed `pngjs` supports PNG dimensions and RGBA samples; WebP, semantic tokens, and non-pixel effects require recorded limitations.
+# Validation: components registry, contracts, and reference-spec checks passed before this skill was added; final focused checks are required after edits.
