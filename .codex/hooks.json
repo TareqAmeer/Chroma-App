@@ -1,0 +1,109 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/autostart-diagnostics.sh'"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/block-full-html-read.sh'"
+          },
+          {
+            "type": "command",
+            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/nudge-explore-delegation.sh'"
+          }
+        ]
+      },
+      {
+        "matcher": "Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/nudge-explore-delegation.sh'"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/reset-explore-counter.sh'"
+          }
+        ]
+      },
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/plan-completeness-gate.sh'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/bump-build-stamp.sh'"
+          },
+          {
+            "type": "command",
+            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/warn-claude-md-size.sh'"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/token-lint-on-edit.sh'"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/precompact-snapshot.sh'"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/reset-explore-counter.sh'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/stop-editor-gate-check.sh'"
+          }
+        ]
+      }
+    ]
+  }
+}

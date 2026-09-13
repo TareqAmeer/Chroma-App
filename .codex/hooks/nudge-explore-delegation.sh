@@ -1,0 +1,36 @@
+#!/bin/sh
+# PreToolUse/Read|Grep|Glob hook: counts raw exploration-shaped reads in a row and nudges
+# (non-blocking) to consider the Explore subagent once the count gets high, instead of leaving
+# this as a memory rule that competes for relevance and gets skipped under exactly the
+# circumstances it matters most (a big multi-file audit, which is also when the model is busiest
+# and least likely to re-derive "should I have delegated this").
+#
+# This exists because the previous version of this advice — context-efficiency memory rule #3
+# ("delegate multi-file/codebase search to Explore") — was demonstrated NOT working, live, in the
+# session that wrote this hook: a ~20-call repo audit ran entirely as raw Bash/Read/Grep in the
+# main thread instead. A hook can't judge "is this task audit-shaped" semantically, but it CAN
+# deterministically count "N raw reads in a row with no subagent dispatch," which is a cheap,
+# honest proxy — imperfect, but enforced rather than hoped for.
+#
+# Not a hard block: unlike the chromasmith-22.html read-size gate, "should this have been
+# delegated" isn't objectively checkable, so this only nudges (JSON additionalContext, allowed)
+# rather than blocking — a false positive here would wrongly stop legitimate focused work.
+repo="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
+state="$repo/.claude/.explore-nudge-count"
+threshold=12
+
+count=$(cat "$state" 2>/dev/null || echo 0)
+count=$((count + 1))
+
+if [ "$count" -ge "$threshold" ]; then
+  # Plain stderr on a PreToolUse exit-0 is NEVER shown to Claude — only logged for debugging
+  # (confirmed live 2026-09-11: this hook fired and wrote its counter file, but the message
+  # never reached the conversation). The documented way to surface non-blocking guidance is
+  # JSON on stdout with hookSpecificOutput.additionalContext, exit 0.
+  jq -n --arg msg "${count} raw file reads/greps in a row with no subagent dispatch — if this is a broad multi-file search or audit (not iterating on one thing), consider fanning it out to 1-3 Explore subagents instead: only the conclusion lands in context, not every intermediate read." \
+    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "allow", additionalContext: $msg}}'
+  count=0
+fi
+
+echo "$count" > "$state" 2>/dev/null
+exit 0
