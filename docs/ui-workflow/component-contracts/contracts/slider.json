@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "family": "slider",
-  "purpose": "Unreviewed; purpose requires human review.",
-  "status": "draft",
+  "purpose": "Provide direct, continuous adjustment for tonal and colour parameters in the Color workflow, with a visible current value and immediate image feedback.",
+  "status": "proposed",
   "observations": {
     "generatedBy": "scripts/scaffold-component-contracts.mjs",
     "generatedAt": "2026-09-13T04:14:41.378Z",
@@ -2948,70 +2948,168 @@
   "authored": {
     "identity": {
       "family": "slider",
-      "subfamilies": [],
+      "subfamilies": [
+        "Color Mixer HSL adjustment",
+        "Point Color adjustment",
+        "Color Wheels luminance adjustment"
+      ],
       "designSystemComponent": null,
-      "designSystemEvidence": "unreviewed"
+      "designSystemEvidence": "design.md has no Slider component specification; this proposal maps its system-wide rules without claiming an existing component spec."
     },
-    "purpose": "unreviewed",
+    "purpose": "Change one bounded numeric colour or tonal parameter continuously and show both its current value and its effect on the image.",
     "semantics": {
-      "uses": [],
-      "mismatch": "unreviewed"
+      "uses": [
+        "Color Mixer: Hue, Saturation, and Luminance for the selected colour band; each is bipolar from -100 to 100 with neutral at 0.",
+        "Point Color: Hue, Saturation, and Luminance are bipolar from -100 to 100 with neutral at 0; Range is 0 to 100 and starts at 35. Source hides these four controls until a point colour is chosen.",
+        "Color Wheels: Shadows (Lift), Midtones (Gamma), and Highlights (Gain) luminance controls are bipolar from -100 to 100 with neutral at 0."
+      ],
+      "mismatch": "The component registry includes sliders across many unrelated workflows. This contract proposes only the three Color-workflow presentations; generated observations remain broader. The registry's 47 saved appearances do not establish all 91 source registrations."
     },
     "anatomy": {
-      "parts": [],
-      "evidenceLimit": "unreviewed"
+      "parts": [
+        "Visible parameter label",
+        "Horizontal range input and track, with circular thumb",
+        "Current numeric value",
+        "Optional functional colour-gradient track for hue/saturation/luminance"
+      ],
+      "evidenceLimit": "The saved Color Mixer and Color Wheels captures show the track, thumb, labels, and values. Point Color capture shows its pre-selection empty state. Captures do not show a focused, dragging, or changed state."
     },
-    "variants": [],
+    "variants": [
+      "HSL colour-mixer gradients: Hue uses a spectrum; Saturation and Luminance are tinted for the chosen band.",
+      "Point Color: three HSL gradients plus a neutral Range slider; controls are conditionally revealed after colour selection.",
+      "Color Wheels: three plain luminance sliders, one under each tonal wheel."
+    ],
     "themes": {
-      "current": "unreviewed",
-      "proposed": null
+      "current": "Saved Color surface captures exist in dark and light variants. Source uses shared slider styling plus app theme variables; the Color screenshots directly show dark HSL and wheel controls. Registry evidence does not link all Color controls to runtime appearances in either theme.",
+      "proposed": "Use the system's single interactive colour for changed/focused control chrome: Slate Blue on light surfaces and Mist Blue on near-black. Preserve hue/saturation/luminance spectrum gradients only as functional colour data, not as a second brand accent. Validate legibility in both themes."
     },
     "states": {
-      "current": [],
-      "evidenceLimit": "unreviewed"
+      "current": [
+        "Neutral/default numeric values are 0 for HSL and wheel sliders; Point Color Range starts at 35.",
+        "Source comments and CSS show a neutral track until the value departs from its default, then a filled region; bipolar fills grow from the centre and unipolar fills from the left.",
+        "Active pointer state changes the thumb cursor and scales it to 1.12; a changed row uses the accent fill.",
+        "Point Color source has an empty/unselected state with adjustment controls hidden and a selected state with the controls shown."
+      ],
+      "evidenceLimit": "The saved captures show resting/default controls only. Changed, disabled, error, keyboard-focus, pointer-drag, and selected Point Color control states are not evidenced by the permitted Color captures."
     },
-    "responsiveDimensions": {},
+    "responsiveDimensions": {
+      "current": "Source sets the generic range input height to 16px, the generic track to 3px, and the generic thumb to 13px; gradient sliders override visual height to 5px and thumb size to 16px. The mobile rule sets .fx-slider height to 28px and touch-action: pan-x. The captured Color panels are 220px/440px panel surfaces, not evidence of phone hit-area geometry.",
+      "proposed": "Preserve the visual footprint across breakpoints while providing at least the design.md 44px interaction target. Exact track, thumb, and hit-area geometry remains undecided pending mobile and pointer validation."
+    },
     "tokens": {
-      "references": [],
-      "rawLiterals": [],
-      "proposed": [],
-      "exception": null
+      "references": [
+        "color.action.primary",
+        "color.border.default",
+        "motion.durationFast",
+        "motion.ease"
+      ],
+      "rawLiterals": [
+        "3px generic track; 13px generic thumb; 16px generic input height",
+        "5px gradient track/input height; 16px gradient thumb",
+        "28px mobile .fx-slider height",
+        "3px track and 2px radius; 1px centre detent by 7px",
+        "16px gradient thumb with white fill and rgba(0,0,0,.5) shadow",
+        "12px Color parameter labels in saved HSL surface record; 11px section eyebrow",
+        "Amber focus outline rgba(212,144,58,.55), 2px with 2px offset",
+        "Active thumb transform scale(1.12); no slider transition duration is set"
+      ],
+      "proposed": [
+        "slider.geometry.trackThickness",
+        "slider.geometry.trackRadius",
+        "slider.geometry.thumbSize",
+        "slider.geometry.hitTargetBlockSize",
+        "slider.color.trackRest",
+        "slider.color.trackChanged",
+        "slider.color.thumb",
+        "slider.color.functionalGradient",
+        "slider.typography.label",
+        "slider.typography.value",
+        "slider.spacing.labelToControl",
+        "slider.spacing.valueInset",
+        "slider.focus.color",
+        "slider.focus.width",
+        "slider.focus.offset",
+        "slider.motion.duration",
+        "slider.motion.easing",
+        "slider.motion.reduced"
+      ],
+      "exception": "Functional spectrum/tint gradients encode the adjusted colour parameter. They remain data encoding; the interactive changed/focus signal should follow the one-colour system rule. Proposed roles are contract vocabulary only and add no production tokens."
     },
     "typography": {
-      "current": "unreviewed",
-      "proposed": null
+      "current": "Color Mixer and Point Color labels are Hue, Saturation, and Luminance; Point Color also has Range. Wheel labels are Shadows (Lift), Midtones (Gamma), and Highlights (Gain). Source places a separate .fx-val numeric readout beside each range input. Captures show numeric values, including 0 and Range 35. The saved HSL surface record measures the parameter labels at 12px SF Pro Text, weight 400; the numeric-value typography is not established by these surface records.",
+      "proposed": "Use SF Pro Text and the design.md weight ladder (300/400/600/700; no 500). Define label and numeric-value roles; keep tabular alignment for changing numbers. Exact size, weight, and contrast require a reviewed target."
     },
     "motion": {
-      "current": "unreviewed",
-      "proposed": null
+      "current": "Input handlers update adjustments directly on input. The generic thumb grows to 1.12 while active; no slider-specific easing or transition is set. The global reduced-motion rule shortens transitions and animations to .01ms.",
+      "proposed": "Keep value and image feedback direct while dragging. Tokenize any future transition duration/easing and remove nonessential movement when reduced motion is requested; do not add spring or bounce motion."
     },
     "keyboardPointer": {
-      "pointer": "unreviewed",
-      "keyboard": "unreviewed"
+      "pointer": "Source uses native input[type=range] controls with horizontal tracks; generic mobile CSS sets touch-action: pan-x. Exact touch gesture and hit-area behavior for Color controls has not been interaction-tested.",
+      "keyboard": "Native range inputs are used, so browser range keyboard behavior is the source-level mechanism. No permitted Color evidence records keyboard operation, focus order, or value announcements; these need verification."
     },
     "accessibility": {
-      "current": "unreviewed",
-      "evidenceLimit": "unreviewed"
+      "current": "Color source puts a visible .fx-label div beside each range input; these are not label elements and the Color range inputs have no explicit aria-label in their source declarations. Runtime records leave several slider labels empty or unresolved. A visible numeric readout exists, but no live-region or value-announcement behavior is evidenced. The focus-visible rule is a 2px amber outline at 2px offset, which conflicts with design.md's 2px #2a5468 focus ring.",
+      "evidenceLimit": "No accessibility tree, screen-reader, keyboard, forced-colors, or hit-target test was performed. Programmatic naming and announcement behavior must be treated as unverified; the current source suggests the adjacent labels are not associated with these inputs."
     },
-    "systemDesignRules": [],
-    "proposedTargets": {},
+    "systemDesignRules": [
+      "Use sentence case for visible control labels and use SF Pro Text for UI below 20px; weight 500 is absent.",
+      "Use one interactive colour: Slate Blue #224455 on light surfaces and Mist Blue #61a0af on near-black. State colours must not become decoration; functional HSL gradients are a data-encoding exception to assess explicitly.",
+      "Use the documented 2px #2a5468 focus ring at 2px offset, with verified contrast in both themes.",
+      "The minimum hit target is 44px. Do not infer an exception for the slider from its smaller visual track.",
+      "Keep motion restrained; respect reduced motion and avoid bounce/spring behavior."
+    ],
+    "proposedTargets": {
+      "scope": "Consistent Color-workflow slider behavior across Color Mixer, Point Color, and Color Wheels.",
+      "labeling": "Every range input has a programmatically associated name matching its visible parameter label.",
+      "value": "Expose current value and bounds through the native range semantics; keep the visible numeric readout synchronized.",
+      "interaction": "Provide a 44px minimum interaction target without changing the current visual track/thumb footprint; validate pointer, touch, and keyboard input.",
+      "focus": "Use the design.md focus treatment after confirming legibility against both light and near-black panel surfaces.",
+      "feedback": "Use the single interactive colour for changed/focus chrome while retaining only necessary colour-parameter gradients.",
+      "motion": "Keep updates immediate; make any nonessential transition obey reduced motion."
+    },
     "decisions": [],
-    "exceptions": [],
+    "exceptions": [
+      "Generated registry records 91 slider source registrations and 47 saved appearances; it reports 84 registrations without linked runtime appearance and 30 unresolved runtime records. Coverage is incomplete.",
+      "Only ten source registrations are in the three Color presentations described here. The wider family observations include unrelated editor, mask, library, collage, and page sliders.",
+      "Color Mixer and Point Color use functional rainbow/tinted gradients; Color Wheels use plain luminance sliders.",
+      "Current source uses amber modified/focus styling and smaller visual controls than the 44px system target; this proposal records the mismatch without changing production UI."
+    ],
     "currentVsProposed": {
-      "current": "unreviewed",
-      "proposed": null
+      "current": "Color has three slider presentations: three HSL controls per selected band in Color Mixer, three per-wheel luminance controls, and four Point Color controls revealed after sampling. Inputs are native ranges with source-defined bounds and separate visible values. Current source has no explicit accessible names on these Color inputs, amber modified/focus styling, small visual track/thumb geometry, and only generic mobile sizing/touch CSS. Saved captures show resting default states, including the empty Point Color state.",
+      "proposed": "Provide a common, named, keyboard/touch/pointer-operable range interaction with synchronized value, at least a 44px target, system focus and colour roles, and restrained reduced-motion behavior. Preserve distinct functional gradients and each workflow's evidenced ranges. This is a proposed contract, not approval or production implementation."
     },
     "userDecisions": [],
-    "references": [],
-    "questions": []
+    "references": [
+      "chromasmith-design/project/design.md",
+      "docs/ui-workflow/component-contracts/README.md",
+      "docs/ui-workflow/component-contracts/schema.json",
+      "docs/ui-workflow/component-contracts/contracts/slider.json",
+      "docs/ui-workflow/component-contracts/contracts/toggle.json",
+      "scripts/query-components.mjs",
+      "chromasmith-22.html:1991-1994",
+      "chromasmith-22.html:2009-2023",
+      "chromasmith-22.html:2041-2045",
+      "chromasmith-22.html:306-325",
+      "chromasmith-22.html:432-450",
+      "chromasmith-22.html:659",
+      "design/asbuilt/fxsec-hsl/",
+      "design/asbuilt/fxsec-pointcolor/",
+      "design/asbuilt/fxsec-wheels/"
+    ],
+    "questions": [
+      "Should the existing amber modified/focus treatment be replaced with the documented Slate/Mist Blue system treatment, and how should the functional HSL gradients remain distinct from interactive-state colour?",
+      "What track, thumb, spacing, and 44px hit-target geometry should be standardized, especially for gradient sliders on mobile?",
+      "Should each Color range input be associated with its visible .fx-label and expose the visible numeric value as its accessible current value; what screen-reader wording/announcement is required?",
+      "Which exact typography and token values should the proposed slider roles use after the Color controls are validated in light, dark, mobile, keyboard, and assistive-technology contexts?"
+    ]
   },
   "validation": {
     "commands": [
       "node scripts/query-components.mjs --family slider",
       "node scripts/validate-component-contracts.mjs --family slider"
     ],
-    "scope": "Unreviewed generated draft; observations only, not a design or production gate."
+    "scope": "Registry and saved-surface evidence reviewed for a proposed Color-workflow contract; incomplete runtime coverage, not a production gate."
   },
   "approval": null,
-  "authoredDigest": "756ae587175b595e5f51197f9b010061063819f024e5c0c50dee0487dd834831"
+  "authoredDigest": "6383ec645855453063edf5e32e1aea5ce89030b2d1fa2ff8566e734818b12b6a"
 }
