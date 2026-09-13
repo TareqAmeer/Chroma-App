@@ -34,6 +34,11 @@ if (!styleMatch) { console.log('FAIL: no <style> block found'); process.exit(1);
 let css = styleMatch[1];
 // Strip @font-face data: URIs — huge base64 blobs that are not CSS colour/spacing literals.
 css = css.replace(/url\(data:[^)]*\)/g, 'url(DATA_URI_STRIPPED)');
+// Strip CSS comments — without this, a rationale comment's prose (which routinely contains
+// literal px numbers and hex-looking substrings) gets parsed as a selector/declaration and
+// produces bogus findings. token-report.mjs already does this; this checker didn't, which is
+// why some of its findings were comment text, not real CSS.
+css = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 // Literals already known-intentional and not worth flagging (absolute black/white, transparent,
 // currentColor, and the handful of raw shadow-alpha blacks used across many rules deliberately).
@@ -52,6 +57,23 @@ function extractRootTokens() {
       if (/^-?\d+(\.\d+)?px$/.test(val)) pxTokens.add(val);
     }
   }
+  // Also fold in design/tokens.json's own color/dimension values — the actual source of truth,
+  // which can define a token (e.g. an app-level radius/spacing step, or one only emitted into
+  // desktop/library-ui.js's DS block) that chromasmith-22.html's own :root doesn't restate. Without
+  // this, a value can be a real, wired token elsewhere and still get flagged here as "invented".
+  const tokensDoc = JSON.parse(readFileSync('design/tokens.json', 'utf8'));
+  (function walk(o) {
+    if (Array.isArray(o)) return;
+    if (o && typeof o === 'object') {
+      if ('$type' in o && '$value' in o) {
+        const val = String(o.$value).trim().toLowerCase();
+        if (o.$type === 'color' && (/^#[0-9a-f]{3,8}$/.test(val) || /^rgba?\(/.test(val))) colorTokens.add(val.replace(/\s+/g, ''));
+        if (o.$type === 'dimension' && /^-?\d+(\.\d+)?px$/.test(val)) pxTokens.add(val);
+        return;
+      }
+      for (const k of Object.keys(o)) { if (!k.startsWith('$')) walk(o[k]); }
+    }
+  })(tokensDoc);
   return { colorTokens, pxTokens };
 }
 const { colorTokens, pxTokens } = extractRootTokens();

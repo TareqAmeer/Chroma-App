@@ -155,7 +155,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .cver{font-family:var(--mono);font-size:var(--fs-2);color:var(--acc);background:var(--tint-2);border:1px solid var(--tint-4);padding:2px 8px;border-radius:3px;margin-left:auto}
 .dg2{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-2)}
 .dg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-2)}
-.dz{background:var(--sur2);border:1px dashed var(--bdr);border-radius:var(--r);padding:22px 14px;text-align:center;cursor:pointer;transition:all .15s;position:relative;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
+.dz{background:var(--sur2);border:1px dashed var(--bdr);border-radius:var(--r);padding:22px 14px;text-align:center;cursor:pointer;transition:all .15s;position:relative;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--sp-1)}
 .dz:hover,.dz.over{border-color:var(--acc);background:var(--tint-1)}.dz.loaded{border-style:solid;border-color:var(--ok);background:var(--ok)}.dz.loaded .dz-lb,.dz.loaded .dz-sb{color:#fff}
 .dz input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 .dz-ic{font-size:var(--fs-4);color:var(--mut)}.dz.loaded .dz-ic{color:#fff}
@@ -164,7 +164,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .dz-fn{font-family:var(--mono);font-size:var(--fs-2);color:var(--ok);word-break:break-all;max-width:92%;margin-top:2px}.dz.loaded .dz-fn{color:#fff}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .chip-tap{margin-top:0}
-.btn{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:var(--sp-2) 14px;border-radius:5px;border:1px solid;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease,transform .1s ease,box-shadow .15s ease;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.btn{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:var(--sp-2) 14px;border-radius:var(--r-sm);border:1px solid;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease,transform .1s ease,box-shadow .15s ease;display:flex;align-items:center;gap:6px;white-space:nowrap}
 .btn:disabled{opacity:.3;cursor:not-allowed}
 .btn:active:not(:disabled){transform:scale(.96)}
 .bpri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600;box-shadow:inset 0 1px 0 var(--scrim-w1),0 1px 2px var(--scrim-b1)}
@@ -177,7 +177,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .pf{height:100%;background:var(--acc);border-radius:2px;transition:width .25s;width:0%}
 .vrow{display:flex;gap:8px;align-items:center;margin-top:var(--sp-2)}
 .vlb{font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);letter-spacing:0}
-.vinput{background:var(--sur2);border:1px solid var(--bdr);border-radius:5px;padding:6px var(--sp-2);color:var(--txt);font-family:var(--mono);font-size:var(--fs-2);width:180px}
+.vinput{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r-sm);padding:6px var(--sp-2);color:var(--txt);font-family:var(--mono);font-size:var(--fs-2);width:180px}
 .vinput:focus{outline:none;border-color:var(--acc)}
 .step-card{border:1px solid var(--bdr);border-radius:var(--r);margin-bottom:12px;overflow:hidden;box-shadow:var(--lift-1)}
 .step-hdr{background:var(--sur2);padding:var(--sp-2) 14px;display:flex;align-items:center;gap:var(--sp-2);font-family:var(--sans);font-weight:600;font-size:12px}
@@ -199,7 +199,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .sl-cap{font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);text-align:center;padding:3px 0 var(--sp-2);letter-spacing:0}
 .sl-ph{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:28px 16px;text-align:center;color:var(--mut);font-size:12px;min-height:100px;display:flex;align-items:center;justify-content:center}
 .sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-top:8px}
-.si{background:var(--sur2);border:1px solid var(--bdr);border-radius:5px;padding:6px var(--sp-2)}
+.si{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r-sm);padding:6px var(--sp-2)}
 .sk{font-family:var(--sans);font-size:var(--fs-1);font-weight:500;letter-spacing:0;color:var(--mut)}
 .sv{font-family:var(--sans);font-size:var(--fs-3);font-variant-numeric:tabular-nums;color:var(--txt);margin-top:1px}
 .sv.pos,.sv.neg{color:var(--txt)}
@@ -348,7 +348,7 @@ body.mobile-fx .fx-slider{touch-action:pan-x}
 /* A slider that differs from its factory default gets a dot, so a loaded recipe is legible at a
    glance instead of needing every section opened and compared. */
 .fx-row.fx-mod>.fx-label::after{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;
-  background:var(--acc);margin-left:5px;vertical-align:middle;opacity:.85}
+  background:var(--acc);margin-left:var(--sp-1);vertical-align:middle;opacity:.85}
 .fx-val[contenteditable]{cursor:text;border-radius:3px;outline:none;padding:1px 2px}
 .fx-val[contenteditable]:hover{background:var(--sur2)}
 .fx-val[contenteditable]:focus{background:var(--sur2);box-shadow:0 0 0 1px var(--acc);color:var(--txt);text-align:center;min-width:40px}
@@ -381,7 +381,7 @@ body.mobile-fx .hsl-chip{border-width:3px}
    audit enforces — the old 22px was the most-clicked undersized control in the editor. */
 .seg{display:inline-flex;align-items:stretch;background:var(--sur2);border:1px solid var(--bdr);
   border-radius:var(--r);padding:2px;gap:2px;overflow:hidden}
-.seg>button{flex:1 1 auto;min-height:28px;padding:0 var(--sp-2);border:none;border-radius:5px;cursor:pointer;
+.seg>button{flex:1 1 auto;min-height:28px;padding:0 var(--sp-2);border:none;border-radius:var(--r-sm);cursor:pointer;
   background:transparent;color:var(--mut);font-family:var(--sans);font-size:var(--fs-2);font-weight:500;
   white-space:nowrap;transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
 .seg>button:hover{color:var(--txt)}
@@ -390,7 +390,7 @@ body.mobile-fx .hsl-chip{border-width:3px}
 .msk-rowbar{display:flex;align-items:center;gap:6px;padding:2px 0 8px;border-bottom:1px solid var(--bdr);margin-bottom:var(--sp-2)}
 .msk-rowbar-nm{font-size:var(--fs-3);font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msk-more{margin-left:auto}
-.msk-tag{font-size:var(--fs-0);color:var(--mut);background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:1px 5px;white-space:nowrap}
+.msk-tag{font-size:var(--fs-0);color:var(--mut);background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:1px var(--sp-1);white-space:nowrap}
 .msk-tag.on{color:var(--acc);border-color:var(--tint-6);background:var(--tint-2)}
 /* Collapsible group. The chevron rotates rather than swapping glyphs, so there is one DOM shape
    and no layout shift on toggle. */
@@ -411,10 +411,10 @@ body.mobile-fx .hsl-chip{border-width:3px}
   background:var(--sur2);border:1px solid var(--bdr);color:var(--mut);font-size:var(--fs-0);font-weight:700;flex:0 0 auto}
 .msk-hint{font-size:var(--fs-1);color:var(--mut);line-height:var(--lh-base);margin:var(--sp-1) 0 var(--sp-2)}
 .msk-cov{font-size:var(--fs-1);color:var(--txt);background:var(--sur2);border:1px solid var(--bdr);
-  border-radius:6px;padding:5px 8px;margin:var(--sp-1) 0 var(--sp-2)}
+  border-radius:6px;padding:var(--sp-1) 8px;margin:var(--sp-1) 0 var(--sp-2)}
 .msk-warn{font-size:var(--fs-1);color:#000;background:#ff9b42;border:1px solid #ff9b42;
   border-radius:6px;padding:6px 8px;line-height:var(--lh-base);margin:var(--sp-1) 0 var(--sp-2)}
-.msk-chiprow{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:var(--sp-1) 0 var(--sp-2)}
+.msk-chiprow{display:flex;gap:var(--sp-1);flex-wrap:wrap;align-items:center;margin:var(--sp-1) 0 var(--sp-2)}
 .msk-swatch{width:24px;height:24px;position:relative}
 .msk-mst .msk-swatch>span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   font-size:var(--fs-2);font-weight:700;color:var(--scrim-b4);text-shadow:0 0 2px var(--scrim-w2)}
@@ -449,7 +449,7 @@ body.mobile-fx .hsl-chip{border-width:3px}
 /* ══ CHECKBOX ════════════════════════════════════════════════════════════════════════════════
    Native 13x13 checkboxes were half the size of everything around them and impossible to hit
    cleanly. Sized up and given the app's own accent rather than the OS blue. */
-.fx-row input[type=checkbox]{width:18px;height:18px;accent-color:var(--acc);cursor:pointer;flex:0 0 auto;margin:5px 6px 5px 0}
+.fx-row input[type=checkbox]{width:18px;height:18px;accent-color:var(--acc);cursor:pointer;flex:0 0 auto;margin:var(--sp-1) 6px var(--sp-1) 0}
 /* ══ FOCUS ═══════════════════════════════════════════════════════════════════════════════════
    There was no visible focus state anywhere in the app — keyboard navigation was invisible. */
 :where(button,input,select,textarea,[tabindex]):focus-visible{outline:2px solid rgba(97,160,175,.55);outline-offset:2px;border-radius:4px}
@@ -540,7 +540,7 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-preset-chev svg{display:block;width:100%;height:100%}
 #fx-looks-ctrl.fx-preset-collapsed .fx-preset-chev{transform:rotate(-90deg)}
 #fx-looks-ctrl.fx-preset-collapsed #fx-preset-body{display:none}
-.look-cell{cursor:pointer;border-radius:5px;overflow:hidden;border:2px solid transparent;background:var(--sur2);position:relative;min-width:0}
+.look-cell{cursor:pointer;border-radius:var(--r-sm);overflow:hidden;border:2px solid transparent;background:var(--sur2);position:relative;min-width:0}
 .look-cell.sel{border-color:var(--acc)}
 /* A look whose vendor/luts/ fetch failed (offline before the warm-up finished). Marked rather
    than removed, so the cell keeps its place and retries on the next gallery rebuild. */
@@ -609,13 +609,13 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
 .guide li{margin:0 0 var(--sp-2);padding-left:16px;position:relative}
 .guide li::before{content:'›';position:absolute;left:0;color:var(--acc);font-weight:700}
 .guide b{color:var(--txt);font-weight:600}
-.guide code,.guide kbd{font-family:var(--mono);font-size:12px;background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:1px 5px;color:var(--acc2)}
+.guide code,.guide kbd{font-family:var(--mono);font-size:12px;background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:1px var(--sp-1);color:var(--acc2)}
 .guide .gcard{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:16px 20px;margin:0 0 14px}
-.guide .gnote{background:var(--sur2);border-left:2px solid var(--acc);border-radius:0 5px 5px 0;padding:var(--sp-2) 14px;margin:14px 0;font-size:var(--fs-2);color:var(--mut)}
+.guide .gnote{background:var(--sur2);border-left:2px solid var(--acc);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:var(--sp-2) 14px;margin:14px 0;font-size:var(--fs-2);color:var(--mut)}
 .guide .faq-q{font-weight:600;color:var(--txt);margin:16px 0 4px}
 .guide .faq-a{color:var(--mut);margin:0 0 12px}
 .guide .toc{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}
-.guide .toc a{font-family:var(--mono);font-size:var(--fs-2);text-decoration:none;color:var(--acc);border:1px solid var(--bdr);border-radius:5px;padding:5px var(--sp-3);background:var(--sur)}
+.guide .toc a{font-family:var(--mono);font-size:var(--fs-2);text-decoration:none;color:var(--acc);border:1px solid var(--bdr);border-radius:var(--r-sm);padding:5px var(--sp-3);background:var(--sur)}
 .guide .toc a:hover{border-color:var(--acc);background:var(--sur2)}
 #log-area{display:none;background:var(--sur);border-top:1px solid var(--bdr);padding:var(--sp-2) 22px;max-height:66px;overflow-y:auto;position:sticky;bottom:0}
 body.log-on #log-area{display:block}
@@ -896,7 +896,7 @@ body.fx-single.diag-on .fx-diag{display:none}
 body.fx-single.diag-on .fx-diag.sec-active{display:block}
 /* compact compare/split/hist as small overlay chips on the image */
 body.mobile-fx #fx-preview-tools{left:auto;right:8px;top:8px;bottom:auto;transform:none;gap:4px;justify-content:flex-end}
-.fx-mini{padding:5px 8px!important;min-height:0!important;font-size:var(--fs-2)!important;letter-spacing:.04em;background:var(--scrim-b4);border-color:var(--bdr)}
+.fx-mini{padding:var(--sp-1) 8px!important;min-height:0!important;font-size:var(--fs-2)!important;letter-spacing:.04em;background:var(--scrim-b4);border-color:var(--bdr)}
 body.mobile-fx #fx-crop-tools{order:5;margin:6px 0 0}
 /* action bar directly below the image */
 body.mobile-fx #fx-actionbar{display:flex;gap:0;padding:var(--sp-2) 4px;justify-content:space-between}
@@ -958,7 +958,7 @@ body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:
 .fx-db-pri .fx-db-ic{color:#000}
 .fx-db-pri:hover{background:#61a0af}
 .fx-db-icon{padding:8px;gap:0;justify-content:center}
-body.deskx .fx-db-icon{padding:5px}
+body.deskx .fx-db-icon{padding:var(--sp-1)}
 .flag-btn{width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:var(--r-sm);cursor:pointer;color:var(--mut);transition:color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
 .flag-btn:hover{background:var(--sur2);color:var(--txt)}
 .flag-btn svg{width:18px;height:18px;flex:0 0 auto}
@@ -1302,12 +1302,12 @@ body.deskx #fx-settings{display:inline-flex}
    hand-copied ruleset that could drift from this one — see the "gear submenu parity" comment
    on #lib-view-menu in library-ui.js. */
 #fx-settings-cats,.fx-settings-cats{display:flex;flex-direction:column;gap:2px;width:150px;flex:0 0 auto;
-  border-right:1px solid var(--bdr);padding:5px;overflow-y:auto;max-height:70vh}
+  border-right:1px solid var(--bdr);padding:var(--sp-1);overflow-y:auto;max-height:70vh}
 .fx-settings-cat{display:block;width:100%;text-align:left;background:none;border:none;border-radius:6px;
   color:var(--txt);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);letter-spacing:0;padding:var(--sp-2) var(--sp-2)}
 .fx-settings-cat:hover{background:var(--sur2)}
 .fx-settings-cat.active{background:var(--sur2);color:var(--acc);font-weight:600}
-#fx-settings-page,.fx-settings-page{width:260px;flex:0 0 auto;padding:5px;overflow-y:auto;max-height:70vh}
+#fx-settings-page,.fx-settings-page{width:260px;flex:0 0 auto;padding:var(--sp-1);overflow-y:auto;max-height:70vh}
 .fx-settings-pane{display:none}
 .fx-settings-pane.active{display:block}
 .fx-ovf-item{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;border-radius:6px;
@@ -1411,16 +1411,16 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-div.h::after{top:5px;height:2px;left:0;right:0}
 .cl-div:hover::after{background:var(--acc)}
 .cl-tray{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.cl-thumb{position:relative;width:50px;height:50px;border-radius:5px;overflow:hidden;border:2px solid var(--bdr);cursor:grab;background:var(--sur2)}
+.cl-thumb{position:relative;width:50px;height:50px;border-radius:var(--r-sm);overflow:hidden;border:2px solid var(--bdr);cursor:grab;background:var(--sur2)}
 .cl-thumb img{width:100%;height:100%;object-fit:cover;pointer-events:none}
-.cl-thumb .cl-thumb-x{position:absolute;top:0;right:0;width:16px;height:16px;background:var(--scrim-b5);color:#fff;font-size:var(--fs-2);line-height:16px;text-align:center;cursor:pointer;border-radius:0 0 0 4px}
+.cl-thumb .cl-thumb-x{position:absolute;top:0;right:0;width:var(--sp-4);height:var(--sp-4);background:var(--scrim-b5);color:#fff;font-size:var(--fs-2);line-height:var(--sp-4);text-align:center;cursor:pointer;border-radius:0 0 0 4px}
 .cl-shapes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.cl-shape{aspect-ratio:1;border:1px solid var(--bdr);border-radius:5px;background:var(--sur2);cursor:pointer;padding:5px;transition:border-color .15s}
+.cl-shape{aspect-ratio:1;border:1px solid var(--bdr);border-radius:var(--r-sm);background:var(--sur2);cursor:pointer;padding:var(--sp-1);transition:border-color .15s}
 .cl-shape:hover{border-color:var(--mut)}
 .cl-shape.on{border-color:var(--acc);background:var(--tint-2)}
 .cl-shape svg{display:block;width:100%;height:100%}
 .cl-count{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap}
-.cl-count button{font-family:var(--mono);font-size:var(--fs-2);min-width:30px;padding:5px 0;border:1px solid var(--bdr);border-radius:5px;background:var(--sur2);color:var(--mut);cursor:pointer}
+.cl-count button{font-family:var(--mono);font-size:var(--fs-2);min-width:30px;padding:var(--sp-1) 0;border:1px solid var(--bdr);border-radius:var(--r-sm);background:var(--sur2);color:var(--mut);cursor:pointer}
 .cl-count button.on{border-color:var(--acc);color:var(--acc)}
 .cl-swatches{display:flex;gap:4px;flex-wrap:wrap}
 .cl-swatches button{width:20px;height:20px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;padding:0}
