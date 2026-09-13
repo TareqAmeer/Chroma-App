@@ -1,0 +1,136 @@
+{
+  "asset": {
+    "path": "/Users/tareqameer/Downloads/Screenshot 2026-09-13 at 9.21.28 AM.png",
+    "sha256": "8c55ffa2e9e2c1c6cb7ae418c8ff9086901a1211984683d5e813054d2addf456",
+    "format": "png",
+    "dimensions": {
+      "width": 586,
+      "height": 618
+    }
+  },
+  "samples": [
+    {
+      "x": 51,
+      "y": 293,
+      "rgba": [
+        26,
+        26,
+        26,
+        255
+      ]
+    },
+    {
+      "x": 401,
+      "y": 294,
+      "rgba": [
+        145,
+        122,
+        223,
+        255
+      ]
+    },
+    {
+      "x": 296,
+      "y": 392,
+      "rgba": [
+        177,
+        194,
+        219,
+        255
+      ]
+    }
+  ],
+  "crops": [
+    {
+      "id": "histogram",
+      "rect": {
+        "x": 16,
+        "y": 46,
+        "width": 560,
+        "height": 202
+      },
+      "pixelStatistics": {
+        "pixelCount": 113120,
+        "rgbaMean": [
+          37.21466584158416,
+          35.13003889674682,
+          35.13475070721358,
+          255
+        ],
+        "rgbaMin": [
+          0,
+          26,
+          26,
+          255
+        ],
+        "rgbaMax": [
+          142,
+          159,
+          248,
+          255
+        ]
+      }
+    },
+    {
+      "id": "circles",
+      "rect": {
+        "x": 26,
+        "y": 268,
+        "width": 540,
+        "height": 52
+      },
+      "pixelStatistics": {
+        "pixelCount": 28080,
+        "rgbaMean": [
+          55.87724358974359,
+          52.05149572649572,
+          55.988853276353275,
+          255
+        ],
+        "rgbaMin": [
+          26,
+          26,
+          26,
+          255
+        ],
+        "rgbaMax": [
+          255,
+          255,
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "id": "controls",
+      "rect": {
+        "x": 32,
+        "y": 344,
+        "width": 528,
+        "height": 218
+      },
+      "pixelStatistics": {
+        "pixelCount": 115104,
+        "rgbaMean": [
+          33.12966534612177,
+          33.68026306644426,
+          35.621290311370586,
+          255
+        ],
+        "rgbaMin": [
+          0,
+          24,
+          24,
+          255
+        ],
+        "rgbaMax": [
+          255,
+          255,
+          255,
+          255
+        ]
+      }
+    }
+  ],
+  "method": "pngjs PNG decode; exact RGBA byte samples and source-image crop rectangles"
+}

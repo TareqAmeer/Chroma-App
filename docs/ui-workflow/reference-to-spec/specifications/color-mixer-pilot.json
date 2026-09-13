@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "id": "color-mixer-pilot",
+  "reference": {
+    "provenance": {
+      "origin": "User-supplied current Color Mixer screenshot, user-supplied Darkroom screenshot, and https://uiverse.io/neitt0/odd-hound-66",
+      "creator": "User (screenshots); neitt0 / Thien Nguyen (toggle)",
+      "capturedAt": "2026-09-13",
+      "usageNotes": "Pilot-only reference analysis. The Uiverse toggle is published under the MIT License; the prototype retains attribution."
+    },
+    "views": [
+      {"id":"current-full","kind":"full","assetRef":"/var/folders/6s/sd2nq00x4f1f7t5fcrx67lrw0000gn/T/codex-clipboard-09b5bdd4-3fb5-4b35-b240-0b0d14c614a3.png","description":"Existing Color Mixer presentation.","visibleScope":"Header, histogram, bands, three controls, and reset buttons."},
+      {"id":"darkroom-full","kind":"full","assetRef":"/Users/tareqameer/Downloads/Screenshot 2026-09-13 at 9.21.28 AM.png","description":"Darkroom reference for thin histogram bars, circle treatment, and slider styling.","visibleScope":"Histogram, eight circles, and three controls."}
+    ]
+  },
+  "scope": {"componentFamily":"slider","registryScope":{"includedSubfamilies":["toggle","band selector","numeric value","reset actions"],"excludedFamilies":["production renderer","other Color Mixer instances"],"notes":"An isolated interactive HTML pilot only; it does not alter chromasmith-22.html."}},
+  "generated": {
+    "visibleObservations": [
+      {"id":"obs-current-eight","viewId":"current-full","area":"geometry-spacing","fact":"The existing view visibly contains eight color bands, with the last band wrapping to a second line.","sourceClass":"reference","sourceRef":"current-full","certainty":"directly-visible"},
+      {"id":"obs-darkroom-eight","viewId":"darkroom-full","area":"geometry-spacing","fact":"The Darkroom view visibly presents eight circles in one horizontal row.","sourceClass":"reference","sourceRef":"darkroom-full","certainty":"directly-visible"},
+      {"id":"obs-darkroom-outline","viewId":"darkroom-full","area":"color-contrast","fact":"Unedited circles are visibly dark inside with colored outlines; the selected circle has a white outer ring and a diagonal fill.","sourceClass":"reference","sourceRef":"darkroom-full","certainty":"directly-visible"},
+      {"id":"obs-darkroom-bars","viewId":"darkroom-full","area":"geometry-spacing","fact":"The histogram uses thin, separated vertical bars rather than wide blocks.","sourceClass":"reference","sourceRef":"darkroom-full","certainty":"directly-visible"},
+      {"id":"obs-darkroom-size","viewId":"darkroom-full","area":"geometry-spacing","fact":"The Darkroom source image measures 586 by 618 pixels; deterministic measurement is recorded in the Darkroom evidence JSON.","measurement":{"value":"586 × 618","unit":"px"},"sourceClass":"reference","sourceRef":"darkroom-full","certainty":"directly-visible"}
+    ],
+    "repositoryEvidence": [
+      {"id":"repo-current-controls","claim":"The live Color Mixer has three gradient range inputs and two bordered reset buttons.","locator":"chromasmith-22.html:1986-1999","sourceClass":"repository_evidence"},
+      {"id":"repo-current-state","claim":"The live mixer maintains eight named bands and per-band hue, saturation, and luminance state.","locator":"chromasmith-22.html:10477-10602","sourceClass":"repository_evidence"},
+      {"id":"repo-slider-family","claim":"The slider contract identifies Color workflow sliders as continuous controls with visible current values.","locator":"docs/ui-workflow/component-contracts/contracts/slider.json","sourceClass":"repository_evidence"}
+    ],
+    "stateCoverage":{"shown":[{"id":"shown-edited","state":"An edited, selected band is visible in the Darkroom reference.","sourceClass":"reference","sourceRef":"darkroom-full"},{"id":"shown-identity","state":"Unedited band circles are visible in the Darkroom reference.","sourceClass":"reference","sourceRef":"darkroom-full"}],"missing":[{"id":"missing-toggle-off","state":"Toggle-off state is not visible in the current reference.","sourceClass":"reference","sourceRef":"current-full"},{"id":"missing-focus","state":"Keyboard focus state is not visible in the Darkroom reference.","sourceClass":"reference","sourceRef":"darkroom-full"}]},
+    "variantCoverage":{"shown":[{"id":"shown-dark","state":"Dark presentation is visible in the current reference.","sourceClass":"reference","sourceRef":"current-full"}],"missing":[{"id":"missing-narrow","state":"No narrow viewport is visible in the current reference.","sourceClass":"reference","sourceRef":"current-full"}]}
+  },
+  "authored": {
+    "applicableDesignRules":[{"id":"rule-stable-footprint","rule":"Selected states must preserve their footprint so grids never reflow.","sourceClass":"repository_evidence","sourceRef":"chromasmith-design/project/design.md, Hover & press"}],
+    "proposedInterpretations":[{"id":"proposal-prototype-scope","statement":"The isolated prototype will demonstrate the requested behavior without asserting a production design decision.","sourceClass":"proposal","sourceRef":"User request, 2026-09-13","basedOn":["repo-current-controls","repo-current-state"]}],
+    "userDecisions":[
+      {"id":"decision-reference-scope","decision":"Use only the Darkroom slider styling, thinner histogram bars, and circle design.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 1"},
+      {"id":"decision-bands","decision":"Keep the current eight color bands.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 2"},
+      {"id":"decision-unedited","decision":"Unedited circles use a colored outline and transparent/dark center.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 3"},
+      {"id":"decision-edited","decision":"Edited circles use a diagonal original-color/new-color split.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 4"},
+      {"id":"decision-interaction","decision":"The standalone HTML draft must be interactive for testing.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 5"}
+    ],
+    "unresolvedQuestions":[]
+  },
+  "implementation": {
+    "geometrySpacing":[{"id":"geometry-row","statement":"Use an eight-column, no-wrap grid for the bands; reduce the circle size responsively instead of wrapping.","sourceClass":"proposal","sourceRef":"User request","basedOn":["obs-current-eight","obs-darkroom-eight"]}],
+    "typography":[],
+    "colorsContrastRoles":[{"id":"colors-band-state","statement":"Use a dark center for an unedited band and a diagonal original/new-color fill only when that band's value is non-zero.","sourceClass":"proposal","sourceRef":"User request","basedOn":["obs-darkroom-outline"]}],
+    "icons":[],
+    "motionInteraction":[{"id":"interaction-reset","statement":"Reveal text-only Reset | All actions after an edit; preserve header space so this state change cannot shift neighboring controls.","sourceClass":"proposal","sourceRef":"User request","basedOn":["obs-current-eight"]}],
+    "responsiveBehavior":[{"id":"responsive-eight","statement":"At all supported pilot widths, eight bands remain in one row; controls may shrink but do not wrap.","sourceClass":"proposal","sourceRef":"User request","basedOn":["obs-darkroom-eight"]}],
+    "accessibility":[{"id":"a11y-native-controls","statement":"Use native checkbox, range, and number inputs with visible labels and focus styles in the pilot.","sourceClass":"proposal","sourceRef":"User request","basedOn":["repo-slider-family"]}],
+    "targets":[{"id":"target-draft","statement":"Create drafts/color-mixer-pilot.html only; do not update the live HTML application.","sourceClass":"proposal","sourceRef":"User request","basedOn":["repo-current-controls"]}],
+    "acceptanceCriteria":[
+      {"id":"ac-eight","criterion":"All eight bands remain in one row.","verification":"Resize the pilot window and inspect the band grid."},
+      {"id":"ac-edit-state","criterion":"Editing a band changes only its circle to a diagonal split.","verification":"Change a slider or numeric value and inspect the selected band."},
+      {"id":"ac-resets","criterion":"Reset | All is hidden before any edit and shown afterward.","verification":"Load the draft, then change and reset a control."},
+      {"id":"ac-stability","criterion":"Numeric editing does not shift labels, sliders, or neighboring controls.","verification":"Enter one-, two-, and three-character values and compare control-row bounds."}
+    ]
+  },
+  "validation":{"requiredScreenshots":["Identity state at a desktop width","Edited diagonal-split state at a desktop width","Narrow-width state with eight bands in one row"],"evidence":[]},
+  "approval":{"status":"draft","approvedBy":"","approvedAt":"","userDecisionRefs":[]}
+}

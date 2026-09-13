@@ -1,0 +1,136 @@
+{
+  "asset": {
+    "path": "/var/folders/6s/sd2nq00x4f1f7t5fcrx67lrw0000gn/T/codex-clipboard-09b5bdd4-3fb5-4b35-b240-0b0d14c614a3.png",
+    "sha256": "473059c130415434c5378afa446b1a27c48ae6f27e9c68b535639311c8ad68b5",
+    "format": "png",
+    "dimensions": {
+      "width": 1260,
+      "height": 1536
+    }
+  },
+  "samples": [
+    {
+      "x": 76,
+      "y": 201,
+      "rgba": [
+        68,
+        68,
+        70,
+        255
+      ]
+    },
+    {
+      "x": 144,
+      "y": 508,
+      "rgba": [
+        199,
+        78,
+        111,
+        255
+      ]
+    },
+    {
+      "x": 1120,
+      "y": 803,
+      "rgba": [
+        184,
+        184,
+        184,
+        255
+      ]
+    }
+  ],
+  "crops": [
+    {
+      "id": "header",
+      "rect": {
+        "x": 76,
+        "y": 77,
+        "width": 1108,
+        "height": 127
+      },
+      "pixelStatistics": {
+        "pixelCount": 140716,
+        "rgbaMean": [
+          56.715000426390745,
+          58.57343869922397,
+          60.92515421131925,
+          255
+        ],
+        "rgbaMin": [
+          35,
+          35,
+          37,
+          255
+        ],
+        "rgbaMax": [
+          255,
+          255,
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "id": "histogram",
+      "rect": {
+        "x": 76,
+        "y": 251,
+        "width": 1108,
+        "height": 98
+      },
+      "pixelStatistics": {
+        "pixelCount": 108584,
+        "rgbaMean": [
+          68.66341265748177,
+          61.27425771752745,
+          61.58133795034259,
+          255
+        ],
+        "rgbaMin": [
+          42,
+          42,
+          44,
+          255
+        ],
+        "rgbaMax": [
+          237,
+          119,
+          135,
+          255
+        ]
+      }
+    },
+    {
+      "id": "controls",
+      "rect": {
+        "x": 76,
+        "y": 457,
+        "width": 1108,
+        "height": 253
+      },
+      "pixelStatistics": {
+        "pixelCount": 280324,
+        "rgbaMean": [
+          63.36549135999772,
+          59.39331630541802,
+          62.28375023187454,
+          255
+        ],
+        "rgbaMin": [
+          42,
+          42,
+          44,
+          255
+        ],
+        "rgbaMax": [
+          237,
+          215,
+          213,
+          255
+        ]
+      }
+    }
+  ],
+  "method": "pngjs PNG decode; exact RGBA byte samples and source-image crop rectangles"
+}
