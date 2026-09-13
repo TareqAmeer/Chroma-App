@@ -3709,7 +3709,7 @@
       "label": "Retouch Reset Mode i Heal (blend color)Clone (copy exactly) HealClone Size4% Feather50 Opacity100 Re",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2285:section-card"
+        "chromasmith-22.html:2309:section-card"
       ],
       "unresolved": false
     },
@@ -3795,7 +3795,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:2565:button"
+        "chromasmith-22.html:2589:button"
       ],
       "unresolved": false
     },
@@ -3812,7 +3812,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -3829,7 +3829,7 @@
       "label": "Favorite (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2561:button"
+        "chromasmith-22.html:2585:button"
       ],
       "unresolved": false
     },
@@ -3846,7 +3846,7 @@
       "label": "Green flag (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2560:button"
+        "chromasmith-22.html:2584:button"
       ],
       "unresolved": false
     },
@@ -3863,7 +3863,7 @@
       "label": "Reject (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2559:button"
+        "chromasmith-22.html:2583:button"
       ],
       "unresolved": false
     },
@@ -3880,7 +3880,7 @@
       "label": "Full resolution — renders the whole preview at full source resolution instead of the usual capped si",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2558:button"
+        "chromasmith-22.html:2582:button"
       ],
       "unresolved": false
     },
@@ -3897,7 +3897,7 @@
       "label": "Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14120:button"
+        "chromasmith-22.html:14189:button"
       ],
       "unresolved": false
     },
@@ -3914,8 +3914,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14179:button",
-        "chromasmith-22.html:14290:button"
+        "chromasmith-22.html:14248:button",
+        "chromasmith-22.html:14359:button"
       ],
       "unresolved": false
     },
@@ -3932,7 +3932,7 @@
       "label": "Erase instead of add",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14144:button"
+        "chromasmith-22.html:14213:button"
       ],
       "unresolved": false
     },
@@ -3949,7 +3949,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14143:button"
+        "chromasmith-22.html:14212:button"
       ],
       "unresolved": false
     },
@@ -3966,7 +3966,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -3983,7 +3983,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -3999,7 +3999,7 @@
       "label": "Zoom in",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2548:button"
+        "chromasmith-22.html:2572:button"
       ],
       "unresolved": false
     },
@@ -4015,7 +4015,7 @@
       "label": "Zoom out",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2544:button"
+        "chromasmith-22.html:2568:button"
       ],
       "unresolved": false
     },
@@ -4031,7 +4031,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -4047,7 +4047,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -4803,7 +4803,7 @@
       "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only AI 1 AI 1Se",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2054:section-card"
+        "chromasmith-22.html:2078:section-card"
       ],
       "unresolved": false
     },
@@ -4833,7 +4833,7 @@
       "label": "Drag to zoom · double-click to fit the whole image",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2545:slider"
+        "chromasmith-22.html:2569:slider"
       ],
       "unresolved": false
     },
@@ -4850,7 +4850,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14407:slider"
+        "chromasmith-22.html:14476:slider"
       ],
       "unresolved": false
     },
@@ -4881,7 +4881,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2055:toggle"
+        "chromasmith-22.html:2079:toggle"
       ],
       "unresolved": false
     },
@@ -4897,7 +4897,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:2565:button"
+        "chromasmith-22.html:2589:button"
       ],
       "unresolved": false
     },
@@ -4914,7 +4914,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -4931,7 +4931,7 @@
       "label": "Favorite (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2561:button"
+        "chromasmith-22.html:2585:button"
       ],
       "unresolved": false
     },
@@ -4948,7 +4948,7 @@
       "label": "Green flag (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2560:button"
+        "chromasmith-22.html:2584:button"
       ],
       "unresolved": false
     },
@@ -4965,7 +4965,7 @@
       "label": "Reject (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2559:button"
+        "chromasmith-22.html:2583:button"
       ],
       "unresolved": false
     },
@@ -4982,7 +4982,7 @@
       "label": "Full resolution — renders the whole preview at full source resolution instead of the usual capped si",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2558:button"
+        "chromasmith-22.html:2582:button"
       ],
       "unresolved": false
     },
@@ -4999,8 +4999,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14179:button",
-        "chromasmith-22.html:14290:button"
+        "chromasmith-22.html:14248:button",
+        "chromasmith-22.html:14359:button"
       ],
       "unresolved": false
     },
@@ -5017,7 +5017,7 @@
       "label": "Erase instead of add",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14144:button"
+        "chromasmith-22.html:14213:button"
       ],
       "unresolved": false
     },
@@ -5034,7 +5034,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14143:button"
+        "chromasmith-22.html:14212:button"
       ],
       "unresolved": false
     },
@@ -5051,7 +5051,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -5068,7 +5068,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -5084,7 +5084,7 @@
       "label": "Zoom in",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2548:button"
+        "chromasmith-22.html:2572:button"
       ],
       "unresolved": false
     },
@@ -5100,7 +5100,7 @@
       "label": "Zoom out",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2544:button"
+        "chromasmith-22.html:2568:button"
       ],
       "unresolved": false
     },
@@ -5116,7 +5116,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -5132,7 +5132,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -5829,7 +5829,7 @@
       "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Brush 1 Bru",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2054:section-card"
+        "chromasmith-22.html:2078:section-card"
       ],
       "unresolved": false
     },
@@ -5859,7 +5859,7 @@
       "label": "Drag to zoom · double-click to fit the whole image",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2545:slider"
+        "chromasmith-22.html:2569:slider"
       ],
       "unresolved": false
     },
@@ -5876,7 +5876,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14407:slider"
+        "chromasmith-22.html:14476:slider"
       ],
       "unresolved": false
     },
@@ -5907,7 +5907,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2055:toggle"
+        "chromasmith-22.html:2079:toggle"
       ],
       "unresolved": false
     },
@@ -5923,7 +5923,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:2565:button"
+        "chromasmith-22.html:2589:button"
       ],
       "unresolved": false
     },
@@ -5940,7 +5940,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -5957,7 +5957,7 @@
       "label": "Favorite (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2561:button"
+        "chromasmith-22.html:2585:button"
       ],
       "unresolved": false
     },
@@ -5974,7 +5974,7 @@
       "label": "Green flag (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2560:button"
+        "chromasmith-22.html:2584:button"
       ],
       "unresolved": false
     },
@@ -5991,7 +5991,7 @@
       "label": "Reject (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2559:button"
+        "chromasmith-22.html:2583:button"
       ],
       "unresolved": false
     },
@@ -6008,7 +6008,7 @@
       "label": "Full resolution — renders the whole preview at full source resolution instead of the usual capped si",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2558:button"
+        "chromasmith-22.html:2582:button"
       ],
       "unresolved": false
     },
@@ -6025,7 +6025,7 @@
       "label": "Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14120:button"
+        "chromasmith-22.html:14189:button"
       ],
       "unresolved": false
     },
@@ -6042,7 +6042,7 @@
       "label": "Erase instead of add",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14144:button"
+        "chromasmith-22.html:14213:button"
       ],
       "unresolved": false
     },
@@ -6059,7 +6059,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14143:button"
+        "chromasmith-22.html:14212:button"
       ],
       "unresolved": false
     },
@@ -6076,7 +6076,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -6093,7 +6093,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -6109,7 +6109,7 @@
       "label": "Zoom in",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2548:button"
+        "chromasmith-22.html:2572:button"
       ],
       "unresolved": false
     },
@@ -6125,7 +6125,7 @@
       "label": "Zoom out",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2544:button"
+        "chromasmith-22.html:2568:button"
       ],
       "unresolved": false
     },
@@ -6141,7 +6141,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -6157,7 +6157,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -6913,7 +6913,7 @@
       "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Coat AI 1 C",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2054:section-card"
+        "chromasmith-22.html:2078:section-card"
       ],
       "unresolved": false
     },
@@ -6943,7 +6943,7 @@
       "label": "Drag to zoom · double-click to fit the whole image",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2545:slider"
+        "chromasmith-22.html:2569:slider"
       ],
       "unresolved": false
     },
@@ -6960,7 +6960,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14407:slider"
+        "chromasmith-22.html:14476:slider"
       ],
       "unresolved": false
     },
@@ -6991,7 +6991,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2055:toggle"
+        "chromasmith-22.html:2079:toggle"
       ],
       "unresolved": false
     },
@@ -7007,7 +7007,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:2565:button"
+        "chromasmith-22.html:2589:button"
       ],
       "unresolved": false
     },
@@ -7024,7 +7024,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -7041,7 +7041,7 @@
       "label": "Favorite (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2561:button"
+        "chromasmith-22.html:2585:button"
       ],
       "unresolved": false
     },
@@ -7058,7 +7058,7 @@
       "label": "Green flag (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2560:button"
+        "chromasmith-22.html:2584:button"
       ],
       "unresolved": false
     },
@@ -7075,7 +7075,7 @@
       "label": "Reject (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2559:button"
+        "chromasmith-22.html:2583:button"
       ],
       "unresolved": false
     },
@@ -7092,7 +7092,7 @@
       "label": "Full resolution — renders the whole preview at full source resolution instead of the usual capped si",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2558:button"
+        "chromasmith-22.html:2582:button"
       ],
       "unresolved": false
     },
@@ -7110,8 +7110,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14179:button",
-        "chromasmith-22.html:14290:button"
+        "chromasmith-22.html:14248:button",
+        "chromasmith-22.html:14359:button"
       ],
       "unresolved": false
     },
@@ -7128,7 +7128,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -7145,7 +7145,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -7161,7 +7161,7 @@
       "label": "Zoom in",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2548:button"
+        "chromasmith-22.html:2572:button"
       ],
       "unresolved": false
     },
@@ -7177,7 +7177,7 @@
       "label": "Zoom out",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2544:button"
+        "chromasmith-22.html:2568:button"
       ],
       "unresolved": false
     },
@@ -7193,7 +7193,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -7209,7 +7209,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -7876,7 +7876,7 @@
       "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Color 1 Col",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2054:section-card"
+        "chromasmith-22.html:2078:section-card"
       ],
       "unresolved": false
     },
@@ -7906,7 +7906,7 @@
       "label": "Drag to zoom · double-click to fit the whole image",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2545:slider"
+        "chromasmith-22.html:2569:slider"
       ],
       "unresolved": false
     },
@@ -7923,7 +7923,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14407:slider"
+        "chromasmith-22.html:14476:slider"
       ],
       "unresolved": false
     },
@@ -7954,7 +7954,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2055:toggle"
+        "chromasmith-22.html:2079:toggle"
       ],
       "unresolved": false
     },
@@ -7970,7 +7970,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:2565:button"
+        "chromasmith-22.html:2589:button"
       ],
       "unresolved": false
     },
@@ -7987,7 +7987,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -8004,7 +8004,7 @@
       "label": "Favorite (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2561:button"
+        "chromasmith-22.html:2585:button"
       ],
       "unresolved": false
     },
@@ -8021,7 +8021,7 @@
       "label": "Green flag (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2560:button"
+        "chromasmith-22.html:2584:button"
       ],
       "unresolved": false
     },
@@ -8038,7 +8038,7 @@
       "label": "Reject (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2559:button"
+        "chromasmith-22.html:2583:button"
       ],
       "unresolved": false
     },
@@ -8055,7 +8055,7 @@
       "label": "Full resolution — renders the whole preview at full source resolution instead of the usual capped si",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2558:button"
+        "chromasmith-22.html:2582:button"
       ],
       "unresolved": false
     },
@@ -8072,8 +8072,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14179:button",
-        "chromasmith-22.html:14290:button"
+        "chromasmith-22.html:14248:button",
+        "chromasmith-22.html:14359:button"
       ],
       "unresolved": false
     },
@@ -8090,7 +8090,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -8107,7 +8107,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -8123,7 +8123,7 @@
       "label": "Zoom in",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2548:button"
+        "chromasmith-22.html:2572:button"
       ],
       "unresolved": false
     },
@@ -8139,7 +8139,7 @@
       "label": "Zoom out",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2544:button"
+        "chromasmith-22.html:2568:button"
       ],
       "unresolved": false
     },
@@ -8155,7 +8155,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -8171,7 +8171,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -8529,7 +8529,7 @@
       "label": "Overlay opacity 75",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2077:control-row"
+        "chromasmith-22.html:2101:control-row"
       ],
       "unresolved": false
     },
@@ -8545,7 +8545,7 @@
       "label": "Edge only",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2082:control-row"
+        "chromasmith-22.html:2106:control-row"
       ],
       "unresolved": false
     },
@@ -8842,7 +8842,7 @@
       "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Showing what is ACTUALLY adjusted — shap",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2054:section-card"
+        "chromasmith-22.html:2078:section-card"
       ],
       "unresolved": false
     },
@@ -8872,7 +8872,7 @@
       "label": "Drag to zoom · double-click to fit the whole image",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2545:slider"
+        "chromasmith-22.html:2569:slider"
       ],
       "unresolved": false
     },
@@ -8889,7 +8889,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14407:slider"
+        "chromasmith-22.html:14476:slider"
       ],
       "unresolved": false
     },
@@ -8905,7 +8905,7 @@
       "label": "Overlay opacity",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2079:slider"
+        "chromasmith-22.html:2103:slider"
       ],
       "unresolved": false
     },
@@ -8936,7 +8936,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2055:toggle"
+        "chromasmith-22.html:2079:toggle"
       ],
       "unresolved": false
     },
@@ -8952,7 +8952,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:2565:button"
+        "chromasmith-22.html:2589:button"
       ],
       "unresolved": false
     },
@@ -8969,7 +8969,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -8986,7 +8986,7 @@
       "label": "Favorite (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2561:button"
+        "chromasmith-22.html:2585:button"
       ],
       "unresolved": false
     },
@@ -9003,7 +9003,7 @@
       "label": "Green flag (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2560:button"
+        "chromasmith-22.html:2584:button"
       ],
       "unresolved": false
     },
@@ -9020,7 +9020,7 @@
       "label": "Reject (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2559:button"
+        "chromasmith-22.html:2583:button"
       ],
       "unresolved": false
     },
@@ -9037,7 +9037,7 @@
       "label": "Full resolution — renders the whole preview at full source resolution instead of the usual capped si",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2558:button"
+        "chromasmith-22.html:2582:button"
       ],
       "unresolved": false
     },
@@ -9054,8 +9054,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14179:button",
-        "chromasmith-22.html:14290:button"
+        "chromasmith-22.html:14248:button",
+        "chromasmith-22.html:14359:button"
       ],
       "unresolved": false
     },
@@ -9072,7 +9072,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -9089,7 +9089,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -9105,7 +9105,7 @@
       "label": "Zoom in",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2548:button"
+        "chromasmith-22.html:2572:button"
       ],
       "unresolved": false
     },
@@ -9121,7 +9121,7 @@
       "label": "Zoom out",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2544:button"
+        "chromasmith-22.html:2568:button"
       ],
       "unresolved": false
     },
@@ -9137,7 +9137,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -9153,7 +9153,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -9862,7 +9862,7 @@
       "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Linear 1 Li",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2054:section-card"
+        "chromasmith-22.html:2078:section-card"
       ],
       "unresolved": false
     },
@@ -9892,7 +9892,7 @@
       "label": "Drag to zoom · double-click to fit the whole image",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2545:slider"
+        "chromasmith-22.html:2569:slider"
       ],
       "unresolved": false
     },
@@ -9909,7 +9909,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14407:slider"
+        "chromasmith-22.html:14476:slider"
       ],
       "unresolved": false
     },
@@ -9940,7 +9940,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2055:toggle"
+        "chromasmith-22.html:2079:toggle"
       ],
       "unresolved": false
     },
@@ -9956,7 +9956,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:2565:button"
+        "chromasmith-22.html:2589:button"
       ],
       "unresolved": false
     },
@@ -9973,7 +9973,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -9990,7 +9990,7 @@
       "label": "Favorite (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2561:button"
+        "chromasmith-22.html:2585:button"
       ],
       "unresolved": false
     },
@@ -10007,7 +10007,7 @@
       "label": "Green flag (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2560:button"
+        "chromasmith-22.html:2584:button"
       ],
       "unresolved": false
     },
@@ -10024,7 +10024,7 @@
       "label": "Reject (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2559:button"
+        "chromasmith-22.html:2583:button"
       ],
       "unresolved": false
     },
@@ -10041,7 +10041,7 @@
       "label": "Full resolution — renders the whole preview at full source resolution instead of the usual capped si",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2558:button"
+        "chromasmith-22.html:2582:button"
       ],
       "unresolved": false
     },
@@ -10058,8 +10058,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14179:button",
-        "chromasmith-22.html:14290:button"
+        "chromasmith-22.html:14248:button",
+        "chromasmith-22.html:14359:button"
       ],
       "unresolved": false
     },
@@ -10076,7 +10076,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -10093,7 +10093,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -10109,7 +10109,7 @@
       "label": "Zoom in",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2548:button"
+        "chromasmith-22.html:2572:button"
       ],
       "unresolved": false
     },
@@ -10125,7 +10125,7 @@
       "label": "Zoom out",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2544:button"
+        "chromasmith-22.html:2568:button"
       ],
       "unresolved": false
     },
@@ -10141,7 +10141,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -10157,7 +10157,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -10515,7 +10515,7 @@
       "label": "Overlay opacity 75",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2077:control-row"
+        "chromasmith-22.html:2101:control-row"
       ],
       "unresolved": false
     },
@@ -10531,7 +10531,7 @@
       "label": "Edge only",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2082:control-row"
+        "chromasmith-22.html:2106:control-row"
       ],
       "unresolved": false
     },
@@ -10828,7 +10828,7 @@
       "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Showing what is ACTUALLY adjusted — shap",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2054:section-card"
+        "chromasmith-22.html:2078:section-card"
       ],
       "unresolved": false
     },
@@ -10858,7 +10858,7 @@
       "label": "Drag to zoom · double-click to fit the whole image",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2545:slider"
+        "chromasmith-22.html:2569:slider"
       ],
       "unresolved": false
     },
@@ -10875,7 +10875,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14407:slider"
+        "chromasmith-22.html:14476:slider"
       ],
       "unresolved": false
     },
@@ -10891,7 +10891,7 @@
       "label": "Overlay opacity",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2079:slider"
+        "chromasmith-22.html:2103:slider"
       ],
       "unresolved": false
     },
@@ -10922,7 +10922,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2055:toggle"
+        "chromasmith-22.html:2079:toggle"
       ],
       "unresolved": false
     },
@@ -10938,7 +10938,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:2565:button"
+        "chromasmith-22.html:2589:button"
       ],
       "unresolved": false
     },
@@ -10955,7 +10955,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -10972,7 +10972,7 @@
       "label": "Favorite (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2561:button"
+        "chromasmith-22.html:2585:button"
       ],
       "unresolved": false
     },
@@ -10989,7 +10989,7 @@
       "label": "Green flag (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2560:button"
+        "chromasmith-22.html:2584:button"
       ],
       "unresolved": false
     },
@@ -11006,7 +11006,7 @@
       "label": "Reject (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2559:button"
+        "chromasmith-22.html:2583:button"
       ],
       "unresolved": false
     },
@@ -11023,7 +11023,7 @@
       "label": "Full resolution — renders the whole preview at full source resolution instead of the usual capped si",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2558:button"
+        "chromasmith-22.html:2582:button"
       ],
       "unresolved": false
     },
@@ -11040,8 +11040,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14179:button",
-        "chromasmith-22.html:14290:button"
+        "chromasmith-22.html:14248:button",
+        "chromasmith-22.html:14359:button"
       ],
       "unresolved": false
     },
@@ -11058,7 +11058,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -11075,7 +11075,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -11091,7 +11091,7 @@
       "label": "Zoom in",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2548:button"
+        "chromasmith-22.html:2572:button"
       ],
       "unresolved": false
     },
@@ -11107,7 +11107,7 @@
       "label": "Zoom out",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2544:button"
+        "chromasmith-22.html:2568:button"
       ],
       "unresolved": false
     },
@@ -11123,7 +11123,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -11139,7 +11139,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -11848,7 +11848,7 @@
       "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Radial 1 Ra",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2054:section-card"
+        "chromasmith-22.html:2078:section-card"
       ],
       "unresolved": false
     },
@@ -11878,7 +11878,7 @@
       "label": "Drag to zoom · double-click to fit the whole image",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2545:slider"
+        "chromasmith-22.html:2569:slider"
       ],
       "unresolved": false
     },
@@ -11895,7 +11895,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14407:slider"
+        "chromasmith-22.html:14476:slider"
       ],
       "unresolved": false
     },
@@ -11926,7 +11926,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2055:toggle"
+        "chromasmith-22.html:2079:toggle"
       ],
       "unresolved": false
     },
@@ -11942,7 +11942,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:2565:button"
+        "chromasmith-22.html:2589:button"
       ],
       "unresolved": false
     },
@@ -11959,7 +11959,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -11976,7 +11976,7 @@
       "label": "Favorite (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2561:button"
+        "chromasmith-22.html:2585:button"
       ],
       "unresolved": false
     },
@@ -11993,7 +11993,7 @@
       "label": "Green flag (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2560:button"
+        "chromasmith-22.html:2584:button"
       ],
       "unresolved": false
     },
@@ -12010,7 +12010,7 @@
       "label": "Reject (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2559:button"
+        "chromasmith-22.html:2583:button"
       ],
       "unresolved": false
     },
@@ -12027,7 +12027,7 @@
       "label": "Full resolution — renders the whole preview at full source resolution instead of the usual capped si",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2558:button"
+        "chromasmith-22.html:2582:button"
       ],
       "unresolved": false
     },
@@ -12044,7 +12044,7 @@
       "label": "Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14120:button"
+        "chromasmith-22.html:14189:button"
       ],
       "unresolved": false
     },
@@ -12061,8 +12061,8 @@
       "label": "Pick manually",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14179:button",
-        "chromasmith-22.html:14290:button"
+        "chromasmith-22.html:14248:button",
+        "chromasmith-22.html:14359:button"
       ],
       "unresolved": false
     },
@@ -12079,7 +12079,7 @@
       "label": "Erase instead of add",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14144:button"
+        "chromasmith-22.html:14213:button"
       ],
       "unresolved": false
     },
@@ -12096,7 +12096,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14143:button"
+        "chromasmith-22.html:14212:button"
       ],
       "unresolved": false
     },
@@ -12113,7 +12113,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -12130,7 +12130,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -12146,7 +12146,7 @@
       "label": "Zoom in",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2548:button"
+        "chromasmith-22.html:2572:button"
       ],
       "unresolved": false
     },
@@ -12162,7 +12162,7 @@
       "label": "Zoom out",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2544:button"
+        "chromasmith-22.html:2568:button"
       ],
       "unresolved": false
     },
@@ -12178,7 +12178,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -12194,7 +12194,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -13240,7 +13240,7 @@
       "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Skin AI 1 S",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2054:section-card"
+        "chromasmith-22.html:2078:section-card"
       ],
       "unresolved": false
     },
@@ -13285,7 +13285,7 @@
       "label": "Drag to zoom · double-click to fit the whole image",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2545:slider"
+        "chromasmith-22.html:2569:slider"
       ],
       "unresolved": false
     },
@@ -13302,7 +13302,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14407:slider"
+        "chromasmith-22.html:14476:slider"
       ],
       "unresolved": false
     },
@@ -13333,7 +13333,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2055:toggle"
+        "chromasmith-22.html:2079:toggle"
       ],
       "unresolved": false
     },
@@ -13349,7 +13349,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:2565:button"
+        "chromasmith-22.html:2589:button"
       ],
       "unresolved": false
     },
@@ -13366,7 +13366,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -13383,7 +13383,7 @@
       "label": "Favorite (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2561:button"
+        "chromasmith-22.html:2585:button"
       ],
       "unresolved": false
     },
@@ -13400,7 +13400,7 @@
       "label": "Green flag (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2560:button"
+        "chromasmith-22.html:2584:button"
       ],
       "unresolved": false
     },
@@ -13417,7 +13417,7 @@
       "label": "Reject (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2559:button"
+        "chromasmith-22.html:2583:button"
       ],
       "unresolved": false
     },
@@ -13434,7 +13434,7 @@
       "label": "Full resolution — renders the whole preview at full source resolution instead of the usual capped si",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2558:button"
+        "chromasmith-22.html:2582:button"
       ],
       "unresolved": false
     },
@@ -13451,8 +13451,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14179:button",
-        "chromasmith-22.html:14290:button"
+        "chromasmith-22.html:14248:button",
+        "chromasmith-22.html:14359:button"
       ],
       "unresolved": false
     },
@@ -13469,7 +13469,7 @@
       "label": "Erase instead of add",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14144:button"
+        "chromasmith-22.html:14213:button"
       ],
       "unresolved": false
     },
@@ -13486,7 +13486,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14143:button"
+        "chromasmith-22.html:14212:button"
       ],
       "unresolved": false
     },
@@ -13503,7 +13503,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -13520,7 +13520,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -13536,7 +13536,7 @@
       "label": "Zoom in",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2548:button"
+        "chromasmith-22.html:2572:button"
       ],
       "unresolved": false
     },
@@ -13552,7 +13552,7 @@
       "label": "Zoom out",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2544:button"
+        "chromasmith-22.html:2568:button"
       ],
       "unresolved": false
     },
@@ -13568,7 +13568,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -13584,7 +13584,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -14296,7 +14296,7 @@
       "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Sky 1 Sky 1",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2054:section-card"
+        "chromasmith-22.html:2078:section-card"
       ],
       "unresolved": false
     },
@@ -14326,7 +14326,7 @@
       "label": "Drag to zoom · double-click to fit the whole image",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2545:slider"
+        "chromasmith-22.html:2569:slider"
       ],
       "unresolved": false
     },
@@ -14343,7 +14343,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14407:slider"
+        "chromasmith-22.html:14476:slider"
       ],
       "unresolved": false
     },
@@ -14374,7 +14374,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2055:toggle"
+        "chromasmith-22.html:2079:toggle"
       ],
       "unresolved": false
     },
@@ -14391,8 +14391,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14179:button",
-        "chromasmith-22.html:14290:button"
+        "chromasmith-22.html:14248:button",
+        "chromasmith-22.html:14359:button"
       ],
       "unresolved": false
     },
@@ -14408,7 +14408,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -14424,7 +14424,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -14937,7 +14937,7 @@
       "label": "Overlay opacity 75",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2077:control-row"
+        "chromasmith-22.html:2101:control-row"
       ],
       "unresolved": false
     },
@@ -14953,7 +14953,7 @@
       "label": "Edge only",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2082:control-row"
+        "chromasmith-22.html:2106:control-row"
       ],
       "unresolved": false
     },
@@ -15339,7 +15339,7 @@
       "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Showing what is ACTUALLY adjusted — shap",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2054:section-card"
+        "chromasmith-22.html:2078:section-card"
       ],
       "unresolved": false
     },
@@ -15543,7 +15543,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14407:slider"
+        "chromasmith-22.html:14476:slider"
       ],
       "unresolved": false
     },
@@ -15559,7 +15559,7 @@
       "label": "Overlay opacity",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2079:slider"
+        "chromasmith-22.html:2103:slider"
       ],
       "unresolved": false
     },
@@ -15590,7 +15590,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2055:toggle"
+        "chromasmith-22.html:2079:toggle"
       ],
       "unresolved": false
     },
@@ -15606,7 +15606,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:2565:button"
+        "chromasmith-22.html:2589:button"
       ],
       "unresolved": false
     },
@@ -15623,7 +15623,7 @@
       "label": "Favorite (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2561:button"
+        "chromasmith-22.html:2585:button"
       ],
       "unresolved": false
     },
@@ -15640,7 +15640,7 @@
       "label": "Green flag (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2560:button"
+        "chromasmith-22.html:2584:button"
       ],
       "unresolved": false
     },
@@ -15657,7 +15657,7 @@
       "label": "Reject (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2559:button"
+        "chromasmith-22.html:2583:button"
       ],
       "unresolved": false
     },
@@ -15674,7 +15674,7 @@
       "label": "Full resolution — renders the whole preview at full source resolution instead of the usual capped si",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2558:button"
+        "chromasmith-22.html:2582:button"
       ],
       "unresolved": false
     },
@@ -15691,8 +15691,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14179:button",
-        "chromasmith-22.html:14290:button"
+        "chromasmith-22.html:14248:button",
+        "chromasmith-22.html:14359:button"
       ],
       "unresolved": false
     },
@@ -15708,7 +15708,7 @@
       "label": "Zoom in",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2548:button"
+        "chromasmith-22.html:2572:button"
       ],
       "unresolved": false
     },
@@ -15724,7 +15724,7 @@
       "label": "Zoom out",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2544:button"
+        "chromasmith-22.html:2568:button"
       ],
       "unresolved": false
     },
@@ -15738,7 +15738,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2697:button"
+        "chromasmith-22.html:2721:button"
       ],
       "unresolved": false
     },
@@ -15754,7 +15754,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -15770,7 +15770,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -16338,7 +16338,7 @@
       "label": "Overlay opacity 75",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2077:control-row"
+        "chromasmith-22.html:2101:control-row"
       ],
       "unresolved": false
     },
@@ -16354,7 +16354,7 @@
       "label": "Edge only",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2082:control-row"
+        "chromasmith-22.html:2106:control-row"
       ],
       "unresolved": false
     },
@@ -16651,7 +16651,7 @@
       "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Showing what is ACTUALLY adjusted — shap",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2054:section-card"
+        "chromasmith-22.html:2078:section-card"
       ],
       "unresolved": false
     },
@@ -16681,7 +16681,7 @@
       "label": "Drag to zoom · double-click to fit the whole image",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2545:slider"
+        "chromasmith-22.html:2569:slider"
       ],
       "unresolved": false
     },
@@ -16698,7 +16698,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14407:slider"
+        "chromasmith-22.html:14476:slider"
       ],
       "unresolved": false
     },
@@ -16714,7 +16714,7 @@
       "label": "Overlay opacity",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2079:slider"
+        "chromasmith-22.html:2103:slider"
       ],
       "unresolved": false
     },
@@ -16745,7 +16745,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2055:toggle"
+        "chromasmith-22.html:2079:toggle"
       ],
       "unresolved": false
     },
@@ -16762,7 +16762,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -16779,7 +16779,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -16796,7 +16796,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -16813,7 +16813,7 @@
       "label": "Export collage",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2941:button"
+        "chromasmith-22.html:2965:button"
       ],
       "unresolved": false
     },
@@ -17139,7 +17139,7 @@
       "label": "Aspect",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2902:select"
+        "chromasmith-22.html:2926:select"
       ],
       "unresolved": false
     },
@@ -17155,7 +17155,7 @@
       "label": "Long side",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2933:select"
+        "chromasmith-22.html:2957:select"
       ],
       "unresolved": false
     },
@@ -17171,7 +17171,7 @@
       "label": "Spacing",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2916:slider"
+        "chromasmith-22.html:2940:slider"
       ],
       "unresolved": false
     },
@@ -17187,7 +17187,7 @@
       "label": "Outer margin",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2917:slider"
+        "chromasmith-22.html:2941:slider"
       ],
       "unresolved": false
     },
@@ -17203,7 +17203,7 @@
       "label": "Corner round",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2918:slider"
+        "chromasmith-22.html:2942:slider"
       ],
       "unresolved": false
     },
@@ -17220,7 +17220,7 @@
       "label": "Download .cube LUT",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1698:button"
+        "chromasmith-22.html:1737:button"
       ],
       "unresolved": false
     },
@@ -17237,7 +17237,7 @@
       "label": "Download .xmp Preset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1699:button"
+        "chromasmith-22.html:1738:button"
       ],
       "unresolved": false
     },
@@ -17254,7 +17254,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -17271,7 +17271,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -17288,7 +17288,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -17334,7 +17334,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:2565:button"
+        "chromasmith-22.html:2589:button"
       ],
       "unresolved": false
     },
@@ -17351,7 +17351,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -17368,7 +17368,7 @@
       "label": "Favorite (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2561:button"
+        "chromasmith-22.html:2585:button"
       ],
       "unresolved": false
     },
@@ -17385,7 +17385,7 @@
       "label": "Green flag (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2560:button"
+        "chromasmith-22.html:2584:button"
       ],
       "unresolved": false
     },
@@ -17402,7 +17402,7 @@
       "label": "Reject (Library)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2559:button"
+        "chromasmith-22.html:2583:button"
       ],
       "unresolved": false
     },
@@ -17419,7 +17419,7 @@
       "label": "Full resolution — renders the whole preview at full source resolution instead of the usual capped si",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2558:button"
+        "chromasmith-22.html:2582:button"
       ],
       "unresolved": false
     },
@@ -17436,7 +17436,7 @@
       "label": "Pick photos from your Google Photos library — selection happens in Google's own picker (one-time fre",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1828:button"
+        "chromasmith-22.html:1867:button"
       ],
       "unresolved": false
     },
@@ -17453,7 +17453,7 @@
       "label": "Delete",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1832:button"
+        "chromasmith-22.html:1871:button"
       ],
       "unresolved": false
     },
@@ -17470,7 +17470,7 @@
       "label": "Download .cube",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1836:button"
+        "chromasmith-22.html:1875:button"
       ],
       "unresolved": false
     },
@@ -17487,7 +17487,7 @@
       "label": "Library is stored in this browser only (Safari may purge it after ~7 days unused)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1831:button"
+        "chromasmith-22.html:1870:button"
       ],
       "unresolved": false
     },
@@ -17504,7 +17504,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -17521,7 +17521,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -17537,7 +17537,7 @@
       "label": "Zoom in",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2548:button"
+        "chromasmith-22.html:2572:button"
       ],
       "unresolved": false
     },
@@ -17553,7 +17553,7 @@
       "label": "Zoom out",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2544:button"
+        "chromasmith-22.html:2568:button"
       ],
       "unresolved": false
     },
@@ -17569,7 +17569,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1784:button"
+        "chromasmith-22.html:1823:button"
       ],
       "unresolved": false
     },
@@ -17585,7 +17585,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1785:button"
+        "chromasmith-22.html:1824:button"
       ],
       "unresolved": false
     },
@@ -17862,7 +17862,7 @@
       "label": "Image Input Drop imageportrait RAW profile None (LibRaw sRGB)StandardNaturalVividFlatPortraitLandsca",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1797:section-card"
+        "chromasmith-22.html:1836:section-card"
       ],
       "unresolved": false
     },
@@ -17878,7 +17878,7 @@
       "label": "RAW profile",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1805:select"
+        "chromasmith-22.html:1844:select"
       ],
       "unresolved": false
     },
@@ -17892,7 +17892,7 @@
       "label": "Drag to zoom · double-click to fit the whole image",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:2545:slider"
+        "chromasmith-22.html:2569:slider"
       ],
       "unresolved": false
     },
@@ -17909,7 +17909,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -17926,7 +17926,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -17943,7 +17943,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },
@@ -17990,7 +17990,7 @@
       "label": "Export at full resolution",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:1747:button"
+        "chromasmith-22.html:1786:button"
       ],
       "unresolved": false
     },
@@ -18007,7 +18007,7 @@
       "label": "Redo (⌘Y)",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1730:button"
+        "chromasmith-22.html:1769:button"
       ],
       "unresolved": false
     },
@@ -18024,7 +18024,7 @@
       "label": "Generate LUT & XMP",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1670:button"
+        "chromasmith-22.html:1709:button"
       ],
       "unresolved": false
     },
@@ -18041,7 +18041,7 @@
       "label": "Undo (⌘Z) · hold for edit history · shift-click to reset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:1729:button"
+        "chromasmith-22.html:1768:button"
       ],
       "unresolved": false
     },

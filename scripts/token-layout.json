@@ -206,9 +206,39 @@
    "hadSemi": true
   },
   {
-   "var": "--glass-bg",
-   "pre": "\n  ",
-   "hadSemi": false
+    "var": "--glass-bg",
+    "pre": "\n  ",
+    "hadSemi": true
+  },
+  {
+    "var": "--ctl-toggle-w",
+    "pre": "\n  ",
+    "hadSemi": true
+  },
+  {
+    "var": "--ctl-toggle-h",
+    "pre": "",
+    "hadSemi": true
+  },
+  {
+    "var": "--ctl-slider-thumb",
+    "pre": "",
+    "hadSemi": true
+  },
+  {
+    "var": "--ctl-slider-roll",
+    "pre": "",
+    "hadSemi": true
+  },
+  {
+    "var": "--ctl-slider-track",
+    "pre": "",
+    "hadSemi": true
+  },
+  {
+    "var": "--ctl-square-radius",
+    "pre": "",
+    "hadSemi": false
   }
  ],
  "bodyLight": [

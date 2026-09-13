@@ -970,3 +970,34 @@ Decision gate: user must choose the existing draft as pilot basis, supply a new 
 - Rejected generic component completion and screenshot-derived semantic/typographic/responsive/accessibility claims; browser capture and annotation remain deferred.
 - Added deterministic PNG measurement/comparison negative-path checks; no schema, production UI, Color design, baseline, or capture changed.
 - Limitations: PNG pixels cannot establish intended tokens, fonts, hidden states, accessibility, motion, or visual correctness.
+
+**Color liquid-progress specification — 2026-09-13**
+- Measured the supplied static screenshot and sampled the supplied 22.767-second recording as motion authority; URL parameters remain supporting evidence only.
+- Draft specifies internal labels/values, an attached deforming front, endpoint compression, native range behavior, shared Canvas 2D rendering, performance, and reduced motion.
+- Specification only: no prototype, production UI, or dependency changed; density and Color-control scope remain approval gates.
+
+**Color Mixer rollout review + completion — 2026-09-13**
+- Reviewed Codex's 2026-09-12→13 work: registry/contracts/reference-to-spec groundwork is sound;
+  the last uncommitted step (Color Mixer square-control rollout) had not recorded approval, was
+  inconsistent with earlier reset/toggle decisions in places, and left the app in an uncommitted
+  state. User approved the rollout scope live in chat; recorded in
+  `color-mixer-pilot.json` (`approval.status: approved`, decision-rollout-scope) with its two
+  surviving reference images copied into `reference-to-spec/evidence/color-mixer-pilot/` (the
+  Downloads screenshot was already gone from disk — noted as unavailable, not silently dropped).
+- Fixed: removed an always-on dotted underline under editable slider values (`.fx-val[contenteditable="true"]`
+  had a stray `border-bottom` beneath the newer hover/focus rule that already handled it).
+- Unified per-section reset: every `.fx-ctrl` section's header now shows the same hidden-until-
+  edited generic Reset button; Curves and Color Mixer additionally get a scoped "Reset | All"
+  (current channel/band vs. whole section) via `_fxSectionScopedReset`; the ad-hoc "Reset | All"/
+  "Reset all" button rows Curves/HSL/Wheels/Point Color used to draw below their own controls are
+  removed (redundant with the header button, and inconsistent with every other section).
+- Color Mixer: band selectors are now square (draft's 4px coloured-outline/diagonal-split/white-
+  ring pattern) instead of circular chips; the histogram is now a continuous per-hue spectrum
+  (48 sampled buckets) with 8 hover/click zones and a pale-grey selected-range overlay, replacing
+  the old 8 discrete band-coloured bars.
+- Added lesson #19 (`docs/process-lessons.md`, one-liner in `CLAUDE.md` §6): a reference-to-spec
+  draft must use the app's own tokens/markup and get a side-by-side pixel-diff step before
+  "matched," and an "approved" token/spec needs an actually-recorded `approval.status`.
+- Restored the dropped per-panel "draw/capture every state" and "screenshot and look" steps in
+  `docs/editor-redesign-plan.md` §1 (with the original T25 rationale), and removed the invented
+  Luna/Terra/Astra model-role section.

@@ -223,25 +223,61 @@ const GATES = [
 ];
 
 const verbose = process.argv.includes('--verbose');
-const results = [];
 
-for (const gate of GATES) {
-  const attempts = gate.retries || 1;
-  let out = '', code = 1, used = 0;
-  for (let i = 1; i <= attempts; i++) {
-    used = i;
-    const r = spawnSync(gate.cmd[0], gate.cmd.slice(1), { encoding: 'utf8' });
-    out = `${r.stdout || ''}${r.stderr || ''}`;
-    code = r.status ?? 1;
-    if (code === 0) break;
-    if (i < attempts) console.log(`  ${gate.name}: attempt ${i} failed — retrying (see E7 in editor_ux_spec.json)`);
+// Each gate is an independent `node`/`npx` subprocess with no shared mutable state — every one
+// that opens a local server binds port 0 (ephemeral), confirmed by grepping every editor_*.mjs/
+// surface_coverage_check.mjs for `.listen(` before this was written — so running several at once
+// is exactly as safe as running them one at a time, just faster. This was a a plain sequential
+// `for` loop until 2026-09-13: on this 8-core machine, ~30 gates x several-second Playwright/
+// Chromium boots each made a full `editor:gates` run take 15-20 minutes wall-clock for maybe 2-3
+// minutes of actual CPU-bound work per core, because nothing ran alongside anything else.
+// CONCURRENCY caps how many gate subprocesses run at once — bounded (not "run all 30 at
+// once") because each is its own Chromium/WebKit instance and 30 simultaneous browser
+// launches would thrash memory/CPU worse than the sequential version it replaces. 4 is a
+// starting point for an 8-core machine (leaves headroom for the OS + this orchestrating
+// process); override with `--jobs N` if a given machine wants a different number.
+const jobsArg = process.argv.find((a) => a.startsWith('--jobs='));
+const CONCURRENCY = jobsArg ? Math.max(1, parseInt(jobsArg.slice('--jobs='.length), 10) || 4) : 4;
+
+function runGate(gate) {
+  return new Promise((resolve) => {
+    const attempts = gate.retries || 1;
+    let used = 0;
+    const tryOnce = () => {
+      used += 1;
+      const r = spawnSync(gate.cmd[0], gate.cmd.slice(1), { encoding: 'utf8' });
+      const out = `${r.stdout || ''}${r.stderr || ''}`;
+      const code = r.status ?? 1;
+      if (code !== 0 && used < attempts) {
+        console.log(`  ${gate.name}: attempt ${used} failed — retrying (see E7 in editor_ux_spec.json)`);
+        tryOnce();
+        return;
+      }
+      resolve({ name: gate.name, ok: code === 0, attempts: used, out });
+    };
+    tryOnce();
+  });
+}
+
+// A small worker-pool, not Promise.all(GATES.map(...)) — that would launch all 30 at once.
+// Results are collected in GATES order regardless of completion order, so the summary table
+// below is stable and diffable between runs the way the old sequential version was.
+const results = new Array(GATES.length);
+let nextIndex = 0;
+async function worker() {
+  while (nextIndex < GATES.length) {
+    const i = nextIndex++;
+    results[i] = await runGate(GATES[i]);
   }
-  results.push({ name: gate.name, ok: code === 0, attempts: used, out });
+}
+await Promise.all(Array.from({ length: Math.min(CONCURRENCY, GATES.length) }, worker));
+
+for (const r of results) {
   // Only a FAILING gate dumps its output. A passing gate's full log is noise that pushes the
   // one thing you need to read off the top of the terminal — same reasoning as test/verify.py.
-  if (code !== 0 || verbose) {
-    console.log(`\n──── ${gate.name} ${code === 0 ? '(verbose)' : 'FAILED'} ────`);
-    console.log(out.trimEnd());
+  if (!r.ok || verbose) {
+    console.log(`\n──── ${r.name} ${r.ok ? '(verbose)' : 'FAILED'} ────`);
+    console.log(r.out.trimEnd());
   }
 }
 

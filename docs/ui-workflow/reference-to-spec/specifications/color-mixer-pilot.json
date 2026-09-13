@@ -9,9 +9,9 @@
       "usageNotes": "Pilot-only reference analysis. The Uiverse toggle is published under the MIT License; the prototype retains attribution."
     },
     "views": [
-      {"id":"current-full","kind":"full","assetRef":"/var/folders/6s/sd2nq00x4f1f7t5fcrx67lrw0000gn/T/codex-clipboard-09b5bdd4-3fb5-4b35-b240-0b0d14c614a3.png","description":"Existing Color Mixer presentation.","visibleScope":"Header, histogram, bands, three controls, and reset buttons."},
-      {"id":"darkroom-full","kind":"full","assetRef":"/Users/tareqameer/Downloads/Screenshot 2026-09-13 at 9.21.28 AM.png","description":"Darkroom reference for thin histogram bars, circle treatment, and slider styling.","visibleScope":"Histogram, eight circles, and three controls."},
-      {"id":"darkroom-histogram","kind":"crop","assetRef":"/var/folders/6s/sd2nq00x4f1f7t5fcrx67lrw0000gn/T/codex-clipboard-d5cb5a40-720c-4272-b75f-c5ab4cb3995b.png","description":"Close reference for histogram height, colour progression, and selected-band overlay.","visibleScope":"Histogram only."}
+      {"id":"current-full","kind":"full","assetRef":"docs/ui-workflow/reference-to-spec/evidence/color-mixer-pilot/current-full.png","description":"Existing Color Mixer presentation.","visibleScope":"Header, histogram, bands, three controls, and reset buttons."},
+      {"id":"darkroom-full","kind":"full","assetRef":"UNAVAILABLE — /Users/tareqameer/Downloads/Screenshot 2026-09-13 at 9.21.28 AM.png no longer exists on disk; not copied into evidence/ before it was removed. Observations below that cite this view are retained as prior evidence but cannot be re-verified against the original.","description":"Darkroom reference for thin histogram bars, circle treatment, and slider styling.","visibleScope":"Histogram, eight circles, and three controls."},
+      {"id":"darkroom-histogram","kind":"crop","assetRef":"docs/ui-workflow/reference-to-spec/evidence/color-mixer-pilot/darkroom-histogram.png","description":"Close reference for histogram height, colour progression, and selected-band overlay.","visibleScope":"Histogram only."}
     ]
   },
   "scope": {"componentFamily":"slider","registryScope":{"includedSubfamilies":["toggle","band selector","numeric value","reset actions"],"excludedFamilies":["production renderer","other Color Mixer instances"],"notes":"An isolated interactive HTML pilot only; it does not alter chromasmith-22.html."}},
@@ -42,7 +42,8 @@
       {"id":"decision-edited","decision":"Edited circles use a diagonal original-color/new-color split.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 4"},
       {"id":"decision-interaction","decision":"The standalone HTML draft must be interactive for testing.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 5"},
       {"id":"decision-pilot-refinement","decision":"Keep all unrequested typography, spacing, and foundational styling on approved design tokens; add the specified Darkroom histogram and slider interactions to the pilot only.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User request, 2026-09-13"},
-      {"id":"decision-square-variant","decision":"Use square band selectors and square slider thumbs in this pilot variation; fix slider roll speed at 6.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User request, 2026-09-13"}
+      {"id":"decision-square-variant","decision":"Use square band selectors and square slider thumbs in this pilot variation; fix slider roll speed at 6.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User request, 2026-09-13"},
+      {"id":"decision-rollout-scope","decision":"Approve this design for rollout into chromasmith-22.html's shared .fx-slider/.fx-toggle/.fx-reset controls (all editor panels) and the Color Mixer's histogram/band selectors specifically — supersedes target-draft's 'drafts/color-mixer-pilot.html only' scope for the production implementation.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User request, 2026-09-13 (live chat approval, recorded after the fact)"}
     ],
     "unresolvedQuestions":[]
   },
@@ -63,5 +64,5 @@
     ]
   },
   "validation":{"requiredScreenshots":["Identity state at a desktop width","Edited diagonal-split state at a desktop width","Narrow-width state with eight bands in one row"],"evidence":[]},
-  "approval":{"status":"draft","approvedBy":"","approvedAt":"","userDecisionRefs":[]}
+  "approval":{"status":"approved","approvedBy":"user (tariqameer7575@gmail.com)","approvedAt":"2026-09-13","userDecisionRefs":["decision-reference-scope","decision-bands","decision-unedited","decision-edited","decision-interaction","decision-pilot-refinement","decision-square-variant","decision-rollout-scope"]}
 }

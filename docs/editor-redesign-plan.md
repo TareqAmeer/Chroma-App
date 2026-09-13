@@ -50,27 +50,34 @@ component or panel at a time:
 6. Read only the approved panel specification and, when applicable, the approved reference
    specification, plus the grep-located production section needed for the named targets. Do not
    read the production file in full.
-7. Implement with existing markup and shared components; move existing markup when possible.
-8. Run the focused typed diff, `node test/editor_wireframe_diff.mjs --panel <panel> --json`, and
+7. **Draw or capture every state you care about, not just the resting one** — hover, active,
+   disabled, empty, edited, and the long-content case, in both themes. Anything not drawn or
+   captured here will be invented during implementation, and an invention is what gets corrected
+   later at far higher cost than drawing it now.
+8. Implement with existing markup and shared components; move existing markup when possible.
+9. Run the focused typed diff, `node test/editor_wireframe_diff.mjs --panel <panel> --json`, and
    the panel-specific checks required by the approved specification. For layout changes, preserve
    the every-width requirement in §3 and in the wireframe-transplant skill.
-9. Capture the panel pair with `node test/panel_pair_shots.mjs --panel <panel>`.
-10. Review the result against explicit acceptance criteria in a fresh, separate chat. Give the
+10. Capture the panel pair with `node test/panel_pair_shots.mjs --panel <panel>`.
+11. **Screenshot the result and look at it** — not to measure, but to catch the class of defect no
+    automated check has an opinion about (something ugly, something in a nonsensical place). Do
+    this per panel, before moving to the next one, not batched later — every check in this loop
+    explicitly disclaims that it cannot see "ugly" or "nonsensical," and that disclaimer is only
+    honored if this step actually happens each time.
+12. Review the result against explicit acceptance criteria in a fresh, separate chat. Give the
     reviewer no implementation context beyond the approved specification, affected files, and
     validation evidence. The reviewer reports mismatches against those criteria.
-11. Run `npm run components:check` and the focused contract/specification validations again.
-12. Commit implementation and validation evidence separately when that separation is useful.
+13. Run `npm run components:check` and the focused contract/specification validations again.
+14. Commit implementation and validation evidence separately when that separation is useful.
 
 The query is authoritative for source-locatable shared declarations; dynamic declarations and
 instances without stable selectors remain visible coverage debt and must be considered. Component
 contract validation is `node scripts/validate-component-contracts.mjs --family <family>`. A
 reference specification is checked with `npm run reference:spec:validate -- <spec-path>`.
 
-### Optional model guidance
-
-Use Luna for deterministic checks and small documentation changes, Terra for bounded
-implementation, and Astra only for difficult visual interpretation or unresolved review. These
-are optional role suggestions; the workflow, checks, and evidence do not depend on a model choice.
+A reference-to-spec's proposed rollout scope is provisional until the user approves it; approval
+must record which files/components it covers (a standalone draft, or specific production controls
+app-wide) — do not infer scope from where the draft happens to live on disk.
 
 ---
 

@@ -113,3 +113,14 @@ Learned the hard/expensive way:
    be verified (a covered part must be visible inside its parent) or require the user's explicit approval;
    a session may never grant itself an exemption.
 
+
+19. A reference-to-spec draft built on the wireframe's token set and hand-drawn markup, instead
+    of the production tokens and real component markup, has to be matched twice: once to build
+    the draft, once to re-match production to it. Neither pass had a pixel-diff step, so the user
+    became the diff tool across ~7 rounds. Build implementation-facing drafts directly against
+    the app's own `design/tokens.json` vars and real `.fx-*`/component markup (an in-app catalogue
+    page, not a standalone HTML file), and add a side-by-side screenshot + pixel-diff step to the
+    reference-to-spec workflow before calling a match "done." Also: an "approved" token or spec
+    must actually have `approval.status: approved` recorded with who/when — a description that
+    says "Approved" while the spec is still `draft` is invisible to every check that reads
+    approval status, and the work stays uncommitted/unpushed until that's fixed.

@@ -58,7 +58,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
      --red-oxide UNCHANGED for light mode; dark mode keeps its brighter values on purpose — DS's
      literals are near-invisible on this near-black --bg (contrast ~1.3:1), so darkroom
      readability wins there (see body.light's override for the light-mode DS values). */
-  --acc:#61a0af;--acc2:var(--acc);--txt:#ffffff;--mut:#cccccc;--ok:#52c97a;--err:#e05454;--r:8px;
+  --acc:#61a0af;--acc2:var(--acc);--txt:#ffffff;--mut:#cccccc;--ok:#214e1d;--err:#870f13;--r:8px;
   /* Slider-thumb dark values, made explicit — previously only the CSS var()'s inline fallback
      (chromasmith-22.html:302/304) supplied these, so --sl-thumb was never a real custom property
      in dark mode even though body.light declared one. No visual change, just removes the hidden
@@ -106,7 +106,8 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
      consistent and any future tuning is a one-line change. */
   --lift-1:inset 0 1px 0 rgba(255,255,255,.045),0 1px 2px rgba(0,0,0,.3),0 6px 16px -4px rgba(0,0,0,.35);
   --lift-2:inset 0 1px 0 rgba(255,255,255,.06),0 2px 4px rgba(0,0,0,.35),0 14px 32px -8px rgba(0,0,0,.5);
-  --glass-bg:#272729/* TOKENS:ROOT:END */}
+  --glass-bg:#272729;
+  --ctl-toggle-w:44px;--ctl-toggle-h:22px;--ctl-slider-thumb:28px;--ctl-slider-roll:6;--ctl-slider-track:3px;--ctl-square-radius:0px/* TOKENS:ROOT:END */}
 body.light{--glass-bg:#ffffff}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100%;overflow-x:clip}
@@ -154,10 +155,10 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .btn{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:9px 14px;border-radius:5px;border:1px solid;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease,transform .1s ease,box-shadow .15s ease;display:flex;align-items:center;gap:6px;white-space:nowrap}
 .btn:disabled{opacity:.3;cursor:not-allowed}
 .btn:active:not(:disabled){transform:scale(.96)}
-.bpri{background:linear-gradient(#e8a54a,var(--acc));border-color:var(--acc);color:#000;font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 1px 2px rgba(0,0,0,.25)}
-.bpri:not(:disabled):hover{background:linear-gradient(#efb361,#e09a41)}
+.bpri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 1px 2px rgba(0,0,0,.25)}
+.bpri:not(:disabled):hover{filter:brightness(1.15)}
 .bsec{background:transparent;border-color:var(--acc2);color:var(--acc2)}.bsec:not(:disabled):hover{background:rgba(74,157,220,.1)}
-.bgh{background:var(--sur2);border-color:var(--bdr);color:var(--mut)}.bgh:not(:disabled):hover{border-color:var(--txt);color:var(--txt);background:var(--sur)}.bgh.on{border-color:var(--acc);color:var(--acc);background:rgba(212,144,58,.12)}
+.bgh{background:var(--sur2);border-color:var(--bdr);color:var(--mut)}.bgh:not(:disabled):hover{border-color:var(--txt);color:var(--txt);background:var(--sur)}.bgh.on{border-color:#61a0af;color:#fff;background:#61a0af}
 /* .bdot removed: a decorative leading dot on every single button, carrying no meaning and
    pushing every label off-centre. State is now shown by the button's own .on treatment. */
 .pb{height:3px;background:var(--bdr);border-radius:2px;margin-top:10px;overflow:hidden;display:none}
@@ -219,7 +220,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-ctrl.fx-sec-collapsed .fx-ctrl-chev{transform:rotate(-90deg)}
 .fx-ctrl.fx-sec-collapsed>.fx-ctrl-title{margin-bottom:0;padding-bottom:10px;border-bottom:1px solid var(--bdr)}
 .fx-ctrl.fx-sec-collapsed>:not(.fx-ctrl-title){display:none}
-.fx-toggle{width:32px;height:18px;border-radius:9px;background:var(--bdr);position:relative;cursor:pointer;transition:background .18s ease;flex-shrink:0;box-shadow:inset 0 1px 2px rgba(0,0,0,.25);border:1px solid transparent}
+.fx-toggle{width:var(--ctl-toggle-w);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--bdr);position:relative;cursor:pointer;transition:background var(--dur-2) ease;flex-shrink:0;box-shadow:none;border:1px solid transparent}
 /* T45 (editor_ux_spec.json): under forced-colors (Windows High Contrast) mode, the browser can
    strip a custom `background` entirely — .fx-toggle has no text/icon and no real border, so with
    nothing else painting its shape it could vanish completely. `border` survives forced-colors
@@ -228,14 +229,13 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
    CanvasText (the current-value UI-color equivalent) only under forced-colors — same fix shape as
    .btn already had for free via its own always-on `border:1px solid`. */
 @media (forced-colors:active){.fx-toggle{border-color:CanvasText}}
-.fx-toggle.on{background:var(--acc);box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
-.fx-toggle::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .18s cubic-bezier(.34,1.4,.64,1);box-shadow:0 1px 2px rgba(0,0,0,.4),0 0 0 .5px rgba(0,0,0,.06)}
-.fx-toggle.on::after{left:16px}
+.fx-toggle.on{background:var(--acc);box-shadow:none}
+.fx-toggle::after{content:'';position:absolute;width:var(--ctl-toggle-h);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--txt);top:-1px;left:-1px;transition:transform var(--dur-1) cubic-bezier(.75,.02,.86,1.31);transform-origin:bottom right;box-shadow:none}
+.fx-toggle.on::after{transform:rotate(90deg)}
 /* The 32x18 track is a precise mouse target but a cramped touch one — scale up to roughly
    native iOS switch proportions on mobile rather than adding an invisible hit-area hack. */
-body.mobile-fx .fx-toggle{width:44px;height:24px;border-radius:12px}
-body.mobile-fx .fx-toggle::after{width:20px;height:20px;top:2px;left:2px}
-body.mobile-fx .fx-toggle.on::after{left:22px}
+body.mobile-fx .fx-toggle{width:var(--ctl-toggle-w);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius)}
+body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-toggle-h);top:-1px;left:-1px}
 /* ⚠️ An OFF section used to be display:none, so a disabled panel rendered as an empty card with
    a lone switch and several hundred pixels of void — the Masks panel at rest was literally a
    title, a toggle and nothing else, which reads as broken rather than as off. The controls are
@@ -304,21 +304,23 @@ body.mobile-fx .fx-toggle.on::after{left:22px}
    Implemented with a background-image on the track rather than ::-moz-range-progress etc., so
    one rule covers WebKit and Gecko; --p is written by fxSliderPaint() on input. */
 .fx-slider{order:3;flex:1 1 100%;width:100%;cursor:pointer;margin-top:3px;-webkit-appearance:none;appearance:none;
-  height:16px;background:transparent}
-.fx-slider::-webkit-slider-runnable-track{height:3px;border-radius:2px;
+  height:var(--ctl-slider-thumb);background:transparent}
+.fx-slider::-webkit-slider-runnable-track{height:var(--ctl-slider-track);border-radius:2px;
   background:linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--sl-fill,var(--mut)) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
-.fx-slider::-moz-range-track{height:3px;border-radius:2px;
+.fx-slider::-moz-range-track{height:var(--ctl-slider-track);border-radius:2px;
   background:linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--sl-fill,var(--mut)) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
-.fx-slider::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;margin-top:-5px;
-  background:var(--sl-thumb,#e9e6df);box-shadow:var(--sl-thumb-sh,inset 0 1px 0 rgba(255,255,255,.9),0 1px 2px rgba(0,0,0,.5));cursor:grab}
-.fx-slider::-moz-range-thumb{width:13px;height:13px;border-radius:50%;border:none;
-  background:var(--sl-thumb,#e9e6df);box-shadow:var(--sl-thumb-sh,inset 0 1px 0 rgba(255,255,255,.9),0 1px 2px rgba(0,0,0,.5));cursor:grab}
-.fx-slider:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.12)}
+.fx-slider::-webkit-slider-thumb{-webkit-appearance:none;width:var(--ctl-slider-thumb);height:var(--ctl-slider-thumb);border-radius:var(--ctl-square-radius);margin-top:calc((var(--ctl-slider-track) - var(--ctl-slider-thumb)) / 2);
+  background:var(--sur);border:3px solid var(--txt);box-shadow:none;cursor:grab;transform:rotate(var(--sl-roll,0deg));transition:transform var(--dur-1) linear}
+.fx-slider::-moz-range-thumb{width:var(--ctl-slider-thumb);height:var(--ctl-slider-thumb);border-radius:var(--ctl-square-radius);border:3px solid var(--txt);
+  background:var(--sur);box-shadow:none;cursor:grab;transform:rotate(var(--sl-roll,0deg));transition:transform var(--dur-1) linear}
+.fx-row.fx-mod .fx-slider::-webkit-slider-thumb{background:var(--acc)}
+.fx-row.fx-mod .fx-slider::-moz-range-thumb{background:var(--acc)}
+.fx-slider:active::-webkit-slider-thumb{cursor:grabbing}
 /* A modified row drives its fill amber — the same signal .fx-mod already gives the label dot. */
-.fx-row.fx-mod .fx-slider{--sl-fill:var(--acc)}
+.fx-row.fx-mod .fx-slider{--sl-fill:var(--txt)}
 /* Centre detent on bipolar rows, so the neutral point is findable by eye. */
-.fx-slider-bi{background-image:linear-gradient(var(--bdr),var(--bdr));background-size:1px 7px;
-  background-position:center 4px;background-repeat:no-repeat}
+.fx-slider-bi{background-image:radial-gradient(circle,var(--mut) 0 2px,transparent 3px);background-size:5px 5px;
+  background-position:center 0;background-repeat:no-repeat}
 /* Guards a vertical drag on the thumb from being captured by the bottom sheet's own vertical
    scroll if a slider ever ends up inside that scrollable area — horizontal-only touch handling,
    consistent with touch-action:none already used on the zoom/mask/curve drag surfaces. */
@@ -330,8 +332,7 @@ body.mobile-fx .fx-slider{touch-action:pan-x}
 .fx-row.fx-mod>.fx-val{color:var(--acc)}
 /* Click the number to type an exact value. Kept visually identical to the static readout so the
    row doesn't shift when it becomes editable. */
-.fx-val[contenteditable="true"]{cursor:text;outline:none;min-width:34px;border-bottom:1px dotted var(--acc)}
-.fx-val[contenteditable="true"]:focus{border-bottom:1px solid var(--acc);background:rgba(212,144,58,.10)}
+.fx-val[contenteditable="true"]{cursor:text;outline:none;min-width:34px}
 /* A slider that differs from its factory default gets a dot, so a loaded recipe is legible at a
    glance instead of needing every section opened and compared. */
 .fx-row.fx-mod>.fx-label::after{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;
@@ -348,9 +349,19 @@ body.mobile-fx .fx-val[contenteditable]:focus{border-bottom-style:solid}
 .btn-icon{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
   width:38px;height:38px;font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .btn-icon:hover{border-color:var(--mut)}
-.hsl-chip{display:flex;flex-direction:column;align-items:center;background:none;border:none;border-bottom:2px solid transparent;padding:5px 6px 6px;cursor:pointer}
-/* ~28-30px at the base padding — below the ~44px comfortable touch target. */
-body.mobile-fx .hsl-chip{padding:10px 8px;min-height:44px;justify-content:center}
+/* Approved Color Mixer pilot, 2026-09-13: 8 square band selectors in one never-wrapping row —
+   a coloured outline at rest, a diagonal before/after split once that band has been edited
+   (draft's .band.edited), and a white selection ring (replaces the old chip's border-bottom
+   underline, which didn't survive the square shape). */
+#hsl-chips{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;flex-wrap:nowrap}
+.hsl-chip{width:100%;max-width:44px;aspect-ratio:1;justify-self:center;border-radius:var(--ctl-square-radius,0px);
+  border:4px solid var(--band-col,var(--bdr));background:transparent;padding:0;cursor:pointer;
+  transition:transform var(--dur-1) var(--ease),box-shadow var(--dur-1) var(--ease)}
+.hsl-chip:hover{transform:scale(1.05)}
+.hsl-chip.on{box-shadow:0 0 0 2px var(--txt)}
+.hsl-chip.edited{background:linear-gradient(135deg,var(--band-before) 0 49.4%,var(--band-after) 50.6% 100%)}
+/* ~44px at this size — clears the comfortable touch-target floor without a separate mobile rule. */
+body.mobile-fx .hsl-chip{border-width:3px}
 /* ══ SEGMENTED CONTROL ═══════════════════════════════════════════════════════════════════════
    Was built inline with a hardcoded style="" on every button (four of them per control, repeated
    at each call site). One component now, used by Show-on-photo, Skin Tone's target picker, the
@@ -389,7 +400,7 @@ body.mobile-fx .hsl-chip{padding:10px 8px;min-height:44px;justify-content:center
 .msk-hint{font-size:var(--fs-1);color:var(--mut);line-height:1.45;margin:var(--sp-1) 0 var(--sp-2)}
 .msk-cov{font-size:var(--fs-1);color:var(--txt);background:var(--sur2);border:1px solid var(--bdr);
   border-radius:6px;padding:5px 8px;margin:var(--sp-1) 0 var(--sp-2)}
-.msk-warn{font-size:var(--fs-1);color:#e8c07a;background:rgba(212,144,58,.10);border:1px solid rgba(212,144,58,.28);
+.msk-warn{font-size:var(--fs-1);color:#ff9b42;background:rgba(255,155,66,.10);border:1px solid rgba(255,155,66,.28);
   border-radius:6px;padding:6px 8px;line-height:1.45;margin:var(--sp-1) 0 var(--sp-2)}
 .msk-chiprow{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:var(--sp-1) 0 var(--sp-2)}
 .msk-swatch{width:24px;height:24px;position:relative}
@@ -438,16 +449,20 @@ body.mobile-fx .hsl-chip{padding:10px 8px;min-height:44px;justify-content:center
 }
 .pc-chip.on{border-color:var(--acc);box-shadow:0 0 0 2px rgba(212,144,58,.35)}
 body.mobile-fx .pc-chip{width:36px;height:36px}
-#hsl-hist{flex:1}
-.hsl-hist-bar{flex:1;min-width:6px;border-radius:2px 2px 0 0;cursor:pointer;opacity:.45;transition:opacity .1s}
-.hsl-hist-bar:hover{opacity:.75}
-.hsl-hist-bar.on{opacity:1}
+/* Approved Color Mixer pilot, 2026-09-13: a continuous per-hue population histogram (thin bars
+   across the full spectrum, each its own sampled hue) with 8 invisible click/hover zones laid
+   over it — one per band — that select a band and show a pale grey overlay, matching the
+   draft's Darkroom-style reference instead of the previous 8 discrete band-coloured bars. */
+#hsl-hist{position:relative;display:flex;align-items:flex-end;gap:1px;height:32px;padding:0 1px}
+.hsl-hist-bar{flex:1 1 0;min-width:2px;border-radius:2px 2px 0 0;pointer-events:none;opacity:.9}
+.hsl-hist-zone{position:absolute;top:0;bottom:0;border:0;background:transparent;cursor:pointer;padding:0}
+.hsl-hist-zone:hover,.hsl-hist-zone.on{background:linear-gradient(180deg,rgba(197,197,197,.28),rgba(197,197,197,.12) 62%,transparent)}
 /* Color Mixer sliders: gradient track (Hue = fixed rainbow; Sat/Lum tinted per selected band
    via JS, see hslSyncUI). Track colour comes from the input's own `background`, so appearance
    must be reset to none — WebKit/Safari-focused since the app runs in Safari or a WKWebView shell. */
-.fx-slider-grad{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;background:linear-gradient(to right,#ff5b5b,#ff9f43,#ffd43b,#51cf66,#3bc9db,#4d8bff,#9775fa,#f06595,#ff5b5b)}
-.fx-slider-grad::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 0 3px rgba(0,0,0,.5)}
-.fx-slider-grad::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#fff;border:none;box-shadow:0 0 3px rgba(0,0,0,.5)}
+.fx-slider-grad{-webkit-appearance:none;appearance:none;height:var(--ctl-slider-thumb);border-radius:var(--ctl-square-radius);background:transparent}
+.fx-slider-grad::-webkit-slider-runnable-track{background:var(--sl-grad,linear-gradient(to right,#ff5b5b,#ff9f43,#ffd43b,#51cf66,#3bc9db,#4d8bff,#9775fa,#f06595,#ff5b5b))}
+.fx-slider-grad::-moz-range-track{background:var(--sl-grad,linear-gradient(to right,#ff5b5b,#ff9f43,#ffd43b,#51cf66,#3bc9db,#4d8bff,#9775fa,#f06595,#ff5b5b))}
 /* 3.4.2: matches the wireframe's .select-btn idiom (Editor (Developer) View.dc.html:123-127) —
    a real native <select> reskinned to look like it (fixed 32px pill height, 8px radius, a
    pill-role border, a custom chevron replacing the native arrow) rather than replaced with a
@@ -739,7 +754,9 @@ body.mobile-fx.sheet-open .fx-act-ic{font-size:19px}
    (found live via a real phone-viewport behaviour test, which none of this file's tests ran at
    before T12). Mirrors the desktop selector exactly, just with the mobile-only sizing kept. */
 body.mobile-fx.sheet-open .fx-ctrl:has(.fx-row.fx-mod) > .fx-ctrl-title .fx-ctrl-title-reset,
-body.mobile-fx.sheet-open .fx-ctrl.fx-has-heal > .fx-ctrl-title .fx-ctrl-title-reset{display:inline-flex;align-items:center;justify-content:center;
+body.mobile-fx.sheet-open .fx-ctrl.fx-has-heal > .fx-ctrl-title .fx-ctrl-title-reset,
+body.mobile-fx.sheet-open .fx-ctrl.fx-has-hsledit > .fx-ctrl-title .fx-ctrl-title-reset,
+body.mobile-fx.sheet-open .fx-ctrl.fx-has-curveedit > .fx-ctrl-title .fx-ctrl-title-reset{display:inline-flex;align-items:center;justify-content:center;
   width:26px;height:26px;border-radius:6px;background:none;border:none;color:var(--mut);cursor:pointer}
 body.mobile-fx.sheet-open .fx-ctrl-title-reset:active{background:var(--sur2);color:var(--txt)}
 .fx-ctrl-title-reset-lb{display:none} /* the mobile button is icon-only; label text is desktop-only, see below */
@@ -756,7 +773,29 @@ body.fx-deskb .fx-ctrl-title-reset svg{display:none} /* icon glyph is mobile-onl
 body.fx-deskb .fx-ctrl-title-reset-lb{display:inline}
 body.fx-deskb .fx-ctrl-title-reset:hover{color:var(--txt)}
 body.fx-deskb .fx-ctrl:has(.fx-row.fx-mod) > .fx-ctrl-title .fx-ctrl-title-reset,
-body.fx-deskb .fx-ctrl.fx-has-heal > .fx-ctrl-title .fx-ctrl-title-reset{display:inline-block}
+body.fx-deskb .fx-ctrl.fx-has-heal > .fx-ctrl-title .fx-ctrl-title-reset,
+body.fx-deskb .fx-ctrl.fx-has-hsledit > .fx-ctrl-title .fx-ctrl-title-reset,
+body.fx-deskb .fx-ctrl.fx-has-curveedit > .fx-ctrl-title .fx-ctrl-title-reset{display:inline-block}
+/* A section with a "reset just the current selection" concept (Curves' channel, Color Mixer's
+   band) gets a second header button in front of the generic one, "Reset | All" — same visibility
+   gate, same styling, just two targets instead of one. Built by the same injection pass; see
+   _fxSectionScopedReset. The separator is plain text, not a control — it isn't focusable and
+   isn't a second reset target. */
+.fx-ctrl-title-reset-scoped,.fx-ctrl-title-reset-sep{display:none}
+.fx-ctrl-title-reset-sep{color:var(--mut);padding:0 4px;font-size:var(--fs-1)}
+body.fx-deskb .fx-ctrl-title-reset-scoped{font-size:var(--fs-1);font-weight:400;letter-spacing:0;
+  text-transform:none;color:var(--mut);background:none;border:none;padding:0;cursor:pointer}
+body.fx-deskb .fx-ctrl-title-reset-scoped:hover{color:var(--txt)}
+body.fx-deskb .fx-ctrl:has(.fx-row.fx-mod) > .fx-ctrl-title .fx-ctrl-title-reset-scoped,
+body.fx-deskb .fx-ctrl.fx-has-heal > .fx-ctrl-title .fx-ctrl-title-reset-scoped,
+body.fx-deskb .fx-ctrl.fx-has-hsledit > .fx-ctrl-title .fx-ctrl-title-reset-scoped,
+body.fx-deskb .fx-ctrl.fx-has-curveedit > .fx-ctrl-title .fx-ctrl-title-reset-scoped,
+body.fx-deskb .fx-ctrl:has(.fx-row.fx-mod) > .fx-ctrl-title .fx-ctrl-title-reset-sep,
+body.fx-deskb .fx-ctrl.fx-has-heal > .fx-ctrl-title .fx-ctrl-title-reset-sep,
+body.fx-deskb .fx-ctrl.fx-has-hsledit > .fx-ctrl-title .fx-ctrl-title-reset-sep,
+body.fx-deskb .fx-ctrl.fx-has-curveedit > .fx-ctrl-title .fx-ctrl-title-reset-sep{display:inline-block}
+.fx-ctrl[data-fxsec="curves"].fx-curve-param-mode .fx-ctrl-title-reset-scoped,
+.fx-ctrl[data-fxsec="curves"].fx-curve-param-mode .fx-ctrl-title-reset-sep{display:none!important}
 #fx-sheet-handle{display:none}
 body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:9px 0 7px;position:sticky;top:0;background:var(--sur);z-index:5;cursor:pointer}
 body.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:38px;height:4px;border-radius:2px;background:var(--bdr)}
@@ -1967,19 +2006,12 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
             <div style="max-width:280px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px;margin-bottom:4px">
               <span>Blacks</span><span>Midtones</span><span>Whites</span>
             </div>
-            <div class="btn-row" style="margin-top:6px">
-              <button class="btn bgh" onclick="curveResetCh()">Reset channel</button>
-              <button class="btn bgh" onclick="curveResetAll()">Reset all</button>
-            </div>
           </div>
           <div id="curve-param-block" style="display:none;margin-top:6px">
             <div class="fx-row" title="Lifts/lowers the darkest tones."><div class="fx-label">Shadows</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-crv-s" oninput="paramCurveChanged('s',this.value);document.getElementById('vl-crv-s').textContent=this.value"><div class="fx-val" id="vl-crv-s">0</div></div>
             <div class="fx-row" title="Lifts/lowers the low-midtones."><div class="fx-label">Darks</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-crv-d" oninput="paramCurveChanged('d',this.value);document.getElementById('vl-crv-d').textContent=this.value"><div class="fx-val" id="vl-crv-d">0</div></div>
             <div class="fx-row" title="Lifts/lowers the high-midtones."><div class="fx-label">Lights</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-crv-l" oninput="paramCurveChanged('l',this.value);document.getElementById('vl-crv-l').textContent=this.value"><div class="fx-val" id="vl-crv-l">0</div></div>
             <div class="fx-row" title="Lifts/lowers the brightest tones."><div class="fx-label">Highlights</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-crv-h" oninput="paramCurveChanged('h',this.value);document.getElementById('vl-crv-h').textContent=this.value"><div class="fx-val" id="vl-crv-h">0</div></div>
-            <div class="btn-row" style="margin-top:6px">
-              <button class="btn bgh" onclick="paramCurveResetAll()">Reset all</button>
-            </div>
           </div>
         </div>
       </div>
@@ -1987,15 +2019,11 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <div class="fx-ctrl" data-fxsec="hsl">
         <div class="fx-ctrl-title">Color Mixer <div class="fx-toggle" id="tg-hsl" onclick="toggleFX('hsl')"></div></div>
         <div class="fx-fields ff-off" id="ff-hsl">
-          <div id="hsl-hist" style="display:flex;align-items:flex-end;gap:3px;height:26px;margin-bottom:6px"></div>
-          <div class="btn-row" id="hsl-chips" style="flex-wrap:wrap;gap:4px"></div>
+          <div id="hsl-hist" style="margin-bottom:6px" aria-label="Color distribution"></div>
+          <div id="hsl-chips" style="margin-bottom:8px" aria-label="Color bands"></div>
           <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-hsl-h" oninput="hslSlider('hue',this.value)"><div class="fx-val" id="vl-hsl-h">0</div></div>
           <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-hsl-s" oninput="hslSlider('sat',this.value)"><div class="fx-val" id="vl-hsl-s">0</div></div>
           <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-hsl-l" oninput="hslSlider('lum',this.value)"><div class="fx-val" id="vl-hsl-l">0</div></div>
-          <div class="btn-row" style="margin-top:4px">
-            <button class="btn bgh" onclick="hslResetBand()">Reset band</button>
-            <button class="btn bgh" onclick="hslResetAll()">Reset all</button>
-          </div>
         </div>
       </div>
       <!-- COLOUR WHEELS (ROADMAP R11) — 3-way lift/gamma/gain grading, ASC-CDL -->
@@ -2023,9 +2051,6 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
               <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-gain-l">0</div>
             </div>
           </div>
-          <div class="btn-row" style="margin-top:8px">
-            <button class="btn bgh" onclick="wheelResetAll()">Reset all</button>
-          </div>
         </div>
       </div>
       <!-- POINT COLOR -->
@@ -2045,7 +2070,6 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
             <div class="fx-row" title="How wide a neighborhood of similar colors around the picked point is affected — low = only close matches, high = a broad spread of nearby hues/saturations"><div class="fx-label">Range</div><input class="fx-slider" type="range" min="0" max="100" value="35" id="sl-pc-r" oninput="pcSlider('range',this.value)"><div class="fx-val" id="vl-pc-r">35</div></div>
             <div class="btn-row" style="margin-top:4px">
               <button class="btn bgh" onclick="pcDelete()">Delete point</button>
-              <button class="btn bgh" onclick="pcResetAll()">Reset all</button>
             </div>
           </div>
         </div>
@@ -4870,7 +4894,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-12a';
+const BUILD='2026-09-13a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -10332,7 +10356,13 @@ function bakeCurves(){
 function curveSetCh(ch){curveCh=ch;document.querySelectorAll('.crv-chip').forEach(b=>b.classList.toggle('on',b.dataset.ch===ch));drawCurveEditor();}
 function curveResetCh(){fxState.curves[curveCh]=_identityCurvePts();curveChanged();}
 function curveResetAll(){fxState.curves=_curveDefault();curveChanged();}
-function curveChanged(){bakeCurves();drawCurveEditor();fxUpdate();}
+function curveChanged(){
+  bakeCurves();drawCurveEditor();fxUpdate();
+  // Curve edits (point-mode canvas drags, parametric sliders) aren't tracked by the generic
+  // fxMarkModifiedSliders()/.fx-mod snapshot — same reason Curves always had its own bespoke
+  // reset. This is what actually drives the header's "Reset | All" visibility for this section.
+  document.querySelector('.fx-ctrl[data-fxsec="curves"]')?.classList.toggle('fx-has-curveedit',!curvesIdentity());
+}
 // Toggle between the raw point-curve editor and the 4-slider parametric mode — same segmented-
 // button pattern as the RGB/R/G/B channel chips above, mirrored for the mode switch itself.
 function curveSetMode(mode){
@@ -10341,8 +10371,17 @@ function curveSetMode(mode){
   const pt=document.getElementById('curve-point-block'),pm=document.getElementById('curve-param-block');
   if(pt)pt.style.display=mode==='point'?'':'none';
   if(pm)pm.style.display=mode==='param'?'':'none';
+  // Param mode has no per-channel concept, so the header's scoped "Reset | All" collapses to a
+  // single "Reset" there (see .fx-curve-param-mode in the CSS) — same class also drives the
+  // generic reset button's own label back and forth.
+  document.querySelector('.fx-ctrl[data-fxsec="curves"]')?.classList.toggle('fx-curve-param-mode',mode==='param');
+  const genericLb=document.querySelector('.fx-ctrl[data-fxsec="curves"] > .fx-ctrl-title .fx-ctrl-title-reset-lb');
+  if(genericLb)genericLb.textContent=mode==='param'?'Reset':'All';
   curveChanged();
 }
+// Header "All" reset for Curves covers both editing modes at once, so switching modes never
+// leaves stale state in the one not currently shown.
+function fxResetCurvesAll(){curveResetAll();paramCurveResetAll();}
 function drawCurveEditor(){
   const cv=document.getElementById('cv-curve');if(!cv||!cv.clientWidth)return;
   const dpr=Math.min(window.devicePixelRatio||1,2),w=cv.clientWidth;
@@ -10523,16 +10562,16 @@ function _hslAfterColor(b){
 }
 function hslBuildChips(){
   const row=document.getElementById('hsl-chips');if(!row)return;row.innerHTML='';
+  const preview=_hslActiveBand();
   HSL_BANDS.forEach(b=>{
-    const bt=document.createElement('button');bt.className='hsl-chip'+(b===hslBand?' on':'');bt.dataset.band=b;
-    bt.title=b;
-    bt.style.borderBottomColor=(b===hslBand?HSL_COLS[b]:'transparent');
     const edited=['hue','sat','lum'].some(k=>fxState.hsl[k]&&fxState.hsl[k][b]);
-    const before=_hslColorAt(b,0,0,0);
-    const after=_hslAfterColor(b);
-    const ring=edited?'0 0 0 2px rgba(255,255,255,.55)':'none';
-    bt.innerHTML=`<span style="display:inline-block;width:22px;height:22px;border-radius:50%;box-shadow:${ring};`+
-      `background:linear-gradient(90deg,${before} 50%,${after} 50%)"></span>`;
+    const bt=document.createElement('button');bt.type='button';
+    bt.className='hsl-chip'+(edited?' edited':'')+(b===preview?' on':'');
+    bt.dataset.band=b;bt.title=b;bt.setAttribute('aria-label',b+(edited?', edited':''));
+    bt.setAttribute('aria-pressed',String(b===preview));
+    bt.style.setProperty('--band-col',HSL_COLS[b]);
+    bt.style.setProperty('--band-before',_hslColorAt(b,0,0,0));
+    bt.style.setProperty('--band-after',_hslAfterColor(b));
     bt.onclick=()=>hslSetBand(b);
     row.appendChild(bt);
   });
@@ -10541,42 +10580,67 @@ function hslBuildChips(){
 // as a clickable bar row above the chips (click a bar = select that band, same as its chip).
 // Sampled from a small offscreen downscale of the graded preview canvas — cheap (a few
 // thousand pixels), recomputed on image load / preset change, not per-slider-drag.
-function hslHistCompute(){
-  const cv=document.getElementById('fx-canvas');if(!cv||!cv.width||!cv.height)return new Array(8).fill(0);
+const HSL_HIST_BUCKETS=48; // continuous spectrum resolution — independent of the 8 band zones
+function hslHistCompute(n){
+  const buckets=n||HSL_HIST_BUCKETS;
+  const cv=document.getElementById('fx-canvas');if(!cv||!cv.width||!cv.height)return new Array(buckets).fill(0);
   const N=64,tmp=document.createElement('canvas');tmp.width=N;tmp.height=N;
   const tx=tmp.getContext('2d',{willReadFrequently:true});
-  try{tx.drawImage(cv,0,0,N,N);}catch(e){return new Array(8).fill(0);}
-  let px;try{px=tx.getImageData(0,0,N,N).data;}catch(e){return new Array(8).fill(0);}
-  const counts=new Array(8).fill(0);let total=0;
+  try{tx.drawImage(cv,0,0,N,N);}catch(e){return new Array(buckets).fill(0);}
+  let px;try{px=tx.getImageData(0,0,N,N).data;}catch(e){return new Array(buckets).fill(0);}
+  const counts=new Array(buckets).fill(0);let total=0;
   for(let i=0;i<px.length;i+=4){
     const r=px[i]/255,g=px[i+1]/255,b=px[i+2]/255;
     const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;
-    if(d<0.03)continue; // near-neutral — doesn't belong to any hue band
+    if(d<0.03)continue; // near-neutral — doesn't belong to any hue bucket
     let h;if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;
     h=(h*60+360)%360;
-    for(let bi=0;bi<8;bi++){
-      const[lo,hi]=HSL_HUE_RANGE[bi];
-      if(lo>hi?(h>=lo||h<hi):(h>=lo&&h<hi)){counts[bi]++;break;}
-    }
+    counts[Math.min(buckets-1,Math.floor(h/360*buckets))]++;
     total++;
   }
   return total?counts.map(c=>c/total):counts;
 }
+let hslPreviewBand=null;
+function _hslActiveBand(){return hslPreviewBand||hslBand;}
+// Continuous spectrum bars (their own sampled hue's colour) plus 8 invisible overlay zones,
+// one per band range, for hover-preview + click-select with a pale grey selected-range overlay —
+// approved Color Mixer pilot, 2026-09-13, replacing the old 8 discrete band-coloured bars.
 function hslBuildHist(){
   const row=document.getElementById('hsl-hist');if(!row)return;
   const counts=hslHistCompute(),mx=Math.max(...counts,0.001);
   row.innerHTML='';
-  HSL_BANDS.forEach((b,i)=>{
-    const bar=document.createElement('div');
-    bar.className='hsl-hist-bar'+(b===hslBand?' on':'');
-    bar.style.height=Math.max(3,Math.round(counts[i]/mx*24))+'px';
-    bar.style.background=HSL_COLS[b];
-    bar.title=b+': '+(counts[i]*100).toFixed(1)+'%';
-    bar.onclick=()=>hslSetBand(b);
+  counts.forEach((c,i)=>{
+    const bar=document.createElement('span');bar.className='hsl-hist-bar';
+    bar.style.height=Math.max(2,Math.round(c/mx*28))+'px';
+    const hueDeg=(i+0.5)/counts.length*360;
+    bar.style.background=`hsl(${hueDeg.toFixed(0)},72%,58%)`;
     row.appendChild(bar);
   });
+  const active=_hslActiveBand();
+  HSL_BANDS.forEach((b,i)=>{
+    const zone=document.createElement('button');zone.type='button';zone.className='hsl-hist-zone'+(b===active?' on':'');
+    zone.style.left=(i*12.5)+'%';zone.style.width='12.5%';
+    zone.title='Select '+b;zone.setAttribute('aria-label','Select '+b);zone.setAttribute('aria-pressed',String(b===active));
+    zone.onclick=()=>hslSetBand(b,true);
+    row.appendChild(zone);
+  });
 }
-function hslSetBand(b){hslBand=b;hslSyncUI();}
+function hslSetBand(b){hslBand=b;hslPreviewBand=null;hslSyncUI();}
+function hslPreviewSet(b){if(hslPreviewBand===b)return;hslPreviewBand=b;hslBuildHist();hslBuildChips();}
+function hslPreviewClear(){if(!hslPreviewBand)return;hslPreviewBand=null;hslBuildHist();hslBuildChips();}
+// Hover a histogram zone previews that band's chip/selection state without committing the
+// selection — leaving is a no-op, clicking calls hslSetBand. Delegated once; hslBuildHist()
+// replaces the zone elements on every rebuild but never re-adds this listener.
+{
+  const histEl=document.getElementById('hsl-hist');
+  if(histEl){
+    histEl.addEventListener('pointermove',e=>{
+      const zone=e.target.closest&&e.target.closest('.hsl-hist-zone');
+      if(zone)hslPreviewSet(zone.getAttribute('aria-label').replace('Select ',''));
+    });
+    histEl.addEventListener('pointerleave',hslPreviewClear);
+  }
+}
 function hslSyncUI(){
   hslBuildChips();
   hslBuildHist();
@@ -10588,12 +10652,17 @@ function hslSyncUI(){
   // Saturation/Luminance tracks tint toward the selected band's colour (Hue keeps its fixed
   // rainbow gradient from CSS, so it's left alone here).
   const col=HSL_COLS[hslBand];
-  const slS=document.getElementById('sl-hsl-s');if(slS)slS.style.background='linear-gradient(to right,#888,'+col+')';
-  const slL=document.getElementById('sl-hsl-l');if(slL)slL.style.background='linear-gradient(to right,#000,'+col+',#fff)';
+  const slS=document.getElementById('sl-hsl-s');if(slS)slS.style.setProperty('--sl-grad','linear-gradient(to right,#888,'+col+')');
+  const slL=document.getElementById('sl-hsl-l');if(slL)slL.style.setProperty('--sl-grad','linear-gradient(to right,#000,'+col+',#fff)');
+  // Per-band hue/sat/lum edits aren't tracked by the generic fxMarkModifiedSliders()/.fx-mod
+  // snapshot (a slider's "default" is band-relative here, not one fixed value) — this is what
+  // actually drives the header's "Reset | All" visibility for this section.
+  document.querySelector('.fx-ctrl[data-fxsec="hsl"]')?.classList.toggle('fx-has-hsledit',!hslIdentity());
 }
 function hslSlider(k,v){
   fxState.hsl[k][hslBand]=parseFloat(v)||0;
   const vl=document.getElementById('vl-hsl-'+{hue:'h',sat:'s',lum:'l'}[k]);if(vl)vl.textContent=v;
+  document.querySelector('.fx-ctrl[data-fxsec="hsl"]')?.classList.toggle('fx-has-hsledit',!hslIdentity());
   clearTimeout(_hslBakeT);_hslBakeT=setTimeout(()=>{bakeHsl();hslBuildChips();},40);
   fxUpdate();
 }
@@ -16802,6 +16871,8 @@ function fxPaintSlider(sl){
   sl.classList.toggle('fx-slider-bi',bi);
   sl.style.setProperty('--fillA',Math.min(from,to)+'%');
   sl.style.setProperty('--fillB',Math.max(from,to)+'%');
+  const roll=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ctl-slider-roll'))||6;
+  sl.style.setProperty('--sl-roll',((v-(bi?0:min))*roll)+'deg');
 }
 function fxPaintAllSliders(root){(root||document).querySelectorAll('input.fx-slider[type=range]').forEach(fxPaintSlider);}
 // Delegated so dynamically-built rows need no wiring. `input` does not bubble from all engines'
@@ -16865,6 +16936,13 @@ function initSliderErgonomics(){
     e.preventDefault();
     if(_fxSliderSet(sl,parseFloat(base[key])))_fxFireInput(sl);
   });
+  document.addEventListener('wheel',e=>{
+    const sl=e.target&&e.target.closest&&e.target.closest('input.fx-slider[type=range]');
+    if(!sl||!e.deltaX||Math.abs(e.deltaX)<=Math.abs(e.deltaY))return;
+    const step=(parseFloat(sl.step)||1)*(e.shiftKey?10:1);
+    if(_fxSliderSet(sl,parseFloat(sl.value)+(e.deltaX>0?step:-step)))_fxFireInput(sl);
+    e.preventDefault();
+  },{passive:false});
   // T3 (editor_ux_spec.json): originally gated on type==='range' only, so a colour-swatch edit
   // (type='color') never called fxMarkModifiedSliders at all — the function's own .fx-mod logic
   // could be extended to know about colours/toggles (done above) and it would still never run.
@@ -21588,7 +21666,13 @@ function fxResetSection(cardOrName){
 // far older and more correct than the generic fxResetSection() above for those specific cases.
 // The header injector below prefers one of these when the section has one, rather than
 // silently replacing already-correct behaviour with the generic sliders-and-toggles walk.
-const _fxSectionResetOverride={nr:'resetNR',deconv:'resetDeconv',adjust:'resetAdjust'};
+const _fxSectionResetOverride={nr:'resetNR',deconv:'resetDeconv',adjust:'resetAdjust',curves:'fxResetCurvesAll',hsl:'hslResetAll',wheels:'wheelResetAll',pointcolor:'pcResetAll'};
+// Sections whose header reset is two targets, "Reset | All" — the FIRST resets only the
+// currently-selected thing (a curve channel, a Color Mixer band), the SECOND (the generic
+// button above, mapped through _fxSectionResetOverride) resets the whole section. Approved
+// Color Mixer pilot, 2026-09-13 — replaces the ad-hoc "Reset | All" button rows each of these
+// sections used to draw below its own controls, so every section now shows this the same way.
+const _fxSectionScopedReset={curves:'curveResetCh',hsl:'hslResetBand'};
 // T18 (editor_ux_spec.json, 2026-09-10): a startup check, not a test — an override entry
 // pointing at a renamed/deleted function silently falls through to `typeof window[override]===
 // 'function'` being false and the header's own onclick just uses the generic fxResetSection()
@@ -21608,9 +21692,10 @@ Object.entries(_fxSectionResetOverride).forEach(([fxsec,fnName])=>{
 document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title=>{
   if(title.querySelector(':scope > .fx-toggle-lb'))return;
   const fxsec=title.parentElement.dataset.fxsec;
+  const scopedFn=_fxSectionScopedReset[fxsec];
   const b=document.createElement('button');
   b.type='button';b.className='fx-ctrl-title-reset';b.title='Reset this section';
-  b.innerHTML=icon('reset',14)+'<span class="fx-ctrl-title-reset-lb">Reset</span>';
+  b.innerHTML=icon('reset',14)+`<span class="fx-ctrl-title-reset-lb">${scopedFn?'All':'Reset'}</span>`;
   b.onclick=(e)=>{
     e.stopPropagation();
     const override=_fxSectionResetOverride[fxsec];
@@ -21624,6 +21709,15 @@ document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title
   const right=document.createElement('span');right.className='fx-title-right';
   const toggle=title.querySelector(':scope > .fx-toggle');
   title.appendChild(right);
+  if(scopedFn){
+    if(typeof window[scopedFn]!=='function')console.error(`[startup] _fxSectionScopedReset['${fxsec}'] names '${scopedFn}', which is not a function`);
+    const scoped=document.createElement('button');
+    scoped.type='button';scoped.className='fx-ctrl-title-reset-scoped';scoped.title='Reset the current selection';
+    scoped.textContent='Reset';
+    scoped.onclick=(e)=>{e.stopPropagation();if(typeof window[scopedFn]==='function')window[scopedFn]();};
+    const sep=document.createElement('span');sep.className='fx-ctrl-title-reset-sep';sep.setAttribute('aria-hidden','true');sep.textContent='|';
+    right.appendChild(scoped);right.appendChild(sep);
+  }
   right.appendChild(b);
   if(toggle)right.appendChild(toggle);
 });
@@ -21789,7 +21883,7 @@ function a11yEnhanceFormLabels(){
     const tg=title.querySelector('.fx-toggle');
     if(!tg||tg.hasAttribute('aria-label'))return;
     const clone=title.cloneNode(true);
-    clone.querySelectorAll('.fx-toggle,.fx-ctrl-title-reset,button').forEach(el=>el.remove());
+    clone.querySelectorAll('.fx-toggle,.fx-ctrl-title-reset,.fx-ctrl-title-reset-scoped,.fx-ctrl-title-reset-sep,button').forEach(el=>el.remove());
     const txt=clone.textContent.trim();
     if(txt)tg.setAttribute('aria-label',txt);
   });
