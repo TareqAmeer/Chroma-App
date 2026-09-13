@@ -228,6 +228,7 @@ carrying it in every turn:
 - Resizable/breakpoint UI needs a state-matrix test at min/threshold/max, with hand-written expectations (#16).
 - Never act on a written-up flaky-bug theory without reproducing it live first; rerun enough to see the rate move (#17).
 - Completeness is measured from the running app, not a hand-written list; test every width = every viewport × every resizer at min/default/max × every mode; a check counts only after it fails on the real defect (#18).
+- Port an approved draft by diffing computed styles on the real element in its edited state; older app rules silently override new ones and gates only compare to the old app (#20).
 - A reference-to-spec draft must use the app's own tokens/markup, not the wireframe's, and needs a side-by-side pixel-diff step before "matched" — otherwise the user becomes the diff tool across many rounds; "approved" tokens/specs need an actual recorded `approval.status: approved` (#19).
 
 ---

@@ -124,3 +124,15 @@ Learned the hard/expensive way:
     must actually have `approval.status: approved` recorded with who/when — a description that
     says "Approved" while the spec is still `draft` is invisible to every check that reads
     approval status, and the work stays uncommitted/unpushed until that's fixed.
+
+20. **An approved draft is ported by computed-style diff, not by re-typing rules onto existing
+    classes.** The Color Mixer rollout (afbbe88) passed every gate yet lost seven approved details:
+    an older `.fx-slider-grad{background:transparent}` erased the midpoint dot, its track rule
+    replaced the white centre-fill line, per-band sliders never received `.fx-mod` so thumbs never
+    filled, the histogram was re-derived at 32px instead of the draft's tall panel, the toggle's
+    exact timings were swapped for generic `--dur-*` tokens, and the header divider was never
+    removed. Gates compare against the OLD app, so they cannot see drift from the draft, and the
+    live check used the generic slider at value 0 — the one state where fill/line/dot can't show.
+    Fix: for every draft rule, read `getComputedStyle` on the real target element in its edited
+    state (moved, toggled, hovered) and compare to the draft value; never substitute a token for a
+    literal draft value without asking; screenshot the real section side by side with the draft.

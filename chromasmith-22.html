@@ -107,7 +107,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   --lift-1:inset 0 1px 0 rgba(255,255,255,.045),0 1px 2px rgba(0,0,0,.3),0 6px 16px -4px rgba(0,0,0,.35);
   --lift-2:inset 0 1px 0 rgba(255,255,255,.06),0 2px 4px rgba(0,0,0,.35),0 14px 32px -8px rgba(0,0,0,.5);
   --glass-bg:#272729;
-  --ctl-toggle-w:44px;--ctl-toggle-h:22px;--ctl-slider-thumb:28px;--ctl-slider-roll:6;--ctl-slider-track:3px;--ctl-square-radius:0px;
+  --ctl-toggle-w:44px;--ctl-toggle-h:22px;--ctl-slider-thumb:20px;--ctl-slider-roll:6;--ctl-slider-track:3px;--ctl-square-radius:0px;
   /* Neutral scrim/overlay ramp (T-scrim): a short fixed alpha scale for shadows, dimming
      scrims and translucent chrome, same idea as Material Design elevation levels or Carbon's
      layer/overlay tokens — components snap to the nearest step instead of inventing their own
@@ -123,7 +123,17 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   /* Stacking-order scale (T-z): named tiers instead of ad-hoc literals, same discipline as
      Material Design's z-index groups and Ant Design's preset stack — see design/tokens.json
      zIndex for the full audit and per-tier rationale. */
-  --z-raise:1;--z-sticky:10;--z-float:30;--z-dropdown:50;--z-fixed:1500;--z-overlay:3000;--z-menu:5000;--z-system:9999;--z-modal:20000;--z-splash:99999/* TOKENS:ROOT:END */}
+  --z-raise:1;--z-sticky:10;--z-float:30;--z-dropdown:50;--z-fixed:1500;--z-overlay:3000;--z-menu:5000;--z-system:9999;--z-modal:20000;--z-splash:99999;
+  /* State-layer / translucency ramp (T-op): audited from 13 raw opacity literals — see
+     design/tokens.json opacity for the full audit, per-step role and the disabled-state
+     consolidation note. */
+  --op-1:0.3;--op-2:0.32;--op-3:0.35;--op-4:0.4;--op-5:0.42;--op-6:0.6;--op-7:0.65;--op-8:0.7;--op-9:0.75;--op-10:0.85;--op-11:0.9;
+  /* Tracking ramp (T-ls): audited from 7 raw letter-spacing literals on uppercase eyebrow
+     labels — see design/tokens.json letterSpacing for the full audit. */
+  --ls-1:0.03em;--ls-2:0.04em;--ls-3:0.05em;--ls-4:0.06em;--ls-5:0.08em;--ls-6:0.1em;--ls-7:0.11em;
+  /* Border-width ramp (T-bw): the 4 non-1px widths found in the app — see design/tokens.json
+     borderWidth for the full audit (1px itself stays a plain literal, not a token). */
+  --bw-1:1.5px;--bw-2:2px;--bw-3:3px;--bw-4:4px/* TOKENS:ROOT:END */}
 body.light{--glass-bg:#ffffff}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100%;overflow-x:clip}
@@ -141,14 +151,14 @@ header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-item
 .logo .sub{color:var(--mut);font-size:var(--fs-1);font-family:var(--sans);letter-spacing:0;font-style:normal}
 .logo-glow{text-shadow:0 0 4px rgba(212,144,58,.55),0 0 12px rgba(212,144,58,.45),0 0 22px rgba(224,84,84,.35),0 0 2px rgba(255,210,150,.6)}
 .hdr-right{display:flex;align-items:center;gap:var(--sp-2)}
-.bstamp{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);letter-spacing:.04em;cursor:pointer}
+.bstamp{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);letter-spacing:var(--ls-2);cursor:pointer}
 .hdr-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);cursor:pointer;padding:6px;transition:all .15s}
 .hdr-btn:hover{border-color:var(--mut)}
 .hdr-ic{display:inline-flex;color:var(--mut)}
 .hdr-ic svg{display:block}
-.badge{font-family:var(--mono);font-size:var(--fs-2);color:#fff;background:var(--ok);border:1px solid var(--ok);padding:3px 8px;border-radius:3px;letter-spacing:.06em}
+.badge{font-family:var(--mono);font-size:var(--fs-2);color:#fff;background:var(--ok);border:1px solid var(--ok);padding:3px 8px;border-radius:3px;letter-spacing:var(--ls-4)}
 .tabs{display:flex;border-bottom:1px solid var(--bdr);padding:0 24px;background:var(--sur);overflow-x:auto;touch-action:pan-x;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
-.tab{flex:0 0 auto;padding:12px var(--sp-4);font-size:var(--fs-2);font-weight:500;letter-spacing:0;font-family:var(--sans);color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color var(--dur-1) var(--ease);white-space:nowrap}
+.tab{flex:0 0 auto;padding:12px var(--sp-4);font-size:var(--fs-2);font-weight:500;letter-spacing:0;font-family:var(--sans);color:var(--mut);cursor:pointer;border-bottom:var(--bw-2) solid transparent;margin-bottom:-1px;transition:color var(--dur-1) var(--ease);white-space:nowrap}
 .tab:hover{color:var(--txt)}.tab.active{color:var(--acc);border-bottom-color:var(--acc)}
 main{max-width:1180px;margin:0 auto;padding:24px 20px var(--sp-11)}
 main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
@@ -169,7 +179,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .chip-tap{margin-top:0}
 .btn{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:var(--sp-2) 14px;border-radius:var(--r-sm);border:1px solid;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease,transform .1s ease,box-shadow .15s ease;display:flex;align-items:center;gap:6px;white-space:nowrap}
-.btn:disabled{opacity:.3;cursor:not-allowed}
+.btn:disabled{opacity:var(--op-1);cursor:not-allowed}
 .btn:active:not(:disabled){transform:scale(.96)}
 .bpri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600;box-shadow:inset 0 1px 0 var(--scrim-w1),0 1px 2px var(--scrim-b1)}
 .bpri:not(:disabled):hover{filter:brightness(1.15)}
@@ -198,7 +208,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .sl-cb{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
 .sl-line{position:absolute;top:0;bottom:0;width:2px;background:var(--scrim-w3);transform:translateX(-50%);pointer-events:none}
 .sl-knob{position:absolute;top:50%;transform:translate(-50%,-50%);width:32px;height:32px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:col-resize;box-shadow:0 2px 10px var(--scrim-b5)}
-.sl-lbl{position:absolute;bottom:7px;background:var(--scrim-b5);color:#fff;font-family:var(--sans);font-size:var(--fs-1);padding:2px var(--sp-2);border-radius:3px;pointer-events:none;letter-spacing:.04em}
+.sl-lbl{position:absolute;bottom:7px;background:var(--scrim-b5);color:#fff;font-family:var(--sans);font-size:var(--fs-1);padding:2px var(--sp-2);border-radius:3px;pointer-events:none;letter-spacing:var(--ls-2)}
 .sl-ll{left:7px}.sl-lr{right:7px}
 .sl-cap{font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);text-align:center;padding:3px 0 var(--sp-2);letter-spacing:0}
 .sl-ph{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:28px 16px;text-align:center;color:var(--mut);font-size:12px;min-height:100px;display:flex;align-items:center;justify-content:center}
@@ -213,7 +223,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .hsl-t tr:last-child td{border-bottom:none}
 .div-sep{display:flex;align-items:center;gap:var(--sp-2);margin:16px 0 12px;font-family:var(--sans);font-size:var(--fs-2);font-weight:600;color:var(--mut);letter-spacing:0}
 .div-sep::before,.div-sep::after{content:'';flex:1;height:1px;background:var(--bdr)}
-.opt-dz{border-style:dashed;opacity:.7}
+.opt-dz{border-style:dashed;opacity:var(--op-8)}
 /* FX TAB */
 .fx-layout{display:grid;grid-template-columns:640px 1fr;gap:16px;align-items:start}
 .fx-panel{column-count:2;column-gap:var(--sp-2)}
@@ -225,18 +235,18 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-ctrl[data-fxsec="looks"]{column-span:all}
 /* Detail/Highlight-Desat are real no-ops while both NR gate sliders (Luminance, Color) sit at 0
    — the shader skips the whole NR pass then. Dim them so that's visible instead of silent. */
-.nr-gated.gate-off{opacity:.4}
+.nr-gated.gate-off{opacity:var(--op-4)}
 #panel-fx .dz{min-height:54px;padding:var(--sp-3) 14px}
 #dz-fx-img:not(.loaded){border-color:var(--acc);border-style:solid;background:var(--tint-1)}
 #dz-fx-img:not(.loaded):hover{background:var(--tint-2)}
 #dz-fx-img:not(.loaded) .dz-ic,#dz-fx-img:not(.loaded) .dz-lb{color:var(--acc)}
 #panel-fx .dz-ic{font-size:var(--fs-4)}
-.fx-ctrl-title{font-family:var(--sans);font-size:var(--fs-1);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--txt);margin-bottom:12px;padding-bottom:var(--sp-2);border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;cursor:pointer;gap:6px}
+.fx-ctrl-title{font-family:var(--sans);font-size:var(--fs-1);font-weight:600;letter-spacing:var(--ls-6);text-transform:uppercase;color:var(--txt);margin-bottom:12px;padding-bottom:var(--sp-2);display:flex;align-items:center;justify-content:space-between;cursor:pointer;gap:6px}
 .fx-ctrl-chev{display:inline-flex;flex-shrink:0;transform:rotate(0deg);transition:transform var(--dur-1) var(--ease);margin-right:2px}
 .fx-ctrl.fx-sec-collapsed .fx-ctrl-chev{transform:rotate(-90deg)}
-.fx-ctrl.fx-sec-collapsed>.fx-ctrl-title{margin-bottom:0;padding-bottom:var(--sp-2);border-bottom:1px solid var(--bdr)}
+.fx-ctrl.fx-sec-collapsed>.fx-ctrl-title{margin-bottom:0;padding-bottom:var(--sp-2)}
 .fx-ctrl.fx-sec-collapsed>:not(.fx-ctrl-title){display:none}
-.fx-toggle{width:var(--ctl-toggle-w);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--bdr);position:relative;cursor:pointer;transition:background var(--dur-2) ease;flex-shrink:0;box-shadow:none;border:1px solid transparent}
+.fx-toggle{width:var(--ctl-toggle-w);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--bdr);position:relative;cursor:pointer;transition:background .4s;flex-shrink:0;box-shadow:none;border:1px solid transparent}
 /* T45 (editor_ux_spec.json): under forced-colors (Windows High Contrast) mode, the browser can
    strip a custom `background` entirely — .fx-toggle has no text/icon and no real border, so with
    nothing else painting its shape it could vanish completely. `border` survives forced-colors
@@ -246,7 +256,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
    .btn already had for free via its own always-on `border:1px solid`. */
 @media (forced-colors:active){.fx-toggle{border-color:CanvasText}}
 .fx-toggle.on{background:var(--acc);box-shadow:none}
-.fx-toggle::after{content:'';position:absolute;width:var(--ctl-toggle-h);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--txt);top:-1px;left:-1px;transition:transform var(--dur-1) cubic-bezier(.75,.02,.86,1.31);transform-origin:bottom right;box-shadow:none}
+.fx-toggle::after{content:'';position:absolute;width:var(--ctl-toggle-h);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--txt);top:-1px;left:-1px;transition:transform .2s cubic-bezier(.75,.02,.86,1.31);transform-origin:bottom right;box-shadow:none}
 .fx-toggle.on::after{transform:rotate(90deg)}
 /* The 32x18 track is a precise mouse target but a cramped touch one — scale up to roughly
    native iOS switch proportions on mobile rather than adding an invisible hit-area hack. */
@@ -258,7 +268,7 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
    always laid out now and simply dimmed, so you can see what the section offers before turning
    it on, and touching any control switches it on for you (see the ff-off handler in JS). */
 .fx-fields{margin-top:8px;display:flex;flex-direction:column;gap:6px;transition:opacity var(--dur-2) var(--ease)}
-.fx-fields.ff-off{opacity:.42}
+.fx-fields.ff-off{opacity:var(--op-5)}
 .fx-fields.ff-off .fx-ctrl-title,.fx-fields.ff-off .msk-group-hd{color:var(--mut)}
 .fx-hint{font-size:var(--fs-2);color:var(--mut);line-height:var(--lh-base);margin:-2px 0 8px}
 /* Round info button — sits on a label or a button, never on its own line (panel redesign,
@@ -326,11 +336,12 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
 .fx-slider::-moz-range-track{height:var(--ctl-slider-track);border-radius:2px;
   background:linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--sl-fill,var(--mut)) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
 .fx-slider::-webkit-slider-thumb{-webkit-appearance:none;width:var(--ctl-slider-thumb);height:var(--ctl-slider-thumb);border-radius:var(--ctl-square-radius);margin-top:calc((var(--ctl-slider-track) - var(--ctl-slider-thumb)) / 2);
-  background:var(--sur);border:3px solid var(--txt);box-shadow:none;cursor:grab;transform:rotate(var(--sl-roll,0deg));transition:transform var(--dur-1) linear}
-.fx-slider::-moz-range-thumb{width:var(--ctl-slider-thumb);height:var(--ctl-slider-thumb);border-radius:var(--ctl-square-radius);border:3px solid var(--txt);
+  background:var(--sur);border:var(--bw-3) solid var(--txt);box-shadow:none;cursor:grab;transform:rotate(var(--sl-roll,0deg));transition:transform var(--dur-1) linear}
+.fx-slider::-moz-range-thumb{width:var(--ctl-slider-thumb);height:var(--ctl-slider-thumb);border-radius:var(--ctl-square-radius);border:var(--bw-3) solid var(--txt);
   background:var(--sur);box-shadow:none;cursor:grab;transform:rotate(var(--sl-roll,0deg));transition:transform var(--dur-1) linear}
-.fx-row.fx-mod .fx-slider::-webkit-slider-thumb{background:var(--acc)}
-.fx-row.fx-mod .fx-slider::-moz-range-thumb{background:var(--acc)}
+/* Draft fill: a coloured inset square inside the ring once moved (--knob; Color Mixer sets it per band). */
+.fx-row.fx-mod .fx-slider::-webkit-slider-thumb,.fx-slider.fx-knob-on::-webkit-slider-thumb{box-shadow:inset 0 0 0 5px var(--knob,var(--acc))}
+.fx-row.fx-mod .fx-slider::-moz-range-thumb,.fx-slider.fx-knob-on::-moz-range-thumb{background:var(--knob,var(--acc))}
 .fx-slider:active::-webkit-slider-thumb{cursor:grabbing}
 /* A modified row drives its fill amber — the same signal .fx-mod already gives the label dot. */
 .fx-row.fx-mod .fx-slider{--sl-fill:var(--txt)}
@@ -352,7 +363,7 @@ body.mobile-fx .fx-slider{touch-action:pan-x}
 /* A slider that differs from its factory default gets a dot, so a loaded recipe is legible at a
    glance instead of needing every section opened and compared. */
 .fx-row.fx-mod>.fx-label::after{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;
-  background:var(--acc);margin-left:var(--sp-1);vertical-align:middle;opacity:.85}
+  background:var(--acc);margin-left:var(--sp-1);vertical-align:middle;opacity:var(--op-10)}
 .fx-val[contenteditable]{cursor:text;border-radius:3px;outline:none;padding:1px 2px}
 .fx-val[contenteditable]:hover{background:var(--sur2)}
 .fx-val[contenteditable]:focus{background:var(--sur2);box-shadow:0 0 0 1px var(--acc);color:var(--txt);text-align:center;min-width:40px}
@@ -371,13 +382,13 @@ body.mobile-fx .fx-val[contenteditable]:focus{border-bottom-style:solid}
    underline, which didn't survive the square shape). */
 #hsl-chips{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;flex-wrap:nowrap}
 .hsl-chip{width:100%;max-width:44px;aspect-ratio:1;justify-self:center;border-radius:var(--ctl-square-radius,0px);
-  border:4px solid var(--band-col,var(--bdr));background:transparent;padding:0;cursor:pointer;
+  border:var(--bw-4) solid var(--band-col,var(--bdr));background:transparent;padding:0;cursor:pointer;
   transition:transform var(--dur-1) var(--ease),box-shadow var(--dur-1) var(--ease)}
 .hsl-chip:hover{transform:scale(1.05)}
 .hsl-chip.on{box-shadow:0 0 0 2px var(--txt)}
 .hsl-chip.edited{background:linear-gradient(135deg,var(--band-before) 0 49.4%,var(--band-after) 50.6% 100%)}
 /* ~44px at this size — clears the comfortable touch-target floor without a separate mobile rule. */
-body.mobile-fx .hsl-chip{border-width:3px}
+body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 /* ══ SEGMENTED CONTROL ═══════════════════════════════════════════════════════════════════════
    Was built inline with a hardcoded style="" on every button (four of them per control, repeated
    at each call site). One component now, used by Show-on-photo, Skin Tone's target picker, the
@@ -439,7 +450,7 @@ body.mobile-fx .hsl-chip{border-width:3px}
 .msk-more-it{display:flex;align-items:center;gap:var(--sp-2);width:100%;min-height:30px;padding:0 var(--sp-2);background:none;
   border:none;border-radius:6px;cursor:pointer;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);text-align:left}
 .msk-more-it:hover:not(:disabled){background:var(--sur2)}
-.msk-more-it:disabled{opacity:.35;cursor:default}
+.msk-more-it:disabled{opacity:var(--op-3);cursor:default}
 .msk-more-it.on{color:var(--acc)}
 .msk-more-it.danger{color:var(--err)}
 .msk-more-sep{height:1px;background:var(--bdr);margin:4px 6px}
@@ -449,14 +460,14 @@ body.mobile-fx .hsl-chip{border-width:3px}
 /* Inline icons inside text buttons must never absorb the flex squeeze — a shrunk 14px glyph next
    to a full-size label looks like a rendering fault. */
 .btn>svg,.msk-more-it>svg{flex:0 0 auto}
-.pc-chip{width:28px;height:28px;border-radius:50%;border:2px solid var(--bdr);cursor:pointer;padding:0;flex:0 0 auto}
+.pc-chip{width:28px;height:28px;border-radius:50%;border:var(--bw-2) solid var(--bdr);cursor:pointer;padding:0;flex:0 0 auto}
 /* ══ CHECKBOX ════════════════════════════════════════════════════════════════════════════════
    Native 13x13 checkboxes were half the size of everything around them and impossible to hit
    cleanly. Sized up and given the app's own accent rather than the OS blue. */
 .fx-row input[type=checkbox]{width:18px;height:18px;accent-color:var(--acc);cursor:pointer;flex:0 0 auto;margin:var(--sp-1) 6px var(--sp-1) 0}
 /* ══ FOCUS ═══════════════════════════════════════════════════════════════════════════════════
    There was no visible focus state anywhere in the app — keyboard navigation was invisible. */
-:where(button,input,select,textarea,[tabindex]):focus-visible{outline:2px solid rgba(97,160,175,.55);outline-offset:2px;border-radius:4px}
+:where(button,input,select,textarea,[tabindex]):focus-visible{outline:var(--bw-2) solid rgba(97,160,175,.55);outline-offset:2px;border-radius:4px}
 /* ══ MOTION ══════════════════════════════════════════════════════════════════════════════════
    Every transition/animation in the file is opt-out here. The app previously honoured no
    reduced-motion preference at all. */
@@ -469,15 +480,15 @@ body.mobile-fx .pc-chip{width:36px;height:36px}
    across the full spectrum, each its own sampled hue) with 8 invisible click/hover zones laid
    over it — one per band — that select a band and show a pale grey overlay, matching the
    draft's Darkroom-style reference instead of the previous 8 discrete band-coloured bars. */
-#hsl-hist{position:relative;display:flex;align-items:flex-end;gap:1px;height:32px;padding:0 1px}
-.hsl-hist-bar{flex:1 1 0;min-width:2px;border-radius:2px 2px 0 0;pointer-events:none;opacity:.9}
+#hsl-hist{position:relative;display:flex;align-items:flex-end;gap:1px;height:110px;padding:0 1px;background:var(--sur2);border-radius:var(--r) var(--r) 0 0;overflow:hidden}
+.hsl-hist-bar{flex:1 1 0;min-width:2px;border-radius:2px 2px 0 0;pointer-events:none;opacity:var(--op-11)}
 .hsl-hist-zone{position:absolute;top:0;bottom:0;border:0;background:transparent;cursor:pointer;padding:0}
 .hsl-hist-zone:hover,.hsl-hist-zone.on{background:linear-gradient(180deg,var(--tint-3),var(--tint-1) 62%,transparent)}
 /* Color Mixer sliders: gradient track (Hue = fixed rainbow; Sat/Lum tinted per selected band
    via JS, see hslSyncUI). Track colour comes from the input's own `background`, so appearance
    must be reset to none — WebKit/Safari-focused since the app runs in Safari or a WKWebView shell. */
-.fx-slider-grad{-webkit-appearance:none;appearance:none;height:var(--ctl-slider-thumb);border-radius:var(--ctl-square-radius);background:transparent}
-.fx-slider-grad::-webkit-slider-runnable-track{background:var(--sl-grad,linear-gradient(to right,#ff5b5b,#ff9f43,#ffd43b,#51cf66,#3bc9db,#4d8bff,#9775fa,#f06595,#ff5b5b))}
+.fx-slider-grad{-webkit-appearance:none;appearance:none;height:var(--ctl-slider-thumb);border-radius:var(--ctl-square-radius);background-color:transparent}
+.fx-slider-grad::-webkit-slider-runnable-track{background:linear-gradient(to right,transparent var(--fillA,50%),#f4f4f4 var(--fillA,50%) var(--fillB,50%),transparent var(--fillB,50%)),var(--sl-grad,linear-gradient(to right,#ff5b5b,#ff9f43,#ffd43b,#51cf66,#3bc9db,#4d8bff,#9775fa,#f06595,#ff5b5b))}
 .fx-slider-grad::-moz-range-track{background:var(--sl-grad,linear-gradient(to right,#ff5b5b,#ff9f43,#ffd43b,#51cf66,#3bc9db,#4d8bff,#9775fa,#f06595,#ff5b5b))}
 /* 3.4.2: matches the wireframe's .select-btn idiom (Editor (Developer) View.dc.html:123-127) —
    a real native <select> reskinned to look like it (fixed 32px pill height, 8px radius, a
@@ -488,7 +499,7 @@ body.mobile-fx .pc-chip{width:36px;height:36px}
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cccccc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 8px center;background-size:12px}
 .fx-select:hover{background-color:var(--hov)}
-.fx-select:disabled{opacity:.4;pointer-events:none;cursor:default}
+.fx-select:disabled{opacity:var(--op-4);pointer-events:none;cursor:default}
 body.light .fx-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237a7a7a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")}
 body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-canvas-wrap{background:#000;border-radius:var(--r);overflow:hidden;position:relative;min-height:300px;display:flex;align-items:center;justify-content:center}
@@ -497,7 +508,7 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 #fx-canvas-orig{display:none;position:absolute;top:0;left:0;pointer-events:none}
 .fx-split-line{display:none;position:absolute;top:0;bottom:0;width:3px;background:var(--scrim-w4);cursor:col-resize;z-index:var(--z-sticky)}
 .fx-split-knob{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 2px 8px var(--scrim-b5);display:flex;align-items:center;justify-content:center;font-size:var(--fs-2);color:#000;user-select:none}
-#fx-hist{display:none;position:absolute;bottom:8px;right:8px;border-radius:4px;background:var(--scrim-b3);opacity:.9;pointer-events:none}
+#fx-hist{display:none;position:absolute;bottom:8px;right:8px;border-radius:4px;background:var(--scrim-b3);opacity:var(--op-11);pointer-events:none}
 .fx-zoom-wrap{transform-origin:0 0;cursor:grab;touch-action:none}
 .fx-zoom-wrap.dragging{cursor:grabbing}
 .fx-zoom-ctrl{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:2px;background:var(--scrim-b4);border:1px solid var(--bdr);border-radius:6px;padding:2px;z-index:var(--z-sticky);font-family:var(--sans);font-variant-numeric:tabular-nums}
@@ -519,14 +530,14 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-zoom-ctrl #fx-zoom-pct{font-size:var(--fs-2);color:var(--mut);min-width:36px;text-align:center;cursor:default;opacity:0;transition:opacity .1s}
 .fx-zoom-ctrl.active #fx-zoom-pct{opacity:1}
 .fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:var(--sp-8);position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:4px;z-index:var(--z-raise)}
-.ni-logo{font-family:var(--display);font-size:var(--fs-7);letter-spacing:.11em;color:var(--acc);font-style:italic;margin-bottom:2px}
+.ni-logo{font-family:var(--display);font-size:var(--fs-7);letter-spacing:var(--ls-7);color:var(--acc);font-style:italic;margin-bottom:2px}
 .ni-sub{font-family:var(--sans);font-size:var(--fs-1);letter-spacing:0;color:var(--mut)}
-.ni-build{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);opacity:.7}
+.ni-build{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);opacity:var(--op-8)}
 .ni-hint{font-size:12px;color:var(--mut);margin-top:14px}
 #fx-preview-tools{position:absolute;right:8px;top:8px;margin:0!important;z-index:var(--z-sticky)}
 /* multi-photo filmstrip — switch which loaded photo is previewed */
 #fx-filmstrip{display:none;gap:6px;overflow-x:auto;padding:2px 1px;margin-top:8px}
-.fs-thumb{position:relative;flex:0 0 auto;width:52px;height:52px;border-radius:6px;overflow:hidden;border:2px solid var(--bdr);background:var(--sur2);cursor:pointer;padding:0;-webkit-tap-highlight-color:transparent}
+.fs-thumb{position:relative;flex:0 0 auto;width:52px;height:52px;border-radius:6px;overflow:hidden;border:var(--bw-2) solid var(--bdr);background:var(--sur2);cursor:pointer;padding:0;-webkit-tap-highlight-color:transparent}
 .fs-thumb:hover{border-color:var(--mut)}
 .fs-thumb.active{border-color:var(--acc)}
 .fs-thumb canvas{display:block;width:100%;height:100%}
@@ -544,11 +555,11 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-preset-chev svg{display:block;width:100%;height:100%}
 #fx-looks-ctrl.fx-preset-collapsed .fx-preset-chev{transform:rotate(-90deg)}
 #fx-looks-ctrl.fx-preset-collapsed #fx-preset-body{display:none}
-.look-cell{cursor:pointer;border-radius:var(--r-sm);overflow:hidden;border:2px solid transparent;background:var(--sur2);position:relative;min-width:0}
+.look-cell{cursor:pointer;border-radius:var(--r-sm);overflow:hidden;border:var(--bw-2) solid transparent;background:var(--sur2);position:relative;min-width:0}
 .look-cell.sel{border-color:var(--acc)}
 /* A look whose vendor/luts/ fetch failed (offline before the warm-up finished). Marked rather
    than removed, so the cell keeps its place and retries on the next gallery rebuild. */
-.look-cell-err{opacity:.4}
+.look-cell-err{opacity:var(--op-4)}
 .look-cell-err::after{content:"offline";position:absolute;inset:auto 0 18px 0;text-align:center;font-size:var(--fs-2);color:var(--mut)}
 .look-cell canvas{display:block;width:100%;height:auto}
 .look-cell .look-nm{font-family:var(--mono);font-size:var(--fs-2);color:var(--txt);padding:2px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--scrim-b3)}
@@ -565,13 +576,13 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
    actually asking to be fixed — the coordinate math itself was already correct. */
 #fx-mask-overlay{position:absolute;display:none;touch-action:none;overflow:hidden}
 #fx-mask-overlay.on{display:block}
-.msk-dim{fill:#000;opacity:.6;pointer-events:none}
+.msk-dim{fill:#000;opacity:var(--op-6);pointer-events:none}
 .msk-scribble-dot{pointer-events:none}
 .msk-shape{fill:none;stroke:#fff;stroke-width:.003;vector-effect:non-scaling-stroke;pointer-events:none}
 .msk-shape.filled{fill:none;stroke:var(--ok);stroke-width:.005}
-.msk-feather{fill:none;stroke:#fff;stroke-width:.0015;stroke-dasharray:.01 .008;opacity:.65;vector-effect:non-scaling-stroke;pointer-events:none}
-.msk-feather-mid{stroke-dasharray:none;opacity:.9}
-.msk-feather-50{fill:none;stroke:#fff;stroke-width:.001;stroke-dasharray:.004 .01;opacity:.32;vector-effect:non-scaling-stroke;pointer-events:none}
+.msk-feather{fill:none;stroke:#fff;stroke-width:.0015;stroke-dasharray:.01 .008;opacity:var(--op-7);vector-effect:non-scaling-stroke;pointer-events:none}
+.msk-feather-mid{stroke-dasharray:none;opacity:var(--op-11)}
+.msk-feather-50{fill:none;stroke:#fff;stroke-width:.001;stroke-dasharray:.004 .01;opacity:var(--op-2);vector-effect:non-scaling-stroke;pointer-events:none}
 .msk-handle{fill:#fff;stroke:#000;stroke-width:.0015;vector-effect:non-scaling-stroke;cursor:grab;pointer-events:auto}
 .msk-handle.rot{fill:var(--acc,#e8a33d);cursor:alias}
 .msk-handle:active{cursor:grabbing}
@@ -583,13 +594,13 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
    brush-mask equivalent of the radial/linear shape overlay above; same mskPreviewMode segmented
    control (Overlay/Isolate/Off) drives both, and "O" toggles it — see mskOverlaySync(). */
 #msk-paint-overlay{position:absolute;display:none;pointer-events:none} /* smooth (default) upscale — m.px is already a soft-falloff gradient, not a hard mask */
-.msk-dragging{opacity:0.4}
+.msk-dragging{opacity:var(--op-4)}
 #msk-paint-overlay.on{display:block}
 /* Live brush cursor: a ring at the ACTUAL painted radius (matches mskPaintAt's soft falloff),
    only shown while "Paint" is armed — previously the brush had no visible size/position at all
    on the canvas itself, just a generic crosshair cursor. */
 #msk-brush-cursor{position:absolute;display:none;pointer-events:none;border-radius:50%;
-  border:1.5px solid #fff;box-shadow:0 0 0 1px var(--scrim-b5),inset 0 0 0 1px var(--scrim-b5);
+  border:var(--bw-1) solid #fff;box-shadow:0 0 0 1px var(--scrim-b5),inset 0 0 0 1px var(--scrim-b5);
   transform:translate(-50%,-50%)}
 #msk-brush-cursor.on{display:block}
 #msk-brush-cursor.erase{border-color:var(--err)}
@@ -615,7 +626,7 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
 .guide b{color:var(--txt);font-weight:600}
 .guide code,.guide kbd{font-family:var(--mono);font-size:12px;background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:1px var(--sp-1);color:var(--acc2)}
 .guide .gcard{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:16px 20px;margin:0 0 14px}
-.guide .gnote{background:var(--sur2);border-left:2px solid var(--acc);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:var(--sp-2) 14px;margin:14px 0;font-size:var(--fs-2);color:var(--mut)}
+.guide .gnote{background:var(--sur2);border-left:var(--bw-2) solid var(--acc);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:var(--sp-2) 14px;margin:14px 0;font-size:var(--fs-2);color:var(--mut)}
 .guide .faq-q{font-weight:600;color:var(--txt);margin:16px 0 4px}
 .guide .faq-a{color:var(--mut);margin:0 0 12px}
 .guide .toc{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}
@@ -900,7 +911,7 @@ body.fx-single.diag-on .fx-diag{display:none}
 body.fx-single.diag-on .fx-diag.sec-active{display:block}
 /* compact compare/split/hist as small overlay chips on the image */
 body.mobile-fx #fx-preview-tools{left:auto;right:8px;top:8px;bottom:auto;transform:none;gap:4px;justify-content:flex-end}
-.fx-mini{padding:var(--sp-1) 8px!important;min-height:0!important;font-size:var(--fs-2)!important;letter-spacing:.04em;background:var(--scrim-b4);border-color:var(--bdr)}
+.fx-mini{padding:var(--sp-1) 8px!important;min-height:0!important;font-size:var(--fs-2)!important;letter-spacing:var(--ls-2);background:var(--scrim-b4);border-color:var(--bdr)}
 body.mobile-fx #fx-crop-tools{order:5;margin:6px 0 0}
 /* action bar directly below the image */
 body.mobile-fx #fx-actionbar{display:flex;gap:0;padding:var(--sp-2) 4px;justify-content:space-between}
@@ -923,7 +934,7 @@ body.mobile-fx #fx-fab-export{display:flex;align-items:center;justify-content:ce
   position:fixed;right:14px;bottom:calc(64px + max(10px,var(--sab)));z-index:var(--z-float);
   width:50px;height:50px;border-radius:50%;background:var(--acc);color:#000;border:none;
   box-shadow:var(--lift-2);cursor:pointer}
-body.mobile-fx #fx-fab-export:disabled{opacity:.4;background:var(--sur2);color:var(--mut)}
+body.mobile-fx #fx-fab-export:disabled{opacity:var(--op-4);background:var(--sur2);color:var(--mut)}
 body.mobile-fx #fx-fab-export .fx-act-ic{font-size:var(--fs-6)}
 body.mobile-fx.sheet-open #fx-fab-export{display:none} /* the sheet already has its own controls in reach */
 .fx-sec-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:none;border:none;color:var(--mut);cursor:pointer;padding:6px 12px;font-family:var(--mono);border-radius:8px;min-width:60px;min-height:44px}
@@ -945,11 +956,11 @@ body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:
 .fx-db.fx-db-icon{border-radius:8px;height:30px;width:30px;padding:0}
 .fx-db:hover{border-color:var(--mut)}
 /* 3.1.2 — matches the wireframe's .ibtn.disabled (Editor (Developer) View.dc.html:40). */
-.fx-db:disabled{opacity:.35;pointer-events:none;cursor:default}
+.fx-db:disabled{opacity:var(--op-3);pointer-events:none;cursor:default}
 /* "Show original" is a .db-btn, not a .fx-db, so it needs its own disabled treatment — wired
    alongside Undo/Redo in fxSyncTopbarDisabled() (2026-09-10), same fxHistIdx<=0 signal ("nothing
    to compare against yet" = the same state that disables Undo). */
-.db-btn:disabled{opacity:.35;pointer-events:none;cursor:default}
+.db-btn:disabled{opacity:var(--op-3);pointer-events:none;cursor:default}
 /* 3.1.1 originally matched the wireframe's bordered .undogrp pill (one outer border/radius, a
    hairline divider between the two buttons). 2026-09-10: dropped per explicit request — plain
    adjacent icon buttons, same as every other pair in the bar, no enclosing box. */
@@ -1320,7 +1331,7 @@ body.deskx #fx-settings{display:inline-flex}
 .fx-ovf-item:hover{background:var(--sur2)}
 .fx-ovf-item.dim{color:var(--mut);cursor:default}
 .fx-ovf-sep{height:1px;background:var(--bdr);margin:4px 2px}
-.fx-ovf-grp-label{font-size:var(--fs-2);text-transform:uppercase;letter-spacing:.08em;color:var(--mut);padding:8px 8px 4px;font-weight:600}
+.fx-ovf-grp-label{font-size:var(--fs-2);text-transform:uppercase;letter-spacing:var(--ls-5);color:var(--mut);padding:8px 8px 4px;font-weight:600}
 .fx-ovf-item .fx-ovf-check{margin-left:auto;visibility:hidden;color:var(--acc)}
 .fx-ovf-item.on .fx-ovf-check{visibility:visible}
 /* ── LIGHT THEME ──────────────────────────────────────────────────────────────────────────────
@@ -1399,13 +1410,13 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:var(--fs-2);pointer-events:none}
 #cl-frame{position:relative;box-shadow:0 6px 30px var(--scrim-b2);display:none}
 .cl-cell{position:absolute;overflow:hidden;cursor:pointer;background:transparent}
-.cl-cell.sel{outline:2px solid var(--acc);outline-offset:-2px;z-index:var(--z-raise);touch-action:none}
+.cl-cell.sel{outline:var(--bw-2) solid var(--acc);outline-offset:-2px;z-index:var(--z-raise);touch-action:none}
 #cl-dz.hot{border-style:solid;border-color:var(--acc);background:var(--tint-1)}
 #cl-dz.hot .dz-ic,#cl-dz.hot .dz-lb{color:var(--acc)}
 #cl-secnav{display:none}
 .cl-cell img{position:absolute;left:0;top:0;pointer-events:none;user-select:none;-webkit-user-drag:none;max-width:none}
 .cl-cell.has-photo{cursor:move}
-.cl-cell.dragover{outline:2px dashed var(--acc2);outline-offset:-2px}
+.cl-cell.dragover{outline:var(--bw-2) dashed var(--acc2);outline-offset:-2px}
 .cl-cell-empty{display:flex;align-items:center;justify-content:center;color:var(--scrim-w2);font-size:var(--fs-6);width:100%;height:100%}
 .cl-div{position:absolute;z-index:var(--z-sticky);background:transparent}
 .cl-div.v{cursor:col-resize;width:12px;margin-left:-6px}
@@ -1415,7 +1426,7 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-div.h::after{top:5px;height:2px;left:0;right:0}
 .cl-div:hover::after{background:var(--acc)}
 .cl-tray{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.cl-thumb{position:relative;width:50px;height:50px;border-radius:var(--r-sm);overflow:hidden;border:2px solid var(--bdr);cursor:grab;background:var(--sur2)}
+.cl-thumb{position:relative;width:50px;height:50px;border-radius:var(--r-sm);overflow:hidden;border:var(--bw-2) solid var(--bdr);cursor:grab;background:var(--sur2)}
 .cl-thumb img{width:100%;height:100%;object-fit:cover;pointer-events:none}
 .cl-thumb .cl-thumb-x{position:absolute;top:0;right:0;width:var(--sp-4);height:var(--sp-4);background:var(--scrim-b5);color:#fff;font-size:var(--fs-2);line-height:var(--sp-4);text-align:center;cursor:pointer;border-radius:0 0 0 4px}
 .cl-shapes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
@@ -1443,7 +1454,7 @@ body.mobile-cl .cl-controls .fx-ctrl{display:none}
 body.mobile-cl .cl-controls .fx-ctrl.cl-sec-active{display:block}
 .cl-sec-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;color:var(--mut);cursor:pointer;padding:4px 8px;font-family:var(--mono);border-radius:6px;min-width:58px}
 .cl-sec-btn .cl-sec-ic{display:inline-flex}
-.cl-sec-btn .cl-sec-lb{font-size:var(--fs-2);letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+.cl-sec-btn .cl-sec-lb{font-size:var(--fs-2);letter-spacing:var(--ls-1);text-transform:uppercase;white-space:nowrap}
 .cl-sec-btn.on{color:var(--acc)}
 .cl-sec-ic svg{display:block}
 .fx-ctrl[data-clsec="sel"]:not(.cl-has-sel){display:none}
@@ -1474,7 +1485,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
       padding:22px 18px;background:linear-gradient(165deg,rgb(30,13,7) 0%,rgb(21,8,4) 100%);
       border-right:1px solid rgba(255,155,66,.2);overflow:hidden">
       <div style="font-family:Palatino,'Palatino Linotype',Georgia,serif;font-style:italic;
-        font-size:22px;letter-spacing:.1em;color:#f0ece2;
+        font-size:22px;letter-spacing:var(--ls-6);color:#f0ece2;
         text-shadow:0 0 4px rgba(212,144,58,.55),0 0 12px rgba(212,144,58,.45),0 0 22px rgba(224,84,84,.35),0 0 2px rgba(255,210,150,.6)">
         Chroma<span style="color:#d4903a;text-shadow:none">smith</span>
       </div>
@@ -10627,7 +10638,7 @@ function hslBuildHist(){
   row.innerHTML='';
   counts.forEach((c,i)=>{
     const bar=document.createElement('span');bar.className='hsl-hist-bar';
-    bar.style.height=Math.max(2,Math.round(c/mx*28))+'px';
+    bar.style.height=Math.max(3,Math.round(c/mx*100))+'px';
     const hueDeg=(i+0.5)/counts.length*360;
     bar.style.background=`hsl(${hueDeg.toFixed(0)},72%,58%)`;
     row.appendChild(bar);
@@ -10663,7 +10674,7 @@ function hslSyncUI(){
   [['hue','h'],['sat','s'],['lum','l']].forEach(([k,sfx])=>{
     const v=(fxState.hsl[k]&&fxState.hsl[k][hslBand])||0;
     const sl=document.getElementById('sl-hsl-'+sfx),vl=document.getElementById('vl-hsl-'+sfx);
-    if(sl)sl.value=v;if(vl)vl.textContent=v;
+    if(sl){sl.value=v;hslKnob(sl,k);fxPaintSlider(sl);}if(vl)vl.textContent=v;
   });
   // Saturation/Luminance tracks tint toward the selected band's colour (Hue keeps its fixed
   // rainbow gradient from CSS, so it's left alone here).
@@ -10675,9 +10686,12 @@ function hslSyncUI(){
   // actually drives the header's "Reset | All" visibility for this section.
   document.querySelector('.fx-ctrl[data-fxsec="hsl"]')?.classList.toggle('fx-has-hsledit',!hslIdentity());
 }
+// Draft: thumb fills with the selected band's colour once that slider leaves 0.
+function hslKnob(sl,k){const on=!!((fxState.hsl[k]&&fxState.hsl[k][hslBand])||0);sl.classList.toggle('fx-knob-on',on);sl.style.setProperty('--knob',HSL_COLS[hslBand]);}
 function hslSlider(k,v){
   fxState.hsl[k][hslBand]=parseFloat(v)||0;
   const vl=document.getElementById('vl-hsl-'+{hue:'h',sat:'s',lum:'l'}[k]);if(vl)vl.textContent=v;
+  const sl=document.getElementById('sl-hsl-'+{hue:'h',sat:'s',lum:'l'}[k]);if(sl)hslKnob(sl,k);
   document.querySelector('.fx-ctrl[data-fxsec="hsl"]')?.classList.toggle('fx-has-hsledit',!hslIdentity());
   clearTimeout(_hslBakeT);_hslBakeT=setTimeout(()=>{bakeHsl();hslBuildChips();},40);
   fxUpdate();
@@ -10928,7 +10942,7 @@ function _csModal(title,bodyHtml){
 // behavior. Grouped to match the new Photo/View menus.
 function shortcutsHtml(){
   const rows=(pairs)=>pairs.map(([k,d])=>`<div style="display:flex;justify-content:space-between;gap:16px;padding:3px 0;font-size:13px"><span>${d}</span><kbd style="font-family:var(--mono);font-size:11px;color:var(--mut);background:var(--bdr);border-radius:4px;padding:2px 6px;white-space:nowrap">${k}</kbd></div>`).join('');
-  const group=(title,pairs)=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">${title}</div>${rows(pairs)}</div>`;
+  const group=(title,pairs)=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:var(--ls-2);margin-bottom:4px">${title}</div>${rows(pairs)}</div>`;
   return group('File',[['⌘O','Open photo(s)'],['⌘L','Toggle Library'],['⌘E','Export']])
     +group('Edit',[['⌘Z','Undo'],['⇧⌘Z','Redo'],['⇧⌘C','Copy edit'],['⇧⌘V','Paste edit']])
     +group('Photo (Library grid)',[['X','Reject'],['P','Pick / flag'],['U','Clear flag'],['←/→','Move culling cursor'],['Enter','Open selected'],['⌘[ / ⌘]','Rotate left / right']])
@@ -10943,7 +10957,7 @@ function shortcutsHtml(){
 // session, or a returning tab reload, none of which should re-greet a new user).
 const _TOUR_KEY='chromasmith-tour-seen-v1';
 function tourHtml(){
-  const step=(n,title,body)=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--acc);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Step ${n}</div><div style="font-size:14px;font-weight:600;margin-bottom:2px">${title}</div><div style="font-size:13px;color:var(--mut)">${body}</div></div>`;
+  const step=(n,title,body)=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--acc);text-transform:uppercase;letter-spacing:var(--ls-2);margin-bottom:2px">Step ${n}</div><div style="font-size:14px;font-weight:600;margin-bottom:2px">${title}</div><div style="font-size:13px;color:var(--mut)">${body}</div></div>`;
   return step(1,'Load a photo','Drag a photo (or RW2/RAW) onto the window, or use the ＋ button.')
     +step(2,'Pick a look','Open <b>Presets & Looks</b> and tap a film look — everything else (grain, halation, curves, masks…) is optional refinement on top of it.')
     +step(3,'Export','When it looks right, hit <b>Export</b> at full resolution. Nothing ever uploads — it all runs on this device.')
@@ -11033,7 +11047,7 @@ function cpOpen(){
     const filtered=_cpFilter(cmds,input.value);
     if(_cpIdx>=filtered.length)_cpIdx=Math.max(0,filtered.length-1);
     list.innerHTML=filtered.map((c,i)=>`<div class="cp-row" data-i="${i}" style="padding:8px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;font-size:13px;${i===_cpIdx?'background:var(--acc);color:#fff':'color:var(--txt)'}">`
-      +`<span>${c.label}</span><span style="font-family:var(--mono);font-size:10px;opacity:.65">${c.group}</span></div>`).join('')
+      +`<span>${c.label}</span><span style="font-family:var(--mono);font-size:10px;opacity:var(--op-7)">${c.group}</span></div>`).join('')
       ||'<div style="padding:14px;font-size:12px;color:var(--mut);font-family:var(--mono)">No matches</div>';
     list.querySelectorAll('.cp-row').forEach(row=>{
       row.onmouseenter=()=>{_cpIdx=parseInt(row.dataset.i,10);render();};
@@ -11329,7 +11343,7 @@ function cvBuildChips(){
       // invisible to the UI audit until off-sections started rendering dimmed instead of hidden.
       // It is an icon now, like every other affordance in the app.
       b.className='pc-chip';
-      b.style.cssText='width:28px;height:28px;border-radius:50%;border:2px solid '+(sel?'var(--acc)':'var(--bdr)')+';cursor:pointer;padding:0;flex-shrink:0;'
+      b.style.cssText='width:28px;height:28px;border-radius:50%;border:var(--bw-2) solid '+(sel?'var(--acc)':'var(--bdr)')+';cursor:pointer;padding:0;flex-shrink:0;'
         +'display:inline-flex;align-items:center;justify-content:center;'
         +(isBlur?'background:linear-gradient(135deg,#8a8a8a,#333);color:#fff':'background:'+c);
       if(isBlur){b.innerHTML=icon('nr',14);b.title='Blurred photo as the background';}
@@ -13986,8 +14000,8 @@ function mskCrEyedropperClick(e){
 // purity had NOT been touched silently moved both — this makes the coupling visible and gives a
 // one-click way back to it after diverging them on purpose.
 function _mskCrLinkNote(m){
-  if(m.crRangeC==null)return '<div class="msk-hint" style="opacity:.75">Linked to Hue range — drag it to set an independent value.</div>';
-  return '<div class="msk-hint" style="opacity:.75">Independent of Hue range. <a href="javascript:void(0)" onclick="mskCrRelink()">Re-link</a></div>';
+  if(m.crRangeC==null)return '<div class="msk-hint" style="opacity:var(--op-9)">Linked to Hue range — drag it to set an independent value.</div>';
+  return '<div class="msk-hint" style="opacity:var(--op-9)">Independent of Hue range. <a href="javascript:void(0)" onclick="mskCrRelink()">Re-link</a></div>';
 }
 function mskCrRelink(){const m=fxState.masks[mskSel];if(!m)return;m.crRangeC=null;mskSrcVDebounced();mskRebuild();fxUpdate();}
 function mskCrToggle(el){
@@ -15179,7 +15193,7 @@ function _fxSplitRow(text,onclick,active){
 }
 function _fxSplitHead(text){
   const h=document.createElement('div');
-  h.style.cssText='padding:6px 9px 2px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)';
+  h.style.cssText='padding:6px 9px 2px;font-size:10px;letter-spacing:var(--ls-3);text-transform:uppercase;color:var(--mut)';
   h.textContent=text;
   return h;
 }
@@ -22330,10 +22344,10 @@ function buildCatalogPage(){
   css.textContent='body.catalog-mode>*:not(#catalog-root){display:none!important}'
     +'#catalog-root{padding:24px;display:flex;flex-direction:column;gap:20px;max-width:920px;margin:0 auto;background:var(--bg);min-height:100vh}'
     +'#catalog-root .cat-item{border:1px solid var(--bdr);border-radius:8px;padding:14px;background:var(--sur)}'
-    +'#catalog-root .cat-item-label{font-family:var(--sans);font-size:11px;color:var(--mut);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}'
+    +'#catalog-root .cat-item-label{font-family:var(--sans);font-size:11px;color:var(--mut);margin-bottom:8px;text-transform:uppercase;letter-spacing:var(--ls-2)}'
     +'#catalog-root .cat-missing{font-family:var(--mono);font-size:11px;color:var(--err)}'
     +'#catalog-root .cat-group-title{font-family:var(--sans);font-size:16px;font-weight:600;color:var(--txt);margin:8px 0 -6px}'
-    +'#catalog-root .cat-live-badge{display:inline-block;background:var(--acc);color:#000;font-size:9px;font-weight:700;letter-spacing:.04em;border-radius:3px;padding:1px 5px;text-transform:uppercase;vertical-align:middle}'
+    +'#catalog-root .cat-live-badge{display:inline-block;background:var(--acc);color:#000;font-size:9px;font-weight:700;letter-spacing:var(--ls-2);border-radius:3px;padding:1px 5px;text-transform:uppercase;vertical-align:middle}'
     // ?only=<key> (report iframe embed): drop the page margin/max-width/gap chrome so the clone
     // fills the iframe edge-to-edge instead of floating in a centered 920px column.
     +'#catalog-root.cat-root-compact{padding:10px;max-width:none;gap:0}'
@@ -22373,6 +22387,14 @@ function buildCatalogPage(){
     ['.fx-info-i','fx-info-i','#ff-retouch .fx-info-i'],
     ['select / .fx-select','select','#sel-dcp'],
     ['.btn-icon (icon-button)','btn-icon','.btn-icon'],
+    // Library-only families: markup exists solely in desktop/library-ui.js (loaded by
+    // desktop/dist/index.html, never by this plain web file) and needs
+    // chromasmithForceLibraryReady()+#lib-overlay opened first — done once, above, by the
+    // 'load'-deferred catalog bootstrap. On the plain web build these three simply have no
+    // matching selector and fall back to _catItem's "missing selector" placeholder.
+    ['.lib-chip','chip','.lib-chip'],
+    ['.lib-search-wrap','search-input','.lib-search-wrap'],
+    ['.lib-menu (#lib-sort-menu)','menu','#lib-sort-menu'],
   ];
   // Real click/drag wiring is registered with addEventListener on the ORIGINAL nodes at boot
   // (fxSecToggle's title listener, selectToSeg's button.onclick) or via an onclick="" ATTRIBUTE
@@ -22451,7 +22473,21 @@ function buildCatalogPage(){
     root.appendChild(clone);
   }
 }
-if(/[?&]catalog=1/.test(location.search))buildCatalogPage();
+if(/[?&]catalog=1/.test(location.search)){
+  // library-ui.js (desktop/dist/index.html only — absent from the plain web build) loads via a
+  // <script src> AFTER this inline block, so chromasmithForceLibraryReady is not yet defined at
+  // this point in the parse — deferring to 'load' (or running now if already past it) lets the
+  // Library families (chip/search-input/menu) resolve when this page IS the desktop build,
+  // while changing nothing for chromasmith-22.html where the function never exists.
+  const _startCatalog=()=>{
+    if(typeof window.chromasmithForceLibraryReady==='function'){
+      try{window.chromasmithForceLibraryReady();}catch(e){}
+      document.getElementById('lib-overlay')?.classList.add('on','full');
+    }
+    buildCatalogPage();
+  };
+  if(document.readyState==='complete')_startCatalog();else window.addEventListener('load',_startCatalog);
+}
 </script>
 </body>
 </html>
