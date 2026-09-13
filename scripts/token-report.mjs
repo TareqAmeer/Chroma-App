@@ -35,7 +35,7 @@ function categorizeRole(role) {
 }
 const CATEGORY_LABEL = { brand: 'Brand & Accent', surfaces: 'Surfaces', text: 'Text', borders: 'Borders & Hairlines', scrims: 'Scrims & Shadows', other: 'Other' };
 
-const catalogue = { color: [], fontFamily: [], fontSize: [], fontWeight: [], lineHeight: [], dimension: [], other: [] };
+const catalogue = { color: [], fontFamily: [], fontSize: [], fontWeight: [], lineHeight: [], dimension: [], zIndex: [], other: [] };
 (function walk(o, path) {
   if (Array.isArray(o)) return;
   if (o && typeof o === 'object') {
@@ -52,6 +52,7 @@ const catalogue = { color: [], fontFamily: [], fontSize: [], fontWeight: [], lin
       else if (o.$type === 'fontWeight') catalogue.fontWeight.push(entry);
       else if (o.$type === 'dimension' && /(^|\/)typography\/size(\/|$)/.test(path)) catalogue.fontSize.push(entry);
       else if (o.$type === 'number' && /(^|\/)typography\/lineHeight(\/|$)/.test(path)) catalogue.lineHeight.push(entry);
+      else if (o.$type === 'number' && /(^|\/)zIndex(\/|$)/.test(path)) catalogue.zIndex.push(entry);
       else if (o.$type === 'dimension') catalogue.dimension.push(entry);
       else catalogue.other.push(entry);
       return;
@@ -224,6 +225,17 @@ for (const { selector, body } of ruleBodies) {
       if (approvedColors.has(norm)) continue;
       colorFindings.push({ selector, prop, value: rgba, category: categorizeFinding(selector, prop, rgba) });
     }
+  }
+}
+
+const zIndexFindings = [];
+for (const { selector, body } of ruleBodies) {
+  for (const decl of body.split(';')) {
+    const m = decl.match(/^\s*(z-index)\s*:\s*(.+?)\s*$/i);
+    if (!m) continue;
+    const rawVal = m[2].trim();
+    if (rawVal.includes('var(--') || /^auto$/i.test(rawVal)) continue;
+    zIndexFindings.push({ kind: 'z-index', selector, prop: 'z-index', value: rawVal });
   }
 }
 
@@ -439,14 +451,84 @@ function layoutRows() {
     </div>`).join('');
 }
 
+// z-index spans 1..99999 — a linear bar would make the low tiers invisible, so scale by
+// log10 instead (same reasoning as the token's own rationale: tiers are ordinal, not additive).
+function zIndexRows() {
+  const maxLog = Math.log10(99999);
+  const tokenRows = catalogue.zIndex.slice().sort((a, b) => parseFloat(a.value) - parseFloat(b.value)).map((e) => {
+    const v = parseFloat(e.value) || 0;
+    const pct = Math.max(4, (Math.log10(Math.max(v, 1)) / maxLog) * 100);
+    return `
+    <div class="layout-row">
+      <div class="layout-path">${esc(e.path)}</div>
+      <div class="layout-bar-wrap"><div class="layout-bar" style="width:${pct}%"></div></div>
+      <div class="layout-val">${esc(e.value)}</div>
+    </div>`;
+  }).join('');
+  const findingsHtml = zIndexFindings.length
+    ? zIndexFindings.map((f) => `
+    <div class="viol-row">
+      <div class="viol-kind">z-index</div>
+      <div class="viol-selector">${esc(f.selector)}</div>
+      <div class="viol-decl">z-index: ${esc(f.value)}</div>
+    </div>`).join('')
+    : `<div class="empty-inline">No raw z-index literals found outside the token scale.</div>`;
+  return `
+    <div class="subhead">Stacking-order scale — tiers named by role (Material/Ant Design pattern), audited from every raw z-index literal in chromasmith-22.html; bar length is log-scaled (1 to 99999)</div>
+    ${tokenRows}
+    <div class="subhead">Unapproved z-index literals in &lt;style&gt; rules (not var(--z-*), not auto)</div>
+    ${findingsHtml}`;
+}
+
+// Maps a design/components.json family name to its chromasmith-22.html buildCatalogPage()
+// COMPONENTS key (chromasmith-22.html:22346-22362) so the report can embed a live
+// ?catalog=1&live=1&only=<key> iframe instead of a text row. null = no catalog entry exists yet
+// because the family lives only in desktop/library-ui.js (chip, search-input, menu — the Library
+// UI isn't loaded by the plain web build the catalogue clones from; see
+// docs/ui-workflow/component-visuals-plan.md §0/§1) — shown as an explicit placeholder, not
+// silently dropped, so a reader can tell "not built yet" from "genuinely has no visual".
+const FAMILY_TO_CATALOG_KEY = {
+  'section-card': 'fx-ctrl',
+  'control-row': 'fx-row',
+  toggle: 'fx-toggle',
+  slider: 'slider',
+  select: 'select',
+  'segmented-control': 'seg',
+  button: 'btn',
+  'icon-button': 'btn-icon',
+  chip: null,
+  'info-button': 'fx-info-i',
+  'search-input': null,
+  menu: null,
+  icon: null, // rendered separately in iconSections() — real SVG glyphs, not a DOM clone
+};
+// Families whose LIVE_WIRE shim (chromasmith-22.html:22367-22395) makes the embed clickable, not
+// just visually rendered — everything else (native slider drag/select open, or hover-only
+// button/icon-button/info-button) is still live-embedded but has no click affordance to badge.
+const CATALOG_KEYS_WITH_SHIM = new Set(['fx-toggle', 'fx-ctrl', 'seg']);
+
 function componentSections() {
   const families = componentFamilies.slice().sort((a, b) => b.instances.length - a.instances.length);
-  const familyRows = families.map((f) => `
-    <div class="comp-row">
-      <div class="comp-name">${esc(f.name)}<div class="comp-sub">${esc(f.appleComponent || '')}</div></div>
-      <div class="comp-selectors">${(f.selectors || []).map((s) => `<code>${esc(s)}</code>`).join(' ')}</div>
-      <div class="comp-count">${f.instances.length}</div>
-    </div>`).join('');
+  const familyCards = families.map((f) => {
+    const catalogKey = FAMILY_TO_CATALOG_KEY[f.name];
+    const embed = catalogKey
+      ? `<div class="comp-embed-wrap">
+           <iframe class="comp-embed" loading="lazy" title="${esc(f.name)} — live" src="../chromasmith-22.html?catalog=1&live=1&only=${encodeURIComponent(catalogKey)}"></iframe>
+           ${CATALOG_KEYS_WITH_SHIM.has(catalogKey) ? '<div class="comp-embed-badge">click to try</div>' : ''}
+         </div>`
+      : f.name === 'icon'
+        ? `<div class="comp-no-embed">Rendered above in the Icons tab (real SVG glyphs, not a DOM clone) — see the Icons count.</div>`
+        : `<div class="comp-no-embed">No catalogue entry yet — ${esc(f.name)} lives only in desktop/library-ui.js (Library UI), not the plain web build this page clones from. See docs/ui-workflow/component-visuals-plan.md.</div>`;
+    return `
+    <div class="comp-card">
+      ${embed}
+      <div class="comp-card-meta">
+        <div class="comp-name">${esc(f.name)}<div class="comp-sub">${esc(f.appleComponent || '')}</div></div>
+        <div class="comp-selectors">${(f.selectors || []).map((s) => `<code>${esc(s)}</code>`).join(' ')}</div>
+        <div class="comp-count">${f.instances.length} instance${f.instances.length === 1 ? '' : 's'}</div>
+      </div>
+    </div>`;
+  }).join('');
 
   const dynamicList = (componentCoverage.dynamicInstances || []);
   const unstableList = (componentCoverage.withoutStableSelector || []);
@@ -460,9 +542,9 @@ function componentSections() {
   return `
     <section class="cat-section">
       <h2 class="cat-title">Component Registry <span class="cat-count">${families.length} families, ${componentsDoc.instances.length} static instances</span></h2>
-      <div class="comp-table">
-        <div class="comp-row comp-head"><div>Family</div><div>Selectors</div><div>Instances</div></div>
-        ${familyRows}
+      <div class="comp-embed-note">Each card embeds the real component live out of chromasmith-22.html (?catalog=1&live=1) — "click to try" cards respond to real clicks (toggle flip, section collapse, segmented-control switch); sliders/selects are native controls and already drag/open with no shim. Nothing you do here touches the real app's state.</div>
+      <div class="comp-grid">
+        ${familyCards}
       </div>
     </section>
     <section class="cat-section">
@@ -586,13 +668,18 @@ const out = `<!doctype html>
   .layout-bar-wrap { flex:1; background:rgba(128,128,128,.15); border-radius:4px; height:10px; max-width:300px; }
   .layout-bar { height:100%; background:#0066cc; border-radius:4px; }
   .layout-val { font-family:ui-monospace,monospace; opacity:.7; width:70px; }
-  .comp-table { display:flex; flex-direction:column; }
-  .comp-row { display:grid; grid-template-columns:180px 1fr 90px; gap:16px; padding:10px 0; border-bottom:1px solid rgba(128,128,128,.15); align-items:start; font-size:13px; }
-  .comp-head { font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; opacity:.6; border-bottom:1px solid rgba(128,128,128,.25); }
+  .comp-embed-note { font-size:12px; opacity:.6; margin-bottom:14px; max-width:70ch; }
+  .comp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+  .comp-card { border:1px solid rgba(128,128,128,.25); border-radius:10px; overflow:hidden; background:rgba(128,128,128,.04); }
+  .comp-embed-wrap { position:relative; background:#1c1d1f; }
+  .comp-embed { width:100%; height:180px; border:0; display:block; }
+  .comp-embed-badge { position:absolute; top:6px; right:8px; background:#61a0af; color:#000; font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:2px 6px; border-radius:4px; }
+  .comp-no-embed { height:180px; display:flex; align-items:center; justify-content:center; text-align:center; padding:12px; font-size:12px; opacity:.6; background:#1c1d1f; }
+  .comp-card-meta { padding:10px 12px; font-size:13px; }
   .comp-name { font-weight:600; }
   .comp-sub { font-weight:400; opacity:.55; font-size:11px; }
-  .comp-selectors code { font-family:ui-monospace,monospace; font-size:11px; background:rgba(128,128,128,.12); padding:1px 5px; border-radius:4px; margin:0 4px 4px 0; display:inline-block; }
-  .comp-count { text-align:right; font-family:ui-monospace,monospace; opacity:.7; }
+  .comp-selectors code { font-family:ui-monospace,monospace; font-size:11px; background:rgba(128,128,128,.12); padding:1px 5px; border-radius:4px; margin:4px 4px 0 0; display:inline-block; }
+  .comp-count { font-family:ui-monospace,monospace; opacity:.7; font-size:12px; margin-top:4px; }
   .issue-list { max-height:340px; overflow-y:auto; font-size:12px; }
   .issue-row { padding:4px 0; border-bottom:1px dotted rgba(128,128,128,.15); word-break:break-all; }
   .issue-row code { font-family:ui-monospace,monospace; opacity:.75; }
@@ -621,14 +708,16 @@ const out = `<!doctype html>
   <button data-tab="colors" class="active">Colors <span class="count">${catalogue.color.filter((e) => !isAliasEntry(e)).length}</span></button>
   <button data-tab="typography">Typography <span class="count">${catalogue.fontFamily.filter((e) => !isAliasEntry(e)).length + catalogue.fontSize.length + catalogue.fontWeight.length}</span></button>
   <button data-tab="layout">Layout <span class="count">${catalogue.dimension.length}</span></button>
+  <button data-tab="zindex">Z-Index <span class="count">${catalogue.zIndex.length}</span></button>
   <button data-tab="components">Components <span class="count">${componentFamilies.length}</span></button>
   <button data-tab="icons">Icons <span class="count">${iconEntries.length}</span></button>
-  <button data-tab="violations">Violations <span class="count">${findings.length + colorFindings.length + spacingFindings.length}</span></button>
+  <button data-tab="violations">Violations <span class="count">${findings.length + colorFindings.length + spacingFindings.length + zIndexFindings.length}</span></button>
 </nav>
 <main>
   <div class="panel active" id="panel-colors">${colorSections()}</div>
   <div class="panel" id="panel-typography">${typographyRows()}</div>
   <div class="panel" id="panel-layout">${layoutRows()}</div>
+  <div class="panel" id="panel-zindex">${zIndexRows()}</div>
   <div class="panel" id="panel-components">${componentSections()}</div>
   <div class="panel" id="panel-icons">${iconSections()}</div>
   <div class="panel" id="panel-violations">${violationRows()}</div>

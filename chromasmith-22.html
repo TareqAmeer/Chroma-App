@@ -119,7 +119,11 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   /* Line-height + font-weight scale (T-lh/T-fw): validated against Apple HIG (SF Pro text-style
      ratios cluster ~1.2-1.3x) and Adobe Spectrum (its own line-height-100 token is 1.3x) — see
      design/tokens.json typography.lineHeight for the full validation note. */
-  --lh-tight:1.2;--lh-base:1.3;--fw-regular:400;--fw-medium:500;--fw-semibold:600;--fw-bold:700/* TOKENS:ROOT:END */}
+  --lh-tight:1.2;--lh-base:1.3;--fw-regular:400;--fw-medium:500;--fw-semibold:600;--fw-bold:700;
+  /* Stacking-order scale (T-z): named tiers instead of ad-hoc literals, same discipline as
+     Material Design's z-index groups and Ant Design's preset stack — see design/tokens.json
+     zIndex for the full audit and per-tier rationale. */
+  --z-raise:1;--z-sticky:10;--z-float:30;--z-dropdown:50;--z-fixed:1500;--z-overlay:3000;--z-menu:5000;--z-system:9999;--z-modal:20000;--z-splash:99999/* TOKENS:ROOT:END */}
 body.light{--glass-bg:#ffffff}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100%;overflow-x:clip}
@@ -131,7 +135,7 @@ html.mobile-fx,html.mobile-cl{overflow:hidden;height:var(--app-h,100svh)}
 canvas,img,video,select,input{max-width:100%}
 body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh;font-size:var(--fs-4);line-height:var(--lh-base)}
 header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;
-  position:sticky;top:0;z-index:10;background:var(--glass-bg)}
+  position:sticky;top:0;z-index:var(--z-sticky);background:var(--glass-bg)}
 .logo{display:flex;align-items:center;gap:12px}
 .logo-img{height:28px;width:auto;display:block}
 .logo .sub{color:var(--mut);font-size:var(--fs-1);font-family:var(--sans);letter-spacing:0;font-style:normal}
@@ -429,7 +433,7 @@ body.mobile-fx .hsl-chip{border-width:3px}
    ancestor, so it needs its own open-state rule rather than inheriting _mskGroup's. */
 .msk-adv-hd .msk-group-chev.msk-adv-open{transform:rotate(0)}
 /* "..." menu */
-.msk-more-menu{position:fixed;z-index:5000;min-width:230px;background:var(--glass-bg);
+.msk-more-menu{position:fixed;z-index:var(--z-menu);min-width:230px;background:var(--glass-bg);
   -webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
   border:1px solid var(--bdr);border-radius:var(--r);padding:4px;box-shadow:var(--lift-2)}
 .msk-more-it{display:flex;align-items:center;gap:var(--sp-2);width:100%;min-height:30px;padding:0 var(--sp-2);background:none;
@@ -491,12 +495,12 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 #fx-canvas{display:block;max-width:100%;height:auto}
 .fx-preview-col{position:sticky;top:16px;align-self:start}
 #fx-canvas-orig{display:none;position:absolute;top:0;left:0;pointer-events:none}
-.fx-split-line{display:none;position:absolute;top:0;bottom:0;width:3px;background:var(--scrim-w4);cursor:col-resize;z-index:10}
+.fx-split-line{display:none;position:absolute;top:0;bottom:0;width:3px;background:var(--scrim-w4);cursor:col-resize;z-index:var(--z-sticky)}
 .fx-split-knob{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 2px 8px var(--scrim-b5);display:flex;align-items:center;justify-content:center;font-size:var(--fs-2);color:#000;user-select:none}
 #fx-hist{display:none;position:absolute;bottom:8px;right:8px;border-radius:4px;background:var(--scrim-b3);opacity:.9;pointer-events:none}
 .fx-zoom-wrap{transform-origin:0 0;cursor:grab;touch-action:none}
 .fx-zoom-wrap.dragging{cursor:grabbing}
-.fx-zoom-ctrl{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:2px;background:var(--scrim-b4);border:1px solid var(--bdr);border-radius:6px;padding:2px;z-index:11;font-family:var(--sans);font-variant-numeric:tabular-nums}
+.fx-zoom-ctrl{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:2px;background:var(--scrim-b4);border:1px solid var(--bdr);border-radius:6px;padding:2px;z-index:var(--z-sticky);font-family:var(--sans);font-variant-numeric:tabular-nums}
 .fx-zoom-ctrl #fx-zoom-slider{width:70px}
 .fx-zoom-ctrl button{background:none;border:none;color:var(--txt);cursor:pointer;font-size:12px;padding:3px var(--sp-2);border-radius:4px;line-height:1}
 .fx-zoom-ctrl button:hover{background:rgba(255,255,255,.12)}
@@ -514,12 +518,12 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
    listener below. */
 .fx-zoom-ctrl #fx-zoom-pct{font-size:var(--fs-2);color:var(--mut);min-width:36px;text-align:center;cursor:default;opacity:0;transition:opacity .1s}
 .fx-zoom-ctrl.active #fx-zoom-pct{opacity:1}
-.fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:var(--sp-8);position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:4px;z-index:2}
+.fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:var(--sp-8);position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:4px;z-index:var(--z-raise)}
 .ni-logo{font-family:var(--display);font-size:var(--fs-7);letter-spacing:.11em;color:var(--acc);font-style:italic;margin-bottom:2px}
 .ni-sub{font-family:var(--sans);font-size:var(--fs-1);letter-spacing:0;color:var(--mut)}
 .ni-build{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);opacity:.7}
 .ni-hint{font-size:12px;color:var(--mut);margin-top:14px}
-#fx-preview-tools{position:absolute;right:8px;top:8px;margin:0!important;z-index:11}
+#fx-preview-tools{position:absolute;right:8px;top:8px;margin:0!important;z-index:var(--z-sticky)}
 /* multi-photo filmstrip — switch which loaded photo is previewed */
 #fx-filmstrip{display:none;gap:6px;overflow-x:auto;padding:2px 1px;margin-top:8px}
 .fs-thumb{position:relative;flex:0 0 auto;width:52px;height:52px;border-radius:6px;overflow:hidden;border:2px solid var(--bdr);background:var(--sur2);cursor:pointer;padding:0;-webkit-tap-highlight-color:transparent}
@@ -687,7 +691,7 @@ body.diag-on .diag-only{display:flex}
   #fx-fname{width:auto!important;flex:1}
   .btn-row{flex-wrap:wrap}
   /* Black cap over the status-bar / notch area */
-  #status-cap{display:block;position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:#000;z-index:2000}
+  #status-cap{display:block;position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:#000;z-index:var(--z-fixed)}
   /* Bigger touch targets for the zoom overlay + editable values */
   .fx-zoom-ctrl{gap:4px;padding:3px}
   .fx-zoom-ctrl button{padding:var(--sp-2) var(--sp-3);font-size:14px}
@@ -697,7 +701,7 @@ body.diag-on .diag-only{display:flex}
   /* On the non-FX tabs the header just shows the title + subtitle; build / theme / log /
      status move to a slim fixed bar at the bottom so the top stays clean. */
   body:not(.mobile-fx) header{padding-top:env(safe-area-inset-top);height:auto;min-height:56px}
-  body:not(.mobile-fx) .hdr-right{position:fixed;left:0;right:0;bottom:0;justify-content:center;gap:16px;background:var(--sur);border-top:1px solid var(--bdr);padding:var(--sp-2) 14px calc(var(--sp-2) + env(safe-area-inset-bottom));z-index:1500}
+  body:not(.mobile-fx) .hdr-right{position:fixed;left:0;right:0;bottom:0;justify-content:center;gap:16px;background:var(--sur);border-top:1px solid var(--bdr);padding:var(--sp-2) 14px calc(var(--sp-2) + env(safe-area-inset-bottom));z-index:var(--z-fixed)}
   body:not(.mobile-fx) main{padding-bottom:70px}
   body:not(.mobile-fx) #log-area{bottom:54px}}
 
@@ -809,7 +813,7 @@ body.fx-deskb .fx-ctrl.fx-has-curveedit > .fx-ctrl-title .fx-ctrl-title-reset-se
 .fx-ctrl[data-fxsec="curves"].fx-curve-param-mode .fx-ctrl-title-reset-scoped,
 .fx-ctrl[data-fxsec="curves"].fx-curve-param-mode .fx-ctrl-title-reset-sep{display:none!important}
 #fx-sheet-handle{display:none}
-body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:var(--sp-2) 0 var(--sp-2);position:sticky;top:0;background:var(--sur);z-index:5;cursor:pointer}
+body.mobile-fx #fx-sheet-handle{display:flex;justify-content:center;align-items:center;padding:var(--sp-2) 0 var(--sp-2);position:sticky;top:0;background:var(--sur);z-index:var(--z-sticky);cursor:pointer}
 body.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:38px;height:4px;border-radius:2px;background:var(--bdr)}
 /* ── dynamic-feel polish (INS/DRK-style) ── */
 /* tool-panel content slides up + fades as you switch tools in the open sheet */
@@ -848,7 +852,7 @@ canvas,img{-webkit-user-drag:none}
   background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
   border:1px solid var(--bdr);color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);
   letter-spacing:0;line-height:var(--lh-base);padding:var(--sp-2) var(--sp-4);border-radius:var(--r);opacity:0;pointer-events:none;
-  transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1.15);z-index:3000;
+  transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1.15);z-index:var(--z-overlay);
   max-width:min(82vw,420px);text-align:left;box-shadow:var(--lift-2)}
 #fx-toast::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--mut);flex:0 0 auto}
 #fx-toast.show{opacity:1;transform:translateY(0)}
@@ -860,7 +864,7 @@ body.mobile-fx{--toast-b:98px}
 body.mobile-fx #fx-toast{left:50%;right:auto;transform:translateX(-50%) translateY(8px)}
 body.mobile-fx #fx-toast.show{transform:translateX(-50%) translateY(0)}
 /* slider polish: bigger touch targets + a value bubble above the thumb while dragging */
-#fx-sl-bubble{position:fixed;transform:translateX(-50%);background:var(--acc);color:#000;font-family:var(--mono);font-size:var(--fs-2);font-weight:600;padding:3px 8px;border-radius:var(--r);opacity:0;pointer-events:none;transition:opacity .15s;z-index:3000}
+#fx-sl-bubble{position:fixed;transform:translateX(-50%);background:var(--acc);color:#000;font-family:var(--mono);font-size:var(--fs-2);font-weight:600;padding:3px 8px;border-radius:var(--r);opacity:0;pointer-events:none;transition:opacity .15s;z-index:var(--z-overlay)}
 body.mobile-fx .fx-slider{min-height:34px}
 body.mobile-fx .fx-slider::-webkit-slider-thumb{width:22px;height:22px}
 /* mobile: the editor IS the app — web tabs live behind the ⋯ sheet */
@@ -869,13 +873,13 @@ body.mobile-fx .ni-hint{display:none}
 #fx-add-btn{display:flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:50%;background:var(--acc);color:#000;font-size:var(--fs-7);line-height:1;border:none;cursor:pointer;margin:var(--sp-4) auto 6px;box-shadow:0 4px 22px var(--tint-6)}
 #fx-add-btn:active{transform:scale(.94)}
 .ni-add-lb{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;color:var(--acc);letter-spacing:0}
-#fx-more-menu{position:fixed;inset:0;background:var(--scrim-b4);z-index:2500;display:flex;align-items:flex-end}
+#fx-more-menu{position:fixed;inset:0;background:var(--scrim-b4);z-index:var(--z-overlay);display:flex;align-items:flex-end}
 #fx-more-menu .mm-sheet{background:var(--sur);width:100%;border-radius:14px 14px 0 0;padding:14px 14px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
 #fx-more-menu .btn{width:100%;justify-content:center;min-height:44px}
 /* active tool pill on the icon strip */
 body.mobile-fx .fx-sec-btn.on{background:var(--tint-2)}
 /* export overlay (mobile): dim + big progress + cancel */
-#fx-exp-ov{position:fixed;inset:0;background:var(--scrim-b4);z-index:2600;display:flex;align-items:flex-end;justify-content:center}
+#fx-exp-ov{position:fixed;inset:0;background:var(--scrim-b4);z-index:var(--z-overlay);display:flex;align-items:flex-end;justify-content:center}
 #fx-exp-ov .eo-box{background:var(--sur);border-radius:14px 14px 0 0;width:100%;padding:16px 16px calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:var(--sp-2);align-items:center}
 #fx-exp-ov .eo-txt{font-family:var(--mono);font-size:var(--fs-2);color:var(--txt)}
 #fx-exp-ov .eo-bar{width:100%;height:5px;background:var(--bdr);border-radius:3px;overflow:hidden}
@@ -916,7 +920,7 @@ body.mobile-fx #fx-secnav{display:flex;gap:2px;overflow-x:auto;-webkit-overflow-
    duplicates just Export in comfortable bottom-of-screen thumb range without touching that
    top-bar layout math. */
 body.mobile-fx #fx-fab-export{display:flex;align-items:center;justify-content:center;
-  position:fixed;right:14px;bottom:calc(64px + max(10px,var(--sab)));z-index:30;
+  position:fixed;right:14px;bottom:calc(64px + max(10px,var(--sab)));z-index:var(--z-float);
   width:50px;height:50px;border-radius:50%;background:var(--acc);color:#000;border:none;
   box-shadow:var(--lift-2);cursor:pointer}
 body.mobile-fx #fx-fab-export:disabled{opacity:.4;background:var(--sur2);color:var(--mut)}
@@ -930,7 +934,7 @@ body.mobile-fx.sheet-open #fx-fab-export{display:none} /* the sheet already has 
 .fx-sec-ic svg,.fx-rail-ic svg,.fx-db-ic svg{display:block}
 /* ── DESKTOP "one tool at a time" editor (body.fx-deskb) ── */
 #fx-deskbar,#fx-toolrail{display:none}
-body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:8px var(--sp-2);background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);position:sticky;top:8px;z-index:20}
+body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:8px var(--sp-2);background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);position:sticky;top:8px;z-index:var(--z-sticky)}
 .fx-db{display:inline-flex;align-items:center;justify-content:center;gap:var(--sp-2);white-space:nowrap;flex:0 0 auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:8px 12px;cursor:pointer;transition:background var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)}
 /* Editor (Developer) View.dc.html:44's .pillbtn (#btn-allfx) — pill radius, transparent fill
    (outline only), 28px height, regular weight — distinct from the filled-tile treatment shared
@@ -1105,7 +1109,7 @@ body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:var(--sp-9) 
    Only overridden here, under body.deskx — #fx-deskbar-title's own base rule (above) keeps its
    position:absolute centering for the older body.fx-deskb-only flex layout, untouched. */
 body.deskx #fx-deskbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:8px;
-  position:fixed;top:0;left:0;right:0;z-index:3000;height:var(--deskx-topbar-h);
+  position:fixed;top:0;left:0;right:0;z-index:var(--z-overlay);height:var(--deskx-topbar-h);
   margin:0;padding:0 12px 0 var(--sp-10);border:none;border-bottom:1px solid var(--bdr-panel);border-radius:0;
   background:var(--glass-bg);
   /* Only the bottom edge has real width, but with border-color unset on the other three sides
@@ -1192,7 +1196,7 @@ body.deskx.panel-closed .fx-panel{display:none}
 /* Inert outside deskx: the handles are static markup in every layout, and on the phone shell they
    would otherwise paint as ordinary full-width 4px-tall buttons. */
 .fx-edge{display:none}
-body.deskx .fx-edge{display:block;position:absolute;top:0;bottom:0;width:7px;z-index:40;cursor:col-resize;
+body.deskx .fx-edge{display:block;position:absolute;top:0;bottom:0;width:7px;z-index:var(--z-float);cursor:col-resize;
   background:none;border:0;padding:0}
 body.deskx #fx-panel-resizer{right:calc(var(--panel-w) + var(--rail-w) - 3px)}
 body.deskx #fx-rail-resizer{right:calc(var(--rail-w) - 3px)}
@@ -1217,7 +1221,7 @@ body.deskx.rail-icons #fx-rail-foot .fx-rail-ic{transform:scaleX(-1)}
 /* Restore button for a HIDDEN rail — the panel needs no equivalent, because clicking any tool
    already reopens it; a hidden rail has no tools left to click. */
 #fx-rail-show{display:none}
-body.deskx.rail-hidden #fx-rail-show{position:absolute;top:8px;right:8px;z-index:41;display:flex;
+body.deskx.rail-hidden #fx-rail-show{position:absolute;top:8px;right:8px;z-index:var(--z-float);display:flex;
   align-items:center;justify-content:center;width:28px;height:28px;padding:0;border-radius:var(--r-sm);
   background:var(--sur2);border:1px solid var(--bdr-pill);color:var(--mut);cursor:pointer}
 body.deskx.rail-hidden #fx-rail-show:hover{color:var(--txt)}
@@ -1269,7 +1273,7 @@ body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px var(--sp-2);
    edge-to-edge, matching DRK; only the library/editor divider (library-ui.js) is thicker now. */
 body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:#000;border:none;border-radius:0;margin:0}
 body.deskx #fx-canvas{max-height:none}
-body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:30;
+body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:var(--z-float);
   background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:8px 12px}
 body.deskx .fx-preview-col{position:relative}
 /* 2026-09-10: was force-shown under deskx ("display:inline-flex!important") — the wireframe's
@@ -1292,7 +1296,7 @@ body.deskx #db-lib-btn{display:none}
    (one at a time, switched by category, instead of all five stacked and always visible) is new. */
 #fx-settings{display:none;position:relative}
 body.deskx #fx-settings{display:inline-flex}
-#fx-settings-menu{display:none;position:fixed;top:46px;right:12px;z-index:4500;
+#fx-settings-menu{display:none;position:fixed;top:46px;right:12px;z-index:var(--z-menu);
   background:var(--glass-bg);
   border:1px solid var(--bdr);border-radius:var(--r);box-shadow:var(--lift-2);overflow:hidden}
 #fx-settings-menu.on{display:flex;align-items:stretch}
@@ -1395,7 +1399,7 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:var(--fs-2);pointer-events:none}
 #cl-frame{position:relative;box-shadow:0 6px 30px var(--scrim-b2);display:none}
 .cl-cell{position:absolute;overflow:hidden;cursor:pointer;background:transparent}
-.cl-cell.sel{outline:2px solid var(--acc);outline-offset:-2px;z-index:4;touch-action:none}
+.cl-cell.sel{outline:2px solid var(--acc);outline-offset:-2px;z-index:var(--z-raise);touch-action:none}
 #cl-dz.hot{border-style:solid;border-color:var(--acc);background:var(--tint-1)}
 #cl-dz.hot .dz-ic,#cl-dz.hot .dz-lb{color:var(--acc)}
 #cl-secnav{display:none}
@@ -1403,7 +1407,7 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-cell.has-photo{cursor:move}
 .cl-cell.dragover{outline:2px dashed var(--acc2);outline-offset:-2px}
 .cl-cell-empty{display:flex;align-items:center;justify-content:center;color:var(--scrim-w2);font-size:var(--fs-6);width:100%;height:100%}
-.cl-div{position:absolute;z-index:5;background:transparent}
+.cl-div{position:absolute;z-index:var(--z-sticky);background:transparent}
 .cl-div.v{cursor:col-resize;width:12px;margin-left:-6px}
 .cl-div.h{cursor:row-resize;height:12px;margin-top:-6px}
 .cl-div::after{content:'';position:absolute;background:transparent;transition:background .15s}
@@ -1460,7 +1464,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
      asset path: the iOS/desktop build scripts only stage chromasmith-22.html + vendor/, not a
      top-level assets/ folder, and this must render with zero fetch()/network dependency on the
      very first paint — see §2's payload note before growing this further. -->
-<div id="boot-splash" style="position:fixed;inset:0;z-index:99999;background:transparent;display:flex;
+<div id="boot-splash" style="position:fixed;inset:0;z-index:var(--z-splash);background:transparent;display:flex;
   align-items:center;justify-content:center;transition:opacity .4s ease-out;opacity:1">
   <div style="position:relative;width:min(640px,92vw);height:300px;background:#0f1c24;
     border-radius:0;overflow:hidden;display:grid;grid-template-columns:220px 1fr;
@@ -1616,7 +1620,7 @@ window.showBootStallBanner=function(phase,elapsedMs){
   if(!b){
     b=document.createElement('div');
     b.id='boot-stall-banner';
-    b.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:99998;'
+    b.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:var(--z-splash);'
       +'background:#3a2a12;color:#f0ece2;border:1px solid rgba(212,144,58,.4);border-radius:8px;'
       +'padding:8px 14px;font-size:12px;font-family:-apple-system,sans-serif;display:flex;'
       +'align-items:center;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.35)';
@@ -2546,7 +2550,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
                overlay — never rendered into a preview snapshot or an export. Lives inside
                fx-zoom-wrap for the same reason the mask overlay does: it must ride the exact
                CSS transform zoom/pan applies, with no per-event JS repositioning. -->
-          <svg id="fx-guides-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:4">
+          <svg id="fx-guides-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:var(--z-raise)">
             <line x1="33.33" y1="0" x2="33.33" y2="100" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
             <line x1="66.67" y1="0" x2="66.67" y2="100" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
             <line x1="0" y1="33.33" x2="100" y2="33.33" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
@@ -2602,11 +2606,11 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <button class="db-btn" id="btn-split" onclick="toggleSplit()" title="Split before/after view"><span class="fx-db-ic" id="ic-split"></span></button>
           <div style="position:relative;display:inline-flex">
             <button class="db-btn db-btn-narrow" id="btn-split-menu" onclick="fxToggleSplitMenu(event)" title="Choose what the split's before-side compares against"><span class="fx-db-ic" id="ic-splitmenu"></span></button>
-            <div id="fx-split-popover" style="display:none;position:absolute;top:100%;left:0;margin-top:6px;min-width:210px;max-height:320px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:4px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
+            <div id="fx-split-popover" style="display:none;position:absolute;top:100%;left:0;margin-top:6px;min-width:210px;max-height:320px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:4px;z-index:var(--z-dropdown);box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
           </div>
           <div style="position:relative;display:inline-flex">
             <button class="db-btn" id="btn-history" onclick="fxToggleTimelinePopover()" title="Edit history timeline"><span class="fx-db-ic" id="ic-timeline"></span></button>
-            <div id="fx-timeline-popover" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;width:260px;max-height:360px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:8px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
+            <div id="fx-timeline-popover" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;width:260px;max-height:360px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:8px;z-index:var(--z-dropdown);box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
           </div>
           <button class="db-btn" id="btn-hist" onclick="toggleHist()" title="Toggle scope overlay"><span class="fx-db-ic" id="ic-scope"></span></button>
           <!-- Gamut warning's own toggle button lived here (3.1.6: "gamut button should be
@@ -10837,7 +10841,7 @@ function editorBgOpenMenu(x,y){
   document.querySelectorAll('.fx-bgmenu').forEach(m=>m.remove());
   const menu=document.createElement('div');
   menu.className='fx-bgmenu';
-  menu.style.cssText='position:fixed;z-index:9999;background:var(--glass-bg,#222);backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr,#444);border-radius:8px;padding:8px 10px;font-family:var(--sans);font-size:12px;color:var(--txt,#eee);box-shadow:var(--lift-2,0 8px 24px rgba(0,0,0,.4));display:flex;align-items:center;gap:8px';
+  menu.style.cssText='position:fixed;z-index:var(--z-system);background:var(--glass-bg,#222);backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr,#444);border-radius:8px;padding:8px 10px;font-family:var(--sans);font-size:12px;color:var(--txt,#eee);box-shadow:var(--lift-2,0 8px 24px rgba(0,0,0,.4));display:flex;align-items:center;gap:8px';
   menu.innerHTML=`<span>Editor background</span><input type="color" id="fx-bgmenu-color" style="width:28px;height:24px;padding:0;border:1px solid var(--bdr,#444);border-radius:4px;background:none;cursor:pointer">`
     +`<button class="btn bgh" id="fx-bgmenu-reset" style="padding:4px 8px;font-size:11px">Reset</button>`;
   document.body.appendChild(menu);
@@ -10909,7 +10913,7 @@ function _toastPump(){
 function _csModal(title,bodyHtml){
   const prev=document.getElementById('cs-modal-ov');if(prev)prev.remove();
   const ov=document.createElement('div');ov.id='cs-modal-ov';
-  ov.style.cssText='position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.style.cssText='position:fixed;inset:0;z-index:var(--z-modal);background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   const panel=document.createElement('div');
   panel.style.cssText='max-width:560px;width:100%;max-height:80vh;overflow-y:auto;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;padding:20px;color:var(--txt);font-family:-apple-system,sans-serif;box-shadow:var(--lift-2)';
@@ -11016,7 +11020,7 @@ function cpOpen(){
   const prev=document.getElementById('cp-ov');if(prev){prev.remove();return;}
   const cmds=_cpCommands();
   const ov=document.createElement('div');ov.id='cp-ov';
-  ov.style.cssText='position:fixed;inset:0;z-index:20001;background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding-top:12vh';
+  ov.style.cssText='position:fixed;inset:0;z-index:var(--z-modal);background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding-top:12vh';
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   const panel=document.createElement('div');
   panel.style.cssText='width:min(560px,92vw);max-height:60vh;display:flex;flex-direction:column;background:var(--glass-bg);-webkit-backdrop-filter:blur(24px) saturate(1.4);backdrop-filter:blur(24px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;box-shadow:var(--lift-2);overflow:hidden';
@@ -12480,7 +12484,7 @@ function _subjPopup(items,ev){
   document.querySelectorAll('.subj-pop').forEach(n=>n.remove());
   const pop=document.createElement('div');
   pop.className='subj-pop';
-  pop.style.cssText='position:fixed;z-index:9999;background:var(--glass-bg,var(--sur2));backdrop-filter:blur(20px);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:200px;box-shadow:var(--lift-2)';
+  pop.style.cssText='position:fixed;z-index:var(--z-system);background:var(--glass-bg,var(--sur2));backdrop-filter:blur(20px);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:200px;box-shadow:var(--lift-2)';
   items.forEach(it=>{
     const b=document.createElement('div');
     b.style.cssText='padding:7px 10px;border-radius:5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:7px';
@@ -19917,7 +19921,7 @@ async function gpImportClick(){ // entry point (button onclick)
 function gpTapOpen(uri){ // popup blocked → a real <a> the user taps (fresh activation)
   let h=document.getElementById('gp-tap-open');
   if(!h){h=document.createElement('a');h.id='gp-tap-open';h.target='_blank';h.rel='noopener';
-    h.style.cssText='position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:9999;background:var(--acc);color:#000;font:600 13px system-ui;padding:11px 18px;border-radius:22px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.45)';
+    h.style.cssText='position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:var(--z-system);background:var(--acc);color:#000;font:600 13px system-ui;padding:11px 18px;border-radius:22px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.45)';
     document.body.appendChild(h);}
   h.href=uri;h.textContent='Tap to open the Google Photos picker';
   // target=_blank is a no-op in the WKWebView shell (no browser chrome to open a tab in) —
@@ -22329,6 +22333,11 @@ function buildCatalogPage(){
     +'#catalog-root .cat-item-label{font-family:var(--sans);font-size:11px;color:var(--mut);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}'
     +'#catalog-root .cat-missing{font-family:var(--mono);font-size:11px;color:var(--err)}'
     +'#catalog-root .cat-group-title{font-family:var(--sans);font-size:16px;font-weight:600;color:var(--txt);margin:8px 0 -6px}'
+    +'#catalog-root .cat-live-badge{display:inline-block;background:var(--acc);color:#000;font-size:9px;font-weight:700;letter-spacing:.04em;border-radius:3px;padding:1px 5px;text-transform:uppercase;vertical-align:middle}'
+    // ?only=<key> (report iframe embed): drop the page margin/max-width/gap chrome so the clone
+    // fills the iframe edge-to-edge instead of floating in a centered 920px column.
+    +'#catalog-root.cat-root-compact{padding:10px;max-width:none;gap:0}'
+    +'#catalog-root .cat-item-compact{border:none;padding:0;background:transparent}'
     // A clone's .sec-active is added for parity with real markup (:has(.fx-mod) reset-icon rules
     // key off it too), but the app's own fxSection() does a GLOBAL
     // querySelectorAll('.fx-ctrl.sec-active').forEach(remove) on boot, which wipes it straight
@@ -22340,19 +22349,58 @@ function buildCatalogPage(){
   document.body.appendChild(root);
   const params=new URLSearchParams(location.search);
   const onlyPanel=params.get('panel');
+  const isLive=/^1$/.test(params.get('live'));
+  // ?only=<key>&state=<state> renders a single component/state pair with no grid chrome around
+  // it — the compact form an iframe embed (token report) wants, vs. the full review grid above.
+  const onlyKey=params.get('only');
+  const onlyState=params.get('state')||'rest';
   const STATES=['rest','disabled','modified','longlabel'];
   // Real source elements to clone from, per S1(d)'s tested Retouch pairing plus one .bpri/.fx-sub
-  // instance (contract: "the older .bpri is still used by 10 elements, so include both").
+  // instance (contract: "the older .bpri is still used by 10 elements, so include both"), plus
+  // the remaining design/components.json families reachable from the plain web build (chip,
+  // search-input, and menu live only in desktop/library-ui.js — not loaded here — so they are
+  // deliberately left out rather than silently faked; see docs/ui-workflow/component-visuals-plan.md §0/§1).
   const COMPONENTS=[
     ['.fx-ctrl (section card)','fx-ctrl','.fx-ctrl[data-fxsec="retouch"]'],
     ['.fx-row (slider row)','fx-row','#sl-heal-size'],
+    ['input[type=range] (slider)','slider','#sl-heal-size'],
     ['.fx-toggle','fx-toggle','#tg-retouch'],
     ['.fx-sub','fx-sub','.fx-ctrl[data-fxsec="export"] .fx-sub'],
     ['.btn.fx-btn-primary','fx-btn-primary','#btn-heal-paint'],
+    ['.btn (secondary)','btn','.fx-ctrl[data-fxsec="retouch"] .btn:not(.fx-btn-primary)'],
     ['.bpri','bpri','#btn-fx-export'],
     ['.seg (selectToSeg)','seg','#seg-heal-mode'],
     ['.fx-info-i','fx-info-i','#ff-retouch .fx-info-i'],
+    ['select / .fx-select','select','#sel-dcp'],
+    ['.btn-icon (icon-button)','btn-icon','.btn-icon'],
   ];
+  // Real click/drag wiring is registered with addEventListener on the ORIGINAL nodes at boot
+  // (fxSecToggle's title listener, selectToSeg's button.onclick) or via an onclick="" ATTRIBUTE
+  // that calls a global function keyed off an id (toggleFX('retouch') -> getElementById('tg-retouch')).
+  // cloneNode(true) copies neither addEventListener listeners nor JS-property onclick — and the
+  // attribute-based ones would, if left in place, mutate the REAL hidden app instance sharing this
+  // page (same ids still resolve on the original nodes) rather than the clone. _catStub() already
+  // strips all of that. Live mode re-wires a small, deliberately inert-to-the-real-app equivalent
+  // per family — never the real global functions — so a click only ever touches the clone's own
+  // classes. Families not listed here are either native (slider/select — drag/open already works
+  // with zero JS) or hover-only (button/icon-button/info-button/chip) and need no shim.
+  const LIVE_WIRE={
+    'fx-toggle':(clone)=>{clone.addEventListener('click',()=>clone.classList.toggle('on'));},
+    'fx-ctrl':(clone)=>{
+      const title=clone.querySelector(':scope > .fx-ctrl-title');
+      if(!title)return;
+      title.addEventListener('click',(e)=>{
+        if(e.target.closest('.fx-toggle,.fx-ctrl-title-reset,.fx-toggle-lb,button,input,select'))return;
+        clone.classList.toggle('fx-sec-collapsed');
+      });
+    },
+    'seg':(clone)=>{
+      clone.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+        clone.querySelectorAll('button.on').forEach(x=>x.classList.remove('on'));
+        b.classList.add('on');
+      }));
+    },
+  };
   function resolveSel(sel){
     // .fx-row/.fx-toggle/.fx-sub sources above are given as a descendant selector rooted at an
     // id — walk up to the actual real component root to clone the whole real row/card, not just
@@ -22363,23 +22411,34 @@ function buildCatalogPage(){
     if(sel==='#tg-retouch')return el; // .fx-toggle itself
     return el;
   }
+  function renderOne(label,key,sel,state,compact){
+    const src=key==='fx-row'?document.querySelector(sel)?.closest('.fx-row'):document.querySelector(sel);
+    if(!src){const item=_catItem(label,key,sel,state);root.appendChild(item);return;}
+    const wrap=document.createElement('div');wrap.className='cat-item'+(compact?' cat-item-compact':'');
+    const live=isLive&&state==='rest';
+    if(!compact)wrap.innerHTML='<div class="cat-item-label">'+label+' — '+state+(live?' <span class="cat-live-badge">live</span>':'')+'</div>';
+    const clone=src.cloneNode(true);
+    clone.removeAttribute('id');clone.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
+    clone.classList.add('sec-active');
+    _catStub(clone);_catState(clone,state);
+    if(live&&LIVE_WIRE[key])LIVE_WIRE[key](clone);
+    clone.setAttribute('data-cat',key+'-'+state);
+    wrap.appendChild(clone);root.appendChild(wrap);
+  }
+  if(onlyKey){
+    // Compact single-component mode for report iframes: no grid title, no other states, tight
+    // padding — root already gets #catalog-root's own background/border from the injected CSS.
+    root.classList.add('cat-root-compact');
+    const found=COMPONENTS.find(([,key])=>key===onlyKey);
+    if(!found){root.innerHTML='<div class="cat-missing">no COMPONENTS entry for key "'+onlyKey+'"</div>';return;}
+    renderOne(found[0],found[1],found[2],onlyState,true);
+    return;
+  }
   COMPONENTS.forEach(([label,key,sel])=>{
     if(onlyPanel)return; // panel mode below shows one section instead of the component grid
     const title=document.createElement('div');title.className='cat-group-title';title.textContent=label;
     root.appendChild(title);
-    STATES.forEach(state=>{
-      const realSel=sel==='#sl-heal-size'?null:sel;
-      const src=sel==='#sl-heal-size'?document.querySelector(sel)?.closest('.fx-row'):document.querySelector(sel);
-      if(!src){root.appendChild(_catItem(label,key,sel,state));return;}
-      const wrap=document.createElement('div');wrap.className='cat-item';
-      wrap.innerHTML='<div class="cat-item-label">'+label+' — '+state+'</div>';
-      const clone=src.cloneNode(true);
-      clone.removeAttribute('id');clone.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
-      clone.classList.add('sec-active');
-      _catStub(clone);_catState(clone,state);
-      clone.setAttribute('data-cat',key+'-'+state);
-      wrap.appendChild(clone);root.appendChild(wrap);
-    });
+    STATES.forEach(state=>renderOne(label,key,sel,state,false));
   });
   if(onlyPanel){
     const src=document.querySelector('.fx-ctrl[data-fxsec="'+onlyPanel+'"]');
