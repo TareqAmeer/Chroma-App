@@ -949,3 +949,7 @@ call `ui:test`) will currently fail on that until it's fixed.
   records the active panel in task notes. The script's runtime invocation remains unverified here.
 - The upcoming per-panel pilot is **Color**. Masks remains historical evidence; no Color
   implementation or product artifact changed.
+
+**Color pilot readiness audit — 2026-09-13:** Recorded current composition, captures, contracts, earlier implementation, and open Color backlog in `docs/ui-workflow/color-pilot-readiness.md`.
+Existing Color comparison and extracted spec are generated drafts/evidence, not approved design; no production UI or visual direction changed.
+Decision gate: user must choose the existing draft as pilot basis, supply a new reference, or name one component for targeted redesign.
