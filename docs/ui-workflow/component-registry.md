@@ -1,3 +1,8 @@
+See [component-visuals-plan.md](component-visuals-plan.md) for the plan to show real rendered
+visuals (sizing/color/state, not text rows) in the token report's Components tab, cross-app
+consistency practices from Apple/Adobe/Material, and the ongoing sprawl-prevention/maintenance
+process.
+
 # Component registry
 
 `design/components.json` is the generated, app-wide source map for repeated UI components and
