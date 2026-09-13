@@ -930,3 +930,9 @@ call `ui:test`) will currently fail on that until it's fixed.
 - **Slider contract — proposed:** Color Mixer HSL, Point Color, and Color Wheels documented from targeted source, registry, and saved Color surfaces; current gaps remain mobile, changed, keyboard, and assistive-technology states.
 - User decisions recorded: Slate/Mist changed-state fills retain functional HSL gradients; use a 44px target unless validation finds a concrete issue; associate visible labels and expose native values.
 - Recommended mapping uses existing 12px/400 SF Pro Text labels, tabular values, 4px label/control separation, and documented focus/motion rules. No production tokens or UI changed.
+
+**Phase 3A — reference-to-spec workflow — 2026-09-13**
+- Added a vendor-neutral, offline-validated reference specification format; no design or production UI was created.
+- Reference observations, repository evidence, design rules, proposals, user decisions, and approval are separate; missing states and unresolved questions stay explicit.
+- Specs name a contract family; the validator resolves its existing contract and rejects unsupported families or approval with open questions.
+- Added one-file and all-specification npm validation commands; implementation requires explicit user approval and acceptance criteria.

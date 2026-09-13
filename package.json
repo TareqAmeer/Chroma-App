@@ -69,6 +69,8 @@
     "components:check": "node scripts/build-component-registry.mjs --check && node test/component_runtime_check.mjs --check",
     "components:contracts:scaffold": "node scripts/scaffold-component-contracts.mjs",
     "components:contracts:check": "node scripts/scaffold-component-contracts.mjs --check",
+    "reference:spec:validate": "node scripts/validate-reference-spec.mjs",
+    "reference:spec:validate:all": "node scripts/validate-reference-spec.mjs --all",
     "masks:inventory": "node test/panel_extract.mjs --section=local && node test/mask_inventory_check.mjs",
     "stop-hook:test": "node --test test/stop_editor_gate_check.mjs"
   },

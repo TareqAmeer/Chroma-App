@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Chromasmith reference-to-spec record",
+  "description": "Vendor-neutral component specification record. Generated evidence and authored decisions are kept separate.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "reference", "scope", "generated", "authored", "implementation", "validation", "approval"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "template": { "const": true },
+    "id": { "type": "string", "minLength": 1 },
+    "reference": {
+      "type": "object",
+      "required": ["provenance", "views"],
+      "properties": {
+        "provenance": {
+          "type": "object",
+          "required": ["origin", "creator", "capturedAt", "usageNotes"],
+          "properties": {
+            "origin": { "type": "string" },
+            "creator": { "type": "string" },
+            "capturedAt": { "type": "string" },
+            "usageNotes": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "kind", "assetRef", "description", "visibleScope"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "kind": { "enum": ["full", "crop", "state", "annotation", "other"] },
+              "assetRef": { "type": "string" },
+              "description": { "type": "string" },
+              "visibleScope": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "scope": {
+      "type": "object",
+      "required": ["componentFamily", "registryScope"],
+      "properties": {
+        "componentFamily": { "type": "string" },
+        "registryScope": {
+          "type": "object",
+          "required": ["includedSubfamilies", "excludedFamilies", "notes"],
+          "properties": {
+            "includedSubfamilies": { "type": "array", "items": { "type": "string" } },
+            "excludedFamilies": { "type": "array", "items": { "type": "string" } },
+            "notes": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "generated": {
+      "type": "object",
+      "required": ["visibleObservations", "repositoryEvidence", "stateCoverage", "variantCoverage"],
+      "properties": {
+        "visibleObservations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "viewId", "area", "fact", "sourceClass", "sourceRef", "certainty"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "viewId": { "type": "string", "minLength": 1 },
+              "area": { "enum": ["geometry-spacing", "typography", "color-contrast", "icons", "motion-interaction", "responsive", "accessibility", "other"] },
+              "fact": { "type": "string", "minLength": 1 },
+              "measurement": {
+                "type": "object",
+                "required": ["value", "unit"],
+                "properties": { "value": { "type": ["number", "string"] }, "unit": { "type": "string", "minLength": 1 } },
+                "additionalProperties": false
+              },
+              "sourceClass": { "const": "reference" },
+              "sourceRef": { "type": "string", "minLength": 1 },
+              "certainty": { "const": "directly-visible" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "repositoryEvidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "claim", "locator", "sourceClass"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "claim": { "type": "string", "minLength": 1 },
+              "locator": { "type": "string", "minLength": 1 },
+              "sourceClass": { "const": "repository_evidence" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "stateCoverage": {
+          "type": "object",
+          "required": ["shown", "missing"],
+          "properties": {
+            "shown": { "$ref": "#/$defs/stateEvidenceList" },
+            "missing": { "$ref": "#/$defs/stateEvidenceList" }
+          },
+          "additionalProperties": false
+        },
+        "variantCoverage": {
+          "type": "object",
+          "required": ["shown", "missing"],
+          "properties": {
+            "shown": { "$ref": "#/$defs/stateEvidenceList" },
+            "missing": { "$ref": "#/$defs/stateEvidenceList" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "authored": {
+      "type": "object",
+      "required": ["applicableDesignRules", "proposedInterpretations", "userDecisions", "unresolvedQuestions"],
+      "properties": {
+        "applicableDesignRules": { "$ref": "#/$defs/ruleList" },
+        "proposedInterpretations": { "$ref": "#/$defs/proposalList" },
+        "userDecisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "decision", "decidedBy", "decidedAt", "sourceClass", "sourceRef"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "decision": { "type": "string", "minLength": 1 },
+              "decidedBy": { "type": "string", "minLength": 1 },
+              "decidedAt": { "type": "string", "minLength": 1 },
+              "sourceClass": { "const": "user_decision" },
+              "sourceRef": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "unresolvedQuestions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "question", "blocksApproval"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "question": { "type": "string", "minLength": 1 },
+              "blocksApproval": { "const": true }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "implementation": {
+      "type": "object",
+      "required": ["geometrySpacing", "typography", "colorsContrastRoles", "icons", "motionInteraction", "responsiveBehavior", "accessibility", "targets", "acceptanceCriteria"],
+      "properties": {
+        "geometrySpacing": { "$ref": "#/$defs/proposalList" },
+        "typography": { "$ref": "#/$defs/proposalList" },
+        "colorsContrastRoles": { "$ref": "#/$defs/proposalList" },
+        "icons": { "$ref": "#/$defs/proposalList" },
+        "motionInteraction": { "$ref": "#/$defs/proposalList" },
+        "responsiveBehavior": { "$ref": "#/$defs/proposalList" },
+        "accessibility": { "$ref": "#/$defs/proposalList" },
+        "targets": { "$ref": "#/$defs/proposalList" },
+        "acceptanceCriteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "criterion", "verification"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "criterion": { "type": "string", "minLength": 1 },
+              "verification": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "validation": {
+      "type": "object",
+      "required": ["requiredScreenshots", "evidence"],
+      "properties": {
+        "requiredScreenshots": { "type": "array", "items": { "type": "string" } },
+        "evidence": { "$ref": "#/$defs/proposalList" }
+      },
+      "additionalProperties": false
+    },
+    "approval": {
+      "type": "object",
+      "required": ["status", "approvedBy", "approvedAt", "userDecisionRefs"],
+      "properties": {
+        "status": { "enum": ["draft", "proposed", "approved"] },
+        "approvedBy": { "type": "string" },
+        "approvedAt": { "type": "string" },
+        "userDecisionRefs": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "proposalList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "statement", "sourceClass", "sourceRef", "basedOn"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "statement": { "type": "string", "minLength": 1 },
+          "sourceClass": { "const": "proposal" },
+          "sourceRef": { "type": "string", "minLength": 1 },
+          "basedOn": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "ruleList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "rule", "sourceClass", "sourceRef"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "rule": { "type": "string", "minLength": 1 },
+          "sourceClass": { "const": "repository_evidence" },
+          "sourceRef": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "stateEvidenceList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "state", "sourceClass", "sourceRef"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "state": { "type": "string", "minLength": 1 },
+          "sourceClass": { "enum": ["reference", "repository_evidence"] },
+          "sourceRef": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "template": true,
+  "id": "template-only",
+  "reference": {
+    "provenance": {
+      "origin": "",
+      "creator": "",
+      "capturedAt": "",
+      "usageNotes": ""
+    },
+    "views": []
+  },
+  "scope": {
+    "componentFamily": "",
+    "registryScope": {
+      "includedSubfamilies": [],
+      "excludedFamilies": [],
+      "notes": ""
+    }
+  },
+  "generated": {
+    "visibleObservations": [],
+    "repositoryEvidence": [],
+    "stateCoverage": {
+      "shown": [],
+      "missing": []
+    },
+    "variantCoverage": {
+      "shown": [],
+      "missing": []
+    }
+  },
+  "authored": {
+    "applicableDesignRules": [],
+    "proposedInterpretations": [],
+    "userDecisions": [],
+    "unresolvedQuestions": []
+  },
+  "implementation": {
+    "geometrySpacing": [],
+    "typography": [],
+    "colorsContrastRoles": [],
+    "icons": [],
+    "motionInteraction": [],
+    "responsiveBehavior": [],
+    "accessibility": [],
+    "targets": [],
+    "acceptanceCriteria": []
+  },
+  "validation": {
+    "requiredScreenshots": [],
+    "evidence": []
+  },
+  "approval": {
+    "status": "draft",
+    "approvedBy": "",
+    "approvedAt": "",
+    "userDecisionRefs": []
+  }
+}
