@@ -18,29 +18,35 @@ if [ -f "$STATE_DIR/active-panel" ]; then
   if [ -n "$panel" ]; then
     hash_file="$STATE_DIR/panel-hash-$panel"
     block_file="$STATE_DIR/panel-blocks-$panel"
+    report_file="$STATE_DIR/panel-last-failure-$panel.json"
     cur_hash=$(shasum chromasmith-22.html | awk '{print $1}')
     prev_hash=$(cat "$hash_file" 2>/dev/null || echo "")
     if [ "$cur_hash" = "$prev_hash" ]; then
-      : # unchanged since the last check for this panel — skip the ~20s diff entirely
+      : # this exact panel+hash passed before — safe to skip the expensive diff
     else
-      bash build-desktop.sh >/tmp/panel-diff-build.log 2>&1
+      if ! bash build-desktop.sh >"$STATE_DIR/panel-build-$panel.log" 2>&1; then
+        echo "Panel '$panel' build failed; see $STATE_DIR/panel-build-$panel.log" >&2
+        exit 2
+      fi
       diff_json=$(node test/editor_wireframe_diff.mjs --panel "$panel" --json 2>/tmp/panel-diff-err.log)
       diff_code=$?
-      echo "$cur_hash" > "$hash_file"
       if [ $diff_code -ne 0 ]; then
+        printf '%s\n' "$diff_json" > "$report_file"
         blocks=$(cat "$block_file" 2>/dev/null || echo 0)
         blocks=$((blocks + 1))
         echo "$blocks" > "$block_file"
         if [ "$blocks" -ge 3 ]; then
-          echo "stopped after 3 rounds — see the diff" >&2
-          echo "$diff_json" >&2
+          echo "Panel '$panel' still fails after $blocks rounds — human attention is required." >&2
+          echo "Full mismatch report retained at $report_file" >&2
         else
           echo "Panel '$panel' wireframe diff found mismatches (block $blocks/3):" >&2
-          echo "$diff_json" >&2
-          exit 2
         fi
+        echo "$diff_json" >&2
+        exit 2
       fi
-      # clean pass (or the 3rd-strike stop above) — nothing to keep blocking on right now
+      # Only a clean run earns the panel+source hash cache and clears stale failure state.
+      echo "$cur_hash" > "$hash_file"
+      rm -f "$block_file" "$report_file" "$STATE_DIR/panel-build-$panel.log"
     fi
   fi
 fi

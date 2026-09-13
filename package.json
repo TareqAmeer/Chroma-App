@@ -65,8 +65,10 @@
     "tokens:check": "node scripts/build-tokens.mjs --check",
     "tokens:verify": "if [ -x .calibvenv/bin/python3 ]; then .calibvenv/bin/python3 design/verify_tokens.py; else python3 design/verify_tokens.py; fi",
     "tokens:gates": "npm run tokens:check && npm run tokens:verify",
-    "components:build": "node scripts/build-component-registry.mjs",
-    "components:check": "node scripts/build-component-registry.mjs --check"
+    "components:build": "node scripts/build-component-registry.mjs && node test/component_runtime_check.mjs",
+    "components:check": "node scripts/build-component-registry.mjs --check && node test/component_runtime_check.mjs --check",
+    "masks:inventory": "node test/panel_extract.mjs --section=local && node test/mask_inventory_check.mjs",
+    "stop-hook:test": "node --test test/stop_editor_gate_check.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.4.1",

@@ -24,6 +24,7 @@ const argv = process.argv.slice(2);
 const panelFlagIdx = argv.indexOf('--panel');
 const PANEL_ID = panelFlagIdx >= 0 ? argv[panelFlagIdx + 1] : null;
 const JSON_MODE = argv.includes('--json');
+const WRITE_BASELINE_CANDIDATE = argv.includes('--write-baseline-candidate');
 
 const REPORT_PATH = 'test/output/editor_wireframe_diff_report.json';
 // Findings are ZONE-qualified as `[zone] [theme] label: prop — ...` so the shared allowlist's
@@ -264,7 +265,20 @@ if (PANEL_ID) {
   for (let i = 0; i < pairs.length; i++) {
     const key = String(i);
     const w = wfStyles[key], a = appStyles[key];
-    if (!w || !a) continue;
+    if (!w || !a) {
+      found.push({
+        key: `${pairs[i].app}|__missing__`,
+        selector: pairs[i].app,
+        property: '__missing__',
+        expectedDesignValue: w ? 'present' : 'wireframe selector present',
+        actualValue: a ? 'present' : 'missing',
+        expectedToken: null,
+        panel: PANEL_ID,
+        control: pairs[i].label || pairs[i].wf,
+        reason: w ? 'Application control or selector could not be found.' : 'Wireframe control or selector could not be found.',
+      });
+      continue;
+    }
     const authored = wfAuthored[key] || [];
     const specNode = spec && wfPaths[i] ? walkSpecTree(spec.tree, wfPaths[i]) : null;
     for (const p of SCOPED_PROPS) {
@@ -276,38 +290,52 @@ if (PANEL_ID) {
       found.push({
         key: `${pairs[i].app}|${p}`,
         selector: pairs[i].app,
-        prop: p,
-        expected: w[p],
-        actual: a[p],
+        property: p,
+        expectedDesignValue: w[p],
+        actualValue: a[p],
         expectedToken: tok?.token ?? tok?.appVar ?? null,
+        panel: PANEL_ID,
+        control: pairs[i].label || pairs[i].wf,
+        reason: null,
       });
     }
   }
 
-  // Baseline: this repo-wide sweep's PROPS deliberately excludes padding/gap (unresolved
-  // convention question, comment above) and CONTROL_PAIRS has never been diffed/allowlisted at
-  // all before this — so a naive first run would report every pre-existing, untriaged gap as a
-  // "defect", not just a real new regression. Auto-seed a per-panel baseline from the first run
-  // (nothing planted yet) and only report a finding whose ACTUAL value has moved since that
-  // baseline — not just whose key is new — so a further drift on an already-known-mismatched
-  // prop (e.g. the app's pre-existing 9px-vs-0px padding gap drifting to some other value) still
-  // gets caught; a bare key-presence check would silently swallow that, since the key was already
-  // "known bad" at seed time. Keyed by selector+prop, same idea as recheck()/writeReport() above.
-  const baselinePath = path.join(ROOT, 'test', 'output', 'panel_diff_baseline', `${PANEL_ID}.json`);
-  let baseline = null;
-  try { baseline = JSON.parse(await readFile(baselinePath, 'utf8')).entries; } catch { /* first run */ }
-  if (!baseline) {
-    await mkdir(path.dirname(baselinePath), { recursive: true });
-    const entries = Object.fromEntries(found.map((f) => [f.key, f.actual]));
-    await writeFile(baselinePath, JSON.stringify({ generatedAt: new Date().toISOString(), entries }, null, 2));
-    if (JSON_MODE) console.log('[]');
-    else console.log('(baseline seeded — nothing to compare against yet, re-run after a real change)');
+  const reviewedPath = path.join(ROOT, 'test', 'baselines', 'panel-diff-reviewed', `${PANEL_ID}.json`);
+  const candidatePath = path.join(ROOT, 'test', 'baselines', 'panel-diff-candidates', `${PANEL_ID}.json`);
+  if (WRITE_BASELINE_CANDIDATE) {
+    await mkdir(path.dirname(candidatePath), { recursive: true });
+    const candidate = {
+      schemaVersion: 1,
+      status: 'candidate-unreviewed',
+      panel: PANEL_ID,
+      generatedAt: new Date().toISOString(),
+      entries: found.map(({ key, ...entry }) => ({ ...entry, reason: null })),
+    };
+    await writeFile(candidatePath, JSON.stringify(candidate, null, 2) + '\n');
+    const report = { status: candidate.status, panel: PANEL_ID, candidatePath: path.relative(ROOT, candidatePath), differenceCount: candidate.entries.length, differences: candidate.entries };
+    console.log(JSON.stringify(report, null, JSON_MODE ? 0 : 2));
     process.exit(0);
   }
-  const out = found.filter((f) => baseline[f.key] === undefined || baseline[f.key] !== f.actual).map(({ key, ...rest }) => rest);
-  if (JSON_MODE) console.log(JSON.stringify(out));
-  else console.log(out);
-  process.exit(out.length ? 1 : 0);
+
+  let reviewed;
+  try { reviewed = JSON.parse(await readFile(reviewedPath, 'utf8')); } catch {
+    const failure = [{ panel: PANEL_ID, selector: null, property: '__baseline__', expectedDesignValue: 'reviewed baseline file', actualValue: 'missing', expectedToken: null, reason: `Required reviewed baseline missing: ${path.relative(ROOT, reviewedPath)}. Generate a candidate explicitly with --write-baseline-candidate; do not copy or approve it without human review.` }];
+    console.log(JSON.stringify(failure));
+    process.exit(1);
+  }
+  if (reviewed.status !== 'reviewed' || !Array.isArray(reviewed.entries) || reviewed.entries.some((e) => !e.reason)) {
+    console.log(JSON.stringify([{ panel: PANEL_ID, selector: null, property: '__baseline__', expectedDesignValue: 'status=reviewed and a reason on every entry', actualValue: 'invalid reviewed baseline', expectedToken: null, reason: `Reviewed baseline is invalid: ${path.relative(ROOT, reviewedPath)}` }]));
+    process.exit(1);
+  }
+  const accepted = new Map(reviewed.entries.map((e) => [`${e.selector}|${e.property}`, e]));
+  const regressions = found.filter((f) => {
+    const prior = accepted.get(f.key);
+    return !prior || prior.actualValue !== f.actualValue || prior.expectedDesignValue !== f.expectedDesignValue || prior.expectedToken !== f.expectedToken;
+  }).map(({ key, ...rest }) => ({ ...rest, classification: 'new-regression' }));
+  if (JSON_MODE) console.log(JSON.stringify(regressions));
+  else console.log(regressions);
+  process.exit(regressions.length ? 1 : 0);
 }
 
 const b = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });

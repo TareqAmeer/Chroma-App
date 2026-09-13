@@ -791,13 +791,11 @@ call `ui:test`) will currently fail on that until it's fixed.
   exact 4-file `open_dark/open_light(+crop)` shape for `kind:"chrome"` too — same reasoning it
   already applied to menu/modal/confirm/toast. Re-run dropped findings from 32 to 2 real ones
   (`lib-review-grid`, `lib-dock-reopen` — both already known partial/unreachable).
-- Also made `surface_coverage_check.mjs`'s covers-verification loop recognize a bare `reloadQuery`
-  step as an explicit no-op (it already reloads fresh per-surface) instead of silently falling
-  through every branch, for clarity next to `surface_capture.mjs`'s version. `lib-compare-bar`/
-  `lib-compare-panes` still show `COVERS_HIDES_SURFACE` — traced to the harness not replicating
-  `surface_capture.mjs`'s exact pre-state before `lib-compare`'s openSteps; real images already
-  exist in `design/asbuilt/lib-compare` (confirmed by `capture_audit`), so this is a harness gap,
-  not a missing capture. Left as backlog, noted in the review page's gap callout.
+- `surface_coverage_check.mjs` still reports `lib-compare-bar`/`lib-compare-panes` as
+  `COVERS_HIDES_SURFACE`. Existing image files prove only that an image was written, not that
+  these children were open, so this remains a real integrity failure rather than being waived as
+  a harness gap. The Phase 1 pass now applies each surface's `reloadQuery` to the covers-check's
+  fresh boot, but the real Compare entry sequence still does not produce those children there.
 - Verified the original 62 surfaces' data/UI are unchanged: same DATA object shape, same
   `ALL_IDS`/triage/db wiring; `read_db` on collection `triage` returned zero documents both
   before and after (no triage decisions had been saved yet, so nothing was at risk of loss).
@@ -839,3 +837,57 @@ call `ui:test`) will currently fail on that until it's fixed.
 - Coverage debt is explicit: 22 dynamic declarations and 124 registrations without a stable selector remain source-locatable and cannot silently count as selector-covered.
 - `scripts/query-components.mjs` gives small offline `--summary`, `--family`, `--icon`, or `--text` results so agents do not read the 10,000-line registry.
 - `editor:components-check` is blocking in `editor:gates`; `components:build`/`components:check` are npm commands. S12/S13 prompts now require registry queries for shared-component work.
+
+**Phase 1 trust repairs — 2026-09-12 — in progress, waiting on baseline/capture decisions**
+- Scoped panel diffs no longer seed `test/output` and approve their first observation. Normal
+  checks require `test/baselines/panel-diff-reviewed/<panel>.json`, never write it, and report
+  missing controls/selectors. Explicit `--write-baseline-candidate` writes an unreviewed,
+  structured candidate under `test/baselines/panel-diff-candidates/` with panel, selector,
+  control, property, design value, actual value, expected token, and acceptance-reason slot.
+- Masks candidate currently has 8 differences. One stale selector was repaired first:
+  wireframe `#tg-msk-edge` now maps to the real `#ck-msk-selview-outline`; the remaining 8 are
+  the Overlay opacity height plus seven intentional-looking-but-unapproved native-checkbox vs
+  wireframe-switch style differences. None is accepted. See the candidate file and user decision.
+- Stop hook now caches only a passing panel+source hash; failures remain blocking indefinitely,
+  retain their full report under `.claude/state/`, and report human attention after round 3.
+  Clean runs clear stale counter/report state. `test/stop_editor_gate_check.mjs` proves unchanged
+  failures, three-plus rounds, clean reset/cache, and per-panel isolation (3/3 pass).
+- Masks extraction discovers the live + Mask menu's 10 types (radial, linear, brush, sky, skin,
+  coat, AI, colour, luminance, depth), enters each through `mskAdd`, and merges 13 contexts
+  (no-mask, every selected type, multi-selected, muted+inverted) into 94 stable controls with
+  visibility context. Model-backed additions are invoked deterministically with native model
+  calls rejected by the offline harness. `mask_inventory_check.mjs` snapshots every
+  state's visible identity set so a missing type or conditional control fails. Masks proposal
+  validation is now 0 hard failures; the approved compact label `Range` is explicitly mapped to
+  the runtime `Hue range` without weakening other panels.
+- Surface-count discrepancy resolved from repository history and arithmetic: the pre-S6d set was
+  62 surfaces and chunks A/B/C added 35, so the source-backed total is **97**, not 98. Every
+  revision from `af262b6` through HEAD contains 97 unique IDs; no 98th ID was added, removed,
+  renamed, duplicated, or folded. The review-page note's “84 of 98” was an arithmetic typo.
+  Current repository assets: 83/97 surfaces have dedicated WebP captures, 2 of those are partial;
+  14 have no dedicated WebP (persistent chrome judged in whole-window captures, splash stand-in,
+  and the unresolved library cases). `fx-hist` and `fx-more-menu` were reachable despite stale
+  `opened:null`; both are now marked reachable and captured through `toggleHist()`/`fxMoreMenu()`.
+- Capture audit is deliberately still red: `lib-review-grid`, `lib-thumb-progress`,
+  `lib-dock-reopen`, and `lib-viewbar` remain unapproved under “Needs user approval to skip”. It
+  also reports `hq-offline-quit-modal`'s light capture as dark; this is not approved or hidden.
+  The audit now evaluates unreachable before surface kind, so partial images cannot bypass
+  approval, and uses top-chrome brightness for true-black Compare canvases instead of a false
+  whole-image theme failure.
+- Surface coverage now has 0 missing layout regions. Parent mappings for `hdr-info` and
+  `lib-bwm-bar` were repaired to their actual `hdr-about` and `lib-blocking-wait-modal` parents.
+  Integrity remains red on the four unapproved unreachable surfaces plus `lib-compare-bar` and
+  `lib-compare-panes`, whose real Compare entry sequence still does not render them in the
+  independent covers check. No exception was added for any of these findings.
+- Runtime component validation now supplements source scanning. `components-runtime.json` maps
+  983 visible appearances across 18 exercised states (Editor, Library, Match, Copy, Collage,
+  Guide, every dynamic Masks type, catalogue, mobile) into 59 variants, preserving shared declaration keys
+  and 676 explicit unresolved semantic records. `components:check` compares both registries;
+  `query-components.mjs --runtime|--state` keeps results concise. Semantic icon source queries
+  such as `--icon heart` remain unchanged and blocking through the source registry.
+- **User decision — 2026-09-13:** approved all 8 current Masks scoped-diff entries and the four
+  named capture exceptions (`lib-review-grid`, `lib-thumb-progress`, `lib-dock-reopen`,
+  `lib-viewbar`) for now. The Masks candidate was promoted to the reviewed baseline with a reason
+  on every entry; the four surfaces now carry `approvedBy:"user"`. This approval does not hide
+  the separately reported dark light-theme `hq-offline-quit-modal` capture or the two Compare
+  child integrity failures.

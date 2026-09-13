@@ -198,15 +198,15 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > (1) Add `--panel <id> --json` to `test/editor_wireframe_diff.mjs`. It outputs only `[{selector, prop, expected, actual, expectedToken}]` for that panel's generated pairs; `expectedToken` comes from `design/specs/<panel>.json`.
 > (2) Extend the Stop hook. When `.claude/state/active-panel` exists:
 >    - Run the scoped diff and exit 2 with the JSON list while there are mismatches.
->    - Skip the run when `chromasmith-22.html`'s hash hasn't changed since the last run (store the hash in `.claude/state/`), so a turn that didn't touch the app doesn't pay 20s.
->    - Cap it at 3 blocks per panel (a counter in `.claude/state/`). After that, exit 0 with "stopped after 3 rounds — see the diff".
+>    - Skip the run only when the same panel and `chromasmith-22.html` hash previously passed. A failed hash is never cached as clean.
+>    - After 3 failed rounds, retain the complete report under `.claude/state/`, say that human attention is required, and continue returning failure until the mismatch is resolved or accepted through the reviewed-baseline process.
 > (3) Write `test/panel_pair_shots.mjs --panel <id>`. It writes wireframe and app side by side, in both themes, for the rest state and any other state the wireframe itself defines (read which it has; a static wireframe may only have rest).
 >
 > Test on the real file, then restore it with `git checkout -- chromasmith-22.html`; never commit the planted change.
 > Done when:
 > - a planted 4px padding mismatch in the Retouch panel blocks the turn with exactly one typed defect
 > - removing it clears the block
-> - planting it again three times ends in the "stopped after 3 rounds" message
+> - planting it again three times continues to fail with the human-attention message and retained report
 > - an unchanged-file turn skips the diff
 
 **S10: Design-stage guardrails** (Opus 5)

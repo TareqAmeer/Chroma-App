@@ -157,6 +157,10 @@ const sliderIndex = new Map();   // normLabel -> [{min,max,section,id}]
 const checkboxIndex = new Map(); // normLabel -> [{section,id}]
 const selectIndex = new Map();   // normLabel -> [{options,section,id}]
 const labelExists = new Set();   // any label/option/button text seen anywhere in-scope, normalized
+// Reviewed Masks proposal vocabulary: the compact proposal calls the real Hue range slider
+// "Range". Keep the exact runtime label in the inventory and make the approved presentation
+// alias explicit here instead of corrupting extraction or globally weakening label matching.
+const PANEL_LABEL_ALIASES = panelKey === 'masks' ? new Map([['range', 'hue range']]) : new Map();
 
 function push(map, key, val) {
   if (!map.has(key)) map.set(key, []);
@@ -190,7 +194,7 @@ for (const m of controlsFragment.matchAll(
   /<div class="slider-row"><div class="sr-top"><span>(.*?)<\/span>.*?<\/div><input type="range" min="(-?[\d.]+)" max="(-?[\d.]+)" value="(-?[\d.]+)">/g,
 )) {
   const label = stripTags(m[1]);
-  const key = normLabel(label);
+  const key = PANEL_LABEL_ALIASES.get(normLabel(label)) || normLabel(label);
   const min = Number(m[2]), max = Number(m[3]);
   const candidates = sliderIndex.get(key);
   if (!candidates) {

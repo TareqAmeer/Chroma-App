@@ -66,14 +66,16 @@ async function analyzeImage(filePath) {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
     const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    let sum = 0, sumSq = 0, n = 0;
+    let sum = 0, sumSq = 0, n = 0, topSum = 0, topN = 0;
     for (let i = 0; i < data.length; i += 4 * 37) { // sample every 37th pixel — plenty for mean/variance, much faster than every pixel
       const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
       sum += lum; sumSq += lum * lum; n++;
+      const pixel = i / 4;
+      if (Math.floor(pixel / canvas.width) < Math.max(1, canvas.height * 0.1)) { topSum += lum; topN++; }
     }
     const mean = sum / n;
     const variance = sumSq / n - mean * mean;
-    return { width: canvas.width, height: canvas.height, meanLuma: mean, stdLuma: Math.sqrt(Math.max(0, variance)) };
+    return { width: canvas.width, height: canvas.height, meanLuma: mean, topLuma: topSum / topN, stdLuma: Math.sqrt(Math.max(0, variance)) };
   }, b64);
 }
 
@@ -84,6 +86,15 @@ for (const entry of surfacesDoc.surfaces) {
   const dir = path.join(ROOT, 'design/asbuilt', entry.id);
   let actualFiles = [];
   try { actualFiles = (await readdir(dir)).filter((f) => f.endsWith('.webp')); } catch { /* no dir at all */ }
+
+  if (entry.opened !== true || entry.unreachable === true) {
+    // An unreachable marker is never self-approving, regardless of surface kind or whether a
+    // partial image happens to exist. Splash is a documented static wireframe stand-in.
+    const approved = entry.approvedBy === 'user' || entry.id === 'splash';
+    if (!approved) findings.push({ id: entry.id, kind: 'NOT_CAPTURED', detail: `marked unreachable (${String(entry.note || 'no reason given').slice(0, 140)}). Find a real way to open it, or get the user to approve skipping it (approvedBy:"user")` });
+    surfaceResults.push({ id: entry.id, ok: approved, note: approved ? 'documented stand-in/user-approved skip' : 'NOT CAPTURED' });
+    continue;
+  }
 
   if (expected === null) {
     // 2026-09-12: S6d chunks A/B/C gave a real "open_dark/open_light(+crop)" capture to small
@@ -99,17 +110,6 @@ for (const entry of surfacesDoc.surfaces) {
     surfaceResults.push({ id: entry.id, ok: actualFiles.length === 0 || isRecognizedChromeCapture });
     continue;
   }
-  if (entry.opened !== true) {
-    // 2026-09-11: this used to be ok:true — "unreachable this pass" silently passed the audit, and
-    // 8 real surfaces (Library info panel, compare view, 5 dialogs, import bar) ended up with no
-    // images and no alert. Unreachable now FAILS unless the user has explicitly accepted it
-    // (entry.approvedBy === 'user', with a reason). Splash has an approved wireframe stand-in.
-    const approved = entry.approvedBy === 'user' || entry.id === 'splash';
-    if (!approved) findings.push({ id: entry.id, kind: 'NOT_CAPTURED', detail: `no images — marked unreachable (${String(entry.note || 'no reason given').slice(0, 140)}). Find a real way to open it, or get the user to approve skipping it (approvedBy:"user")` });
-    surfaceResults.push({ id: entry.id, ok: approved, note: approved ? 'user-approved skip' : 'NOT CAPTURED' });
-    continue;
-  }
-
   const missing = expected.filter((f) => !actualFiles.includes(f));
   const extra = actualFiles.filter((f) => !expected.includes(f));
   if (missing.length) findings.push({ id: entry.id, kind: 'MISSING_IMAGES', detail: missing.join(',') });
@@ -142,7 +142,10 @@ for (const entry of surfacesDoc.surfaces) {
       const isCrop = f.includes('crop') || f.startsWith('panel') || f.startsWith('open_');
       const lo = isCrop ? (theme === 'dark' ? -1 : 100) : (theme === 'dark' ? -1 : 60);
       const hi = isCrop ? (theme === 'dark' ? 140 : 999) : (theme === 'dark' ? 170 : 999);
-      if (info.meanLuma < lo || info.meanLuma > hi) {
+      // Compare/full-canvas surfaces can be mostly true black in BOTH themes. Their top chrome
+      // remains theme-coloured, so a bright top band is valid evidence for light mode.
+      const lightChromeMatches = theme === 'light' && info.topLuma >= 100;
+      if (!lightChromeMatches && (info.meanLuma < lo || info.meanLuma > hi)) {
         findings.push({ id: entry.id, kind: 'THEME_MISMATCH', detail: `${f}: meanLuma=${info.meanLuma.toFixed(1)}, expected ${theme} theme range [${lo},${hi}]` });
         surfaceOk = false;
       }

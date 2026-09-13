@@ -149,3 +149,22 @@ open/closed). This is enforced, not advisory:
   `design/surfaces.json` entry; being inside a bigger surface doesn't count. Advisory until S6b
   adds the chrome entries (T60), then blocking.
 
+## Reviewed panel-diff baselines
+
+Scoped panel checks never create or update an accepted baseline. A normal check fails when its
+reviewed file is absent:
+
+```bash
+node test/editor_wireframe_diff.mjs --panel masks --json
+```
+
+Generate an unreviewed candidate only with the explicit flag below. It writes to the committed
+`test/baselines/panel-diff-candidates/` review queue and prints a concise difference report.
+
+```bash
+node test/editor_wireframe_diff.mjs --panel masks --json --write-baseline-candidate
+```
+
+Do not move a candidate to `test/baselines/panel-diff-reviewed/` until the user has reviewed every
+entry and supplied its acceptance reason. Missing controls/selectors are findings, not acceptable
+empty observations. Reviewed files require `status: "reviewed"` and a non-empty reason per entry.

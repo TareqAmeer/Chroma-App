@@ -61,7 +61,7 @@ const results = await page.evaluate((inv) => {
     'white glow': 'tg-hal-white',
     'no remjet': 'tg-hal-noremjet',
     'extreme': 'tg-hal-extreme',
-    'edge only': 'tg-msk-edge',
+    'edge only': 'ck-msk-selview-outline',
   };
   // Segments that don't match by label — map by section + context
   const SEGMENT_MAP = {

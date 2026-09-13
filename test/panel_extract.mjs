@@ -69,7 +69,7 @@ await settleForCapture(page);
 const sectionKeys = await page.evaluate(() =>
   [...document.querySelectorAll('.fx-ctrl[data-fxsec]')].map((el) => el.dataset.fxsec).filter((k) => k && k !== '${cardOrName}'));
 
-const EXTRACT_FN = `(key) => {
+const EXTRACT_FN = `(key, stateContext) => {
   const card = document.querySelector('.fx-ctrl[data-fxsec="' + key + '"]');
   if (!card) return null;
 
@@ -130,15 +130,24 @@ const EXTRACT_FN = `(key) => {
     if (seen.has(el)) return;
     seen.add(el);
     const label = labelFor(el);
+    const groupHeading = (() => {
+      const grp = el.closest('.msk-group, [data-group]');
+      const hd = grp && grp.querySelector('.msk-group-hd, .grp-label');
+      return hd ? hd.textContent.trim().replace(/\\s+/g, ' ').slice(0, 60) : null;
+    })();
+    const stablePart = el.id ? '#' + el.id
+      : el.dataset && el.dataset.k ? '[data-k="' + el.dataset.k + '"]'
+      : el.getAttribute('onclick') ? 'onclick:' + el.getAttribute('onclick').replace(/\\s+/g, ' ').slice(0, 100)
+      : null;
+    const identity = stablePart || [key, groupHeading || 'ungrouped', kind, label || 'unlabelled'].join('::');
     controls.push({
       kind, label, unlabeled: !label,
       id: el.id || null,
+      selector: el.id ? '#' + CSS.escape(el.id) : (el.dataset && el.dataset.k ? '.fx-ctrl[data-fxsec="' + key + '"] [data-k="' + CSS.escape(el.dataset.k) + '"]' : null),
+      identity,
+      unresolvedIdentity: !identity,
       visible: visible(el),
-      groupHeading: (() => {
-        const grp = el.closest('.msk-group, [data-group]');
-        const hd = grp && grp.querySelector('.msk-group-hd, .grp-label');
-        return hd ? hd.textContent.trim().replace(/\\s+/g, ' ').slice(0, 60) : null;
-      })(),
+      groupHeading,
       ...extra,
     });
   };
@@ -170,7 +179,7 @@ const EXTRACT_FN = `(key) => {
   });
 
   return {
-    key, title: titleText, defaultOn,
+    key, title: titleText, defaultOn, stateContext: stateContext || null,
     hasToggle: !!card.querySelector('.fx-toggle'),
     controlCount: controls.length,
     controls,
@@ -185,8 +194,106 @@ for (const key of targets) {
   // calling the internal fxSection() function directly.
   await page.evaluate((k) => { if (typeof fxSection === 'function') fxSection(k, true); }, key);
   await page.waitForTimeout(120);
-  const result = await page.evaluate(`(${EXTRACT_FN})(${JSON.stringify(key)})`);
+  const result = await page.evaluate(`(${EXTRACT_FN})(${JSON.stringify(key)}, null)`);
   if (result) inventory[key] = result;
+}
+
+// Masks are rebuilt conditionally from the selected mask. Discover the real creation choices
+// from the live + Mask menu, then enter every type through that menu. A no-mask snapshot alone
+// is not an inventory of this panel.
+if ((!ONLY_SECTION || ONLY_SECTION === 'local') && inventory.local) {
+  // Keep the inventory deterministic and offline while still exercising the application's real
+  // failure/unavailable branches: model invocations fail promptly instead of loading native
+  // inference work that this Chromium harness cannot complete.
+  await page.evaluate(() => {
+    const core = window.__TAURI__ && window.__TAURI__.core;
+    if (!core || core.__panelExtractWrapped) return;
+    const realInvoke = core.invoke.bind(core);
+    core.invoke = (cmd, args) => /^(sam_|sam2_|depth_|faceparse_)/.test(cmd)
+      ? Promise.reject(new Error('model unavailable in offline inventory harness'))
+      : realInvoke(cmd, args);
+    core.__panelExtractWrapped = true;
+    // Rendering the same photo after every inventory-only mask creation adds no DOM evidence.
+    // mskAdd still creates the real state and calls mskRebuild; only the pixel render is skipped.
+    window.__panelExtractFxUpdate = window.fxUpdate;
+    window.fxUpdate = () => {};
+  });
+  const addButton = page.getByRole('button', { name: '+ Mask', exact: true });
+  await addButton.click();
+  const maskTypes = await page.locator('.msk-more-menu .msk-more-it').evaluateAll((buttons) => buttons.map((b) => ({
+    label: b.textContent.trim().replace(/\s+/g, ' '),
+    type: (b.getAttribute('onclick') || '').match(/mskAdd\('([^']+)'\)/)?.[1] || null,
+  })).filter((x) => x.type));
+  await page.keyboard.press('Escape');
+  if (!DUMP_JSON) console.log(`[masks] discovered ${maskTypes.map((x) => x.type).join(', ')}`);
+  const states = [];
+  const extractLocal = async (context) => {
+    await page.waitForTimeout(20);
+    const snap = await page.evaluate(`(${EXTRACT_FN})('local', ${JSON.stringify(context)})`);
+    if (snap) states.push(snap);
+  };
+  await page.evaluate(() => { fxState.masks = []; mskSel = 0; mskRebuild(); });
+  await extractLocal({ name: 'no-mask', maskTypes: [] });
+  for (const mt of maskTypes) {
+    if (!DUMP_JSON) console.log(`[masks] extracting ${mt.type}`);
+    await page.evaluate(() => { fxState.masks = []; mskSel = 0; mskRebuild(); });
+    // mskAdd is the same real application function invoked by the discovered menu item. Calling
+    // it directly avoids Playwright waiting on transient menus while background model work starts.
+    await page.evaluate((type) => {
+      if (type === 'depth' && typeof curItem === 'function' && curItem()?.img) curItem().img._depthMapAttempted = true;
+      mskAdd(type);
+    }, mt.type);
+    await page.waitForTimeout(30);
+    await extractLocal({ name: `selected-${mt.type}`, maskTypes: [mt.type], selected: mt.type });
+  }
+  // Multi-mask management changes the available actions. Muting and inversion use the real app
+  // commands, then rebuild exactly as the UI buttons do.
+  await page.evaluate(() => { fxState.masks = []; mskSel = 0; mskRebuild(); });
+  for (const type of ['radial', 'linear']) {
+    await page.evaluate((maskType) => mskAdd(maskType), type);
+  }
+  await page.locator('#local-ctl .msk-more').click();
+  const managementNormal = await page.locator('.msk-more-menu .msk-more-it').evaluateAll((buttons) => buttons.map((el) => ({
+    kind: 'button', label: el.textContent.trim().replace(/\s+/g, ' '), unlabeled: false,
+    id: el.id || null, selector: null,
+    identity: 'local::management::button::' + el.textContent.trim().replace(/\s+/g, ' '),
+    unresolvedIdentity: false, visible: el.getBoundingClientRect().width > 0, groupHeading: 'Mask management',
+  })));
+  await page.keyboard.press('Escape');
+  await extractLocal({ name: 'multiple-selected', maskTypes: ['radial', 'linear'], selected: 'linear' });
+  states.at(-1).controls.push(...managementNormal);
+  states.at(-1).controlCount = states.at(-1).controls.length;
+  await page.evaluate(() => mskToggleMute());
+  await page.evaluate(() => mskInvert());
+  await extractLocal({ name: 'multiple-muted-inverted', maskTypes: ['radial', 'linear'], selected: 'linear', muted: true, inverted: true });
+  await page.locator('#local-ctl .msk-more').click();
+  const management = await page.locator('.msk-more-menu .msk-more-it').evaluateAll((buttons) => buttons.map((el) => ({
+    kind: 'button', label: el.textContent.trim().replace(/\s+/g, ' '), unlabeled: false,
+    id: el.id || null, selector: null,
+    identity: 'local::management::button::' + el.textContent.trim().replace(/\s+/g, ' '),
+    unresolvedIdentity: false, visible: el.getBoundingClientRect().width > 0,
+    groupHeading: 'Mask management',
+  })));
+  states.at(-1).controls.push(...management);
+  states.at(-1).controlCount = states.at(-1).controls.length;
+  await page.keyboard.press('Escape');
+
+  const merged = new Map();
+  for (const state of states) for (const control of state.controls) {
+    const id = control.identity;
+    if (!id) continue;
+    if (!merged.has(id)) merged.set(id, { ...control, contexts: [] });
+    const entry = merged.get(id);
+    const context = { ...state.stateContext, visible: control.visible };
+    if (!entry.contexts.some((x) => JSON.stringify(x) === JSON.stringify(context))) entry.contexts.push(context);
+  }
+  inventory.local = {
+    ...inventory.local,
+    discoveredMaskTypes: maskTypes,
+    states: states.map((s) => ({ context: s.stateContext, controlCount: s.controlCount })),
+    controls: [...merged.values()],
+  };
+  inventory.local.controlCount = inventory.local.controls.length;
 }
 
 await page.close();

@@ -529,7 +529,7 @@ export const CONTROL_PAIRS = [
   },
   {
     "wf": ".tp-panel[data-panel=\"masks\"] button.sw",
-    "app": "#tg-msk-edge",
+    "app": "#ck-msk-selview-outline",
     "label": "Edge only",
     "panel": "masks",
     "fxsec": null

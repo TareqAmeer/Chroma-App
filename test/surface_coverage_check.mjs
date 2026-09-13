@@ -138,7 +138,7 @@ server.close();
 // given up on and silently passed. Both now fail here.
 const integrity = [];
 for (const s of surfaces) {
-  if (s.opened !== true && s.id !== 'splash' && s.approvedBy !== 'user') {
+  if ((s.opened !== true || s.unreachable === true) && s.id !== 'splash' && s.approvedBy !== 'user') {
     integrity.push({ id: s.id, kind: 'NOT_CAPTURED', detail: `marked unreachable: ${String(s.note || 'no reason').slice(0, 120)}` });
   }
 }
@@ -151,7 +151,9 @@ for (const s of surfaces) {
     } catch { res.writeHead(404); res.end(); } }).listen(0, '127.0.0.1', () => r(sv)); globalThis.__sv2 = sv; })).address().port;
   for (const s of surfaces.filter((x) => (x.covers || []).length && x.opened === true)) {
     await pg.setViewportSize({ width: 1440, height: 900 });
-    await pg.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&deskx=1`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    const reloadQuery = (s.openSteps || []).find((st) => st.reloadQuery !== undefined)?.reloadQuery || '';
+    const extraQuery = reloadQuery ? (reloadQuery.startsWith('&') ? reloadQuery : `&${reloadQuery.replace(/^\?/, '')}`) : '';
+    await pg.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&deskx=1${extraQuery}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await pg.waitForTimeout(1200);
     await pg.evaluate(() => document.querySelectorAll('button').forEach((x) => { if (x.textContent.trim() === 'Got it') x.click(); }));
     await pg.keyboard.press('Escape');
@@ -165,13 +167,8 @@ for (const s of surfaces) {
         if (st.eval) await pg.evaluate(`void (${st.eval})`);
         else if (st.click) await pg.click(st.click, { timeout: 2000 });
         else if (st.wait) await pg.waitForTimeout(st.wait);
-        // { reloadQuery }: this loop already reloads + loads a photo fresh at the top of every
-        // surface's iteration (lines above), so a bare reloadQuery step here is a no-op by
-        // design — it exists in surfaces.json for surface_capture.mjs's session-reuse model,
-        // not because this covers-check needs it too. Recognizing it (instead of silently
-        // falling through every branch above) avoids it masquerading as "a broken step" in the
-        // comment below when someone reads this loop next to surface_capture.mjs's version.
-        else if (st.reloadQuery !== undefined) { /* no-op: already fresh for this surface */ }
+        // reloadQuery was applied to this surface's fresh boot above.
+        else if (st.reloadQuery !== undefined) { /* already applied */ }
       } catch { /* a broken step shows up as the parent not being visible below */ }
     }
     await pg.waitForTimeout(300);
@@ -206,4 +203,3 @@ else {
   console.log(failCount ? '\nRESULT: FAIL' : '\nRESULT: PASS');
 }
 process.exit(failCount ? 1 : 0);
-

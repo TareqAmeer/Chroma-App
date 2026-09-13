@@ -1,0 +1,18 @@
+{
+  "maskTypes": ["radial", "linear", "brush", "sky", "skin", "coat", "ai", "color", "lum", "depth"],
+  "stateVisibleIdentityDigests": {
+    "no-mask": "9f4e6ae47cb6fda8",
+    "selected-radial": "db32e0c377849c71",
+    "selected-linear": "e64da42dcb026525",
+    "selected-brush": "ee3f55e6c0aeaa6c",
+    "selected-sky": "e6c2d5d0b30c57ce",
+    "selected-skin": "26d6ab5108a8118b",
+    "selected-coat": "4a18a85057eabb7a",
+    "selected-ai": "b6e9ca1ab797d174",
+    "selected-color": "734f3bd74eae6b0e",
+    "selected-lum": "340d4e368025a886",
+    "selected-depth": "340d4e368025a886",
+    "multiple-selected": "11cfddcd3226e547",
+    "multiple-muted-inverted": "8607180d1d6dffe7"
+  }
+}

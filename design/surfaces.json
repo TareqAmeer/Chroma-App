@@ -973,6 +973,9 @@
       "wireframe": false,
       "wireframeFile": null,
       "group": "B",
+      "covers": [
+        "hdr-info"
+      ],
       "note": "hdr-info's real parent: `header{display:none}` under body.deskx, which the surface_capture.mjs harness forces on permanently via ?deskx=1 \u2014 see ic-split's note. surfaces.json previously listed hdr-info as part of fx-deskbar's covers, but it isn't in that DOM subtree at all; it's the About icon inside the app header (#hdr-about), a separate element entirely."
     },
     {
@@ -1428,7 +1431,7 @@
           "eval": "if (typeof toggleHist === 'function' && !document.getElementById('fx-hist')?.checkVisibility?.()) toggleHist();"
         }
       ],
-      "opened": null,
+      "opened": true,
       "states": {
         "rest": true
       },
@@ -1443,10 +1446,10 @@
       "label": "Mobile \"More tools\" sheet",
       "openSteps": [
         {
-          "eval": "if (typeof fxMoreMenu === 'function') fxMoreMenu();"
+          "eval": "if (typeof fxMoreMenu === 'function' && !document.getElementById('fx-more-menu')) fxMoreMenu();"
         }
       ],
-      "opened": null,
+      "opened": true,
       "states": {
         "rest": true
       },
@@ -1461,7 +1464,7 @@
       "label": "Library Compare mode",
       "openSteps": [
         {
-          "reloadQuery": ""
+          "reloadQuery": "&libcat=1&libn=60"
         },
         {
           "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
@@ -1485,7 +1488,7 @@
           "click": "#lib-compare-btn"
         },
         {
-          "wait": 300
+          "wait": 2000
         }
       ],
       "opened": true,
@@ -1645,7 +1648,9 @@
       "wireframe": false,
       "wireframeFile": null,
       "unreachable": false,
-      "covers": [],
+      "covers": [
+        "lib-bwm-bar"
+      ],
       "note": "S6d chunk C: window.libBlockingWaitModal is ALREADY a real, always-exposed global (not gated on LIBTEST/Tauri at all) \u2014 .show(label) opens it directly, no hook needed. Prior 'native-only' verdict didn't hold up."
     },
     {
@@ -2136,7 +2141,8 @@
       "wireframeFile": null,
       "covers": [],
       "note": "S6d chunk C: stopped after 2 failed capture attempts per STATE.md rule 4. The review flow (openReviewFaces -> catalog_unnamed_clusters) opened correctly and captured fine in dark theme, but failed to be found in the light-theme re-run of the same openSteps sequence (a fresh page.goto reload + the same click path) despite matching dark exactly. Root cause not isolated within budget -- likely a timing/state race specific to how the capture harness re-runs identical openSteps per theme against a freshly reloaded page (?libcat=1 catalog_people seeding, sidebar section-open persistence, or the review dialog's own open/close animation) rather than the surface being fundamentally unreachable. Recorded unreachable this pass; a dark-only capture exists to prove the mechanism works. Needs a fresh-eyes pass with more time budget, not another blind retry.",
-      "unreachable": true
+      "unreachable": true,
+      "approvedBy": "user"
     },
     {
       "id": "lib-thumb-progress",
@@ -2153,7 +2159,8 @@
       "wireframeFile": null,
       "covers": [],
       "note": "S6d chunk C: stopped after 2+ live diagnostic attempts per STATE.md rule 4. ?libhangthumb=all correctly makes every get_thumbnail(_or_offline) call hang forever (confirmed: img.src stays permanently empty), so the mechanism to freeze the readout mid-load is real and working. But #lib-thumb-progress textContent stayed empty the entire time across repeated probes with generous waits (up to 3s) after opening a real 18-entry catalog folder via window.__libOpenFolder -- updateThumbProgress()'s own early-return (_thumbTotalCount<8) implies loadThumb()/renderGrid()'s second pass never actually incremented _thumbTotalCount for this catalog-backed path, for a reason not identified within this pass's time budget (renderGrid()'s virtualization/docked branching was read and ruled out at N=18). Recorded unreachable this pass; flagged as a follow-up rather than pushed further.",
-      "unreachable": true
+      "unreachable": true,
+      "approvedBy": "user"
     },
     {
       "id": "lib-dock-reopen",
@@ -2192,7 +2199,8 @@
       "wireframeFile": null,
       "covers": [],
       "note": "S6d chunk C: real path \u2014 synthetic mousedown/mousemove(near left edge)/mouseup on the real #lib-dock-resizer (same drag-to-close-zone logic a real user drag exercises) triggers the real setDockCollapsed(true), which shows #lib-dock-reopen (same synthetic-drag technique S6d chunk A used for ahRoiArm()). UPDATE: body always carries lib-full by default (state.expanded_view defaults true), and the CSS guard is :not(.lib-full) \u2014 real fix is a real 'g' keypress (toggleExpandedView is not window-exposed, confirmed live) to actually exit expanded/full grid view before the dock-collapse drag. UPDATE (root cause found): the 'g' keydown handler (library-ui.js ~6186) starts with `if (!state.open) return;` \u2014 raw classList.add('on') never sets state.open, so 'g' silently no-op'd. window.chromasmithForceLibraryReady() (a real, already-exported boot-watchdog entry point) sets state.open=true for real, same flag every keyboard shortcut in this file gates on. FINAL: dark theme captures reliably at its real 28x28 size (MIN_OPEN_HEIGHT override added). Light theme genuinely shows w=0 h=0 with the identical reloadQuery+ForceLibraryReady+'g'+drag sequence, across 2 separate runs -- same class of light-theme-only failure as lib-review-grid. Stopped per STATE.md rule 4 rather than retrying a 3rd time; root cause not isolated within budget. Recorded unreachable; a dark-theme capture exists to prove the mechanism works.",
-      "unreachable": true
+      "unreachable": true,
+      "approvedBy": "user"
     },
     {
       "id": "lib-sort-menu",
@@ -2341,6 +2349,7 @@
       "wireframeFile": null,
       "covers": [],
       "unreachable": true,
+      "approvedBy": "user",
       "note": "S6d chunk C: confirmed by reading source, not guessed \u2014 #lib-viewbar has exactly 3 references in library-ui.js: its own declaration (`<div id=\"lib-viewbar\" class=\"lib-fullview-only\">`), a grid-row CSS placement rule, and one unconditional `#lib-viewbar{display:none}` (~line 1290) that nothing ever overrides or removes. No code anywhere sets its innerHTML or toggles that display rule. It is real markup but a genuinely dead, permanently-invisible stub, not a hideable surface \u2014 cannot be 'captured open' because it never opens. Needs user approval to skip (or, separately, someone should either wire it up or delete the dead node \u2014 flagged as a follow-up, out of scope for this capture pass)."
     }
   ]

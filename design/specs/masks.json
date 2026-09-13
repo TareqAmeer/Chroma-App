@@ -1,7 +1,7 @@
 {
   "id": "masks",
   "group": "wireframe",
-  "generatedAt": "2026-09-12T10:46:42.494Z",
+  "generatedAt": "2026-09-12T19:52:31.561Z",
   "tree": {
     "tag": "div",
     "classes": [
@@ -27553,7 +27553,7 @@
                         "token": null
                       }
                     },
-                    "dataApp": "#tg-msk-edge"
+                    "dataApp": "#ck-msk-selview-outline"
                   },
                   {
                     "tag": "span",

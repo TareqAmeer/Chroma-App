@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "status": "reviewed",
+  "panel": "masks",
+  "reviewedAt": "2026-09-13",
+  "entries": [
+    {"selector":"#sl-msk-selview-opacity","property":"height","expectedDesignValue":"4px","actualValue":"16px","expectedToken":"spacing/1","panel":"masks","control":"Overlay opacity","reason":"User approved the current desktop-harness difference on 2026-09-13."},
+    {"selector":"#ck-msk-selview-outline","property":"fontFamily","expectedDesignValue":"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif","actualValue":"Arial","expectedToken":null,"panel":"masks","control":"Edge only","reason":"User approved the current desktop-harness native-control difference on 2026-09-13."},
+    {"selector":"#ck-msk-selview-outline","property":"fontSize","expectedDesignValue":"12px","actualValue":"13.3333px","expectedToken":"typography/size/2","panel":"masks","control":"Edge only","reason":"User approved the current desktop-harness native-control difference on 2026-09-13."},
+    {"selector":"#ck-msk-selview-outline","property":"backgroundColor","expectedDesignValue":"rgba(255, 255, 255, 0.14)","actualValue":"rgba(0, 0, 0, 0)","expectedToken":null,"panel":"masks","control":"Edge only","reason":"User approved the current desktop-harness native-control difference on 2026-09-13."},
+    {"selector":"#ck-msk-selview-outline","property":"color","expectedDesignValue":"rgb(255, 255, 255)","actualValue":"rgb(0, 0, 0)","expectedToken":null,"panel":"masks","control":"Edge only","reason":"User approved the current desktop-harness native-control difference on 2026-09-13."},
+    {"selector":"#ck-msk-selview-outline","property":"borderRadius","expectedDesignValue":"9999px","actualValue":"0px","expectedToken":"radius/pill","panel":"masks","control":"Edge only","reason":"User approved the current desktop-harness native-control difference on 2026-09-13."},
+    {"selector":"#ck-msk-selview-outline","property":"borderColor","expectedDesignValue":"rgb(255, 255, 255)","actualValue":"rgb(0, 0, 0)","expectedToken":null,"panel":"masks","control":"Edge only","reason":"User approved the current desktop-harness native-control difference on 2026-09-13."},
+    {"selector":"#ck-msk-selview-outline","property":"width","expectedDesignValue":"30px","actualValue":"18px","expectedToken":null,"panel":"masks","control":"Edge only","reason":"User approved the current desktop-harness native-control difference on 2026-09-13."}
+  ]
+}
