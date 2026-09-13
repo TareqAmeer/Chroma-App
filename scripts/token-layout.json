@@ -378,6 +378,56 @@
     {
       "var": "--fw-bold",
       "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--z-raise",
+      "pre": "\n  /* Stacking-order scale (T-z): named tiers instead of ad-hoc literals, same discipline as\n     Material Design's z-index groups and Ant Design's preset stack — see design/tokens.json\n     zIndex for the full audit and per-tier rationale. */\n  ",
+      "hadSemi": true
+    },
+    {
+      "var": "--z-sticky",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--z-float",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--z-dropdown",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--z-fixed",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--z-overlay",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--z-menu",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--z-system",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--z-modal",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--z-splash",
+      "pre": "",
       "hadSemi": false
     }
   ],
