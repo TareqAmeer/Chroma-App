@@ -1,0 +1,1941 @@
+{
+  "schemaVersion": 1,
+  "family": "icon",
+  "purpose": "Unreviewed; purpose requires human review.",
+  "status": "draft",
+  "observations": {
+    "generatedBy": "scripts/scaffold-component-contracts.mjs",
+    "generatedAt": "2026-09-13T04:14:41.378Z",
+    "registry": {
+      "query": "node scripts/query-components.mjs --family icon",
+      "sourceRegistrationCount": 90,
+      "expectedCount": 90,
+      "locations": [
+        {
+          "key": "chromasmith-22.html:9053:icon:pause",
+          "source": "chromasmith-22.html",
+          "line": 9053,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:9064:icon:play",
+          "source": "chromasmith-22.html",
+          "line": 9064,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:11250:icon:nr",
+          "source": "chromasmith-22.html",
+          "line": 11250,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:11608:icon:wand",
+          "source": "chromasmith-22.html",
+          "line": 11608,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:11859:icon:wand",
+          "source": "chromasmith-22.html",
+          "line": 11859,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:11875:icon:flagGreen",
+          "source": "chromasmith-22.html",
+          "line": 11875,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:11876:icon:flagRed",
+          "source": "chromasmith-22.html",
+          "line": 11876,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:11881:icon:star",
+          "source": "chromasmith-22.html",
+          "line": 11881,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:11892:icon:export",
+          "source": "chromasmith-22.html",
+          "line": 11892,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:11893:icon:image",
+          "source": "chromasmith-22.html",
+          "line": 11893,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:13183:icon:chevron",
+          "source": "chromasmith-22.html",
+          "line": 13183,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14081:icon:more",
+          "source": "chromasmith-22.html",
+          "line": 14081,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14097:icon:chevron",
+          "source": "chromasmith-22.html",
+          "line": 14097,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14120:icon:wand",
+          "source": "chromasmith-22.html",
+          "line": 14120,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14122:icon:scissors",
+          "source": "chromasmith-22.html",
+          "line": 14122,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14123:icon:wand",
+          "source": "chromasmith-22.html",
+          "line": 14123,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14143:icon:brush",
+          "source": "chromasmith-22.html",
+          "line": 14143,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14144:icon:eraser",
+          "source": "chromasmith-22.html",
+          "line": 14144,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14149:icon:refine",
+          "source": "chromasmith-22.html",
+          "line": 14149,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14179:icon:eyedropper",
+          "source": "chromasmith-22.html",
+          "line": 14179,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14289:icon:wand",
+          "source": "chromasmith-22.html",
+          "line": 14289,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14291:icon:eyedropper",
+          "source": "chromasmith-22.html",
+          "line": 14291,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14326:icon:eyedropper",
+          "source": "chromasmith-22.html",
+          "line": 14326,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14370:icon:chevron",
+          "source": "chromasmith-22.html",
+          "line": 14370,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:15807:icon:download",
+          "source": "chromasmith-22.html",
+          "line": 15807,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:15808:icon:close",
+          "source": "chromasmith-22.html",
+          "line": 15808,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:19304:icon:image",
+          "source": "chromasmith-22.html",
+          "line": 19304,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:20525:icon:rotateRight",
+          "source": "chromasmith-22.html",
+          "line": 20525,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:20526:icon:rotateLeft",
+          "source": "chromasmith-22.html",
+          "line": 20526,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:20527:icon:flipH",
+          "source": "chromasmith-22.html",
+          "line": 20527,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:20528:icon:flipV",
+          "source": "chromasmith-22.html",
+          "line": 20528,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:20530:icon:copy",
+          "source": "chromasmith-22.html",
+          "line": 20530,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:20531:icon:paste",
+          "source": "chromasmith-22.html",
+          "line": 20531,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:20532:icon:reset",
+          "source": "chromasmith-22.html",
+          "line": 20532,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:20871:icon:chevleft",
+          "source": "chromasmith-22.html",
+          "line": 20871,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:20962:icon:railshow",
+          "source": "chromasmith-22.html",
+          "line": 20962,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:21613:icon:reset",
+          "source": "chromasmith-22.html",
+          "line": 21613,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:21645:icon:chevron",
+          "source": "chromasmith-22.html",
+          "line": 21645,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:21661:icon:chevron",
+          "source": "chromasmith-22.html",
+          "line": 21661,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:21698:icon:plus",
+          "source": "chromasmith-22.html",
+          "line": 21698,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:22006:icon:close",
+          "source": "chromasmith-22.html",
+          "line": 22006,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:22037:icon:plus",
+          "source": "chromasmith-22.html",
+          "line": 22037,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1817:icon:sortAsc",
+          "source": "desktop/library-ui.js",
+          "line": 1817,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1856:icon:gridView",
+          "source": "desktop/library-ui.js",
+          "line": 1856,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1857:icon:tableView",
+          "source": "desktop/library-ui.js",
+          "line": 1857,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1871:icon:search",
+          "source": "desktop/library-ui.js",
+          "line": 1871,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1887:icon:zoomOut",
+          "source": "desktop/library-ui.js",
+          "line": 1887,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1889:icon:zoomIn",
+          "source": "desktop/library-ui.js",
+          "line": 1889,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1901:icon:flagRed",
+          "source": "desktop/library-ui.js",
+          "line": 1901,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1902:icon:flagGreen",
+          "source": "desktop/library-ui.js",
+          "line": 1902,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1903:icon:heart",
+          "source": "desktop/library-ui.js",
+          "line": 1903,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1906:icon:looks",
+          "source": "desktop/library-ui.js",
+          "line": 1906,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1907:icon:export",
+          "source": "desktop/library-ui.js",
+          "line": 1907,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1926:icon:library",
+          "source": "desktop/library-ui.js",
+          "line": 1926,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1927:icon:cloud",
+          "source": "desktop/library-ui.js",
+          "line": 1927,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1928:icon:history",
+          "source": "desktop/library-ui.js",
+          "line": 1928,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1929:icon:info",
+          "source": "desktop/library-ui.js",
+          "line": 1929,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1930:icon:fit",
+          "source": "desktop/library-ui.js",
+          "line": 1930,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1931:icon:compare",
+          "source": "desktop/library-ui.js",
+          "line": 1931,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1938:icon:image",
+          "source": "desktop/library-ui.js",
+          "line": 1938,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1976:icon:close",
+          "source": "desktop/library-ui.js",
+          "line": 1976,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2066:icon:library",
+          "source": "desktop/library-ui.js",
+          "line": 2066,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2071:icon:tools",
+          "source": "desktop/library-ui.js",
+          "line": 2071,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2094:icon:flagGreen",
+          "source": "desktop/library-ui.js",
+          "line": 2094,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2095:icon:close",
+          "source": "desktop/library-ui.js",
+          "line": 2095,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2096:icon:heart",
+          "source": "desktop/library-ui.js",
+          "line": 2096,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2146:icon:library",
+          "source": "desktop/library-ui.js",
+          "line": 2146,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:3573:icon:chevron",
+          "source": "desktop/library-ui.js",
+          "line": 3573,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:3574:icon:folder",
+          "source": "desktop/library-ui.js",
+          "line": 3574,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:5234:icon:video",
+          "source": "desktop/library-ui.js",
+          "line": 5234,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:5691:icon:flagGreen",
+          "source": "desktop/library-ui.js",
+          "line": 5691,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:5692:icon:close",
+          "source": "desktop/library-ui.js",
+          "line": 5692,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:5693:icon:heart",
+          "source": "desktop/library-ui.js",
+          "line": 5693,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:6424:icon:close",
+          "source": "desktop/library-ui.js",
+          "line": 6424,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7097:icon:chevron",
+          "source": "desktop/library-ui.js",
+          "line": 7097,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7266:icon:drive",
+          "source": "desktop/library-ui.js",
+          "line": 7266,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7368:icon:drive",
+          "source": "desktop/library-ui.js",
+          "line": 7368,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7400:icon:chevron",
+          "source": "desktop/library-ui.js",
+          "line": 7400,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7407:icon:chevron",
+          "source": "desktop/library-ui.js",
+          "line": 7407,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7475:icon:chevron",
+          "source": "desktop/library-ui.js",
+          "line": 7475,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7482:icon:chevron",
+          "source": "desktop/library-ui.js",
+          "line": 7482,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7533:icon:search",
+          "source": "desktop/library-ui.js",
+          "line": 7533,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7811:icon:focus",
+          "source": "desktop/library-ui.js",
+          "line": 7811,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7822:icon:focus",
+          "source": "desktop/library-ui.js",
+          "line": 7822,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7829:icon:image",
+          "source": "desktop/library-ui.js",
+          "line": 7829,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7851:icon:image",
+          "source": "desktop/library-ui.js",
+          "line": 7851,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7856:icon:video",
+          "source": "desktop/library-ui.js",
+          "line": 7856,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:7872:icon:chevron",
+          "source": "desktop/library-ui.js",
+          "line": 7872,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:8957:icon:chevron",
+          "source": "desktop/library-ui.js",
+          "line": 8957,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "icon"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:9010:icon:close",
+          "source": "desktop/library-ui.js",
+          "line": 9010,
+          "tag": null,
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon"
+          ]
+        }
+      ],
+      "overlappingFamilyMembership": [
+        {
+          "declaration": "chromasmith-22.html:11859",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:11875",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:11876",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:11881",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:11892",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:11893",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:14081",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:14097",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:14120",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:14122",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:14123",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:14143",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:14144",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:14149",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:14179",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:14326",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:14370",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:15807",
+          "families": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:15808",
+          "families": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:20525",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:20526",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:20527",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:20528",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:20530",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:20531",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:20532",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1817",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1856",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1857",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1901",
+          "families": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1902",
+          "families": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1903",
+          "families": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1906",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1907",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1926",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1927",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1928",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1929",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1930",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1931",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2066",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2071",
+          "families": [
+            "button",
+            "icon"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2094",
+          "families": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2095",
+          "families": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2096",
+          "families": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:9010",
+          "families": [
+            "button",
+            "icon"
+          ]
+        }
+      ],
+      "coverageGaps": {
+        "sourceRegistrationsWithoutRuntimeAppearance": [
+          "chromasmith-22.html:9053:icon:pause",
+          "chromasmith-22.html:9064:icon:play",
+          "chromasmith-22.html:11250:icon:nr",
+          "chromasmith-22.html:11608:icon:wand",
+          "chromasmith-22.html:11859:icon:wand",
+          "chromasmith-22.html:11875:icon:flagGreen",
+          "chromasmith-22.html:11876:icon:flagRed",
+          "chromasmith-22.html:11881:icon:star",
+          "chromasmith-22.html:11892:icon:export",
+          "chromasmith-22.html:11893:icon:image",
+          "chromasmith-22.html:13183:icon:chevron",
+          "chromasmith-22.html:14081:icon:more",
+          "chromasmith-22.html:14097:icon:chevron",
+          "chromasmith-22.html:14120:icon:wand",
+          "chromasmith-22.html:14122:icon:scissors",
+          "chromasmith-22.html:14123:icon:wand",
+          "chromasmith-22.html:14143:icon:brush",
+          "chromasmith-22.html:14144:icon:eraser",
+          "chromasmith-22.html:14149:icon:refine",
+          "chromasmith-22.html:14179:icon:eyedropper",
+          "chromasmith-22.html:14289:icon:wand",
+          "chromasmith-22.html:14291:icon:eyedropper",
+          "chromasmith-22.html:14326:icon:eyedropper",
+          "chromasmith-22.html:14370:icon:chevron",
+          "chromasmith-22.html:15807:icon:download",
+          "chromasmith-22.html:15808:icon:close",
+          "chromasmith-22.html:19304:icon:image",
+          "chromasmith-22.html:20525:icon:rotateRight",
+          "chromasmith-22.html:20526:icon:rotateLeft",
+          "chromasmith-22.html:20527:icon:flipH",
+          "chromasmith-22.html:20528:icon:flipV",
+          "chromasmith-22.html:20530:icon:copy",
+          "chromasmith-22.html:20531:icon:paste",
+          "chromasmith-22.html:20532:icon:reset",
+          "chromasmith-22.html:20871:icon:chevleft",
+          "chromasmith-22.html:20962:icon:railshow",
+          "chromasmith-22.html:21613:icon:reset",
+          "chromasmith-22.html:21645:icon:chevron",
+          "chromasmith-22.html:21661:icon:chevron",
+          "chromasmith-22.html:21698:icon:plus",
+          "chromasmith-22.html:22006:icon:close",
+          "chromasmith-22.html:22037:icon:plus",
+          "desktop/library-ui.js:1817:icon:sortAsc",
+          "desktop/library-ui.js:1856:icon:gridView",
+          "desktop/library-ui.js:1857:icon:tableView",
+          "desktop/library-ui.js:1871:icon:search",
+          "desktop/library-ui.js:1887:icon:zoomOut",
+          "desktop/library-ui.js:1889:icon:zoomIn",
+          "desktop/library-ui.js:1901:icon:flagRed",
+          "desktop/library-ui.js:1902:icon:flagGreen",
+          "desktop/library-ui.js:1903:icon:heart",
+          "desktop/library-ui.js:1906:icon:looks",
+          "desktop/library-ui.js:1907:icon:export",
+          "desktop/library-ui.js:1926:icon:library",
+          "desktop/library-ui.js:1927:icon:cloud",
+          "desktop/library-ui.js:1928:icon:history",
+          "desktop/library-ui.js:1929:icon:info",
+          "desktop/library-ui.js:1930:icon:fit",
+          "desktop/library-ui.js:1931:icon:compare",
+          "desktop/library-ui.js:1938:icon:image",
+          "desktop/library-ui.js:1976:icon:close",
+          "desktop/library-ui.js:2066:icon:library",
+          "desktop/library-ui.js:2071:icon:tools",
+          "desktop/library-ui.js:2094:icon:flagGreen",
+          "desktop/library-ui.js:2095:icon:close",
+          "desktop/library-ui.js:2096:icon:heart",
+          "desktop/library-ui.js:2146:icon:library",
+          "desktop/library-ui.js:3573:icon:chevron",
+          "desktop/library-ui.js:3574:icon:folder",
+          "desktop/library-ui.js:5234:icon:video",
+          "desktop/library-ui.js:5691:icon:flagGreen",
+          "desktop/library-ui.js:5692:icon:close",
+          "desktop/library-ui.js:5693:icon:heart",
+          "desktop/library-ui.js:6424:icon:close",
+          "desktop/library-ui.js:7097:icon:chevron",
+          "desktop/library-ui.js:7266:icon:drive",
+          "desktop/library-ui.js:7368:icon:drive",
+          "desktop/library-ui.js:7400:icon:chevron",
+          "desktop/library-ui.js:7407:icon:chevron",
+          "desktop/library-ui.js:7475:icon:chevron",
+          "desktop/library-ui.js:7482:icon:chevron",
+          "desktop/library-ui.js:7533:icon:search",
+          "desktop/library-ui.js:7811:icon:focus",
+          "desktop/library-ui.js:7822:icon:focus",
+          "desktop/library-ui.js:7829:icon:image",
+          "desktop/library-ui.js:7851:icon:image",
+          "desktop/library-ui.js:7856:icon:video",
+          "desktop/library-ui.js:7872:icon:chevron",
+          "desktop/library-ui.js:8957:icon:chevron",
+          "desktop/library-ui.js:9010:icon:close"
+        ],
+        "dynamicRegistrations": [],
+        "registrationsWithoutStableSelector": [
+          "chromasmith-22.html:9053:icon:pause",
+          "chromasmith-22.html:9064:icon:play",
+          "chromasmith-22.html:11250:icon:nr",
+          "chromasmith-22.html:11608:icon:wand",
+          "chromasmith-22.html:11859:icon:wand",
+          "chromasmith-22.html:11875:icon:flagGreen",
+          "chromasmith-22.html:11876:icon:flagRed",
+          "chromasmith-22.html:11881:icon:star",
+          "chromasmith-22.html:11892:icon:export",
+          "chromasmith-22.html:11893:icon:image",
+          "chromasmith-22.html:13183:icon:chevron",
+          "chromasmith-22.html:14081:icon:more",
+          "chromasmith-22.html:14097:icon:chevron",
+          "chromasmith-22.html:14120:icon:wand",
+          "chromasmith-22.html:14122:icon:scissors",
+          "chromasmith-22.html:14123:icon:wand",
+          "chromasmith-22.html:14143:icon:brush",
+          "chromasmith-22.html:14144:icon:eraser",
+          "chromasmith-22.html:14149:icon:refine",
+          "chromasmith-22.html:14179:icon:eyedropper",
+          "chromasmith-22.html:14289:icon:wand",
+          "chromasmith-22.html:14291:icon:eyedropper",
+          "chromasmith-22.html:14326:icon:eyedropper",
+          "chromasmith-22.html:14370:icon:chevron",
+          "chromasmith-22.html:15807:icon:download",
+          "chromasmith-22.html:15808:icon:close",
+          "chromasmith-22.html:19304:icon:image",
+          "chromasmith-22.html:20525:icon:rotateRight",
+          "chromasmith-22.html:20526:icon:rotateLeft",
+          "chromasmith-22.html:20527:icon:flipH",
+          "chromasmith-22.html:20528:icon:flipV",
+          "chromasmith-22.html:20530:icon:copy",
+          "chromasmith-22.html:20531:icon:paste",
+          "chromasmith-22.html:20532:icon:reset",
+          "chromasmith-22.html:20871:icon:chevleft",
+          "chromasmith-22.html:20962:icon:railshow",
+          "chromasmith-22.html:21613:icon:reset",
+          "chromasmith-22.html:21645:icon:chevron",
+          "chromasmith-22.html:21661:icon:chevron",
+          "chromasmith-22.html:21698:icon:plus",
+          "chromasmith-22.html:22006:icon:close",
+          "chromasmith-22.html:22037:icon:plus",
+          "desktop/library-ui.js:1817:icon:sortAsc",
+          "desktop/library-ui.js:1856:icon:gridView",
+          "desktop/library-ui.js:1857:icon:tableView",
+          "desktop/library-ui.js:1871:icon:search",
+          "desktop/library-ui.js:1887:icon:zoomOut",
+          "desktop/library-ui.js:1889:icon:zoomIn",
+          "desktop/library-ui.js:1901:icon:flagRed",
+          "desktop/library-ui.js:1902:icon:flagGreen",
+          "desktop/library-ui.js:1903:icon:heart",
+          "desktop/library-ui.js:1906:icon:looks",
+          "desktop/library-ui.js:1907:icon:export",
+          "desktop/library-ui.js:1926:icon:library",
+          "desktop/library-ui.js:1927:icon:cloud",
+          "desktop/library-ui.js:1928:icon:history",
+          "desktop/library-ui.js:1929:icon:info",
+          "desktop/library-ui.js:1930:icon:fit",
+          "desktop/library-ui.js:1931:icon:compare",
+          "desktop/library-ui.js:1938:icon:image",
+          "desktop/library-ui.js:1976:icon:close",
+          "desktop/library-ui.js:2066:icon:library",
+          "desktop/library-ui.js:2071:icon:tools",
+          "desktop/library-ui.js:2094:icon:flagGreen",
+          "desktop/library-ui.js:2095:icon:close",
+          "desktop/library-ui.js:2096:icon:heart",
+          "desktop/library-ui.js:2146:icon:library",
+          "desktop/library-ui.js:3573:icon:chevron",
+          "desktop/library-ui.js:3574:icon:folder",
+          "desktop/library-ui.js:5234:icon:video",
+          "desktop/library-ui.js:5691:icon:flagGreen",
+          "desktop/library-ui.js:5692:icon:close",
+          "desktop/library-ui.js:5693:icon:heart",
+          "desktop/library-ui.js:6424:icon:close",
+          "desktop/library-ui.js:7097:icon:chevron",
+          "desktop/library-ui.js:7266:icon:drive",
+          "desktop/library-ui.js:7368:icon:drive",
+          "desktop/library-ui.js:7400:icon:chevron",
+          "desktop/library-ui.js:7407:icon:chevron",
+          "desktop/library-ui.js:7475:icon:chevron",
+          "desktop/library-ui.js:7482:icon:chevron",
+          "desktop/library-ui.js:7533:icon:search",
+          "desktop/library-ui.js:7811:icon:focus",
+          "desktop/library-ui.js:7822:icon:focus",
+          "desktop/library-ui.js:7829:icon:image",
+          "desktop/library-ui.js:7851:icon:image",
+          "desktop/library-ui.js:7856:icon:video",
+          "desktop/library-ui.js:7872:icon:chevron",
+          "desktop/library-ui.js:8957:icon:chevron",
+          "desktop/library-ui.js:9010:icon:close"
+        ]
+      }
+    },
+    "runtime": {
+      "evidenceSource": "design/components-runtime.json",
+      "appearanceCount": 0,
+      "runtimeAppearanceCount": 0,
+      "distinctSemantics": [],
+      "states": [],
+      "variants": [],
+      "instances": [],
+      "unresolvedAppearances": [],
+      "coverageComplete": false,
+      "evidenceGaps": [
+        "no saved runtime appearances for this family",
+        "90 source registrations have no linked runtime appearance",
+        "90 source registrations have no stable selector"
+      ]
+    }
+  },
+  "authored": {
+    "identity": {
+      "family": "icon",
+      "subfamilies": [],
+      "designSystemComponent": null,
+      "designSystemEvidence": "unreviewed"
+    },
+    "purpose": "unreviewed",
+    "semantics": {
+      "uses": [],
+      "mismatch": "unreviewed"
+    },
+    "anatomy": {
+      "parts": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "variants": [],
+    "themes": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "states": {
+      "current": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "responsiveDimensions": {},
+    "tokens": {
+      "references": [],
+      "rawLiterals": [],
+      "proposed": [],
+      "exception": null
+    },
+    "typography": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "motion": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "keyboardPointer": {
+      "pointer": "unreviewed",
+      "keyboard": "unreviewed"
+    },
+    "accessibility": {
+      "current": "unreviewed",
+      "evidenceLimit": "unreviewed"
+    },
+    "systemDesignRules": [],
+    "proposedTargets": {},
+    "decisions": [],
+    "exceptions": [],
+    "currentVsProposed": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "userDecisions": [],
+    "references": [],
+    "questions": []
+  },
+  "validation": {
+    "commands": [
+      "node scripts/query-components.mjs --family icon",
+      "node scripts/validate-component-contracts.mjs --family icon"
+    ],
+    "scope": "Unreviewed generated draft; observations only, not a design or production gate."
+  },
+  "approval": null,
+  "authoredDigest": "11c4bfbae05819c00691ed4030ad8638b8c1266aef9bd61cabb8500915dbb53f"
+}

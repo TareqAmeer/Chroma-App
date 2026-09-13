@@ -1,0 +1,1273 @@
+{
+  "schemaVersion": 1,
+  "family": "select",
+  "purpose": "Unreviewed; purpose requires human review.",
+  "status": "draft",
+  "observations": {
+    "generatedBy": "scripts/scaffold-component-contracts.mjs",
+    "generatedAt": "2026-09-13T04:14:41.378Z",
+    "registry": {
+      "query": "node scripts/query-components.mjs --family select",
+      "sourceRegistrationCount": 60,
+      "expectedCount": 60,
+      "locations": [
+        {
+          "key": "chromasmith-22.html:290:select",
+          "source": "chromasmith-22.html",
+          "line": 290,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:452:select",
+          "source": "chromasmith-22.html",
+          "line": 452,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1805:select",
+          "source": "chromasmith-22.html",
+          "line": 1805,
+          "tag": "select",
+          "selector": "#sel-dcp",
+          "id": "sel-dcp",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1844:select",
+          "source": "chromasmith-22.html",
+          "line": 1844,
+          "tag": "select",
+          "selector": "#sel-input",
+          "id": "sel-input",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1847:select",
+          "source": "chromasmith-22.html",
+          "line": 1847,
+          "tag": "select",
+          "selector": "#sel-tonemap",
+          "id": "sel-tonemap",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1850:select",
+          "source": "chromasmith-22.html",
+          "line": 1850,
+          "tag": "select",
+          "selector": "#sel-print",
+          "id": "sel-print",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1852:select",
+          "source": "chromasmith-22.html",
+          "line": 1852,
+          "tag": "select",
+          "selector": "#sel-lut",
+          "id": "sel-lut",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1911:select",
+          "source": "chromasmith-22.html",
+          "line": 1911,
+          "tag": "select",
+          "selector": "#sel-raw-nr",
+          "id": "sel-raw-nr",
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2107:select",
+          "source": "chromasmith-22.html",
+          "line": 2107,
+          "tag": "select",
+          "selector": "#sel-lens-manual",
+          "id": "sel-lens-manual",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2129:select",
+          "source": "chromasmith-22.html",
+          "line": 2129,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2135:select",
+          "source": "chromasmith-22.html",
+          "line": 2135,
+          "tag": "select",
+          "selector": "#sel-crop-ar",
+          "id": "sel-crop-ar",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2156:select",
+          "source": "chromasmith-22.html",
+          "line": 2156,
+          "tag": "input",
+          "selector": "#crop-custom-w",
+          "id": "crop-custom-w",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2158:select",
+          "source": "chromasmith-22.html",
+          "line": 2158,
+          "tag": "input",
+          "selector": "#crop-custom-h",
+          "id": "crop-custom-h",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2177:select",
+          "source": "chromasmith-22.html",
+          "line": 2177,
+          "tag": "select",
+          "selector": "#sel-crop-grid",
+          "id": "sel-crop-grid",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2195:select",
+          "source": "chromasmith-22.html",
+          "line": 2195,
+          "tag": "select",
+          "selector": "#sel-grain-fmt",
+          "id": "sel-grain-fmt",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2268:select",
+          "source": "chromasmith-22.html",
+          "line": 2268,
+          "tag": "select",
+          "selector": "#sel-film-frame",
+          "id": "sel-film-frame",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2280:select",
+          "source": "chromasmith-22.html",
+          "line": 2280,
+          "tag": "input",
+          "selector": "#in-frame-edge",
+          "id": "in-frame-edge",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2289:select",
+          "source": "chromasmith-22.html",
+          "line": 2289,
+          "tag": "select",
+          "selector": "#sel-heal-mode",
+          "id": "sel-heal-mode",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2324:select",
+          "source": "chromasmith-22.html",
+          "line": 2324,
+          "tag": "select",
+          "selector": "#sel-debug",
+          "id": "sel-debug",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2344:select",
+          "source": "chromasmith-22.html",
+          "line": 2344,
+          "tag": "select",
+          "selector": "#sel-exp-fmt",
+          "id": "sel-exp-fmt",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2355:select",
+          "source": "chromasmith-22.html",
+          "line": 2355,
+          "tag": "select",
+          "selector": "#sel-exp-size",
+          "id": "sel-exp-size",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2365:select",
+          "source": "chromasmith-22.html",
+          "line": 2365,
+          "tag": "select",
+          "selector": "#sel-exp-sharp",
+          "id": "sel-exp-sharp",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2399:select",
+          "source": "chromasmith-22.html",
+          "line": 2399,
+          "tag": "select",
+          "selector": "#sel-exp-preset",
+          "id": "sel-exp-preset",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2580:select",
+          "source": "chromasmith-22.html",
+          "line": 2580,
+          "tag": "select",
+          "selector": "#sel-scope-mode",
+          "id": "sel-scope-mode",
+          "classes": [],
+          "label": "Scope type",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2639:select",
+          "source": "chromasmith-22.html",
+          "line": 2639,
+          "tag": "select",
+          "selector": "#sel-vid-preview-quality",
+          "id": "sel-vid-preview-quality",
+          "classes": [],
+          "label": "Scales the LIVE PREVIEW resolution only — export is always full quality",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2650:select",
+          "source": "chromasmith-22.html",
+          "line": 2650,
+          "tag": "select",
+          "selector": "#sel-vid-quality",
+          "id": "sel-vid-quality",
+          "classes": [],
+          "label": "Encode bitrate — higher survives film grain better, at a larger file",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2657:select",
+          "source": "chromasmith-22.html",
+          "line": 2657,
+          "tag": "select",
+          "selector": "#sel-vid-resolution",
+          "id": "sel-vid-resolution",
+          "classes": [],
+          "label": "Caps the export's long edge — never upscales past the source",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2664:select",
+          "source": "chromasmith-22.html",
+          "line": 2664,
+          "tag": "select",
+          "selector": "#sel-vid-codec",
+          "id": "sel-vid-codec",
+          "classes": [],
+          "label": "HEVC falls back to H.264 automatically if this browser can't encode it",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2670:select",
+          "source": "chromasmith-22.html",
+          "line": 2670,
+          "tag": "select",
+          "selector": "#sel-vid-fps",
+          "id": "sel-vid-fps",
+          "classes": [],
+          "label": "Decimates toward the target — never interpolates up",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2902:select",
+          "source": "chromasmith-22.html",
+          "line": 2902,
+          "tag": "select",
+          "selector": "#cl-aspect",
+          "id": "cl-aspect",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2933:select",
+          "source": "chromasmith-22.html",
+          "line": 2933,
+          "tag": "select",
+          "selector": "#cl-res",
+          "id": "cl-res",
+          "classes": [
+            "fx-select"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:8210:select",
+          "source": "chromasmith-22.html",
+          "line": 8210,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:10897:select",
+          "source": "chromasmith-22.html",
+          "line": 10897,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:17254:select",
+          "source": "chromasmith-22.html",
+          "line": 17254,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:21462:select",
+          "source": "chromasmith-22.html",
+          "line": 21462,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:21479:select",
+          "source": "chromasmith-22.html",
+          "line": 21479,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:21744:select",
+          "source": "chromasmith-22.html",
+          "line": 21744,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1820:select",
+          "source": "desktop/library-ui.js",
+          "line": 1820,
+          "tag": "select",
+          "selector": "#lib-sort",
+          "id": "lib-sort",
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1943:select",
+          "source": "desktop/library-ui.js",
+          "line": 1943,
+          "tag": "select",
+          "selector": "#lib-metadisp",
+          "id": "lib-metadisp",
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1980:select",
+          "source": "desktop/library-ui.js",
+          "line": 1980,
+          "tag": "select",
+          "selector": "#lib-source",
+          "id": "lib-source",
+          "classes": [],
+          "label": "Photo source",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1984:select",
+          "source": "desktop/library-ui.js",
+          "line": 1984,
+          "tag": "select",
+          "selector": "#lib-type-filter",
+          "id": "lib-type-filter",
+          "classes": [],
+          "label": "Filter by file type",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1998:select",
+          "source": "desktop/library-ui.js",
+          "line": 1998,
+          "tag": "select",
+          "selector": "#lib-camera-filter",
+          "id": "lib-camera-filter",
+          "classes": [],
+          "label": "Filter by camera",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1999:select",
+          "source": "desktop/library-ui.js",
+          "line": 1999,
+          "tag": "select",
+          "selector": "#lib-lens-filter",
+          "id": "lib-lens-filter",
+          "classes": [],
+          "label": "Filter by lens",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2000:select",
+          "source": "desktop/library-ui.js",
+          "line": 2000,
+          "tag": "select",
+          "selector": "#lib-iso-filter",
+          "id": "lib-iso-filter",
+          "classes": [],
+          "label": "Filter by ISO",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2001:select",
+          "source": "desktop/library-ui.js",
+          "line": 2001,
+          "tag": "select",
+          "selector": "#lib-dupe-filter",
+          "id": "lib-dupe-filter",
+          "classes": [],
+          "label": "Filter by duplicate status",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2005:select",
+          "source": "desktop/library-ui.js",
+          "line": 2005,
+          "tag": "select",
+          "selector": "#lib-synced-filter",
+          "id": "lib-synced-filter",
+          "classes": [],
+          "label": "Filter by Google Photos sync status",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2010:select",
+          "source": "desktop/library-ui.js",
+          "line": 2010,
+          "tag": "select",
+          "selector": "#lib-faces-filter",
+          "id": "lib-faces-filter",
+          "classes": [],
+          "label": "Filter by face-indexing status",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2023:select",
+          "source": "desktop/library-ui.js",
+          "line": 2023,
+          "tag": "select",
+          "selector": "#lib-rating-filter",
+          "id": "lib-rating-filter",
+          "classes": [],
+          "label": "Filter by star rating",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2033:select",
+          "source": "desktop/library-ui.js",
+          "line": 2033,
+          "tag": "select",
+          "selector": "#lib-tag-filter",
+          "id": "lib-tag-filter",
+          "classes": [],
+          "label": "Filter by tag",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2044:select",
+          "source": "desktop/library-ui.js",
+          "line": 2044,
+          "tag": "select",
+          "selector": "#lib-views",
+          "id": "lib-views",
+          "classes": [],
+          "label": "Saved filter + sort views",
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2081:select",
+          "source": "desktop/library-ui.js",
+          "line": 2081,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:3122:select",
+          "source": "desktop/library-ui.js",
+          "line": 3122,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:5686:select",
+          "source": "desktop/library-ui.js",
+          "line": 5686,
+          "tag": "select",
+          "selector": ".lib-cmp-photo-sel",
+          "id": null,
+          "classes": [
+            "lib-cmp-photo-sel"
+          ],
+          "label": null,
+          "dynamic": true,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:5687:select",
+          "source": "desktop/library-ui.js",
+          "line": 5687,
+          "tag": "select",
+          "selector": ".lib-cmp-src-sel",
+          "id": null,
+          "classes": [
+            "lib-cmp-src-sel"
+          ],
+          "label": null,
+          "dynamic": true,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:5875:select",
+          "source": "desktop/library-ui.js",
+          "line": 5875,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:6376:select",
+          "source": "desktop/library-ui.js",
+          "line": 6376,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:6381:select",
+          "source": "desktop/library-ui.js",
+          "line": 6381,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:6409:select",
+          "source": "desktop/library-ui.js",
+          "line": 6409,
+          "tag": "select",
+          "selector": null,
+          "id": null,
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:8998:select",
+          "source": "desktop/library-ui.js",
+          "line": 8998,
+          "tag": "select",
+          "selector": "#imp-folder",
+          "id": "imp-folder",
+          "classes": [],
+          "label": null,
+          "dynamic": true,
+          "familyMembership": [
+            "select"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:9004:select",
+          "source": "desktop/library-ui.js",
+          "line": 9004,
+          "tag": "select",
+          "selector": "#imp-name",
+          "id": "imp-name",
+          "classes": [],
+          "label": null,
+          "dynamic": true,
+          "familyMembership": [
+            "select"
+          ]
+        }
+      ],
+      "overlappingFamilyMembership": [],
+      "coverageGaps": {
+        "sourceRegistrationsWithoutRuntimeAppearance": [
+          "chromasmith-22.html:290:select",
+          "chromasmith-22.html:452:select",
+          "chromasmith-22.html:1844:select",
+          "chromasmith-22.html:1847:select",
+          "chromasmith-22.html:1850:select",
+          "chromasmith-22.html:1852:select",
+          "chromasmith-22.html:1911:select",
+          "chromasmith-22.html:2107:select",
+          "chromasmith-22.html:2129:select",
+          "chromasmith-22.html:2135:select",
+          "chromasmith-22.html:2156:select",
+          "chromasmith-22.html:2158:select",
+          "chromasmith-22.html:2177:select",
+          "chromasmith-22.html:2195:select",
+          "chromasmith-22.html:2268:select",
+          "chromasmith-22.html:2280:select",
+          "chromasmith-22.html:2289:select",
+          "chromasmith-22.html:2324:select",
+          "chromasmith-22.html:2344:select",
+          "chromasmith-22.html:2355:select",
+          "chromasmith-22.html:2365:select",
+          "chromasmith-22.html:2399:select",
+          "chromasmith-22.html:2580:select",
+          "chromasmith-22.html:2639:select",
+          "chromasmith-22.html:2650:select",
+          "chromasmith-22.html:2657:select",
+          "chromasmith-22.html:2664:select",
+          "chromasmith-22.html:2670:select",
+          "chromasmith-22.html:8210:select",
+          "chromasmith-22.html:10897:select",
+          "chromasmith-22.html:17254:select",
+          "chromasmith-22.html:21462:select",
+          "chromasmith-22.html:21479:select",
+          "chromasmith-22.html:21744:select",
+          "desktop/library-ui.js:1820:select",
+          "desktop/library-ui.js:1943:select",
+          "desktop/library-ui.js:2023:select",
+          "desktop/library-ui.js:2081:select",
+          "desktop/library-ui.js:3122:select",
+          "desktop/library-ui.js:5686:select",
+          "desktop/library-ui.js:5687:select",
+          "desktop/library-ui.js:5875:select",
+          "desktop/library-ui.js:6376:select",
+          "desktop/library-ui.js:6381:select",
+          "desktop/library-ui.js:6409:select",
+          "desktop/library-ui.js:8998:select",
+          "desktop/library-ui.js:9004:select"
+        ],
+        "dynamicRegistrations": [
+          "desktop/library-ui.js:5686:select",
+          "desktop/library-ui.js:5687:select",
+          "desktop/library-ui.js:8998:select",
+          "desktop/library-ui.js:9004:select"
+        ],
+        "registrationsWithoutStableSelector": [
+          "chromasmith-22.html:290:select",
+          "chromasmith-22.html:452:select",
+          "chromasmith-22.html:2129:select",
+          "chromasmith-22.html:8210:select",
+          "chromasmith-22.html:10897:select",
+          "chromasmith-22.html:17254:select",
+          "chromasmith-22.html:21462:select",
+          "chromasmith-22.html:21479:select",
+          "chromasmith-22.html:21744:select",
+          "desktop/library-ui.js:2081:select",
+          "desktop/library-ui.js:3122:select",
+          "desktop/library-ui.js:5875:select",
+          "desktop/library-ui.js:6376:select",
+          "desktop/library-ui.js:6381:select",
+          "desktop/library-ui.js:6409:select"
+        ]
+      }
+    },
+    "runtime": {
+      "evidenceSource": "design/components-runtime.json",
+      "appearanceCount": 13,
+      "runtimeAppearanceCount": 13,
+      "distinctSemantics": [
+        "#cl-aspect",
+        "#cl-res",
+        "#lib-camera-filter",
+        "#lib-dupe-filter",
+        "#lib-faces-filter",
+        "#lib-iso-filter",
+        "#lib-lens-filter",
+        "#lib-source",
+        "#lib-synced-filter",
+        "#lib-tag-filter",
+        "#lib-type-filter",
+        "#lib-views",
+        "#sel-dcp"
+      ],
+      "states": [
+        "library:full",
+        "page:collage",
+        "page:fx"
+      ],
+      "variants": [
+        "select|select|",
+        "select|select|fx-select"
+      ],
+      "instances": [
+        {
+          "family": "select",
+          "state": "library:full",
+          "semantic": "#lib-camera-filter",
+          "selector": "#lib-camera-filter",
+          "tag": "select",
+          "classes": [],
+          "label": "Filter by camera",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:1998:select"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "select",
+          "state": "library:full",
+          "semantic": "#lib-dupe-filter",
+          "selector": "#lib-dupe-filter",
+          "tag": "select",
+          "classes": [],
+          "label": "Filter by duplicate status",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:2001:select"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "select",
+          "state": "library:full",
+          "semantic": "#lib-faces-filter",
+          "selector": "#lib-faces-filter",
+          "tag": "select",
+          "classes": [],
+          "label": "Filter by face-indexing status",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:2010:select"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "select",
+          "state": "library:full",
+          "semantic": "#lib-iso-filter",
+          "selector": "#lib-iso-filter",
+          "tag": "select",
+          "classes": [],
+          "label": "Filter by ISO",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:2000:select"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "select",
+          "state": "library:full",
+          "semantic": "#lib-lens-filter",
+          "selector": "#lib-lens-filter",
+          "tag": "select",
+          "classes": [],
+          "label": "Filter by lens",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:1999:select"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "select",
+          "state": "library:full",
+          "semantic": "#lib-source",
+          "selector": "#lib-source",
+          "tag": "select",
+          "classes": [],
+          "label": "Photo source",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:1980:select"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "select",
+          "state": "library:full",
+          "semantic": "#lib-synced-filter",
+          "selector": "#lib-synced-filter",
+          "tag": "select",
+          "classes": [],
+          "label": "Filter by Google Photos sync status",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:2005:select"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "select",
+          "state": "library:full",
+          "semantic": "#lib-tag-filter",
+          "selector": "#lib-tag-filter",
+          "tag": "select",
+          "classes": [],
+          "label": "Filter by tag",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:2033:select"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "select",
+          "state": "library:full",
+          "semantic": "#lib-type-filter",
+          "selector": "#lib-type-filter",
+          "tag": "select",
+          "classes": [],
+          "label": "Filter by file type",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:1984:select"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "select",
+          "state": "library:full",
+          "semantic": "#lib-views",
+          "selector": "#lib-views",
+          "tag": "select",
+          "classes": [],
+          "label": "Saved filter + sort views",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:2044:select"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "select",
+          "state": "page:collage",
+          "semantic": "#cl-aspect",
+          "selector": "#cl-aspect",
+          "tag": "select",
+          "classes": [
+            "fx-select"
+          ],
+          "label": "Aspect",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2902:select"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "select",
+          "state": "page:collage",
+          "semantic": "#cl-res",
+          "selector": "#cl-res",
+          "tag": "select",
+          "classes": [
+            "fx-select"
+          ],
+          "label": "Long side",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2933:select"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "select",
+          "state": "page:fx",
+          "semantic": "#sel-dcp",
+          "selector": "#sel-dcp",
+          "tag": "select",
+          "classes": [
+            "fx-select"
+          ],
+          "label": "RAW profile",
+          "disabled": true,
+          "sourceDeclarations": [
+            "chromasmith-22.html:1805:select"
+          ],
+          "unresolved": false
+        }
+      ],
+      "unresolvedAppearances": [],
+      "coverageComplete": false,
+      "evidenceGaps": [
+        "47 source registrations have no linked runtime appearance",
+        "4 source registrations are marked dynamic",
+        "15 source registrations have no stable selector"
+      ]
+    }
+  },
+  "authored": {
+    "identity": {
+      "family": "select",
+      "subfamilies": [],
+      "designSystemComponent": null,
+      "designSystemEvidence": "unreviewed"
+    },
+    "purpose": "unreviewed",
+    "semantics": {
+      "uses": [],
+      "mismatch": "unreviewed"
+    },
+    "anatomy": {
+      "parts": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "variants": [],
+    "themes": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "states": {
+      "current": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "responsiveDimensions": {},
+    "tokens": {
+      "references": [],
+      "rawLiterals": [],
+      "proposed": [],
+      "exception": null
+    },
+    "typography": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "motion": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "keyboardPointer": {
+      "pointer": "unreviewed",
+      "keyboard": "unreviewed"
+    },
+    "accessibility": {
+      "current": "unreviewed",
+      "evidenceLimit": "unreviewed"
+    },
+    "systemDesignRules": [],
+    "proposedTargets": {},
+    "decisions": [],
+    "exceptions": [],
+    "currentVsProposed": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "userDecisions": [],
+    "references": [],
+    "questions": []
+  },
+  "validation": {
+    "commands": [
+      "node scripts/query-components.mjs --family select",
+      "node scripts/validate-component-contracts.mjs --family select"
+    ],
+    "scope": "Unreviewed generated draft; observations only, not a design or production gate."
+  },
+  "approval": null,
+  "authoredDigest": "da56b8a1da01d92b3452ed415ee630e44c0d34d0f145220caef1902d5809cb8e"
+}

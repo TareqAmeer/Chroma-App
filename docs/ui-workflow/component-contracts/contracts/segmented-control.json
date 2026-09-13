@@ -1,0 +1,585 @@
+{
+  "schemaVersion": 1,
+  "family": "segmented-control",
+  "purpose": "Unreviewed; purpose requires human review.",
+  "status": "draft",
+  "observations": {
+    "generatedBy": "scripts/scaffold-component-contracts.mjs",
+    "generatedAt": "2026-09-13T04:14:41.378Z",
+    "registry": {
+      "query": "node scripts/query-components.mjs --family segmented-control",
+      "sourceRegistrationCount": 7,
+      "expectedCount": 7,
+      "locations": [
+        {
+          "key": "chromasmith-22.html:1912:segmented-control",
+          "source": "chromasmith-22.html",
+          "line": 1912,
+          "tag": "div",
+          "selector": "#seg-raw-nr",
+          "id": "seg-raw-nr",
+          "classes": [
+            "seg"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "segmented-control"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2071:segmented-control",
+          "source": "chromasmith-22.html",
+          "line": 2071,
+          "tag": "div",
+          "selector": ".lib-seg",
+          "id": null,
+          "classes": [
+            "seg",
+            "lib-seg",
+            "msk-prevmode-seg"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "segmented-control"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2290:segmented-control",
+          "source": "chromasmith-22.html",
+          "line": 2290,
+          "tag": "div",
+          "selector": "#seg-heal-mode",
+          "id": "seg-heal-mode",
+          "classes": [
+            "seg"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "segmented-control"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:12280:segmented-control",
+          "source": "chromasmith-22.html",
+          "line": 12280,
+          "tag": "div",
+          "selector": null,
+          "id": null,
+          "classes": [
+            "seg"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "segmented-control"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14261:segmented-control",
+          "source": "chromasmith-22.html",
+          "line": 14261,
+          "tag": "div",
+          "selector": ".msk-seg",
+          "id": null,
+          "classes": [
+            "seg",
+            "msk-seg"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "segmented-control"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14311:segmented-control",
+          "source": "chromasmith-22.html",
+          "line": 14311,
+          "tag": "div",
+          "selector": ".msk-seg",
+          "id": null,
+          "classes": [
+            "seg",
+            "msk-seg"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "segmented-control"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1855:segmented-control",
+          "source": "desktop/library-ui.js",
+          "line": 1855,
+          "tag": "div",
+          "selector": "#lib-viewmode-seg",
+          "id": "lib-viewmode-seg",
+          "classes": [
+            "lib-seg",
+            "lib-viewtoggle"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "segmented-control"
+          ]
+        }
+      ],
+      "overlappingFamilyMembership": [
+        {
+          "declaration": "chromasmith-22.html:12280",
+          "families": [
+            "button",
+            "segmented-control"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2071",
+          "families": [
+            "button",
+            "segmented-control"
+          ]
+        }
+      ],
+      "coverageGaps": {
+        "sourceRegistrationsWithoutRuntimeAppearance": [
+          "chromasmith-22.html:1912:segmented-control",
+          "chromasmith-22.html:2071:segmented-control",
+          "chromasmith-22.html:2290:segmented-control",
+          "chromasmith-22.html:12280:segmented-control",
+          "chromasmith-22.html:14261:segmented-control",
+          "chromasmith-22.html:14311:segmented-control"
+        ],
+        "dynamicRegistrations": [],
+        "registrationsWithoutStableSelector": [
+          "chromasmith-22.html:12280:segmented-control"
+        ]
+      }
+    },
+    "runtime": {
+      "evidenceSource": "design/components-runtime.json",
+      "appearanceCount": 15,
+      "runtimeAppearanceCount": 15,
+      "distinctSemantics": [
+        "#lib-viewmode-seg",
+        "segmented-control::div::Even them outMatch shootPick a shadeCustom",
+        "segmented-control::div::HealClone",
+        "segmented-control::div::OverlayIsolateSelectionOff"
+      ],
+      "states": [
+        "catalog",
+        "editor:masks-ai",
+        "editor:masks-brush",
+        "editor:masks-coat",
+        "editor:masks-color",
+        "editor:masks-depth",
+        "editor:masks-linear",
+        "editor:masks-lum",
+        "editor:masks-radial",
+        "editor:masks-skin",
+        "editor:masks-sky",
+        "library:full",
+        "mobile"
+      ],
+      "variants": [
+        "segmented-control|div|lib-seg.lib-viewtoggle",
+        "segmented-control|div|lib-seg.msk-prevmode-seg.seg",
+        "segmented-control|div|msk-seg.seg",
+        "segmented-control|div|seg"
+      ],
+      "instances": [
+        {
+          "family": "segmented-control",
+          "state": "catalog",
+          "semantic": "segmented-control::div::HealClone",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "seg"
+          ],
+          "label": "HealClone",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "editor:masks-ai",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "msk-prevmode-seg",
+            "seg"
+          ],
+          "label": "OverlayIsolateSelectionOff",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "editor:masks-brush",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "msk-prevmode-seg",
+            "seg"
+          ],
+          "label": "OverlayIsolateSelectionOff",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "editor:masks-coat",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "msk-prevmode-seg",
+            "seg"
+          ],
+          "label": "OverlayIsolateSelectionOff",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "editor:masks-color",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "msk-prevmode-seg",
+            "seg"
+          ],
+          "label": "OverlayIsolateSelectionOff",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "editor:masks-depth",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "msk-prevmode-seg",
+            "seg"
+          ],
+          "label": "OverlayIsolateSelectionOff",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "editor:masks-linear",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "msk-prevmode-seg",
+            "seg"
+          ],
+          "label": "OverlayIsolateSelectionOff",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "editor:masks-lum",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "msk-prevmode-seg",
+            "seg"
+          ],
+          "label": "OverlayIsolateSelectionOff",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "editor:masks-radial",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "msk-prevmode-seg",
+            "seg"
+          ],
+          "label": "OverlayIsolateSelectionOff",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "editor:masks-skin",
+          "semantic": "segmented-control::div::Even them outMatch shootPick a shadeCustom",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "msk-seg",
+            "seg"
+          ],
+          "label": "Even them outMatch shootPick a shadeCustom",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "editor:masks-skin",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "msk-prevmode-seg",
+            "seg"
+          ],
+          "label": "OverlayIsolateSelectionOff",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "editor:masks-sky",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "msk-prevmode-seg",
+            "seg"
+          ],
+          "label": "OverlayIsolateSelectionOff",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "library:full",
+          "semantic": "#lib-viewmode-seg",
+          "selector": "#lib-viewmode-seg",
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "lib-viewtoggle"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:1855:segmented-control"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "segmented-control",
+          "state": "library:full",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "msk-prevmode-seg",
+            "seg"
+          ],
+          "label": "OverlayIsolateSelectionOff",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "segmented-control",
+          "state": "mobile",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-seg",
+            "msk-prevmode-seg",
+            "seg"
+          ],
+          "label": "OverlayIsolateSelectionOff",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        }
+      ],
+      "unresolvedAppearances": [
+        {
+          "state": "catalog",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::HealClone"
+        },
+        {
+          "state": "editor:masks-ai",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff"
+        },
+        {
+          "state": "editor:masks-brush",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff"
+        },
+        {
+          "state": "editor:masks-coat",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff"
+        },
+        {
+          "state": "editor:masks-color",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff"
+        },
+        {
+          "state": "editor:masks-depth",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff"
+        },
+        {
+          "state": "editor:masks-linear",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff"
+        },
+        {
+          "state": "editor:masks-lum",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff"
+        },
+        {
+          "state": "editor:masks-radial",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff"
+        },
+        {
+          "state": "editor:masks-skin",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::Even them outMatch shootPick a shadeCustom"
+        },
+        {
+          "state": "editor:masks-skin",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff"
+        },
+        {
+          "state": "editor:masks-sky",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff"
+        },
+        {
+          "state": "library:full",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff"
+        },
+        {
+          "state": "mobile",
+          "family": "segmented-control",
+          "semantic": "segmented-control::div::OverlayIsolateSelectionOff"
+        }
+      ],
+      "coverageComplete": false,
+      "evidenceGaps": [
+        "6 source registrations have no linked runtime appearance",
+        "28 runtime records are unresolved",
+        "1 source registrations have no stable selector"
+      ]
+    }
+  },
+  "authored": {
+    "identity": {
+      "family": "segmented-control",
+      "subfamilies": [],
+      "designSystemComponent": null,
+      "designSystemEvidence": "unreviewed"
+    },
+    "purpose": "unreviewed",
+    "semantics": {
+      "uses": [],
+      "mismatch": "unreviewed"
+    },
+    "anatomy": {
+      "parts": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "variants": [],
+    "themes": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "states": {
+      "current": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "responsiveDimensions": {},
+    "tokens": {
+      "references": [],
+      "rawLiterals": [],
+      "proposed": [],
+      "exception": null
+    },
+    "typography": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "motion": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "keyboardPointer": {
+      "pointer": "unreviewed",
+      "keyboard": "unreviewed"
+    },
+    "accessibility": {
+      "current": "unreviewed",
+      "evidenceLimit": "unreviewed"
+    },
+    "systemDesignRules": [],
+    "proposedTargets": {},
+    "decisions": [],
+    "exceptions": [],
+    "currentVsProposed": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "userDecisions": [],
+    "references": [],
+    "questions": []
+  },
+  "validation": {
+    "commands": [
+      "node scripts/query-components.mjs --family segmented-control",
+      "node scripts/validate-component-contracts.mjs --family segmented-control"
+    ],
+    "scope": "Unreviewed generated draft; observations only, not a design or production gate."
+  },
+  "approval": null,
+  "authoredDigest": "7519bdee1a752116c5477aae332aa456754a10294cafceec2b2463801422a6e8"
+}

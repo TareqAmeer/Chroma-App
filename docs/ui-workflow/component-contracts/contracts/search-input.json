@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "family": "search-input",
+  "purpose": "Unreviewed; purpose requires human review.",
+  "status": "draft",
+  "observations": {
+    "generatedBy": "scripts/scaffold-component-contracts.mjs",
+    "generatedAt": "2026-09-13T04:14:41.378Z",
+    "registry": {
+      "query": "node scripts/query-components.mjs --family search-input",
+      "sourceRegistrationCount": 1,
+      "expectedCount": 1,
+      "locations": [
+        {
+          "key": "desktop/library-ui.js:1870:search-input",
+          "source": "desktop/library-ui.js",
+          "line": 1870,
+          "tag": "div",
+          "selector": ".lib-search-wrap",
+          "id": null,
+          "classes": [
+            "lib-search-wrap"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "search-input"
+          ]
+        }
+      ],
+      "overlappingFamilyMembership": [],
+      "coverageGaps": {
+        "sourceRegistrationsWithoutRuntimeAppearance": [
+          "desktop/library-ui.js:1870:search-input"
+        ],
+        "dynamicRegistrations": [],
+        "registrationsWithoutStableSelector": []
+      }
+    },
+    "runtime": {
+      "evidenceSource": "design/components-runtime.json",
+      "appearanceCount": 1,
+      "runtimeAppearanceCount": 1,
+      "distinctSemantics": [
+        "search-input::div::"
+      ],
+      "states": [
+        "library:full"
+      ],
+      "variants": [
+        "search-input|div|lib-search-wrap"
+      ],
+      "instances": [
+        {
+          "family": "search-input",
+          "state": "library:full",
+          "semantic": "search-input::div::",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "lib-search-wrap"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        }
+      ],
+      "unresolvedAppearances": [
+        {
+          "state": "library:full",
+          "family": "search-input",
+          "semantic": "search-input::div::"
+        }
+      ],
+      "coverageComplete": false,
+      "evidenceGaps": [
+        "1 source registrations have no linked runtime appearance",
+        "2 runtime records are unresolved"
+      ]
+    }
+  },
+  "authored": {
+    "identity": {
+      "family": "search-input",
+      "subfamilies": [],
+      "designSystemComponent": null,
+      "designSystemEvidence": "unreviewed"
+    },
+    "purpose": "unreviewed",
+    "semantics": {
+      "uses": [],
+      "mismatch": "unreviewed"
+    },
+    "anatomy": {
+      "parts": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "variants": [],
+    "themes": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "states": {
+      "current": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "responsiveDimensions": {},
+    "tokens": {
+      "references": [],
+      "rawLiterals": [],
+      "proposed": [],
+      "exception": null
+    },
+    "typography": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "motion": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "keyboardPointer": {
+      "pointer": "unreviewed",
+      "keyboard": "unreviewed"
+    },
+    "accessibility": {
+      "current": "unreviewed",
+      "evidenceLimit": "unreviewed"
+    },
+    "systemDesignRules": [],
+    "proposedTargets": {},
+    "decisions": [],
+    "exceptions": [],
+    "currentVsProposed": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "userDecisions": [],
+    "references": [],
+    "questions": []
+  },
+  "validation": {
+    "commands": [
+      "node scripts/query-components.mjs --family search-input",
+      "node scripts/validate-component-contracts.mjs --family search-input"
+    ],
+    "scope": "Unreviewed generated draft; observations only, not a design or production gate."
+  },
+  "approval": null,
+  "authoredDigest": "722098580464bebf4be5220614f2cdf5f2003074dc68eb2fd7afb8194fb9306f"
+}

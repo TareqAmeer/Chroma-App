@@ -1,0 +1,961 @@
+{
+  "schemaVersion": 1,
+  "family": "section-card",
+  "purpose": "Unreviewed; purpose requires human review.",
+  "status": "draft",
+  "observations": {
+    "generatedBy": "scripts/scaffold-component-contracts.mjs",
+    "generatedAt": "2026-09-13T04:14:41.378Z",
+    "registry": {
+      "query": "node scripts/query-components.mjs --family section-card",
+      "sourceRegistrationCount": 29,
+      "expectedCount": 29,
+      "locations": [
+        {
+          "key": "chromasmith-22.html:1797:section-card",
+          "source": "chromasmith-22.html",
+          "line": 1797,
+          "tag": "div",
+          "selector": "[data-fxsec=\"image\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1841:section-card",
+          "source": "chromasmith-22.html",
+          "line": 1841,
+          "tag": "div",
+          "selector": "[data-fxsec=\"looks\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1875:section-card",
+          "source": "chromasmith-22.html",
+          "line": 1875,
+          "tag": "div",
+          "selector": "[data-fxsec=\"adjust\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1907:section-card",
+          "source": "chromasmith-22.html",
+          "line": 1907,
+          "tag": "div",
+          "selector": "[data-fxsec=\"nr\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1940:section-card",
+          "source": "chromasmith-22.html",
+          "line": 1940,
+          "tag": "div",
+          "selector": "[data-fxsec=\"deconv\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1949:section-card",
+          "source": "chromasmith-22.html",
+          "line": 1949,
+          "tag": "div",
+          "selector": "[data-fxsec=\"curves\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1987:section-card",
+          "source": "chromasmith-22.html",
+          "line": 1987,
+          "tag": "div",
+          "selector": "[data-fxsec=\"hsl\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2002:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2002,
+          "tag": "div",
+          "selector": "[data-fxsec=\"wheels\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2032:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2032,
+          "tag": "div",
+          "selector": "[data-fxsec=\"pointcolor\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2054:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2054,
+          "tag": "div",
+          "selector": "[data-fxsec=\"local\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2091:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2091,
+          "tag": "div",
+          "selector": "[data-fxsec=\"lens\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2124:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2124,
+          "tag": "div",
+          "selector": "[data-fxsec=\"crop\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2189:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2189,
+          "tag": "div",
+          "selector": "[data-fxsec=\"grain\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2221:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2221,
+          "tag": "div",
+          "selector": "[data-fxsec=\"art\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2232:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2232,
+          "tag": "div",
+          "selector": "[data-fxsec=\"hal\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2244:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2244,
+          "tag": "div",
+          "selector": "[data-fxsec=\"bloom\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2253:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2253,
+          "tag": "div",
+          "selector": "[data-fxsec=\"vig\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2260:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2260,
+          "tag": "div",
+          "selector": "[data-fxsec=\"borders\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2285:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2285,
+          "tag": "div",
+          "selector": "[data-fxsec=\"retouch\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2309:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2309,
+          "tag": "div",
+          "selector": "[data-fxsec=\"canvas\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2321:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2321,
+          "tag": "div",
+          "selector": "[data-fxsec=\"diag\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl",
+            "fx-diag"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2333:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2333,
+          "tag": "div",
+          "selector": "[data-fxsec=\"export\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2471:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2471,
+          "tag": "div",
+          "selector": "[data-fxsec=\"info\"]",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2890:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2890,
+          "tag": "div",
+          "selector": ".fx-ctrl",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2899:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2899,
+          "tag": "div",
+          "selector": ".fx-ctrl",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2905:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2905,
+          "tag": "div",
+          "selector": ".fx-ctrl",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2910:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2910,
+          "tag": "div",
+          "selector": ".fx-ctrl",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2920:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2920,
+          "tag": "div",
+          "selector": "#cl-cellpanel",
+          "id": "cl-cellpanel",
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2930:section-card",
+          "source": "chromasmith-22.html",
+          "line": 2930,
+          "tag": "div",
+          "selector": ".fx-ctrl",
+          "id": null,
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "section-card"
+          ]
+        }
+      ],
+      "overlappingFamilyMembership": [],
+      "coverageGaps": {
+        "sourceRegistrationsWithoutRuntimeAppearance": [
+          "chromasmith-22.html:1841:section-card",
+          "chromasmith-22.html:1875:section-card",
+          "chromasmith-22.html:1907:section-card",
+          "chromasmith-22.html:1940:section-card",
+          "chromasmith-22.html:1949:section-card",
+          "chromasmith-22.html:1987:section-card",
+          "chromasmith-22.html:2002:section-card",
+          "chromasmith-22.html:2032:section-card",
+          "chromasmith-22.html:2091:section-card",
+          "chromasmith-22.html:2124:section-card",
+          "chromasmith-22.html:2189:section-card",
+          "chromasmith-22.html:2221:section-card",
+          "chromasmith-22.html:2232:section-card",
+          "chromasmith-22.html:2244:section-card",
+          "chromasmith-22.html:2253:section-card",
+          "chromasmith-22.html:2260:section-card",
+          "chromasmith-22.html:2309:section-card",
+          "chromasmith-22.html:2321:section-card",
+          "chromasmith-22.html:2333:section-card",
+          "chromasmith-22.html:2471:section-card",
+          "chromasmith-22.html:2890:section-card",
+          "chromasmith-22.html:2899:section-card",
+          "chromasmith-22.html:2905:section-card",
+          "chromasmith-22.html:2910:section-card",
+          "chromasmith-22.html:2920:section-card",
+          "chromasmith-22.html:2930:section-card"
+        ],
+        "dynamicRegistrations": [],
+        "registrationsWithoutStableSelector": []
+      }
+    },
+    "runtime": {
+      "evidenceSource": "design/components-runtime.json",
+      "appearanceCount": 19,
+      "runtimeAppearanceCount": 19,
+      "distinctSemantics": [
+        "[data-fxsec=\"image\"]",
+        "[data-fxsec=\"local\"]",
+        "[data-fxsec=\"retouch\"]",
+        "section-card::div::Borders & background Background Spacing8 Outer margin0 Corner round0",
+        "section-card::div::Canvas size Aspect 1:14:55:43:44:32:33:29:1616:9",
+        "section-card::div::Export Long side 1600 px 2400 px 3200 px 4000 px (large) Export collage Shuffle ",
+        "section-card::div::Layout Add photos to see layout options.",
+        "section-card::div::Photos ＋Add photos Add photos, then pick a layout. Drag a photo onto a slot to p"
+      ],
+      "states": [
+        "catalog",
+        "editor:masks-ai",
+        "editor:masks-brush",
+        "editor:masks-coat",
+        "editor:masks-color",
+        "editor:masks-depth",
+        "editor:masks-linear",
+        "editor:masks-lum",
+        "editor:masks-radial",
+        "editor:masks-skin",
+        "editor:masks-sky",
+        "library:full",
+        "mobile",
+        "page:collage",
+        "page:fx"
+      ],
+      "variants": [
+        "section-card|div|fx-ctrl",
+        "section-card|div|fx-ctrl.sec-active"
+      ],
+      "instances": [
+        {
+          "family": "section-card",
+          "state": "catalog",
+          "semantic": "[data-fxsec=\"retouch\"]",
+          "selector": "[data-fxsec=\"retouch\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": "Retouch Reset Mode i Heal (blend color)Clone (copy exactly) HealClone Size4% Feather50 Opacity100 Re",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2285:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "editor:masks-ai",
+          "semantic": "[data-fxsec=\"local\"]",
+          "selector": "[data-fxsec=\"local\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only AI 1 AI 1Se",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2054:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "editor:masks-brush",
+          "semantic": "[data-fxsec=\"local\"]",
+          "selector": "[data-fxsec=\"local\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Brush 1 Bru",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2054:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "editor:masks-coat",
+          "semantic": "[data-fxsec=\"local\"]",
+          "selector": "[data-fxsec=\"local\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Coat AI 1 C",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2054:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "editor:masks-color",
+          "semantic": "[data-fxsec=\"local\"]",
+          "selector": "[data-fxsec=\"local\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Color 1 Col",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2054:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "editor:masks-depth",
+          "semantic": "[data-fxsec=\"local\"]",
+          "selector": "[data-fxsec=\"local\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Showing what is ACTUALLY adjusted — shap",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2054:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "editor:masks-linear",
+          "semantic": "[data-fxsec=\"local\"]",
+          "selector": "[data-fxsec=\"local\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Linear 1 Li",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2054:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "editor:masks-lum",
+          "semantic": "[data-fxsec=\"local\"]",
+          "selector": "[data-fxsec=\"local\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Showing what is ACTUALLY adjusted — shap",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2054:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "editor:masks-radial",
+          "semantic": "[data-fxsec=\"local\"]",
+          "selector": "[data-fxsec=\"local\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Radial 1 Ra",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2054:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "editor:masks-skin",
+          "semantic": "[data-fxsec=\"local\"]",
+          "selector": "[data-fxsec=\"local\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Skin AI 1 S",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2054:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "editor:masks-sky",
+          "semantic": "[data-fxsec=\"local\"]",
+          "selector": "[data-fxsec=\"local\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Overlay opacity 75 Edge only Sky 1 Sky 1",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2054:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "library:full",
+          "semantic": "[data-fxsec=\"local\"]",
+          "selector": "[data-fxsec=\"local\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Showing what is ACTUALLY adjusted — shap",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2054:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "mobile",
+          "semantic": "[data-fxsec=\"local\"]",
+          "selector": "[data-fxsec=\"local\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Masks Reset + Mask Show on photo OverlayIsolateSelectionOff Showing what is ACTUALLY adjusted — shap",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2054:section-card"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "section-card",
+          "state": "page:collage",
+          "semantic": "section-card::div::Borders & background Background Spacing8 Outer margin0 Corner round0",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": "Borders & background Background Spacing8 Outer margin0 Corner round0",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "section-card",
+          "state": "page:collage",
+          "semantic": "section-card::div::Canvas size Aspect 1:14:55:43:44:32:33:29:1616:9",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": "Canvas size Aspect 1:14:55:43:44:32:33:29:1616:9",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "section-card",
+          "state": "page:collage",
+          "semantic": "section-card::div::Export Long side 1600 px 2400 px 3200 px 4000 px (large) Export collage Shuffle ",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": "Export Long side 1600 px 2400 px 3200 px 4000 px (large) Export collage Shuffle Start over",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "section-card",
+          "state": "page:collage",
+          "semantic": "section-card::div::Layout Add photos to see layout options.",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": "Layout Add photos to see layout options.",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "section-card",
+          "state": "page:collage",
+          "semantic": "section-card::div::Photos ＋Add photos Add photos, then pick a layout. Drag a photo onto a slot to p",
+          "selector": null,
+          "tag": "div",
+          "classes": [
+            "fx-ctrl"
+          ],
+          "label": "Photos ＋Add photos Add photos, then pick a layout. Drag a photo onto a slot to place it; drag betwee",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "section-card",
+          "state": "page:fx",
+          "semantic": "[data-fxsec=\"image\"]",
+          "selector": "[data-fxsec=\"image\"]",
+          "tag": "div",
+          "classes": [
+            "fx-ctrl",
+            "sec-active"
+          ],
+          "label": "Image Input Drop imageportrait RAW profile None (LibRaw sRGB)StandardNaturalVividFlatPortraitLandsca",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:1797:section-card"
+          ],
+          "unresolved": false
+        }
+      ],
+      "unresolvedAppearances": [
+        {
+          "state": "page:collage",
+          "family": "section-card",
+          "semantic": "section-card::div::Borders & background Background Spacing8 Outer margin0 Corner round0"
+        },
+        {
+          "state": "page:collage",
+          "family": "section-card",
+          "semantic": "section-card::div::Canvas size Aspect 1:14:55:43:44:32:33:29:1616:9"
+        },
+        {
+          "state": "page:collage",
+          "family": "section-card",
+          "semantic": "section-card::div::Export Long side 1600 px 2400 px 3200 px 4000 px (large) Export collage Shuffle "
+        },
+        {
+          "state": "page:collage",
+          "family": "section-card",
+          "semantic": "section-card::div::Layout Add photos to see layout options."
+        },
+        {
+          "state": "page:collage",
+          "family": "section-card",
+          "semantic": "section-card::div::Photos ＋Add photos Add photos, then pick a layout. Drag a photo onto a slot to p"
+        }
+      ],
+      "coverageComplete": false,
+      "evidenceGaps": [
+        "26 source registrations have no linked runtime appearance",
+        "10 runtime records are unresolved"
+      ]
+    }
+  },
+  "authored": {
+    "identity": {
+      "family": "section-card",
+      "subfamilies": [],
+      "designSystemComponent": null,
+      "designSystemEvidence": "unreviewed"
+    },
+    "purpose": "unreviewed",
+    "semantics": {
+      "uses": [],
+      "mismatch": "unreviewed"
+    },
+    "anatomy": {
+      "parts": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "variants": [],
+    "themes": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "states": {
+      "current": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "responsiveDimensions": {},
+    "tokens": {
+      "references": [],
+      "rawLiterals": [],
+      "proposed": [],
+      "exception": null
+    },
+    "typography": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "motion": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "keyboardPointer": {
+      "pointer": "unreviewed",
+      "keyboard": "unreviewed"
+    },
+    "accessibility": {
+      "current": "unreviewed",
+      "evidenceLimit": "unreviewed"
+    },
+    "systemDesignRules": [],
+    "proposedTargets": {},
+    "decisions": [],
+    "exceptions": [],
+    "currentVsProposed": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "userDecisions": [],
+    "references": [],
+    "questions": []
+  },
+  "validation": {
+    "commands": [
+      "node scripts/query-components.mjs --family section-card",
+      "node scripts/validate-component-contracts.mjs --family section-card"
+    ],
+    "scope": "Unreviewed generated draft; observations only, not a design or production gate."
+  },
+  "approval": null,
+  "authoredDigest": "768225e0a6208c732f6e7e57bdf6d3dc7e7745837ffe7e7eca1cd387d4201bed"
+}

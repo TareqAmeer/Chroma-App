@@ -923,3 +923,7 @@ call `ui:test`) will currently fail on that until it's fixed.
   variants). These decisions do **not** approve the overall contract structure or authorize
   production changes. Phase 3 remains blocked pending that separate approval and exact
   token/interaction implementation proposals.
+
+**Phase 2B — contract scaffolds — 2026-09-13**
+- Added deterministic, observation-only scaffolding for 12 non-toggle families; all 13 registry families now have contracts.
+- Generated drafts record registration/runtime counts, overlap, variants, and explicit evidence gaps; drafts are not design approval.

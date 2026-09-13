@@ -1,0 +1,3017 @@
+{
+  "schemaVersion": 1,
+  "family": "slider",
+  "purpose": "Unreviewed; purpose requires human review.",
+  "status": "draft",
+  "observations": {
+    "generatedBy": "scripts/scaffold-component-contracts.mjs",
+    "generatedAt": "2026-09-13T04:14:41.378Z",
+    "registry": {
+      "query": "node scripts/query-components.mjs --family slider",
+      "sourceRegistrationCount": 91,
+      "expectedCount": 91,
+      "locations": [
+        {
+          "key": "chromasmith-22.html:1853:slider",
+          "source": "chromasmith-22.html",
+          "line": 1853,
+          "tag": "input",
+          "selector": "#sl-lut-mix",
+          "id": "sl-lut-mix",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "Blends the look LUT with the unfiltered image — 100 is the full look, lower values fade it toward the original.",
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1881:slider",
+          "source": "chromasmith-22.html",
+          "line": 1881,
+          "tag": "input",
+          "selector": "#sl-adj-exp",
+          "id": "sl-adj-exp",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1882:slider",
+          "source": "chromasmith-22.html",
+          "line": 1882,
+          "tag": "input",
+          "selector": "#sl-adj-temp",
+          "id": "sl-adj-temp",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1883:slider",
+          "source": "chromasmith-22.html",
+          "line": 1883,
+          "tag": "input",
+          "selector": "#sl-adj-tint",
+          "id": "sl-adj-tint",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1884:slider",
+          "source": "chromasmith-22.html",
+          "line": 1884,
+          "tag": "input",
+          "selector": "#sl-adj-con",
+          "id": "sl-adj-con",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1885:slider",
+          "source": "chromasmith-22.html",
+          "line": 1885,
+          "tag": "input",
+          "selector": "#sl-adj-hi",
+          "id": "sl-adj-hi",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1886:slider",
+          "source": "chromasmith-22.html",
+          "line": 1886,
+          "tag": "input",
+          "selector": "#sl-adj-sh",
+          "id": "sl-adj-sh",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1887:slider",
+          "source": "chromasmith-22.html",
+          "line": 1887,
+          "tag": "input",
+          "selector": "#sl-adj-wh",
+          "id": "sl-adj-wh",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1888:slider",
+          "source": "chromasmith-22.html",
+          "line": 1888,
+          "tag": "input",
+          "selector": "#sl-adj-bl",
+          "id": "sl-adj-bl",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1889:slider",
+          "source": "chromasmith-22.html",
+          "line": 1889,
+          "tag": "input",
+          "selector": "#sl-adj-vib",
+          "id": "sl-adj-vib",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1890:slider",
+          "source": "chromasmith-22.html",
+          "line": 1890,
+          "tag": "input",
+          "selector": "#sl-adj-sat",
+          "id": "sl-adj-sat",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1891:slider",
+          "source": "chromasmith-22.html",
+          "line": 1891,
+          "tag": "input",
+          "selector": "#sl-adj-clarity",
+          "id": "sl-adj-clarity",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1892:slider",
+          "source": "chromasmith-22.html",
+          "line": 1892,
+          "tag": "input",
+          "selector": "#sl-adj-skin",
+          "id": "sl-adj-skin",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1893:slider",
+          "source": "chromasmith-22.html",
+          "line": 1893,
+          "tag": "input",
+          "selector": "#sl-adj-dehaze",
+          "id": "sl-adj-dehaze",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1916:slider",
+          "source": "chromasmith-22.html",
+          "line": 1916,
+          "tag": "input",
+          "selector": "#sl-nr-high-strength",
+          "id": "sl-nr-high-strength",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "info-button",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1929:slider",
+          "source": "chromasmith-22.html",
+          "line": 1929,
+          "tag": "input",
+          "selector": "#sl-nr-lum",
+          "id": "sl-nr-lum",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1930:slider",
+          "source": "chromasmith-22.html",
+          "line": 1930,
+          "tag": "input",
+          "selector": "#sl-nr-col",
+          "id": "sl-nr-col",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1931:slider",
+          "source": "chromasmith-22.html",
+          "line": 1931,
+          "tag": "input",
+          "selector": "#sl-nr-det",
+          "id": "sl-nr-det",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1932:slider",
+          "source": "chromasmith-22.html",
+          "line": 1932,
+          "tag": "input",
+          "selector": "#sl-adj-sharp",
+          "id": "sl-adj-sharp",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1933:slider",
+          "source": "chromasmith-22.html",
+          "line": 1933,
+          "tag": "input",
+          "selector": "#sl-nr-hldesat",
+          "id": "sl-nr-hldesat",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "control-row",
+            "info-button",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1945:slider",
+          "source": "chromasmith-22.html",
+          "line": 1945,
+          "tag": "input",
+          "selector": "#sl-deconv-amt",
+          "id": "sl-deconv-amt",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1946:slider",
+          "source": "chromasmith-22.html",
+          "line": 1946,
+          "tag": "input",
+          "selector": "#sl-deconv-rad",
+          "id": "sl-deconv-rad",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1976:slider",
+          "source": "chromasmith-22.html",
+          "line": 1976,
+          "tag": "input",
+          "selector": "#sl-crv-s",
+          "id": "sl-crv-s",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1977:slider",
+          "source": "chromasmith-22.html",
+          "line": 1977,
+          "tag": "input",
+          "selector": "#sl-crv-d",
+          "id": "sl-crv-d",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1978:slider",
+          "source": "chromasmith-22.html",
+          "line": 1978,
+          "tag": "input",
+          "selector": "#sl-crv-l",
+          "id": "sl-crv-l",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1979:slider",
+          "source": "chromasmith-22.html",
+          "line": 1979,
+          "tag": "input",
+          "selector": "#sl-crv-h",
+          "id": "sl-crv-h",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1992:slider",
+          "source": "chromasmith-22.html",
+          "line": 1992,
+          "tag": "input",
+          "selector": "#sl-hsl-h",
+          "id": "sl-hsl-h",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1993:slider",
+          "source": "chromasmith-22.html",
+          "line": 1993,
+          "tag": "input",
+          "selector": "#sl-hsl-s",
+          "id": "sl-hsl-s",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1994:slider",
+          "source": "chromasmith-22.html",
+          "line": 1994,
+          "tag": "input",
+          "selector": "#sl-hsl-l",
+          "id": "sl-hsl-l",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2010:slider",
+          "source": "chromasmith-22.html",
+          "line": 2010,
+          "tag": "input",
+          "selector": "#sl-wheel-lift-l",
+          "id": "sl-wheel-lift-l",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2016:slider",
+          "source": "chromasmith-22.html",
+          "line": 2016,
+          "tag": "input",
+          "selector": "#sl-wheel-gamma-l",
+          "id": "sl-wheel-gamma-l",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2022:slider",
+          "source": "chromasmith-22.html",
+          "line": 2022,
+          "tag": "input",
+          "selector": "#sl-wheel-gain-l",
+          "id": "sl-wheel-gain-l",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2042:slider",
+          "source": "chromasmith-22.html",
+          "line": 2042,
+          "tag": "input",
+          "selector": "#sl-pc-h",
+          "id": "sl-pc-h",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2043:slider",
+          "source": "chromasmith-22.html",
+          "line": 2043,
+          "tag": "input",
+          "selector": "#sl-pc-s",
+          "id": "sl-pc-s",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2044:slider",
+          "source": "chromasmith-22.html",
+          "line": 2044,
+          "tag": "input",
+          "selector": "#sl-pc-l",
+          "id": "sl-pc-l",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2045:slider",
+          "source": "chromasmith-22.html",
+          "line": 2045,
+          "tag": "input",
+          "selector": "#sl-pc-r",
+          "id": "sl-pc-r",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2079:slider",
+          "source": "chromasmith-22.html",
+          "line": 2079,
+          "tag": "input",
+          "selector": "#sl-msk-selview-opacity",
+          "id": "sl-msk-selview-opacity",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2111:slider",
+          "source": "chromasmith-22.html",
+          "line": 2111,
+          "tag": "input",
+          "selector": "#in-lens-manual-focal",
+          "id": "in-lens-manual-focal",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2114:slider",
+          "source": "chromasmith-22.html",
+          "line": 2114,
+          "tag": "input",
+          "selector": "#sl-lens-dist",
+          "id": "sl-lens-dist",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2115:slider",
+          "source": "chromasmith-22.html",
+          "line": 2115,
+          "tag": "input",
+          "selector": "#sl-lens-vig",
+          "id": "sl-lens-vig",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2116:slider",
+          "source": "chromasmith-22.html",
+          "line": 2116,
+          "tag": "input",
+          "selector": "#sl-lens-ca",
+          "id": "sl-lens-ca",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2117:slider",
+          "source": "chromasmith-22.html",
+          "line": 2117,
+          "tag": "input",
+          "selector": "#sl-lens-pv",
+          "id": "sl-lens-pv",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2118:slider",
+          "source": "chromasmith-22.html",
+          "line": 2118,
+          "tag": "input",
+          "selector": "#sl-lens-ph",
+          "id": "sl-lens-ph",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2119:slider",
+          "source": "chromasmith-22.html",
+          "line": 2119,
+          "tag": "input",
+          "selector": "#sl-lens-rot",
+          "id": "sl-lens-rot",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2120:slider",
+          "source": "chromasmith-22.html",
+          "line": 2120,
+          "tag": "input",
+          "selector": "#sl-lens-scale",
+          "id": "sl-lens-scale",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2121:slider",
+          "source": "chromasmith-22.html",
+          "line": 2121,
+          "tag": "input",
+          "selector": "#sl-lens-defr",
+          "id": "sl-lens-defr",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2170:slider",
+          "source": "chromasmith-22.html",
+          "line": 2170,
+          "tag": "input",
+          "selector": "#sl-straighten",
+          "id": "sl-straighten",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2192:slider",
+          "source": "chromasmith-22.html",
+          "line": 2192,
+          "tag": "input",
+          "selector": "#sl-grain-a",
+          "id": "sl-grain-a",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2193:slider",
+          "source": "chromasmith-22.html",
+          "line": 2193,
+          "tag": "input",
+          "selector": "#sl-grain-sz",
+          "id": "sl-grain-sz",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2207:slider",
+          "source": "chromasmith-22.html",
+          "line": 2207,
+          "tag": "input",
+          "selector": "#sl-grain-motion",
+          "id": "sl-grain-motion",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2213:slider",
+          "source": "chromasmith-22.html",
+          "line": 2213,
+          "tag": "input",
+          "selector": "#sl-gate-weave",
+          "id": "sl-gate-weave",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2216:slider",
+          "source": "chromasmith-22.html",
+          "line": 2216,
+          "tag": "input",
+          "selector": "#sl-film-breath",
+          "id": "sl-film-breath",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2224:slider",
+          "source": "chromasmith-22.html",
+          "line": 2224,
+          "tag": "input",
+          "selector": "#sl-art-du",
+          "id": "sl-art-du",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2226:slider",
+          "source": "chromasmith-22.html",
+          "line": 2226,
+          "tag": "input",
+          "selector": "#sl-art-sc",
+          "id": "sl-art-sc",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2227:slider",
+          "source": "chromasmith-22.html",
+          "line": 2227,
+          "tag": "input",
+          "selector": "#sl-art-lk",
+          "id": "sl-art-lk",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2235:slider",
+          "source": "chromasmith-22.html",
+          "line": 2235,
+          "tag": "input",
+          "selector": "#sl-hal-a",
+          "id": "sl-hal-a",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2236:slider",
+          "source": "chromasmith-22.html",
+          "line": 2236,
+          "tag": "input",
+          "selector": "#sl-hal-r",
+          "id": "sl-hal-r",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2237:slider",
+          "source": "chromasmith-22.html",
+          "line": 2237,
+          "tag": "input",
+          "selector": "#sl-hal-p",
+          "id": "sl-hal-p",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "control-row",
+            "info-button",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2247:slider",
+          "source": "chromasmith-22.html",
+          "line": 2247,
+          "tag": "input",
+          "selector": "#sl-bloom-a",
+          "id": "sl-bloom-a",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2248:slider",
+          "source": "chromasmith-22.html",
+          "line": 2248,
+          "tag": "input",
+          "selector": "#sl-bloom-th",
+          "id": "sl-bloom-th",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2249:slider",
+          "source": "chromasmith-22.html",
+          "line": 2249,
+          "tag": "input",
+          "selector": "#sl-bloom-r",
+          "id": "sl-bloom-r",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2256:slider",
+          "source": "chromasmith-22.html",
+          "line": 2256,
+          "tag": "input",
+          "selector": "#sl-vig",
+          "id": "sl-vig",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2264:slider",
+          "source": "chromasmith-22.html",
+          "line": 2264,
+          "tag": "input",
+          "selector": "#sl-b1-t",
+          "id": "sl-b1-t",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2266:slider",
+          "source": "chromasmith-22.html",
+          "line": 2266,
+          "tag": "input",
+          "selector": "#sl-b2-t",
+          "id": "sl-b2-t",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2292:slider",
+          "source": "chromasmith-22.html",
+          "line": 2292,
+          "tag": "input",
+          "selector": "#sl-heal-size",
+          "id": "sl-heal-size",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2293:slider",
+          "source": "chromasmith-22.html",
+          "line": 2293,
+          "tag": "input",
+          "selector": "#sl-heal-feather",
+          "id": "sl-heal-feather",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2294:slider",
+          "source": "chromasmith-22.html",
+          "line": 2294,
+          "tag": "input",
+          "selector": "#sl-heal-opacity",
+          "id": "sl-heal-opacity",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2313:slider",
+          "source": "chromasmith-22.html",
+          "line": 2313,
+          "tag": "input",
+          "selector": "#sl-canvas-z",
+          "id": "sl-canvas-z",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2342:slider",
+          "source": "chromasmith-22.html",
+          "line": 2342,
+          "tag": "input",
+          "selector": "#sl-exp-q",
+          "id": "sl-exp-q",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2390:slider",
+          "source": "chromasmith-22.html",
+          "line": 2390,
+          "tag": "input",
+          "selector": "#sl-exp-wm-op",
+          "id": "sl-exp-wm-op",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2545:slider",
+          "source": "chromasmith-22.html",
+          "line": 2545,
+          "tag": "input",
+          "selector": "#fx-zoom-slider",
+          "id": "fx-zoom-slider",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2604:slider",
+          "source": "chromasmith-22.html",
+          "line": 2604,
+          "tag": "input",
+          "selector": "#vid-scrub",
+          "id": "vid-scrub",
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2614:slider",
+          "source": "chromasmith-22.html",
+          "line": 2614,
+          "tag": "input",
+          "selector": "#vid-trim-in",
+          "id": "vid-trim-in",
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2615:slider",
+          "source": "chromasmith-22.html",
+          "line": 2615,
+          "tag": "input",
+          "selector": "#vid-trim-out",
+          "id": "vid-trim-out",
+          "classes": [],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2916:slider",
+          "source": "chromasmith-22.html",
+          "line": 2916,
+          "tag": "input",
+          "selector": "#cl-inner",
+          "id": "cl-inner",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2917:slider",
+          "source": "chromasmith-22.html",
+          "line": 2917,
+          "tag": "input",
+          "selector": "#cl-outer",
+          "id": "cl-outer",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2918:slider",
+          "source": "chromasmith-22.html",
+          "line": 2918,
+          "tag": "input",
+          "selector": "#cl-radius",
+          "id": "cl-radius",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2922:slider",
+          "source": "chromasmith-22.html",
+          "line": 2922,
+          "tag": "input",
+          "selector": "#cl-zoom",
+          "id": "cl-zoom",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:11887:slider",
+          "source": "chromasmith-22.html",
+          "line": 11887,
+          "tag": "input",
+          "selector": ".fx-slider",
+          "id": null,
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:12282:slider",
+          "source": "chromasmith-22.html",
+          "line": 12282,
+          "tag": "input",
+          "selector": ".fx-slider",
+          "id": null,
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:13547:slider",
+          "source": "chromasmith-22.html",
+          "line": 13547,
+          "tag": "input",
+          "selector": ".fx-slider",
+          "id": null,
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14145:slider",
+          "source": "chromasmith-22.html",
+          "line": 14145,
+          "tag": "input",
+          "selector": ".fx-slider",
+          "id": null,
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14146:slider",
+          "source": "chromasmith-22.html",
+          "line": 14146,
+          "tag": "input",
+          "selector": ".fx-slider",
+          "id": null,
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14227:slider",
+          "source": "chromasmith-22.html",
+          "line": 14227,
+          "tag": "input",
+          "selector": ".fx-slider",
+          "id": null,
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14235:slider",
+          "source": "chromasmith-22.html",
+          "line": 14235,
+          "tag": "input",
+          "selector": ".fx-slider",
+          "id": null,
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14259:slider",
+          "source": "chromasmith-22.html",
+          "line": 14259,
+          "tag": "input",
+          "selector": ".fx-slider",
+          "id": null,
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14355:slider",
+          "source": "chromasmith-22.html",
+          "line": 14355,
+          "tag": "input",
+          "selector": ".fx-slider",
+          "id": null,
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14377:slider",
+          "source": "chromasmith-22.html",
+          "line": 14377,
+          "tag": "input",
+          "selector": ".fx-slider",
+          "id": null,
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14398:slider",
+          "source": "chromasmith-22.html",
+          "line": 14398,
+          "tag": "input",
+          "selector": ".fx-slider",
+          "id": null,
+          "classes": [
+            "fx-slider"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:14407:slider",
+          "source": "chromasmith-22.html",
+          "line": 14407,
+          "tag": "input",
+          "selector": "#msk-col-hue",
+          "id": "msk-col-hue",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1888:slider",
+          "source": "desktop/library-ui.js",
+          "line": 1888,
+          "tag": "input",
+          "selector": "#lib-thumbsize",
+          "id": "lib-thumbsize",
+          "classes": [],
+          "label": "Thumbnail size",
+          "dynamic": false,
+          "familyMembership": [
+            "slider"
+          ]
+        }
+      ],
+      "overlappingFamilyMembership": [
+        {
+          "declaration": "chromasmith-22.html:14145",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:14146",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1853",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1881",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1882",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1883",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1884",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1885",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1886",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1887",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1888",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1889",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1890",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1891",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1892",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1893",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1916",
+          "families": [
+            "button",
+            "info-button",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1929",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1930",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1931",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1932",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1933",
+          "families": [
+            "button",
+            "control-row",
+            "info-button",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1945",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1946",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1976",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1977",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1978",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1979",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1992",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1993",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1994",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2042",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2043",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2044",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2045",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2114",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2115",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2116",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2117",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2118",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2119",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2120",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2121",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2170",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2192",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2193",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2224",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2226",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2227",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2235",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2236",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2237",
+          "families": [
+            "button",
+            "control-row",
+            "info-button",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2247",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2248",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2249",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2256",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2264",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2266",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2292",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2293",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2294",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2313",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2342",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2390",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2916",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2917",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2918",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2922",
+          "families": [
+            "control-row",
+            "slider"
+          ]
+        }
+      ],
+      "coverageGaps": {
+        "sourceRegistrationsWithoutRuntimeAppearance": [
+          "chromasmith-22.html:1853:slider",
+          "chromasmith-22.html:1881:slider",
+          "chromasmith-22.html:1882:slider",
+          "chromasmith-22.html:1883:slider",
+          "chromasmith-22.html:1884:slider",
+          "chromasmith-22.html:1885:slider",
+          "chromasmith-22.html:1886:slider",
+          "chromasmith-22.html:1887:slider",
+          "chromasmith-22.html:1888:slider",
+          "chromasmith-22.html:1889:slider",
+          "chromasmith-22.html:1890:slider",
+          "chromasmith-22.html:1891:slider",
+          "chromasmith-22.html:1892:slider",
+          "chromasmith-22.html:1893:slider",
+          "chromasmith-22.html:1916:slider",
+          "chromasmith-22.html:1929:slider",
+          "chromasmith-22.html:1930:slider",
+          "chromasmith-22.html:1931:slider",
+          "chromasmith-22.html:1932:slider",
+          "chromasmith-22.html:1933:slider",
+          "chromasmith-22.html:1945:slider",
+          "chromasmith-22.html:1946:slider",
+          "chromasmith-22.html:1976:slider",
+          "chromasmith-22.html:1977:slider",
+          "chromasmith-22.html:1978:slider",
+          "chromasmith-22.html:1979:slider",
+          "chromasmith-22.html:1992:slider",
+          "chromasmith-22.html:1993:slider",
+          "chromasmith-22.html:1994:slider",
+          "chromasmith-22.html:2010:slider",
+          "chromasmith-22.html:2016:slider",
+          "chromasmith-22.html:2022:slider",
+          "chromasmith-22.html:2042:slider",
+          "chromasmith-22.html:2043:slider",
+          "chromasmith-22.html:2044:slider",
+          "chromasmith-22.html:2045:slider",
+          "chromasmith-22.html:2111:slider",
+          "chromasmith-22.html:2114:slider",
+          "chromasmith-22.html:2115:slider",
+          "chromasmith-22.html:2116:slider",
+          "chromasmith-22.html:2117:slider",
+          "chromasmith-22.html:2118:slider",
+          "chromasmith-22.html:2119:slider",
+          "chromasmith-22.html:2120:slider",
+          "chromasmith-22.html:2121:slider",
+          "chromasmith-22.html:2170:slider",
+          "chromasmith-22.html:2192:slider",
+          "chromasmith-22.html:2193:slider",
+          "chromasmith-22.html:2207:slider",
+          "chromasmith-22.html:2213:slider",
+          "chromasmith-22.html:2216:slider",
+          "chromasmith-22.html:2224:slider",
+          "chromasmith-22.html:2226:slider",
+          "chromasmith-22.html:2227:slider",
+          "chromasmith-22.html:2235:slider",
+          "chromasmith-22.html:2236:slider",
+          "chromasmith-22.html:2237:slider",
+          "chromasmith-22.html:2247:slider",
+          "chromasmith-22.html:2248:slider",
+          "chromasmith-22.html:2249:slider",
+          "chromasmith-22.html:2256:slider",
+          "chromasmith-22.html:2264:slider",
+          "chromasmith-22.html:2266:slider",
+          "chromasmith-22.html:2292:slider",
+          "chromasmith-22.html:2293:slider",
+          "chromasmith-22.html:2294:slider",
+          "chromasmith-22.html:2313:slider",
+          "chromasmith-22.html:2342:slider",
+          "chromasmith-22.html:2390:slider",
+          "chromasmith-22.html:2604:slider",
+          "chromasmith-22.html:2614:slider",
+          "chromasmith-22.html:2615:slider",
+          "chromasmith-22.html:2922:slider",
+          "chromasmith-22.html:11887:slider",
+          "chromasmith-22.html:12282:slider",
+          "chromasmith-22.html:13547:slider",
+          "chromasmith-22.html:14145:slider",
+          "chromasmith-22.html:14146:slider",
+          "chromasmith-22.html:14227:slider",
+          "chromasmith-22.html:14235:slider",
+          "chromasmith-22.html:14259:slider",
+          "chromasmith-22.html:14355:slider",
+          "chromasmith-22.html:14377:slider",
+          "chromasmith-22.html:14398:slider"
+        ],
+        "dynamicRegistrations": [],
+        "registrationsWithoutStableSelector": []
+      }
+    },
+    "runtime": {
+      "evidenceSource": "design/components-runtime.json",
+      "appearanceCount": 47,
+      "runtimeAppearanceCount": 47,
+      "distinctSemantics": [
+        "#cl-inner",
+        "#cl-outer",
+        "#cl-radius",
+        "#fx-zoom-slider",
+        "#lib-thumbsize",
+        "#msk-col-hue",
+        "#sl-msk-selview-opacity",
+        "[aria-label=\"Feather\"]",
+        "[aria-label=\"Opacity\"]",
+        "[aria-label=\"Size\"]",
+        "slider::input::"
+      ],
+      "states": [
+        "catalog",
+        "editor:masks-ai",
+        "editor:masks-brush",
+        "editor:masks-coat",
+        "editor:masks-color",
+        "editor:masks-depth",
+        "editor:masks-linear",
+        "editor:masks-lum",
+        "editor:masks-radial",
+        "editor:masks-skin",
+        "editor:masks-sky",
+        "library:full",
+        "mobile",
+        "page:collage",
+        "page:fx"
+      ],
+      "variants": [
+        "slider|input|",
+        "slider|input|fx-slider",
+        "slider|input|fx-slider.fx-slider-grad"
+      ],
+      "instances": [
+        {
+          "family": "slider",
+          "state": "catalog",
+          "semantic": "[aria-label=\"Feather\"]",
+          "selector": "[aria-label=\"Feather\"]",
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "Feather",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "catalog",
+          "semantic": "[aria-label=\"Opacity\"]",
+          "selector": "[aria-label=\"Opacity\"]",
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "Opacity",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "catalog",
+          "semantic": "[aria-label=\"Size\"]",
+          "selector": "[aria-label=\"Size\"]",
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "Size",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-ai",
+          "semantic": "#fx-zoom-slider",
+          "selector": "#fx-zoom-slider",
+          "tag": "input",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2545:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-ai",
+          "semantic": "#msk-col-hue",
+          "selector": "#msk-col-hue",
+          "tag": "input",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:14407:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-ai",
+          "semantic": "slider::input::",
+          "selector": null,
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-brush",
+          "semantic": "#fx-zoom-slider",
+          "selector": "#fx-zoom-slider",
+          "tag": "input",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2545:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-brush",
+          "semantic": "#msk-col-hue",
+          "selector": "#msk-col-hue",
+          "tag": "input",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:14407:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-brush",
+          "semantic": "slider::input::",
+          "selector": null,
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-coat",
+          "semantic": "#fx-zoom-slider",
+          "selector": "#fx-zoom-slider",
+          "tag": "input",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2545:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-coat",
+          "semantic": "#msk-col-hue",
+          "selector": "#msk-col-hue",
+          "tag": "input",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:14407:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-coat",
+          "semantic": "slider::input::",
+          "selector": null,
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-color",
+          "semantic": "#fx-zoom-slider",
+          "selector": "#fx-zoom-slider",
+          "tag": "input",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2545:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-color",
+          "semantic": "#msk-col-hue",
+          "selector": "#msk-col-hue",
+          "tag": "input",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:14407:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-color",
+          "semantic": "slider::input::",
+          "selector": null,
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-depth",
+          "semantic": "#fx-zoom-slider",
+          "selector": "#fx-zoom-slider",
+          "tag": "input",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2545:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-depth",
+          "semantic": "#msk-col-hue",
+          "selector": "#msk-col-hue",
+          "tag": "input",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:14407:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-depth",
+          "semantic": "#sl-msk-selview-opacity",
+          "selector": "#sl-msk-selview-opacity",
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "Overlay opacity",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2079:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-depth",
+          "semantic": "slider::input::",
+          "selector": null,
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-linear",
+          "semantic": "#fx-zoom-slider",
+          "selector": "#fx-zoom-slider",
+          "tag": "input",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2545:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-linear",
+          "semantic": "#msk-col-hue",
+          "selector": "#msk-col-hue",
+          "tag": "input",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:14407:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-linear",
+          "semantic": "slider::input::",
+          "selector": null,
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-lum",
+          "semantic": "#fx-zoom-slider",
+          "selector": "#fx-zoom-slider",
+          "tag": "input",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2545:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-lum",
+          "semantic": "#msk-col-hue",
+          "selector": "#msk-col-hue",
+          "tag": "input",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:14407:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-lum",
+          "semantic": "#sl-msk-selview-opacity",
+          "selector": "#sl-msk-selview-opacity",
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "Overlay opacity",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2079:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-lum",
+          "semantic": "slider::input::",
+          "selector": null,
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-radial",
+          "semantic": "#fx-zoom-slider",
+          "selector": "#fx-zoom-slider",
+          "tag": "input",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2545:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-radial",
+          "semantic": "#msk-col-hue",
+          "selector": "#msk-col-hue",
+          "tag": "input",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:14407:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-radial",
+          "semantic": "slider::input::",
+          "selector": null,
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-skin",
+          "semantic": "#fx-zoom-slider",
+          "selector": "#fx-zoom-slider",
+          "tag": "input",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2545:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-skin",
+          "semantic": "#msk-col-hue",
+          "selector": "#msk-col-hue",
+          "tag": "input",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:14407:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-skin",
+          "semantic": "slider::input::",
+          "selector": null,
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-sky",
+          "semantic": "#fx-zoom-slider",
+          "selector": "#fx-zoom-slider",
+          "tag": "input",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2545:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-sky",
+          "semantic": "#msk-col-hue",
+          "selector": "#msk-col-hue",
+          "tag": "input",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:14407:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "editor:masks-sky",
+          "semantic": "slider::input::",
+          "selector": null,
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "library:full",
+          "semantic": "#lib-thumbsize",
+          "selector": "#lib-thumbsize",
+          "tag": "input",
+          "classes": [],
+          "label": "Thumbnail size",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:1888:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "library:full",
+          "semantic": "#msk-col-hue",
+          "selector": "#msk-col-hue",
+          "tag": "input",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:14407:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "library:full",
+          "semantic": "#sl-msk-selview-opacity",
+          "selector": "#sl-msk-selview-opacity",
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "Overlay opacity",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2079:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "library:full",
+          "semantic": "slider::input::",
+          "selector": null,
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "mobile",
+          "semantic": "#fx-zoom-slider",
+          "selector": "#fx-zoom-slider",
+          "tag": "input",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2545:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "mobile",
+          "semantic": "#msk-col-hue",
+          "selector": "#msk-col-hue",
+          "tag": "input",
+          "classes": [
+            "fx-slider",
+            "fx-slider-grad"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:14407:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "mobile",
+          "semantic": "#sl-msk-selview-opacity",
+          "selector": "#sl-msk-selview-opacity",
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "Overlay opacity",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2079:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "mobile",
+          "semantic": "slider::input::",
+          "selector": null,
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "slider",
+          "state": "page:collage",
+          "semantic": "#cl-inner",
+          "selector": "#cl-inner",
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "Spacing",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2916:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "page:collage",
+          "semantic": "#cl-outer",
+          "selector": "#cl-outer",
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "Outer margin",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2917:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "page:collage",
+          "semantic": "#cl-radius",
+          "selector": "#cl-radius",
+          "tag": "input",
+          "classes": [
+            "fx-slider"
+          ],
+          "label": "Corner round",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2918:slider"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "slider",
+          "state": "page:fx",
+          "semantic": "#fx-zoom-slider",
+          "selector": "#fx-zoom-slider",
+          "tag": "input",
+          "classes": [],
+          "label": "Drag to zoom · double-click to fit the whole image",
+          "disabled": false,
+          "sourceDeclarations": [
+            "chromasmith-22.html:2545:slider"
+          ],
+          "unresolved": false
+        }
+      ],
+      "unresolvedAppearances": [
+        {
+          "state": "catalog",
+          "family": "slider",
+          "semantic": "[aria-label=\"Feather\"]"
+        },
+        {
+          "state": "catalog",
+          "family": "slider",
+          "semantic": "[aria-label=\"Opacity\"]"
+        },
+        {
+          "state": "catalog",
+          "family": "slider",
+          "semantic": "[aria-label=\"Size\"]"
+        },
+        {
+          "state": "editor:masks-ai",
+          "family": "slider",
+          "semantic": "slider::input::"
+        },
+        {
+          "state": "editor:masks-brush",
+          "family": "slider",
+          "semantic": "slider::input::"
+        },
+        {
+          "state": "editor:masks-coat",
+          "family": "slider",
+          "semantic": "slider::input::"
+        },
+        {
+          "state": "editor:masks-color",
+          "family": "slider",
+          "semantic": "slider::input::"
+        },
+        {
+          "state": "editor:masks-depth",
+          "family": "slider",
+          "semantic": "slider::input::"
+        },
+        {
+          "state": "editor:masks-linear",
+          "family": "slider",
+          "semantic": "slider::input::"
+        },
+        {
+          "state": "editor:masks-lum",
+          "family": "slider",
+          "semantic": "slider::input::"
+        },
+        {
+          "state": "editor:masks-radial",
+          "family": "slider",
+          "semantic": "slider::input::"
+        },
+        {
+          "state": "editor:masks-skin",
+          "family": "slider",
+          "semantic": "slider::input::"
+        },
+        {
+          "state": "editor:masks-sky",
+          "family": "slider",
+          "semantic": "slider::input::"
+        },
+        {
+          "state": "library:full",
+          "family": "slider",
+          "semantic": "slider::input::"
+        },
+        {
+          "state": "mobile",
+          "family": "slider",
+          "semantic": "slider::input::"
+        }
+      ],
+      "coverageComplete": false,
+      "evidenceGaps": [
+        "84 source registrations have no linked runtime appearance",
+        "30 runtime records are unresolved"
+      ]
+    }
+  },
+  "authored": {
+    "identity": {
+      "family": "slider",
+      "subfamilies": [],
+      "designSystemComponent": null,
+      "designSystemEvidence": "unreviewed"
+    },
+    "purpose": "unreviewed",
+    "semantics": {
+      "uses": [],
+      "mismatch": "unreviewed"
+    },
+    "anatomy": {
+      "parts": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "variants": [],
+    "themes": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "states": {
+      "current": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "responsiveDimensions": {},
+    "tokens": {
+      "references": [],
+      "rawLiterals": [],
+      "proposed": [],
+      "exception": null
+    },
+    "typography": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "motion": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "keyboardPointer": {
+      "pointer": "unreviewed",
+      "keyboard": "unreviewed"
+    },
+    "accessibility": {
+      "current": "unreviewed",
+      "evidenceLimit": "unreviewed"
+    },
+    "systemDesignRules": [],
+    "proposedTargets": {},
+    "decisions": [],
+    "exceptions": [],
+    "currentVsProposed": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "userDecisions": [],
+    "references": [],
+    "questions": []
+  },
+  "validation": {
+    "commands": [
+      "node scripts/query-components.mjs --family slider",
+      "node scripts/validate-component-contracts.mjs --family slider"
+    ],
+    "scope": "Unreviewed generated draft; observations only, not a design or production gate."
+  },
+  "approval": null,
+  "authoredDigest": "756ae587175b595e5f51197f9b010061063819f024e5c0c50dee0487dd834831"
+}

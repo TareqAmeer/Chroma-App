@@ -67,6 +67,8 @@
     "tokens:gates": "npm run tokens:check && npm run tokens:verify",
     "components:build": "node scripts/build-component-registry.mjs && node test/component_runtime_check.mjs",
     "components:check": "node scripts/build-component-registry.mjs --check && node test/component_runtime_check.mjs --check",
+    "components:contracts:scaffold": "node scripts/scaffold-component-contracts.mjs",
+    "components:contracts:check": "node scripts/scaffold-component-contracts.mjs --check",
     "masks:inventory": "node test/panel_extract.mjs --section=local && node test/mask_inventory_check.mjs",
     "stop-hook:test": "node --test test/stop_editor_gate_check.mjs"
   },

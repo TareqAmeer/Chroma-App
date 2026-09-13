@@ -1,0 +1,456 @@
+{
+  "schemaVersion": 1,
+  "family": "chip",
+  "purpose": "Unreviewed; purpose requires human review.",
+  "status": "draft",
+  "observations": {
+    "generatedBy": "scripts/scaffold-component-contracts.mjs",
+    "generatedAt": "2026-09-13T04:14:41.378Z",
+    "registry": {
+      "query": "node scripts/query-components.mjs --family chip",
+      "sourceRegistrationCount": 13,
+      "expectedCount": 13,
+      "locations": [
+        {
+          "key": "desktop/library-ui.js:2084:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2084,
+          "tag": "button",
+          "selector": "[data-fgrp=\"type\"]",
+          "id": null,
+          "classes": [
+            "lib-chip",
+            "lib-sel"
+          ],
+          "label": "All",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2085:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2085,
+          "tag": "button",
+          "selector": "[data-fgrp=\"type\"]",
+          "id": null,
+          "classes": [
+            "lib-chip"
+          ],
+          "label": "RAW",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2086:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2086,
+          "tag": "button",
+          "selector": "[data-fgrp=\"type\"]",
+          "id": null,
+          "classes": [
+            "lib-chip"
+          ],
+          "label": "JPEG",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2087:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2087,
+          "tag": "button",
+          "selector": "[data-fgrp=\"type\"]",
+          "id": null,
+          "classes": [
+            "lib-chip"
+          ],
+          "label": "Video",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2088:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2088,
+          "tag": "button",
+          "selector": "#lib-types-more",
+          "id": "lib-types-more",
+          "classes": [
+            "lib-chip"
+          ],
+          "label": "More types",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2089:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2089,
+          "tag": "button",
+          "selector": "[data-fgrp=\"type\"]",
+          "id": null,
+          "classes": [
+            "lib-chip",
+            "lib-more-type"
+          ],
+          "label": "HEIC",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2090:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2090,
+          "tag": "button",
+          "selector": "[data-fgrp=\"type\"]",
+          "id": null,
+          "classes": [
+            "lib-chip",
+            "lib-more-type"
+          ],
+          "label": "TIFF",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2091:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2091,
+          "tag": "button",
+          "selector": "[data-fgrp=\"type\"]",
+          "id": null,
+          "classes": [
+            "lib-chip",
+            "lib-more-type"
+          ],
+          "label": "PNG",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2094:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2094,
+          "tag": "button",
+          "selector": "[data-fgrp=\"flag\"]",
+          "id": null,
+          "classes": [
+            "lib-chip",
+            "lib-iconchip"
+          ],
+          "label": "Picked",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2095:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2095,
+          "tag": "button",
+          "selector": "[data-fgrp=\"flag\"]",
+          "id": null,
+          "classes": [
+            "lib-chip",
+            "lib-iconchip"
+          ],
+          "label": "Rejected",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2096:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2096,
+          "tag": "button",
+          "selector": "[data-fgrp=\"flag\"]",
+          "id": null,
+          "classes": [
+            "lib-chip",
+            "lib-iconchip"
+          ],
+          "label": "Favorited",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2099:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2099,
+          "tag": "button",
+          "selector": "[data-fgrp=\"flag\"]",
+          "id": null,
+          "classes": [
+            "lib-chip",
+            "lib-iconchip"
+          ],
+          "label": "Unflagged",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2101:chip",
+          "source": "desktop/library-ui.js",
+          "line": 2101,
+          "tag": "button",
+          "selector": "#lib-more-filters",
+          "id": "lib-more-filters",
+          "classes": [
+            "lib-chip"
+          ],
+          "label": "Camera, lens, ISO, duplicates, sync and rating filters",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip"
+          ]
+        }
+      ],
+      "overlappingFamilyMembership": [
+        {
+          "declaration": "desktop/library-ui.js:2084",
+          "families": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2085",
+          "families": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2086",
+          "families": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2087",
+          "families": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2088",
+          "families": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2089",
+          "families": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2090",
+          "families": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2091",
+          "families": [
+            "button",
+            "chip"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2094",
+          "families": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2095",
+          "families": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2096",
+          "families": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2099",
+          "families": [
+            "button",
+            "chip",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2101",
+          "families": [
+            "button",
+            "chip"
+          ]
+        }
+      ],
+      "coverageGaps": {
+        "sourceRegistrationsWithoutRuntimeAppearance": [
+          "desktop/library-ui.js:2084:chip",
+          "desktop/library-ui.js:2085:chip",
+          "desktop/library-ui.js:2086:chip",
+          "desktop/library-ui.js:2087:chip",
+          "desktop/library-ui.js:2088:chip",
+          "desktop/library-ui.js:2089:chip",
+          "desktop/library-ui.js:2090:chip",
+          "desktop/library-ui.js:2091:chip",
+          "desktop/library-ui.js:2094:chip",
+          "desktop/library-ui.js:2095:chip",
+          "desktop/library-ui.js:2096:chip",
+          "desktop/library-ui.js:2099:chip",
+          "desktop/library-ui.js:2101:chip"
+        ],
+        "dynamicRegistrations": [],
+        "registrationsWithoutStableSelector": []
+      }
+    },
+    "runtime": {
+      "evidenceSource": "design/components-runtime.json",
+      "appearanceCount": 0,
+      "runtimeAppearanceCount": 0,
+      "distinctSemantics": [],
+      "states": [],
+      "variants": [],
+      "instances": [],
+      "unresolvedAppearances": [],
+      "coverageComplete": false,
+      "evidenceGaps": [
+        "no saved runtime appearances for this family",
+        "13 source registrations have no linked runtime appearance"
+      ]
+    }
+  },
+  "authored": {
+    "identity": {
+      "family": "chip",
+      "subfamilies": [],
+      "designSystemComponent": null,
+      "designSystemEvidence": "unreviewed"
+    },
+    "purpose": "unreviewed",
+    "semantics": {
+      "uses": [],
+      "mismatch": "unreviewed"
+    },
+    "anatomy": {
+      "parts": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "variants": [],
+    "themes": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "states": {
+      "current": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "responsiveDimensions": {},
+    "tokens": {
+      "references": [],
+      "rawLiterals": [],
+      "proposed": [],
+      "exception": null
+    },
+    "typography": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "motion": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "keyboardPointer": {
+      "pointer": "unreviewed",
+      "keyboard": "unreviewed"
+    },
+    "accessibility": {
+      "current": "unreviewed",
+      "evidenceLimit": "unreviewed"
+    },
+    "systemDesignRules": [],
+    "proposedTargets": {},
+    "decisions": [],
+    "exceptions": [],
+    "currentVsProposed": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "userDecisions": [],
+    "references": [],
+    "questions": []
+  },
+  "validation": {
+    "commands": [
+      "node scripts/query-components.mjs --family chip",
+      "node scripts/validate-component-contracts.mjs --family chip"
+    ],
+    "scope": "Unreviewed generated draft; observations only, not a design or production gate."
+  },
+  "approval": null,
+  "authoredDigest": "fddef6911960d2671707b6e9ad7e77032cbac216f3106361e30c41468bb7b3a8"
+}

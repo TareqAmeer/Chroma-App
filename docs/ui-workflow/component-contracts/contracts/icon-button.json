@@ -1,0 +1,714 @@
+{
+  "schemaVersion": 1,
+  "family": "icon-button",
+  "purpose": "Unreviewed; purpose requires human review.",
+  "status": "draft",
+  "observations": {
+    "generatedBy": "scripts/scaffold-component-contracts.mjs",
+    "generatedAt": "2026-09-13T04:14:41.378Z",
+    "registry": {
+      "query": "node scripts/query-components.mjs --family icon-button",
+      "sourceRegistrationCount": 19,
+      "expectedCount": 19,
+      "locations": [
+        {
+          "key": "chromasmith-22.html:2162:icon-button",
+          "source": "chromasmith-22.html",
+          "line": 2162,
+          "tag": "button",
+          "selector": null,
+          "id": null,
+          "classes": [
+            "btn-icon"
+          ],
+          "label": "Rotate left",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2163:icon-button",
+          "source": "chromasmith-22.html",
+          "line": 2163,
+          "tag": "button",
+          "selector": null,
+          "id": null,
+          "classes": [
+            "btn-icon"
+          ],
+          "label": "Rotate right",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2164:icon-button",
+          "source": "chromasmith-22.html",
+          "line": 2164,
+          "tag": "button",
+          "selector": null,
+          "id": null,
+          "classes": [
+            "btn-icon"
+          ],
+          "label": "Flip horizontal",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2165:icon-button",
+          "source": "chromasmith-22.html",
+          "line": 2165,
+          "tag": "button",
+          "selector": null,
+          "id": null,
+          "classes": [
+            "btn-icon"
+          ],
+          "label": "Flip vertical",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2598:icon-button",
+          "source": "chromasmith-22.html",
+          "line": 2598,
+          "tag": "button",
+          "selector": null,
+          "id": null,
+          "classes": [
+            "btn-icon"
+          ],
+          "label": "Previous frame (←)",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2599:icon-button",
+          "source": "chromasmith-22.html",
+          "line": 2599,
+          "tag": "button",
+          "selector": "#btn-vid-play",
+          "id": "btn-vid-play",
+          "classes": [
+            "btn-icon"
+          ],
+          "label": "Play/pause (Space)",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2600:icon-button",
+          "source": "chromasmith-22.html",
+          "line": 2600,
+          "tag": "button",
+          "selector": null,
+          "id": null,
+          "classes": [
+            "btn-icon"
+          ],
+          "label": "Next frame (→)",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2601:icon-button",
+          "source": "chromasmith-22.html",
+          "line": 2601,
+          "tag": "button",
+          "selector": "#btn-vid-loop",
+          "id": "btn-vid-loop",
+          "classes": [
+            "btn-icon"
+          ],
+          "label": "Loop playback within the trim range",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2602:icon-button",
+          "source": "chromasmith-22.html",
+          "line": 2602,
+          "tag": "button",
+          "selector": "#btn-vid-mute",
+          "id": "btn-vid-mute",
+          "classes": [
+            "btn-icon"
+          ],
+          "label": "Mute (playback + export)",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:15807:icon-button",
+          "source": "chromasmith-22.html",
+          "line": 15807,
+          "tag": "button",
+          "selector": null,
+          "id": null,
+          "classes": [
+            "btn-icon"
+          ],
+          "label": "Export as .json",
+          "dynamic": true,
+          "familyMembership": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:15808:icon-button",
+          "source": "chromasmith-22.html",
+          "line": 15808,
+          "tag": "button",
+          "selector": null,
+          "id": null,
+          "classes": [
+            "btn-icon"
+          ],
+          "label": "Delete",
+          "dynamic": true,
+          "familyMembership": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1901:icon-button",
+          "source": "desktop/library-ui.js",
+          "line": 1901,
+          "tag": "button",
+          "selector": "#lib-flag-reject",
+          "id": "lib-flag-reject",
+          "classes": [
+            "lib-btn",
+            "lib-btn-icon",
+            "flag-btn"
+          ],
+          "label": "Reject",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1902:icon-button",
+          "source": "desktop/library-ui.js",
+          "line": 1902,
+          "tag": "button",
+          "selector": "#lib-flag-pick",
+          "id": "lib-flag-pick",
+          "classes": [
+            "lib-btn",
+            "lib-btn-icon",
+            "flag-btn"
+          ],
+          "label": "Pick",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1903:icon-button",
+          "source": "desktop/library-ui.js",
+          "line": 1903,
+          "tag": "button",
+          "selector": "#lib-flag-fav",
+          "id": "lib-flag-fav",
+          "classes": [
+            "lib-btn",
+            "lib-btn-icon",
+            "flag-btn"
+          ],
+          "label": "Favorite",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1912:icon-button",
+          "source": "desktop/library-ui.js",
+          "line": 1912,
+          "tag": "button",
+          "selector": "#lib-view-menu-btn",
+          "id": "lib-view-menu-btn",
+          "classes": [
+            "lib-btn",
+            "lib-btn-icon"
+          ],
+          "label": "View settings",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2094:icon-button",
+          "source": "desktop/library-ui.js",
+          "line": 2094,
+          "tag": "button",
+          "selector": "[data-fgrp=\"flag\"]",
+          "id": null,
+          "classes": [
+            "lib-chip",
+            "lib-iconchip"
+          ],
+          "label": "Picked",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2095:icon-button",
+          "source": "desktop/library-ui.js",
+          "line": 2095,
+          "tag": "button",
+          "selector": "[data-fgrp=\"flag\"]",
+          "id": null,
+          "classes": [
+            "lib-chip",
+            "lib-iconchip"
+          ],
+          "label": "Rejected",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2096:icon-button",
+          "source": "desktop/library-ui.js",
+          "line": 2096,
+          "tag": "button",
+          "selector": "[data-fgrp=\"flag\"]",
+          "id": null,
+          "classes": [
+            "lib-chip",
+            "lib-iconchip"
+          ],
+          "label": "Favorited",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:2099:icon-button",
+          "source": "desktop/library-ui.js",
+          "line": 2099,
+          "tag": "button",
+          "selector": "[data-fgrp=\"flag\"]",
+          "id": null,
+          "classes": [
+            "lib-chip",
+            "lib-iconchip"
+          ],
+          "label": "Unflagged",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "chip",
+            "icon-button"
+          ]
+        }
+      ],
+      "overlappingFamilyMembership": [
+        {
+          "declaration": "chromasmith-22.html:15807",
+          "families": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:15808",
+          "families": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2162",
+          "families": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2163",
+          "families": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2164",
+          "families": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2165",
+          "families": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2598",
+          "families": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2599",
+          "families": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2600",
+          "families": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2601",
+          "families": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2602",
+          "families": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1901",
+          "families": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1902",
+          "families": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1903",
+          "families": [
+            "button",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:1912",
+          "families": [
+            "button",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2094",
+          "families": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2095",
+          "families": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2096",
+          "families": [
+            "button",
+            "chip",
+            "icon",
+            "icon-button"
+          ]
+        },
+        {
+          "declaration": "desktop/library-ui.js:2099",
+          "families": [
+            "button",
+            "chip",
+            "icon-button"
+          ]
+        }
+      ],
+      "coverageGaps": {
+        "sourceRegistrationsWithoutRuntimeAppearance": [
+          "chromasmith-22.html:2162:icon-button",
+          "chromasmith-22.html:2163:icon-button",
+          "chromasmith-22.html:2164:icon-button",
+          "chromasmith-22.html:2165:icon-button",
+          "chromasmith-22.html:2598:icon-button",
+          "chromasmith-22.html:2599:icon-button",
+          "chromasmith-22.html:2600:icon-button",
+          "chromasmith-22.html:2601:icon-button",
+          "chromasmith-22.html:2602:icon-button",
+          "chromasmith-22.html:15807:icon-button",
+          "chromasmith-22.html:15808:icon-button",
+          "desktop/library-ui.js:2094:icon-button",
+          "desktop/library-ui.js:2095:icon-button",
+          "desktop/library-ui.js:2096:icon-button",
+          "desktop/library-ui.js:2099:icon-button"
+        ],
+        "dynamicRegistrations": [
+          "chromasmith-22.html:15807:icon-button",
+          "chromasmith-22.html:15808:icon-button"
+        ],
+        "registrationsWithoutStableSelector": [
+          "chromasmith-22.html:2162:icon-button",
+          "chromasmith-22.html:2163:icon-button",
+          "chromasmith-22.html:2164:icon-button",
+          "chromasmith-22.html:2165:icon-button",
+          "chromasmith-22.html:2598:icon-button",
+          "chromasmith-22.html:2600:icon-button",
+          "chromasmith-22.html:15807:icon-button",
+          "chromasmith-22.html:15808:icon-button"
+        ]
+      }
+    },
+    "runtime": {
+      "evidenceSource": "design/components-runtime.json",
+      "appearanceCount": 4,
+      "runtimeAppearanceCount": 4,
+      "distinctSemantics": [
+        "#lib-flag-fav",
+        "#lib-flag-pick",
+        "#lib-flag-reject",
+        "#lib-view-menu-btn"
+      ],
+      "states": [
+        "library:full"
+      ],
+      "variants": [
+        "icon-button|button|flag-btn.lib-btn.lib-btn-icon",
+        "icon-button|button|lib-btn.lib-btn-icon"
+      ],
+      "instances": [
+        {
+          "family": "icon-button",
+          "state": "library:full",
+          "semantic": "#lib-flag-fav",
+          "selector": "#lib-flag-fav",
+          "tag": "button",
+          "classes": [
+            "flag-btn",
+            "lib-btn",
+            "lib-btn-icon"
+          ],
+          "label": "Favorite",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:1903:button",
+            "desktop/library-ui.js:1903:icon-button"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "icon-button",
+          "state": "library:full",
+          "semantic": "#lib-flag-pick",
+          "selector": "#lib-flag-pick",
+          "tag": "button",
+          "classes": [
+            "flag-btn",
+            "lib-btn",
+            "lib-btn-icon"
+          ],
+          "label": "Pick",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:1902:button",
+            "desktop/library-ui.js:1902:icon-button"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "icon-button",
+          "state": "library:full",
+          "semantic": "#lib-flag-reject",
+          "selector": "#lib-flag-reject",
+          "tag": "button",
+          "classes": [
+            "flag-btn",
+            "lib-btn",
+            "lib-btn-icon"
+          ],
+          "label": "Reject",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:1901:button",
+            "desktop/library-ui.js:1901:icon-button"
+          ],
+          "unresolved": false
+        },
+        {
+          "family": "icon-button",
+          "state": "library:full",
+          "semantic": "#lib-view-menu-btn",
+          "selector": "#lib-view-menu-btn",
+          "tag": "button",
+          "classes": [
+            "lib-btn",
+            "lib-btn-icon"
+          ],
+          "label": "View settings",
+          "disabled": false,
+          "sourceDeclarations": [
+            "desktop/library-ui.js:1912:button",
+            "desktop/library-ui.js:1912:icon-button"
+          ],
+          "unresolved": false
+        }
+      ],
+      "unresolvedAppearances": [],
+      "coverageComplete": false,
+      "evidenceGaps": [
+        "15 source registrations have no linked runtime appearance",
+        "2 source registrations are marked dynamic",
+        "8 source registrations have no stable selector"
+      ]
+    }
+  },
+  "authored": {
+    "identity": {
+      "family": "icon-button",
+      "subfamilies": [],
+      "designSystemComponent": null,
+      "designSystemEvidence": "unreviewed"
+    },
+    "purpose": "unreviewed",
+    "semantics": {
+      "uses": [],
+      "mismatch": "unreviewed"
+    },
+    "anatomy": {
+      "parts": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "variants": [],
+    "themes": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "states": {
+      "current": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "responsiveDimensions": {},
+    "tokens": {
+      "references": [],
+      "rawLiterals": [],
+      "proposed": [],
+      "exception": null
+    },
+    "typography": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "motion": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "keyboardPointer": {
+      "pointer": "unreviewed",
+      "keyboard": "unreviewed"
+    },
+    "accessibility": {
+      "current": "unreviewed",
+      "evidenceLimit": "unreviewed"
+    },
+    "systemDesignRules": [],
+    "proposedTargets": {},
+    "decisions": [],
+    "exceptions": [],
+    "currentVsProposed": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "userDecisions": [],
+    "references": [],
+    "questions": []
+  },
+  "validation": {
+    "commands": [
+      "node scripts/query-components.mjs --family icon-button",
+      "node scripts/validate-component-contracts.mjs --family icon-button"
+    ],
+    "scope": "Unreviewed generated draft; observations only, not a design or production gate."
+  },
+  "approval": null,
+  "authoredDigest": "480845d474807e6fd705e8800501f964f9561a5e628a33ee1c28641bb20051a0"
+}

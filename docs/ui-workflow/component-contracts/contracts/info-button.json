@@ -1,0 +1,538 @@
+{
+  "schemaVersion": 1,
+  "family": "info-button",
+  "purpose": "Unreviewed; purpose requires human review.",
+  "status": "draft",
+  "observations": {
+    "generatedBy": "scripts/scaffold-component-contracts.mjs",
+    "generatedAt": "2026-09-13T04:14:41.378Z",
+    "registry": {
+      "query": "node scripts/query-components.mjs --family info-button",
+      "sourceRegistrationCount": 14,
+      "expectedCount": 14,
+      "locations": [
+        {
+          "key": "chromasmith-22.html:1910:info-button",
+          "source": "chromasmith-22.html",
+          "line": 1910,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Off: untouched decode. Fast (default): the native Rust-side shadow + chroma-wavelet denoise on linear RAW data, before any tone curve — a few seconds, applies automatically. High: additionally runs a neural (RawNIND UtNet2) denoiser, 25–90s at 24MP — never automatic; press &quot;Denoise now&quot; below, or it runs once at export if selected. Requires reopening this photo (or Denoise now) to take effect. Desktop/RAW only.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "info-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1916:info-button",
+          "source": "chromasmith-22.html",
+          "line": 1916,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Real-photo review (5 ISO 12800 shots vs DxO PureRAW) found full strength can soften fine hair/fur strands more than DxO does, even though flat-area noise removal is comparable or better — lower this if High is smoothing detail you want to keep. Changing it re-arms Denoise now / re-applies at next export.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "info-button",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1927:info-button",
+          "source": "chromasmith-22.html",
+          "line": 1927,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Uses AHD interpolation, which cleans up dense green/magenta false-color speckle on sunlit water/specular highlights much further than Standard — but it trades away some general chroma-noise headroom elsewhere in the frame, so it's opt-in per photo rather than a global default. Requires reopening this photo to take effect. Desktop only.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "info-button",
+            "toggle"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:1933:info-button",
+          "source": "chromasmith-22.html",
+          "line": 1933,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes. Since real highlight color is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real color in bright areas too at high amounts. Per-photo only, so it never touches other images.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "control-row",
+            "info-button",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2037:info-button",
+          "source": "chromasmith-22.html",
+          "line": 2037,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Click a colour in the photo to target it precisely, then dial in how far the selection spreads with Range.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "info-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2094:info-button",
+          "source": "chromasmith-22.html",
+          "line": 2094,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "info-button",
+            "toggle"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2237:info-button",
+          "source": "chromasmith-22.html",
+          "line": 2237,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behavior.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "control-row",
+            "info-button",
+            "slider"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2238:info-button",
+          "source": "chromasmith-22.html",
+          "line": 2238,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Neutral white halation instead of the warm film glow — best for black-and-white photos (auto-enabled when a B&amp;W photo is loaded).",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "control-row",
+            "info-button",
+            "toggle"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2239:info-button",
+          "source": "chromasmith-22.html",
+          "line": 2239,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Film with no anti-halation backing (remjet) — much stronger, bloomier halos with a yellow→orange→red edge, calibrated to Dehancer's no-remjet look.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "control-row",
+            "info-button",
+            "toggle"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2240:info-button",
+          "source": "chromasmith-22.html",
+          "line": 2240,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Extreme halation — the no-remjet glow pushed ≈5–6× stronger for a heavy, stylised bloom. Implies No remjet.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "control-row",
+            "info-button",
+            "toggle"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2267:info-button",
+          "source": "chromasmith-22.html",
+          "line": 2267,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "The sprocket styles are drawn to the real 35mm standard, so they stay correct at any aspect ratio. Load frame… takes any scanned rebate PNG you have a licence to use.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "control-row",
+            "info-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2288:info-button",
+          "source": "chromasmith-22.html",
+          "line": 2288,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Heal blends the copied area into the surrounding colour. Clone copies it exactly.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "control-row",
+            "info-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2337:info-button",
+          "source": "chromasmith-22.html",
+          "line": 2337,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "info-button"
+          ]
+        },
+        {
+          "key": "chromasmith-22.html:2409:info-button",
+          "source": "chromasmith-22.html",
+          "line": 2409,
+          "tag": "button",
+          "selector": ".fx-info-i",
+          "id": null,
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Batch only. Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.",
+          "dynamic": false,
+          "familyMembership": [
+            "button",
+            "info-button"
+          ]
+        }
+      ],
+      "overlappingFamilyMembership": [
+        {
+          "declaration": "chromasmith-22.html:1910",
+          "families": [
+            "button",
+            "info-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1916",
+          "families": [
+            "button",
+            "info-button",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1927",
+          "families": [
+            "button",
+            "info-button",
+            "toggle"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:1933",
+          "families": [
+            "button",
+            "control-row",
+            "info-button",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2037",
+          "families": [
+            "button",
+            "info-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2094",
+          "families": [
+            "button",
+            "info-button",
+            "toggle"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2237",
+          "families": [
+            "button",
+            "control-row",
+            "info-button",
+            "slider"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2238",
+          "families": [
+            "button",
+            "control-row",
+            "info-button",
+            "toggle"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2239",
+          "families": [
+            "button",
+            "control-row",
+            "info-button",
+            "toggle"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2240",
+          "families": [
+            "button",
+            "control-row",
+            "info-button",
+            "toggle"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2267",
+          "families": [
+            "button",
+            "control-row",
+            "info-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2288",
+          "families": [
+            "button",
+            "control-row",
+            "info-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2337",
+          "families": [
+            "button",
+            "info-button"
+          ]
+        },
+        {
+          "declaration": "chromasmith-22.html:2409",
+          "families": [
+            "button",
+            "info-button"
+          ]
+        }
+      ],
+      "coverageGaps": {
+        "sourceRegistrationsWithoutRuntimeAppearance": [
+          "chromasmith-22.html:1910:info-button",
+          "chromasmith-22.html:1916:info-button",
+          "chromasmith-22.html:1927:info-button",
+          "chromasmith-22.html:1933:info-button",
+          "chromasmith-22.html:2037:info-button",
+          "chromasmith-22.html:2094:info-button",
+          "chromasmith-22.html:2237:info-button",
+          "chromasmith-22.html:2238:info-button",
+          "chromasmith-22.html:2239:info-button",
+          "chromasmith-22.html:2240:info-button",
+          "chromasmith-22.html:2267:info-button",
+          "chromasmith-22.html:2288:info-button",
+          "chromasmith-22.html:2337:info-button",
+          "chromasmith-22.html:2409:info-button"
+        ],
+        "dynamicRegistrations": [],
+        "registrationsWithoutStableSelector": []
+      }
+    },
+    "runtime": {
+      "evidenceSource": "design/components-runtime.json",
+      "appearanceCount": 2,
+      "runtimeAppearanceCount": 2,
+      "distinctSemantics": [
+        "info-button::button::A very long tooltip label that would wrap across multiple lines to stress the la",
+        "info-button::button::Heal blends the copied area into the surrounding colour. Clone copies it exactly"
+      ],
+      "states": [
+        "catalog"
+      ],
+      "variants": [
+        "info-button|button|fx-info-i",
+        "info-button|button|fx-info-i.sec-active"
+      ],
+      "instances": [
+        {
+          "family": "info-button",
+          "state": "catalog",
+          "semantic": "info-button::button::A very long tooltip label that would wrap across multiple lines to stress the la",
+          "selector": null,
+          "tag": "button",
+          "classes": [
+            "fx-info-i",
+            "sec-active"
+          ],
+          "label": "A very long tooltip label that would wrap across multiple lines to stress the layout width if it wer",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        },
+        {
+          "family": "info-button",
+          "state": "catalog",
+          "semantic": "info-button::button::Heal blends the copied area into the surrounding colour. Clone copies it exactly",
+          "selector": null,
+          "tag": "button",
+          "classes": [
+            "fx-info-i"
+          ],
+          "label": "Heal blends the copied area into the surrounding colour. Clone copies it exactly.",
+          "disabled": false,
+          "sourceDeclarations": [],
+          "unresolved": true
+        }
+      ],
+      "unresolvedAppearances": [
+        {
+          "state": "catalog",
+          "family": "info-button",
+          "semantic": "info-button::button::A very long tooltip label that would wrap across multiple lines to stress the la"
+        },
+        {
+          "state": "catalog",
+          "family": "info-button",
+          "semantic": "info-button::button::Heal blends the copied area into the surrounding colour. Clone copies it exactly"
+        }
+      ],
+      "coverageComplete": false,
+      "evidenceGaps": [
+        "14 source registrations have no linked runtime appearance",
+        "4 runtime records are unresolved"
+      ]
+    }
+  },
+  "authored": {
+    "identity": {
+      "family": "info-button",
+      "subfamilies": [],
+      "designSystemComponent": null,
+      "designSystemEvidence": "unreviewed"
+    },
+    "purpose": "unreviewed",
+    "semantics": {
+      "uses": [],
+      "mismatch": "unreviewed"
+    },
+    "anatomy": {
+      "parts": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "variants": [],
+    "themes": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "states": {
+      "current": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "responsiveDimensions": {},
+    "tokens": {
+      "references": [],
+      "rawLiterals": [],
+      "proposed": [],
+      "exception": null
+    },
+    "typography": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "motion": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "keyboardPointer": {
+      "pointer": "unreviewed",
+      "keyboard": "unreviewed"
+    },
+    "accessibility": {
+      "current": "unreviewed",
+      "evidenceLimit": "unreviewed"
+    },
+    "systemDesignRules": [],
+    "proposedTargets": {},
+    "decisions": [],
+    "exceptions": [],
+    "currentVsProposed": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "userDecisions": [],
+    "references": [],
+    "questions": []
+  },
+  "validation": {
+    "commands": [
+      "node scripts/query-components.mjs --family info-button",
+      "node scripts/validate-component-contracts.mjs --family info-button"
+    ],
+    "scope": "Unreviewed generated draft; observations only, not a design or production gate."
+  },
+  "approval": null,
+  "authoredDigest": "ad1773dac430539c4d0fbd69fa2ae923bde76ad6366a88bcff7e0e6514e63d37"
+}

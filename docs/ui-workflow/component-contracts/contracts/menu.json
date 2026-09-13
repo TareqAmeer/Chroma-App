@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "family": "menu",
+  "purpose": "Unreviewed; purpose requires human review.",
+  "status": "draft",
+  "observations": {
+    "generatedBy": "scripts/scaffold-component-contracts.mjs",
+    "generatedAt": "2026-09-13T04:14:41.378Z",
+    "registry": {
+      "query": "node scripts/query-components.mjs --family menu",
+      "sourceRegistrationCount": 2,
+      "expectedCount": 2,
+      "locations": [
+        {
+          "key": "desktop/library-ui.js:1818:menu",
+          "source": "desktop/library-ui.js",
+          "line": 1818,
+          "tag": "div",
+          "selector": "#lib-sort-menu",
+          "id": "lib-sort-menu",
+          "classes": [
+            "lib-menu"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "menu"
+          ]
+        },
+        {
+          "key": "desktop/library-ui.js:1922:menu",
+          "source": "desktop/library-ui.js",
+          "line": 1922,
+          "tag": "div",
+          "selector": "#lib-view-menu",
+          "id": "lib-view-menu",
+          "classes": [
+            "lib-menu",
+            "fx-settings-menu-drill"
+          ],
+          "label": null,
+          "dynamic": false,
+          "familyMembership": [
+            "menu"
+          ]
+        }
+      ],
+      "overlappingFamilyMembership": [],
+      "coverageGaps": {
+        "sourceRegistrationsWithoutRuntimeAppearance": [
+          "desktop/library-ui.js:1818:menu",
+          "desktop/library-ui.js:1922:menu"
+        ],
+        "dynamicRegistrations": [],
+        "registrationsWithoutStableSelector": []
+      }
+    },
+    "runtime": {
+      "evidenceSource": "design/components-runtime.json",
+      "appearanceCount": 0,
+      "runtimeAppearanceCount": 0,
+      "distinctSemantics": [],
+      "states": [],
+      "variants": [],
+      "instances": [],
+      "unresolvedAppearances": [],
+      "coverageComplete": false,
+      "evidenceGaps": [
+        "no saved runtime appearances for this family",
+        "2 source registrations have no linked runtime appearance"
+      ]
+    }
+  },
+  "authored": {
+    "identity": {
+      "family": "menu",
+      "subfamilies": [],
+      "designSystemComponent": null,
+      "designSystemEvidence": "unreviewed"
+    },
+    "purpose": "unreviewed",
+    "semantics": {
+      "uses": [],
+      "mismatch": "unreviewed"
+    },
+    "anatomy": {
+      "parts": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "variants": [],
+    "themes": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "states": {
+      "current": [],
+      "evidenceLimit": "unreviewed"
+    },
+    "responsiveDimensions": {},
+    "tokens": {
+      "references": [],
+      "rawLiterals": [],
+      "proposed": [],
+      "exception": null
+    },
+    "typography": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "motion": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "keyboardPointer": {
+      "pointer": "unreviewed",
+      "keyboard": "unreviewed"
+    },
+    "accessibility": {
+      "current": "unreviewed",
+      "evidenceLimit": "unreviewed"
+    },
+    "systemDesignRules": [],
+    "proposedTargets": {},
+    "decisions": [],
+    "exceptions": [],
+    "currentVsProposed": {
+      "current": "unreviewed",
+      "proposed": null
+    },
+    "userDecisions": [],
+    "references": [],
+    "questions": []
+  },
+  "validation": {
+    "commands": [
+      "node scripts/query-components.mjs --family menu",
+      "node scripts/validate-component-contracts.mjs --family menu"
+    ],
+    "scope": "Unreviewed generated draft; observations only, not a design or production gate."
+  },
+  "approval": null,
+  "authoredDigest": "0076274037e78ec5ec1e10493278a5a5c5519b4f54813097132619902a3c0eac"
+}
