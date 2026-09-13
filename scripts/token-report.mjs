@@ -35,7 +35,7 @@ function categorizeRole(role) {
 }
 const CATEGORY_LABEL = { brand: 'Brand & Accent', surfaces: 'Surfaces', text: 'Text', borders: 'Borders & Hairlines', scrims: 'Scrims & Shadows', other: 'Other' };
 
-const catalogue = { color: [], fontFamily: [], fontSize: [], fontWeight: [], dimension: [], other: [] };
+const catalogue = { color: [], fontFamily: [], fontSize: [], fontWeight: [], lineHeight: [], dimension: [], other: [] };
 (function walk(o, path) {
   if (Array.isArray(o)) return;
   if (o && typeof o === 'object') {
@@ -51,6 +51,7 @@ const catalogue = { color: [], fontFamily: [], fontSize: [], fontWeight: [], dim
       else if (o.$type === 'fontFamily') catalogue.fontFamily.push(entry);
       else if (o.$type === 'fontWeight') catalogue.fontWeight.push(entry);
       else if (o.$type === 'dimension' && /(^|\/)typography\/size(\/|$)/.test(path)) catalogue.fontSize.push(entry);
+      else if (o.$type === 'number' && /(^|\/)typography\/lineHeight(\/|$)/.test(path)) catalogue.lineHeight.push(entry);
       else if (o.$type === 'dimension') catalogue.dimension.push(entry);
       else catalogue.other.push(entry);
       return;
@@ -117,6 +118,23 @@ for (const block of rootBlocks) {
     if (/line-height|^lh-/.test(lname)) lineHeightTokens.add(val.toLowerCase());
   }
 }
+
+// ---------- 2a2. Spacing/radius px tokens (:root literals + dimension catalogue) — same rule as
+// test/editor_token_check.mjs's spacing pass, so the visual report and the CLI gate agree. ----------
+const pxTokens = new Set();
+for (const block of rootBlocks) {
+  for (const decl of block.split(';')) {
+    const m = decl.match(/--[a-zA-Z0-9-]+\s*:\s*(.+)/);
+    if (!m) continue;
+    const val = m[1].trim().toLowerCase();
+    if (/^-?\d+(\.\d+)?px$/.test(val)) pxTokens.add(val);
+  }
+}
+for (const e of catalogue.dimension) {
+  const v = String(e.value).trim().toLowerCase();
+  if (/^-?\d+(\.\d+)?px$/.test(v)) pxTokens.add(v);
+}
+const ALLOW_SPACING_PX = new Set(['0px', '1px', '2px']); // hairline/reset values, not a token concept
 // Also fold in design/tokens.json's font values (source of truth even if a :root var name doesn't
 // self-describe as font-ish, e.g. --font-text / --font-display already caught above by name, but
 // catch any dimension-typed size token too).
@@ -168,6 +186,22 @@ function categorizeFinding(selector, prop, value) {
 const ruleBodies = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
   .filter((m) => !/:root/.test(m[1]) && !/@font-face/i.test(m[1]))
   .map((m) => ({ selector: m[1].trim().replace(/\s+/g, ' '), body: m[2] }));
+
+const spacingFindings = [];
+for (const { selector, body } of ruleBodies) {
+  for (const decl of body.split(';')) {
+    const m = decl.match(/^\s*([a-zA-Z-]+)\s*:\s*(.+?)\s*$/);
+    if (!m) continue;
+    const [, prop, rawVal] = m;
+    if (rawVal.includes('var(--')) continue;
+    if (!/^(border-radius|gap|padding|margin|row-gap|column-gap)$/i.test(prop) && !/^border(-top|-bottom|-left|-right)?(-left|-right)?-radius$/i.test(prop)) continue;
+    const pxMatches = rawVal.match(/-?\d+(\.\d+)?px/g) || [];
+    for (const px of pxMatches) {
+      if (ALLOW_SPACING_PX.has(px)) continue;
+      if (!pxTokens.has(px)) spacingFindings.push({ kind: 'spacing', selector, prop, value: px });
+    }
+  }
+}
 
 const colorFindings = [];
 for (const { selector, body } of ruleBodies) {
@@ -366,6 +400,12 @@ function typographyRows() {
       catalogue.fontWeight.map((e) => ({ name: e.path, value: String(e.value) })),
       (value) => `font-weight:${esc(value)}`,
       (value) => `weight ${esc(value)}`,
+    )}
+    <div class="subhead">Line heights — validated against Apple HIG + Adobe Spectrum</div>
+    ${groupedTypeRows(
+      catalogue.lineHeight.map((e) => ({ name: e.path, value: String(e.value) })),
+      (value) => `font-size:16px;line-height:${esc(value)}`,
+      (value) => `line-height ${esc(value)}`,
     )}`;
 }
 
@@ -485,9 +525,10 @@ function iconSections() {
 function violationRows() {
   const all = [
     ...colorFindings.map((f) => ({ kind: `color (${CATEGORY_LABEL[f.category]})`, selector: f.selector, prop: f.prop, value: f.value })),
+    ...spacingFindings,
     ...findings,
   ];
-  if (!all.length) return `<div class="empty">No color or font literals found outside the token set. PASS.</div>`;
+  if (!all.length) return `<div class="empty">No color, spacing, or font literals found outside the token set. PASS.</div>`;
   return all.map((f) => `
     <div class="viol-row">
       <div class="viol-kind">${esc(f.kind)}</div>
@@ -582,7 +623,7 @@ const out = `<!doctype html>
   <button data-tab="layout">Layout <span class="count">${catalogue.dimension.length}</span></button>
   <button data-tab="components">Components <span class="count">${componentFamilies.length}</span></button>
   <button data-tab="icons">Icons <span class="count">${iconEntries.length}</span></button>
-  <button data-tab="violations">Violations <span class="count">${findings.length + colorFindings.length}</span></button>
+  <button data-tab="violations">Violations <span class="count">${findings.length + colorFindings.length + spacingFindings.length}</span></button>
 </nav>
 <main>
   <div class="panel active" id="panel-colors">${colorSections()}</div>
@@ -625,11 +666,16 @@ document.querySelectorAll('nav button').forEach((b) => {
 </body></html>`;
 
 writeFileSync('scripts/token-report.html', out);
-console.log(`Wrote scripts/token-report.html — ${catalogue.color.length} colors, ${catalogue.fontFamily.length} font families, ${catalogue.fontSize.length} font sizes, ${catalogue.fontWeight.length} font weights, ${colorFindings.length} color + ${findings.length} font violation(s).`);
+console.log(`Wrote scripts/token-report.html — ${catalogue.color.length} colors, ${catalogue.fontFamily.length} font families, ${catalogue.fontSize.length} font sizes, ${catalogue.fontWeight.length} font weights, ${colorFindings.length} color + ${spacingFindings.length} spacing + ${findings.length} font violation(s).`);
 if (colorFindings.length) {
   console.log('\nColor literals not matching any :root/body.light/tokens.json value:');
   for (const f of colorFindings.slice(0, 50)) console.log(`  [${CATEGORY_LABEL[f.category]}] ${f.selector} { ${f.prop}: ${f.value} }`);
   if (colorFindings.length > 50) console.log(`  ... and ${colorFindings.length - 50} more (see the report for the full list)`);
+}
+if (spacingFindings.length) {
+  console.log('\nSpacing/radius px literals not matching any :root or tokens.json dimension value:');
+  for (const f of spacingFindings.slice(0, 50)) console.log(`  [spacing] ${f.selector} { ${f.prop}: ${f.value} }`);
+  if (spacingFindings.length > 50) console.log(`  ... and ${spacingFindings.length - 50} more (see the report for the full list)`);
 }
 if (findings.length) {
   console.log('\nFont/typography literals not matching any :root or tokens.json value:');

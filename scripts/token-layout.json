@@ -318,6 +318,36 @@
     {
       "var": "--err-border",
       "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--lh-tight",
+      "pre": "\n  /* Line-height + font-weight scale (T-lh/T-fw): validated against Apple HIG (SF Pro text-style\n     ratios cluster ~1.2-1.3x) and Adobe Spectrum (its own line-height-100 token is 1.3x) \u2014 see\n     design/tokens.json typography.lineHeight for the full validation note. */\n  ",
+      "hadSemi": true
+    },
+    {
+      "var": "--lh-base",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--fw-regular",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--fw-medium",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--fw-semibold",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--fw-bold",
+      "pre": "",
       "hadSemi": false
     }
   ],
