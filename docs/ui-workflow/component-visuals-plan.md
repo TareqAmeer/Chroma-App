@@ -195,61 +195,85 @@ in `chromasmith-22.html`):
   `prefers-reduced-motion` — matches the Apple/Material guidance in §5b below, nothing to fix
   there.
 
-### 5a. How to actually capture motion for review
+### 5a. Live interactive embeds, not video
 
-Playwright (already the driver for `test/component_runtime_check.mjs` and `surface_capture.mjs`)
-can record video per page (`context.video`) or do a CDP screencast — either gives real frames,
-not a described transition. Plan:
-1. For each animated selector above, script the real trigger (click the toggle, open the
-   popover, expand the section) inside a short Playwright run, recording a 1–2s clip through the
-   transition.
-2. Save as `design/asbuilt/<id>/motion.webm` (or a re-encoded GIF for easy inline embedding),
-   next to that surface's existing static webp captures from §0 — same directory, same review
-   flow, no new taxonomy.
-3. Pull real frame timestamps from the trace (not just the declared `--dur-*` token) to flag
-   **dropped frames or a rendered duration that drifts from the declared one** — a token-correct
-   transition can still stutter under real paint cost, which `motion-token-check` cannot see.
-4. Review is manual (a human judging "smooth" is not something a pixel-diff threshold captures
-   well) — the report's job is surfacing the clip next to its declared duration/easing token so
-   you can watch it and flag anything that needs re-tuning, not auto-passing/failing it.
+Rejected a video-capture pipeline: a recording can't be clicked, hovered, or dragged, it's a new
+binary artifact to generate/store/re-encode on every change, and it's not how design-system docs
+actually present this. Checked how the sites in §5b do it — Material's, Carbon's, and Spectrum's
+component doc pages embed the **live, real component** so a reader can click/hover/drag it
+themselves; Storybook's canonical unit is a live-mounted "story," not a recording. Video only
+shows up for things a page genuinely can't host interactively (choreographed multi-screen
+sequences, marketing motion) — not standard control interactions like a toggle flip or a slider
+drag, which is exactly what's being asked for here.
+
+This fits the app better too. `?catalog=1` (`chromasmith-22.html:22261-22395`) already clones
+real DOM out of the booted app with the real `<style>` tag attached — genuine CSS, genuine
+transitions. It only *looks* static today because `_catStub()` (line 22268) deliberately strips
+every `onclick`/`oninput`/etc. attribute and nulls the handler properties — that stripping was
+built for deterministic screenshots (S6c), not for review. Plan:
+
+1. **Add a `?catalog=1&live=1` mode** that skips `_catStub()` for the cloned node. CSS-only
+   interactions (`:hover`, `:active`, `:focus`, the toggle's `:checked`-driven transition if it's
+   pure CSS) work immediately on the clone with zero extra code — no shim needed.
+2. **For state changes driven by JS** (the toggle flips `fxState`, the slider drags update a
+   value in app state) — the *visual* transition is CSS-driven off a class/attribute
+   (`.fx-toggle.on`, a custom property for the slider thumb position), the app-state write is a
+   side effect the demo doesn't need. Attach a minimal generic shim per family — one line per
+   family in `buildCatalogPage()`, e.g. "toggle `.on` on click," "update `--sl-pos` on
+   pointermove" — that drives the same class/property the real app does, without wiring the real
+   `fxState`/image pipeline behind it. This is strictly less code than the video pipeline's
+   record/encode/store round trip, and the family already needs a resolved selector for the
+   static catalogue in §1, so this is additive, not a new subsystem.
+3. **Embed as an `<iframe>`** pointing at `chromasmith-22.html?catalog=1&live=1&family=<name>`
+   in the token report, sized to the real component's box (from the computed values already
+   captured per §1/§4). No screenshot, no video file, no encoding step — the report just points
+   an iframe at the real page. Reload-to-reset is free (iframes reload independently); no undo
+   stack to manage.
+4. Where a family's transition genuinely needs live image/canvas context to demo honestly (rare
+   — most of the list in §5 is chrome, not pixel processing), it stays out of the live-embed set
+   and keeps only its static before/after webp from §0 — call this out explicitly in the report
+   rather than faking it with a shim.
 
 ### 5b. How others handle animation review
 
 - **Material Design 3**: ships explicit **duration tiers** (`short1`=50ms … up through `long4`/
   `extra-long4`) and two **easing families**, "Standard" (short/inexpensive, non-attention-
   grabbing motion) vs "Emphasized" (bigger, choreographed transitions) — every component's
-  motion spec cites one of these named tokens, never a bespoke curve per component. This repo
-  has the same *shape* (`--dur-1`/`--dur-2`/`--ease`) but the toggle and split-popover above have
-  their own one-off `cubic-bezier(...)` outside that scale — worth deciding whether those are
-  intentional "emphasized" exceptions or drift.
+  motion spec cites one of these named tokens, never a bespoke curve per component, and its
+  component doc pages show the live component, not a clip. This repo has the same *shape*
+  (`--dur-1`/`--dur-2`/`--ease`) but the toggle and split-popover above have their own one-off
+  `cubic-bezier(...)` outside that scale — worth deciding whether those are intentional
+  "emphasized" exceptions or drift, and the live embed in §5a is exactly how you'd judge that by
+  feel rather than by reading the curve.
   ([Easing and duration – Material Design 3](https://m3.material.io/styles/motion/easing-and-duration/tokens-specs))
 - **Apple HIG**: keep motion subtle and infrequent — system components already animate
   consistently, so custom motion should be reserved for moments that need it, and must respect
   Reduce Motion (crossfade instead of slide, no autoplay) — already satisfied here (§5 above).
   ([Motion – Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/foundations/motion))
-- **Storybook + Chromatic** (the closest analogue to "review a component's animation before
-  shipping"): Chromatic snapshots every story in a real browser, waiting for animations to settle
-  before diffing — but for pixel-diff purposes it **disables** animation entirely and instead
-  uses interaction "play" functions plus a human review dashboard (accept/deny per changed story)
-  for anything animation-related, because pixel-diffing mid-animation is inherently noisy. The
-  transferable idea isn't the tool, it's the pattern: **separate the deterministic gate (token
-  literal check — already have it) from the human judgment call (does this look right — needs a
-  clip, not a still)**, and keep both, rather than trying to make one check do both jobs.
+- **Storybook + Chromatic**: each story is a live-mounted component you can interact with in the
+  docs UI (this is where the live-embed idea in §5a comes from directly) — Chromatic then adds an
+  *automated* layer on top for regression purposes, but explicitly **disables animation and
+  diffs the settled end state**, because pixel-diffing mid-motion is noisy. The transferable
+  pattern: **live embed for human review** (§5a — "does this feel right") stays completely
+  separate from the **deterministic regression gate** (§5c below — "did the end state change
+  unexpectedly"), and one is not a substitute for the other.
   ([Chromatic Storybook visual testing guide](https://qaskills.sh/blog/chromatic-storybook-visual-testing-guide))
 
 ### 5c. What to add
 
-- A `motion.webm`/`.gif` per animated selector in §5, generated by the Playwright step in §5a,
-  reusing `design/asbuilt/<id>/` so it lives with that surface's existing static evidence.
-  Priority order: `.fx-toggle` (custom easing, high interaction frequency) → `.fx-split-popover`
-  → mobile sheet open/close → section chevrons/`fxSecIn` → progress fills/spinner (lowest
-  priority — simple linear/width fills, least likely to look wrong).
-- Embed those clips in the token report next to the family's static thumbnail (§1/§4) whenever
-  `design/tokens.json`'s `--dur-*`/`--ease` values changed, so a token-scale change shows its
-  real on-screen effect, not just the new number.
+- The `?catalog=1&live=1` mode + per-family shim from §5a, prioritized: `.fx-toggle` (custom
+  easing, highest interaction frequency) → `.fx-split-popover` → mobile sheet open/close →
+  section chevrons/`fxSecIn` → progress fills/spinner (lowest priority — simple linear/width
+  fills, least likely to look wrong).
+- One `<iframe>` embed per animated family in the token report, next to its static thumbnail
+  (§1/§4), so hovering/clicking/dragging it live is one page, not a separate tool.
 - Flag the two one-off `cubic-bezier` curves (toggle, split-popover) in the report as "custom
-  easing, not on the `--ease`/`--dur-*` scale" — visible today only by reading source; the
-  report should call this out the way it already calls out color/spacing literals.
+  easing, not on the `--ease`/`--dur-*` scale" — visible today only by reading source; the report
+  should call this out the way it already calls out color/spacing literals.
+- Keep the regression side purely static: reuse §0's existing before/after webp (or add one where
+  missing) as the automated pixel-diff baseline for each animated family's *end state* — same
+  reasoning as Chromatic's "disable animation, diff the settled frame." No video artifact needed
+  on either side of this.
 
 ## Completeness check
 
@@ -260,7 +284,8 @@ already fails on registry drift; the new visual step should fail the same way wh
 that JSON has no corresponding screenshot (reused from `design/asbuilt/` per §0, or freshly
 captured per §1 only when no existing surface contains it).
 
-Every selector with a non-token-default `transition`/`@keyframes` declaration in
-`chromasmith-22.html` (the literal grep list in §5 — re-run that grep, don't hand-maintain the
-list) gets a `motion.webm` clip. That grep is the completeness scan for animation coverage the
-same way `families.length` is for the static catalogue.
+Every selector with a `transition`/`@keyframes` declaration in `chromasmith-22.html` (the literal
+grep list in §5 — re-run that grep, don't hand-maintain the list) gets either a live
+`?catalog=1&live=1` embed (§5a) or, where live isn't viable, an explicit "static only, see §5a.4"
+note in the report — never silently omitted. That grep is the completeness scan for animation
+coverage the same way `families.length` is for the static catalogue.
