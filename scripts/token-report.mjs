@@ -30,9 +30,10 @@ function categorizeRole(role) {
   if (role.startsWith('surface.') || role.startsWith('interaction.') || role.startsWith('component.')) return 'surfaces';
   if (role.startsWith('text.')) return 'text';
   if (role.startsWith('border.')) return 'borders';
+  if (role.startsWith('scrim.')) return 'scrims';
   return 'other';
 }
-const CATEGORY_LABEL = { brand: 'Brand & Accent', surfaces: 'Surfaces', text: 'Text', borders: 'Borders & Hairlines', other: 'Other' };
+const CATEGORY_LABEL = { brand: 'Brand & Accent', surfaces: 'Surfaces', text: 'Text', borders: 'Borders & Hairlines', scrims: 'Scrims & Shadows', other: 'Other' };
 
 const catalogue = { color: [], fontFamily: [], fontSize: [], fontWeight: [], dimension: [], other: [] };
 (function walk(o, path) {
@@ -151,12 +152,16 @@ for (const e of catalogue.color) {
 
 // ---------- 2c. Unapproved-color heuristic categorizer (selector/prop based, same spirit as
 // editor_token_check.mjs's ROLE_HINTS — advisory, not a guarantee) ----------
-function categorizeFinding(selector, prop) {
+function categorizeFinding(selector, prop, value) {
   const s = selector.toLowerCase();
   const p = prop.toLowerCase();
-  if (/^border|outline-color|box-shadow/.test(p) || /bdr|border|hairline|divider/.test(s)) return 'borders';
+  const isNeutral = value && /^(#fff|#000|rgba?\(0,0,0|rgba?\(255,255,255)/i.test(value.trim());
   if (/primary|accent|\bbpri\b|export|danger|destructive|\berr\b|success|\bok\b|warning|\bwarn\b/.test(s)) return 'brand';
-  if (/^color$|^fill$|^stroke$/.test(p)) return /muted|label|\blb\b|-lb\b|text/.test(s) ? 'text' : 'text';
+  // Shadows/elevation and neutral black/white overlays are the "scrim scale" family, not a
+  // brand-color or border-hairline concern — same split the design/tokens.json scrim category uses.
+  if (p === 'box-shadow' || isNeutral) return 'scrims';
+  if (/^border|outline-color/.test(p) || /bdr|border|hairline|divider/.test(s)) return 'borders';
+  if (/^color$|^fill$|^stroke$/.test(p)) return 'text';
   if (/^background/.test(p)) return 'surfaces';
   return 'other';
 }
@@ -178,12 +183,12 @@ for (const { selector, body } of ruleBodies) {
     for (const hex of hexMatches) {
       const norm = hex.toLowerCase();
       if (ALLOW_COLORS.has(norm) || approvedColors.has(norm)) continue;
-      colorFindings.push({ selector, prop, value: hex, category: categorizeFinding(selector, prop) });
+      colorFindings.push({ selector, prop, value: hex, category: categorizeFinding(selector, prop, hex) });
     }
     for (const rgba of rgbaMatches) {
       const norm = normColor(rgba);
       if (approvedColors.has(norm)) continue;
-      colorFindings.push({ selector, prop, value: rgba, category: categorizeFinding(selector, prop) });
+      colorFindings.push({ selector, prop, value: rgba, category: categorizeFinding(selector, prop, rgba) });
     }
   }
 }
@@ -314,7 +319,7 @@ function isAliasEntry(e) {
 }
 
 function colorSections() {
-  const order = ['brand', 'surfaces', 'text', 'borders', 'other'];
+  const order = ['brand', 'surfaces', 'text', 'borders', 'scrims', 'other'];
   return order.filter((cat) => catalogue.color.some((e) => e.category === cat && !isAliasEntry(e)) || colorFindings.some((f) => f.category === cat)).map((cat) => {
     const entries = catalogue.color.filter((e) => e.category === cat && !isAliasEntry(e));
     const light = groupedSwatches(entries.map((e) => ({ name: e.path, value: resolvedLiteral(e.modes ? e.modes.light : e.value, 'light') })));
