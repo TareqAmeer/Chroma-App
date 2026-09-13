@@ -17,12 +17,12 @@
     .reset-actions button { appearance:none; border:0; padding:4px 5px; background:none; color:var(--text); font:inherit; font-size:13px; cursor:pointer; }
     .reset-actions button:hover { color:var(--white); }
     .reset-actions span { color:#575757; }
-    .switch { position:relative; display:inline-block; width:44px; height:22px; flex:0 0 auto; }
+    .switch { font-size:17px; position:relative; display:inline-block; width:8em; height:4em; flex:0 0 auto; }
     .switch input { opacity:0; width:0; height:0; }
-    .toggle-slider { position:absolute; inset:0; cursor:pointer; background:#4b4b4b; transition:.4s; border-radius:2px; }
-    .toggle-slider::before { position:absolute; content:""; inset:0 auto auto 0; width:22px; height:22px; background:#fff; transition:.2s cubic-bezier(.75,.02,.86,1.31); transform-origin:bottom right; border-radius:2px; }
+    .toggle-slider { position:absolute; inset:0; cursor:pointer; background:#4b4b4b; transition:.4s; }
+    .toggle-slider::before { position:absolute; content:""; inset:0 auto auto 0; width:4em; height:4em; background:#fff; transition:.2s cubic-bezier(.75,.02,.86,1.31); transform-origin:bottom right; }
     .switch input:checked + .toggle-slider { background:#61a0af; }
-    .switch input:checked + .toggle-slider::before { transform:translateX(22px) rotate(90deg); }
+    .switch input:checked + .toggle-slider::before { transform:translateX(0em) rotate(90deg); }
     .switch input:focus-visible + .toggle-slider { outline:2px solid #fff; outline-offset:3px; }
     .content { padding-top:22px; transition:opacity .16s ease; }
     .pilot.disabled .content { opacity:.42; pointer-events:none; }
