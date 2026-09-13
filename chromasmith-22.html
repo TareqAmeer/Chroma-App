@@ -112,7 +112,10 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
      scrims and translucent chrome, same idea as Material Design elevation levels or Carbon's
      layer/overlay tokens — components snap to the nearest step instead of inventing their own
      alpha. Always the same value in both themes, so no body.light override exists for these. */
-  --scrim-b1:rgba(0,0,0,.25);--scrim-b2:rgba(0,0,0,.35);--scrim-b3:rgba(0,0,0,.45);--scrim-b4:rgba(0,0,0,.55);--scrim-b5:rgba(0,0,0,.65);--scrim-w1:rgba(255,255,255,.35);--scrim-w2:rgba(255,255,255,.5);--scrim-w3:rgba(255,255,255,.65);--scrim-w4:rgba(255,255,255,.85)/* TOKENS:ROOT:END */}
+  --scrim-b1:rgba(0,0,0,.25);--scrim-b2:rgba(0,0,0,.35);--scrim-b3:rgba(0,0,0,.45);--scrim-b4:rgba(0,0,0,.55);--scrim-b5:rgba(0,0,0,.65);--scrim-w1:rgba(255,255,255,.35);--scrim-w2:rgba(255,255,255,.5);--scrim-w3:rgba(255,255,255,.65);--scrim-w4:rgba(255,255,255,.85);
+  /* Mist-blue accent tint ramp (T-tint): same discipline as the scrim scale above, but keyed
+     to --acc's mist-blue RGB for active/selected/hover states instead of neutral black/white. */
+  --tint-1:rgba(97,160,175,.08);--tint-2:rgba(97,160,175,.12);--tint-3:rgba(97,160,175,.18);--tint-4:rgba(97,160,175,.25);--tint-5:rgba(97,160,175,.35);--tint-6:rgba(97,160,175,.45)/* TOKENS:ROOT:END */}
 body.light{--glass-bg:#ffffff}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100%;overflow-x:clip}
@@ -145,11 +148,11 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:20px;margin-bottom:14px;box-shadow:var(--lift-1)}
 .ctitle{font-family:var(--sans);font-weight:600;font-size:var(--fs-3);letter-spacing:0;color:var(--txt);margin-bottom:14px;display:flex;align-items:center;gap:8px}
 .ctitle::after{content:'';flex:1;height:1px;background:var(--bdr)}
-.cver{font-family:var(--mono);font-size:11px;color:var(--acc);background:rgba(97,160,175,.12);border:1px solid rgba(97,160,175,.25);padding:2px 8px;border-radius:3px;margin-left:auto}
+.cver{font-family:var(--mono);font-size:11px;color:var(--acc);background:var(--tint-2);border:1px solid var(--tint-4);padding:2px 8px;border-radius:3px;margin-left:auto}
 .dg2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .dg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 .dz{background:var(--sur2);border:1px dashed var(--bdr);border-radius:var(--r);padding:22px 14px;text-align:center;cursor:pointer;transition:all .15s;position:relative;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
-.dz:hover,.dz.over{border-color:var(--acc);background:rgba(97,160,175,.05)}.dz.loaded{border-style:solid;border-color:var(--ok);background:var(--ok)}.dz.loaded .dz-lb,.dz.loaded .dz-sb{color:#fff}
+.dz:hover,.dz.over{border-color:var(--acc);background:var(--tint-1)}.dz.loaded{border-style:solid;border-color:var(--ok);background:var(--ok)}.dz.loaded .dz-lb,.dz.loaded .dz-sb{color:#fff}
 .dz input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 .dz-ic{font-size:18px;color:var(--mut)}.dz.loaded .dz-ic{color:#fff}
 .dz-lb{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;color:var(--mut)}
@@ -162,7 +165,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .btn:active:not(:disabled){transform:scale(.96)}
 .bpri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600;box-shadow:inset 0 1px 0 var(--scrim-w1),0 1px 2px var(--scrim-b1)}
 .bpri:not(:disabled):hover{filter:brightness(1.15)}
-.bsec{background:transparent;border-color:var(--acc2);color:var(--acc2)}.bsec:not(:disabled):hover{background:rgba(74,157,220,.1)}
+.bsec{background:transparent;border-color:var(--acc2);color:var(--acc2)}.bsec:not(:disabled):hover{background:var(--tint-2)}
 .bgh{background:var(--sur2);border-color:var(--bdr);color:var(--mut)}.bgh:not(:disabled):hover{border-color:var(--txt);color:var(--txt);background:var(--sur)}.bgh.on{border-color:#61a0af;color:#fff;background:#61a0af}
 /* .bdot removed: a decorative leading dot on every single button, carrying no meaning and
    pushing every label off-centre. State is now shown by the button's own .on treatment. */
@@ -174,7 +177,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .vinput:focus{outline:none;border-color:var(--acc)}
 .step-card{border:1px solid var(--bdr);border-radius:var(--r);margin-bottom:12px;overflow:hidden;box-shadow:var(--lift-1)}
 .step-hdr{background:var(--sur2);padding:9px 14px;display:flex;align-items:center;gap:9px;font-family:var(--sans);font-weight:600;font-size:12px}
-.step-badge{background:rgba(97,160,175,.15);border:1px solid rgba(97,160,175,.3);color:var(--acc);padding:2px 8px;border-radius:3px;font-size:10px;font-family:var(--mono)}
+.step-badge{background:var(--tint-3);border:1px solid var(--tint-5);color:var(--acc);padding:2px 8px;border-radius:3px;font-size:10px;font-family:var(--mono)}
 .step-body{padding:14px}
 .sum-box{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 14px;margin-top:12px;box-shadow:var(--lift-1)}
 .sum-title{font-family:var(--sans);font-size:var(--fs-2);font-weight:600;letter-spacing:0;color:var(--mut);margin-bottom:7px}
@@ -216,8 +219,8 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
    — the shader skips the whole NR pass then. Dim them so that's visible instead of silent. */
 .nr-gated.gate-off{opacity:.4}
 #panel-fx .dz{min-height:54px;padding:11px 14px}
-#dz-fx-img:not(.loaded){border-color:var(--acc);border-style:solid;background:rgba(97,160,175,.07)}
-#dz-fx-img:not(.loaded):hover{background:rgba(97,160,175,.12)}
+#dz-fx-img:not(.loaded){border-color:var(--acc);border-style:solid;background:var(--tint-1)}
+#dz-fx-img:not(.loaded):hover{background:var(--tint-2)}
 #dz-fx-img:not(.loaded) .dz-ic,#dz-fx-img:not(.loaded) .dz-lb{color:var(--acc)}
 #panel-fx .dz-ic{font-size:16px}
 .fx-ctrl-title{font-family:var(--sans);font-size:var(--fs-1);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--txt);margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;cursor:pointer;gap:6px}
@@ -384,7 +387,7 @@ body.mobile-fx .hsl-chip{border-width:3px}
 .msk-rowbar-nm{font-size:var(--fs-3);font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msk-more{margin-left:auto}
 .msk-tag{font-size:var(--fs-0);color:var(--mut);background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:1px 5px;white-space:nowrap}
-.msk-tag.on{color:var(--acc);border-color:rgba(97,160,175,.4);background:rgba(97,160,175,.12)}
+.msk-tag.on{color:var(--acc);border-color:var(--tint-6);background:var(--tint-2)}
 /* Collapsible group. The chevron rotates rather than swapping glyphs, so there is one DOM shape
    and no layout shift on toggle. */
 .msk-group{border-top:1px solid var(--bdr);margin-top:var(--sp-2)}
@@ -452,7 +455,7 @@ body.mobile-fx .hsl-chip{border-width:3px}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}
 }
-.pc-chip.on{border-color:var(--acc);box-shadow:0 0 0 2px rgba(97,160,175,.35)}
+.pc-chip.on{border-color:var(--acc);box-shadow:0 0 0 2px var(--tint-5)}
 body.mobile-fx .pc-chip{width:36px;height:36px}
 /* Approved Color Mixer pilot, 2026-09-13: a continuous per-hue population histogram (thin bars
    across the full spectrum, each its own sampled hue) with 8 invisible click/hover zones laid
@@ -461,7 +464,7 @@ body.mobile-fx .pc-chip{width:36px;height:36px}
 #hsl-hist{position:relative;display:flex;align-items:flex-end;gap:1px;height:32px;padding:0 1px}
 .hsl-hist-bar{flex:1 1 0;min-width:2px;border-radius:2px 2px 0 0;pointer-events:none;opacity:.9}
 .hsl-hist-zone{position:absolute;top:0;bottom:0;border:0;background:transparent;cursor:pointer;padding:0}
-.hsl-hist-zone:hover,.hsl-hist-zone.on{background:linear-gradient(180deg,rgba(197,197,197,.28),rgba(197,197,197,.12) 62%,transparent)}
+.hsl-hist-zone:hover,.hsl-hist-zone.on{background:linear-gradient(180deg,var(--tint-3),var(--tint-1) 62%,transparent)}
 /* Color Mixer sliders: gradient track (Hue = fixed rainbow; Sat/Lum tinted per selected band
    via JS, see hslSyncUI). Track colour comes from the input's own `background`, so appearance
    must be reset to none — WebKit/Safari-focused since the app runs in Safari or a WKWebView shell. */
@@ -859,14 +862,14 @@ body.mobile-fx .fx-slider::-webkit-slider-thumb{width:22px;height:22px}
 /* mobile: the editor IS the app — web tabs live behind the ⋯ sheet */
 body.mobile-fx .tabs{display:none}
 body.mobile-fx .ni-hint{display:none}
-#fx-add-btn{display:flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:50%;background:var(--acc);color:#000;font-size:36px;line-height:1;border:none;cursor:pointer;margin:18px auto 6px;box-shadow:0 4px 22px rgba(97,160,175,.45)}
+#fx-add-btn{display:flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:50%;background:var(--acc);color:#000;font-size:36px;line-height:1;border:none;cursor:pointer;margin:18px auto 6px;box-shadow:0 4px 22px var(--tint-6)}
 #fx-add-btn:active{transform:scale(.94)}
 .ni-add-lb{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;color:var(--acc);letter-spacing:0}
 #fx-more-menu{position:fixed;inset:0;background:var(--scrim-b4);z-index:2500;display:flex;align-items:flex-end}
 #fx-more-menu .mm-sheet{background:var(--sur);width:100%;border-radius:14px 14px 0 0;padding:14px 14px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
 #fx-more-menu .btn{width:100%;justify-content:center;min-height:44px}
 /* active tool pill on the icon strip */
-body.mobile-fx .fx-sec-btn.on{background:rgba(97,160,175,.14)}
+body.mobile-fx .fx-sec-btn.on{background:var(--tint-2)}
 /* export overlay (mobile): dim + big progress + cancel */
 #fx-exp-ov{position:fixed;inset:0;background:var(--scrim-b4);z-index:2600;display:flex;align-items:flex-end;justify-content:center}
 #fx-exp-ov .eo-box{background:var(--sur);border-radius:14px 14px 0 0;width:100%;padding:16px 16px calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;align-items:center}
@@ -969,7 +972,7 @@ body.deskx .fx-db-icon{padding:5px}
   padding:0;background:transparent;border:1px solid transparent;border-radius:var(--r-sm);
   color:var(--mut);cursor:pointer;transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
 .db-btn:hover{background:var(--sur2);color:var(--txt)}
-.db-btn.on{background:rgba(97,160,175,.14);color:var(--acc)}
+.db-btn.on{background:var(--tint-2);color:var(--acc)}
 .db-btn .fx-db-ic{display:inline-flex}
 .db-btn-narrow{width:28px}       /* the split-options chevron rides tight against its parent button */
 body.deskx .fx-db,body.deskx .fx-db-icon{height:32px;padding:0 12px}
@@ -1035,7 +1038,7 @@ body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
 body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:sticky;top:calc(var(--deskbar-h, 58px) + 16px);align-self:start;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:6px}
 .fx-rail-btn{display:flex;align-items:center;gap:10px;width:120px;background:none;border:none;border-radius:var(--r-sm);color:var(--mut);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:9px 10px;text-align:left;transition:color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
 .fx-rail-btn:hover{background:var(--sur2);color:var(--txt)}
-.fx-rail-btn.on{background:rgba(97,160,175,.12);color:var(--acc)}
+.fx-rail-btn.on{background:var(--tint-2);color:var(--acc)}
 .fx-rail-btn .fx-rail-ic{display:inline-flex;flex-shrink:0}
 .fx-rail-btn .fx-rail-lb{white-space:nowrap}
 /* ⚠️ `column-count:1` is NOT the same as "not a multi-column element" — it still establishes a
@@ -1065,7 +1068,7 @@ body.fx-deskb .fx-canvas-wrap{min-height:0}
 /* enabled-section indicator on rail + strip */
 .fx-rail-btn.enabled,.fx-sec-btn.enabled{color:var(--acc)}
 .fx-rail-btn.enabled .fx-rail-ic,.fx-sec-btn.enabled .fx-sec-ic{color:var(--acc)}
-.fx-rail-btn.enabled.on{background:rgba(97,160,175,.18)}
+.fx-rail-btn.enabled.on{background:var(--tint-3)}
 /* All-FX buttons highlight when every effect is on */
 .fx-db.js-allfx.allon{border-color:var(--acc);color:var(--acc)}
 .fx-db.js-allfx.allon .fx-db-ic{color:var(--acc)}
@@ -1389,7 +1392,7 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 #cl-frame{position:relative;box-shadow:0 6px 30px var(--scrim-b2);display:none}
 .cl-cell{position:absolute;overflow:hidden;cursor:pointer;background:rgba(255,255,255,.03)}
 .cl-cell.sel{outline:2px solid var(--acc);outline-offset:-2px;z-index:4;touch-action:none}
-#cl-dz.hot{border-style:solid;border-color:var(--acc);background:rgba(97,160,175,.08)}
+#cl-dz.hot{border-style:solid;border-color:var(--acc);background:var(--tint-1)}
 #cl-dz.hot .dz-ic,#cl-dz.hot .dz-lb{color:var(--acc)}
 #cl-secnav{display:none}
 .cl-cell img{position:absolute;left:0;top:0;pointer-events:none;user-select:none;-webkit-user-drag:none;max-width:none}
@@ -1410,7 +1413,7 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-shapes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .cl-shape{aspect-ratio:1;border:1px solid var(--bdr);border-radius:5px;background:var(--sur2);cursor:pointer;padding:5px;transition:border-color .15s}
 .cl-shape:hover{border-color:var(--mut)}
-.cl-shape.on{border-color:var(--acc);background:rgba(97,160,175,.1)}
+.cl-shape.on{border-color:var(--acc);background:var(--tint-2)}
 .cl-shape svg{display:block;width:100%;height:100%}
 .cl-count{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap}
 .cl-count button{font-family:var(--mono);font-size:11px;min-width:30px;padding:5px 0;border:1px solid var(--bdr);border-radius:5px;background:var(--sur2);color:var(--mut);cursor:pointer}

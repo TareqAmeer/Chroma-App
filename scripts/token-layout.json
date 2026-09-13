@@ -283,6 +283,36 @@
     {
       "var": "--scrim-w4",
       "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--tint-1",
+      "pre": "\n  /* Mist-blue accent tint ramp (T-tint): same discipline as the scrim scale above, but keyed\n     to --acc's mist-blue RGB for active/selected/hover states instead of neutral black/white. */\n  ",
+      "hadSemi": true
+    },
+    {
+      "var": "--tint-2",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--tint-3",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--tint-4",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--tint-5",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--tint-6",
+      "pre": "",
       "hadSemi": false
     }
   ],
