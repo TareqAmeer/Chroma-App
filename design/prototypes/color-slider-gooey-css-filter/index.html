@@ -1,0 +1,6 @@
+<!doctype html>
+<!-- Independent browser-native prototype prompted by the user-supplied CSS/SVG technique. No React or dependency. -->
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Color slider CSS-filter prototype</title><link rel="stylesheet" href="style.css">
+<!-- Gemini-style hidden SVG filter. It touches decorative blobs only: text and native controls stay outside. -->
+<svg width="0" height="0" aria-hidden="true" style="position:absolute"><filter id="gooey-effect"><feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 18 -7" result="goo"/></filter></svg>
+<main><header><p>CHROMASMITH / CSS FILTER STUDY</p><h1>Thumb meets the endpoint.</h1><button id="theme">Light theme</button></header><p class="lede">A second, dependency-free experiment using CSS <code>filter:url()</code> on decorative blobs only. No trailing surface.</p><div class="compare"><section><h2>Normal</h2><div id="normal"></div></section><section><h2>CSS filter proposal <small>WebKit uncertain</small></h2><div id="gooey"></div></section></div><footer>The blob follows the native input directly. At 0 or 100 it merges with a stationary edge blob, then separates—an endpoint squish, not a trail.</footer></main><script src="script.js"></script>

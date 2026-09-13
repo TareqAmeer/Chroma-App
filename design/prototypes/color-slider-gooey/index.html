@@ -11,17 +11,18 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Color slider gooey prototype</title>
   <link rel="stylesheet" href="prototype.css">
+  <link rel="stylesheet" href="review-revision.css">
 </head>
 <body>
   <main class="study" aria-labelledby="title">
     <header class="masthead">
-      <div><p class="eyebrow">Chromasmith / Color study</p><h1 id="title">Moving thumb surface.</h1><p class="lede">A disposable evaluation of a restrained, decorative trail beneath the native range control.</p></div>
+      <div><p class="eyebrow">Chromasmith / Color study</p><h1 id="title">A soft thumb surface.</h1><p class="lede">A disposable evaluation of a responsive, self-contained thumb beneath the native range control.</p></div>
       <div class="switches"><button id="theme" type="button">Light theme</button><button id="motion" type="button" aria-pressed="true">Effect on</button></div>
     </header>
 
     <section class="controls" aria-label="Prototype controls">
-      <label>Trail strength <input id="trail" type="range" min="0" max="1" value=".28" step=".02"><output for="trail">0.28</output></label>
-      <label>Softness <input id="softness" type="range" min="0" max="8" value="3" step=".5"><output for="softness">3px</output></label>
+      <label>End squish <input id="squish" type="range" min="0" max=".4" value=".18" step=".02"><output for="squish">0.18</output></label>
+      <label>Soft edge <input id="softness" type="range" min="0" max="4" value="1.5" step=".5"><output for="softness">1.5px</output></label>
       <button type="button" data-state="default">Default</button><button type="button" data-state="changed">Changed</button><button type="button" data-state="focus">Keyboard focus</button>
     </section>
 
@@ -30,7 +31,7 @@
       <section class="panel" aria-labelledby="normal-title"><h2 id="normal-title">Normal</h2><div class="rows" data-kind="normal"></div></section>
       <section class="panel proposal" aria-labelledby="gooey-title"><h2 id="gooey-title">Gooey proposal <span>optional surface</span></h2><div class="rows" data-kind="gooey"></div></section>
     </div>
-    <footer>Proposed starting values: trail 0.28, softness 3px, 180ms settle. The effect is decorative; the real input remains the focusable, 44px target.</footer>
+    <footer>Proposed starting values: end squish 0.18 and soft edge 1.5px. The real input remains the focusable, 44px target; only its visual thumb is mirrored in SVG.</footer>
   </main>
   <script src="prototype.js"></script>
 </body>

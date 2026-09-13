@@ -1,0 +1,2 @@
+/* Review revision: CSS transforms move the soft thumb itself, never a tail. */
+.liquid .surface { transform-box: fill-box; transform-origin: 0 0; }

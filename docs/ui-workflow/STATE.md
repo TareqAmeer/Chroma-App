@@ -33,6 +33,7 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
 <!-- S1, S2, … append below. Format: **Sx — date — verdict**, then ≤10 lines. -->
 **Color-slider gooey — 2026-09-13 — draft prototype**
 - Added isolated HTML/CSS/SVG/JS study at `design/prototypes/color-slider-gooey/`; no production UI or dependencies changed.
+- Added a second CSS `filter:url()` endpoint-merge study at `design/prototypes/color-slider-gooey-css-filter/`; Chromium-only, WebKit explicitly uncertain.
 - Draft reference specification and concise review record source behavior, fallback, and required human decisions.
 - Source audit pinned official liquid-gooey MIT package at `422180dd7a5ac646c85deedc65500c4a74339127`; WebKit evidence remains unrecorded.
 

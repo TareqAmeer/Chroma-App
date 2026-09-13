@@ -43,7 +43,7 @@
     ],
     "proposedInterpretations": [
       { "id": "proposal-surface", "statement": "Apply the effect only as an optional SVG silhouette beneath a native range input, never to labels, values, focus indicators, or HSL gradient pixels.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["lib-layers", "rule-focus"] },
-      { "id": "proposal-settings", "statement": "Start with trail 0.28, SVG blur 3px, no wobble, and a 180ms damped settle; these are deliberately more restrained than the library defaults.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["lib-motion", "rule-motion"] },
+      { "id": "proposal-settings", "statement": "Do not trail or settle: directly mirror the thumb with a 1.5px soft edge and 0.18 endpoint compression only; no bounce or animation loop.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["lib-motion", "rule-motion"] },
       { "id": "proposal-fallback", "statement": "If SVG filters, feature detection, or a required browser behavior is unavailable, hide the surface immediately and retain the normal Chroma slider unchanged.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["repo-contract"] }
     ],
     "userDecisions": [
@@ -57,7 +57,7 @@
     "typography": [ { "id": "type", "statement": "Preserve Chroma’s SF Pro Text stack, existing label treatment, and tabular numeric value styling.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["repo-contract"] } ],
     "colorsContrastRoles": [ { "id": "colors", "statement": "Use current dark/light Chroma tokens and preserve functional HSL gradients; the liquid uses the existing action token only.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["rule-color", "repo-gradient"] } ],
     "icons": [],
-    "motionInteraction": [ { "id": "motion", "statement": "Decorative movement follows input changes, stops its rAF after settling, and is disabled under prefers-reduced-motion.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["lib-motion", "rule-motion"] } ],
+    "motionInteraction": [ { "id": "motion", "statement": "The decorative thumb mirrors input changes directly, with endpoint-only squish and no rAF or trailing movement; it is disabled under prefers-reduced-motion.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["lib-motion", "rule-motion"] } ],
     "responsiveBehavior": [ { "id": "responsive", "statement": "At narrow width, comparison panels stack; each slider remains row-bounded with no clipping or layout shift.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["repo-geometry"] } ],
     "accessibility": [ { "id": "a11y", "statement": "The native range owns keyboard handling, focus, ARIA name, value behavior, and pointer hit target; SVG is aria-hidden and pointer-events:none.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["lib-layers"] } ],
     "targets": [ { "id": "target", "statement": "Future production work, if approved, binds to the slider contract and Color declarations identified by the registry; this prototype touches no production target.", "sourceClass": "proposal", "sourceRef": "prototype", "basedOn": ["repo-contract", "repo-registry"] } ],
