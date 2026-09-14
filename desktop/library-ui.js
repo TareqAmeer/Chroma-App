@@ -3062,7 +3062,12 @@
   // every folder switch. 24 is enough to fill the tallest common viewport at default thumb size
   // without generating an unbounded number of shimmering nodes for a huge folder.
   function libSkeletonHtml(n = 24) {
-    return Array.from({ length: n }, () => '<div class="lib-card lib-skel"><div class="lib-thumb-wrap"></div></div>').join('');
+    return '<div class="lib-loading" role="status" aria-live="polite">Loading photos…</div>' + Array.from({ length: n }, () => '<div class="lib-card lib-skel"><div class="lib-thumb-wrap"></div></div>').join('');
+  }
+  function showLibraryError(message, actionLabel, action) {
+    const grid = document.getElementById('lib-grid'); if (!grid) return;
+    grid.innerHTML = `<div id="lib-empty" role="alert"><div>${message}</div><button class="lib-btn" id="lib-empty-retry">${actionLabel}</button></div>`;
+    const button = grid.querySelector('#lib-empty-retry'); if (button) button.onclick = action;
   }
   /// Nothing has ever been added to the Library — the true first-launch state. Two distinct
   /// actions, not one: "Add photos" loads loose files straight into the editor (fxPickPhotos,
@@ -4080,7 +4085,7 @@
         }
       }
     } catch (e) {
-      grid.innerHTML = `<div id="lib-empty">Can't read this folder.</div>`;
+      showLibraryError('Couldn’t open this folder.', 'Choose another folder', () => pickFolder());
       return;
     }
     state.entries = entries.filter((e) => e.is_image || e.is_video);
@@ -7083,7 +7088,7 @@
     grid.innerHTML = libSkeletonHtml();
     let entries;
     try { entries = await invoke('list_collection', { name }); }
-    catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load this collection.</div>'; return; }
+    catch (e) { showLibraryError('Couldn’t load this collection.', 'Try again', () => openCollectionView(name)); return; }
     // Missing registry records are retained natively for recovery/history, but cannot render as
     // photos.  Exclude them from this view's total so its sidebar badge, footer, and grid agree.
     state.entries = entries.filter((e) => !e.missing);
@@ -7102,7 +7107,7 @@
     grid.innerHTML = libSkeletonHtml();
     let entries;
     try { entries = await invoke('list_exported'); }
-    catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load exported photos.</div>'; return; }
+    catch (e) { showLibraryError('Couldn’t load exported photos.', 'Try again', () => openExportedView()); return; }
     state.entries = entries.filter((e) => !e.missing);
     {
       const paths = entries.filter((e) => !e.missing).map((e) => e.path);
@@ -9355,7 +9360,7 @@
     renderCollections();
     let assets;
     try { assets = await window.lrCloud.assets(albumId); }
-    catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load this album.</div>'; console.error('lr assets', e); return; }
+    catch (e) { showLibraryError('Couldn’t load this album.', 'Try again', () => openLrAlbum(albumId)); console.error('lr assets', e); return; }
     if (state.source !== 'lr' || lrState.album !== albumId) return; // user navigated away mid-fetch
     lrState.assets = assets;
     await renderLrGrid();

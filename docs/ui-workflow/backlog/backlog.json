@@ -128,7 +128,7 @@
       "priority": "P0",
       "cluster": "library-trust",
       "title": "Design friendly Library loading, empty, and error states",
-      "status": "backlog",
+      "status": "in_progress",
       "recommended_executor": "Codex",
       "model": "codex:gpt-5.6-terra",
       "reference": "apple-ui-tips",
