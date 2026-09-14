@@ -2147,19 +2147,27 @@ pub fn list_exported() -> Vec<DirEntry> {
     out
 }
 
-/// Counts for every smart collection's sidebar badge — cheap (list lengths from disk, no
-/// per-photo stat) so it can be refreshed after every sidecar write/export without cost.
+/// Count only paths that can still produce a Library card. Registry/history records are retained
+/// for recovery when originals move or disconnect, but reporting those stale records in a badge
+/// made the sidebar disagree with the no-filter collection grid.
+fn existing_path_count(paths: impl IntoIterator<Item = String>) -> usize {
+    paths.into_iter().filter(|path| std::fs::metadata(path).is_ok()).count()
+}
+
+/// Counts for every smart collection's sidebar badge. The registries are small user-state lists;
+/// checking their paths keeps the badge aligned with the renderable collection without deleting
+/// a recoverable record.
 #[tauri::command]
 pub fn collection_counts() -> std::collections::HashMap<String, usize> {
     let mut m = std::collections::HashMap::new();
-    m.insert("edited".to_string(), registry_read("edited").len());
-    m.insert("favorites".to_string(), registry_read("favorites").len());
-    m.insert("flagged".to_string(), registry_read("flagged").len());
-    m.insert("rejected".to_string(), registry_read("rejected").len());
-    m.insert("exported".to_string(), export_history_read_all().len());
-    m.insert("recents".to_string(), registry_read("recents").len());
-    m.insert("duplicates".to_string(), registry_read("duplicates").len());
-    m.insert("gphotos".to_string(), registry_read("gphotos").len());
+    m.insert("edited".to_string(), existing_path_count(registry_read("edited")));
+    m.insert("favorites".to_string(), existing_path_count(registry_read("favorites")));
+    m.insert("flagged".to_string(), existing_path_count(registry_read("flagged")));
+    m.insert("rejected".to_string(), existing_path_count(registry_read("rejected")));
+    m.insert("exported".to_string(), existing_path_count(export_history_read_all().into_keys()));
+    m.insert("recents".to_string(), existing_path_count(registry_read("recents")));
+    m.insert("duplicates".to_string(), existing_path_count(registry_read("duplicates")));
+    m.insert("gphotos".to_string(), existing_path_count(registry_read("gphotos")));
     m
 }
 

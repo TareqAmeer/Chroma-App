@@ -101,7 +101,9 @@
       "priority": "P0",
       "source_document": "recommendations-33-70",
       "summary": "Review screenshots showed a Library count of 57,651 while All Photos displayed no photos and the footer showed 0 of 0; the Working status appeared unchanged after clicks.",
-      "disposition": "Keep as a diagnostic finding, not one of the 100 numbered design recommendations. Investigate/reproduce before implementation; item 16 covers user-facing state design."
+      "disposition": "Keep as a diagnostic finding, not one of the 100 numbered design recommendations. Investigate/reproduce before implementation; item 16 covers user-facing state design.",
+      "status": "done",
+      "completion_evidence": "2026-09-14: reproduced the empty-root launch and stale smart-collection paths. Library now restores a versioned destination (folder, collection, catalog/date scope, or Lightroom album); stale registry/history paths are excluded from sidebar and footer totals while preserved for recovery. Focused lib:test checks passed for saved collection/date restoration and 8 visible Edited photos matching sidebar/footer 8 of 8."
     }
   ],
   "items": [
@@ -111,13 +113,14 @@
       "priority": "P0",
       "cluster": "library-selection",
       "title": "Show selection actions only when they can act",
-      "status": "backlog",
+      "status": "done",
       "recommended_executor": "Codex",
       "model": "codex:gpt-5.6-terra",
       "reference": "lightroom-contextual-taskbar",
       "depends_on": [],
       "acceptance": "No-photo state has no active destructive or export actions; selection state exposes the correct actions and counts.",
-      "source_id": 34
+      "source_id": 34,
+      "completion_evidence": "desktop/library-ui.js: added syncLibActionButtons() (near syncLibFlagRow, ~L6508) that disables #lib-flag-reject/#lib-flag-fav/#lib-flag-pick when no photo is open (state.openedPath empty) and #lib-export-btn/#lib-allfx-btn when nothing can act (cmKbTargets() empty: no selection, no keyboard cursor, no open photo); wired into renderGridTail, updateCardSelClasses, openEditInHandoff and the flag-button click handlers so it tracks selection/open-photo changes. Added .lib-btn:disabled CSS (opacity .4, no pointer events) using only existing --sur2/--bdr/--txt tokens, no new values. The pre-existing lib-batchbar (>=2 selected) already showed correct counts/actions and was left unchanged. Verified live via desktop/dist build served from a staged /tmp copy (?libtest=1): fresh load / nothing selected -> all five buttons disabled; single click selects (no open) -> Export/All FX enable, flag row stays disabled (rates the open photo only, unchanged prior behavior); second click opens the photo -> flag row also enables. npm run ui:test shows the same pre-existing unrelated failures (export@ TAP, looks@ CONTRAST) with and without this change \u2014 no new regressions."
     },
     {
       "id": 2,

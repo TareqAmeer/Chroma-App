@@ -8,9 +8,11 @@ this module also verifies the executable's containing .app via `lsof` and
 prefers the one at REAL_APP_PATH.
 """
 import os
+import json
 import subprocess
 
 EXE_NAME = 'chromasmith'
+NATIVE_STATE_PATH = '/tmp/chromasmith_diag_state.json'
 REAL_APP_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     'desktop', 'src-tauri', 'target', 'release', 'bundle', 'macos', 'Chromasmith.app',
@@ -29,6 +31,33 @@ def _pids_by_name(name):
     if out.returncode != 0:
         return []
     return [int(p) for p in out.stdout.split() if p.strip()]
+
+
+def _pids_by_executable_path(path):
+    """Find an app even when macOS does not expose its executable basename to pgrep.
+
+    The native diagnostics bridge is written only by the running desktop app and records its
+    executable path.  Using it as a fallback keeps diagnostics attached to that exact binary
+    instead of treating a current native bridge heartbeat as "no running app".
+    """
+    if not path:
+        return []
+    try:
+        out = subprocess.run(['pgrep', '-f', path], capture_output=True, text=True, timeout=5)
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return []
+    if out.returncode != 0:
+        return []
+    return [int(p) for p in out.stdout.split() if p.strip()]
+
+
+def _bridge_binary_path():
+    try:
+        with open(NATIVE_STATE_PATH) as f:
+            payload = json.load(f)
+        return payload.get('native', {}).get('binary_path')
+    except (OSError, ValueError, TypeError):
+        return None
 
 
 def _app_bundle_for_pid(pid):
@@ -64,6 +93,8 @@ def find_chromasmith_pid(prefer_path=REAL_APP_PATH):
     picks the one under prefer_path if possible.
     """
     pids = _pids_by_name(EXE_NAME)
+    if not pids:
+        pids = _pids_by_executable_path(_bridge_binary_path())
     if not pids:
         raise ProcessNotFound(
             f"No running '{EXE_NAME}' process found. Launch {REAL_APP_PATH} normally first."

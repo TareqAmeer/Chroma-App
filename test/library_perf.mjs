@@ -27,6 +27,38 @@ let failures=[];
 const BUDGET={200:{dom:8000},1000:{dom:6000},5000:{dom:6000,ms:20000}};
 console.log('kind        n      budget        actual   status');
 console.log('-'.repeat(58));
+for (const [label, saved, activeSelector] of [
+  ['collection', {kind:'collection',name:'edited'}, '[data-coll="edited"].on'],
+  ['date scope', {kind:'catalog',scope:'date:2026'}, '[data-date-scope="date:2026"].on'],
+]) {
+  const p=await b.newPage();
+  await p.addInitScript((view) => localStorage.setItem('chromasmith_lib_last_view_v2', JSON.stringify(view)), saved);
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libcat=1&libn=18&librestoreview=1`,{waitUntil:'domcontentloaded',timeout:120000});
+  await p.waitForTimeout(500);
+  const r=await p.evaluate((sel)=>({active:!!document.querySelector(sel),cards:document.querySelectorAll('#lib-grid .lib-card[data-path]').length}),activeSelector);
+  const ok=r.active && (label==='collection' || r.cards>0);
+  console.log(`relaunch restores ${label}: active=${r.active}, cards=${r.cards}  ${ok?'PASS':'FAIL'}`);
+  if(!ok)failures.push(`relaunch did not restore saved ${label}: ${JSON.stringify(r)}`);
+  await p.close();
+}
+// Focused regression first: keep this state check independent of the later large-library perf
+// workloads, which can exceed a short interactive runner window.
+{
+  const p=await b.newPage();
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libcountmismatch=1`,{waitUntil:'domcontentloaded',timeout:120000});
+  await p.waitForTimeout(1000);
+  await p.evaluate(() => document.querySelector('[data-coll="edited"]')?.click());
+  await p.waitForTimeout(300);
+  const r=await p.evaluate(()=>({
+    sidebar:document.querySelector('[data-coll="edited"] .lib-coll-count')?.textContent?.trim(),
+    cards:document.querySelectorAll('#lib-grid .lib-card[data-path]').length,
+    footer:document.getElementById('lib-count')?.textContent?.trim(),
+  }));
+  const ok=r.sidebar==='8'&&r.cards===8&&r.footer==='8 of 8 photo(s)';
+  console.log(`stale collection records: sidebar ${r.sidebar}, cards ${r.cards}, footer "${r.footer}"  ${ok?'PASS':'FAIL'}`);
+  if(!ok)failures.push(`stale collection records disagree with the visible collection: ${JSON.stringify(r)}`);
+  await p.close();
+}
 for (const n of [200,1000,5000]) {
   const p=await b.newPage();
   p.on('pageerror',e=>console.log('[pageerror]',e.message));
@@ -68,6 +100,24 @@ for (const n of [200,1000,5000]) {
   console.log('-'.repeat(58));
   console.log(`popcount vs BigInt reference: ${r.checked} pairs, ${r.mism} mismatches  ${r.mism?'FAIL':'PASS'}`);
   if(r.mism)failures.push(`hamming popcount disagrees with the BigInt reference on ${r.mism} pairs`);
+  await p.close();
+}
+// Run before the intentionally heavy clustering probes below: this is a focused visual/state
+// regression for stale smart-collection records, independent of those perf workloads.
+{
+  const p=await b.newPage();
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libcountmismatch=1`,{waitUntil:'domcontentloaded',timeout:120000});
+  await p.waitForTimeout(1000);
+  await p.locator('[data-coll="edited"]').click();
+  await p.waitForTimeout(300);
+  const r=await p.evaluate(()=>({
+    sidebar:document.querySelector('[data-coll="edited"] .lib-coll-count')?.textContent?.trim(),
+    cards:document.querySelectorAll('#lib-grid .lib-card[data-path]').length,
+    footer:document.getElementById('lib-count')?.textContent?.trim(),
+  }));
+  const ok=r.sidebar==='8'&&r.cards===8&&r.footer==='8 of 8 photo(s)';
+  console.log(`stale collection records: sidebar ${r.sidebar}, cards ${r.cards}, footer "${r.footer}"  ${ok?'PASS':'FAIL'}`);
+  if(!ok)failures.push(`stale collection records disagree with the visible collection: ${JSON.stringify(r)}`);
   await p.close();
 }
 // Correctness: clusterByHash was rewritten from a plain O(n^2) nested loop (444M comparisons at

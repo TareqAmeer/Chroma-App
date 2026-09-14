@@ -145,7 +145,14 @@
       // video branch — that is what the grid's duration badge reads.
       case 'get_meta': return Promise.resolve(ltMetaFor(A.path));
       case 'get_meta_batch': return Promise.resolve((A.paths || []).map(ltMetaFor));
-      case 'collection_counts': return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0, duplicates: 2, gphotos: 1 });
+      case 'collection_counts': {
+        // Regression fixture: ten historical Edited records point at files no longer present.
+        // The real backend now excludes those from badges without deleting their recovery data.
+        if (/[?&]libcountmismatch=1/.test(location.search)) {
+          return Promise.resolve({ recents: 4, favorites: 2, edited: 8, exported: 1, flagged: 0, rejected: 0, duplicates: 2, gphotos: 1 });
+        }
+        return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0, duplicates: 2, gphotos: 1 });
+      }
       case 'album_list': return Promise.resolve(ltAlbums);
       case 'album_create': {
         if (ltAlbums.some((a) => a.name.toLowerCase() === String(A.name).toLowerCase())) return Promise.reject(new Error('exists'));
@@ -206,7 +213,17 @@
       case 'gphotos_downloads_dir': return Promise.resolve('/test/Google Photos Download');
       case 'get_lr_thumb': return Promise.reject(new Error('miss')); // always a miss → exercises the network+save path
       case 'save_lr_thumb': return Promise.resolve();
-      case 'list_collection': case 'list_exported': return Promise.resolve([]);
+      case 'list_collection': {
+        if (/[?&]libcountmismatch=1/.test(location.search) && A.name === 'edited') {
+          return Promise.resolve(Array.from({ length: 18 }, (_, i) => ({
+            id: i + 1, name: `IMG_${1000 + i}.RW2`, path: `/test/Edited/IMG_${1000 + i}.RW2`,
+            is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i,
+            size: 1000 + i, missing: i >= 8, edited_ts: 0, thumb_path: null,
+          })));
+        }
+        return Promise.resolve([]);
+      }
+      case 'list_exported': return Promise.resolve([]);
       case 'get_export_history': return Promise.resolve([]);
       // Catalog: `?libcat=1` synthesises N (from ?libn=N, default 18) catalog rows so "All
       // Photos" is screenshot-verifiable without a real SQLite catalog behind it. Every 7th
@@ -610,17 +627,26 @@
   };
 
   const LS_ROOT = 'chromasmith_lib_root';
-  // Last-opened folder/photo, restored at the deskx startup path below — LS_ROOT only ever
-  // remembered the library ROOT, not which subfolder or photo the user actually had open, so a
-  // relaunch always landed back at the top of the tree with nothing open.
+  // A relaunch must restore the last Library destination, not merely a filesystem root.  That
+  // destination can be a folder, smart collection, date range, keyword/person catalog scope, or
+  // a cloud album; the legacy key only represented a folder.
   const LS_LAST_FOLDER = 'chromasmith_lib_last_folder';
+  const LS_LAST_VIEW = 'chromasmith_lib_last_view_v2';
   const LS_LAST_PATH = 'chromasmith_lib_last_path';
+  function savedLibraryView() {
+    if (LIBTEST && !/[?&]librestoreview=1/.test(location.search)) return null;
+    try {
+      const parsed = JSON.parse(localStorage.getItem(LS_LAST_VIEW) || 'null');
+      return parsed && typeof parsed === 'object' && typeof parsed.kind === 'string' ? parsed : null;
+    } catch (e) { return null; }
+  }
+  const initialLibraryView = savedLibraryView();
   const state = {
     // ?libnoroot=1 exercises the true first-launch state (renderLibraryNoRoot) — otherwise
     // LIBTEST always has a root, so that path would be untestable in the harness.
     root: LIBTEST ? (/[?&]libnoroot=1/.test(location.search) ? '' : '/test/Photos') : (localStorage.getItem(LS_ROOT) || ''),
     expanded: new Set(),
-    currentFolder: LIBTEST ? '' : (localStorage.getItem(LS_LAST_FOLDER) || ''),
+    currentFolder: LIBTEST ? '' : (initialLibraryView?.kind === 'folder' ? initialLibraryView.path : (localStorage.getItem(LS_LAST_FOLDER) || '')),
     entries: [],           // image entries in the currently-viewed folder
     sidecars: new Map(),   // path -> {rating,label,edited,recipe} (cached client-side)
     meta: new Map(),       // path -> {camera,lens,date,iso}
@@ -674,6 +700,11 @@
     // confusion, not a hypothetical.
     includeSubfolders: localStorage.getItem('chromasmith_lib_subfolders') === '1',
   };
+
+  function rememberLibraryView(view) {
+    if (LIBTEST) return;
+    try { localStorage.setItem(LS_LAST_VIEW, JSON.stringify(view)); } catch (e) {}
+  }
 
   // ── styles ──────────────────────────────────────────────────────────────────
   const style = document.createElement('style');
@@ -1221,6 +1252,7 @@
     .lib-btn:hover{background:var(--bdr)}
     .lib-btn.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
     .lib-btn.on.disabled-note{background:var(--sur2);color:var(--mut);border-color:var(--bdr)}
+    .lib-btn:disabled{opacity:.4;cursor:default;pointer-events:none}
     #lib-aspect-toggle{padding:5px 8px;margin-left:6px}
     /* Info panel keyword chips (renderInfoPanel) — the leaf name only, full path in the tooltip
        (a photo tagged "Travel|Iceland|Reykjavik" would otherwise overflow a 232px panel). */
@@ -3361,6 +3393,7 @@
       }
       state.openedPath = path;
       if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
+      if (typeof syncLibActionButtons === 'function') syncLibActionButtons();
       // E5 fix (editor_ux_spec.json, 2026-09-09): this is the real "switching photos" path (a
       // Library grid/filmstrip click opening a different photo) — it synced the Library's OWN
       // flag row but never the Editor topbar's (fxUpdateFlagBtns, chromasmith-22.html), which is
@@ -4008,7 +4041,6 @@
   async function openFolder(path, opts) {
     if (compareState.active) exitCompareMode(); // switching folders while comparing would strand the panes on the old batch
     state.currentFolder = path;
-    if (!LIBTEST) { try { localStorage.setItem(LS_LAST_FOLDER, path); } catch (e) {} }
     state.source = 'folder'; // leaving a collection/cloud view — clears their sidebar highlight below
     state.selected.clear();
     const grid = document.getElementById('lib-grid');
@@ -4050,6 +4082,10 @@
       return;
     }
     state.entries = entries.filter((e) => e.is_image || e.is_video);
+    // Record a successfully opened folder, even when it is empty.  It is one possible Library
+    // destination among collections and catalog scopes, rather than the sole startup state.
+    rememberLibraryView({ kind: 'folder', path });
+    if (!LIBTEST) { try { localStorage.setItem(LS_LAST_FOLDER, path); } catch (e) {} }
     // A folder's entries all share one volume, so any one of them (CatalogEntry.offline, a
     // per-row field the SQL query already computes) says whether THIS folder's drive is
     // reachable right now. Undefined (the list_dir/listDirRecursive fallback path) reads as
@@ -4291,6 +4327,7 @@
         window.chromasmithEditInPath = path;
         state.openedPath = path;
         if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
+        if (typeof syncLibActionButtons === 'function') syncLibActionButtons();
         if (typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns(); // E5 fix — see openInEditorInner's comment
         if (typeof syncSideTabs === 'function') syncSideTabs();
         window.chromasmithSourcePath = path;
@@ -4396,6 +4433,7 @@
     // bar until something else forced a full grid re-render (scroll, filter change) — the bar
     // the user actually needs right after selecting silently didn't appear.
     renderBatchBar();
+    if (typeof syncLibActionButtons === 'function') syncLibActionButtons();
   }
   // Single click opens the editor immediately (no double-click needed). ⌘/Ctrl-click instead
   // multi-selects WITHOUT opening, building up a batch; ⌘/Ctrl-double-click opens that whole
@@ -5614,6 +5652,7 @@
   function renderGridTail(shown) {
     renderStatusBar(shown);
     renderBatchBar();
+    if (typeof syncLibActionButtons === 'function') syncLibActionButtons();
     renderInfoPanel();
     const grid = document.getElementById('lib-grid');
     if (!shown.length && state.entries.length) {
@@ -6461,9 +6500,26 @@
     pick.classList.toggle('on', label === 'Green');
     fav.classList.toggle('on', !!favorite);
   };
-  overlay.querySelector('#lib-flag-reject').onclick = async () => { await window.chromasmithToggleFlag('Red'); syncLibFlagRow(); };
-  overlay.querySelector('#lib-flag-pick').onclick = async () => { await window.chromasmithToggleFlag('Green'); syncLibFlagRow(); };
-  overlay.querySelector('#lib-flag-fav').onclick = async () => { await window.chromasmithToggleFavorite(); syncLibFlagRow(); };
+  // Backlog #1 (source #34, "lightroom-contextual-taskbar"): the flag/export/All-FX buttons used
+  // to stay visually enabled with nothing to act on — no photo open, nothing selected, an empty
+  // library. Clicking them was already a harmless no-op (chromasmithToggleFlag/Favorite bail on
+  // !state.openedPath; libExportPaths bails on !paths.length) but they LOOKED clickable, which is
+  // the actual defect: a taskbar that can't act shouldn't read as active. Disable them instead.
+  const syncLibActionButtons = () => {
+    const reject = overlay.querySelector('#lib-flag-reject');
+    const pick = overlay.querySelector('#lib-flag-pick');
+    const fav = overlay.querySelector('#lib-flag-fav');
+    const hasOpen = !!state.openedPath;
+    [reject, pick, fav].forEach((b) => { if (b) b.disabled = !hasOpen; });
+    const exportBtn = overlay.querySelector('#lib-export-btn');
+    const allFxBtn = overlay.querySelector('#lib-allfx-btn');
+    const hasTarget = cmKbTargets().length > 0;
+    if (exportBtn) exportBtn.disabled = !hasTarget;
+    if (allFxBtn) allFxBtn.disabled = !hasTarget;
+  };
+  overlay.querySelector('#lib-flag-reject').onclick = async () => { await window.chromasmithToggleFlag('Red'); syncLibFlagRow(); syncLibActionButtons(); };
+  overlay.querySelector('#lib-flag-pick').onclick = async () => { await window.chromasmithToggleFlag('Green'); syncLibFlagRow(); syncLibActionButtons(); };
+  overlay.querySelector('#lib-flag-fav').onclick = async () => { await window.chromasmithToggleFavorite(); syncLibFlagRow(); syncLibActionButtons(); };
   const filtersBtn = overlay.querySelector('#lib-filters-btn');
   const filtersPanel = overlay.querySelector('#lib-filters-panel');
   const filterRow = overlay.querySelector('#lib-filter-row');
@@ -7026,12 +7082,15 @@
     let entries;
     try { entries = await invoke('list_collection', { name }); }
     catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load this collection.</div>'; return; }
-    state.entries = entries;
+    // Missing registry records are retained natively for recovery/history, but cannot render as
+    // photos.  Exclude them from this view's total so its sidebar badge, footer, and grid agree.
+    state.entries = entries.filter((e) => !e.missing);
     {
       const paths = entries.filter((e) => !e.missing).map((e) => e.path);
       await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
     }
     await renderGrid();
+    rememberLibraryView({ kind: 'collection', name });
     renderCollections(); // re-highlight the active row
   }
   async function openExportedView() {
@@ -7042,12 +7101,13 @@
     let entries;
     try { entries = await invoke('list_exported'); }
     catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load exported photos.</div>'; return; }
-    state.entries = entries;
+    state.entries = entries.filter((e) => !e.missing);
     {
       const paths = entries.filter((e) => !e.missing).map((e) => e.path);
       await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
     }
     await renderGrid();
+    rememberLibraryView({ kind: 'exported' });
     renderCollections();
   // Albums load once at startup, then only after a mutation — the list is small and lives in one
   // JSON file, so re-reading it on every grid render would be pure waste.
@@ -8665,6 +8725,7 @@
     state.entries = entries;
     if (!entries.length) {
       grid.innerHTML = '<div id="lib-empty">Nothing here — open a folder in the Library and it\'ll appear here.</div>';
+      rememberLibraryView({ kind: 'catalog', scope: state.catalogScope });
       renderCollections();
       return;
     }
@@ -8690,6 +8751,7 @@
       });
     }
     await renderGrid();
+    rememberLibraryView({ kind: 'catalog', scope: state.catalogScope });
     renderCollections();
   }
 
@@ -9295,6 +9357,7 @@
     if (state.source !== 'lr' || lrState.album !== albumId) return; // user navigated away mid-fetch
     lrState.assets = assets;
     await renderLrGrid();
+    rememberLibraryView({ kind: 'lr', albumId });
   }
   // Renders the current cloud album from lrState.assets (no refetch) — ALSO what renderGrid()
   // delegates to while state.source==='lr', so a filter/sort/search handler re-running
@@ -9898,6 +9961,32 @@
   }
   setupMarquee();
 
+  async function restoreSavedLibraryView() {
+    const view = initialLibraryView;
+    if (!view) return false;
+    if (view.kind === 'folder' && typeof view.path === 'string' && view.path) {
+      await openFolder(view.path, { prefetchThumbs: true });
+      return true;
+    }
+    if (view.kind === 'collection' && COLLECTIONS.some((c) => c.name === view.name)) {
+      await openCollectionView(view.name);
+      return true;
+    }
+    if (view.kind === 'exported') {
+      await openExportedView();
+      return true;
+    }
+    if (view.kind === 'catalog' && typeof view.scope === 'string' && view.scope) {
+      await openCatalogView(view.scope);
+      return true;
+    }
+    if (view.kind === 'lr' && view.albumId && window.lrCloud && window.lrCloud.connected()) {
+      await openLrAlbum(view.albumId);
+      return true;
+    }
+    return false;
+  }
+
   async function toggleLibrary(opts) {
     state.open = !state.open;
     overlay.classList.toggle('on', state.open);
@@ -9919,6 +10008,10 @@
           await openLrAlbum(origin.albumId || (lrState.albums[0] && lrState.albums[0].id));
           return;
         } catch (e) { console.error('reopen lr album', e); /* fall through to folder */ }
+      }
+      if (!state._restoredLastView) {
+        state._restoredLastView = true;
+        try { if (await restoreSavedLibraryView()) return; } catch (e) { console.error('restore Library view', e); }
       }
       // First-ever launch (or every folder removed): show the in-app empty state with two
       // explicit actions, rather than immediately popping the OS folder picker — a modal dialog
