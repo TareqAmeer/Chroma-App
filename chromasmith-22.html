@@ -130,7 +130,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   --op-1:0.32;--op-2:0.4;--op-3:0.6;--op-4:0.65;--op-5:0.7;--op-6:0.75;--op-7:0.85;--op-8:0.9;
   /* Tracking ramp (T-ls): audited from 7 raw letter-spacing literals on uppercase eyebrow
      labels — see design/tokens.json letterSpacing for the full audit. */
-  --ls-1:0.03em;--ls-2:0.04em;--ls-3:0.05em;--ls-4:0.06em;--ls-5:0.08em;--ls-6:0.1em;--ls-7:0.11em;
+  --ls-1:0.03em;--ls-2:0.04em;--ls-3:0.05em;--ls-4:0.06em;--ls-5:0.08em;--ls-6:0.1em;
   /* Border-width ramp (T-bw): the 4 non-1px widths found in the app — see design/tokens.json
      borderWidth for the full audit (1px itself stays a plain literal, not a token). */
   --bw-1:1.5px;--bw-2:2px;--bw-3:3px;--bw-4:4px/* TOKENS:ROOT:END */}
@@ -149,7 +149,6 @@ header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-item
 .logo{display:flex;align-items:center;gap:12px}
 .logo-img{height:28px;width:auto;display:block}
 .logo .sub{color:var(--mut);font-size:var(--fs-1);font-family:var(--sans);letter-spacing:0;font-style:normal}
-.logo-glow{text-shadow:0 0 4px rgba(212,144,58,.55),0 0 12px rgba(212,144,58,.45),0 0 22px rgba(224,84,84,.35),0 0 2px rgba(255,210,150,.6)}
 .hdr-right{display:flex;align-items:center;gap:var(--sp-2)}
 .bstamp{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);letter-spacing:var(--ls-2);cursor:pointer}
 .hdr-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);cursor:pointer;padding:6px;transition:all .15s}
@@ -530,7 +529,6 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-zoom-ctrl #fx-zoom-pct{font-size:var(--fs-2);color:var(--mut);min-width:36px;text-align:center;cursor:default;opacity:0;transition:opacity .1s}
 .fx-zoom-ctrl.active #fx-zoom-pct{opacity:1}
 .fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:var(--sp-8);position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:4px;z-index:var(--z-raise)}
-.ni-logo{font-family:var(--display);font-size:var(--fs-7);letter-spacing:var(--ls-7);color:var(--acc);font-style:italic;margin-bottom:2px}
 .ni-sub{font-family:var(--sans);font-size:var(--fs-1);letter-spacing:0;color:var(--mut)}
 .ni-build{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);opacity:var(--op-5)}
 .ni-hint{font-size:12px;color:var(--mut);margin-top:14px}
@@ -2534,7 +2532,6 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
     <div class="fx-preview-col">
       <div class="fx-canvas-wrap" id="fx-wrap">
         <div class="fx-no-img" id="fx-no-img">
-          <div class="ni-logo"><span class="logo-glow">Chroma</span>smith</div>
           <div class="ni-sub">film simulation tool</div>
           <!-- The build stamp used to sit here too — under the wordmark, on the empty state, as
                the third line a first-time user read. It is in About now. `＋` was U+FF0B FULLWIDTH
@@ -4921,7 +4918,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-13a';
+const BUILD='2026-09-14a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.

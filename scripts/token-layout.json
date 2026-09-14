@@ -501,11 +501,6 @@
       "hadSemi": true
     },
     {
-      "var": "--ls-7",
-      "pre": "",
-      "hadSemi": true
-    },
-    {
       "var": "--bw-1",
       "pre": "\n  /* Border-width ramp (T-bw): the 4 non-1px widths found in the app — see design/tokens.json\n     borderWidth for the full audit (1px itself stays a plain literal, not a token). */\n  ",
       "hadSemi": true
