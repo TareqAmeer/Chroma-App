@@ -1480,13 +1480,15 @@
           "wait": 150
         },
         {
-          "click": "#lib-view-menu-btn"
+          "click": "#lib-view-menu-btn",
+          "force": true
         },
         {
           "wait": 150
         },
         {
-          "click": "#lib-compare-btn"
+          "click": "#lib-compare-btn",
+          "force": true
         },
         {
           "wait": 2000

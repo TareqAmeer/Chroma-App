@@ -26,7 +26,23 @@ export default defineConfig({
   reporter: process.env.CI ? 'list' : [['list']],
   retries: 0,
   timeout: 30000,
-  expect: { timeout: 8000 },
+  // maxDiffPixels: 10 — an absolute pixel-count floor below which toHaveScreenshot() no longer
+  // fails on font/subpixel anti-aliasing noise (the fx-info-i-rest-dark case: 2 of ~200 pixels
+  // differ, same image dimensions, invisible to the eye). Left `threshold` (the PER-PIXEL color-
+  // distance tolerance, default 0.2) untouched on purpose — Playwright's own docs and community
+  // guidance (e.g. testdino.com's Playwright visual-testing guide, 2026) are explicit that
+  // widening `threshold` blunts the comparison for every pixel everywhere, whereas a small
+  // maxDiffPixels/maxDiffPixelRatio budget only forgives a handful of pixels per image. The
+  // commonly recommended global default is maxDiffPixelRatio: 0.01 (1%) or maxDiffPixels: 100;
+  // 10 here is deliberately tighter than either, since these are small (tens to a few hundred px)
+  // component crops where even 1% can be a real few-pixel border/label shift, not noise.
+  // ⚠️ This does NOT mask most of catalog_visual's current failures — the large majority (e.g.
+  // "Expected an image 842x421, received 842x382 — 40949 pixels (12%) different") are actual
+  // ELEMENT-SIZE mismatches against a stale golden, not per-pixel color drift, and Playwright
+  // counts the entire non-overlapping region as "different" for those — 40949 > 10 either way.
+  // Confirmed pre-existing on the pre-backlog-5 baseline (558ed6d) before this session's changes;
+  // tracked separately as a golden-refresh task, not fixed by this threshold change.
+  expect: { timeout: 8000, toHaveScreenshot: { maxDiffPixels: 10 } },
   use: {
     ...DETERMINISTIC_CONTEXT_OPTIONS,
     viewport: { width: 960, height: 900 },

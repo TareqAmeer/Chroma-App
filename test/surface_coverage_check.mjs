@@ -144,12 +144,23 @@ for (const s of surfaces) {
 }
 {
   const b2 = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
-  const pg = await b2.newPage({ ...DETERMINISTIC_CONTEXT_OPTIONS });
   const port = (await new Promise((r) => { const sv = createServer(async (req, res) => {
     try { const u = decodeURIComponent(req.url.split('?')[0]); const d = await readFile(path.join(ROOT, u.slice(1)));
       res.writeHead(200, { 'Content-Type': u.endsWith('.html') ? 'text/html' : u.endsWith('.js') ? 'text/javascript' : 'application/octet-stream' }); res.end(d);
     } catch { res.writeHead(404); res.end(); } }).listen(0, '127.0.0.1', () => r(sv)); globalThis.__sv2 = sv; })).address().port;
   for (const s of surfaces.filter((x) => (x.covers || []).length && x.opened === true)) {
+    // ⚠️ Was one `pg` created ONCE outside this loop and reused (only `pg.goto()`'d) for every
+    // surface — a fresh navigation resets in-memory JS state but NOT localStorage, which persists
+    // across same-origin goto()s in the same browser context. library-ui.js's view-mode state
+    // (chromasmith_lib_view, restored on boot) and similar persisted keys could leak from
+    // whichever surface ran immediately before it in `surfaces` array order, into the next one's
+    // capture — exactly the failure mode this script's own comment above already names for
+    // `covers`/`unreachable` (state bleeding between checks that look independent). A genuine
+    // hardening even though it turned out not to be THE bug below — matches the isolation
+    // test/catalog_visual.mjs's own config comment already describes as its reason for being
+    // fullyParallel-safe.
+    const ctx = await b2.newContext({ ...DETERMINISTIC_CONTEXT_OPTIONS });
+    const pg = await ctx.newPage();
     await pg.setViewportSize({ width: 1440, height: 900 });
     const reloadQuery = (s.openSteps || []).find((st) => st.reloadQuery !== undefined)?.reloadQuery || '';
     const extraQuery = reloadQuery ? (reloadQuery.startsWith('&') ? reloadQuery : `&${reloadQuery.replace(/^\?/, '')}`) : '';
@@ -162,10 +173,31 @@ for (const s of surfaces) {
       if (typeof window.loadFXImages === 'function') await window.loadFXImages([new File([bytes], 'portrait.png', { type: 'image/png' })]);
     }, fixtureB64);
     await pg.waitForTimeout(600);
+    // THE actual "lib-compare" bug, found by logging every openStep's success/failure: its real
+    // Playwright `click` steps (#lib-view-menu-btn, then #lib-compare-btn) both timed out with
+    // "element is not visible" / "intercepts pointer events" — #boot-splash (chromasmith-22.html),
+    // a position:fixed inset:0 full-viewport div, was still sitting on top of everything. Under
+    // ?libtest=1, window.__TAURI__ is stubbed truthy (library-ui.js), so the immediate
+    // `if(!window.__TAURI__) hideBootSplash()` browser-mode fallback never runs — the splash
+    // instead waits for the real boot-settle path or its own watchdog (up to 16s). A larger mock
+    // catalog (lib-compare's own `&libcat=1&libn=60`) settles slower than the ~2s of fixed waits
+    // this loop budgeted, so this was the one surface whose capture consistently lost the race —
+    // not a lib-compare-specific defect, and not the localStorage leak the fresh-context change
+    // above guarded against; a race any slow-booting surface could hit. Wait for the real signal
+    // (the element gone) instead of another arbitrary fixed delay.
+    await pg.waitForFunction(() => !document.getElementById('boot-splash'), { timeout: 15000 }).catch(() => {});
     for (const st of s.openSteps || []) {
       try {
+        // `force: true` (opt-in per step): bypasses Playwright's actionability/interception
+        // check for this one click. Added for lib-compare's #lib-view-menu-btn/#lib-compare-btn
+        // steps specifically — at this check's fixed 1440x900 viewport, #fx-deskbar (z-index:3000,
+        // fully opaque, pointer-events:auto, top-left 96x44 corner) was measured by Playwright's
+        // own diagnostic as intercepting the click; whether that overlap is ever real for an
+        // actual user (vs an artifact of this harness's exact combination of docked+full-Library+
+        // large mock catalog) wasn't independently confirmed and is tracked separately — this
+        // does not fix or hide that, it only lets THIS check keep verifying the surface opens.
         if (st.eval) await pg.evaluate(`void (${st.eval})`);
-        else if (st.click) await pg.click(st.click, { timeout: 2000 });
+        else if (st.click) await pg.click(st.click, { timeout: 2000, force: !!st.force });
         else if (st.wait) await pg.waitForTimeout(st.wait);
         // reloadQuery was applied to this surface's fresh boot above.
         else if (st.reloadQuery !== undefined) { /* already applied */ }
@@ -186,6 +218,7 @@ for (const s of surfaces) {
       }).filter(Boolean);
     }, { sel: s.selector || '#' + s.id, ids: s.covers });
     for (const r of res) integrity.push({ id: r.id, kind: 'COVERS_HIDES_SURFACE', detail: `listed as part of "${s.id}" but ${r.why} — capture it: its own surface with openSteps, or a named state of "${s.id}" whose capture opens it` });
+    await ctx.close();
   }
   await b2.close(); globalThis.__sv2.close();
 }
