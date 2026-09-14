@@ -38,8 +38,8 @@ and machines.
 | G21 | Two separate bugs made the app 404 on literally every asset the first time it was actually run (`npm run dev`, not just `cargo check`/`test`): (1) `main.rs`'s dev-fallback dist path was `$CARGO_MANIFEST_DIR/dist` — missing a `../`, since the real staged output (`build-desktop.mjs`'s target, matching `tauri.conf.json`'s own `build.frontendDist: "../dist"`) lives at `desktop/dist`, one level above `desktop/src-tauri`, not inside it; (2) the `cs` protocol handler built its file path via `format!("{}/{}", dist_dir().display(), path)` — a **verbatim** (`\\?\`-prefixed) path, which `resource_dir()` can return, disables Win32's normal path parsing entirely, so a `/` inside one is a literal invalid character, not a separator; the manually-concatenated string named a file that could never exist | `main.rs` | Blank/404'd window on first real launch, on any platform (bug (1) is not Windows-specific at all — it was just never exercised, since this app's actual macOS dev-iteration loop is `npm run preview`/`test/preview_server.mjs`, not `cargo tauri dev`; `install-app.sh` builds a real release bundle instead, where the CORRECT "bundled resource" branch is what runs) | **Fixed** — `../dist` in both dev-fallback call sites; the protocol handler now builds the path via `dist_dir().join(&path)` (structured components, always rendered with real backslashes) instead of raw string concatenation, matching how every other resource path in this file was already built. **Verified live**: `npm run dev` now renders the actual Chromasmith Library UI (folder tree, Favorites count from real persisted state, Welcome panel) — the first real end-to-end proof this port works, not just that it compiles |
 | G6 | `std::fs::canonicalize` returns `\\?\C:\…` on Windows; catalog canonicalises paths as keys. Windows paths are also case-insensitive | `catalog.rs`, `library.rs` | `\\?\` paths leak into the UI/JS; duplicate rows for `C:\Photos` vs `c:\photos` | **Mostly fixed** — this turned out to be FOUR distinct bugs discovered by chasing one hanging test (`catalog::tests::corruption_is_distinguished_from_an_edit`; see the write-up below the table). Case-insensitive dedupe (the `c:\photos` vs `C:\Photos` half of this row) is still open |
 | G7 | `long_path()` prefixes UNC paths wrongly (`\\server\share` needs `\\?\UNC\server\share`) and doesn't accept `/` | `platform/windows.rs` | NAS libraries fail | **Fixed** — a UNC path's leading `\\` is now replaced with `UNC\` (not glued to a `\\?\` prefix, which produced 4 leading backslashes) and forward slashes are normalized to backslashes before either case, since Win32's verbatim (`\\?\`) form requires backslashes even where the non-verbatim form accepts either |
-| G8 | `volume_identity_hint` returns just the drive letter; letters change between plug-ins | `platform/windows.rs` | External drive shows "offline" or duplicates after reconnect | Open |
-| G9 | `eject` is a stub | `platform/windows.rs` | Card ingest can't eject | Open |
+| G8 | `volume_identity_hint` returns just the drive letter; letters change between plug-ins | `platform/windows.rs` | External drive shows "offline" or duplicates after reconnect | **Fixed** — `volume_identity_hint` now calls `GetVolumeNameForVolumeMountPointW` for a `\\?\Volume{GUID}\` path, stable across a drive-letter reassignment. Wired into `catalog.rs`'s `volume_identity`: the read-only-media `fp:` fingerprint fallback now prefers this GUID form over the mount point's own basename (the drive letter) when it's available — platform-conditional (macOS's own hint, `f_mntfromname`, is deliberately NOT preferred there, per that function's pre-existing doc comment on why it's less stable on macOS) |
+| G9 | `eject` is a stub | `platform/windows.rs` | Card ingest can't eject | **Implemented** — via the standard volume-handle sequence (Microsoft KB165721: `CreateFileW(\\.\D:)` → `FSCTL_LOCK_VOLUME` → `FSCTL_DISMOUNT_VOLUME` → `IOCTL_STORAGE_MEDIA_REMOVAL` (allow) → `IOCTL_STORAGE_EJECT_MEDIA`), **not** the `CM_Request_Device_EjectW` PnP-device-tree approach this doc originally proposed — the volume-handle sequence is simpler (one handle, no DEVINST walk) and doesn't need admin rights for ordinary removable media, unlike ejecting a physical-drive handle directly. ⚠️ **Unverified against real hardware** — no removable drive was available on the dev machine this was written on; only `cargo check` confirms the Win32 call shapes are correct, not that ejection actually happens. Verify with a real USB drive/card before relying on it |
 | G10 | Adobe DCP profile tree hardcoded to the macOS path | `dcp_store.rs` | User-installed camera profiles not found (Windows: `%ProgramData%\Adobe\CameraRaw\CameraProfiles`) | **Fixed** — new `platform::adobe_profile_roots()` (macOS: `~/Library/...` + `/Library/...`, unchanged; Windows: `%APPDATA%\Adobe\...` per-user + `%ProgramData%\Adobe\...` all-users) replaces `dcp_store.rs`'s own hardcoded `HOME`-based paths; both `candidate_roots`/`root_for_source` now derive from the one platform call instead of two independently-hardcoded copies |
 | G11 | No Windows fast thumbnail or video poster path (ImageIO/AVFoundation only) | `fastthumb.rs`, `videothumb.rs` | Slow grid (~800ms/24MP JPEG through `image`), no video thumbnails | Open |
 | G12 | JS assumes macOS: `split('/')` basenames, "Reveal in Finder", ⌘ shortcut labels, traffic-light padding/drag region | `library-ui.js` (43 hits), `desktop-native.js` | Wrong filenames, wrong labels | Open |
@@ -183,21 +183,26 @@ build wasn't fully clean before it ran out — rerun rather than trust a build t
 - Done when: `cargo test --bin chromasmith` passes on Windows; the app launches; RAW opens; export works.
 
 ### Phase 2 — native parity
-- **Thumbnails (G11):** `platform/windows/thumb.rs` using WIC `IWICBitmapSourceTransform` scaled
-  decode (the analogue of ImageIO's reduced-DCT path). HEIC only works if the user has the
-  HEIF/HEVC extensions, so fail cleanly to the existing path.
-- **Video posters:** `IShellItemImageFactory::GetImage` (uses whatever codecs Windows has, runs on
-  a COM STA thread like trash). Use Media Foundation `IMFSourceReader` only if exact-frame
-  selection turns out to matter.
-- **Volume identity (G8):** `GetVolumeNameForVolumeMountPointW` → `\\?\Volume{GUID}\`, which
-  survives drive-letter changes, plus a `GetVolumeInformationW` label.
-- **Eject (G9):** `CM_Request_Device_EjectW` (cfgmgr32). No admin needed, unlike
-  `IOCTL_STORAGE_EJECT_MEDIA`.
-- **DCP (G10):** `platform::adobe_profile_roots()`.
-- **Background work:** Windows 11 **EcoQoS** via `SetThreadInformation(ThreadPowerThrottling)` in
-  `mark_current_thread_background`; `throttle_pause` reads battery saver via `GetSystemPowerStatus`
-  (Windows has no public thermal-state API — note that limitation, don't try to fake it).
-- **Haptics:** the no-op already exists; capability `haptics:false`.
+- ~~**Thumbnails (G11):**~~ still open — `platform/windows/thumb.rs` using WIC
+  `IWICBitmapSourceTransform` scaled decode (the analogue of ImageIO's reduced-DCT path). HEIC
+  only works if the user has the HEIF/HEVC extensions, so fail cleanly to the existing path.
+- ~~**Video posters:**~~ still open — `IShellItemImageFactory::GetImage` (uses whatever codecs
+  Windows has, runs on a COM STA thread like trash). Use Media Foundation `IMFSourceReader` only
+  if exact-frame selection turns out to matter.
+- **Volume identity (G8):** done — `GetVolumeNameForVolumeMountPointW` → `\\?\Volume{GUID}\`,
+  wired into `catalog.rs`'s fingerprint fallback. A `GetVolumeInformationW` label is still open
+  (not needed for identity, only cosmetic — e.g. showing a friendly volume name somewhere).
+- **Eject (G9):** done, via the KB165721 volume-handle sequence instead of the
+  `CM_Request_Device_EjectW` approach originally planned here (simpler, no admin needed) — see
+  the G9 table row for the reasoning. Unverified against real hardware.
+- **DCP (G10):** done (Phase 1b) — `platform::adobe_profile_roots()`.
+- **Background work:** done — Windows 11 **EcoQoS** via `SetThreadInformation(ThreadPowerThrottling)`
+  in `mark_current_thread_background`; `throttle_pause` reads battery saver via
+  `GetSystemPowerStatus` (Windows has no public thermal-state API, so only that one signal exists
+  there, unlike macOS's two).
+- **Haptics:** still open — the no-op already exists; needs the `platform_capabilities`/
+  `window.CS_PLATFORM` plumbing (ground rule 1) to actually surface `haptics:false` to the
+  frontend, which hasn't been built yet as of this phase.
 
 ### Phase 3 — frontend (mostly mechanical → a cheaper model is fine)
 - `window.CS_PLATFORM` + helpers; replace `split('/')`, "Reveal in Finder", and hard-coded ⌘

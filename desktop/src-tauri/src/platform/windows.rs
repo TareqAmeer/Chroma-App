@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use windows::core::{HSTRING, PCWSTR};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, MAX_PATH};
 use windows::Win32::Storage::FileSystem::{
-    GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives, GetVolumePathNameW, CreateFileW,
+    GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives, GetVolumePathNameW, GetVolumeNameForVolumeMountPointW, CreateFileW,
     SetFileTime, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     FILE_FLAG_BACKUP_SEMANTICS,
 };
@@ -157,10 +157,19 @@ pub fn is_boot_volume(mount_point: &str) -> bool {
     mount_point.eq_ignore_ascii_case(&sys_root)
 }
 
+/// A `\\?\Volume{GUID}\` path identifying the volume — stable across a drive-letter
+/// reassignment (a card reader/external drive reconnecting as a different letter), unlike
+/// `mount_point`'s own return value. `catalog.rs`'s `volume_identity` prefers this over the
+/// drive letter for its read-only-media fingerprint fallback (docs/windows-port.md G8).
 pub fn volume_identity_hint(path: &Path) -> Option<String> {
-    // GetVolumeInformationW's serial number would go here; deferred until real hardware is
-    // available to verify against — see the Windows-port plan's Phase 2/hands-on list.
-    mount_point(path)
+    let root = mount_point(path)?;
+    let wide = HSTRING::from(root.as_str());
+    let mut buf = vec![0u16; 128]; // a GUID volume path ("\\?\Volume{...}\") is always short and fixed-length
+    // SAFETY: buf is a live, adequately-sized buffer; wide is a live, NUL-terminated wide string
+    // for the call's duration.
+    unsafe { GetVolumeNameForVolumeMountPointW(PCWSTR(wide.as_ptr()), &mut buf).ok()? };
+    let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+    Some(String::from_utf16_lossy(&buf[..len]))
 }
 
 /// Every fixed or removable drive letter except the boot volume. Unlike macOS's `/Volumes`
@@ -193,12 +202,58 @@ pub fn list_removable() -> Result<Vec<PathBuf>, String> {
     Ok(out)
 }
 
-/// Best-effort eject. `IOCTL_STORAGE_EJECT_MEDIA` needs a handle to the physical device (not the
-/// volume) and admin rights on some configurations; a failed eject here should never block the
-/// import that already completed, so callers treat this as advisory. Verify against real
-/// hardware before relying on it (Windows-port plan, hands-on list item 5).
-pub fn eject(_path: &Path) -> Result<(), String> {
-    Err("eject: not yet implemented for Windows — safe to remove the drive manually once import finishes".into())
+/// Best-effort eject via the standard volume-handle sequence (Microsoft KB165721: lock, dismount,
+/// allow media removal, eject) — simpler than, and an alternative to, walking the PnP device tree
+/// to find an ejectable ancestor DEVINST and calling `CM_Request_Device_EjectW` on it (what an
+/// earlier version of this doc comment / the original Windows-port plan proposed). This sequence
+/// operates entirely on the VOLUME handle, not the physical disk, so — unlike calling
+/// `IOCTL_STORAGE_EJECT_MEDIA` directly on a physical-drive handle — it does not need admin
+/// rights for ordinary removable media. A failed eject here should never block the import that
+/// already completed, so callers treat this as advisory.
+/// ⚠️ Not yet verified against real hardware (no removable drive was plugged into the dev
+/// machine this was written on) — see docs/windows-port.md's hands-on verification list.
+pub fn eject(path: &Path) -> Result<(), String> {
+    use windows::Win32::Foundation::{BOOLEAN, GENERIC_READ};
+    use windows::Win32::System::IO::DeviceIoControl;
+    use windows::Win32::System::Ioctl::{
+        FSCTL_LOCK_VOLUME, FSCTL_DISMOUNT_VOLUME, IOCTL_STORAGE_EJECT_MEDIA, IOCTL_STORAGE_MEDIA_REMOVAL, PREVENT_MEDIA_REMOVAL,
+    };
+    let root = mount_point(path).ok_or("eject: could not resolve a volume for this path")?;
+    // CreateFileW on `\\.\D:` (no trailing backslash — MSDN's own documented form for opening a
+    // volume, distinct from `D:\` which opens the root DIRECTORY instead of the volume device).
+    let device_path = format!(r"\\.\{}", root.trim_end_matches('\\'));
+    let wide = HSTRING::from(device_path.as_str());
+    unsafe {
+        let handle: HANDLE = CreateFileW(
+            PCWSTR(wide.as_ptr()),
+            (GENERIC_READ.0 | FILE_GENERIC_WRITE.0) as u32,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            None,
+            OPEN_EXISTING,
+            windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES(0),
+            None,
+        )
+        .map_err(|e| format!("CreateFileW({device_path}): {e}"))?;
+        let ioctl = |code: u32, in_buf: Option<&[u8]>| -> Result<(), String> {
+            let (ptr, len) = in_buf.map(|b| (b.as_ptr() as *const _, b.len() as u32)).unwrap_or((std::ptr::null(), 0));
+            DeviceIoControl(handle, code, Some(ptr), len, None, 0, None, None).map_err(|e| format!("DeviceIoControl(0x{code:x}): {e}"))
+        };
+        let result = (|| -> Result<(), String> {
+            ioctl(FSCTL_LOCK_VOLUME, None)?;
+            ioctl(FSCTL_DISMOUNT_VOLUME, None)?;
+            // PREVENT_MEDIA_REMOVAL { PreventMediaRemoval: BOOLEAN } — FALSE (0) means ALLOW
+            // removal, the counter-intuitive-sounding but correct value for actually ejecting.
+            let allow_removal = PREVENT_MEDIA_REMOVAL { PreventMediaRemoval: BOOLEAN(0) };
+            let allow_removal_bytes = std::slice::from_raw_parts(
+                &allow_removal as *const _ as *const u8,
+                std::mem::size_of::<PREVENT_MEDIA_REMOVAL>(),
+            );
+            ioctl(IOCTL_STORAGE_MEDIA_REMOVAL, Some(allow_removal_bytes))?;
+            ioctl(IOCTL_STORAGE_EJECT_MEDIA, None)
+        })();
+        let _ = CloseHandle(handle);
+        result
+    }
 }
 
 /// Reveals a file in Explorer, selected — the Win32 analogue of `open -R`.

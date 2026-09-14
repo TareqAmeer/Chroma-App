@@ -59,7 +59,37 @@ pub fn mark_current_thread_background() {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Windows analogue of the macOS pthread-QoS call above: opts the calling thread into
+/// **EcoQoS**, Windows 11's own mechanism for the same intent (Microsoft's own framing —
+/// "Introducing EcoQoS" — is explicitly about giving background work the efficiency cores /
+/// reduced clock speed a UI thread should never be throttled to). `SetThreadInformation` with
+/// `ThreadPowerThrottling` + a `THREAD_POWER_THROTTLING_STATE` where `ControlMask` and
+/// `StateMask` both carry `THREAD_POWER_THROTTLING_EXECUTION_SPEED` is the exact shape
+/// Microsoft's own EcoQoS sample code uses. Same call-site contract as the macOS version: call
+/// this FIRST thing inside any background worker thread, never the main/UI thread; ignoring the
+/// result matches macOS's own "a failure here just leaves the thread as it was" reasoning.
+#[cfg(windows)]
+pub fn mark_current_thread_background() {
+    use windows::Win32::System::Threading::{
+        GetCurrentThread, SetThreadInformation, ThreadPowerThrottling, THREAD_POWER_THROTTLING_CURRENT_VERSION,
+        THREAD_POWER_THROTTLING_EXECUTION_SPEED, THREAD_POWER_THROTTLING_STATE,
+    };
+    let state = THREAD_POWER_THROTTLING_STATE {
+        Version: THREAD_POWER_THROTTLING_CURRENT_VERSION,
+        ControlMask: THREAD_POWER_THROTTLING_EXECUTION_SPEED,
+        StateMask: THREAD_POWER_THROTTLING_EXECUTION_SPEED,
+    };
+    unsafe {
+        let _ = SetThreadInformation(
+            GetCurrentThread(),
+            ThreadPowerThrottling,
+            &state as *const _ as *const std::ffi::c_void,
+            std::mem::size_of_val(&state) as u32,
+        );
+    }
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn mark_current_thread_background() {}
 
 /// How long to pause before the NEXT unit of background work, given current system pressure.
@@ -98,7 +128,28 @@ pub fn throttle_pause() -> Option<Duration> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Windows has no public per-process thermal-state API (the macOS version's other signal) — the
+/// documented, closest system-wide equivalent, `GetSystemPowerStatus`'s `SystemStatusFlag`
+/// (battery saver on/off), is the one signal available here. Same pacing values as macOS's
+/// low-power-mode branch, deliberately not the thermal ones — there's nothing to distinguish
+/// "seriously overheating" from "battery saver on" on this platform, and treating every
+/// battery-saver session as a thermal emergency would be needlessly aggressive.
+#[cfg(windows)]
+pub fn throttle_pause() -> Option<Duration> {
+    use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    let mut status = SYSTEM_POWER_STATUS::default();
+    // SAFETY: status is a valid, appropriately-sized out-pointer for the call's duration.
+    let ok = unsafe { GetSystemPowerStatus(&mut status) };
+    // SystemStatusFlag: nonzero means battery saver is on (documented since Windows 10; older
+    // headers call this field Reserved1, same bit).
+    if ok.is_ok() && status.SystemStatusFlag != 0 {
+        Some(Duration::from_millis(400))
+    } else {
+        None
+    }
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn throttle_pause() -> Option<Duration> {
     None
 }

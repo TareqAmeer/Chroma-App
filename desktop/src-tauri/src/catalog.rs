@@ -793,7 +793,7 @@ fn volume_identity(path: &Path) -> (String, String, bool) {
     // under it goes unwalked. Canonicalizing both sides once, here, is what keeps
     // `add_root_run`'s rel_path computation and `walk_root`'s reconstruction consistent.
     let canon = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let Some((mount_point, _fromname)) = statfs_mount_point(&canon) else {
+    let Some((mount_point, hint)) = statfs_mount_point(&canon) else {
         return ("fp:unknown".into(), "/".into(), true);
     };
     if is_boot_volume(&mount_point) {
@@ -812,8 +812,19 @@ fn volume_identity(path: &Path) -> (String, String, bool) {
     }
     // Read-only or unwritable volume: fingerprint instead of failing identity entirely.
     let (total, _free) = crate::platform::disk_bytes(Path::new(&mount_point));
-    let basename = Path::new(&mount_point).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    (format!("fp:{basename}:{total}"), mount_point, false)
+    // On Windows, `hint` is a `\\?\Volume{GUID}\` path (platform::volume_identity_hint via
+    // GetVolumeNameForVolumeMountPointW) — stable across a drive-letter reassignment, unlike
+    // `mount_point`'s own basename (the letter itself, which is exactly what CAN change between
+    // reconnects — docs/windows-port.md G8). On macOS, `hint` is `f_mntfromname` (e.g.
+    // "/dev/disk4s1"), which is explicitly LESS stable there per this function's own doc comment
+    // above (tracks USB port/attach order, not the drive) — so only prefer the hint when it's
+    // recognizably the Windows GUID form; otherwise keep the existing basename behavior.
+    let identity_key = if hint.starts_with(r"\\?\Volume") {
+        hint
+    } else {
+        Path::new(&mount_point).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+    };
+    (format!("fp:{identity_key}:{total}"), mount_point, false)
 }
 
 /// Inserts or refreshes a volume row for whatever volume `path` lives on, returning its id and
