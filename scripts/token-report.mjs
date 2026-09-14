@@ -599,9 +599,16 @@ function componentSections() {
     const embedBase = LIBRARY_ONLY_CATALOG_KEYS.has(catalogKey)
       ? '../desktop/dist/index.html?catalog=1&live=1&libtest=1&only='
       : '../chromasmith-22.html?catalog=1&live=1&only=';
+    // States exposed here mirror STATES in chromasmith-22.html's buildCatalogPage() (rest/hover/
+    // disabled/modified/longlabel) — a state picker per card instead of one static "rest" embed,
+    // plus &theme= kept in sync with the report's own light/dark toggle (wired in the <script>
+    // below via .comp-embed's data-embed-base).
     const embed = catalogKey
       ? `<div class="comp-embed-wrap">
-           <iframe class="comp-embed" loading="lazy" title="${esc(f.name)} — live" src="${embedBase}${encodeURIComponent(catalogKey)}"></iframe>
+           <iframe class="comp-embed" loading="lazy" title="${esc(f.name)} — live" data-embed-base="${embedBase}${encodeURIComponent(catalogKey)}" data-state="rest"></iframe>
+           <div class="comp-state-picker">
+             ${['rest', 'hover', 'disabled', 'modified', 'longlabel'].map((s) => `<button type="button" class="comp-state-btn${s === 'rest' ? ' on' : ''}" data-state="${s}">${s}</button>`).join('')}
+           </div>
            ${CATALOG_KEYS_WITH_SHIM.has(catalogKey) ? '<div class="comp-embed-badge">click to try</div>' : ''}
          </div>`
       : `<div class="comp-no-embed">Rendered above in the Icons tab (real SVG glyphs, not a DOM clone) — see the Icons count.</div>`;
@@ -777,6 +784,10 @@ const out = `<!doctype html>
   .comp-embed-wrap { position:relative; background:#1c1d1f; }
   .comp-embed { width:100%; height:180px; border:0; display:block; }
   .comp-embed-badge { position:absolute; top:6px; right:8px; background:#61a0af; color:#000; font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:2px 6px; border-radius:4px; }
+  .comp-state-picker { display:flex; flex-wrap:wrap; gap:4px; padding:6px 8px; background:rgba(128,128,128,.08); border-top:1px solid rgba(128,128,128,.2); }
+  .comp-state-btn { font-size:10px; text-transform:uppercase; letter-spacing:.03em; padding:2px 7px; border-radius:5px; border:1px solid rgba(128,128,128,.35); background:none; color:inherit; opacity:.65; cursor:pointer; font:inherit; }
+  .comp-state-btn:hover { opacity:1; border-color:rgba(128,128,128,.6); }
+  .comp-state-btn.on { opacity:1; background:var(--rep-fg); color:var(--rep-bg); border-color:var(--rep-fg); }
   .comp-no-embed { height:180px; display:flex; align-items:center; justify-content:center; text-align:center; padding:12px; font-size:12px; opacity:.6; background:#1c1d1f; }
   .comp-card-meta { padding:10px 12px; font-size:13px; }
   .comp-name { font-weight:600; }
@@ -855,7 +866,37 @@ function toggleReportTheme() {
   document.documentElement.dataset.theme = next;
   try { localStorage.setItem('token-report-theme', next); } catch {}
   updateThemeToggleLabel();
+  syncEmbedThemes();
 }
+// Component-catalogue iframes carry their own theme independent of chromasmith-22.html's stored
+// csTheme (they're read-only clones) — resync every embed's &theme= to the report's current
+// light/dark on init and on every toggle, so the cards always match what the report itself shows.
+function currentReportTheme() {
+  return document.documentElement.dataset.theme
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+function embedSrcFor(iframe) {
+  const state = iframe.dataset.state || 'rest';
+  return iframe.dataset.embedBase + '&state=' + state + '&theme=' + currentReportTheme();
+}
+function syncEmbedThemes() {
+  document.querySelectorAll('.comp-embed[data-embed-base]').forEach((iframe) => {
+    iframe.src = embedSrcFor(iframe);
+  });
+}
+document.querySelectorAll('.comp-embed[data-embed-base]').forEach((iframe) => { iframe.src = embedSrcFor(iframe); });
+document.querySelectorAll('.comp-state-picker').forEach((picker) => {
+  const iframe = picker.previousElementSibling && picker.previousElementSibling.tagName === 'IFRAME'
+    ? picker.previousElementSibling
+    : picker.parentElement.querySelector('.comp-embed');
+  picker.querySelectorAll('.comp-state-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      picker.querySelectorAll('.comp-state-btn').forEach((b) => b.classList.toggle('on', b === btn));
+      iframe.dataset.state = btn.dataset.state;
+      iframe.src = embedSrcFor(iframe);
+    });
+  });
+});
 document.querySelectorAll('nav button').forEach((b) => {
   b.addEventListener('click', () => {
     document.querySelectorAll('nav button').forEach((x) => x.classList.remove('active'));

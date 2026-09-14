@@ -22289,9 +22289,39 @@ function _catLongText(el){
   const t=el.matches&&el.matches('input,textarea')?null:el;
   if(t)t.textContent='A very long label that wraps across multiple lines to stress the layout width';
 }
+// Force-hover support: a synthetic mouseover does NOT trigger real `:hover` styling (that's
+// driven by the OS pointer, not the DOM event), so a static report card can't just dispatch an
+// event. Instead, walk every same-origin stylesheet once, clone each rule whose selector uses
+// `:hover` with `:hover` replaced by `.is-cat-hover`, and append those clones into one injected
+// sheet — the same "force pseudo-state" approach devtools use, done in plain CSSOM so it works
+// inside this catalog's own iframe with no extra tooling.
+let _catHoverSheet=null;
+function _catEnsureHoverSheet(){
+  if(_catHoverSheet)return _catHoverSheet;
+  const style=document.createElement('style');
+  style.id='cat-hover-shim';
+  document.head.appendChild(style);
+  const sheet=style.sheet;
+  for(const s of Array.from(document.styleSheets)){
+    if(s.ownerNode===style)continue;
+    let rules;
+    try{rules=s.cssRules;}catch(e){continue;} // cross-origin sheet — skip, never happens here
+    for(const r of Array.from(rules||[])){
+      if(!r.selectorText||!r.selectorText.includes(':hover'))continue;
+      const sel=r.selectorText.split(',').map(p=>p.trim().replace(/:hover\b/g,'.is-cat-hover')).join(', ');
+      try{sheet.insertRule(sel+'{'+r.style.cssText+'}',sheet.cssRules.length);}catch(e){}
+    }
+  }
+  _catHoverSheet=sheet;
+  return sheet;
+}
 function _catState(clone,state){
   // Applied to the CLONE, never the live app node.
-  if(state==='disabled'){
+  if(state==='hover'){
+    _catEnsureHoverSheet();
+    clone.classList.add('is-cat-hover');
+    clone.querySelectorAll('*').forEach(el=>el.classList.add('is-cat-hover'));
+  } else if(state==='disabled'){
     const ctl=clone.matches('input,select,button')?clone:clone.querySelector('input,select,button');
     if(ctl)ctl.disabled=true; else clone.classList.add('is-cat-disabled'); // no native control on this node (e.g. .fx-sub) — nothing to disable, kept as rest
   } else if(state==='modified'){
@@ -22363,7 +22393,12 @@ function buildCatalogPage(){
   // it — the compact form an iframe embed (token report) wants, vs. the full review grid above.
   const onlyKey=params.get('only');
   const onlyState=params.get('state')||'rest';
-  const STATES=['rest','disabled','modified','longlabel'];
+  const STATES=['rest','hover','disabled','modified','longlabel'];
+  // ?theme=light|dark (report iframe embed): the report's own theme toggle re-points the iframe
+  // src at the new theme so the embedded clone matches the report's light/dark state instead of
+  // always booting into whatever csTheme was last left in the shared app's localStorage.
+  const themeParam=params.get('theme');
+  if(themeParam==='light'||themeParam==='dark')fxSetTheme(themeParam);
   // Real source elements to clone from, per S1(d)'s tested Retouch pairing plus one .bpri/.fx-sub
   // instance (contract: "the older .bpri is still used by 10 elements, so include both"), plus
   // the remaining design/components.json families reachable from the plain web build (chip,
