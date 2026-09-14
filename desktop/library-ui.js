@@ -1255,6 +1255,8 @@
     .lib-btn.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
     .lib-btn.on.disabled-note{background:var(--sur2);color:var(--mut);border-color:var(--bdr)}
     .lib-btn:disabled{opacity:.4;cursor:default;pointer-events:none}
+    .lib-selection-action-hint{font-size:11px;color:var(--mut);white-space:nowrap}
+    .lib-selection-action-hint[hidden]{display:none}
     #lib-aspect-toggle{padding:5px 8px;margin-left:6px}
     /* Info panel keyword chips (renderInfoPanel) — the leaf name only, full path in the tooltip
        (a photo tagged "Travel|Iceland|Reykjavik" would otherwise overflow a 232px panel). */
@@ -1921,23 +1923,21 @@
         <input type="range" id="lib-thumbsize" min="90" max="320" step="10" title="Thumbnail size">
         ${ic('zoomIn',12)}
       </div>
-      <!-- Flag row: rates state.openedPath — whichever single photo is open in the Editor —
-           same window.chromasmithToggle*() bridge the Editor's own top-bar flag buttons already
-           use, so the two stay in sync automatically. HANDOVER §3.11 — this comment previously
-           claimed a multi-selection fallback; chromasmithToggleFlag/Favorite (below) read
-           state.openedPath only and ignore state.selected entirely.
+      <!-- Flag row: applies to the selected Library photos. The Editor's separate toolbar
+           continues to rate only the photo being edited via window.chromasmithToggle*().
            Reject icon is 'flagRed' (not the generic 'close' this used to render) — the Editor's
            own reject button (#btn-flag-red, chromasmith-22.html) uses 'flagRed' specifically so
            the two bars show the literal same glyph, not two different X shapes at two different
            stroke weights. -->
       <div class="lib-flagrow" id="lib-flagrow">
-        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-reject" title="Reject">${ic('flagRed',18)}</button>
-        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-pick" title="Pick">${ic('flagGreen',18)}</button>
-        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-fav" title="Favorite">${ic('heart',18)}</button>
+        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-reject" title="Reject selected photos">${ic('flagRed',18)}</button>
+        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-pick" title="Pick selected photos">${ic('flagGreen',18)}</button>
+        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-fav" title="Favorite selected photos">${ic('heart',18)}</button>
       </div>
       </div>
-      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo">${ic('looks',14)}<span class="lbl">All FX</span></button>
-      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ⌘E">${ic('export',14)}<span class="lbl">Export</span></button>
+      <span id="lib-selection-action-hint" class="lib-selection-action-hint" aria-live="polite" hidden>Select photo(s) to use these actions</span>
+      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo" aria-describedby="lib-selection-action-hint">${ic('looks',14)}<span class="lbl">All FX</span></button>
+      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ⌘E" aria-describedby="lib-selection-action-hint">${ic('export',14)}<span class="lbl">Export</span></button>
       <!-- id (not just a bare positioning div) so body.deskx can give it the SAME margin-left/
            padding-left/border-left divider as the Editor's own #fx-settings, instead of just the
            row's flat 8px gap — see the #lib-settings CSS rule below, copied from #fx-settings. -->
@@ -6493,40 +6493,58 @@
       };
     });
   }
-  // Top-bar flag row (design-import wireframe) — rates state.openedPath via the same bridge
-  // functions the Editor's own top-bar flag buttons use (window.chromasmithToggleFlag/Favorite),
-  // so a click here and a click there can never disagree about the current photo's flag.
+  // Library top-bar flags operate on the Library selection. The Editor's own top-bar buttons
+  // continue to use the separate window.chromasmithToggle* bridge for its currently edited photo.
   const syncLibFlagRow = () => {
     const reject = overlay.querySelector('#lib-flag-reject');
     const pick = overlay.querySelector('#lib-flag-pick');
     const fav = overlay.querySelector('#lib-flag-fav');
     if (!reject || !pick || !fav) return;
-    const label = typeof window.chromasmithOpenedFlag === 'function' ? window.chromasmithOpenedFlag() : '';
-    const favorite = typeof window.chromasmithOpenedFavorite === 'function' ? window.chromasmithOpenedFavorite() : false;
-    reject.classList.toggle('on', label === 'Red');
-    pick.classList.toggle('on', label === 'Green');
-    fav.classList.toggle('on', !!favorite);
+    const paths = [...state.selected];
+    const labels = paths.map((p) => (state.sidecars.get(p) || {}).label || '');
+    const favorites = paths.map((p) => !!(state.sidecars.get(p) || {}).favorite);
+    reject.classList.toggle('on', paths.length > 0 && labels.every((label) => label === 'Red'));
+    pick.classList.toggle('on', paths.length > 0 && labels.every((label) => label === 'Green'));
+    fav.classList.toggle('on', paths.length > 0 && favorites.every(Boolean));
   };
-  // Backlog #1 (source #34, "lightroom-contextual-taskbar"): the flag/export/All-FX buttons used
-  // to stay visually enabled with nothing to act on — no photo open, nothing selected, an empty
-  // library. Clicking them was already a harmless no-op (chromasmithToggleFlag/Favorite bail on
-  // !state.openedPath; libExportPaths bails on !paths.length) but they LOOKED clickable, which is
-  // the actual defect: a taskbar that can't act shouldn't read as active. Disable them instead.
+  // Backlog #1 disables actions without a target; backlog #4 explains that prerequisite and
+  // routes Library actions to the selection, never a previously opened Editor photo.
   const syncLibActionButtons = () => {
     const reject = overlay.querySelector('#lib-flag-reject');
     const pick = overlay.querySelector('#lib-flag-pick');
     const fav = overlay.querySelector('#lib-flag-fav');
-    const hasOpen = !!state.openedPath;
-    [reject, pick, fav].forEach((b) => { if (b) b.disabled = !hasOpen; });
+    const hasTarget = state.selected.size > 0;
+    [reject, pick, fav].forEach((b) => {
+      if (b) {
+        b.disabled = !hasTarget;
+        b.setAttribute('aria-describedby', 'lib-selection-action-hint');
+      }
+    });
     const exportBtn = overlay.querySelector('#lib-export-btn');
     const allFxBtn = overlay.querySelector('#lib-allfx-btn');
-    const hasTarget = cmKbTargets().length > 0;
     if (exportBtn) exportBtn.disabled = !hasTarget;
     if (allFxBtn) allFxBtn.disabled = !hasTarget;
+    const hint = overlay.querySelector('#lib-selection-action-hint');
+    if (hint) hint.hidden = hasTarget;
+    syncLibFlagRow();
   };
-  overlay.querySelector('#lib-flag-reject').onclick = async () => { await window.chromasmithToggleFlag('Red'); syncLibFlagRow(); syncLibActionButtons(); };
-  overlay.querySelector('#lib-flag-pick').onclick = async () => { await window.chromasmithToggleFlag('Green'); syncLibFlagRow(); syncLibActionButtons(); };
-  overlay.querySelector('#lib-flag-fav').onclick = async () => { await window.chromasmithToggleFavorite(); syncLibFlagRow(); syncLibActionButtons(); };
+  const applySelectionLabel = async (label) => {
+    const paths = [...state.selected];
+    if (!paths.length) return;
+    const clear = paths.every((p) => ((state.sidecars.get(p) || {}).label || '') === label);
+    await Promise.all(paths.map((p) => setLabel(p, clear ? '' : label)));
+    syncLibActionButtons();
+  };
+  overlay.querySelector('#lib-flag-reject').onclick = () => applySelectionLabel('Red');
+  overlay.querySelector('#lib-flag-pick').onclick = () => applySelectionLabel('Green');
+  overlay.querySelector('#lib-flag-fav').onclick = async () => {
+    const paths = [...state.selected];
+    if (!paths.length) return;
+    const allFavorited = paths.every((p) => !!(state.sidecars.get(p) || {}).favorite);
+    await Promise.all(paths.map((p) => setFavorite(p, !allFavorited)));
+    syncLibActionButtons();
+  };
+  syncLibActionButtons();
   const filtersBtn = overlay.querySelector('#lib-filters-btn');
   const filtersPanel = overlay.querySelector('#lib-filters-panel');
   const filterRow = overlay.querySelector('#lib-filter-row');

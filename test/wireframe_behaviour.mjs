@@ -151,13 +151,11 @@ test.describe('topbar', () => {
     expect(await ls(page, 'chromasmith_lib_thumbsize')).toBe('220');
   });
 
-  test('flag buttons are inert with no photo open', async ({ lib: { page } }) => {
-    // chromasmithToggleFlag/Favorite both early-return on a falsy state.openedPath
-    // (library-ui.js:3734-3755). Nothing is open in a fresh harness, so the row must not light.
-    await page.click('#lib-flag-pick');
-    await page.click('#lib-flag-fav');
-    await expect(page.locator('#lib-flag-pick')).not.toHaveClass(/\bon\b/);
-    await expect(page.locator('#lib-flag-fav')).not.toHaveClass(/\bon\b/);
+  test('selection actions explain the prerequisite when no photos are selected', async ({ lib: { page } }) => {
+    const actions = page.locator('#lib-flag-reject, #lib-flag-pick, #lib-flag-fav, #lib-allfx-btn, #lib-export-btn');
+    await expect(actions).toHaveCount(5);
+    for (const action of await actions.all()) await expect(action).toBeDisabled();
+    await expect(page.locator('#lib-selection-action-hint')).toBeVisible();
   });
 
   test('sort menu opens and closes on outside click', async ({ lib: { page } }) => {

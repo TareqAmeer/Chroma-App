@@ -160,7 +160,7 @@
       "priority": "P0",
       "cluster": "library-selection",
       "title": "Reduce visual clutter from unavailable actions",
-      "status": "backlog",
+      "status": "in_progress",
       "recommended_executor": "Codex",
       "model": "codex:gpt-5.6-terra",
       "reference": "apple-photo-editing-hig",
@@ -168,6 +168,8 @@
         1
       ],
       "acceptance": "Unavailable controls remain discoverable when needed, explain their prerequisite, and do not compete with available actions.",
+      "implementation_note": "Library toolbar actions require an explicit Library selection and target that selection; the Editor's own controls continue to target its edited photo. A visible prerequisite hint is shown only when selection is empty. Automated test currently confirms the no-selection state, but selected-card targeting still needs a reliable browser regression check before closure.",
+      "validation_evidence": "2026-09-14: desktop build succeeds. Focused Playwright run confirmed all five controls are disabled with the hint visible and aria-described; later selection assertions could not reliably observe the harness card selection and were removed rather than treated as proof. Item remains in_progress pending a reliable selected-batch interaction check and visual capture.",
       "source_id": 26
     },
     {
@@ -1660,8 +1662,8 @@
       "acceptance": "Hover/focus/selection states are distinct and do not shift neighbouring tiles or disrupt dense-grid scanning.",
       "source_id": 67
     },
-    {
-      "id": 100,
+  {
+    "id": 100,
       "rank": 100,
       "priority": "P3",
       "cluster": "editor-navigation",
@@ -1675,8 +1677,22 @@
         73
       ],
       "acceptance": "Prototype is discoverable, keyboard accessible, does not replace context menus and passes usability review before adoption.",
-      "source_id": 50
-    }
+    "source_id": 50
+  },
+  {
+    "id": 101,
+    "rank": 101,
+    "priority": "P3",
+    "cluster": "library-chrome",
+    "title": "Restore a visible hover affordance on Library topbar icon buttons",
+    "status": "backlog",
+    "recommended_executor": "Codex",
+    "model": "codex:gpt-5.6-terra",
+    "reference": "apple-ui-tips",
+    "depends_on": [],
+    "acceptance": "Library topbar icon buttons have a visible hover treatment consistent with the design tokens and the current interaction state.",
+    "note": "Linked follow-up created while committing backlog item 4: the pre-existing wireframe inventory reports the Library topbar icon button hover background does not change, while the wireframe expects a visible lift. Kept out of item 4 scope."
+  }
   ],
   "id_policy": "id is the new priority-ordered sequence; source_id preserves the original recommendation number from 1-100."
 }
