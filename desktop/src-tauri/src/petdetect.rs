@@ -142,7 +142,7 @@ mod tests {
     use super::*;
 
     fn setup_model() {
-        let dylib = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib");
+        let dylib = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::platform::ort_lib_dev_path());
         crate::sam::set_dylib_path(dylib);
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/rtdetr/model_quantized.onnx");
         set_model_path(path);

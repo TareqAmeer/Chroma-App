@@ -30,10 +30,12 @@ and machines.
 |---|---|---|---|---|
 | G1 | This doc didn't exist yet — `platform/*.rs` linked to a "Windows-port plan" with nothing to find | `platform/mod.rs` | Every session rediscovers it from scratch | **Fixed** (this file) |
 | G2 | Window URL hardcoded `cs://localhost/index.html`; WebView2 serves custom schemes as `http://cs.localhost/` | `tauri.conf.json` | Blank window on launch | Open |
-| G3 | `titleBarStyle:Overlay`, `hiddenTitle`, `transparent`, `macOSPrivateApi`, `.icns`-only icon, `targets:["app"]`, resources list `libonnxruntime.dylib` | `tauri.conf.json` | Bundle fails or looks broken | Open |
-| G4 | File-open + Adobe OAuth deep link only handled via `RunEvent::Opened` (macOS-only); on Windows they arrive in **argv of a second process** | `main.rs` | Double-click in Explorer / Adobe sign-in silently do nothing | Open |
-| G5 | No `onnxruntime.dll` in tree, **and `C:\Windows\System32\onnxruntime.dll` exists** (Windows ML's own copy) | `vendor/onnxruntime/` | Its dependent DLLs may resolve from System32 → version mismatch | Open |
-| G6 | `std::fs::canonicalize` returns `\\?\C:\…` on Windows; catalog canonicalises paths as keys. Windows paths are also case-insensitive | `catalog.rs`, `library.rs` | `\\?\` paths leak into the UI/JS; duplicate rows for `C:\Photos` vs `c:\photos` | Open |
+| G3 | `titleBarStyle:Overlay`, `hiddenTitle`, `transparent`, `macOSPrivateApi`, `.icns`-only icon, `targets:["app"]`, resources list `libonnxruntime.dylib` | `tauri.conf.json` | Bundle fails or looks broken | **Fixed** — split into `tauri.conf.json` (shared) + `tauri.macos.conf.json` / `tauri.windows.conf.json`; generated `icons/icon.ico` (multi-res, via Pillow). Native decorations + `nsis` target on Windows, per the session's title-bar/installer decisions. NSIS build itself not yet run (needs `tauri build`, not just `cargo check`) |
+| G4 | File-open + Adobe OAuth deep link only handled via `RunEvent::Opened` (macOS-only); on Windows they arrive in **argv of a second process** | `main.rs` | Double-click in Explorer / Adobe sign-in silently do nothing | Partially addressed — the `Opened` match arm is now `#[cfg(any(target_os="macos", target_os="ios", target_os="android"))]` (matches how it's already gated upstream in tauri's own `app.rs`, confirmed by reading it — this repo's code just hadn't hit that gate yet since it never compiled on Windows before). Unblocks compilation and makes the gap explicit instead of a hidden no-op; the real Windows fix is still open for Phase 1b — see the research note below the table |
+| G5 | No `onnxruntime.dll` in tree, **and `C:\Windows\System32\onnxruntime.dll` exists** (Windows ML's own copy) | `vendor/onnxruntime/` | Its dependent DLLs may resolve from System32 → version mismatch | Partially fixed — `vendor/onnxruntime/win-x64/onnxruntime.dll` fetched (current release, v1.30.0, MIT), gitignored, bundled via `tauri.windows.conf.json`. The `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` loader-flag fix so the bundled copy (not System32's) is what actually loads at runtime is still open — Phase 1b |
+| G19 | `windows` crate 0.58 doesn't wrap `DRIVE_REMOVABLE`/`DRIVE_FIXED` as typed constants (`GetDriveTypeW` returns a bare `u32`), and `CreateFileW` is gated behind a `Win32_Security` Cargo feature the port didn't enable | `platform/windows.rs`, `Cargo.toml` | `cargo check` failed outright — this had never compiled on real Windows before this session | **Fixed** — replaced with local `const DRIVE_REMOVABLE: u32 = 2` / `DRIVE_FIXED: u32 = 3` (documented Win32 values) and added the `Win32_Security` feature |
+| G20 | `Cargo.toml` unconditionally enabled the `tauri` crate's `macos-private-api` feature; Tauri's build script cross-checks a dependency's enabled features against the *merged* `tauri.conf.json` and fails the build if they disagree — Windows's merged config correctly has no `macOSPrivateApi: true` (G3's fix), so the two disagreed | `Cargo.toml` | `cargo check` failed with "does not match the allowlist defined under tauri.conf.json" | **Fixed** — moved the feature into `[target.'cfg(target_os = "macos")'.dependencies]`, same crate, extra feature merged in only on macOS |
+| G6 | `std::fs::canonicalize` returns `\\?\C:\…` on Windows; catalog canonicalises paths as keys. Windows paths are also case-insensitive | `catalog.rs`, `library.rs` | `\\?\` paths leak into the UI/JS; duplicate rows for `C:\Photos` vs `c:\photos` | **Mostly fixed** — this turned out to be FOUR distinct bugs discovered by chasing one hanging test (`catalog::tests::corruption_is_distinguished_from_an_edit`; see the write-up below the table). Case-insensitive dedupe (the `c:\photos` vs `C:\Photos` half of this row) is still open |
 | G7 | `long_path()` prefixes UNC paths wrongly (`\\server\share` needs `\\?\UNC\server\share`) and doesn't accept `/` | `platform/windows.rs` | NAS libraries fail | Open |
 | G8 | `volume_identity_hint` returns just the drive letter; letters change between plug-ins | `platform/windows.rs` | External drive shows "offline" or duplicates after reconnect | Open |
 | G9 | `eject` is a stub | `platform/windows.rs` | Card ingest can't eject | Open |
@@ -45,7 +47,78 @@ and machines.
 | G15 | `bump-build-stamp.sh` used `jq` (not installed), BSD `sed -i ''` (no-op under GNU sed), a bash-built POSIX path compared against a Windows path, and a `python -` + heredoc that ate its own piped stdin | `.claude/hooks/` | BUILD-stamp hook silently did nothing off macOS | **Fixed** — rewritten as `bump-build-stamp.py` + a thin `.sh` wrapper that picks a working `python`/`python3`; tested with 4 cases (stale+relative path, stale+native Windows path, already-today no-op, wrong-file no-op) |
 | G16 | `core.autocrlf=true`, `.gitattributes` only covered the two LFS globs | repo root | CRLF risk in `.sh` hooks and byte-compared goldens/hashes | **Fixed** — `.gitattributes` now sets `* text=auto eol=lf` plus explicit `binary` for onnx/image/icon formats |
 | G17 | `diagnostics/` + the `chromasmith-debugger`/`hang-diagnose`/`chromasmith-diagnostics` skills assume macOS (`sample`, dtrace, `~/Library/Logs`, `.app` bundle) | `diagnostics/*.py` | CLAUDE.md's debugger-agent rule doesn't work on Windows yet | Open — Phase 6 |
-| G18 | Toolchain missing: no Rust, no Node, no VS Build Tools; `sam2/*.onnx` + `rawdenoise/*.onnx` not fetched (gitignored on both platforms); no `onnxruntime.dll` | this PC | Nothing builds | **Rust + Node installed** (`rustup` stable-x86_64-pc-windows-msvc, Node LTS via winget); VS Build Tools (Desktop C++ workload) installing; models/ORT dll not yet fetched |
+| G18 | Toolchain missing: no Rust, no Node, no VS Build Tools; `sam2/*.onnx` + `rawdenoise/*.onnx` not fetched (gitignored on both platforms); no `onnxruntime.dll` | this PC | Nothing builds | **Fixed** — Rust (rustup stable-x86_64-pc-windows-msvc), Node LTS, and VS Build Tools (Desktop C++ workload) all installed via winget; sam2/rawdenoise models and the win-x64 ORT dll all fetched. `cargo check --bin chromasmith` passes clean (warnings only) — **first-ever successful Windows compile of this port** |
+
+### G6, in full: one hanging test, four real bugs
+`cargo test` initially looked hung (400+ CPU-seconds and climbing on one test, no progress in the
+output). Killing it and re-running with `--test-threads=1` proved it wasn't system load — the
+SAME single test, run alone with nothing else competing, still didn't finish in 180s. Reading the
+actual code (not more guessing) found the real cause, and fixing it surfaced three more bugs the
+hang had been masking:
+
+1. **`std::fs::canonicalize`'s `\\?\` prefix breaks `add_root_run`'s prefix-strip.** `canon_str.
+   strip_prefix(&mount_point)` fails silently (`canon_str` is `\\?\C:\Users\...`, `mount_point`
+   from `GetVolumePathNameW` is `C:\`, they don't share a prefix), so `rel_path` becomes the
+   WHOLE canonical path. `hash_run`'s `loop {}` re-selects the same never-hashed row every pass
+   (its `WHERE content_hash IS NULL` never stops matching) — a genuine infinite loop, not just a
+   cosmetic path issue. **Fix:** swapped all 7 `canonicalize` call sites (`catalog.rs` ×5,
+   `dcp_store.rs` ×2) for `dunce::canonicalize` — a drop-in replacement (added as a dependency)
+   that strips the verbatim prefix when safe, and is a pure passthrough to std's canonicalize on
+   macOS/Linux.
+2. **`abs_path()` and `find_photo_by_abs_path()` both hardcoded a bare `"/"` for local-volume
+   paths** — correct only because macOS's boot volume mount point happens to BE `/`; on Windows
+   it's `C:\`, so every reconstructed/looked-up path was garbage (`/Users\Tareq\...` — a leading
+   POSIX slash glued onto a backslash path, naming no real file). This is what produced the
+   cascade of "not in the catalog" panics that persisted even after fix #1. **Fix:** both now use
+   `Path`/`Path::join`, which correctly uses the volume's real mount point and the platform's
+   native separator, for local and external volumes alike — no more special case.
+3. **`is_ancestor_rel` checked for a hardcoded `b'/'` segment boundary** — `rel_path` strings use
+   the native separator (`\` on Windows after fix #1's `canon_str` is native, not `\\?\`-escaped),
+   so a Windows rel_path like `Users\a\2026` never registered as a descendant of `Users\a`,
+   breaking nested-root collapse. **Fix:** compare against `std::path::MAIN_SEPARATOR` instead.
+   Two existing tests (`is_ancestor_rel_is_segment_aware_not_a_string_prefix`,
+   `collapse_nested_roots_cleans_up_rows_already_in_the_db_and_keeps_photos`) had hardcoded `/`
+   in their own fixture strings for the same reason and needed the same separator fix — a preview
+   of G13 (portable test literals) showing up as a real assertion failure, not just a style nit.
+4. **The ONNX Runtime dylib path was hardcoded to the macOS filename at 14 call sites** —
+   `platform::ort_lib_filename()` already existed (returns `"onnxruntime.dll"` on Windows) but was
+   never actually called; every site (the real runtime path in `main.rs`, plus one `#[cfg(test)]`
+   helper each in `arcface.rs`, `catalog.rs` ×5, `clip.rs`, `depth.rs`, `faceparse.rs`,
+   `petdetect.rs`, `sam.rs`, `scrfd.rs`, `subject.rs`) built the path with the literal string
+   `"vendor/onnxruntime/libonnxruntime.dylib"`. Every ONNX-backed test failed with `LoadLibraryExW
+   failed` even after the crate itself compiled and linked cleanly. **Fix:** added
+   `platform::ort_lib_dev_path()` (the dev-tree source path, which differs by OS — Windows keeps
+   its dll under `vendor/onnxruntime/win-x64/`, not flattened like the bundled resource) and swapped
+   every hardcoded literal for it.
+
+Net result: `cargo test --bin chromasmith` went from hanging indefinitely to **235/236 passing**
+(the one remaining failure, `cache_usage_by_root_and_clear_are_scoped_correctly`, is a
+pre-existing, self-documented flaky test — a real, shared, unisolated disk cache directory raced
+across parallel test threads; confirmed passes reliably alone, not a Windows-specific regression).
+
+### Research: the G4 fix (Windows file-open / deep-link)
+`tauri-plugin-single-instance` with its `deep-link` Cargo feature is the standard pattern: it
+fires a callback with the second instance's `argv` (and cwd), and — when built with that feature
+— runs *before* `tauri-plugin-deep-link`'s own event so a deep-link URL arriving as an argv
+element gets handled the same way on the second launch as on the first. One documented pitfall:
+naively scanning argv for anything that parses as a URL can false-positive on the executable's own
+path (`C:\Users\...` parses with scheme `c`) — filter by the registered scheme *inside* the
+`find_map`, not after. Wire both the file-path and Adobe-OAuth-URL branches into the **existing**
+`PendingOpen`/`PendingOAuth` state (main.rs) so the frontend-facing contract (`open-file-path`,
+`adobe-oauth-callback` events) doesn't change — only how those two get populated on Windows.
+Sources: [tauri-plugin-single-instance docs](https://docs.rs/tauri-plugin-single-instance/latest/tauri_plugin_single_instance/),
+[Tauri deep-linking guide](https://v2.tauri.app/plugin/deep-linking/).
+
+### Note: disk space
+A full `cargo test` (not just `cargo check`) pulls in extra dev-dependencies `cargo check --bin`
+never touches (webview/regex/CSS-selector crates for Tauri's own test harness), and a later
+`cargo build --release` needs a **separate** `target/release/` tree. This PC's drive filled
+completely (0 bytes free) mid-session from unrelated pre-existing data (a 1.36TB `C:\Games`, not
+from this port's build artifacts — `target/debug` alone was ~2GB, `~/.cargo` ~664MB) and a `cargo
+test` run failed outright with `os error 112`/`STATUS_ACCESS_VIOLATION` (not a real code bug —
+rustc mid-write with no space to write to). Keep at least 15-20GB free before an iteration
+session; freeing space mid-build can still leave partially-corrupt `target/` artifacts if the
+build wasn't fully clean before it ran out — rerun rather than trust a build that hit ENOSPC.
 
 ---
 

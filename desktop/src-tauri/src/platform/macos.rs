@@ -168,3 +168,13 @@ pub fn set_file_mtime(path: &Path, unix_secs: i64) -> Result<(), String> {
 pub fn ort_lib_filename() -> &'static str {
     "libonnxruntime.dylib"
 }
+
+/// Crate-manifest-relative path to the ONNX Runtime library in the DEV TREE (source checkout),
+/// as opposed to `ort_lib_filename()`'s bare filename (used for the flattened *bundled* resource
+/// path inside an installed app — see `tauri.conf.json`'s `bundle.resources`). Every call site
+/// that dlopen()s the runtime directly from the source tree (main.rs's dev fallback, and every
+/// `#[cfg(test)]` module's own dylib-path setup) should use this instead of hardcoding the
+/// literal string, so a platform difference here is a one-line fix instead of an N-file grep.
+pub fn ort_lib_dev_path() -> &'static str {
+    "vendor/onnxruntime/libonnxruntime.dylib"
+}

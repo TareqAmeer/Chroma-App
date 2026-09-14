@@ -75,6 +75,10 @@ desktop/src-tauri/vendor/sam2/*.onnx
 # RawNIND UtNet2 raw denoiser (GPL-3.0 weights — see vendor/rawdenoise/README.md): ~30MB each,
 # re-fetched from the darktable-ai release rather than committed, same rationale as sam2/ above.
 desktop/src-tauri/vendor/rawdenoise/*.onnx
+# ONNX Runtime for Windows (docs/windows-port.md G5/G18): ~16MB DLL, current win-x64 release
+# (unlike the pinned-old macOS Intel dylib, which IS committed — see vendor/onnxruntime/README.md
+# for why). Re-fetch after a fresh clone with vendor/onnxruntime/win-x64/README.md's commands.
+desktop/src-tauri/vendor/onnxruntime/win-x64/*.dll
 test/output/
 scripts/token-report.html
 

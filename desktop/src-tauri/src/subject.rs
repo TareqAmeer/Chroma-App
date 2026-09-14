@@ -754,7 +754,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn setup_model() {
-        let dylib = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib");
+        let dylib = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::platform::ort_lib_dev_path());
         crate::sam::set_dylib_path(dylib);
     }
 

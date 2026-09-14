@@ -792,7 +792,7 @@ fn volume_identity(path: &Path) -> (String, String, bool) {
     // (non-canonical) path against that mount point silently fails to match, and every file
     // under it goes unwalked. Canonicalizing both sides once, here, is what keeps
     // `add_root_run`'s rel_path computation and `walk_root`'s reconstruction consistent.
-    let canon = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let canon = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let Some((mount_point, _fromname)) = statfs_mount_point(&canon) else {
         return ("fp:unknown".into(), "/".into(), true);
     };
@@ -846,11 +846,22 @@ fn upsert_volume(conn: &Connection, path: &Path) -> rusqlite::Result<(i64, Strin
 /// LAST-SEEN mount point — never stored. This is what makes a remount at a different
 /// `/Volumes/...` path transparent to every caller: `set_sidecar`, `get_thumbnail`, opening a
 /// photo in the editor, none of them need to know a volume table exists.
-fn abs_path(vol_last_path: &str, is_local: bool, rel_path: &str) -> String {
-    if is_local {
-        format!("/{rel_path}")
+fn abs_path(vol_last_path: &str, _is_local: bool, rel_path: &str) -> String {
+    // Was `if is_local { format!("/{rel_path}") } else { ... }` — a bare "/" is only correct
+    // because the boot volume's mount point happens to BE "/" on macOS. On Windows the boot
+    // volume's mount point is "C:\" (platform::mount_point via GetVolumePathNameW), so the old
+    // local-volume branch built "/Users\Tareq\..." (leading POSIX slash glued onto a
+    // backslash-separated Windows path) — a string that names no real file, so every catalog
+    // lookup against a freshly-scanned local photo failed with "not in the catalog" (found live
+    // during this port's first Windows test run; see docs/windows-port.md G6's write-up — this
+    // was the SECOND bug hiding behind that same symptom, after the canonicalize \\?\ mismatch).
+    // `Path::join` uses the platform's native separator, matching whatever `rel_path` (itself
+    // built from a canonicalized path's native-separator string) already uses, for both the
+    // local and external-volume cases alike — `vol_last_path` IS the real mount point either way.
+    if rel_path.is_empty() {
+        vol_last_path.to_string()
     } else {
-        format!("{vol_last_path}/{rel_path}")
+        Path::new(vol_last_path).join(rel_path).to_string_lossy().into_owned()
     }
 }
 
@@ -923,11 +934,17 @@ pub struct CatalogRoot {
 /// `anc` is an ancestor of (or equal to) `desc` as path SEGMENTS, not a string prefix — a bare
 /// `desc.starts_with(anc)` would wrongly match "PHOTOS2" against "PHOTOS". "" is the volume root
 /// and is an ancestor of everything.
+///
+/// `rel_path` strings are built from a canonicalized path's native separator (`\` on Windows,
+/// `/` elsewhere — see `add_root_run`), so the segment-boundary byte checked here has to match
+/// that, not a hardcoded `/`: a Windows rel_path like `Users\a\2026` under ancestor `Users\a`
+/// otherwise never registers as a descendant (found live during this port's Windows test run —
+/// see docs/windows-port.md G6).
 fn is_ancestor_rel(anc: &str, desc: &str) -> bool {
     if anc.is_empty() || anc == desc {
         return true;
     }
-    desc.starts_with(anc) && desc.as_bytes().get(anc.len()) == Some(&b'/')
+    desc.starts_with(anc) && desc.as_bytes().get(anc.len()) == Some(&(std::path::MAIN_SEPARATOR as u8))
 }
 
 /// Registers a folder to be catalogued. Scanning is opt-in per root, never "the whole disk" —
@@ -952,7 +969,7 @@ pub fn add_root_run(conn: &Connection, path: &str, kind: Option<String>) -> Resu
     // (via `volume_identity`) resolves the MOUNT POINT from the canonical path, so the prefix
     // strip below has to run against the same canonical form or it silently fails to match
     // (see `volume_identity`'s doc comment on `/var` -> `/private/var`).
-    let canon = std::fs::canonicalize(&p).map_err(|e| format!("resolve {path}: {e}"))?;
+    let canon = dunce::canonicalize(&p).map_err(|e| format!("resolve {path}: {e}"))?;
     let (volume_id, mount_point) = upsert_volume(conn, &canon).map_err(|e| e.to_string())?;
     let canon_str = canon.to_string_lossy().into_owned();
     let rel_path = canon_str
@@ -6917,12 +6934,21 @@ fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {
     drop(stmt);
     volumes.sort_by_key(|(_, last_path, is_local)| std::cmp::Reverse(if *is_local { 1 } else { last_path.len() }));
 
-    for (vid, last_path, is_local) in &volumes {
-        let prefix = if *is_local { "/".to_string() } else { format!("{last_path}/") };
-        let Some(rel) = path.strip_prefix(&prefix) else { continue };
+    for (vid, last_path, _is_local) in &volumes {
+        // Was `if is_local { "/" } else { format!("{last_path}/") }` — the same bare-"/"
+        // assumption `abs_path` used to make (see that function's doc comment): correct only
+        // because macOS's boot volume mount point happens to BE "/". `last_path` is already the
+        // real mount point either way ("/" on macOS, "C:\" on Windows), so `Path::strip_prefix`
+        // — which compares path COMPONENTS, not raw bytes, so it tolerates the trailing-separator
+        // difference between "/" and "C:\" without a special case — replaces both branches at
+        // once. Found live during this port's Windows test run (docs/windows-port.md G6): with
+        // the old code every local-volume lookup here failed, e.g. "not in the catalog" errors on
+        // a photo the very same test had just scanned.
+        let Ok(rel) = Path::new(path).strip_prefix(Path::new(last_path.as_str())) else { continue };
+        let rel = rel.to_string_lossy();
         if let Ok(id) = conn.query_row(
             "SELECT id FROM photos WHERE volume_id = ?1 AND rel_path = ?2",
-            params![vid, rel],
+            params![vid, rel.as_ref()],
             |r| r.get(0),
         ) {
             return Some(id);
@@ -7086,12 +7112,18 @@ mod tests {
 
     #[test]
     fn is_ancestor_rel_is_segment_aware_not_a_string_prefix() {
+        // rel_path segments are joined with the platform's native separator (see is_ancestor_rel's
+        // own doc comment), so the fixture strings below build with it too, not a hardcoded "/" —
+        // a literal "PHOTOS/2026" is never a real Windows rel_path and would test the wrong thing.
+        let sep = std::path::MAIN_SEPARATOR;
+        let photos_2026 = format!("PHOTOS{sep}2026");
+        let photos_2026_08 = format!("PHOTOS{sep}2026{sep}08");
         assert!(is_ancestor_rel("", "PHOTOS"), "empty (volume root) is an ancestor of everything");
         assert!(is_ancestor_rel("PHOTOS", "PHOTOS"), "a path is its own ancestor");
-        assert!(is_ancestor_rel("PHOTOS", "PHOTOS/2026"));
-        assert!(is_ancestor_rel("PHOTOS", "PHOTOS/2026/08"));
+        assert!(is_ancestor_rel("PHOTOS", &photos_2026));
+        assert!(is_ancestor_rel("PHOTOS", &photos_2026_08));
         assert!(!is_ancestor_rel("PHOTOS", "PHOTOS2"), "must not match on a bare string prefix");
-        assert!(!is_ancestor_rel("PHOTOS/2026", "PHOTOS"), "wrong direction");
+        assert!(!is_ancestor_rel(&photos_2026, "PHOTOS"), "wrong direction");
         assert!(!is_ancestor_rel("PHOTOSA", "PHOTOSB"));
     }
 
@@ -7195,7 +7227,10 @@ mod tests {
         // Insert both roots DIRECTLY (bypassing add_root_run's own dedupe) to simulate rows that
         // predate this fix.
         let outer = add_root_run(&conn, &root.to_string_lossy(), None).unwrap();
-        let nested_rel = format!("{}/2026", outer.rel_path);
+        // MAIN_SEPARATOR, not a hardcoded "/" — outer.rel_path is native-separator (backslash on
+        // Windows, see add_root_run), and a mixed-separator nested_rel wouldn't match
+        // is_ancestor_rel's native-separator segment-boundary check.
+        let nested_rel = format!("{}{}2026", outer.rel_path, std::path::MAIN_SEPARATOR);
         conn.execute(
             "INSERT INTO roots (volume_id, rel_path, kind, added) VALUES (?1, ?2, 'originals', 0)",
             params![outer.volume_id, nested_rel],
@@ -7323,8 +7358,12 @@ mod tests {
         )
         .unwrap();
 
+        // Expected paths are built with the same join Path::join (via abs_path) uses, not a
+        // hand-typed "/"-joined literal — "/Volumes/Archive" is a synthetic macOS-shaped fixture
+        // (this test's real subject is remount/uuid continuity, not literal separator style), and
+        // Path::join on Windows inserts a native `\` regardless of the base string's own slashes.
         let page1 = query_run(&conn, CatalogQuery::default()).unwrap();
-        assert_eq!(page1.entries[0].path, "/Volumes/Archive/a.jpg");
+        assert_eq!(page1.entries[0].path, Path::new("/Volumes/Archive").join("a.jpg").to_string_lossy());
 
         // The remount: same uuid, new mount path.
         upsert("/Volumes/Archive 1");
@@ -7332,7 +7371,11 @@ mod tests {
         assert_eq!(id1, id2, "remounting must not create a second volume row");
 
         let page2 = query_run(&conn, CatalogQuery::default()).unwrap();
-        assert_eq!(page2.entries[0].path, "/Volumes/Archive 1/a.jpg", "path must reflect the NEW mount point");
+        assert_eq!(
+            page2.entries[0].path,
+            Path::new("/Volumes/Archive 1").join("a.jpg").to_string_lossy(),
+            "path must reflect the NEW mount point"
+        );
         assert_eq!(page2.entries[0].id, page1.entries[0].id, "the photo's own id must be unchanged by a remount");
     }
 
@@ -8213,7 +8256,7 @@ mod tests {
     /// `embed_run_embeds_detected_faces_and_is_resumable` below already proves for ArcFace.
     #[test]
     fn clip_embed_run_embeds_present_photos_and_is_resumable() {
-        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib"));
+        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::platform::ort_lib_dev_path()));
         crate::clip::set_model_paths(
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/clip/vision_model.onnx"),
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/clip/text_model.onnx"),
@@ -8248,7 +8291,7 @@ mod tests {
     /// vectors, so this also exercises the actual text encoder end to end.
     #[test]
     fn clip_search_ranks_the_closer_embedding_first() {
-        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib"));
+        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::platform::ort_lib_dev_path()));
         crate::clip::set_model_paths(
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/clip/vision_model.onnx"),
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/clip/text_model.onnx"),
@@ -8364,7 +8407,7 @@ mod tests {
     /// after, and a second pass embeds nothing new.
     #[test]
     fn embed_run_embeds_detected_faces_and_is_resumable() {
-        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib"));
+        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::platform::ort_lib_dev_path()));
         crate::arcface::set_model_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/arcface/w600k_r50.onnx"));
 
         let conn = temp_db();
@@ -8602,7 +8645,7 @@ mod tests {
         // internally (see `add_root_run`'s own comment on `/var` -> `/private/var`-style symlinks
         // — `/tmp` has the identical issue on macOS, and a non-canonical path here would silently
         // fail to resolve, which is exactly the class of bug this test exists to catch).
-        let abs_path = std::fs::canonicalize(dir.join("a.jpg")).unwrap().to_string_lossy().into_owned();
+        let abs_path = dunce::canonicalize(dir.join("a.jpg")).unwrap().to_string_lossy().into_owned();
         let faces = faces_for_path_run(&conn, &abs_path).unwrap();
         assert_eq!(faces.len(), 2);
         let named = faces.iter().find(|f| f.face_id == face_id).unwrap();
@@ -8629,7 +8672,7 @@ mod tests {
         let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
         let cancel = AtomicBool::new(false);
         scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
-        let abs_path = std::fs::canonicalize(dir.join("a.jpg")).unwrap().to_string_lossy().into_owned();
+        let abs_path = dunce::canonicalize(dir.join("a.jpg")).unwrap().to_string_lossy().into_owned();
 
         record_pet_sighting_run(&conn, &abs_path, "Juno", 0.1, 0.2, 0.3, 0.4, true).unwrap();
         let (kind, auto): (String, i64) = conn.query_row("SELECT kind, auto FROM people WHERE name = 'Juno'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
@@ -8751,7 +8794,7 @@ mod tests {
     /// resumable exactly like `hash_run`.
     #[test]
     fn faces_run_scans_present_photos_and_is_resumable() {
-        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib"));
+        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::platform::ort_lib_dev_path()));
 
         let conn = temp_db();
         let dir = scratch_photos_dir("faces");
@@ -8782,7 +8825,7 @@ mod tests {
     // frontend changes. Uses the same real-photo fixture petdetect.rs's own test does (not
     // committed — see that test's doc comment); skips gracefully when absent.
     fn pets_run_detects_and_creates_a_review_ready_auto_pet_person() {
-        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/onnxruntime/libonnxruntime.dylib"));
+        crate::sam::set_dylib_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::platform::ort_lib_dev_path()));
         crate::petdetect::set_model_path(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/rtdetr/model_quantized.onnx"));
         let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("dog_test_fixture.jpg");
         if !fixture.exists() {
@@ -10008,7 +10051,7 @@ mod tests {
         // Canonicalize — /var is a symlink to /private/var on macOS, and `find_photo_by_abs_path`
         // matches against the volume's own canonicalized mount point (see `volume_identity`), so
         // a non-canonical test path would spuriously fail to resolve.
-        let path = std::fs::canonicalize(dir.join("a.jpg")).unwrap().to_string_lossy().into_owned();
+        let path = dunce::canonicalize(dir.join("a.jpg")).unwrap().to_string_lossy().into_owned();
         (conn, path, db_path)
     }
 

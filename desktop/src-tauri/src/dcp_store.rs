@@ -69,8 +69,11 @@ fn is_safe_path_component(s: &str) -> bool {
 /// have missed (e.g. a symlink planted inside a root pointing elsewhere) and is cheap insurance
 /// given how much untrusted-input-to-filesystem-path code has historically gotten this wrong.
 fn resolved_under(root: &Path, candidate: &Path) -> Option<PathBuf> {
-    let root_canon = root.canonicalize().ok()?;
-    let cand_canon = candidate.canonicalize().ok()?;
+    // dunce::canonicalize, not the std method — see catalog.rs's Cargo.toml comment on the `dunce`
+    // dependency for why a plain std::fs::canonicalize (\\?\-prefixed on Windows) is the wrong
+    // choice for any path that gets compared or displayed rather than only fed back to Win32 APIs.
+    let root_canon = dunce::canonicalize(root).ok()?;
+    let cand_canon = dunce::canonicalize(candidate).ok()?;
     cand_canon.starts_with(&root_canon).then_some(cand_canon)
 }
 

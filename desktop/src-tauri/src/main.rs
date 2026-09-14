@@ -2579,9 +2579,13 @@ fn main() {
             // Prefer the packaged resource_dir() (a real distributed .app); fall back to the
             // source tree's vendor/ directly for `cargo tauri dev`, where resource_dir() may not
             // point at a populated location.
-            let dylib_rel = "vendor/onnxruntime/libonnxruntime.dylib";
-            let bundled = handle.path().resource_dir().ok().map(|d| d.join(dylib_rel));
-            let dev_fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(dylib_rel);
+            // Bundled resource dest is always the FLATTENED "vendor/onnxruntime/<filename>"
+            // (tauri.conf.json's bundle.resources, both platforms), but the dev-tree source path
+            // differs (Windows keeps its dll under a win-x64/ subdir — see platform::ort_lib_dev_path's
+            // doc comment) — hence two different relative paths here, not one shared constant.
+            let bundled_rel = format!("vendor/onnxruntime/{}", platform::ort_lib_filename());
+            let bundled = handle.path().resource_dir().ok().map(|d| d.join(&bundled_rel));
+            let dev_fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(platform::ort_lib_dev_path());
             let dylib_path = bundled.filter(|p| p.exists()).unwrap_or(dev_fallback);
             sam::set_dylib_path(dylib_path);
 
@@ -2682,6 +2686,13 @@ fn main() {
             // can arrive before the frontend has attached any listener, so an emitted event
             // would just be silently dropped; also emit it for the already-running case, where
             // a listener reliably exists already and the extra immediacy is worth it.
+            // `RunEvent::Opened` is itself cfg-gated upstream to macOS/iOS/Android only (tauri's
+            // app.rs) — on Windows/Linux the same information arrives in argv instead (a second
+            // process's command line, relayed to the first instance by a single-instance plugin).
+            // That's real, not-yet-done wiring (docs/windows-port.md G4, Phase 1b) — cfg-gating
+            // this match arm keeps the macOS behavior unchanged and makes the gap explicit rather
+            // than pretending a compile fix here means file-open/deep-link works on Windows.
+            #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
             if let tauri::RunEvent::Opened { urls } = event {
                 // A file:// URL (Lightroom Edit-In / Finder "Open With" / CLI open) goes to
                 // PendingOpen. Anything else — currently just Adobe's Lightroom OAuth

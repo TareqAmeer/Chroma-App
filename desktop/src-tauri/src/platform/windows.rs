@@ -1,8 +1,8 @@
-//! Windows implementations of the `platform` surface. See the Windows-port plan (linked from
-//! CLAUDE.md) for the reasoning behind each choice.
+//! Windows implementations of the `platform` surface. See docs/windows-port.md for the reasoning
+//! behind each choice, the status of the port, and what's still open.
 //!
 //! WIC-based thumbnail decode and Media Foundation video posters are big enough to be their own
-//! modules (`winthumb.rs`, `winvideothumb.rs`, not yet written — see the plan's Phase 2) rather
+//! modules (`winthumb.rs`, `winvideothumb.rs`, not yet written — see that doc's Phase 2) rather
 //! than living here; this file covers the platform:: surface itself.
 
 use std::path::{Path, PathBuf};
@@ -11,8 +11,14 @@ use windows::Win32::Foundation::{CloseHandle, HANDLE, MAX_PATH};
 use windows::Win32::Storage::FileSystem::{
     GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives, GetVolumePathNameW, CreateFileW,
     SetFileTime, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
-    FILE_FLAG_BACKUP_SEMANTICS, DRIVE_REMOVABLE,
+    FILE_FLAG_BACKUP_SEMANTICS,
 };
+
+// GetDriveTypeW returns a bare u32, not a typed constant from the `windows` crate (0.58 doesn't
+// wrap these) — these match the values documented for GetDriveTypeW at
+// https://learn.microsoft.com/windows/win32/api/fileapi/nf-fileapi-getdrivetypew.
+const DRIVE_REMOVABLE: u32 = 2;
+const DRIVE_FIXED: u32 = 3;
 use windows::Win32::System::Com::{
     CoInitializeEx, CoCreateInstance, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
 };
@@ -150,7 +156,7 @@ pub fn list_removable() -> Result<Vec<PathBuf>, String> {
         let wide = HSTRING::from(root.as_str());
         // SAFETY: wide is a live, NUL-terminated wide string for the call.
         let drive_type = unsafe { GetDriveTypeW(PCWSTR(wide.as_ptr())) };
-        if drive_type == DRIVE_REMOVABLE || drive_type.0 == windows::Win32::Storage::FileSystem::DRIVE_FIXED.0 {
+        if drive_type == DRIVE_REMOVABLE || drive_type == DRIVE_FIXED {
             out.push(PathBuf::from(root));
         }
     }
@@ -250,4 +256,16 @@ fn move_to_trash_sta(path: &Path) -> Result<(), String> {
 /// The ONNX Runtime shared-library filename bundled under `vendor/onnxruntime/`.
 pub fn ort_lib_filename() -> &'static str {
     "onnxruntime.dll"
+}
+
+/// Crate-manifest-relative path to the ONNX Runtime library in the DEV TREE — see macos.rs's
+/// `ort_lib_dev_path` doc comment for why this exists as a shared platform fn rather than a
+/// hardcoded literal at each call site (found the hard way: every one of those call sites was
+/// still hardcoding the macOS `.dylib` path, so every ONNX-backed test failed on Windows with a
+/// `LoadLibraryExW failed` error even after the crate itself compiled and linked cleanly).
+/// `vendor/onnxruntime/win-x64/` (not flattened, unlike the bundled resource) because that's
+/// where `docs/windows-port.md`'s G5/G18 fetch puts the gitignored `.dll` — see that directory's
+/// own `README.md`.
+pub fn ort_lib_dev_path() -> &'static str {
+    "vendor/onnxruntime/win-x64/onnxruntime.dll"
 }

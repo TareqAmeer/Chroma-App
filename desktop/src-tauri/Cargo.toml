@@ -8,7 +8,7 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset", "macos-private-api"] }
+tauri = { version = "2", features = ["protocol-asset"] }
 # Direct dep so main.rs can build+cap its own runtime (max_blocking_threads) instead of Tauri's
 # uncapped default — see main()'s own comment for why. Version pinned to what tauri already pulls
 # transitively (Cargo.lock), so this isn't a second copy of the crate.
@@ -96,6 +96,17 @@ libloading = "0.9"
 # dependency of tauri/rawler — this only makes the direct use explicit. Nothing else needs it,
 # and the alternative (shelling out to `df` and parsing it) would be worse.
 libc = "0.2"
+# std::fs::canonicalize returns \\?\-prefixed ("verbatim") paths on Windows — catalog.rs's
+# volume_identity/add_root_run strip a plain (non-\\?\) mount_point prefix off the canonicalized
+# path to compute rel_path, so on Windows that strip silently fails, rel_path ends up being the
+# WHOLE canonical path, and every reconstructed abs_path is garbage that doesn't exist on disk.
+# That's not just cosmetic: hash_run's `loop {}` re-selects the same never-successfully-hashed
+# row every pass since content_hash never gets set, so it never terminates — a genuine hang,
+# found and confirmed live on a real Windows machine during this port's first test run (see
+# docs/windows-port.md G6). `dunce::canonicalize` is a drop-in replacement (identical signature)
+# that strips the verbatim prefix when it's safe to (the common case), and is a pure passthrough
+# to std's canonicalize on macOS/Linux — zero behavior change there. MIT/Apache-2.0, no deps.
+dunce = "1"
 # Library catalog (catalog.rs): a whole-archive index of 100k+ photos needs indexed queries
 # and incremental upsert-by-key, which the app's existing flat-JSON-file persistence pattern
 # (albums.json, the registry_*.json files) does not scale to — those rewrite their entire file
@@ -129,6 +140,13 @@ tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
 strip = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# `macos-private-api` used to live on the unconditional `tauri` dependency above, but Tauri's
+# build script cross-checks a dependency's enabled features against tauri.conf.json's merged
+# app config and fails the build if they disagree — Windows's merged config (tauri.windows.conf.json,
+# see docs/windows-port.md) correctly has no `macOSPrivateApi: true`, so the feature has to be
+# macOS-only too. Cargo merges extra features for the same crate declared in a target-specific
+# dependencies block with the unconditional declaration, so this doesn't duplicate the dependency.
+tauri = { version = "2", features = ["macos-private-api"] }
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
@@ -144,6 +162,9 @@ objc2-foundation = "0.3"
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_Storage_FileSystem",
+    # CreateFileW (used by set_file_mtime's SetFileTime path) is gated behind this feature in the
+    # windows crate 0.58 — found via cargo's own "found an item that was configured out" note.
+    "Win32_Security",
     "Win32_System_Com",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",

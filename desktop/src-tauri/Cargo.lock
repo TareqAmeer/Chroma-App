@@ -447,6 +447,7 @@ dependencies = [
  "base64 0.22.1",
  "blake3",
  "demosaic",
+ "dunce",
  "image",
  "jxl-oxide",
  "kamadak-exif",
