@@ -147,7 +147,11 @@ pub(crate) fn ort_handle() -> Result<&'static OrtHandle, String> {
     static H: OnceLock<Result<OrtHandle, String>> = OnceLock::new();
     H.get_or_init(|| unsafe {
         let path = DYLIB_PATH.get().ok_or_else(|| "SAM dylib path not set — set_dylib_path() must run before any AI Select use".to_string())?;
-        let lib = libloading::Library::new(path).map_err(|e| format!("dlopen({}): {e}", path.display()))?;
+        // crate::platform::load_dylib, not a bare libloading::Library::new — on Windows this
+        // forces onnxruntime.dll's own dependent DLLs to resolve next to it rather than from
+        // C:\Windows\System32, where Windows ML may already ship a same-named copy (see that
+        // function's doc comment; docs/windows-port.md G5).
+        let lib = crate::platform::load_dylib(path)?;
         let base_getter: libloading::Symbol<unsafe extern "C" fn() -> *const OrtApiBase> =
             lib.get(b"OrtGetApiBase").map_err(|e| format!("OrtGetApiBase symbol: {e}"))?;
         let base = base_getter();

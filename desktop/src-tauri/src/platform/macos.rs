@@ -169,6 +169,30 @@ pub fn ort_lib_filename() -> &'static str {
     "libonnxruntime.dylib"
 }
 
+/// Where Adobe Camera Raw's installed camera profiles live — `dcp_store.rs`'s only source of
+/// platform knowledge for that lookup (docs/windows-port.md G10). `bool` marks the per-camera-
+/// subfolder shape (`Camera/`) vs the flat one-file-per-camera shape (`Adobe Standard/`) — see
+/// that file's own module doc comment for what those shapes actually look like on disk.
+pub fn adobe_profile_roots() -> Vec<(&'static str, PathBuf, bool)> {
+    const CAMERA_TREE: &str = "Library/Application Support/Adobe/CameraRaw/CameraProfiles/Camera";
+    const ADOBE_STANDARD_TREE: &str = "Library/Application Support/Adobe/CameraRaw/CameraProfiles/Adobe Standard";
+    let mut roots = Vec::new();
+    if let Ok(home) = home_dir() {
+        roots.push(("user-camera", home.join(CAMERA_TREE), true));
+    }
+    roots.push(("system-camera", PathBuf::from("/").join(CAMERA_TREE), true));
+    roots.push(("adobe-standard", PathBuf::from("/").join(ADOBE_STANDARD_TREE), false));
+    roots
+}
+
+/// Loads a shared library the plain way — `dlopen`'s own default search behavior (RPATH/
+/// DYLD_LIBRARY_PATH/cwd-adjacent, per `path`'s own directory since it's passed as a full path
+/// here) has no equivalent to Windows' "a same-named system copy might resolve first" problem
+/// (see the Windows sibling of this fn), so nothing extra is needed on this platform.
+pub fn load_dylib(path: &std::path::Path) -> Result<libloading::Library, String> {
+    unsafe { libloading::Library::new(path).map_err(|e| format!("dlopen({}): {e}", path.display())) }
+}
+
 /// Crate-manifest-relative path to the ONNX Runtime library in the DEV TREE (source checkout),
 /// as opposed to `ort_lib_filename()`'s bare filename (used for the flattened *bundled* resource
 /// path inside an installed app — see `tauri.conf.json`'s `bundle.resources`). Every call site

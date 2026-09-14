@@ -4,6 +4,7 @@
 // The frontend listens for the "menu-*" events emitted below (see desktop-native.js) and
 // calls the SAME JS functions the on-screen buttons already call — no duplicated logic.
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "macos")]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
 
@@ -1497,6 +1498,84 @@ fn take_pending_oauth_callback(state: tauri::State<PendingOAuth>) -> Option<Stri
     state.0.lock().unwrap().take()
 }
 
+/// Registered custom URL scheme for Adobe's OAuth redirect (tauri.conf.json's
+/// plugins.deep-link.desktop.schemes) — a real constant, not just an inline literal, because the
+/// Windows/Linux single-instance argv path (below) has to recognize it explicitly rather than the
+/// macOS RunEvent::Opened handler's "not a file:// URL, so it must be this" fallback: argv can
+/// contain arbitrary junk (including the executable's own path, which happens to parse as a URL
+/// with scheme "c" on Windows — a real, documented single-instance-plugin pitfall), so a loose
+/// else-branch there would be wrong in a way Launch-Services-delivered URLs never are.
+const ADOBE_OAUTH_SCHEME_PREFIX: &str = "adobe+5e575447f1fc4a4228c93a157e8422d9f310dd31:";
+
+/// Populates PendingOpen and emits `open-file-path`, exactly like the macOS RunEvent::Opened
+/// handler's file-url branch — shared so Windows/Linux's single-instance argv path (below) and
+/// macOS's Launch-Services path produce identical frontend-facing behavior from two different OS
+/// mechanisms. See PendingOpen's own doc comment for why this stashes state rather than only
+/// emitting (a cold-launch race with the frontend's listener).
+fn dispatch_open_files(app_handle: &tauri::AppHandle, file_paths: Vec<String>) {
+    if file_paths.is_empty() {
+        return;
+    }
+    *app_handle.state::<PendingOpen>().0.lock().unwrap() = file_paths.clone();
+    let _ = app_handle.emit("open-file-path", file_paths);
+}
+
+/// Populates PendingOAuth and emits `adobe-oauth-callback` — the OAuth-URL counterpart to
+/// `dispatch_open_files` above, same sharing rationale.
+fn dispatch_oauth_url(app_handle: &tauri::AppHandle, url: String) {
+    *app_handle.state::<PendingOAuth>().0.lock().unwrap() = Some(url.clone());
+    let _ = app_handle.emit("adobe-oauth-callback", url);
+}
+
+/// Registers `tauri-plugin-single-instance` — Windows/Linux's RunEvent::Opened equivalent
+/// (docs/windows-port.md G4): without it, a second `chromasmith.exe` launch (double-clicking
+/// another file, or an Adobe OAuth redirect hitting the registered custom scheme while the app is
+/// already running) starts a genuinely separate process instead of an event the first one can
+/// react to. Two mutually-exclusive `#[cfg]` bodies rather than one function with an inline
+/// `#[cfg]` on a `.plugin(...)` call — Rust's `#[cfg]` can't attach to a single method call
+/// inside a longer chained expression, only to a real item or statement, and the crate this calls
+/// into isn't even a dependency on macOS (`[target.'cfg(not(target_os = "macos"))'.dependencies]`
+/// in Cargo.toml), so the reference has to not exist in that build at all, not just be skipped at
+/// runtime. Registered FIRST (before this fn's caller adds any other plugin), per
+/// tauri-plugin-single-instance's own docs, so it can veto every later plugin's setup in the
+/// second (about-to-exit) process.
+#[cfg(not(target_os = "macos"))]
+fn with_single_instance_plugin(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    // The `deep-link` Cargo feature makes this hand off to tauri-plugin-deep-link's own event
+    // before this callback runs, for any argv element deep-link recognizes as one of its
+    // registered schemes.
+    builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+        // argv[0] is the exe path itself, never a file to open or a URL — skip it. Matching is
+        // deliberately explicit (an existing file, or exactly the registered Adobe scheme prefix)
+        // rather than a loose "else" fallback: unlike macOS's Launch-Services-delivered URLs, raw
+        // argv can contain anything, including — a real, documented single-instance-plugin
+        // pitfall — the executable's own path, which happens to parse as a URL with scheme "c"
+        // on Windows.
+        let mut file_paths: Vec<String> = Vec::new();
+        for arg in argv.into_iter().skip(1) {
+            if arg.starts_with(ADOBE_OAUTH_SCHEME_PREFIX) {
+                dispatch_oauth_url(app, arg);
+            } else if Path::new(&arg).is_file() {
+                file_paths.push(arg);
+            }
+        }
+        dispatch_open_files(app, file_paths);
+        // Bring the already-running window to the front — otherwise the user's double-click (or
+        // OAuth redirect) silently does nothing visible in the running instance at all.
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }))
+}
+
+/// macOS gets the same information through `RunEvent::Opened` (Launch Services) instead — see
+/// this file's `RunEvent::Opened` match arm — so there's nothing to register here.
+#[cfg(target_os = "macos")]
+fn with_single_instance_plugin(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder
+}
+
 fn gphotos_downloads_path() -> Result<PathBuf, String> {
     Ok(crate::platform::documents_dir()?.join("Google Photos Download"))
 }
@@ -1986,10 +2065,15 @@ fn main() {
         .build()
         .expect("failed to build the capped tokio runtime");
     tauri::async_runtime::set(tokio_rt.handle().clone());
-    tauri::Builder::default()
+    // Rust's `#[cfg]` can't attach to a single `.plugin(...)` call in the middle of one long
+    // method-chain expression (it needs a real statement boundary) — hence the plugin's
+    // registration lives in its own function below and gets spliced in via an intermediate
+    // `let builder = ...;` rather than one unbroken chain from `Builder::default()` to `.run()`.
+    let builder = with_single_instance_plugin(tauri::Builder::default())
         .manage(PendingOpen(Mutex::new(Vec::new())))
         .manage(PendingOAuth(Mutex::new(None)))
-        .manage(catalog::CatalogState::new())
+        .manage(catalog::CatalogState::new());
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -2229,6 +2313,18 @@ fn main() {
         .setup(|app| {
             let handle = app.handle();
 
+            // Deep links are only registered with the OS at INSTALL time (the NSIS installer,
+            // built from tauri.conf.json's plugins.deep-link.desktop.schemes) — fine for a
+            // packaged release, but `cargo tauri dev`/`cargo run` never runs that installer, so
+            // the Adobe OAuth custom scheme would silently never reach a dev build at all without
+            // this. macOS needs no equivalent: Info.plist's CFBundleURLTypes (from the same
+            // config) is read by Launch Services straight from the .app bundle, dev or not.
+            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let _ = app.deep_link().register_all();
+            }
+
             // The window opened smaller than the screen on every launch, for two separate
             // reasons that both land here (tauri_plugin_window_state has already restored by
             // the time .setup runs):
@@ -2320,6 +2416,16 @@ fn main() {
                 library::prune_caches();
             });
 
+            // The native app menu bar is macOS-shaped: an "app name" first menu (App > About/
+            // Hide/Hide Others/Show All/Quit) is a macOS Application-menu convention with no
+            // Windows equivalent (PredefinedMenuItem::hide/hide_others/show_all are no-ops
+            // there), and the in-app UI (⌘K→Ctrl+K command palette, header buttons) already
+            // surfaces every one of these actions on every platform. Skipping it on Windows
+            // rather than porting its shape is a deliberate decision (docs/windows-port.md
+            // Phase 1b), not an oversight — cfg-gate the whole block rather than leave a
+            // half-native, half-nothing menu bar.
+            #[cfg(target_os = "macos")]
+            {
             let open_item =
                 MenuItem::with_id(handle, "menu-open", "Open Photo…", true, Some("CmdOrCtrl+O"))?;
             // library-ui.js already keeps a recents list (its own header "Recent" button,
@@ -2571,6 +2677,7 @@ fn main() {
                     let _ = handle2.emit(id, ());
                 }
             });
+            } // #[cfg(target_os = "macos")]
 
             // AI tap-to-select's onnxruntime dylib (see sam.rs): a bundled RESOURCE (declared in
             // tauri.conf.json's bundle.resources), not embedded in the binary — `ort`'s
@@ -2708,15 +2815,10 @@ fn main() {
                     if let Ok(path) = u.to_file_path() {
                         file_paths.push(path.to_string_lossy().into_owned());
                     } else {
-                        let url_s = u.to_string();
-                        *app_handle.state::<PendingOAuth>().0.lock().unwrap() = Some(url_s.clone());
-                        let _ = app_handle.emit("adobe-oauth-callback", url_s);
+                        dispatch_oauth_url(app_handle, u.to_string());
                     }
                 }
-                if !file_paths.is_empty() {
-                    *app_handle.state::<PendingOpen>().0.lock().unwrap() = file_paths.clone();
-                    let _ = app_handle.emit("open-file-path", file_paths);
-                }
+                dispatch_open_files(app_handle, file_paths);
             }
         });
 }

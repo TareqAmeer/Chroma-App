@@ -24,7 +24,7 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::UI::Shell::{
     FileOperation, IFileOperation, IShellItem, SHCreateItemFromParsingName, SHGetKnownFolderPath,
-    FOLDERID_LocalAppData, FOLDERID_RoamingAppData, FOLDERID_Profile, FOLDERID_Downloads,
+    FOLDERID_LocalAppData, FOLDERID_RoamingAppData, FOLDERID_Profile, FOLDERID_Downloads, FOLDERID_ProgramData,
     FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_SILENT, KF_FLAG_DEFAULT,
 };
 
@@ -39,7 +39,17 @@ pub fn long_path(p: &Path) -> PathBuf {
     if s.starts_with(r"\\?\") {
         return p.to_path_buf();
     }
-    PathBuf::from(format!(r"\\?\{s}"))
+    // A UNC path's verbatim form REPLACES the leading "\\" with "UNC\" — it is NOT simply "\\?\"
+    // glued onto the original, which would produce "\\?\\\server\share" (four leading
+    // backslashes), a different and invalid path (docs/windows-port.md G7: this used to be the
+    // whole function, and it broke every NAS/network-share library). Forward slashes (a UNC path
+    // can arrive as "//server/share/..." too, and Win32 file APIs require backslashes in the
+    // verbatim form even though they accept "/" in the non-verbatim one) are normalized either way.
+    let backslashed = s.replace('/', "\\");
+    if let Some(unc_rest) = backslashed.strip_prefix(r"\\") {
+        return PathBuf::from(format!(r"\\?\UNC\{unc_rest}"));
+    }
+    PathBuf::from(format!(r"\\?\{backslashed}"))
 }
 
 fn known_folder(id: &windows::core::GUID) -> Result<PathBuf, String> {
@@ -81,6 +91,26 @@ pub fn documents_dir() -> Result<PathBuf, String> {
 
 pub fn downloads_dir() -> Result<PathBuf, String> {
     known_folder(&FOLDERID_Downloads)
+}
+
+/// Where Adobe Camera Raw's installed camera profiles live on Windows (docs/windows-port.md
+/// G10) — the Windows analogue of macos.rs's `adobe_profile_roots`, following the SAME real
+/// on-disk shapes Adobe uses per-OS: per-user under roaming AppData, all-users under ProgramData
+/// (the Windows equivalent of macOS's `/Library` for machine-wide, not-this-user-only data).
+/// `bool` marks the per-camera-subfolder shape (`Camera\`) vs the flat one-file-per-camera shape
+/// (`Adobe Standard\`) — see `dcp_store.rs`'s own module doc comment for what those look like.
+pub fn adobe_profile_roots() -> Vec<(&'static str, PathBuf, bool)> {
+    const CAMERA_TREE: &str = "Adobe\\CameraRaw\\CameraProfiles\\Camera";
+    const ADOBE_STANDARD_TREE: &str = "Adobe\\CameraRaw\\CameraProfiles\\Adobe Standard";
+    let mut roots = Vec::new();
+    if let Ok(roaming) = known_folder(&FOLDERID_RoamingAppData) {
+        roots.push(("user-camera", roaming.join(CAMERA_TREE), true));
+    }
+    if let Ok(program_data) = known_folder(&FOLDERID_ProgramData) {
+        roots.push(("system-camera", program_data.join(CAMERA_TREE), true));
+        roots.push(("adobe-standard", program_data.join(ADOBE_STANDARD_TREE), false));
+    }
+    roots
 }
 
 /// Windows has no single "Trash" directory to move a file into — `move_to_trash` below sends
@@ -256,6 +286,28 @@ fn move_to_trash_sta(path: &Path) -> Result<(), String> {
 /// The ONNX Runtime shared-library filename bundled under `vendor/onnxruntime/`.
 pub fn ort_lib_filename() -> &'static str {
     "onnxruntime.dll"
+}
+
+/// Loads a shared library from an absolute `path`, forcing DLLs it depends on to resolve from
+/// `path`'s own directory first, ahead of `C:\Windows\System32` — where, on many current Windows
+/// installs, Windows ML already ships its OWN `onnxruntime.dll` (confirmed present on this port's
+/// dev machine). A plain `LoadLibraryW`/`libloading::Library::new` searches System32 before an
+/// arbitrary directory that isn't on `PATH`, so without this flag the app can silently load
+/// Microsoft's version instead of the one it was built and tested against — a mismatch that would
+/// show up only as "AI features behave subtly differently on some machines," not as an error.
+/// `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` adds `path`'s directory to THIS LoadLibrary call's private
+/// search path; `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` keeps the normal safe default order for
+/// anything not found there (application dir, System32, `PATH`) rather than restricting the
+/// search to only `path`'s directory, which would break resolving Windows' own base DLLs
+/// (kernel32 etc.) that `onnxruntime.dll` itself depends on.
+pub fn load_dylib(path: &Path) -> Result<libloading::Library, String> {
+    use windows::Win32::System::LibraryLoader::{LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR};
+    let flags = (LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR.0 | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS.0) as u32;
+    unsafe {
+        libloading::os::windows::Library::load_with_flags(path, flags)
+            .map(libloading::Library::from)
+            .map_err(|e| format!("LoadLibraryExW({}): {e}", path.display()))
+    }
 }
 
 /// Crate-manifest-relative path to the ONNX Runtime library in the DEV TREE — see macos.rs's

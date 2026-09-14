@@ -26,34 +26,21 @@
 
 use std::path::{Path, PathBuf};
 
-fn dirs_home() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
-}
-
-const CAMERA_TREE: &str = "Library/Application Support/Adobe/CameraRaw/CameraProfiles/Camera";
-const ADOBE_STANDARD_TREE: &str = "Library/Application Support/Adobe/CameraRaw/CameraProfiles/Adobe Standard";
-
 /// Adobe's own fixed vocabulary for where camera profiles live — never derived from anything in
-/// the photo, so these roots are trusted starting points for the traversal guard below.
-/// `bool` marks whether this root uses the per-camera-subfolder shape (Camera/) or the flat
-/// one-file-per-camera shape (Adobe Standard/).
+/// the photo, so these roots are trusted starting points for the traversal guard below. `bool`
+/// marks whether this root uses the per-camera-subfolder shape (Camera/) or the flat
+/// one-file-per-camera shape (Adobe Standard/). Platform-specific (docs/windows-port.md G10):
+/// macOS keeps profiles under `~/Library/...` and `/Library/...`; Windows under
+/// `%APPDATA%\Adobe\...` (per-user) and `%ProgramData%\Adobe\...` (all users) — see
+/// `platform::adobe_profile_roots`'s own doc comment for the exact paths. Both
+/// `candidate_roots`/`root_for_source` below derive from the SAME platform call so the two can't
+/// drift the way two independently-hardcoded copies eventually would.
 fn candidate_roots() -> Vec<(PathBuf, &'static str, bool)> {
-    let mut roots = Vec::new();
-    if let Some(home) = dirs_home() {
-        roots.push((home.join(CAMERA_TREE), "user-camera", true));
-    }
-    roots.push((PathBuf::from("/").join(CAMERA_TREE), "system-camera", true));
-    roots.push((PathBuf::from("/").join(ADOBE_STANDARD_TREE), "adobe-standard", false));
-    roots
+    crate::platform::adobe_profile_roots().into_iter().map(|(name, root, shape)| (root, name, shape)).collect()
 }
 
 fn root_for_source(source: &str) -> Option<(PathBuf, bool)> {
-    match source {
-        "user-camera" => Some((dirs_home()?.join(CAMERA_TREE), true)),
-        "system-camera" => Some((PathBuf::from("/").join(CAMERA_TREE), true)),
-        "adobe-standard" => Some((PathBuf::from("/").join(ADOBE_STANDARD_TREE), false)),
-        _ => None,
-    }
+    crate::platform::adobe_profile_roots().into_iter().find(|(name, ..)| *name == source).map(|(_, root, shape)| (root, shape))
 }
 
 /// Rejects anything that could escape the intended root once joined onto a `Path`, checked on

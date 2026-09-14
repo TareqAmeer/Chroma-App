@@ -173,3 +173,13 @@ windows = { version = "0.58", features = [
     "Win32_Media_MediaFoundation",
     "Win32_System_LibraryLoader",
 ] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+# On macOS, RunEvent::Opened (main.rs) already delivers both file-open and deep-link URLs via
+# Launch Services — this plugin gives Windows (and, if this repo ever supports it, Linux) the
+# equivalent: without it, double-clicking another file — or an Adobe OAuth redirect hitting the
+# custom scheme — while the app is already running just spawns a genuinely separate SECOND
+# process instead of an event the first one can react to. `deep-link` feature makes it hand the
+# already-running instance's argv off through tauri-plugin-deep-link's own event first, ahead of
+# this plugin's own callback. See docs/windows-port.md G4 for the research this is based on.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

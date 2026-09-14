@@ -5,7 +5,7 @@
       {
         "label": "main",
         "title": "Chromasmith",
-        "url": "https://cs.localhost/index.html",
+        "url": "http://cs.localhost/index.html",
         "width": 1440,
         "height": 900,
         "maximized": true,
