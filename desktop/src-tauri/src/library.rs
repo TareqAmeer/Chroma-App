@@ -530,6 +530,16 @@ pub(crate) fn get_thumbnail_inner(path: String) -> Result<Vec<u8>, String> {
     // pixel before downsizing while ImageIO decodes at a reduced DCT scale. RAW deliberately does
     // NOT come through here: rawler's embedded-preview path is already fast (97-175ms) and is the
     // one that applies the camera's own rendering. See fastthumb.rs's header for the numbers.
+    #[cfg(windows)]
+    {
+        let ext = ext_lower(Path::new(&path));
+        if !is_raw_ext(&ext) && is_image_ext(&ext) {
+            if let Some(bytes) = crate::winthumb::thumbnail_jpeg(&path, 360) {
+                write_cache_atomic(&cache_path, &bytes, mtime, size);
+                return Ok(bytes);
+            }
+        }
+    }
     #[cfg(target_os = "macos")]
     {
         let ext = ext_lower(Path::new(&path));
@@ -797,6 +807,18 @@ fn quicklook_preview_bytes_at(path: &str, long_edge: u32) -> Result<Vec<u8>, Str
             .map_err(|e| format!("jpeg encode: {e}"))?;
         return Ok(out.into_inner());
     }
+    #[cfg(windows)]
+    {
+        if !is_video_ext(&ext) && is_image_ext(&ext) && !is_heic_ext(&ext) {
+            if let Some(bytes) = crate::winthumb::thumbnail_jpeg(path, long_edge) {
+                return Ok(bytes);
+            }
+        }
+        // No HEIC fallback here (unlike macOS's sips shell-out below) — Windows only decodes
+        // HEIC at all with the optional Store HEIF/HEVC extensions installed, and there is no
+        // bundled/guaranteed decoder to shell out to the way sips is guaranteed present on
+        // macOS. Falls through to still_decode below, which fails cleanly for HEIC it can't read.
+    }
     #[cfg(target_os = "macos")]
     {
         if !is_video_ext(&ext) && is_image_ext(&ext) && !is_heic_ext(&ext) {
@@ -903,6 +925,16 @@ pub(crate) fn decode_rgb8_capped(path: &str, long_edge: u32) -> Result<(Vec<u8>,
         let rgb = thumb.to_rgb8();
         let (w, h) = rgb.dimensions();
         return Ok((rgb.into_raw(), w, h));
+    }
+    #[cfg(windows)]
+    {
+        if !is_video_ext(&ext) && is_image_ext(&ext) && !is_heic_ext(&ext) {
+            if let Some(bytes) = crate::winthumb::thumbnail_jpeg(path, long_edge) {
+                let img = image::load_from_memory(&bytes).map_err(|e| format!("thumb decode: {e}"))?.to_rgb8();
+                let (w, h) = img.dimensions();
+                return Ok((img.into_raw(), w, h));
+            }
+        }
     }
     #[cfg(target_os = "macos")]
     {

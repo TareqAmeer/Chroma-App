@@ -52,6 +52,8 @@ mod tiff_meta;
 mod gainmap;
 #[cfg(target_os = "macos")]
 mod fastthumb;
+#[cfg(windows)]
+mod winthumb;
 #[cfg(target_os = "macos")]
 mod videothumb;
 mod subject;

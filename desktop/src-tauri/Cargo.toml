@@ -180,6 +180,12 @@ windows = { version = "0.58", features = [
     # sequence (Microsoft KB165721), which needs DeviceIoControl + its IOCTL/FSCTL codes.
     "Win32_System_Ioctl",
     "Win32_System_IO",
+    # winthumb.rs's WIC thumbnail decode: CreateStreamOnHGlobal (a growable in-memory IStream
+    # for the encoded JPEG output) and STATSTG/STATFLAG_NONAME (IStream::Stat, to size the read-
+    # back buffer) live in these two distinctly-named "StructuredStorage" modules — not the same
+    # one, despite the identical last path segment.
+    "Win32_System_Com_StructuredStorage",
+    "Win32_Storage_StructuredStorage",
 ] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
