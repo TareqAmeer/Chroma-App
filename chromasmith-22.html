@@ -330,10 +330,16 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
    one rule covers WebKit and Gecko; --p is written by fxSliderPaint() on input. */
 .fx-slider{order:3;flex:1 1 100%;width:100%;cursor:pointer;margin-top:3px;-webkit-appearance:none;appearance:none;
   height:var(--ctl-slider-thumb);background:transparent}
+/* --sl-def-pct marks each slider's OWN starting/default value (not a fixed 50% midpoint —
+   e.g. Deconv Radius defaults to 20%, RAW Sharpen to 40%) with a thin pointer, on top of the
+   existing fill layer, so you can always see where "back to default" sits and how far a drag
+   has moved from it. Written by fxPaintSlider(). */
 .fx-slider::-webkit-slider-runnable-track{height:var(--ctl-slider-track);border-radius:2px;
-  background:linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--sl-fill,var(--mut)) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
+  background:linear-gradient(to right,transparent calc(var(--sl-def-pct,0%) - 1px),var(--txt) calc(var(--sl-def-pct,0%) - 1px),var(--txt) calc(var(--sl-def-pct,0%) + 1px),transparent calc(var(--sl-def-pct,0%) + 1px)),
+    linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--sl-fill,var(--mut)) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
 .fx-slider::-moz-range-track{height:var(--ctl-slider-track);border-radius:2px;
-  background:linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--sl-fill,var(--mut)) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
+  background:linear-gradient(to right,transparent calc(var(--sl-def-pct,0%) - 1px),var(--txt) calc(var(--sl-def-pct,0%) - 1px),var(--txt) calc(var(--sl-def-pct,0%) + 1px),transparent calc(var(--sl-def-pct,0%) + 1px)),
+    linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--sl-fill,var(--mut)) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
 .fx-slider::-webkit-slider-thumb{-webkit-appearance:none;width:var(--ctl-slider-thumb);height:var(--ctl-slider-thumb);border-radius:var(--ctl-square-radius);margin-top:calc((var(--ctl-slider-track) - var(--ctl-slider-thumb)) / 2);
   background:var(--sur);border:var(--bw-3) solid var(--txt);box-shadow:none;cursor:grab;transform:rotate(var(--sl-roll,0deg));transition:transform var(--dur-1) linear}
 .fx-slider::-moz-range-thumb{width:var(--ctl-slider-thumb);height:var(--ctl-slider-thumb);border-radius:var(--ctl-square-radius);border:var(--bw-3) solid var(--txt);
@@ -1980,7 +1986,8 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
            tacked-on sub-section (matches the Lens Correction card's pattern: a plain title, no
            enable toggle — it's driven by the sliders being >0, same as Lens). -->
       <div class="fx-ctrl" data-fxsec="nr">
-        <div class="fx-ctrl-title">Noise Reduction</div>
+        <div class="fx-ctrl-title">Noise Reduction <div class="fx-toggle on" id="tg-nr" onclick="toggleFX('nr')"></div></div>
+        <div class="fx-fields" id="ff-nr">
         <div class="fx-row">
           <div class="fx-label">RAW Noise Reduction <button class="fx-info-i" title="Off: untouched decode. Fast (default): the native Rust-side shadow + chroma-wavelet denoise on linear RAW data, before any tone curve — a few seconds, applies automatically. High: additionally runs a neural (RawNIND UtNet2) denoiser, 25–90s at 24MP — never automatic; press &quot;Denoise now&quot; below, or it runs once at export if selected. Requires reopening this photo (or Denoise now) to take effect. Desktop/RAW only.">i</button></div>
           <select id="sel-raw-nr" onchange="fxRawNrChanged(this.value)" style="display:none"><option value="off">Off</option><option value="fast" selected>Fast</option><option value="high">High</option></select>
@@ -2007,18 +2014,24 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="fx-row" title="Capture sharpening — RAW photos default to 40 on load/reset (moved here so it survives Reset independently of the general Adjust sliders)."><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp">0</div></div>
         <div class="fx-row nr-gated" id="row-nr-hldesat"><div class="fx-label">Highlight Desaturation <button class="fx-info-i" title="Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes. Since real highlight color is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real color in bright areas too at high amounts. Per-photo only, so it never touches other images.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="nr-gate-hint">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
+        </div>
       </div>
       <!-- DECONVOLUTION SHARPENING (ROADMAP.md R6) — models the lens/sensor blur as a small
            Gaussian PSF and inverts it with a few iterations of damped Richardson-Lucy, unlike
-           the unsharp-mask Sharpen above which only boosts existing edge contrast. Driven by
-           Amount>0, same pattern as the Lens/NR cards (no enable toggle). -->
+           the unsharp-mask Sharpen above which only boosts existing edge contrast. Master toggle
+           defaults to on (matches the pre-existing Amount>0-driven behavior byte-for-byte for
+           anyone who already had it dialed in); getFXParams() zeroes Amount when switched off,
+           same mechanism the Amount>0 gate in render() already used, so render()/the shader
+           needed no change. -->
       <div class="fx-ctrl" data-fxsec="deconv">
-        <div class="fx-ctrl-title">Deconvolution</div>
+        <div class="fx-ctrl-title">Deconvolution <div class="fx-toggle on" id="tg-deconv" onclick="toggleFX('deconv')"></div></div>
+        <div class="fx-fields" id="ff-deconv">
         <div class="fx-hint">Recovers real detail lost to lens/sensor blur (Richardson-Lucy),
           instead of just boosting edge contrast like Sharpen. Push Amount too far and you'll
           see ringing (dark/light halos) at hard edges — that's the real algorithm, not a bug.</div>
         <div class="fx-row" title="Blend between the original and the deconvolved result."><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-deconv-amt" oninput="fxUpdate()"><div class="fx-val" id="vl-deconv-amt">0</div></div>
         <div class="fx-row" title="Size of the assumed lens/sensor blur (Gaussian PSF) to invert."><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-deconv-rad" oninput="fxUpdate()"><div class="fx-val" id="vl-deconv-rad">20</div></div>
+        </div>
       </div>
       <!-- TONE CURVES -->
       <div class="fx-ctrl" data-fxsec="curves">
@@ -2149,9 +2162,9 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       </div>
       <!-- LENS CORRECTION -->
       <div class="fx-ctrl" data-fxsec="lens">
-        <div class="fx-ctrl-title">Lens Correction</div>
+        <div class="fx-ctrl-title">Lens Correction <div class="fx-toggle" id="tg-lens-auto" onclick="this.classList.toggle('on');fxLensAutoToggled()"></div></div>
         <div class="fx-row">
-          <div class="fx-label">Auto (lens profile) <button class="fx-info-i" title="Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.">i</button></div><div class="fx-toggle" id="tg-lens-auto" onclick="this.classList.toggle('on');fxLensAutoToggled()"></div>
+          <div class="fx-label">Auto (lens profile) <button class="fx-info-i" title="Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.">i</button></div>
         </div>
         <div id="lens-auto-status" style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);line-height:1.5;margin:2px 0 8px"></div>
         <!-- Manual/adapted lenses (TTArtisan and similar mechanical-only optics) write NO lens
@@ -10346,9 +10359,13 @@ function applyRawDefaults(){
   const col=document.getElementById('sl-nr-col'),sharp=document.getElementById('sl-adj-sharp');
   const vCol=document.getElementById('vl-nr-col'),vSharp=document.getElementById('vl-adj-sharp');
   let applied=false;
-  if(col&&adjVal('sl-nr-col')===0){col.value=25;if(vCol)vCol.textContent='25';applied=true;}
-  if(sharp&&adjVal('sl-adj-sharp')===0){sharp.value=40;if(vSharp)vSharp.textContent='40';applied=true;}
+  // .defaultValue (not just .value) is set too — fxPaintSlider anchors the "flat, unrotated"
+  // thumb position and the fill-from-default marker on .defaultValue, and this new resting
+  // point IS the default for a RAW photo, not the 0 the static markup ships for every other kind.
+  if(col&&adjVal('sl-nr-col')===0){col.value=25;col.defaultValue=25;if(vCol)vCol.textContent='25';applied=true;}
+  if(sharp&&adjVal('sl-adj-sharp')===0){sharp.value=40;sharp.defaultValue=40;if(vSharp)vSharp.textContent='40';applied=true;}
   if(applied)log('RAW defaults applied (Color NR 25, Sharpen 40)','info');
+  if(applied&&typeof fxPaintAllSliders==='function')fxPaintAllSliders();
 }
 
 // ══ TONE CURVES — master + R/G/B point curves, monotone cubic, baked to a 256×1 LUT ══
@@ -16066,7 +16083,7 @@ const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-w
   'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-canvas-z','sl-vig','sl-exp-q'];
-const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-wheels','tg-pointcolor','tg-local','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
+const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-wheels','tg-pointcolor','tg-local','tg-nr','tg-deconv','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
 const _SESS_SELECTS=['sel-input','sel-tonemap','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt','sel-exp-size','sel-exp-sharp'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(quiet){
@@ -16523,12 +16540,17 @@ function getFXParams(adjValsOverride){return{
   adjust:computeAdjustBlock(adjValsOverride),
   // Noise reduction runs on the RAW source before the LUT — independent of the Adjust toggle,
   // active whenever Luminance or Color > 0 (both default 0 → off → byte-identical default path).
-  nr:{luma:adjVal('sl-nr-lum')/100, color:adjVal('sl-nr-col')/100, detail:adjVal('sl-nr-det')/100, hlDesat:adjVal('sl-nr-hldesat')/100},
+  // tg-nr defaults to "on" in the markup, so this is unchanged for anyone who already had it
+  // dialed in; switching it off zeroes luma/color/hlDesat, which render()'s existing
+  // luma>0||color>0||hlDesat>0 gate already treats as fully off — no render()/shader change needed.
+  nr:(function(){const on=!(document.getElementById('tg-nr')&&!document.getElementById('tg-nr').classList.contains('on'));
+    return{luma:(on?adjVal('sl-nr-lum'):0)/100, color:(on?adjVal('sl-nr-col'):0)/100, detail:adjVal('sl-nr-det')/100, hlDesat:(on?adjVal('sl-nr-hldesat'):0)/100};})(),
   // ROADMAP.md R6 — deconvolution sharpening (damped Richardson-Lucy). amount 0..1 (Amount
   // slider is 0-100), radius in reference-image pixels (Radius slider 0-100 -> 0-8px, see the
   // shader-side clamp in render()). Both default 0/1.5 -> amount 0 means the whole pass is
-  // skipped (see render()'s dcAmt>0 gate), so this key is safe to always compute.
-  deconv:{amount:adjVal('sl-deconv-amt')/100, radius:1.5+(adjVal('sl-deconv-rad')/100)*6.5},
+  // skipped (see render()'s dcAmt>0 gate), so this key is safe to always compute. tg-deconv
+  // defaults to "on" (same rationale as tg-nr above); off just zeroes amount.
+  deconv:{amount:((!(document.getElementById('tg-deconv')&&!document.getElementById('tg-deconv').classList.contains('on')))?adjVal('sl-deconv-amt'):0)/100, radius:1.5+(adjVal('sl-deconv-rad')/100)*6.5},
   // Lens correction: manual-only (no per-lens profile database — see the shader comment for
   // why). dist/vig/ca in -0.5..0.5, small enough that the single-term radial model stays
   // well-behaved at the frame corners.
@@ -16994,12 +17016,20 @@ function fxPaintSlider(sl){
   // Treat as bipolar only when the range is genuinely symmetric about zero (-100..100, -50..50).
   // A 0..100 or 25..800 control is unipolar and must still fill from its own start.
   const bi=min<0&&max>0&&Math.abs(Math.abs(min)-Math.abs(max))<1e-6;
-  const from=bi?pct(0):0,to=pct(v);
+  // Anchor point: the slider's OWN resting/default value, not always 0 or min — Deconv Radius
+  // defaults to 20, RAW Sharpen to 40 (see fxRawNrChanged, which also updates .defaultValue so
+  // this stays correct after that runtime default is applied). sl.defaultValue mirrors the
+  // element's `value=` attribute (or a later explicit .defaultValue write); every .fx-slider
+  // ships one, so the bipolar/min fallback below only covers a row built without one.
+  const defRaw=parseFloat(sl.defaultValue);
+  const def=isFinite(defRaw)?Math.min(max,Math.max(min,defRaw)):(bi?0:min);
+  const from=pct(Math.min(def,v)),to=pct(Math.max(def,v));
   sl.classList.toggle('fx-slider-bi',bi);
-  sl.style.setProperty('--fillA',Math.min(from,to)+'%');
-  sl.style.setProperty('--fillB',Math.max(from,to)+'%');
+  sl.style.setProperty('--fillA',from+'%');
+  sl.style.setProperty('--fillB',to+'%');
+  sl.style.setProperty('--sl-def-pct',pct(def)+'%');
   const roll=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ctl-slider-roll'))||6;
-  sl.style.setProperty('--sl-roll',((v-(bi?0:min))*roll)+'deg');
+  sl.style.setProperty('--sl-roll',((v-def)*roll)+'deg');
 }
 function fxPaintAllSliders(root){(root||document).querySelectorAll('input.fx-slider[type=range]').forEach(fxPaintSlider);}
 // Delegated so dynamically-built rows need no wiring. `input` does not bubble from all engines'
@@ -21069,16 +21099,6 @@ function buildToolRail(){        // desktop vertical labelled rail
     b.onclick=()=>fxSection(bKey);
     rail.appendChild(b);
   });
-  // Foot: narrow the rail a step (labels -> icons) and put them back. Rebuilt with the rail, so
-  // it can't outlive a layout change that drops the rail entirely.
-  if(dx){
-    const foot=document.createElement('div');foot.id='fx-rail-foot';
-    const fb=document.createElement('button');fb.className='fx-rail-btn';
-    fb.innerHTML=`<span class="fx-rail-ic">${icon('chevleft',22)}</span><span class="fx-rail-lb">Narrow</span>`;
-    fb.onclick=()=>railMode(document.body.classList.contains('rail-icons')?'labels':'icons');
-    foot.appendChild(fb);rail.appendChild(foot);
-    railSyncFoot();
-  }
   fxSection(_activeSec()||(window.__TAURI__?'looks':'image'),true);
   syncSectionEnabled();
 }
@@ -21873,7 +21893,13 @@ document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(card=>{
   title.insertBefore(chev,title.firstChild);
   if(_fxSecCollapsed[card.dataset.fxsec])card.classList.add('fx-sec-collapsed');
   title.addEventListener('click',(e)=>{
-    if(e.target.closest('.fx-toggle,.fx-ctrl-title-reset,.fx-toggle-lb,button,input,select'))return;
+    // The "|" separator between Reset and All (.fx-ctrl-title-reset-sep) sits between the two
+    // buttons with its own horizontal padding and isn't itself a button/toggle, so a click that
+    // lands on it (easy to do — the two controls sit close together) used to fall through this
+    // guard and collapse the section instead of doing nothing. .fx-title-right (the cluster
+    // wrapping both buttons + the separator) is the real hit-target for "clicked in the Reset/All
+    // area at all" rather than enumerating each control inside it.
+    if(e.target.closest('.fx-toggle,.fx-title-right,.fx-toggle-lb,button,input,select'))return;
     fxSecToggle(card);
   });
 });
