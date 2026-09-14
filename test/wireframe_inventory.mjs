@@ -454,6 +454,16 @@ for (const pair of SELECTED_PAIRS) {
   if (pair.app.color === pair.app.ground) findings.push(`[colors] ${pair.label}: selected-row text colour equals its own background`);
 }
 
+// The topbar's flag-row icon buttons (#lib-top .lib-btn-icon's first DOM match) are `disabled`
+// — and therefore `pointer-events:none` — until at least one photo is selected. Left unselected,
+// the "topbar icon button" hover check below always measured a genuinely un-hoverable disabled
+// control and reported a 0.0/255 lift no CSS fix could ever satisfy — not a real hover-visibility
+// defect, just a fixture gap. A plain click (not double-click/force-press) on a grid card selects
+// it without opening the Editor (handleCardClick's `selectIt` path), which is exactly the "select,
+// don't open" state real usage puts the app in before anyone would hover that button anyway.
+await app.click('#lib-grid .lib-card:first-child', { timeout: 2000 }).catch(() => {});
+await app.waitForTimeout(80);
+
 // ── Hover, asserted as a MEASURED delta on every interactive row family ──────
 const HOVER_TARGETS = [
   { label: 'sidebar collection row', wf: '.sidebar .row:not(.sel)', app: '.lib-coll-row:not(.on)' },

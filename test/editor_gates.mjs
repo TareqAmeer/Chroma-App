@@ -40,7 +40,7 @@
 // didn't, and it's the one wired into `npm test` and the pre-commit hook. Now this always runs
 // build-desktop.sh first and fails loudly (before any gate) if the build itself is broken,
 // rather than letting every gate below quietly grade stale HTML.
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 
 const build = spawnSync('bash', ['build-desktop.sh'], { encoding: 'utf8' });
 if (build.status !== 0) {
@@ -313,21 +313,38 @@ const verbose = process.argv.includes('--verbose');
 const jobsArg = process.argv.find((a) => a.startsWith('--jobs='));
 const CONCURRENCY = jobsArg ? Math.max(1, parseInt(jobsArg.slice('--jobs='.length), 10) || 4) : 4;
 
+// ⚠️ Was spawnSync — inside an `await runGate(...)` in each of the 4 `worker()` loops below, that
+// blocks Node's ONE event loop for the child's entire lifetime. Since JS is single-threaded, only
+// one spawnSync call can ever be "in flight" at a time: while worker #1 sits inside spawnSync
+// waiting on gate A's Chromium/Playwright process, workers #2-4 cannot even START their own
+// spawnSync call — their `await` just queues behind it. So CONCURRENCY never did anything; every
+// run was exactly as sequential as the pre-worker-pool version this file's own top comment says
+// took "15-20 minutes wall-clock," just with the illusion of a pool. This surfaced as an apparent
+// hang in the pre-commit hook: editor:wireframe-diff's own "attempt 1 failed — retrying" sat with
+// no further output for 7-13 minutes, which read as stuck — it wasn't; the other ~29 gates ahead
+// of it in the fake pool were quietly running one at a time first, with nothing printed until a
+// gate finishes. Confirmed live: node test/editor_wireframe_diff.mjs run standalone completed in
+// ~27s with no hang. Real `spawn` (async, non-blocking on the parent's event loop) lets the 4
+// workers' child processes actually run concurrently, restoring the wall-clock win this file was
+// written to get in the first place.
 function runGate(gate) {
   return new Promise((resolve) => {
     const attempts = gate.retries || 1;
     let used = 0;
     const tryOnce = () => {
       used += 1;
-      const r = spawnSync(gate.cmd[0], gate.cmd.slice(1), { encoding: 'utf8' });
-      const out = `${r.stdout || ''}${r.stderr || ''}`;
-      const code = r.status ?? 1;
-      if (code !== 0 && used < attempts) {
-        console.log(`  ${gate.name}: attempt ${used} failed — retrying (see E7 in editor_ux_spec.json)`);
-        tryOnce();
-        return;
-      }
-      resolve({ name: gate.name, ok: code === 0, attempts: used, out });
+      const child = spawn(gate.cmd[0], gate.cmd.slice(1), { stdio: ['ignore', 'pipe', 'pipe'] });
+      let out = '';
+      child.stdout.on('data', (d) => { out += d; });
+      child.stderr.on('data', (d) => { out += d; });
+      child.on('close', (code) => {
+        if (code !== 0 && used < attempts) {
+          console.log(`  ${gate.name}: attempt ${used} failed — retrying (see E7 in editor_ux_spec.json)`);
+          tryOnce();
+          return;
+        }
+        resolve({ name: gate.name, ok: code === 0, attempts: used, out });
+      });
     };
     tryOnce();
   });

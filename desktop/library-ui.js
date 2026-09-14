@@ -988,6 +988,14 @@
     /* HANDOVER §8 item #7: the shared .lib-btn base rule gives every button a 1px border; the
        wireframe's .flagbtn has none at all (hover background only, Library View.html:64-65). */
     .lib-flagrow .lib-btn-icon{border:none;background:none}
+    /* The rule above's unconditional background:none has equal specificity to, and comes after,
+       the shared .lib-btn:hover rule — so hover was silently swallowed with no feedback at all
+       (wireframe_inventory's hover-visibility check caught this: 0.0/255 lift, backlog #5
+       follow-up). Needs its own :hover, same --hover-tint every other ghost-style Library control
+       (.lib-pill, .lib-chip) already uses — matches Library View.html:65's intent (background
+       only on hover) without reusing --surface-alt, a token this file uses for a different role
+       (the statusbar's own background, not a hover tint). */
+    .lib-flagrow .lib-btn-icon:hover{background:var(--hover-tint)}
     /* UI_SPEC.md #1: never a raw hex — the flag/pick/favorite glyphs are the DS's own semantic
        state tokens (oxide/pine/ember), not the app's pre-existing hand-picked hex triad. */
     #lib-flag-reject svg{stroke:var(--red-oxide)}
