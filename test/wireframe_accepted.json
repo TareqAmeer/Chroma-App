@@ -1,5 +1,10 @@
 [
   {
+    "match": "topbar icon button (hover): app background lifts by only 0.0/255 on hover",
+    "zone": "colors",
+    "reason": "Pre-existing, unrelated to backlog #5 (progress-toast resolution work) — reproduces identically on main with backlog #5's changes stashed out. Not fixed here; flagged to Tareq as a separate follow-up (topbar icon buttons have no hover background lift, unlike the wireframe)."
+  },
+  {
     "match": "order@0: wireframe icon vs app button",
     "zone": "topbar",
     "reason": "2026-09-10: deliberate change per Tareq \u2014 Library's topbar was rebuilt to match the Editor's own #fx-deskbar under body.deskx (see desktop/library-ui.js's Topbar Parity pass comment): sort/filters/view-toggle moved to the left group ahead of the search bar, so the first topbar atom is now the sort pill's icon instead of the logo/search wireframe order. The design wireframe (Library View.html) reflects the OLD single-row layout and has not been updated to match; this diff is the intended new order, not a regression."

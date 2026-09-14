@@ -120,7 +120,7 @@
       "depends_on": [],
       "acceptance": "No-photo state has no active destructive or export actions; selection state exposes the correct actions and counts.",
       "source_id": 34,
-      "completion_evidence": "desktop/library-ui.js: added syncLibActionButtons() (near syncLibFlagRow, ~L6508) that disables #lib-flag-reject/#lib-flag-fav/#lib-flag-pick when no photo is open (state.openedPath empty) and #lib-export-btn/#lib-allfx-btn when nothing can act (cmKbTargets() empty: no selection, no keyboard cursor, no open photo); wired into renderGridTail, updateCardSelClasses, openEditInHandoff and the flag-button click handlers so it tracks selection/open-photo changes. Added .lib-btn:disabled CSS (opacity .4, no pointer events) using only existing --sur2/--bdr/--txt tokens, no new values. The pre-existing lib-batchbar (>=2 selected) already showed correct counts/actions and was left unchanged. Verified live via desktop/dist build served from a staged /tmp copy (?libtest=1): fresh load / nothing selected -> all five buttons disabled; single click selects (no open) -> Export/All FX enable, flag row stays disabled (rates the open photo only, unchanged prior behavior); second click opens the photo -> flag row also enables. npm run ui:test shows the same pre-existing unrelated failures (export@ TAP, looks@ CONTRAST) with and without this change \u2014 no new regressions."
+      "completion_evidence": "desktop/library-ui.js: added syncLibActionButtons() (near syncLibFlagRow, ~L6508) that disables #lib-flag-reject/#lib-flag-fav/#lib-flag-pick when no photo is open (state.openedPath empty) and #lib-export-btn/#lib-allfx-btn when nothing can act (cmKbTargets() empty: no selection, no keyboard cursor, no open photo); wired into renderGridTail, updateCardSelClasses, openEditInHandoff and the flag-button click handlers so it tracks selection/open-photo changes. Added .lib-btn:disabled CSS (opacity .4, no pointer events) using only existing --sur2/--bdr/--txt tokens, no new values. The pre-existing lib-batchbar (>=2 selected) already showed correct counts/actions and was left unchanged. Verified live via desktop/dist build served from a staged /tmp copy (?libtest=1): fresh load / nothing selected -> all five buttons disabled; single click selects (no open) -> Export/All FX enable, flag row stays disabled (rates the open photo only, unchanged prior behavior); second click opens the photo -> flag row also enables. npm run ui:test shows the same pre-existing unrelated failures (export@ TAP, looks@ CONTRAST) with and without this change — no new regressions."
     },
     {
       "id": 2,
@@ -178,13 +178,16 @@
       "priority": "P0",
       "cluster": "work-progress",
       "title": "Make progress notices resolve into completion or failure",
-      "status": "backlog",
+      "status": "done",
       "recommended_executor": "Codex",
       "model": "codex:gpt-5.6-terra",
       "reference": "sonner",
       "depends_on": [],
       "acceptance": "Progress updates advance and resolve; completion and failure are announced accessibly and do not remain stale.",
-      "source_id": 69
+      "source_id": 69,
+      "owner": "Claude (Sonnet 5)",
+      "completion_evidence": "Added a pinned toastProgress(msg) API to chromasmith-22.html's toast engine that stays open with a pulsing indicator until update()/resolve()/fail() is called, instead of the old fire-and-forget toast() timing out on a fixed 1.9s/3.4s clock regardless of whether the underlying operation was still running. Added role=status/aria-live=polite/aria-atomic to the shared toast element so completion and failure are announced to assistive tech, not just shown visually. In desktop/library-ui.js, converted the collage build, HDR merge, focus stack, astro stack, panorama stitch, and recursive subfolder-scan progress toasts (previously separate toast() calls that could go stale mid-op) to toastProgress(), each resolving to a completion or failure message when its invoke() settles. Verified with node test/export_harness.mjs (30/30 renders, no GLSL compile errors) and npm run ui:test — the remaining ui_audit failures (TAP/CONTRAST/PARITY-MISSING) are pre-existing and unrelated, confirmed identical with the change stashed out.",
+      "notes": "Scoped to explicit start/end progress toasts (collage/HDR/focus/astro/pano merges, subfolder scan). Left selectAllCatalogEntries()'s \"Loading all N photos…\" toast alone — it has no matching failure/success pair today and adding one was out of scope for this item."
     },
     {
       "id": 6,

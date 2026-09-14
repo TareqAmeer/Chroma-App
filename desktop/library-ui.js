@@ -3933,6 +3933,11 @@
     let queue = [rootPath];
     let dirsWalked = 0;
     let capHit = false;
+    // Pinned for the life of the walk instead of a fresh toast() every 50 dirs — the old form
+    // let each progress pill time out on its own 1.9s clock regardless of whether the walk was
+    // still running, so on a slow tree the pill would read "Scanning… 50 folders" long after the
+    // walk had moved past 200 (backlog #5). update() just replaces the same pill's text.
+    const prog = toastProgress('Scanning subfolders…');
     // Fire one update BEFORE the first batch even starts. The boot splash's watchdog
     // (chromasmith-22.html's bumpBootSplashWatchdog) force-hides the splash if nothing bumps it
     // within its grace period — if the first slow stretch of this walk (a contended external
@@ -3965,11 +3970,12 @@
       if (typeof updateBootSplashProgress === 'function') {
         updateBootSplashProgress({ phase: 'subfolders', done: collected.length, total: 0, current: '' });
       }
-      if (dirsWalked % 50 < SUBFOLDER_WALK_CONCURRENCY && typeof toast === 'function') {
-        toast(`Scanning subfolders… ${dirsWalked} folders, ${collected.length} photos found`, true);
+      if (dirsWalked % 50 < SUBFOLDER_WALK_CONCURRENCY) {
+        prog.update(`Scanning subfolders… ${dirsWalked} folders, ${collected.length} photos found`);
       }
     }
-    if (capHit && typeof toast === 'function') toast(`Stopped after ${SUBFOLDER_WALK_CAP} subfolders — this tree is unusually large`, false);
+    if (capHit) prog.fail(`Stopped after ${SUBFOLDER_WALK_CAP} subfolders — this tree is unusually large`);
+    else prog.resolve(`Found ${collected.length} photo${collected.length === 1 ? '' : 's'} in ${dirsWalked} subfolder${dirsWalked === 1 ? '' : 's'}`);
     return collected;
   }
   // Loads thumbnails STRAIGHT INTO `_thumbCache` (thumbCachePut, the same LRU the ordinary grid
@@ -4627,10 +4633,10 @@
     const n = paths.length;
     const tpl = await collageTemplateModal(n);
     if (!tpl) return;
-    toast(`Building collage from ${n} photos…`);
+    const prog = toastProgress(`Building collage from ${n} photos…`);
     try {
       const files = await readPathsAsFiles(paths);
-      if (!files.length) { toast('Could not read any of the selected photos', 'err'); return; }
+      if (!files.length) { prog.fail('Could not read any of the selected photos'); return; }
       const okPaths = files.okPaths || paths;
       const bitmaps = await Promise.all(files.map((f) => createImageBitmap(f)));
       const CW = 3200;
@@ -4658,10 +4664,10 @@
       const bytes = new Uint8Array(await blob.arrayBuffer());
       const outPath = await invoke('collage_output_path', { firstSource: okPaths[0] });
       await invoke('write_file_bytes', { path: outPath, dataB64: bytesToBase64(bytes) });
-      toast('Collage saved — added to library');
+      prog.resolve('Collage saved — added to library');
       refreshView();
       openInEditor(outPath);
-    } catch (e) { toast(humanizeErr('create collage', e), 'err'); }
+    } catch (e) { prog.fail(humanizeErr('create collage', e)); }
   }
 
   // Shared batch-open: reads paths, loads them into the editor, and registers each in Recents
@@ -5030,48 +5036,48 @@
     // unaudited one) below the photo count each merge needs.
     const mergeMenu = submenu('Merge into (beta)'); // 3.2.3: HDR/focus/astro/panorama/collage merge is new/unproven enough to flag
     const mergeHdrItem = mergeMenu.subItem('Merge exposures (HDR)…', async () => {
-      toast(`Merging ${n} exposures…`);
+      const prog = toastProgress(`Merging ${n} exposures…`);
       try {
         const outPath = await invoke('merge_hdr_photos', { paths });
-        toast('HDR merge saved — added to library');
+        prog.resolve('HDR merge saved — added to library');
         refreshView();
         openInEditor(outPath);
-      } catch (e) { toast(humanizeErr('merge exposures', e), 'err'); }
+      } catch (e) { prog.fail(humanizeErr('merge exposures', e)); }
     });
     const mergeFocusItem = mergeMenu.subItem('Focus stack…', async () => {
-      toast(`Stacking ${n} photos…`);
+      const prog = toastProgress(`Stacking ${n} photos…`);
       try {
         const outPath = await invoke('merge_focus_photos', { paths });
-        toast('Focus stack saved — added to library');
+        prog.resolve('Focus stack saved — added to library');
         refreshView();
         openInEditor(outPath);
-      } catch (e) { toast(humanizeErr('focus stack', e), 'err'); }
+      } catch (e) { prog.fail(humanizeErr('focus stack', e)); }
     });
     // ── Astro stacking (ROADMAP R13 part 2) — same batch-action shape as HDR/focus above,
     // reusing merge.rs's translation-only aligner + a new per-pixel mean/median blend.
     const mergeAstroItem = mergeMenu.subItem('Astro stack…', async () => {
       const mode = await astroStackModeModal();
       if (!mode) return;
-      toast(`Stacking ${n} photos (${mode})…`);
+      const prog = toastProgress(`Stacking ${n} photos (${mode})…`);
       try {
         const outPath = await invoke('merge_astro_photos', { paths, mode });
-        toast('Astro stack saved — added to library');
+        prog.resolve('Astro stack saved — added to library');
         refreshView();
         openInEditor(outPath);
-      } catch (e) { toast(humanizeErr('astro stack', e), 'err'); }
+      } catch (e) { prog.fail(humanizeErr('astro stack', e)); }
     });
     // ── Panorama (ROADMAP R13 part 3) — SCOPED to exactly 2 photos (see merge.rs's `pano`
     // module doc for why: a real similarity-transform aligner, validated on a known synthetic
     // transform, but not full feature-matching stitching — 3+ photos would need pairwise
     // chaining this pass didn't build). Only enabled at exactly 2 selected, not just >=2.
     const mergePanoItem = mergeMenu.subItem('Stitch panorama (2 photos)…', async () => {
-      toast('Stitching panorama…');
+      const prog = toastProgress('Stitching panorama…');
       try {
         const outPath = await invoke('merge_panorama_photos', { paths });
-        toast('Panorama saved — added to library');
+        prog.resolve('Panorama saved — added to library');
         refreshView();
         openInEditor(outPath);
-      } catch (e) { toast(humanizeErr('stitch panorama', e), 'err'); }
+      } catch (e) { prog.fail(humanizeErr('stitch panorama', e)); }
     });
     // ── Collage (ROADMAP R13 part 1) — pure client-side canvas compositing, no alignment.
     const collageItem = mergeMenu.subItem('Create collage…', () => createCollage(paths));
