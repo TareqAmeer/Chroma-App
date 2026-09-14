@@ -15,14 +15,22 @@ use tauri::{Emitter, Manager};
 // (see DIST_DIR_RESOLVED/dist_dir below, set from .setup()) instead of a compile-time constant:
 // prefers the bundled "dist" resource (declared in tauri.conf.json's bundle.resources, same
 // pattern as the onnxruntime dylib below) so a packaged .app is portable to any Mac, and falls
-// back to $CARGO_MANIFEST_DIR/dist for `cargo tauri dev` — a path relative to wherever THIS repo
-// is checked out, not hardcoded to one specific dev machine.
+// back to $CARGO_MANIFEST_DIR/../dist for `cargo tauri dev` (CARGO_MANIFEST_DIR is
+// desktop/src-tauri; the real staged output — build-desktop.mjs's target, matching
+// tauri.conf.json's own `build.frontendDist: "../dist"` — lives one level up, at desktop/dist,
+// NOT desktop/src-tauri/dist). This was wrong (missing the `../`) for who knows how long without
+// being noticed: this app's actual mac dev-iteration loop is `npm run preview`
+// (test/preview_server.mjs), not `cargo tauri dev` — see build-desktop.sh's own comment on why —
+// so the dev_fallback branch here almost never actually ran; `install-app.sh` builds a real
+// release bundle instead, where the CORRECT "bundled" branch above is what gets exercised. Found
+// live, the hard way, the first time this port actually ran `cargo tauri dev` on Windows: it
+// 404'd on literally every asset, including index.html itself.
 static DIST_DIR_RESOLVED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 fn dist_dir() -> PathBuf {
     DIST_DIR_RESOLVED
         .get()
         .cloned()
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("dist"))
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../dist"))
 }
 
 mod platform;
@@ -2290,7 +2298,18 @@ fn main() {
             // Standard.dcp") but std::fs::read needs the literal decoded path. Forgetting this
             // silently 404s every asset whose name needs encoding.
             let path = percent_decode(raw_path);
-            let full = format!("{}/{path}", dist_dir().display());
+            // Path::join, NOT a manually formatted "{dir}/{path}" string — the real bug behind
+            // this whole handler 404ing on Windows (docs/windows-port.md G21). Win32's "\\?\"
+            // verbatim-path prefix (which `dist_dir()` can carry — Tauri's `resource_dir()`
+            // returns one) disables ALL of the OS's normal path parsing, including treating "/"
+            // as a separator: a forward slash inside a "\\?\" path is a LITERAL, invalid
+            // character in a filename, not a separator, so the manually concatenated string
+            // named a file that could never exist. `Path::join` builds the path as structured
+            // components instead of raw bytes, so Rust always renders the final OS string with
+            // real backslash separators regardless of the "\\?\" prefix — exactly how every
+            // OTHER resource path in this file is already built (the dylib/model resolvers
+            // below), which is why only this hand-formatted one had the bug.
+            let full = dist_dir().join(&path);
             let (body, mime, status): (Vec<u8>, String, u16) = match std::fs::read(&full) {
                 Ok(b) => (
                     b,
@@ -2365,11 +2384,20 @@ fn main() {
             }
 
             // Resolve dist_dir() once — see DIST_DIR_RESOLVED's doc comment above. Same
-            // bundled-resource-with-dev-fallback pattern as the onnxruntime dylib below.
+            // bundled-resource-with-dev-fallback pattern as the onnxruntime dylib below, EXCEPT
+            // the existence check has to test for a real FILE inside the candidate directory
+            // (index.html), not just the directory itself — every other resource fallback in this
+            // file joins a specific file's relative path before checking `.exists()`, but this one
+            // joins only "dist", the directory. On Windows (not macOS, found live during this
+            // port's first `cargo tauri dev` run), `cargo tauri dev`'s own resource staging
+            // creates a real `target/debug/dist` directory regardless of whether our own
+            // build-desktop.mjs has populated the real desktop/dist yet, so a bare `p.exists()`
+            // silently accepted an empty/wrong directory over the correct dev fallback — the
+            // whole app 404'd on every asset including index.html itself.
             let bundled_dist = handle.path().resource_dir().ok().map(|d| d.join("dist"));
             let dist = bundled_dist
-                .filter(|p| p.exists())
-                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("dist"));
+                .filter(|p| p.join("index.html").exists())
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../dist"));
             let _ = DIST_DIR_RESOLVED.set(dist);
 
             // CLI/manual-launch fallback for the Lightroom "Edit In" handoff (see PendingOpen
