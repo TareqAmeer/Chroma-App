@@ -400,10 +400,17 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
    scope selector and export quality. 28px tall so it clears the pointer-target floor the UI
    audit enforces — the old 22px was the most-clicked undersized control in the editor. */
 .seg{display:inline-flex;align-items:stretch;background:var(--sur2);border:1px solid var(--bdr);
-  border-radius:var(--r);padding:2px;gap:2px;overflow:hidden}
+  border-radius:var(--r);padding:2px;gap:2px;overflow:hidden;max-width:100%}
 .seg>button{flex:1 1 auto;min-height:28px;padding:0 var(--sp-2);border:none;border-radius:var(--r-sm);cursor:pointer;
   background:transparent;color:var(--mut);font-family:var(--sans);font-size:var(--fs-2);font-weight:500;
   white-space:nowrap;transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
+/* Masks' "Show on photo" row: 4 real words (Overlay/Isolate/Selection/Off) is wider than any
+   other .seg use in the app, and .seg's own inline-flex/overflow:hidden doesn't shrink to fit a
+   320px tool panel — it just clips, which read as the buttons overlapping/running into each
+   other. Full-width + equal shrinkable shares (flex-basis 0, not each button's own natural text
+   width) instead of the generic auto-basis every other narrower .seg still uses correctly. */
+.msk-prevmode-seg{display:flex;width:100%}
+.msk-prevmode-seg>button{flex:1 1 0;min-width:0;padding:0 4px;overflow:hidden;text-overflow:ellipsis}
 .seg>button:hover{color:var(--txt)}
 .seg>button.on{background:var(--sur);color:var(--txt);box-shadow:0 1px 2px var(--scrim-b2),inset 0 1px 0 var(--hov)}
 /* ══ MASK PANEL ══════════════════════════════════════════════════════════════════════════════ */

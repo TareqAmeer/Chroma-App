@@ -1671,7 +1671,12 @@
        padding — #lib-top itself is display:none while docked (.lib-fullview-only above), so only
        the FULL-view rule here is live; the docked-only overrides that used to follow it are dead
        code once #lib-top stopped rendering at all in dock mode, and were removed with it. */
-    body.deskx #lib-overlay #lib-top{height:44px;padding:0 12px 0 84px;-webkit-app-region:no-drag}
+    /* No -webkit-app-region:no-drag here (the topbar-parity pass that set these numbers carried
+       one over from copying the Editor's #fx-deskbar CSS) — the base #lib-top rule above already
+       sets "drag" with button/input/select exempted, and this override left the whole desktop
+       Library window undraggable-by-header on macOS (Overlay titlebar, no native drag chrome of
+       its own) whenever the Library was in full view. */
+    body.deskx #lib-overlay #lib-top{height:44px;padding:0 12px 0 84px}
     /* .full-scoped (not just body.deskx #lib-overlay #lib-top) so this never fights the
        body.deskx #lib-overlay:not(.full) .lib-fullview-only{display:none} rule above that keeps
        #lib-top hidden while DOCKED — two ids beat that rule's one, so a bare display:grid here
