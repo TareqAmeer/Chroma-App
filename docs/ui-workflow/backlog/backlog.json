@@ -144,7 +144,7 @@
       "priority": "P0",
       "cluster": "library-trust",
       "title": "Center the Library empty state around one primary action",
-      "status": "backlog",
+      "status": "done",
       "recommended_executor": "Claude Code",
       "model": "claude-code:claude-opus-5",
       "reference": "apple-ui-tips",
@@ -152,7 +152,8 @@
         2
       ],
       "acceptance": "At supported widths, the primary import action is centered, secondary action is subordinate, and labels never wrap awkwardly.",
-      "source_id": 36
+      "source_id": 36,
+      "completion_evidence": "desktop/library-ui.js: renderLibraryNoRoot() (the true first-launch/no-root empty state, ~L3069) previously rendered 'Add photos' and 'Add a folder' as two equal-weight bordered .lib-btn buttons side by side. Restacked vertically and centered, made 'Add a folder' the primary action (it's the one that actually registers a folder with the Library so it stays browsable/synced; 'Add photos' only loads loose files straight into the editor, bypassing the Library) using the existing filled/pill .lib-btn-export style already used for the topbar Export button — no new colors. Added a new .lib-btn-link modifier (near .lib-btn-export's CSS, ~L1030) for 'Add photos': no border/fill, underlined accent-colored text, reading as a subordinate link. Depends on item 2 (Library loading/empty/error states), still in_progress as of this change (commit 558ed6d) — left untouched; this change only restructures the existing no-root empty state's action hierarchy, it does not implement item 2's error-state copy/behavior work. Verified live via desktop/dist built from this branch, served over http and driven with window.libtestClearRoot() (?libtest=1 harness) to reach the true empty state: primary button centered, secondary link subordinate beneath it, no wrapping at 1600/1440/1280/700px (test/ui_audit.mjs's VIEWPORTS + NARROW_WIDTHS sweep). npm run ui:test shows the same pre-existing unrelated failures (export@ TAP, looks@ CONTRAST, topbar-parity@ PARITY-MISSING) with and without this change on this branch — no new regressions."
     },
     {
       "id": 4,

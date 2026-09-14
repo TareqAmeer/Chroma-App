@@ -1031,6 +1031,11 @@
       font-weight:var(--weight-semibold);border-radius:9999px!important;height:30px}
     .lib-btn.lib-btn-export:hover{background:var(--blue-slate-focus);border-color:var(--blue-slate-focus)}
     .lib-btn.lib-btn-export svg{stroke:var(--on-primary)}
+    /* Subordinate to .lib-btn-export in an empty-state pair: no fill, no border — reads as a
+       secondary link, not a second button competing for the same weight as the primary action. */
+    .lib-btn.lib-btn-link{background:none;border-color:transparent;height:auto;padding:4px 8px;
+      border-radius:6px;font-weight:var(--weight-normal);color:var(--acc);text-decoration:underline}
+    .lib-btn.lib-btn-link:hover{background:var(--hover-tint);color:var(--acc2)}
     /* Sort/View popovers — transplanted verbatim from the wireframe's .menu/.opt/.grp-label. */
     .lib-menu{position:absolute;top:36px;right:0;width:230px;background:var(--bg);border:1px solid var(--bdr);
       border-radius:var(--r);box-shadow:0 3px 30px rgba(0,0,0,.35);padding:6px;z-index:4600;display:none;
@@ -3076,12 +3081,16 @@
   function renderLibraryNoRoot() {
     const grid = document.getElementById('lib-grid');
     if (!grid) return;
+    // One primary action (Add a folder — the one that actually builds a browsable, synced
+    // Library) centered and prominent; "Add photos" is a secondary, subordinate link rather
+    // than a second equal-weight button. Stacked vertically (not side-by-side) so neither
+    // label depends on available width to avoid wrapping down to the narrowest supported panel.
     grid.innerHTML = '<div id="lib-empty" style="grid-column:1/-1;padding:60px 20px">Add photos or a folder'
-      + '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center">'
-      + '<button class="lib-btn" id="lib-empty-addphotos">Add photos</button>'
-      + '<button class="lib-btn" id="lib-empty-addfolder">Add a folder</button>'
+      + '<div style="margin-top:16px;display:flex;flex-direction:column;align-items:center;gap:10px">'
+      + '<button class="lib-btn lib-btn-export" id="lib-empty-addfolder" style="white-space:nowrap">Add a folder</button>'
+      + '<button class="lib-btn lib-btn-link" id="lib-empty-addphotos" style="white-space:nowrap">Add photos</button>'
       + '</div>'
-      + '<div style="margin-top:10px;font-size:11px">Drop an image to start · '
+      + '<div style="margin-top:14px;font-size:11px">Drop an image to start · '
       + '<a id="lib-empty-gphotos" style="color:var(--acc);cursor:pointer;text-decoration:underline">Google Photos…</a></div></div>';
     const addPhotos = document.getElementById('lib-empty-addphotos');
     if (addPhotos) addPhotos.onclick = () => { if (typeof window.fxPickPhotos === 'function') window.fxPickPhotos(); };
