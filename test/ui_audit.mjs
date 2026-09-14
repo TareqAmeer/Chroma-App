@@ -68,7 +68,11 @@ const MIN_TAP = 28;   // px — below this a pointer target is uncomfortable
 // and inflating them to 28px would make dense panels worse, not better. They still have to clear
 // 18px — the point of the exemption is to name the two shapes it covers, not to stop measuring.
 const MIN_TAP_INLINE = 18;
-const INLINE_TARGET_SEL = 'input[type=checkbox], input[type=color], input[type=radio], .pc-chip';
+// .lib-zoom-btn joins the exemption for the same reason as .pc-chip: it's an icon flanking a
+// slider inside an already-tight cluster (icon + range + icon sharing a ~90px floor at the
+// narrowest topbar breakpoints), not a standalone button — inflating it to 28px would overlap
+// the slider it sits next to rather than making the row more usable.
+const INLINE_TARGET_SEL = 'input[type=checkbox], input[type=color], input[type=radio], .pc-chip, .lib-zoom-btn';
 // Edge drag handles (the tool-panel and tool-rail resizers) are deliberately thin on ONE axis and
 // full-height on the other: 7x776 is a larger pointer target than any button in the app, and the
 // platform convention for a col-resize edge is 5-8px. Widening one to 28px would put an invisible

@@ -943,12 +943,16 @@
     .lib-btn.lib-pill.active{background:var(--blue-mist-soft);border-color:var(--acc2)!important;color:var(--acc2)}
     #lib-filters-btn-wrap{position:relative}
     /* #5 — Library View.html:111-117,74-82, copied literally. */
-    .lib-filterrow{display:none;height:40px;flex:none;align-items:center;gap:10px;padding:0 16px;
+    .lib-filterrow{display:none;height:40px;flex:none;align-items:center;justify-content:center;gap:10px;padding:0 16px;
       border-bottom:1px solid var(--bdr);overflow-x:auto}
     .lib-filterrow.open{display:flex}
     .lib-filterrow .lib-flabel{font-size:11px;color:var(--mut);flex:none}
+    /* Was missing flex centering — a plain <button>/<span> chip's text sits at its natural
+       line-height position, not centered in the 26px pill, so labels rode slightly off-centre
+       vertically (icon chips right below already had this and read correctly). */
     .lib-chip{height:26px;padding:0 12px;border-radius:9999px;border:1px solid var(--bdr);
-      font-size:12px;flex:none;white-space:nowrap;background:none;color:var(--txt)}
+      font-size:12px;flex:none;white-space:nowrap;background:none;color:var(--txt);
+      display:flex;align-items:center;justify-content:center}
     .lib-chip:hover{background:var(--hover-tint)}
     /* Found live by the new WCAG-contrast self-consistency check: white text on --acc
        (--blue-mist, #61a0af in dark mode) is only 2.93:1, below the 4.5:1 AA floor for normal
@@ -1021,13 +1025,22 @@
        nothing had actually overflowed the ROW as far as scrollWidth was concerned. */
     .lib-zoomrow{display:flex;align-items:center;gap:8px;flex:1 1 30px;min-width:90px;color:var(--mut)}
     .lib-zoomrow svg{flex:none}
+    /* zoomOut/zoomIn are real buttons now (were bare unclickable SVG) — strip default button
+       chrome so they still read as plain icons flanking the slider, not two chunky rects. */
+    .lib-zoom-btn{display:flex;align-items:center;justify-content:center;flex:none;padding:4px;
+      margin:-4px;border:none;background:none;color:inherit;cursor:pointer;border-radius:6px}
+    .lib-zoom-btn:hover{background:var(--hover-tint)}
     .lib-zoomrow input[type=range]{width:100%;min-width:50px;accent-color:var(--acc2)}
     #lib-overlay:not(.full) .lib-zoomrow{display:none}
     /* #8 squeeze: wireframe's own compact contract (Library View.html:61) hides the zoom row's
        icons under squeeze — the app never did, so .lib-zoomrow kept its full ~76px floor
        (2 icons + a 50px-min slider) and collided with the flag row / view toggle at 1100px down
        to 640px (measured live: up to 18px overlap). Copied literally rather than re-derived. */
-    #lib-top.lib-top-compact .lib-zoomrow svg{display:none}
+    /* Was "svg{display:none}" only — fine while these were bare unclickable icon spans, but now
+       that they're real buttons (zoom +/- need a click target — see lib-zoom-btn), hiding just the
+       icon left an empty, near-invisible 8x8 button still sitting in the DOM at this squeeze. Hide
+       the whole button so compact mode goes back to "no zoom icons visible", same as before. */
+    #lib-top.lib-top-compact .lib-zoomrow .lib-zoom-btn{display:none}
     #lib-top.lib-top-compact .lib-zoomrow{min-width:36px}
     /* Primary filled Export button — transplanted from the wireframe's .btn-export. */
     /* Library View.html:92's .btn-export always uses --primary (Slate Blue) — no dark-mode
@@ -1500,7 +1513,12 @@
     #lib-grid:not(.list-view) .lib-card:hover .lib-flags,
     #lib-grid:not(.list-view) .lib-flags:has(.lib-flag.on){opacity:1}
     .lib-flags{display:flex;gap:3px}
-    .lib-flag{cursor:pointer;font-size:11px;opacity:.55;filter:grayscale(1);transition:opacity .1s ease}
+    /* Was a bare <span> around an inline SVG — inline content defaults to baseline vertical-align,
+       so the flag/pick/favorite glyphs (different intrinsic SVG heights) sat at slightly different
+       vertical offsets from each other and from the chip's own padding instead of all centering on
+       the same line. display:flex + a fixed box makes every glyph occupy the same centered slot. */
+    .lib-flag{cursor:pointer;font-size:11px;opacity:.55;filter:grayscale(1);transition:opacity .1s ease;
+      display:flex;align-items:center;justify-content:center;width:15px;height:15px}
     .lib-flag.on{opacity:1;filter:none}
     /* HANDOVER §8 item #9: was opacity:.55/grayscale for the unset flags — always drawn, just
        dimmed. Wireframe: .ratebar.has-set button:not(.set){display:none} — once a card carries
@@ -1934,9 +1952,9 @@
            body.deskx .fx-zoom-ctrl. -->
       <div id="lib-zoomflag-cluster">
       <div class="lib-zoomrow">
-        ${ic('zoomOut',12)}
+        <button type="button" class="lib-zoom-btn" id="lib-zoom-out" title="Smaller thumbnails">${ic('zoomOut',12)}</button>
         <input type="range" id="lib-thumbsize" min="90" max="320" step="10" title="Thumbnail size">
-        ${ic('zoomIn',12)}
+        <button type="button" class="lib-zoom-btn" id="lib-zoom-in" title="Larger thumbnails">${ic('zoomIn',12)}</button>
       </div>
       <!-- Flag row: applies to the selected Library photos. The Editor's separate toolbar
            continues to rate only the photo being edited via window.chromasmithToggle*().
@@ -6720,6 +6738,21 @@
     localStorage.setItem('chromasmith_lib_thumbsize', state.thumbSize);
     if (grid) grid.style.setProperty('--lib-thumb', state.thumbSize + 'px');
   };
+  // The zoomOut/zoomIn icons flanking the slider were pure decoration — no element, no handler —
+  // so clicking them did nothing (only dragging the slider itself worked). Step by the slider's
+  // own `step` (10px), clamp to its min/max, then dispatch a real 'input' event so the existing
+  // handler above stays the single source of truth instead of duplicating its body here.
+  const thumbStep = parseInt(thumbSlider.step, 10) || 10;
+  function nudgeThumbSize(dir) {
+    const min = parseInt(thumbSlider.min, 10), max = parseInt(thumbSlider.max, 10);
+    const next = Math.max(min, Math.min(max, parseInt(thumbSlider.value, 10) + dir * thumbStep));
+    if (next === parseInt(thumbSlider.value, 10)) return;
+    thumbSlider.value = next;
+    thumbSlider.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  const zoomOutBtn = overlay.querySelector('#lib-zoom-out'), zoomInBtn = overlay.querySelector('#lib-zoom-in');
+  if (zoomOutBtn) zoomOutBtn.onclick = () => nudgeThumbSize(-1);
+  if (zoomInBtn) zoomInBtn.onclick = () => nudgeThumbSize(1);
 
   const viewsSel = overlay.querySelector('#lib-views');
   if (viewsSel) { viewsSel.onchange = onViewsChange; renderViewsMenu(); }
