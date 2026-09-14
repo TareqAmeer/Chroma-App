@@ -788,7 +788,7 @@
          --bdr's .14 which the rest of this file's control/pill borders keep using unchanged. */
       --bdr-panel:rgba(255,255,255,.1);
       --canvas:var(--surface-tile-1);--surface-alt:var(--surface-tile-2);
-      --ink:var(--ink-on-dark);--ink-muted-80:var(--ink-on-dark);--ink-muted-48:var(--ink-on-dark-muted);
+      --ink:var(--ink-on-dark);--ink-muted-80:var(--ink-on-dark-muted);--ink-muted-48:var(--ink-on-dark-muted);
       --hairline:rgba(255,255,255,.12);--hairline-alpha:rgba(255,255,255,.12);
       --divider-soft:rgba(255,255,255,.12);
       --primary:var(--blue-mist);--primary-focus:var(--blue-mist);--primary-on-dark:var(--blue-mist);
@@ -1144,8 +1144,10 @@
     /* Collections/tree rows — transplanted from the wireframe's .row/.row.sel: 20px left inset,
        13px, selected = the mist-blue wash + primary text/icon (dark mode swaps to the translucent
        accent wash per the token remap above, matching Library View.html's .app.dark .row.sel). */
+    /* Navigation supports the photo work rather than competing with it. The inactive tone stays
+       comfortably readable in both themes; .on below restores the full selection contrast. */
     .lib-coll-row{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 20px;border-radius:var(--radius-xs,5px);
-      cursor:pointer;font-size:13px;color:var(--txt)}
+      cursor:pointer;font-size:13px;color:var(--ink-muted-80)}
     .lib-coll-row:hover{background:var(--hover-tint)}
     .lib-coll-row.on{background:var(--blue-mist-soft);color:var(--primary);font-weight:var(--weight-semibold)}
     .lib-coll-row.on .lib-coll-ic{color:var(--primary)}

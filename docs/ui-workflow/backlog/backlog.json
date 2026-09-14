@@ -266,13 +266,14 @@
       "priority": "P1",
       "cluster": "library-navigation",
       "title": "Dim inactive sidebar labels, icons and counts",
-      "status": "backlog",
+      "status": "done",
       "recommended_executor": "Claude Code",
       "model": "claude-code:claude-opus-5",
       "reference": "linear-refresh",
       "depends_on": [],
       "acceptance": "Inactive navigation recedes while the active row remains clear; contrast stays readable.",
-      "source_id": 33
+      "source_id": 33,
+      "completion_evidence": "desktop/library-ui.js: inactive .lib-coll-row labels and inherited icons use the existing --ink-muted-80 token, mapped to --ink-on-dark-muted in dark mode and #333 in light mode; selected rows retain their existing high-contrast accent/ink rules. The existing muted count treatment remains unchanged. In the staged Library at 1440×900, dark inactive navigation measured 8.92:1 contrast; light inactive labels measured 11.60:1 and the selected row retained semibold Blue Slate text/icons/count. lint:library-content, tokens:check, tokens:verify, and git diff --check pass. The wireframe inventory hover finding and four responsive topbar/640px layout findings are explicitly waived by the user on 2026-09-14 for this navigation-only commit."
     },
     {
       "id": 12,
