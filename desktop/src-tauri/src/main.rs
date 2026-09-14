@@ -612,21 +612,35 @@ fn emit_job(app: &tauri::AppHandle, job: &str, label: &str, phase: &str, done: u
     );
 }
 
+// ⚠️ ROOT CAUSE of the Library activity pill getting permanently stuck on "Merging…"/"Stacking…":
+// each command below only called emit_job(..., "done", ...) on ITS OWN success path, after `?`
+// had already had every chance to return early on a decode/align/blend error. The pill (fed by
+// this same job-progress event, library-ui.js's activityUpdate) had already been moved to
+// 'align'/'blend' by the mid-op progress callback, so a failed merge left it parked there forever
+// — these jobs carry no cancelFn (see emit_job's doc comment above), so there was also no Cancel
+// action that could clear it; only reloading the window did. Fixed by running the real work
+// inside an `async` block and emitting "done" unconditionally afterward, from OUTSIDE the `?`
+// chain, so the pill always resolves — on success AND on failure — before the error is returned
+// to the caller (whose own catch already surfaces a toast via humanizeErr).
 #[tauri::command]
 async fn merge_hdr_photos(app: tauri::AppHandle, paths: Vec<String>) -> Result<String, String> {
     let paths2 = paths.clone();
     let app2 = app.clone();
     let label = "Merging HDR";
-    let png = tauri::async_runtime::spawn_blocking(move || {
-        let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
-        merge::merge_hdr_progress(&paths2, &mut cb)
-    })
-    .await
-    .map_err(|e| format!("merge_hdr_photos: join error: {e}"))??;
-    let out_path = merge_output_path(&paths[0], "-hdr");
-    std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+    let result: Result<String, String> = async {
+        let png = tauri::async_runtime::spawn_blocking(move || {
+            let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
+            merge::merge_hdr_progress(&paths2, &mut cb)
+        })
+        .await
+        .map_err(|e| format!("merge_hdr_photos: join error: {e}"))??;
+        let out_path = merge_output_path(&paths[0], "-hdr");
+        std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+        Ok(out_path)
+    }
+    .await;
     emit_job(&app, "merge", label, "done", 1, 1);
-    Ok(out_path)
+    result
 }
 
 #[tauri::command]
@@ -634,16 +648,20 @@ async fn merge_focus_photos(app: tauri::AppHandle, paths: Vec<String>) -> Result
     let paths2 = paths.clone();
     let app2 = app.clone();
     let label = "Focus stacking";
-    let png = tauri::async_runtime::spawn_blocking(move || {
-        let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
-        merge::merge_focus_progress(&paths2, &mut cb)
-    })
-    .await
-    .map_err(|e| format!("merge_focus_photos: join error: {e}"))??;
-    let out_path = merge_output_path(&paths[0], "-focus-stack");
-    std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+    let result: Result<String, String> = async {
+        let png = tauri::async_runtime::spawn_blocking(move || {
+            let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
+            merge::merge_focus_progress(&paths2, &mut cb)
+        })
+        .await
+        .map_err(|e| format!("merge_focus_photos: join error: {e}"))??;
+        let out_path = merge_output_path(&paths[0], "-focus-stack");
+        std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+        Ok(out_path)
+    }
+    .await;
     emit_job(&app, "merge", label, "done", 1, 1);
-    Ok(out_path)
+    result
 }
 
 #[tauri::command]
@@ -652,17 +670,21 @@ async fn merge_astro_photos(app: tauri::AppHandle, paths: Vec<String>, mode: Str
     let mode2 = mode.clone();
     let app2 = app.clone();
     let label = "Astro stacking";
-    let png = tauri::async_runtime::spawn_blocking(move || {
-        let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
-        merge::merge_astro_progress(&paths2, &mode2, &mut cb)
-    })
-    .await
-    .map_err(|e| format!("merge_astro_photos: join error: {e}"))??;
-    let suffix = if mode == "median" { "-astro-median" } else { "-astro-mean" };
-    let out_path = merge_output_path(&paths[0], suffix);
-    std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+    let result: Result<String, String> = async {
+        let png = tauri::async_runtime::spawn_blocking(move || {
+            let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
+            merge::merge_astro_progress(&paths2, &mode2, &mut cb)
+        })
+        .await
+        .map_err(|e| format!("merge_astro_photos: join error: {e}"))??;
+        let suffix = if mode == "median" { "-astro-median" } else { "-astro-mean" };
+        let out_path = merge_output_path(&paths[0], suffix);
+        std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+        Ok(out_path)
+    }
+    .await;
     emit_job(&app, "merge", label, "done", 1, 1);
-    Ok(out_path)
+    result
 }
 
 #[tauri::command]
@@ -670,16 +692,20 @@ async fn merge_panorama_photos(app: tauri::AppHandle, paths: Vec<String>) -> Res
     let paths2 = paths.clone();
     let app2 = app.clone();
     let label = "Merging panorama";
-    let png = tauri::async_runtime::spawn_blocking(move || {
-        let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
-        merge::merge_panorama_progress(&paths2, &mut cb)
-    })
-    .await
-    .map_err(|e| format!("merge_panorama_photos: join error: {e}"))??;
-    let out_path = merge_output_path(&paths[0], "-panorama");
-    std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+    let result: Result<String, String> = async {
+        let png = tauri::async_runtime::spawn_blocking(move || {
+            let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
+            merge::merge_panorama_progress(&paths2, &mut cb)
+        })
+        .await
+        .map_err(|e| format!("merge_panorama_photos: join error: {e}"))??;
+        let out_path = merge_output_path(&paths[0], "-panorama");
+        std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+        Ok(out_path)
+    }
+    .await;
     emit_job(&app, "merge", label, "done", 1, 1);
-    Ok(out_path)
+    result
 }
 
 // ROADMAP R13 part 1 (collage) — the compositing itself runs entirely client-side in

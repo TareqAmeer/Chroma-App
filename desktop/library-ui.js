@@ -8513,6 +8513,13 @@
         // drain loop (see drainCatalogThumbnails' comment on why this button did nothing).
         if (activity.kind === 'catalog') bgStopAll();
         else if (typeof activity.cancelFn === 'function') { try { activity.cancelFn(); } catch (e) {} }
+        // ⚠️ A job with no cancelFn (e.g. the merge/HDR/focus/astro/panorama lane — it has no
+        // cancel token, see main.rs's emit_job doc comment) previously left this button a no-op:
+        // it showed "Cancel" once the stall watchdog fired, but clicking it only closed the
+        // popover, so a wedged job stayed visible forever with no way to dismiss it. Since there's
+        // nothing to actually cancel, treat the click as a dismiss instead — the pill can no
+        // longer get permanently stuck no matter what the backend does or fails to emit.
+        else if (activity.kind !== 'catalog') { activity.visible = false; }
         activity.expanded = false;
         renderActivity();
       };

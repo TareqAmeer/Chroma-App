@@ -221,7 +221,8 @@
         5
       ],
       "acceptance": "Import, index, cache and export activity survives navigation and exposes safe pause/cancel actions where supported.",
-      "source_id": 96
+      "source_id": 96,
+      "notes": "2026-09-14: fixed a stuck-forever bug in the pill (desktop/library-ui.js's `#lib-activity`, already built as the merge of catalog-scan/import/job-progress events) reported as 'stuck on working'. Root cause: merge_hdr_photos/merge_focus_photos/merge_astro_photos/merge_panorama_photos (desktop/src-tauri/src/main.rs) only called emit_job(...,\"done\",...) on their success path, after `?` had every chance to return early on a decode/align/blend error — so a failed merge left the pill parked on whatever phase it was last at ('align'/'blend') forever, and since these jobs carry no cancelFn there was no Cancel action to clear it either (clicking it, once the 90s stall watchdog showed the button, only closed the popover). Fix: (1) each merge command now runs its work inside an `async` block and emits \"done\" unconditionally afterward, on both success and failure; (2) library-ui.js's Cancel button now falls back to dismissing the pill for any non-catalog job with no real cancelFn, so a wedged pill can never get permanently stuck regardless of backend behavior. Could not run `cargo check`/the JS test suite/a live app session — this Windows checkout has no Rust or Node toolchain installed; validated by manual code review only (diff is minimal and structurally mirrors the pre-existing capture pattern). Scope: only the stuck-pill bug, not the rest of item 7's acceptance criteria (export activity, full pause/cancel coverage) — status left as-is."
     },
     {
       "id": 8,
