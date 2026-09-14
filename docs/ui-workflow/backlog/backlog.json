@@ -195,15 +195,17 @@
       "priority": "P0",
       "cluster": "work-progress",
       "title": "Show per-photo progress for decode and analysis work",
-      "status": "backlog",
+      "status": "in_progress",
       "recommended_executor": "Codex",
       "model": "codex:gpt-6-astra",
       "reference": "material-progress",
       "depends_on": [
         5
       ],
-      "acceptance": "A photo undergoing background work has a local, understandable status that clears on success or failure.",
-      "source_id": 95
+      "acceptance": "Every photo-specific decode or analysis operation shows a local, understandable loading status for that photo and clears on success or failure.",
+      "source_id": 95,
+      "owner": "Codex",
+      "notes": "Scope confirmed by user: anything that results in loading is in scope. Implemented photo/video decode and RAW re-decode status, RAW denoise, AI Select encode/refine, depth estimation, face parsing, Library thumbnail decode, and per-photo faces/pets/face-embedding/CLIP indexing badges. Library scan events now carry the affected photo paths for those four analysis stages; the Editor status has a local overlay when the deskbar title is unavailable. Checks: Library photo-activity Playwright test passed in dark and light themes; focused Editor lifecycle test passed once before the narrow-layout fallback was added, but later attempts timed out during initial page navigation; CDP diagnostic confirmed the narrow-layout status call settles without a hang. `git diff --check`, Editor fast structural checks, and Rust `cargo check` passed. Keep in progress: full visual screenshot inspection and a clean focused Editor lifecycle run remain outstanding; audit any additional photo-specific catalog stages before closure."
     },
     {
       "id": 7,

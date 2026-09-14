@@ -1001,3 +1001,21 @@ Decision gate: user must choose the existing draft as pilot basis, supply a new 
 - Restored the dropped per-panel "draw/capture every state" and "screenshot and look" steps in
   `docs/editor-redesign-plan.md` §1 (with the original T25 rationale), and removed the invented
   Luna/Terra/Astra model-role section.
+
+**Backlog item 6 — 2026-09-14 — implementation in progress**
+- User clarified scope: anything that results in loading is in scope.
+- Added photo-local Editor statuses for still/video decode, RAW profile re-decode, RAW denoise,
+  AI Select encode/refine, depth estimation, and face parsing. Status is announced accessibly,
+  clears on settlement, ignores stale photo completions, and falls back to an overlay when the
+  deskbar title is unavailable.
+- Library cards show thumbnail-decode activity and photo-specific faces, pets, face-embedding,
+  and CLIP indexing stages. Rust scan progress now identifies the current photo batch for those
+  analysis stages; the persistent activity center remains intact.
+- `node test/library_photo_activity.mjs` passed in dark and light themes. The Editor lifecycle
+  test passed once before the narrow-layout fallback, then later attempts timed out at initial
+  navigation; the repository CDP diagnostic confirmed the fallback status call settles. `git
+  diff --check`, `npm run editor:fast-check`, and `cargo check --manifest-path
+  desktop/src-tauri/Cargo.toml` passed. `node test/export_harness.mjs` and `npm run ui:test`
+  previously timed out at initial page readiness; no visual screenshots have been reviewed.
+- Item remains `in_progress`: finish a clean Editor lifecycle/visual check and complete the
+  remaining photo-specific catalog-stage audit before closure.

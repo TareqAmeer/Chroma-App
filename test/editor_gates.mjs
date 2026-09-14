@@ -187,6 +187,8 @@ const GATES = [
   { name: 'editor:hover-focus-matrix', cmd: ['node', 'test/editor_hover_focus_matrix.mjs', '--strict'] },
   // T44 (editor_ux_spec.json): empty/loading/error state legibility (visibility + WCAG contrast).
   { name: 'editor:empty-error-states', cmd: ['node', 'test/editor_empty_error_states.mjs', '--strict'] },
+  // Backlog 6: photo-local loading status lifecycle for Editor decode and analysis.
+  { name: 'editor:photo-activity-test', cmd: ['node', 'test/editor_photo_activity.mjs'] },
   // T46 (editor_ux_spec.json): real browser-chrome zoom (CDP DeviceMetricsOverride) at 150%/200%
   // — overlap + unmarked-clipping check against the deskbar/toolrail.
   { name: 'editor:zoom-check', cmd: ['node', 'test/editor_zoom_check.mjs', '--strict'] },
@@ -257,6 +259,7 @@ const GATE_TAGS = {
   'editor:forced-colors-check': ['a11y'],
   'editor:hover-focus-matrix': ['a11y', 'layout'],
   'editor:empty-error-states': ['a11y', 'layout'],
+  'editor:photo-activity-test': ['behavior', 'a11y'],
   'editor:zoom-check': ['layout'],
   'editor:long-string-check': ['layout'],
   'editor:hidpi-check': ['render'],

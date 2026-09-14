@@ -1287,6 +1287,14 @@ pub struct ScanProgress {
     pub current: String,
 }
 
+// The Library mirrors these paths onto their individual cards while a photo-analysis chunk is
+// running. Keep the marker private to the existing `current` field so older progress consumers
+// continue to receive the same stable event shape.
+fn photo_batch_current(paths: impl IntoIterator<Item = String>) -> String {
+    let json = serde_json::to_string(&paths.into_iter().collect::<Vec<_>>()).unwrap_or_default();
+    format!("@photos:{json}")
+}
+
 #[derive(Serialize, Default)]
 pub struct ScanResult {
     pub scanned: usize,
@@ -2600,6 +2608,12 @@ pub fn faces_run(
             if cancel.load(Ordering::Relaxed) {
                 break;
             }
+            progress(ScanProgress {
+                phase: "faces".into(),
+                done: base_scanned + attempted_in_batch,
+                total: base_scanned + total_in_batch,
+                current: photo_batch_current(chunk.iter().map(|(_, path, _)| path.clone())),
+            });
             // System-state throttling (bgwork::throttle_pause): pause under thermal pressure or
             // low-power mode instead of grinding ahead at full speed regardless of what the rest
             // of the machine needs right now — checked once per chunk (cheap) rather than per
@@ -3058,6 +3072,12 @@ pub fn pets_run(
         const CHUNK: usize = 4; // same "stuck at 0%" fix faces_run's own comment explains
         let mut detected: Vec<(i64, i64, Option<Vec<crate::petdetect::PetDetection>>)> = Vec::with_capacity(total_in_batch);
         for chunk in batch.chunks(CHUNK) {
+            progress(ScanProgress {
+                phase: "pets".into(),
+                done: base_scanned + detected.len(),
+                total: base_scanned + total_in_batch,
+                current: photo_batch_current(chunk.iter().map(|(_, path, _)| path.clone())),
+            });
             let mut part: Vec<(i64, i64, Option<Vec<crate::petdetect::PetDetection>>)> = chunk
                 .par_iter()
                 .map(|(id, abs, mtime)| {
@@ -3525,6 +3545,12 @@ pub fn embed_run(
         const CHUNK: usize = 4;
         let mut embedded: Vec<(i64, Option<Vec<f32>>)> = Vec::with_capacity(total_faces);
         for chunk in photo_batch.chunks(CHUNK) {
+            progress(ScanProgress {
+                phase: "embed".into(),
+                done: base_embedded + embedded.len(),
+                total: base_embedded + total_faces,
+                current: photo_batch_current(chunk.iter().map(|(_, path)| path.clone())),
+            });
             let mut part: Vec<(i64, Option<Vec<f32>>)> = chunk
                 .par_iter()
                 .flat_map(|(photo_id, abs)| {
@@ -4384,6 +4410,12 @@ pub fn clip_embed_run(
         const CHUNK: usize = 4;
         let mut embedded: Vec<(i64, i64, Option<Vec<f32>>)> = Vec::with_capacity(total_in_batch);
         for chunk in batch.chunks(CHUNK) {
+            progress(ScanProgress {
+                phase: "clip".into(),
+                done: base_embedded + embedded.len(),
+                total: base_embedded + total_in_batch,
+                current: photo_batch_current(chunk.iter().map(|(_, path, _)| path.clone())),
+            });
             let mut part: Vec<(i64, i64, Option<Vec<f32>>)> = chunk
                 .par_iter()
                 .map(|(id, abs, mtime)| {

@@ -1453,6 +1453,13 @@
        the wireframe rather than theme-following. */
     .lib-thumb-wrap{aspect-ratio:1;background:var(--canvas-parchment);display:flex;align-items:center;justify-content:center;overflow:hidden}
     .lib-thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+    .lib-photo-work{position:absolute;left:5px;bottom:5px;z-index:4;display:flex;align-items:center;gap:5px;
+      max-width:calc(100% - 10px);padding:3px 6px;border:1px solid var(--bdr);border-radius:var(--r-pill);
+      background:var(--sur);color:var(--txt);font-size:10px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .lib-photo-work-spin{width:9px;height:9px;flex:0 0 auto;border:1px solid var(--mut);border-right-color:var(--acc);
+      border-radius:50%;animation:libPhotoWorkSpin .8s linear infinite}
+    @keyframes libPhotoWorkSpin{to{transform:rotate(360deg)}}
+    @media(prefers-reduced-motion:reduce){.lib-photo-work-spin{animation:none;border-right-color:var(--mut)}}
     /* Item 31: "Aspect ratio" grid mode — real aspect, no crop, ragged-right rows (not edge-to-
        edge justified: that needs a width-fitting layout pass, which is a bigger, riskier project
        — see the code comment at the toggle handler for why this scope was chosen instead).
@@ -2885,6 +2892,7 @@
       }
       _thumbActive++;
       if (job.isVideo) _thumbActiveVideo++;
+      setPhotoWorkBadge(job.imgEl.closest('.lib-card'), 'Loading preview…', 'thumb');
       updateThumbProgress();
       // Tier 1 (get_thumbnail_fast): pulls the camera's own embedded JPEG preview straight out
       // of the EXIF thumbnail IFD — no full-image decode, so it paints almost instantly. Falls
@@ -2934,6 +2942,7 @@
           }
         })
         .finally(() => {
+          setPhotoWorkBadge(job.imgEl.closest('.lib-card'), '', 'thumb');
           if (_thumbIO) _thumbIO.unobserve(job.imgEl);
           _thumbActive--;
           if (job.isVideo) _thumbActiveVideo--;
@@ -2971,6 +2980,42 @@
     if (!el) return;
     if (_thumbDoneCount >= _thumbTotalCount || _thumbTotalCount < 8) { el.textContent = ''; return; }
     el.textContent = `Loading photos… ${_thumbDoneCount}/${_thumbTotalCount}`;
+  }
+  const PHOTO_STAGE_LABELS = { faces: 'Finding faces…', pets: 'Finding pets…', embed: 'Analyzing faces…', clip: 'Indexing for search…' };
+  function setPhotoWorkBadge(card, label, kind = 'analysis') {
+    const wrap = card && card.querySelector('.lib-thumb-wrap');
+    if (!wrap) return;
+    let badge = wrap.querySelector(`.lib-photo-work[data-photo-work="${kind}"]`);
+    if (!label) { if (badge) badge.remove(); return; }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'lib-photo-work';
+      badge.dataset.photoWork = kind;
+      badge.innerHTML = '<span class="lib-photo-work-spin" aria-hidden="true"></span><span></span>';
+      wrap.appendChild(badge);
+    }
+    badge.title = label;
+    badge.setAttribute('aria-label', label);
+    badge.lastElementChild.textContent = label;
+  }
+  function syncPhotoWorkBadges() {
+    const labelsByPath = new Map();
+    const addWork = (work) => {
+      const label = PHOTO_STAGE_LABELS[work.stage] || (work.kind === 'thumb' ? 'Loading preview…' : 'Working…');
+      for (const path of work.photoPaths || []) {
+        const labels = labelsByPath.get(path) || [];
+        if (!labels.includes(label)) labels.push(label);
+        labelsByPath.set(path, labels);
+      }
+    };
+    addWork(activity);
+    if (typeof _activityQueue !== 'undefined') for (const [kind, work] of _activityQueue) addWork({ ...work, kind });
+    const gridEl = document.getElementById('lib-grid');
+    if (!gridEl) return;
+    gridEl.querySelectorAll('.lib-card').forEach((card) => {
+      const labels = [...new Set([card.dataset.path, card.dataset.thumbPath].filter(Boolean).flatMap((p) => labelsByPath.get(p) || []))];
+      setPhotoWorkBadge(card, labels.join(' · '));
+    });
   }
   /// The real readiness gate for the boot splash: resolves once every card mounted in the
   /// CURRENT grid generation has settled — loaded OR failed, `_thumbDoneCount >= _thumbTotalCount`
@@ -3246,7 +3291,7 @@
     if (spin && !cached) spin.style.display = '';
     // Deskbar title: show the incoming photo's name + a spinner immediately (RapidRAW-style);
     // loadFXImages swaps the spinner for the real dimensions when the decode lands.
-    if (!cached && typeof fxDeskbarTitle === 'function') fxDeskbarTitle(baseName(path), '', true);
+    if (!cached && typeof fxDeskbarTitle === 'function') fxDeskbarTitle(baseName(path), 'Opening photo…', true);
     // RAW Noise Reduction is baked into the native decode itself (not a live shader term), so
     // it must be per-PHOTO, not one global switch bleeding into whatever you open next — peek
     // the sidecar's saved recipe BEFORE decoding (not after, like the rest of applyUISnapshot)
@@ -5298,6 +5343,7 @@
       card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '') + (state.selected.has(entry.path) ? ' multi' : '') +
         (sc.label ? ' lbl-' + sc.label.toLowerCase() : '') + (entry.missing ? ' lib-missing' : '');
       card.dataset.path = entry.path;
+      if (entry.thumb_path) card.dataset.thumbPath = entry.thumb_path;
       // Stack badge takes over the RAW badge's own top-left corner when this card represents
       // a stack (per the plan: "the grid draws a +2 badge in the existing .lib-raw-badge corner
       // slot") — a stack's leader is virtually always the RAW, so showing both would be
@@ -5358,6 +5404,7 @@
       built.push({ entry, card, idx });
     });
     grid.appendChild(frag);
+    syncPhotoWorkBadges();
     // Second pass: every card is now connected, so loadThumb()'s isConnected check (see its
     // comment) sees it correctly instead of silently dropping the job.
     built.forEach(({ entry, card, idx }) => {
@@ -8293,8 +8340,8 @@
   // (catalog-scan: {phase,done,total,current}) and card import (ingest-progress:
   // {done,total,current,bytes_done,bytes_total}) — nothing new on the Rust side, this just
   // gives those events somewhere to land.
-  const STAGE_LABELS = { walk: 'Scanning folders', subfolders: 'Scanning subfolders', metadata: 'Reading photo info', sidecar: 'Syncing ratings', cache: 'Loading thumbnails', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', embed: 'Analyzing faces', clip: 'Indexing for search', paint: 'Loading thumbnails' };
-  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'embed', 'clip'];
+  const STAGE_LABELS = { walk: 'Scanning folders', subfolders: 'Scanning subfolders', metadata: 'Reading photo info', sidecar: 'Syncing ratings', cache: 'Loading thumbnails', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', pets: 'Finding pets', embed: 'Analyzing faces', clip: 'Indexing for search', paint: 'Loading thumbnails' };
+  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'pets', 'embed', 'clip'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
   let _activityClearTimer = null;
   // Stall watchdog: distinguishes "still working" from "stopped working" — before this, a
@@ -8340,7 +8387,7 @@
   function renderActivity() {
     const el = document.getElementById('lib-activity');
     if (!el) return;
-    if (!activity.visible) { el.innerHTML = ''; return; }
+    if (!activity.visible) { el.innerHTML = ''; syncPhotoWorkBadges(); return; }
     const pct = Math.round(activityFrac() * 100);
     // While the initial directory walk is still running, `total` is genuinely unknown (it's
     // only known once the whole tree has been enumerated — see walk_root's own comment) — so
@@ -8433,6 +8480,7 @@
     }
     html += `</span>`;
     el.innerHTML = html;
+    syncPhotoWorkBadges();
     const pill = document.getElementById('lib-act-pill');
     if (pill) pill.onclick = (e) => { e.stopPropagation(); activity.expanded = !activity.expanded; renderActivity(); };
     // The pill sits near the LEFT of the bottom bar (lib-count/thumb-progress/status-labels all
@@ -8482,6 +8530,16 @@
   // unaffected — they still go straight to `activity` exactly as before.
   const _activityQueue = new Map(); // kind -> last patch, for kinds waiting behind the visible one
   function activityUpdate(kind, patch) {
+    if (typeof patch.current === 'string' && patch.current.startsWith('@photos:')) {
+      let photoPaths = [];
+      try {
+        const parsed = JSON.parse(patch.current.slice(8));
+        if (Array.isArray(parsed)) photoPaths = parsed.filter((p) => typeof p === 'string');
+      } catch (e) {}
+      patch = { ...patch, photoPaths, current: `Processing ${photoPaths.length} photo${photoPaths.length === 1 ? '' : 's'}` };
+    } else if ((patch.current !== undefined && patch.photoPaths === undefined) || patch.stage === 'done') {
+      patch = { ...patch, photoPaths: [] };
+    }
     const isDone = patch && patch.stage === 'done';
     if (activity.visible && activity.stage !== 'done' && activity.kind && activity.kind !== kind) {
       // A different job already owns the pill — queue this one instead of clobbering it.
@@ -8533,6 +8591,10 @@
       if (state === 'progress') activityUpdate('catalog', { stage: 'metadata', done: 40, total: 120 });
       else if (state === 'done') activityUpdate('catalog', { stage: 'done', done: 120, total: 120 });
       else if (state === 'import-failed') activityUpdate('import', { stage: 'done', done: 21, total: 24, failed: ['P1000512.RW2: read error', 'P1000513.RW2: read error', 'P1000889.RW2: disk full'] });
+    };
+    window.libtestPhotoActivity = (path, stage = 'faces') => {
+      if (stage === 'clear') activityUpdate('catalog', { stage: 'done', current: '' });
+      else activityUpdate('catalog', { stage, done: 0, total: 1, current: '@photos:' + JSON.stringify([path]) });
     };
     // Same reasoning: the info panel's own trigger is the 'i' keyboard shortcut, gated on
     // state.open (the docked/deskx harness never goes through toggleLibrary(), so state.open

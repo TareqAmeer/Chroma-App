@@ -690,6 +690,14 @@ body.diag-on .diag-only{display:flex}
 /* Below this the bar has no room for a centre title at all — the tools matter more. */
 @media(max-width:1200px){#fx-deskbar-title{display:none}}
 #db-title-status.spin::before{content:'⟳';display:inline-block;animation:fxspin .8s linear infinite}
+#fx-photo-work-status{position:absolute;z-index:var(--z-overlay);top:12px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:8px;max-width:calc(100% - 24px);padding:8px 12px;border:1px solid var(--bdr);
+  border-radius:var(--r-pill);background:var(--glass-bg);color:var(--txt);font:var(--fs-2)/var(--lh-base) var(--sans);
+  box-shadow:var(--lift-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+#fx-photo-work-status[hidden]{display:none}
+#fx-photo-work-status::before{content:'';width:12px;height:12px;flex:0 0 auto;border:2px solid var(--mut);
+  border-right-color:var(--acc);border-radius:50%;animation:fxspin .8s linear infinite}
+@media(prefers-reduced-motion:reduce){#fx-photo-work-status::before{animation:none;border-right-color:var(--mut)}}
 @media(max-width:700px){.dg2,.dg3,.sliders-row,.fx-layout{grid-template-columns:1fr}
   .fx-panel{column-count:1}
   main,main:has(#panel-fx.active){padding-left:14px;padding-right:14px}
@@ -1803,7 +1811,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
     <!-- "Reset all edits" moved into the ⋯ overflow menu (ovfBuild()) — the one genuinely rare,
          semi-destructive action in the always-visible cluster; Undo/Redo already cover the
          common "I changed my mind" case. -->
-    <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status"></span></div>
+    <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status" role="status" aria-live="polite" aria-atomic="true"></span></div>
     <div id="fx-deskbar-right">
       <div id="fx-deskbar-tools"></div>
       <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span><span class="fx-db-lb">All FX</span></button>
@@ -7666,11 +7674,41 @@ function fxDeskbarTitle(name,statusText,spinning){
   if(!n||!s)return;
   if(name!==undefined&&name!==null)n.textContent=name;
   s.classList.toggle('spin',!!spinning);
-  s.textContent=spinning?'':(statusText||'');
+  s.textContent=statusText||'';
+  const title=document.getElementById('fx-deskbar-title');
+  const titleVisible=!!(title&&title.getClientRects().length);
+  let local=document.getElementById('fx-photo-work-status');
+  if(spinning&&statusText&&!titleVisible){
+    const wrap=document.getElementById('fx-wrap');
+    if(wrap){
+      if(!local){local=document.createElement('div');local.id='fx-photo-work-status';local.setAttribute('role','status');local.setAttribute('aria-live','polite');local.setAttribute('aria-atomic','true');wrap.appendChild(local)}
+      local.textContent=(name?name+' · ':'')+statusText;local.hidden=false;
+    }
+  }else if(local){local.hidden=true;local.textContent=''}
   fxUpdateFlagBtns();
   fxUpdateHistoryBtn();
 }
 window.fxDeskbarTitle=fxDeskbarTitle;
+// Photo-scoped loading indicator shared by decode and on-demand analysis. Completion (including
+// failure) restores this photo's dimensions; a late result from a photo the user has switched
+// away from must never overwrite the newly selected photo's status.
+let _fxPhotoActivitySeq=0;
+function fxPhotoActivityInvalidate(){_fxPhotoActivitySeq++;}
+function fxPhotoActivity(item,label){
+  const current=()=>typeof curItem==='function'?curItem():null;
+  const belongs=()=>item&&current()===item;
+  if(!belongs())return()=>{};
+  const seq=++_fxPhotoActivitySeq;
+  fxDeskbarTitle(item.name,label,true);
+  let settled=false;
+  return()=>{
+    if(settled)return;
+    settled=true;
+    if(seq!==_fxPhotoActivitySeq||!belongs())return;
+    const it=current();
+    fxDeskbarTitle(it.name,fxDimsFmt(it.name,it.img,it.ext),false);
+  };
+}
 // Library red/green flag toggle for the currently-open photo — Tauri/Library-only (no-op,
 // buttons hidden, in the browser build where window.chromasmithToggleFlag is never defined).
 async function fxToggleFlag(label){
@@ -7948,6 +7986,7 @@ async function fxDenoiseNowClicked(){
   if(!it||!it.rawFile){toast('High-tier noise reduction only applies to RAW files',false);return;}
   const btn=document.getElementById('btn-denoise-now'),cancelBtn=document.getElementById('btn-denoise-cancel');
   const progRow=document.getElementById('row-nr-high-progress'),bar=document.getElementById('nr-high-progress-bar');
+  const endActivity=fxPhotoActivity(it,'Denoising RAW…');
   btn.disabled=true;btn.textContent='Denoising…';
   if(cancelBtn)cancelBtn.style.display='';
   if(progRow)progRow.style.display='';
@@ -7973,6 +8012,7 @@ async function fxDenoiseNowClicked(){
     if(cancelBtn)cancelBtn.style.display='none';
     if(progRow)progRow.style.display='none';
     fxRawNrSyncUI();
+    endActivity();
   }
 }
 function fxDenoiseCancelClicked(){
@@ -9396,7 +9436,8 @@ async function reloadRawProfileForCurrentPhoto(v){
   // itself so a second change can't race the first while a decode is in flight.
   const sel=document.getElementById('sel-dcp');
   if(sel)sel.disabled=true;
-  fxDeskbarTitle(it.name,'',true);
+  fxPhotoActivityInvalidate();
+  fxDeskbarTitle(it.name,'Reprocessing RAW…',true);
   // Re-reads curItem() fresh rather than closing over `it` — the native path (chromasmithReloadCurrentPhoto)
   // replaces fxImages wholesale, so restoring from the pre-reload `it` could paint a stale object.
   const restoreTitle=()=>{
@@ -10032,6 +10073,7 @@ function installFXImages(entries,loadKey){
   log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
 }
 async function loadFXImages(fileList){
+  fxPhotoActivityInvalidate();
   // MIME is often EMPTY, not just for TIFF/RW2: the desktop library opens files via
   // read_file_bytes and builds File objects with type:'' — a plain MIME check silently
   // dropped every PNG/JPEG opened from the library ("No images loaded"). Fall back to the
@@ -10073,11 +10115,13 @@ async function loadFXImages(fileList){
   if(loadKey!==_fxLoadKey&&_fxPristineDefault)applyUISnapshot(_fxPristineDefault);
   const entries=[];
   for(const file of videoFiles){
+    fxDeskbarTitle(file.name,'Opening video…',true);
     try{
       entries.push(await loadFXVideoFile(file));
-    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++}
+    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++;const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false)}
   }
   for(const file of files){
+    fxDeskbarTitle(file.name,'Opening photo…',true);
     try{
       const bytes=new Uint8Array(await file.arrayBuffer());
       let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';if(ext==='tiff')ext='tif';
@@ -10133,10 +10177,10 @@ async function loadFXImages(fileList){
       // fileSize: without this, non-library JPEGs (drag-drop / Google Photos) showed no "Size"
       // row in the metadata panel at all — only photos opened via the desktop Library set it.
       entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength});
-    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++} // keep loading the rest of the batch
+    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++;const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false)} // keep loading the rest of the batch
   }
   if(_loadFailCount>0&&typeof toast==='function')toast(`${_loadFailCount} of ${files.length+videoFiles.length+nonImageNonVideo.length} file(s) failed to load — see log`,false);
-  if(!entries.length){log('No images loaded','err');return}
+  if(!entries.length){const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false);else fxDeskbarTitle('', '', false);log('No images loaded','err');return}
   // Must run BEFORE installFXImages (its render reflects whatever's in the slider DOM right
   // now) — was previously inline per-RW2-entry, before any render had happened; moving it
   // after the render here would apply the defaults a frame too late, requiring a manual
@@ -11762,6 +11806,7 @@ async function samEnsureEncoded(){
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
   if(!img)return;
   _samEncoding=true;
+  const endActivity=fxPhotoActivity(typeof curItem==='function'?curItem():null,'Preparing AI Select…');
   if(typeof toast==='function')toast('Preparing AI Select…',true);
   try{
     const{w,h}=samInputDims();
@@ -11780,11 +11825,13 @@ async function samEnsureEncoded(){
     log(msg,'err');_samLastError=msg;
     if(typeof toast==='function')toast(msg);
     if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild();
-  }finally{_samEncoding=false;}
+  }finally{_samEncoding=false;endActivity();}
 }
 async function samEnsureEncoded2(img,rgb,w,h){
   if(!window.__TAURI__||_sam2Token||_sam2Encoding)return;
   _sam2Encoding=true;
+  const item=typeof curItem==='function'?curItem():null;
+  const endActivity=fxPhotoActivity(item&&item.img===img?item:null,'Improving AI Select…');
   if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild(); // show the spinner
   try{
     const token='sam2-'+Date.now()+'-'+Math.random().toString(36).slice(2);
@@ -11802,6 +11849,7 @@ async function samEnsureEncoded2(img,rgb,w,h){
     log('AI Select (background quality upgrade): '+(e&&e.message||e),'warn'); // non-fatal — EdgeSAM still works
   }finally{
     _sam2Encoding=false;
+    endActivity();
     if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild(); // hide the spinner
   }
 }
@@ -11890,13 +11938,14 @@ function _samRefineMask(mask,w,h){
 }
 async function samRunPoints(m){
   if(!window.__TAURI__)return;
-  await samEnsureEncoded();
-  if(!_samToken){
-    const msg='AI Select is not ready yet — try again in a moment';
-    toast(msg);_samLastError=msg;mskRebuild();return;
-  }
   if(!m.aiPoints||!m.aiPoints.length)return;
+  const endActivity=fxPhotoActivity(curItem(),'Selecting subject…');
   try{
+    await samEnsureEncoded();
+    if(!_samToken){
+      const msg='AI Select is not ready yet — try again in a moment';
+      toast(msg);_samLastError=msg;mskRebuild();return;
+    }
     const points=samSubsamplePoints(m.aiPoints).map(p=>({x:p.nx,y:p.ny,positive:p.positive}));
     const useSam2=!!_sam2Token;
     const buf=await window.__TAURI__.core.invoke(useSam2?'sam2_points':'sam_points',{token:useSam2?_sam2Token:_samToken,points});
@@ -11927,6 +11976,8 @@ async function samRunPoints(m){
     log(msg,'err');_samLastError=msg;
     if(typeof toast==='function')toast(msg);
     mskRebuild();
+  }finally{
+    endActivity();
   }
 }
 // ── Named subjects: "remember this dog", then find it again in another photo ──────────────────
@@ -12652,6 +12703,7 @@ async function fxEnsureDepthMap(){
   if(_depthRunning)return null;
   _depthRunning=true;
   img._depthMapAttempted=true;
+  const endActivity=fxPhotoActivity(it,'Estimating depth…');
   try{
     const sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;
     if(!sw||!sh)return null;
@@ -12677,7 +12729,7 @@ async function fxEnsureDepthMap(){
   }catch(e){
     log('Depth estimate failed: '+(e&&e.message||e),'error');
     return null;
-  }finally{_depthRunning=false;}
+  }finally{_depthRunning=false;endActivity();}
 }
 /// Places one or more of the 4 face-parse layers (union, max not sum) into a full mtW*mtH raster.
 function _facePlace(r,groupIdxs){
@@ -12699,6 +12751,7 @@ async function mskFaceAutoExclude(){
   if(!mskIsAI(m)||!m.px||!m.px.length){log('Scribble to select yourself first — the face crop is derived from that selection','warn');return;}
   if(_faceparseRunning)return;
   _faceparseRunning=true;
+  const endActivity=fxPhotoActivity(curItem(),'Finding face features…');
   if(typeof toast==='function')toast('Finding face features…',true);
   try{
     const r=await _faceparseRunLayers(m);
@@ -12729,7 +12782,7 @@ async function mskFaceAutoExclude(){
     const msg='Face-feature exclusion failed — '+(e&&e.message||e);
     log(msg,'err');if(typeof toast==='function')toast(msg);
   }finally{
-    _faceparseRunning=false;
+    _faceparseRunning=false;endActivity();
   }
 }
 // Lightroom's People mask lets you select individual features (facial skin, lips, eyes, hair…) as
@@ -12746,6 +12799,7 @@ async function mskFaceSelectFeature(groupIdx){
   if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
   _faceparseRunning=true;
   const feat=FACE_FEATURES.find(f=>f.i===groupIdx);
+  const endActivity=fxPhotoActivity(curItem(),'Finding '+(feat?feat.label.toLowerCase():'feature')+'…');
   if(typeof toast==='function')toast('Finding '+(feat?feat.label.toLowerCase():'feature')+'…',true);
   try{
     const r=await _faceparseRunLayers(src);
@@ -12763,7 +12817,7 @@ async function mskFaceSelectFeature(groupIdx){
     const msg='Face-feature selection failed — '+(e&&e.message||e);
     log(msg,'err');if(typeof toast==='function')toast(msg);
   }finally{
-    _faceparseRunning=false;mskRebuild();
+    _faceparseRunning=false;endActivity();mskRebuild();
   }
 }
 // ── Face-parse skin selector (ROADMAP "Mask system" item 4's remainder) ───────────────────────
@@ -12789,6 +12843,7 @@ async function mskFaceSelectSkin(){
   if(_faceparseRunning)return;
   if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
   _faceparseRunning=true;
+  const endActivity=fxPhotoActivity(curItem(),'Finding skin…');
   if(typeof toast==='function')toast('Finding skin…',true);
   try{
     const r=await _faceparseRunLayers(src);
@@ -12808,7 +12863,7 @@ async function mskFaceSelectSkin(){
     const msg='Face-parse skin selection failed — '+(e&&e.message||e);
     log(msg,'err');if(typeof toast==='function')toast(msg);
   }finally{
-    _faceparseRunning=false;mskRebuild();
+    _faceparseRunning=false;endActivity();mskRebuild();
   }
 }
 function mskAiPointsClear(){
@@ -17450,6 +17505,7 @@ function fxSelectImage(idx){
   // rather than trying to coordinate two independent async flows.
   if(window.chromasmithLibraryBusy)return;
   if(idx<0||idx>=fxImages.length||idx===fxCurIdx)return;
+  fxPhotoActivityInvalidate();
   // Both are keyed to "the photo currently open" (scan results list OTHER photos to jump to;
   // multi-instance results are candidate points IN the photo that was open when they were found).
   // Neither was reset on a photo switch, so navigating away and back — or just clicking a
