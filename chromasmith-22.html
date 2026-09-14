@@ -867,6 +867,10 @@ canvas,img{-webkit-user-drag:none}
 #fx-toast.ok::before{background:var(--ok)}
 #fx-toast.err::before{background:var(--err)}
 #fx-toast.err{border-color:var(--err-border)}
+/* Progress pill (toastProgress) — pinned open, no auto-dismiss, until resolve()/fail() lands.
+   Pulses instead of a static dot so a long-running op reads as "still going", not stalled. */
+#fx-toast.progress::before{animation:fxToastPulse 1.1s ease-in-out infinite}
+@keyframes fxToastPulse{0%,100%{opacity:.3}50%{opacity:1}}
 /* Clears the mobile action bar; every other layout wants it near the bottom edge. */
 body.mobile-fx{--toast-b:98px}
 body.mobile-fx #fx-toast{left:50%;right:auto;transform:translateX(-50%) translateY(8px)}
@@ -10885,7 +10889,19 @@ function editorBgOpenMenu(x,y){
 // other: a batch that failed on five photos showed only the fifth message, for 1.9s, and the
 // other four were lost. Queue instead, and let each pill finish its fade before the next
 // starts — two pills cross-fading in place is unreadable.
-const _toastQ=[];let _toastBusy=false;
+const _toastQ=[];let _toastBusy=false;let _toastPinned=false;
+function _toastEl(){
+  let t=document.getElementById('fx-toast');
+  if(!t){
+    t=document.createElement('div');t.id='fx-toast';
+    // role=status + aria-live: every pill (including the plain toast() path below) is announced
+    // to a screen reader, not just visible — backlog #5's "completion and failure are announced
+    // accessibly" applies to all toasts, not only the progress ones that motivated this.
+    t.setAttribute('role','status');t.setAttribute('aria-live','polite');t.setAttribute('aria-atomic','true');
+    document.body.appendChild(t);
+  }
+  return t;
+}
 function toast(msg,kind){
   // Back-compat: existing callers pass `true` for success and `false`/undefined for neutral.
   // A string ('ok' | 'err') is the newer form and is what log() uses for failures.
@@ -10898,16 +10914,16 @@ function toast(msg,kind){
   if(last&&last.msg===m&&last.k===k)return;
   _toastQ.push({msg:m,k});
   if(_toastQ.length>3)_toastQ.splice(0,_toastQ.length-3);
-  if(!_toastBusy)_toastPump();
+  if(!_toastBusy&&!_toastPinned)_toastPump();
 }
 function _toastPump(){
+  if(_toastPinned)return; // a live toastProgress() pill owns the element until it resolves
   const next=_toastQ.shift();
   if(!next){_toastBusy=false;return;}
   _toastBusy=true;
-  let t=document.getElementById('fx-toast');
-  if(!t){t=document.createElement('div');t.id='fx-toast';document.body.appendChild(t);}
+  const t=_toastEl();
   t.textContent=next.msg;
-  t.classList.remove('ok','err');if(next.k)t.classList.add(next.k);
+  t.classList.remove('ok','err','progress');if(next.k)t.classList.add(next.k);
   t.classList.add('show');
   // Errors hold longer: they carry more words, and the user has to decide what to do next.
   clearTimeout(t._h);
@@ -10915,6 +10931,37 @@ function _toastPump(){
     t.classList.remove('show');
     setTimeout(_toastPump,220); // match the opacity transition so the pills don't overlap
   },next.k==='err'?3400:1900);
+}
+// Pinned progress pill for an operation with a real start/end (batch merge, collage, folder
+// scan…) — unlike toast(), this does NOT auto-dismiss on a timer, because a long op can easily
+// outlive the normal 1.9s pill lifetime, leaving the user staring at a stale "Building…" message
+// that has nothing to do with whether the work is still running (backlog #5). It stays open,
+// optionally updates its text, and only leaves the screen once resolve()/fail() is called.
+// Any toast() calls made while a progress pill is open queue normally and play once it resolves.
+function toastProgress(msg){
+  const t=_toastEl();
+  clearTimeout(t._h);
+  _toastPinned=true;_toastBusy=true;
+  t.textContent=String(msg);
+  t.classList.remove('ok','err');t.classList.add('progress');
+  t.classList.add('show');
+  let settled=false;
+  const settle=(text,k)=>{
+    if(settled)return;settled=true;
+    _toastPinned=false;
+    t.textContent=String(text);
+    t.classList.remove('progress');if(k)t.classList.add(k);
+    clearTimeout(t._h);
+    t._h=setTimeout(()=>{
+      t.classList.remove('show');
+      setTimeout(_toastPump,220);
+    },k==='err'?3400:1900);
+  };
+  return{
+    update(text){if(!settled)t.textContent=String(text);},
+    resolve(text){settle(text,'ok');},
+    fail(text){settle(text,'err');},
+  };
 }
 // Minimal reusable modal — used by the Keyboard Shortcuts and What's New panels (Help menu).
 // Deliberately not a "framework": one dismissible glass panel, styled to match the app's
