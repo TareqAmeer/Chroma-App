@@ -38,8 +38,10 @@ it was fixed) and `CLAUDE.md` (app architecture, the shader-comment/backtick bug
   the Playwright behaviour suite too (~5 min), `--no-build` to skip the rebuild. **Use this
   instead of running `npm run X` five times by hand** — see §5 for why that matters here
   specifically.
-- **App install target is the repo root**, not `/Applications`. `desktop/install-app.sh`
-  installs to `"<repo root>/Chromasmith copy.app"`. Don't reintroduce `/Applications` anywhere.
+- **The app runs in place from the release build**, no installed copy anywhere.
+  `desktop/install-app.sh` registers
+  `desktop/src-tauri/target/release/bundle/macos/Chromasmith.app` with Launch Services
+  directly. Don't reintroduce `/Applications` or any other copy.
 
 ---
 
@@ -233,7 +235,7 @@ For every Editor fix, before calling it finished:
 
 ## 7. What NOT to do — steps that would be pure waste of time regardless of what they produce
 
-- **Don't touch `/Applications/Chromasmith.app`.** It's not the install target any more (§0).
+- **Don't touch `/Applications/Chromasmith.app`.** It's not the install target (§0).
 - **Don't hand-roll a new "gate on regressions only" pattern for anything.** Use
   `wireframe_checks_lib.mjs`'s `hardGate`. This exact mistake shipped independently in TWO
   different tools before being caught — assume it'll happen a third time if not actively avoided.
