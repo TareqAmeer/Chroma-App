@@ -4,7 +4,7 @@
   "description": "Chromasmith — native macOS shell (Tauri) wrapping the single-file web app",
   "private": true,
   "scripts": {
-    "build:dist": "../build-desktop.sh",
+    "build:dist": "node ../scripts/build-desktop.mjs",
     "dev": "npm run build:dist && tauri dev",
     "build": "npm run build:dist && tauri build"
   },

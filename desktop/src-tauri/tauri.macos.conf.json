@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Chromasmith",
+        "url": "cs://localhost/index.html",
+        "width": 1440,
+        "height": 900,
+        "maximized": true,
+        "minWidth": 900,
+        "minHeight": 600,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "dragDropEnabled": true,
+        "transparent": true
+      }
+    ]
+  },
+  "bundle": {
+    "targets": ["app"],
+    "icon": ["icons/icon.icns"],
+    "macOS": {
+      "minimumSystemVersion": "13.0"
+    },
+    "resources": {
+      "vendor/onnxruntime/libonnxruntime.dylib": "vendor/onnxruntime/libonnxruntime.dylib"
+    }
+  }
+}

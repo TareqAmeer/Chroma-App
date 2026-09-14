@@ -1,2 +1,21 @@
+# Normalize line endings on checkout/commit so a Windows clone (core.autocrlf=true by default)
+# can't silently turn LF-authored shell hooks, JS, or golden-image-adjacent files into CRLF —
+# see docs/windows-port.md G16. `text=auto` lets git still decide text-vs-binary per file; `eol=lf`
+# pins the checked-out line ending for text files to LF on every platform, matching how the repo
+# has always been authored (macOS/Linux).
+* text=auto eol=lf
+
+# Explicit binary — never run through the LF/CRLF or diff machinery. *.onnx first as the general
+# rule (covers the plain-blob-committed scrfd/sam/faceparse/rtdetr/depth weights); the two
+# git-lfs-tracked paths below override it with the more specific filter=lfs attribute (last
+# matching pattern wins in .gitattributes, so order here matters).
+*.onnx binary
+*.png binary
+*.jpg binary
+*.webp binary
+*.dcp binary
+*.icns binary
+*.ico binary
+
 desktop/src-tauri/vendor/arcface/*.onnx filter=lfs diff=lfs merge=lfs -text
 desktop/src-tauri/vendor/clip/*.onnx filter=lfs diff=lfs merge=lfs -text

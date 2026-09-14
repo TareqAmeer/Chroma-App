@@ -187,6 +187,10 @@ See [docs/app-tabs.md](docs/app-tabs.md) — Effects & Export, Match & Refine, C
 These cover work that touches a specific subsystem — load the relevant one instead of
 carrying it in every turn:
 
+- **[docs/windows-port.md](docs/windows-port.md)** — the Windows desktop-shell port: status table,
+  phased plan, ground rules for changes that reach both platforms, and the Windows-vs-macOS
+  tools/feature comparison. Load before any `desktop/src-tauri` or `.claude/hooks` work touching
+  Windows, or before continuing the port.
 - **[calib/CLAUDE.md](calib/CLAUDE.md)** — halation/bloom emission model science, `calib/`
   tooling, the grain model, Fujify Fujifilm-look recreation, chart zone geometry. Auto-loads
   when working inside `calib/`; load before tuning any `FXR.CAL.*` constant. See also skill

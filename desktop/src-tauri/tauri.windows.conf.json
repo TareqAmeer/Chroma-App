@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Chromasmith",
+        "url": "https://cs.localhost/index.html",
+        "width": 1440,
+        "height": 900,
+        "maximized": true,
+        "minWidth": 900,
+        "minHeight": 600,
+        "dragDropEnabled": true,
+        "decorations": true
+      }
+    ]
+  },
+  "bundle": {
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
+    "resources": {
+      "vendor/onnxruntime/win-x64/onnxruntime.dll": "vendor/onnxruntime/onnxruntime.dll"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  }
+}
