@@ -1270,7 +1270,8 @@
       "covers": [
         "lib-top-left",
         "lib-top-center",
-        "lib-top-right"
+        "lib-top-right",
+        "lib-selection-action-hint"
       ]
     },
     {
@@ -2087,6 +2088,37 @@
         "lib-empty-open"
       ],
       "note": "S6d chunk C: real path \u2014 the libtest list_dir mock (library-ui.js) already special-cases any path matching /Folders only/ to return []; window.__libOpenFolder(path) is an existing real test hook (line ~2595) wrapping the real openFolder()."
+    },
+    {
+      "id": "lib-empty-error",
+      "kind": "chrome",
+      "group": "E",
+      "selector": "#lib-empty",
+      "label": "Library empty \u2014 load failed, with retry",
+      "openSteps": [
+        {
+          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "eval": "window.__libForceLoadError && window.__libForceLoadError()"
+        },
+        {
+          "wait": 200
+        }
+      ],
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": [
+        "lib-empty-retry"
+      ],
+      "note": "Backlog #5 follow-up: showLibraryError() (library-ui.js ~3075) is a real recovery state (folder/collection/exported/Lightroom-album load failures all route through it), but every real call site needs an actual IPC rejection \u2014 the libtest list_dir mock never rejects for any path, so this state had no reachable test trigger and surface_coverage_check.mjs flagged #lib-empty-retry as never captured. Added window.__libForceLoadError(), a LIBTEST-only hook calling the exact same showLibraryError() real code, mirroring window.__libSelect/window.libtestClearRoot's existing test-hook convention."
     },
     {
       "id": "lib-batchbar",

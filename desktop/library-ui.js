@@ -2637,6 +2637,12 @@
     window.__libState = () => ({ m: state._virtMetrics, on: state._virtOn, n: (state._virtAll || []).length, range: state._virtRange });
     window.__libRenderGrid = () => renderGrid();
     window.__libSelect = (p) => { state.selected.add(p); };
+    // Test-only trigger for showLibraryError()'s recovery state — its 4 real call sites (folder/
+    // collection/exported/Lightroom-album load failures) all need a real IPC rejection, which
+    // libtestInvoke's list_dir mock never produces (it resolves for any path). Without this,
+    // #lib-empty-retry has no reachable test path at all — surface_coverage_check.mjs flagged it
+    // as a genuinely uncaptured surface (backlog #5 follow-up).
+    window.__libForceLoadError = () => { showLibraryError('Couldn’t open this folder.', 'Choose another folder', () => {}); };
     window.__libScrollTo = (p) => scrollLibraryToPath(p);
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
     window.__libOpenFolder = (path) => openFolder(path);
