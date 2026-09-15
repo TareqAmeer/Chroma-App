@@ -1653,7 +1653,12 @@
        padding — #lib-top itself is display:none while docked (.lib-fullview-only above), so only
        the FULL-view rule here is live; the docked-only overrides that used to follow it are dead
        code once #lib-top stopped rendering at all in dock mode, and were removed with it. */
-    body.deskx #lib-overlay #lib-top{height:44px;padding:0 12px 0 84px;-webkit-app-region:no-drag}
+    body.deskx #lib-overlay #lib-top{height:44px;padding:0 12px;-webkit-app-region:no-drag}
+    /* Same macOS-only traffic-light clearance as #fx-deskbar's own (chromasmith-22.html) —
+       Windows' native title bar (decorations:true) already occupies that space, so this 84px
+       left padding only applies under body.mac-titlebar-overlay now (desktop-native.js,
+       docs/windows-port.md Phase 3). */
+    body.mac-titlebar-overlay #lib-overlay #lib-top{padding-left:84px}
     /* .full-scoped (not just body.deskx #lib-overlay #lib-top) so this never fights the
        body.deskx #lib-overlay:not(.full) .lib-fullview-only{display:none} rule above that keeps
        #lib-top hidden while DOCKED — two ids beat that rule's one, so a bare display:grid here

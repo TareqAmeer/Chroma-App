@@ -400,25 +400,32 @@
 
   // ── DRK-style shell layout: everything is chromasmith-22.html's `body.deskx` mode
   // (grid, icon rail right, panel toggle, ⋯ menu, 44px deskbar) — the shell only turns it on
-  // and handles the two things a web page can't: the window drag region and traffic lights.
-  // titleBarStyle:"Overlay" (tauri.conf.json) keeps the traffic-light buttons floating over
-  // the web content; the deskbar's 84px left padding (deskx CSS) clears them, and the deskbar
-  // itself is the drag handle. Buttons inside it must be explicitly no-drag or every click
-  // becomes a window drag.
+  // and handles the one thing that differs by platform: the window drag region and traffic
+  // lights, which exist ONLY under macOS's titleBarStyle:"Overlay" (tauri.macos.conf.json).
+  // Windows uses a native title bar instead (decorations:true, tauri.windows.conf.json) with
+  // its own min/max/close and drag handle already provided by the OS, so none of this — the
+  // 84px traffic-light clearance (chromasmith-22.html/library-ui.js CSS, gated on
+  // body.mac-titlebar-overlay below), -webkit-app-region:drag, or data-tauri-drag-region —
+  // applies there; setting them anyway would just reserve dead space no button needs clearing.
+  // docs/windows-port.md Phase 3 / G3's window-frame decision; CS_PLATFORM.os (not a bare
+  // window.__TAURI__ check) is the capability gate per ground rule 1.
   const style = document.createElement('style');
   style.textContent = `
-    body.tauri-native #fx-deskbar{-webkit-app-region:drag}
-    body.tauri-native #fx-deskbar button,body.tauri-native #fx-deskbar-tools,
-    body.tauri-native #fx-deskbar-tools *,body.tauri-native #fx-overflow,
-    body.tauri-native #fx-overflow *{-webkit-app-region:no-drag}
+    body.mac-titlebar-overlay #fx-deskbar{-webkit-app-region:drag}
+    body.mac-titlebar-overlay #fx-deskbar button,body.mac-titlebar-overlay #fx-deskbar-tools,
+    body.mac-titlebar-overlay #fx-deskbar-tools *,body.mac-titlebar-overlay #fx-overflow,
+    body.mac-titlebar-overlay #fx-overflow *{-webkit-app-region:no-drag}
     body.tauri-native{height:100vh;overflow:hidden}
     body.tauri-native #log-area{z-index:3500}
   `;
   document.head.appendChild(style);
   document.body.classList.add('tauri-native');
   document.body.classList.add('deskx');
-  const deskbar = document.getElementById('fx-deskbar');
-  if (deskbar) deskbar.setAttribute('data-tauri-drag-region', '');
+  if (window.CS_PLATFORM.os === 'macos') {
+    document.body.classList.add('mac-titlebar-overlay');
+    const deskbar = document.getElementById('fx-deskbar');
+    if (deskbar) deskbar.setAttribute('data-tauri-drag-region', '');
+  }
   if (typeof applyFxLayout === 'function') applyFxLayout(); // re-fit now that deskx changed the geometry
 
   document.addEventListener('keydown', (e) => {

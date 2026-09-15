@@ -1130,12 +1130,21 @@ body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:var(--sp-9) 
    position:absolute centering for the older body.fx-deskb-only flex layout, untouched. */
 body.deskx #fx-deskbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:8px;
   position:fixed;top:0;left:0;right:0;z-index:var(--z-overlay);height:var(--deskx-topbar-h);
-  margin:0;padding:0 12px 0 var(--sp-10);border:none;border-bottom:1px solid var(--bdr-panel);border-radius:0;
+  margin:0;padding:0 12px;border:none;border-bottom:1px solid var(--bdr-panel);border-radius:0;
   background:var(--glass-bg);
   /* Only the bottom edge has real width, but with border-color unset on the other three sides
      it computes to currentColor, not var(--bdr-panel) — see the identical #lib-overlay fix and
      its comment (library-ui.js). Set explicitly so getComputedStyle().borderColor is uniform. */
   border-color:var(--bdr-panel)}
+/* The 84px LEFT clearance above is for macOS's overlaid traffic-light buttons (titleBarStyle:
+   Overlay, tauri.macos.conf.json) — Windows uses a native title bar (decorations:true,
+   tauri.windows.conf.json) with its own min/max/close already occupying that space, so reserving
+   it a second time here would just be 72px of dead padding pushing every left-cluster button
+   inward for no reason. desktop-native.js adds body.mac-titlebar-overlay only under
+   CS_PLATFORM.os==='macos' (and "?deskx=1" browser testing, which simulates the macOS wireframe
+   this wasn't designed for anywhere else). docs/windows-port.md Phase 3 / G3's window-frame
+   decision. */
+body.mac-titlebar-overlay #fx-deskbar{padding-left:var(--sp-10)}
 body.deskx #fx-deskbar-left{display:flex;align-items:center;gap:8px;grid-column:1;justify-self:start;min-width:0}
 body.deskx #fx-deskbar-right{display:flex;align-items:center;gap:8px;grid-column:3;justify-self:end;min-width:0}
 /* The title's own base rule (above #fx-deskbar-title) centers it by ABSOLUTE positioning against
@@ -4928,7 +4937,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-14a';
+const BUILD='2026-09-15a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -4981,7 +4990,12 @@ window.csAbout=csAbout;
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
 // deskx (DRK-style desktop layout): normally applied by the Tauri shell
 // (desktop-native.js); "?deskx=1" lets it be exercised in a plain browser for testing.
-try{if(new URLSearchParams(location.search).has('deskx'))document.body.classList.add('deskx');}catch(e){}
+// mac-titlebar-overlay rides along with it: every wireframe/visual reference this mode is
+// tested against was built for macOS's titleBarStyle:Overlay traffic-light layout (desktop-
+// native.js only adds this class for real under CS_PLATFORM.os==='macos' — see its own comment
+// on the #fx-deskbar 84px-padding rule, docs/windows-port.md Phase 3), so the browser escape
+// hatch keeps simulating that, not Windows' native-titlebar layout, which no wireframe covers.
+try{if(new URLSearchParams(location.search).has('deskx')){document.body.classList.add('deskx');document.body.classList.add('mac-titlebar-overlay');}}catch(e){}
 // Also give a plain (non-Tauri) wide browser window the same grouped-rail, photo-left layout
 // as the real desktop shell — previously only Tauri or the explicit ?deskx=1 escape hatch got
 // it, so a wide GitHub Pages window fell back to fx-deskb's un-grouped section list with

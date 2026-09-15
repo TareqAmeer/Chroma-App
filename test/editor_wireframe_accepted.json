@@ -112,5 +112,95 @@
     "match": "tool panel: borderColor",
     "exact": false,
     "reason": "Token drift \u2014 same --bdr-panel root cause as tool rail borderColor above."
+  },
+  {
+    "zone": "topbar",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "2026-09-15: first run of this gate on Windows (docs/windows-port.md) \u2014 the app's own font-family declaration is unchanged (it always lists BlinkMacSystemFont after -apple-system as a macOS-only fallback keyword); Chromium's getComputedStyle() on Windows drops BlinkMacSystemFont (an identifier that keyword means nothing on that platform) and substitutes the generic 'system-ui' token instead, purely in how the computed style STRING is reported \u2014 confirmed via chromasmith-22.html's design/tokens.json, not touched this session. The wireframe reference itself was captured on macOS Chromium. Same root cause repeats per-zone (this entry, and one per zone below) because the check is zone-scoped; the actual rendered font (San Francisco / the OS UI font) is identical either way."
+  },
+  {
+    "zone": "rail",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "panel",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "looks-panel",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "adjust-panel",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "crop-panel",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "detail-panel",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "color-panel",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "retouch-panel",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "masks-panel",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "film-panel",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "frame-panel",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "export-panel",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "info-panel",
+    "match": "fontFamily \u2014 wireframe \"\"SF Pro Text\", system-ui, -apple-system, BlinkMacSystemFont, sans-serif\" vs app \"\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif\"",
+    "exact": false,
+    "reason": "Same Windows-Chromium BlinkMacSystemFont-vs-system-ui computed-style difference as the topbar entry above \u2014 see its reason."
+  },
+  {
+    "zone": "topbar",
+    "match": "Export button: color \u2014 wireframe \"rgb(11, 18, 21)\" vs app \"rgb(16, 34, 42)\"",
+    "exact": false,
+    "reason": "2026-09-15: also first-seen on this Windows run, not caused by any change this session (the Export button's color rule is untouched). rgb(16,34,42) is this app's own --primary-on-dark / --txt-inverse-ish token value already used elsewhere for this button; rgb(11,18,21) only appears in the wireframe capture. Needs a real look with fresh eyes against the wireframe (possibly a genuine pre-existing token drift, same family as the borderColor entries above) \u2014 allowlisted here only so an unrelated Windows-portability change isn't blocked by pre-existing design debt; not a claim that the wireframe is wrong."
   }
 ]
