@@ -56,6 +56,8 @@ mod fastthumb;
 mod winthumb;
 #[cfg(target_os = "macos")]
 mod videothumb;
+#[cfg(windows)]
+mod winvideothumb;
 mod subject;
 mod ingest;
 mod catalog;
