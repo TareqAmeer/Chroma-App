@@ -50,8 +50,9 @@ coi-serviceworker.min.js  Cross-origin isolation shim so RAW decode works on Pag
 vendor/                 libraw (RW2 wasm), dcp (14 DC-S9 profiles), mediabunny (video, MPL-2.0,
                         lazy import), luts (102 of 113 presets as raw 33³ bytes — §2)
 ios/, build-ios.sh, patches/   Capacitor iOS shell — docs/ios-shell.md
-.github/workflows/      ios-ipa.yml; desktop-dmg.yml on `v*` tag. ⚠️ macos-13 (x86_64) required by
-                        the Intel-only libonnxruntime.dylib; dmg via hdiutil, tauri targets:["app"]
+.github/workflows/      ios-ipa.yml; desktop-release.yml (dmg + Windows NSIS installer) on `v*`
+                        tag. ⚠️ macos-13 (x86_64) required by the Intel-only libonnxruntime.dylib;
+                        dmg via hdiutil, tauri.macos.conf.json targets:["app"]
 calib/                  Calibration tooling (Python) — calib/CLAUDE.md. Not needed to run the app.
                         LUT LIBRARY/ (46) + dehancer/cubes/ (67) = source of every preset
 ```

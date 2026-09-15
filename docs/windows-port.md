@@ -224,11 +224,30 @@ build wasn't fully clean before it ran out — rerun rather than trust a build t
   hand (support there wasn't confirmed by research — see §5).
 
 ### Phase 5 — packaging + CI release
-- Extend `desktop-dmg.yml` into a matrix (rename `desktop-release.yml`): `windows-latest` job runs
-  `node scripts/fetch-models.mjs`, `npm run build`, uploads
-  `Chromasmith-<ver>-windows-x64-setup.exe` to the same `v*` release. Release notes cover
-  SmartScreen ("More info → Run anyway") and LICENSES-MODELS.
-- NSIS registers file associations (from shared config) and the Adobe deep-link scheme.
+- **Done** — `desktop-dmg.yml` renamed to `desktop-release.yml` with a new `nsis` job
+  (`windows-latest`) alongside the existing `dmg` job (`macos-13`), rather than one shared
+  `strategy: matrix` block — the packaging step (hdiutil vs locating the NSIS `.exe`) and the
+  resource-verification step (windows also merges `tauri.windows.conf.json`'s `onnxruntime.dll`
+  resource) differ enough that a shared step list would need almost as much per-OS branching.
+  Both jobs now call the same new `scripts/fetch-models.mjs` (ground rule 4) instead of each
+  having their own curl/python steps — it fetches sam2 + rawdenoise on both platforms and the
+  win-x64 ONNX Runtime DLL only on Windows (`--windows-ort` forces it elsewhere). The nsis job
+  renames Tauri's default NSIS output to `Chromasmith-<ver>-windows-x64-setup.exe` and uploads it
+  to the same `v*` tag release the dmg job publishes to; the dmg job's release body now also
+  covers Windows SmartScreen ("More info → Run anyway") and points at LICENSES-MODELS.md.
+  Verified live: `node scripts/fetch-models.mjs --windows-ort` on this dev machine correctly
+  resolved the latest ONNX Runtime release via the GitHub API, downloaded the win-x64 zip, and
+  extracted a valid 16MB `onnxruntime.dll` via bsdtar (`%SystemRoot%\System32\tar.exe`, which
+  understands zip unlike Git Bash's bundled GNU tar — the same PATH trap G14 already
+  documented for a different tool). **Not yet verified**: an actual `windows-latest` CI run of the
+  new job (this session had no way to trigger GitHub Actions), and whether NSIS's default output
+  filename/path assumptions in the packaging step hold on a clean runner.
+- **Still open**: NSIS file-association + Adobe deep-link scheme registration on install. The
+  `fileAssociations` list already lives in the shared `tauri.conf.json` and Tauri's NSIS bundler
+  registers those automatically; the deep-link scheme (`tauri.conf.json`'s `plugins.deep-link`)
+  needs verifying it's also picked up by the NSIS installer (Tauri 2's deep-link plugin docs say
+  yes for Windows via registry, but this hasn't been confirmed against a real installed build on
+  this port).
 
 ### Phase 6 — Windows diagnostics + real-engine testing
 - Launch dev/test builds with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`
@@ -303,7 +322,8 @@ Sources for the HDR format research: [Greg Benz – HDR display support](https:/
 `dcp_store.rs` · `bgwork.rs` · `sam.rs`/`rawdenoise.rs` (ORT load) · `tauri.conf.json` (+ new
 platform overrides) · `Cargo.toml` · `desktop/desktop-native.js` · `desktop/library-ui.js` ·
 `build-desktop.sh` · `.claude/hooks/*.sh` (+ new `.py` companions where a hook needs real logic) ·
-`.github/workflows/desktop-dmg.yml`, `editor-gates.yml` · `diagnostics/` · this file.
+`.github/workflows/desktop-release.yml`, `editor-gates.yml` · `scripts/fetch-models.mjs` ·
+`diagnostics/` · this file.
 
 ## Completeness check
 "Done" is measured by scans of the code and the running app, not by the lists above:
