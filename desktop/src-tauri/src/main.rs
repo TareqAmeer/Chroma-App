@@ -3,6 +3,13 @@
 // lives here: this only wires OS-level integration (native menu bar, file dialogs) on top.
 // The frontend listens for the "menu-*" events emitted below (see desktop-native.js) and
 // calls the SAME JS functions the on-screen buttons already call — no duplicated logic.
+//
+// Windows only: a plain Rust binary defaults to the console subsystem, which pops up a
+// terminal window alongside the app on every launch (harmless on macOS/Linux, where the
+// GUI subsystem is the only one). `windows_subsystem = "windows"` switches to the GUI
+// subsystem instead — kept debug-only-console via cfg_attr so `cargo tauri dev`/`cargo run`
+// still show println!/log output in a console, matching Tauri's own project-template default.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "macos")]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
