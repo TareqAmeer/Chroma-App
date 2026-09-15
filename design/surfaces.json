@@ -1112,6 +1112,27 @@
       "group": "B"
     },
     {
+      "id": "fx-info-pop",
+      "openSteps": [
+        {
+          "eval": "(() => { const bs=[...document.querySelectorAll('.fx-info-i')].filter((b) => b.title && b.offsetParent); if (bs[0]) bs[0].click(); })()"
+        },
+        {
+          "wait": 100
+        }
+      ],
+      "selector": "#fx-info-pop:not([hidden])",
+      "opened": true,
+      "states": {
+        "rest": true
+      },
+      "note": "Tap/click fallback bubble for a .fx-info-i button's `title` tooltip — the native title tooltip never fires on touch (mobile web, iOS/Android app shell, tablet), so this shows the same text on click instead.",
+      "kind": "tooltip",
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "B"
+    },
+    {
       "id": "mobile-sheet",
       "kind": "layout",
       "selector": ".fx-panel",

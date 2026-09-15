@@ -135,6 +135,16 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
      borderWidth for the full audit (1px itself stays a plain literal, not a token). */
   --bw-1:1.5px;--bw-2:2px;--bw-3:3px;--bw-4:4px/* TOKENS:ROOT:END */}
 body.light{--glass-bg:#ffffff}
+*{scrollbar-width:thin;scrollbar-color:transparent transparent}
+*:hover,*.fx-scrolling{scrollbar-color:rgba(255,255,255,.28) transparent}
+body.light *:hover,body.light *.fx-scrolling{scrollbar-color:rgba(0,0,0,.28) transparent}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:transparent;border-radius:8px}
+:hover::-webkit-scrollbar-thumb,.fx-scrolling::-webkit-scrollbar-thumb{background:rgba(255,255,255,.28)}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.42)}
+body.light :hover::-webkit-scrollbar-thumb,body.light .fx-scrolling::-webkit-scrollbar-thumb{background:rgba(0,0,0,.28)}
+body.light ::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.42)}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100%;overflow-x:clip}
 /* Mirrors of body.mobile-fx/body.mobile-cl, toggled onto <html> alongside <body> (see
@@ -169,12 +179,16 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .dg2{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-2)}
 .dg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-2)}
 .dz{background:var(--sur2);border:1px dashed var(--bdr);border-radius:var(--r);padding:22px 14px;text-align:center;cursor:pointer;transition:all var(--dur-1);position:relative;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--sp-1)}
-.dz:hover,.dz.over{border-color:var(--acc);background:var(--tint-1)}.dz.loaded{border-style:solid;border-color:var(--ok);background:var(--ok)}.dz.loaded .dz-lb,.dz.loaded .dz-sb{color:#fff}
+.dz:hover,.dz.over{border-color:var(--acc);background:var(--tint-1)}
+/* Loaded state used to fill the whole drop-zone solid --ok green permanently once a file was
+   picked (not just momentarily) — a quiet neutral surface with a slim success-colored border
+   reads as "confirmed" without a persistent green wash competing with the rest of the panel. */
+.dz.loaded{border-style:solid;border-color:var(--ok);background:var(--sur2)}
 .dz input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-.dz-ic{font-size:var(--fs-4);color:var(--mut)}.dz.loaded .dz-ic{color:#fff}
+.dz-ic{font-size:var(--fs-4);color:var(--mut)}.dz.loaded .dz-ic{color:var(--ok)}
 .dz-lb{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;color:var(--mut)}
 .dz-sb{font-size:var(--fs-2);color:var(--mut);margin-top:1px}
-.dz-fn{font-family:var(--mono);font-size:var(--fs-2);color:var(--ok);word-break:break-all;max-width:92%;margin-top:2px}.dz.loaded .dz-fn{color:#fff}
+.dz-fn{font-family:var(--mono);font-size:var(--fs-2);color:var(--ok);word-break:break-all;max-width:92%;margin-top:2px}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .chip-tap{margin-top:0}
 .btn{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:var(--sp-2) 14px;border-radius:var(--r-sm);border:1px solid;cursor:pointer;transition:background var(--dur-1) ease,border-color var(--dur-1) ease,color var(--dur-1) ease,transform var(--dur-1) ease,box-shadow var(--dur-1) ease;display:flex;align-items:center;gap:6px;white-space:nowrap}
@@ -283,6 +297,15 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
 .fx-info-i{width:14px;height:14px;border-radius:50%;border:1px solid var(--bdr);background:none;
   color:var(--mut);font-size:var(--fs-2);font-style:italic;line-height:1;cursor:help;padding:0;
   display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;flex:none}
+/* Tap/click fallback for .fx-info-i's `title` tooltip — the native browser tooltip never fires
+   on touch (mobile web, iOS/Android app shells, tablets), which made "the info buttons don't
+   work" a real bug report there even though hover-based desktop use was fine. #fx-info-pop shows
+   the same title text as a small anchored bubble; see _fxInfoTapInit(). */
+#fx-info-pop{position:fixed;z-index:9999;max-width:260px;padding:8px 10px;border-radius:8px;
+  border:1px solid var(--bdr);background:var(--sur2);color:var(--txt);font-family:var(--sans);
+  font-size:var(--fs-2);line-height:var(--lh-base);box-shadow:0 4px 16px rgba(0,0,0,.35);
+  pointer-events:none}
+#fx-info-pop[hidden]{display:none}
 /* Collapsed long-form explanation — for a paragraph too long to sit comfortably on an ⓘ tooltip
    (real per-photo timing/behaviour detail a user may want to actually read, not just a caveat).
    Closed by default so it doesn't cost permanent panel space; the summary line is the same
@@ -7896,6 +7919,18 @@ function fxLensAutoToggled(){
   const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
   if(!reloaded)fxLensStatusRefresh(); // no open photo to reload — show why nothing happened
 }
+if(typeof window!=='undefined')(()=>{
+  // Windows has no OS-level overlay scrollbars, so `.fx-scrolling` (CSS above) fakes one:
+  // scroll events don't bubble, so this listens in the capture phase on the document.
+  const fxScrollTimers=new WeakMap();
+  document.addEventListener('scroll',e=>{
+    const el=e.target===document?document.documentElement:e.target;
+    if(!el||!el.classList)return;
+    el.classList.add('fx-scrolling');
+    clearTimeout(fxScrollTimers.get(el));
+    fxScrollTimers.set(el,setTimeout(()=>el.classList.remove('fx-scrolling'),800));
+  },{capture:true,passive:true});
+})();
 if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
   const tg=document.getElementById('tg-lens-auto');
   if(tg&&window.chromasmithAutoLens)tg.classList.add('on');
@@ -11098,6 +11133,37 @@ function _csModal(title,bodyHtml){
   panel.querySelector('#cs-modal-x').onclick=()=>ov.remove();
   document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){ov.remove();document.removeEventListener('keydown',esc);}});
 }
+// .fx-info-i's tooltip is a plain `title` attribute, which relies on the browser's native hover
+// tooltip — that never fires on touch (mobile web, iOS/Android app shell, tablet), so tapping an
+// info dot there does nothing. This adds a delegated click/tap fallback: show the same `title`
+// text as a small anchored bubble, dismissed on the next tap/scroll/Escape or after a timeout.
+function _fxInfoTapInit(){
+  const pop=document.createElement('div');pop.id='fx-info-pop';pop.hidden=true;
+  document.body.appendChild(pop);
+  let hideTimer=null;
+  const hide=()=>{pop.hidden=true;clearTimeout(hideTimer);};
+  document.addEventListener('click',e=>{
+    const btn=e.target.closest&&e.target.closest('.fx-info-i');
+    if(!btn||btn.style.pointerEvents==='none'){hide();return;}
+    const text=btn.getAttribute('title');
+    if(!text){hide();return;}
+    e.preventDefault();e.stopPropagation();
+    pop.textContent=text;pop.hidden=false;
+    const r=btn.getBoundingClientRect();
+    const pw=Math.min(260,window.innerWidth-16);
+    pop.style.maxWidth=pw+'px';
+    // Measure after content/width are set so offsetWidth/Height reflect this bubble's text.
+    let left=r.left;let top=r.bottom+6;
+    if(left+pop.offsetWidth>window.innerWidth-8)left=window.innerWidth-8-pop.offsetWidth;
+    if(left<8)left=8;
+    if(top+pop.offsetHeight>window.innerHeight-8)top=r.top-6-pop.offsetHeight;
+    pop.style.left=left+'px';pop.style.top=top+'px';
+    clearTimeout(hideTimer);hideTimer=setTimeout(hide,6000);
+  },true);
+  document.addEventListener('scroll',hide,true);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')hide();});
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',_fxInfoTapInit);
 // Keyboard Shortcuts panel (Help menu / Cmd+/ / bare "?") — every shortcut below is real and
 // already wired elsewhere (desktop-native.js's menu-* wiring, library-ui.js's grid keydown
 // handler, or an on-page oninput/onclick); this is purely a discoverability surface, not new

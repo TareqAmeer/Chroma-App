@@ -440,13 +440,15 @@
       "priority": "P1",
       "cluster": "editor-canvas",
       "title": "Replace the always-green drop zone with a quiet drag-active treatment",
-      "status": "backlog",
+      "status": "done",
       "recommended_executor": "Claude Code",
       "model": "claude-code:claude-opus-5",
       "reference": "linear-refresh",
       "depends_on": [],
       "acceptance": "Neutral idle state does not compete with the image; drag-over state is obvious and accessible.",
-      "source_id": 19
+      "source_id": 19,
+      "owner": "Claude (Sonnet 5)",
+      "completion_evidence": "2026-09-15: the idle (`.dz`) and drag-over (`.dz.over`) states were already quiet — dashed neutral border and a light accent tint on drag-over, using existing --acc/--tint-1 tokens, no changes needed there. The actual defect (\"always-green\") was `.dz.loaded` (chromasmith-22.html ~L182): once ANY file was picked in Match & Refine, Colour Copy, or the Effects & Export drop targets, the whole zone filled solid --ok green PERMANENTLY (not just as a momentary confirmation) with white text/icon overrides, competing with every panel around it for the rest of the session. Changed `.dz.loaded` to a neutral --sur2 background with a slim solid --ok border, and dropped the #fff overrides on `.dz-ic`/`.dz-fn` so the icon/filename keep their existing --ok/--mut colors against the neutral surface instead of white-on-green. Verified live in both themes (Match & Refine dropzone, dark and light) via a local static server + browser: idle stays neutral, loaded now reads as a quiet bordered confirmation with the filename legible, no solid green fill. `node test/export_harness.mjs` — 30/30 renders, no GLSL compile errors (no shader touched, ran per the shader-edit contract anyway since it's the same HTML file). `npm run ui:test` — identical failing set (TOKEN --duration-press, MENU library-topbar, TAP export@ info-i, 10x CONTRAST looks@) confirmed by stashing this change and re-running both ways; no new regressions."
     },
     {
       "id": 23,
