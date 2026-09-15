@@ -70,6 +70,23 @@ pub struct DiagNativeState {
     thumb_remaining: Option<u64>,
 }
 
+/// Where the native diagnostics bridge (chromasmith-22.html's `writeDiag()`) writes its
+/// periodic JSON snapshot, and where `diagnostics/native_bridge.py`/`find_process.py` poll it
+/// from. Used to hardcode a literal `/tmp/chromasmith_diag_state.json` — silently broken on
+/// Windows: `std::fs::write` there resolves a leading `/` to the root of the CURRENT DRIVE (not
+/// a real temp dir), so it wrote to a `C:\tmp\` that doesn't exist and `write_file_bytes` failed
+/// on every call, with the error swallowed by the JS side's own `catch(_){}`. `env::temp_dir()`
+/// is the portable fix — resolves to the real per-user temp dir on every platform (macOS:
+/// `$TMPDIR`, typically under `/var/folders/...`; Windows: `%TEMP%`), matched on the Python side
+/// by `tempfile.gettempdir()`, which resolves the same OS/user temp dir by the same mechanism.
+#[tauri::command]
+pub fn diag_state_path() -> String {
+    std::env::temp_dir()
+        .join("chromasmith_diag_state.json")
+        .to_string_lossy()
+        .into_owned()
+}
+
 #[tauri::command]
 pub fn diag_native_state() -> DiagNativeState {
     let exe = std::env::current_exe().ok();

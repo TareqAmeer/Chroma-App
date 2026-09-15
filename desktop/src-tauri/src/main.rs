@@ -2409,7 +2409,8 @@ fn main() {
             stream_write,
             stream_close,
             lr_downloads_dir,
-            diag::diag_native_state
+            diag::diag_native_state,
+            diag::diag_state_path
         ])
         // Custom "cs://" protocol serving the embedded dist/ with EXPLICIT COOP/COEP headers
         // on every single response, including the very first navigation — see the Cargo.toml

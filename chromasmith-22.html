@@ -21762,7 +21762,11 @@ if(window.__TAURI__&&window.__TAURI__.log&&window.__TAURI__.log.attachConsole){
 // (gated on window.__TAURI__) and costs nothing when nothing is watching the file.
 if(window.__TAURI__&&window.__TAURI__.core){
   (()=>{
-    const DIAG_PATH='/tmp/chromasmith_diag_state.json';
+    // Resolved once via the native diag_state_path command (env::temp_dir() on the Rust side,
+    // matched by tempfile.gettempdir() on the diagnostics/ Python side) rather than a hardcoded
+    // "/tmp/..." literal — that literal silently broke write_file_bytes on Windows, where a
+    // leading "/" resolves to the current drive's root, not a real temp dir.
+    let diagPath=null;
     let diagErrors=[],diagIpc=[],lastWrite=0;
     const diagSnap=()=>{try{return window.getUISnapshot?window.getUISnapshot():null}catch(_){return null}};
     // Library-only localStorage state (desktop/library-ui.js's own keys — same origin, so
@@ -21812,12 +21816,16 @@ if(window.__TAURI__&&window.__TAURI__.core){
       if(now-lastWrite<1000)return; // debounce an error burst; the 5s interval still catches it
       lastWrite=now;
       try{
+        if(diagPath===null){
+          try{diagPath=await window.__TAURI__.core.invoke('diag_state_path');}
+          catch(_){diagPath='/tmp/chromasmith_diag_state.json';} // pre-diag_state_path binary
+        }
         let native=null;
         try{native=await window.__TAURI__.core.invoke('diag_native_state');}catch(_){}
         const payload={t:now,errors:diagErrors,ipc:diagIpc,state:diagSnap(),config:configSnap(),native};
         const json=JSON.stringify(payload);
         const b64=btoa(unescape(encodeURIComponent(json)));
-        await window.__TAURI__.core.invoke('write_file_bytes',{path:DIAG_PATH,dataB64:b64});
+        await window.__TAURI__.core.invoke('write_file_bytes',{path:diagPath,dataB64:b64});
         diagErrors=[];diagIpc=[];
       }catch(_){}
     }
