@@ -5014,7 +5014,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-15a';
+const BUILD='2026-09-16a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -10357,10 +10357,6 @@ function fxUpdate(){
   if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // grading changed → coarse full-res underlay is stale
   fxScheduleRender();
   if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();
-  // Callers that set slider .value directly (photo switch, scope toggle, preset apply) never
-  // fire an 'input' event, so the fill squares wouldn't otherwise repaint — fxUpdate() is the one
-  // function nearly every such caller already calls, so repaint here catches them all.
-  if(typeof fxPaintAllSliders==='function')fxPaintAllSliders();
 }
 // ── Live preview feedback while a control is moving ──────────────────────────────────────────
 // This used to be a bare `setTimeout(renderPreview,400)`, which meant that dragging a slider
@@ -10390,8 +10386,6 @@ function fxScheduleRender(){
 const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-skin'];
 function resetAdjust(){
   ADJ_RESET_FIELDS.forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
-  fxPaintAllSliders();   // programmatic .value= writes never fire 'input', so the fill squares
-                         // above would otherwise stay stuck showing the pre-reset position
   fxUpdate();log('Adjustments reset','info');
 }
 // Disabled once every Basic Adjustments slider is already at its default (0) — clicking Reset
@@ -17231,6 +17225,13 @@ function fxPaintSlider(sl){
   sl.style.setProperty('--sl-def-pct',pct(def)+'%');
   const roll=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ctl-slider-roll'))||6;
   sl.style.setProperty('--sl-roll',((v-def)*roll)+'deg');
+  // The thumb's filled-square look (.fx-knob-on, shared with HSL/Point Color's own per-band
+  // knob toggle below) used to depend on .fx-row.fx-mod, which fxMarkModifiedSliders only sets
+  // 120ms after input stops — so a slider being actively dragged away from its default looked
+  // like it "wasn't filling" for the whole drag, only catching up once you let go. Comparing
+  // straight against this slider's OWN default here instead makes it exact AND immediate, since
+  // fxPaintSlider already runs synchronously on every 'input' tick.
+  sl.classList.toggle('fx-knob-on',Math.abs(v-def)>1e-9);
 }
 function fxPaintAllSliders(root){(root||document).querySelectorAll('input.fx-slider[type=range]').forEach(fxPaintSlider);}
 // Delegated so dynamically-built rows need no wiring. `input` does not bubble from all engines'
@@ -17769,9 +17770,6 @@ function fxSelectImage(idx){
   // Basic Adjustments: show THIS photo's own values if it's been made independent
   // (adjToggleScope), else the shared batch-wide baseline.
   applyAdjustVals(it.adjustOverride||fxState.sharedAdjust||domAdjustVals());
-  fxPaintAllSliders();  // applyAdjustVals writes .value directly (no 'input' event), so the fill
-                        // squares above must be repainted explicitly or they'd still show the
-                        // PREVIOUS photo's position after switching
   if(typeof adjSyncScopeUI==='function')adjSyncScopeUI();
   document.getElementById('fx-fname').value=it.name;
   fxDeskbarTitle(it.name,fxDimsFmt(it.name,it.img,it.ext));

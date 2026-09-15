@@ -123,22 +123,22 @@
   "coverage": {
     "sourceLocatableInstances": 767,
     "dynamicInstances": [
-      "chromasmith-22.html:15517:button",
-      "chromasmith-22.html:16160:button",
-      "chromasmith-22.html:16161:button",
-      "chromasmith-22.html:16161:icon-button",
-      "chromasmith-22.html:16162:button",
-      "chromasmith-22.html:16162:icon-button",
-      "chromasmith-22.html:19729:button",
-      "chromasmith-22.html:19729:button",
-      "chromasmith-22.html:19747:button",
-      "chromasmith-22.html:20943:button",
+      "chromasmith-22.html:15511:button",
+      "chromasmith-22.html:16154:button",
+      "chromasmith-22.html:16155:button",
+      "chromasmith-22.html:16155:icon-button",
+      "chromasmith-22.html:16156:button",
+      "chromasmith-22.html:16156:icon-button",
+      "chromasmith-22.html:19727:button",
+      "chromasmith-22.html:19727:button",
+      "chromasmith-22.html:19745:button",
+      "chromasmith-22.html:20941:button",
+      "chromasmith-22.html:20999:button",
       "chromasmith-22.html:21001:button",
       "chromasmith-22.html:21003:button",
-      "chromasmith-22.html:21005:button",
-      "chromasmith-22.html:21008:button",
-      "chromasmith-22.html:21009:button",
-      "chromasmith-22.html:21034:button",
+      "chromasmith-22.html:21006:button",
+      "chromasmith-22.html:21007:button",
+      "chromasmith-22.html:21032:button",
       "desktop/library-ui.js:1989:button",
       "desktop/library-ui.js:4728:button",
       "desktop/library-ui.js:5879:select",
@@ -203,59 +203,59 @@
       "chromasmith-22.html:5059:button",
       "chromasmith-22.html:5061:button",
       "chromasmith-22.html:8403:select",
-      "chromasmith-22.html:11205:button",
-      "chromasmith-22.html:11236:select",
-      "chromasmith-22.html:11558:button",
-      "chromasmith-22.html:12205:button",
-      "chromasmith-22.html:12206:button",
-      "chromasmith-22.html:12207:button",
-      "chromasmith-22.html:12208:button",
-      "chromasmith-22.html:12209:button",
+      "chromasmith-22.html:11199:button",
+      "chromasmith-22.html:11230:select",
+      "chromasmith-22.html:11552:button",
+      "chromasmith-22.html:12199:button",
+      "chromasmith-22.html:12200:button",
+      "chromasmith-22.html:12201:button",
+      "chromasmith-22.html:12202:button",
+      "chromasmith-22.html:12203:button",
+      "chromasmith-22.html:12215:button",
+      "chromasmith-22.html:12216:button",
       "chromasmith-22.html:12221:button",
-      "chromasmith-22.html:12222:button",
-      "chromasmith-22.html:12227:button",
-      "chromasmith-22.html:12231:button",
-      "chromasmith-22.html:12238:button",
-      "chromasmith-22.html:12239:button",
-      "chromasmith-22.html:12541:button",
-      "chromasmith-22.html:12546:button",
-      "chromasmith-22.html:12623:button",
-      "chromasmith-22.html:12624:button",
-      "chromasmith-22.html:12626:button",
-      "chromasmith-22.html:12626:segmented-control",
-      "chromasmith-22.html:14416:button",
-      "chromasmith-22.html:14471:button",
+      "chromasmith-22.html:12225:button",
+      "chromasmith-22.html:12232:button",
+      "chromasmith-22.html:12233:button",
+      "chromasmith-22.html:12535:button",
+      "chromasmith-22.html:12540:button",
+      "chromasmith-22.html:12617:button",
+      "chromasmith-22.html:12618:button",
+      "chromasmith-22.html:12620:button",
+      "chromasmith-22.html:12620:segmented-control",
+      "chromasmith-22.html:14410:button",
+      "chromasmith-22.html:14465:button",
+      "chromasmith-22.html:14466:button",
+      "chromasmith-22.html:14467:button",
       "chromasmith-22.html:14472:button",
-      "chromasmith-22.html:14473:button",
-      "chromasmith-22.html:14478:button",
-      "chromasmith-22.html:14497:button",
-      "chromasmith-22.html:14498:button",
-      "chromasmith-22.html:14499:button",
-      "chromasmith-22.html:14612:button",
-      "chromasmith-22.html:14638:button",
-      "chromasmith-22.html:14662:button",
-      "chromasmith-22.html:14666:button",
-      "chromasmith-22.html:14676:button",
-      "chromasmith-22.html:14677:button",
-      "chromasmith-22.html:14699:button",
-      "chromasmith-22.html:15517:button",
-      "chromasmith-22.html:16160:button",
-      "chromasmith-22.html:16161:button",
-      "chromasmith-22.html:16161:icon-button",
-      "chromasmith-22.html:16162:button",
-      "chromasmith-22.html:16162:icon-button",
-      "chromasmith-22.html:17690:select",
-      "chromasmith-22.html:19729:button",
-      "chromasmith-22.html:19729:button",
-      "chromasmith-22.html:19747:button",
+      "chromasmith-22.html:14491:button",
+      "chromasmith-22.html:14492:button",
+      "chromasmith-22.html:14493:button",
+      "chromasmith-22.html:14606:button",
+      "chromasmith-22.html:14632:button",
+      "chromasmith-22.html:14656:button",
+      "chromasmith-22.html:14660:button",
+      "chromasmith-22.html:14670:button",
+      "chromasmith-22.html:14671:button",
+      "chromasmith-22.html:14693:button",
+      "chromasmith-22.html:15511:button",
+      "chromasmith-22.html:16154:button",
+      "chromasmith-22.html:16155:button",
+      "chromasmith-22.html:16155:icon-button",
+      "chromasmith-22.html:16156:button",
+      "chromasmith-22.html:16156:icon-button",
+      "chromasmith-22.html:17691:select",
+      "chromasmith-22.html:19727:button",
+      "chromasmith-22.html:19727:button",
+      "chromasmith-22.html:19745:button",
+      "chromasmith-22.html:20999:button",
       "chromasmith-22.html:21001:button",
       "chromasmith-22.html:21003:button",
-      "chromasmith-22.html:21005:button",
-      "chromasmith-22.html:21008:button",
-      "chromasmith-22.html:21009:button",
-      "chromasmith-22.html:21916:select",
-      "chromasmith-22.html:21933:select",
-      "chromasmith-22.html:22232:select",
+      "chromasmith-22.html:21006:button",
+      "chromasmith-22.html:21007:button",
+      "chromasmith-22.html:21914:select",
+      "chromasmith-22.html:21931:select",
+      "chromasmith-22.html:22230:select",
       "desktop/library-ui.js:950:button",
       "desktop/library-ui.js:1940:button",
       "desktop/library-ui.js:1941:button",
@@ -6380,10 +6380,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:11026:button",
+      "key": "chromasmith-22.html:11020:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 11026,
+      "line": 11020,
       "tag": "button",
       "selector": "#fx-bgmenu-reset",
       "id": "fx-bgmenu-reset",
@@ -6395,10 +6395,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:11143:button",
+      "key": "chromasmith-22.html:11137:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 11143,
+      "line": 11137,
       "tag": "button",
       "selector": "#cs-modal-x",
       "id": "cs-modal-x",
@@ -6407,10 +6407,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:11205:button",
+      "key": "chromasmith-22.html:11199:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 11205,
+      "line": 11199,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6422,10 +6422,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:11236:select",
+      "key": "chromasmith-22.html:11230:select",
       "family": "select",
       "source": "chromasmith-22.html",
-      "line": 11236,
+      "line": 11230,
       "tag": "select",
       "selector": null,
       "id": null,
@@ -6434,10 +6434,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:11558:button",
+      "key": "chromasmith-22.html:11552:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 11558,
+      "line": 11552,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6449,30 +6449,30 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:11589:icon:nr",
+      "key": "chromasmith-22.html:11583:icon:nr",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 11589,
+      "line": 11583,
       "selector": null,
       "icon": "nr",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:11947:icon:wand",
+      "key": "chromasmith-22.html:11941:icon:wand",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 11947,
+      "line": 11941,
       "selector": null,
       "icon": "wand",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12197:control-row",
+      "key": "chromasmith-22.html:12191:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 12197,
+      "line": 12191,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -6483,10 +6483,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12205:button",
+      "key": "chromasmith-22.html:12199:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12205,
+      "line": 12199,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6498,20 +6498,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12205:icon:wand",
+      "key": "chromasmith-22.html:12199:icon:wand",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 12205,
+      "line": 12199,
       "selector": null,
       "icon": "wand",
       "size": "12",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12206:button",
+      "key": "chromasmith-22.html:12200:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12206,
+      "line": 12200,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6523,10 +6523,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12207:button",
+      "key": "chromasmith-22.html:12201:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12207,
+      "line": 12201,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6538,10 +6538,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12208:button",
+      "key": "chromasmith-22.html:12202:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12208,
+      "line": 12202,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6553,10 +6553,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12209:button",
+      "key": "chromasmith-22.html:12203:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12209,
+      "line": 12203,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6568,10 +6568,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12220:control-row",
+      "key": "chromasmith-22.html:12214:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 12220,
+      "line": 12214,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -6579,6 +6579,56 @@
         "fx-row"
       ],
       "label": null,
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:12215:button",
+      "family": "button",
+      "source": "chromasmith-22.html",
+      "line": 12215,
+      "tag": "button",
+      "selector": null,
+      "id": null,
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "label": "'+icon('flagGreen',12)+' Yes",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:12215:icon:flagGreen",
+      "family": "icon",
+      "source": "chromasmith-22.html",
+      "line": 12215,
+      "selector": null,
+      "icon": "flagGreen",
+      "size": "12",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:12216:button",
+      "family": "button",
+      "source": "chromasmith-22.html",
+      "line": 12216,
+      "tag": "button",
+      "selector": null,
+      "id": null,
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "label": "'+icon('flagRed',12)+' No",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:12216:icon:flagRed",
+      "family": "icon",
+      "source": "chromasmith-22.html",
+      "line": 12216,
+      "selector": null,
+      "icon": "flagRed",
+      "size": "12",
       "dynamic": false
     },
     {
@@ -6593,74 +6643,24 @@
         "btn",
         "bgh"
       ],
-      "label": "'+icon('flagGreen',12)+' Yes",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:12221:icon:flagGreen",
-      "family": "icon",
-      "source": "chromasmith-22.html",
-      "line": 12221,
-      "selector": null,
-      "icon": "flagGreen",
-      "size": "12",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:12222:button",
-      "family": "button",
-      "source": "chromasmith-22.html",
-      "line": 12222,
-      "tag": "button",
-      "selector": null,
-      "id": null,
-      "classes": [
-        "btn",
-        "bgh"
-      ],
-      "label": "'+icon('flagRed',12)+' No",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:12222:icon:flagRed",
-      "family": "icon",
-      "source": "chromasmith-22.html",
-      "line": 12222,
-      "selector": null,
-      "icon": "flagRed",
-      "size": "12",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:12227:button",
-      "family": "button",
-      "source": "chromasmith-22.html",
-      "line": 12227,
-      "tag": "button",
-      "selector": null,
-      "id": null,
-      "classes": [
-        "btn",
-        "bgh"
-      ],
       "label": "Name this selection so you can find the same subject in other photos. Measured reliability (~77-80% recall on one dog across varied conditions) is a general guide, not a per-species guarantee — a person, a different animal, or a busier scene may do better or worse.",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12227:icon:star",
+      "key": "chromasmith-22.html:12221:icon:star",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 12227,
+      "line": 12221,
       "selector": null,
       "icon": "star",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12230:control-row",
+      "key": "chromasmith-22.html:12224:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 12230,
+      "line": 12224,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -6671,10 +6671,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12231:button",
+      "key": "chromasmith-22.html:12225:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12231,
+      "line": 12225,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6686,10 +6686,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12232:control-row",
+      "key": "chromasmith-22.html:12226:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 12232,
+      "line": 12226,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -6700,10 +6700,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12233:slider",
+      "key": "chromasmith-22.html:12227:slider",
       "family": "slider",
       "source": "chromasmith-22.html",
-      "line": 12233,
+      "line": 12227,
       "tag": "input",
       "selector": ".fx-slider",
       "id": null,
@@ -6714,10 +6714,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12238:button",
+      "key": "chromasmith-22.html:12232:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12238,
+      "line": 12232,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6729,20 +6729,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12238:icon:export",
+      "key": "chromasmith-22.html:12232:icon:export",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 12238,
+      "line": 12232,
       "selector": null,
       "icon": "export",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12239:button",
+      "key": "chromasmith-22.html:12233:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12239,
+      "line": 12233,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6754,20 +6754,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12239:icon:image",
+      "key": "chromasmith-22.html:12233:icon:image",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 12239,
+      "line": 12233,
       "selector": null,
       "icon": "image",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12540:control-row",
+      "key": "chromasmith-22.html:12534:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 12540,
+      "line": 12534,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -6778,10 +6778,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12541:button",
+      "key": "chromasmith-22.html:12535:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12541,
+      "line": 12535,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6793,10 +6793,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12545:control-row",
+      "key": "chromasmith-22.html:12539:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 12545,
+      "line": 12539,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -6807,10 +6807,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12546:button",
+      "key": "chromasmith-22.html:12540:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12546,
+      "line": 12540,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6822,10 +6822,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12622:control-row",
+      "key": "chromasmith-22.html:12616:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 12622,
+      "line": 12616,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -6836,10 +6836,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12623:button",
+      "key": "chromasmith-22.html:12617:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12623,
+      "line": 12617,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6851,10 +6851,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12624:button",
+      "key": "chromasmith-22.html:12618:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12624,
+      "line": 12618,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6866,10 +6866,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12625:control-row",
+      "key": "chromasmith-22.html:12619:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 12625,
+      "line": 12619,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -6880,10 +6880,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12626:button",
+      "key": "chromasmith-22.html:12620:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 12626,
+      "line": 12620,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -6894,10 +6894,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12626:segmented-control",
+      "key": "chromasmith-22.html:12620:segmented-control",
       "family": "segmented-control",
       "source": "chromasmith-22.html",
-      "line": 12626,
+      "line": 12620,
       "tag": "div",
       "selector": null,
       "id": null,
@@ -6908,10 +6908,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12627:control-row",
+      "key": "chromasmith-22.html:12621:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 12627,
+      "line": 12621,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -6922,10 +6922,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:12628:slider",
+      "key": "chromasmith-22.html:12622:slider",
       "family": "slider",
       "source": "chromasmith-22.html",
-      "line": 12628,
+      "line": 12622,
       "tag": "input",
       "selector": ".fx-slider",
       "id": null,
@@ -6936,10 +6936,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:13532:button",
+      "key": "chromasmith-22.html:13526:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 13532,
+      "line": 13526,
       "tag": "button",
       "selector": ".msk-group-hd",
       "id": null,
@@ -6950,20 +6950,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:13533:icon:chevron",
+      "key": "chromasmith-22.html:13527:icon:chevron",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 13533,
+      "line": 13527,
       "selector": null,
       "icon": "chevron",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:13546:button",
+      "key": "chromasmith-22.html:13540:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 13546,
+      "line": 13540,
       "tag": "button",
       "selector": ".msk-more-it",
       "id": null,
@@ -6974,10 +6974,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:13580:button",
+      "key": "chromasmith-22.html:13574:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 13580,
+      "line": 13574,
       "tag": "button",
       "selector": ".msk-more-it'+(on?'",
       "id": null,
@@ -6990,10 +6990,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:13896:control-row",
+      "key": "chromasmith-22.html:13890:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 13896,
+      "line": 13890,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7004,10 +7004,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:13897:slider",
+      "key": "chromasmith-22.html:13891:slider",
       "family": "slider",
       "source": "chromasmith-22.html",
-      "line": 13897,
+      "line": 13891,
       "tag": "input",
       "selector": ".fx-slider",
       "id": null,
@@ -7018,10 +7018,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14416:button",
+      "key": "chromasmith-22.html:14410:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14416,
+      "line": 14410,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7033,10 +7033,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14431:button",
+      "key": "chromasmith-22.html:14425:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14431,
+      "line": 14425,
       "tag": "button",
       "selector": ".msk-more",
       "id": null,
@@ -7048,20 +7048,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14431:icon:more",
+      "key": "chromasmith-22.html:14425:icon:more",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 14431,
+      "line": 14425,
       "selector": null,
       "icon": "more",
       "size": "16",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14447:button",
+      "key": "chromasmith-22.html:14441:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14447,
+      "line": 14441,
       "tag": "button",
       "selector": ".msk-adv-hd",
       "id": null,
@@ -7072,20 +7072,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14447:icon:chevron",
+      "key": "chromasmith-22.html:14441:icon:chevron",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 14447,
+      "line": 14441,
       "selector": null,
       "icon": "chevron",
       "size": "12",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14470:button",
+      "key": "chromasmith-22.html:14464:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14470,
+      "line": 14464,
       "tag": "button",
       "selector": "#btn-msk-ai-tap",
       "id": "btn-msk-ai-tap",
@@ -7097,20 +7097,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14470:icon:wand",
+      "key": "chromasmith-22.html:14464:icon:wand",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 14470,
+      "line": 14464,
       "selector": null,
       "icon": "wand",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14471:button",
+      "key": "chromasmith-22.html:14465:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14471,
+      "line": 14465,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7119,6 +7119,56 @@
         "bgh"
       ],
       "label": "Clear all scribble points and start over",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:14466:button",
+      "family": "button",
+      "source": "chromasmith-22.html",
+      "line": 14466,
+      "tag": "button",
+      "selector": null,
+      "id": null,
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "label": "Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble.",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:14466:icon:scissors",
+      "family": "icon",
+      "source": "chromasmith-22.html",
+      "line": 14466,
+      "selector": null,
+      "icon": "scissors",
+      "size": "14",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:14467:button",
+      "family": "button",
+      "source": "chromasmith-22.html",
+      "line": 14467,
+      "tag": "button",
+      "selector": null,
+      "id": null,
+      "classes": [
+        "btn",
+        "bgh"
+      ],
+      "label": "Adds a NEW mask selecting only face-parsed skin within this selection (cheeks/forehead/neck) — a supplementary, face-crop-scoped alternative to this Skin mask\\'s own colour-range gate, not a replacement for it.",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:14467:icon:wand",
+      "family": "icon",
+      "source": "chromasmith-22.html",
+      "line": 14467,
+      "selector": null,
+      "icon": "wand",
+      "size": "14",
       "dynamic": false
     },
     {
@@ -7133,64 +7183,14 @@
         "btn",
         "bgh"
       ],
-      "label": "Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble.",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:14472:icon:scissors",
-      "family": "icon",
-      "source": "chromasmith-22.html",
-      "line": 14472,
-      "selector": null,
-      "icon": "scissors",
-      "size": "14",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:14473:button",
-      "family": "button",
-      "source": "chromasmith-22.html",
-      "line": 14473,
-      "tag": "button",
-      "selector": null,
-      "id": null,
-      "classes": [
-        "btn",
-        "bgh"
-      ],
-      "label": "Adds a NEW mask selecting only face-parsed skin within this selection (cheeks/forehead/neck) — a supplementary, face-crop-scoped alternative to this Skin mask\\'s own colour-range gate, not a replacement for it.",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:14473:icon:wand",
-      "family": "icon",
-      "source": "chromasmith-22.html",
-      "line": 14473,
-      "selector": null,
-      "icon": "wand",
-      "size": "14",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:14478:button",
-      "family": "button",
-      "source": "chromasmith-22.html",
-      "line": 14478,
-      "tag": "button",
-      "selector": null,
-      "id": null,
-      "classes": [
-        "btn",
-        "bgh"
-      ],
       "label": "Select just the '+f.label.toLowerCase()+' as a new mask.",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14493:button",
+      "key": "chromasmith-22.html:14487:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14493,
+      "line": 14487,
       "tag": "button",
       "selector": "#btn-msk-paint",
       "id": "btn-msk-paint",
@@ -7202,20 +7202,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14493:icon:brush",
+      "key": "chromasmith-22.html:14487:icon:brush",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 14493,
+      "line": 14487,
       "selector": null,
       "icon": "brush",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14494:button",
+      "key": "chromasmith-22.html:14488:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14494,
+      "line": 14488,
       "tag": "button",
       "selector": "#btn-msk-erase",
       "id": "btn-msk-erase",
@@ -7227,20 +7227,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14494:icon:eraser",
+      "key": "chromasmith-22.html:14488:icon:eraser",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 14494,
+      "line": 14488,
       "selector": null,
       "icon": "eraser",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14495:control-row",
+      "key": "chromasmith-22.html:14489:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14495,
+      "line": 14489,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7251,10 +7251,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14495:slider",
+      "key": "chromasmith-22.html:14489:slider",
       "family": "slider",
       "source": "chromasmith-22.html",
-      "line": 14495,
+      "line": 14489,
       "tag": "input",
       "selector": ".fx-slider",
       "id": null,
@@ -7265,10 +7265,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14496:control-row",
+      "key": "chromasmith-22.html:14490:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14496,
+      "line": 14490,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7279,10 +7279,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14496:slider",
+      "key": "chromasmith-22.html:14490:slider",
       "family": "slider",
       "source": "chromasmith-22.html",
-      "line": 14496,
+      "line": 14490,
       "tag": "input",
       "selector": ".fx-slider",
       "id": null,
@@ -7293,10 +7293,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14497:button",
+      "key": "chromasmith-22.html:14491:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14497,
+      "line": 14491,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7308,10 +7308,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14498:button",
+      "key": "chromasmith-22.html:14492:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14498,
+      "line": 14492,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7323,10 +7323,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14499:button",
+      "key": "chromasmith-22.html:14493:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14499,
+      "line": 14493,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7338,20 +7338,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14499:icon:refine",
+      "key": "chromasmith-22.html:14493:icon:refine",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 14499,
+      "line": 14493,
       "selector": null,
       "icon": "refine",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14509:button",
+      "key": "chromasmith-22.html:14503:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14509,
+      "line": 14503,
       "tag": "button",
       "selector": ".msk-swatch",
       "id": null,
@@ -7363,10 +7363,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14526:control-row",
+      "key": "chromasmith-22.html:14520:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14526,
+      "line": 14520,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7377,10 +7377,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14529:button",
+      "key": "chromasmith-22.html:14523:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14529,
+      "line": 14523,
       "tag": "button",
       "selector": "#btn-msk-cr-eye",
       "id": "btn-msk-cr-eye",
@@ -7392,20 +7392,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14529:icon:eyedropper",
+      "key": "chromasmith-22.html:14523:icon:eyedropper",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 14529,
+      "line": 14523,
       "selector": null,
       "icon": "eyedropper",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14552:control-row",
+      "key": "chromasmith-22.html:14546:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14552,
+      "line": 14546,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7416,10 +7416,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14576:control-row",
+      "key": "chromasmith-22.html:14570:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14576,
+      "line": 14570,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7430,10 +7430,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14577:slider",
+      "key": "chromasmith-22.html:14571:slider",
       "family": "slider",
       "source": "chromasmith-22.html",
-      "line": 14577,
+      "line": 14571,
       "tag": "input",
       "selector": ".fx-slider",
       "id": null,
@@ -7444,10 +7444,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14584:control-row",
+      "key": "chromasmith-22.html:14578:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14584,
+      "line": 14578,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7458,10 +7458,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14585:slider",
+      "key": "chromasmith-22.html:14579:slider",
       "family": "slider",
       "source": "chromasmith-22.html",
-      "line": 14585,
+      "line": 14579,
       "tag": "input",
       "selector": ".fx-slider",
       "id": null,
@@ -7472,10 +7472,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14608:control-row",
+      "key": "chromasmith-22.html:14602:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14608,
+      "line": 14602,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7486,10 +7486,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14609:slider",
+      "key": "chromasmith-22.html:14603:slider",
       "family": "slider",
       "source": "chromasmith-22.html",
-      "line": 14609,
+      "line": 14603,
       "tag": "input",
       "selector": ".fx-slider",
       "id": null,
@@ -7500,10 +7500,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14611:segmented-control",
+      "key": "chromasmith-22.html:14605:segmented-control",
       "family": "segmented-control",
       "source": "chromasmith-22.html",
-      "line": 14611,
+      "line": 14605,
       "tag": "div",
       "selector": ".msk-seg",
       "id": null,
@@ -7515,10 +7515,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14612:button",
+      "key": "chromasmith-22.html:14606:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14612,
+      "line": 14606,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7529,10 +7529,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14614:button",
+      "key": "chromasmith-22.html:14608:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14614,
+      "line": 14608,
       "tag": "button",
       "selector": ".msk-swatch'+(th.toLowerCase()===hx?'",
       "id": null,
@@ -7546,10 +7546,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14617:control-row",
+      "key": "chromasmith-22.html:14611:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14617,
+      "line": 14611,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7560,10 +7560,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14619:control-row",
+      "key": "chromasmith-22.html:14613:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14619,
+      "line": 14613,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7574,10 +7574,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14638:button",
+      "key": "chromasmith-22.html:14632:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14638,
+      "line": 14632,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7589,20 +7589,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14639:icon:wand",
+      "key": "chromasmith-22.html:14633:icon:wand",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 14639,
+      "line": 14633,
       "selector": null,
       "icon": "wand",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14640:button",
+      "key": "chromasmith-22.html:14634:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14640,
+      "line": 14634,
       "tag": "button",
       "selector": "#btn-msk-cr-eye",
       "id": "btn-msk-cr-eye",
@@ -7614,20 +7614,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14641:icon:eyedropper",
+      "key": "chromasmith-22.html:14635:icon:eyedropper",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 14641,
+      "line": 14635,
       "selector": null,
       "icon": "eyedropper",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14661:segmented-control",
+      "key": "chromasmith-22.html:14655:segmented-control",
       "family": "segmented-control",
       "source": "chromasmith-22.html",
-      "line": 14661,
+      "line": 14655,
       "tag": "div",
       "selector": ".msk-seg",
       "id": null,
@@ -7639,10 +7639,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14662:button",
+      "key": "chromasmith-22.html:14656:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14662,
+      "line": 14656,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7653,10 +7653,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14666:button",
+      "key": "chromasmith-22.html:14660:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14666,
+      "line": 14660,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7665,10 +7665,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14670:control-row",
+      "key": "chromasmith-22.html:14664:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14670,
+      "line": 14664,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7679,10 +7679,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14675:control-row",
+      "key": "chromasmith-22.html:14669:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14675,
+      "line": 14669,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7693,10 +7693,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14676:button",
+      "key": "chromasmith-22.html:14670:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14676,
+      "line": 14670,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7708,20 +7708,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14676:icon:eyedropper",
+      "key": "chromasmith-22.html:14670:icon:eyedropper",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 14676,
+      "line": 14670,
       "selector": null,
       "icon": "eyedropper",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14677:button",
+      "key": "chromasmith-22.html:14671:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14677,
+      "line": 14671,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7733,10 +7733,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14693:control-row",
+      "key": "chromasmith-22.html:14687:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14693,
+      "line": 14687,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7747,10 +7747,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14699:button",
+      "key": "chromasmith-22.html:14693:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14699,
+      "line": 14693,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7762,10 +7762,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14702:button",
+      "key": "chromasmith-22.html:14696:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14702,
+      "line": 14696,
       "tag": "button",
       "selector": ".msk-preset",
       "id": null,
@@ -7778,10 +7778,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14704:control-row",
+      "key": "chromasmith-22.html:14698:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14704,
+      "line": 14698,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7792,10 +7792,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14705:slider",
+      "key": "chromasmith-22.html:14699:slider",
       "family": "slider",
       "source": "chromasmith-22.html",
-      "line": 14705,
+      "line": 14699,
       "tag": "input",
       "selector": ".fx-slider",
       "id": null,
@@ -7806,10 +7806,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14720:button",
+      "key": "chromasmith-22.html:14714:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 14720,
+      "line": 14714,
       "tag": "button",
       "selector": ".msk-adv-hd",
       "id": null,
@@ -7820,20 +7820,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14720:icon:chevron",
+      "key": "chromasmith-22.html:14714:icon:chevron",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 14720,
+      "line": 14714,
       "selector": null,
       "icon": "chevron",
       "size": "12",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14726:control-row",
+      "key": "chromasmith-22.html:14720:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14726,
+      "line": 14720,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7844,10 +7844,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14727:slider",
+      "key": "chromasmith-22.html:14721:slider",
       "family": "slider",
       "source": "chromasmith-22.html",
-      "line": 14727,
+      "line": 14721,
       "tag": "input",
       "selector": ".fx-slider",
       "id": null,
@@ -7858,10 +7858,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14747:control-row",
+      "key": "chromasmith-22.html:14741:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14747,
+      "line": 14741,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7872,10 +7872,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14748:slider",
+      "key": "chromasmith-22.html:14742:slider",
       "family": "slider",
       "source": "chromasmith-22.html",
-      "line": 14748,
+      "line": 14742,
       "tag": "input",
       "selector": ".fx-slider",
       "id": null,
@@ -7886,10 +7886,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14754:control-row",
+      "key": "chromasmith-22.html:14748:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14754,
+      "line": 14748,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7900,10 +7900,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14756:control-row",
+      "key": "chromasmith-22.html:14750:control-row",
       "family": "control-row",
       "source": "chromasmith-22.html",
-      "line": 14756,
+      "line": 14750,
       "tag": "div",
       "selector": ".fx-row",
       "id": null,
@@ -7914,10 +7914,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:14757:slider",
+      "key": "chromasmith-22.html:14751:slider",
       "family": "slider",
       "source": "chromasmith-22.html",
-      "line": 14757,
+      "line": 14751,
       "tag": "input",
       "selector": "#msk-col-hue",
       "id": "msk-col-hue",
@@ -7929,10 +7929,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:15147:button",
+      "key": "chromasmith-22.html:15141:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 15147,
+      "line": 15141,
       "tag": "button",
       "selector": "#paste-cancel",
       "id": "paste-cancel",
@@ -7944,10 +7944,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:15148:button",
+      "key": "chromasmith-22.html:15142:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 15148,
+      "line": 15142,
       "tag": "button",
       "selector": "#paste-confirm",
       "id": "paste-confirm",
@@ -7959,10 +7959,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:15517:button",
+      "key": "chromasmith-22.html:15511:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 15517,
+      "line": 15511,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7973,10 +7973,10 @@
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:16160:button",
+      "key": "chromasmith-22.html:16154:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 16160,
+      "line": 16154,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -7988,10 +7988,10 @@
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:16161:button",
+      "key": "chromasmith-22.html:16155:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 16161,
+      "line": 16155,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -8002,20 +8002,20 @@
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:16161:icon:download",
+      "key": "chromasmith-22.html:16155:icon:download",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 16161,
+      "line": 16155,
       "selector": null,
       "icon": "download",
       "size": "16",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:16161:icon-button",
+      "key": "chromasmith-22.html:16155:icon-button",
       "family": "icon-button",
       "source": "chromasmith-22.html",
-      "line": 16161,
+      "line": 16155,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -8026,10 +8026,10 @@
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:16162:button",
+      "key": "chromasmith-22.html:16156:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 16162,
+      "line": 16156,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -8040,20 +8040,20 @@
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:16162:icon:close",
+      "key": "chromasmith-22.html:16156:icon:close",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 16162,
+      "line": 16156,
       "selector": null,
       "icon": "close",
       "size": "16",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:16162:icon-button",
+      "key": "chromasmith-22.html:16156:icon-button",
       "family": "icon-button",
       "source": "chromasmith-22.html",
-      "line": 16162,
+      "line": 16156,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -8064,10 +8064,10 @@
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:16508:select",
+      "key": "chromasmith-22.html:16502:select",
       "family": "select",
       "source": "chromasmith-22.html",
-      "line": 16508,
+      "line": 16502,
       "tag": "input",
       "selector": "#fx-kw-add",
       "id": "fx-kw-add",
@@ -8078,10 +8078,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:17690:select",
+      "key": "chromasmith-22.html:17691:select",
       "family": "select",
       "source": "chromasmith-22.html",
-      "line": 17690,
+      "line": 17691,
       "tag": "select",
       "selector": null,
       "id": null,
@@ -8090,10 +8090,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:19729:button",
+      "key": "chromasmith-22.html:19727:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 19729,
+      "line": 19727,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -8105,10 +8105,10 @@
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:19729:button",
+      "key": "chromasmith-22.html:19727:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 19729,
+      "line": 19727,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -8120,20 +8120,20 @@
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:19744:icon:image",
+      "key": "chromasmith-22.html:19742:icon:image",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 19744,
+      "line": 19742,
       "selector": null,
       "icon": "image",
       "size": "16",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:19747:button",
+      "key": "chromasmith-22.html:19745:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 19747,
+      "line": 19745,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -8145,10 +8145,10 @@
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:20075:button",
+      "key": "chromasmith-22.html:20073:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 20075,
+      "line": 20073,
       "tag": "button",
       "selector": "#fx-ask-cancel",
       "id": "fx-ask-cancel",
@@ -8160,10 +8160,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:20076:button",
+      "key": "chromasmith-22.html:20074:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 20076,
+      "line": 20074,
       "tag": "button",
       "selector": "#fx-ask-ok",
       "id": "fx-ask-ok",
@@ -8175,10 +8175,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:20114:button",
+      "key": "chromasmith-22.html:20112:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 20114,
+      "line": 20112,
       "tag": "button",
       "selector": "#fx-confirm-cancel",
       "id": "fx-confirm-cancel",
@@ -8190,10 +8190,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:20115:button",
+      "key": "chromasmith-22.html:20113:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 20115,
+      "line": 20113,
       "tag": "button",
       "selector": "#fx-confirm-ok",
       "id": "fx-confirm-ok",
@@ -8203,6 +8203,20 @@
       ],
       "label": null,
       "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:20941:button",
+      "family": "button",
+      "source": "chromasmith-22.html",
+      "line": 20941,
+      "tag": "button",
+      "selector": ".fx-ovf-item",
+      "id": null,
+      "classes": [
+        "fx-ovf-item"
+      ],
+      "label": null,
+      "dynamic": true
     },
     {
       "key": "chromasmith-22.html:20943:button",
@@ -8215,28 +8229,14 @@
       "classes": [
         "fx-ovf-item"
       ],
-      "label": null,
-      "dynamic": true
-    },
-    {
-      "key": "chromasmith-22.html:20945:button",
-      "family": "button",
-      "source": "chromasmith-22.html",
-      "line": 20945,
-      "tag": "button",
-      "selector": ".fx-ovf-item",
-      "id": null,
-      "classes": [
-        "fx-ovf-item"
-      ],
       "label": "Library (L)",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:20951:button",
+      "key": "chromasmith-22.html:20949:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 20951,
+      "line": 20949,
       "tag": "button",
       "selector": ".fx-ovf-item",
       "id": null,
@@ -8247,10 +8247,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:20956:button",
+      "key": "chromasmith-22.html:20954:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 20956,
+      "line": 20954,
       "tag": "button",
       "selector": ".fx-ovf-item",
       "id": null,
@@ -8258,6 +8258,54 @@
         "fx-ovf-item"
       ],
       "label": "About Chromasmith",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:20971:button",
+      "family": "button",
+      "source": "chromasmith-22.html",
+      "line": 20971,
+      "tag": "button",
+      "selector": ".fx-ovf-item",
+      "id": null,
+      "classes": [
+        "fx-ovf-item"
+      ],
+      "label": "Rotate 90° CW",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:20971:icon:rotateRight",
+      "family": "icon",
+      "source": "chromasmith-22.html",
+      "line": 20971,
+      "selector": null,
+      "icon": "rotateRight",
+      "size": "16",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:20972:button",
+      "family": "button",
+      "source": "chromasmith-22.html",
+      "line": 20972,
+      "tag": "button",
+      "selector": ".fx-ovf-item",
+      "id": null,
+      "classes": [
+        "fx-ovf-item"
+      ],
+      "label": "Rotate 90° CCW",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:20972:icon:rotateLeft",
+      "family": "icon",
+      "source": "chromasmith-22.html",
+      "line": 20972,
+      "selector": null,
+      "icon": "rotateLeft",
+      "size": "16",
       "dynamic": false
     },
     {
@@ -8271,16 +8319,16 @@
       "classes": [
         "fx-ovf-item"
       ],
-      "label": "Rotate 90° CW",
+      "label": "Flip horizontal",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:20973:icon:rotateRight",
+      "key": "chromasmith-22.html:20973:icon:flipH",
       "family": "icon",
       "source": "chromasmith-22.html",
       "line": 20973,
       "selector": null,
-      "icon": "rotateRight",
+      "icon": "flipH",
       "size": "16",
       "dynamic": false
     },
@@ -8295,40 +8343,16 @@
       "classes": [
         "fx-ovf-item"
       ],
-      "label": "Rotate 90° CCW",
+      "label": "Flip vertical",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:20974:icon:rotateLeft",
+      "key": "chromasmith-22.html:20974:icon:flipV",
       "family": "icon",
       "source": "chromasmith-22.html",
       "line": 20974,
       "selector": null,
-      "icon": "rotateLeft",
-      "size": "16",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:20975:button",
-      "family": "button",
-      "source": "chromasmith-22.html",
-      "line": 20975,
-      "tag": "button",
-      "selector": ".fx-ovf-item",
-      "id": null,
-      "classes": [
-        "fx-ovf-item"
-      ],
-      "label": "Flip horizontal",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:20975:icon:flipH",
-      "family": "icon",
-      "source": "chromasmith-22.html",
-      "line": 20975,
-      "selector": null,
-      "icon": "flipH",
+      "icon": "flipV",
       "size": "16",
       "dynamic": false
     },
@@ -8343,16 +8367,40 @@
       "classes": [
         "fx-ovf-item"
       ],
-      "label": "Flip vertical",
+      "label": "Copy edit settings",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:20976:icon:flipV",
+      "key": "chromasmith-22.html:20976:icon:copy",
       "family": "icon",
       "source": "chromasmith-22.html",
       "line": 20976,
       "selector": null,
-      "icon": "flipV",
+      "icon": "copy",
+      "size": "16",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:20977:button",
+      "family": "button",
+      "source": "chromasmith-22.html",
+      "line": 20977,
+      "tag": "button",
+      "selector": ".fx-ovf-item",
+      "id": null,
+      "classes": [
+        "fx-ovf-item"
+      ],
+      "label": "Paste edit settings",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:20977:icon:paste",
+      "family": "icon",
+      "source": "chromasmith-22.html",
+      "line": 20977,
+      "selector": null,
+      "icon": "paste",
       "size": "16",
       "dynamic": false
     },
@@ -8367,65 +8415,45 @@
       "classes": [
         "fx-ovf-item"
       ],
-      "label": "Copy edit settings",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:20978:icon:copy",
-      "family": "icon",
-      "source": "chromasmith-22.html",
-      "line": 20978,
-      "selector": null,
-      "icon": "copy",
-      "size": "16",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:20979:button",
-      "family": "button",
-      "source": "chromasmith-22.html",
-      "line": 20979,
-      "tag": "button",
-      "selector": ".fx-ovf-item",
-      "id": null,
-      "classes": [
-        "fx-ovf-item"
-      ],
-      "label": "Paste edit settings",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:20979:icon:paste",
-      "family": "icon",
-      "source": "chromasmith-22.html",
-      "line": 20979,
-      "selector": null,
-      "icon": "paste",
-      "size": "16",
-      "dynamic": false
-    },
-    {
-      "key": "chromasmith-22.html:20980:button",
-      "family": "button",
-      "source": "chromasmith-22.html",
-      "line": 20980,
-      "tag": "button",
-      "selector": ".fx-ovf-item",
-      "id": null,
-      "classes": [
-        "fx-ovf-item"
-      ],
       "label": "Reset photo",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:20980:icon:reset",
+      "key": "chromasmith-22.html:20978:icon:reset",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 20980,
+      "line": 20978,
       "selector": null,
       "icon": "reset",
       "size": "16",
+      "dynamic": false
+    },
+    {
+      "key": "chromasmith-22.html:20999:button",
+      "family": "button",
+      "source": "chromasmith-22.html",
+      "line": 20999,
+      "tag": "button",
+      "selector": null,
+      "id": null,
+      "classes": [
+        "on':''}"
+      ],
+      "label": "True 1:1 view",
+      "dynamic": true
+    },
+    {
+      "key": "chromasmith-22.html:21000:button",
+      "family": "button",
+      "source": "chromasmith-22.html",
+      "line": 21000,
+      "tag": "button",
+      "selector": ".fx-ovf-item",
+      "id": null,
+      "classes": [
+        "fx-ovf-item"
+      ],
+      "label": "Editor background…",
       "dynamic": false
     },
     {
@@ -8439,22 +8467,8 @@
       "classes": [
         "on':''}"
       ],
-      "label": "True 1:1 view",
+      "label": "Scope overlay",
       "dynamic": true
-    },
-    {
-      "key": "chromasmith-22.html:21002:button",
-      "family": "button",
-      "source": "chromasmith-22.html",
-      "line": 21002,
-      "tag": "button",
-      "selector": ".fx-ovf-item",
-      "id": null,
-      "classes": [
-        "fx-ovf-item"
-      ],
-      "label": "Editor background…",
-      "dynamic": false
     },
     {
       "key": "chromasmith-22.html:21003:button",
@@ -8467,28 +8481,14 @@
       "classes": [
         "on':''}"
       ],
-      "label": "Scope overlay",
-      "dynamic": true
-    },
-    {
-      "key": "chromasmith-22.html:21005:button",
-      "family": "button",
-      "source": "chromasmith-22.html",
-      "line": 21005,
-      "tag": "button",
-      "selector": null,
-      "id": null,
-      "classes": [
-        "on':''}"
-      ],
       "label": "Show gamut warning",
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:21008:button",
+      "key": "chromasmith-22.html:21006:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 21008,
+      "line": 21006,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -8499,10 +8499,10 @@
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:21009:button",
+      "key": "chromasmith-22.html:21007:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 21009,
+      "line": 21007,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -8513,10 +8513,10 @@
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:21034:button",
+      "key": "chromasmith-22.html:21032:button",
       "family": "button",
       "source": "chromasmith-22.html",
-      "line": 21034,
+      "line": 21032,
       "tag": "button",
       "selector": ".fx-settings-cat",
       "id": null,
@@ -8527,20 +8527,20 @@
       "dynamic": true
     },
     {
-      "key": "chromasmith-22.html:21408:icon:railshow",
+      "key": "chromasmith-22.html:21406:icon:railshow",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 21408,
+      "line": 21406,
       "selector": null,
       "icon": "railshow",
       "size": "16",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:21916:select",
+      "key": "chromasmith-22.html:21914:select",
       "family": "select",
       "source": "chromasmith-22.html",
-      "line": 21916,
+      "line": 21914,
       "tag": "select",
       "selector": null,
       "id": null,
@@ -8549,10 +8549,10 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:21933:select",
+      "key": "chromasmith-22.html:21931:select",
       "family": "select",
       "source": "chromasmith-22.html",
-      "line": 21933,
+      "line": 21931,
       "tag": "select",
       "selector": null,
       "id": null,
@@ -8561,50 +8561,50 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:22079:icon:reset",
+      "key": "chromasmith-22.html:22077:icon:reset",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 22079,
+      "line": 22077,
       "selector": null,
       "icon": "reset",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:22120:icon:chevron",
+      "key": "chromasmith-22.html:22118:icon:chevron",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 22120,
+      "line": 22118,
       "selector": null,
       "icon": "chevron",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:22149:icon:chevron",
+      "key": "chromasmith-22.html:22147:icon:chevron",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 22149,
+      "line": 22147,
       "selector": null,
       "icon": "chevron",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:22186:icon:plus",
+      "key": "chromasmith-22.html:22184:icon:plus",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 22186,
+      "line": 22184,
       "selector": null,
       "icon": "plus",
       "size": "34",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:22232:select",
+      "key": "chromasmith-22.html:22230:select",
       "family": "select",
       "source": "chromasmith-22.html",
-      "line": 22232,
+      "line": 22230,
       "tag": "select",
       "selector": null,
       "id": null,
@@ -8613,20 +8613,20 @@
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:22494:icon:close",
+      "key": "chromasmith-22.html:22492:icon:close",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 22494,
+      "line": 22492,
       "selector": null,
       "icon": "close",
       "size": "12",
       "dynamic": false
     },
     {
-      "key": "chromasmith-22.html:22525:icon:plus",
+      "key": "chromasmith-22.html:22523:icon:plus",
       "family": "icon",
       "source": "chromasmith-22.html",
-      "line": 22525,
+      "line": 22523,
       "selector": null,
       "icon": "plus",
       "size": "22",

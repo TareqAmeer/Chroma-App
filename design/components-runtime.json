@@ -20,8 +20,8 @@
     "page:guide",
     "page:match"
   ],
-  "appearanceCount": 987,
-  "declarationCount": 84,
+  "appearanceCount": 985,
+  "declarationCount": 82,
   "variants": [
     "button|button|",
     "button|button|bgh.btn",
@@ -61,7 +61,6 @@
     "button|button|lib-chip.lib-sel.sec-active",
     "button|button|lib-side-tab",
     "button|button|lib-side-tab.on",
-    "button|button|lib-zoom-btn",
     "button|button|msk-adv-hd",
     "button|button|msk-group-hd",
     "button|button|on",
@@ -4073,7 +4072,7 @@
       "label": "Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14470:button"
+        "chromasmith-22.html:14464:button"
       ],
       "unresolved": false
     },
@@ -4090,8 +4089,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14529:button",
-        "chromasmith-22.html:14640:button"
+        "chromasmith-22.html:14523:button",
+        "chromasmith-22.html:14634:button"
       ],
       "unresolved": false
     },
@@ -4108,7 +4107,7 @@
       "label": "Erase instead of add",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14494:button"
+        "chromasmith-22.html:14488:button"
       ],
       "unresolved": false
     },
@@ -4125,7 +4124,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14493:button"
+        "chromasmith-22.html:14487:button"
       ],
       "unresolved": false
     },
@@ -5013,7 +5012,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14757:slider"
+        "chromasmith-22.html:14751:slider"
       ],
       "unresolved": false
     },
@@ -5162,8 +5161,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14529:button",
-        "chromasmith-22.html:14640:button"
+        "chromasmith-22.html:14523:button",
+        "chromasmith-22.html:14634:button"
       ],
       "unresolved": false
     },
@@ -5180,7 +5179,7 @@
       "label": "Erase instead of add",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14494:button"
+        "chromasmith-22.html:14488:button"
       ],
       "unresolved": false
     },
@@ -5197,7 +5196,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14493:button"
+        "chromasmith-22.html:14487:button"
       ],
       "unresolved": false
     },
@@ -6026,7 +6025,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14757:slider"
+        "chromasmith-22.html:14751:slider"
       ],
       "unresolved": false
     },
@@ -6175,7 +6174,7 @@
       "label": "Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14470:button"
+        "chromasmith-22.html:14464:button"
       ],
       "unresolved": false
     },
@@ -6192,7 +6191,7 @@
       "label": "Erase instead of add",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14494:button"
+        "chromasmith-22.html:14488:button"
       ],
       "unresolved": false
     },
@@ -6209,7 +6208,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14493:button"
+        "chromasmith-22.html:14487:button"
       ],
       "unresolved": false
     },
@@ -7097,7 +7096,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14757:slider"
+        "chromasmith-22.html:14751:slider"
       ],
       "unresolved": false
     },
@@ -7247,8 +7246,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14529:button",
-        "chromasmith-22.html:14640:button"
+        "chromasmith-22.html:14523:button",
+        "chromasmith-22.html:14634:button"
       ],
       "unresolved": false
     },
@@ -8047,7 +8046,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14757:slider"
+        "chromasmith-22.html:14751:slider"
       ],
       "unresolved": false
     },
@@ -8196,8 +8195,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14529:button",
-        "chromasmith-22.html:14640:button"
+        "chromasmith-22.html:14523:button",
+        "chromasmith-22.html:14634:button"
       ],
       "unresolved": false
     },
@@ -9000,7 +8999,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14757:slider"
+        "chromasmith-22.html:14751:slider"
       ],
       "unresolved": false
     },
@@ -9165,8 +9164,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14529:button",
-        "chromasmith-22.html:14640:button"
+        "chromasmith-22.html:14523:button",
+        "chromasmith-22.html:14634:button"
       ],
       "unresolved": false
     },
@@ -10007,7 +10006,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14757:slider"
+        "chromasmith-22.html:14751:slider"
       ],
       "unresolved": false
     },
@@ -10156,8 +10155,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14529:button",
-        "chromasmith-22.html:14640:button"
+        "chromasmith-22.html:14523:button",
+        "chromasmith-22.html:14634:button"
       ],
       "unresolved": false
     },
@@ -10960,7 +10959,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14757:slider"
+        "chromasmith-22.html:14751:slider"
       ],
       "unresolved": false
     },
@@ -11125,8 +11124,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14529:button",
-        "chromasmith-22.html:14640:button"
+        "chromasmith-22.html:14523:button",
+        "chromasmith-22.html:14634:button"
       ],
       "unresolved": false
     },
@@ -11967,7 +11966,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14757:slider"
+        "chromasmith-22.html:14751:slider"
       ],
       "unresolved": false
     },
@@ -12116,7 +12115,7 @@
       "label": "Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14470:button"
+        "chromasmith-22.html:14464:button"
       ],
       "unresolved": false
     },
@@ -12133,8 +12132,8 @@
       "label": "Pick manually",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14529:button",
-        "chromasmith-22.html:14640:button"
+        "chromasmith-22.html:14523:button",
+        "chromasmith-22.html:14634:button"
       ],
       "unresolved": false
     },
@@ -12151,7 +12150,7 @@
       "label": "Erase instead of add",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14494:button"
+        "chromasmith-22.html:14488:button"
       ],
       "unresolved": false
     },
@@ -12168,7 +12167,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14493:button"
+        "chromasmith-22.html:14487:button"
       ],
       "unresolved": false
     },
@@ -13361,7 +13360,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14757:slider"
+        "chromasmith-22.html:14751:slider"
       ],
       "unresolved": false
     },
@@ -13510,8 +13509,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14529:button",
-        "chromasmith-22.html:14640:button"
+        "chromasmith-22.html:14523:button",
+        "chromasmith-22.html:14634:button"
       ],
       "unresolved": false
     },
@@ -13528,7 +13527,7 @@
       "label": "Erase instead of add",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14494:button"
+        "chromasmith-22.html:14488:button"
       ],
       "unresolved": false
     },
@@ -13545,7 +13544,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14493:button"
+        "chromasmith-22.html:14487:button"
       ],
       "unresolved": false
     },
@@ -14389,7 +14388,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14757:slider"
+        "chromasmith-22.html:14751:slider"
       ],
       "unresolved": false
     },
@@ -14437,8 +14436,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14529:button",
-        "chromasmith-22.html:14640:button"
+        "chromasmith-22.html:14523:button",
+        "chromasmith-22.html:14634:button"
       ],
       "unresolved": false
     },
@@ -14663,38 +14662,6 @@
       "sourceDeclarations": [
         "desktop/library-ui.js:1994:button",
         "desktop/library-ui.js:1994:icon-button"
-      ],
-      "unresolved": false
-    },
-    {
-      "family": "button",
-      "state": "library:full",
-      "semantic": "#lib-zoom-in",
-      "selector": "#lib-zoom-in",
-      "tag": "button",
-      "classes": [
-        "lib-zoom-btn"
-      ],
-      "label": "Larger thumbnails",
-      "disabled": false,
-      "sourceDeclarations": [
-        "desktop/library-ui.js:1973:button"
-      ],
-      "unresolved": false
-    },
-    {
-      "family": "button",
-      "state": "library:full",
-      "semantic": "#lib-zoom-out",
-      "selector": "#lib-zoom-out",
-      "tag": "button",
-      "classes": [
-        "lib-zoom-btn"
-      ],
-      "label": "Smaller thumbnails",
-      "disabled": false,
-      "sourceDeclarations": [
-        "desktop/library-ui.js:1971:button"
       ],
       "unresolved": false
     },
@@ -15608,7 +15575,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14757:slider"
+        "chromasmith-22.html:14751:slider"
       ],
       "unresolved": false
     },
@@ -15756,8 +15723,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14529:button",
-        "chromasmith-22.html:14640:button"
+        "chromasmith-22.html:14523:button",
+        "chromasmith-22.html:14634:button"
       ],
       "unresolved": false
     },
@@ -16820,7 +16787,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14757:slider"
+        "chromasmith-22.html:14751:slider"
       ],
       "unresolved": false
     },
