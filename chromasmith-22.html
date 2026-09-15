@@ -94,7 +94,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   /* Spacing rhythm — replaces ad-hoc 2/3/4/6/7/9/10/14/18px values, which is why rows read as
      subtly uneven even when each one looked fine on its own. */
   --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;--sp-7:32px;--sp-8:40px;--sp-9:60px;--sp-10:84px;--sp-11:100px;
-  --ease:cubic-bezier(.2,.8,.3,1);--dur-1:120ms;--dur-2:200ms;
+  --ease:cubic-bezier(.2,.8,.3,1);--dur-1:120ms;--dur-2:220ms;--dur-3:400ms;
   /* Safe-area insets as overridable custom props: layout rules use var(--sat)/var(--sab)
      instead of env() directly, so desktop-Chrome testing can inject real iPhone values
      (e.g. --sat:47px --sab:34px) and render the exact device geometry Chrome can't emulate. */
@@ -151,7 +151,7 @@ header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-item
 .logo .sub{color:var(--mut);font-size:var(--fs-1);font-family:var(--sans);letter-spacing:0;font-style:normal}
 .hdr-right{display:flex;align-items:center;gap:var(--sp-2)}
 .bstamp{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);letter-spacing:var(--ls-2);cursor:pointer}
-.hdr-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);cursor:pointer;padding:6px;transition:all .15s}
+.hdr-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);cursor:pointer;padding:6px;transition:all var(--dur-1)}
 .hdr-btn:hover{border-color:var(--mut)}
 .hdr-ic{display:inline-flex;color:var(--mut)}
 .hdr-ic svg{display:block}
@@ -168,7 +168,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .cver{font-family:var(--mono);font-size:var(--fs-2);color:var(--acc);background:var(--tint-2);border:1px solid var(--tint-4);padding:2px 8px;border-radius:3px;margin-left:auto}
 .dg2{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-2)}
 .dg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-2)}
-.dz{background:var(--sur2);border:1px dashed var(--bdr);border-radius:var(--r);padding:22px 14px;text-align:center;cursor:pointer;transition:all .15s;position:relative;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--sp-1)}
+.dz{background:var(--sur2);border:1px dashed var(--bdr);border-radius:var(--r);padding:22px 14px;text-align:center;cursor:pointer;transition:all var(--dur-1);position:relative;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--sp-1)}
 .dz:hover,.dz.over{border-color:var(--acc);background:var(--tint-1)}.dz.loaded{border-style:solid;border-color:var(--ok);background:var(--ok)}.dz.loaded .dz-lb,.dz.loaded .dz-sb{color:#fff}
 .dz input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 .dz-ic{font-size:var(--fs-4);color:var(--mut)}.dz.loaded .dz-ic{color:#fff}
@@ -177,7 +177,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .dz-fn{font-family:var(--mono);font-size:var(--fs-2);color:var(--ok);word-break:break-all;max-width:92%;margin-top:2px}.dz.loaded .dz-fn{color:#fff}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .chip-tap{margin-top:0}
-.btn{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:var(--sp-2) 14px;border-radius:var(--r-sm);border:1px solid;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease,transform .1s ease,box-shadow .15s ease;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.btn{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:var(--sp-2) 14px;border-radius:var(--r-sm);border:1px solid;cursor:pointer;transition:background var(--dur-1) ease,border-color var(--dur-1) ease,color var(--dur-1) ease,transform var(--dur-1) ease,box-shadow var(--dur-1) ease;display:flex;align-items:center;gap:6px;white-space:nowrap}
 .btn:disabled{opacity:var(--op-2);cursor:not-allowed}
 .btn:active:not(:disabled){transform:scale(.96)}
 .bpri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600;box-shadow:inset 0 1px 0 var(--scrim-w1),0 1px 2px var(--scrim-b1)}
@@ -187,7 +187,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 /* .bdot removed: a decorative leading dot on every single button, carrying no meaning and
    pushing every label off-centre. State is now shown by the button's own .on treatment. */
 .pb{height:3px;background:var(--bdr);border-radius:2px;margin-top:var(--sp-2);overflow:hidden;display:none}
-.pf{height:100%;background:var(--acc);border-radius:2px;transition:width .25s;width:0%}
+.pf{height:100%;background:var(--acc);border-radius:2px;transition:width var(--dur-2);width:0%}
 .vrow{display:flex;gap:8px;align-items:center;margin-top:var(--sp-2)}
 .vlb{font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);letter-spacing:0}
 .vinput{background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r-sm);padding:6px var(--sp-2);color:var(--txt);font-family:var(--mono);font-size:var(--fs-2);width:180px}
@@ -245,7 +245,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-ctrl.fx-sec-collapsed .fx-ctrl-chev{transform:rotate(-90deg)}
 .fx-ctrl.fx-sec-collapsed>.fx-ctrl-title{margin-bottom:0;padding-bottom:var(--sp-2)}
 .fx-ctrl.fx-sec-collapsed>:not(.fx-ctrl-title){display:none}
-.fx-toggle{width:var(--ctl-toggle-w);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--bdr);position:relative;cursor:pointer;transition:background .4s;flex-shrink:0;box-shadow:none;border:1px solid transparent}
+.fx-toggle{width:var(--ctl-toggle-w);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--bdr);position:relative;cursor:pointer;transition:background var(--dur-3);flex-shrink:0;box-shadow:none;border:1px solid transparent}
 /* T45 (editor_ux_spec.json): under forced-colors (Windows High Contrast) mode, the browser can
    strip a custom `background` entirely — .fx-toggle has no text/icon and no real border, so with
    nothing else painting its shape it could vanish completely. `border` survives forced-colors
@@ -255,7 +255,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
    .btn already had for free via its own always-on `border:1px solid`. */
 @media (forced-colors:active){.fx-toggle{border-color:CanvasText}}
 .fx-toggle.on{background:var(--acc);box-shadow:none}
-.fx-toggle::after{content:'';position:absolute;width:var(--ctl-toggle-h);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--txt);top:-1px;left:-1px;transition:transform .2s cubic-bezier(.75,.02,.86,1.31);transform-origin:bottom right;box-shadow:none}
+.fx-toggle::after{content:'';position:absolute;width:var(--ctl-toggle-h);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--txt);top:-1px;left:-1px;transition:transform var(--dur-2) cubic-bezier(.75,.02,.86,1.31);transform-origin:bottom right;box-shadow:none}
 .fx-toggle.on::after{transform:rotate(90deg)}
 /* The 32x18 track is a precise mouse target but a cramped touch one — scale up to roughly
    native iOS switch proportions on mobile rather than adding an invisible hit-area hack. */
@@ -545,7 +545,7 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
    piece of information the Editor keeps over Library's version should earn its keep by staying
    out of the way otherwise). .active is toggled by the slider's mousedown/the window mouseup
    listener below. */
-.fx-zoom-ctrl #fx-zoom-pct{font-size:var(--fs-2);color:var(--mut);min-width:36px;text-align:center;cursor:default;opacity:0;transition:opacity .1s}
+.fx-zoom-ctrl #fx-zoom-pct{font-size:var(--fs-2);color:var(--mut);min-width:36px;text-align:center;cursor:default;opacity:0;transition:opacity var(--dur-1)}
 .fx-zoom-ctrl.active #fx-zoom-pct{opacity:1}
 .fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:var(--sp-8);position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:4px;z-index:var(--z-raise)}
 .ni-build{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);opacity:var(--op-5)}
@@ -567,7 +567,7 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .look-cell.kbd-focus{box-shadow:0 0 0 2px var(--acc)}
 /* 3.4.9: collapse/expand chevron for the preset filter+grid specifically (Preset section only —
    independent of the whole panel's own section-level collapse, fxSecToggle further down). */
-.fx-preset-chev{display:inline-flex;width:14px;height:14px;color:var(--mut);transition:transform .15s}
+.fx-preset-chev{display:inline-flex;width:14px;height:14px;color:var(--mut);transition:transform var(--dur-1)}
 .fx-preset-chev svg{display:block;width:100%;height:100%}
 #fx-looks-ctrl.fx-preset-collapsed .fx-preset-chev{transform:rotate(-90deg)}
 #fx-looks-ctrl.fx-preset-collapsed #fx-preset-body{display:none}
@@ -784,7 +784,7 @@ body.mobile-fx .fx-canvas-wrap{flex:1 1 auto;height:auto;min-height:120px}
 body.mobile-fx #fx-canvas{object-fit:contain}
 /* bottom sheet = the tool panel; height animates 0 ↔ 34vh, flex gives the freed space
    back to the photo. Drag-handle row (#fx-sheet-handle) closes it. */
-body.mobile-fx .fx-panel{flex:0 0 auto;min-height:0;height:0;overflow:hidden;column-count:auto;column-width:auto;padding:0 var(--sp-2);background:var(--sur);border-radius:14px 14px 0 0;box-shadow:0 -6px 24px var(--scrim-b3);transition:height .28s ease}
+body.mobile-fx .fx-panel{flex:0 0 auto;min-height:0;height:0;overflow:hidden;column-count:auto;column-width:auto;padding:0 var(--sp-2);background:var(--sur);border-radius:14px 14px 0 0;box-shadow:0 -6px 24px var(--scrim-b3);transition:height var(--dur-2) ease}
 /* NOTE: plain 34vh for the ANIMATED value — Chrome refuses to interpolate a height
    transition to a min()/calc() endpoint (sticks at 0), so the real size cap lives in
    max-height (never transitioned → min()/calc() on the JS-owned --app-h is safe there).
@@ -858,9 +858,9 @@ body.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:38px;height:4px;border-radiu
 /* ── dynamic-feel polish (INS/DRK-style) ── */
 /* tool-panel content slides up + fades as you switch tools in the open sheet */
 @keyframes fxSecIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-body.mobile-fx.sheet-open .fx-ctrl.sec-active{animation:fxSecIn .18s ease}
+body.mobile-fx.sheet-open .fx-ctrl.sec-active{animation:fxSecIn var(--dur-2) ease}
 /* tactile press feedback on the two icon rows */
-.fx-sec-btn,.fx-act{transition:transform .12s ease}
+.fx-sec-btn,.fx-act{transition:transform var(--dur-1) ease}
 .fx-sec-btn:active,.fx-act:active{transform:scale(.9)}
 /* horizontal rails settle onto a cell instead of stopping mid-scroll */
 body.mobile-fx #fx-looks{scroll-snap-type:x proximity}
@@ -892,7 +892,7 @@ canvas,img{-webkit-user-drag:none}
   background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
   border:1px solid var(--bdr);color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);
   letter-spacing:0;line-height:var(--lh-base);padding:var(--sp-2) var(--sp-4);border-radius:var(--r);opacity:0;pointer-events:none;
-  transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1.15);z-index:var(--z-overlay);
+  transition:opacity var(--dur-2) ease,transform var(--dur-2) cubic-bezier(.2,.8,.3,1.15);z-index:var(--z-overlay);
   max-width:min(82vw,420px);text-align:left;box-shadow:var(--lift-2)}
 #fx-toast::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--mut);flex:0 0 auto}
 #fx-toast.show{opacity:1;transform:translateY(0)}
@@ -908,7 +908,7 @@ body.mobile-fx{--toast-b:98px}
 body.mobile-fx #fx-toast{left:50%;right:auto;transform:translateX(-50%) translateY(8px)}
 body.mobile-fx #fx-toast.show{transform:translateX(-50%) translateY(0)}
 /* slider polish: bigger touch targets + a value bubble above the thumb while dragging */
-#fx-sl-bubble{position:fixed;transform:translateX(-50%);background:var(--acc);color:#000;font-family:var(--mono);font-size:var(--fs-2);font-weight:600;padding:3px 8px;border-radius:var(--r);opacity:0;pointer-events:none;transition:opacity .15s;z-index:var(--z-overlay)}
+#fx-sl-bubble{position:fixed;transform:translateX(-50%);background:var(--acc);color:#000;font-family:var(--mono);font-size:var(--fs-2);font-weight:600;padding:3px 8px;border-radius:var(--r);opacity:0;pointer-events:none;transition:opacity var(--dur-1);z-index:var(--z-overlay)}
 body.mobile-fx .fx-slider{min-height:34px}
 body.mobile-fx .fx-slider::-webkit-slider-thumb{width:22px;height:22px}
 /* mobile: the editor IS the app — web tabs live behind the ⋯ sheet */
@@ -927,7 +927,7 @@ body.mobile-fx .fx-sec-btn.on{background:var(--tint-2)}
 #fx-exp-ov .eo-box{background:var(--sur);border-radius:14px 14px 0 0;width:100%;padding:16px 16px calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:var(--sp-2);align-items:center}
 #fx-exp-ov .eo-txt{font-family:var(--mono);font-size:var(--fs-2);color:var(--txt)}
 #fx-exp-ov .eo-bar{width:100%;height:5px;background:var(--bdr);border-radius:3px;overflow:hidden}
-#fx-exp-ov #eo-fill{height:100%;width:0;background:var(--acc);transition:width .15s}
+#fx-exp-ov #eo-fill{height:100%;width:0;background:var(--acc);transition:width var(--dur-1)}
 #fx-exp-ov .btn{min-height:44px;width:100%;justify-content:center}
 /* preset rail: lives inside the Looks tool panel (not docked under the preview at all
    times) — a horizontal tap-to-select strip, gated behind the Looks sheet like every
@@ -1154,12 +1154,21 @@ body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:var(--sp-9) 
    position:absolute centering for the older body.fx-deskb-only flex layout, untouched. */
 body.deskx #fx-deskbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:8px;
   position:fixed;top:0;left:0;right:0;z-index:var(--z-overlay);height:var(--deskx-topbar-h);
-  margin:0;padding:0 12px 0 var(--sp-10);border:none;border-bottom:1px solid var(--bdr-panel);border-radius:0;
+  margin:0;padding:0 12px;border:none;border-bottom:1px solid var(--bdr-panel);border-radius:0;
   background:var(--glass-bg);
   /* Only the bottom edge has real width, but with border-color unset on the other three sides
      it computes to currentColor, not var(--bdr-panel) — see the identical #lib-overlay fix and
      its comment (library-ui.js). Set explicitly so getComputedStyle().borderColor is uniform. */
   border-color:var(--bdr-panel)}
+/* The 84px LEFT clearance above is for macOS's overlaid traffic-light buttons (titleBarStyle:
+   Overlay, tauri.macos.conf.json) — Windows uses a native title bar (decorations:true,
+   tauri.windows.conf.json) with its own min/max/close already occupying that space, so reserving
+   it a second time here would just be 72px of dead padding pushing every left-cluster button
+   inward for no reason. desktop-native.js adds body.mac-titlebar-overlay only under
+   CS_PLATFORM.os==='macos' (and "?deskx=1" browser testing, which simulates the macOS wireframe
+   this wasn't designed for anywhere else). docs/windows-port.md Phase 3 / G3's window-frame
+   decision. */
+body.mac-titlebar-overlay #fx-deskbar{padding-left:var(--sp-10)}
 body.deskx #fx-deskbar-left{display:flex;align-items:center;gap:8px;grid-column:1;justify-self:start;min-width:0}
 body.deskx #fx-deskbar-right{display:flex;align-items:center;gap:8px;grid-column:3;justify-self:end;min-width:0}
 /* The title's own base rule (above #fx-deskbar-title) centers it by ABSOLUTE positioning against
@@ -1216,7 +1225,7 @@ body.deskx .fx-db{padding:5px var(--sp-2)}
    nearest common ancestor keeps this one source of truth instead of a second copy drifting. */
 body.deskx{--dock-w:0px;--panel-w:var(--panel-w-user,320px);--rail-w:72px}
 body.deskx .fx-layout{grid-template-columns:var(--dock-w) 1fr var(--panel-w) var(--rail-w);position:relative;
-  gap:0;height:calc(100vh - var(--deskx-topbar-h));align-items:stretch;transition:grid-template-columns .2s ease}
+  gap:0;height:calc(100vh - var(--deskx-topbar-h));align-items:stretch;transition:grid-template-columns var(--dur-2) ease}
 /* Mid-drag the .2s column transition lags the pointer by a visible fifth of a second, so every
    drag reads as sluggish and overshoots. Dropped for the duration of the drag only — the class
    toggles (panel-closed, rail-icons, rail-hidden) keep their animation. */
@@ -1454,7 +1463,7 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-div{position:absolute;z-index:var(--z-sticky);background:transparent}
 .cl-div.v{cursor:col-resize;width:12px;margin-left:-6px}
 .cl-div.h{cursor:row-resize;height:12px;margin-top:-6px}
-.cl-div::after{content:'';position:absolute;background:transparent;transition:background .15s}
+.cl-div::after{content:'';position:absolute;background:transparent;transition:background var(--dur-1)}
 .cl-div.v::after{left:5px;width:2px;top:0;bottom:0}
 .cl-div.h::after{top:5px;height:2px;left:0;right:0}
 .cl-div:hover::after{background:var(--acc)}
@@ -1463,7 +1472,7 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-thumb img{width:100%;height:100%;object-fit:cover;pointer-events:none}
 .cl-thumb .cl-thumb-x{position:absolute;top:0;right:0;width:var(--sp-4);height:var(--sp-4);background:var(--scrim-b5);color:#fff;font-size:var(--fs-2);line-height:var(--sp-4);text-align:center;cursor:pointer;border-radius:0 0 0 4px}
 .cl-shapes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.cl-shape{aspect-ratio:1;border:1px solid var(--bdr);border-radius:var(--r-sm);background:var(--sur2);cursor:pointer;padding:var(--sp-1);transition:border-color .15s}
+.cl-shape{aspect-ratio:1;border:1px solid var(--bdr);border-radius:var(--r-sm);background:var(--sur2);cursor:pointer;padding:var(--sp-1);transition:border-color var(--dur-1)}
 .cl-shape:hover{border-color:var(--mut)}
 .cl-shape.on{border-color:var(--acc);background:var(--tint-2)}
 .cl-shape svg{display:block;width:100%;height:100%}
@@ -1509,7 +1518,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
      top-level assets/ folder, and this must render with zero fetch()/network dependency on the
      very first paint — see §2's payload note before growing this further. -->
 <div id="boot-splash" style="position:fixed;inset:0;z-index:var(--z-splash);background:transparent;display:flex;
-  align-items:center;justify-content:center;transition:opacity .4s ease-out;opacity:1">
+  align-items:center;justify-content:center;transition:opacity var(--dur-3) ease-out;opacity:1">
   <div style="position:relative;width:min(640px,92vw);height:300px;background:#0f1c24;
     border-radius:0;overflow:hidden;display:grid;grid-template-columns:220px 1fr;
     box-shadow:0 24px 70px rgba(0,0,0,.85),0 8px 24px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.12)">
@@ -1530,7 +1539,7 @@ body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:blo
            and switches to a determinate bar once a phase's total is known. -->
       <div id="boot-splash-progress" style="display:flex;flex-direction:column;gap:8px">
         <div style="width:100%;height:3px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden">
-          <div id="boot-splash-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#e55319 0%,#ff8c2b 50%,#ffc43d 100%);border-radius:2px;transition:width .2s ease"></div>
+          <div id="boot-splash-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#e55319 0%,#ff8c2b 50%,#ffc43d 100%);border-radius:2px;transition:width var(--dur-2) ease"></div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div id="boot-splash-label" style="font-size:11px;color:#9a968c;font-variant-numeric:tabular-nums">Checking your library…</div>
@@ -2020,7 +2029,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
             <button class="btn" id="btn-denoise-cancel" onclick="fxDenoiseCancelClicked()" style="display:none;margin-left:6px">Cancel</button>
           </div>
           <div id="row-nr-high-progress" style="display:none;margin:2px 0 4px">
-            <div style="height:4px;border-radius:2px;background:var(--sur2);overflow:hidden"><div id="nr-high-progress-bar" style="height:100%;width:0%;background:var(--acc);transition:width .15s"></div></div>
+            <div style="height:4px;border-radius:2px;background:var(--sur2);overflow:hidden"><div id="nr-high-progress-bar" style="height:100%;width:0%;background:var(--acc);transition:width var(--dur-1)"></div></div>
           </div>
         </div>
         <div class="fx-row">
@@ -2498,7 +2507,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         </div>
         <div id="fx-export-prog" style="display:none;margin-top:8px">
           <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:4px" id="fx-export-prog-txt"></div>
-          <div style="height:4px;background:var(--bdr);border-radius:2px;overflow:hidden"><div id="fx-export-prog-bar" style="height:100%;width:0;background:var(--acc);transition:width .15s"></div></div>
+          <div style="height:4px;background:var(--bdr);border-radius:2px;overflow:hidden"><div id="fx-export-prog-bar" style="height:100%;width:0;background:var(--acc);transition:width var(--dur-1)"></div></div>
           <!-- Per-photo status list — only populated (see setExportPhotoStatus) for a >1-photo
                export, so a partial/mixed-result batch is visible at a glance instead of a single
                bar that just reads "done" whether 1 or all-but-one photos actually saved. -->
@@ -5033,7 +5042,12 @@ window.csAbout=csAbout;
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
 // deskx (DRK-style desktop layout): normally applied by the Tauri shell
 // (desktop-native.js); "?deskx=1" lets it be exercised in a plain browser for testing.
-try{if(new URLSearchParams(location.search).has('deskx'))document.body.classList.add('deskx');}catch(e){}
+// mac-titlebar-overlay rides along with it: every wireframe/visual reference this mode is
+// tested against was built for macOS's titleBarStyle:Overlay traffic-light layout (desktop-
+// native.js only adds this class for real under CS_PLATFORM.os==='macos' — see its own comment
+// on the #fx-deskbar 84px-padding rule, docs/windows-port.md Phase 3), so the browser escape
+// hatch keeps simulating that, not Windows' native-titlebar layout, which no wireframe covers.
+try{if(new URLSearchParams(location.search).has('deskx')){document.body.classList.add('deskx');document.body.classList.add('mac-titlebar-overlay');}}catch(e){}
 // Also give a plain (non-Tauri) wide browser window the same grouped-rail, photo-left layout
 // as the real desktop shell — previously only Tauri or the explicit ?deskx=1 escape hatch got
 // it, so a wide GitHub Pages window fell back to fx-deskb's un-grouped section list with
@@ -14971,7 +14985,11 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   'deconv-amt','deconv-rad',
   'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig','lut-mix'];
-const _FX_SNAP_TOGGLES=['adjust','curves','hsl','wheels','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas'];
+// nr/deconv added 2026-09-15 (found by the Editor snap-list cross-check hook) — same gap the
+// deconv-amt/deconv-rad sliders comment above describes: Noise Reduction and Deconvolution
+// predate the shared fx-mod/header-reset mechanism, so their toggle state was silently skipped
+// by reset/undo/session persistence.
+const _FX_SNAP_TOGGLES=['adjust','curves','hsl','wheels','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas','nr','deconv'];
 const _FX_SNAP_SELECTS=['sel-input','sel-tonemap','sel-lut','sel-print','sel-grain-fmt','sel-debug'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
 function getUISnapshot(opts){
@@ -19755,7 +19773,11 @@ function _hdrHeadroomPngFor(it,outW,outH){
 async function fxSaveGainMapHeic(pngBytes,fname,it){
   const source=window.chromasmithSourcePath;
   if(!source)return false;
-  const heicName=fname.replace(/\.[^.]+$/,'')+'.heic';
+  // Ultra HDR is a JPEG container (Windows, docs/windows-port.md Phase 4); the HEIC path stays
+  // macOS-only (Core Image). Same headroom-map contract either way, just a different command
+  // and container extension — see gainmap_uhdr.rs / gainmap.rs's write_gainmap_*_from_map.
+  const isUhdr=window.CS_PLATFORM&&window.CS_PLATFORM.hdrExport==='uhdr';
+  const outName=fname.replace(/\.[^.]+$/,'')+(isUhdr?'.jpg':'.heic');
   const q=(parseFloat((document.getElementById('sl-exp-q')||{}).value)||92)/100;
   // RAW path: OUR OWN headroom, computed at decode time — see gainmap.rs's "HDR from RAW" note
   // for why CIRAWFilter can't do this for this camera's files.
@@ -19770,12 +19792,13 @@ async function fxSaveGainMapHeic(pngBytes,fname,it){
       hrCanvas.width=hrCanvas.height=0;
       const hrBytes=new Uint8Array(await hrBlob.arrayBuffer());
       // Length-prefixed two-blob body: headroom PNG, then the graded PNG — see main.rs's
-      // write_gainmap_heic_from_map for the exact framing this must match.
+      // write_gainmap_heic_from_map / write_gainmap_uhdr_from_map for the exact framing this
+      // must match (both commands share the same request shape).
       const body=new Uint8Array(4+hrBytes.length+pngBytes.length);
       new DataView(body.buffer).setUint32(0,hrBytes.length,true);
       body.set(hrBytes,4);body.set(pngBytes,4+hrBytes.length);
-      const wrote=await window.__TAURI__.core.invoke('write_gainmap_heic_from_map',body,{headers:{
-        'x-filename':_u8b64(new TextEncoder().encode(heicName)),
+      const wrote=await window.__TAURI__.core.invoke(isUhdr?'write_gainmap_uhdr_from_map':'write_gainmap_heic_from_map',body,{headers:{
+        'x-filename':_u8b64(new TextEncoder().encode(outName)),
         'x-quality':String(q),'x-max-stops':'2'}});
       if(wrote){log(`Saved ${wrote} (HDR gain map, from RAW headroom)`,'ok');return true;}
       log('No RAW headroom in this photo — exported as SDR','info');
@@ -19786,8 +19809,11 @@ async function fxSaveGainMapHeic(pngBytes,fname,it){
     }
   }
   // Non-RAW path (iPhone HEIC etc.): unchanged — Core Image's own expand-to-HDR on the source
-  // file already works for these (measured headroom 1.37-1.40 on real iPhone photos).
+  // file already works for these (measured headroom 1.37-1.40 on real iPhone photos). macOS-only
+  // (write_gainmap_heic has no Windows/uHDR counterpart yet — only the RAW-headroom path above
+  // does), so this always writes .heic regardless of CS_PLATFORM.hdrExport.
   try{
+    const heicName=fname.replace(/\.[^.]+$/,'')+'.heic';
     const wrote=await window.__TAURI__.core.invoke('write_gainmap_heic',pngBytes,{headers:{
       'x-source':_u8b64(new TextEncoder().encode(source)),
       'x-filename':_u8b64(new TextEncoder().encode(heicName)),

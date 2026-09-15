@@ -539,6 +539,17 @@ pub(crate) fn get_thumbnail_inner(path: String) -> Result<Vec<u8>, String> {
                 return Ok(bytes);
             }
         }
+        // Video posters come from the shell's own thumbnail handler (winvideothumb.rs) — the
+        // same mechanism Explorer uses, reached via IShellItemImageFactory rather than a bundled
+        // decoder. Sitting here means it inherits the disk cache above for free, same as the
+        // macOS AVFoundation path below.
+        if is_video_ext(&ext) {
+            let dur = crate::catalog::video_track_info(&path).map(|i| i.duration_secs).unwrap_or(0.0);
+            if let Some(bytes) = crate::winvideothumb::poster_jpeg(&path, 360, dur) {
+                write_cache_atomic(&cache_path, &bytes, mtime, size);
+                return Ok(bytes);
+            }
+        }
     }
     #[cfg(target_os = "macos")]
     {

@@ -825,7 +825,7 @@
       border-color:var(--bdr-panel);
       box-shadow:6px 0 20px -8px rgba(0,0,0,.5);
       grid-template-rows:auto auto auto minmax(120px,26%) 1fr 28px;color:var(--txt);
-      font-family:var(--font-text);transition:width .15s ease;
+      font-family:var(--font-text);transition:width var(--duration-press) ease;
       /* chromasmith-22.html's body{font-size:14px;line-height:1.5} otherwise cascades in here —
          the wireframe never sets either explicitly (falls back to the browser default 16px/
          normal), so this overrides them at the Library's own root, scoped so it never leaks
@@ -1298,7 +1298,7 @@
     #lib-quicklook{position:fixed;inset:0;z-index:500;background:rgba(10,10,10,.96);
       display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px}
     #lib-quicklook.on{display:flex}
-    #lib-ql-img{max-width:92vw;max-height:86vh;object-fit:contain;opacity:0;transition:opacity .12s ease;
+    #lib-ql-img{max-width:92vw;max-height:86vh;object-fit:contain;opacity:0;transition:opacity var(--duration-press) ease;
       border-radius:4px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
     #lib-ql-img.loaded{opacity:1}
     #lib-ql-caption{color:var(--mut);font-size:12px;font-family:var(--mono);letter-spacing:.02em}
@@ -1320,7 +1320,7 @@
     #lib-overlay:not(.lib-light) .lib-tree-row.on .coll-count{color:var(--ink-on-dark)}
     .lib-tree-row.on .coll-count{color:var(--primary);font-weight:var(--weight-semibold)}
     .lib-tree-chev{width:14px;flex:0 0 14px;display:inline-flex;align-items:center;justify-content:center;opacity:.6;
-      transform:rotate(-90deg);transition:transform .12s ease}
+      transform:rotate(-90deg);transition:transform var(--duration-press) ease}
     .lib-tree-chev.open{transform:rotate(0)}
     .lib-tree-children{margin-left:14px}
     /* ── Activity indicator: one chained pipeline (walk -> metadata -> sidecar -> hash), not
@@ -1448,7 +1448,7 @@
        one place that deliberately opts out, so the literal value is the only way to pin it. */
     .lib-thumb-wrap{position:relative;box-shadow:inset 0 0 0 1px #e0e0e0}
     .lib-card{background:transparent;border:none;border-radius:0;overflow:hidden;
-      cursor:pointer;position:relative;box-shadow:none;transition:box-shadow .15s ease}
+      cursor:pointer;position:relative;box-shadow:none;transition:box-shadow var(--duration-press) ease}
     .lib-card:hover .lib-thumb-wrap{box-shadow:inset 0 0 0 1px var(--acc2)}
     .lib-card.sel{box-shadow:0 0 0 2px var(--acc2)}
     .lib-card.multi{box-shadow:0 0 0 2px var(--acc2)}
@@ -1491,7 +1491,7 @@
     #lib-grid.aspect-view .lib-thumb-wrap img{width:auto;height:100%;object-fit:contain}
     /* Real thumbnails fade in over the skeleton/empty cell instead of popping in the instant
        get_thumbnail resolves — .loaded is added by the thumb pool once the blob URL is set. */
-    #lib-grid:not(.list-view) .lib-thumb-wrap img{opacity:0;transition:opacity .15s ease}
+    #lib-grid:not(.list-view) .lib-thumb-wrap img{opacity:0;transition:opacity var(--duration-press) ease}
     #lib-grid:not(.list-view) .lib-thumb-wrap img.loaded{opacity:1}
     .lib-card .lib-name{font-size:11px;font-family:var(--sans);color:var(--mut);
       padding:4px 6px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1507,7 +1507,7 @@
        just photos. List mode keeps its own in-flow column cell (styled further down). */
     #lib-grid:not(.list-view) .lib-flags{position:absolute;bottom:4px;right:4px;display:flex;gap:3px;z-index:3;
       background:rgba(0,0,0,.55);border-radius:5px;padding:2px 3px;
-      opacity:0;transition:opacity .12s ease}
+      opacity:0;transition:opacity var(--duration-press) ease}
     /* the chip itself (dark rounded background) is invisible at rest, not just the icons inside
        it — reveal on hover, or keep it revealed if a flag is already selected (hover or not). */
     #lib-grid:not(.list-view) .lib-card:hover .lib-flags,
@@ -1517,7 +1517,7 @@
        so the flag/pick/favorite glyphs (different intrinsic SVG heights) sat at slightly different
        vertical offsets from each other and from the chip's own padding instead of all centering on
        the same line. display:flex + a fixed box makes every glyph occupy the same centered slot. */
-    .lib-flag{cursor:pointer;font-size:11px;opacity:.55;filter:grayscale(1);transition:opacity .1s ease;
+    .lib-flag{cursor:pointer;font-size:11px;opacity:.55;filter:grayscale(1);transition:opacity var(--duration-press) ease;
       display:flex;align-items:center;justify-content:center;width:15px;height:15px}
     .lib-flag.on{opacity:1;filter:none}
     /* HANDOVER §8 item #9: was opacity:.55/grayscale for the unset flags — always drawn, just
@@ -1671,12 +1671,15 @@
        padding — #lib-top itself is display:none while docked (.lib-fullview-only above), so only
        the FULL-view rule here is live; the docked-only overrides that used to follow it are dead
        code once #lib-top stopped rendering at all in dock mode, and were removed with it. */
-    /* No -webkit-app-region:no-drag here (the topbar-parity pass that set these numbers carried
-       one over from copying the Editor's #fx-deskbar CSS) — the base #lib-top rule above already
-       sets "drag" with button/input/select exempted, and this override left the whole desktop
-       Library window undraggable-by-header on macOS (Overlay titlebar, no native drag chrome of
-       its own) whenever the Library was in full view. */
-    body.deskx #lib-overlay #lib-top{height:44px;padding:0 12px 0 84px}
+    /* No -webkit-app-region:no-drag missing here would leave the whole desktop Library window
+       undraggable-by-header on macOS (Overlay titlebar, no native drag chrome of its own)
+       whenever the Library was in full view. */
+    body.deskx #lib-overlay #lib-top{height:44px;padding:0 12px;-webkit-app-region:no-drag}
+    /* Same macOS-only traffic-light clearance as #fx-deskbar's own (chromasmith-22.html) —
+       Windows' native title bar (decorations:true) already occupies that space, so this 84px
+       left padding only applies under body.mac-titlebar-overlay now (desktop-native.js,
+       docs/windows-port.md Phase 3). */
+    body.mac-titlebar-overlay #lib-overlay #lib-top{padding-left:84px}
     /* .full-scoped (not just body.deskx #lib-overlay #lib-top) so this never fights the
        body.deskx #lib-overlay:not(.full) .lib-fullview-only{display:none} rule above that keeps
        #lib-top hidden while DOCKED — two ids beat that rule's one, so a bare display:grid here
@@ -1804,7 +1807,7 @@
     body.deskx #lib-overlay:not(.full) .lib-strip-info{
       position:absolute;left:0;right:0;bottom:0;padding:2px 4px 3px;pointer-events:none;
       background:linear-gradient(to top,rgba(0,0,0,.82),rgba(0,0,0,0));
-      font-size:9px;line-height:1.25;color:#fff;opacity:0;transition:opacity .12s var(--ease,ease);
+      font-size:9px;line-height:1.25;color:#fff;opacity:0;transition:opacity var(--duration-press) var(--ease,ease);
       display:flex;align-items:center;gap:3px;justify-content:space-between}
     body.deskx #lib-overlay:not(.full) .lib-card:hover .lib-strip-info{opacity:1}
     body.deskx #lib-overlay:not(.full) .lib-card:hover .lib-strip-info,
@@ -1975,7 +1978,7 @@
       </div>
       <span id="lib-selection-action-hint" class="lib-selection-action-hint" aria-live="polite" hidden>Select photo(s) to use these actions</span>
       <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo" aria-describedby="lib-selection-action-hint">${ic('looks',14)}<span class="lbl">All FX</span></button>
-      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ⌘E" aria-describedby="lib-selection-action-hint">${ic('export',14)}<span class="lbl">Export</span></button>
+      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ${kbd([], 'E')}" aria-describedby="lib-selection-action-hint">${ic('export',14)}<span class="lbl">Export</span></button>
       <!-- id (not just a bare positioning div) so body.deskx can give it the SAME margin-left/
            padding-left/border-left divider as the Editor's own #fx-settings, instead of just the
            row's flat 8px gap — see the #lib-settings CSS rule below, copied from #fx-settings. -->
@@ -2298,7 +2301,28 @@
   }
 
   // ── helpers ─────────────────────────────────────────────────────────────────
-  const baseName = (p) => p.split('/').pop();
+  // baseName/kbd are used well above this point in the file (the topbar's Export button title
+  // is built during the initial overlay HTML assembly, long before this line runs top-to-bottom)
+  // — `function` declarations, not `const`, so they're hoisted and callable from anywhere in
+  // this closure regardless of source order. A `const` here previously threw "Cannot access
+  // 'kbd' before initialization" the moment the overlay HTML was built, which — caught live via
+  // the wireframe-inventory gate — silently left the whole topbar/sidebar/menus unrendered (a
+  // thrown error during template-literal assembly, not merely a wrong label).
+  //
+  // csBaseName (desktop-native.js) splits on either OS separator — a real path from the Rust
+  // side is native-separated ('/' on macOS, '\' on Windows), unlike this file's own test-mode
+  // mock IPC layer above, which fabricates always-'/'-separated paths on purpose. Falls back to
+  // the same split inline for LIBTEST (`?libtest=1`), which runs this file in a plain browser
+  // with no desktop-native.js loaded to define the global.
+  function baseName(p) { return window.csBaseName ? window.csBaseName(p) : String(p).split(/[\\/]/).pop(); }
+  // csKbd (desktop-native.js): ⌘E on macOS, Ctrl+E on Windows. Same LIBTEST fallback as baseName
+  // above — a plain-'⌘'-prefixed label when nothing sets window.csKbd, matching every literal
+  // this replaces.
+  function kbd(mods, key) {
+    if (window.csKbd) return window.csKbd(mods, key);
+    const list = Array.isArray(mods) ? mods : mods ? [mods] : [];
+    return `⌘${list.map((m) => (m === 'shift' ? '⇧' : m === 'alt' ? '⌥' : '')).join('')}${key}`;
+  }
   // Best-effort MIME from the filename — File objects built from read_file_bytes carry no
   // type, and chromasmith-22.html has type-based branches downstream (its loadFXImages filter
   // is now extension-aware too, but a real MIME keeps every other check honest).
@@ -5022,8 +5046,8 @@
     // ── Versions & edit ▸ — copy/paste/virtual copies/reset, everything about the RECIPE
     // rather than the file itself.
     const verMenu = submenu('Edit'); // 3.2.2 rename (was "Versions & edit") — see "Undo last reset" below for the other half of this item
-    verMenu.subItem('Copy edit', () => libCopyEdit(paths), '⌘⇧C');
-    const pasteRow = verMenu.subItem('Paste edit', () => libPasteEdit(paths), '⌘⇧V');
+    verMenu.subItem('Copy edit', () => libCopyEdit(paths), kbd('shift', 'C'));
+    const pasteRow = verMenu.subItem('Paste edit', () => libPasteEdit(paths), kbd('shift', 'V'));
     // Selective paste (darktable idiom): pick WHICH parts of the copied recipe to apply instead
     // of all-or-nothing — e.g. paste just the grain+halation without also overwriting the LUT.
     // chromasmithPasteEditSelective (chromasmith-22.html) shows the category picker and hands
@@ -5105,12 +5129,12 @@
     // the next reset overwrites the buffer — closing the app between now and using the undo
     // item is fine (the buffer lives in the .xmp sidecar, not in-memory), but leaving it too
     // long is still a real way to lose the edit for good.
-    const resetItem = verMenu.subItem('Reset edit', () => libResetEdit(paths), '⌘⇧R');
+    const resetItem = verMenu.subItem('Reset edit', () => libResetEdit(paths), kbd('shift', 'R'));
     if (!paths.some((p) => (state.sidecars.get(p) || {}).edited)) { resetItem.style.opacity = '.4'; resetItem.style.pointerEvents = 'none'; }
     // Enabled only when at least one selected photo actually has a pending buffer —
     // `last_reset_recipe` on its sidecar — and restores each photo INDEPENDENTLY (a multi-photo
     // reset can be partially undone: reset 3, then export 1, then undo the other 2).
-    const undoResetItem = verMenu.subItem('Undo last reset', () => libUndoLastReset(paths), '⌘Z');
+    const undoResetItem = verMenu.subItem('Undo last reset', () => libUndoLastReset(paths), kbd([], 'Z'));
     if (!paths.some((p) => (state.sidecars.get(p) || {}).last_reset_recipe)) {
       undoResetItem.style.opacity = '.4';
       undoResetItem.style.pointerEvents = 'none';
@@ -5202,7 +5226,7 @@
 
     // ── File ▸ — actions about the file on disk rather than its recipe.
     const fileMenu = submenu('File');
-    fileMenu.subItem('Reveal in Finder', () => invoke('reveal_in_finder', { path: paths[0] }).catch((e) => console.error('reveal_in_finder', e)));
+    fileMenu.subItem(`Reveal in ${window.CS_PLATFORM ? window.CS_PLATFORM.revealLabel : 'Finder'}`, () => invoke('reveal_in_finder', { path: paths[0] }).catch((e) => console.error('reveal_in_finder', e)));
     // ── Get Info (Bug #2 fix): the Info panel (renderInfoPanel) was fully built and functional
     // but had no discoverable trigger anywhere in the UI — only an undiscoverable 'i'/'I' keydown
     // shortcut (itself duplicated, with a second copy gated on state.source==='lr' that never
@@ -5211,7 +5235,7 @@
     // selected photo via `_kbCursor`, same as the keyboard shortcut, so the panel shows THIS
     // photo rather than whatever was focused before the right-click.
     fileMenu.subItem('Get Info', () => { state._kbCursor = paths[0]; window.__libInfo(true); }, 'I');
-    fileMenu.subItem(`Duplicate ${n > 1 ? n + ' photos' : ''}`.trim(), () => libDuplicatePaths(paths), '⌘D');
+    fileMenu.subItem(`Duplicate ${n > 1 ? n + ' photos' : ''}`.trim(), () => libDuplicatePaths(paths), kbd([], 'D'));
 
     sep();
     // ── Scoped face/CLIP analysis (N4) — the sidebar's People search icon
@@ -5238,7 +5262,7 @@
     // photo(s) in the editor and reveals the Export section instead of firing right away, so
     // quality/scope/etc can be changed first).
     const exportMenu = submenu(`Export ${n > 1 ? n + ' photos' : ''}`.trim());
-    exportMenu.subItem('Quick export', () => libExportPaths(paths), '⌘E');
+    exportMenu.subItem('Quick export', () => libExportPaths(paths), kbd([], 'E'));
     exportMenu.subItem('Export custom…', async () => {
       if (n <= 1) await openInEditor(paths[0]);
       else await openPathsInEditor(paths);
@@ -9188,7 +9212,7 @@
         const head = document.createElement('div');
         head.style.cssText = 'display:flex;align-items:center;gap:7px;padding:6px 2px;cursor:pointer;font-size:12px;font-weight:600;margin-top:6px';
         head.innerHTML = `<input type="checkbox" ${dayAllSel ? 'checked' : ''} style="width:15px;height:15px">
-          <span class="imp-day-chev" style="display:inline-flex;transition:transform .12s ease;transform:rotate(${isOpen ? '90' : '0'}deg)">${ic('chevron', 12)}</span>
+          <span class="imp-day-chev" style="display:inline-flex;transition:transform var(--duration-press) ease;transform:rotate(${isOpen ? '90' : '0'}deg)">${ic('chevron', 12)}</span>
           <span>${esc(dayLabel(k))}</span><span style="font-weight:400;color:var(--mut)">${dayFiles.length} · ${fmtBytes(dayBytes)}</span>`;
         const headCb = head.querySelector('input');
         if (!dayAllSel && daySomeSel) headCb.indeterminate = true;
@@ -9248,7 +9272,7 @@
         <label style="display:flex;align-items:center;gap:7px;font-size:12px;margin-bottom:14px;cursor:pointer">
           <input type="checkbox" id="imp-eject" ${prefs.eject ? 'checked' : ''}> Eject card when finished</label>
         <div id="imp-prog" style="display:none;margin-bottom:12px">
-          <div style="height:6px;background:var(--sur2);border-radius:3px;overflow:hidden"><div id="imp-bar" style="height:100%;width:0;background:var(--acc);transition:width .15s"></div></div>
+          <div style="height:6px;background:var(--sur2);border-radius:3px;overflow:hidden"><div id="imp-bar" style="height:100%;width:0;background:var(--acc);transition:width var(--duration-press)"></div></div>
           <div id="imp-prog-txt" style="font-size:11px;color:var(--mut);margin-top:5px"></div></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center">
           <div id="imp-cancel" style="font-size:12px;color:var(--mut);cursor:pointer;padding:8px 10px">Cancel</div>

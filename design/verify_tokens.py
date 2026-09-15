@@ -9,12 +9,12 @@ import json, re, sys, pathlib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 def declared_vars(path, start, end):
-    lines = path.read_text().split("\n")
+    lines = path.read_text(encoding="utf-8").split("\n")
     seg = "\n".join(lines[start - 1:end])
     return sorted(set(re.findall(r'--[a-zA-Z0-9-]+(?=\s*:)', seg)))
 
 def find_block(path, marker, span=200):
-    lines = path.read_text().split("\n")
+    lines = path.read_text(encoding="utf-8").split("\n")
     for i, l in enumerate(lines, 1):
         if marker in l:
             return i
@@ -26,7 +26,7 @@ lib = ROOT / "desktop/library-ui.js"
 root_start, root_end = 50, 98
 light_line = find_block(html, "body.light{", )
 # second occurrence is the real override block (first is the one-liner at line 99)
-lines = html.read_text().split("\n")
+lines = html.read_text(encoding="utf-8").split("\n")
 light_lines = [i for i, l in enumerate(lines, 1) if l.strip().startswith("body.light{")]
 light_start = light_lines[-1]
 # find matching closing brace
@@ -40,7 +40,7 @@ for i in range(light_start - 1, len(lines)):
 
 lib_start = find_block(lib, "const DS_FONTS")
 lib_end_marker = None
-lib_lines = lib.read_text().split("\n")
+lib_lines = lib.read_text(encoding="utf-8").split("\n")
 for i, l in enumerate(lib_lines, 1):
     if l.strip() == "`;" and i > lib_start:
         lib_end_marker = i
@@ -51,7 +51,7 @@ wanted |= set(declared_vars(html, root_start, root_end))
 wanted |= set(declared_vars(html, light_start, light_end))
 wanted |= set(declared_vars(lib, lib_start, lib_end_marker))
 
-tokens = json.loads((ROOT / "design/tokens.json").read_text())
+tokens = json.loads((ROOT / "design/tokens.json").read_text(encoding="utf-8"))
 
 covered = set()
 def walk(node):
@@ -63,7 +63,7 @@ def walk(node):
             walk(v)
 walk(tokens)
 
-conflicts_text = (ROOT / "design/token-conflicts.md").read_text()
+conflicts_text = (ROOT / "design/token-conflicts.md").read_text(encoding="utf-8")
 conflict_vars = set(re.findall(r'`(--[a-zA-Z0-9-]+)`', conflicts_text))
 
 missing = sorted(v for v in wanted if v not in covered and v not in conflict_vars)
