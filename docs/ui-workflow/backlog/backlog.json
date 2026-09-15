@@ -622,13 +622,14 @@
       "priority": "P1",
       "cluster": "motion-system",
       "title": "Define shared motion durations and easing for the interface",
-      "status": "backlog",
+      "status": "done",
       "recommended_executor": "Codex",
       "model": "codex:gpt-5.6-terra",
       "reference": "motion-great-animations",
       "depends_on": [],
       "acceptance": "A small motion token set covers common transitions and has a verified reduced-motion fallback.",
-      "source_id": 63
+      "source_id": 63,
+      "resolution": "2026-09-15: design/tokens.json motion section extended to a 3-tier duration scale sourced from Adobe Spectrum's public animation-duration ladder (user directive: match published Adobe/photo-tool numbers, not invented values) — --dur-1=120ms (fast/press, ~Spectrum animation-duration-100), --dur-2=220ms (base/fade-reveal, Spectrum animation-duration-400, replacing an unsourced 200ms), --dur-3=400ms (new, slow/emphasis, exact match to Spectrum animation-duration-800). --ease left unchanged (no exact Adobe match, prior decision already documented). Regenerated via scripts/build-tokens.mjs + scripts/token-report.mjs. Reduced-motion fallback was already fully verified pre-existing (chromasmith-22.html:486-488, a global `*` wildcard forcing .01ms on every transition/animation in the file, not just the two component-specific @media blocks) — no changes needed there."
     },
     {
       "id": 35,
@@ -636,7 +637,7 @@
       "priority": "P1",
       "cluster": "motion-system",
       "title": "Apply one purposeful motion language across app surfaces",
-      "status": "backlog",
+      "status": "done",
       "recommended_executor": "Codex",
       "model": "codex:gpt-6-astra",
       "reference": "motion-dev",
@@ -644,7 +645,8 @@
         34
       ],
       "acceptance": "Library and Editor share transition principles; system reduced-motion preference is respected everywhere.",
-      "source_id": 30
+      "source_id": 30,
+      "resolution": "2026-09-15: wired the item-34 token scale through both surfaces. chromasmith-22.html (Editor) — 20 raw transition/animation-duration literals (.1s/.12s/.15s -> var(--dur-1); .18s/.2s/.25s/.28s -> var(--dur-2); .4s -> var(--dur-3)) replaced at call sites. desktop/library-ui.js (Library) — 10 call sites using its own pre-existing DS token var(--duration-press) (120ms, numerically identical to Editor's --dur-1, both ultimately Adobe Spectrum animation-duration-100-class) instead of raw .1s/.12s/.15s literals, so the fast/press tier is now numerically shared between the two surfaces. Left untouched, deliberately: the app's one-off spring/bounce easing (single confirmation-accent use, chromasmith-22.html transform transition, duration re-pointed to --dur-2 but its unique cubic-bezier kept), Library's single .18s panel-slide outlier (would need visual re-verification to retime, out of scope), and every continuous loop animation (fxspin/libPhotoWorkSpin/lib-shimmer/fxToastPulse) which are spinner/pulse timings, not discrete UI transitions, matching the project's convention of not tokenizing single-purpose values. Reduced-motion: already global (see #34) and applies unconditionally to every var()-driven or literal duration in both files, so this item's reduced-motion clause needed no new work, only confirmation. Verified live in-browser (local static server, no GLSL/JS console errors, --dur-1/2/3 resolve correctly via getComputedStyle, panel/tab transitions animate normally) — could not run test/export_harness.mjs or npm run ui:test in this session (npm/playwright unavailable in the sandboxed shell); recommend running the full `npm test` gate suite in an environment with node_modules installed before merge."
     },
     {
       "id": 36,

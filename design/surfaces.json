@@ -1468,7 +1468,7 @@
           "reloadQuery": "&libcat=1&libn=60"
         },
         {
-          "eval": "document.getElementById('lib-overlay').classList.add('on','full')"
+          "eval": "(function(){document.getElementById('lib-overlay').classList.add('on','full');document.body.classList.add('lib-full');})()"
         },
         {
           "wait": 400
@@ -1480,15 +1480,13 @@
           "wait": 150
         },
         {
-          "click": "#lib-view-menu-btn",
-          "force": true
+          "click": "#lib-view-menu-btn"
         },
         {
           "wait": 150
         },
         {
-          "click": "#lib-compare-btn",
-          "force": true
+          "click": "#lib-compare-btn"
         },
         {
           "wait": 2000
@@ -1503,7 +1501,7 @@
         "lib-compare-bar",
         "lib-compare-panes"
       ],
-      "note": "S6d chunk C: real path found \u2014 select 2 cards via synthetic click/metaKey-click (real handleCardClick modifier branch), open #lib-view-menu-btn, click the real #lib-compare-btn (enterCompareMode())."
+      "note": "S6d chunk C: real path found \u2014 select 2 cards via synthetic click/metaKey-click (real handleCardClick modifier branch), open #lib-view-menu-btn, click the real #lib-compare-btn (enterCompareMode()). Root-caused 2026-09-15: the fake-open eval only toggled #lib-overlay's own classes, never `body.lib-full` (the real toggleExpandedView() does both \u2014 chromasmith-22.html's `body.lib-full #fx-deskbar{display:none}` rule depends on the body class). Without it, the Editor's #fx-deskbar (loaded by this same check's fixture-image step) stayed visible and pointer-interactive on top of #lib-view-menu-btn at 1440x900, so Playwright's `force:true` click landed on #fx-deskbar instead \u2014 the view menu never opened, so #lib-compare-btn was never visible either. Adding `body.classList.add('lib-full')` to the fake-open step removes the real overlap, so both clicks now land correctly without needing `force`."
     },
     {
       "id": "lib-info",
