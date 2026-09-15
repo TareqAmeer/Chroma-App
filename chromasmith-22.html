@@ -2012,27 +2012,23 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <button class="btn bgh" id="btn-adj-scope" onclick="adjToggleScope()" title="By default Basic Adjustments apply to every loaded photo. Click to make THIS photo's adjustments independent (e.g. nudge just its exposure), or click again to sync it back to the shared value.">This photo only</button>
         </div>
         <div class="fx-fields ff-off" id="ff-adjust">
+          <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Light</div>
           <div class="fx-row"><div class="fx-label">Exposure</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-exp">0</div></div>
-          <div class="fx-row"><div class="fx-label">Temp</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-temp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-temp">0</div></div>
-          <div class="fx-row"><div class="fx-label">Tint</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-tint" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tint">0</div></div>
           <div class="fx-row"><div class="fx-label">Contrast</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-con" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-con">0</div></div>
           <div class="fx-row"><div class="fx-label">Highlights</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-hi" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-hi">0</div></div>
           <div class="fx-row"><div class="fx-label">Shadows</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-sh" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sh">0</div></div>
           <div class="fx-row"><div class="fx-label">Whites</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-wh" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-wh">0</div></div>
           <div class="fx-row"><div class="fx-label">Blacks</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-bl" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-bl">0</div></div>
-          <div class="fx-row"><div class="fx-label">Vibrance</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-vib" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-vib">0</div></div>
-          <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-sat" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sat">0</div></div>
-          <div class="fx-row"><div class="fx-label">Clarity</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-clarity" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-clarity">0</div></div>
-          <div class="fx-row" title="Warms (or cools) skin/orange tones only — everything else is unaffected. Dial to taste; not a color-accuracy control."><div class="fx-label">Skin Warmth</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-skin" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-skin">0</div></div>
-          <div class="fx-row" title="Cuts atmospheric haze in the distance — extra contrast/black-point/saturation, but only where the image reads BRIGHT and DESATURATED (a hazy sky or ridge), so foreground color is left alone. Negative values add haze back in."><div class="fx-label">Dehaze</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-dehaze" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-dehaze">0</div></div>
+          <div class="fx-sub">Colors</div>
+          <div class="fx-row"><div class="fx-label">Temp</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#4d8bff,#ff9f43)" type="range" min="-100" max="100" value="0" id="sl-adj-temp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-temp">0</div></div>
+          <div class="fx-row"><div class="fx-label">Tint</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#51cf66,#9775fa)" type="range" min="-100" max="100" value="0" id="sl-adj-tint" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tint">0</div></div>
+          <div class="fx-row"><div class="fx-label">Vibrance</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#888,#ff5b5b,#ffd43b,#51cf66,#3bc9db,#9775fa)" type="range" min="-100" max="100" value="0" id="sl-adj-vib" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-vib">0</div></div>
+          <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#888,#ff5b5b,#ffd43b,#51cf66,#3bc9db,#9775fa)" type="range" min="-100" max="100" value="0" id="sl-adj-sat" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sat">0</div></div>
+          <div class="fx-row" title="Warms (or cools) skin/orange tones only — everything else is unaffected. Dial to taste; not a color-accuracy control."><div class="fx-label">Skin Warmth</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#4d8bff,#ff9f43)" type="range" min="-100" max="100" value="0" id="sl-adj-skin" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-skin">0</div></div>
           <div class="btn-row" style="margin-top:4px">
             <button class="btn bgh" onclick="wbEyedropper()" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance">WB Eyedropper</button>
             <button class="btn bgh" onclick="autoEnhance()" title="One-click levels and white balance from the image histogram">Auto-enhance</button>
           </div>
-          <!-- Bare "Reset" — the card's own "Basic Adjustments" title already says what it
-               resets, so the qualifier only restated it (see CLAUDE.md's note on 13
-               near-synonymous reset/clear verbs). -->
-          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" id="btn-adj-reset" onclick="resetAdjust()">Reset</button></div>
         </div>
       </div>
       <!-- NOISE REDUCTION — split out of Basic Adjustments so it reads as its own tool, not a
@@ -2381,9 +2377,12 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       </div>
       <!-- VIGNETTE -->
       <div class="fx-ctrl" data-fxsec="vig">
-        <div class="fx-ctrl-title">Vignette <div class="fx-toggle" id="tg-vig" onclick="toggleFX('vig')"></div></div>
+        <div class="fx-ctrl-title">Effects <div class="fx-toggle" id="tg-vig" onclick="toggleFX('vig')"></div></div>
         <div class="fx-fields ff-off" id="ff-vig">
           <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-vig">50</div></div>
+          <div class="fx-row"><div class="fx-label">Clarity</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-clarity" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-clarity">0</div></div>
+          <div class="fx-row" title="Adds or removes fine surface detail (radius-1 high-pass) — positive adds crunchy texture/grain-like detail, negative softens it. Distinct from Clarity's wider midtone-structure move."><div class="fx-label">Texture</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-texture" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-texture">0</div></div>
+          <div class="fx-row" title="Cuts atmospheric haze in the distance — extra contrast/black-point/saturation, but only where the image reads BRIGHT and DESATURATED (a hazy sky or ridge), so foreground color is left alone. Negative values add haze back in."><div class="fx-label">Dehaze</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-dehaze" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-dehaze">0</div></div>
         </div>
       </div>
       <!-- BORDERS -->
@@ -5692,7 +5691,7 @@ vec2 vidUV(vec2 u){
 // Basic adjustments (applied AFTER the LUT, BEFORE film FX — so halation/bloom react to
 // the edited image, as real film would). adjOn gates the whole block (default 0 = bypass,
 // byte-identical to before). exposure in stops; contrast/temp/tint/tone/sat/vib in -1..1.
-uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjClarity,adjSkin,adjDehaze;
+uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjClarity,adjSkin,adjDehaze,adjTexture;
 uniform float useVlog;   // input transform: 1 = source is Panasonic V-Log (convert to Rec.709 first)
 // ROADMAP.md R1: lets basicAdjust's exposure/contrast/tonal-zone clamps pass real >1.0 values
 // through to the (now-float, when this is on — see FXR._initBufs) "lut" FBO instead of clipping
@@ -6127,7 +6126,7 @@ if(vidBreath!=1.0)c.rgb*=vidBreath;
 // recomputed there) so the 4 extra taps are paid at most once per pixel — and skipped entirely
 // when nothing needs it, so the default path costs exactly what it did before.
 vec3 srcHP=vec3(0.0);
-bool needHP=(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.))||mskAnyTex>0.5;
+bool needHP=(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.||adjTexture!=0.))||mskAnyTex>0.5;
 if(needHP){
   vec3 nb=(texture(img,vidUV(uv+vec2(0.,texSize.y)))+texture(img,vidUV(uv-vec2(0.,texSize.y)))
           +texture(img,vidUV(uv+vec2(texSize.x,0.)))+texture(img,vidUV(uv-vec2(texSize.x,0.)))).rgb*0.25;
@@ -6173,11 +6172,11 @@ if(mskAnyNR>0.5){
 }
 // Sharpening / Clarity: unsharp mask on source pixels BEFORE LUT (smooth LUT preserves HP detail).
 // adjSharp boosts all frequencies; adjClarity weights by midtone mask (4*lum*(1-lum)).
-if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.)){
+if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.||adjTexture!=0.)){
   vec3 hp=srcHP;
   float lv=dot(c.rgb,vec3(.2126,.7152,.0722));
   float cw=4.*lv*(1.-lv);
-  c.rgb=clamp(c.rgb+hp*(adjSharp+adjClarity*cw),0.,1.);
+  c.rgb=clamp(c.rgb+hp*(adjSharp+adjClarity*cw+adjTexture),0.,1.);
 }
 // Input transform BEFORE the look LUT (sharpen above runs on raw source values — consistent
 // for all 5 taps; log-space unsharp is fine). With V-Log in and no LUT the image is neutral Rec.709.
@@ -7478,7 +7477,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // saturation/vibrance moved to the comp pass (applied AFTER the print stage, Dehancer
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
-      adjSharp:A.sharpness||0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,
+      adjSharp:A.sharpness||0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
       texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false]]);
 
     // EMISSION IS ALWAYS COMPUTED AT FULL RES, then DOWNSAMPLED into the reduced glow
@@ -10331,10 +10330,10 @@ function _ffAutoEnable(e){
 }
 document.addEventListener('input',_ffAutoEnable,true);
 document.addEventListener('change',_ffAutoEnable,true);
-document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button,.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
+document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
-   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','nr-lum','nr-col','nr-det','nr-hldesat','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
+   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
@@ -10358,6 +10357,10 @@ function fxUpdate(){
   if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // grading changed → coarse full-res underlay is stale
   fxScheduleRender();
   if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();
+  // Callers that set slider .value directly (photo switch, scope toggle, preset apply) never
+  // fire an 'input' event, so the fill squares wouldn't otherwise repaint — fxUpdate() is the one
+  // function nearly every such caller already calls, so repaint here catches them all.
+  if(typeof fxPaintAllSliders==='function')fxPaintAllSliders();
 }
 // ── Live preview feedback while a control is moving ──────────────────────────────────────────
 // This used to be a bare `setTimeout(renderPreview,400)`, which meant that dragging a slider
@@ -10387,6 +10390,8 @@ function fxScheduleRender(){
 const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-skin'];
 function resetAdjust(){
   ADJ_RESET_FIELDS.forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
+  fxPaintAllSliders();   // programmatic .value= writes never fire 'input', so the fill squares
+                         // above would otherwise stay stuck showing the pre-reset position
   fxUpdate();log('Adjustments reset','info');
 }
 // Disabled once every Basic Adjustments slider is already at its default (0) — clicking Reset
@@ -10833,9 +10838,13 @@ function hslSyncUI(){
     const sl=document.getElementById('sl-hsl-'+sfx),vl=document.getElementById('vl-hsl-'+sfx);
     if(sl){sl.value=v;hslKnob(sl,k);fxPaintSlider(sl);}if(vl)vl.textContent=v;
   });
-  // Saturation/Luminance tracks tint toward the selected band's colour (Hue keeps its fixed
-  // rainbow gradient from CSS, so it's left alone here).
+  // Hue/Saturation/Luminance tracks all tint toward the selected band's colour — Hue as a
+  // narrow spectrum centred on the band's own hue (matching the ±45° range the slider actually
+  // moves, see bakeHsl's *0.45), Sat/Lum as a grey/black-to-band and band-to-white ramp.
   const col=HSL_COLS[hslBand];
+  const hDeg=HSL_HUE_DEG[hslBand];
+  const slH=document.getElementById('sl-hsl-h');
+  if(slH)slH.style.setProperty('--sl-grad',`linear-gradient(to right,hsl(${((hDeg-45+360)%360)},70%,55%),hsl(${hDeg},70%,55%),hsl(${((hDeg+45)%360)},70%,55%))`);
   const slS=document.getElementById('sl-hsl-s');if(slS)slS.style.setProperty('--sl-grad','linear-gradient(to right,#888,'+col+')');
   const slL=document.getElementById('sl-hsl-l');if(slL)slL.style.setProperty('--sl-grad','linear-gradient(to right,#000,'+col+',#fff)');
   // Per-band hue/sat/lum edits aren't tracked by the generic fxMarkModifiedSliders()/.fx-mod
@@ -11221,7 +11230,7 @@ function _cpCommands(){
   Object.entries(TABS).forEach(([k,label])=>add('Tab','Go to '+label,()=>switchTab(k)));
   const SECTIONS={looks:'Presets & Looks',adjust:'Basic Adjustments',nr:'Noise Reduction',deconv:'Deconvolution',curves:'Tone Curves',
     hsl:'Color Mixer',wheels:'Colour Wheels',pointcolor:'Point Color',local:'Masks / Local Adjustments',lens:'Lens Correction',
-    grain:'Film Grain',art:'Film Artifacts',hal:'Halation',bloom:'Bloom',vig:'Vignette',
+    grain:'Film Grain',art:'Film Artifacts',hal:'Halation',bloom:'Bloom',vig:'Effects (Vignette, Clarity, Texture, Dehaze)',
     borders:'Borders',canvas:'Canvas',export:'Export: Output',wm:'Export: Watermark',exppreset:'Export: Presets',style:'Export: Styles',share:'Export: Sharing'};
   Object.entries(SECTIONS).forEach(([k,label])=>add('Section',label,()=>{switchTab('fx');fxSection(k);}));
   // Looks/LUTs and Print profiles are read live from their <select>s so a palette entry can never
@@ -15045,7 +15054,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   // against the DOM's real sl- ids found it 2026-09-10) — present in _SESS_SLIDERS (session
   // save/restore) but absent from the undo-history/copy-paste/.fx-mod snapshot, same class of
   // gap as deconv-amt/deconv-rad before DT1.
-  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','adj-dehaze','nr-lum','nr-col','nr-det','nr-hldesat',
+  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat',
   'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
   // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
   // header-reset mechanism — see resetDeconv() and _fxSectionResetOverride) — added 2026-09-10
@@ -15107,7 +15116,7 @@ const PASTE_CATEGORIES=[
   {key:'lut',label:'Look (LUT + Print profile)',sliders:['lut-mix'],toggles:[],selects:['sel-lut','sel-print']},
   {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','hsl','pointColors']},
   {key:'wheels',label:'Colour Wheels',sliders:[],toggles:['tg-wheels'],selects:[],extra:['wheels']},
-  {key:'adjust',label:'Basic Adjustments',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin'],toggles:['tg-adjust'],selects:[]},
+  {key:'adjust',label:'Basic Adjustments',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-hldesat'],toggles:[],selects:[]},
   {key:'deconv',label:'Deconvolution',sliders:['deconv-amt','deconv-rad'],toggles:[],selects:[]},
   {key:'grain',label:'Film Grain',sliders:['grain-a','grain-sz'],toggles:['tg-grain'],selects:['sel-grain-fmt']},
@@ -16211,7 +16220,7 @@ function exportPresetListRefresh(selectName){
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
-  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-skin','sl-adj-dehaze','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
+  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
   'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-canvas-z','sl-vig','sl-exp-q'];
@@ -16681,7 +16690,7 @@ function matchSeriesClear(){
   updateWork();renderPreview();buildLookGallery();fxHistoryPush();
   toast(n?`${n} photo(s) back to the shared grade`:'Nothing to clear',true);
 }
-const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','skin','dehaze'];
+const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','skin','dehaze','texture'];
 function domAdjustVals(){const o={};ADJ_FIELDS.forEach(f=>o[f]=adjVal('sl-adj-'+f));return o;}
 function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:0;if(sl)sl.value=val;if(vl)vl.textContent=val;});}
 function computeAdjustBlock(v){
@@ -16693,7 +16702,7 @@ function computeAdjustBlock(v){
     whites:(v.wh||0)/100, blacks:(v.bl||0)/100,
     temp:(v.temp||0)/100, tint:(v.tint||0)/100,
     vibrance:(v.vib||0)/100, saturation:(v.sat||0)/100,
-    sharpness:(v.sharp||0)/500, clarity:(v.clarity||0)/500,
+    sharpness:(v.sharp||0)/500, clarity:(v.clarity||0)/500, texture:(v.texture||0)/500,
     skin:(v.skin||0)/100, dehaze:(v.dehaze||0)/100};
 }
 function getFXParams(adjValsOverride){return{
@@ -17760,6 +17769,9 @@ function fxSelectImage(idx){
   // Basic Adjustments: show THIS photo's own values if it's been made independent
   // (adjToggleScope), else the shared batch-wide baseline.
   applyAdjustVals(it.adjustOverride||fxState.sharedAdjust||domAdjustVals());
+  fxPaintAllSliders();  // applyAdjustVals writes .value directly (no 'input' event), so the fill
+                        // squares above must be repainted explicitly or they'd still show the
+                        // PREVIOUS photo's position after switching
   if(typeof adjSyncScopeUI==='function')adjSyncScopeUI();
   document.getElementById('fx-fname').value=it.name;
   fxDeskbarTitle(it.name,fxDimsFmt(it.name,it.img,it.ext));
@@ -21211,7 +21223,7 @@ const FX_SECTIONS=[['image','Image'],['looks','Looks'],['adjust','Adjust'],
   ['nr','Noise'],['lens','Lens'],['retouch','Retouch'],
   ['crop','Crop'],
   ['local','Masks'],
-  ['grain','Grain'],['hal','Halation'],['bloom','Bloom'],['art','Artifacts'],['vig','Vignette'],
+  ['grain','Grain'],['hal','Halation'],['bloom','Bloom'],['art','Artifacts'],['vig','Effects'],
   ['borders','Borders'],['canvas','Canvas'],
   ['export','Output'],['wm','Watermark'],['exppreset','Export Presets'],['style','Styles'],['share','Sharing'],
   ['info','Info'],['diag','Diag']];
