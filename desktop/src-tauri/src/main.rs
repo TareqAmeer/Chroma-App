@@ -50,12 +50,15 @@ mod rawdenoise;
 mod tiff_meta;
 #[cfg(target_os = "macos")]
 mod gainmap;
+mod gainmap_uhdr;
 #[cfg(target_os = "macos")]
 mod fastthumb;
 #[cfg(windows)]
 mod winthumb;
 #[cfg(target_os = "macos")]
 mod videothumb;
+#[cfg(windows)]
+mod winvideothumb;
 mod subject;
 mod ingest;
 mod catalog;
@@ -1104,6 +1107,57 @@ fn haptic_feedback(app: tauri::AppHandle) {
 #[tauri::command]
 fn haptic_feedback(_app: tauri::AppHandle) {}
 
+/// The single source of truth for every macOS-vs-Windows difference the frontend needs to know
+/// about (docs/windows-port.md ground rule 1: "one frontend, capability-gated, never OS-gated").
+/// `desktop-native.js` exposes this once as `window.CS_PLATFORM`; shared JS in library-ui.js
+/// checks a capability field, never `os` directly, so a feature that's macOS-only today shows up
+/// on Windows as either working or cleanly hidden the moment the Rust side gains it — never
+/// broken or silently wrong (the `split('/')` / "Reveal in Finder" / hard-coded ⌘-label class of
+/// bug this fixes, G12).
+#[derive(serde::Serialize)]
+struct PlatformCapabilities {
+    os: &'static str,
+    // macOS keeps its Core Image HEIC gain-map path (write_gainmap_heic/_from_map); Windows
+    // (and, if ever wanted, macOS too) gets pure-Rust Ultra HDR JPEG instead
+    // (write_gainmap_uhdr_from_map, gainmap_uhdr.rs — docs/windows-port.md Phase 4). Only the
+    // RAW-headroom export path (fxSaveGainMapHeic's `_hdrHeadroom` branch in
+    // chromasmith-22.html) is wired to "uhdr" so far — non-RAW sources still need
+    // `source_has_hdr`, which stays macOS-only (Core Image's expand-to-HDR).
+    #[serde(rename = "hdrExport", skip_serializing_if = "Option::is_none")]
+    hdr_export: Option<&'static str>,
+    eject: bool,
+    haptics: bool,
+    #[serde(rename = "fastThumb")]
+    fast_thumb: bool,
+    #[serde(rename = "videoPoster")]
+    video_poster: bool,
+    #[serde(rename = "revealLabel")]
+    reveal_label: &'static str,
+    #[serde(rename = "modKey")]
+    mod_key: &'static str,
+}
+
+#[tauri::command]
+fn platform_capabilities() -> PlatformCapabilities {
+    let macos = cfg!(target_os = "macos");
+    PlatformCapabilities {
+        os: if macos { "macos" } else { "windows" },
+        hdr_export: Some(if macos { "heic" } else { "uhdr" }),
+        // Both platforms implement eject (platform::eject) — macOS via diskutil-equivalent
+        // APIs, Windows via the KB165721 volume-handle sequence (docs/windows-port.md G9).
+        eject: true,
+        haptics: macos,
+        // Both platforms implement a fast (non-`image`-crate) thumbnail decode: ImageIO on
+        // macOS (fastthumb.rs), WIC on Windows (winthumb.rs).
+        fast_thumb: true,
+        // Both platforms implement video posters: AVFoundation on macOS (videothumb.rs),
+        // IShellItemImageFactory on Windows (winvideothumb.rs).
+        video_poster: true,
+        reveal_label: if macos { "Finder" } else { "Explorer" },
+        mod_key: if macos { "⌘" } else { "Ctrl" },
+    }
+}
+
 // Native HTTP download, bypassing the WKWebView network stack. The Google Photos Picker's
 // media bytes live on the `*.googleusercontent.com` user-content CDN; a cross-origin GET with
 // the required `Authorization: Bearer` header forces a CORS preflight the CDN never answers
@@ -1327,6 +1381,64 @@ fn write_gainmap_heic_from_map(request: tauri::ipc::Request<'_>) -> Result<Optio
     let headroom_png = &body[4..4 + hr_len];
     let graded_png = &body[4 + hr_len..];
     let wrote = gainmap::write_gainmap_heic_from_map(headroom_png, graded_png, &dest, quality, max_stops)?;
+    Ok(if wrote { Some(dest) } else { None })
+}
+
+// Cross-platform counterpart to write_gainmap_heic_from_map (Ultra HDR JPEG instead of a
+// gain-map HEIC — docs/windows-port.md Phase 4). Same request framing (length-prefixed
+// headroom PNG + graded PNG body, x-filename/x-quality/x-max-stops headers) so the JS caller
+// only has to pick the command name, not rebuild the body — see chromasmith-22.html's
+// fxSaveGainMapHeic.
+#[tauri::command]
+fn write_gainmap_uhdr_from_map(request: tauri::ipc::Request<'_>) -> Result<Option<String>, String> {
+    use base64::Engine;
+    let hdr = |k: &str| -> Result<String, String> {
+        let v = request
+            .headers()
+            .get(k)
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| format!("missing {k} header"))?;
+        let b = base64::engine::general_purpose::STANDARD
+            .decode(v)
+            .map_err(|e| format!("decode {k}: {e}"))?;
+        String::from_utf8(b).map_err(|e| format!("{k} not utf8: {e}"))
+    };
+    let name = hdr("x-filename")?;
+    let safe_name = Path::new(&name)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("empty filename")?;
+    let dir = export_downloads_path()?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create '{}': {e}", dir.display()))?;
+    let dest_path = unique_dest(&dir, safe_name);
+    let dest = dest_path.to_string_lossy().to_string();
+    let quality: f64 = request
+        .headers()
+        .get("x-quality")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.92);
+    let max_stops: f64 = request
+        .headers()
+        .get("x-max-stops")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2.0);
+    let body = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b,
+        _ => return Err("expected raw request body (headroom PNG + graded PNG)".into()),
+    };
+    if body.len() < 4 {
+        return Err("request body too short for the length prefix".into());
+    }
+    let hr_len = u32::from_le_bytes([body[0], body[1], body[2], body[3]]) as usize;
+    if body.len() < 4 + hr_len {
+        return Err("request body shorter than its own declared headroom-PNG length".into());
+    }
+    let headroom_png = &body[4..4 + hr_len];
+    let graded_png = &body[4 + hr_len..];
+    let wrote =
+        gainmap_uhdr::write_gainmap_uhdr_from_map(headroom_png, graded_png, &dest, quality, max_stops)?;
     Ok(if wrote { Some(dest) } else { None })
 }
 
@@ -2124,6 +2236,7 @@ fn main() {
             write_gainmap_heic,
             #[cfg(target_os = "macos")]
             write_gainmap_heic_from_map,
+            write_gainmap_uhdr_from_map,
             #[cfg(target_os = "macos")]
             source_has_hdr,
             store_dcp_lut,
@@ -2144,6 +2257,7 @@ fn main() {
             native_build_tag,
             open_url_native,
             haptic_feedback,
+            platform_capabilities,
             peek_raw_camera,
             read_file_bytes,
             write_file_bytes,
