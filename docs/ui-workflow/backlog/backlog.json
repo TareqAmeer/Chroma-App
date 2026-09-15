@@ -409,13 +409,15 @@
       "priority": "P1",
       "cluster": "brand-system",
       "title": "Use one interface accent consistently across splash and app",
-      "status": "backlog",
+      "status": "done",
       "recommended_executor": "Codex",
       "model": "codex:gpt-5.6-terra",
       "reference": "linear-refresh",
       "depends_on": [],
       "acceptance": "Primary actions and progress use the approved light/dark accent roles; no decorative rainbow accent remains.",
-      "source_id": 3
+      "source_id": 3,
+      "owner": "Claude (Sonnet 5)",
+      "completion_evidence": "2026-09-15: audited every progress/primary-action fill in the app for the DS's approved single accent (--acc, mist-blue rgb(97,160,175) dark / blue-slate light, per design/tokens.json's 2026-09-11 'no second brand accent' decision) vs a decorative multi-hue gradient. Found one: the boot-splash progress bar (chromasmith-22.html ~L1565, #boot-splash-bar) used a hardcoded 3-stop red/orange/yellow linear-gradient (#e55319/#ff8c2b/#ffc43d) instead of the accent every other progress fill in the app uses flat (e.g. desktop/library-ui.js's #imp-bar: background:var(--acc)). Replaced it with a flat var(--acc) fill, matching that established convention. Deliberately left untouched: the splash card's own warm brand-panel background/border and the wordmark's warm text-shadow glow — those are the subject of separate, still-open items 71/72 (wordmark glow, splash corner treatment) and are brand-identity decisions, not the 'progress control' this item's acceptance criterion targets. Verified: reconstructed the splash markup in a live browser (local static server, both by triggering the real #boot-splash-bar mid-load and by injecting an isolated copy of the same markup for a stable screenshot) — bar now renders as a flat teal-accent fill, legible against the dark panel. `node test/export_harness.mjs` — 30/30 renders, no GLSL compile errors. `npm run editor:gates` after `npm run components:build` — identical pre-existing failing set (editor:inventory, token-check, axe-check, icon-check, motion-token-check, hover-focus-matrix, hidpi-check) as the known baseline; no new regressions."
     },
     {
       "id": 21,
