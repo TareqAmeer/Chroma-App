@@ -3279,6 +3279,28 @@ fn faces_for_path_run(conn: &Connection, path: &str) -> Result<Vec<PhotoFaceInfo
     Ok(rows)
 }
 
+/// The Editor's own Info panel (chromasmith-22.html's fx-people section) has no way to tell
+/// "no faces detected" (a real, common result) apart from "never scanned yet" — both render as
+/// an empty list from catalog_faces_for_path above. This answers exactly that, using the same
+/// faces_scanned_at == mtime predicate list_photos_run's own `faces_scanned` field and the
+/// sidebar's "Not Face-Scanned" collection (facesPendingRowHtml, library-ui.js) already agree on.
+/// Ok(None) for a path the catalog has no row for at all (not indexed / a bare file:// open) —
+/// distinct from Ok(Some(false)), a real catalogued photo genuinely still pending a scan.
+#[tauri::command]
+pub fn catalog_face_scan_status(state: tauri::State<CatalogState>, path: String) -> Result<Option<bool>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let Some(photo_id) = find_photo_by_abs_path(&conn, &path) else { return Ok(None) };
+    let (mtime, faces_scanned_at, kind): (i64, Option<i64>, String) = conn
+        .query_row(
+            "SELECT mtime, faces_scanned_at, kind FROM photos WHERE id = ?1",
+            params![photo_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .map_err(|e| e.to_string())?;
+    if kind == "video" { return Ok(None) } // faces_scanned_at is meaningless for a video row — see the list_photos_run comment on the same exclusion
+    Ok(Some(faces_scanned_at.map_or(false, |t| t == mtime)))
+}
+
 /// Bridges a PerSAM subject match (`subject.rs` — "remember this dog, find it again", desktop
 /// editor's AI-mask panel) into the SAME `people`/`photo_faces` tables the human-face pipeline
 /// uses, so a taught pet shows up in the ordinary sidebar/review-mode/Info-panel UI instead of

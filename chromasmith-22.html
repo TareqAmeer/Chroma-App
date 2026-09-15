@@ -330,10 +330,16 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
    one rule covers WebKit and Gecko; --p is written by fxSliderPaint() on input. */
 .fx-slider{order:3;flex:1 1 100%;width:100%;cursor:pointer;margin-top:3px;-webkit-appearance:none;appearance:none;
   height:var(--ctl-slider-thumb);background:transparent}
+/* --sl-def-pct marks each slider's OWN starting/default value (not a fixed 50% midpoint —
+   e.g. Deconv Radius defaults to 20%, RAW Sharpen to 40%) with a thin pointer, on top of the
+   existing fill layer, so you can always see where "back to default" sits and how far a drag
+   has moved from it. Written by fxPaintSlider(). */
 .fx-slider::-webkit-slider-runnable-track{height:var(--ctl-slider-track);border-radius:2px;
-  background:linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--sl-fill,var(--mut)) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
+  background:linear-gradient(to right,transparent calc(var(--sl-def-pct,0%) - 1px),var(--txt) calc(var(--sl-def-pct,0%) - 1px),var(--txt) calc(var(--sl-def-pct,0%) + 1px),transparent calc(var(--sl-def-pct,0%) + 1px)),
+    linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--sl-fill,var(--mut)) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
 .fx-slider::-moz-range-track{height:var(--ctl-slider-track);border-radius:2px;
-  background:linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--sl-fill,var(--mut)) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
+  background:linear-gradient(to right,transparent calc(var(--sl-def-pct,0%) - 1px),var(--txt) calc(var(--sl-def-pct,0%) - 1px),var(--txt) calc(var(--sl-def-pct,0%) + 1px),transparent calc(var(--sl-def-pct,0%) + 1px)),
+    linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--sl-fill,var(--mut)) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
 .fx-slider::-webkit-slider-thumb{-webkit-appearance:none;width:var(--ctl-slider-thumb);height:var(--ctl-slider-thumb);border-radius:var(--ctl-square-radius);margin-top:calc((var(--ctl-slider-track) - var(--ctl-slider-thumb)) / 2);
   background:var(--sur);border:var(--bw-3) solid var(--txt);box-shadow:none;cursor:grab;transform:rotate(var(--sl-roll,0deg));transition:transform var(--dur-1) linear}
 .fx-slider::-moz-range-thumb{width:var(--ctl-slider-thumb);height:var(--ctl-slider-thumb);border-radius:var(--ctl-square-radius);border:var(--bw-3) solid var(--txt);
@@ -394,10 +400,17 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
    scope selector and export quality. 28px tall so it clears the pointer-target floor the UI
    audit enforces — the old 22px was the most-clicked undersized control in the editor. */
 .seg{display:inline-flex;align-items:stretch;background:var(--sur2);border:1px solid var(--bdr);
-  border-radius:var(--r);padding:2px;gap:2px;overflow:hidden}
+  border-radius:var(--r);padding:2px;gap:2px;overflow:hidden;max-width:100%}
 .seg>button{flex:1 1 auto;min-height:28px;padding:0 var(--sp-2);border:none;border-radius:var(--r-sm);cursor:pointer;
   background:transparent;color:var(--mut);font-family:var(--sans);font-size:var(--fs-2);font-weight:500;
   white-space:nowrap;transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
+/* Masks' "Show on photo" row: 4 real words (Overlay/Isolate/Selection/Off) is wider than any
+   other .seg use in the app, and .seg's own inline-flex/overflow:hidden doesn't shrink to fit a
+   320px tool panel — it just clips, which read as the buttons overlapping/running into each
+   other. Full-width + equal shrinkable shares (flex-basis 0, not each button's own natural text
+   width) instead of the generic auto-basis every other narrower .seg still uses correctly. */
+.msk-prevmode-seg{display:flex;width:100%}
+.msk-prevmode-seg>button{flex:1 1 0;min-width:0;padding:0 4px;overflow:hidden;text-overflow:ellipsis}
 .seg>button:hover{color:var(--txt)}
 .seg>button.on{background:var(--sur);color:var(--txt);box-shadow:0 1px 2px var(--scrim-b2),inset 0 1px 0 var(--hov)}
 /* ══ MASK PANEL ══════════════════════════════════════════════════════════════════════════════ */
@@ -501,7 +514,13 @@ body.mobile-fx .pc-chip{width:36px;height:36px}
 .fx-select:disabled{opacity:var(--op-2);pointer-events:none;cursor:default}
 body.light .fx-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237a7a7a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")}
 body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
-.fx-canvas-wrap{background:#000;border-radius:var(--r);overflow:hidden;position:relative;min-height:300px;display:flex;align-items:center;justify-content:center}
+/* padding here (not a bigger margin on the canvas/photo itself) gives the fit-to-window photo
+   breathing room on every edge, including toward the docked filmstrip below it — the JS sizing
+   (renderPreview/fxLiveFit) reads wrap.clientWidth/clientHeight, which already excludes padding,
+   so the "fit" computation shrinks to match with no separate change needed there. Zooming past
+   100% still legitimately fills/overflows this box (clipped by overflow:hidden below) — the
+   margin is only about the DEFAULT fit-to-window state touching every edge. */
+.fx-canvas-wrap{background:#000;border-radius:var(--r);overflow:hidden;position:relative;min-height:300px;display:flex;align-items:center;justify-content:center;padding:var(--sp-6)}
 #fx-canvas{display:block;max-width:100%;height:auto}
 .fx-preview-col{position:sticky;top:16px;align-self:start}
 #fx-canvas-orig{display:none;position:absolute;top:0;left:0;pointer-events:none}
@@ -669,6 +688,11 @@ body.diag-on .diag-only{display:flex}
 .fx-people-ava{width:18px;height:18px;border-radius:50%;flex:0 0 auto;overflow:hidden;background:var(--sur);position:relative}
 .fx-people-ava img{width:100%;height:100%;object-fit:cover;visibility:hidden}
 .fx-people-ava img.loaded{visibility:visible}
+.fx-people-pending{padding:8px 0;font-size:var(--fs-2);color:var(--mut);border-top:1px solid var(--bdr)}
+.fx-kw-chip{display:inline-flex;align-items:center;gap:4px;padding:3px var(--sp-2);border-radius:var(--r-pill);
+  background:var(--sur2);border:1px solid var(--bdr);font-size:var(--fs-2);color:var(--txt)}
+.fx-kw-chip-x{cursor:pointer;color:var(--mut)}
+.fx-kw-chip-x:hover{color:var(--txt)}
 /* Deskbar center title: filename + a status suffix that is a spinner while a decode is in
    flight and "W × H" once loaded (RapidRAW-style). Hidden (empty) until a photo is open. */
 /* ⚠️ The centre title must CLIP, not spill. #db-title-status was flex-shrink:0 inside a
@@ -1980,7 +2004,8 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
            tacked-on sub-section (matches the Lens Correction card's pattern: a plain title, no
            enable toggle — it's driven by the sliders being >0, same as Lens). -->
       <div class="fx-ctrl" data-fxsec="nr">
-        <div class="fx-ctrl-title">Noise Reduction</div>
+        <div class="fx-ctrl-title">Noise Reduction <div class="fx-toggle on" id="tg-nr" onclick="toggleFX('nr')"></div></div>
+        <div class="fx-fields" id="ff-nr">
         <div class="fx-row">
           <div class="fx-label">RAW Noise Reduction <button class="fx-info-i" title="Off: untouched decode. Fast (default): the native Rust-side shadow + chroma-wavelet denoise on linear RAW data, before any tone curve — a few seconds, applies automatically. High: additionally runs a neural (RawNIND UtNet2) denoiser, 25–90s at 24MP — never automatic; press &quot;Denoise now&quot; below, or it runs once at export if selected. Requires reopening this photo (or Denoise now) to take effect. Desktop/RAW only.">i</button></div>
           <select id="sel-raw-nr" onchange="fxRawNrChanged(this.value)" style="display:none"><option value="off">Off</option><option value="fast" selected>Fast</option><option value="high">High</option></select>
@@ -2007,18 +2032,24 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="fx-row" title="Capture sharpening — RAW photos default to 40 on load/reset (moved here so it survives Reset independently of the general Adjust sliders)."><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp">0</div></div>
         <div class="fx-row nr-gated" id="row-nr-hldesat"><div class="fx-label">Highlight Desaturation <button class="fx-info-i" title="Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes. Since real highlight color is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real color in bright areas too at high amounts. Per-photo only, so it never touches other images.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="nr-gate-hint">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
+        </div>
       </div>
       <!-- DECONVOLUTION SHARPENING (ROADMAP.md R6) — models the lens/sensor blur as a small
            Gaussian PSF and inverts it with a few iterations of damped Richardson-Lucy, unlike
-           the unsharp-mask Sharpen above which only boosts existing edge contrast. Driven by
-           Amount>0, same pattern as the Lens/NR cards (no enable toggle). -->
+           the unsharp-mask Sharpen above which only boosts existing edge contrast. Master toggle
+           defaults to on (matches the pre-existing Amount>0-driven behavior byte-for-byte for
+           anyone who already had it dialed in); getFXParams() zeroes Amount when switched off,
+           same mechanism the Amount>0 gate in render() already used, so render()/the shader
+           needed no change. -->
       <div class="fx-ctrl" data-fxsec="deconv">
-        <div class="fx-ctrl-title">Deconvolution</div>
-        <div class="fx-hint">Recovers real detail lost to lens/sensor blur (Richardson-Lucy),
+        <div class="fx-ctrl-title">Deconvolution <div class="fx-toggle on" id="tg-deconv" onclick="toggleFX('deconv')"></div></div>
+        <div class="fx-fields" id="ff-deconv">
+        <details class="fx-hint-x"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Recovers real detail lost to lens/sensor blur (Richardson-Lucy),
           instead of just boosting edge contrast like Sharpen. Push Amount too far and you'll
-          see ringing (dark/light halos) at hard edges — that's the real algorithm, not a bug.</div>
+          see ringing (dark/light halos) at hard edges — that's the real algorithm, not a bug.</p></details>
         <div class="fx-row" title="Blend between the original and the deconvolved result."><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-deconv-amt" oninput="fxUpdate()"><div class="fx-val" id="vl-deconv-amt">0</div></div>
         <div class="fx-row" title="Size of the assumed lens/sensor blur (Gaussian PSF) to invert."><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-deconv-rad" oninput="fxUpdate()"><div class="fx-val" id="vl-deconv-rad">20</div></div>
+        </div>
       </div>
       <!-- TONE CURVES -->
       <div class="fx-ctrl" data-fxsec="curves">
@@ -2066,7 +2097,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <div class="fx-ctrl" data-fxsec="wheels">
         <div class="fx-ctrl-title">Colour Wheels <div class="fx-toggle" id="tg-wheels" onclick="toggleFX('wheels')"></div></div>
         <div class="fx-fields ff-off" id="ff-wheels">
-          <div class="fx-hint">Drag each wheel off-centre to tint that tonal region; the slider underneath is an independent brightness for the same region. Double-click a wheel to reset it.</div>
+          <details class="fx-hint-x"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Drag each wheel off-centre to tint that tonal region; the slider underneath is an independent brightness for the same region. Double-click a wheel to reset it.</p></details>
           <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:space-between;margin-top:6px">
             <div style="flex:1;min-width:84px;text-align:center">
               <canvas id="cv-wheel-lift" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair"></canvas>
@@ -2098,7 +2129,11 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
             <button class="fx-info-i" title="Click a colour in the photo to target it precisely, then dial in how far the selection spreads with Range.">i</button>
           </div>
           <div class="btn-row" id="pc-list" style="flex-wrap:wrap;gap:6px;margin-top:8px"></div>
-          <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:6px" id="pc-empty-hint">Pick a color from the photo, then dial in Hue/Saturation/Luminance and how wide a Range around it is affected.</div>
+          <!-- Removed rather than converted to a second tooltip: this restated, word for word in
+               substance, the "Pick from photo" button's own adjacent .fx-info-i above — an
+               explanation duplicated onto the SAME row two different ways. pc-empty-hint's only
+               other job (display:none/block toggled by pcSlider et al.) still no-ops safely via
+               getElementById returning null. -->
           <div id="pc-ctl" style="display:none;flex-direction:column;gap:6px;margin-top:6px">
             <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-h" oninput="pcSlider('hue',this.value)"><div class="fx-val" id="vl-pc-h">0</div></div>
             <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-s" oninput="pcSlider('sat',this.value)"><div class="fx-val" id="vl-pc-s">0</div></div>
@@ -2149,9 +2184,9 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       </div>
       <!-- LENS CORRECTION -->
       <div class="fx-ctrl" data-fxsec="lens">
-        <div class="fx-ctrl-title">Lens Correction</div>
+        <div class="fx-ctrl-title">Lens Correction <div class="fx-toggle" id="tg-lens-auto" onclick="this.classList.toggle('on');fxLensAutoToggled()"></div></div>
         <div class="fx-row">
-          <div class="fx-label">Auto (lens profile) <button class="fx-info-i" title="Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.">i</button></div><div class="fx-toggle" id="tg-lens-auto" onclick="this.classList.toggle('on');fxLensAutoToggled()"></div>
+          <div class="fx-label">Auto (lens profile) <button class="fx-info-i" title="Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.">i</button></div>
         </div>
         <div id="lens-auto-status" style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);line-height:1.5;margin:2px 0 8px"></div>
         <!-- Manual/adapted lenses (TTArtisan and similar mechanical-only optics) write NO lens
@@ -2390,9 +2425,13 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         </div>
       </div>
       <!-- EXPORT -->
+      <!-- EXPORT — split into several titled/collapsible cards (all still reached through the
+           one "Export" rail icon, via FX_GROUPS.export below, exactly the same one-rail-button
+           many-stacked-cards pattern Color/Detail/Film/Frame already use) instead of one long
+           scroll mixing output settings, the watermark, export presets, Styles and Google Photos
+           sharing with no real separation between them. -->
       <div class="fx-ctrl" data-fxsec="export">
-        <div class="fx-ctrl-title">Export</div>
-        <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Output</div>
+        <div class="fx-ctrl-title">Output</div>
         <div class="vrow">
           <div class="vlb">Filename <button class="fx-info-i" title="Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></div>
           <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px">
@@ -2438,33 +2477,6 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <input type="checkbox" id="tg-exp-hdr">
         </div>
         <div class="msk-hint" id="fx-hdr-note" style="display:none"></div>
-        <div class="fx-sub">Watermark</div>
-        <div class="fx-row" style="margin-top:0" title="Draws a translucent text watermark into the bottom-right corner of the exported file only — never the on-screen preview.">
-          <div class="fx-label">Watermark</div>
-          <div class="fx-toggle" id="tg-exp-wm" onclick="this.classList.toggle('on');document.getElementById('exp-wm-row').style.display=this.classList.contains('on')?'block':'none'"></div>
-        </div>
-        <div id="exp-wm-row" style="display:none">
-          <div class="vrow" style="margin-top:4px">
-            <input class="vinput" id="exp-wm-text" value="" placeholder="© Your Name" style="flex:1">
-          </div>
-          <div class="fx-row" style="margin-top:4px"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" value="55" id="sl-exp-wm-op" oninput="document.getElementById('vl-exp-wm-op').textContent=this.value"><div class="fx-val" id="vl-exp-wm-op">55</div></div>
-        </div>
-        <!-- Named export presets: just the four controls above (format/quality/resize/sharpen),
-             saved/recalled by name — distinct from Styles (the full edit recipe) and from Save
-             session (one auto-restored slot). The common case this exists for: "small JPG for
-             the web" vs "full-res PNG for print" as one click instead of four each time. -->
-        <div class="fx-sub">Preset</div>
-        <div style="margin-top:0">
-          <div class="fx-row" style="margin-top:0"><div class="fx-label">Export preset</div>
-            <select class="fx-select" id="sel-exp-preset" onchange="if(this.value)exportPresetApply(this.value)">
-              <option value="">— none —</option>
-            </select>
-          </div>
-          <div class="btn-row" style="margin-top:4px">
-            <button class="btn bgh" onclick="exportPresetSaveCurrent()" title="Save the current Quality/Format/Resize/Sharpening as a named preset">Save preset…</button>
-            <button class="btn bgh" id="btn-exp-preset-del" onclick="exportPresetDeleteCurrent()" disabled title="Delete the selected preset">Delete</button>
-          </div>
-        </div>
         <div id="fx-match-series-row" style="margin-top:8px;display:none">
           <div class="fx-sub">Match series <button class="fx-info-i" title="Batch only. Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.">i</button></div>
           <div style="display:flex;gap:6px">
@@ -2496,36 +2508,64 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <button class="btn bgh" onclick="saveSession()" title="Save all slider settings to localStorage">Save session</button>
           <button class="btn bgh" onclick="loadSession(true)" title="Restore saved slider settings">Load session</button>
         </div>
-        <!-- STYLES: named, reusable, re-editable recipes (curves/HSL/masks/grain/halation/bloom/
-             adjust/etc — everything a LUT preset does NOT capture, since a LUT is a baked 3D
-             lookup table). Distinct from "Save session" above (session is one slot, auto-
-             restored on relaunch); a Style is a permanent, named, list entry you apply on demand
-             to ANY photo, and can export/import as a .json to share between devices. Modelled on
-             darktable's Styles (a saved history-stack, separate from per-module presets). -->
-        <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px">
-          <div class="fx-label" style="width:auto;margin-bottom:6px">Styles</div>
-          <div class="btn-row" style="margin-top:0">
-            <button class="btn bgh" onclick="styleSaveCurrent()" title="Save the current recipe (everything except crop/geometry) as a named, reusable Style">Save as Style…</button>
-            <button class="btn bgh" onclick="styleImportClick()" title="Import a Style .json exported from Chromasmith">Import…</button>
+      </div>
+      <!-- WATERMARK — split out of the old single Export card. -->
+      <div class="fx-ctrl" data-fxsec="wm">
+        <div class="fx-ctrl-title">Watermark <div class="fx-toggle" id="tg-exp-wm" onclick="this.classList.toggle('on');document.getElementById('exp-wm-row').style.display=this.classList.contains('on')?'block':'none'"></div></div>
+        <div id="exp-wm-row" style="display:none">
+          <div class="vrow" style="margin-top:4px" title="Draws a translucent text watermark into the bottom-right corner of the exported file only — never the on-screen preview.">
+            <input class="vinput" id="exp-wm-text" value="" placeholder="© Your Name" style="flex:1">
           </div>
-          <div id="style-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
-          <input type="file" id="style-import-input" accept="application/json,.json" style="display:none" onchange="styleImportFile(this.files[0])">
+          <div class="fx-row" style="margin-top:4px"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" value="55" id="sl-exp-wm-op" oninput="document.getElementById('vl-exp-wm-op').textContent=this.value"><div class="fx-val" id="vl-exp-wm-op">55</div></div>
         </div>
-        <div style="margin-top:14px;border-top:1px solid var(--bdr);padding-top:10px">
-          <div class="fx-label" style="width:auto;margin-bottom:6px" title="Optional &amp; off by default. Needs your own free Google OAuth client ID — see Guide → “Can I use Google Photos?”. Uploads land in a “Chromasmith” album and count against your Google storage.">Google Photos</div>
-          <!-- Was a button reading "Upload exports: Off" — the state was baked into its own
-               label rather than shown the way every other on/off control in the app is. Real
-               .fx-toggle switch instead, matching e.g. "Sparkle-optimized RAW". -->
-          <div class="fx-row" title="Also upload every export to a &quot;Chromasmith&quot; album in your Google Photos"><div class="fx-label">Upload exports to Google Photos</div><div class="fx-toggle" id="tg-gp-save" onclick="gpToggleSave()"></div></div>
-          <div class="btn-row" style="margin-top:0">
-            <button class="btn bgh" id="btn-gp-connect" onclick="gpConnectToggle()" title="Sign in to Google Photos (lasts ~1 hour)">Connect</button>
-            <button class="btn bgh" onclick="gpAskClientId(true)" title="Set or change your Google OAuth client ID" style="flex:0 0 auto;padding-left:8px;padding-right:8px">ID…</button>
-          </div>
+      </div>
+      <!-- EXPORT PRESETS — just the four Output controls (format/quality/resize/sharpen),
+           saved/recalled by name — distinct from Styles (the full edit recipe) below and from
+           Save session above (one auto-restored slot). The common case this exists for: "small
+           JPG for the web" vs "full-res PNG for print" as one click instead of four each time. -->
+      <div class="fx-ctrl" data-fxsec="exppreset">
+        <div class="fx-ctrl-title">Export Presets</div>
+        <div class="fx-row" style="margin-top:0"><div class="fx-label">Export preset</div>
+          <select class="fx-select" id="sel-exp-preset" onchange="if(this.value)exportPresetApply(this.value)">
+            <option value="">— none —</option>
+          </select>
         </div>
-        <!-- Lightroom cloud browsing moved into the desktop LIBRARY sidebar (see library-ui.js's
-             Cloud section + window.lrCloud below) — the old cramped Export-panel widget
-             (#lr-section: Connect button + album dropdown + 72px grid) is gone. -->
-
+        <div class="btn-row" style="margin-top:4px">
+          <button class="btn bgh" onclick="exportPresetSaveCurrent()" title="Save the current Quality/Format/Resize/Sharpening as a named preset">Save preset…</button>
+          <button class="btn bgh" id="btn-exp-preset-del" onclick="exportPresetDeleteCurrent()" disabled title="Delete the selected preset">Delete</button>
+        </div>
+      </div>
+      <!-- STYLES: named, reusable, re-editable recipes (curves/HSL/masks/grain/halation/bloom/
+           adjust/etc — everything a LUT preset does NOT capture, since a LUT is a baked 3D
+           lookup table). Distinct from Export Presets above (those four output controls only) and
+           from Save session (one auto-restored slot); a Style is a permanent, named, list entry
+           you apply on demand to ANY photo, and can export/import as a .json to share between
+           devices. Modelled on darktable's Styles (a saved history-stack, separate from
+           per-module presets). -->
+      <div class="fx-ctrl" data-fxsec="style">
+        <div class="fx-ctrl-title">Styles</div>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn bgh" onclick="styleSaveCurrent()" title="Save the current recipe (everything except crop/geometry) as a named, reusable Style">Save as Style…</button>
+          <button class="btn bgh" onclick="styleImportClick()" title="Import a Style .json exported from Chromasmith">Import…</button>
+        </div>
+        <div id="style-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
+        <input type="file" id="style-import-input" accept="application/json,.json" style="display:none" onchange="styleImportFile(this.files[0])">
+      </div>
+      <!-- SHARING — Google Photos today; Lightroom cloud browsing moved into the desktop LIBRARY
+           sidebar instead (see library-ui.js's Cloud section + window.lrCloud), so the old
+           cramped Export-panel widget (#lr-section: Connect button + album dropdown + 72px grid)
+           stays gone, not revived here. -->
+      <div class="fx-ctrl" data-fxsec="share">
+        <div class="fx-ctrl-title">Sharing</div>
+        <div class="fx-label" style="width:auto;margin-bottom:6px" title="Optional &amp; off by default. Needs your own free Google OAuth client ID — see Guide → “Can I use Google Photos?”. Uploads land in a “Chromasmith” album and count against your Google storage.">Google Photos</div>
+        <!-- Was a button reading "Upload exports: Off" — the state was baked into its own
+             label rather than shown the way every other on/off control in the app is. Real
+             .fx-toggle switch instead, matching e.g. "Sparkle-optimized RAW". -->
+        <div class="fx-row" title="Also upload every export to a &quot;Chromasmith&quot; album in your Google Photos"><div class="fx-label">Upload exports to Google Photos</div><div class="fx-toggle" id="tg-gp-save" onclick="gpToggleSave()"></div></div>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn bgh" id="btn-gp-connect" onclick="gpConnectToggle()" title="Sign in to Google Photos (lasts ~1 hour)">Connect</button>
+          <button class="btn bgh" onclick="gpAskClientId(true)" title="Set or change your Google OAuth client ID" style="flex:0 0 auto;padding-left:8px;padding-right:8px">ID…</button>
+        </div>
       </div>
       <!-- INFO / METADATA -->
       <div class="fx-ctrl" data-fxsec="info">
@@ -2536,6 +2576,11 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
              reasoning as EXIF sitting right below it. `fx-people` is populated by
              fxRenderPeoplePanel(), called from showExif()'s one choke point. -->
         <div id="fx-people"></div>
+        <!-- Keywords: same per-photo sidecar tags the Library's own Get Info popover edits
+             (get_sidecar/set_keywords, desktop/library-ui.js) — this Info TAB had no way to see
+             or edit them at all while a photo was open in the Editor. fxRenderKeywordsPanel()
+             populates this, called from the same showExif() choke point as People & Pets. -->
+        <div id="fx-keywords"></div>
         <div id="fx-exif"></div>
       </div>
     </div>
@@ -2952,7 +2997,11 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <div class="dz-ic">＋</div><div class="dz-lb">Add photos</div>
         </div>
         <div class="cl-tray" id="cl-tray"></div>
-        <div class="fx-hint" id="cl-tray-hint">Add photos, then pick a layout. Drag a photo onto a slot to place it; drag between slots to swap.</div>
+        <!-- Was a standing .fx-hint sentence — collapsed into the same tooltip/details pattern
+             every other long explanation in the panel redesign already uses (see .fx-info-i /
+             .fx-hint-x's own CSS comment). id="cl-tray-hint" kept on the <details> itself so
+             existing show/hide-by-id callers (if any) keep working unchanged. -->
+        <details class="fx-hint-x" id="cl-tray-hint"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Add photos, then pick a layout. Drag a photo onto a slot to place it; drag between slots to swap.</p></details>
       </div>
       <div class="fx-ctrl" data-clsec="canvas">
         <div class="ctitle" style="margin-bottom:10px">Canvas size</div>
@@ -2963,6 +3012,9 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <div class="fx-ctrl" data-clsec="layout">
         <div class="ctitle" style="margin-bottom:10px">Layout</div>
         <div class="cl-shapes" id="cl-shapes"></div>
+        <!-- NOT converted to an info tooltip like its siblings — clRebuildShapes() rewrites this
+             element's textContent with a live photo count ("3 photos — pick an arrangement."),
+             so it's a status readout, not standing explanatory prose. -->
         <div class="fx-hint" id="cl-shape-hint">Pick how many photos and the arrangement.</div>
       </div>
       <div class="fx-ctrl" data-clsec="style">
@@ -2978,7 +3030,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <div class="fx-ctrl" id="cl-cellpanel" data-clsec="sel">
         <div class="ctitle" style="margin-bottom:10px">Selected photo</div>
         <div class="fx-row"><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="100" max="400" value="100" id="cl-zoom" oninput="clCellZoom(+this.value)"><div class="fx-val" id="cl-zoom-v">100</div></div>
-        <div class="fx-hint">Drag inside the photo to reposition it. Scroll over a photo to zoom.</div>
+        <details class="fx-hint-x"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Drag inside the photo to reposition it. Scroll over a photo to zoom.</p></details>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bsec" onclick="clReplaceSelected()">Replace</button>
           <button class="btn bgh" onclick="clCellReset()">Reset</button>
@@ -4928,7 +4980,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-14a';
+const BUILD='2026-09-15a';
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -10205,7 +10257,13 @@ function autoDetectBW(img){
   tg.classList.toggle('on',bw);
   if(bw)log('Black-and-white photo detected — halation set to white (toggle in Halation)','info');
 }
-function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(name==='hsl'&&on)setTimeout(hslBuildHist,60);if(name==='wheels'&&on)setTimeout(wheelsInitAll,0);if(name==='local'&&typeof mskOverlaySync==='function')setTimeout(mskOverlaySync,60);if((name==='hsl'||name==='pointcolor')&&typeof bakeHsl==='function')bakeHsl();if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
+function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}
+  // Turning a section ON is an explicit "I want this" — leaving its card collapsed (a title bar
+  // with no visible body, per .fx-sec-collapsed>:not(.fx-ctrl-title){display:none}) means the
+  // sliders you just enabled are still invisible, reading as "the toggle doesn't do anything."
+  // The card can end up collapsed from an earlier session (fxSecToggle persists it in
+  // localStorage) with no relation to which effects are on/off, so this reconciles the two.
+  if(on){const card=ff&&ff.closest('.fx-ctrl');if(card&&card.classList.contains('fx-sec-collapsed')&&typeof fxSecToggle==='function')fxSecToggle(card);}if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(name==='hsl'&&on)setTimeout(hslBuildHist,60);if(name==='wheels'&&on)setTimeout(wheelsInitAll,0);if(name==='local'&&typeof mskOverlaySync==='function')setTimeout(mskOverlaySync,60);if((name==='hsl'||name==='pointcolor')&&typeof bakeHsl==='function')bakeHsl();if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
 // Touching a control in a dimmed (off) section turns that section on, rather than the control
 // silently doing nothing. This is the other half of showing off-sections instead of hiding them:
 // the controls are visible, so they have to be live. Registered once, delegated, capture-phase so
@@ -10346,9 +10404,13 @@ function applyRawDefaults(){
   const col=document.getElementById('sl-nr-col'),sharp=document.getElementById('sl-adj-sharp');
   const vCol=document.getElementById('vl-nr-col'),vSharp=document.getElementById('vl-adj-sharp');
   let applied=false;
-  if(col&&adjVal('sl-nr-col')===0){col.value=25;if(vCol)vCol.textContent='25';applied=true;}
-  if(sharp&&adjVal('sl-adj-sharp')===0){sharp.value=40;if(vSharp)vSharp.textContent='40';applied=true;}
+  // .defaultValue (not just .value) is set too — fxPaintSlider anchors the "flat, unrotated"
+  // thumb position and the fill-from-default marker on .defaultValue, and this new resting
+  // point IS the default for a RAW photo, not the 0 the static markup ships for every other kind.
+  if(col&&adjVal('sl-nr-col')===0){col.value=25;col.defaultValue=25;if(vCol)vCol.textContent='25';applied=true;}
+  if(sharp&&adjVal('sl-adj-sharp')===0){sharp.value=40;sharp.defaultValue=40;if(vSharp)vSharp.textContent='40';applied=true;}
   if(applied)log('RAW defaults applied (Color NR 25, Sharpen 40)','info');
+  if(applied&&typeof fxPaintAllSliders==='function')fxPaintAllSliders();
 }
 
 // ══ TONE CURVES — master + R/G/B point curves, monotone cubic, baked to a 256×1 LUT ══
@@ -11077,7 +11139,7 @@ function _cpCommands(){
   const SECTIONS={looks:'Presets & Looks',adjust:'Basic Adjustments',nr:'Noise Reduction',deconv:'Deconvolution',curves:'Tone Curves',
     hsl:'Color Mixer',wheels:'Colour Wheels',pointcolor:'Point Color',local:'Masks / Local Adjustments',lens:'Lens Correction',
     grain:'Film Grain',art:'Film Artifacts',hal:'Halation',bloom:'Bloom',vig:'Vignette',
-    borders:'Borders',canvas:'Canvas',export:'Export'};
+    borders:'Borders',canvas:'Canvas',export:'Export: Output',wm:'Export: Watermark',exppreset:'Export: Presets',style:'Export: Styles',share:'Export: Sharing'};
   Object.entries(SECTIONS).forEach(([k,label])=>add('Section',label,()=>{switchTab('fx');fxSection(k);}));
   // Looks/LUTs and Print profiles are read live from their <select>s so a palette entry can never
   // point at a preset that doesn't actually exist in this build.
@@ -16066,7 +16128,7 @@ const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-w
   'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-canvas-z','sl-vig','sl-exp-q'];
-const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-wheels','tg-pointcolor','tg-local','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
+const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-wheels','tg-pointcolor','tg-local','tg-nr','tg-deconv','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
 const _SESS_SELECTS=['sel-input','sel-tonemap','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt','sel-exp-size','sel-exp-sharp'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(quiet){
@@ -16269,7 +16331,18 @@ async function fxRenderPeoplePanel(){
   try{faces=await window.__TAURI__.core.invoke('catalog_faces_for_path',{path});}
   catch(e){el.innerHTML='';return;}
   if(_fxPeoplePathToken!==path)return; // superseded by a newer photo before this resolved
-  if(!faces||!faces.length){el.innerHTML='';return;}
+  if(!faces||!faces.length){
+    // Empty is ambiguous — "genuinely no faces in this photo" and "never scanned yet" both land
+    // here otherwise (this Info tab had no way to tell them apart, unlike the Library sidebar's
+    // own "Not Face-Scanned" collection count, which is exactly the gap this closes for a single
+    // open photo). Best-effort: a path the catalog can't resolve, or a video, both come back
+    // null and fall back to the plain "no people" blank, same as before this existed.
+    let scanned=null;
+    try{scanned=await window.__TAURI__.core.invoke('catalog_face_scan_status',{path});}catch(e){}
+    if(_fxPeoplePathToken!==path)return;
+    el.innerHTML=(scanned===false)?'<div class="fx-people-pending">Not yet scanned for faces</div>':'';
+    return;
+  }
   const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const chips=faces.map(f=>{
     const named=!!f.name;
@@ -16310,9 +16383,58 @@ async function fxRenderPeoplePanel(){
     };
   });
 }
+// Keywords: same per-photo sidecar tags the Library's own Get Info popover already edits
+// (get_sidecar/set_keywords — desktop/library-ui.js's renderInfoPanel/addKeywordToPhoto), just
+// reachable from the Editor's Info tab too, using the identical Tauri commands directly rather
+// than routing through library-ui.js (which may not even be loaded — see chromasmith-22.html's
+// note on the desktop/web split). Same _fxKeywordsPathToken re-query guard as People & Pets above.
+let _fxKeywordsPathToken='';
+async function fxRenderKeywordsPanel(){
+  const el=document.getElementById('fx-keywords');if(!el)return;
+  if(!window.__TAURI__){el.innerHTML='';return;}
+  const it=fxImages[fxCurIdx]||fxImages[0];
+  const path=it&&it.path;
+  if(!path){el.innerHTML='';_fxKeywordsPathToken='';return;}
+  if(path===_fxKeywordsPathToken)return;
+  _fxKeywordsPathToken=path;
+  let sc;
+  try{sc=await window.__TAURI__.core.invoke('get_sidecar',{path});}catch(e){el.innerHTML='';return;}
+  if(_fxKeywordsPathToken!==path)return;
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const keywords=sc.keywords||[];
+  const chips=keywords.map(k=>{
+    const leaf=k.split('|').pop();
+    return `<span class="fx-kw-chip" data-kw="${esc(k)}" title="${esc(k)}">${esc(leaf)}<span class="fx-kw-chip-x" data-kw-remove="${esc(k)}">×</span></span>`;
+  }).join('');
+  el.innerHTML=`<div class="fx-people-row"><div style="width:100%">`
+    +`<div class="fx-label" style="width:auto;margin-bottom:6px">Keywords</div>`
+    +`<div id="fx-kw-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${chips}</div>`
+    +`<input id="fx-kw-add" placeholder="Add keyword…" class="fx-select" style="width:100%">`
+    +`</div></div>`;
+  el.querySelectorAll('[data-kw-remove]').forEach(x=>{
+    x.onclick=async(e)=>{
+      e.stopPropagation();
+      const kw=x.dataset.kwRemove;
+      const next=keywords.filter(k=>k!==kw);
+      try{await window.__TAURI__.core.invoke('set_keywords',{path,keywords:next});_fxKeywordsPathToken='';fxRenderKeywordsPanel();}
+      catch(e2){if(typeof toast==='function')toast('Could not remove that keyword','err');}
+    };
+  });
+  const addInput=document.getElementById('fx-kw-add');
+  if(addInput)addInput.onkeydown=async(e)=>{
+    if(e.key!=='Enter')return;
+    e.stopPropagation();
+    const v=addInput.value.trim();if(!v)return;
+    if(keywords.includes(v)){addInput.value='';return;}
+    const next=[...keywords,v];
+    try{await window.__TAURI__.core.invoke('set_keywords',{path,keywords:next});_fxKeywordsPathToken='';fxRenderKeywordsPanel();}
+    catch(e2){if(typeof toast==='function')toast('Could not add that keyword','err');}
+  };
+}
 function showExif(exif){
   const el=document.getElementById('fx-exif');if(!el)return;
   if(typeof fxRenderPeoplePanel==='function')fxRenderPeoplePanel();
+  if(typeof fxRenderKeywordsPanel==='function')fxRenderKeywordsPanel();
   // ⚠️ A video has no EXIF, so this used to return early and the Info panel showed nothing at all
   // for a clip — no duration, codec, frame rate or colour space, even though the demuxer had all
   // of it. Video gets its own block built from the item's own probe data.
@@ -16523,12 +16645,17 @@ function getFXParams(adjValsOverride){return{
   adjust:computeAdjustBlock(adjValsOverride),
   // Noise reduction runs on the RAW source before the LUT — independent of the Adjust toggle,
   // active whenever Luminance or Color > 0 (both default 0 → off → byte-identical default path).
-  nr:{luma:adjVal('sl-nr-lum')/100, color:adjVal('sl-nr-col')/100, detail:adjVal('sl-nr-det')/100, hlDesat:adjVal('sl-nr-hldesat')/100},
+  // tg-nr defaults to "on" in the markup, so this is unchanged for anyone who already had it
+  // dialed in; switching it off zeroes luma/color/hlDesat, which render()'s existing
+  // luma>0||color>0||hlDesat>0 gate already treats as fully off — no render()/shader change needed.
+  nr:(function(){const on=!(document.getElementById('tg-nr')&&!document.getElementById('tg-nr').classList.contains('on'));
+    return{luma:(on?adjVal('sl-nr-lum'):0)/100, color:(on?adjVal('sl-nr-col'):0)/100, detail:adjVal('sl-nr-det')/100, hlDesat:(on?adjVal('sl-nr-hldesat'):0)/100};})(),
   // ROADMAP.md R6 — deconvolution sharpening (damped Richardson-Lucy). amount 0..1 (Amount
   // slider is 0-100), radius in reference-image pixels (Radius slider 0-100 -> 0-8px, see the
   // shader-side clamp in render()). Both default 0/1.5 -> amount 0 means the whole pass is
-  // skipped (see render()'s dcAmt>0 gate), so this key is safe to always compute.
-  deconv:{amount:adjVal('sl-deconv-amt')/100, radius:1.5+(adjVal('sl-deconv-rad')/100)*6.5},
+  // skipped (see render()'s dcAmt>0 gate), so this key is safe to always compute. tg-deconv
+  // defaults to "on" (same rationale as tg-nr above); off just zeroes amount.
+  deconv:{amount:((!(document.getElementById('tg-deconv')&&!document.getElementById('tg-deconv').classList.contains('on')))?adjVal('sl-deconv-amt'):0)/100, radius:1.5+(adjVal('sl-deconv-rad')/100)*6.5},
   // Lens correction: manual-only (no per-lens profile database — see the shader comment for
   // why). dist/vig/ca in -0.5..0.5, small enough that the single-term radial model stays
   // well-behaved at the frame corners.
@@ -16994,12 +17121,20 @@ function fxPaintSlider(sl){
   // Treat as bipolar only when the range is genuinely symmetric about zero (-100..100, -50..50).
   // A 0..100 or 25..800 control is unipolar and must still fill from its own start.
   const bi=min<0&&max>0&&Math.abs(Math.abs(min)-Math.abs(max))<1e-6;
-  const from=bi?pct(0):0,to=pct(v);
+  // Anchor point: the slider's OWN resting/default value, not always 0 or min — Deconv Radius
+  // defaults to 20, RAW Sharpen to 40 (see fxRawNrChanged, which also updates .defaultValue so
+  // this stays correct after that runtime default is applied). sl.defaultValue mirrors the
+  // element's `value=` attribute (or a later explicit .defaultValue write); every .fx-slider
+  // ships one, so the bipolar/min fallback below only covers a row built without one.
+  const defRaw=parseFloat(sl.defaultValue);
+  const def=isFinite(defRaw)?Math.min(max,Math.max(min,defRaw)):(bi?0:min);
+  const from=pct(Math.min(def,v)),to=pct(Math.max(def,v));
   sl.classList.toggle('fx-slider-bi',bi);
-  sl.style.setProperty('--fillA',Math.min(from,to)+'%');
-  sl.style.setProperty('--fillB',Math.max(from,to)+'%');
+  sl.style.setProperty('--fillA',from+'%');
+  sl.style.setProperty('--fillB',to+'%');
+  sl.style.setProperty('--sl-def-pct',pct(def)+'%');
   const roll=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ctl-slider-roll'))||6;
-  sl.style.setProperty('--sl-roll',((v-(bi?0:min))*roll)+'deg');
+  sl.style.setProperty('--sl-roll',((v-def)*roll)+'deg');
 }
 function fxPaintAllSliders(root){(root||document).querySelectorAll('input.fx-slider[type=range]').forEach(fxPaintSlider);}
 // Delegated so dynamically-built rows need no wiring. `input` does not bubble from all engines'
@@ -20983,7 +21118,8 @@ const FX_SECTIONS=[['image','Image'],['looks','Looks'],['adjust','Adjust'],
   ['local','Masks'],
   ['grain','Grain'],['hal','Halation'],['bloom','Bloom'],['art','Artifacts'],['vig','Vignette'],
   ['borders','Borders'],['canvas','Canvas'],
-  ['export','Export'],['info','Info'],['diag','Diag']];
+  ['export','Output'],['wm','Watermark'],['exppreset','Export Presets'],['style','Styles'],['share','Sharing'],
+  ['info','Info'],['diag','Diag']];
 // A16: the card lookup is cached. This ran a querySelector per section on every rail and
 // section-nav rebuild (and those rebuild on every layout change / window resize). The cards are
 // static markup — they are never added or removed at runtime — so one pass is enough.
@@ -21018,7 +21154,14 @@ function _eachSection(cb){
 const FX_GROUPS={color:{label:'Color',icon:'curves',members:['curves','hsl','pointcolor','wheels']},
   detail:{label:'Detail',icon:'lens',members:['nr','deconv','lens']},
   film:{label:'Film',icon:'grain',members:['grain','hal','bloom','art','vig']},
-  frame:{label:'Frame',icon:'borders',members:['borders','canvas']}};
+  frame:{label:'Frame',icon:'borders',members:['borders','canvas']},
+  // The old single "export" card (Output/Watermark/Export Presets/Styles/Sharing all run
+  // together with no real separation) split into five titled cards — same one-rail-icon,
+  // several-stacked-cards pattern as the groups above, still reached through the same "Export"
+  // rail button (label/icon unchanged; 'export' itself stays a real member — the Output card —
+  // same as every other group's members, just also lending the group its name here since this
+  // rail icon was already called Export before any of this existed).
+  exportgrp:{label:'Export',icon:'export',members:['export','wm','exppreset','style','share']}};
 const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEach(k=>FX_GROUP_OF[k]=g));
 // deskx rail: draw a hairline BEFORE each of these, so the rail reads as bands rather than one
 // undifferentiated list. With the FX_SECTIONS order above that yields:
@@ -21029,7 +21172,7 @@ const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEac
 // ⚠️ A key that is neither is silently never matched, so a stale entry here does not throw —
 // it just DROPS a hairline. After reordering FX_SECTIONS, count the separators in the live
 // rail rather than assuming this set still lines up.
-const RAIL_GROUP_BREAK=new Set(['adjust','color','detail','film','frame','local','crop','export']);
+const RAIL_GROUP_BREAK=new Set(['adjust','color','detail','film','frame','local','crop','exportgrp']);
 function _activeSec(){
   const c=document.querySelector('.fx-ctrl.sec-active');if(!c)return null;
   const key=c.dataset.fxsec;
@@ -21069,16 +21212,6 @@ function buildToolRail(){        // desktop vertical labelled rail
     b.onclick=()=>fxSection(bKey);
     rail.appendChild(b);
   });
-  // Foot: narrow the rail a step (labels -> icons) and put them back. Rebuilt with the rail, so
-  // it can't outlive a layout change that drops the rail entirely.
-  if(dx){
-    const foot=document.createElement('div');foot.id='fx-rail-foot';
-    const fb=document.createElement('button');fb.className='fx-rail-btn';
-    fb.innerHTML=`<span class="fx-rail-ic">${icon('chevleft',22)}</span><span class="fx-rail-lb">Narrow</span>`;
-    fb.onclick=()=>railMode(document.body.classList.contains('rail-icons')?'labels':'icons');
-    foot.appendChild(fb);rail.appendChild(foot);
-    railSyncFoot();
-  }
   fxSection(_activeSec()||(window.__TAURI__?'looks':'image'),true);
   syncSectionEnabled();
 }
@@ -21363,7 +21496,7 @@ window.addEventListener('resize',()=>{
 //  - toggle-able FX (grain/hal/bloom/vig/borders/adjust) → its toggle is on
 //  - looks → a preset/LUT other than None/Original is selected
 //  - crop  → any rotate/flip/straighten/crop has been applied
-const _SEC_TOGGLE={adjust:'tg-adjust',curves:'tg-curves',hsl:'tg-hsl',wheels:'tg-wheels',pointcolor:'tg-pointcolor',local:'tg-local',grain:'tg-grain',art:'tg-art',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders',canvas:'tg-canvas'};
+const _SEC_TOGGLE={adjust:'tg-adjust',curves:'tg-curves',hsl:'tg-hsl',wheels:'tg-wheels',pointcolor:'tg-pointcolor',local:'tg-local',nr:'tg-nr',deconv:'tg-deconv',grain:'tg-grain',art:'tg-art',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders',canvas:'tg-canvas'};
 function _secIsEnabled(key){
   if(typeof FX_GROUPS!=='undefined'&&FX_GROUPS[key])return FX_GROUPS[key].members.some(_secIsEnabled); // deskx Color/Film rail buttons
   const tg=_SEC_TOGGLE[key];
@@ -21871,9 +22004,22 @@ document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(card=>{
   const chev=document.createElement('span');
   chev.className='fx-ctrl-chev';chev.innerHTML=icon('chevron',14);
   title.insertBefore(chev,title.firstChild);
-  if(_fxSecCollapsed[card.dataset.fxsec])card.classList.add('fx-sec-collapsed');
+  // Film's own sections (grain/artifacts/halation/bloom/vignette) always start expanded on a
+  // fresh launch, ignoring a stale collapsed flag from a previous session — the persisted map is
+  // shared with every OTHER section's collapse state (including ones fine to stay tucked away),
+  // and Film's are core, frequently-tweaked controls that shouldn't require rediscovering a
+  // collapse toggle to even see. Still collapsible by hand within a session (fxSecToggle below
+  // still writes the same map — this only skips reading it back for these five keys).
+  const FX_ALWAYS_OPEN=new Set(['grain','art','hal','bloom','vig']);
+  if(_fxSecCollapsed[card.dataset.fxsec]&&!FX_ALWAYS_OPEN.has(card.dataset.fxsec))card.classList.add('fx-sec-collapsed');
   title.addEventListener('click',(e)=>{
-    if(e.target.closest('.fx-toggle,.fx-ctrl-title-reset,.fx-toggle-lb,button,input,select'))return;
+    // The "|" separator between Reset and All (.fx-ctrl-title-reset-sep) sits between the two
+    // buttons with its own horizontal padding and isn't itself a button/toggle, so a click that
+    // lands on it (easy to do — the two controls sit close together) used to fall through this
+    // guard and collapse the section instead of doing nothing. .fx-title-right (the cluster
+    // wrapping both buttons + the separator) is the real hit-target for "clicked in the Reset/All
+    // area at all" rather than enumerating each control inside it.
+    if(e.target.closest('.fx-toggle,.fx-title-right,.fx-toggle-lb,button,input,select'))return;
     fxSecToggle(card);
   });
 });
