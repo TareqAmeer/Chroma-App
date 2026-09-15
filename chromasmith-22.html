@@ -1154,12 +1154,21 @@ body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:var(--sp-9) 
    position:absolute centering for the older body.fx-deskb-only flex layout, untouched. */
 body.deskx #fx-deskbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:8px;
   position:fixed;top:0;left:0;right:0;z-index:var(--z-overlay);height:var(--deskx-topbar-h);
-  margin:0;padding:0 12px 0 var(--sp-10);border:none;border-bottom:1px solid var(--bdr-panel);border-radius:0;
+  margin:0;padding:0 12px;border:none;border-bottom:1px solid var(--bdr-panel);border-radius:0;
   background:var(--glass-bg);
   /* Only the bottom edge has real width, but with border-color unset on the other three sides
      it computes to currentColor, not var(--bdr-panel) — see the identical #lib-overlay fix and
      its comment (library-ui.js). Set explicitly so getComputedStyle().borderColor is uniform. */
   border-color:var(--bdr-panel)}
+/* The 84px LEFT clearance above is for macOS's overlaid traffic-light buttons (titleBarStyle:
+   Overlay, tauri.macos.conf.json) — Windows uses a native title bar (decorations:true,
+   tauri.windows.conf.json) with its own min/max/close already occupying that space, so reserving
+   it a second time here would just be 72px of dead padding pushing every left-cluster button
+   inward for no reason. desktop-native.js adds body.mac-titlebar-overlay only under
+   CS_PLATFORM.os==='macos' (and "?deskx=1" browser testing, which simulates the macOS wireframe
+   this wasn't designed for anywhere else). docs/windows-port.md Phase 3 / G3's window-frame
+   decision. */
+body.mac-titlebar-overlay #fx-deskbar{padding-left:var(--sp-10)}
 body.deskx #fx-deskbar-left{display:flex;align-items:center;gap:8px;grid-column:1;justify-self:start;min-width:0}
 body.deskx #fx-deskbar-right{display:flex;align-items:center;gap:8px;grid-column:3;justify-self:end;min-width:0}
 /* The title's own base rule (above #fx-deskbar-title) centers it by ABSOLUTE positioning against
@@ -5033,7 +5042,12 @@ window.csAbout=csAbout;
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
 // deskx (DRK-style desktop layout): normally applied by the Tauri shell
 // (desktop-native.js); "?deskx=1" lets it be exercised in a plain browser for testing.
-try{if(new URLSearchParams(location.search).has('deskx'))document.body.classList.add('deskx');}catch(e){}
+// mac-titlebar-overlay rides along with it: every wireframe/visual reference this mode is
+// tested against was built for macOS's titleBarStyle:Overlay traffic-light layout (desktop-
+// native.js only adds this class for real under CS_PLATFORM.os==='macos' — see its own comment
+// on the #fx-deskbar 84px-padding rule, docs/windows-port.md Phase 3), so the browser escape
+// hatch keeps simulating that, not Windows' native-titlebar layout, which no wireframe covers.
+try{if(new URLSearchParams(location.search).has('deskx')){document.body.classList.add('deskx');document.body.classList.add('mac-titlebar-overlay');}}catch(e){}
 // Also give a plain (non-Tauri) wide browser window the same grouped-rail, photo-left layout
 // as the real desktop shell — previously only Tauri or the explicit ?deskx=1 escape hatch got
 // it, so a wide GitHub Pages window fell back to fx-deskb's un-grouped section list with
@@ -14971,7 +14985,11 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   'deconv-amt','deconv-rad',
   'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','vig','lut-mix'];
-const _FX_SNAP_TOGGLES=['adjust','curves','hsl','wheels','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas'];
+// nr/deconv added 2026-09-15 (found by the Editor snap-list cross-check hook) — same gap the
+// deconv-amt/deconv-rad sliders comment above describes: Noise Reduction and Deconvolution
+// predate the shared fx-mod/header-reset mechanism, so their toggle state was silently skipped
+// by reset/undo/session persistence.
+const _FX_SNAP_TOGGLES=['adjust','curves','hsl','wheels','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas','nr','deconv'];
 const _FX_SNAP_SELECTS=['sel-input','sel-tonemap','sel-lut','sel-print','sel-grain-fmt','sel-debug'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
 function getUISnapshot(opts){
@@ -19755,7 +19773,11 @@ function _hdrHeadroomPngFor(it,outW,outH){
 async function fxSaveGainMapHeic(pngBytes,fname,it){
   const source=window.chromasmithSourcePath;
   if(!source)return false;
-  const heicName=fname.replace(/\.[^.]+$/,'')+'.heic';
+  // Ultra HDR is a JPEG container (Windows, docs/windows-port.md Phase 4); the HEIC path stays
+  // macOS-only (Core Image). Same headroom-map contract either way, just a different command
+  // and container extension — see gainmap_uhdr.rs / gainmap.rs's write_gainmap_*_from_map.
+  const isUhdr=window.CS_PLATFORM&&window.CS_PLATFORM.hdrExport==='uhdr';
+  const outName=fname.replace(/\.[^.]+$/,'')+(isUhdr?'.jpg':'.heic');
   const q=(parseFloat((document.getElementById('sl-exp-q')||{}).value)||92)/100;
   // RAW path: OUR OWN headroom, computed at decode time — see gainmap.rs's "HDR from RAW" note
   // for why CIRAWFilter can't do this for this camera's files.
@@ -19770,12 +19792,13 @@ async function fxSaveGainMapHeic(pngBytes,fname,it){
       hrCanvas.width=hrCanvas.height=0;
       const hrBytes=new Uint8Array(await hrBlob.arrayBuffer());
       // Length-prefixed two-blob body: headroom PNG, then the graded PNG — see main.rs's
-      // write_gainmap_heic_from_map for the exact framing this must match.
+      // write_gainmap_heic_from_map / write_gainmap_uhdr_from_map for the exact framing this
+      // must match (both commands share the same request shape).
       const body=new Uint8Array(4+hrBytes.length+pngBytes.length);
       new DataView(body.buffer).setUint32(0,hrBytes.length,true);
       body.set(hrBytes,4);body.set(pngBytes,4+hrBytes.length);
-      const wrote=await window.__TAURI__.core.invoke('write_gainmap_heic_from_map',body,{headers:{
-        'x-filename':_u8b64(new TextEncoder().encode(heicName)),
+      const wrote=await window.__TAURI__.core.invoke(isUhdr?'write_gainmap_uhdr_from_map':'write_gainmap_heic_from_map',body,{headers:{
+        'x-filename':_u8b64(new TextEncoder().encode(outName)),
         'x-quality':String(q),'x-max-stops':'2'}});
       if(wrote){log(`Saved ${wrote} (HDR gain map, from RAW headroom)`,'ok');return true;}
       log('No RAW headroom in this photo — exported as SDR','info');
@@ -19786,8 +19809,11 @@ async function fxSaveGainMapHeic(pngBytes,fname,it){
     }
   }
   // Non-RAW path (iPhone HEIC etc.): unchanged — Core Image's own expand-to-HDR on the source
-  // file already works for these (measured headroom 1.37-1.40 on real iPhone photos).
+  // file already works for these (measured headroom 1.37-1.40 on real iPhone photos). macOS-only
+  // (write_gainmap_heic has no Windows/uHDR counterpart yet — only the RAW-headroom path above
+  // does), so this always writes .heic regardless of CS_PLATFORM.hdrExport.
   try{
+    const heicName=fname.replace(/\.[^.]+$/,'')+'.heic';
     const wrote=await window.__TAURI__.core.invoke('write_gainmap_heic',pngBytes,{headers:{
       'x-source':_u8b64(new TextEncoder().encode(source)),
       'x-filename':_u8b64(new TextEncoder().encode(heicName)),

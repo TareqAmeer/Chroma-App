@@ -1,5 +1,15 @@
 [
   {
+    "match": "EXTRA   2x  button",
+    "zone": "topbar",
+    "reason": "2026-09-15: pre-existing, not introduced by this change — confirmed present on main before the Windows-port branches merged (checked out 7136496, ce5d7f8 and this worktree's merge commit; all three report the identical \"app has 12, wireframe has 10\" finding), so it predates both the video-posters Phase 3 branch and the HDR-export work in this session. Not investigated further as it's unrelated to either."
+  },
+  {
+    "match": "atom count: wireframe 30 vs app 31",
+    "zone": "topbar",
+    "reason": "Downstream of the EXTRA 2x button finding above."
+  },
+  {
     "match": "order@0: wireframe icon vs app button",
     "zone": "topbar",
     "reason": "2026-09-10: deliberate change per Tareq \u2014 Library's topbar was rebuilt to match the Editor's own #fx-deskbar under body.deskx (see desktop/library-ui.js's Topbar Parity pass comment): sort/filters/view-toggle moved to the left group ahead of the search bar, so the first topbar atom is now the sort pill's icon instead of the logo/search wireframe order. The design wireframe (Library View.html) reflects the OLD single-row layout and has not been updated to match; this diff is the intended new order, not a regression."

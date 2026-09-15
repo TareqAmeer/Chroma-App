@@ -216,7 +216,7 @@ const GATES = [
   { name: 'editor:components-check', cmd: ['node', 'scripts/build-component-registry.mjs', '--check'] },
   // verify_tokens.py re-parses all three source blocks and asserts every declared CSS var is
   // either in design/tokens.json or documented in design/token-conflicts.md. Blocking.
-  { name: 'editor:tokens-verify', cmd: ['bash', '-c', 'if [ -x .calibvenv/bin/python3 ]; then .calibvenv/bin/python3 design/verify_tokens.py; else python3 design/verify_tokens.py; fi'] },
+  { name: 'editor:tokens-verify', cmd: ['node', 'scripts/run-python.mjs', 'design/verify_tokens.py'] },
   // ?catalog=1 component catalogue (docs/ui-workflow/STATE.md S1(d)): one toHaveScreenshot() per
   // shared component class x state (test/catalog_visual.mjs). Blocking — baselines are committed
   // and a pixel-level regression in any shared component should fail the same way any other
@@ -336,7 +336,13 @@ function runGate(gate) {
     let used = 0;
     const tryOnce = () => {
       used += 1;
-      const child = spawn(gate.cmd[0], gate.cmd.slice(1), { stdio: ['ignore', 'pipe', 'pipe'] });
+      // On Windows, npm installs `npx` as `npx.cmd`, a batch file — not a real PE executable, so
+      // CreateProcess (what `spawn()` uses under the hood) can't launch it directly even with the
+      // extension spelled out (confirmed: that alone throws EINVAL). `shell: true` is the actual
+      // fix; every `gate.cmd` entry here is a fixed, hardcoded array literal, never built from
+      // external/user input, so the shell-argument-escaping risk Node's deprecation warning is
+      // about does not apply at this call site.
+      const child = spawn(gate.cmd[0], gate.cmd.slice(1), { stdio: ['ignore', 'pipe', 'pipe'], shell: process.platform === 'win32' });
       let out = '';
       child.stdout.on('data', (d) => { out += d; });
       child.stderr.on('data', (d) => { out += d; });
