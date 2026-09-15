@@ -20,17 +20,32 @@ source or DB state). When a stall is detected, this module captures the
 child's own stack sample and checks both signals together.
 """
 import subprocess
+import sys
 import time
 
 import sample_capture
 import symbolicate
 import pipe_dtrace
 
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+IS_WINDOWS = sys.platform == 'win32'
+
 STALL_CPU_THRESHOLD = 1.0    # % — below this counts as "not doing visible work"
 STALL_WINDOW_S = 20.0        # how long CPU must stay low before flagging a stall
 
 
 def _pgrep_children(pid):
+    if IS_WINDOWS:
+        if psutil is None:
+            return []
+        try:
+            return [c.pid for c in psutil.Process(pid).children(recursive=False)]
+        except psutil.Error:
+            return []
     try:
         out = subprocess.run(['pgrep', '-P', str(pid)], capture_output=True, text=True, timeout=5)
     except (subprocess.SubprocessError, FileNotFoundError):
@@ -42,6 +57,11 @@ def _pgrep_children(pid):
 
 def find_descendants(pid):
     """All children, grandchildren, etc. of pid."""
+    if IS_WINDOWS and psutil is not None:
+        try:
+            return [c.pid for c in psutil.Process(pid).children(recursive=True)]
+        except psutil.Error:
+            return []
     direct = _pgrep_children(pid)
     out = list(direct)
     for c in direct:
@@ -50,6 +70,13 @@ def find_descendants(pid):
 
 
 def _proc_cmd(pid):
+    if IS_WINDOWS:
+        if psutil is None:
+            return None
+        try:
+            return psutil.Process(pid).name()
+        except psutil.Error:
+            return None
     try:
         out = subprocess.run(['ps', '-o', 'comm=', '-p', str(pid)],
                               capture_output=True, text=True, timeout=5)
@@ -59,6 +86,17 @@ def _proc_cmd(pid):
 
 
 def _proc_cpu(pid):
+    if IS_WINDOWS:
+        if psutil is None:
+            return None
+        try:
+            # interval=None reads against psutil's own internally-cached prior call (same
+            # "must prime first" caveat process_metrics.py documents for the main pid) —
+            # good enough here since child_watch polls repeatedly on CHILD_POLL_S anyway,
+            # so the first reading for a newly-discovered child is the only ever-0.0 one.
+            return psutil.Process(pid).cpu_percent(interval=None)
+        except psutil.Error:
+            return None
     try:
         out = subprocess.run(['ps', '-o', 'pcpu=', '-p', str(pid)],
                               capture_output=True, text=True, timeout=5)
@@ -77,7 +115,19 @@ def pipe_fd_count(pid):
     full, undrained pipe holds one open indefinitely while otherwise idle,
     which is exactly the signature that distinguishes this from a process
     that's merely sleeping/polling for legitimate reasons.
+
+    Windows has no `lsof`/pipe-fd concept exposed the same way — psutil's
+    `open_files()`/`net_connections()` don't enumerate anonymous pipe handles
+    either, so this is a genuine capability gap, not just a syntax swap: it
+    returns None on Windows (the caller already treats None as "unknown",
+    same as a macOS lsof failure) rather than fabricating a number. The
+    stack-sample half of `_investigate_stall` (write/writev at the top of
+    the stack) still works via `sample_capture`'s procdump path, so a
+    blocked-write stall is still detectable, just without the fd-count
+    corroborating signal macOS gets for free.
     """
+    if IS_WINDOWS:
+        return None
     try:
         out = subprocess.run(['lsof', '-p', str(pid)], capture_output=True, text=True, timeout=10)
     except (subprocess.SubprocessError, FileNotFoundError):

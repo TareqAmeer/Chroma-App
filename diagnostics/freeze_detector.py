@@ -7,9 +7,21 @@ near zero — see CLAUDE.md's own notes on background-indexing contention
 and camera-retry freezes). Instead we periodically ask the app to respond
 to an AppleEvent via `osascript`; a hard timeout on that call is the
 freeze signal.
+
+Windows (2026-09-15): there's no AppleEvent equivalent. Research finding:
+user32!IsHungAppWindow is the exact API Windows' own Task Manager uses to
+mark a window "(Not Responding)" — true once its message pump hasn't
+processed a message in roughly 5s. It needs the app's main HWND rather than
+a bundle id, resolved once via win_helpers.find_main_window(pid) and cached
+(the window doesn't change identity across the life of one process).
 """
-import subprocess
+import sys
 import time
+
+IS_WINDOWS = sys.platform == 'win32'
+
+if not IS_WINDOWS:
+    import subprocess
 
 PING_TIMEOUT_S = 2.0
 PING_INTERVAL_S = 3.0
@@ -17,7 +29,7 @@ CONSECUTIVE_MISSES_TO_FREEZE = 2
 
 
 def ping(bundle_id):
-    """Return True if the app responded within the timeout, False otherwise."""
+    """Return True if the app responded within the timeout, False otherwise. macOS only."""
     try:
         result = subprocess.run(
             ['osascript', '-e', f'tell application id "{bundle_id}" to get name'],
@@ -31,10 +43,31 @@ def ping(bundle_id):
 
 
 class FreezeDetector:
-    def __init__(self, bundle_id):
-        self.bundle_id = bundle_id
+    """
+    macOS: pass a bundle id (e.g. 'com.tareq.chromasmith'), pinged via osascript.
+    Windows: pass a pid (int); the main HWND is resolved lazily and IsHungAppWindow
+    is polled directly — no bundle id concept applies.
+    """
+    def __init__(self, target):
+        self.target = target
+        self._hwnd = None  # Windows only, resolved lazily
         self._consecutive_misses = 0
         self._freeze_started_at = None
+
+    def _responded(self):
+        if IS_WINDOWS:
+            import win_helpers
+            if self._hwnd is None:
+                self._hwnd = win_helpers.find_main_window(self.target)
+            if self._hwnd is None:
+                # No window yet (still booting) or it closed — don't manufacture a freeze
+                # out of a lookup failure; try to re-resolve it next poll instead.
+                return True
+            if not win_helpers.user32.IsWindow(self._hwnd):
+                self._hwnd = None
+                return True
+            return not win_helpers.is_hung(self._hwnd)
+        return ping(self.target)
 
     def check(self):
         """
@@ -44,7 +77,7 @@ class FreezeDetector:
         ('freeze_end', ts, duration_s) - responsiveness recovered
         """
         now = time.time()
-        responded = ping(self.bundle_id)
+        responded = self._responded()
 
         if responded:
             if self._freeze_started_at is not None:

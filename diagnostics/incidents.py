@@ -246,7 +246,7 @@ def write_incidents(incidents, run_dir):
     ranked = sorted(enumerate(incidents, 1), key=lambda t: severity_score(t[1]), reverse=True)
     for idx, incident in ranked:
         path = os.path.join(out_dir, f'incident_{idx}.md')
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(render_incident_markdown(incident, idx))
         paths.append((idx, incident, path))
     return paths

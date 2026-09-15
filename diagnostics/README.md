@@ -1,12 +1,21 @@
 # Live diagnostic tool
 
-Watches the **real, running** app (built via `desktop/install-app.sh`, which
-registers it in place at
-`desktop/src-tauri/target/release/bundle/macos/Chromasmith.app` — no copy is
-made) while you use it by
-hand, and turns "it felt slow" / "that button did nothing" / "the app froze" into
-a timestamped, categorized event log — so debugging starts from evidence instead
-of screenshots and assumptions.
+Watches the **real, running** app while you use it by hand, and turns "it felt
+slow" / "that button did nothing" / "the app froze" into a timestamped,
+categorized event log — so debugging starts from evidence instead of
+screenshots and assumptions.
+
+On macOS, the app is built via `desktop/install-app.sh`, which registers it in
+place at `desktop/src-tauri/target/release/bundle/macos/Chromasmith.app` — no
+copy is made. On Windows, the tool attaches to `chromasmith.exe` directly out of
+`desktop/src-tauri/target/release/` (or `target/debug/` for a dev build) — see
+docs/windows-port.md's G17 entry for the full module-by-module Windows port
+notes (process discovery, freeze detection, log/db paths, screenshot capture,
+stack sampling — all verified live, not just compiled). Needs `pip install
+psutil` (already a `requirements.txt` dependency on every platform, but Windows
+has no `ps`/`lsof` fallback at all without it, unlike macOS). Everything below
+is written from the macOS side of the tool; where Windows differs, the module
+itself documents it inline (search each `diagnostics/*.py` for "Windows").
 
 This is the complement to `npm test` / `calib/*.py`, not a replacement. Those are
 deterministic, headless, CI-gated checks against fixtures and golden images. This

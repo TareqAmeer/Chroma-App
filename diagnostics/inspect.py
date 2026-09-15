@@ -5,31 +5,15 @@ instead of waiting on a session's aggregate report.md. Prints straight to
 stdout; if a diagnostic session is active, also logs one event per pid so
 it lands in that run's events.jsonl/incidents for later reference.
 """
-import subprocess
 import time
 
 import process_metrics
 import child_watch
 
-
-def _proc_cmd(pid):
-    try:
-        out = subprocess.run(['ps', '-o', 'comm=', '-p', str(pid)],
-                              capture_output=True, text=True, timeout=5)
-    except (subprocess.SubprocessError, FileNotFoundError):
-        return None
-    return out.stdout.strip() or None
-
-
-def _fd_count(pid):
-    try:
-        out = subprocess.run(['lsof', '-p', str(pid)], capture_output=True, text=True, timeout=10)
-    except (subprocess.SubprocessError, FileNotFoundError):
-        return None
-    if out.returncode not in (0, 1):
-        return None
-    lines = out.stdout.splitlines()
-    return max(0, len(lines) - 1)  # minus the header row
+# Reuse child_watch's own process-cmd/pipe-fd lookups (already cross-platform: psutil on
+# Windows, ps/lsof on macOS) instead of a second, macOS-only copy of the same subprocess calls.
+_proc_cmd = child_watch._proc_cmd
+_fd_count = child_watch.pipe_fd_count
 
 
 def snapshot(main_pid):

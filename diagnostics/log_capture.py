@@ -19,16 +19,25 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
 
-EXE_NAME = 'chromasmith'
+IS_WINDOWS = sys.platform == 'win32'
+
+EXE_NAME = 'chromasmith.exe' if IS_WINDOWS else 'chromasmith'
 # 2026-09-14: no installed copy is made — the app runs from the release build output in place.
-EXE_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    'desktop', 'src-tauri', 'target', 'release', 'bundle', 'macos', 'Chromasmith.app',
-    'Contents', 'MacOS', 'chromasmith',
-)
+if IS_WINDOWS:
+    EXE_PATH = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        'desktop', 'src-tauri', 'target', 'release', 'chromasmith.exe',
+    )
+else:
+    EXE_PATH = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        'desktop', 'src-tauri', 'target', 'release', 'bundle', 'macos', 'Chromasmith.app',
+        'Contents', 'MacOS', 'chromasmith',
+    )
 
 GLSL_ERROR_RE = re.compile(r'GLSL (compile|link) error', re.IGNORECASE)
 CORRUPT_DB_RE = re.compile(r'catalog\.corrupt-\d+\.db')
@@ -43,7 +52,15 @@ def _classify_line(text):
 
 
 class LogStreamCapture:
-    """Background `log stream` reader. Calls on_event(dict) for matches."""
+    """Background `log stream` reader. Calls on_event(dict) for matches.
+
+    macOS only — `log stream` has no Windows equivalent. `start()` is a deliberate no-op on
+    Windows (not an error): log_file.py's LogFileTailer already covers native stdout/stderr on
+    every platform (see its own docstring on why it, not `log stream`, is the real fix even on
+    macOS), so watcher.py's non-`--relaunch` path losing this specific capture on Windows loses
+    nothing this app doesn't already get elsewhere — unlike leaving it wired up, which would
+    crash Session.run() outright the first time watcher.py called log_cap.start() (Popen on a
+    'log' binary that doesn't exist raises FileNotFoundError, uncaught, on Windows)."""
 
     def __init__(self, on_event):
         self.on_event = on_event
@@ -52,6 +69,8 @@ class LogStreamCapture:
         self._stop = threading.Event()
 
     def start(self):
+        if IS_WINDOWS:
+            return
         self._proc = subprocess.Popen(
             ['log', 'stream',
              '--predicate', f'process == "{EXE_NAME}"',

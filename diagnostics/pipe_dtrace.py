@@ -31,6 +31,9 @@ same disclosure standard as sample_capture.capture_spindump's own sudo path.
 Verify against a real stalled pid before relying on it.
 """
 import subprocess
+import sys
+
+IS_WINDOWS = sys.platform == 'win32'
 
 
 def confirm_blocked_write(pid, duration_s=3):
@@ -41,7 +44,17 @@ def confirm_blocked_write(pid, duration_s=3):
     a direct confirmation, not an inference from CPU%% or an fd count. Returns
     False if dtrace ran cleanly and saw no such stuck call, and None if dtrace
     itself couldn't run (no sudo, SIP fully blocking, dtrace missing, etc.).
+
+    Windows: dtrace has no equivalent here (ETW is the closest OS mechanism, but it's a
+    fundamentally different provider/session model, not a drop-in substitute for this exact
+    "is this pid inside write() right now" probe) — this is a deliberate, documented gap, not
+    a silent no-op: returns None immediately (the same "couldn't run" signal a missing dtrace
+    binary produces on macOS), so --use-dtrace degrades to "no extra confirmation" on Windows
+    rather than erroring, and child_watch.py's CPU-idle-then-sample heuristic (which already
+    works cross-platform) remains the only signal.
     """
+    if IS_WINDOWS:
+        return None
     script = (
         f'syscall::write*:entry /pid == {pid}/ {{ self->in_write = 1; }} '
         f'syscall::write*:return /pid == {pid}/ {{ self->in_write = 0; }} '

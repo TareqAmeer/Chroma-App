@@ -23,7 +23,7 @@ MEM_GROWTH_FLAG_MB_PER_MIN = 5.0
 
 def load_events(events_path):
     events = []
-    with open(events_path) as f:
+    with open(events_path, encoding='utf-8', errors='replace') as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -53,7 +53,7 @@ def load_meta(run_dir):
     if not os.path.exists(path):
         return {}
     try:
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             return json.load(f)
     except (OSError, json.JSONDecodeError, ValueError):
         return {}
@@ -444,14 +444,18 @@ def run(run_dir, for_claude=False):
 
     md = render_markdown(summary, events_path, meta, incident_files, repeat_loops, comparison, bug_matches)
     report_path = os.path.join(run_dir, 'report.md')
-    with open(report_path, 'w') as f:
+    # Explicit UTF-8: this markdown has real unicode (→, ⚠️, …) and Windows' default open()
+    # encoding is the ANSI codepage (cp1252 here), not UTF-8 — the same class of bug G14's
+    # design/verify_tokens.py fix already addressed elsewhere in this repo. Confirmed live:
+    # this crashed with UnicodeEncodeError on '→' (→) the first time this ran here.
+    with open(report_path, 'w', encoding='utf-8') as f:
         f.write(md)
     print(f"Report written to {report_path}\n")
     render_stdout_summary(summary, incident_files, comparison)
 
     digest = build_claude_digest(run_dir, summary, meta, incident_files, repeat_loops, comparison, bug_matches)
     digest_path = os.path.join(run_dir, 'for_claude.md')
-    with open(digest_path, 'w') as f:
+    with open(digest_path, 'w', encoding='utf-8') as f:
         f.write(digest)
     if for_claude:
         print(f"\n{'=' * 60}\n")

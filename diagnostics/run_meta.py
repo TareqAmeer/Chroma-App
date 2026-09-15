@@ -50,12 +50,23 @@ def capture(binary_path=None):
 
     # chromasmith-22.html is ~17MB (base64 LUT presets precede the BUILD
     # const by ~2.3MB) — grep is far cheaper than loading it into Python.
+    # `grep` ships with Git for Windows (Git\usr\bin, generally on PATH alongside `git` on any
+    # machine this tool already depends on) so this path usually still works there too; the
+    # bounded partial-read fallback below only kicks in if it genuinely isn't available.
     build_stamp = None
     grep_out = _run(['grep', '-m1', '-o', r"const BUILD='[^']*'", HTML_PATH])
     if grep_out:
         m = BUILD_RE.search(grep_out)
         if m:
             build_stamp = m.group(1)
+    elif os.path.exists(HTML_PATH):
+        try:
+            with open(HTML_PATH, encoding='utf-8', errors='replace') as f:
+                m = BUILD_RE.search(f.read(4 * 1024 * 1024))
+            if m:
+                build_stamp = m.group(1)
+        except OSError:
+            pass
 
     # Answers "is the running binary actually today's build?" directly: a
     # Rust source edit needs a real `cargo build` + full app restart (a

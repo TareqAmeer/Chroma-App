@@ -18,8 +18,14 @@ needed beyond the mtime check.
 """
 import json
 import os
+import tempfile
 
-DIAG_PATH = '/tmp/chromasmith_diag_state.json'
+# Matches diag.rs's diag_state_path() command (env::temp_dir() on the Rust side) — both
+# resolve the OS/user's real temp dir by the platform-standard mechanism (TMPDIR/%TEMP%),
+# not a hardcoded "/tmp/..." literal, which silently broke this on Windows (a leading "/"
+# there resolves to the current drive's root, not a real temp dir, so write_file_bytes
+# failed on every call and the JS side's own catch(_){} swallowed the error).
+DIAG_PATH = os.path.join(tempfile.gettempdir(), 'chromasmith_diag_state.json')
 
 
 class NativeBridgePoller:

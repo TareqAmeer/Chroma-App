@@ -8,6 +8,7 @@ live one-line status readout. See diagnostics/README.md for usage.
 import json
 import os
 import sys
+import tempfile
 import time
 
 from find_process import find_chromasmith_pid, ProcessNotFound, REAL_APP_PATH
@@ -21,7 +22,8 @@ from child_watch import ChildProcessWatcher
 import sample_capture
 import run_meta
 
-BUNDLE_ID = 'com.tareq.chromasmith'
+IS_WINDOWS = sys.platform == 'win32'
+BUNDLE_ID = 'com.tareq.chromasmith'  # macOS only — Windows freeze detection targets a pid, not a bundle id
 PROCESS_POLL_S = 1.0
 FREEZE_POLL_S = 3.0
 NATIVE_BRIDGE_POLL_S = 2.0
@@ -105,7 +107,10 @@ class Session:
               "config state AUTOMATICALLY — no paste needed. Native + attachConsole()'d frontend "
               f"logs are tailed straight from {LOG_PATH}.")
         print("Fallback for a browser/Pages session, or a binary predating these features —")
-        print("paste once into Safari's Web Inspector console (Develop > Chromasmith > the page):")
+        if IS_WINDOWS:
+            print("paste once into WebView2 DevTools (right-click the app window > Inspect):")
+        else:
+            print("paste once into Safari's Web Inspector console (Develop > Chromasmith > the page):")
         print()
         print(PASTE_SNIPPET)
         print()
@@ -120,7 +125,7 @@ class Session:
         log_file_tail = LogFileTailer(self._write_event)
         child_watch = ChildProcessWatcher(self._write_event, self.samples_dir, use_dtrace=self.use_dtrace)
 
-        freeze = FreezeDetector(BUNDLE_ID)
+        freeze = FreezeDetector(self.pid if IS_WINDOWS else BUNDLE_ID)
 
         try:
             prime_cpu_percent(self.pid)

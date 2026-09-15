@@ -5,10 +5,21 @@ the deep-dive counterpart to report.md's aggregate summary. Opened via a
 writer connection or risks a stray write.
 """
 import os
+import sys
 import sqlite3
 
-DEFAULT_DB_PATH = os.path.expanduser(
-    '~/Library/Application Support/com.tareq.chromasmith/catalog.db')
+if sys.platform == 'win32':
+    # catalog.rs's catalog_dir() calls platform::data_root(), whose Windows implementation
+    # (platform/windows.rs) is %APPDATA%\Chromasmith — the app's PRODUCT NAME, not the
+    # com.tareq.chromasmith identifier Tauri's own dirs use (macOS's data_root() uses the
+    # identifier, so this is a genuine cross-platform naming difference already in the app,
+    # not a bug introduced here). Verified live against a real running Windows app + catalog.db
+    # at exactly this path. CS_CATALOG_DIR (below) overrides this the same way catalog_dir() does.
+    DEFAULT_DB_PATH = os.path.join(
+        os.environ.get('APPDATA', os.path.expanduser('~')), 'Chromasmith', 'catalog.db')
+else:
+    DEFAULT_DB_PATH = os.path.expanduser(
+        '~/Library/Application Support/com.tareq.chromasmith/catalog.db')
 
 
 def db_path():

@@ -59,14 +59,17 @@ def sample(pid, cpu_interval=None):
         except psutil.NoSuchProcess:
             raise ProcessGone(f"pid {pid} no longer running")
 
-    # stdlib-only fallback
+    # stdlib-only fallback — macOS/Linux `ps` syntax; Windows has no `ps` at all, so without
+    # psutil there is no fallback there and this always raises (FileNotFoundError below),
+    # same as a genuinely-gone process. psutil is a normal requirements.txt dependency, so
+    # this path is a last resort on every platform, not a Windows-specific gap.
     try:
         out = subprocess.run(
             ['ps', '-o', 'pcpu=,rss=,nlwp=', '-p', str(pid)],
             capture_output=True, text=True, timeout=5,
         )
     except (subprocess.SubprocessError, FileNotFoundError):
-        raise ProcessGone(f"could not query pid {pid}")
+        raise ProcessGone(f"could not query pid {pid} (install psutil for Windows support: pip install psutil)")
     if out.returncode != 0 or not out.stdout.strip():
         raise ProcessGone(f"pid {pid} no longer running")
     parts = out.stdout.split()

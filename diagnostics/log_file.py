@@ -24,9 +24,21 @@ dependency could be equally chatty in the future.
 """
 import os
 import re
+import sys
 import time
 
-LOG_DIR = os.path.expanduser('~/Library/Logs/com.tareq.chromasmith')
+if sys.platform == 'win32':
+    # tauri-plugin-log's LogDir target resolves through Tauri's OWN app_log_dir(), which is
+    # identifier-based (tauri.conf.json's identifier: com.tareq.chromasmith) — unlike
+    # catalog.rs's custom platform::data_root()/cache_root(), which deliberately use the
+    # "Chromasmith" product name on Windows instead (see db.py's own comment on that split).
+    # Tauri v2's app_log_dir() on Windows is %LOCALAPPDATA%\<identifier>\logs. Verified live:
+    # a real running Windows app writes exactly to %LOCALAPPDATA%\com.tareq.chromasmith\logs\
+    # Chromasmith.log — same "product name regardless of file_name option" filename quirk
+    # documented below holds on Windows too.
+    LOG_DIR = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'com.tareq.chromasmith', 'logs')
+else:
+    LOG_DIR = os.path.expanduser('~/Library/Logs/com.tareq.chromasmith')
 LOG_PATH = os.path.join(LOG_DIR, 'Chromasmith.log')
 
 OWN_CRATE_PREFIX = 'chromasmith'

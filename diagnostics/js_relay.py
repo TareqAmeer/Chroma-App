@@ -5,11 +5,15 @@ non-persisted #log-area (see chromasmith-22.html's window.onerror/
 unhandledrejection handlers) and nothing native bridges them anywhere
 retrievable.
 
-This requires one manual, one-time-per-session paste into Safari's Web
-Inspector console (Develop > Chromasmith > the page) — the minimum
-possible ritual without a native code change. The tool is fully
-functional without it; it just loses JS-error / silent-wrong-behavior
-visibility for that session.
+This requires one manual, one-time-per-session paste into the app's own
+devtools console (Safari's Web Inspector on macOS: Develop > Chromasmith >
+the page; WebView2 DevTools on Windows: right-click the window > Inspect)
+— the minimum possible ritual without a native code change (see
+watcher.py, which prints the platform-appropriate instructions). The tool
+is fully functional without it; it just loses JS-error / silent-wrong-
+behavior visibility for that session. In practice this fallback rarely
+matters now — native_bridge.py's automatic path covers the same signals
+for any session running inside window.__TAURI__.
 
 Beyond error capture, the pasted snippet also:
 - POSTs a periodic getUISnapshot() heartbeat (category 'state_snapshot'),

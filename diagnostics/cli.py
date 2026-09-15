@@ -21,6 +21,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -129,7 +130,7 @@ def cmd_inspect(args):
     rows = inspect_mod.snapshot(pid)
 
     run_dir = _active_run_dir()
-    out_dir = os.path.join(run_dir, 'snapshots') if run_dir else '/tmp'
+    out_dir = os.path.join(run_dir, 'snapshots') if run_dir else tempfile.gettempdir()
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, f"inspect_{int(time.time())}.txt")
     with open(out_path, 'w') as f:
@@ -170,7 +171,7 @@ def cmd_sample(args):
             return 1
 
     run_dir = _active_run_dir()
-    out_dir = os.path.join(run_dir, 'samples') if run_dir else '/tmp'
+    out_dir = os.path.join(run_dir, 'samples') if run_dir else tempfile.gettempdir()
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, f"manual_sample_{pid}_{int(time.time())}.sample.txt")
 
@@ -199,7 +200,10 @@ def _print_db_table(cols, rows, limit=None, out_path=None):
         print("(no rows)")
         return
     if out_path:
-        with open(out_path, 'w') as f:
+        # Row values come straight from catalog.db (rel_path etc. can be real unicode
+        # filenames) — explicit UTF-8 needed on Windows (see report.py's own comment on
+        # the identical cp1252-default crash, confirmed live in this same port pass).
+        with open(out_path, 'w', encoding='utf-8') as f:
             f.write('\t'.join(cols) + '\n')
             for r in rows:
                 f.write('\t'.join(str(v) for v in r) + '\n')
@@ -246,7 +250,7 @@ def cmd_db(args):
         return 1
 
     run_dir = _active_run_dir()
-    out_dir = os.path.join(run_dir, 'db_queries') if run_dir else '/tmp'
+    out_dir = os.path.join(run_dir, 'db_queries') if run_dir else tempfile.gettempdir()
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, f"query_{int(time.time())}.tsv")
     limit = None if args.full else 10
