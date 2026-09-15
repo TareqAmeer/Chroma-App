@@ -336,10 +336,22 @@ function runGate(gate) {
     let used = 0;
     const tryOnce = () => {
       used += 1;
-      const child = spawn(gate.cmd[0], gate.cmd.slice(1), { stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(gate.cmd[0], gate.cmd.slice(1), {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: process.platform === 'win32',
+      });
       let out = '';
       child.stdout.on('data', (d) => { out += d; });
       child.stderr.on('data', (d) => { out += d; });
+      child.on('error', (err) => {
+        out += `\n[spawn error] ${err.message}\n`;
+        if (used < attempts) {
+          console.log(`  ${gate.name}: attempt ${used} failed to spawn — retrying (see E7 in editor_ux_spec.json)`);
+          tryOnce();
+          return;
+        }
+        resolve({ name: gate.name, ok: false, attempts: used, out });
+      });
       child.on('close', (code) => {
         if (code !== 0 && used < attempts) {
           console.log(`  ${gate.name}: attempt ${used} failed — retrying (see E7 in editor_ux_spec.json)`);
