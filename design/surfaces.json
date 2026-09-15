@@ -375,10 +375,30 @@
       "kind": "fxsec",
       "wireframe": false,
       "wireframeFile": null,
-      "group": "A",
-      "covers": [
-        "pc-empty-hint"
-      ]
+      "group": "A"
+    },
+    {
+      "id": "pc-empty-hint",
+      "openSteps": [
+        {
+          "eval": "fxState.pointColors=[];pcSel=-1;pcSyncUI();fxSection('pointcolor', true)"
+        },
+        {
+          "wait": 150
+        }
+      ],
+      "selector": "#pc-empty-hint",
+      "opened": true,
+      "states": {
+        "rest": true,
+        "hover": false,
+        "disabled": false
+      },
+      "note": "Only visible when fxState.pointColors is empty (pcSyncUI's own gate) -- was previously listed as unconditionally `covers`-ed by fxsec-pointcolor, which is false whenever a point color already exists when that surface opens (state bleed from an earlier capture step). Own openSteps forces the empty state before opening, per surface_coverage_check's own COVERS_HIDES_SURFACE remediation text.",
+      "kind": "hint",
+      "wireframe": false,
+      "wireframeFile": null,
+      "group": "A"
     },
     {
       "id": "fxsec-local",
