@@ -186,6 +186,9 @@ windows = { version = "0.58", features = [
     # one, despite the identical last path segment.
     "Win32_System_Com_StructuredStorage",
     "Win32_Storage_StructuredStorage",
+    # winvideothumb.rs's video poster path: IShellItemImageFactory::GetImage returns an HBITMAP,
+    # and GetDIBits (to read its pixels back into a JPEG) is GDI.
+    "Win32_Graphics_Gdi",
 ] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]

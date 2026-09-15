@@ -6,6 +6,54 @@
   if (!window.__TAURI__) return;
   const invoke = window.__TAURI__.core.invoke;
 
+  // ── window.CS_PLATFORM (docs/windows-port.md ground rule 1, G12) ─────────────────
+  // The ONE place shared JS (library-ui.js) may branch on macOS vs Windows — and it must check
+  // a capability field (e.g. `CS_PLATFORM.haptics`), never `CS_PLATFORM.os` directly, so a
+  // feature that's macOS-only today shows up on Windows as either working or cleanly hidden the
+  // moment the Rust side gains it. Set synchronously here from a `navigator.platform` sniff (so
+  // nothing that runs before the IPC round-trip below resolves — e.g. the first menu built —
+  // ever sees `undefined`), then immediately corrected from the real `platform_capabilities`
+  // Tauri command, which is the actual source of truth (e.g. it's the only side that knows
+  // Ultra HDR export hasn't shipped on Windows yet). Anything already rendered off the sniffed
+  // guess re-renders on the 'cs-platform-ready' event fired once the correction lands.
+  const macGuess = /Mac/.test(navigator.platform || '');
+  window.CS_PLATFORM = {
+    os: macGuess ? 'macos' : 'windows',
+    hdrExport: macGuess ? 'heic' : null,
+    eject: true,
+    haptics: macGuess,
+    fastThumb: true,
+    videoPoster: true,
+    revealLabel: macGuess ? 'Finder' : 'Explorer',
+    modKey: macGuess ? '⌘' : 'Ctrl',
+  };
+  invoke('platform_capabilities')
+    .then((caps) => {
+      window.CS_PLATFORM = caps;
+      window.dispatchEvent(new CustomEvent('cs-platform-ready', { detail: caps }));
+    })
+    .catch((e) => console.error('platform_capabilities', e));
+
+  // `⌘⇧E`-style shortcut-hint strings, without every call site hand-picking ⌘ vs Ctrl. `mods` is
+  // zero or more of 'shift'/'alt' (Ctrl/Cmd is always implied — every use here is a modified
+  // shortcut); order matches the existing hand-written labels (⌘⇧C, not ⌘C⇧).
+  window.csKbd = function (mods, key) {
+    const glyphs = { shift: '⇧', alt: '⌥' };
+    const list = Array.isArray(mods) ? mods : mods ? [mods] : [];
+    const macos = window.CS_PLATFORM.os === 'macos';
+    const modPart = list.map((m) => (macos ? glyphs[m] || '' : m === 'shift' ? 'Shift+' : m === 'alt' ? 'Alt+' : '')).join('');
+    return macos ? `${window.CS_PLATFORM.modKey}${modPart}${key}` : `${window.CS_PLATFORM.modKey}+${modPart}${key}`;
+  };
+
+  // A path's final component, independent of which OS wrote the separator — a path from the Rust
+  // side is always native-separated (`/` on macOS, `\` on Windows), and a dropped-file path from
+  // the WebView's own drag&drop is native-separated too, so splitting on either separator (never
+  // just '/') is correct on both platforms without needing to check CS_PLATFORM.os at all.
+  window.csBaseName = function (p) {
+    const parts = String(p).split(/[\\/]/);
+    return parts[parts.length - 1] || '';
+  };
+
   // loadRw2() has an unconditional guard — `if(!self.crossOriginIsolated) throw ...` — that
   // blocks RW2 loading whenever cross-origin isolation is off, since the WEB build's decoder
   // (libraw-wasm) needs SharedArrayBuffer for that. The native shim below never touches
@@ -352,25 +400,32 @@
 
   // ── DRK-style shell layout: everything is chromasmith-22.html's `body.deskx` mode
   // (grid, icon rail right, panel toggle, ⋯ menu, 44px deskbar) — the shell only turns it on
-  // and handles the two things a web page can't: the window drag region and traffic lights.
-  // titleBarStyle:"Overlay" (tauri.conf.json) keeps the traffic-light buttons floating over
-  // the web content; the deskbar's 84px left padding (deskx CSS) clears them, and the deskbar
-  // itself is the drag handle. Buttons inside it must be explicitly no-drag or every click
-  // becomes a window drag.
+  // and handles the one thing that differs by platform: the window drag region and traffic
+  // lights, which exist ONLY under macOS's titleBarStyle:"Overlay" (tauri.macos.conf.json).
+  // Windows uses a native title bar instead (decorations:true, tauri.windows.conf.json) with
+  // its own min/max/close and drag handle already provided by the OS, so none of this — the
+  // 84px traffic-light clearance (chromasmith-22.html/library-ui.js CSS, gated on
+  // body.mac-titlebar-overlay below), -webkit-app-region:drag, or data-tauri-drag-region —
+  // applies there; setting them anyway would just reserve dead space no button needs clearing.
+  // docs/windows-port.md Phase 3 / G3's window-frame decision; CS_PLATFORM.os (not a bare
+  // window.__TAURI__ check) is the capability gate per ground rule 1.
   const style = document.createElement('style');
   style.textContent = `
-    body.tauri-native #fx-deskbar{-webkit-app-region:drag}
-    body.tauri-native #fx-deskbar button,body.tauri-native #fx-deskbar-tools,
-    body.tauri-native #fx-deskbar-tools *,body.tauri-native #fx-overflow,
-    body.tauri-native #fx-overflow *{-webkit-app-region:no-drag}
+    body.mac-titlebar-overlay #fx-deskbar{-webkit-app-region:drag}
+    body.mac-titlebar-overlay #fx-deskbar button,body.mac-titlebar-overlay #fx-deskbar-tools,
+    body.mac-titlebar-overlay #fx-deskbar-tools *,body.mac-titlebar-overlay #fx-overflow,
+    body.mac-titlebar-overlay #fx-overflow *{-webkit-app-region:no-drag}
     body.tauri-native{height:100vh;overflow:hidden}
     body.tauri-native #log-area{z-index:3500}
   `;
   document.head.appendChild(style);
   document.body.classList.add('tauri-native');
   document.body.classList.add('deskx');
-  const deskbar = document.getElementById('fx-deskbar');
-  if (deskbar) deskbar.setAttribute('data-tauri-drag-region', '');
+  if (window.CS_PLATFORM.os === 'macos') {
+    document.body.classList.add('mac-titlebar-overlay');
+    const deskbar = document.getElementById('fx-deskbar');
+    if (deskbar) deskbar.setAttribute('data-tauri-drag-region', '');
+  }
   if (typeof applyFxLayout === 'function') applyFxLayout(); // re-fit now that deskx changed the geometry
 
   document.addEventListener('keydown', (e) => {

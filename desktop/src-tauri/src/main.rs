@@ -56,6 +56,8 @@ mod fastthumb;
 mod winthumb;
 #[cfg(target_os = "macos")]
 mod videothumb;
+#[cfg(windows)]
+mod winvideothumb;
 mod subject;
 mod ingest;
 mod catalog;
@@ -1104,6 +1106,53 @@ fn haptic_feedback(app: tauri::AppHandle) {
 #[tauri::command]
 fn haptic_feedback(_app: tauri::AppHandle) {}
 
+/// The single source of truth for every macOS-vs-Windows difference the frontend needs to know
+/// about (docs/windows-port.md ground rule 1: "one frontend, capability-gated, never OS-gated").
+/// `desktop-native.js` exposes this once as `window.CS_PLATFORM`; shared JS in library-ui.js
+/// checks a capability field, never `os` directly, so a feature that's macOS-only today shows up
+/// on Windows as either working or cleanly hidden the moment the Rust side gains it — never
+/// broken or silently wrong (the `split('/')` / "Reveal in Finder" / hard-coded ⌘-label class of
+/// bug this fixes, G12).
+#[derive(serde::Serialize)]
+struct PlatformCapabilities {
+    os: &'static str,
+    // Ultra HDR JPEG export (docs/windows-port.md Phase 4) isn't built yet, so Windows gets
+    // `null` here rather than a value that doesn't exist — update this the day that lands.
+    #[serde(rename = "hdrExport", skip_serializing_if = "Option::is_none")]
+    hdr_export: Option<&'static str>,
+    eject: bool,
+    haptics: bool,
+    #[serde(rename = "fastThumb")]
+    fast_thumb: bool,
+    #[serde(rename = "videoPoster")]
+    video_poster: bool,
+    #[serde(rename = "revealLabel")]
+    reveal_label: &'static str,
+    #[serde(rename = "modKey")]
+    mod_key: &'static str,
+}
+
+#[tauri::command]
+fn platform_capabilities() -> PlatformCapabilities {
+    let macos = cfg!(target_os = "macos");
+    PlatformCapabilities {
+        os: if macos { "macos" } else { "windows" },
+        hdr_export: if macos { Some("heic") } else { None },
+        // Both platforms implement eject (platform::eject) — macOS via diskutil-equivalent
+        // APIs, Windows via the KB165721 volume-handle sequence (docs/windows-port.md G9).
+        eject: true,
+        haptics: macos,
+        // Both platforms implement a fast (non-`image`-crate) thumbnail decode: ImageIO on
+        // macOS (fastthumb.rs), WIC on Windows (winthumb.rs).
+        fast_thumb: true,
+        // Both platforms implement video posters: AVFoundation on macOS (videothumb.rs),
+        // IShellItemImageFactory on Windows (winvideothumb.rs).
+        video_poster: true,
+        reveal_label: if macos { "Finder" } else { "Explorer" },
+        mod_key: if macos { "⌘" } else { "Ctrl" },
+    }
+}
+
 // Native HTTP download, bypassing the WKWebView network stack. The Google Photos Picker's
 // media bytes live on the `*.googleusercontent.com` user-content CDN; a cross-origin GET with
 // the required `Authorization: Bearer` header forces a CORS preflight the CDN never answers
@@ -2144,6 +2193,7 @@ fn main() {
             native_build_tag,
             open_url_native,
             haptic_feedback,
+            platform_capabilities,
             peek_raw_camera,
             read_file_bytes,
             write_file_bytes,
