@@ -293,13 +293,15 @@
       "priority": "P1",
       "cluster": "library-navigation",
       "title": "Shorten and clarify Library search wording",
-      "status": "backlog",
+      "status": "done",
       "recommended_executor": "Claude Code",
       "model": "claude-code:claude-sonnet-5",
       "reference": "apple-ui-tips",
       "depends_on": [],
       "acceptance": "Placeholder fits narrow supported widths and describes the searchable content without truncation.",
-      "source_id": 17
+      "source_id": 17,
+      "owner": "Claude (Sonnet 5)",
+      "completion_evidence": "2026-09-15: old placeholder 'Search name, keyword, or filter' (32 chars) was also slightly inaccurate — the live-typing path only substring-matches entry.name (desktop/library-ui.js applyFilters, ~L4351), it doesn't search keyword tags, and 'filter' described no distinct feature (Enter separately triggers AI/CLIP natural-language search per the box's own design comment at ~L1945). Measured the box's real rendered width at test/library_responsive_qa.mjs's own documented '820x700 (narrow — the squeeze floor)' viewport via getBoundingClientRect(): the input itself renders at only ~52px there (tighter than the CSS comment's assumed ~80px floor, because #lib-top-center's siblings — view toggle, selection-action hint, Export — squeeze it further at that width pre-item-16's sidebar-collapse). Even a shortened 'Search photos' still visibly truncated there. Landed on placeholder='Search' (matches how the file's own search icon plus a single word is a standard, universally-understood pattern, e.g. every browser/OS search field) plus a `title` attribute carrying the full accurate detail ('Search by filename, or press Enter to describe a photo (e.g. \"dog on a beach\") for AI search') for hover/screen-reader discoverability, since the acceptance's own real constraint (fits at the documented floor) made a longer self-describing placeholder impossible at that width. Verified live via desktop/dist (build-desktop.sh) with ?libtest=1 at both the 820x700 squeeze floor and normal desktop width — 'Search' renders fully at both, no clipping. `node test/export_harness.mjs` — 30/30, no GLSL errors. `npm run editor:gates` after `npm run components:build` — identical pre-existing failing set as the known baseline; no new regressions."
     },
     {
       "id": 13,

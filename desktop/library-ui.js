@@ -1953,7 +1953,7 @@
       <div id="lib-top-center">
       <div class="lib-search-wrap">
         ${ic('search', 14)}
-        <input id="lib-search" placeholder="Search name, keyword, or filter" />
+        <input id="lib-search" placeholder="Search" title="Search by filename, or press Enter to describe a photo (e.g. &quot;dog on a beach&quot;) for AI search" />
       </div>
       </div>
       <div id="lib-top-right">

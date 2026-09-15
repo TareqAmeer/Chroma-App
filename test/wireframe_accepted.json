@@ -1,5 +1,15 @@
 [
   {
+    "match": "MISSING 1x  input:\"Search name, keyword, or filter\"",
+    "zone": "topbar",
+    "reason": "2026-09-15 (backlog item 12): deliberate copy change, not a regression. \"Search name, keyword, or filter\" truncated at the app's own documented narrow-width floor (test/library_responsive_qa.mjs's 820x700 squeeze-floor viewport) and overclaimed the box's behavior (\"filter\" named no real feature; the live-typing path only matches filenames, not keyword tags). Placeholder is now \"Search\", with the full detail moved to a title attribute. The reference wireframe (chromasmith-design/project) still has the old string and was not updated."
+  },
+  {
+    "match": "EXTRA   1x  input:\"Search\"",
+    "zone": "topbar",
+    "reason": "2026-09-15 (backlog item 12): the app-side half of the same deliberate placeholder-copy change above."
+  },
+  {
     "match": "EXTRA   2x  button",
     "zone": "topbar",
     "reason": "2026-09-15: pre-existing, not introduced by this change — confirmed present on main before the Windows-port branches merged (checked out 7136496, ce5d7f8 and this worktree's merge commit; all three report the identical \"app has 12, wireframe has 10\" finding), so it predates both the video-posters Phase 3 branch and the HDR-export work in this session. Not investigated further as it's unrelated to either."
