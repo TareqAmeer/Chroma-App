@@ -981,13 +981,15 @@
       "priority": "P2",
       "cluster": "library-navigation",
       "title": "Soften sidebar dividers and use spacing for grouping",
-      "status": "backlog",
+      "status": "done",
       "recommended_executor": "Claude Code",
       "model": "claude-code:claude-sonnet-5",
       "reference": "linear-refresh",
       "depends_on": [],
       "acceptance": "Sidebar sections remain easy to distinguish with fewer heavy separators.",
-      "source_id": 11
+      "source_id": 11,
+      "owner": "Claude (Sonnet 5)",
+      "completion_evidence": "2026-09-15: audited before making any change (per this session's no-unnecessary-edits discipline) and found the acceptance criterion already satisfied by prior work, not yet reflected in this backlog's status. Every sidebar section (Collections, Folders, Keywords, People & Pets, Devices, Cloud, Albums, Drives — desktop/library-ui.js, sidebarSection() call sites ~L7621-9873) is separated by `.lib-coll-sep` (L1193: border-top:1px solid var(--divider-soft,var(--bdr)); margin-top:6px; padding-top:6px), a quiet, low-contrast divider plus real spacing — not the panel's own harder --bdr outer edge (#lib-side's own top/bottom border, L1115, which bounds the whole sidebar against the rest of the chrome, a different thing from inter-section separators). A code comment at L9853 confirms this was itself a deliberate wireframe-transplant fix from an earlier session ('Collections/Folders' getting an explicit lib-coll-sep 'until the wireframe diff [caught the rest]'), just never reflected back into this backlog entry. Verified live via desktop/dist (?libtest=1, both themes): COLLECTIONS/PEOPLE & PETS/ALBUMS/DRIVES read as distinct groups from whitespace and the section-eyebrow label alone, with no visible heavy line between them. No code change made — nothing to fix."
     },
     {
       "id": 57,
