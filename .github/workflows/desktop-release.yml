@@ -69,6 +69,15 @@ jobs:
       - name: Fetch models
         run: node scripts/fetch-models.mjs
 
+      # Must run before the resource-verify step below: tauri.conf.json's bundle.resources
+      # includes "../dist" (desktop/dist), which doesn't exist until this staging step creates
+      # it. This ordering bug was actually latent in the original desktop-dmg.yml too (the old
+      # "Stage the web app into desktop/dist" step ran via bash build-desktop.sh, but the verify
+      # step still ran before it) — it just never surfaced because that job had never had a
+      # confirmed real run. Caught live by this job's first actual CI run.
+      - name: Stage the web app into desktop/dist
+        run: node scripts/build-desktop.mjs
+
       - name: Verify every bundled resource is present
         # tauri.conf.json's bundle.resources lists these by path; a missing one fails the bundle
         # late and confusingly, so check first and name the file that is absent.
@@ -186,6 +195,11 @@ jobs:
 
       - name: Fetch models
         run: node scripts/fetch-models.mjs
+        shell: bash
+
+      # Same ordering requirement as the dmg job above: "../dist" doesn't exist until this runs.
+      - name: Stage the web app into desktop/dist
+        run: node scripts/build-desktop.mjs
         shell: bash
 
       - name: Verify every bundled resource is present
