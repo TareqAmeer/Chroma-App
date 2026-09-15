@@ -6,6 +6,54 @@
   if (!window.__TAURI__) return;
   const invoke = window.__TAURI__.core.invoke;
 
+  // ── window.CS_PLATFORM (docs/windows-port.md ground rule 1, G12) ─────────────────
+  // The ONE place shared JS (library-ui.js) may branch on macOS vs Windows — and it must check
+  // a capability field (e.g. `CS_PLATFORM.haptics`), never `CS_PLATFORM.os` directly, so a
+  // feature that's macOS-only today shows up on Windows as either working or cleanly hidden the
+  // moment the Rust side gains it. Set synchronously here from a `navigator.platform` sniff (so
+  // nothing that runs before the IPC round-trip below resolves — e.g. the first menu built —
+  // ever sees `undefined`), then immediately corrected from the real `platform_capabilities`
+  // Tauri command, which is the actual source of truth (e.g. it's the only side that knows
+  // Ultra HDR export hasn't shipped on Windows yet). Anything already rendered off the sniffed
+  // guess re-renders on the 'cs-platform-ready' event fired once the correction lands.
+  const macGuess = /Mac/.test(navigator.platform || '');
+  window.CS_PLATFORM = {
+    os: macGuess ? 'macos' : 'windows',
+    hdrExport: macGuess ? 'heic' : null,
+    eject: true,
+    haptics: macGuess,
+    fastThumb: true,
+    videoPoster: true,
+    revealLabel: macGuess ? 'Finder' : 'Explorer',
+    modKey: macGuess ? '⌘' : 'Ctrl',
+  };
+  invoke('platform_capabilities')
+    .then((caps) => {
+      window.CS_PLATFORM = caps;
+      window.dispatchEvent(new CustomEvent('cs-platform-ready', { detail: caps }));
+    })
+    .catch((e) => console.error('platform_capabilities', e));
+
+  // `⌘⇧E`-style shortcut-hint strings, without every call site hand-picking ⌘ vs Ctrl. `mods` is
+  // zero or more of 'shift'/'alt' (Ctrl/Cmd is always implied — every use here is a modified
+  // shortcut); order matches the existing hand-written labels (⌘⇧C, not ⌘C⇧).
+  window.csKbd = function (mods, key) {
+    const glyphs = { shift: '⇧', alt: '⌥' };
+    const list = Array.isArray(mods) ? mods : mods ? [mods] : [];
+    const macos = window.CS_PLATFORM.os === 'macos';
+    const modPart = list.map((m) => (macos ? glyphs[m] || '' : m === 'shift' ? 'Shift+' : m === 'alt' ? 'Alt+' : '')).join('');
+    return macos ? `${window.CS_PLATFORM.modKey}${modPart}${key}` : `${window.CS_PLATFORM.modKey}+${modPart}${key}`;
+  };
+
+  // A path's final component, independent of which OS wrote the separator — a path from the Rust
+  // side is always native-separated (`/` on macOS, `\` on Windows), and a dropped-file path from
+  // the WebView's own drag&drop is native-separated too, so splitting on either separator (never
+  // just '/') is correct on both platforms without needing to check CS_PLATFORM.os at all.
+  window.csBaseName = function (p) {
+    const parts = String(p).split(/[\\/]/);
+    return parts[parts.length - 1] || '';
+  };
+
   // loadRw2() has an unconditional guard — `if(!self.crossOriginIsolated) throw ...` — that
   // blocks RW2 loading whenever cross-origin isolation is off, since the WEB build's decoder
   // (libraw-wasm) needs SharedArrayBuffer for that. The native shim below never touches

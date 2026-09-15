@@ -1952,7 +1952,7 @@
       </div>
       <span id="lib-selection-action-hint" class="lib-selection-action-hint" aria-live="polite" hidden>Select photo(s) to use these actions</span>
       <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo" aria-describedby="lib-selection-action-hint">${ic('looks',14)}<span class="lbl">All FX</span></button>
-      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ⌘E" aria-describedby="lib-selection-action-hint">${ic('export',14)}<span class="lbl">Export</span></button>
+      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ${kbd([], 'E')}" aria-describedby="lib-selection-action-hint">${ic('export',14)}<span class="lbl">Export</span></button>
       <!-- id (not just a bare positioning div) so body.deskx can give it the SAME margin-left/
            padding-left/border-left divider as the Editor's own #fx-settings, instead of just the
            row's flat 8px gap — see the #lib-settings CSS rule below, copied from #fx-settings. -->
@@ -2275,7 +2275,28 @@
   }
 
   // ── helpers ─────────────────────────────────────────────────────────────────
-  const baseName = (p) => p.split('/').pop();
+  // baseName/kbd are used well above this point in the file (the topbar's Export button title
+  // is built during the initial overlay HTML assembly, long before this line runs top-to-bottom)
+  // — `function` declarations, not `const`, so they're hoisted and callable from anywhere in
+  // this closure regardless of source order. A `const` here previously threw "Cannot access
+  // 'kbd' before initialization" the moment the overlay HTML was built, which — caught live via
+  // the wireframe-inventory gate — silently left the whole topbar/sidebar/menus unrendered (a
+  // thrown error during template-literal assembly, not merely a wrong label).
+  //
+  // csBaseName (desktop-native.js) splits on either OS separator — a real path from the Rust
+  // side is native-separated ('/' on macOS, '\' on Windows), unlike this file's own test-mode
+  // mock IPC layer above, which fabricates always-'/'-separated paths on purpose. Falls back to
+  // the same split inline for LIBTEST (`?libtest=1`), which runs this file in a plain browser
+  // with no desktop-native.js loaded to define the global.
+  function baseName(p) { return window.csBaseName ? window.csBaseName(p) : String(p).split(/[\\/]/).pop(); }
+  // csKbd (desktop-native.js): ⌘E on macOS, Ctrl+E on Windows. Same LIBTEST fallback as baseName
+  // above — a plain-'⌘'-prefixed label when nothing sets window.csKbd, matching every literal
+  // this replaces.
+  function kbd(mods, key) {
+    if (window.csKbd) return window.csKbd(mods, key);
+    const list = Array.isArray(mods) ? mods : mods ? [mods] : [];
+    return `⌘${list.map((m) => (m === 'shift' ? '⇧' : m === 'alt' ? '⌥' : '')).join('')}${key}`;
+  }
   // Best-effort MIME from the filename — File objects built from read_file_bytes carry no
   // type, and chromasmith-22.html has type-based branches downstream (its loadFXImages filter
   // is now extension-aware too, but a real MIME keeps every other check honest).
@@ -4994,8 +5015,8 @@
     // ── Versions & edit ▸ — copy/paste/virtual copies/reset, everything about the RECIPE
     // rather than the file itself.
     const verMenu = submenu('Edit'); // 3.2.2 rename (was "Versions & edit") — see "Undo last reset" below for the other half of this item
-    verMenu.subItem('Copy edit', () => libCopyEdit(paths), '⌘⇧C');
-    const pasteRow = verMenu.subItem('Paste edit', () => libPasteEdit(paths), '⌘⇧V');
+    verMenu.subItem('Copy edit', () => libCopyEdit(paths), kbd('shift', 'C'));
+    const pasteRow = verMenu.subItem('Paste edit', () => libPasteEdit(paths), kbd('shift', 'V'));
     // Selective paste (darktable idiom): pick WHICH parts of the copied recipe to apply instead
     // of all-or-nothing — e.g. paste just the grain+halation without also overwriting the LUT.
     // chromasmithPasteEditSelective (chromasmith-22.html) shows the category picker and hands
@@ -5077,12 +5098,12 @@
     // the next reset overwrites the buffer — closing the app between now and using the undo
     // item is fine (the buffer lives in the .xmp sidecar, not in-memory), but leaving it too
     // long is still a real way to lose the edit for good.
-    const resetItem = verMenu.subItem('Reset edit', () => libResetEdit(paths), '⌘⇧R');
+    const resetItem = verMenu.subItem('Reset edit', () => libResetEdit(paths), kbd('shift', 'R'));
     if (!paths.some((p) => (state.sidecars.get(p) || {}).edited)) { resetItem.style.opacity = '.4'; resetItem.style.pointerEvents = 'none'; }
     // Enabled only when at least one selected photo actually has a pending buffer —
     // `last_reset_recipe` on its sidecar — and restores each photo INDEPENDENTLY (a multi-photo
     // reset can be partially undone: reset 3, then export 1, then undo the other 2).
-    const undoResetItem = verMenu.subItem('Undo last reset', () => libUndoLastReset(paths), '⌘Z');
+    const undoResetItem = verMenu.subItem('Undo last reset', () => libUndoLastReset(paths), kbd([], 'Z'));
     if (!paths.some((p) => (state.sidecars.get(p) || {}).last_reset_recipe)) {
       undoResetItem.style.opacity = '.4';
       undoResetItem.style.pointerEvents = 'none';
@@ -5174,7 +5195,7 @@
 
     // ── File ▸ — actions about the file on disk rather than its recipe.
     const fileMenu = submenu('File');
-    fileMenu.subItem('Reveal in Finder', () => invoke('reveal_in_finder', { path: paths[0] }).catch((e) => console.error('reveal_in_finder', e)));
+    fileMenu.subItem(`Reveal in ${window.CS_PLATFORM ? window.CS_PLATFORM.revealLabel : 'Finder'}`, () => invoke('reveal_in_finder', { path: paths[0] }).catch((e) => console.error('reveal_in_finder', e)));
     // ── Get Info (Bug #2 fix): the Info panel (renderInfoPanel) was fully built and functional
     // but had no discoverable trigger anywhere in the UI — only an undiscoverable 'i'/'I' keydown
     // shortcut (itself duplicated, with a second copy gated on state.source==='lr' that never
@@ -5183,7 +5204,7 @@
     // selected photo via `_kbCursor`, same as the keyboard shortcut, so the panel shows THIS
     // photo rather than whatever was focused before the right-click.
     fileMenu.subItem('Get Info', () => { state._kbCursor = paths[0]; window.__libInfo(true); }, 'I');
-    fileMenu.subItem(`Duplicate ${n > 1 ? n + ' photos' : ''}`.trim(), () => libDuplicatePaths(paths), '⌘D');
+    fileMenu.subItem(`Duplicate ${n > 1 ? n + ' photos' : ''}`.trim(), () => libDuplicatePaths(paths), kbd([], 'D'));
 
     sep();
     // ── Scoped face/CLIP analysis (N4) — the sidebar's People search icon
@@ -5210,7 +5231,7 @@
     // photo(s) in the editor and reveals the Export section instead of firing right away, so
     // quality/scope/etc can be changed first).
     const exportMenu = submenu(`Export ${n > 1 ? n + ' photos' : ''}`.trim());
-    exportMenu.subItem('Quick export', () => libExportPaths(paths), '⌘E');
+    exportMenu.subItem('Quick export', () => libExportPaths(paths), kbd([], 'E'));
     exportMenu.subItem('Export custom…', async () => {
       if (n <= 1) await openInEditor(paths[0]);
       else await openPathsInEditor(paths);
