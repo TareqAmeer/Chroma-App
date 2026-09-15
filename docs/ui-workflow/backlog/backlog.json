@@ -246,13 +246,15 @@
       "priority": "P1",
       "cluster": "library-thumbnails",
       "title": "Replace black thumbnail tiles with photo-derived placeholders",
-      "status": "backlog",
+      "status": "done",
       "recommended_executor": "Codex",
       "model": "codex:gpt-5.6-terra",
       "reference": "darkroom-rebuild",
       "depends_on": [],
       "acceptance": "Real library loading never presents a misleading solid-black tile; placeholder transitions to image without layout shift.",
-      "source_id": 8
+      "source_id": 8,
+      "owner": "Claude (Sonnet 5)",
+      "completion_evidence": "2026-09-15: audited every thumbnail surface for a literal solid-black loading tile. The main Library grid (`.lib-thumb-wrap`, desktop/library-ui.js) already used a neutral --canvas-parchment background with an <img class=\"loaded\"> opacity fade and a shimmer skeleton (`.lib-skel`) — no black-tile defect there. The one remaining instance was the memory-card import dialog's tile grid (desktop/library-ui.js tileEl(), ~L9144): each tile rendered a plain `background:#000` div until get_thumbnail_fast/get_thumbnail_or_offline resolved, so a slow card read showed a grid of solid black squares. Fixed by porting the Library grid's own pattern: `.imp-tile-img` now shows the existing `lib-shimmer` gradient animation (reused, not duplicated) instead of black, and the thumbnail is now a real `<img class=\"imp-tile-thumb\">` that starts at opacity:0 and fades in via `.loaded` (var(--duration-press) transition) on its onload — matching `.lib-thumb-wrap img.loaded` exactly, so no layout shift (tile stays 64x64, only opacity changes) and no black ever renders. Verified: `node -c desktop/library-ui.js` passes; `npm run components:build` regenerated after the markup change; `npm run editor:gates` shows the identical failing set (editor:inventory, token-check, axe-check, icon-check, motion-token-check, hover-focus-matrix, hidpi-check) with and without this change, confirmed by stashing the diff and re-running both ways — no new regressions introduced. Could not exercise the actual memory-card import flow live (no card reader attached in this environment); verification is code-path/markup parity with the already-shipped, working Library-grid pattern plus the gate diff, not a live screenshot of a card import."
     },
     {
       "id": 10,

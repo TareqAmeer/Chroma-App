@@ -1604,6 +1604,14 @@
     .lib-skel .lib-thumb-wrap{background:linear-gradient(100deg,var(--sur) 30%,var(--sur2) 50%,var(--sur) 70%);
       background-size:200% 100%;animation:lib-shimmer 1.4s ease-in-out infinite}
     @keyframes lib-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+    /* Memory-card import tiles: same shimmer-then-fade-in pattern as .lib-thumb-wrap above,
+       instead of a plain black tile while get_thumbnail_fast/get_thumbnail_or_offline resolve. */
+    .imp-tile-img{width:100%;height:100%;background:linear-gradient(100deg,var(--sur) 30%,var(--sur2) 50%,var(--sur) 70%);
+      background-size:200% 100%;animation:lib-shimmer 1.4s ease-in-out infinite}
+    .imp-tile-img:has(.imp-tile-thumb.loaded){animation:none;background:var(--sur2)}
+    .imp-tile-thumb{display:block;width:100%;height:100%;object-fit:cover;opacity:0;
+      transition:opacity var(--duration-press) ease}
+    .imp-tile-thumb.loaded{opacity:1}
     #lib-filters select,#lib-filters input{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:7px;padding:5px 8px;font-size:11px;min-width:0}
     /* Provisional preview must fully REPLACE the previous photo, not float over it: it fills
@@ -9139,7 +9147,7 @@
       el.className = 'imp-tile';
       el.dataset.path = path;
       el.style.cssText = 'position:relative;width:64px;height:64px;border-radius:6px;overflow:hidden;background:var(--sur2);cursor:pointer;flex:0 0 auto';
-      el.innerHTML = `<div class="imp-tile-img" style="width:100%;height:100%;background:#000 center/cover no-repeat"></div>
+      el.innerHTML = `<div class="imp-tile-img"><img class="imp-tile-thumb" alt="" /></div>
         <div class="imp-tile-check" style="position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:4px;background:rgba(0,0,0,.55);border:1.5px solid rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center">
           <svg class="imp-tile-mark" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#fff" stroke-width="3" style="display:${selected.has(path) ? '' : 'none'}"><path d="M4 12l5 5L20 6"/></svg>
         </div>
@@ -9180,8 +9188,11 @@
             if (buf && job.el.isConnected) {
               const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
               thumbUrls.push(url);
-              const img = job.el.querySelector('.imp-tile-img');
-              if (img) img.style.backgroundImage = `url(${url})`;
+              const img = job.el.querySelector('.imp-tile-thumb');
+              if (img) {
+                img.onload = () => img.classList.add('loaded');
+                img.src = url;
+              }
             }
           })
           .catch(() => {})
