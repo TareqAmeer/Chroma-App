@@ -135,6 +135,11 @@ ndarray = "0.16"
 # keeps `onig`, which CLIP's pretokenizer regex actually needs: its pattern uses lookahead
 # (`\s+(?!\S)`) that Rust's own `regex` crate cannot express, only a PCRE-like engine can.
 tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
+# Ultra HDR JPEG export (docs/windows-port.md Phase 4) — pure-Rust ISO 21496-1 gain-map JPEG
+# encoder, cross-platform (unlike gainmap.rs's HEIC path, which is Core Image/macOS-only), so
+# Windows gets HDR export too. See gainmap_uhdr.rs for how it reuses write_gainmap_heic_from_map's
+# existing headroom-map contract.
+ultrahdr-rs = "0.3"
 
 [profile.release]
 strip = true
@@ -186,6 +191,9 @@ windows = { version = "0.58", features = [
     # one, despite the identical last path segment.
     "Win32_System_Com_StructuredStorage",
     "Win32_Storage_StructuredStorage",
+    # winvideothumb.rs's video poster path: IShellItemImageFactory::GetImage returns an HBITMAP,
+    # and GetDIBits (to read its pixels back into a JPEG) is GDI.
+    "Win32_Graphics_Gdi",
 ] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
