@@ -9,7 +9,7 @@
 //
 // Sources + why each isn't committed to git: the README.md next to each destination directory
 // (vendor/sam2/README.md, vendor/rawdenoise/README.md, vendor/onnxruntime/win-x64/README.md).
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, copyFileSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
@@ -19,6 +19,20 @@ import os from 'node:os';
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const vendor = join(repoRoot, 'desktop', 'src-tauri', 'vendor');
 const forceWinOrt = process.argv.includes('--windows-ort');
+
+// fs.renameSync fails with EXDEV when src and dest are on different volumes — which they are on
+// GitHub's windows-latest runner (the OS temp dir extraction happens into is on C:, the checkout
+// is on D:). Confirmed live: the first CI run of this script failed exactly this way. Fall back to
+// copy+delete, same as `mv` across filesystems.
+function moveFile(src, dest) {
+  try {
+    renameSync(src, dest);
+  } catch (err) {
+    if (err.code !== 'EXDEV') throw err;
+    copyFileSync(src, dest);
+    rmSync(src, { force: true });
+  }
+}
 
 function sha256(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
@@ -74,8 +88,8 @@ async function fetchRawdenoise() {
   const extractDir = join(os.tmpdir(), `rawdenoise-nind-${Date.now()}-extracted`);
   extractZip(tmpZip, extractDir);
   const extractedSub = join(extractDir, 'rawdenoise-nind');
-  renameSync(join(extractedSub, 'model_linear.onnx'), linear);
-  renameSync(join(extractedSub, 'model_bayer.onnx'), bayer);
+  moveFile(join(extractedSub, 'model_linear.onnx'), linear);
+  moveFile(join(extractedSub, 'model_bayer.onnx'), bayer);
   rmSync(tmpZip, { force: true });
   rmSync(extractDir, { recursive: true, force: true });
   console.log(`  -> ${linear}, ${bayer}`);
@@ -106,9 +120,9 @@ async function fetchWindowsOrt() {
   extractZip(tmpZip, extractDir);
   const pkgDir = join(extractDir, `onnxruntime-win-x64-${version}`);
   mkdirSync(dir, { recursive: true });
-  renameSync(join(pkgDir, 'lib', 'onnxruntime.dll'), dll);
+  moveFile(join(pkgDir, 'lib', 'onnxruntime.dll'), dll);
   const licenseSrc = join(pkgDir, 'LICENSE');
-  if (existsSync(licenseSrc)) renameSync(licenseSrc, join(dir, 'LICENSE'));
+  if (existsSync(licenseSrc)) moveFile(licenseSrc, join(dir, 'LICENSE'));
   rmSync(tmpZip, { force: true });
   rmSync(extractDir, { recursive: true, force: true });
   console.log(`  -> ${dll} (release ${tag})`);
