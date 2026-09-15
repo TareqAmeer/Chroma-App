@@ -310,11 +310,17 @@ const verbose = process.argv.includes('--verbose');
 // minutes of actual CPU-bound work per core, because nothing ran alongside anything else.
 // CONCURRENCY caps how many gate subprocesses run at once — bounded (not "run all 30 at
 // once") because each is its own Chromium/WebKit instance and 30 simultaneous browser
-// launches would thrash memory/CPU worse than the sequential version it replaces. 4 is a
-// starting point for an 8-core machine (leaves headroom for the OS + this orchestrating
-// process); override with `--jobs N` if a given machine wants a different number.
+// launches would thrash memory/CPU worse than the sequential version it replaces. Bumped
+// 4 -> 8 (2026-09-15) after benchmarking on a 12-core machine: `--jobs=4/6/8/12`, 2-4 runs
+// each of the full ~30-gate advisory run (excluding editor:catalog-visual, blocked on this
+// machine by an unrelated npx-spawn Windows bug — see that gate's own history). 8 beat every
+// jobs=4 sample outright (208-273s vs 383-411s, a consistent ~35% cut) with no change in
+// which gates passed/failed run to run — only wall-clock varied, never correctness. jobs=12
+// averaged faster still (182-259s) but with much wider run-to-run variance and left no CPU
+// headroom for the OS on an interactive box, so it's a `--jobs=12` override, not the default.
+// Override with `--jobs=N` if a given machine wants a different number.
 const jobsArg = process.argv.find((a) => a.startsWith('--jobs='));
-const CONCURRENCY = jobsArg ? Math.max(1, parseInt(jobsArg.slice('--jobs='.length), 10) || 4) : 4;
+const CONCURRENCY = jobsArg ? Math.max(1, parseInt(jobsArg.slice('--jobs='.length), 10) || 8) : 8;
 
 // ⚠️ Was spawnSync — inside an `await runGate(...)` in each of the 4 `worker()` loops below, that
 // blocks Node's ONE event loop for the child's entire lifetime. Since JS is single-threaded, only

@@ -16,13 +16,53 @@ actual `.app` is unaffected.
 
 ## Running fewer gates on purpose (added 2026-09-13)
 
-`editor:gates` runs its ~30 gates through a small worker pool (4 at a time by default — every
+`editor:gates` runs its ~30 gates through a small worker pool (8 at a time by default — every
 gate binds an ephemeral port, so this is safe; override with `--jobs=N`), which cut a full run
 from ~15-20 minutes to a few minutes on an 8-core machine. `test/catalog_visual.mjs` (the shared-
 component screenshot suite) got its own `playwright.catalog.config.mjs` with `fullyParallel` and
 4 workers for the same reason — it used to be forced onto one worker per file by the shared
 `playwright.config.mjs` (which needs `fullyParallel:false` for its OTHER suites, which mutate
 shared localStorage/theme state) and was the single longest-running gate at ~13 minutes serial.
+
+### Concurrency tuned per-machine, not raised blindly (2026-09-15)
+
+The `--jobs` default was 4 (picked for an 8-core machine — see the comment above `CONCURRENCY`
+in `test/editor_gates.mjs`). Benchmarked on a 12-core Windows machine: `--jobs=4/6/8/12`, 2-4
+full advisory runs each (`editor:catalog-visual` excluded — see the npx-spawn note below). Same
+5 gates failed on every run regardless of `--jobs`, so concurrency changed wall-clock only, never
+which gates passed:
+
+| jobs | sample times (s) |
+|---|---|
+| 4  | 411, 383 |
+| 6  | 255, 254 |
+| 8  | 334, 263, 273, 208 |
+| 12 | 182, 259, 199, 203 |
+
+8 beat both jobs=4 samples on every single run (a consistent ~35% cut) and is now the default.
+jobs=12 averaged faster still but swung much more (182-259s, a single machine hiccup away from
+losing most of the gain) and leaves zero CPU headroom for the OS on an interactive box — use
+`--jobs=12` explicitly when you want the extra speed and aren't doing anything else with the
+machine, but it isn't the default.
+
+`playwright.catalog.config.mjs`'s `workers: 4` was left unchanged. Tested standalone
+(`npx playwright test test/catalog_visual.mjs --config=playwright.catalog.config.mjs
+--workers=N`, bypassing `editor:gates`), `workers=8` was both faster (58s vs 69s clean) and
+flake-free across 2 runs, while `workers=12` produced one timing flake in 2 runs — consistent
+with this file's existing comment about contention flakes at higher worker counts. But that
+comment's flakes were found under contention with *other gates* running at the same time, which
+is exactly the scenario standalone testing can't reproduce, and — on this machine —
+`editor:catalog-visual` currently can't be run inside `editor_gates.mjs`'s pool at all (see
+below), so raising this default couldn't be validated in its real usage context. Left at 4 until
+someone can benchmark it running alongside the rest of the suite.
+
+⚠️ **`editor:catalog-visual` crashes the entire `editor_gates.mjs` process on Windows** — its
+`spawn('npx', ...)` call has no `shell: true`, and Windows can't exec `npx.cmd` without a shell,
+so the whole worker pool dies with an uncaught `spawn npx ENOENT` instead of that one gate
+failing cleanly. This also means a fresh worktree needs `npm install` before `editor:gates` can
+run at all (`node_modules` isn't checked in) — the ENOENT looks identical whether the cause is
+the missing shell or missing deps, so check both. Fix tracked separately; work around it locally
+with `--skip=editor:catalog-visual` (or its `visual` tag) until it lands.
 
 That parallelism is still every gate, every time. When you already know what you're touching,
 narrow the run instead — every gate carries one or more tags (`structural`, `wireframe`, `tokens`,
