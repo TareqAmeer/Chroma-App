@@ -47,7 +47,7 @@ and machines.
 | G14 | `build-desktop.sh` needs `rsync` + `python3` (rsync not installed on Windows; `python3` on PATH is the Microsoft Store stub, not real Python) | `build-desktop.sh`, `desktop/package.json` | `npm run build:dist` fails | **Fixed** — `build-desktop.sh` is now a thin wrapper (`set -euo pipefail; node scripts/build-desktop.mjs`); the real staging logic moved to `scripts/build-desktop.mjs` (Node, `fs.cpSync`-based, cross-platform), and `desktop/package.json`'s `build:dist` calls the `.mjs` directly, so Windows never shells out to bash/rsync/python3 at all. Re-verified on this Windows machine: `npm run build:dist` (from `desktop/`) staged `desktop/dist/` (54.1M) clean |
 | G15 | `bump-build-stamp.sh` used `jq` (not installed), BSD `sed -i ''` (no-op under GNU sed), a bash-built POSIX path compared against a Windows path, and a `python -` + heredoc that ate its own piped stdin | `.claude/hooks/` | BUILD-stamp hook silently did nothing off macOS | **Fixed** — rewritten as `bump-build-stamp.py` + a thin `.sh` wrapper that picks a working `python`/`python3`; tested with 4 cases (stale+relative path, stale+native Windows path, already-today no-op, wrong-file no-op) |
 | G16 | `core.autocrlf=true`, `.gitattributes` only covered the two LFS globs | repo root | CRLF risk in `.sh` hooks and byte-compared goldens/hashes | **Fixed** — `.gitattributes` now sets `* text=auto eol=lf` plus explicit `binary` for onnx/image/icon formats |
-| G17 | `diagnostics/` + the `chromasmith-debugger`/`hang-diagnose`/`chromasmith-diagnostics` skills assume macOS (`sample`, dtrace, `~/Library/Logs`, `.app` bundle) | `diagnostics/*.py` | CLAUDE.md's debugger-agent rule doesn't work on Windows yet | Open — Phase 6 |
+| G17 | `diagnostics/` + the `chromasmith-debugger`/`hang-diagnose`/`chromasmith-diagnostics` skills assume macOS (`sample`, dtrace, `~/Library/Logs`, `.app` bundle) | `diagnostics/*.py` | CLAUDE.md's debugger-agent rule doesn't work on Windows yet | **Fixed — Phase 6 done.** Every OS-specific module now has a Windows implementation, verified live against a real running Windows app (`cli.py inspect`/`start`/`mark`/`db` all exercised end to end, not just `cargo check`'d): process discovery (`find_process.py`, psutil-based, no `pgrep`/`lsof`), freeze detection (`freeze_detector.py`, `user32!IsHungAppWindow` on the app's main HWND via new `win_helpers.py`, the same API Task Manager uses for "(Not Responding)"), log tailing (`log_file.py`, `%LOCALAPPDATA%\com.tareq.chromasmith\logs\Chromasmith.log` — path confirmed against a real log file, not guessed), `catalog.db` access (`db.py`, `%APPDATA%\Chromasmith\catalog.db` — note the PRODUCT NAME not the identifier, a real cross-platform naming split already in `platform/windows.rs`'s `data_root()`, confirmed against a real live db), child-process/stall tracking (`child_watch.py`, `psutil` children/cpu; pipe-fd-count is `None` on Windows — a genuine capability gap, documented, not silently faked), a window screenshot (`screenshot.py`, pure-ctypes GDI `PrintWindow` capture + a from-scratch minimal PNG encoder using stdlib `zlib` — no Pillow — verified against a real captured, correctly-rendered app window), and a best-effort stack dump (`sample_capture.py`, Sysinternals `procdump -ma`, degrades cleanly to "unavailable" like macOS's `sample` when not installed). `pipe_dtrace.py` is a documented no-op on Windows (no ETW equivalent wired up). **Also fixed as a prerequisite**: `diag_state_path` — the native diagnostics bridge (`chromasmith-22.html`'s `writeDiag()`, `write_file_bytes`) had a hardcoded `/tmp/chromasmith_diag_state.json` literal that silently failed on Windows (`std::fs::write` there resolves a leading `/` to the CURRENT DRIVE's root, not a real temp dir, and the JS side's own `catch(_){}` swallowed the error) — replaced with a new `diag.rs::diag_state_path()` Tauri command (`env::temp_dir()`), matched on the Python side by `tempfile.gettempdir()`; confirmed live that the bridge file now writes and is read correctly on Windows. |
 | G18 | Toolchain missing: no Rust, no Node, no VS Build Tools; `sam2/*.onnx` + `rawdenoise/*.onnx` not fetched (gitignored on both platforms); no `onnxruntime.dll` | this PC | Nothing builds | **Fixed** — Rust (rustup stable-x86_64-pc-windows-msvc), Node LTS, and VS Build Tools (Desktop C++ workload) all installed via winget; sam2/rawdenoise models and the win-x64 ORT dll all fetched. `cargo check --bin chromasmith` passes clean (warnings only) — **first-ever successful Windows compile of this port** |
 
 ### G6, in full: one hanging test, four real bugs
@@ -250,15 +250,18 @@ build wasn't fully clean before it ran out — rerun rather than trust a build t
   this port).
 
 ### Phase 6 — Windows diagnostics + real-engine testing
-- Launch dev/test builds with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`
-  and add `test/attach_app.mjs` (Playwright `chromium.connectOverCDP`), so selected gates
-  (`ui_audit`, export determinism, a library smoke) run **inside the real Windows app**. This
-  closes, for Windows, the "tests drive Chromium, not the shipping engine" gap CLAUDE.md §2 warns
-  about for macOS.
-- `diagnostics/`: branch `log_file.py` to `%LOCALAPPDATA%\com.tareq.chromasmith\logs`;
-  `find_process`/`process_metrics` via psutil; JS stack sampling via CDP (reuses the
-  `hang-diagnose` approach); native stacks via `cdb`/`procdump` only when needed. Update the
-  debugger agent + diagnostics skill with a short "on Windows" section.
+- **Diagnostics tool: done** (2026-09-15), see G17 above for the full module-by-module list and
+  live verification. `log_file.py`/`db.py` branch to the real Windows paths (confirmed against a
+  live app, not guessed); `find_process`/`process_metrics`/`child_watch` via psutil; native stacks
+  via Sysinternals `procdump` when present, degrading cleanly when not (matches macOS's `sample`
+  degrade). `hang-diagnose`'s CDP stack sampling needed no change — it already drives the WebView's
+  own JS debugger, and WebView2 supports CDP the same as WKWebView.
+- **Still open**: launching dev/test builds with
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` and adding
+  `test/attach_app.mjs` (Playwright `chromium.connectOverCDP`), so selected gates (`ui_audit`,
+  export determinism, a library smoke) run **inside the real Windows app** rather than a bare
+  Chromium instance — this closes, for Windows, the "tests drive Chromium, not the shipping
+  engine" gap CLAUDE.md §2 warns about for macOS. Not attempted this pass.
 
 ---
 
