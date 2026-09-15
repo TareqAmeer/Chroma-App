@@ -60,7 +60,7 @@
         ".lib-btn"
       ],
       "appleComponent": "Button",
-      "instanceCount": 268
+      "instanceCount": 267
     },
     "icon-button": {
       "selectors": [
@@ -116,12 +116,12 @@
       "instances": [
         "desktop/library-ui.js:1984:icon:heart",
         "desktop/library-ui.js:2178:icon:heart",
-        "desktop/library-ui.js:5881:icon:heart"
+        "desktop/library-ui.js:5886:icon:heart"
       ]
     }
   },
   "coverage": {
-    "sourceLocatableInstances": 767,
+    "sourceLocatableInstances": 766,
     "dynamicInstances": [
       "chromasmith-22.html:15508:button",
       "chromasmith-22.html:16151:button",
@@ -140,12 +140,12 @@
       "chromasmith-22.html:20997:button",
       "chromasmith-22.html:21022:button",
       "desktop/library-ui.js:1989:button",
-      "desktop/library-ui.js:4723:button",
-      "desktop/library-ui.js:5874:select",
-      "desktop/library-ui.js:5875:select",
-      "desktop/library-ui.js:6901:button",
-      "desktop/library-ui.js:9267:select",
-      "desktop/library-ui.js:9273:select"
+      "desktop/library-ui.js:4728:button",
+      "desktop/library-ui.js:5879:select",
+      "desktop/library-ui.js:5880:select",
+      "desktop/library-ui.js:6906:button",
+      "desktop/library-ui.js:9272:select",
+      "desktop/library-ui.js:9278:select"
     ],
     "withoutStableSelector": [
       "chromasmith-22.html:338:select",
@@ -260,12 +260,12 @@
       "desktop/library-ui.js:1940:button",
       "desktop/library-ui.js:1941:button",
       "desktop/library-ui.js:2163:select",
-      "desktop/library-ui.js:3274:select",
-      "desktop/library-ui.js:4723:button",
-      "desktop/library-ui.js:6063:select",
-      "desktop/library-ui.js:6564:select",
+      "desktop/library-ui.js:3279:select",
+      "desktop/library-ui.js:4728:button",
+      "desktop/library-ui.js:6068:select",
       "desktop/library-ui.js:6569:select",
-      "desktop/library-ui.js:6597:select"
+      "desktop/library-ui.js:6574:select",
+      "desktop/library-ui.js:6602:select"
     ],
     "note": "Source line is authoritative. A missing selector or dynamic declaration is visible debt, not silently treated as covered."
   },
@@ -10003,24 +10003,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:3195:button",
+      "key": "desktop/library-ui.js:3202:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 3195,
-      "tag": "button",
-      "selector": "#lib-empty-addphotos",
-      "id": "lib-empty-addphotos",
-      "classes": [
-        "lib-btn"
-      ],
-      "label": "Add photos",
-      "dynamic": false
-    },
-    {
-      "key": "desktop/library-ui.js:3196:button",
-      "family": "button",
-      "source": "desktop/library-ui.js",
-      "line": 3196,
+      "line": 3202,
       "tag": "button",
       "selector": "#lib-empty-addfolder",
       "id": "lib-empty-addfolder",
@@ -10031,10 +10017,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:3274:select",
+      "key": "desktop/library-ui.js:3279:select",
       "family": "select",
       "source": "desktop/library-ui.js",
-      "line": 3274,
+      "line": 3279,
       "tag": "select",
       "selector": null,
       "id": null,
@@ -10043,30 +10029,30 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:3747:icon:chevron",
+      "key": "desktop/library-ui.js:3752:icon:chevron",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 3747,
+      "line": 3752,
       "selector": null,
       "icon": "chevron",
       "size": "11",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:3748:icon:folder",
+      "key": "desktop/library-ui.js:3753:icon:folder",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 3748,
+      "line": 3753,
       "selector": null,
       "icon": "folder",
       "size": "13",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:4677:button",
+      "key": "desktop/library-ui.js:4682:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 4677,
+      "line": 4682,
       "tag": "button",
       "selector": "#lib-astro-cancel",
       "id": "lib-astro-cancel",
@@ -10078,10 +10064,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:4678:button",
+      "key": "desktop/library-ui.js:4683:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 4678,
+      "line": 4683,
       "tag": "button",
       "selector": "#lib-astro-median",
       "id": "lib-astro-median",
@@ -10093,10 +10079,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:4679:button",
+      "key": "desktop/library-ui.js:4684:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 4679,
+      "line": 4684,
       "tag": "button",
       "selector": "#lib-astro-mean",
       "id": "lib-astro-mean",
@@ -10108,10 +10094,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:4723:button",
+      "key": "desktop/library-ui.js:4728:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 4723,
+      "line": 4728,
       "tag": "button",
       "selector": null,
       "id": null,
@@ -10123,10 +10109,10 @@
       "dynamic": true
     },
     {
-      "key": "desktop/library-ui.js:4726:button",
+      "key": "desktop/library-ui.js:4731:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 4726,
+      "line": 4731,
       "tag": "button",
       "selector": "#lib-collage-cancel",
       "id": "lib-collage-cancel",
@@ -10138,20 +10124,20 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:5420:icon:video",
+      "key": "desktop/library-ui.js:5425:icon:video",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 5420,
+      "line": 5425,
       "selector": null,
       "icon": "video",
       "size": "10",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:5656:button",
+      "key": "desktop/library-ui.js:5661:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 5656,
+      "line": 5661,
       "tag": "button",
       "selector": "#lib-info-close",
       "id": "lib-info-close",
@@ -10162,10 +10148,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:5740:button",
+      "key": "desktop/library-ui.js:5745:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 5740,
+      "line": 5745,
       "tag": "button",
       "selector": "[data-act=\"reject\"]",
       "id": null,
@@ -10176,10 +10162,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:5741:button",
+      "key": "desktop/library-ui.js:5746:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 5741,
+      "line": 5746,
       "tag": "button",
       "selector": "[data-act=\"pick\"]",
       "id": null,
@@ -10190,10 +10176,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:5742:button",
+      "key": "desktop/library-ui.js:5747:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 5742,
+      "line": 5747,
       "tag": "button",
       "selector": "[data-act=\"clear-label\"]",
       "id": null,
@@ -10204,10 +10190,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:5743:button",
+      "key": "desktop/library-ui.js:5748:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 5743,
+      "line": 5748,
       "tag": "button",
       "selector": "[data-act=\"fav\"]",
       "id": null,
@@ -10218,10 +10204,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:5744:button",
+      "key": "desktop/library-ui.js:5749:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 5744,
+      "line": 5749,
       "tag": "button",
       "selector": "[data-act=\"deselect\"]",
       "id": null,
@@ -10232,10 +10218,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:5804:button",
+      "key": "desktop/library-ui.js:5809:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 5804,
+      "line": 5809,
       "tag": "button",
       "selector": "#lib-empty-import",
       "id": "lib-empty-import",
@@ -10246,10 +10232,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:5805:button",
+      "key": "desktop/library-ui.js:5810:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 5805,
+      "line": 5810,
       "tag": "button",
       "selector": "#lib-empty-open",
       "id": "lib-empty-open",
@@ -10260,10 +10246,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:5874:select",
+      "key": "desktop/library-ui.js:5879:select",
       "family": "select",
       "source": "desktop/library-ui.js",
-      "line": 5874,
+      "line": 5879,
       "tag": "select",
       "selector": ".lib-cmp-photo-sel",
       "id": null,
@@ -10274,10 +10260,10 @@
       "dynamic": true
     },
     {
-      "key": "desktop/library-ui.js:5875:select",
+      "key": "desktop/library-ui.js:5880:select",
       "family": "select",
       "source": "desktop/library-ui.js",
-      "line": 5875,
+      "line": 5880,
       "tag": "select",
       "selector": ".lib-cmp-src-sel",
       "id": null,
@@ -10288,52 +10274,40 @@
       "dynamic": true
     },
     {
-      "key": "desktop/library-ui.js:5879:icon:flagGreen",
+      "key": "desktop/library-ui.js:5884:icon:flagGreen",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 5879,
+      "line": 5884,
       "selector": null,
       "icon": "flagGreen",
       "size": "15",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:5880:icon:close",
+      "key": "desktop/library-ui.js:5885:icon:close",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 5880,
+      "line": 5885,
       "selector": null,
       "icon": "close",
       "size": "12",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:5881:icon:heart",
+      "key": "desktop/library-ui.js:5886:icon:heart",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 5881,
+      "line": 5886,
       "selector": null,
       "icon": "heart",
       "size": "15",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:6063:select",
+      "key": "desktop/library-ui.js:6068:select",
       "family": "select",
       "source": "desktop/library-ui.js",
-      "line": 6063,
-      "tag": "select",
-      "selector": null,
-      "id": null,
-      "classes": [],
-      "label": null,
-      "dynamic": false
-    },
-    {
-      "key": "desktop/library-ui.js:6564:select",
-      "family": "select",
-      "source": "desktop/library-ui.js",
-      "line": 6564,
+      "line": 6068,
       "tag": "select",
       "selector": null,
       "id": null,
@@ -10354,10 +10328,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:6597:select",
+      "key": "desktop/library-ui.js:6574:select",
       "family": "select",
       "source": "desktop/library-ui.js",
-      "line": 6597,
+      "line": 6574,
       "tag": "select",
       "selector": null,
       "id": null,
@@ -10366,20 +10340,32 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:6612:icon:close",
+      "key": "desktop/library-ui.js:6602:select",
+      "family": "select",
+      "source": "desktop/library-ui.js",
+      "line": 6602,
+      "tag": "select",
+      "selector": null,
+      "id": null,
+      "classes": [],
+      "label": null,
+      "dynamic": false
+    },
+    {
+      "key": "desktop/library-ui.js:6617:icon:close",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 6612,
+      "line": 6617,
       "selector": null,
       "icon": "close",
       "size": "10",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:6901:button",
+      "key": "desktop/library-ui.js:6906:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 6901,
+      "line": 6906,
       "tag": "button",
       "selector": ".fx-settings-cat",
       "id": null,
@@ -10390,30 +10376,30 @@
       "dynamic": true
     },
     {
-      "key": "desktop/library-ui.js:7339:icon:chevron",
+      "key": "desktop/library-ui.js:7344:icon:chevron",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 7339,
+      "line": 7344,
       "selector": null,
       "icon": "chevron",
       "size": "11",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:7508:icon:drive",
+      "key": "desktop/library-ui.js:7513:icon:drive",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 7508,
+      "line": 7513,
       "selector": null,
       "icon": "drive",
       "size": "13",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:7571:button",
+      "key": "desktop/library-ui.js:7576:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 7571,
+      "line": 7576,
       "tag": "button",
       "selector": "#lib-verify-close",
       "id": "lib-verify-close",
@@ -10424,130 +10410,130 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:7610:icon:drive",
+      "key": "desktop/library-ui.js:7615:icon:drive",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 7610,
+      "line": 7615,
       "selector": null,
       "icon": "drive",
       "size": "13",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:7642:icon:chevron",
+      "key": "desktop/library-ui.js:7647:icon:chevron",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 7642,
+      "line": 7647,
       "selector": null,
       "icon": "chevron",
       "size": "11",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:7649:icon:chevron",
+      "key": "desktop/library-ui.js:7654:icon:chevron",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 7649,
+      "line": 7654,
       "selector": null,
       "icon": "chevron",
       "size": "11",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:7717:icon:chevron",
+      "key": "desktop/library-ui.js:7722:icon:chevron",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 7717,
+      "line": 7722,
       "selector": null,
       "icon": "chevron",
       "size": "11",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:7724:icon:chevron",
+      "key": "desktop/library-ui.js:7729:icon:chevron",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 7724,
+      "line": 7729,
       "selector": null,
       "icon": "chevron",
       "size": "11",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:7775:icon:search",
+      "key": "desktop/library-ui.js:7780:icon:search",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 7775,
+      "line": 7780,
       "selector": null,
       "icon": "search",
       "size": "13",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:8053:icon:focus",
+      "key": "desktop/library-ui.js:8058:icon:focus",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 8053,
+      "line": 8058,
       "selector": null,
       "icon": "focus",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:8064:icon:focus",
+      "key": "desktop/library-ui.js:8069:icon:focus",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 8064,
+      "line": 8069,
       "selector": null,
       "icon": "focus",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:8071:icon:image",
+      "key": "desktop/library-ui.js:8076:icon:image",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 8071,
+      "line": 8076,
       "selector": null,
       "icon": "image",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:8093:icon:image",
-      "family": "icon",
-      "source": "desktop/library-ui.js",
-      "line": 8093,
-      "selector": null,
-      "icon": "image",
-      "size": "14",
-      "dynamic": false
-    },
-    {
-      "key": "desktop/library-ui.js:8098:icon:video",
+      "key": "desktop/library-ui.js:8098:icon:image",
       "family": "icon",
       "source": "desktop/library-ui.js",
       "line": 8098,
+      "selector": null,
+      "icon": "image",
+      "size": "14",
+      "dynamic": false
+    },
+    {
+      "key": "desktop/library-ui.js:8103:icon:video",
+      "family": "icon",
+      "source": "desktop/library-ui.js",
+      "line": 8103,
       "selector": null,
       "icon": "video",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:8114:icon:chevron",
+      "key": "desktop/library-ui.js:8119:icon:chevron",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 8114,
+      "line": 8119,
       "selector": null,
       "icon": "chevron",
       "size": "11",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:8390:button",
+      "key": "desktop/library-ui.js:8395:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 8390,
+      "line": 8395,
       "tag": "button",
       "selector": "#hq-offline-quit-wait",
       "id": "hq-offline-quit-wait",
@@ -10556,10 +10542,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:8391:button",
+      "key": "desktop/library-ui.js:8396:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 8391,
+      "line": 8396,
       "tag": "button",
       "selector": "#hq-offline-quit-anyway",
       "id": "hq-offline-quit-anyway",
@@ -10568,10 +10554,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:8545:button",
+      "key": "desktop/library-ui.js:8550:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 8545,
+      "line": 8550,
       "tag": "button",
       "selector": "#lib-act-pause",
       "id": "lib-act-pause",
@@ -10583,20 +10569,20 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:9226:icon:chevron",
+      "key": "desktop/library-ui.js:9231:icon:chevron",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 9226,
+      "line": 9231,
       "selector": null,
       "icon": "chevron",
       "size": "12",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:9260:button",
+      "key": "desktop/library-ui.js:9265:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 9260,
+      "line": 9265,
       "tag": "button",
       "selector": "#imp-select-all",
       "id": "imp-select-all",
@@ -10605,10 +10591,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:9261:button",
+      "key": "desktop/library-ui.js:9266:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 9261,
+      "line": 9266,
       "tag": "button",
       "selector": "#imp-select-none",
       "id": "imp-select-none",
@@ -10617,10 +10603,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:9266:button",
+      "key": "desktop/library-ui.js:9271:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 9266,
+      "line": 9271,
       "tag": "button",
       "selector": "#imp-dest-pick",
       "id": "imp-dest-pick",
@@ -10629,10 +10615,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:9267:select",
+      "key": "desktop/library-ui.js:9272:select",
       "family": "select",
       "source": "desktop/library-ui.js",
-      "line": 9267,
+      "line": 9272,
       "tag": "select",
       "selector": "#imp-folder",
       "id": "imp-folder",
@@ -10641,10 +10627,10 @@
       "dynamic": true
     },
     {
-      "key": "desktop/library-ui.js:9273:select",
+      "key": "desktop/library-ui.js:9278:select",
       "family": "select",
       "source": "desktop/library-ui.js",
-      "line": 9273,
+      "line": 9278,
       "tag": "select",
       "selector": "#imp-name",
       "id": "imp-name",
@@ -10653,10 +10639,10 @@
       "dynamic": true
     },
     {
-      "key": "desktop/library-ui.js:9278:button",
+      "key": "desktop/library-ui.js:9283:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 9278,
+      "line": 9283,
       "tag": "button",
       "selector": "#imp-backup-pick",
       "id": "imp-backup-pick",
@@ -10665,10 +10651,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:9279:button",
+      "key": "desktop/library-ui.js:9284:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 9279,
+      "line": 9284,
       "tag": "button",
       "selector": "#imp-backup-clear",
       "id": "imp-backup-clear",
@@ -10677,20 +10663,20 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:9279:icon:close",
+      "key": "desktop/library-ui.js:9284:icon:close",
       "family": "icon",
       "source": "desktop/library-ui.js",
-      "line": 9279,
+      "line": 9284,
       "selector": null,
       "icon": "close",
       "size": "14",
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:9290:button",
+      "key": "desktop/library-ui.js:9295:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 9290,
+      "line": 9295,
       "tag": "button",
       "selector": "#imp-go",
       "id": "imp-go",
@@ -10699,10 +10685,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:9438:button",
+      "key": "desktop/library-ui.js:9443:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 9438,
+      "line": 9443,
       "tag": "button",
       "selector": "#lib-lr-connect",
       "id": "lib-lr-connect",
@@ -10713,10 +10699,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:10248:button",
+      "key": "desktop/library-ui.js:10253:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 10248,
+      "line": 10253,
       "tag": "button",
       "selector": "#lib-offq-ignore",
       "id": "lib-offq-ignore",
@@ -10728,10 +10714,10 @@
       "dynamic": false
     },
     {
-      "key": "desktop/library-ui.js:10249:button",
+      "key": "desktop/library-ui.js:10254:button",
       "family": "button",
       "source": "desktop/library-ui.js",
-      "line": 10249,
+      "line": 10254,
       "tag": "button",
       "selector": "#lib-offq-apply",
       "id": "lib-offq-apply",

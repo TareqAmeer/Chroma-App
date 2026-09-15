@@ -3190,13 +3190,18 @@
   function renderLibraryNoRoot() {
     const grid = document.getElementById('lib-grid');
     if (!grid) return;
-    grid.innerHTML = '<div id="lib-empty" style="grid-column:1/-1;padding:60px 20px">Add photos or a folder'
-      + '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center">'
-      + '<button class="lib-btn" id="lib-empty-addphotos">Add photos</button>'
-      + '<button class="lib-btn" id="lib-empty-addfolder">Add a folder</button>'
-      + '</div>'
-      + '<div style="margin-top:10px;font-size:11px">Drop an image to start · '
-      + '<a id="lib-empty-gphotos" style="color:var(--acc);cursor:pointer;text-decoration:underline">Google Photos…</a></div></div>';
+    // Same hero pattern as showLrEmptyState's approved wireframe (icon, bold heading, muted
+    // subtitle, ONE filled primary button) — this used to give "Add photos" and "Add a folder"
+    // equal visual weight side by side, with no clear first action for a brand-new Library.
+    // "Add a folder" is primary: it's the action that actually builds an ongoing, browsable
+    // Library (what this tab is for); "Add photos" only feeds loose files straight to the
+    // Editor, so it — and Google Photos — read as subordinate alternatives underneath.
+    grid.innerHTML = `<div id="lib-empty" style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;padding:60px 20px;min-height:50vh">
+      <div style="font-weight:600;font-size:14px;color:var(--txt)">Nothing in your Library yet</div>
+      <div style="font-size:11px;color:var(--mut);max-width:280px">Add a folder to build a browsable, always-in-sync Library — or drop a photo anywhere to start editing right away.</div>
+      <button class="lib-btn" id="lib-empty-addfolder" style="background:var(--acc);color:#000;border-color:var(--acc);font-weight:600;padding:7px 16px">Add a folder</button>
+      <div style="font-size:11px;color:var(--mut)"><a id="lib-empty-addphotos" style="color:var(--acc);cursor:pointer;text-decoration:underline">Add photos</a> instead · <a id="lib-empty-gphotos" style="color:var(--acc);cursor:pointer;text-decoration:underline">Google Photos…</a></div>
+    </div>`;
     const addPhotos = document.getElementById('lib-empty-addphotos');
     if (addPhotos) addPhotos.onclick = () => { if (typeof window.fxPickPhotos === 'function') window.fxPickPhotos(); };
     const addFolder = document.getElementById('lib-empty-addfolder');

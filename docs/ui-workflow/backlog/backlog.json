@@ -144,7 +144,7 @@
       "priority": "P0",
       "cluster": "library-trust",
       "title": "Center the Library empty state around one primary action",
-      "status": "backlog",
+      "status": "done",
       "recommended_executor": "Claude Code",
       "model": "claude-code:claude-opus-5",
       "reference": "apple-ui-tips",
@@ -152,7 +152,9 @@
         2
       ],
       "acceptance": "At supported widths, the primary import action is centered, secondary action is subordinate, and labels never wrap awkwardly.",
-      "source_id": 36
+      "source_id": 36,
+      "owner": "Claude (Sonnet 5)",
+      "completion_evidence": "2026-09-15: item 2 (loading/error states) is still in_progress, but its scope is disjoint from this item's target — the TRUE first-launch empty state (renderLibraryNoRoot(), desktop/library-ui.js), which had no loading/error concern to begin with; proceeded on that basis rather than blocking. Before: 'Add photos' and 'Add a folder' were two equal-weight buttons side by side with no stated hierarchy, plus a small 'Google Photos…' link — acceptance explicitly requires one centered primary action with the rest subordinate. Rewrote to match the already-approved hero pattern from showLrEmptyState() (icon-less variant: bold heading, muted subtitle, ONE filled var(--acc) primary button, centered column, min-height:50vh): 'Add a folder' is now the sole primary action (it is what actually builds an ongoing, browsable Library — this tab's whole purpose — vs. 'Add photos', which only feeds loose files straight to the Editor), with 'Add photos' and 'Google Photos…' demoted to a single subordinate text-link line beneath it. Verified live via desktop/dist built from build-desktop.sh, loaded with ?libtest=1 (injecting the exact new markup since the test harness ships canned photos, not a true empty catalog) in both a normal desktop width and the app's actual documented narrow floor (640x700, per test/library_responsive_qa.mjs's own viewport list — not the app's unsupported 375px phone width): heading/subtitle/button stay centered, no label wraps, primary button reads unmistakably as the one action. `node test/export_harness.mjs` — 30/30 renders, no GLSL compile errors. `npm run editor:gates` after `npm run components:build` — identical pre-existing failing set (editor:inventory, token-check, axe-check, icon-check, motion-token-check, hover-focus-matrix, hidpi-check) as the known baseline; no new regressions."
     },
     {
       "id": 4,
