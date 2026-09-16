@@ -1542,6 +1542,11 @@
     .lib-thumb-wrap img.thumb-error{opacity:0}
     .lib-thumb-wrap.thumb-broken::after{content:'⚠';position:absolute;top:50%;left:50%;
       transform:translate(-50%,-50%);color:var(--mut);font-size:16px}
+    /* Distinct from thumb-broken: the file isn't missing/corrupt on disk, it's simply not present
+       on THIS machine (a catalog row from another computer/volume). A dashed-circle "offline"
+       glyph reads as "elsewhere", not "something is wrong with this photo". */
+    .lib-thumb-wrap.thumb-missing::after{content:'⌀';position:absolute;top:50%;left:50%;
+      transform:translate(-50%,-50%);color:var(--mut);font-size:16px}
     /* Small corner icon badges, DRK-style — no text pills. Edited (orange pen) sits
        top-right; the RAW "R" badge sits top-left so the two never collide. */
     .lib-edited-badge{position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;
@@ -3004,7 +3009,13 @@
           _thumbFailCount++;
           if (job.imgEl.isConnected) {
             job.imgEl.classList.add('thumb-error');
-            job.imgEl.parentElement?.classList.add('thumb-broken');
+            // "file not found on this machine" (library.rs's get_thumbnail_or_offline) means the
+            // catalog row points at a file that was never copied to this computer's volumes — not
+            // a real decode failure. Distinct icon/tooltip so it doesn't read as "this file is
+            // broken" when the fix is "copy it over and rescan", not "check the file".
+            const missing = /file not found on this machine/.test(String(err));
+            job.imgEl.parentElement?.classList.add(missing ? 'thumb-missing' : 'thumb-broken');
+            if (missing) job.imgEl.parentElement?.setAttribute('title', 'File not found on this machine — it may only exist on another computer or drive. Copy it here and rescan the folder.');
           }
         })
         .finally(() => {

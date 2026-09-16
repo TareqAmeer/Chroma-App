@@ -565,7 +565,40 @@ pub fn get_thumbnail_or_offline(path: String, state: tauri::State<crate::catalog
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     match crate::catalog::offline_thumb_bytes(&conn, &path) {
         Some(bytes) => Ok(tauri::ipc::Response::new(bytes)),
-        None => Err(format!("no thumbnail available (online or offline) for {path}")),
+        // Distinguish "the file simply isn't on this machine" (a catalog row pointing at another
+        // volume — e.g. imported on a different computer and never copied over) from a genuine
+        // decode failure, so the frontend can show a different placeholder/tooltip instead of the
+        // same warning-triangle "something is wrong with this file" icon for both. Checked last,
+        // only once every real recovery path (live decode, offline cache) has already failed.
+        None => Err(missing_thumbnail_error(&path)),
+    }
+}
+
+fn missing_thumbnail_error(path: &str) -> String {
+    if std::fs::metadata(path).is_err() {
+        format!("file not found on this machine: {path}")
+    } else {
+        format!("no thumbnail available (online or offline) for {path}")
+    }
+}
+
+#[cfg(test)]
+mod missing_thumbnail_error_tests {
+    use super::missing_thumbnail_error;
+
+    #[test]
+    fn nonexistent_path_reports_file_not_found() {
+        let msg = missing_thumbnail_error("Z:\\this\\path\\does\\not\\exist\\clip.mp4");
+        assert!(msg.contains("file not found on this machine"), "got: {msg}");
+    }
+
+    #[test]
+    fn existing_path_reports_generic_no_thumbnail() {
+        // Any real file on disk (this source file itself) — present, so the branch must NOT
+        // claim it's missing even though no thumbnail could be produced for it.
+        let msg = missing_thumbnail_error(file!());
+        assert!(!msg.contains("file not found on this machine"), "got: {msg}");
+        assert!(msg.contains("no thumbnail available"), "got: {msg}");
     }
 }
 
