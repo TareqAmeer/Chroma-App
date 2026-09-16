@@ -47,6 +47,14 @@ def sample(pid, cpu_interval=None):
                     fds = len(p.open_files())
                 except (psutil.AccessDenied, psutil.Error):
                     fds = None
+                except Exception:
+                    # Windows-specific: a process with a very large handle table (Chromasmith's
+                    # WebView2 host routinely has thousands) makes psutil's NtQuerySystemInformation
+                    # call raise a bare RuntimeError("SystemExtendedHandleInformation buffer too big")
+                    # instead of a psutil.Error — verified live 2026-09-16 crashing the whole watcher
+                    # loop on every single sample. open_files() is best-effort instrumentation, not
+                    # something worth taking the process down over.
+                    fds = None
             return {
                 'ts': time.time(),
                 'category': 'process',

@@ -24,6 +24,16 @@ import sys
 import tempfile
 import time
 
+# Windows' console defaults to the system codepage (cp1252 etc.), which can't encode the
+# emoji this tool prints (e.g. the stale-binary warning) — verified live 2026-09-16: it
+# crashed the ENTIRE watcher with UnicodeEncodeError before a single event was recorded,
+# every run, not just the first. macOS/Linux terminals are UTF-8 by default so this is a
+# Windows-only reconfigure; reconfigure() is Python 3.7+, which this tool already requires.
+if sys.platform == 'win32':
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, 'reconfigure'):
+            _stream.reconfigure(encoding='utf-8', errors='replace')
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 ROOT = os.path.dirname(os.path.abspath(__file__))

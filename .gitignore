@@ -125,3 +125,4 @@ playwright-report/
 # render identically share a file), but the matrix is thousands of images per surface group.
 # Only the generated contact-sheet grids + spec.json (design/asbuilt/) are committed.
 design/asbuilt-full/
+diagnostics/tools/
