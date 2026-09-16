@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 17;
+const SCHEMA_VERSION: i64 = 18;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -733,6 +733,87 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_label    ON photos(label)", [])?;
     }
 
+    // v17 -> v18: `rel_path`/`rel_dir` are now always `/`-separated (see walk_root's doc comment)
+    // instead of the platform's native separator. A catalog that was ever scanned on Windows
+    // before this fix has `\`-separated rows; a catalog restored from macOS onto Windows (or any
+    // volume scanned from both OSes) can have BOTH forms for the same file, since `volume_identity`
+    // already reunites the same external volume across OSes but the old native-separator rel_path
+    // did not agree — the duplicate is a real orphaning bug (confirmed live: a 57,655-photo
+    // catalog restored from macOS backup onto Windows became 114,932 rows, exactly 2x, with
+    // faces_scanned_at frozen at the old count because every "new" Windows-side row started with
+    // no face data). This step: (1) rewrites every existing `\` to `/` in `photos.rel_path` and
+    // `rel_dir`, then (2) for any `(volume_id, rel_path)` collision that produces, keeps the row
+    // WITH `faces_scanned_at` set (falling back to whichever is `present`) and copies the other
+    // row's fresher stat facts onto it before deleting the loser — `ON DELETE CASCADE` handles
+    // photo_faces/labels/etc for the (data-less) loser automatically. Also normalizes `roots` and
+    // `walked_dirs` the same way so `is_ancestor_rel`'s now-`/`-only check keeps matching them.
+    if version < 18 {
+        conn.execute("UPDATE roots SET rel_path = REPLACE(rel_path, '\\', '/') WHERE rel_path LIKE '%\\%'", [])?;
+        conn.execute("UPDATE walked_dirs SET rel_dir = REPLACE(rel_dir, '\\', '/') WHERE rel_dir LIKE '%\\%'", [])?;
+        // ⚠️ Group and merge duplicates FIRST, by the NORMALIZED form, before rewriting anything
+        // in place — a bulk `UPDATE photos SET rel_path = REPLACE(...)` would try to write the
+        // canonical value onto BOTH the keeper and the loser in the same statement, tripping
+        // `UNIQUE(volume_id, rel_path)` the instant the loser's row is touched (the keeper, if
+        // already `/`-only, already holds that exact value). Doing the merge in Rust first means
+        // the loser is deleted before its rel_path ever needs to collide with anything.
+        let all: Vec<(i64, i64, String, Option<i64>, i64, i64, i64, i64, i64, i64)> = conn
+            .prepare(
+                "SELECT id, volume_id, rel_path, faces_scanned_at, present, size, mtime, scan_gen, added, sidecar_mtime
+                 FROM photos WHERE rel_path LIKE '%\\%'",
+            )?
+            .query_map([], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        for (id, volume_id, rel_path, faces_scanned_at, present, size, mtime, scan_gen, added, sidecar_mtime) in all {
+            let canon = rel_path.replace('\\', "/");
+            let existing: Option<(i64, Option<i64>, i64, i64, i64, i64, i64, i64)> = conn
+                .query_row(
+                    "SELECT id, faces_scanned_at, present, size, mtime, scan_gen, added, sidecar_mtime
+                     FROM photos WHERE volume_id = ?1 AND rel_path = ?2",
+                    params![volume_id, canon],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)),
+                )
+                .ok();
+            match existing {
+                None => {
+                    // No canonical counterpart yet — safe to just rewrite this row in place.
+                    conn.execute(
+                        "UPDATE photos SET rel_path = ?1, rel_dir = REPLACE(rel_dir, '\\', '/') WHERE id = ?2",
+                        params![canon, id],
+                    )?;
+                }
+                Some((other_id, other_faces, other_present, _, _, _, _, _)) => {
+                    // Two rows for the same file: keep whichever already has face data (falling
+                    // back to whichever is `present`), adopt the OTHER row's fresher stat facts
+                    // onto the keeper, and delete the loser — `ON DELETE CASCADE` takes care of
+                    // the loser's photo_faces/labels/etc, which is empty anyway since it never
+                    // matched anything before this migration.
+                    let this_is_keeper = match (faces_scanned_at.is_some(), other_faces.is_some()) {
+                        (true, false) => true,
+                        (false, true) => false,
+                        _ => present >= other_present,
+                    };
+                    let (keeper_id, loser_id) = if this_is_keeper { (id, other_id) } else { (other_id, id) };
+                    let (fresh_size, fresh_mtime, fresh_present, fresh_scan_gen, fresh_added, fresh_sidecar) = if this_is_keeper {
+                        (size, mtime, present, scan_gen, added, sidecar_mtime)
+                    } else {
+                        conn.query_row(
+                            "SELECT size, mtime, present, scan_gen, added, sidecar_mtime FROM photos WHERE id = ?1",
+                            params![id],
+                            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
+                        )?
+                    };
+                    conn.execute(
+                        "UPDATE photos SET size = ?1, mtime = ?2, present = ?3, scan_gen = ?4, added = MAX(added, ?5), sidecar_mtime = ?6 WHERE id = ?7",
+                        params![fresh_size, fresh_mtime, fresh_present, fresh_scan_gen, fresh_added, fresh_sidecar, keeper_id],
+                    )?;
+                    conn.execute("DELETE FROM photos WHERE id = ?1", params![loser_id])?;
+                }
+            }
+        }
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -946,16 +1027,20 @@ pub struct CatalogRoot {
 /// `desc.starts_with(anc)` would wrongly match "PHOTOS2" against "PHOTOS". "" is the volume root
 /// and is an ancestor of everything.
 ///
-/// `rel_path` strings are built from a canonicalized path's native separator (`\` on Windows,
-/// `/` elsewhere — see `add_root_run`), so the segment-boundary byte checked here has to match
-/// that, not a hardcoded `/`: a Windows rel_path like `Users\a\2026` under ancestor `Users\a`
-/// otherwise never registers as a descendant (found live during this port's Windows test run —
-/// see docs/windows-port.md G6).
+/// `rel_path` strings are always `/`-separated regardless of platform (see `add_root_run` and
+/// `walk_root`) — a stable, OS-independent form is required for `UNIQUE(volume_id, rel_path)` to
+/// keep matching rows for an external volume that's been scanned from more than one OS (the
+/// marker-file identity in `volume_identity` already reunites the volume itself across OSes; the
+/// rel_path string has to agree too, or a rescan from a different OS inserts a duplicate row per
+/// file instead of matching the existing one — see `walk_root`'s doc comment for the incident
+/// this caused). This was previously native-separator (`\` on Windows), which is why a Windows
+/// rel_path like `Users\a\2026` under ancestor `Users\a` needed a native-separator check here too
+/// (docs/windows-port.md G6) — now both sides are always `/`, so the check is a plain `/`.
 fn is_ancestor_rel(anc: &str, desc: &str) -> bool {
     if anc.is_empty() || anc == desc {
         return true;
     }
-    desc.starts_with(anc) && desc.as_bytes().get(anc.len()) == Some(&(std::path::MAIN_SEPARATOR as u8))
+    desc.starts_with(anc) && desc.as_bytes().get(anc.len()) == Some(&b'/')
 }
 
 /// Registers a folder to be catalogued. Scanning is opt-in per root, never "the whole disk" —
@@ -983,11 +1068,15 @@ pub fn add_root_run(conn: &Connection, path: &str, kind: Option<String>) -> Resu
     let canon = dunce::canonicalize(&p).map_err(|e| format!("resolve {path}: {e}"))?;
     let (volume_id, mount_point) = upsert_volume(conn, &canon).map_err(|e| e.to_string())?;
     let canon_str = canon.to_string_lossy().into_owned();
+    // Canonical separator is always `/` — see `walk_root`'s and `is_ancestor_rel`'s doc comments;
+    // this is the other place a root's own rel_path gets built, so it has to agree with them or a
+    // root re-added on Windows (native `\`) would never match its own ancestor/descendant check
+    // against a rel_path stored (from macOS, or from `walk_root`'s per-file rows) as `/`.
     let rel_path = canon_str
         .strip_prefix(&mount_point)
         .unwrap_or(&canon_str)
-        .trim_start_matches('/')
-        .to_string();
+        .trim_start_matches(['/', '\\'])
+        .replace('\\', "/");
 
     let existing: Vec<(i64, String)> = conn
         .prepare("SELECT id, rel_path FROM roots WHERE volume_id = ?1")
@@ -1186,8 +1275,17 @@ fn walk_root(volume_mount: &Path, root_rel: &str, on_found: &mut dyn FnMut(usize
             let ext = ext_lower(&p);
             let Some(kind) = media_kind(&ext) else { continue };
             let Ok(rel) = p.strip_prefix(volume_mount) else { continue };
-            let rel_path = rel.to_string_lossy().into_owned();
-            let rel_dir = rel.parent().map(|d| d.to_string_lossy().into_owned()).unwrap_or_default();
+            // ⚠️ Canonical separator is always `/`, regardless of platform. `rel.to_string_lossy()`
+            // on Windows yields backslash-joined components; a volume that's ever been scanned
+            // from macOS (POSIX `/`) stores rows keyed on `/`-separated rel_path, and
+            // `UNIQUE(volume_id, rel_path)` is a raw string compare — so without normalizing here,
+            // rescanning the SAME externally-marker-identified volume (which correctly reunites
+            // across OSes, see `volume_identity`) from Windows treated every file as brand new:
+            // one row per OS, the older one silently orphaned (marked absent, its face-scan/
+            // people data invisible) instead of matched. Found via a real cross-OS catalog
+            // restore where photo count exactly doubled with faces_scanned_at unchanged.
+            let rel_path = rel.to_string_lossy().replace('\\', "/");
+            let rel_dir = rel.parent().map(|d| d.to_string_lossy().replace('\\', "/")).unwrap_or_default();
             let meta = entry.metadata().ok();
             let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
             let mtime = meta
@@ -1254,7 +1352,9 @@ fn walk_dirs_and_sidecars_only(volume_mount: &Path, root_rel: &str) -> Vec<(Stri
         let Ok(rel) = p.strip_prefix(volume_mount) else { return };
         let Ok(meta) = std::fs::metadata(p) else { return };
         let Some(mtime) = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_nanos() as u64) else { return };
-        out.push((rel.to_string_lossy().into_owned(), mtime));
+        // Canonical `/` separator, same as walk_root — this feeds `walked_dirs` and the
+        // `rel_dir LIKE '{root_rel}/%'` check in scan_run, both of which already assume `/`.
+        out.push((rel.to_string_lossy().replace('\\', "/"), mtime));
     };
     while let Some(dir) = stack.pop() {
         stat_rel(&dir, &mut out);
@@ -5376,7 +5476,11 @@ pub fn catalog_counts(state: tauri::State<CatalogState>) -> Result<std::collecti
 /// agree instead of just trusting they were written to match.
 pub fn catalog_counts_run(conn: &Connection) -> Result<std::collections::HashMap<String, u64>, String> {
     let mut m = std::collections::HashMap::new();
-    let all: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    // `(stack_id IS NULL OR stack_id = id)` matches query_run's own grouped-view predicate — the
+    // "All Photos" row must count exactly what the grid shows when you click it (top-level
+    // leaders/unstacked photos only), not every stacked derivative underneath (see
+    // date_counts_run's identical fix and its doc comment for the live incident this covers).
+    let all: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND (stack_id IS NULL OR stack_id = id)", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     m.insert("all".to_string(), all as u64);
     let blurry: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND blurry = 1", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     m.insert("blurry".to_string(), blurry as u64);
@@ -5441,10 +5545,18 @@ pub fn catalog_date_counts(state: tauri::State<CatalogState>) -> Result<DateCoun
 }
 
 pub fn date_counts_run(conn: &Connection) -> Result<DateCounts, String> {
+    // ⚠️ Must match query_run's own grouped-view predicate exactly (`stack_id IS NULL OR
+    // stack_id = id`) — verified live 2026-09-16: without it, a month with real stacks (e.g. a
+    // Sony body's paired RAW+JPG, auto-stacked as leader+derivative) showed a bigger number here
+    // than the grid actually displayed for that same month (43 here vs 36 real top-level photos
+    // in the grid), because this counted every derivative separately instead of folding it into
+    // its leader the way the grid does. A "By Date" count that doesn't match what clicking into
+    // that date actually shows is worse than no count.
     let mut stmt = conn
         .prepare(
             "SELECT cap_y, cap_m, cap_d, COUNT(*) FROM photos
              WHERE present = 1 AND cap_y IS NOT NULL AND cap_m IS NOT NULL AND cap_d IS NOT NULL
+               AND (stack_id IS NULL OR stack_id = id)
              GROUP BY cap_y, cap_m, cap_d
              ORDER BY cap_y DESC, cap_m DESC, cap_d DESC",
         )
@@ -5459,7 +5571,8 @@ pub fn date_counts_run(conn: &Connection) -> Result<DateCounts, String> {
     drop(stmt);
     let no_date: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM photos WHERE present = 1 AND (cap_y IS NULL OR cap_m IS NULL OR cap_d IS NULL)",
+            "SELECT COUNT(*) FROM photos WHERE present = 1 AND (cap_y IS NULL OR cap_m IS NULL OR cap_d IS NULL)
+               AND (stack_id IS NULL OR stack_id = id)",
             [],
             |r| r.get(0),
         )
@@ -6978,10 +7091,13 @@ fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {
         // the old code every local-volume lookup here failed, e.g. "not in the catalog" errors on
         // a photo the very same test had just scanned.
         let Ok(rel) = Path::new(path).strip_prefix(Path::new(last_path.as_str())) else { continue };
-        let rel = rel.to_string_lossy();
+        // Canonical `/` separator, same as walk_root/add_root_run — `rel_path` is stored that
+        // way regardless of platform now, so the lookup key has to match it or every local-volume
+        // lookup on Windows fails with "not in the catalog" for a photo just scanned.
+        let rel = rel.to_string_lossy().replace('\\', "/");
         if let Ok(id) = conn.query_row(
             "SELECT id FROM photos WHERE volume_id = ?1 AND rel_path = ?2",
-            params![vid, rel.as_ref()],
+            params![vid, rel.as_str()],
             |r| r.get(0),
         ) {
             return Some(id);
@@ -7145,12 +7261,10 @@ mod tests {
 
     #[test]
     fn is_ancestor_rel_is_segment_aware_not_a_string_prefix() {
-        // rel_path segments are joined with the platform's native separator (see is_ancestor_rel's
-        // own doc comment), so the fixture strings below build with it too, not a hardcoded "/" —
-        // a literal "PHOTOS/2026" is never a real Windows rel_path and would test the wrong thing.
-        let sep = std::path::MAIN_SEPARATOR;
-        let photos_2026 = format!("PHOTOS{sep}2026");
-        let photos_2026_08 = format!("PHOTOS{sep}2026{sep}08");
+        // rel_path segments are always `/`-joined regardless of platform (see is_ancestor_rel's
+        // own doc comment) — a real Windows rel_path is `/`-separated too now, not native `\`.
+        let photos_2026 = "PHOTOS/2026".to_string();
+        let photos_2026_08 = "PHOTOS/2026/08".to_string();
         assert!(is_ancestor_rel("", "PHOTOS"), "empty (volume root) is an ancestor of everything");
         assert!(is_ancestor_rel("PHOTOS", "PHOTOS"), "a path is its own ancestor");
         assert!(is_ancestor_rel("PHOTOS", &photos_2026));
@@ -7260,10 +7374,9 @@ mod tests {
         // Insert both roots DIRECTLY (bypassing add_root_run's own dedupe) to simulate rows that
         // predate this fix.
         let outer = add_root_run(&conn, &root.to_string_lossy(), None).unwrap();
-        // MAIN_SEPARATOR, not a hardcoded "/" — outer.rel_path is native-separator (backslash on
-        // Windows, see add_root_run), and a mixed-separator nested_rel wouldn't match
-        // is_ancestor_rel's native-separator segment-boundary check.
-        let nested_rel = format!("{}{}2026", outer.rel_path, std::path::MAIN_SEPARATOR);
+        // `/`, not MAIN_SEPARATOR — outer.rel_path is always `/`-separated now regardless of
+        // platform (see add_root_run), and is_ancestor_rel's segment-boundary check is `/`-only.
+        let nested_rel = format!("{}/2026", outer.rel_path);
         conn.execute(
             "INSERT INTO roots (volume_id, rel_path, kind, added) VALUES (?1, ?2, 'originals', 0)",
             params![outer.volume_id, nested_rel],
@@ -7323,6 +7436,77 @@ mod tests {
         assert_eq!(version2, SCHEMA_VERSION);
         let label: String = conn.query_row("SELECT label FROM volumes WHERE uuid='local'", [], |r| r.get(0)).unwrap();
         assert_eq!(label, "This Mac", "a second migrate() must not disturb existing data");
+    }
+
+    /// Regression for a real cross-OS catalog restore: a volume scanned once from macOS (`/`
+    /// rel_path) and once from Windows on the pre-fix code (`\` rel_path) for the SAME file ended
+    /// up as two `photos` rows under the same `(volume_id, rel_path-that-differs-only-by-slash)`
+    /// — the marker-file volume identity correctly reunited the volume, but the rel_path string
+    /// didn't agree, so a Windows rescan inserted a duplicate instead of matching the existing
+    /// row. That orphaned the macOS row's face-scan data (`faces_scanned_at`/`photo_faces`): a
+    /// 57,655-photo catalog with 50,412 already face-scanned became 114,932 rows after one
+    /// Windows rescan, with faces_scanned_at frozen at the old count. The v17->v18 migration must
+    /// collapse that back to one row per file, keeping the face data.
+    #[test]
+    fn cross_os_separator_duplicate_photos_are_merged_keeping_face_data() {
+        let dir = std::env::temp_dir().join(format!("cs_catalog_sepdupe_{}_{}", std::process::id(), gen_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("catalog.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        // Force the connection to schema v17 (pre-fix) by running migrate() then rolling the
+        // version back — same technique `schema_migrates_and_is_idempotent`'s sibling test uses
+        // to simulate "an existing database from before this fix".
+        migrate(&conn).unwrap();
+        conn.pragma_update(None, "user_version", 17i64).unwrap();
+
+        conn.execute(
+            "INSERT INTO volumes (id, uuid, label, last_path, is_local, last_seen) VALUES (2, 'ext-marker-1', 'Crucial', 'D:\\', 0, 0)",
+            [],
+        )
+        .unwrap();
+        // The macOS-scanned row: `/`-separated rel_path, already face-scanned, with a linked
+        // photo_faces + people row — the data this regression exists to protect.
+        conn.execute(
+            "INSERT INTO photos (id, volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, faces_scanned_at)
+             VALUES (1, 2, 'PHOTOS/2020/img.jpg', 'PHOTOS/2020', 'img.jpg', 'img.jpg', 'jpg', 'photo', 100, 1000, 1000, 0, 1700000000)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO people (id, name, created) VALUES (1, 'Alice', 0)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO photo_faces (id, photo_id, person_id, x0, y0, x1, y1, score, kps) VALUES (1, 1, 1, 0, 0, 1, 1, 0.9, '[]')",
+            [],
+        )
+        .unwrap();
+        // The Windows-rescanned duplicate: same file, `\`-separated rel_path, fresher stat facts,
+        // no face data yet — exactly what the pre-fix `walk_root` inserted.
+        conn.execute(
+            "INSERT INTO photos (id, volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present)
+             VALUES (2, 2, 'PHOTOS\\2020\\img.jpg', 'PHOTOS\\2020', 'img.jpg', 'img.jpg', 'jpg', 'photo', 100, 2000, 2000, 1)",
+            [],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM photos", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1, "the separator-only duplicate must be merged into one row");
+        let (rel_path, faces_scanned_at, present, mtime): (String, Option<i64>, i64, i64) = conn
+            .query_row("SELECT rel_path, faces_scanned_at, present, mtime FROM photos", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            })
+            .unwrap();
+        assert_eq!(rel_path, "PHOTOS/2020/img.jpg", "rel_path must be normalized to `/`");
+        assert!(faces_scanned_at.is_some(), "the surviving row must keep the macOS row's face-scan data");
+        assert_eq!(present, 1, "the surviving row must adopt the fresher scan's present flag");
+        assert_eq!(mtime, 2000, "the surviving row must adopt the fresher scan's stat facts");
+        let faces: i64 = conn.query_row("SELECT COUNT(*) FROM photo_faces", [], |r| r.get(0)).unwrap();
+        assert_eq!(faces, 1, "photo_faces linked to the kept row must survive (loser had none to cascade-delete)");
     }
 
     /// query_run's stack_n/thumb_path columns are correlated subqueries keyed on stack_id, run

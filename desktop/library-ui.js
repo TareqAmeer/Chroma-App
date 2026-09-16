@@ -8420,9 +8420,24 @@
   // (catalog-scan: {phase,done,total,current}) and card import (ingest-progress:
   // {done,total,current,bytes_done,bytes_total}) — nothing new on the Rust side, this just
   // gives those events somewhere to land.
-  const STAGE_LABELS = { walk: 'Scanning folders', subfolders: 'Scanning subfolders', metadata: 'Reading photo info', sidecar: 'Syncing ratings', cache: 'Loading thumbnails', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', pets: 'Finding pets', embed: 'Analyzing faces', clip: 'Indexing for search', paint: 'Loading thumbnails' };
-  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'pets', 'embed', 'clip'];
+  const STAGE_LABELS = { walk: 'Scanning folders', subfolders: 'Scanning subfolders', metadata: 'Reading photo info', sidecar: 'Syncing ratings', cache: 'Loading thumbnails', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', pets: 'Finding pets', embed: 'Analyzing faces', clip: 'Indexing for search', paint: 'Loading thumbnails', hq_offline: 'Preparing full-res cache' };
+  // ⚠️ Every `phase` string catalog.rs's `progress()` callbacks can emit via the generic
+  // 'catalog-scan' event MUST have an entry here — verified live 2026-09-16: hq_offline_run
+  // (catalog.rs) emits phase:"hq_offline", which was missing from this list, so
+  // STAGE_ORDER.indexOf('hq_offline') was always -1. renderActivity's `activeIdx` (the "which
+  // stage are we on" index) landed on -1 too, and since no stage index ever equals -1, EVERY
+  // row in the popover rendered as "queued" forever — a real, indefinitely-running scan looked
+  // identical to one that had never started. Confirmed by inspecting the live `activity` state
+  // via window._activityDebugSnapshot() (see its own comment) rather than guessing from the UI.
+  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'pets', 'embed', 'clip', 'hq_offline'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
+  // Debug hook — `activity`/`_activityQueue` are closure-private, so a stuck "Indexing library"
+  // panel (every stage permanently "queued") was otherwise only diagnosable by reading the whole
+  // module or adding a throwaway console.log + rebuild. window.__TAURI__.core.invoke calls made
+  // directly from DevTools (bypassing the normal openFolder/runRescanFlags JS wrappers) still
+  // fire this app's own 'catalog-scan'/'registry-rescan' Tauri event listeners, so activityUpdate
+  // can be inspected without needing to reproduce through the real UI flow.
+  window._activityDebugSnapshot = () => ({ activity: { ...activity }, queued: [..._activityQueue.entries()] });
   let _activityClearTimer = null;
   // Stall watchdog: distinguishes "still working" from "stopped working" — before this, a
   // wedged native call or crashed worker looked IDENTICAL to a healthy long-running scan,
