@@ -193,10 +193,65 @@ mod list_dir_tests {
     }
 }
 
+/// ⚠️ `CS_CACHE_DIR` overrides this for tests — added 2026-09-16 after confirmed live pollution:
+/// every test that calls `set_sidecar_run` (version_tests, sidecar_preservation_tests, and others)
+/// ends up calling `registry_set`/`registry_write` for the real "edited"/"favorites"/"flagged"/
+/// "rejected" registries, since neither read this override before now. Those registries live
+/// under THIS machine's real `%LOCALAPPDATA%\Chromasmith\thumbnails\*_registry.json` — the exact
+/// same files the live desktop app reads for its Flagged/Favorites/Rejected sidebar counts. A
+/// user running `cargo test` on their own dev machine (not a CI sandbox) had over a thousand
+/// leftover test-fixture temp paths (`cs_sidecar_<pid>_foreign\photo.jpg` and similar) counted as
+/// real flagged/favorite photos, on top of doubling every real one via an unrelated path bug —
+/// see abs_path()'s own doc comment for that half of the incident. Mirrors `catalog_dir()`'s
+/// `CS_CATALOG_DIR` (catalog.rs) exactly, including the same "tests must set/unset around
+/// themselves, serialized via a lock" caveat — see CACHE_DIR_TEST_LOCK below.
 pub(crate) fn cache_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("CS_CACHE_DIR") {
+        let p = PathBuf::from(dir);
+        let _ = std::fs::create_dir_all(&p);
+        return p;
+    }
     let dir = crate::platform::cache_root().join("thumbnails");
     let _ = std::fs::create_dir_all(&dir);
     dir
+}
+
+/// Serializes every test that sets `CS_CACHE_DIR` — env vars are process-global, and Rust's test
+/// runner executes `#[test]` functions concurrently on multiple threads by default, so two tests
+/// setting different values at once would race (one test's registry writes landing in the OTHER
+/// test's directory, or briefly in the real one). Held for the whole isolated section via
+/// `isolate_cache_dir()`'s RAII guard, not just around the `set_var` call itself.
+#[cfg(test)]
+pub(crate) static CACHE_DIR_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// RAII guard: sets `CS_CACHE_DIR` to a fresh temp directory for the lock's duration and restores
+/// the previous value (typically unset) on drop, so a test that touches `set_sidecar_run`/
+/// `registry_set`/etc. can never write into this machine's real registries. `tag` should be
+/// unique per call site (mirrors the existing `scratch(tag)` helpers' own convention) so two
+/// tests running back-to-back don't share a directory even though the lock already serializes
+/// them — cheap insurance, not load-bearing on its own.
+#[cfg(test)]
+pub(crate) struct CacheDirGuard {
+    _lock: std::sync::MutexGuard<'static, ()>,
+    previous: Option<String>,
+}
+#[cfg(test)]
+impl Drop for CacheDirGuard {
+    fn drop(&mut self) {
+        match self.previous.take() {
+            Some(v) => std::env::set_var("CS_CACHE_DIR", v),
+            None => std::env::remove_var("CS_CACHE_DIR"),
+        }
+    }
+}
+#[cfg(test)]
+pub(crate) fn isolate_cache_dir(tag: &str) -> CacheDirGuard {
+    let lock = CACHE_DIR_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let previous = std::env::var("CS_CACHE_DIR").ok();
+    let dir = std::env::temp_dir().join(format!("cs_cache_dir_{}_{}", std::process::id(), tag));
+    let _ = std::fs::create_dir_all(&dir);
+    std::env::set_var("CS_CACHE_DIR", dir.to_string_lossy().as_ref());
+    CacheDirGuard { _lock: lock, previous }
 }
 
 // ── Stable cache hashing ──────────────────────────────────────────────────────────────────
@@ -2743,6 +2798,7 @@ mod version_tests {
     #[test]
     fn virtual_copies_round_trip_and_stay_independent() {
         let path = scratch("rt");
+        let _iso = isolate_cache_dir("rt");
         set_sidecar_run(path.clone(), 3, "Green".into(), true, Some("RECIPE_A".into()), Some(true), None).unwrap();
 
         // A photo that has never been copied carries NO versions — it must look exactly like one
@@ -2784,6 +2840,7 @@ mod version_tests {
     #[test]
     fn deleting_down_to_one_collapses_the_list() {
         let path = scratch("del");
+        let _iso = isolate_cache_dir("del");
         set_sidecar_run(path.clone(), 0, String::new(), true, Some("BASE".into()), None, None).unwrap();
         sidecar_add_version(path.clone(), "B".into()).unwrap();
         sidecar_add_version(path.clone(), "C".into()).unwrap();
@@ -2811,6 +2868,7 @@ mod version_tests {
     fn a_legacy_sidecar_still_loads() {
         // Exactly the shape written before virtual copies existed — no Versions attribute.
         let path = scratch("legacy");
+        let _iso = isolate_cache_dir("legacy");
         let xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF><rdf:Description rdf:about="" xmp:Rating="4" chromasmith:Edited="True" chromasmith:Recipe="OLDRECIPE"/></rdf:RDF></x:xmpmeta>"#;
         std::fs::write(sidecar_path(&path), xmp).unwrap();
         let sc = get_sidecar(path.clone());
@@ -2824,6 +2882,7 @@ mod version_tests {
     #[test]
     fn an_out_of_range_active_index_is_clamped() {
         let path = scratch("clamp");
+        let _iso = isolate_cache_dir("clamp");
         let xmp = r#"<x:xmpmeta><rdf:Description chromasmith:Recipe="R" chromasmith:ActiveVersion="9"/></x:xmpmeta>"#;
         std::fs::write(sidecar_path(&path), xmp).unwrap();
         // No versions at all, ActiveVersion=9 — a hand-edited or truncated file must not index
@@ -2835,6 +2894,7 @@ mod version_tests {
     #[test]
     fn reset_edit_is_undoable_exactly_once() {
         let path = scratch("reset_undo");
+        let _iso = isolate_cache_dir("reset_undo");
         set_sidecar_run(path.clone(), 3, "Green".into(), true, Some("ORIGRECIPE".into()), None, None).unwrap();
 
         // Nothing to undo before any reset has happened.
@@ -2873,6 +2933,7 @@ mod version_tests {
     #[test]
     fn a_real_edit_after_a_reset_clears_the_undo_buffer() {
         let path = scratch("reset_then_edit");
+        let _iso = isolate_cache_dir("reset_then_edit");
         set_sidecar_run(path.clone(), 0, String::new(), true, Some("A".into()), None, None).unwrap();
         reset_edit(path.clone()).unwrap();
         assert!(get_sidecar(path.clone()).last_reset_recipe.is_some());
@@ -3285,6 +3346,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn write_sidecar_preserves_unknown_fields() {
         let path = scratch("foreign");
+        let _iso = isolate_cache_dir("foreign");
         let foreign = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" crs:Exposure2012="+0.35" crs:Contrast2012="+10">
@@ -3317,6 +3379,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn a_chromasmith_only_sidecar_round_trips_on_a_second_write() {
         let path = scratch("own");
+        let _iso = isolate_cache_dir("own");
         set_sidecar_run(path.clone(), 2, "Red".into(), false, Some("A".into()), Some(false), None).unwrap();
         set_sidecar_run(path.clone(), 5, "".into(), true, Some("B".into()), Some(true), None).unwrap();
         let sc = get_sidecar(path.clone());
@@ -3333,6 +3396,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn clearing_a_field_removes_its_attribute_not_just_skips_it() {
         let path = scratch("clear");
+        let _iso = isolate_cache_dir("clear");
         set_sidecar_run(path.clone(), 3, "Star".into(), true, Some("R".into()), Some(true), None).unwrap();
         set_sidecar_run(path.clone(), 0, "".into(), false, Some("".into()), Some(false), None).unwrap();
         let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
@@ -3350,6 +3414,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn no_existing_sidecar_falls_back_to_the_plain_template() {
         let path = scratch("none");
+        let _iso = isolate_cache_dir("none");
         set_sidecar_run(path.clone(), 3, "".into(), false, None, None, None).unwrap();
         let sc = get_sidecar(path);
         assert_eq!(sc.rating, 3);
@@ -3361,6 +3426,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn an_unparseable_existing_sidecar_falls_back_safely() {
         let path = scratch("corrupt");
+        let _iso = isolate_cache_dir("corrupt");
         std::fs::write(sidecar_path(&path), b"not xml at all").unwrap();
         let res = set_sidecar_run(path.clone(), 2, "".into(), false, None, None, None);
         assert!(res.is_ok());
@@ -3390,6 +3456,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn hierarchical_keywords_round_trip_through_xmp() {
         let path = scratch("keywords");
+        let _iso = isolate_cache_dir("keywords");
         set_keywords(path.clone(), vec!["Travel|Iceland|Reykjavik".into(), "Portrait".into()]).unwrap();
 
         let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
@@ -3418,6 +3485,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn flat_subject_falls_back_to_single_segment_keywords() {
         let path = scratch("flat-subject");
+        let _iso = isolate_cache_dir("flat-subject");
         let xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Other Tool">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -3437,6 +3505,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn clearing_all_keywords_removes_the_elements() {
         let path = scratch("clear-keywords");
+        let _iso = isolate_cache_dir("clear-keywords");
         set_keywords(path.clone(), vec!["Travel".into()]).unwrap();
         set_keywords(path.clone(), vec![]).unwrap();
 
@@ -3452,6 +3521,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn person_regions_round_trip_into_mwg_rs_xmp() {
         let path = scratch("people-regions");
+        let _iso = isolate_cache_dir("people-regions");
         set_people_regions(
             path.clone(),
             vec![
@@ -3481,6 +3551,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn person_regions_never_touch_existing_keywords_or_rating() {
         let path = scratch("people-regions-preserve");
+        let _iso = isolate_cache_dir("people-regions-preserve");
         set_keywords(path.clone(), vec!["Travel".into()]).unwrap();
         set_people_regions(path.clone(), vec![PersonRegion { name: "Alice".into(), kind: "person".into(), x0: 0.0, y0: 0.0, x1: 0.1, y1: 0.1 }])
             .unwrap();
@@ -3492,6 +3563,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn clearing_all_people_removes_the_regions_elements() {
         let path = scratch("people-regions-clear");
+        let _iso = isolate_cache_dir("people-regions-clear");
         set_people_regions(path.clone(), vec![PersonRegion { name: "Alice".into(), kind: "person".into(), x0: 0.0, y0: 0.0, x1: 0.1, y1: 0.1 }])
             .unwrap();
         set_people_regions(path.clone(), vec![]).unwrap();
@@ -3508,6 +3580,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn setting_keywords_preserves_foreign_attributes_and_children() {
         let path = scratch("keywords-foreign");
+        let _iso = isolate_cache_dir("keywords-foreign");
         let foreign = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" crs:Exposure2012="+0.35">
@@ -3531,6 +3604,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn a_keyword_with_special_characters_round_trips() {
         let path = scratch("keywords-escape");
+        let _iso = isolate_cache_dir("keywords-escape");
         set_keywords(path.clone(), vec!["Rock & Roll|Q&A <live>".into()]).unwrap();
         let sc = get_sidecar(path);
         assert_eq!(sc.keywords, vec!["Rock & Roll|Q&A <live>".to_string()]);
@@ -3542,6 +3616,7 @@ mod sidecar_preservation_tests {
     #[test]
     fn set_sidecar_preserves_existing_keywords() {
         let path = scratch("keywords-survive-rating");
+        let _iso = isolate_cache_dir("keywords-survive-rating");
         set_keywords(path.clone(), vec!["Travel".into()]).unwrap();
         set_sidecar_run(path.clone(), 3, "Green".into(), false, None, None, None).unwrap();
         let sc = get_sidecar(path);
