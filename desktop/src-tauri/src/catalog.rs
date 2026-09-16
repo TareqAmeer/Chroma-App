@@ -953,7 +953,23 @@ fn abs_path(vol_last_path: &str, _is_local: bool, rel_path: &str) -> String {
     if rel_path.is_empty() {
         vol_last_path.to_string()
     } else {
-        Path::new(vol_last_path).join(rel_path).to_string_lossy().into_owned()
+        // ⚠️ `Path::join` onto a BARE drive letter ("D:", no trailing separator) does NOT insert
+        // one — Windows itself distinguishes "D:foo" (drive-relative) from "D:\foo" (absolute),
+        // and Rust's Path preserves that. If `vol_last_path` was ever persisted without its
+        // trailing separator (confirmed live 2026-09-16: an older `volumes.last_path` row was
+        // exactly "D:"), every abs_path() call silently produced "D:PHOTOS\..." — a DIFFERENT
+        // string that still happens to resolve to the same real file (Windows treats a drive-
+        // relative path as relative to that drive's current directory, which is usually its
+        // root), so it passed every existence check and got written into the flagged/favorites/
+        // rejected registries as a SEPARATE entry from the correctly-formed path for the same
+        // photo — doubling those counts and showing every affected photo twice in the grid.
+        // Guaranteeing a trailing separator here (independent of whatever wrote `last_path`)
+        // means join() can never take that special-cased bare-prefix path again.
+        let mut base = vol_last_path.to_string();
+        if !base.ends_with('/') && !base.ends_with('\\') {
+            base.push(std::path::MAIN_SEPARATOR);
+        }
+        Path::new(&base).join(rel_path).to_string_lossy().into_owned()
     }
 }
 
