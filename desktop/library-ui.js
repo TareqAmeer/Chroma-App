@@ -8786,6 +8786,17 @@
       }
       updateBootSplashProgress(p);
       if (p.phase === 'done') refreshCatalogCounts();
+      // ⚠️ hq_offline is the LAST entry in STAGE_ORDER, and hq_offline_run (catalog.rs) emits
+      // phase:"hq_offline" with total:0 specifically to mean "nothing in the last-100-edited/
+      // added set is pending right now" — a legitimate terminal state, not a stage still running.
+      // Nothing else in the automatic chain ever follows hq_offline with its own 'done' event, so
+      // without this the pill parked on "Preparing full-res cache…" forever after every
+      // genuinely-finished session — confirmed live 2026-09-16: CPU and the catalog.db mtime both
+      // idle for 15+ minutes while the panel still read as actively working. total:1 (below) means
+      // hq_offline just STARTED real work on one item, so only a total:0 report counts as done.
+      if (p.phase === 'hq_offline' && !p.total) {
+        activityUpdate('catalog', { stage: 'done', done: 0, total: 0 });
+      }
     }).catch(() => {});
     window.__TAURI__.event.listen('ingest-progress', (ev) => {
       const p = ev.payload || {};
