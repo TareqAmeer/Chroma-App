@@ -544,8 +544,19 @@
   }
   if (LIBTEST) {
     document.body.classList.add('deskx');
-    // Minimal event shim (menu-library listener registration).
-    window.__TAURI__ = { core: { invoke: libtestInvoke }, event: { listen: () => Promise.resolve(() => {}) } };
+    // Minimal event shim (menu-library listener registration). Callbacks are captured (not just
+    // discarded) so window.libtestFireEvent() below can drive the REAL wireActivityListeners
+    // handlers under test — a regression like the hq_offline/'catalog' kind clobbering race
+    // (library-ui.js's catalog-scan handler) lives entirely inside that callback, so a test that
+    // only calls activityUpdate()/libtestPhotoActivity() directly would never exercise it.
+    const _ltEventCallbacks = {};
+    window.__TAURI__ = {
+      core: { invoke: libtestInvoke },
+      event: {
+        listen: (name, cb) => { (_ltEventCallbacks[name] = _ltEventCallbacks[name] || []).push(cb); return Promise.resolve(() => {}); },
+      },
+    };
+    window.libtestFireEvent = (name, payload) => { (_ltEventCallbacks[name] || []).forEach((cb) => cb({ payload })); };
     // Cloud mock: disconnected by default; window.libtestLrConnect() flips to a connected
     // state with fake albums/assets so every Cloud UI state is screenshottable.
     let ltConnected = false;
@@ -8781,7 +8792,19 @@
       // between the two. drainCatalogThumbnails already owns this stage's display authoritatively
       // (it fires right after the same invoke() this event is a byproduct of), so the raw event
       // is skipped here rather than fixed to agree with it — one writer, not two kept in sync.
-      if (p.phase !== 'thumb') {
+      // hqOfflineDrainLoop polls catalog_hq_offline on its OWN 90s setInterval, fully independent
+      // of catalogRunBackgroundPhases' walk/thumb/focus/hash chain, yet both report through this
+      // SAME 'catalog' activity kind — so an hq_offline report can land mid-way through a real,
+      // still-genuinely-pending walk/thumb pass (routine: the two run on unrelated timers).
+      // `otherStageActive` catches that: if some OTHER real stage already owns the pill, an
+      // hq_offline report (progress or its total:0 "nothing pending" signal) must not touch it at
+      // all — hq_offline may only ever update/clear its OWN turn with the pill. Confirmed live
+      // 2026-09-16 alongside a stuck "not scanned" count: an hq_offline total:0 report force-
+      // cleared a genuine walk/thumb pass to stage:'done' (which then auto-hid the whole panel
+      // after 8s), reading as "the indexing panel is empty" while pending-thumbs/pending-faces
+      // counts stayed nonzero and CPU sat at 0%.
+      const otherStageActive = activity.visible && activity.stage !== 'done' && activity.stage !== 'hq_offline' && activity.kind === 'catalog';
+      if (p.phase !== 'thumb' && !(p.phase === 'hq_offline' && otherStageActive)) {
         activityUpdate('catalog', { stage: p.phase, done: p.done || 0, total: p.total || 0, current: p.current || '' });
       }
       updateBootSplashProgress(p);
@@ -8791,10 +8814,11 @@
       // added set is pending right now" — a legitimate terminal state, not a stage still running.
       // Nothing else in the automatic chain ever follows hq_offline with its own 'done' event, so
       // without this the pill parked on "Preparing full-res cache…" forever after every
-      // genuinely-finished session — confirmed live 2026-09-16: CPU and the catalog.db mtime both
-      // idle for 15+ minutes while the panel still read as actively working. total:1 (below) means
-      // hq_offline just STARTED real work on one item, so only a total:0 report counts as done.
-      if (p.phase === 'hq_offline' && !p.total) {
+      // genuinely-finished session. total:1 (below) means hq_offline just STARTED real work on
+      // one item, so only a total:0 report counts as done. Gated on `activity.stage ===
+      // 'hq_offline'` (not unconditional) for the same otherStageActive reasoning above — hq_offline
+      // may only declare ITSELF done, never whatever unrelated stage happens to occupy the pill.
+      if (p.phase === 'hq_offline' && !p.total && activity.stage === 'hq_offline') {
         activityUpdate('catalog', { stage: 'done', done: 0, total: 0 });
       }
     }).catch(() => {});
