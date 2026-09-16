@@ -31,7 +31,7 @@ pub fn poster_jpeg(path: &str, long_edge: u32, _duration_secs: f64) -> Option<Ve
     // no ambient COM initialization, and re-initializing an already-STA thread is a documented
     // harmless no-op (S_FALSE), not an error.
     unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let _co_result = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let result = poster_jpeg_inner(path, long_edge);
         CoUninitialize();
         result
@@ -40,7 +40,12 @@ pub fn poster_jpeg(path: &str, long_edge: u32, _duration_secs: f64) -> Option<Ve
 
 unsafe fn poster_jpeg_inner(path: &str, long_edge: u32) -> Option<Vec<u8>> {
     let wide = windows::core::HSTRING::from(path);
-    let factory: IShellItemImageFactory = SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None).ok()?;
+    let factory: IShellItemImageFactory = match SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None) {
+        Ok(f) => f,
+        Err(_e) => {
+            return None;
+        }
+    };
     // RESIZETOFIT: the returned bitmap fits within the box preserving aspect ratio, so no further
     // scaling step is needed here — mirroring winthumb.rs's WIC scaler doing the same job for
     // stills. THUMBNAILONLY is load-bearing, not decorative: without it GetImage silently falls
@@ -48,7 +53,12 @@ unsafe fn poster_jpeg_inner(path: &str, long_edge: u32) -> Option<Vec<u8>> {
     // corrupt file, or no codec installed) instead of failing — which would cache a wrong, generic
     // icon as the poster forever rather than letting the caller's normal "no poster" fallback run.
     let size = SIZE { cx: long_edge as i32, cy: long_edge as i32 };
-    let hbitmap = factory.GetImage(size, SIIGBF_RESIZETOFIT | SIIGBF_THUMBNAILONLY).ok()?;
+    let hbitmap = match factory.GetImage(size, SIIGBF_RESIZETOFIT | SIIGBF_THUMBNAILONLY) {
+        Ok(b) => b,
+        Err(_e) => {
+            return None;
+        }
+    };
     let jpeg = hbitmap_to_jpeg(hbitmap);
     let _ = DeleteObject(hbitmap);
     jpeg

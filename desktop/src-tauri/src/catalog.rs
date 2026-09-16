@@ -969,7 +969,23 @@ fn abs_path(vol_last_path: &str, _is_local: bool, rel_path: &str) -> String {
         if !base.ends_with('/') && !base.ends_with('\\') {
             base.push(std::path::MAIN_SEPARATOR);
         }
-        Path::new(&base).join(rel_path).to_string_lossy().into_owned()
+        // ⚠️ `rel_path` is stored CANONICALLY `/`-separated (see the scan-loop comment above,
+        // `rel.to_string_lossy().replace('\\', "/")`) so the same row matches whichever OS last
+        // scanned that volume. `Path::join` does NOT renormalize separators inside the string
+        // it's given — it just concatenates `base` + one native separator + `rel_path` verbatim
+        // — so on Windows this used to produce a MIXED path like `D:\PHOTOS/2026/2026-08-06/
+        // P_TM4740.MP4`: a native prefix followed by forward-slash segments. That string still
+        // resolves via Rust's own fs calls (which accept either separator) but is REJECTED by
+        // Windows shell APIs (`SHCreateItemFromParsingName`, used for video thumbnails/playback)
+        // with `E_INVALIDARG` — confirmed live via [DEBUG H1] logging, 100% of sampled video
+        // files. Convert the canonical `/` to the platform separator before joining so every
+        // consumer of `abs_path()` gets a fully native path on Windows.
+        let native_rel = if std::path::MAIN_SEPARATOR != '/' {
+            rel_path.replace('/', &std::path::MAIN_SEPARATOR.to_string())
+        } else {
+            rel_path.to_string()
+        };
+        Path::new(&base).join(native_rel).to_string_lossy().into_owned()
     }
 }
 
@@ -7271,6 +7287,38 @@ mod tests {
     /// to "now". Delegates to `platform::set_file_mtime`, mirroring ingest.rs's/library.rs's use.
     fn set_mtime_for_test(path: &Path, unix_secs: i64) {
         let _ = crate::platform::set_file_mtime(path, unix_secs);
+    }
+
+    // ── abs_path: canonical `/`-separated rel_path must join onto a native-separator path ────
+
+    #[test]
+    fn abs_path_never_mixes_separators_on_windows() {
+        // rel_path is stored canonically `/`-separated (see the scan-loop comment above
+        // `rel.to_string_lossy().replace('\\', "/")`) regardless of platform. On Windows,
+        // `Path::join` does NOT renormalize separators already inside the string it's given, so
+        // joining a `/`-separated rel_path directly onto a `D:\`-rooted volume path used to
+        // produce a MIXED-separator result like `D:\PHOTOS/2026/2026-08-06/P_TM4740.MP4` — a
+        // string Windows shell APIs (SHCreateItemFromParsingName, used for video thumbnails and
+        // by extension anything else that resolves a catalog row's path) reject outright with
+        // E_INVALIDARG, even though plain Rust fs calls tolerate it. This must never regress.
+        let result = abs_path("D:\\PHOTOS", false, "2026/2026-08-06/P_TM4740.MP4");
+        if std::path::MAIN_SEPARATOR == '\\' {
+            assert_eq!(result, "D:\\PHOTOS\\2026\\2026-08-06\\P_TM4740.MP4");
+            assert!(!result.contains('/'), "abs_path produced a mixed-separator path: {result}");
+        } else {
+            assert_eq!(result, "D:\\PHOTOS/2026/2026-08-06/P_TM4740.MP4");
+        }
+    }
+
+    #[test]
+    fn abs_path_bare_drive_letter_plus_slash_rel_path_is_fully_native() {
+        // Regression for the combination of both historical bugs at once: a bare-drive-letter
+        // `last_path` (38a9c51) AND a `/`-separated rel_path (this fix) must still produce a
+        // single, fully native path with no drive-relative ambiguity and no mixed separators.
+        let result = abs_path("D:", false, "PHOTOS/2026/clip.mp4");
+        if std::path::MAIN_SEPARATOR == '\\' {
+            assert_eq!(result, "D:\\PHOTOS\\2026\\clip.mp4");
+        }
     }
 
     // ── Nested-root dedupe (is_ancestor_rel / add_root_run / collapse_nested_roots) ─────────
