@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "id": "color-slider-metal-progress",
+  "reference": {
+    "provenance": {
+      "origin": "User-supplied MetalForge screenshot, screen recording, and configured URL",
+      "creator": "MetalForge",
+      "capturedAt": "2026-09-13",
+      "usageNotes": "The recording is motion authority, the screenshot is static authority, and URL parameters are supporting evidence only. Generated WebGPU source is locked; source parity is not claimed."
+    },
+    "views": [
+      { "id": "static", "kind": "state", "assetRef": "/Users/tareqameer/Downloads/Screenshot 2026-09-13 at 1.10.55 PM.png", "description": "Supplied 52 percent state and deterministic PNG measurements.", "visibleScope": "Geometry, content placement, colour hierarchy, and settled front." },
+      { "id": "motion", "kind": "other", "assetRef": "/Users/tareqameer/Desktop/Screen Recording 2026-09-13 at 1.20.31 PM.mov", "description": "Supplied 22.767-second H.264 motion reference sampled once per second.", "visibleScope": "Three traversals, direction reversal, shape evolution, endpoint holds, and attached haze." },
+      { "id": "parameters", "kind": "other", "assetRef": "https://metalforge.xyz/editor#effect=progress&style=liquid&progress=52&speed=1&amount=0.085&lag=0.55&echo=0.055&bloom=1&jitter=0.3", "description": "User-supplied configured URL.", "visibleScope": "Parameter names and supplied values only; no units, equations, or implementation semantics." }
+    ]
+  },
+  "scope": {
+    "componentFamily": "slider",
+    "registryScope": {
+      "includedSubfamilies": [".fx-slider", ".fx-slider-grad", "#sl-hsl-h", "#sl-hsl-s", "#sl-hsl-l"],
+      "excludedFamilies": ["all non-Color sliders", "control-row", "section-card"],
+      "notes": "Specification only. No prototype or production target is authorised."
+    }
+  },
+  "generated": {
+    "visibleObservations": [
+      { "id": "obs-geometry", "viewId": "static", "area": "geometry-spacing", "fact": "The bar occupies x=55, y=52, width=1950, height=262 in the 2118 by 394 screenshot, a 7.44 to 1 aspect ratio.", "sourceClass": "reference", "sourceRef": "static", "certainty": "directly-visible" },
+      { "id": "obs-copy", "viewId": "static", "area": "typography", "fact": "An uppercase feature block is inside the left side and a large percentage is inside the right side; both are stationary and crisp.", "sourceClass": "reference", "sourceRef": "static", "certainty": "directly-visible" },
+      { "id": "obs-color", "viewId": "static", "area": "color-contrast", "fact": "The unfilled point sample is RGB 32,32,35 and the front point sample is RGB 80,155,248; the front crop reaches RGB 190,253,254.", "sourceClass": "reference", "sourceRef": "static", "certainty": "directly-visible" },
+      { "id": "obs-traverse", "viewId": "motion", "area": "motion-interaction", "fact": "The recording shows 0 to 100, 100 to 0, and 0 to 100 traversals at different visible rates, followed by endpoint holds.", "sourceClass": "reference", "sourceRef": "motion", "certainty": "directly-visible" },
+      { "id": "obs-front", "viewId": "motion", "area": "motion-interaction", "fact": "The attached luminous front changes between rounded lobes and concave pinches during travel; a broad haze stays behind it and no detached trail is visible.", "sourceClass": "reference", "sourceRef": "motion", "certainty": "directly-visible" },
+      { "id": "obs-ends", "viewId": "motion", "area": "motion-interaction", "fact": "At zero the front disappears into the left edge; at 100 it clips and compresses against the rounded right edge.", "sourceClass": "reference", "sourceRef": "motion", "certainty": "directly-visible" }
+    ],
+    "repositoryEvidence": [
+      { "id": "repo-contract", "claim": "The slider contract preserves continuous tonal and colour adjustment, visible values, native semantics, and functional gradients.", "locator": "docs/ui-workflow/component-contracts/contracts/slider.json", "sourceClass": "repository_evidence" },
+      { "id": "repo-colors", "claim": "Chromasmith defines Mist Blue and Slate Blue action roles by theme.", "locator": "design/tokens.json color.action.primary", "sourceClass": "repository_evidence" },
+      { "id": "repo-type", "claim": "Chromasmith uses SF Pro Text and SF Mono interface stacks.", "locator": "docs/design-tokens.md", "sourceClass": "repository_evidence" },
+      { "id": "repo-gradient", "claim": "Color Mixer HSL controls currently expose functional gradients through native range inputs.", "locator": "chromasmith-22.html:1992-1994", "sourceClass": "repository_evidence" }
+    ],
+    "stateCoverage": {
+      "shown": [
+        { "id": "zero", "state": "0 percent hold", "sourceClass": "reference", "sourceRef": "motion" },
+        { "id": "middle", "state": "52 percent settled", "sourceClass": "reference", "sourceRef": "static" },
+        { "id": "increasing", "state": "increasing traversal", "sourceClass": "reference", "sourceRef": "motion" },
+        { "id": "decreasing", "state": "decreasing traversal", "sourceClass": "reference", "sourceRef": "motion" },
+        { "id": "full", "state": "100 percent hold", "sourceClass": "reference", "sourceRef": "motion" }
+      ],
+      "missing": [
+        { "id": "focus", "state": "keyboard focus", "sourceClass": "reference", "sourceRef": "motion" },
+        { "id": "disabled", "state": "disabled", "sourceClass": "reference", "sourceRef": "motion" },
+        { "id": "reduced", "state": "reduced motion", "sourceClass": "reference", "sourceRef": "motion" }
+      ]
+    },
+    "variantCoverage": {
+      "shown": [
+        { "id": "dark", "state": "dark reference", "sourceClass": "reference", "sourceRef": "static" }
+      ],
+      "missing": [
+        { "id": "light", "state": "light theme", "sourceClass": "reference", "sourceRef": "static" },
+        { "id": "mobile", "state": "narrow layout", "sourceClass": "reference", "sourceRef": "static" },
+        { "id": "functional", "state": "functional HSL gradient", "sourceClass": "reference", "sourceRef": "static" },
+        { "id": "webkit", "state": "Safari/WebKit", "sourceClass": "reference", "sourceRef": "motion" }
+      ]
+    }
+  },
+  "authored": {
+    "applicableDesignRules": [
+      { "id": "rule-color", "rule": "Use existing Chroma colour roles and preserve functional gradients.", "sourceClass": "repository_evidence", "sourceRef": "chromasmith-design/project/design.md Visual foundations" },
+      { "id": "rule-type", "rule": "Preserve Chroma typography rather than copying unknown raster font metrics.", "sourceClass": "repository_evidence", "sourceRef": "chromasmith-design/project/design.md Typography" },
+      { "id": "rule-motion", "rule": "Reduced-motion mode removes lag, wave evolution, pulsing, and settle animation.", "sourceClass": "repository_evidence", "sourceRef": "chromasmith-design/project/design.md Animation" },
+      { "id": "rule-focus", "rule": "The semantic native input and visible focus treatment remain intact.", "sourceClass": "repository_evidence", "sourceRef": "chromasmith-design/project/design.md Accessibility" }
+    ],
+    "proposedInterpretations": [
+      { "id": "proposal-layering", "statement": "Keep labels, values, focus, and the native range in HTML/CSS; render only the filled region, attached haze, and deforming front in a shared Canvas 2D layer.", "sourceClass": "proposal", "sourceRef": "motion", "basedOn": ["obs-copy", "obs-front", "repo-contract"] },
+      { "id": "proposal-native", "statement": "Use one panel-level Canvas and scheduler instead of one WebGL context or animated SVG filter per slider.", "sourceClass": "proposal", "sourceRef": "motion", "basedOn": ["repo-contract", "obs-front"] },
+      { "id": "proposal-timing", "statement": "Prototype direct tracking during pointer drag, 120 to 220 milliseconds of visual catch-up for programmatic or keyboard changes, and at most 120 milliseconds of deformation settle; these values are not measured from MetalForge.", "sourceClass": "proposal", "sourceRef": "motion", "basedOn": ["obs-traverse", "rule-motion"] }
+    ],
+    "userDecisions": [
+      { "id": "decision-spec-first", "decision": "Produce static and motion specification for approval and do not implement yet.", "decidedBy": "user", "decidedAt": "2026-09-13", "sourceClass": "user_decision", "sourceRef": "user request" },
+      { "id": "decision-evidence", "decision": "Treat the recording as motion reference and URL parameters as supporting evidence.", "decidedBy": "user", "decidedAt": "2026-09-13", "sourceClass": "user_decision", "sourceRef": "user request" },
+      { "id": "decision-preserve", "decision": "Preserve Chroma typography and existing slider behavior.", "decidedBy": "user", "decidedAt": "2026-09-13", "sourceClass": "user_decision", "sourceRef": "user request" }
+    ],
+    "unresolvedQuestions": [
+      { "id": "decision-density", "question": "Should a future isolated prototype preserve the 7.44 to 1 reference density or adapt it to a compact Color-panel row?", "blocksApproval": true },
+      { "id": "decision-scope", "question": "Should a future prototype cover all Color sliders or selected primary controls only?", "blocksApproval": true }
+    ]
+  },
+  "implementation": {
+    "geometrySpacing": [
+      { "id": "geometry", "statement": "Use the measured 7.44 to 1 bar proportion as the reference silhouette; exact radius and production density remain unresolved.", "sourceClass": "proposal", "sourceRef": "static", "basedOn": ["obs-geometry"] }
+    ],
+    "typography": [
+      { "id": "type", "statement": "Place existing feature/context copy and canonical value inside the bar using Chroma SF Pro Text/SF Mono tokens; do not infer the reference font.", "sourceClass": "proposal", "sourceRef": "static", "basedOn": ["obs-copy", "repo-type", "rule-type"] }
+    ],
+    "colorsContrastRoles": [
+      { "id": "colors", "statement": "Map the dark fill, luminous core, and haze hierarchy onto Chroma surface/Slate/Mist roles while retaining functional HSL information.", "sourceClass": "proposal", "sourceRef": "static", "basedOn": ["obs-color", "repo-colors", "repo-gradient"] }
+    ],
+    "icons": [],
+    "motionInteraction": [
+      { "id": "motion", "statement": "Front deformation scales with movement, remains attached, narrows after settle, reverses continuously, and clips/compresses at both endpoints with no detached trail.", "sourceClass": "proposal", "sourceRef": "motion", "basedOn": ["obs-traverse", "obs-front", "obs-ends"] }
+    ],
+    "responsiveBehavior": [
+      { "id": "responsive", "statement": "A future prototype must keep internal text legible and inside the bar through the complete Color-panel width and resizer matrix; the reference supplies no narrow layout.", "sourceClass": "proposal", "sourceRef": "static", "basedOn": ["obs-geometry", "repo-contract"] }
+    ],
+    "accessibility": [
+      { "id": "a11y", "statement": "The existing native range owns semantics and behavior; visual duplicates are hidden from accessibility APIs and focus stays crisp outside the effect.", "sourceClass": "proposal", "sourceRef": "motion", "basedOn": ["repo-contract", "rule-focus"] }
+    ],
+    "targets": [
+      { "id": "target", "statement": "Specification only. If prototype approval is later granted, bind an isolated study to the Color slider contract without modifying production targets.", "sourceClass": "proposal", "sourceRef": "motion", "basedOn": ["repo-contract"] }
+    ],
+    "acceptanceCriteria": [
+      { "id": "ac-static", "criterion": "Feature/context and canonical value remain crisp and inside the bar at min, default, max, both themes, and every supported Color-panel width.", "verification": "Focused browser screenshots and bounding-box assertions." },
+      { "id": "ac-motion", "criterion": "The front remains attached, deforms only while moving/settling, reverses continuously, and compresses at both endpoints with no trail.", "verification": "Side-by-side 60 fps recording against the supplied motion reference." },
+      { "id": "ac-native", "criterion": "Pointer, keyboard, Home/End, steps, input/change events, undo, persistence, focus, and functional gradients match current slider behavior.", "verification": "Existing behavior suite plus focused Color tests." },
+      { "id": "ac-performance", "criterion": "One shared scheduler animates only active/settling controls; p95 draw cost is at most 1 ms per frame on the supported desktop baseline and idle CPU returns to zero effect work.", "verification": "Running-app performance trace with the complete visible slider inventory." },
+      { "id": "ac-reduced", "criterion": "Reduced motion snaps immediately, uses a static narrow boundary, and schedules no animation after paint.", "verification": "Emulated and live prefers-reduced-motion test." }
+    ]
+  },
+  "validation": {
+    "requiredScreenshots": ["measured 52 percent static reference", "future min/default/max", "future increasing/decreasing reversal", "future dark/light", "future narrow/resizer bounds", "future keyboard focus", "future reduced motion"],
+    "evidence": [
+      { "id": "static-evidence", "statement": "Retain the deterministic screenshot hash, RGBA point samples, and analyst-selected crop statistics.", "sourceClass": "proposal", "sourceRef": "static", "basedOn": ["obs-geometry", "obs-color"] },
+      { "id": "motion-evidence", "statement": "Retain recording metadata, one-second displayed-value samples, traversal intervals, and explicit measurement limits.", "sourceClass": "proposal", "sourceRef": "motion", "basedOn": ["obs-traverse", "obs-front", "obs-ends"] }
+    ]
+  },
+  "approval": {
+    "status": "draft",
+    "approvedBy": "",
+    "approvedAt": "",
+    "userDecisionRefs": []
+  }
+}

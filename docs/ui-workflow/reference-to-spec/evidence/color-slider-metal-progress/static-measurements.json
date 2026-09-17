@@ -1,0 +1,36 @@
+{
+  "asset": {
+    "path": "/Users/tareqameer/Downloads/Screenshot 2026-09-13 at 1.10.55 PM.png",
+    "sha256": "c550939dd2a9a99d2d903280b26013b4aad0f3b3f0736a65c8960ca6f6e458fa",
+    "format": "png",
+    "dimensions": { "width": 2118, "height": 394 }
+  },
+  "samples": [
+    { "x": 0, "y": 0, "rgba": [0, 0, 0, 255] },
+    { "x": 1068, "y": 183, "rgba": [80, 155, 248, 255] },
+    { "x": 1800, "y": 190, "rgba": [32, 32, 35, 255] }
+  ],
+  "crops": [
+    {
+      "id": "bar",
+      "rect": { "x": 55, "y": 52, "width": 1950, "height": 262 },
+      "pixelStatistics": { "pixelCount": 510900, "rgbaMean": [33.08042865531415, 37.16625171266393, 47.40290859267959, 255], "rgbaMin": [0, 0, 0, 255], "rgbaMax": [255, 255, 255, 255] }
+    },
+    {
+      "id": "front",
+      "rect": { "x": 980, "y": 52, "width": 175, "height": 262 },
+      "pixelStatistics": { "pixelCount": 45850, "rgbaMean": [46.10176663031625, 77.78944383860414, 119.69350054525627, 255], "rgbaMin": [0, 0, 0, 255], "rgbaMax": [190, 253, 254, 255] }
+    },
+    {
+      "id": "label",
+      "rect": { "x": 190, "y": 120, "width": 620, "height": 125 },
+      "pixelStatistics": { "pixelCount": 77500, "rgbaMean": [54.4473935483871, 56.35427096774193, 65.47855483870968, 255], "rgbaMin": [7, 9, 18, 255], "rgbaMax": [255, 255, 255, 255] }
+    },
+    {
+      "id": "value",
+      "rect": { "x": 1570, "y": 120, "width": 320, "height": 130 },
+      "pixelStatistics": { "pixelCount": 41600, "rgbaMean": [77.6313701923077, 77.6313701923077, 80.028125, 255], "rgbaMin": [32, 32, 35, 255], "rgbaMax": [255, 255, 255, 255] }
+    }
+  ],
+  "method": "pngjs PNG decode; exact RGBA byte samples and analyst-selected source-image crop rectangles"
+}

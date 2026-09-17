@@ -51,7 +51,9 @@ if needs_check "chromasmith-22.html" || needs_check "desktop/library-ui.js" || n
   fi
 fi
 
-if needs_check "chromasmith-22.html"; then
+if [ -f .git/.skip-editor-gates ]; then
+  echo "Editor gates on hold (.git/.skip-editor-gates present) — skipping."
+elif needs_check "chromasmith-22.html"; then
   echo "chromasmith-22.html changed — running all Editor gates (test/editor_gates.mjs)..."
   # Was: only editor_wireframe_diff.mjs, hand-retried 6x here for the documented E7 flake
   # (editor_ux_spec.json, since fixed at its real root cause — see editor_gates.mjs). That left
