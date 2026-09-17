@@ -3362,7 +3362,10 @@
     // Selecting a photo from the full-window home screen transitions into the editor — the
     // library collapses to the docked filmstrip (stays open, just narrow), it doesn't close.
     if (state.expanded_view) toggleExpandedView(false);
-    const cached = imgCache.get(path);
+    // HDR preview needs the scene-linear companion from a fresh native decode; an SDR
+    // canvas cache entry is therefore not valid while that opt-in is enabled.
+    const hdrPreview = !!window.chromasmithHdrPreview;
+    const cached = hdrPreview ? null : imgCache.get(path);
     // Cache hit: skip read_file_bytes + the full decode entirely, and skip the provisional
     // preview too (there's nothing to bridge — the real image is already ready instantly).
     const provisionalPromise = cached ? Promise.resolve(() => {}) : showProvisional(path);
@@ -3416,7 +3419,7 @@
     const isRaw = RAW_EXT_RE.test(path);
     const recipeKey = isRaw ? rawRecipeKey() : '';
     let diskCached = null;
-    if (!cached && isRaw) {
+    if (!cached && isRaw && !hdrPreview) {
       try {
         const jpegBuf = await invoke('get_decode_cache', { path, recipeKey });
         const bmp = await createImageBitmap(new Blob([jpegBuf], { type: 'image/jpeg' }));

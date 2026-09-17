@@ -182,7 +182,8 @@
       // wantExt (ROADMAP.md R1): only meaningful when mode is 'lut' — asks Rust for the
       // unquantized companion buffer alongside the normal RGBA8 body, so a real blown
       // highlight's headroom survives instead of being clamped away before this IPC round trip.
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: true, ...extra, fast: true } : { mode, ...extra, fast: true }, bytes);
+      const wantHdrPreview = !!window.chromasmithHdrPreview;
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, fast: true } : { mode, ...extra, fast: true }, bytes);
       _lap('decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at');
       // 4th header word: whether Rust actually applied the requested LUT. Rust re-checks the
       // camera make independently (main.rs's KNOWN_DCP_MAKES) as a backstop in case this
@@ -236,7 +237,8 @@
     async refine() {
       if (!this._needsRefine || !this._bytes) return null;
       const { _mode: mode, _lutKey: lutKey, _extra: extra, _bytes: bytes } = this;
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: true, ...extra, fast: false } : { mode, ...extra, fast: false }, bytes);
+      const wantHdrPreview = !!window.chromasmithHdrPreview;
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, fast: false } : { mode, ...extra, fast: false }, bytes);
       const head = new Uint32Array(buf, 0, 6);
       const w = head[0], h = head[1];
       const usedLut = head[3] === 1;

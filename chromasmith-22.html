@@ -1980,6 +1980,9 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="fx-label" style="margin:10px 0 4px">Highlight response</div>
         <select class="fx-select" id="sel-tonemap" onchange="fxUpdate()" style="display:none"><option value="">Standard (BT.2390)</option><option value="agx">AgX (filmic)</option><option value="native">Film stock (native)</option></select>
         <div class="btn-row chip-tap" id="chips-tonemap" title="Only visible once real RAW highlight headroom survives to the render (a blown sky or window shot RAW) — otherwise there's nothing above white to roll off and both options render identically. AgX is a stronger filmic look with more shoulder compression; BT.2390 is a gentler broadcast-standard knee."></div>
+        <div class="fx-row" id="fx-hdr-preview-row" style="display:none" title="Loads floating-point highlight data for this RAW so the Highlight response controls can use real headroom. Off keeps normal SDR editing fast; it never changes the RAW's colour profile.">
+          <div class="fx-label">HDR preview</div><div class="fx-toggle" id="tg-hdr-preview" onclick="fxHdrPreviewChanged()"></div>
+        </div>
         <div class="fx-label" style="margin:10px 0 4px">Print</div>
         <select class="fx-select" id="sel-print" onchange="selectPrint(this.value)" style="display:none"><option value="">None</option><option value="kodak_print">Kodak Print</option><option value="fuji_print">Fuji Print</option></select>
         <div class="btn-row chip-tap" id="chips-print" title="Dehancer-style print profile applied AFTER the film look (Kodak or Fuji print)."></div>
@@ -9523,6 +9526,21 @@ const XYZ2PP=[1.3459433,-0.2556075,-0.0511118,-0.5445989,1.5081673,0.0205351,0,0
 const PP2SRGB=[2.0340758,-0.7273341,-0.3067418,-0.2288131,1.2317301,-0.0029168,-0.0085698,-0.1532866,1.1618564];
 function rawProfile(){const v=localStorage.getItem('rawProfile');return v===null?'Standard':v}
 function setRawProfile(v){localStorage.setItem('rawProfile',v);reloadRawProfileForCurrentPhoto(v)}
+try{window.chromasmithHdrPreview=localStorage.getItem('chromasmithHdrPreview')==='1';}catch(e){window.chromasmithHdrPreview=false;}
+function fxHdrPreviewSyncUI(){
+  const row=document.getElementById('fx-hdr-preview-row'),tg=document.getElementById('tg-hdr-preview');
+  if(row)row.style.display=window.__TAURI__?'':'none';
+  if(tg)tg.classList.toggle('on',!!window.chromasmithHdrPreview);
+}
+async function fxHdrPreviewChanged(){
+  window.chromasmithHdrPreview=!window.chromasmithHdrPreview;
+  try{localStorage.setItem('chromasmithHdrPreview',window.chromasmithHdrPreview?'1':'0');}catch(e){}
+  fxHdrPreviewSyncUI();
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
+  const reloaded=typeof window.chromasmithReloadCurrentPhoto==='function'&&window.chromasmithReloadCurrentPhoto();
+  if(reloaded)toast('HDR preview: '+(window.chromasmithHdrPreview?'on':'off')+' — reloading this photo…',true);
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',fxHdrPreviewSyncUI);
 // Re-decodes the CURRENT photo under the newly-picked DCP profile instead of only remembering
 // the choice for the next RW2 load (the original behaviour — see the log string it used to emit).
 // Native shell: full path-based reopen (chromasmithReloadCurrentPhoto), same mechanism the
