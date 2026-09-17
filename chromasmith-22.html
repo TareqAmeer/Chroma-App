@@ -17140,8 +17140,8 @@ function renderPreview(){
   }
   applyPreviewBorders(P,cw,ch);                        // borders sized in CSS px (keep visual thickness)
   document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
-    ?`Full res ${Math.round(fxZoom*100)}% — native-quality preview of ${iw}\u00d7${ih}`
-    :`Preview ${cw}\u00d7${ch} — export will be at full ${iw}\u00d7${ih}`;
+    ?`Full res ${Math.round(fxZoom*100)}% — rendered ${pw}\u00d7${ph}; export full ${iw}\u00d7${ih}`
+    :`Preview ${pw}\u00d7${ph} — displayed ${cw}\u00d7${ch}; export full ${iw}\u00d7${ih}`;
   document.getElementById('btn-fx-export').disabled=false;
   if(fxHistOn)drawHistogram();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // canvas rect may have just changed (new photo / resize)
