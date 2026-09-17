@@ -1287,8 +1287,6 @@
     .lib-btn.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
     .lib-btn.on.disabled-note{background:var(--sur2);color:var(--mut);border-color:var(--bdr)}
     .lib-btn:disabled{opacity:.4;cursor:default;pointer-events:none}
-    .lib-selection-action-hint{font-size:11px;color:var(--mut);white-space:nowrap}
-    .lib-selection-action-hint[hidden]{display:none}
     #lib-aspect-toggle{padding:5px 8px;margin-left:6px}
     /* Info panel keyword chips (renderInfoPanel) — the leaf name only, full path in the tooltip
        (a photo tagged "Travel|Iceland|Reykjavik" would otherwise overflow a 232px panel). */
@@ -2000,9 +1998,8 @@
         <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-fav" title="Favorite selected photos">${ic('heart',18)}</button>
       </div>
       </div>
-      <span id="lib-selection-action-hint" class="lib-selection-action-hint" aria-live="polite" hidden>Select photo(s) to use these actions</span>
-      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo" aria-describedby="lib-selection-action-hint">${ic('looks',14)}<span class="lbl">All FX</span></button>
-      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ${kbd([], 'E')}" aria-describedby="lib-selection-action-hint">${ic('export',14)}<span class="lbl">Export</span></button>
+      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo">${ic('looks',14)}<span class="lbl">All FX</span></button>
+      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ${kbd([], 'E')}">${ic('export',14)}<span class="lbl">Export</span></button>
       <!-- id (not just a bare positioning div) so body.deskx can give it the SAME margin-left/
            padding-left/border-left divider as the Editor's own #fx-settings, instead of just the
            row's flat 8px gap — see the #lib-settings CSS rule below, copied from #fx-settings. -->
@@ -6671,15 +6668,12 @@
     [reject, pick, fav].forEach((b) => {
       if (b) {
         b.disabled = !hasTarget;
-        b.setAttribute('aria-describedby', 'lib-selection-action-hint');
       }
     });
     const exportBtn = overlay.querySelector('#lib-export-btn');
     const allFxBtn = overlay.querySelector('#lib-allfx-btn');
     if (exportBtn) exportBtn.disabled = !hasTarget;
     if (allFxBtn) allFxBtn.disabled = !hasTarget;
-    const hint = overlay.querySelector('#lib-selection-action-hint');
-    if (hint) hint.hidden = hasTarget;
     syncLibFlagRow();
   };
   const applySelectionLabel = async (label) => {
