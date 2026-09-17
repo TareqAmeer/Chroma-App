@@ -17679,6 +17679,10 @@ function applyPreviewBorders(P,pw,ph){
   // stage 2: canvas matte around image+borders+frame
   const fin=canvasCompose(framed,P.canvas);
   bd.width=fin.width;bd.height=fin.height;
+  // fxLiveFit may have set both CSS dimensions on the previous photo while the layout was
+  // resizing. Clear those stale dimensions before showing a new-aspect result; the intrinsic
+  // canvas size plus height:auto must be the only sizing source for the composed image.
+  bd.style.width='';bd.style.height='';
   bd.getContext('2d').drawImage(fin,0,0);
   if(stage!==FX.cv)stage.width=stage.height=0;
   if(framed!==stage&&framed!==FX.cv)framed.width=framed.height=0;
@@ -21509,12 +21513,16 @@ function fxLiveFit(ms){
   const cv=(bd&&bd.style.display!=='none'&&bd.width)?bd:document.getElementById('fx-canvas');
   if(!wrap||!cv)return;
   const w0=parseFloat(cv.style.width)||cv.clientWidth,h0=parseFloat(cv.style.height)||cv.clientHeight;
-  if(!w0||!h0)return;
+  const nativeW=cv.width||w0,nativeH=cv.height||h0;
+  if(!nativeW||!nativeH)return;
   const step=()=>{
     const aw=wrap.clientWidth,ah=wrap.clientHeight;
     if(aw>0&&ah>0){
-      const s=Math.min(aw/w0,ah/h0,1);
-      cv.style.width=(w0*s)+'px';cv.style.height=(h0*s)+'px';
+      // Use the CURRENT canvas intrinsic dimensions, not the previous photo's CSS dimensions.
+      // A pasted edit can switch from portrait to landscape while this observer is still
+      // settling; scaling stale w0/h0 independently was the direct squeeze/stretch path.
+      const s=Math.min(aw/nativeW,ah/nativeH,1);
+      cv.style.width=(nativeW*s)+'px';cv.style.height=(nativeH*s)+'px';
     }
     _lfRaf=(performance.now()<_lfUntil)?requestAnimationFrame(step):0;
   };
