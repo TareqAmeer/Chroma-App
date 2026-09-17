@@ -17138,7 +17138,10 @@ function renderPreview(){
     if(orig){orig.style.display='none';orig.style.clipPath='';}
     if(FX&&FX.cv)FX.cv.style.clipPath='';
   }
-  applyPreviewBorders(P,cw,ch);                        // borders sized in CSS px (keep visual thickness)
+  // Compose from the actual backing-store render. Passing cw/ch here downsampled a 2k×3k
+  // preview back to the ~500×750 fit footprint before the border was added, making bordered
+  // previews visibly pixelated; CSS scales the finished canvas to the fit footprint below.
+  applyPreviewBorders(P,pw,ph);
   document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
     ?`Full res ${Math.round(fxZoom*100)}% — rendered ${pw}\u00d7${ph}; export full ${iw}\u00d7${ih}`
     :`Preview ${pw}\u00d7${ph} — export full ${iw}\u00d7${ih}`;
