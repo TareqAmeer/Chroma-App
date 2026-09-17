@@ -15775,6 +15775,11 @@ function drawScopeVectorscope(hc,px,srcW,srcH){
 }
 
 // ══ ZOOM / PAN ════════════════════════════════════════════════════════════════
+function _fxZoomFootprint(){
+  const zw=document.getElementById('fx-zoom-wrap'),cv=document.getElementById('fx-canvas');
+  return {w:parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||cv.clientWidth||0,
+    h:parseFloat(zw&&zw.style.height)||parseFloat(cv&&cv.style.height)||cv.clientHeight||0};
+}
 function _applyZoom(smooth){
   const zw=document.getElementById('fx-zoom-wrap');
   if(!zw)return;
@@ -15786,9 +15791,7 @@ function _applyZoom(smooth){
   // scale*(x+pan). fxPanX/Y are the raw USER drag offset in both branches below — pointermove
   // always just adds the screen-delta/zoom to whatever fxPanX/Y already were, regardless of
   // which regime that offset gets used in here.
-  const cv=document.getElementById('fx-canvas');
-  const w=parseFloat(cv.style.width)||cv.clientWidth||0;
-  const h=parseFloat(cv.style.height)||cv.clientHeight||0;
+  const {w,h}=_fxZoomFootprint();
   let baseX=0,baseY=0;
   if(fxZoom<1){
     // Below 100%: without a correction the shrunk image collapses toward the (0,0)
@@ -15829,8 +15832,7 @@ function zoomBy(factor){
   fxZoom=Math.max(0.25,Math.min(8,fxZoom*factor));
   if(fxZoom<=1){fxPanX=0;fxPanY=0;}
   else{ // keep the frame centre fixed under the new zoom (ox=oy=0.5 in the cursor-zoom invariant)
-    const cv=document.getElementById('fx-canvas');
-    const cw=parseFloat(cv.style.width)||cv.clientWidth,ch=parseFloat(cv.style.height)||cv.clientHeight;
+    const {w:cw,h:ch}=_fxZoomFootprint();
     fxPanX+=0.5*cw*(1/fxZoom-1/prev);fxPanY+=0.5*ch*(1/fxZoom-1/prev);
   }
   _applyZoom(true);
@@ -15851,8 +15853,7 @@ function toggleLoupe(){
     // Carry the current CSS-zoom view-centre into the loupe instead of snapping to the
     // middle. transform is scale(z)·translate(pan) with origin 0 0, so the frame centre
     // (screen x=w/2) maps to local x=(w/2)/z−pan → normalised cx = 0.5/z − pan/w.
-    const cv=document.getElementById('fx-canvas');
-    const w=parseFloat(cv.style.width)||cv.clientWidth||1, h=parseFloat(cv.style.height)||cv.clientHeight||1;
+    const {w,h}=_fxZoomFootprint();
     loupeCX=Math.min(1,Math.max(0,0.5/fxZoom-fxPanX/w));
     loupeCY=Math.min(1,Math.max(0,0.5/fxZoom-fxPanY/h));
     _resetZoom();fxLoupeSeed=Math.random()*100;
@@ -15915,9 +15916,7 @@ function initZoomPan(){
       // screen z*(p+pan) — invariant p ⇒ pan_new = pan_old + o*size*(1/z_new − 1/z_old), same
       // "anchor = mouse position in unscaled content space" identity used by OpenSeadragon's
       // zoomBy/Google Maps/Figma-style canvas zoom.
-      const cv=document.getElementById('fx-canvas');
-      const cw=parseFloat(cv.style.width)||cv.clientWidth;
-      const ch=parseFloat(cv.style.height)||cv.clientHeight;
+      const {w:cw,h:ch}=_fxZoomFootprint();
       fxPanX+=ox*cw*(1/fxZoom-1/prev);
       fxPanY+=oy*ch*(1/fxZoom-1/prev);
     }
@@ -16816,6 +16815,8 @@ function renderLoupe(){
   const src=fxWork;if(!src||!FX.ok)return;
   const fw=src.naturalWidth||src.width,fh=src.naturalHeight||src.height;
   const wrap=document.getElementById('fx-wrap');
+  const zw=document.getElementById('fx-zoom-wrap');
+  if(zw){zw.style.width='';zw.style.height='';}
   // deskx: don't cap at 900 — same reasoning as renderPreview's own maxW (a large desktop window
   // has far more than 900px to show real detail in); web/mobile keep the 900 cap.
   const deskx=document.body.classList.contains('deskx');
@@ -16922,6 +16923,10 @@ function _fxHideFullBase(){const el=document.getElementById('fx-canvas-fullbase'
 function renderFullResCrop(P,iw,ih,cw,ch){
   const src=fxWork;
   const wrap=document.getElementById('fx-wrap');
+  const zw=document.getElementById('fx-zoom-wrap');
+  // Keep the zoom surface at the full image footprint. The crisp tile is smaller and
+  // translated inside it, but its layout box must not become the pan/clamp reference.
+  if(zw){zw.style.width=cw+'px';zw.style.height=ch+'px';}
   const z=fxZoom;
   // Visible region of the canvas in canvas-CSS coords (screen = z·(x+pan) — see _applyZoom).
   const visW=Math.min(cw,(wrap.clientWidth||cw)/z),visH=Math.min(ch,(wrap.clientHeight||ch)/z);
@@ -17033,9 +17038,13 @@ function renderPreview(){
   const maxH=fxPreviewMaxH();                           // cap height on phones (sticky preview)
   const sc=Math.min(1,maxW/iw,maxH/ih);
   const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
+  const _previewComposition=(()=>{const p=getFXParams();return !!(
+    (p.filmFrame&&p.filmFrame.style&&p.filmFrame.style!=='none')||
+    p.bordersEnabled||(p.canvas&&p.canvas.enabled&&p.canvas.ar));})();
   // Full-res + zoomed in: visible-crop render (see renderFullResCrop). Falls through to the
-  // normal full-frame path only if the crop degenerates.
-  if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit){
+  // normal full-frame path for framed/matted images, whose composition must span the whole
+  // image rather than be rebuilt from only the visible source tile.
+  if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&!_previewComposition){
     const Pc=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
       bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
     _fxShowFullBase(iw,ih,cw,ch);                       // coarse underlay behind the crisp crop (smooth panning)
@@ -17050,6 +17059,8 @@ function renderPreview(){
     }
   }
   _fxHideFullBase();fxInvalidateFullBase();             // leaving crop mode — underlay stale, hide it
+  const zw=document.getElementById('fx-zoom-wrap');
+  if(zw){zw.style.width='';zw.style.height='';}
   FX.cv.style.transform='';                            // clear any full-res-crop offset
   // Render the backing store at devicePixelRatio (capped at 2x in-browser so the preview is
   // crisp on HiDPI screens without costing much: 2×900=1800px is still ~1/13 of a 24MP
@@ -17063,13 +17074,20 @@ function renderPreview(){
   // (2.25x the pixels) stays comfortably inside the existing drag_renders/frame budgets, which
   // are keyed to render COUNT, not per-render duration (test/perf_bench.mjs).
   let dpr=Math.min(window.devicePixelRatio||1,capNative()?3:2);
+  // The display footprint is still fit-to-window, but the backing store should retain at
+  // least half of the source detail for usable editing. This is a resolution change, not a
+  // layout change: the preview remains responsive while faces, texture and masks stop being
+  // judged from a tiny ~500px proxy.
+  if(cw>0&&ch>0){
+    const halfSourceDpr=Math.min(iw/cw,ih/ch)*0.5;
+    dpr=Math.max(dpr,halfSourceDpr);
+  }
   if(deskx&&cw>0)dpr=Math.min(dpr,4800/cw);
-  // Full-res preview at Fit: the dpr/4800px caps above exist to bound GPU cost for the DEFAULT
-  // preview; when the user has explicitly opted into Full res, honor that even at Fit by lifting
-  // both caps (still clamped to the source's own resolution — no point exceeding iw×ih) instead
-  // of silently falling back to the capped backing store. This is what was making the preview
-  // look pixelated next to the export even with Full res toggled on.
-  if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom<=1){
+  // Full-res preview: the dpr/4800px caps above exist to bound GPU cost for the DEFAULT preview;
+  // when the user explicitly opts into Full res, honor it at every zoom level (still clamped to
+  // the source's own resolution). Framed/matted previews stay on this whole-frame path so their
+  // composition remains coherent while zooming.
+  if(fxFullResPreview&&!_fxPreviewInteracting){
     dpr=Math.min(iw/(cw||1),ih/(ch||1));
   }
   let pw=(cw*dpr)|0,ph=(ch*dpr)|0;                     // WebGL backing store
@@ -17121,7 +17139,9 @@ function renderPreview(){
     if(FX&&FX.cv)FX.cv.style.clipPath='';
   }
   applyPreviewBorders(P,cw,ch);                        // borders sized in CSS px (keep visual thickness)
-  document.getElementById('fx-info').textContent=`Preview ${cw}\u00d7${ch} — export will be at full ${iw}\u00d7${ih}`;
+  document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
+    ?`Full res ${Math.round(fxZoom*100)}% — native-quality preview of ${iw}\u00d7${ih}`
+    :`Preview ${cw}\u00d7${ch} — export will be at full ${iw}\u00d7${ih}`;
   document.getElementById('btn-fx-export').disabled=false;
   if(fxHistOn)drawHistogram();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // canvas rect may have just changed (new photo / resize)
@@ -17637,7 +17657,8 @@ function applyPreviewBorders(P,pw,ph){
   let bd=document.getElementById('fx-canvas-bd');
   const b1t=P.bordersEnabled?Math.round(pw*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(pw*P.b2.thickness/100):0;
   const cvOn=P.canvas&&P.canvas.enabled&&P.canvas.ar;
-  if(!b1t&&!b2t&&!cvOn){if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;return;}
+  const frameOn=P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none';
+  if(!b1t&&!b2t&&!cvOn&&!frameOn){if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;return;}
   if(!bd){bd=document.createElement('canvas');bd.id='fx-canvas-bd';bd.style.cssText='display:block;max-width:100%;height:auto';wrap.appendChild(bd);}
   // stage 1: bordered image (or the bare render when borders are off)
   let stage=FX.cv;
