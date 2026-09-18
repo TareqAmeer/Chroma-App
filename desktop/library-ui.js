@@ -13,7 +13,9 @@
   const LIBTEST = !window.__TAURI__ && /[?&]libtest=1/.test(location.search);
   let ltAlbums = [];
   if (!window.__TAURI__ && !LIBTEST) return;
-  const invoke = LIBTEST ? libtestInvoke : window.__TAURI__.core.invoke;
+  // Resolve through the current Tauri function at call time so the native diagnostics
+  // wrapper installed by chromasmith-22.html can observe Library IPC too.
+  const invoke = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
   // A Rust command's Result::Err reaches here as a bare String (sometimes a plain sentence like
   // "no such album", sometimes an internal detail like an os-error from a failed write) — either
   // way it was landing in a toast completely unframed, with no verb telling the user what had

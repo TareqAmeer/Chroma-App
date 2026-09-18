@@ -4,7 +4,8 @@
 // this file is a safe no-op if it were ever loaded outside the native shell.
 (function () {
   if (!window.__TAURI__) return;
-  const invoke = window.__TAURI__.core.invoke;
+  // Keep this dynamic: the diagnostics bridge wraps core.invoke after the page script loads.
+  const invoke = (...args) => window.__TAURI__.core.invoke(...args);
 
   // ── window.CS_PLATFORM (docs/windows-port.md ground rule 1, G12) ─────────────────
   // The ONE place shared JS (library-ui.js) may branch on macOS vs Windows — and it must check

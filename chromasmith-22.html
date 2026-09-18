@@ -20207,7 +20207,7 @@ async function gpAuthNative(cid){
     // comply with Google's OAuth 2.0 policy" even after the {PORT}-encoding bug was fixed.
     client_id:cid,redirect_uri:'http://127.0.0.1:{PORT}',response_type:'code',
     scope:GP_SCOPES,state:'gpcb',code_challenge:challenge,code_challenge_method:'S256'}).toString();
-  const invoke=window.__TAURI__.core.invoke;
+  const invoke=(...args)=>window.__TAURI__.core.invoke(...args);
   let result;
   try{result=await invoke('google_oauth_loopback',{authUrlTemplate:template})}
   catch(e){throw new Error('Google sign-in failed: '+(e&&e.message||e))}
@@ -20608,7 +20608,7 @@ async function lrAuthNative(cid){
   const authUrl=LR_IMS_AUTH+'?'+new URLSearchParams({
     client_id:cid,redirect_uri:LR_REDIRECT_URI,response_type:'code',
     scope:LR_SCOPES,state:'lrcb',code_challenge:challenge,code_challenge_method:'S256'}).toString();
-  const invoke=window.__TAURI__.core.invoke;
+  const invoke=(...args)=>window.__TAURI__.core.invoke(...args);
   const callbackPromise=new Promise((resolve,reject)=>{
     let unlisten=null;
     const timeout=setTimeout(()=>{if(unlisten)unlisten();reject(new Error('Sign-in timed out — try again'));},180000);
