@@ -734,6 +734,15 @@ fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
     const RADIUS: i32 = 3; // 7x7 taps
     const MAX_BLEND: f32 = 0.85; // blend fraction toward the local average AT true black (luma=0)
     let src = rgb.to_vec();
+    // Resolve the clamped neighbourhood coordinates once. The old inner loop repeated 98
+    // integer clamps and index calculations for every shadow pixel; these tables preserve the
+    // exact same border replication while leaving the hot loop as plain array reads/adds.
+    let x_neighbors: Vec<[usize; 7]> = (0..w).map(|x| {
+        std::array::from_fn(|k| (x as i32 + k as i32 - RADIUS).clamp(0, w as i32 - 1) as usize)
+    }).collect();
+    let y_neighbors: Vec<[usize; 7]> = (0..h).map(|y| {
+        std::array::from_fn(|k| (y as i32 + k as i32 - RADIUS).clamp(0, h as i32 - 1) as usize)
+    }).collect();
     rgb.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
         for x in 0..w {
             let i = x * 3;
@@ -746,16 +755,13 @@ fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
                 continue; // fast path — skip the blur entirely outside true shadows
             }
             let weight = (1.0 - luma / THRESH).clamp(0.0, 1.0) * MAX_BLEND;
-            let (mut sr, mut sg, mut sb, mut n) = (0f32, 0f32, 0f32, 0f32);
-            for dy in -RADIUS..=RADIUS {
-                let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
-                for dx in -RADIUS..=RADIUS {
-                    let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as usize;
+            let (mut sr, mut sg, mut sb) = (0f32, 0f32, 0f32);
+            for &sy in &y_neighbors[y] {
+                for &sx in &x_neighbors[x] {
                     let si = (sy * w + sx) * 3;
                     sr += src[si] as f32;
                     sg += src[si + 1] as f32;
                     sb += src[si + 2] as f32;
-                    n += 1.0;
                 }
             }
             // CHROMA-ONLY blend, luma preserved. Blending RGB toward the local average (the old
@@ -765,7 +771,7 @@ fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
             // saw as "waxy". Lightroom removes shadow COLOR blotches while keeping luminance
             // grain. So: convert the pixel and the neighbourhood-average to Y/Cb/Cr, blend only
             // the chroma toward the average, and reconstruct with the pixel's ORIGINAL luma.
-            let (ar, ag, ab) = (sr / n, sg / n, sb / n);
+            let (ar, ag, ab) = (sr / 49.0, sg / 49.0, sb / 49.0);
             let cb_p = -0.168_736 * r - 0.331_264 * g + 0.5 * b;
             let cr_p = 0.5 * r - 0.418_688 * g - 0.081_312 * b;
             let cb_a = -0.168_736 * ar - 0.331_264 * ag + 0.5 * ab;
