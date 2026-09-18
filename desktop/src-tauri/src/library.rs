@@ -293,7 +293,9 @@ const META_READER_VER: &str = "meta-v5";   // bumped when the RW2-lens EXIF garb
 /// invalidate every photo's cached EXIF read. See meta_cache_path.
 const VIDEO_META_VER: &str = "vmeta-v1";
 const PHASH_VER: &str = "phash-v1";
-const DECODE_RENDER_VER: &str = "decode-v1";
+// v2 switches the editor-render cache from lossy JPEG to lossless PNG. A cache entry is used as
+// the actual editor source on a later open, so it must preserve every developed display pixel.
+const DECODE_RENDER_VER: &str = "decode-v2";
 const LR_THUMB_VER: &str = "lr-thumb-v1";
 /// Bump this if `is_evictable_cache_file`'s notion of what belongs to the thumbnail tier ever
 /// changes shape again — see `migrate_thumb_cache_v2` below, which uses it as a one-time-per-
@@ -760,7 +762,7 @@ fn decode_cache_key(path: &str, mtime: u64, size: u64, recipe_key: &str) -> Stri
     let size_s = size.to_string();
     // recipe_key folds in RAW profile / native-NR / demosaic-algo / auto-lens — anything that
     // changes decoded pixels. DECODE_RENDER_VER is its own tier, independent of the others.
-    format!("{:016x}.jpg", fnv1a(&[path, &mtime_s, &size_s, recipe_key, DECODE_RENDER_VER]))
+    format!("{:016x}.png", fnv1a(&[path, &mtime_s, &size_s, recipe_key, DECODE_RENDER_VER]))
 }
 
 /// Persistent full-resolution decode cache — the "photos re-decode on every relaunch" fix.
@@ -800,7 +802,7 @@ pub(crate) fn write_decode_cache_file(path: &str, recipe_key: &str, payload: &[u
         .map_err(|e| format!("write decode cache: {e}"))
 }
 
-/// Writes the decode cache — framed raw body (JSON header + JPEG bytes) like store_dcp_lut, to
+/// Writes the decode cache — framed raw body (JSON header + PNG bytes) like store_dcp_lut, to
 /// avoid a multi-megabyte JSON-array argument. Best-effort: the caller (library-ui.js) fires
 /// this in the background after a successful decode and doesn't block on it; a write failure
 /// just means the next open re-decodes, same as today.

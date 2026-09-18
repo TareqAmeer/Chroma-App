@@ -880,7 +880,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 }
 
 /// Warms the persistent editor cache without opening photos in the WebView. One native full
-/// decode is used per photo; future opens are JPEG-only and retain the editor's DCP/matrix colors.
+/// decode is used per photo; future opens use the exact lossless developed pixels.
 #[tauri::command]
 fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: String, raw_nr: String, auto_lens: bool,
                     demosaic_algo: String, lens_override: String, lens_override_focal: f64) -> Result<String, String> {
@@ -906,8 +906,9 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
     } else { raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam) };
     let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba).ok_or("decoded RGBA dimensions do not match")?;
     let mut out = Cursor::new(Vec::new());
-    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 95)
-        .encode_image(&image::DynamicImage::ImageRgba8(img)).map_err(|e| format!("encode decode cache: {e}"))?;
+    image::DynamicImage::ImageRgba8(img)
+        .write_to(&mut out, image::ImageFormat::Png)
+        .map_err(|e| format!("encode decode cache: {e}"))?;
     library::write_decode_cache_file(&path, &recipe_key, out.get_ref())?;
     Ok("written".into())
 }

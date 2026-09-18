@@ -3414,20 +3414,20 @@
     window.chromasmithDemosaicAlgo = demosaicAlgoForThisPhoto;
     // Persistent decode cache ("photos re-decode on every relaunch"): the in-memory imgCache
     // above only survives within THIS session. For a RAW that isn't in it (first open, or a
-    // fresh app launch), check the on-disk cache — a quality-95 JPEG of the fully-decoded
+    // fresh app launch), check the on-disk cache — a lossless PNG of the fully-decoded
     // result keyed on path+mtime+size+recipe (see library.rs's get_decode_cache) — before
-    // falling back to the full native RAW pipeline. A hit is a plain JPEG decode (~100-200ms)
+    // falling back to the full native RAW pipeline. A hit is a plain PNG decode
     // instead of several seconds of demosaic+NR.
     const isRaw = RAW_EXT_RE.test(path);
     const recipeKey = isRaw ? rawRecipeKey() : '';
     let diskCached = null;
     if (!cached && isRaw && !hdrPreview) {
       try {
-        const jpegBuf = await invoke('get_decode_cache', { path, recipeKey });
-        const bmp = await createImageBitmap(new Blob([jpegBuf], { type: 'image/jpeg' }));
+        const pngBuf = await invoke('get_decode_cache', { path, recipeKey });
+        const bmp = await createImageBitmap(new Blob([pngBuf], { type: 'image/png' }));
         const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
         c.getContext('2d').drawImage(bmp, 0, 0);
-        // The cache itself is a re-encoded JPEG, but the SOURCE FILE is the real RAW — ext/exif
+        // The cache itself is a lossless PNG, but the SOURCE FILE is the real RAW — ext/exif
         // must reflect that (showExif reads it.ext for "File Format" and it.exif for the EXIF
         // rows), or a reopened RAW from this cache path shows "JPG" with blank metadata even
         // though the fresh-decode path (below) gets it right.
@@ -3537,7 +3537,7 @@
                 if (!blob || state.openedPath !== path) return;
                 blob.arrayBuffer().then((ab) => framedInvoke('save_decode_cache', { path, recipeKey }, new Uint8Array(ab)))
                   .catch((e) => console.error('save_decode_cache', e));
-              }, 'image/jpeg', 0.95);
+              }, 'image/png');
             };
           }
         }
@@ -5815,7 +5815,9 @@
   function renderBatchBar() {
     let bar = document.getElementById('lib-batchbar');
     const n = state.selected.size;
-    if (n < 2) { if (bar) bar.remove(); return; }
+    // Caching is useful for a single RAW too, and showing the same selection bar from the first
+    // selected photo makes the pre-cache action discoverable before a large batch is selected.
+    if (n < 1) { if (bar) bar.remove(); return; }
     if (!bar) {
       bar = document.createElement('div');
       bar.id = 'lib-batchbar';
@@ -5828,7 +5830,7 @@
     const paths = () => Array.from(state.selected);
     bar.innerHTML = `<span style="font-size:11px;color:var(--mut)">${n} selected</span>`
       + `<span style="width:1px;height:16px;background:var(--bdr)"></span>`
-      + `<button class="lib-btn" data-act="cache-raw">Cache RAWs</button>`
+      + `<button class="lib-btn" data-act="cache-raw" title="Build exact full-quality editor caches for the selected RAW photos">Cache selected RAWs</button>`
       + `<button class="lib-btn" data-act="reject">Reject</button>`
       + `<button class="lib-btn" data-act="pick">Pick</button>`
       + `<button class="lib-btn" data-act="clear-label">Clear flag</button>`

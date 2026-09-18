@@ -755,13 +755,16 @@ fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
                 continue; // fast path — skip the blur entirely outside true shadows
             }
             let weight = (1.0 - luma / THRESH).clamp(0.0, 1.0) * MAX_BLEND;
-            let (mut sr, mut sg, mut sb) = (0f32, 0f32, 0f32);
+            // A 7×7 sum cannot exceed 3,211,215, which fits exactly in both u32 and f32.
+            // Accumulating as integers removes 147 u16→f32 conversions per shadow pixel while
+            // preserving the exact float values used by the chroma reconstruction below.
+            let (mut sr, mut sg, mut sb) = (0u32, 0u32, 0u32);
             for &sy in &y_neighbors[y] {
                 for &sx in &x_neighbors[x] {
                     let si = (sy * w + sx) * 3;
-                    sr += src[si] as f32;
-                    sg += src[si + 1] as f32;
-                    sb += src[si + 2] as f32;
+                    sr += src[si] as u32;
+                    sg += src[si + 1] as u32;
+                    sb += src[si + 2] as u32;
                 }
             }
             // CHROMA-ONLY blend, luma preserved. Blending RGB toward the local average (the old
@@ -771,7 +774,7 @@ fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
             // saw as "waxy". Lightroom removes shadow COLOR blotches while keeping luminance
             // grain. So: convert the pixel and the neighbourhood-average to Y/Cb/Cr, blend only
             // the chroma toward the average, and reconstruct with the pixel's ORIGINAL luma.
-            let (ar, ag, ab) = (sr / 49.0, sg / 49.0, sb / 49.0);
+            let (ar, ag, ab) = (sr as f32 / 49.0, sg as f32 / 49.0, sb as f32 / 49.0);
             let cb_p = -0.168_736 * r - 0.331_264 * g + 0.5 * b;
             let cr_p = 0.5 * r - 0.418_688 * g - 0.081_312 * b;
             let cb_a = -0.168_736 * ar - 0.331_264 * ag + 0.5 * ab;
