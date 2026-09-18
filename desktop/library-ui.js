@@ -3497,6 +3497,8 @@
         // either way, so this is a no-op for that case.
         const fileMime = offlinePreview ? 'image/jpeg' : (hqOfflineCacheExt ? mimeFromName('x.' + hqOfflineCacheExt) : mimeFromName(path));
         const file = new File([buf], baseName(path), { type: fileMime, lastModified: 0 });
+        window.chromasmithSourcePath = path;
+        window.chromasmithDecodeRecipeKey = recipeKey;
         await loadFXImages([file]); // bare identifier — see desktop-native.js's note on this
         if (fxImages[0]) {
           fxImages[0].fileSize = buf.byteLength; // shown as the "Size" row in the metadata panel
@@ -3524,18 +3526,17 @@
             // wrong image would come back on every future open of that path). The openedPath
             // check is a second guard for the same race on the invoke side.
             const cachedCanvas = fxImages[0].img;
-            setTimeout(() => {
-              if (state.openedPath !== path) return; // user moved on — don't cache a stale/wrong frame
-              if (!cachedCanvas.toBlob) return;
-              cachedCanvas.toBlob((blob) => {
-                if (!blob) return;
-                blob.arrayBuffer().then((ab) => {
-                  if (state.openedPath !== path) return;
-                  framedInvoke('save_decode_cache', { path, recipeKey }, new Uint8Array(ab))
-                    .catch((e) => console.error('save_decode_cache', e));
-                });
+            // desktop-native's refine callback invokes this only after the full-quality pixels
+            // replace the fast first paint. Caching a timed snapshot here could persist the
+            // provisional, unrefined frame when the native pass takes longer than the timeout.
+            window.chromasmithCacheRefinedCanvas = (refinedPath, refinedKey, canvas) => {
+              if (refinedPath !== path || refinedKey !== recipeKey || state.openedPath !== path || canvas !== cachedCanvas || !canvas.toBlob) return;
+              canvas.toBlob((blob) => {
+                if (!blob || state.openedPath !== path) return;
+                blob.arrayBuffer().then((ab) => framedInvoke('save_decode_cache', { path, recipeKey }, new Uint8Array(ab)))
+                  .catch((e) => console.error('save_decode_cache', e));
               }, 'image/jpeg', 0.95);
-            }, 1500);
+            };
           }
         }
       }
@@ -4843,6 +4844,67 @@
     return files;
   }
 
+  // Warm the persistent full-resolution RAW cache without opening photos in the editor.
+  let _cacheWarmCancel = null;
+  async function cacheSelectedRaws(paths) {
+    const rawPaths = paths.filter((p) => RAW_EXT_RE.test(p));
+    if (!rawPaths.length) { toast('Select at least one RAW photo to cache', false); return; }
+    let cancelled = false;
+    _cacheWarmCancel = () => { cancelled = true; };
+    activityUpdate('raw-cache', { label: 'Caching RAW previews', stage: 'working', done: 0, total: rawPaths.length,
+      current: `Preparing ${rawPaths.length} photo${rawPaths.length === 1 ? '' : 's'}`, cancelFn: () => { cancelled = true; } });
+    let written = 0, cached = 0, failed = [];
+    try {
+      for (let i = 0; i < rawPaths.length && !cancelled; i++) {
+        const path = rawPaths[i];
+        try {
+          let rawNr = window.chromasmithRawNr || 'fast';
+          let demosaicAlgo = window.chromasmithDemosaicAlgo || '';
+          try {
+            const sc = await getSidecar(path);
+            if (sc.recipe) {
+              const snap = snapshotFromB64(sc.recipe);
+              rawNr = snap.rawNr !== undefined ? snap.rawNr : (snap.nativeNr === false ? 'off' : rawNr);
+              if (snap.demosaicAlgo !== undefined) demosaicAlgo = snap.demosaicAlgo;
+            }
+          } catch (e) {}
+          const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
+          const autoLens = !!window.chromasmithAutoLens;
+          const lensOverride = window.chromasmithLensOverride || '';
+          const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
+          const recipeKey = [profile, rawNr !== 'off' ? 1 : 0, demosaicAlgo, autoLens ? 1 : 0,
+            lensOverride, lensOverrideFocal].join('|');
+          const bytes = new Uint8Array(await invoke('read_file_bytes', { path }));
+          const ident = await invoke('peek_raw_camera', bytes);
+          let mode = 'srgb', lutKey = '';
+          if (profile && typeof resolveDcpSource === 'function') {
+            const source = await resolveDcpSource(ident.make || '', ident.model || '');
+            if (source) {
+              mode = 'lut'; lutKey = `dcp:${source.prefix}:${profile}`;
+              if (!window.__chromasmithRustLuts) window.__chromasmithRustLuts = {};
+              if (!window.__chromasmithRustLuts[lutKey]) {
+                const lut = await getDcpLUT(source.prefix, profile, 200, source.source);
+                await framedInvoke('store_dcp_lut', { key: lutKey, make: ident.make || '' },
+                  new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
+                window.__chromasmithRustLuts[lutKey] = true;
+              }
+            }
+          }
+          const result = await invoke('cache_raw_decode', { path, recipeKey, mode, lutKey, rawNr,
+            autoLens, demosaicAlgo, lensOverride, lensOverrideFocal });
+          if (result === 'cached') cached++; else written++;
+        } catch (e) { failed.push(`${baseName(path)}: ${humanizeErr('cache', e)}`); }
+        activityUpdate('raw-cache', { stage: 'working', done: i + 1, total: rawPaths.length, current: baseName(path) });
+      }
+    } finally {
+      _cacheWarmCancel = null;
+      const ready = written + cached;
+      const summary = cancelled ? `Caching stopped — ${ready} of ${rawPaths.length} ready` : `Cached ${ready} RAW preview${ready === 1 ? '' : 's'}`;
+      activityUpdate('raw-cache', { stage: 'done', done: ready, total: rawPaths.length, current: summary, failed: failed.length ? failed : undefined });
+      toast(failed.length ? `${summary}; ${failed.length} failed` : summary, !failed.length);
+    }
+  }
+
   // ── Shared edit-recipe actions ───────────────────────────────────────────────────────────
   // Extracted so the context menu (buildPathsMenu, below) and the grid keyboard shortcuts (the
   // document keydown handler further down) call exactly one implementation each — a keyboard-
@@ -5764,11 +5826,13 @@
     const paths = () => Array.from(state.selected);
     bar.innerHTML = `<span style="font-size:11px;color:var(--mut)">${n} selected</span>`
       + `<span style="width:1px;height:16px;background:var(--bdr)"></span>`
+      + `<button class="lib-btn" data-act="cache-raw">Cache RAWs</button>`
       + `<button class="lib-btn" data-act="reject">Reject</button>`
       + `<button class="lib-btn" data-act="pick">Pick</button>`
       + `<button class="lib-btn" data-act="clear-label">Clear flag</button>`
       + `<button class="lib-btn" data-act="fav">Favorite</button>`
       + `<button class="lib-btn" data-act="deselect">Deselect</button>`;
+    bar.querySelector('[data-act="cache-raw"]').onclick = () => cacheSelectedRaws(paths());
     bar.querySelector('[data-act="reject"]').onclick = () => paths().forEach((p) => setLabel(p, 'Red'));
     bar.querySelector('[data-act="pick"]').onclick = () => paths().forEach((p) => setLabel(p, 'Green'));
     bar.querySelector('[data-act="clear-label"]').onclick = () => paths().forEach((p) => setLabel(p, ''));

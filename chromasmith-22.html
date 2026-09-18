@@ -10094,6 +10094,7 @@ async function loadRw2(file){
       }
       if(typeof updateWork==='function')updateWork();
       if(typeof renderPreview==='function')renderPreview();
+      if(typeof window.chromasmithCacheRefinedCanvas==='function')window.chromasmithCacheRefinedCanvas(window.chromasmithSourcePath||'',window.chromasmithDecodeRecipeKey||'',c);
       log('RAW refined (noise reduction applied)','info');
     }).catch(e=>{
       console.error('RAW background refine failed',e);

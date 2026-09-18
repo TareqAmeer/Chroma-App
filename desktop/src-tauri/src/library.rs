@@ -782,6 +782,19 @@ pub fn get_decode_cache(path: String, recipe_key: String) -> Result<tauri::ipc::
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+pub(crate) fn decode_cache_exists(path: &str, recipe_key: &str) -> Result<bool, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    Ok(decode_cache_dir().join(decode_cache_key(path, mtime, meta.len(), recipe_key)).is_file())
+}
+
+pub(crate) fn write_decode_cache_file(path: &str, recipe_key: &str, payload: &[u8]) -> Result<(), String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    std::fs::write(decode_cache_dir().join(decode_cache_key(path, mtime, meta.len(), recipe_key)), payload)
+        .map_err(|e| format!("write decode cache: {e}"))
+}
+
 /// Writes the decode cache — framed raw body (JSON header + JPEG bytes) like store_dcp_lut, to
 /// avoid a multi-megabyte JSON-array argument. Best-effort: the caller (library-ui.js) fires
 /// this in the background after a successful decode and doesn't block on it; a write failure

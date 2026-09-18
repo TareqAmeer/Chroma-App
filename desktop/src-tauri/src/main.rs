@@ -11,6 +11,7 @@
 // still show println!/log output in a console, matching Tauri's own project-template default.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::path::{Path, PathBuf};
+use std::io::Cursor;
 #[cfg(target_os = "macos")]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
@@ -872,6 +873,38 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     out.extend_from_slice(&body);
     out.extend_from_slice(&ext_bytes);
     Ok(tauri::ipc::Response::new(out))
+}
+
+/// Warms the persistent editor cache without opening photos in the WebView. One native full
+/// decode is used per photo; future opens are JPEG-only and retain the editor's DCP/matrix colors.
+#[tauri::command]
+fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: String, raw_nr: String, auto_lens: bool,
+                    demosaic_algo: String, lens_override: String, lens_override_focal: f64) -> Result<String, String> {
+    if !formats::is_raw_ext(Path::new(&path).extension().and_then(|e| e.to_str()).unwrap_or("")) {
+        return Err("selected file is not a RAW photo".into());
+    }
+    if library::decode_cache_exists(&path, &recipe_key)? { return Ok("cached".into()); }
+    let demosaic_algo = match demosaic_algo.as_str() { "" | "ahd" | "vng" | "mhc" => demosaic_algo.as_str(), _ => "" };
+    let lens_override = match (lens_override.is_empty(), lens_override_focal > 0.0) {
+        (false, true) => Some((lens_override.as_str(), lens_override_focal as f32)), _ => None,
+    };
+    let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
+    let nr = if raw_nr == "off" { raw_decode::NrTier::Off } else { raw_decode::NrTier::Fast };
+    let decoded = raw_decode::decode_rw2_bytes(&bytes, auto_lens, nr,
+        demosaic_algo, false, lens_override)?;
+    let (effective_mode, _) = effective_dcp_mode(&mode, &decoded.make, (!lut_key.is_empty()).then_some(lut_key.as_str()));
+    let rgba = if effective_mode == "lut" {
+        let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
+        let lut = guard.as_ref().and_then(|m| m.get(&lut_key).cloned()).ok_or_else(|| format!("LUT '{lut_key}' not registered"))?;
+        let n = ((lut.len() / 3) as f64).cbrt().round() as usize;
+        raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
+    } else { raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam) };
+    let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba).ok_or("decoded RGBA dimensions do not match")?;
+    let mut out = Cursor::new(Vec::new());
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 95)
+        .encode_image(&image::DynamicImage::ImageRgba8(img)).map_err(|e| format!("encode decode cache: {e}"))?;
+    library::write_decode_cache_file(&path, &recipe_key, out.get_ref())?;
+    Ok("written".into())
 }
 
 /// Decode a still the WebView can't (formats::STILL_RUST_EXTS — EXR/HDR/TGA/DDS/QOI/FF/PNM*/
@@ -2250,6 +2283,7 @@ fn main() {
             dcp_store::list_dcp_profiles,
             dcp_store::read_dcp_file,
             decode_raw_v2,
+            cache_raw_decode,
             decode_image_v1,
             merge_hdr_photos,
             merge_focus_photos,
