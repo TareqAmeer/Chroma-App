@@ -1039,6 +1039,54 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     });
 }
 
+/// Exact 5x5 luma range using separable horizontal/vertical min/max passes. The previous
+/// implementation inspected 25 samples for every output pixel; this computes the same range
+/// with 5 horizontal + 5 vertical comparisons. `yv` is scratch after this call and contains the
+/// horizontal maxima; callers recompute the original luma from their untouched RGB input when
+/// reconstructing the output.
+fn local_contrast_5x5(yv: &mut [f32], w: usize, h: usize) -> Vec<f32> {
+    let mut contrast = vec![0f32; yv.len()];
+    contrast.par_chunks_mut(w).zip(yv.par_chunks_mut(w)).for_each(|(mins, row)| {
+        let src = row.to_vec();
+        for x in 0..w {
+            let mut lo = f32::MAX;
+            let mut hi = f32::MIN;
+            for dx in -2i32..=2 {
+                let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as usize;
+                lo = lo.min(src[sx]);
+                hi = hi.max(src[sx]);
+            }
+            mins[x] = lo;
+            row[x] = hi;
+        }
+    });
+    let mins_ptr = contrast.as_ptr() as usize;
+    contrast.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        // The current row is copied because the output overwrites the horizontal minima while
+        // its 5-row neighbourhood still needs the original values. Other rows are read through
+        // a stable pointer; each worker owns a distinct output row.
+        let current = row.to_vec();
+        for x in 0..w {
+            let mut lo = f32::MAX;
+            let mut hi = f32::MIN;
+            for dy in -2i32..=2 {
+                let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
+                let min_v = if sy == y {
+                    current[x]
+                } else {
+                    // SAFETY: mins_ptr points to the immutable horizontal-minimum buffer; this
+                    // loop reads only rows other than the row currently being overwritten.
+                    unsafe { *((mins_ptr as *const f32).add(sy * w + x)) }
+                };
+                lo = lo.min(min_v);
+                hi = hi.max(yv[sy * w + x]);
+            }
+            row[x] = hi - lo;
+        }
+    });
+    contrast
+}
+
 /// Edge-gated false-color suppression — see the call site's doc comment in
 /// decode_rw2_bytes for the full rationale and validation history. Operates on interleaved
 /// u16 RGB (post-demosaic, pre-orientation). `contrast_thresh`/`dev_thresh` are in normalized
@@ -1058,25 +1106,10 @@ fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f3
         *pcr = 0.5 * r - 0.418_688 * g - 0.081_312 * b;
     });
 
-    // Local luma contrast = max-min over a 5x5 window (NOT a box-average diff — measured
-    // directly on real false-color pixels that a box-diff badly under-reports contrast near a
-    // hard edge, since the demosaic itself already smooths the transition over a few pixels).
-    let mut contrast = vec![0f32; npx];
-    contrast.par_iter_mut().enumerate().for_each(|(i, o)| {
-        let (x, y) = (i % w, i / w);
-        let mut lo = f32::MAX;
-        let mut hi = f32::MIN;
-        for dy in -2i32..=2 {
-            let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
-            for dx in -2i32..=2 {
-                let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as usize;
-                let v = yv[sy * w + sx];
-                lo = lo.min(v);
-                hi = hi.max(v);
-            }
-        }
-        *o = hi - lo;
-    });
+    // Local luma contrast is the max-min over a 5x5 window. The separable implementation is
+    // mathematically identical to the direct 25-sample scan, but does only 10 comparisons per
+    // output pixel.
+    let contrast = local_contrast_5x5(&mut yv, w, h);
 
     // The hot path below evaluates this median once per eligible pixel, per channel, per pass.
     // A general-purpose sort spends most of that time in comparator/call overhead. This fixed
@@ -1133,7 +1166,9 @@ fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f3
     }
 
     rgb.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
-        let y = yv[i];
+        let y = 0.299 * (px[0] as f32 / 65535.0)
+            + 0.587 * (px[1] as f32 / 65535.0)
+            + 0.114 * (px[2] as f32 / 65535.0);
         px[0] = ((y + 1.402 * cr[i]) * 65535.0).round().clamp(0.0, 65535.0) as u16;
         px[1] = ((y - 0.344_136 * cb[i] - 0.714_136 * cr[i]) * 65535.0).round().clamp(0.0, 65535.0) as u16;
         px[2] = ((y + 1.772 * cb[i]) * 65535.0).round().clamp(0.0, 65535.0) as u16;
@@ -1159,22 +1194,7 @@ fn hue_defringe_gated(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f32)
         *py = 0.299 * r + 0.587 * g + 0.114 * b;
     });
 
-    let mut contrast = vec![0f32; npx];
-    contrast.par_iter_mut().enumerate().for_each(|(i, o)| {
-        let (x, y) = (i % w, i / w);
-        let mut lo = f32::MAX;
-        let mut hi = f32::MIN;
-        for dy in -2i32..=2 {
-            let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
-            for dx in -2i32..=2 {
-                let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as usize;
-                let v = yv[sy * w + sx];
-                lo = lo.min(v);
-                hi = hi.max(v);
-            }
-        }
-        *o = hi - lo;
-    });
+    let contrast = local_contrast_5x5(&mut yv, w, h);
 
     rgb.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
         if contrast[i] <= contrast_thresh {
@@ -1195,7 +1215,7 @@ fn hue_defringe_gated(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f32)
         };
         let sat = delta / mx.max(1e-9);
         if hue >= HUE_LO && hue <= HUE_HI && sat > SAT_THRESH {
-            let y = yv[i];
+            let y = 0.299 * r + 0.587 * g + 0.114 * b;
             let new_r = r * (1.0 - DESAT_AMOUNT) + y * DESAT_AMOUNT;
             let new_g = g * (1.0 - DESAT_AMOUNT) + y * DESAT_AMOUNT;
             let new_b = b * (1.0 - DESAT_AMOUNT) + y * DESAT_AMOUNT;
