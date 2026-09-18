@@ -5099,6 +5099,19 @@
       });
       sep();
     }
+    // Persistent RAW caching must be reachable from the same right-click selection workflow
+    // as the rest of the batch actions. The floating selection bar is easy to miss in a large
+    // grid or when it is covered by the cursor/context menu.
+    const rawCount = paths.filter((p) => RAW_EXT_RE.test(p)).length;
+    const cacheRawItem = item(`Cache ${rawCount > 1 ? `${rawCount} RAWs` : 'RAW'} for fast editing`, () => cacheSelectedRaws(paths));
+    if (!rawCount) {
+      cacheRawItem.style.opacity = '.4';
+      cacheRawItem.style.pointerEvents = 'none';
+      cacheRawItem.title = 'The selected photos do not include a supported RAW file';
+    } else {
+      cacheRawItem.title = 'Build exact full-quality editor caches for the selected RAW photos';
+    }
+    sep();
     // Only offered while actually looking at Needs review — elsewhere it's a confusing no-op
     // (dismissing a photo that was never flagged does nothing visible), and "blurry" itself
     // stays true either way; this only ever hides it from THIS specific review list.
