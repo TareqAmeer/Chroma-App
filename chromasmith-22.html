@@ -21931,15 +21931,20 @@ if(window.__TAURI__&&window.__TAURI__.core){
       oe(...a);
     };
     if(window.__TAURI__.core.invoke){
-      const origInvoke=window.__TAURI__.core.invoke;
-      window.__TAURI__.core.invoke=function(cmd,args){
-        if(cmd==='write_file_bytes'||cmd==='diag_native_state')return origInvoke.call(this,cmd,args);
+      const core=window.__TAURI__.core;
+      const origInvoke=core.invoke.bind(core);
+      const diagInvoke=function(cmd,args){
+        if(cmd==='write_file_bytes'||cmd==='diag_native_state')return origInvoke(cmd,args);
         const t0=performance.now();
-        return origInvoke.call(this,cmd,args).then(
+        return origInvoke(cmd,args).then(
           r=>{diagIpc.push({t:Date.now(),cmd,ms:Math.round(performance.now()-t0)});if(diagIpc.length>100)diagIpc.shift();return r;},
           err=>{diagIpc.push({t:Date.now(),cmd,ms:Math.round(performance.now()-t0),err:String(err)});if(diagIpc.length>100)diagIpc.shift();throw err;}
         );
       };
+      // Host objects in WebKit can ignore a plain assignment. Define the property when possible,
+      // otherwise proxy the core object so every later `core.invoke` property read is wrapped.
+      try{Object.defineProperty(core,'invoke',{configurable:true,writable:true,value:diagInvoke});}
+      catch(_){window.__TAURI__.core=new Proxy(core,{get(t,p){return p==='invoke'?diagInvoke:Reflect.get(t,p);}});}
     }
     async function writeDiag(){
       const now=Date.now();
