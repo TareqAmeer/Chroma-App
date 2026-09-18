@@ -9,11 +9,12 @@
 # Chromasmith instance that could never finish the sign-in (the PKCE verifier lives in the
 # instance that started it). Exactly one bundle stays registered: this one, in place.
 set -euo pipefail
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 npm run build
 
-APP="$(cd "$(dirname "$0")" && pwd)/src-tauri/target/release/bundle/macos/Chromasmith.app"
+APP="$SCRIPT_DIR/src-tauri/target/release/bundle/macos/Chromasmith.app"
 LSREG=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 
 "$LSREG" -f "$APP"

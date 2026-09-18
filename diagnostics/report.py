@@ -65,6 +65,7 @@ def build_summary(events):
     errors = [e for e in events if e.get('category') == 'error']
     native_log_count = len([e for e in events if e.get('category') == 'native_log'])
     ipc = [e for e in events if e.get('category') == 'ipc']
+    raw_ops = [e for e in events if e.get('category') == 'raw']
     markers = [e for e in events if e.get('category') == 'marker']
     child_events = [e for e in events if e.get('category') == 'child_process']
     child_stalls = [e for e in child_events if e.get('kind') == 'possible_stall']
@@ -103,6 +104,7 @@ def build_summary(events):
         'native_log_count': native_log_count,
         'ipc': ipc,
         'slow_ipc': slow_ipc,
+        'raw_ops': raw_ops,
         'markers': markers,
         'child_events': child_events,
         'child_stalls': child_stalls,
@@ -249,6 +251,15 @@ def render_markdown(summary, events_path, meta, incident_files, repeat_loops, co
         lines.append("|---|---|---|")
         for e in summary['slow_ipc'][:15]:
             lines.append(f"| {_fmt_ts(e['ts'])} | {e.get('cmd', '?')} | {e.get('ms')} |")
+        lines.append("")
+
+    if summary['raw_ops']:
+        lines.append("## RAW operations\n")
+        lines.append("| time | operation | duration / detail |")
+        lines.append("|---|---|---|")
+        for e in summary['raw_ops']:
+            detail = e.get('duration_ms') or e.get('bytes') or ''
+            lines.append(f"| {_fmt_ts(e['ts'])} | {e.get('kind', '?')} | {detail} |")
         lines.append("")
 
     lines.append("## Errors (incl. silent-wrong-behavior signatures)\n")

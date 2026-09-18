@@ -787,6 +787,10 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     // desktop/desktop-native.js's NativeLibRawShim.open()/refine()). Defaults to false so any
     // caller that doesn't set it gets today's unchanged, full-quality-only behavior.
     let fast = json["fast"].as_bool().unwrap_or(false);
+    let _raw_diag = diag::raw_op(format!(
+        "decode_raw_v2 mode={} fast={} bytes={}",
+        mode, fast, payload.len()
+    ));
     // Manual lens override (see list_lens_profiles below): a "Maker Model" string the user
     // picked from the bundled DB's own lens list, paired with a focal length in mm — for
     // manual/adapted lenses (TTArtisan and similar) that write no lens EXIF at all, so no
@@ -880,6 +884,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 #[tauri::command]
 fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: String, raw_nr: String, auto_lens: bool,
                     demosaic_algo: String, lens_override: String, lens_override_focal: f64) -> Result<String, String> {
+    let _raw_diag = diag::raw_op(format!("cache_raw_decode file={}", Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?")));
     if !formats::is_raw_ext(Path::new(&path).extension().and_then(|e| e.to_str()).unwrap_or("")) {
         return Err("selected file is not a RAW photo".into());
     }
@@ -984,6 +989,7 @@ static NR_CANCEL_FLAGS: Mutex<Option<HashMap<String, std::sync::Arc<std::sync::a
 #[tauri::command]
 fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
+    let _raw_diag = diag::raw_op(format!("denoise_raw_high bytes={}", payload.len()));
     let token = json["token"].as_str().unwrap_or("").to_string();
     let mode = json["mode"].as_str().unwrap_or("linear16");
     let auto_lens = json["autoLens"].as_bool().unwrap_or(false);

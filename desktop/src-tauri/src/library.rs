@@ -778,7 +778,12 @@ pub fn get_decode_cache(path: String, recipe_key: String) -> Result<tauri::ipc::
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
     let key = decode_cache_key(&path, mtime, meta.len(), &recipe_key);
-    let bytes = std::fs::read(decode_cache_dir().join(&key)).map_err(|_| "no cached decode".to_string())?;
+    let cache_path = decode_cache_dir().join(&key);
+    let bytes = std::fs::read(&cache_path).map_err(|_| {
+        crate::diag::log("info", format!("RAW_DIAG cache_miss file={}", std::path::Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?")));
+        "no cached decode".to_string()
+    })?;
+    crate::diag::log("info", format!("RAW_DIAG cache_hit file={} bytes={}", std::path::Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?"), bytes.len()));
     Ok(tauri::ipc::Response::new(bytes))
 }
 

@@ -68,6 +68,23 @@ def _category_for(level, target):
     return 'native_log'
 
 
+def _raw_diag_event(parsed, now):
+    """Turn native RAW lifecycle markers into structured diagnostic events."""
+    msg = parsed.get('msg', '')
+    # _parse_line deliberately preserves the complete original line for report/debugging;
+    # strip the logger prefix here instead of assuming msg is only the payload.
+    marker = ' RAW_DIAG '
+    marker_at = msg.find(marker)
+    if marker_at < 0:
+        return None
+    fields = {}
+    for token in msg[marker_at + len(marker):].split():
+        if '=' in token:
+            key, value = token.split('=', 1)
+            fields[key] = value
+    return {'ts': now, 'category': 'raw', 'kind': fields.pop('label', 'unknown'), **fields}
+
+
 class LogFileTailer:
     """Call poll() on an interval; emits one event per new line since the last call."""
 
@@ -107,6 +124,10 @@ class LogFileTailer:
             if not parsed:
                 continue
             category = _category_for(parsed['level'], parsed['target'])
+            raw_event = _raw_diag_event(parsed, now)
+            if raw_event:
+                self.on_event(raw_event)
+                continue
             self.on_event({
                 'ts': now,
                 'category': category,

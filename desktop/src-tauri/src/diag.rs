@@ -23,7 +23,7 @@
 
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::UNIX_EPOCH;
+use std::time::{Instant, UNIX_EPOCH};
 
 /// Log a diagnostic line through the `log` crate, which `tauri_plugin_log`'s targets
 /// (Stdout + LogDir + Webview, see main.rs) persist to a real file automatically.
@@ -38,6 +38,33 @@ pub fn log(level: &str, msg: impl AsRef<str>) {
         "warn" => log::warn!("{msg}"),
         _ => log::info!("{msg}"),
     }
+}
+
+/// Native lifecycle marker for operations whose work happens inside a Tauri command.
+/// The WebKit host object does not reliably allow JS monkey-patching of `core.invoke`,
+/// so timings for the expensive RAW path must be emitted at the operation boundary.
+pub struct RawOpGuard {
+    label: String,
+    started: Instant,
+}
+
+impl Drop for RawOpGuard {
+    fn drop(&mut self) {
+        log(
+            "info",
+            format!(
+                "RAW_DIAG end label={} duration_ms={}",
+                self.label,
+                self.started.elapsed().as_millis()
+            ),
+        );
+    }
+}
+
+pub fn raw_op(label: impl Into<String>) -> RawOpGuard {
+    let label = label.into();
+    log("info", format!("RAW_DIAG start label={label}"));
+    RawOpGuard { label, started: Instant::now() }
 }
 
 /// Install once, at the very top of `main()` — captures panic messages that were
