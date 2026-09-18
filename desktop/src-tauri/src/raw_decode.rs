@@ -734,59 +734,30 @@ fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
     const RADIUS: i32 = 3; // 7x7 taps
     const MAX_BLEND: f32 = 0.85; // blend fraction toward the local average AT true black (luma=0)
     let src = rgb.to_vec();
-    // The original implementation visited 49 source pixels per shadow pixel. Compute the same
-    // clamped 7x7 box average as two 1D passes inside independent row bands: 7 horizontal sums
-    // followed by 7 vertical sums. The sums stay exact in f32 (the largest intermediate is well
-    // below 2^24), while each worker's small band-local scratch buffer avoids a full-frame float
-    // allocation and keeps the vertical working set cache-friendly.
-    const BAND_ROWS: usize = 32;
-    rgb.par_chunks_mut(BAND_ROWS * w * 3)
-        .enumerate()
-        .map_init(|| Vec::<f32>::new(), |scratch, (band, out)| {
-        let y0 = band * BAND_ROWS;
-        let rows = out.len() / (w * 3);
-        let sy0 = y0.saturating_sub(RADIUS as usize);
-        let sy1 = (y0 + rows + RADIUS as usize).min(h);
-        scratch.resize((sy1 - sy0) * w * 3, 0.0);
-        scratch.fill(0.0);
-
-        for sy in sy0..sy1 {
-            let src_row = &src[sy * w * 3..(sy + 1) * w * 3];
-            let dst_row = &mut scratch[(sy - sy0) * w * 3..(sy - sy0 + 1) * w * 3];
-            for x in 0..w {
-                let i = x * 3;
+    rgb.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
+        for x in 0..w {
+            let i = x * 3;
+            let base = y * w * 3 + i;
+            let r = src[base] as f32;
+            let g = src[base + 1] as f32;
+            let b = src[base + 2] as f32;
+            let luma = 0.299 * r + 0.587 * g + 0.114 * b;
+            if luma >= THRESH {
+                continue; // fast path — skip the blur entirely outside true shadows
+            }
+            let weight = (1.0 - luma / THRESH).clamp(0.0, 1.0) * MAX_BLEND;
+            let (mut sr, mut sg, mut sb, mut n) = (0f32, 0f32, 0f32, 0f32);
+            for dy in -RADIUS..=RADIUS {
+                let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
                 for dx in -RADIUS..=RADIUS {
-                    let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as usize * 3;
-                    dst_row[i] += src_row[sx] as f32;
-                    dst_row[i + 1] += src_row[sx + 1] as f32;
-                    dst_row[i + 2] += src_row[sx + 2] as f32;
+                    let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as usize;
+                    let si = (sy * w + sx) * 3;
+                    sr += src[si] as f32;
+                    sg += src[si + 1] as f32;
+                    sb += src[si + 2] as f32;
+                    n += 1.0;
                 }
             }
-        }
-
-        for oy in 0..rows {
-            let y = y0 + oy;
-            let row = &mut out[oy * w * 3..(oy + 1) * w * 3];
-            for x in 0..w {
-                let i = x * 3;
-                let base = y * w * 3 + i;
-                let r = src[base] as f32;
-                let g = src[base + 1] as f32;
-                let b = src[base + 2] as f32;
-                let luma = 0.299 * r + 0.587 * g + 0.114 * b;
-                if luma >= THRESH {
-                    continue;
-                }
-                let weight = (1.0 - luma / THRESH).clamp(0.0, 1.0) * MAX_BLEND;
-                let (mut sr, mut sg, mut sb) = (0f32, 0f32, 0f32);
-                for dy in -RADIUS..=RADIUS {
-                    let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
-                    let hrow = &scratch[(sy - sy0) * w * 3..(sy - sy0 + 1) * w * 3];
-                    sr += hrow[i];
-                    sg += hrow[i + 1];
-                    sb += hrow[i + 2];
-                }
-                let n = 49.0f32;
             // CHROMA-ONLY blend, luma preserved. Blending RGB toward the local average (the old
             // behaviour) smeared LUMA detail — measured against a real Lightroom reference
             // (calib/nr_validate.py): in ISO-12800 shadows CS kept only 48% of the luma noise
@@ -811,9 +782,8 @@ fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
             row[i] = (luma + 1.402 * cr).round().clamp(0.0, 65535.0) as u16;
             row[i + 1] = (luma - 0.344_136 * cb - 0.714_136 * cr).round().clamp(0.0, 65535.0) as u16;
             row[i + 2] = (luma + 1.772 * cb).round().clamp(0.0, 65535.0) as u16;
-            }
         }
-    }).for_each(|_| {});
+    });
 }
 
 /// Chroma-only wavelet denoise on LINEAR 16-bit camera RGB, ISO-gated — the fix for the
