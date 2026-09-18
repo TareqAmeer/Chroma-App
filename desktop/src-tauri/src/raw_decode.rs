@@ -507,6 +507,14 @@ pub fn decode_rw2_bytes_ex(
     progress: Option<&(dyn Fn(usize, usize) + Sync)>,
     cancel: Option<&std::sync::atomic::AtomicBool>
 ) -> Result<DecodedRaw, String> {
+    let stage_timing = std::env::var_os("CS_DIAG_RAW_STAGES").is_some();
+    let stage = |name: &str, started: &mut std::time::Instant| {
+        if stage_timing {
+            crate::diag::log("info", format!("RAW_DIAG stage={} duration_ms={}", name, started.elapsed().as_millis()));
+        }
+        *started = std::time::Instant::now();
+    };
+    let mut stage_started = std::time::Instant::now();
     let nr = NrTier::resolve(nr); // CS_NR_TIER escape hatch, resolved once for the whole call
     let key = demosaic_cache_key(bytes, demosaic_algo);
     // refine (fast=false) first tries to TAKE the fast pass's cached demosaic; anything else
@@ -529,6 +537,7 @@ pub fn decode_rw2_bytes_ex(
         Some(d) => d,
         None => decode_and_demosaic(bytes, demosaic_algo)?,
     };
+    stage("demosaic_or_cache", &mut stage_started);
     if fast {
         // One full-frame copy (~140MB memcpy, tens of ms) buys the refine out of re-running the
         // multi-second decode+demosaic — stored BEFORE orientation/cleanup so refine replays
@@ -568,6 +577,7 @@ pub fn decode_rw2_bytes_ex(
             rgb16 = rawdenoise::denoise_frame_high(&rgb16, out_w, out_h, xyz_to_cam, high_strength, progress, cancel)?;
         }
     }
+    stage("high_nr", &mut stage_started);
 
     // 4.5) False-color suppression (DEFAULT ON; CS_NO_FALSE_COLOR=1 is the diagnostic escape
     // hatch). Fixes the user-reported green speckle on sunlit-water sparkle: PPG demosaic
@@ -600,6 +610,7 @@ pub fn decode_rw2_bytes_ex(
         let steps: usize = std::env::var("CS_FC_STEPS").ok().and_then(|v| v.parse().ok()).unwrap_or(8);
         suppress_false_color(&mut rgb16, out_w, out_h, contrast_thresh, dev_thresh, steps);
     }
+    stage("false_color", &mut stage_started);
 
     // 4.6) Contrast-gated hue-targeted defringe (DEFAULT ON; CS_NO_HUE_DEFRINGE=1 is the
     // diagnostic escape hatch). A complementary technique to the median above — that catches
@@ -620,9 +631,11 @@ pub fn decode_rw2_bytes_ex(
         let contrast_thresh: f32 = std::env::var("CS_HD_CONTRAST").ok().and_then(|v| v.parse().ok()).unwrap_or(0.05);
         hue_defringe_gated(&mut rgb16, out_w, out_h, contrast_thresh);
     }
+    stage("hue_defringe", &mut stage_started);
 
     // 5) EXIF orientation (resolved into DemosaicOut at demosaic time — cameras emit 1/3/6/8 only).
     let (mut rgb16, out_w, out_h) = apply_orientation(rgb16, out_w, out_h, orientation);
+    stage("orientation", &mut stage_started);
 
     // 5.5) Optional automatic lens-profile correction (distortion) — see lens_correct.rs.
     // Graceful no-op when the camera/lens pairing has no match in the bundled DB. `lens_applied`
@@ -665,6 +678,7 @@ pub fn decode_rw2_bytes_ex(
             );
         }
     }
+    stage("lens", &mut stage_started);
 
     // 6/7) Native (Rust) noise reduction — user-toggleable (default Fast) via the "RAW Noise
     //    Reduction" select in the Noise Reduction panel. Both passes run on true-linear data,
@@ -683,6 +697,7 @@ pub fn decode_rw2_bytes_ex(
         }
         denoise_chroma_wavelet_rgb16(&mut rgb16, out_w, out_h, iso);
     }
+    stage("native_nr", &mut stage_started);
 
     Ok(DecodedRaw {
         width: out_w as u32,
@@ -1063,10 +1078,24 @@ fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f3
         *o = hi - lo;
     });
 
-    let median9 = |vals: &mut [f32; 9]| -> f32 {
-        vals.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        vals[4]
-    };
+    // The hot path below evaluates this median once per eligible pixel, per channel, per pass.
+    // A general-purpose sort spends most of that time in comparator/call overhead. This fixed
+    // sorting network has the same median value for all finite inputs (the planes contain only
+    // finite camera values), without changing the arithmetic or the selected pixel value.
+    #[inline(always)]
+    fn median9(v: &mut [f32; 9]) -> f32 {
+        macro_rules! cs { ($a:expr, $b:expr) => { if v[$a] > v[$b] { v.swap($a, $b); } }; }
+        cs!(0, 1); cs!(3, 4); cs!(6, 7);
+        cs!(1, 2); cs!(4, 5); cs!(7, 8);
+        cs!(0, 1); cs!(3, 4); cs!(6, 7);
+        cs!(0, 3); cs!(3, 6); cs!(0, 3);
+        cs!(1, 4); cs!(4, 7); cs!(1, 4);
+        cs!(2, 5); cs!(5, 8); cs!(2, 5);
+        cs!(2, 4); cs!(4, 6); cs!(2, 4);
+        cs!(1, 3); cs!(3, 5); cs!(5, 7);
+        cs!(1, 3); cs!(3, 5);
+        v[4]
+    }
 
     // Each median pass needs to read every neighbor from the UN-modified plane while writing new
     // values (edge pixels only), so a fresh snapshot per iteration is algorithmically required —
