@@ -885,7 +885,12 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: String, raw_nr: String, auto_lens: bool,
                     demosaic_algo: String, lens_override: String, lens_override_focal: f64) -> Result<String, String> {
     let _raw_diag = diag::raw_op(format!("cache_raw_decode file={}", Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?")));
-    if !formats::is_raw_ext(Path::new(&path).extension().and_then(|e| e.to_str()).unwrap_or("")) {
+    let ext = Path::new(&path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !formats::is_raw_ext(&ext) {
         return Err("selected file is not a RAW photo".into());
     }
     if library::decode_cache_exists(&path, &recipe_key)? { return Ok("cached".into()); }
