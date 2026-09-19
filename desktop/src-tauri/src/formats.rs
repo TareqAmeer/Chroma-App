@@ -50,7 +50,7 @@ pub fn all_image_exts() -> impl Iterator<Item = &'static &'static str> {
 }
 
 pub fn is_raw_ext(ext: &str) -> bool {
-    RAW_EXTS.contains(&ext)
+    RAW_EXTS.iter().any(|known| ext.eq_ignore_ascii_case(known))
 }
 pub fn is_still_native_ext(ext: &str) -> bool {
     STILL_NATIVE_EXTS.contains(&ext)
@@ -181,6 +181,16 @@ mod tests {
                 media_kind(ext),
                 "",
                 ".{ext} is a recognised image extension but media_kind() returned \"\" — it would be unreachable by the Library's type filter"
+            );
+        }
+    }
+
+    #[test]
+    fn raw_extensions_are_case_insensitive() {
+        for ext in RAW_EXTS {
+            assert!(
+                is_raw_ext(&ext.to_ascii_uppercase()),
+                ".{ext} must be accepted regardless of filename case"
             );
         }
     }
