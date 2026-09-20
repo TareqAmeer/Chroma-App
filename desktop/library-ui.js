@@ -4903,6 +4903,7 @@
       const ready = written + cached;
       const summary = cancelled ? `Caching stopped — ${ready} of ${rawPaths.length} ready` : `Cached ${ready} RAW preview${ready === 1 ? '' : 's'}`;
       activityUpdate('raw-cache', { stage: 'done', done: ready, total: rawPaths.length, current: summary, failed: failed.length ? failed : undefined });
+      rawPerf('cache-batch-complete', `${rawPaths.length} RAWs`, { ms: performance.now() - batchT0, ready, failed: failed.length });
       toast(failed.length ? `${summary}; ${failed.length} failed` : summary, !failed.length);
     }
   }
@@ -5331,6 +5332,7 @@
       if (!name) return;
       try {
         const al = await invoke('album_create', { name });
+        revealAlbums();
         await refreshAlbums();
         await addToAlbum(al.id, al.name);
       } catch (e) { toast(humanizeErr('create the album', e), 'err'); }
@@ -7433,6 +7435,11 @@
   } catch (e) { sidebarSecOpen = new Set(SIDEBAR_SEC_DEFAULT); }
   function saveSidebarSecOpen() {
     try { localStorage.setItem(SIDEBAR_SEC_KEY, JSON.stringify([...sidebarSecOpen])); } catch (e) { /* quota — session-only fallback */ }
+  }
+  function revealAlbums() {
+    if (sidebarSecOpen.has('albums')) return;
+    sidebarSecOpen.add('albums');
+    saveSidebarSecOpen();
   }
   // Renders a heading as a disclosure row; `bodyHtml` is included only when open, matching the
   // existing dateExpanded/kwExpanded convention elsewhere in this file (conditional inclusion,
@@ -9822,7 +9829,7 @@
       e.stopPropagation();
       const name = await window.askTextModal('Album name', '', '');
       if (!name) return;
-      try { await invoke('album_create', { name }); await refreshAlbums(); toast(`Album "${name}" created`, true); }
+      try { await invoke('album_create', { name }); revealAlbums(); await refreshAlbums(); toast(`Album "${name}" created`, true); }
       catch (err) { toast(humanizeErr('create the album', err), 'err'); }
     };
     host.querySelectorAll('.lib-coll-row[data-album]').forEach((row) => {
