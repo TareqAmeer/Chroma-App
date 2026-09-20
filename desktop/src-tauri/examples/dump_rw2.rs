@@ -16,6 +16,10 @@ mod sam;
 mod rawdenoise;
 #[path = "../src/raw_decode.rs"]
 mod raw_decode;
+#[path = "../src/platform/mod.rs"]
+mod platform;
+#[path = "../src/diag.rs"]
+mod diag;
 
 use std::io::Write;
 

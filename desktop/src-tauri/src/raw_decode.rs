@@ -893,31 +893,35 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     // so only the horizontal intermediate is genuinely transient/reusable.
     fn atrous_smooth(src: &[f32], w: usize, h: usize, step: usize, tmp: &mut Vec<f32>) -> Vec<f32> {
         const K: [f32; 5] = [1.0 / 16.0, 4.0 / 16.0, 6.0 / 16.0, 4.0 / 16.0, 1.0 / 16.0];
+        let x_neighbors: Vec<[usize; 5]> = (0..w).map(|x| std::array::from_fn(|k| {
+            (x as i64 + (k as i64 - 2) * step as i64).clamp(0, w as i64 - 1) as usize
+        })).collect();
+        let y_neighbors: Vec<[usize; 5]> = (0..h).map(|y| std::array::from_fn(|k| {
+            (y as i64 + (k as i64 - 2) * step as i64).clamp(0, h as i64 - 1) as usize
+        })).collect();
         tmp.resize(src.len(), 0.0);
         // horizontal
         tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
             let base = y * w;
             for x in 0..w {
-                let mut acc = 0f32;
-                for (k, kv) in K.iter().enumerate() {
-                    let off = (k as i64 - 2) * step as i64;
-                    let sx = (x as i64 + off).clamp(0, w as i64 - 1) as usize;
-                    acc += src[base + sx] * kv;
-                }
-                row[x] = acc;
+                let [x0, x1, x2, x3, x4] = x_neighbors[x];
+                row[x] = src[base + x0] * K[0]
+                    + src[base + x1] * K[1]
+                    + src[base + x2] * K[2]
+                    + src[base + x3] * K[3]
+                    + src[base + x4] * K[4];
             }
         });
         // vertical
         let mut out = vec![0f32; src.len()];
         out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
             for x in 0..w {
-                let mut acc = 0f32;
-                for (k, kv) in K.iter().enumerate() {
-                    let off = (k as i64 - 2) * step as i64;
-                    let sy = (y as i64 + off).clamp(0, h as i64 - 1) as usize;
-                    acc += tmp[sy * w + x] * kv;
-                }
-                row[x] = acc;
+                let [y0, y1, y2, y3, y4] = y_neighbors[y];
+                row[x] = tmp[y0 * w + x] * K[0]
+                    + tmp[y1 * w + x] * K[1]
+                    + tmp[y2 * w + x] * K[2]
+                    + tmp[y3 * w + x] * K[3]
+                    + tmp[y4 * w + x] * K[4];
             }
         });
         out
@@ -970,7 +974,6 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     let coarse_lo = 0.30 - 0.18 * t; // 0.30 at low-s .. 0.12 at s=1
     let coarse_hi = 0.55 - 0.15 * t; // 0.55 at low-s .. 0.40 at s=1
 
-    // Shared horizontal-pass scratch for every atrous_smooth call in this function.
     let mut atrous_tmp: Vec<f32> = Vec::new();
     // Per-level luma detail magnitude — the shared edge guide for BOTH chroma planes.
     let mut luma_detail: Vec<Vec<f32>> = Vec::with_capacity(levels);
@@ -984,8 +987,6 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
             lcur = lsm;
         }
     }
-    let ldiv = if levels > 1 { (levels - 1) as f32 } else { 1.0 };
-
     // 2026-07-13: attempted a texture-DENSITY gate here (distinguish an isolated real edge,
     // e.g. the gold tag's rim, from a densely-packed field of edges, e.g. sunlit-water
     // sparkle) to suppress over-protection in the latter case without touching the former.
@@ -1003,9 +1004,16 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     // e.g. a sparkle field) the same way it correctly protects a real isolated feature (the
     // gold tag). 1.0 = shipped behavior.
     let protect_scale: f32 = std::env::var("CS_NR_PROTECT_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0);
-    let mut denoise_plane = |plane: &mut Vec<f32>| {
+    fn denoise_plane(
+        plane: &mut Vec<f32>, w: usize, h: usize, npx: usize, levels: usize,
+        luma_detail: &[Vec<f32>], keep_fine: f32, keep_coarse: f32,
+        coarse_lo: f32, coarse_hi: f32, yedge_lo: f32, yedge_hi: f32,
+        protect_scale: f32,
+    ) {
+        let mut atrous_tmp: Vec<f32> = Vec::new();
         let mut current = std::mem::take(plane);
         let mut rebuilt = vec![0f32; npx];
+        let ldiv = if levels > 1 { (levels - 1) as f32 } else { 1.0 };
         for lvl in 0..levels {
             let smooth = atrous_smooth(&current, w, h, 1usize << lvl, &mut atrous_tmp);
             let lvl_frac = lvl as f32 / ldiv;
@@ -1022,12 +1030,14 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
         // residual low-pass carries the true (broad) colours, untouched
         rebuilt.par_iter_mut().enumerate().for_each(|(i, o)| *o += current[i]);
         *plane = rebuilt;
-    };
+    }
     // Keep the ORIGINAL chroma so absolute-highlight protection can restore it below.
     let cb_orig = cb.clone();
     let cr_orig = cr.clone();
-    denoise_plane(&mut cb);
-    denoise_plane(&mut cr);
+    let (cb, cr) = rayon::join(
+        || { denoise_plane(&mut cb, w, h, npx, levels, &luma_detail, keep_fine, keep_coarse, coarse_lo, coarse_hi, yedge_lo, yedge_hi, protect_scale); cb },
+        || { denoise_plane(&mut cr, w, h, npx, levels, &luma_detail, keep_fine, keep_coarse, coarse_lo, coarse_hi, yedge_lo, yedge_hi, protect_scale); cr },
+    );
 
     // Absolute-highlight protection. Bright highlights have high SNR (little chroma noise) and
     // sit near the RGB gamut edge, where smoothing chroma then clamping back into gamut visibly
@@ -1147,27 +1157,35 @@ fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f3
     // pass, `steps * 2` times, on a 24MP+ image).
     let mut next_cb = cb.clone();
     let mut next_cr = cr.clone();
+    let x_neighbors: Vec<[usize; 3]> = (0..w).map(|x| [
+        x.saturating_sub(1), x, (x + 1).min(w.saturating_sub(1)),
+    ]).collect();
+    let y_neighbors: Vec<[usize; 3]> = (0..h).map(|y| [
+        y.saturating_sub(1), y, (y + 1).min(h.saturating_sub(1)),
+    ]).collect();
     for _ in 0..steps {
         for (plane, next) in [(&mut cb, &mut next_cb), (&mut cr, &mut next_cr)] {
             next.copy_from_slice(plane);
-            next.par_iter_mut().enumerate().for_each(|(i, o)| {
-                if contrast[i] <= contrast_thresh {
-                    return; // not near a hard edge — never a candidate, regardless of deviation
-                }
-                let (x, y) = (i % w, i / w);
-                let mut window = [0f32; 9];
-                let mut k = 0;
-                for dy in -1i32..=1 {
-                    let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
-                    for dx in -1i32..=1 {
-                        let sx = (x as i32 + dx).clamp(0, w as i32 - 1) as usize;
-                        window[k] = plane[sy * w + sx];
-                        k += 1;
+            next.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+                let [y0, y1, y2] = y_neighbors[y];
+                let r0 = &plane[y0 * w..(y0 + 1) * w];
+                let r1 = &plane[y1 * w..(y1 + 1) * w];
+                let r2 = &plane[y2 * w..(y2 + 1) * w];
+                for (x, o) in row.iter_mut().enumerate() {
+                    let i = y * w + x;
+                    if contrast[i] <= contrast_thresh {
+                        continue; // not near a hard edge — never a candidate, regardless of deviation
                     }
-                }
-                let med = median9(&mut window);
-                if (plane[i] - med).abs() > dev_thresh {
-                    *o = med;
+                    let [x0, x1, x2] = x_neighbors[x];
+                    let mut window = [
+                        r0[x0], r0[x1], r0[x2],
+                        r1[x0], r1[x1], r1[x2],
+                        r2[x0], r2[x1], r2[x2],
+                    ];
+                    let med = median9(&mut window);
+                    if (plane[i] - med).abs() > dev_thresh {
+                        *o = med;
+                    }
                 }
             });
             std::mem::swap(plane, next);
