@@ -599,15 +599,14 @@
   // invoke() per open to detect). Budgeted by estimated byte size (canvas w*h*4), LRU-evicted
   // by last-access time; the currently-open photo is never evicted (it's still on screen).
   // "clear if the app gets too slow" per the user's own suggestion → chromasmithClearImageCache. ──
-  // 1GB was far too small in practice: a single decoded 6000x4000 RW2 canvas is
-  // 6000*4000*4 = ~96MB, so 1GB held only ~10 photos before evicting — on a typical batch
-  // (dozens of photos) almost every filmstrip click was a full re-decode (several seconds,
-  // per the NR-fix commit) even for a photo viewed moments earlier. Scale the budget with
-  // available RAM (same navigator.deviceMemory signal isMemoryConstrained() already uses),
-  // capped so it can't starve the rest of the app on genuinely low-memory machines.
+  // A decoded 6000x4000 RW2 canvas is ~96MB before WebGL working buffers, so this cache must
+  // stay materially below the machine's total RAM. A previous RAM-scaled budget reached 3GB on
+  // an 8GB-reported Mac and, combined with full-resolution GPU targets and RAW thumbnail work,
+  // drove the app above 1.8GB during a cold Library session. Keep enough entries for quick
+  // back-and-forth navigation while reserving headroom for the active editor and OS.
   const IMG_CACHE_BUDGET = (() => {
     const gb = typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : 8;
-    return Math.min(Math.max(gb, 4), 16) * 0.375 * 1024 * 1024 * 1024; // ~1.5GB@4GB … ~6GB@16GB
+    return Math.min(Math.max(gb, 4) * 0.125, 1) * 1024 * 1024 * 1024; // 512MB@4GB … 1GB max
   })();
   const imgCache = new Map(); // path -> {entry, size, ts}
   // The editor's stroke icon set (chromasmith-22.html ICONS/icon()). Emoji render differently on
@@ -2300,7 +2299,7 @@
       window.chromasmithDemosaicAlgo || '', window.chromasmithAutoLens ? 1 : 0,
       window.chromasmithLensOverride || '', window.chromasmithLensOverrideFocal || 0].join('|');
   }
-  async function showProvisional(path) {
+  async function showProvisional(path, onReady) {
     if (!RAW_EXT_RE.test(path)) return () => {};
     const myToken = ++provisionalToken;
     const el = ensureProvisionalEl();
@@ -2310,17 +2309,148 @@
       if (myToken !== provisionalToken) return () => {}; // superseded by a newer open
       const blob = new Blob([buf], { type: 'image/jpeg' });
       const url = URL.createObjectURL(blob);
-      el.onload = () => URL.revokeObjectURL(url);
+      const img = new Image();
+      img.onload = () => {
+        if (myToken !== provisionalToken) return;
+        if (typeof onReady === 'function') void onReady(img, url);
+      };
+      img.onerror = () => rawPerf('open-provisional-miss', path, { error: 'embedded preview image decode failed' });
+      img.src = url;
       el.src = url;
       el.classList.add('on');
       document.body.classList.add('lib-provisional-on'); // hides the canvas (old photo) beneath
-    } catch (e) { /* embedded preview unavailable — just skip the provisional frame */ }
+      el.onload = () => URL.revokeObjectURL(url);
+    } catch (e) {
+      rawPerf('open-provisional-miss', path, { error: String(e) });
+    }
     return () => {
       if (myToken === provisionalToken) {
         el.classList.remove('on');
         document.body.classList.remove('lib-provisional-on');
       }
     };
+  }
+  async function showDisplayProvisional(path, recipeKey) {
+    const myToken = ++provisionalToken;
+    const el = ensureProvisionalEl();
+    if (!el) return () => {};
+    try {
+      const img = await displayAssetImage(path, recipeKey);
+      if (myToken !== provisionalToken) return () => {};
+      if (myToken !== provisionalToken) return () => {};
+      el.src = img.src;
+      el.classList.add('on');
+      document.body.classList.add('lib-provisional-on');
+      rawPerf('open-display-overlay', path, { width: img.naturalWidth, height: img.naturalHeight });
+    } catch (e) {
+      rawPerf('open-display-overlay-miss', path, { error: String(e) });
+      if (myToken === provisionalToken) {
+        el.classList.remove('on');
+        document.body.classList.remove('lib-provisional-on');
+      }
+    }
+    return () => {
+      if (myToken === provisionalToken) {
+        el.classList.remove('on');
+        document.body.classList.remove('lib-provisional-on');
+      }
+    };
+  }
+  async function loadAssetImage(assetPath) {
+    const img = new Image();
+    // The asset protocol is a separate origin from cs://localhost. Without anonymous CORS,
+    // WebGL rejects the full cached image at texImage2D with SecurityError even though <img>
+    // can display it; that silently prevents the quality promotion.
+    img.crossOrigin = 'anonymous';
+    img.src = window.__TAURI__.core.convertFileSrc(assetPath);
+    if (img.decode) await img.decode();
+    else await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
+    // A few canvas-oriented helpers read width/height while WebGL uses naturalWidth/naturalHeight.
+    // Keep both representations populated without materializing a full-resolution canvas.
+    img.width = img.naturalWidth; img.height = img.naturalHeight;
+    return img;
+  }
+  async function loadNativeCachedImage(path, recipeKey) {
+    const nativeBuf = await invoke('get_cached_raw_decode', { path, recipeKey });
+    const head = new Uint32Array(nativeBuf, 0, 2);
+    const width = head[0], height = head[1];
+    if (!width || !height || nativeBuf.byteLength < 8 + width * height * 4) throw new Error('invalid native RAW cache');
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(nativeBuf, 8), width, height), 0, 0);
+    return canvas;
+  }
+  // A 2560px lossless proxy is large enough to make an unbounded path->Promise map
+  // expensive in long Library sessions. Keep the decoded tier bounded by estimated
+  // RGBA memory, and include the catalog's source signature so a replaced RAW cannot
+  // reuse an older decoded image.
+  const displayPrefetch = new Map();
+  const DISPLAY_CACHE_BUDGET = 96 * 1024 * 1024;
+  const DISPLAY_IMAGE_PREFETCH_LIMIT = 1;
+  let displayPinnedKey = '';
+  function displayCacheKey(path, recipeKey) {
+    const entry = (state.entries || []).find((e) => e.path === path);
+    return `${path}\u0000${recipeKey || ''}\u0000${entry?.mtime || 0}\u0000${entry?.size || 0}`;
+  }
+  function trimDisplayCache(excludeKey) {
+    let total = 0;
+    for (const [key, record] of displayPrefetch) total += record.bytes || 0;
+    if (total <= DISPLAY_CACHE_BUDGET) return;
+    const candidates = [...displayPrefetch.entries()]
+      .filter(([key, record]) => key !== excludeKey && key !== displayPinnedKey && record.ready)
+      .sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+    for (const [key, record] of candidates) {
+      if (total <= DISPLAY_CACHE_BUDGET) break;
+      displayPrefetch.delete(key);
+      total -= record.bytes || 0;
+      rawPerf('display-cache-evict', key, { bytes: record.bytes || 0, totalBytes: total });
+    }
+  }
+  function displayCacheHas(path, recipeKey) {
+    return displayPrefetch.has(displayCacheKey(path, recipeKey));
+  }
+  function displayAssetImage(path, recipeKey, generate = true) {
+    const key = displayCacheKey(path, recipeKey);
+    const existing = displayPrefetch.get(key);
+    if (existing) {
+      existing.lastUsed = performance.now();
+      rawPerf('display-cache-hit', path);
+      return existing.promise;
+    }
+    rawPerf('display-cache-miss', path);
+    const job = (async () => {
+      const command = generate ? 'get_display_decode_cache' : 'get_display_decode_cache_path';
+      const displayPath = await invoke(command, { path, recipeKey, longEdge: 2560 });
+      return loadAssetImage(displayPath);
+    })().then((img) => {
+      const record = displayPrefetch.get(key);
+      if (record) {
+        record.ready = true;
+        record.bytes = (img.naturalWidth || img.width || 0) * (img.naturalHeight || img.height || 0) * 4;
+        record.lastUsed = performance.now();
+        trimDisplayCache(key);
+      }
+      return img;
+    }).catch((e) => { displayPrefetch.delete(key); throw e; });
+    displayPrefetch.set(key, { promise: job, bytes: 0, lastUsed: performance.now(), ready: false });
+    return job;
+  }
+  function prefetchDisplayProxies(paths) {
+    // Do not precompute the first visible RAW: that is the one users most often open next,
+    // and competing with its display-tier request recreates the exact cold-reopen stall this
+    // cache is meant to remove. Batch caching remains responsible for the full selected set.
+    const recipeKey = rawRecipeKey();
+    displayPinnedKey = displayCacheKey(state.openedPath || paths[0] || '', recipeKey);
+    const queue = paths.filter((p) => RAW_EXT_RE.test(p) && !displayCacheHas(p, recipeKey)).slice(1, 1 + DISPLAY_IMAGE_PREFETCH_LIMIT);
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < queue.length) {
+        const p = queue[cursor++];
+        const job = displayAssetImage(p, recipeKey, false).catch(() => null);
+        await job;
+      }
+    };
+    worker();
   }
 
   // ── helpers ─────────────────────────────────────────────────────────────────
@@ -3324,7 +3454,13 @@
   // a visible flash of the wrong image. Mirroring openBusy onto this global lets fxSelectImage
   // simply no-op while a library load owns the transition, rather than fighting over it.
   let openBusy = false, openPendingPath = null;
+  const rawPerf = (event, path, extra = {}) => {
+    if (!window.__rawPerfLog) window.__rawPerfLog = [];
+    window.__rawPerfLog.push({ event, path, t: performance.now(), wall: Date.now(), ...extra });
+    if (window.__rawPerfLog.length > 2000) window.__rawPerfLog.splice(0, window.__rawPerfLog.length - 2000);
+  };
   async function openInEditor(path) {
+    rawPerf('open-click', path);
     if (openBusy) { openPendingPath = path; return; }
     openBusy = true;
     window.chromasmithLibraryBusy = true;
@@ -3351,6 +3487,8 @@
     return true;
   };
   async function openInEditorInner(path) {
+    const openT0 = performance.now();
+    rawPerf('open-start', path);
     // Opening a photo through the normal Library ends any Lightroom Edit-In session — otherwise
     // "Save to Lightroom" would stay visible and silently overwrite the WRONG file (the old
     // handoff path) after the user has already navigated to something else.
@@ -3360,17 +3498,47 @@
     if (saveLrBtn) saveLrBtn.style.display = 'none';
     // A pending disk write for the PREVIOUS photo must land before we move state.openedPath
     // off it — otherwise a quick edit right before switching photos could be dropped.
-    await flushPendingSave();
+    const flushT0 = performance.now(); await flushPendingSave(); rawPerf('open-flush-save', path, { ms: performance.now() - flushT0 });
     // Selecting a photo from the full-window home screen transitions into the editor — the
     // library collapses to the docked filmstrip (stays open, just narrow), it doesn't close.
     if (state.expanded_view) toggleExpandedView(false);
     // HDR preview needs the scene-linear companion from a fresh native decode; an SDR
     // canvas cache entry is therefore not valid while that opt-in is enabled.
     const hdrPreview = !!window.chromasmithHdrPreview;
+    const isRaw = RAW_EXT_RE.test(path);
     const cached = hdrPreview ? null : imgCache.get(path);
+    let displayOverlayPromise = Promise.resolve(() => {});
+    let fastPreviewInstalled = false;
+    const installFastPreview = async (img, url) => {
+      if (cached || !isRaw || fastPreviewInstalled || (state.openedPath && state.openedPath !== path)) return;
+      const realExt = (path.match(/\.([^.\/]+)$/) || [, 'rw2'])[1].toLowerCase();
+      installFXImages([{
+        img, name: baseName(path).replace(/\.[^.]+$/, ''), ext: realExt, dpi: 240,
+        bytes: null, exif: {}, rawPreview: true,
+      }], `${baseName(path)}:embedded-preview`, { deferRender: false });
+      state.openedPath = path;
+      fastPreviewInstalled = true;
+      window.chromasmithFullQualityReady = false;
+      const exportBtn = document.getElementById('btn-fx-export'); if (exportBtn) exportBtn.disabled = true;
+      rawPerf('open-fast-preview', path, { width: img.naturalWidth, height: img.naturalHeight });
+      rawPerf('open-editor-ready', path, { ms: performance.now() - openT0, source: 'provisional' });
+      // Keep the asset URL alive for the editor's Image element until the RAW decode replaces it.
+      // The overlay's onload owns revocation after it has painted the same URL.
+      void url;
+    };
+    // The Library already has a decoded camera thumbnail for every visible RAW. Reuse that
+    // element immediately so the editor has a real image while the larger embedded preview or
+    // lossless RAW decode is still in flight; this keeps first paint independent of IPC latency.
+    if (!cached && isRaw) {
+      const thumb = document.querySelector(`.lib-card[data-path="${CSS.escape(path)}"] img`);
+      if (thumb?.complete && thumb.naturalWidth) {
+        await installFastPreview(thumb, '');
+        rawPerf('open-fast-preview-source', path, { source: 'library-thumb' });
+      }
+    }
     // Cache hit: skip read_file_bytes + the full decode entirely, and skip the provisional
     // preview too (there's nothing to bridge — the real image is already ready instantly).
-    const provisionalPromise = cached ? Promise.resolve(() => {}) : showProvisional(path);
+    const provisionalPromise = cached ? Promise.resolve(() => {}) : showProvisional(path, installFastPreview);
     const spin = document.getElementById('fx-fname-spin');
     if (spin && !cached) spin.style.display = '';
     // Deskbar title: show the incoming photo's name + a spinner immediately (RapidRAW-style);
@@ -3384,7 +3552,7 @@
     // automatically). Falls back to the app-wide default (Fast) for a photo with no saved
     // recipe yet. ⚠️ Deliberately NEVER defaults to High here, sidecar or no — High must only
     // ever be reached by an explicit user action (the Denoise-now button) or at export.
-    const sc = await getSidecar(path);
+    const sidecarT0 = performance.now(); const sc = await getSidecar(path); rawPerf('open-sidecar', path, { ms: performance.now() - sidecarT0 });
     let rawNrForThisPhoto;
     try { rawNrForThisPhoto = localStorage.getItem('chromasmithRawNr') || (localStorage.getItem('chromasmithNativeNr') === '0' ? 'off' : 'fast'); } catch (e) { rawNrForThisPhoto = 'fast'; }
     // Same decode-time-baked, per-photo reasoning as nativeNr above — the RAW demosaic
@@ -3414,20 +3582,94 @@
     window.chromasmithDemosaicAlgo = demosaicAlgoForThisPhoto;
     // Persistent decode cache ("photos re-decode on every relaunch"): the in-memory imgCache
     // above only survives within THIS session. For a RAW that isn't in it (first open, or a
-    // fresh app launch), check the on-disk cache — a lossless PNG of the fully-decoded
-    // result keyed on path+mtime+size+recipe (see library.rs's get_decode_cache) — before
-    // falling back to the full native RAW pipeline. A hit is a plain PNG decode
-    // instead of several seconds of demosaic+NR.
-    const isRaw = RAW_EXT_RE.test(path);
+    // fresh app launch), check the native in-process cache first. This is the cache populated by
+    // the explicit batch action, so it returns lossless pixels without another RAW decode or a
+    // PNG decode. The persistent PNG cache remains the fallback after relaunch.
     const recipeKey = isRaw ? rawRecipeKey() : '';
+    if (isRaw && !hdrPreview) displayPinnedKey = displayCacheKey(path, recipeKey);
+    if (isRaw && !hdrPreview && !fastPreviewInstalled) {
+      displayOverlayPromise = showDisplayProvisional(path, recipeKey);
+    }
     let diskCached = null;
-    if (!cached && isRaw && !hdrPreview) {
+    let fullAssetPath = null;
+    let fullCachedEntry = null;
+    let fullPromotionStarted = false;
+    let deferEditorRender = false;
+    let deferredDisplayRender = false;
+    let deferredRecipeApply = null;
+    const startFullPromotion = () => {
+      const previewEntry = diskCached || (cached && cached.entry);
+      if (fullPromotionStarted || (!fullAssetPath && !fullCachedEntry) || !previewEntry || previewEntry.img.naturalWidth >= 4000) return;
+      fullPromotionStarted = true;
+      window.chromasmithFullQualityReady = false;
+      const exportBtn = document.getElementById('btn-fx-export'); if (exportBtn) exportBtn.disabled = true;
+      const promoteT0 = performance.now();
+      const run = async () => {
+        try {
+          let fullImg;
+          let promotionSource = 'asset';
+          if (fullCachedEntry) {
+            fullImg = fullCachedEntry.img;
+            promotionSource = 'memory';
+          } else if (isRaw && !hdrPreview) {
+            try {
+              const nativeT0 = performance.now();
+              fullImg = await loadNativeCachedImage(path, recipeKey);
+              promotionSource = 'native-cache';
+              rawPerf('open-full-quality-native-cache', path, {
+                ms: performance.now() - nativeT0, width: fullImg.width, height: fullImg.height,
+              });
+            } catch (_) {}
+          }
+          if (!fullImg) fullImg = await loadAssetImage(fullAssetPath);
+          if (state.openedPath && state.openedPath !== path) return;
+          const active = fxImages.find((it) => it.name === previewEntry.name) || fxImages[0];
+          if (!active || active.img !== previewEntry.img) return;
+          active.img = fullImg; fxImg = fullImg;
+          try { autoDetectBW(fullImg); } catch (_) {}
+          const workT0 = performance.now(); updateWork(); rawPerf('open-full-quality-work', path, { ms: performance.now() - workT0 });
+          const renderT0 = performance.now(); renderPreview(); rawPerf('open-full-quality-render', path, { ms: performance.now() - renderT0 });
+          window.chromasmithFullQualityReady = true;
+          const exportBtn = document.getElementById('btn-fx-export'); if (exportBtn) exportBtn.disabled = false;
+          rawPerf('open-full-quality-promoted', path, {
+            ms: performance.now() - promoteT0, width: fullImg.naturalWidth || fullImg.width,
+            height: fullImg.naturalHeight || fullImg.height, source: promotionSource,
+          });
+        } catch (e) { rawPerf('open-full-quality-promotion-failed', path, { error: String(e) }); }
+      };
+      if (deferEditorRender) setTimeout(run, 120); else Promise.resolve().then(run);
+    };
+    if (cached && isRaw && !hdrPreview && cached.entry.img.naturalWidth < 4000) {
+      try { fullAssetPath = await invoke('get_decode_cache_path', { path, recipeKey }); } catch (_) {}
+    }
+    if (cached && isRaw && !hdrPreview && cached.entry.img.naturalWidth >= 4000) {
+      fullCachedEntry = cached.entry;
+    }
+    if (isRaw && !hdrPreview && !fastPreviewInstalled && (!cached || cached.entry.img.naturalWidth >= 4000)) {
+      // The display tier is the first editor source. It is already prepared by batch caching,
+      // so the first paint never waits for the 24MP GPU texture/FBO chain. Full quality is
+      // promoted independently after the photo is visible.
       try {
-        const pngBuf = await invoke('get_decode_cache', { path, recipeKey });
-        const bmp = await createImageBitmap(new Blob([pngBuf], { type: 'image/png' }));
-        const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
-        c.getContext('2d').drawImage(bmp, 0, 0);
-        // The cache itself is a lossless PNG, but the SOURCE FILE is the real RAW — ext/exif
+        const displayT0 = performance.now();
+        fullAssetPath = await invoke('get_decode_cache_path', { path, recipeKey });
+        const displayImg = await displayAssetImage(path, recipeKey);
+        const realExt = (path.match(/\.([^.\/]+)$/) || [, 'jpg'])[1].toLowerCase();
+        const m = await getMeta(path).catch(() => ({}));
+        diskCached = {
+          img: displayImg, name: baseName(path).replace(/\.[^.]+$/, ''), ext: realExt, dpi: 240, bytes: null,
+          exif: { iso: m.iso, aperture: m.aperture, shutter: m.shutter, focalLen: m.focal_len,
+                   date: m.date, lens: m.lens, make: m.make, model: m.model },
+        };
+        rawPerf('open-cache-display-asset', path, { ms: performance.now() - displayT0, width: displayImg.naturalWidth, height: displayImg.naturalHeight });
+      } catch (_) { fullAssetPath = null; }
+    }
+    if (!diskCached && !cached && isRaw && !hdrPreview) {
+      try {
+        const cacheT0 = performance.now(); const nativeBuf = await invoke('get_cached_raw_decode', { path, recipeKey });
+        const head = new Uint32Array(nativeBuf, 0, 2);
+        const c = document.createElement('canvas'); c.width = head[0]; c.height = head[1];
+        c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(nativeBuf, 8), head[0], head[1]), 0, 0);
+        // The cache itself is native RGBA pixels, but the SOURCE FILE is the real RAW — ext/exif
         // must reflect that (showExif reads it.ext for "File Format" and it.exif for the EXIF
         // rows), or a reopened RAW from this cache path shows "JPG" with blank metadata even
         // though the fresh-decode path (below) gets it right.
@@ -3438,19 +3680,57 @@
           exif: { iso: m.iso, aperture: m.aperture, shutter: m.shutter, focalLen: m.focal_len,
                    date: m.date, lens: m.lens, make: m.make, model: m.model },
         };
+        rawPerf('open-cache-native', path, { ms: performance.now() - cacheT0, bytes: nativeBuf.byteLength });
       } catch (e) {
-        if (typeof log === 'function') log(`Decode cache read failed for ${path}: ${e}`, 'warn');
-        /* no cache yet, or it's stale — fall through to a full decode below */
+        try {
+          const assetT0 = performance.now();
+          const fullPath = fullAssetPath || await invoke('get_decode_cache_path', { path, recipeKey });
+          const fullImg = await loadAssetImage(fullPath);
+          const realExt = (path.match(/\.([^.\/]+)$/) || [, 'jpg'])[1].toLowerCase();
+          const m = await getMeta(path).catch(() => ({}));
+          diskCached = {
+            img: fullImg, name: baseName(path).replace(/\.[^.]+$/, ''), ext: realExt, dpi: 240, bytes: null,
+            exif: { iso: m.iso, aperture: m.aperture, shutter: m.shutter, focalLen: m.focal_len,
+                     date: m.date, lens: m.lens, make: m.make, model: m.model },
+          };
+          rawPerf('open-cache-full-asset', path, { ms: performance.now() - assetT0, width: fullImg.naturalWidth, height: fullImg.naturalHeight });
+        } catch (assetErr) {
+          if (typeof log === 'function') log(`Full decode asset read failed for ${path}: ${assetErr}`, 'warn');
+        }
+        if (!diskCached) try {
+          const cacheT0 = performance.now(); const pngBuf = await invoke('get_decode_cache', { path, recipeKey });
+          const bmp = await createImageBitmap(new Blob([pngBuf], { type: 'image/png' }));
+          const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+          c.getContext('2d').drawImage(bmp, 0, 0);
+          const realExt = (path.match(/\.([^.\/]+)$/) || [, 'jpg'])[1].toLowerCase();
+          const m = await getMeta(path).catch(() => ({}));
+          diskCached = {
+            img: c, name: baseName(path).replace(/\.[^.]+$/, ''), ext: realExt, dpi: 240, bytes: null,
+            exif: { iso: m.iso, aperture: m.aperture, shutter: m.shutter, focalLen: m.focal_len,
+                     date: m.date, lens: m.lens, make: m.make, model: m.model },
+          };
+          rawPerf('open-cache-png', path, { ms: performance.now() - cacheT0, bytes: pngBuf.byteLength });
+        } catch (diskErr) {
+          if (typeof log === 'function') log(`Decode cache read failed for ${path}: ${diskErr}`, 'warn');
+          /* no cache yet, or it's stale — fall through to a full decode below */
+        }
       }
     }
     try {
-      if (cached) {
-        cached.ts = Date.now(); // touch for LRU
-        installFXImages([cached.entry], cached.loadKey);
-      } else if (diskCached) {
+      if (diskCached) {
         const loadKey = `${baseName(path)}:diskcache:${recipeKey}`;
-        installFXImages([diskCached], loadKey);
-        imgCacheStore(path, diskCached, loadKey); // warm the in-memory cache too, for this session
+        deferEditorRender = !!(fullAssetPath || fullCachedEntry) && diskCached.img.naturalWidth < 4000;
+        deferredDisplayRender = deferEditorRender;
+        installFXImages([diskCached], loadKey, { deferRender: deferEditorRender });
+        // Keep the in-memory reopen source at the display tier. The active entry is promoted
+        // independently; sharing the same object would make the next reopen pay the full GPU
+        // upload again instead of taking the fast display path.
+        if (!fullCachedEntry) imgCacheStore(path, { ...diskCached, exif: { ...diskCached.exif } }, loadKey);
+      } else if (cached) {
+        cached.ts = Date.now(); // touch for LRU
+        deferEditorRender = false;
+        deferredDisplayRender = false;
+        installFXImages([cached.entry], cached.loadKey, { deferRender: false });
       } else {
         // N1a piece 1: a real decode source for a cached-only (offline) photo. There is no
         // full-resolution offline cache — building one would be a separate, much bigger
@@ -3498,10 +3778,11 @@
         // JPEG. A byte-copied still (already JPEG/HEIC/etc originally) has a matching extension
         // either way, so this is a no-op for that case.
         const fileMime = offlinePreview ? 'image/jpeg' : (hqOfflineCacheExt ? mimeFromName('x.' + hqOfflineCacheExt) : mimeFromName(path));
+        rawPerf('open-read-source', path, { ms: 0, bytes: buf.byteLength, offlinePreview });
         const file = new File([buf], baseName(path), { type: fileMime, lastModified: 0 });
         window.chromasmithSourcePath = path;
         window.chromasmithDecodeRecipeKey = recipeKey;
-        await loadFXImages([file]); // bare identifier — see desktop-native.js's note on this
+        const decodeT0 = performance.now(); await loadFXImages([file]); rawPerf('open-decode', path, { ms: performance.now() - decodeT0, bytes: buf.byteLength }); // bare identifier — see desktop-native.js's note on this
         if (fxImages[0]) {
           fxImages[0].fileSize = buf.byteLength; // shown as the "Size" row in the metadata panel
           fxImages[0].offlinePreview = offlinePreview;
@@ -3564,17 +3845,16 @@
       state.openedPaths = [];
       invoke('touch_recent', { path }).then(() => { if (state.source === 'recents') renderCollectionCounts(); }).catch(() => {});
       if (sc.recipe) {
-        try {
-          applyUISnapshot(snapshotFromB64(sc.recipe));
-          // A recipe saved before the RAW-defaults feature existed carries nr-col:0 (its
-          // honest value at save time), which just clobbered whatever applyRawDefaults() set
-          // moments ago inside loadFXImages — silently undoing the Color NR 25 default on
-          // every previously-edited photo. applyRawDefaults() only fills sliders still at 0,
-          // so re-running it here backfills stale recipes without touching one that
-          // intentionally set NR to something else.
-          if (typeof applyRawDefaults === 'function') applyRawDefaults();
-          fxUpdate();
-        } catch (e) { console.error('restore recipe', e); }
+        const applyRecipe = () => {
+          try {
+            applyUISnapshot(snapshotFromB64(sc.recipe));
+            // A recipe saved before the RAW-defaults feature existed carries nr-col:0 (its
+            // honest value at save time), which would otherwise clobber the RAW defaults.
+            if (typeof applyRawDefaults === 'function') applyRawDefaults();
+            fxUpdate();
+          } catch (e) { console.error('restore recipe', e); }
+        };
+        if (deferEditorRender) deferredRecipeApply = applyRecipe; else applyRecipe();
       } else if (cached && typeof window.chromasmithApplyPristineDefault === 'function') {
         // No saved recipe (e.g. right after "Reset edit"/⌘⇧R) AND this photo was served from
         // the in-memory `cached` branch above — that branch calls installFXImages() directly
@@ -3594,8 +3874,11 @@
       }
       // Real metadata (camera/lens/shutter/aperture/iso/date) via rawler on the Rust side —
       // the editor's own RW2 branch attaches none, so without this #fx-exif stays empty.
-      try {
-        const m = await getMeta(path);
+      // Metadata is panel-only and can be slow on an external volume. Do not block the first
+      // visible cached frame on it; populate EXIF asynchronously and ignore stale completions
+      // when the user navigates before the native metadata read returns.
+      getMeta(path).then((m) => {
+        if (state.openedPath && state.openedPath !== path) return;
         if (typeof showExif === 'function' && fxImages[0]) {
           const exif = {
             model: m.model || m.camera || '', make: m.make || '',
@@ -3604,27 +3887,42 @@
           };
           fxImages[0].exif = exif;
           showExif(exif);
-          // The lens-auto status line reads exif.lens for its message text — refresh it now
-          // that metadata has actually landed (it may have shown "still loading" a moment ago).
           if (typeof window.chromasmithLensStatusRefresh === 'function') window.chromasmithLensStatusRefresh();
         }
-      } catch (e) { console.error('load metadata', e); }
+      }).catch((e) => console.error('load metadata', e));
       // Docked layout: the panel stays open next to the editor; just mark the active card.
       overlay.querySelectorAll('.lib-card.sel').forEach((c) => c.classList.remove('sel'));
       scrollLibraryToPath(path);
       const card = overlay.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
       if (card) card.classList.add('sel');
+      if (fullAssetPath || fullCachedEntry) startFullPromotion(); else window.chromasmithFullQualityReady = true;
     } catch (e) {
       console.error('openInEditor', e);
       if (typeof toast === 'function') toast(`Couldn't open ${baseName(path)} — ${friendlyRawError(e)}`, false);
     } finally {
       const hideProvisional = await provisionalPromise;
+      const hideDisplayOverlay = await displayOverlayPromise;
       hideProvisional();
+      if (!deferredDisplayRender) hideDisplayOverlay();
       if (spin) spin.style.display = 'none';
       // If the decode failed (loadFXImages never replaced the spinner with dimensions),
       // don't leave the deskbar spinner running forever.
       const st = document.getElementById('db-title-status');
       if (st && st.classList.contains('spin') && typeof fxDeskbarTitle === 'function') fxDeskbarTitle(undefined, '', false);
+      if (deferredDisplayRender) {
+        requestAnimationFrame(() => {
+          try {
+            if (deferredRecipeApply) deferredRecipeApply();
+            renderPreview();
+            rawPerf('open-display-render', path, { ms: performance.now() - openT0, width: FX.w, height: FX.h });
+          } catch (e) { rawPerf('open-display-render-failed', path, { error: String(e) }); }
+          hideDisplayOverlay();
+        });
+      } else if ((diskCached || cached) && FX && !FX.w) {
+        try { renderPreview(); } catch (e) { rawPerf('open-display-render-failed', path, { error: String(e) }); }
+      }
+      if (fullAssetPath || fullCachedEntry) startFullPromotion();
+      rawPerf('open-fully-loaded', path, { ms: performance.now() - openT0, source: cached ? 'memory' : (diskCached ? 'persistent-cache' : 'decode') });
     }
   }
 
@@ -4855,10 +5153,12 @@
     _cacheWarmCancel = () => { cancelled = true; };
     activityUpdate('raw-cache', { label: 'Caching RAW previews', stage: 'working', done: 0, total: rawPaths.length,
       current: `Preparing ${rawPaths.length} photo${rawPaths.length === 1 ? '' : 's'}`, cancelFn: () => { cancelled = true; } });
-    let written = 0, cached = 0, failed = [];
+    let written = 0, cached = 0, failed = [], batchT0 = performance.now();
+    rawPerf('cache-batch-start', `${rawPaths.length} RAWs`, { count: rawPaths.length });
     try {
       for (let i = 0; i < rawPaths.length && !cancelled; i++) {
         const path = rawPaths[i];
+        const itemT0 = performance.now(); rawPerf('cache-item-start', path);
         try {
           let rawNr = window.chromasmithRawNr || 'fast';
           let demosaicAlgo = window.chromasmithDemosaicAlgo || '';
@@ -4876,8 +5176,8 @@
           const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
           const recipeKey = [profile, rawNr !== 'off' ? 1 : 0, demosaicAlgo, autoLens ? 1 : 0,
             lensOverride, lensOverrideFocal].join('|');
-          const bytes = new Uint8Array(await invoke('read_file_bytes', { path }));
-          const ident = await invoke('peek_raw_camera', bytes);
+          const readT0 = performance.now(); const bytes = new Uint8Array(await invoke('read_file_bytes', { path })); rawPerf('cache-read', path, { ms: performance.now() - readT0, bytes: bytes.byteLength });
+          const identT0 = performance.now(); const ident = await invoke('peek_raw_camera', bytes); rawPerf('cache-identify', path, { ms: performance.now() - identT0 });
           let mode = 'srgb', lutKey = '';
           if (profile && typeof resolveDcpSource === 'function') {
             const source = await resolveDcpSource(ident.make || '', ident.model || '');
@@ -4892,10 +5192,12 @@
               }
             }
           }
-          const result = await invoke('cache_raw_decode', { path, recipeKey, mode, lutKey, rawNr,
+          const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { path, recipeKey, mode, lutKey, rawNr,
             autoLens, demosaicAlgo, lensOverride, lensOverrideFocal });
+          rawPerf('cache-decode-write', path, { ms: performance.now() - decodeT0, result });
           if (result === 'cached') cached++; else written++;
         } catch (e) { failed.push(`${baseName(path)}: ${humanizeErr('cache', e)}`); }
+        rawPerf('cache-item-complete', path, { ms: performance.now() - itemT0 });
         activityUpdate('raw-cache', { stage: 'working', done: i + 1, total: rawPaths.length, current: baseName(path) });
       }
     } finally {
@@ -5621,6 +5923,11 @@
         };
       });
     });
+    // Keep the next visible RAWs at the display-preview tier without competing with thumbnail
+    // work: two bounded workers, at most twelve candidates, and only after the current grid is
+    // mounted. This makes navigation feel instant without retaining full-resolution canvases.
+    const prefetchPaths = built.map(({ entry }) => entry.path);
+    setTimeout(() => prefetchDisplayProxies(prefetchPaths), 1200);
     if (opts && opts.padBot) {
       const pad = document.createElement('div');
       pad.className = 'lib-virt-pad';

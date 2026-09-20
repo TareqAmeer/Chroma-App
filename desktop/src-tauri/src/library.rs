@@ -296,6 +296,7 @@ const PHASH_VER: &str = "phash-v1";
 // v2 switches the editor-render cache from lossy JPEG to lossless PNG. A cache entry is used as
 // the actual editor source on a later open, so it must preserve every developed display pixel.
 const DECODE_RENDER_VER: &str = "decode-v2";
+const DISPLAY_PROXY_VER: &str = "display-v3-webp-lossless";
 const LR_THUMB_VER: &str = "lr-thumb-v1";
 /// Bump this if `is_evictable_cache_file`'s notion of what belongs to the thumbnail tier ever
 /// changes shape again — see `migrate_thumb_cache_v2` below, which uses it as a one-time-per-
@@ -787,6 +788,56 @@ pub fn get_decode_cache(path: String, recipe_key: String) -> Result<tauri::ipc::
     })?;
     crate::diag::log("info", format!("RAW_DIAG cache_hit file={} bytes={}", std::path::Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?"), bytes.len()));
     Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Returns the existing full-quality cache path so the WebView can load the PNG through the
+/// native asset protocol instead of transferring its tens of megabytes through IPC.
+#[tauri::command]
+pub fn get_decode_cache_path(path: String, recipe_key: String) -> Result<String, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let cache_path = decode_cache_dir().join(decode_cache_key(&path, mtime, meta.len(), &recipe_key));
+    if !cache_path.is_file() { return Err("no cached decode".into()); }
+    Ok(cache_path.to_string_lossy().into_owned())
+}
+
+fn display_cache_path(path: &str, mtime: u64, size: u64, recipe_key: &str, long_edge: u32) -> PathBuf {
+    decode_cache_dir().join(format!("{:016x}.display-{}.webp", fnv1a(&[path, &mtime.to_string(), &size.to_string(), recipe_key, DISPLAY_PROXY_VER]), long_edge))
+}
+
+/// Returns a display-sized, lossless WebP preview through the asset protocol. The pixels come from
+/// the same finished full-resolution decode cache; this only changes the transport/display tier.
+#[tauri::command]
+pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32) -> Result<String, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let edge = long_edge.clamp(512, 4096);
+    let out_path = display_cache_path(&path, mtime, meta.len(), &recipe_key, edge);
+    if !out_path.is_file() {
+        let full_key = decode_cache_key(&path, mtime, meta.len(), &recipe_key);
+        let full_path = decode_cache_dir().join(full_key);
+        let bytes = std::fs::read(&full_path).map_err(|_| "no cached decode".to_string())?;
+        let img = image::load_from_memory(&bytes).map_err(|e| format!("decode cached preview: {e}"))?;
+        let scaled = img.resize(edge, edge, image::imageops::FilterType::Lanczos3);
+        let mut encoded = Vec::new();
+        scaled.write_to(&mut Cursor::new(&mut encoded), image::ImageFormat::WebP)
+            .map_err(|e| format!("encode display preview: {e}"))?;
+        std::fs::write(&out_path, encoded).map_err(|e| format!("write display preview: {e}"))?;
+    }
+    Ok(out_path.to_string_lossy().into_owned())
+}
+
+/// Returns an already-generated display proxy without triggering the expensive first-time
+/// resize/PNG encode. Library prewarming uses this probe so it never competes with an active RAW
+/// open by generating proxies that batch caching has not prepared yet.
+#[tauri::command]
+pub fn get_display_decode_cache_path(path: String, recipe_key: String, long_edge: u32) -> Result<String, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let edge = long_edge.clamp(512, 4096);
+    let out_path = display_cache_path(&path, mtime, meta.len(), &recipe_key, edge);
+    if !out_path.is_file() { return Err("no cached display proxy".into()); }
+    Ok(out_path.to_string_lossy().into_owned())
 }
 
 pub(crate) fn decode_cache_exists(path: &str, recipe_key: &str) -> Result<bool, String> {

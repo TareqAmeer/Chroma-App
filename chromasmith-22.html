@@ -6979,22 +6979,23 @@ void main(){
   // memory. The full-res `lut` base + the full-res composite/grain are untouched, so the
   // EXPORTED IMAGE stays at native resolution. This is what lets a 24MP photo export on
   // iOS (≈860MB → ≈430MB of GPU memory at gs=2) without the tab being killed.
-  _initBufs(w,h,gs,hdrIntermediate){gs=gs||1;hdrIntermediate=!!hdrIntermediate&&this._hdrSupported();
-    if(this.w===w&&this.h===h&&this.gs===gs&&this.hdrIntermediate===hdrIntermediate)return;const gl=this.gl;
+  _initBufs(w,h,gs,hdrIntermediate,resources){gs=gs||1;hdrIntermediate=!!hdrIntermediate&&this._hdrSupported();resources=resources||{};
+    const resourceKey=[resources.lens?1:0,resources.nr?1:0,resources.deconv?1:0,resources.dof?1:0,resources.glow?1:0].join('');
+    if(this.w===w&&this.h===h&&this.gs===gs&&this.hdrIntermediate===hdrIntermediate&&this._resourceKey===resourceKey)return;const gl=this.gl;
     this.cv.width=w;this.cv.height=h;
     Object.values(this.fbs).forEach(f=>gl.deleteFramebuffer(f));
     Object.values(this.txs).forEach(t=>gl.deleteTexture(t));
     this.fbs={};this.txs={};
     const w2=Math.max(1,Math.ceil(w/gs)),h2=Math.max(1,Math.ceil(h/gs));
     this._allocTex('lut',w,h,hdrIntermediate);                            // full-res graded base — RGBA16F only when requested+supported
-    this._allocTex('lens',w,h);                                           // lens-corrected source (only used when Lens on)
-    this._allocTex('nr',w,h);                                             // denoised source (only used when NR on)
+    if(resources.lens)this._allocTex('lens',w,h);                         // lens-corrected source (only used when Lens on)
+    if(resources.nr)this._allocTex('nr',w,h);                             // denoised source (only used when NR on)
     // ROADMAP.md R6 — deconvolution sharpening scratch chain: dcEstA/dcEstB ping-pong the RL
     // estimate across iterations, dcBlurH/dcBlurV are the separable-Gaussian reblur-of-estimate
     // scratch (reuses progs.blur, same shader the halation/skin chains use), deconvOut is the
     // final Amount-blended result the `lut` pass samples from. Full-res like lens/nr (only paid
     // for when Deconvolution amount>0 — see render()'s dcOn gate).
-    ['dcEstA','dcEstB','dcBlurH','dcBlurV','deconvOut'].forEach(n=>this._allocTex(n,w,h));
+    if(resources.deconv)['dcEstA','dcEstB','dcBlurH','dcBlurV','deconvOut'].forEach(n=>this._allocTex(n,w,h));
     // ROADMAP R7 — depth blur / tilt-shift scratch: dofSrc holds the comp pass's finished frame
     // when the feature is on (instead of comp writing straight to outFb); dofHtmp is reused as
     // the horizontal-blur scratch for all three radii in turn (they run sequentially, never
@@ -7003,18 +7004,24 @@ void main(){
     // full-res layers progs.dof blends between. Full-res like lens/nr above — only ever WRITTEN
     // when P.depthBlur/P.tiltShift is enabled (render()'s dofOn gate), so this is idle memory,
     // not idle GPU time, when the feature is off.
-    ['dofSrc','dofHtmp','dofL1','dofL2','dofL3'].forEach(n=>this._allocTex(n,w,h));
+    if(resources.dof)['dofSrc','dofHtmp','dofL1','dofL2','dofL3'].forEach(n=>this._allocTex(n,w,h));
     // ROADMAP.md R1: hemitF/the halation-bloom scratch chain also need to be float when the
     // scene-referred tonemap is active, or a >1.0 highlight from the (now-float) `lut` FBO gets
     // clamped right back to 8-bit the moment the emission pass writes it — same reasoning as
     // `lut` above, just extended down the rest of the chain the comp shader's tonemapShoulder
     // ultimately reads from.
-    this._allocTex('hemitF',w,h,hdrIntermediate);                         // FULL-res halation emit (for a sharp high-pass)
-    ['bsrc','bglow_h','bglow_v','hsrc','hglow_h','hglow_v'].forEach(n=>this._allocTex(n,w2,h2,hdrIntermediate)); // reduced-res glow
+    if(resources.glow){
+      this._allocTex('hemitF',w,h,hdrIntermediate);                       // FULL-res halation emit (for a sharp high-pass)
+      ['bsrc','bglow_h','bglow_v','hsrc','hglow_h','hglow_v'].forEach(n=>this._allocTex(n,w2,h2,hdrIntermediate)); // reduced-res glow
+    }
     // Quarter-res luminance ping-pong for the skin-tone frequency separation (see progs.lumdown).
     const w4=Math.max(1,Math.ceil(w/4)),h4=Math.max(1,Math.ceil(h/4));
-    ['sklo_a','sklo_b','skbox'].forEach(n=>this._allocTex(n,w4,h4));
-    this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.w4=w4;this.h4=h4;this.gs=gs;this.hdrIntermediate=hdrIntermediate;
+    // The LUT pass always binds these texture units, even when no skin luminance gate is active.
+    // Keep the tiny quarter-res targets allocated so a disabled gate never leaves an undefined
+    // texture bound; the resource flag only controls whether the expensive luminance pass runs.
+    ['sklo_a','sklo_b'].forEach(n=>this._allocTex(n,w4,h4));
+    this._allocTex('skbox',w4,h4);
+    this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.w4=w4;this.h4=h4;this.gs=gs;this.hdrIntermediate=hdrIntermediate;this._resourceKey=resourceKey;
   }
   setImage(img){const gl=this.gl;
     // vidTx is a PERSISTENT texture reused across video frames (see setVideoFrame) — never
@@ -7248,7 +7255,17 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // runs, so the toggle could never catch anything but post-lut clipping. Force the float
     // intermediate whenever gamutWarn is requested; _initBufs still falls back to RGBA8 on
     // hardware without EXT_color_buffer_float, so this is a silent no-op there, not a crash.
-    this._initBufs(w,h,gs,(opts&&(opts.hdrIntermediate||opts.gamutWarn))||tonemapOn);
+    const lns0=P.lens||{},nr0=P.nr||{},dc0=P.deconv||{},db0=P.depthBlur||{},ts0=P.tiltShift||{};
+    const masks0=P.masks||[],anyGate0=masks0.some(m=>m.crOn&&m.crSamples&&m.crSamples.length);
+    this._initBufs(w,h,gs,(opts&&(opts.hdrIntermediate||opts.gamutWarn))||tonemapOn,{
+      lens:!!(lns0.dist||lns0.vig||lns0.ca||lns0.defringe||lns0.pv||lns0.ph||lns0.rot||(lns0.scale!=null&&lns0.scale!==1)),
+      nr:!!(nr0.luma>0||nr0.color>0||nr0.hlDesat>0),
+      deconv:!!(dc0.amount>0),
+      dof:!!((db0&&db0.enabled)||(ts0&&ts0.enabled)),
+      glow:!!((P.halation&&P.halation.enabled)||(P.bloom&&P.bloom.enabled)||P.debug),
+      skinGate:anyGate0,
+      skinLum:anyGate0&&masks0.some(m=>m.crOn&&m.uL),
+    });
     const w2=this.w2,h2=this.h2;
     const iw2=1/w2,ih2=1/h2;          // texel step in the REDUCED-res glow buffers
     // ── CALIBRATED CONSTANTS (measured from Dehancer targets, ref width 2400px) ──
@@ -7483,7 +7500,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       adjSharp:A.sharpness||0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
       texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false]]);
 
-    // EMISSION IS ALWAYS COMPUTED AT FULL RES, then DOWNSAMPLED into the reduced glow
+    // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
     // threshold smoothstep is nonlinear, so a 1–2px bright line averaged with its dark
     // neighbours falls below thr and emits NOTHING — fine-line halation vanished on phones
@@ -7492,13 +7509,16 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // uv, weights cancel → an exact bilinear-filtered copy (at gs=1 it's an EXACT copy, so
     // desktop output is byte-identical to before).
     const DS={img:0,dir:[0,0],sig:1};
+    const glowOn=hOn||bOn;
     // BLOOM: emit (neutral, lum^power) FULL-res → hemitF (scratch) → downsample → blur (h,v)
     // (mode=1 path ignores powL/kW/kC/aG/bP — pass harmless defaults)
-    this._pass(this.progs.src,this.fbs.hemitF,
-      {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0,powLg:1.0,gA:0.0,gB:1.0},[[0,'lut',false]]);
-    this._pass(this.progs.blur,this.fbs.bsrc,DS,[[0,'hemitF',false]],RG);
-    this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw2,0],sig:bSig2},[[0,'bsrc',false]],RG);
-    this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih2],sig:bSig2},[[0,'bglow_h',false]],RG);
+    if(glowOn){
+      this._pass(this.progs.src,this.fbs.hemitF,
+        {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0,powLg:1.0,gA:0.0,gB:1.0},[[0,'lut',false]]);
+      this._pass(this.progs.blur,this.fbs.bsrc,DS,[[0,'hemitF',false]],RG);
+      this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw2,0],sig:bSig2},[[0,'bsrc',false]],RG);
+      this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih2],sig:bSig2},[[0,'bglow_h',false]],RG);
+    }
 
     // HALATION emit (rule-based; powL,kW,kC,aG,bP; bluesupp doubles as bB — see CAL.halation).
     // Full-res into hemitF (kept for the composite's high-pass subtraction, which must be
@@ -7508,10 +7528,12 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const emPowL=(NR&&NR.powL!=null)?NR.powL:H.powL, emPowLg=(NR&&NR.powLg!=null)?NR.powLg:H.powLg;
     const emitU={img:0,thr:(NR&&NR.thr!=null)?NR.thr:H.thr,knee:H.knee,power:H.power,bluesupp:H.bluesupp,mode:0.0,
       powL:emPowL,kW:H.kW,kC:H.kC,aG:H.aG,bP:H.bP,powLg:emPowLg,gA:H.gA,gB:H.gB};
-    this._pass(this.progs.src,this.fbs.hemitF,emitU,[[0,'lut',false]]);   // FULL res
-    this._pass(this.progs.blur,this.fbs.hsrc,DS,[[0,'hemitF',false]],RG); // downsampled blur input
-    this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw2,0],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hsrc',false]],RG);
-    this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih2],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hglow_h',false]],RG);
+    if(glowOn){
+      this._pass(this.progs.src,this.fbs.hemitF,emitU,[[0,'lut',false]]);   // FULL res
+      this._pass(this.progs.blur,this.fbs.hsrc,DS,[[0,'hemitF',false]],RG); // downsampled blur input
+      this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw2,0],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hsrc',false]],RG);
+      this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih2],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hglow_h',false]],RG);
+    }
 
     // FINAL composite (linear screen) + grain — FULL resolution; samples the reduced glow
     // buffers with LINEAR filtering → free bilinear upscale of the (smooth) glow.
@@ -7528,7 +7550,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     gl.viewport(0,0,dofOn?w:ovp[0],dofOn?h:ovp[1]);
     gl.useProgram(this.progs.comp);
     // hEmit = hsrc (pre-blur scalar emit) — needed for the high-pass glow subtraction.
-    [['base','lut'],['hGlow','hglow_v'],['bGlow','bglow_v'],['hEmit','hemitF']].forEach(([u,n],i)=>{
+    [['base','lut'],['hGlow',glowOn?'hglow_v':'lut'],['bGlow',glowOn?'bglow_v':'lut'],['hEmit',glowOn?'hemitF':'lut']].forEach(([u,n],i)=>{
       gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(gl.TEXTURE_2D,this.txs[n]);
       gl.uniform1i(gl.getUniformLocation(this.progs.comp,u),i);
     });
@@ -10111,7 +10133,8 @@ async function loadRw2(file){
 // of re-running the whole file→canvas pipeline just to redisplay the same photo.
 // entries: [{img,name,ext,dpi,bytes,exif,icc?,rawFile?}, ...]; loadKey: same "is this a
 // genuinely different photo" string loadFXImages computes from file name+size+lastModified.
-function installFXImages(entries,loadKey){
+function installFXImages(entries,loadKey,opts){
+  opts=opts||{};
   if(typeof fxSyncHdrOption==='function')setTimeout(fxSyncHdrOption,0); // HDR option depends on the SOURCE file, which changes with the photo
 
   if(typeof fxInvalidateMaskSource==='function')fxInvalidateMaskSource(); // A15: the cached photo-at-mask-resolution decode belongs to the OUTGOING photo
@@ -10186,9 +10209,14 @@ function installFXImages(entries,loadKey){
   fxImages[0].masks=fxState.masks;
   for(let i=1;i<fxImages.length;i++)fxImages[i].masks=[];
   if(typeof mskRebuild==='function')mskRebuild(); // refresh the Masks panel to this photo's own list — otherwise it kept showing the OUTGOING photo's mask buttons until the user touched something
-  autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
+  if(!opts.deferRender)autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
   if(typeof loadSessionGeomFor==='function')loadSessionGeomFor(); // restore saved crop/rotate IF this is the same photo the session was saved from
-  renderPreview();buildLookGallery();buildFilmstrip();syncExportScopeUI();
+  if(!opts.deferRender){renderPreview();buildLookGallery();buildFilmstrip();}
+  else {
+    const idle=window.requestIdleCallback||((cb)=>setTimeout(cb,500));
+    idle(()=>{buildLookGallery();buildFilmstrip();},{timeout:1000});
+  }
+  syncExportScopeUI();
   if(typeof nrSyncGate==='function')nrSyncGate(); // this photo's own NR sliders just landed in the DOM — refresh the Detail/HL-Desat dim state for them
   if(typeof fxSyncVideoUI==='function')fxSyncVideoUI();
   showExif(fxImages[0].exif||{});
@@ -10843,9 +10871,13 @@ function hslPreviewClear(){if(!hslPreviewBand)return;hslPreviewBand=null;hslBuil
     histEl.addEventListener('pointerleave',hslPreviewClear);
   }
 }
-function hslSyncUI(){
+function hslSyncUI(opts){
+  opts=opts||{};
   hslBuildChips();
-  hslBuildHist();
+  if(opts.deferHist){
+    const idle=window.requestIdleCallback||((cb)=>setTimeout(cb,0));
+    idle(()=>hslBuildHist(),{timeout:1000});
+  }else hslBuildHist();
   [['hue','h'],['sat','s'],['lum','l']].forEach(([k,sfx])=>{
     const v=(fxState.hsl[k]&&fxState.hsl[k][hslBand])||0;
     const sl=document.getElementById('sl-hsl-'+sfx),vl=document.getElementById('vl-hsl-'+sfx);
@@ -15203,7 +15235,7 @@ function applyUISnapshot(s){
     if(typeof curveSetMode==='function')curveSetMode(s.curveMode);
   }
   if(s.wheels){fxState.wheels=JSON.parse(JSON.stringify(s.wheels));if(typeof WHEEL_NAMES!=='undefined')WHEEL_NAMES.forEach(wheelSyncUI);}
-  if(s.hsl){fxState.hsl=JSON.parse(JSON.stringify(s.hsl));bakeHsl();hslSyncUI();}
+  if(s.hsl){fxState.hsl=JSON.parse(JSON.stringify(s.hsl));bakeHsl();hslSyncUI({deferHist:true});}
   if(s.pointColors){fxState.pointColors=JSON.parse(JSON.stringify(s.pointColors));pcSel=Math.min(pcSel,fxState.pointColors.length-1);pcRebuild();pcSyncUI();bakeHsl();}
   if(s.artSeed!=null)fxState.artSeed=s.artSeed;
   if(s.dustMode!==undefined){fxState.dustMode=s.dustMode;if(typeof dustModeBuildChips==='function')dustModeBuildChips();}
@@ -18004,7 +18036,11 @@ function healApply(img,ops){
   }
   return out;
 }
-function geomCanvas(item){return applyGeomTo(healApply(item.img,item.heal),item.geom||defGeom());}
+function geomCanvas(item){
+  const g=item.geom||defGeom();
+  const identity=!item.heal&&!g.crop&&!g.rot&&!g.flipH&&!g.flipV&&!g.angle;
+  return identity?item.img:applyGeomTo(healApply(item.img,item.heal),g);
+}
 // Recompute the working image after any geometry change and upload it to the GL renderer.
 function updateWork(){
   const it=curItem();
@@ -20112,7 +20148,7 @@ function askTextModal(title,msg,defVal){
       // fell through to a hardcoded grey that missed the real text colour and ignored the light
       // theme entirely. Same reason --sans replaces --mono here — this dialog names masks and
       // Styles now, not just OAuth client IDs, and --mono is for numerals (see :root).
-      dlg.style.cssText='border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+      dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
       dlg.innerHTML='<div id="fx-ask-title" style="font-weight:600;margin-bottom:6px"></div>'+
         '<div id="fx-ask-msg" style="font-size:12px;color:var(--mut);white-space:pre-wrap;margin-bottom:10px"></div>'+
         '<input id="fx-ask-input" type="text" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--bdr);border-radius:6px;background:var(--sur2);color:inherit;font-family:var(--sans);font-size:13px">'+
@@ -20153,7 +20189,7 @@ function confirmModal(msg,okLabel){
     let dlg=document.getElementById('fx-confirm-modal');
     if(!dlg){
       dlg=document.createElement('dialog');dlg.id='fx-confirm-modal';
-      dlg.style.cssText='border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+      dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
       dlg.innerHTML='<div id="fx-confirm-msg" style="font-size:13px;line-height:1.5;white-space:pre-wrap;margin-bottom:14px"></div>'+
         '<div style="display:flex;gap:8px;justify-content:flex-end">'+
         '<button type="button" id="fx-confirm-cancel" class="btn bgh">Cancel</button>'+
@@ -21960,6 +21996,18 @@ if(window.__TAURI__&&window.__TAURI__.core){
       }catch(_){}
     }
     setInterval(writeDiag,5000);
+  })();
+}
+if(window.__TAURI__&&window.__TAURI__.core){
+  (async()=>{
+    const invoke=window.__TAURI__.core.invoke; let base,token,lastId=null;
+    try{base=await invoke('diag_state_path');const p=base.replace('chromasmith_diag_state.json','chromasmith_automation_enable.json');const r=await invoke('read_file_bytes',{path:p});token=JSON.parse(new TextDecoder().decode(new Uint8Array(r))).token;}catch(_){return;}
+    if(!token)return;
+    const cp=base.replace('chromasmith_diag_state.json','chromasmith_automation_command.json'),rp=base.replace('chromasmith_diag_state.json','chromasmith_automation_result.json');
+    const decode=r=>JSON.parse(new TextDecoder().decode(new Uint8Array(r))), encode=o=>btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+    const resolve=p=>p.split('.').reduce((o,k)=>o==null?undefined:o[k],window), safe=v=>{try{return JSON.parse(JSON.stringify(v));}catch(_){return String(v)}};
+    const run=async c=>{if(c.token!==token)throw Error('automation token mismatch');if(c.action==='eval')return await(new Function('return (async()=>('+String(c.code)+'))()'))();if(c.action==='call'){const a=String(c.path||'').split('.'),n=a.pop(),o=resolve(a.join('.'));if(!o||typeof o[n]!=='function')throw Error('call target is not a function');return await o[n](...(c.args||[]));}if(c.action==='click'){const e=document.querySelector(c.selector);if(!e)throw Error('selector not found');e.click();return true;}if(c.action==='setValue'){const e=document.querySelector(c.selector);if(!e)throw Error('selector not found');e.value=c.value;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return e.value;}if(c.action==='key'){(document.activeElement||document.body).dispatchEvent(new KeyboardEvent(c.event||'keydown',{key:c.key,code:c.code||c.key,bubbles:true}));return true;}if(c.action==='snapshot')return window.getUISnapshot?window.getUISnapshot():{title:document.title,ready:document.readyState};throw Error('unknown automation action');};
+    setInterval(async()=>{try{const c=decode(await invoke('read_file_bytes',{path:cp}));if(!c||c.id===lastId)return;lastId=c.id;const o={id:c.id,ok:false};try{o.result=safe(await run(c));o.ok=true;}catch(e){o.error=String(e&&e.stack||e);}await invoke('write_file_bytes',{path:rp,dataB64:encode(o)});}catch(_){}},100);
   })();
 }
 // Tap-to-select chip row mirroring a plain <select> (kept in the DOM, hidden, as the

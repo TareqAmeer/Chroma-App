@@ -143,6 +143,11 @@ def find_chromasmith_pid(prefer_path=None):
         prefer_path = REAL_APP_PATH
     pids = _pids_by_name(EXE_NAME)
     if not pids:
+        # macOS truncates the comm name to 8 characters ("chromasmi"), so an exact
+        # pgrep -x "chromasmith" misses the real app. Prefer the known release bundle
+        # path, then the native bridge path when available.
+        pids = _pids_by_executable_path(os.path.join(prefer_path, 'Contents', 'MacOS', EXE_NAME))
+    if not pids:
         pids = _pids_by_executable_path(_bridge_binary_path())
     if not pids:
         raise ProcessNotFound(

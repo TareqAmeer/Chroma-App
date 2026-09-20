@@ -159,6 +159,19 @@ struct RawDecodeCacheEntry {
 }
 static RAW_DECODE_CACHE: Mutex<Option<RawDecodeCacheEntry>> = Mutex::new(None);
 
+// The explicit RAW-cache action already pays the full decode cost. Keep that developed frame
+// in-process so reopening it in the same session does not decode the RAW again.
+struct RawEditorCacheEntry {
+    path: String,
+    recipe_key: String,
+    mtime: u64,
+    size: u64,
+    width: u32,
+    height: u32,
+    rgba: std::sync::Arc<Vec<u8>>,
+}
+static RAW_EDITOR_CACHE: Mutex<Vec<RawEditorCacheEntry>> = Mutex::new(Vec::new());
+
 fn parse_framed(body: &tauri::ipc::InvokeBody) -> Result<(serde_json::Value, &[u8]), String> {
     let tauri::ipc::InvokeBody::Raw(bytes) = body else {
         return Err("expected raw invoke body".into());
@@ -880,7 +893,8 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 }
 
 /// Warms the persistent editor cache without opening photos in the WebView. One native full
-/// decode is used per photo; future opens use the exact lossless developed pixels.
+/// decode is used per photo; future opens use the lossless in-process pixels instead of paying
+/// the RAW demosaic cost again. The persistent PNG remains the restart fallback.
 #[tauri::command]
 fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: String, raw_nr: String, auto_lens: bool,
                     demosaic_algo: String, lens_override: String, lens_override_focal: f64) -> Result<String, String> {
@@ -893,7 +907,10 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
     if !formats::is_raw_ext(&ext) {
         return Err("selected file is not a RAW photo".into());
     }
-    if library::decode_cache_exists(&path, &recipe_key)? { return Ok("cached".into()); }
+    if library::decode_cache_exists(&path, &recipe_key)? {
+        library::get_display_decode_cache(path, recipe_key, 2560)?;
+        return Ok("cached".into());
+    }
     let demosaic_algo = match demosaic_algo.as_str() { "" | "ahd" | "vng" | "mhc" => demosaic_algo.as_str(), _ => "" };
     let lens_override = match (lens_override.is_empty(), lens_override_focal > 0.0) {
         (false, true) => Some((lens_override.as_str(), lens_override_focal as f32)), _ => None,
@@ -910,12 +927,47 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
         raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
     } else { raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam) };
     let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba).ok_or("decoded RGBA dimensions do not match")?;
+    let rgba = img.into_raw();
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs()).unwrap_or(0);
+    {
+        let mut guard = RAW_EDITOR_CACHE.lock().map_err(|_| "RAW editor cache lock poisoned".to_string())?;
+        guard.retain(|entry| !(entry.path == path && entry.recipe_key == recipe_key));
+        guard.push(RawEditorCacheEntry {
+            path: path.clone(), recipe_key: recipe_key.clone(), mtime, size: meta.len(),
+            width: decoded.width, height: decoded.height, rgba: std::sync::Arc::new(rgba.clone()),
+        });
+        const MAX_IN_PROCESS_RAW_CACHES: usize = 3;
+        if guard.len() > MAX_IN_PROCESS_RAW_CACHES { guard.remove(0); }
+    }
+    // Persistent fallback for the next launch. The in-process cache above is the fast path.
     let mut out = Cursor::new(Vec::new());
-    image::DynamicImage::ImageRgba8(img)
+    image::DynamicImage::ImageRgba8(image::RgbaImage::from_raw(decoded.width, decoded.height, rgba)
+        .ok_or("cached RGBA dimensions do not match")?)
         .write_to(&mut out, image::ImageFormat::Png)
         .map_err(|e| format!("encode decode cache: {e}"))?;
     library::write_decode_cache_file(&path, &recipe_key, out.get_ref())?;
+    // Batch caching is complete only when the display-sized asset is ready too; otherwise the
+    // first reopen still pays the proxy-generation cost that the batch action appeared to cover.
+    library::get_display_decode_cache(path, recipe_key, 2560)?;
     Ok("written".into())
+}
+
+/// Returns the lossless in-process RAW cache populated by cache_raw_decode.
+#[tauri::command]
+fn get_cached_raw_decode(path: String, recipe_key: String) -> Result<tauri::ipc::Response, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs()).unwrap_or(0);
+    let guard = RAW_EDITOR_CACHE.lock().map_err(|_| "RAW editor cache lock poisoned".to_string())?;
+    let entry = guard.iter().rev().find(|entry| entry.path == path && entry.recipe_key == recipe_key
+        && entry.mtime == mtime && entry.size == meta.len()).ok_or("no in-process cached decode")?;
+    let mut out = Vec::with_capacity(8 + entry.rgba.len());
+    out.extend_from_slice(&entry.width.to_le_bytes());
+    out.extend_from_slice(&entry.height.to_le_bytes());
+    out.extend_from_slice(entry.rgba.as_ref());
+    Ok(tauri::ipc::Response::new(out))
 }
 
 /// Decode a still the WebView can't (formats::STILL_RUST_EXTS — EXR/HDR/TGA/DDS/QOI/FF/PNM*/
@@ -2161,7 +2213,14 @@ fn main() {
     // wrong in the other direction (over-throttling) would erase some of this session's own
     // speed-ups; revisit with real measurements if background passes end up feeling slow.
     let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
-    let workers = (cores.saturating_sub(2)).max(2);
+    let default_workers = (cores.saturating_sub(2)).max(2);
+    // Diagnostics can temporarily widen the pool for a controlled RAW-stage A/B. Keep the
+    // production default conservative so a large-folder scan cannot starve the WebView.
+    let workers = std::env::var("CS_RAYON_WORKERS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&n| n >= 2)
+        .unwrap_or(default_workers);
     // QoS (see bgwork.rs) is layered ON TOP of the count cap below, not instead of it — a
     // thread-count cap only bounds concurrency, it can't stop a background thread from being
     // scheduled ahead of the UI thread when both happen to be runnable at once. Marking every
@@ -2296,6 +2355,7 @@ fn main() {
             dcp_store::read_dcp_file,
             decode_raw_v2,
             cache_raw_decode,
+            get_cached_raw_decode,
             decode_image_v1,
             merge_hdr_photos,
             merge_focus_photos,
@@ -2365,6 +2425,9 @@ fn main() {
             library::registry_set_cmd,
             library::registry_set_many,
             library::get_decode_cache,
+            library::get_decode_cache_path,
+            library::get_display_decode_cache,
+            library::get_display_decode_cache_path,
             library::save_decode_cache,
             library::get_lr_thumb,
             library::save_lr_thumb,
