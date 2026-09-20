@@ -7690,9 +7690,6 @@
     await renderGrid();
     rememberLibraryView({ kind: 'exported' });
     renderCollections();
-  // Albums load once at startup, then only after a mutation — the list is small and lives in one
-  // JSON file, so re-reading it on every grid render would be pure waste.
-  refreshAlbums();
   }
 
   // ── DRK-style sidebar: smart collections above the folder tree ─────────────────────
@@ -10518,6 +10515,10 @@
     invoke('collection_counts').then((counts) => { collectionCounts = counts; renderCollections(); }).catch(() => {});
   }
   renderCollections();
+  // Load persisted albums after the Library DOM and album helpers are initialized. The previous
+  // call lived inside openExportedView(), so existing albums stayed at the initial empty state
+  // until the user happened to open Exported or mutate an album.
+  refreshAlbums();
   renderCollectionCounts();
   // ⚠️ NOT guarded on LIBTEST — unlike catalogRegisterFolder (which has no meaningful mock to
   // run against), catalog_counts/catalog_date_counts ARE mocked, and gating this away from
