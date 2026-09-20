@@ -9821,6 +9821,7 @@
   const ALBUM_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H3z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 2"/></svg>';
   async function refreshAlbums() {
     _albums = await invoke('album_list').catch(() => []);
+    if (_albums.length) revealAlbums();
     renderCollections();
   }
   function wireAlbumRows(host) {
