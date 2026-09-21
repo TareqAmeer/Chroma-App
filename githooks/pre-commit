@@ -78,4 +78,9 @@ elif needs_check "chromasmith-22.html"; then
   fi
 fi
 
+# Version stamp: BUILD = 1.MMDDx, letter bumps per commit (scripts/bump-build.py).
+if git diff --cached --name-only | grep -qx "chromasmith-22.html"; then
+  python3 scripts/bump-build.py || python scripts/bump-build.py || true
+fi
+
 exit 0

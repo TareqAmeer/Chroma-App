@@ -1589,7 +1589,7 @@ L.onclick=function(){go(true)};S.onclick=function(){go(false)};})();</script>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div id="boot-splash-label" style="font-size:11px;color:#9a968c;font-variant-numeric:tabular-nums">Checking your library…</div>
         </div>
-        <div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px">Chromasmith</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px">Chromasmith <span id="boot-splash-version"></span></div>
       </div>
     </div>
     <!-- Right pane: cover photo, purely decorative — never gates or reports progress -->
@@ -5039,7 +5039,8 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='2026-09-16a';
+const BUILD='1.0922A';
+{const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -5076,7 +5077,7 @@ function csAbout(){
     +'<p style="margin:0 0 14px;color:var(--mut)">Photos are never uploaded. Every LUT, grain and '
     +'halation pass runs in your browser; the app works with the network switched off.</p>'
     +`<div style="display:flex;gap:8px;align-items:center;color:var(--mut);font-size:var(--fs-1);margin-bottom:16px">`
-    +`<span>Build</span><span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--txt)">${BUILD}</span></div>`
+    +`<span>Version</span><span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--txt)">v. ${BUILD}</span></div>`
     +'<div class="fx-sub" style="border-top:1px solid var(--bdr);margin-bottom:8px">Diagnostics</div>'
     +'<p style="margin:0 0 10px;color:var(--mut);font-size:var(--fs-1)">Only useful when reporting a problem.</p>'
     +'<div class="btn-row" style="margin-top:0">'
@@ -5087,8 +5088,8 @@ function csAbout(){
     +'</div></div>');
 }
 window.csAbout=csAbout;
-{const bs=document.getElementById('build-stamp');if(bs)bs.textContent='build '+BUILD;}
-{const nb=document.getElementById('ni-build');if(nb)nb.textContent='build '+BUILD;}
+{const bs=document.getElementById('build-stamp');if(bs)bs.textContent='v. '+BUILD;}
+{const nb=document.getElementById('ni-build');if(nb)nb.textContent='v. '+BUILD;}
 try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
 // deskx (DRK-style desktop layout): normally applied by the Tauri shell
 // (desktop-native.js); "?deskx=1" lets it be exercised in a plain browser for testing.
@@ -22613,7 +22614,7 @@ document.addEventListener('keyup',e=>{
     fxCompare=false;renderPreview();
   }
 });
-log(`Chromasmith ready (build ${BUILD}) — all processing runs locally in your browser`,'ok');
+log(`Chromasmith ready (v. ${BUILD}) — all processing runs locally in your browser`,'ok');
 // Warm the vendor/luts/ cache in the background, after first paint. Deliberately on 'load' and
 // then behind requestIdleCallback: this is the price of having taken 16 MB of LUT data out of
 // the page, and it must never compete with the photo the user is actually opening.
