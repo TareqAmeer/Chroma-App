@@ -6171,6 +6171,8 @@
   function renderBatchBar() {
     let bar = document.getElementById('lib-batchbar');
     const n = state.selected.size;
+    // CHR-118: no floating Reject/Pick/Clear flag bar over the docked Editor filmstrip.
+    if (document.body.classList.contains('deskx') && !overlay.classList.contains('full')) { if (bar) bar.remove(); return; }
     // Caching is useful for a single RAW too, and showing the same selection bar from the first
     // selected photo makes the pre-cache action discoverable before a large batch is selected.
     if (n < 1) { if (bar) bar.remove(); return; }
