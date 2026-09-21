@@ -1344,7 +1344,7 @@ body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px var(--sp-2);
    image (indistinguishable from the app's own Borders FX), which is not what was asked for —
    "border" meant panel separation (library <-> editor), not framing the canvas. Back to
    edge-to-edge, matching DRK; only the library/editor divider (library-ui.js) is thicker now. */
-body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:#000;border:none;border-radius:0;margin:0}
+body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:var(--bg);border:none;border-radius:0;margin:0}
 body.deskx #fx-canvas{max-height:none}
 body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:var(--z-float);
   background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:8px 12px}
@@ -11177,7 +11177,7 @@ function artReshuffle(){fxState.artSeed=Math.random()*100;fxUpdate();log('Artifa
 // never touches this now sees the neutral default rather than the old hardcoded #000
 // (.fx-canvas-wrap{background:#000} is overridden by this default at init, not left in place).
 const LS_EDITOR_BG='chromasmith_editor_bg';
-const EDITOR_BG_DEFAULT='#3a3a3a';
+const EDITOR_BG_DEFAULT='';/* empty = follow theme (var(--bg)); a theme switch clears any custom pick */
 function editorBgApply(hex){
   const wrap=document.getElementById('fx-wrap');if(wrap)wrap.style.background=hex||'';
 }
@@ -11185,6 +11185,8 @@ function editorBgInit(){
   let saved=null;
   try{saved=localStorage.getItem(LS_EDITOR_BG);}catch(e){}
   editorBgApply(saved||EDITOR_BG_DEFAULT);
+  let wasLight=document.body.classList.contains('light');
+  new MutationObserver(()=>{const l=document.body.classList.contains('light');if(l===wasLight)return;wasLight=l;editorBgReset();}).observe(document.body,{attributes:true,attributeFilter:['class']});
 }
 function editorBgSet(hex){
   try{localStorage.setItem(LS_EDITOR_BG,hex);}catch(e){}
