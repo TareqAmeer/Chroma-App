@@ -1678,6 +1678,10 @@
        ARIA snapshot covers this). */
     body.deskx #lib-overlay:not(.full) #lib-side{display:block;grid-row:1;padding:6px 8px 0;overflow:hidden;min-width:0}
     body.deskx #lib-overlay:not(.full) #lib-main{grid-row:2}
+    /* CHR-130: docked filmstrip thumbnails sit desaturated so they don't compete with the photo;
+       colour returns on hover/focus, or while .fs-active (set by scroll/click, cleared after a pause). */
+    body.deskx #lib-overlay:not(.full) #lib-main{filter:saturate(0);transition:filter .2s}
+    body.deskx #lib-overlay:not(.full):hover #lib-main,body.deskx #lib-overlay:not(.full):focus-within #lib-main,body.deskx #lib-overlay:not(.full) #lib-main.fs-active{filter:none}
     .lib-dock-resizer{display:none;position:absolute;top:0;right:0;width:11px;height:100%;cursor:col-resize;z-index:10}
     body.deskx #lib-overlay:not(.full) .lib-dock-resizer{display:block}
     /* Same "glow line" removal as .lib-side-resizer above — no hover/drag background wash. */
@@ -2243,6 +2247,16 @@
   // directly. Kept as a harmless no-op stub since a couple of call sites below still poke it
   // after a state change; deleting them individually isn't worth the risk of missing one.
   function syncDockPadding() {}
+
+  // CHR-130: scroll/click in the docked filmstrip re-saturates it until 1.2s of inactivity.
+  (function () {
+    const main = overlay.querySelector('#lib-main');
+    if (!main) return;
+    let t = 0;
+    const wake = () => { main.classList.add('fs-active'); clearTimeout(t); t = setTimeout(() => main.classList.remove('fs-active'), 1200); };
+    main.addEventListener('scroll', wake, { passive: true });
+    main.addEventListener('pointerdown', wake, true);
+  })();
 
   // ── provisional preview: while a RAW's full native decode (PPG demosaic + DCP LUT,
   // several seconds) runs, show the camera's own embedded JPEG immediately over the preview
