@@ -126,3 +126,6 @@ playwright-report/
 # Only the generated contact-sheet grids + spec.json (design/asbuilt/) are committed.
 design/asbuilt-full/
 diagnostics/tools/
+
+# Local archive of non-essential files (kept on disk, untracked)
+Archive/
