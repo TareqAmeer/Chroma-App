@@ -6178,7 +6178,8 @@
     if (!bar) {
       bar = document.createElement('div');
       bar.id = 'lib-batchbar';
-      bar.style.cssText = 'position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:40;'
+      // CHR-118: sticky, not absolute — #lib-main scrolls, so an absolute bar rode away with the photos.
+      bar.style.cssText = 'position:sticky;bottom:14px;width:fit-content;margin:0 auto;z-index:40;'
         + 'display:flex;gap:8px;align-items:center;padding:8px 12px;border-radius:10px;'
         + 'background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);'
         + 'backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);box-shadow:var(--lift-2)';
