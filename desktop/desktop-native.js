@@ -187,13 +187,19 @@
       // SAME bytes at full quality in the background and loadRw2() swaps the pixels in once it
       // lands — the user sees a photo almost immediately instead of staring at a spinner.
       this._mode = mode; this._lutKey = lutKey; this._bytes = bytes; this._extra = extra;
-      this._needsRefine = rawNr !== 'off'; // full quality still gets applied — just not before first paint
+      // Interactive chroma tier only: with the chroma NR at half resolution (~1.1s) a single full-quality pass shows the
+      // FINAL image ~1.4s sooner than fast pass + refine (measured, CHR-121: 6.0s vs 7.4s) and skips the second 96MB IPC,
+      // LUT conversion and canvas swap. The heavier 'fast' (Full cleanup) tier keeps the two-phase flow so a photo
+      // still appears quickly. window.chromasmithTwoPhase = true restores two-phase for the chroma tier too.
+      const single = rawNr === 'chroma' && !window.chromasmithTwoPhase;
+      this._single = single;
+      this._needsRefine = rawNr !== 'off' && !single; // full quality still gets applied — just not before first paint
       // wantExt (ROADMAP.md R1): only meaningful when mode is 'lut' — asks Rust for the
       // unquantized companion buffer alongside the normal RGBA8 body, so a real blown
       // highlight's headroom survives instead of being clamped away before this IPC round trip.
       const wantHdrPreview = !!window.chromasmithHdrPreview;
       window.__pm('native-fast-invoke');
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, fast: true } : { mode, ...extra, fast: true }, bytes);
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, fast: !single } : { mode, ...extra, fast: !single }, bytes);
       _lap('decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at');
       // 4th header word: whether Rust actually applied the requested LUT. Rust re-checks the
       // camera make independently (main.rs's KNOWN_DCP_MAKES) as a backstop in case this
