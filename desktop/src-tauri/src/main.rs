@@ -2481,6 +2481,7 @@ fn main() {
             catalog::discard_queued_edit,
             catalog::catalog_add_root,
             catalog::catalog_remove_root,
+            catalog::catalog_keep_root,
             catalog::catalog_roots,
             catalog::catalog_scan,
             catalog::catalog_scan_cancel,

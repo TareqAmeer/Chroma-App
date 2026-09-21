@@ -2493,10 +2493,12 @@
   const MIME_BY_EXT = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', heic: 'image/heic', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff',
     mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v' };
   const mimeFromName = (p) => MIME_BY_EXT[(p.split('.').pop() || '').toLowerCase()] || '';
+  let _nextRootKind = null;
   async function pickFolder() {
     try {
       const chosen = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false } });
       if (!chosen) return;
+      _nextRootKind = 'browse';
       state.root = Array.isArray(chosen) ? chosen[0] : chosen;
       localStorage.setItem(LS_ROOT, state.root);
       pushRecentFolder(state.root);
@@ -2510,6 +2512,7 @@
   // Same root-switch sequence as pickFolder() above, for a folder dropped from Finder onto the
   // grid instead of chosen via the OS dialog.
   async function importDroppedFolder(path) {
+    _nextRootKind = 'browse';
     state.root = path;
     localStorage.setItem(LS_ROOT, state.root);
     pushRecentFolder(state.root);
@@ -2620,6 +2623,7 @@
   // ── quick access: jump straight to a folder (used by the Recent-folders dropdown AND the
   // Google Photos pinned entry) without going through the OS folder-picker dialog. ──────────
   async function openAsRoot(path) {
+    _nextRootKind = 'browse';
     state.root = path;
     localStorage.setItem(LS_ROOT, path);
     pushRecentFolder(path);
@@ -8624,7 +8628,10 @@
   // (nothing queued yet) and be no fix at all.
   let _catalogBgPending = false;
   function catalogRegisterFolder(path) {
-    return invoke('catalog_add_root', { path, kind: null })
+    // 'browse' (set by Choose folder / drop / recent-folder jump) makes the new root transient:
+    // it replaces the previous browsed root and is only kept via the storage menu's "Keep in library".
+    const kind = _nextRootKind; _nextRootKind = null;
+    return invoke('catalog_add_root', { path, kind })
       .then((root) => {
         if (!root) return null;
         const needsScan = !_catalogScannedRoots.has(root.id);
@@ -10295,6 +10302,24 @@
     try { rootUsage = await invoke('catalog_root_cache_usage'); } catch (err) { /* fall back to the global-only view below */ }
 
     const items = [];
+    const rootLabel = (r) => (r.rel_path ? `${r.volume_label} / ${r.rel_path}` : `${r.volume_label} (whole volume)`);
+    for (const r of rootUsage) {
+      if (r.kind === 'browse') {
+        items.push([`Keep ${rootLabel(r)} in library`, async () => {
+          try { await invoke('catalog_keep_root', { id: r.root_id }); toast(`Kept ${rootLabel(r)}`); }
+          catch (err) { toast(humanizeErr('keep that folder', err), 'err'); }
+        }]);
+      }
+    }
+    if (rootUsage.length > 1) {
+      for (const r of rootUsage) {
+        items.push([`Remove ${rootLabel(r)} from library`, async () => {
+          if (!await window.confirmModal(`Remove ${rootLabel(r)} from the library?\n\nIts ${r.photo_count} photo${r.photo_count === 1 ? '' : 's'} disappear from the library only — nothing is deleted from disk, and ratings and labels are kept if you add it again.`, 'Remove')) return;
+          try { await invoke('catalog_remove_root', { id: r.root_id }); toast(`Removed ${rootLabel(r)}`); refreshCatalogCounts(); if (state.currentFolder) openFolder(state.currentFolder); }
+          catch (err) { toast(humanizeErr('remove that folder', err), 'err'); }
+        }]);
+      }
+    }
     if (rootUsage.length > 1) {
       for (const r of rootUsage) {
         const label = r.rel_path ? `${r.volume_label} / ${r.rel_path}` : `${r.volume_label} (whole volume)`;

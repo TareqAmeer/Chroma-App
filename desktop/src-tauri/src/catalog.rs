@@ -1131,7 +1131,22 @@ pub fn add_root_run(conn: &Connection, path: &str, kind: Option<String>) -> Resu
         .map(|(id, _)| *id)
         .collect();
 
-    let kind = kind.unwrap_or_else(|| "originals".to_string());
+    let mut kind = kind.unwrap_or_else(|| "originals".to_string());
+    if kind == "browse" {
+        // A browsed folder is only a permanent library source when nothing else is: the very
+        // first folder, or one that already contains a real root (dropping that root's kind would
+        // silently un-library it). Otherwise it is transient — see the purge below.
+        let permanent: i64 = conn
+            .query_row("SELECT COUNT(*) FROM roots WHERE kind != 'browse'", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        let covers_real = existing.iter().any(|(id, r)| {
+            is_ancestor_rel(&rel_path, r)
+                && conn.query_row("SELECT kind FROM roots WHERE id = ?1", params![id], |x| x.get::<_, String>(0)).map(|k| k != "browse").unwrap_or(false)
+        });
+        if permanent == 0 || covers_real {
+            kind = "originals".to_string();
+        }
+    }
     conn.execute(
         "INSERT INTO roots (volume_id, rel_path, kind, added) VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT(volume_id, rel_path) DO UPDATE SET kind = excluded.kind",
@@ -1148,6 +1163,20 @@ pub fn add_root_run(conn: &Connection, path: &str, kind: Option<String>) -> Resu
             |r| r.get(0),
         )
         .map_err(|e| e.to_string())?;
+    if kind == "browse" {
+        // Browsing a new folder replaces the previous browsed one instead of accumulating —
+        // the library must only ever contain folders the user explicitly kept.
+        let stale: Vec<i64> = conn
+            .prepare("SELECT id FROM roots WHERE kind = 'browse' AND id != ?1")
+            .map_err(|e| e.to_string())?
+            .query_map(params![id], |r| r.get(0))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        for sid in stale {
+            remove_root_run(conn, sid)?;
+        }
+    }
     Ok(CatalogRoot { id, volume_id, rel_path: rel_path.clone(), kind, abs_path: canon_str, requested_rel_path: rel_path })
 }
 
@@ -1181,9 +1210,44 @@ pub fn catalog_add_root(path: String, kind: Option<String>, state: tauri::State<
 }
 
 #[tauri::command]
-pub fn catalog_remove_root(id: i64, state: tauri::State<CatalogState>) -> Result<(), String> {
+pub fn catalog_remove_root(id: i64, state: tauri::State<CatalogState>) -> Result<u64, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    remove_root_run(&conn, id)
+}
+
+/// Un-registers a root and hides its photos (`present = 0`, never DELETE — ratings/labels/keywords
+/// survive and come back if the folder is re-added). Files on disk are never touched. Photos still
+/// covered by another root stay visible. Returns how many rows were hidden.
+pub fn remove_root_run(conn: &Connection, id: i64) -> Result<u64, String> {
+    let (volume_id, rel_path): (i64, String) = conn
+        .query_row("SELECT volume_id, rel_path FROM roots WHERE id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM roots WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    let remaining: Vec<String> = conn
+        .prepare("SELECT rel_path FROM roots WHERE volume_id = ?1")
+        .map_err(|e| e.to_string())?
+        .query_map(params![volume_id], |r| r.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let mut sql = String::from(
+        "UPDATE photos SET present = 0 WHERE volume_id = ?1 AND present = 1 AND (?2 = '' OR rel_dir = ?2 OR rel_dir LIKE ?2 || '/%')",
+    );
+    let mut args: Vec<rusqlite::types::Value> = vec![volume_id.into(), rel_path.into()];
+    for (i, r) in remaining.iter().enumerate() {
+        let n = i + 3;
+        sql.push_str(&format!(" AND NOT (?{n} = '' OR rel_dir = ?{n} OR rel_dir LIKE ?{n} || '/%')"));
+        args.push(r.clone().into());
+    }
+    let n = conn.execute(&sql, rusqlite::params_from_iter(args)).map_err(|e| e.to_string())?;
+    Ok(n as u64)
+}
+
+/// Makes a browsed root permanent (explicit "Keep in library").
+#[tauri::command]
+pub fn catalog_keep_root(id: i64, state: tauri::State<CatalogState>) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute("UPDATE roots SET kind = 'originals' WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -5769,6 +5833,7 @@ pub struct RootCacheUsage {
     pub abs_path: String,
     pub photo_count: u64,
     pub offline_thumbs_bytes: u64,
+    pub kind: String,
 }
 
 /// Present, thumbnailed photo ids under a root — shared by the usage computation and the
@@ -5796,20 +5861,20 @@ fn thumb_photo_ids_under_root(conn: &Connection, volume_id: i64, rel_path: &str)
 pub fn cache_usage_by_root_run(conn: &Connection) -> Result<Vec<RootCacheUsage>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT r.id, v.label, r.rel_path, v.last_path, v.is_local, r.volume_id
+            "SELECT r.id, v.label, r.rel_path, v.last_path, v.is_local, r.volume_id, r.kind
              FROM roots r JOIN volumes v ON v.id = r.volume_id
              ORDER BY v.label, r.rel_path",
         )
         .map_err(|e| e.to_string())?;
-    let roots: Vec<(i64, String, String, String, i64, i64)> = stmt
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))
+    let roots: Vec<(i64, String, String, String, i64, i64, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)))
         .map_err(|e| e.to_string())?
         .collect::<Result<_, _>>()
         .map_err(|e| e.to_string())?;
     drop(stmt);
 
     let mut out = Vec::with_capacity(roots.len());
-    for (root_id, volume_label, rel_path, last_path, is_local, volume_id) in roots {
+    for (root_id, volume_label, rel_path, last_path, is_local, volume_id, kind) in roots {
         let ids = thumb_photo_ids_under_root(conn, volume_id, &rel_path)?;
         let offline_thumbs_bytes: u64 = ids.iter().map(|id| std::fs::metadata(offline_thumb_path(*id)).map(|m| m.len()).unwrap_or(0)).sum();
         out.push(RootCacheUsage {
@@ -5819,6 +5884,7 @@ pub fn cache_usage_by_root_run(conn: &Connection) -> Result<Vec<RootCacheUsage>,
             rel_path,
             photo_count: ids.len() as u64,
             offline_thumbs_bytes,
+            kind,
         });
     }
     Ok(out)
@@ -10238,6 +10304,30 @@ mod tests {
     }
 
     // ── Per-root cache usage/clearing ────────────────────────────────────────────────────────
+
+    #[test]
+    fn remove_root_hides_only_uncovered_photos_and_keeps_rows() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        for r in ["folderA", "folderB"] {
+            conn.execute("INSERT INTO roots (volume_id, rel_path, kind, added) VALUES (?1, ?2, 'originals', 0)", params![vid, r]).unwrap();
+        }
+        let root_a: i64 = conn.query_row("SELECT id FROM roots WHERE rel_path = 'folderA'", [], |r| r.get(0)).unwrap();
+        for (id, rel_dir) in [(1i64, "folderA"), (2, "folderA/sub"), (3, "folderB"), (4, "folderAB")] {
+            conn.execute(
+                "INSERT INTO photos (id, volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, captured)
+                 VALUES (?1, ?2, ?3, ?4, 'x.jpg', 'x.jpg', 'jpg', 'jpeg', 10, 1, 1, 1, 1)",
+                params![id, vid, format!("{rel_dir}/x{id}.jpg"), rel_dir],
+            )
+            .unwrap();
+        }
+        assert_eq!(remove_root_run(&conn, root_a).unwrap(), 2);
+        let present: Vec<i64> = conn.prepare("SELECT id FROM photos WHERE present = 1 ORDER BY id").unwrap()
+            .query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
+        assert_eq!(present, vec![3, 4], "only photos under folderA hidden; folderAB is not a descendant");
+        let total: i64 = conn.query_row("SELECT COUNT(*) FROM photos", [], |r| r.get(0)).unwrap();
+        assert_eq!(total, 4, "rows are hidden, never deleted");
+    }
 
     /// ⚠️ FLAKY under the full parallel suite (measured, not guessed — same posture as
     /// CLAUDE.md's documented `export_harness`/`video_harness` flakes): this touches the real,
