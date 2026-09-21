@@ -9982,7 +9982,7 @@ function applyDcpLUT(u16,w,h,lut,hrOut,extOut){ // u16: interleaved RGB Uint16, 
 async function loadRw2(file){
   window.__pm&&window.__pm('loadRw2-enter');
   if(!self.crossOriginIsolated)throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
-  const profile=rawProfile();
+  let profile=rawProfile();
   const LibRaw=await getLibRaw();
   const bytes=new Uint8Array(await file.arrayBuffer());
   const t0=performance.now();
@@ -9998,6 +9998,18 @@ async function loadRw2(file){
     window.__pm&&window.__pm('loadRw2-imagedata');
   }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
   finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
+  // No bundled DCP for this camera (iPhone/Pixel/Samsung DNG, other bodies…): fall back to
+  // LibRaw's own sRGB render, which uses the colour matrix embedded in the file, instead of failing.
+  if(profile&&!window.__TAURI__&&!cameraDcpPrefix(m.make,m.model)){
+    profile=null;
+    const raw2=new LibRaw();
+    try{
+      await raw2.open(bytes,sdrSettings);
+      img=await raw2.imageData();
+    }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
+    finally{try{raw2.worker.terminate()}catch(_){}}
+    log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the file's embedded colour matrix (LibRaw sRGB)`,'info');
+  }
   // Auto-enable the V-Log input transform (ROADMAP.md F2, first half) — Panasonic PhotoStyle
   // 17 means the file IS V-Log, so grading it as Standard/Rec.709 looks badly wrong (flat,
   // green) until the user notices and finds the toggle themselves. Desktop-only for now
