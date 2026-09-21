@@ -2285,7 +2285,7 @@
   // (see get_decode_cache/save_decode_cache in library.rs) is keyed on this alongside
   // path+mtime+size, so switching RAW profile / native NR / demosaic algo / auto-lens can never
   // serve a stale cached decode.
-  function rawRecipeKey() {
+  function rawRecipeKey(forceFull) {
     const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
     // Must include every setting that changes the NATIVE decode's pixels (see decode_raw_v2's
     // params in main.rs) — a manual lens pick (window.chromasmithLensOverride/Focal) changes the
@@ -2298,7 +2298,7 @@
     return [profile, window.chromasmithRawNr !== 'off' ? 1 : 0,
       window.chromasmithDemosaicAlgo || '', window.chromasmithAutoLens ? 1 : 0,
       window.chromasmithLensOverride || '', window.chromasmithLensOverrideFocal || 0,
-      window.chromasmithRawFullCleanup ? 'full' : 'chroma'].join('|');
+      (forceFull || window.chromasmithRawFullCleanup) ? 'full' : 'chroma'].join('|');
   }
   async function showProvisional(path, onReady) {
     if (!RAW_EXT_RE.test(path)) return () => {};
@@ -3586,7 +3586,16 @@
     // fresh app launch), check the native in-process cache first. This is the cache populated by
     // the explicit batch action, so it returns lossless pixels without another RAW decode or a
     // PNG decode. The persistent PNG cache remains the fallback after relaunch.
-    const recipeKey = isRaw ? rawRecipeKey() : '';
+    let recipeKey = isRaw ? rawRecipeKey() : '';
+    if (!window.__chromasmithFullCleanupPaths) window.__chromasmithFullCleanupPaths = new Set();
+    window.__chromasmithFullCleanupPaths.delete(path);
+    if (isRaw && !window.chromasmithRawFullCleanup) {
+      // A batch-cache entry is always the complete cleanup — a superset of what the interactive
+      // chroma-only tier shows — so use it when present instead of re-decoding.
+      const fullKey = rawRecipeKey(true);
+      try { await invoke('get_decode_cache_path', { path, recipeKey: fullKey }); recipeKey = fullKey; } catch (_) {}
+    }
+    if (isRaw && recipeKey === rawRecipeKey(true)) window.__chromasmithFullCleanupPaths.add(path);
     if (isRaw && !hdrPreview) displayPinnedKey = displayCacheKey(path, recipeKey);
     if (isRaw && !hdrPreview && !fastPreviewInstalled) {
       displayOverlayPromise = showDisplayProvisional(path, recipeKey);
@@ -5175,12 +5184,13 @@
           const autoLens = !!window.chromasmithAutoLens;
           const lensOverride = window.chromasmithLensOverride || '';
           const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
-          // The batch cache follows the same interactive tier as an open ('chroma' unless the manual
-          // Full-cleanup toggle is on) so its key matches what openInEditor looks up; export
-          // completes the deferred cleanup itself (chromasmithApplyFullCleanup).
-          const cacheNr = rawNr === 'off' ? 'off' : (window.chromasmithRawFullCleanup ? 'fast' : 'chroma');
+          // The batch cache is the "wait once, get the finished image" path: it always runs the COMPLETE
+          // cleanup (shadow NR + false-colour + hue defringe + chroma NR) and is stored under the
+          // 'full' key. openInEditorInner prefers a 'full' entry when one exists, and export skips its
+          // own deferred-cleanup pass for photos opened from it (window.__chromasmithFullCleanupPaths).
+          const cacheNr = rawNr === 'off' ? 'off' : 'fast';
           const recipeKey = [profile, rawNr !== 'off' ? 1 : 0, demosaicAlgo, autoLens ? 1 : 0,
-            lensOverride, lensOverrideFocal, window.chromasmithRawFullCleanup ? 'full' : 'chroma'].join('|');
+            lensOverride, lensOverrideFocal, 'full'].join('|');
           const readT0 = performance.now(); const bytes = new Uint8Array(await invoke('read_file_bytes', { path })); rawPerf('cache-read', path, { ms: performance.now() - readT0, bytes: bytes.byteLength });
           const identT0 = performance.now(); const ident = await invoke('peek_raw_camera', bytes); rawPerf('cache-identify', path, { ms: performance.now() - identT0 });
           let mode = 'srgb', lutKey = '';

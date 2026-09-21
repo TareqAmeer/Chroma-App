@@ -34,14 +34,14 @@ def find_pid():
         return None
 
 
-def start(automation=False):
+def start(automation=False, env=()):
     pid = find_pid()
     if pid:
         print(f"already running pid={pid}")
         return 0
     if automation:
         write_json(automation_path("enable"), {"token": secrets.token_urlsafe(24)})
-    subprocess.Popen(["open", "-n", app_path()], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen(["open", "-n", *[a for kv in env for a in ("--env", kv)], app_path()], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(50):
         time.sleep(0.2)
         pid = find_pid()
@@ -97,7 +97,9 @@ def status():
 
 import tempfile
 parser = argparse.ArgumentParser()
-parser.add_argument("command", choices=["start", "stop", "status", "run"])
+parser.add_argument("command", choices=["start", "stop", "status", "run", "screenshot"])
+parser.add_argument("--env", action="append", default=[], help="KEY=VAL passed to the launched app (repeatable), e.g. CS_DIAG_RAW_STAGES=1")
+parser.add_argument("--out", default="/tmp/chromasmith_window.png", help="screenshot output path")
 parser.add_argument("--automation", action="store_true")
 parser.add_argument("--action", default="eval")
 parser.add_argument("--code")
@@ -106,4 +108,9 @@ parser.add_argument("--value")
 parser.add_argument("--key")
 parser.add_argument("--timeout", type=float, default=10)
 args = parser.parse_args()
-sys.exit(start(args.automation) if args.command == "start" else run_automation(args) if args.command == "run" else {"stop": stop, "status": status}[args.command]())
+def screenshot():
+    import screenshot as _shot
+    ok = _shot.capture_window(args.out)
+    print(args.out if ok else "screenshot failed")
+    return 0 if ok else 1
+sys.exit(start(args.automation, args.env) if args.command == "start" else run_automation(args) if args.command == "run" else {"stop": stop, "status": status, "screenshot": screenshot}[args.command]())

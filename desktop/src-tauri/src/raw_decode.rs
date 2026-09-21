@@ -1007,34 +1007,8 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     let coarse_lo = 0.30 - 0.18 * t; // 0.30 at low-s .. 0.12 at s=1
     let coarse_hi = 0.55 - 0.15 * t; // 0.55 at low-s .. 0.40 at s=1
 
-    let mut atrous_tmp: Vec<f32> = Vec::new();
     let protect_scale: f32 = std::env::var("CS_NR_PROTECT_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0);
-    // Per-level "keep" factor (how much of that level's chroma detail survives) — a function of
-    // the LUMA detail only, so it is computed once here and shared by both chroma planes instead
-    // of each plane re-deriving the same smoothstep per pixel per level.
     let ldiv = if levels > 1 { (levels - 1) as f32 } else { 1.0 };
-    let mut keeps: Vec<Vec<f32>> = Vec::with_capacity(levels);
-    {
-        let mut lcur = yv.clone();
-        let mut lsm = vec![0f32; npx];
-        for lvl in 0..levels {
-            let lvl_frac = lvl as f32 / ldiv;
-            let base_keep = keep_fine + (keep_coarse - keep_fine) * lvl_frac;
-            let coarse_gate = smoothstep(coarse_lo, coarse_hi, lvl_frac);
-            let mut keep = vec![0f32; npx];
-            let src = &lcur;
-            atrous_smooth_into(src, w, h, 1usize << lvl, &mut atrous_tmp, &mut lsm, &mut keep, |y, sm_row, keep_row| {
-                let base = y * w;
-                for x in 0..w {
-                    let d = (src[base + x] - sm_row[x]).abs();
-                    let luma_gate = smoothstep(yedge_lo, yedge_hi, d);
-                    keep_row[x] = (base_keep + protect_scale * coarse_gate * luma_gate * (KEEP_PROTECT - base_keep)).min(1.0);
-                }
-            });
-            keeps.push(keep);
-            std::mem::swap(&mut lcur, &mut lsm);
-        }
-    }
     // 2026-07-13: attempted a texture-DENSITY gate here (distinguish an isolated real edge,
     // e.g. the gold tag's rim, from a densely-packed field of edges, e.g. sunlit-water
     // sparkle) to suppress over-protection in the latter case without touching the former.
@@ -1047,32 +1021,54 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     // calibrating a real separator needs more reference examples (isolated-feature vs.
     // dense-texture crops across multiple photos) than were available this session — don't
     // reattempt this exact mechanism without that calibration work done first.
-    fn denoise_plane(plane: &mut Vec<f32>, w: usize, h: usize, npx: usize, levels: usize, keeps: &[Vec<f32>]) {
-        let mut atrous_tmp: Vec<f32> = Vec::new();
-        let mut current = std::mem::take(plane);
-        let mut smooth = vec![0f32; npx];
-        let mut rebuilt = vec![0f32; npx];
-        for lvl in 0..levels {
-            let keep = &keeps[lvl];
-            let cur = &current;
-            atrous_smooth_into(cur, w, h, 1usize << lvl, &mut atrous_tmp, &mut smooth, &mut rebuilt, |y, sm_row, rb_row| {
+    // Level-synchronous pyramid: for each level the luma-derived "keep" factor (how much of that
+    // level's chroma detail survives; a function of the LUMA detail only) is computed ONCE into a
+    // single reused plane, then consumed immediately by both chroma planes. Previously every
+    // level's keep plane was retained until the end (levels x 96MB at 24MP) alongside cloned
+    // original planes — a ~2.2GB peak that pushed an 8GB machine into swap during a real open
+    // (measured: free memory ~18MB, ~1.8GB swapped out, CPU only ~200-250% of 600%). The
+    // arithmetic and its order are unchanged, so the output is bit-identical.
+    struct PlaneState { cur: Vec<f32>, smooth: Vec<f32>, rebuilt: Vec<f32>, tmp: Vec<f32> }
+    let mut lcur = yv;
+    let mut lsm = vec![0f32; npx];
+    let mut keep = vec![0f32; npx];
+    let mut ltmp: Vec<f32> = Vec::new();
+    let mut cbs = PlaneState { cur: cb, smooth: vec![0f32; npx], rebuilt: vec![0f32; npx], tmp: Vec::new() };
+    let mut crs = PlaneState { cur: cr, smooth: vec![0f32; npx], rebuilt: vec![0f32; npx], tmp: Vec::new() };
+    fn chroma_level(st: &mut PlaneState, w: usize, h: usize, lvl: usize, keep: &[f32]) {
+        let cur = &st.cur;
+        atrous_smooth_into(cur, w, h, 1usize << lvl, &mut st.tmp, &mut st.smooth, &mut st.rebuilt, |y, sm_row, rb_row| {
+            let base = y * w;
+            for x in 0..w {
+                rb_row[x] += (cur[base + x] - sm_row[x]) * keep[base + x];
+            }
+        });
+        std::mem::swap(&mut st.cur, &mut st.smooth);
+    }
+    for lvl in 0..levels {
+        let lvl_frac = lvl as f32 / ldiv;
+        let base_keep = keep_fine + (keep_coarse - keep_fine) * lvl_frac;
+        let coarse_gate = smoothstep(coarse_lo, coarse_hi, lvl_frac);
+        {
+            let src = &lcur;
+            atrous_smooth_into(src, w, h, 1usize << lvl, &mut ltmp, &mut lsm, &mut keep, |y, sm_row, keep_row| {
                 let base = y * w;
                 for x in 0..w {
-                    rb_row[x] += (cur[base + x] - sm_row[x]) * keep[base + x];
+                    let d = (src[base + x] - sm_row[x]).abs();
+                    let luma_gate = smoothstep(yedge_lo, yedge_hi, d);
+                    keep_row[x] = (base_keep + protect_scale * coarse_gate * luma_gate * (KEEP_PROTECT - base_keep)).min(1.0);
                 }
             });
-            std::mem::swap(&mut current, &mut smooth);
         }
-        // residual low-pass carries the true (broad) colours, untouched
-        rebuilt.par_iter_mut().enumerate().for_each(|(i, o)| *o += current[i]);
-        *plane = rebuilt;
+        std::mem::swap(&mut lcur, &mut lsm);
+        let kp = &keep;
+        rayon::join(|| chroma_level(&mut cbs, w, h, lvl, kp), || chroma_level(&mut crs, w, h, lvl, kp));
     }
-    // Keep the ORIGINAL chroma so absolute-highlight protection can restore it below.
-    let cb_orig = cb.clone();
-    let cr_orig = cr.clone();
+    drop((lcur, lsm, keep, ltmp));
+    // residual low-pass carries the true (broad) colours, untouched
     let (cb, cr) = rayon::join(
-        || { denoise_plane(&mut cb, w, h, npx, levels, &keeps); cb },
-        || { denoise_plane(&mut cr, w, h, npx, levels, &keeps); cr },
+        || { let mut st = cbs; st.rebuilt.par_iter_mut().enumerate().for_each(|(i, o)| *o += st.cur[i]); st.rebuilt },
+        || { let mut st = crs; st.rebuilt.par_iter_mut().enumerate().for_each(|(i, o)| *o += st.cur[i]); st.rebuilt },
     );
 
     // Absolute-highlight protection. Bright highlights have high SNR (little chroma noise) and
@@ -1084,10 +1080,16 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     const HL_LO: f32 = 0.60 * 65535.0;
     const HL_HI: f32 = 0.90 * 65535.0;
     rgb.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
-        let y = yv[i];
+        // The original luma/chroma are recomputed from the still-untouched input pixel (same
+        // expressions as the initial conversion above) instead of holding three more full-frame
+        // planes alive through the whole pyramid.
+        let (r0, g0, b0) = (px[0] as f32, px[1] as f32, px[2] as f32);
+        let y = 0.299 * r0 + 0.587 * g0 + 0.114 * b0;
+        let cb_o = -0.168_736 * r0 - 0.331_264 * g0 + 0.5 * b0;
+        let cr_o = 0.5 * r0 - 0.418_688 * g0 - 0.081_312 * b0;
         let hl = smoothstep(HL_LO, HL_HI, y);
-        let b = cb[i] * (1.0 - hl) + cb_orig[i] * hl;
-        let r = cr[i] * (1.0 - hl) + cr_orig[i] * hl;
+        let b = cb[i] * (1.0 - hl) + cb_o * hl;
+        let r = cr[i] * (1.0 - hl) + cr_o * hl;
         px[0] = (y + 1.402 * r).round().clamp(0.0, 65535.0) as u16;
         px[1] = (y - 0.344_136 * b - 0.714_136 * r).round().clamp(0.0, 65535.0) as u16;
         px[2] = (y + 1.772 * b).round().clamp(0.0, 65535.0) as u16;

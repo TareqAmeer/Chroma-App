@@ -19017,7 +19017,7 @@ async function exportFX(){
         // the pass on THIS photo's pixels before the render reads them. Skipped when High-tier NR
         // runs/ran (its own decode already includes the full pass). A failure logs and continues
         // with what is on the canvas rather than losing the export.
-        if(!window.chromasmithRawFullCleanup&&exportRawNr!=='high'&&!it._nrHighApplied&&!it._fullCleanupApplied&&(it.rawFile||libPaths[fxImages.indexOf(it)])&&typeof window.chromasmithApplyFullCleanup==='function'){
+        if(!window.chromasmithRawFullCleanup&&exportRawNr!=='high'&&!it._nrHighApplied&&!it._fullCleanupApplied&&!(window.__chromasmithFullCleanupPaths&&window.__chromasmithFullCleanupPaths.has(libPaths[fxImages.indexOf(it)]))&&(it.rawFile||libPaths[fxImages.indexOf(it)])&&typeof window.chromasmithApplyFullCleanup==='function'){
           setExportPhotoStatus(idx,'rendering','cleaning…');
           setProg(idx,`Cleaning ${idx+1}/${N}: ${it.name}…`);
           try{
