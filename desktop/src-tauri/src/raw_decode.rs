@@ -900,28 +900,45 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
             (y as i64 + (k as i64 - 2) * step as i64).clamp(0, h as i64 - 1) as usize
         })).collect();
         tmp.resize(src.len(), 0.0);
-        // horizontal
+        // horizontal. Interior pixels (all five taps in-bounds) read five contiguous shifted
+        // slices, so the loop has no per-pixel index gather and vectorises; the operation order
+        // is unchanged, so every output is bit-identical to the clamped-index form.
         tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
             let base = y * w;
-            for x in 0..w {
+            let s = &src[base..base + w];
+            let lo = (2 * step).min(w);
+            let hi = w.saturating_sub(2 * step).max(lo);
+            for x in (0..lo).chain(hi..w) {
                 let [x0, x1, x2, x3, x4] = x_neighbors[x];
-                row[x] = src[base + x0] * K[0]
-                    + src[base + x1] * K[1]
-                    + src[base + x2] * K[2]
-                    + src[base + x3] * K[3]
-                    + src[base + x4] * K[4];
+                row[x] = s[x0] * K[0] + s[x1] * K[1] + s[x2] * K[2] + s[x3] * K[3] + s[x4] * K[4];
+            }
+            if hi > lo {
+                let n = hi - lo;
+                let (a, b, c, d, e) = (
+                    &s[lo - 2 * step..lo - 2 * step + n],
+                    &s[lo - step..lo - step + n],
+                    &s[lo..lo + n],
+                    &s[lo + step..lo + step + n],
+                    &s[lo + 2 * step..lo + 2 * step + n],
+                );
+                for (i, o) in row[lo..hi].iter_mut().enumerate() {
+                    *o = a[i] * K[0] + b[i] * K[1] + c[i] * K[2] + d[i] * K[3] + e[i] * K[4];
+                }
             }
         });
-        // vertical
+        // vertical: whole-row weighted sums over the five (clamped) source rows.
         let mut out = vec![0f32; src.len()];
         out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-            for x in 0..w {
-                let [y0, y1, y2, y3, y4] = y_neighbors[y];
-                row[x] = tmp[y0 * w + x] * K[0]
-                    + tmp[y1 * w + x] * K[1]
-                    + tmp[y2 * w + x] * K[2]
-                    + tmp[y3 * w + x] * K[3]
-                    + tmp[y4 * w + x] * K[4];
+            let [y0, y1, y2, y3, y4] = y_neighbors[y];
+            let (r0, r1, r2, r3, r4) = (
+                &tmp[y0 * w..(y0 + 1) * w],
+                &tmp[y1 * w..(y1 + 1) * w],
+                &tmp[y2 * w..(y2 + 1) * w],
+                &tmp[y3 * w..(y3 + 1) * w],
+                &tmp[y4 * w..(y4 + 1) * w],
+            );
+            for (i, o) in row.iter_mut().enumerate() {
+                *o = r0[i] * K[0] + r1[i] * K[1] + r2[i] * K[2] + r3[i] * K[3] + r4[i] * K[4];
             }
         });
         out
@@ -1079,31 +1096,26 @@ fn local_contrast_5x5(yv: &mut [f32], w: usize, h: usize) -> Vec<f32> {
             row[x] = hi;
         }
     });
-    let mins_ptr = contrast.as_ptr() as usize;
-    contrast.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
-        // The current row is copied because the output overwrites the horizontal minima while
-        // its 5-row neighbourhood still needs the original values. Other rows are read through
-        // a stable pointer; each worker owns a distinct output row.
-        let current = row.to_vec();
+    // Vertical pass reads the horizontal min/max planes (`contrast` = row minima, `yv` = row
+    // maxima) and writes the finished range into a SEPARATE buffer. Writing it back into
+    // `contrast` while other rows' workers still read their neighbours' minima was a data race
+    // (rows y-2..y+2 could already be overwritten), making the gate non-deterministic run to run.
+    let mins: &[f32] = &contrast;
+    let maxs: &[f32] = yv;
+    let mut out = vec![0f32; mins.len()];
+    out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
         for x in 0..w {
             let mut lo = f32::MAX;
             let mut hi = f32::MIN;
             for dy in -2i32..=2 {
                 let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
-                let min_v = if sy == y {
-                    current[x]
-                } else {
-                    // SAFETY: mins_ptr points to the immutable horizontal-minimum buffer; this
-                    // loop reads only rows other than the row currently being overwritten.
-                    unsafe { *((mins_ptr as *const f32).add(sy * w + x)) }
-                };
-                lo = lo.min(min_v);
-                hi = hi.max(yv[sy * w + x]);
+                lo = lo.min(mins[sy * w + x]);
+                hi = hi.max(maxs[sy * w + x]);
             }
             row[x] = hi - lo;
         }
     });
-    contrast
+    out
 }
 
 /// Edge-gated false-color suppression — see the call site's doc comment in

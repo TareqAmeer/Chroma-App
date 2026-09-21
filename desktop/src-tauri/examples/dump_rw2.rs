@@ -23,7 +23,15 @@ mod diag;
 
 use std::io::Write;
 
+struct StderrLog;
+impl log::Log for StderrLog {
+    fn enabled(&self, _: &log::Metadata) -> bool { true }
+    fn log(&self, r: &log::Record) { eprintln!("{}", r.args()); }
+    fn flush(&self) {}
+}
+
 fn main() {
+    let _ = log::set_logger(&StderrLog).map(|()| log::set_max_level(log::LevelFilter::Info));
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 3 && args.len() != 4 {
         eprintln!("usage: dump_rw2 <input.RW2> <output.bin> [downscale]");
