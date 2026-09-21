@@ -6221,20 +6221,20 @@
       bar.id = 'lib-batchbar';
       // CHR-118: sticky, not absolute — #lib-main scrolls, so an absolute bar rode away with the photos.
       bar.style.cssText = 'position:sticky;bottom:14px;width:fit-content;margin:0 auto;z-index:40;'
-        + 'display:flex;gap:8px;align-items:center;padding:8px 12px;border-radius:10px;'
+        + 'display:flex;gap:8px;align-items:center;padding:8px 12px;border-radius:10px;max-width:calc(100% - 24px);overflow-x:auto;box-sizing:border-box;'
         + 'background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);'
         + 'backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);box-shadow:var(--lift-2)';
       (document.getElementById('lib-main') || document.body).appendChild(bar);
     }
     const paths = () => Array.from(state.selected);
-    bar.innerHTML = `<span style="font-size:11px;color:var(--mut)">${n} selected</span>`
-      + `<span style="width:1px;height:16px;background:var(--bdr)"></span>`
-      + `<button class="lib-btn" data-act="cache-raw" title="Build exact full-quality editor caches for the selected RAW photos">Cache selected RAWs</button>`
-      + `<button class="lib-btn" data-act="reject">Reject</button>`
-      + `<button class="lib-btn" data-act="pick">Pick</button>`
-      + `<button class="lib-btn" data-act="clear-label">Clear flag</button>`
-      + `<button class="lib-btn" data-act="fav">Favorite</button>`
-      + `<button class="lib-btn" data-act="deselect">Deselect</button>`;
+    bar.innerHTML = `<span style="font-size:11px;color:var(--mut);white-space:nowrap;flex:none">${n} selected</span>`
+      + `<span style="width:1px;height:16px;background:var(--bdr);flex:none"></span>`
+      + `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="cache-raw" title="Build exact full-quality editor caches for the selected RAW photos">Cache selected RAWs</button>`
+      + `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="reject">Reject</button>`
+      + `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="pick">Pick</button>`
+      + `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="clear-label">Clear flag</button>`
+      + `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="fav">Favorite</button>`
+      + `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="deselect">Deselect</button>`;
     bar.querySelector('[data-act="cache-raw"]').onclick = () => cacheSelectedRaws(paths());
     bar.querySelector('[data-act="reject"]').onclick = () => paths().forEach((p) => setLabel(p, 'Red'));
     bar.querySelector('[data-act="pick"]').onclick = () => paths().forEach((p) => setLabel(p, 'Green'));
