@@ -17818,7 +17818,7 @@ function curItem(){return fxImages[fxCurIdx]||null;}
 function buildFilmstrip(){
   const el=document.getElementById('fx-filmstrip');if(!el)return;
   if(fxCurIdx>=fxImages.length)fxCurIdx=0;
-  el.innerHTML='';
+  const _sl=el.scrollLeft;el.innerHTML='';
   const applyAllRow=document.getElementById('btn-geom-apply-all-row');
   if(applyAllRow)applyAllRow.style.display=fxImages.length>1?'flex':'none';
   if(typeof adjSyncScopeUI==='function')adjSyncScopeUI();
@@ -17839,6 +17839,7 @@ function buildFilmstrip(){
     b.appendChild(idx);
     el.appendChild(b);
   });
+  el.scrollLeft=_sl; // rebuild wiped scroll position -> strip jumped on every switch
 }
 function fxSelectImage(idx){
   if(typeof fxSyncHdrOption==='function')setTimeout(fxSyncHdrOption,0); // HDR option depends on the SOURCE file, which changes with the photo
