@@ -5343,9 +5343,11 @@
     const label = n > 1 ? `these ${n} photos` : `"${baseName(paths[0])}"`;
     if (!await window.confirmModal(`Move ${label} to the Trash?`, 'Move to Trash')) return;
     const trashed = [];
+    let missing = 0;
     for (const p of paths) {
       try {
-        await invoke('trash_file', { path: p });
+        // false = file not found (deleted elsewhere / drive offline): nothing to trash, still drop it from the Library.
+        if (await invoke('trash_file', { path: p }) === false) missing++;
         state.sidecars.delete(p); state.meta.delete(p); imgCache.delete(p);
         trashed.push(p);
       }
@@ -5360,6 +5362,7 @@
       if (state._catalogTotal != null) state._catalogTotal = Math.max(0, state._catalogTotal - trashed.length);
       renderGrid();
       try { await invoke('catalog_note_deleted', { paths: trashed }); } catch (e) { console.error('catalog_note_deleted', e); }
+      if (missing) toast(`Removed ${missing} missing photo${missing === 1 ? '' : 's'} from the Library — file${missing === 1 ? ' was' : 's were'} not found on this machine`, false);
     }
   }
   async function libExportPaths(paths) {

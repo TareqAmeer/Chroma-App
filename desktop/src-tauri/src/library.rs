@@ -2707,14 +2707,17 @@ pub fn duplicate_file(path: String) -> Result<String, String> {
     Ok(dest.to_string_lossy().into_owned())
 }
 
+/// Returns `Ok(false)` when the source file is missing (deleted elsewhere, or its drive is offline):
+/// nothing to trash, so the caller just drops the photo from the catalog.
 /// Moves a photo (and its .xmp sidecar) to macOS's Trash — never a hard delete, so it's
 /// recoverable the same way Finder's own Delete is. `~/.Trash` is normally on the same
 /// volume as the user's Documents/Pictures, so a plain rename works; falls back to
 /// copy+remove for the rare cross-volume case (e.g. an external drive).
 #[cfg(target_os = "macos")]
 #[tauri::command]
-pub fn trash_file(path: String) -> Result<(), String> {
+pub fn trash_file(path: String) -> Result<bool, String> {
     let src = Path::new(&path);
+    if !src.exists() { return Ok(false); }
     let trash_dir = crate::platform::trash_dir().map_err(|_| "could not resolve ~/.Trash".to_string())?;
     std::fs::create_dir_all(&trash_dir).map_err(|e| format!("create trash dir: {e}"))?;
     let name = src.file_name().ok_or("no filename")?;
@@ -2733,7 +2736,7 @@ pub fn trash_file(path: String) -> Result<(), String> {
         let sc_name = sidecar.file_name().ok_or("no sidecar filename")?;
         let _ = move_or_copy(&sidecar, &trash_dir.join(sc_name));
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Windows has a real Recycle Bin API (unlike the macOS "move a file into ~/.Trash" convention
@@ -2742,14 +2745,15 @@ pub fn trash_file(path: String) -> Result<(), String> {
 /// already handles same-named collisions in the Recycle Bin itself.
 #[cfg(windows)]
 #[tauri::command]
-pub fn trash_file(path: String) -> Result<(), String> {
+pub fn trash_file(path: String) -> Result<bool, String> {
     let src = Path::new(&path);
+    if !src.exists() { return Ok(false); }
     crate::platform::move_to_trash(src)?;
     let sidecar = sidecar_path(&path);
     if sidecar.exists() {
         let _ = crate::platform::move_to_trash(&sidecar);
     }
-    Ok(())
+    Ok(true)
 }
 
 /// `cache_dir()` holds two very different kinds of file: generated, regenerable cache entries
