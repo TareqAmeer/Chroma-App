@@ -762,8 +762,8 @@
       --red-oxide:#870f13;--green-pine:#214e1d;--orange-ember:#ff9b42;
       --ink:#1d1d1f;--ink-muted-80:#333333;--ink-muted-48:#7a7a7a;
       --ink-on-dark:#ffffff;--ink-on-dark-muted:#cccccc;
-      --canvas:#ffffff;--canvas-parchment:#f5f5f7;--canvas-linen:#f0edee;
-      --surface-pearl:#fafafc;--surface-tile-1:#272729;--surface-tile-2:#2a2a2c;--surface-tile-3:#252527;
+      --canvas:#edeeee;--canvas-parchment:#edeeee;--canvas-linen:#edeeee;
+      --surface-pearl:#edeeee;--surface-tile-1:#1c1c1c;--surface-tile-2:#1c1c1c;--surface-tile-3:#1c1c1c;
       --surface-black:#000000;--surface-chip-translucent:#d2d2d7;--surface-chip-alpha:rgba(210,210,215,.64);
       --divider-soft:#f0f0f0;--hairline:#e0e0e0;--hairline-alpha:rgba(0,0,0,.08);
       --primary:var(--blue-slate);--primary-focus:var(--blue-slate-focus);--primary-active:var(--blue-slate-press);
