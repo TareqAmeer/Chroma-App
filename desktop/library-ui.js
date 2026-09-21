@@ -7009,8 +7009,12 @@
       }
       updateCardSelClasses();
       e.preventDefault();
+      // CHR-119: in the docked Editor filmstrip an arrow key opens the neighbour, not just selects it.
+      if (!extend && document.body.classList.contains('deskx') && overlay && !overlay.classList.contains('full')) {
+        openInEditor(state._kbCursor);
+      }
     };
-    const move = (delta, extend) => moveTo((curIdx < 0 ? (delta > 0 ? -1 : 0) : curIdx) + delta, extend);
+    const move =(delta, extend) => moveTo((curIdx < 0 ? (delta > 0 ? -1 : 0) : curIdx) + delta, extend);
     const kbTargets = () => (state.selected.size ? [...state.selected] : (state._kbCursor ? [state._kbCursor] : (state.openedPath ? [state.openedPath] : [])));
     if (e.key === 'ArrowLeft') { move(-1, e.shiftKey); return; }
     if (e.key === 'ArrowRight') { move(1, e.shiftKey); return; }
