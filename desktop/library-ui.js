@@ -1214,6 +1214,8 @@
        here was an unrequested rounding. */
     .lib-sec-h{display:flex;align-items:center;gap:6px;cursor:grab;user-select:none;border-radius:0;
       margin:0 8px;padding:6px 8px}
+    .lib-sec-h .lib-sec-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .lib-sec-h .lib-sec-trail{margin-left:auto;flex:none}
     .lib-sec-h:hover{background:var(--hover-tint)}
     .lib-sec-h .lib-tree-chev{color:var(--mut);opacity:.7}
     .lib-sec-h .lib-coll-count{margin-left:auto;font-family:var(--sans);font-size:11px;color:var(--mut)}
@@ -7831,7 +7833,7 @@
     const open = sidebarSecOpen.has(key);
     const count = opts.count != null && opts.count !== '' ? `<span class="lib-coll-count">${opts.count}</span>` : '';
     return `<div class="lib-coll-heading lib-sec-h" data-sec-toggle="${key}"${opts.extraHeaderAttrs || ''} role="button" tabindex="0" aria-expanded="${open}">
-        <span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span><span>${label}</span>${count}
+        <span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span><span class="lib-sec-label">${label}</span>${opts.trail ? `<span class="lib-sec-trail">${opts.trail}</span>` : ''}${count}
       </div>${open ? bodyHtml : ''}`;
   }
 
@@ -8267,10 +8269,10 @@
   /// a cluster is what promotes it into the named list above.
   function peopleSectionHtml() {
     const scanLabel = 'Analyze photos — find faces and enable AI search';
-    const scanGlyph = `<span id="lib-people-scan" title="${scanLabel}" style="float:right;cursor:pointer;padding:0 4px">${ic('search', 13)}</span>`;
+    const scanGlyph = `<span id="lib-people-scan" title="${scanLabel}" style="cursor:pointer;padding:0 4px">${ic('search', 13)}</span>`;
     if (!peopleList.length) {
-      return '<div class="lib-coll-sep"></div>' + sidebarSection('people', `People &amp; Pets${scanGlyph}`,
-        `<div class="lib-coll-row" style="opacity:.5;cursor:default">No people found yet</div>`);
+      return '<div class="lib-coll-sep"></div>' + sidebarSection('people', 'People &amp; Pets',
+        `<div class="lib-coll-row" style="opacity:.5;cursor:default">No people found yet</div>`, { trail: scanGlyph });
     }
     const named = peopleList.filter((p) => !p.auto).sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
     const unnamedCount = peopleList.filter((p) => p.auto).reduce((n, p) => n + (p.face_count || 0), 0);
@@ -8288,7 +8290,7 @@
         <span class="lib-face-ava unnamed"></span><span class="lib-coll-lb">Unnamed</span>
         <span class="lib-coll-count">${unnamedCount ?? ''}</span>
       </div>`;
-    return '<div class="lib-coll-sep"></div>' + sidebarSection('people', `People &amp; Pets${scanGlyph}`, namedRows + unnamedRow);
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('people', 'People &amp; Pets', namedRows + unnamedRow, { trail: scanGlyph });
   }
   function wirePeopleRows(host) {
     const scanBtn = host.querySelector('#lib-people-scan');
@@ -10201,9 +10203,9 @@
         <span class="lib-coll-ic">${ALBUM_SVG}</span><span class="lib-coll-lb">${esc2(a.name)}</span>
         <span class="lib-coll-count">${a.paths.length ?? ''}</span>
       </div>`).join('');
-    const newBtn = `<span id="lib-album-new" title="New album" style="float:right;cursor:pointer;padding:0 4px">+</span>`;
-    return '<div class="lib-coll-sep"></div>' + sidebarSection('albums', `Albums${newBtn}`,
-      rows || '<div class="lib-coll-row" style="opacity:.5;cursor:default">No albums yet</div>');
+    const newBtn = `<span id="lib-album-new" title="New album" style="cursor:pointer;padding:0 4px">+</span>`;
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('albums', 'Albums',
+      rows || '<div class="lib-coll-row" style="opacity:.5;cursor:default">No albums yet</div>', { trail: newBtn });
   }
   const ALBUM_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H3z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 2"/></svg>';
   async function refreshAlbums() {
