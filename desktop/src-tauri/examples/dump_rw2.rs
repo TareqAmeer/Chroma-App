@@ -59,7 +59,7 @@ fn main() {
     // blend-toward-original amount without going through the app's UI slider.
     let high_strength: f32 = std::env::var("CS_HIGH_STRENGTH").ok().and_then(|v| v.parse::<f32>().ok()).map(|v| v / 100.0).unwrap_or(1.0);
     let t0 = std::time::Instant::now();
-    let d = raw_decode::decode_rw2_bytes_ex(&bytes, false, requested, "", false, None, high_strength, None, None).expect("decode");
+    let d = raw_decode::decode_rw2_bytes_ex(&bytes, std::env::var_os("CS_AUTO_LENS").is_some(), requested, "", false, None, high_strength, None, None).expect("decode");
     eprintln!(
         "{}x{} iso {} decoded in {:.2}s",
         d.width,
