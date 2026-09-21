@@ -10584,6 +10584,7 @@
       if (e.button !== 0) return;
       if (e.target.closest('.lib-card')) return;       // a card handles its own click
       if (e.target.closest('#lib-list-head')) return;
+      if (e.target.closest('#lib-batchbar')) return;   // CHR-8: bar lives in #lib-main; its clicks are not background clicks
       sx = e.clientX; sy = e.clientY; add = e.shiftKey; active = false;
       bgDown = true;
       const gridEl = document.getElementById('lib-grid');
