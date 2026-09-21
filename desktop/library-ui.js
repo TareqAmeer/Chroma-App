@@ -1858,7 +1858,7 @@
        tall and landscape frames are short, like Lightroom's filmstrip. */
     body.deskx #lib-overlay:not(.full) .lib-thumb-wrap{aspect-ratio:auto;height:auto;min-height:40px}
     body.deskx #lib-overlay:not(.full) .lib-thumb-wrap img{width:100%;height:auto;object-fit:contain}
-    body.deskx #lib-overlay:not(.full) .lib-card{border:none;border-radius:6px}
+    body.deskx #lib-overlay:not(.full) .lib-card{border:none;border-radius:0}
     /* the fixed 44px deskbar sits above everything; keep the docked strip below it. .full is a
        genuine takeover (chromasmith-22.html hides #fx-deskbar via body.lib-full) and reclaims
        the whole viewport instead — Library's own #lib-top already reserves its own drag/traffic-
