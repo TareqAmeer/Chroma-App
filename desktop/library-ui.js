@@ -1557,6 +1557,7 @@
        widens for a 2-digit count and gets a pointer cursor since, unlike every other corner
        badge, it's clickable (expand/collapse in place). */
     .lib-stack-badge{min-width:18px;width:auto;padding:0 4px;cursor:pointer;background:rgba(0,0,0,.7)}
+    .lib-stack-member .lib-thumb-wrap{box-shadow:0 0 0 2px var(--acc)}
     .lib-stack-badge:hover{background:rgba(0,0,0,.85)}
     /* Video: same corner-badge slot the RAW "R" chip uses (mutually exclusive — a file is one
        kind or the other), carrying the clip icon plus its duration. The gradient fill behind the
@@ -4688,9 +4689,22 @@
     const dir = state.sortDir === 'desc' ? -1 : 1;
     // Decorate-sort: compute each entry's sort key once up front instead of re-deriving it
     // (map lookups + string/number coercion) on every comparator call during the O(n log n) sort.
-    return list.map((entry) => [sortKeyOf(entry), entry])
+    // Expanded-stack members (tagged _stackOf at splice time) are pulled out before the sort and
+    // re-inserted right after their leader, so a stack stays contiguous instead of scattering.
+    const members = new Map();
+    const rest = [];
+    for (const e of list) {
+      if (e._stackOf != null) { (members.get(e._stackOf) || members.set(e._stackOf, []).get(e._stackOf)).push(e); }
+      else rest.push(e);
+    }
+    const sorted = rest.map((entry) => [sortKeyOf(entry), entry])
       .sort((a, b) => (a[0] < b[0] ? -1 * dir : a[0] > b[0] ? 1 * dir : 0))
       .map((pair) => pair[1]);
+    if (!members.size) return sorted;
+    const out = [];
+    for (const e of sorted) { out.push(e); const m = members.get(e.id); if (m) { out.push(...m); members.delete(e.id); } }
+    for (const m of members.values()) out.push(...m); // leader filtered out — keep members visible
+    return out;
   }
 
   function metaStripHtml(entry) {
@@ -5869,7 +5883,7 @@
       const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
       const card = document.createElement('div');
       card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '') + (state.selected.has(entry.path) ? ' multi' : '') +
-        (sc.label ? ' lbl-' + sc.label.toLowerCase() : '') + (entry.missing ? ' lib-missing' : '');
+        (sc.label ? ' lbl-' + sc.label.toLowerCase() : '') + (entry.missing ? ' lib-missing' : '') + (entry._stackOf != null ? ' lib-stack-member' : '');
       card.dataset.path = entry.path;
       if (entry.thumb_path) card.dataset.thumbPath = entry.thumb_path;
       // Stack badge takes over the RAW badge's own top-left corner when this card represents
@@ -9419,6 +9433,7 @@
         if (entry.stack_n > 1 && state._expandedStacks.has(entry.id)) {
           try {
             const sub = await invoke('catalog_query', { q: { expandStack: entry.id } });
+            for (const m of sub.entries) if (m.id !== entry.id) m._stackOf = entry.id;
             spliced.push(...sub.entries);
             continue;
           } catch (e) { /* fall through — show the collapsed row instead */ }
