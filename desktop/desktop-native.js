@@ -414,7 +414,7 @@
     if (it.rawFile) bytes = new Uint8Array(await it.rawFile.arrayBuffer());
     else if (sourcePath) bytes = new Uint8Array(await invoke('read_file_bytes', { path: sourcePath }));
     else return { applied: false, reason: 'no source' };
-    const c = it.img;
+    let c = it.img;
     const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
     const ident = it.exif || {};
     let mode = 'srgb', lutKey = '';
@@ -457,6 +457,13 @@
       const bodyLen2 = w * h * 4;
       rgba2 = new Uint8ClampedArray(buf, 24, bodyLen2);
       if (hasExt) sceneLinear2 = new Float32Array(buf, 24 + bodyLen2, w * h * 3);
+    }
+    // A photo installed from the Library's decode cache carries an <img>/bitmap, not a canvas
+    // (found live: c.getContext is not a function) — give the item a real canvas in that case.
+    if (!c.getContext) {
+      const nc = document.createElement('canvas');
+      nc.width = w; nc.height = h;
+      it.img = nc; c = nc;
     }
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
     c.getContext('2d').putImageData(new ImageData(rgba2, w, h), 0, 0);
