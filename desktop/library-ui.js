@@ -2297,7 +2297,8 @@
     // cache only needs to distinguish Off from not-Off, same 2-way key as the old boolean.
     return [profile, window.chromasmithRawNr !== 'off' ? 1 : 0,
       window.chromasmithDemosaicAlgo || '', window.chromasmithAutoLens ? 1 : 0,
-      window.chromasmithLensOverride || '', window.chromasmithLensOverrideFocal || 0].join('|');
+      window.chromasmithLensOverride || '', window.chromasmithLensOverrideFocal || 0,
+      window.chromasmithRawFullCleanup ? 'full' : 'chroma'].join('|');
   }
   async function showProvisional(path, onReady) {
     if (!RAW_EXT_RE.test(path)) return () => {};
@@ -5174,8 +5175,12 @@
           const autoLens = !!window.chromasmithAutoLens;
           const lensOverride = window.chromasmithLensOverride || '';
           const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
+          // The batch cache follows the same interactive tier as an open ('chroma' unless the manual
+          // Full-cleanup toggle is on) so its key matches what openInEditor looks up; export
+          // completes the deferred cleanup itself (chromasmithApplyFullCleanup).
+          const cacheNr = rawNr === 'off' ? 'off' : (window.chromasmithRawFullCleanup ? 'fast' : 'chroma');
           const recipeKey = [profile, rawNr !== 'off' ? 1 : 0, demosaicAlgo, autoLens ? 1 : 0,
-            lensOverride, lensOverrideFocal].join('|');
+            lensOverride, lensOverrideFocal, window.chromasmithRawFullCleanup ? 'full' : 'chroma'].join('|');
           const readT0 = performance.now(); const bytes = new Uint8Array(await invoke('read_file_bytes', { path })); rawPerf('cache-read', path, { ms: performance.now() - readT0, bytes: bytes.byteLength });
           const identT0 = performance.now(); const ident = await invoke('peek_raw_camera', bytes); rawPerf('cache-identify', path, { ms: performance.now() - identT0 });
           let mode = 'srgb', lutKey = '';
@@ -5192,7 +5197,7 @@
               }
             }
           }
-          const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { path, recipeKey, mode, lutKey, rawNr,
+          const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { path, recipeKey, mode, lutKey, rawNr: cacheNr,
             autoLens, demosaicAlgo, lensOverride, lensOverrideFocal });
           rawPerf('cache-decode-write', path, { ms: performance.now() - decodeT0, result });
           if (result === 'cached') cached++; else written++;

@@ -2045,6 +2045,9 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <select id="sel-raw-nr" onchange="fxRawNrChanged(this.value)" style="display:none"><option value="off">Off</option><option value="fast" selected>Fast</option><option value="high">High</option></select>
           <div class="seg" id="seg-raw-nr" style="flex:1"></div>
         </div>
+        <div class="fx-row" id="fx-raw-cleanup-row" style="display:none" title="RAW opens with only the chroma-noise cleanup applied, so it is ready quickly. Turn this on to also apply shadow noise reduction, false-colour suppression and hue defringe while you edit (reloads this photo, a few seconds longer). Export always applies them, whichever way this is set.">
+          <div class="fx-label">Full cleanup while editing</div><div class="fx-toggle" id="tg-raw-full-cleanup" onclick="fxRawFullCleanupChanged()"></div>
+        </div>
         <div class="fx-cond-block">
           <div class="fx-row" id="row-nr-high-strength" style="display:none">
             <div class="fx-label">High Strength <button class="fx-info-i" title="Real-photo review (5 ISO 12800 shots vs DxO PureRAW) found full strength can soften fine hair/fur strands more than DxO does, even though flat-area noise removal is comparable or better — lower this if High is smoothing detail you want to keep. Changing it re-arms Denoise now / re-applies at next export.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-nr-high-strength" oninput="fxRawNrHighStrengthChanged(this.value)"><div class="fx-val" id="vl-nr-high-strength">70</div>
@@ -9563,6 +9566,25 @@ async function fxHdrPreviewChanged(){
   if(reloaded)toast('HDR preview: '+(window.chromasmithHdrPreview?'on':'off')+' — reloading this photo…',true);
 }
 if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',fxHdrPreviewSyncUI);
+// "Full cleanup while editing": RAW opens run only the chroma-wavelet noise reduction (fast); the
+// shadow NR + false-colour suppression + hue defringe are applied at export automatically
+// (exportFX -> chromasmithApplyFullCleanup) or here on demand. A global preference like HDR
+// preview above (localStorage), not per-photo recipe state — it only decides which decode tier
+// the editor shows, and export always completes the full pass.
+try{window.chromasmithRawFullCleanup=localStorage.getItem('chromasmithRawFullCleanup')==='1';}catch(e){window.chromasmithRawFullCleanup=false;}
+function fxRawFullCleanupSyncUI(){
+  const row=document.getElementById('fx-raw-cleanup-row'),tg=document.getElementById('tg-raw-full-cleanup');
+  if(row)row.style.display=window.__TAURI__?'':'none';
+  if(tg)tg.classList.toggle('on',!!window.chromasmithRawFullCleanup);
+}
+function fxRawFullCleanupChanged(){
+  window.chromasmithRawFullCleanup=!window.chromasmithRawFullCleanup;
+  try{localStorage.setItem('chromasmithRawFullCleanup',window.chromasmithRawFullCleanup?'1':'0');}catch(e){}
+  fxRawFullCleanupSyncUI();
+  const reloaded=typeof window.chromasmithReloadCurrentPhoto==='function'&&window.chromasmithReloadCurrentPhoto();
+  if(reloaded)toast('Full cleanup while editing: '+(window.chromasmithRawFullCleanup?'on':'off')+' — reloading this photo…',true);
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',fxRawFullCleanupSyncUI);
 // Re-decodes the CURRENT photo under the newly-picked DCP profile instead of only remembering
 // the choice for the next RW2 load (the original behaviour — see the log string it used to emit).
 // Native shell: full path-based reopen (chromasmithReloadCurrentPhoto), same mechanism the
@@ -18990,6 +19012,21 @@ async function exportFX(){
       if(fxExportCancel){log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
       const it=items[idx];
       try{
+        // Deferred RAW cleanup (shadow NR + false-colour suppression + hue defringe): the editor
+        // only ran the chroma-wavelet tier unless "Full cleanup while editing" is on, so complete
+        // the pass on THIS photo's pixels before the render reads them. Skipped when High-tier NR
+        // runs/ran (its own decode already includes the full pass). A failure logs and continues
+        // with what is on the canvas rather than losing the export.
+        if(!window.chromasmithRawFullCleanup&&exportRawNr!=='high'&&!it._nrHighApplied&&!it._fullCleanupApplied&&(it.rawFile||libPaths[fxImages.indexOf(it)])&&typeof window.chromasmithApplyFullCleanup==='function'){
+          setExportPhotoStatus(idx,'rendering','cleaning…');
+          setProg(idx,`Cleaning ${idx+1}/${N}: ${it.name}…`);
+          try{
+            const r=await window.chromasmithApplyFullCleanup(it,libPaths[fxImages.indexOf(it)]);
+            if(r&&r.applied)it._fullCleanupApplied=true;
+          }catch(e){
+            log(`Full cleanup failed for ${it.name} — exporting with the chroma-only cleanup: ${(e&&e.message)||e}`,'warn');
+          }
+        }
         // High-tier neural NR, BEFORE geomCanvas(it) below reads it.img — replaces it.img's
         // pixels in place with the denoised decode, same mechanism the "Denoise now" button
         // uses (window.chromasmithDenoiseHigh with an explicit item, so it applies to THIS

@@ -160,7 +160,11 @@
       // automatically; the expensive one only runs on explicit request or at export — see
       // raw_decode.rs's NrTier and rawdenoise.rs's module doc for the full two-tier rationale).
       const rawNrSelected = window.chromasmithRawNr || (window.chromasmithNativeNr !== false ? 'fast' : 'off');
-      const rawNr = rawNrSelected === 'off' ? 'off' : 'fast';
+      // 'chroma' = interactive tier (chroma-wavelet NR only; shadow NR / false-colour / hue
+      // defringe are deferred to export or the manual "Full cleanup" toggle — see raw_decode.rs's
+      // NrTier::Chroma). 'fast' = the complete pass. Everything that isn't the interactive open
+      // (export, batch cache, thumbnails) keeps requesting the complete pass.
+      const rawNr = rawNrSelected === 'off' ? 'off' : (window.chromasmithRawFullCleanup ? 'fast' : 'chroma');
       // Per-photo "RAW Processing" mode: "" (Standard/PPG, default) or "ahd" (Sparkle-
       // optimized — trades some general chroma-noise headroom for much cleaner rendering of
       // dense sunlit-water/specular sparkle fields; NOT a global default, see raw_decode.rs).
@@ -395,6 +399,73 @@
       // denoise never flashes an unrelated photo's canvas into the visible editor.
       if (typeof updateWork === 'function') updateWork();
       if (typeof renderPreview === 'function') renderPreview();
+    }
+    return { applied: true };
+  };
+  // Export-time completion of the deferred cleanup (shadow NR + false-colour suppression + hue
+  // defringe). The interactive open only ran the chroma-wavelet tier; this re-decodes the SAME
+  // source with the complete 'fast' tier and swaps the pixels into the item's canvas in place
+  // (geometry, masks and history on the item are untouched — only pixels change), so the export
+  // renders the complete pipeline. `sourcePath` is used when the item carries no rawFile (a photo
+  // installed from the Library's decode cache).
+  window.chromasmithApplyFullCleanup = async function (it, sourcePath) {
+    if (!it || !it.img) return { applied: false, reason: 'no item' };
+    let bytes;
+    if (it.rawFile) bytes = new Uint8Array(await it.rawFile.arrayBuffer());
+    else if (sourcePath) bytes = new Uint8Array(await invoke('read_file_bytes', { path: sourcePath }));
+    else return { applied: false, reason: 'no source' };
+    const c = it.img;
+    const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
+    const ident = it.exif || {};
+    let mode = 'srgb', lutKey = '';
+    if (profile) {
+      const dcpSource = (typeof resolveDcpSource === 'function') ? await resolveDcpSource(ident.make || '', ident.model || '') : null;
+      const camPrefix = dcpSource ? dcpSource.prefix : null;
+      if (camPrefix) {
+        mode = 'lut'; lutKey = 'dcp:' + camPrefix + ':' + profile;
+        if (!_rustLuts[lutKey]) {
+          const lut = await getDcpLUT(camPrefix, profile, 200, dcpSource.source);
+          await framedInvoke('store_dcp_lut', { key: lutKey, make: ident.make || '' },
+            new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
+          _rustLuts[lutKey] = true;
+        }
+      } else {
+        mode = 'linear16';
+      }
+    }
+    const req = {
+      mode, autoLens: !!window.chromasmithAutoLens, rawNr: 'fast', fast: false,
+      demosaicAlgo: window.chromasmithDemosaicAlgo || '',
+      lensOverride: window.chromasmithLensOverride || '', lensOverrideFocal: window.chromasmithLensOverrideFocal || 0,
+    };
+    if (mode === 'lut') { req.lutKey = lutKey; req.wantExt = !!window.chromasmithHdrPreview; }
+    const buf = await framedInvoke('decode_raw_v2', req, bytes);
+    const head = new Uint32Array(buf, 0, 6);
+    const w = head[0], h = head[1];
+    const usedLut = head[3] === 1;
+    const hasExt = head[5] === 1;
+    const effMode = (mode === 'lut' && !usedLut) ? 'linear16' : mode;
+    let rgba2, sceneLinear2;
+    if (effMode === 'linear16') {
+      const rgb2 = new Uint16Array(buf, 24);
+      rgba2 = new Uint8ClampedArray(w * h * 4);
+      for (let i = 0, j = 0; i < w * h; i++) {
+        const s = i * 3;
+        rgba2[j++] = rgb2[s] >> 8; rgba2[j++] = rgb2[s + 1] >> 8; rgba2[j++] = rgb2[s + 2] >> 8; rgba2[j++] = 255;
+      }
+    } else {
+      const bodyLen2 = w * h * 4;
+      rgba2 = new Uint8ClampedArray(buf, 24, bodyLen2);
+      if (hasExt) sceneLinear2 = new Float32Array(buf, 24 + bodyLen2, w * h * 3);
+    }
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    c.getContext('2d').putImageData(new ImageData(rgba2, w, h), 0, 0);
+    if (sceneLinear2) {
+      let any = false; for (let i = 0; i < sceneLinear2.length; i++) { if (sceneLinear2[i] > 1.05) { any = true; break; } }
+      c._sceneLinear = { data: sceneLinear2, w, h };
+      c._sceneLinearPresent = any;
+    } else {
+      delete c._sceneLinear; delete c._sceneLinearPresent;
     }
     return { applied: true };
   };

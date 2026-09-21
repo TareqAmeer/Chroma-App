@@ -72,6 +72,8 @@ const KNOWN_EXCLUSIONS = {
     'cl-canvas-bg': 'tracked via s.canvas (fxState.canvas object: ar/bg/blur), not the flat colors map',
   },
   toggles: {
+    'hdr-preview': 'decode-time RAW preference persisted via window.chromasmithHdrPreview + localStorage (like RAW NR tier), not a graded/undoable section switch',
+    'raw-full-cleanup': 'decode-tier preference persisted via window.chromasmithRawFullCleanup + localStorage; decides which RAW cleanup tier the editor shows (export always completes it), not graded photo state',
     'lens-auto': 'a sub-toggle inside the always-on Lens section, not a section on/off switch — no ff-<name> fields block to gate',
     'demosaic-ahd': 'a sub-toggle inside the always-on Noise Reduction section, same shape as lens-auto',
     'hal-white': 'a sub-toggle inside the always-on-when-hal-is-on Halation fields, not its own section toggle',

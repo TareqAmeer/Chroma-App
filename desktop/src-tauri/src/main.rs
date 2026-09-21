@@ -767,6 +767,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     let nr = match json["rawNr"].as_str() {
         Some("off") => raw_decode::NrTier::Off,
         Some("fast") => raw_decode::NrTier::Fast,
+        Some("chroma") => raw_decode::NrTier::Chroma,
         Some(other) => {
             eprintln!("decode_raw_v2: rawNr={other:?} not accepted here (High runs via denoise_raw_high) — using Fast");
             raw_decode::NrTier::Fast
@@ -916,7 +917,11 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
         (false, true) => Some((lens_override.as_str(), lens_override_focal as f32)), _ => None,
     };
     let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
-    let nr = if raw_nr == "off" { raw_decode::NrTier::Off } else { raw_decode::NrTier::Fast };
+    let nr = match raw_nr.as_str() {
+        "off" => raw_decode::NrTier::Off,
+        "chroma" => raw_decode::NrTier::Chroma,
+        _ => raw_decode::NrTier::Fast,
+    };
     let decoded = raw_decode::decode_rw2_bytes(&bytes, auto_lens, nr,
         demosaic_algo, false, lens_override)?;
     let (effective_mode, _) = effective_dcp_mode(&mode, &decoded.make, (!lut_key.is_empty()).then_some(lut_key.as_str()));

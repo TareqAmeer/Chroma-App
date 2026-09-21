@@ -86,6 +86,11 @@ struct DemosaicOut {
 pub enum NrTier {
     Off,
     Fast,
+    /// Interactive-open tier: only the chroma-wavelet pass runs (the visually dominant, always-on
+    /// colour-noise cleanup, like Lightroom's default colour NR). Shadow NR, false-colour
+    /// suppression and hue defringe are DEFERRED to export / the manual "Full cleanup" toggle —
+    /// callers that want the complete result (export, batch cache, thumbnails) pass Fast.
+    Chroma,
     High
 }
 
@@ -94,9 +99,16 @@ impl NrTier {
         match s {
             "off" => Some(Self::Off),
             "fast" => Some(Self::Fast),
+            "chroma" => Some(Self::Chroma),
             "high" => Some(Self::High),
             _ => None
         }
+    }
+
+    /// True for the interactive chroma-only tier: shadow NR, false-colour suppression and hue
+    /// defringe are skipped (deferred to export / the manual toggle).
+    fn defers_cleanup(self) -> bool {
+        self == Self::Chroma
     }
 
     /// CS_NR_TIER overrides whatever the caller requested — the same diagnostic-escape-hatch
@@ -604,7 +616,7 @@ pub fn decode_rw2_bytes_ex(
     // project's noise-model plan file for the full investigation.
     // `fast` skips this and the two passes below (hue defringe, native NR) — see the `fast`
     // param's doc comment on decode_rw2_bytes / main.rs's decode_raw_v2 for why.
-    if !fast && std::env::var_os("CS_NO_FALSE_COLOR").is_none() {
+    if !fast && !nr.defers_cleanup() && std::env::var_os("CS_NO_FALSE_COLOR").is_none() {
         let contrast_thresh: f32 = std::env::var("CS_FC_CONTRAST").ok().and_then(|v| v.parse().ok()).unwrap_or(0.5);
         let dev_thresh: f32 = std::env::var("CS_FC_DEV").ok().and_then(|v| v.parse().ok()).unwrap_or(0.003);
         let steps: usize = std::env::var("CS_FC_STEPS").ok().and_then(|v| v.parse().ok()).unwrap_or(8);
@@ -627,7 +639,7 @@ pub fn decode_rw2_bytes_ex(
     // on much more common real content. Residual red/blue/magenta false-color speckle in the
     // worst scenes is NOT addressed by this pass (see the CS_DEMOSAIC=ahd opt-in toggle for a
     // stronger but riskier alternative for exactly those difficult photos).
-    if !fast && std::env::var_os("CS_NO_HUE_DEFRINGE").is_none() {
+    if !fast && !nr.defers_cleanup() && std::env::var_os("CS_NO_HUE_DEFRINGE").is_none() {
         let contrast_thresh: f32 = std::env::var("CS_HD_CONTRAST").ok().and_then(|v| v.parse().ok()).unwrap_or(0.05);
         hue_defringe_gated(&mut rgb16, out_w, out_h, contrast_thresh);
     }
@@ -692,7 +704,7 @@ pub fn decode_rw2_bytes_ex(
         // calib harness isolate each pass's contribution — CS_NO_CHROMA_NR only disables the
         // wavelet, so the shadow pass alone had never been isolatable before this. Unset in
         // all normal use; default behavior unchanged.
-        if std::env::var_os("CS_NO_SHADOW_NR").is_none() {
+        if !nr.defers_cleanup() && std::env::var_os("CS_NO_SHADOW_NR").is_none() {
             denoise_shadows_rgb16(&mut rgb16, out_w, out_h);
         }
         denoise_chroma_wavelet_rgb16(&mut rgb16, out_w, out_h, iso);
