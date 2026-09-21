@@ -1472,6 +1472,9 @@
        the wireframe rather than theme-following. */
     .lib-thumb-wrap{aspect-ratio:1;background:var(--canvas-parchment);display:flex;align-items:center;justify-content:center;overflow:hidden}
     .lib-thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+    /* CHR-12: square grid only — percentage height on a fractional-size tile can round 1 device px
+       short of the tile, exposing the light plate as a thin line. Pin the image to the tile edges. */
+    #lib-grid:not(.list-view):not(.aspect-view) .lib-thumb-wrap>img{position:absolute;inset:0}
     .lib-photo-work{position:absolute;left:5px;bottom:5px;z-index:4;display:flex;align-items:center;gap:5px;
       max-width:calc(100% - 10px);padding:3px 6px;border:1px solid var(--bdr);border-radius:var(--r-pill);
       background:var(--sur);color:var(--txt);font-size:10px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
