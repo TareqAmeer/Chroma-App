@@ -31,6 +31,14 @@ impl log::Log for StderrLog {
 }
 
 fn main() {
+    // CS_DUMP_UTILITY=<threads>: mimic the app's global rayon pool (main.rs) — N workers, each
+    // marked QoS "utility" — to measure what running at background priority costs the decode.
+    if let Some(n) = std::env::var("CS_DUMP_UTILITY").ok().and_then(|v| v.parse::<usize>().ok()) {
+        extern "C" { fn pthread_set_qos_class_self_np(q: u32, p: i32) -> i32; }
+        let _ = rayon::ThreadPoolBuilder::new().num_threads(n)
+            .start_handler(|_| unsafe { let _ = pthread_set_qos_class_self_np(0x11, 0); })
+            .build_global();
+    }
     let _ = log::set_logger(&StderrLog).map(|()| log::set_max_level(log::LevelFilter::Info));
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 3 && args.len() != 4 {
