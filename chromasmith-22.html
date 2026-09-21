@@ -10250,6 +10250,7 @@ function installFXImages(entries,loadKey,opts){
   log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
 }
 async function loadFXImages(fileList){
+  window.__pm&&window.__pm('lfx-start');
   fxPhotoActivityInvalidate();
   // MIME is often EMPTY, not just for TIFF/RW2: the desktop library opens files via
   // read_file_bytes and builds File objects with type:'' — a plain MIME check silently
@@ -10289,7 +10290,8 @@ async function loadFXImages(fileList){
   // tg-canvas — everything outside the small _ALLFX set) kept showing "enabled" (orange) on a
   // never-touched photo simply because the LAST photo had left that toggle's DOM class on.
   const loadKey=[...files,...videoFiles].map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
-  if(loadKey!==_fxLoadKey&&_fxPristineDefault)applyUISnapshot(_fxPristineDefault);
+  if(loadKey!==_fxLoadKey&&_fxPristineDefault)applyUISnapshot(_fxPristineDefault,{skipRender:true});
+  window.__pm&&window.__pm('lfx-snapshot-done');
   const entries=[];
   for(const file of videoFiles){
     fxDeskbarTitle(file.name,'Opening video…',true);
@@ -10301,6 +10303,7 @@ async function loadFXImages(fileList){
     fxDeskbarTitle(file.name,'Opening photo…',true);
     try{
       const bytes=new Uint8Array(await file.arrayBuffer());
+      window.__pm&&window.__pm('lfx-arraybuffer');
       let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';if(ext==='tiff')ext='tif';
       // A RAW-extension file whose bytes are actually a JPEG/PNG (see sniffRealImageKind) —
       // route it through the normal image path instead of the RAW decoder, which would
@@ -10362,8 +10365,11 @@ async function loadFXImages(fileList){
   // now) — was previously inline per-RW2-entry, before any render had happened; moving it
   // after the render here would apply the defaults a frame too late, requiring a manual
   // slider nudge before they'd visibly take effect.
+  window.__pm&&window.__pm('lfx-pre-defaults');
   if(entries.some(it=>RAW_FILE_EXT_RE.test('.'+it.ext)))applyRawDefaults();
+  window.__pm&&window.__pm('lfx-pre-install');
   installFXImages(entries,loadKey);
+  window.__pm&&window.__pm('lfx-installed');
 }
 // Detect a black-and-white / monochrome photo (near-zero mean saturation) and default the
 // "White glow" halation switch accordingly. The user can still toggle it afterward.
@@ -15233,7 +15239,7 @@ window.chromasmithPasteEditSelective=function(recipeB64,onConfirm){
 // callers that need the restore to be VISUALLY complete (undo/redo/reset/timeline) can await
 // it. Stays otherwise synchronous start-to-finish — renderSnapshotTo's split-compare path
 // depends on that (see its own comment) and must not be made to await anything here.
-function applyUISnapshot(s){
+function applyUISnapshot(s,opts){
   // Pre-v2 recipes (undo history, XMP sidecar, session save) stored the exposure SLIDER value
   // under the old /50 (±2 stop) mapping; getFXParams now divides by /20 (±5 stops), so replaying
   // an old raw slider value unchanged would apply 2.5x the intended exposure shift. Rescale once.
@@ -15273,7 +15279,10 @@ function applyUISnapshot(s){
     const cit=curItem();if(cit)cit.geom=s.geom?JSON.parse(JSON.stringify(s.geom)):defGeom();
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
     const ang=(s.geom&&s.geom.angle)||0;if(ss)ss.value=ang;if(sv)sv.textContent=ang.toFixed(1)+'°';
-    if(cropMode)cropExit();updateWork();buildLookGallery();
+    if(cropMode)cropExit();
+    // opts.skipRender: the caller (loadFXImages) is about to replace fxImages and installFXImages runs its own
+    // updateWork()+buildLookGallery() — re-rendering the OUTGOING photo here cost ~1.2s at 24MP (CHR-121).
+    if(!(opts&&opts.skipRender)){updateWork();buildLookGallery();}
   }
   // Restore whether THIS photo's Basic Adjustments were independent — must run AFTER the
   // sliders above are already written to the DOM (domAdjustVals() reads them live), or an
