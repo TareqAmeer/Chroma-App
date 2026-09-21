@@ -427,5 +427,15 @@
     "match": "atom count: wireframe 30 vs app 31",
     "zone": "topbar",
     "reason": "Downstream of the zoom-button fix above (main commit a7f83bc) — two bare SVGs becoming real buttons nets +1 atom after the kind-classification split (see the sidebar's own \"EXTRA 2x button\" entry above for the same button-vs-icon-plus-text counting quirk)."
+  },
+  {
+    "match": "font-family \"SF Pro Text\": wireframe uses it",
+    "zone": "sortmenu",
+    "reason": "2026-09-21 (CHR-126): deliberate app-wide font change to Gramatika; the SF Pro wireframe predates it."
+  },
+  {
+    "match": "font-family \"Gramatika\": wireframe uses it",
+    "zone": "sortmenu",
+    "reason": "2026-09-21 (CHR-126): deliberate app-wide font change to Gramatika; the SF Pro wireframe predates it."
   }
 ]
