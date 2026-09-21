@@ -891,7 +891,10 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     // photo (levels ≤9) and used to allocate a fresh full-frame Vec on every call. The vertical
     // output IS freshly allocated: every caller retains it (`lcur = lsm` / `current = smooth`),
     // so only the horizontal intermediate is genuinely transient/reusable.
-    fn atrous_smooth(src: &[f32], w: usize, h: usize, step: usize, tmp: &mut Vec<f32>) -> Vec<f32> {
+    fn atrous_smooth_into<F: Fn(usize, &[f32], &mut [f32]) + Sync>(
+        src: &[f32], w: usize, h: usize, step: usize, tmp: &mut Vec<f32>,
+        out: &mut [f32], extra: &mut [f32], post: F,
+    ) {
         const K: [f32; 5] = [1.0 / 16.0, 4.0 / 16.0, 6.0 / 16.0, 4.0 / 16.0, 1.0 / 16.0];
         let x_neighbors: Vec<[usize; 5]> = (0..w).map(|x| std::array::from_fn(|k| {
             (x as i64 + (k as i64 - 2) * step as i64).clamp(0, w as i64 - 1) as usize
@@ -927,8 +930,9 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
             }
         });
         // vertical: whole-row weighted sums over the five (clamped) source rows.
-        let mut out = vec![0f32; src.len()];
-        out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        // `post(y, smoothed_row, extra_row)` runs right after each row is smoothed, while it is
+        // still in cache, so per-level bookkeeping (keep factor / rebuild) needs no extra pass.
+        out.par_chunks_mut(w).zip(extra.par_chunks_mut(w)).enumerate().for_each(|(y, (row, ex))| {
             let [y0, y1, y2, y3, y4] = y_neighbors[y];
             let (r0, r1, r2, r3, r4) = (
                 &tmp[y0 * w..(y0 + 1) * w],
@@ -940,8 +944,8 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
             for (i, o) in row.iter_mut().enumerate() {
                 *o = r0[i] * K[0] + r1[i] * K[1] + r2[i] * K[2] + r3[i] * K[3] + r4[i] * K[4];
             }
+            post(y, row, ex);
         });
-        out
     }
 
     #[inline]
@@ -992,16 +996,31 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     let coarse_hi = 0.55 - 0.15 * t; // 0.55 at low-s .. 0.40 at s=1
 
     let mut atrous_tmp: Vec<f32> = Vec::new();
-    // Per-level luma detail magnitude — the shared edge guide for BOTH chroma planes.
-    let mut luma_detail: Vec<Vec<f32>> = Vec::with_capacity(levels);
+    let protect_scale: f32 = std::env::var("CS_NR_PROTECT_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0);
+    // Per-level "keep" factor (how much of that level's chroma detail survives) — a function of
+    // the LUMA detail only, so it is computed once here and shared by both chroma planes instead
+    // of each plane re-deriving the same smoothstep per pixel per level.
+    let ldiv = if levels > 1 { (levels - 1) as f32 } else { 1.0 };
+    let mut keeps: Vec<Vec<f32>> = Vec::with_capacity(levels);
     {
         let mut lcur = yv.clone();
+        let mut lsm = vec![0f32; npx];
         for lvl in 0..levels {
-            let lsm = atrous_smooth(&lcur, w, h, 1usize << lvl, &mut atrous_tmp);
-            let mut d = vec![0f32; npx];
-            d.par_iter_mut().enumerate().for_each(|(i, o)| *o = (lcur[i] - lsm[i]).abs());
-            luma_detail.push(d);
-            lcur = lsm;
+            let lvl_frac = lvl as f32 / ldiv;
+            let base_keep = keep_fine + (keep_coarse - keep_fine) * lvl_frac;
+            let coarse_gate = smoothstep(coarse_lo, coarse_hi, lvl_frac);
+            let mut keep = vec![0f32; npx];
+            let src = &lcur;
+            atrous_smooth_into(src, w, h, 1usize << lvl, &mut atrous_tmp, &mut lsm, &mut keep, |y, sm_row, keep_row| {
+                let base = y * w;
+                for x in 0..w {
+                    let d = (src[base + x] - sm_row[x]).abs();
+                    let luma_gate = smoothstep(yedge_lo, yedge_hi, d);
+                    keep_row[x] = (base_keep + protect_scale * coarse_gate * luma_gate * (KEEP_PROTECT - base_keep)).min(1.0);
+                }
+            });
+            keeps.push(keep);
+            std::mem::swap(&mut lcur, &mut lsm);
         }
     }
     // 2026-07-13: attempted a texture-DENSITY gate here (distinguish an isolated real edge,
@@ -1016,33 +1035,21 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     // calibrating a real separator needs more reference examples (isolated-feature vs.
     // dense-texture crops across multiple photos) than were available this session — don't
     // reattempt this exact mechanism without that calibration work done first.
-    // Diagnostic-only (unset in normal use): scales the luma-edge protection's ceiling for
-    // A/B testing whether it's over-protecting texture-dense scenes (many real luma edges,
-    // e.g. a sparkle field) the same way it correctly protects a real isolated feature (the
-    // gold tag). 1.0 = shipped behavior.
-    let protect_scale: f32 = std::env::var("CS_NR_PROTECT_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0);
-    fn denoise_plane(
-        plane: &mut Vec<f32>, w: usize, h: usize, npx: usize, levels: usize,
-        luma_detail: &[Vec<f32>], keep_fine: f32, keep_coarse: f32,
-        coarse_lo: f32, coarse_hi: f32, yedge_lo: f32, yedge_hi: f32,
-        protect_scale: f32,
-    ) {
+    fn denoise_plane(plane: &mut Vec<f32>, w: usize, h: usize, npx: usize, levels: usize, keeps: &[Vec<f32>]) {
         let mut atrous_tmp: Vec<f32> = Vec::new();
         let mut current = std::mem::take(plane);
+        let mut smooth = vec![0f32; npx];
         let mut rebuilt = vec![0f32; npx];
-        let ldiv = if levels > 1 { (levels - 1) as f32 } else { 1.0 };
         for lvl in 0..levels {
-            let smooth = atrous_smooth(&current, w, h, 1usize << lvl, &mut atrous_tmp);
-            let lvl_frac = lvl as f32 / ldiv;
-            let base_keep = keep_fine + (keep_coarse - keep_fine) * lvl_frac;
-            let coarse_gate = smoothstep(coarse_lo, coarse_hi, lvl_frac);
-            let ld = &luma_detail[lvl];
-            rebuilt.par_iter_mut().enumerate().for_each(|(i, o)| {
-                let luma_gate = smoothstep(yedge_lo, yedge_hi, ld[i]);
-                let keep = (base_keep + protect_scale * coarse_gate * luma_gate * (KEEP_PROTECT - base_keep)).min(1.0);
-                *o += (current[i] - smooth[i]) * keep;
+            let keep = &keeps[lvl];
+            let cur = &current;
+            atrous_smooth_into(cur, w, h, 1usize << lvl, &mut atrous_tmp, &mut smooth, &mut rebuilt, |y, sm_row, rb_row| {
+                let base = y * w;
+                for x in 0..w {
+                    rb_row[x] += (cur[base + x] - sm_row[x]) * keep[base + x];
+                }
             });
-            current = smooth;
+            std::mem::swap(&mut current, &mut smooth);
         }
         // residual low-pass carries the true (broad) colours, untouched
         rebuilt.par_iter_mut().enumerate().for_each(|(i, o)| *o += current[i]);
@@ -1052,8 +1059,8 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
     let cb_orig = cb.clone();
     let cr_orig = cr.clone();
     let (cb, cr) = rayon::join(
-        || { denoise_plane(&mut cb, w, h, npx, levels, &luma_detail, keep_fine, keep_coarse, coarse_lo, coarse_hi, yedge_lo, yedge_hi, protect_scale); cb },
-        || { denoise_plane(&mut cr, w, h, npx, levels, &luma_detail, keep_fine, keep_coarse, coarse_lo, coarse_hi, yedge_lo, yedge_hi, protect_scale); cr },
+        || { denoise_plane(&mut cb, w, h, npx, levels, &keeps); cb },
+        || { denoise_plane(&mut cr, w, h, npx, levels, &keeps); cr },
     );
 
     // Absolute-highlight protection. Bright highlights have high SNR (little chroma noise) and
