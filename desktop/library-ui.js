@@ -2221,7 +2221,6 @@
       <span id="lib-status-labels" style="font-size:11px;color:var(--mut);display:flex;gap:8px;align-items:center"></span>
       <span id="lib-activity"></span>
       <span style="flex:1"></span>
-      <span style="font-size:11px;color:var(--mut)" id="lib-status-size"></span>
       <span style="font-size:11px;color:var(--mut)" id="lib-status-sel"></span>
     </div>
   `;
@@ -6236,30 +6235,24 @@
   /// glance once a folder is bigger than a screen.
   function renderStatusBar(shown) {
     const lblEl = document.getElementById('lib-status-labels');
-    const sizeEl = document.getElementById('lib-status-size');
     const selEl = document.getElementById('lib-status-sel');
     if (!lblEl) return;
-    let rejected = 0, picked = 0, favorited = 0, bytes = 0;
+    let rejected = 0, picked = 0, favorited = 0;
     for (const e of shown) {
-      bytes += e.size || 0;
       const sc = state.sidecars.get(e.path);
       if (!sc) continue;
       if (sc.label === 'Red') rejected++;
       else if (sc.label === 'Green') picked++;
       if (sc.favorite) favorited++;
     }
-    const dot = (css) => `<span style="width:8px;height:8px;border-radius:50%;background:${css};display:inline-block"></span>`;
+    const chip = (n, cnt) => `<span style="display:inline-flex;align-items:center;gap:3px"><span style="display:inline-flex;color:var(--mut)">${ic(n, 12)}</span>${cnt}</span>`;
     lblEl.innerHTML = [
-      rejected ? `<span style="display:inline-flex;align-items:center;gap:3px">${dot('#e05252')}${rejected}</span>` : '',
-      picked ? `<span style="display:inline-flex;align-items:center;gap:3px">${dot('#5cb85c')}${picked}</span>` : '',
-      favorited ? `<span style="display:inline-flex;align-items:center;gap:3px">${dot('#e0c04a')}${favorited}</span>` : '',
+      rejected ? chip('close', rejected) : '',
+      picked ? chip('flagGreen', picked) : '',
+      favorited ? chip('heart', favorited) : '',
     ].filter(Boolean).join('');
-    const fmt = (b) => b > 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b > 1e6 ? Math.round(b / 1e6) + ' MB' : Math.round(b / 1e3) + ' KB';
-    sizeEl.textContent = shown.length ? fmt(bytes) : '';
     if (state.selected.size) {
-      let sel = 0;
-      for (const e of shown) if (state.selected.has(e.path)) sel += e.size || 0;
-      selEl.textContent = `${state.selected.size} selected · ${fmt(sel)}`;
+      selEl.textContent = `${state.selected.size} selected`;
     } else selEl.textContent = '';
   }
 
