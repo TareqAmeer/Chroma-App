@@ -104,6 +104,15 @@
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/token-lint-on-edit.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__.*__(get_issue|list_comments)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/linear-issue-images.sh"
+          }
+        ]
       }
     ],
     "Stop": [
