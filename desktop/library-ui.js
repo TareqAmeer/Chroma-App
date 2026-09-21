@@ -5367,6 +5367,8 @@
   document.addEventListener('click', closeContextMenu);
   async function showContextMenu(e, entry, shown) {
     e.preventDefault();
+    // CHR-118: the docked Editor filmstrip (body.deskx, overlay not .full) has no quick menu.
+    if (document.body.classList.contains('deskx') && !overlay.classList.contains('full')) return;
     if (!state.selected.has(entry.path)) {
       state.selected.clear();
       state.selected.add(entry.path);
