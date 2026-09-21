@@ -9983,6 +9983,7 @@ function applyDcpLUT(u16,w,h,lut,hrOut,extOut){ // u16: interleaved RGB Uint16, 
 }
 
 async function loadRw2(file){
+  window.__pm&&window.__pm('loadRw2-enter');
   if(!self.crossOriginIsolated)throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
   const profile=rawProfile();
   const LibRaw=await getLibRaw();
@@ -9994,8 +9995,10 @@ async function loadRw2(file){
   const sdrSettings={useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1};                               // sRGB, 8-bit, AHD, camera WB
   try{
     await raw.open(bytes,profile?dcpSettings:sdrSettings);
+    window.__pm&&window.__pm('loadRw2-opened');
     m=await raw.metadata();
     img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
+    window.__pm&&window.__pm('loadRw2-imagedata');
   }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
   finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
   // Auto-enable the V-Log input transform (ROADMAP.md F2, first half) — Panasonic PhotoStyle
@@ -10139,6 +10142,7 @@ async function loadRw2(file){
       if(typeof updateWork==='function')updateWork();
       if(typeof renderPreview==='function')renderPreview();
       if(typeof window.chromasmithCacheRefinedCanvas==='function')window.chromasmithCacheRefinedCanvas(window.chromasmithSourcePath||'',window.chromasmithDecodeRecipeKey||'',c);
+      window.__pm&&window.__pm('refine-applied');
       log('RAW refined (noise reduction applied)','info');
     }).catch(e=>{
       console.error('RAW background refine failed',e);
@@ -10146,6 +10150,7 @@ async function loadRw2(file){
       if(typeof toast==='function')toast(`Noise reduction refine failed for ${file.name} — ${typeof friendlyRawError==='function'?friendlyRawError(e):errStr(e)}`,false);
     });
   }
+  window.__pm&&window.__pm('loadRw2-return');
   return{canvas:c,dpi:240,ms:dt,meta:m}; // RW2 carries no resolution tags; 240 = Lightroom's export default. meta carries make/model/lens/iso (native shell) for the panel on every open path.
 }
 // Installs already-decoded entries as the active fxImages and renders — the second half of

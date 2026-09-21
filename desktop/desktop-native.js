@@ -4,6 +4,9 @@
 // this file is a safe no-op if it were ever loaded outside the native shell.
 (function () {
   if (!window.__TAURI__) return;
+  // Cheap wall-clock marks into window.__rawPerfLog (same array library-ui.js's rawPerf fills) so
+  // the cold-open timeline can be read precisely from the live app (diagnostics/app_control.py eval).
+  window.__pm = (e) => { (window.__rawPerfLog || (window.__rawPerfLog = [])).push({ event: e, t: performance.now(), wall: Date.now() }); };
   // Keep this dynamic: the diagnostics bridge wraps core.invoke after the page script loads.
   const invoke = (...args) => window.__TAURI__.core.invoke(...args);
 
@@ -118,8 +121,9 @@
       // Timing breakdown for the "RAW load takes up to 15s" report, logged into the app's own
       // log panel (not console — the packaged .app has no attached terminal for anyone to read
       // console.log from) so the actual slow stage is visible without a profiler attached.
+      window.__pm('native-open-begin');
       const _t0 = performance.now();
-      const _lap = (label) => { if (typeof log === 'function') log(`RAW load: ${label} ${(performance.now() - _t0).toFixed(0)}ms`, 'info'); };
+      const _lap = (label) => { window.__pm('native-lap: ' + label); if (typeof log === 'function') log(`RAW load: ${label} ${(performance.now() - _t0).toFixed(0)}ms`, 'info'); };
       this._ident = { make: '', model: '', lens: '' };
       try { this._ident = await invoke('peek_raw_camera', bytes); } catch (e) { console.error('peek_raw_camera', e); }
       _lap('peek_raw_camera done at');
@@ -188,6 +192,7 @@
       // unquantized companion buffer alongside the normal RGBA8 body, so a real blown
       // highlight's headroom survives instead of being clamped away before this IPC round trip.
       const wantHdrPreview = !!window.chromasmithHdrPreview;
+      window.__pm('native-fast-invoke');
       const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, fast: true } : { mode, ...extra, fast: true }, bytes);
       _lap('decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at');
       // 4th header word: whether Rust actually applied the requested LUT. Rust re-checks the
@@ -243,7 +248,9 @@
       if (!this._needsRefine || !this._bytes) return null;
       const { _mode: mode, _lutKey: lutKey, _extra: extra, _bytes: bytes } = this;
       const wantHdrPreview = !!window.chromasmithHdrPreview;
+      window.__pm('native-refine-invoke');
       const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, fast: false } : { mode, ...extra, fast: false }, bytes);
+      window.__pm('native-refine-returned');
       const head = new Uint32Array(buf, 0, 6);
       const w = head[0], h = head[1];
       const usedLut = head[3] === 1;

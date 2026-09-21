@@ -3824,11 +3824,30 @@
             // provisional, unrefined frame when the native pass takes longer than the timeout.
             window.chromasmithCacheRefinedCanvas = (refinedPath, refinedKey, canvas) => {
               if (refinedPath !== path || refinedKey !== recipeKey || state.openedPath !== path || canvas !== cachedCanvas || !canvas.toBlob) return;
-              canvas.toBlob((blob) => {
+              const save = (blob) => {
                 if (!blob || state.openedPath !== path) return;
                 blob.arrayBuffer().then((ab) => framedInvoke('save_decode_cache', { path, recipeKey }, new Uint8Array(ab)))
                   .catch((e) => console.error('save_decode_cache', e));
-              }, 'image/png');
+              };
+              // canvas.toBlob('image/png') encodes a 24MP canvas SYNCHRONOUSLY on the main thread
+              // (measured live: the call itself blocks ~1.7s, more under load) — a UI freeze right
+              // after the refined photo lands. Encode in a worker instead (main thread pays only the
+              // ~0.1s createImageBitmap); fall back to toBlob where OffscreenCanvas isn't available.
+              if (typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap === 'function' && typeof Worker === 'function') {
+                try {
+                  if (!window.__pngEncodeWorker) {
+                    const src = 'self.onmessage=async e=>{try{const {bm,w,h}=e.data;const oc=new OffscreenCanvas(w,h);oc.getContext("2d").drawImage(bm,0,0);bm.close&&bm.close();const b=await oc.convertToBlob({type:"image/png"});self.postMessage({ok:true,b})}catch(err){self.postMessage({ok:false,err:String(err)})}}';
+                    window.__pngEncodeWorker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+                  }
+                  const wk = window.__pngEncodeWorker;
+                  createImageBitmap(canvas).then((bm) => {
+                    wk.onmessage = (ev) => { if (ev.data && ev.data.ok) save(ev.data.b); else canvas.toBlob(save, 'image/png'); };
+                    wk.postMessage({ bm, w: canvas.width, h: canvas.height }, [bm]);
+                  }).catch(() => canvas.toBlob(save, 'image/png'));
+                  return;
+                } catch (e) { /* fall through to toBlob */ }
+              }
+              canvas.toBlob(save, 'image/png');
             };
           }
         }
