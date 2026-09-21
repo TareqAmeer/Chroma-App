@@ -159,6 +159,33 @@ struct RawDecodeCacheEntry {
 }
 static RAW_DECODE_CACHE: Mutex<Option<RawDecodeCacheEntry>> = Mutex::new(None);
 
+/// Rayon pool for the user-waiting RAW open/refine (decode_raw_v2 with a DCP LUT). The global
+/// pool is capped at cores-2 workers at QoS "utility" so background scans can't starve the UI;
+/// applied to an interactive open it made the same decode ~1.1s slower than a default-QoS
+/// 8-thread run (measured with dump_rw2, CHR-121). This pool has one worker per core at QoS
+/// user-initiated. CS_INTERACTIVE_POOL=0 falls back to the global pool for A/B.
+static INTERACTIVE_POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
+
+fn on_interactive_pool<R: Send>(f: impl FnOnce() -> R + Send) -> R {
+    let pool = INTERACTIVE_POOL.get_or_init(|| {
+        if std::env::var("CS_INTERACTIVE_POOL").as_deref() == Ok("0") { return None; }
+        let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(cores)
+            .thread_name(|i| format!("cs-interactive-{i}"))
+            .start_handler(|_| {
+                #[cfg(target_os = "macos")]
+                unsafe {
+                    extern "C" { fn pthread_set_qos_class_self_np(q: u32, p: i32) -> i32; }
+                    let _ = pthread_set_qos_class_self_np(0x19, 0); // QOS_CLASS_USER_INITIATED
+                }
+            })
+            .build()
+            .ok()
+    });
+    match pool { Some(p) => p.install(f), None => f() }
+}
+
 // The explicit RAW-cache action already pays the full decode cost. Keep that developed frame
 // in-process so reopening it in the same session does not decode the RAW again.
 struct RawEditorCacheEntry {
@@ -829,14 +856,9 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
         match cached {
             Some(d) => d,
             None => {
-                let d = std::sync::Arc::new(raw_decode::decode_rw2_bytes(
-                    payload,
-                    auto_lens,
-                    nr,
-                    demosaic_algo,
-                    fast,
-                    lens_override,
-                )?);
+                let interactive = json["lutKey"].as_str().is_some();
+                let run = || raw_decode::decode_rw2_bytes(payload, auto_lens, nr, demosaic_algo, fast, lens_override);
+                let d = std::sync::Arc::new(if interactive { on_interactive_pool(run)? } else { run()? });
                 if let Ok(mut guard) = RAW_DECODE_CACHE.lock() {
                     *guard = Some(RawDecodeCacheEntry { key: decode_key, decoded: d.clone() });
                 }
@@ -868,11 +890,11 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
             let n = (lut.len() / 3) as f64;
             let n = n.cbrt().round() as usize;
             if want_ext {
-                let (rgba, e) = raw_decode::apply_lut_rgba_ext(&decoded.rgb16, &lut, n)?;
+                let (rgba, e) = on_interactive_pool(|| raw_decode::apply_lut_rgba_ext(&decoded.rgb16, &lut, n))?;
                 ext = Some(e);
                 rgba
             } else {
-                raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
+                on_interactive_pool(|| raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n))?
             }
         }
         "srgb" => raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam),
