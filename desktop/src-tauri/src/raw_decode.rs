@@ -707,7 +707,7 @@ pub fn decode_rw2_bytes_ex(
         if !nr.defers_cleanup() && std::env::var_os("CS_NO_SHADOW_NR").is_none() {
             denoise_shadows_rgb16(&mut rgb16, out_w, out_h);
         }
-        denoise_chroma_wavelet_rgb16(&mut rgb16, out_w, out_h, iso);
+        if nr.defers_cleanup() && std::env::var_os("CS_CHROMA_FULLRES").is_none() { denoise_chroma_half(&mut rgb16, out_w, out_h, iso); } else { denoise_chroma_wavelet_rgb16(&mut rgb16, out_w, out_h, iso); }
     }
     stage("native_nr", &mut stage_started);
 
@@ -828,6 +828,53 @@ fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
 /// `levels`/`strength` scale with ISO: 0 below ISO 1600 (no cost for clean files), moderate at
 /// 3200-6400, strong at ≥12800 where the packets are coarsest.
 fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
+    denoise_chroma_wavelet_rgb16_ex(rgb, w, h, iso, 0)
+}
+
+/// Interactive-open tier (NrTier::Chroma) only; export/full cleanup, batch cache and the Full-cleanup
+/// toggle keep the full-resolution pass (CS_CHROMA_FULLRES=1 forces it here too). CHR-121: ~1.4s faster,
+/// dE76 mean ~2 / p99 ~7 vs full-res chroma. Run the chroma wavelet on a 2x box-downsampled copy, upsample the
+/// denoised chroma bilinearly and recombine it with the FULL-resolution luma.
+fn denoise_chroma_half(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
+    let (hw, hh) = (w / 2, h / 2);
+    let mut lo = vec![0u16; hw * hh * 3];
+    lo.par_chunks_mut(hw * 3).enumerate().for_each(|(y, row)| {
+        for x in 0..hw { for c in 0..3 {
+            let a = rgb[((2 * y) * w + 2 * x) * 3 + c] as u32 + rgb[((2 * y) * w + 2 * x + 1) * 3 + c] as u32
+                + rgb[((2 * y + 1) * w + 2 * x) * 3 + c] as u32 + rgb[((2 * y + 1) * w + 2 * x + 1) * 3 + c] as u32;
+            row[x * 3 + c] = ((a + 2) / 4) as u16;
+        } }
+    });
+    let orig_lo = lo.clone();
+    denoise_chroma_wavelet_rgb16_ex(&mut lo, hw, hh, iso, -1);
+    // per-half-res-pixel chroma DELTA (denoised - original), upsampled and added to the full-res RGB
+    // as a pure chroma shift (equal R/G/B luma-preserving via BT.601 inverse of a (0,dCb,dCr) delta).
+    let cbcr = |p: &[u16], i: usize| -> (f32, f32) {
+        let (r, g, b) = (p[i * 3] as f32, p[i * 3 + 1] as f32, p[i * 3 + 2] as f32);
+        (-0.168_736 * r - 0.331_264 * g + 0.5 * b, 0.5 * r - 0.418_688 * g - 0.081_312 * b)
+    };
+    rgb.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
+        let fy = ((y as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, (hh - 1) as f32);
+        let y0 = fy.floor() as usize; let y1 = (y0 + 1).min(hh - 1); let ty = fy - y0 as f32;
+        for x in 0..w {
+            let fx = ((x as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, (hw - 1) as f32);
+            let x0 = fx.floor() as usize; let x1 = (x0 + 1).min(hw - 1); let tx = fx - x0 as f32;
+            let mut dcb = 0.0f32; let mut dcr = 0.0f32;
+            for &(yy, wy) in &[(y0, 1.0 - ty), (y1, ty)] { for &(xx, wx) in &[(x0, 1.0 - tx), (x1, tx)] {
+                let i = yy * hw + xx;
+                let (cb1, cr1) = cbcr(&lo, i); let (cb0, cr0) = cbcr(&orig_lo, i);
+                dcb += (cb1 - cb0) * wx * wy; dcr += (cr1 - cr0) * wx * wy;
+            } }
+            // inverse BT.601 of (dY=0, dCb, dCr)
+            let dr = 1.402 * dcr; let dg = -0.344_136 * dcb - 0.714_136 * dcr; let db = 1.772 * dcb;
+            for (c, d) in [dr, dg, db].iter().enumerate() {
+                row[x * 3 + c] = (row[x * 3 + c] as f32 + d).round().clamp(0.0, 65535.0) as u16;
+            }
+        }
+    });
+}
+
+fn denoise_chroma_wavelet_rgb16_ex(rgb: &mut [u16], w: usize, h: usize, iso: u32, level_delta: i32) {
     // Diagnostic escape hatch for A/B validation via the dump_rw2 example (CS_NO_CHROMA_NR=1
     // reproduces the pre-wavelet decode exactly). Not a user-facing setting.
     if std::env::var_os("CS_NO_CHROMA_NR").is_some() {
@@ -883,6 +930,7 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
         _ => (9, 0.78),
         }
     };
+    let levels = (levels as i32 + level_delta).max(1) as usize;
     eprintln!("[chroma-nr] ISO {iso} -> levels={levels} strength={strength} ({w}x{h})");
     let npx = w * h;
     // RGB u16 -> Y/Cb/Cr f32 planes (BT.601, chroma zero-centered).

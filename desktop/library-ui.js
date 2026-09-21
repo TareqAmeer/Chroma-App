@@ -2298,7 +2298,7 @@
     return [profile, window.chromasmithRawNr !== 'off' ? 1 : 0,
       window.chromasmithDemosaicAlgo || '', window.chromasmithAutoLens ? 1 : 0,
       window.chromasmithLensOverride || '', window.chromasmithLensOverrideFocal || 0,
-      (forceFull || window.chromasmithRawFullCleanup) ? 'full' : 'chroma'].join('|');
+      (forceFull || window.chromasmithRawFullCleanup) ? 'full' : 'chroma2'].join('|'); // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
   }
   async function showProvisional(path, onReady) {
     if (!RAW_EXT_RE.test(path)) return () => {};
