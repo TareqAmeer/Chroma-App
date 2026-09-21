@@ -2164,7 +2164,7 @@
              performs a real navigation (closes the Library, same as the header button / L key).
              The wiring is correct — Develop simply IS the editor you land back in — so the
              stale "not yet available" title was the lie, not the handler. -->
-        <button class="lib-side-tab" id="lib-side-tab-develop" title="Switch to Develop" aria-label="Develop">${ic('tools',13)}<span>Develop</span></button>
+        <button class="lib-side-tab" id="lib-side-tab-develop" title="Switch to Studio" aria-label="Studio">${ic('tools',13)}<span>Studio</span></button>
       </div>
       <div id="lib-collections" class="lib-fullview-only"></div><div id="lib-folders-header" class="lib-fullview-only"></div><div id="lib-tree" class="lib-fullview-only"></div><div id="lib-collections-post" class="lib-fullview-only"></div>
     </div>

@@ -1522,9 +1522,31 @@ body.mobile-cl .cl-controls .fx-ctrl.cl-sec-active{display:block}
 .fx-ctrl[data-clsec="sel"]:not(.cl-has-sel){display:none}
 body.mobile-cl .cl-controls .fx-ctrl[data-clsec="sel"].cl-sec-active{display:block}
 @media(max-width:700px){.cl-layout{grid-template-columns:1fr}}
+/* CHR-128/129: shared brand + Library/Studio toggle, fixed top-left, identical in Editor and Library. */
+#cs-brand{display:none}
+body.deskx #cs-brand{display:flex;align-items:center;gap:10px;position:fixed;top:0;left:12px;height:var(--deskx-topbar-h);z-index:calc(var(--z-overlay) + 5);-webkit-app-region:no-drag}
+body.mac-titlebar-overlay #cs-brand{left:84px}
+body.deskx{--cs-brand-w:270px}
+@media(max-width:1000px){#cs-brand-name{display:none}body.deskx{--cs-brand-w:140px}}
+#cs-brand-name{font-size:12px;font-weight:400;letter-spacing:.08em;color:var(--txt,currentColor);white-space:nowrap}
+#cs-brand-tog{display:flex;border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden}
+#cs-brand-tog button{background:transparent;border:0;color:var(--mut);font:inherit;font-size:12px;height:28px;min-width:28px;padding:0 10px;cursor:pointer}
+#cs-brand-tog button+button{border-left:1px solid var(--bdr)}
+#cs-brand-tog button.on{background:var(--sur2);color:var(--txt)}
+body.deskx #fx-deskbar{padding-left:calc(12px + var(--cs-brand-w))}
+body.deskx.mac-titlebar-overlay #fx-deskbar{padding-left:calc(84px + var(--cs-brand-w))}
+body.deskx #lib-overlay #lib-top{padding-left:calc(12px + var(--cs-brand-w))}
+body.deskx.mac-titlebar-overlay #lib-overlay #lib-top{padding-left:calc(84px + var(--cs-brand-w))}
+body.deskx #lib-overlay .lib-side-tabs{display:none}
 </style>
 </head>
 <body>
+<div id="cs-brand"><span id="cs-brand-name">CHRO-MA-SMITH</span><div id="cs-brand-tog" role="group" aria-label="View"><button id="cs-tog-lib" type="button">Library</button><button id="cs-tog-studio" type="button" class="on">Studio</button></div></div>
+<script>(function(){var b=document.body,L=document.getElementById('cs-tog-lib'),S=document.getElementById('cs-tog-studio');
+function sync(){var f=b.classList.contains('lib-full');L.classList.toggle('on',f);S.classList.toggle('on',!f);L.setAttribute('aria-pressed',f);S.setAttribute('aria-pressed',!f)}
+new MutationObserver(sync).observe(b,{attributes:true,attributeFilter:['class']});sync();
+function go(lib){if(b.classList.contains('lib-full')===lib)return;var t=document.getElementById(lib?'lib-side-tab-library':'lib-side-tab-develop');if(t)t.click();else if(window.chromasmithToggleLibrary)window.chromasmithToggleLibrary()}
+L.onclick=function(){go(true)};S.onclick=function(){go(false)};})();</script>
 <!-- Boot splash — visible IMMEDIATELY on first paint (inline styles, no stylesheet/JS dependency)
      so the desktop shell's boot sequence (web-layout paint -> deskx class added -> async
      toggleLibrary()/toggleExpandedView(true) settling into the Library) is covered instead of
@@ -9979,12 +10001,73 @@ function applyDcpLUT(u16,w,h,lut,hrOut,extOut){ // u16: interleaved RGB Uint16, 
   return rgba;
 }
 
+// Camera profile carried INSIDE a DNG (iPhone/Pixel/Samsung/converted files): a DCP-shaped object
+// for bakeDcpLUT built from the file's own tags — ForwardMatrix, else ColorMatrix inverted and
+// adapted D65→D50 — plus its ProfileToneCurve and Look/HueSatMap table when present. Returns null
+// for anything that isn't a DNG carrying a usable matrix (caller falls back to LibRaw sRGB).
+function parseDngEmbeddedProfile(bytes){
+  try{
+    const d=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+    const le=d.getUint16(0,false)===0x4949;
+    if(!le&&d.getUint16(0,false)!==0x4D4D)return null;
+    if(d.getUint16(2,le)!==42)return null;
+    const TS={1:1,2:1,3:2,4:4,5:8,6:1,7:1,8:2,9:4,10:8,11:4,12:8,13:4,16:8};
+    const tags={},seen=new Set();
+    const walk=off=>{
+      if(!off||seen.has(off)||off+2>d.byteLength)return;
+      seen.add(off);
+      const n=d.getUint16(off,le);
+      for(let i=0;i<n;i++){
+        const e=off+2+i*12;if(e+12>d.byteLength)return;
+        const tag=d.getUint16(e,le),typ=d.getUint16(e+2,le),cnt=d.getUint32(e+4,le);
+        const sz=(TS[typ]||1)*cnt,ptr=sz>4?d.getUint32(e+8,le):e+8;
+        if(tag===330){for(let k=0;k<cnt&&k<8;k++)walk(d.getUint32((cnt>1?ptr:e+8)+4*k,le));continue;}
+        if(!(tag>=50721&&tag<=51109)||ptr+sz>d.byteLength||cnt>2000000)continue;
+        let v;
+        if(typ===10){v=new Float64Array(cnt);for(let j=0;j<cnt;j++){const a=d.getInt32(ptr+8*j,le),b=d.getInt32(ptr+8*j+4,le);v[j]=b?a/b:0;}}
+        else if(typ===5){v=new Float64Array(cnt);for(let j=0;j<cnt;j++){const a=d.getUint32(ptr+8*j,le),b=d.getUint32(ptr+8*j+4,le);v[j]=b?a/b:0;}}
+        else if(typ===11){v=new Float64Array(cnt);for(let j=0;j<cnt;j++)v[j]=d.getFloat32(ptr+4*j,le);}
+        else if(typ===12){v=new Float64Array(cnt);for(let j=0;j<cnt;j++)v[j]=d.getFloat64(ptr+8*j,le);}
+        else if(typ===3){v=new Float64Array(cnt);for(let j=0;j<cnt;j++)v[j]=d.getUint16(ptr+2*j,le);}
+        else if(typ===4){v=new Float64Array(cnt);for(let j=0;j<cnt;j++)v[j]=d.getUint32(ptr+4*j,le);}
+        else continue;
+        if(!tags[tag])tags[tag]=v;
+      }
+      if(off+2+n*12+4<=d.byteLength)walk(d.getUint32(off+2+n*12,le));
+    };
+    walk(d.getUint32(4,le));
+    const inv3=m=>{const[a,b,c,dd,e,f,g,h,i]=m,A=e*i-f*h,B=f*g-dd*i,C=dd*h-e*g,det=a*A+b*B+c*C;
+      if(!isFinite(det)||Math.abs(det)<1e-9)return null;
+      return[A/det,(c*h-b*i)/det,(b*f-c*e)/det,B/det,(a*i-c*g)/det,(c*dd-a*f)/det,C/det,(b*g-a*h)/det,(a*e-b*dd)/det];};
+    const mul3=(x,y)=>{const r=new Array(9);for(let i=0;i<3;i++)for(let j=0;j<3;j++)r[3*i+j]=x[3*i]*y[j]+x[3*i+1]*y[3+j]+x[3*i+2]*y[6+j];return r;};
+    let fm=null;
+    const F=tags[50965]||tags[50964],C=tags[50722]||tags[50721];
+    if(F&&F.length>=9&&F.slice(0,9).every(isFinite))fm=Array.from(F.slice(0,9));
+    else if(C&&C.length>=9&&C.slice(0,9).every(isFinite)){
+      const A=inv3(Array.from(C.slice(0,9)));if(!A)return null;
+      const BR=[1.0478112,0.0228866,-0.0501270,0.0295424,0.9904844,-0.0170491,-0.0092345,0.0150436,0.7521316];
+      const M=mul3(BR,A),Mi=inv3(M);if(!Mi)return null;
+      const W=[0.9642,1,0.8249],sc=[0,1,2].map(i=>Mi[3*i]*W[0]+Mi[3*i+1]*W[1]+Mi[3*i+2]*W[2]);
+      fm=[0,1,2].flatMap(i=>[M[3*i]*sc[0],M[3*i+1]*sc[1],M[3*i+2]*sc[2]]);
+    }
+    if(!fm||!fm.every(isFinite))return null;
+    let dims,look,enc=0;
+    if(tags[50981]&&tags[50982]&&tags[50981].length>=3&&tags[50982].length>=tags[50981][0]*tags[50981][1]*tags[50981][2]*3){
+      dims=tags[50981];look=tags[50982];enc=tags[51108]?tags[51108][0]:0;
+    }else if(tags[50937]&&(tags[50939]||tags[50938])&&tags[50937].length>=3&&(tags[50939]||tags[50938]).length>=Math.max(1,tags[50937][2])*tags[50937][0]*tags[50937][1]*3){
+      dims=[tags[50937][0],tags[50937][1],Math.max(1,tags[50937][2])];look=tags[50939]||tags[50938];enc=tags[51107]?tags[51107][0]:0;
+    }else{dims=[1,2,2];look=new Float64Array([0,1,1,0,1,1,0,1,1,0,1,1]);} // identity: 0° hue, ×1 sat, ×1 val
+    const tone=tags[50940]&&tags[50940].length>=4&&tags[50940].length%2===0?tags[50940]:new Float64Array([0,0,1,1]);
+    return{fm,tone,dims,look,enc,baseOff:(tags[50730]?tags[50730][0]:0)+(tags[51109]?tags[51109][0]:0)}; // DNG BaselineExposure (+ profile offset)
+  }catch(e){return null;}
+}
 async function loadRw2(file){
   window.__pm&&window.__pm('loadRw2-enter');
   if(!self.crossOriginIsolated)throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
   let profile=rawProfile();
   const LibRaw=await getLibRaw();
   const bytes=new Uint8Array(await file.arrayBuffer());
+  const bytesCopy=bytes.slice(); // raw.open() transfers (detaches) `bytes`; kept for the embedded-profile parse / sRGB fallback re-decode
   const t0=performance.now();
   const raw=new LibRaw();
   let m,img;
@@ -10000,11 +10083,13 @@ async function loadRw2(file){
   finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
   // No bundled DCP for this camera (iPhone/Pixel/Samsung DNG, other bodies…): fall back to
   // LibRaw's own sRGB render, which uses the colour matrix embedded in the file, instead of failing.
-  if(profile&&!window.__TAURI__&&!cameraDcpPrefix(m.make,m.model)){
+  let embDcp=null;
+  if(profile&&!window.__TAURI__&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(bytesCopy);
+  if(profile&&!window.__TAURI__&&!embDcp&&!cameraDcpPrefix(m.make,m.model)){
     profile=null;
     const raw2=new LibRaw();
     try{
-      await raw2.open(bytes,sdrSettings);
+      await raw2.open(bytesCopy,sdrSettings);
       img=await raw2.imageData();
     }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
     finally{try{raw2.worker.terminate()}catch(_){}}
@@ -10073,8 +10158,13 @@ async function loadRw2(file){
       // Widening RAW_FILE_EXT_RE made this the COMMON case for any camera outside the 2 bundled
       // here (Panasonic DC-S9, Sony DSC-RX100M5) — the web build only ever ships those two DCP
       // sets. The desktop app additionally reads locally-installed Adobe camera profiles.
+      let lut;
+      if(!camPrefix&&embDcp){
+        log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the profile embedded in the DNG`,'info');
+        lut=await _cpuRun('bakeDcpLUT',[embDcp,dcpFit(m.iso_speed,null)]);
+      }else
       if(!camPrefix)throw new Error(`No bundled colour profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile, or open this photo in the Chromasmith desktop app, which can also use camera profiles you've installed with Adobe Camera Raw.`);
-      const lut=await getDcpLUT(camPrefix,profile,m.iso_speed);
+      if(!lut)lut=await getDcpLUT(camPrefix,profile,m.iso_speed);
       hrOut=new Uint8ClampedArray(w*h);
       // ROADMAP.md R1: the real scene-linear buffer — see applyDcpLUT's own comment. Always
       // computed (the loop already runs regardless; this is one more write per channel, not a
@@ -11519,6 +11609,7 @@ function appHSync(){
 // left/right button groups and the real image wrapper, then clamps the shift so the title can
 // never be pushed into either group — it recenters as far as genuine slack allows and no further.
 function fxSyncDeskbarTitleOffset(){
+  document.documentElement.style.setProperty('--db-title-off','0px');return; // CHR-127: never track the image/panels
   const bar=document.getElementById('fx-deskbar');
   const title=document.getElementById('fx-deskbar-title');
   const left=document.getElementById('fx-deskbar-left');
@@ -11548,7 +11639,7 @@ function fxSyncDeskbarTitleOffset(){
   if(maxCenter>=minCenter)clampedCenter=Math.min(Math.max(desiredCenter,minCenter),maxCenter);
   else clampedCenter=naturalCenter; // no slack at all — stay at the grid's own center
   offset=clampedCenter-naturalCenter;
-  document.documentElement.style.setProperty('--db-title-off',Math.round(offset)+'px');
+  document.documentElement.style.setProperty('--db-title-off','0px'); // CHR-127: title stays fixed on the bar's own centre
 }
 (function(){
   const bar=document.getElementById('fx-deskbar');
