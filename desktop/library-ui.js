@@ -5480,7 +5480,7 @@
     // as the rest of the batch actions. The floating selection bar is easy to miss in a large
     // grid or when it is covered by the cursor/context menu.
     const rawCount = paths.filter((p) => RAW_EXT_RE.test(p)).length;
-    const cacheRawItem = item(`Cache ${rawCount > 1 ? `${rawCount} RAWs` : 'RAW'} for fast editing`, () => cacheSelectedRaws(paths));
+    const cacheRawItem = item(`Cache RAWs${rawCount > 1 ? ` (${rawCount})` : ''}`, () => cacheSelectedRaws(paths));
     if (!rawCount) {
       cacheRawItem.style.opacity = '.4';
       cacheRawItem.style.pointerEvents = 'none';
@@ -5534,7 +5534,7 @@
 
     // ── Versions & edit ▸ — copy/paste/virtual copies/reset, everything about the RECIPE
     // rather than the file itself.
-    const verMenu = submenu('Edit'); // 3.2.2 rename (was "Versions & edit") — see "Undo last reset" below for the other half of this item
+    const verMenu = submenu(`Edit${n > 1 ? ` (${n})` : ''}`); // 3.2.2 rename (was "Versions & edit") — see "Undo last reset" below for the other half of this item
     verMenu.subItem('Copy edit', () => libCopyEdit(paths), kbd('shift', 'C'));
     const pasteRow = verMenu.subItem('Paste edit', () => libPasteEdit(paths), kbd('shift', 'V'));
     // Selective paste (darktable idiom): pick WHICH parts of the copied recipe to apply instead
@@ -5738,7 +5738,7 @@
     // actually does — faces_run -> embed_run -> cluster_run -> clip_embed_run, not just faces).
     // Greying it out once a photo is already scanned needs persisted per-photo scan state —
     // backlogged, not done here (see plan's Backlog section).
-    item(`Scan photos${n > 1 ? ` (${n})` : ''}`, async () => {
+    item(`Scan${n > 1 ? ` (${n})` : ''}`, async () => {
       // Paths → ids: state.entries already carries `.id` alongside `.path` for everything
       // currently shown in the grid (the same field catalog_query/expandStack/photoIds results
       // use elsewhere), so no new lookup command is needed — just match on path.
@@ -5751,7 +5751,7 @@
     // immediately with whatever export settings are already configured) and Custom (opens the
     // photo(s) in the editor and reveals the Export section instead of firing right away, so
     // quality/scope/etc can be changed first).
-    const exportMenu = submenu(`Export ${n > 1 ? n + ' photos' : ''}`.trim());
+    const exportMenu = submenu(`Export${n > 1 ? ` (${n})` : ''}`);
     exportMenu.subItem('Quick export', () => libExportPaths(paths), kbd([], 'E'));
     exportMenu.subItem('Export custom…', async () => {
       if (n <= 1) await openInEditor(paths[0]);
