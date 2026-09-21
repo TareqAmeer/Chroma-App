@@ -5317,9 +5317,16 @@
       }
       catch (e) { console.error('trash_file', p, e); toast('Could not delete ' + baseName(p)); }
     }
-    if (trashed.length) invoke('catalog_note_deleted', { paths: trashed }).catch((e) => console.error('catalog_note_deleted', e));
     state.selected.clear();
-    await refreshView();
+    if (trashed.length) {
+      // Drop deleted rows locally and repaint at once (no folder reopen / catalog_add_root / rescan);
+      // the targeted catalog update is awaited afterwards so a later refresh can't resurrect them.
+      const gone = new Set(trashed);
+      state.entries = state.entries.filter((e) => !gone.has(e.path));
+      if (state._catalogTotal != null) state._catalogTotal = Math.max(0, state._catalogTotal - trashed.length);
+      renderGrid();
+      try { await invoke('catalog_note_deleted', { paths: trashed }); } catch (e) { console.error('catalog_note_deleted', e); }
+    }
   }
   async function libExportPaths(paths) {
     if (!paths.length) return;
