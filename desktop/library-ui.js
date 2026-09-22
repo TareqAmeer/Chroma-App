@@ -852,7 +852,11 @@
     /* position:relative so the info panel and batch bar (both position:absolute, appended here)
        resolve against the GRID area. Without it they resolved against a far outer ancestor and
        landed on top of the filter toolbar. */
-    #lib-main{grid-row:5;position:relative}
+    /* A grid item defaults to min-height:auto, so #lib-main can grow to fit the photo grid
+       instead of becoming the scrollport promised by overflow:auto below. That leaves the
+       inline filter row at the top of the visible Library area while the outer view remains
+       effectively static. Allow the main track to shrink so its own content scrolls together. */
+    #lib-main{grid-row:5;position:relative;min-height:0}
     /* FULL (expanded) mode: real LEFT SIDEBAR layout (approved Lightroom-in-Library wireframe)
        — #lib-side becomes a 230px left column spanning the filters/viewbar/main rows, instead
        of the old horizontal band squeezed above the grid ("top bar only, no sidebar"). The
@@ -894,6 +898,13 @@
        relative still behaves as a normal grid item (unlike absolute), so grid-column:1 is unaffected. */
     body.deskx #lib-overlay:not(.full){grid-column:1;position:relative;top:auto;left:auto;bottom:auto;height:100%}
     body.deskx #lib-overlay.full{position:fixed} /* full takeover: back to covering everything */
+    /* CHR-144: desktop bars read as continuous surfaces. Remove only the outer container
+       edges; control outlines and internal separators remain unchanged. Mobile keeps the
+       base borders above until a mobile-specific pass is requested. */
+    body.deskx #lib-overlay{border:none}
+    body.deskx #lib-top{border-bottom:none}
+    body.deskx #lib-side{border-top:none;border-bottom:none}
+    body.deskx #lib-bottom{border-top:none}
     /* Unified top bar — transplanted from Library View.html's .topbar. One wrapping flex row
        holding everything (logo/search/viewtoggle/zoom/flags/sort/filters/allfx/export/gear);
        under DOCK_W (356px), a narrowed .full window, or the deskx filmstrip, it STAYS one row
@@ -1258,7 +1269,7 @@
       color:var(--txt);padding:9px 12px;font:500 14px var(--sans);min-width:0}
     .lib-review-kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--bdr);border-radius:4px;
       padding:1px 5px;background:var(--sur2);color:var(--mut)}
-    #lib-main{overflow:auto;padding:16px}
+    #lib-main{overflow:auto;padding:16px;min-height:0}
     /* List mode's sticky header (#lib-list-head, top:0 below) vs #lib-main's own padding: a
        padded overflow:auto container only masks scrolled-behind content within its padding band
        AT THE SCROLL EXTREMES (scrollTop 0 or max) — at any mid-scroll position that band is just
@@ -1387,6 +1398,8 @@
     #lib-filters-panel select,#lib-filters-panel input[type=range]{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:7px;padding:5px 7px;font-size:11px;width:100%}
     #lib-filters-panel .lib-thumbsize{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--mut)}
+    #lib-filters-panel .lib-filter-field{display:flex;flex-direction:column;gap:3px}
+    #lib-filters-panel .lib-filter-field label{font-size:10px;color:var(--mut);line-height:1.2}
     #lib-filters-panel-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600}
     #lib-filters-panel-close{cursor:pointer;color:var(--mut);display:inline-flex}
     #lib-filters-panel-close:hover{color:var(--txt)}
@@ -1714,18 +1727,21 @@
     /* No -webkit-app-region:no-drag missing here would leave the whole desktop Library window
        undraggable-by-header on macOS (Overlay titlebar, no native drag chrome of its own)
        whenever the Library was in full view. */
-    body.deskx #lib-overlay #lib-top{height:44px;padding:0 12px;-webkit-app-region:no-drag}
+    /* Keep the fixed brand/toggle cluster out of the toolbar's left track. This rule is
+       intentionally later than the base desktop brand rule, so it must repeat the clearance
+       instead of resetting padding to 12px. */
+    body.deskx #lib-overlay #lib-top{height:44px;padding:0 12px 0 calc(12px + var(--cs-brand-w,270px));-webkit-app-region:no-drag}
     /* Same macOS-only traffic-light clearance as #fx-deskbar's own (chromasmith-22.html) —
        Windows' native title bar (decorations:true) already occupies that space, so this 84px
        left padding only applies under body.mac-titlebar-overlay now (desktop-native.js,
        docs/windows-port.md Phase 3). */
-    body.mac-titlebar-overlay #lib-overlay #lib-top{padding-left:84px}
+    body.mac-titlebar-overlay #lib-overlay #lib-top{padding-left:calc(84px + var(--cs-brand-w,270px))}
     /* .full-scoped (not just body.deskx #lib-overlay #lib-top) so this never fights the
        body.deskx #lib-overlay:not(.full) .lib-fullview-only{display:none} rule above that keeps
        #lib-top hidden while DOCKED — two ids beat that rule's one, so a bare display:grid here
        would have silently un-hidden the docked topbar. */
-    body.deskx #lib-overlay.full #lib-top{display:grid;grid-template-columns:1fr minmax(0,280px) 1fr;
-      column-gap:8px;align-items:center}
+    body.deskx #lib-overlay.full #lib-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,280px) minmax(0,1fr);
+      column-gap:12px;align-items:center}
     /* Width-driven responsive fold, same rule as the Editor's own #fx-deskbar (chromasmith-22.html:
        All FX loses its label before Export does, both fold to icon-only rather than the search box
        ever colliding with the side clusters) — distinct class names (#lib-top's own ResizeObserver
@@ -1768,11 +1784,21 @@
        on purpose: it's the one column meant to shrink below its content's natural size (the
        search box), via its own minmax(0,280px) track below. */
     body.deskx #lib-overlay #lib-top-left{grid-column:1;justify-self:start;display:flex;
-      align-items:center;gap:8px}
+      align-items:center;gap:12px;min-width:0;max-width:100%;overflow:hidden}
     body.deskx #lib-overlay #lib-top-center{grid-column:2;justify-self:center;display:flex;
       width:100%;min-width:0}
     body.deskx #lib-overlay #lib-top-right{grid-column:3;justify-self:end;display:flex;
-      align-items:center;gap:8px}
+      align-items:center;gap:12px;min-width:0;max-width:100%;overflow:hidden}
+    /* The side tracks are allowed to shrink, but their controls must never paint into the
+       centre search track.  The live overflow classes below progressively remove optional
+       labels/zoom affordances before the track gets tight enough to clip a button. */
+    body.deskx #lib-overlay #lib-top.lib-top-overflow1 .lib-zoomrow{display:none}
+    body.deskx #lib-overlay #lib-top.lib-top-overflow1 .lib-flagrow{display:none}
+    body.deskx #lib-overlay #lib-top.lib-top-overflow2 .lbl{display:none}
+    body.deskx #lib-overlay #lib-top.lib-top-overflow2 .lib-pill,
+    body.deskx #lib-overlay #lib-top.lib-top-overflow2 .lib-btn-export{padding-left:0;padding-right:0;width:30px}
+    body.deskx #lib-overlay #lib-top.lib-top-overflow3 #lib-sort-btn,
+    body.deskx #lib-overlay #lib-top.lib-top-overflow3 #lib-filters-btn{display:none}
     /* Search moves into the centre column, same slot the Editor uses for its filename/status
        title — sized off its minmax(0,280px) grid track (see #lib-top's grid-template-columns
        and .lib-search-wrap's width:100% further down) instead of the non-deskx flex-grow
@@ -1870,7 +1896,11 @@
        crop) inside a bordered cell. object-fit:contain + auto height so portrait frames are
        tall and landscape frames are short, like Lightroom's filmstrip. */
     body.deskx #lib-overlay:not(.full) .lib-thumb-wrap{aspect-ratio:auto;height:auto;min-height:40px}
-    body.deskx #lib-overlay:not(.full) .lib-thumb-wrap img{width:100%;height:auto;object-fit:contain}
+    /* CHR-143: CHR-12 pins normal square-grid images with position:absolute;inset:0. The
+       selector also matches this single-column dock, where taking the image out of flow makes
+       every card fall back to its 40px minimum height. Restore normal flow here so each card
+       derives its height from the photo's real intrinsic aspect ratio. */
+    body.deskx #lib-overlay:not(.full) .lib-thumb-wrap img{position:static;inset:auto;width:100%;height:auto;object-fit:contain}
     body.deskx #lib-overlay:not(.full) .lib-card{border:none;border-radius:0}
     /* the fixed 44px deskbar sits above everything; keep the docked strip below it. .full is a
        genuine takeover (chromasmith-22.html hides #fx-deskbar via body.lib-full) and reclaims
@@ -2090,11 +2120,11 @@
       </div>
       <label id="lib-subfolders-wrap" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);white-space:nowrap;cursor:pointer" title="Also show photos in every subfolder, not just this one — matches Lightroom's 'Include Photos from Subfolders'">
         <input type="checkbox" id="lib-subfolders">Subfolders</label>
-      <select id="lib-source" title="Photo source">
+      <div class="lib-filter-field"><label for="lib-source">Photo source</label><select id="lib-source" title="Photo source">
         <option value="folder">This folder</option>
         <option value="edited">All Edited</option>
-      </select>
-      <select id="lib-type-filter" title="Filter by file type">
+      </select></div>
+      <div class="lib-filter-field"><label for="lib-type-filter">File type</label><select id="lib-type-filter" title="Filter by file type">
         <option value="all">All types</option>
         <option value="raw">RAW</option><option value="jpeg">JPEG</option>
         <option value="png">PNG</option><option value="tiff">TIFF</option>
@@ -2107,24 +2137,24 @@
         <option value="heic">HEIC</option><option value="webp">WebP</option>
         <option value="hdr">HDR/EXR</option><option value="other">Other</option>
         <option value="video">Video</option>
-      </select>
-      <select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option></select>
-      <select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option></select>
-      <select id="lib-iso-filter" title="Filter by ISO"><option value="all">All ISOs</option></select>
-      <select id="lib-dupe-filter" title="Filter by duplicate status">
+      </select></div>
+      <div class="lib-filter-field"><label for="lib-camera-filter">Camera</label><select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option></select></div>
+      <div class="lib-filter-field"><label for="lib-lens-filter">Lens</label><select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option></select></div>
+      <div class="lib-filter-field"><label for="lib-iso-filter">ISO</label><select id="lib-iso-filter" title="Filter by ISO"><option value="all">All ISOs</option></select></div>
+      <div class="lib-filter-field"><label for="lib-dupe-filter">Duplicates</label><select id="lib-dupe-filter" title="Filter by duplicate status">
         <option value="all">All photos</option>
         <option value="dupes">Duplicates only</option>
-      </select>
-      <select id="lib-synced-filter" title="Filter by Google Photos sync status">
+      </select></div>
+      <div class="lib-filter-field"><label for="lib-synced-filter">Google Photos sync</label><select id="lib-synced-filter" title="Filter by Google Photos sync status">
         <option value="all">All photos</option>
         <option value="synced">Synced to Google Photos</option>
         <option value="notsynced">Not synced</option>
-      </select>
-      <select id="lib-faces-filter" title="Filter by face-indexing status">
+      </select></div>
+      <div class="lib-filter-field"><label for="lib-faces-filter">Face indexing</label><select id="lib-faces-filter" title="Filter by face-indexing status">
         <option value="all">All photos</option>
         <option value="indexed">Face-scanned</option>
         <option value="pending">Not face-scanned</option>
-      </select>
+      </select></div>
       <!-- Own wrapper, deliberately: syncFilterUI() hides _rf.closest('label') || _rf.parentElement
            when STARS_ENABLED is false (it is, unconditionally, in production today), so this
            select's PARENT must be a dedicated element it alone owns — otherwise that hide call
@@ -2132,7 +2162,7 @@
            seven other filters and #lib-filters-panel now, either of which this would have
            hidden in full; this wrapper is what makes STARS_ENABLED=false actually mean "hide
            just the rating filter" rather than "hide whichever container it happens to sit in". -->
-      <div id="lib-rating-filter-wrap">
+      <div id="lib-rating-filter-wrap" class="lib-filter-field"><label for="lib-rating-filter">Star rating</label>
         <select id="lib-rating-filter" title="Filter by star rating">
           <option value="all">Any rating</option>
           <option value="0">Unrated</option>
@@ -2143,7 +2173,7 @@
           <option value="5">★5</option>
         </select>
       </div>
-      <select id="lib-tag-filter" title="Filter by tag">
+      <div class="lib-filter-field"><label for="lib-tag-filter">Tags</label><select id="lib-tag-filter" title="Filter by tag">
         <option value="all">All tags</option>
         <option value="red">Rejected (X)</option>
         <option value="green">Picked (flag)</option>
@@ -2151,7 +2181,7 @@
         <option value="noedited">Not edited</option>
         <option value="favorite">Favorites</option>
         <option value="none">Unflagged</option>
-      </select>
+      </select></div>
       <button class="lib-btn" id="lib-filters-clear">Clear all</button>
       <div class="lib-fp-label">Display</div>
       <select id="lib-views" title="Saved filter + sort views"><option value="">Views…</option></select>
@@ -7634,6 +7664,26 @@
   new ResizeObserver(syncTopTight).observe(libTop);
   window.addEventListener('resize', syncTopTight);
 
+  // Measure the actual side tracks after the grid has resolved, rather than relying on the
+  // top bar's aggregate scrollWidth (which can stay unchanged when a grid item overflows its
+  // own track). Each pass removes optional controls and re-measures until every live button is
+  // inside its track with the 12px inter-group gap intact.
+  function syncTopOverflow() {
+    if (!document.body.classList.contains('deskx') || !overlay.classList.contains('full')) {
+      libTop.classList.remove('lib-top-overflow1','lib-top-overflow2','lib-top-overflow3');
+      return;
+    }
+    libTop.classList.remove('lib-top-overflow1','lib-top-overflow2','lib-top-overflow3');
+    const left=libTop.querySelector('#lib-top-left'), right=libTop.querySelector('#lib-top-right');
+    if (!left || !right) return;
+    const over=()=>left.scrollWidth>left.clientWidth+1 || right.scrollWidth>right.clientWidth+1;
+    if (over()) libTop.classList.add('lib-top-overflow1');
+    if (over()) libTop.classList.add('lib-top-overflow2');
+    if (over()) libTop.classList.add('lib-top-overflow3');
+  }
+  new ResizeObserver(()=>requestAnimationFrame(syncTopOverflow)).observe(libTop);
+  window.addEventListener('resize', syncTopOverflow);
+
   // ── Docked filmstrip Library/Develop tabs: icon-only once the dock is dragged too narrow for
   // the label text — same overflow-measurement approach as syncTopCompact() above, applied to
   // .lib-side-tabs instead of #lib-top. Runs in BOTH modes (unlike syncTopCompact) because the
@@ -7880,6 +7930,36 @@
     rememberLibraryView({ kind: 'collection', name });
     renderCollections(); // re-highlight the active row
   }
+  // The guaranteed-offline tier is catalog-backed rather than a user-editable registry. Read
+  // its current ids first, then use the catalog's normal row builder so cards retain their
+  // original paths (and can still resolve cached thumbnails when the source drive is away).
+  async function openOfflineCollectionView() {
+    state.source = 'offline';
+    lrState.album = null;
+    state.selected.clear();
+    grid = document.getElementById('lib-grid');
+    grid.innerHTML = libSkeletonHtml();
+    try {
+      const cached = await invoke('catalog_hq_offline_list');
+      const ids = (cached || []).map((entry) => entry.photo_id).filter((id) => Number.isFinite(id));
+      if (!ids.length) {
+        state.entries = [];
+        grid.innerHTML = '<div id="lib-empty">No photos are currently saved for offline access.</div>';
+        rememberLibraryView({ kind: 'collection', name: 'offline' });
+        renderCollections();
+        return;
+      }
+      const page = await invoke('catalog_query', { q: { photoIds: ids } });
+      state.entries = (page.entries || []).filter((entry) => !entry.missing);
+      const paths = state.entries.map((entry) => entry.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+      await renderGrid();
+      rememberLibraryView({ kind: 'collection', name: 'offline' });
+      renderCollections();
+    } catch (e) {
+      showLibraryError('Couldn’t load offline photos.', 'Try again', () => openOfflineCollectionView());
+    }
+  }
   async function openExportedView() {
     state.source = 'exported';
     state.selected.clear();
@@ -7901,6 +7981,7 @@
   // ── DRK-style sidebar: smart collections above the folder tree ─────────────────────
   const COLLECTIONS = [
     { name: 'recents', label: 'Recents', icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>' },
+    { name: 'offline', label: 'Offline Photos', icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>' },
     { name: 'favorites', label: 'Favorites', icon: HEART_SVG },
     { name: 'edited', label: 'Edited', icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4.5l5 5L8 21H3v-5L14.5 4.5z"/></svg>' },
     { name: 'exported', label: 'Exported', icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>' },
@@ -8983,6 +9064,7 @@
         }
         if ((r.generated || 0) > 0 || (r.evicted || 0) > 0) {
           await refreshHqOfflineIndex();
+          renderCollectionCounts();
         }
         // Caught up: nothing generated, nothing evicted, nothing still genuinely pending.
         if ((r.generated || 0) === 0 && (r.evicted || 0) === 0 && !stillPending) break;
@@ -10694,6 +10776,7 @@
         const name = row.dataset.coll;
         if (name === 'edited') ensureBackfill();
         if (name === 'exported') openExportedView();
+        else if (name === 'offline') openOfflineCollectionView();
         else openCollectionView(name);
       };
       // Drag-to-add: only the three collections that are actually a per-photo mutation (not a
@@ -10740,7 +10823,14 @@
     if (chipOut && !chipOut._wired) { chipOut._wired = true; chipOut.onclick = lrSignOut; }
   }
   function renderCollectionCounts() {
-    invoke('collection_counts').then((counts) => { collectionCounts = counts; renderCollections(); }).catch(() => {});
+    invoke('collection_counts').then((counts) => {
+      collectionCounts = counts;
+      // Derive this smart collection from the live guaranteed-offline index rather than
+      // maintaining a second registry that could drift from the actual cached files.
+      return invoke('catalog_hq_offline_list').then((entries) => {
+        collectionCounts.offline = (entries || []).length;
+      }).catch(() => {}).then(() => renderCollections());
+    }).catch(() => {});
   }
   renderCollections();
   // Load persisted albums after the Library DOM and album helpers are initialized. The previous

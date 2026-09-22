@@ -24,7 +24,7 @@ if [ -f "$STATE_DIR/active-panel" ]; then
     if [ "$cur_hash" = "$prev_hash" ]; then
       : # this exact panel+hash passed before — safe to skip the expensive diff
     else
-      if ! bash build-desktop.sh >"$STATE_DIR/panel-build-$panel.log" 2>&1; then
+      if ! node scripts/build-desktop.mjs >"$STATE_DIR/panel-build-$panel.log" 2>&1; then
         echo "Panel '$panel' build failed; see $STATE_DIR/panel-build-$panel.log" >&2
         exit 2
       fi
@@ -53,7 +53,7 @@ fi
 
 git diff --quiet HEAD -- chromasmith-22.html desktop/library-ui.js desktop/desktop-native.js 2>/dev/null && exit 0
 
-out=$(bash build-desktop.sh 2>&1 && node test/editor_snap_lists_check.mjs 2>&1 && node test/editor_html_validity_check.mjs 2>&1)
+out=$(node scripts/build-desktop.mjs 2>&1 && node test/editor_snap_lists_check.mjs 2>&1 && node test/editor_html_validity_check.mjs 2>&1)
 code=$?
 if [ $code -ne 0 ]; then
   echo "Fast Editor gates (snap-check/html-check) failed on uncommitted chromasmith-22.html/library-ui.js changes — fix before finishing:" >&2

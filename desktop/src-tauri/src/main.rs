@@ -2274,6 +2274,30 @@ async fn oauth_loopback_flow(auth_url_template: String) -> Result<OAuthResult, S
     .map_err(|e| format!("oauth listener thread panicked: {e}"))?
 }
 
+#[cfg(target_os = "windows")]
+fn with_log_plugin(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    // tauri-plugin-log initializes its platform log directory even when only stdout/webview
+    // targets are requested. On Windows that can fail with ERROR_ACCESS_DENIED for an installed
+    // per-user app, preventing the entire Tauri app from launching. Windows still has stdout and
+    // WebView console diagnostics; file logging is enabled on macOS below.
+    builder
+}
+
+#[cfg(not(target_os = "windows"))]
+fn with_log_plugin(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder.plugin(
+        tauri_plugin_log::Builder::new()
+            .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout))
+            .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                file_name: Some("chromasmith".into()),
+            }))
+            .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview))
+            .level(log::LevelFilter::Info)
+            .level_for("rawler", log::LevelFilter::Error)
+            .build(),
+    )
+}
+
 fn main() {
     // First statement in main() on purpose — catches panics as early as possible.
     // See diag.rs: there was no panic::set_hook anywhere in this codebase before.
@@ -2395,7 +2419,7 @@ fn main() {
         .manage(PendingOpen(Mutex::new(Vec::new())))
         .manage(PendingOAuth(Mutex::new(None)))
         .manage(catalog::CatalogState::new());
-    builder
+    let builder = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -2420,18 +2444,9 @@ fn main() {
         // ("No lens data available") in one 45s session, drowning out anything else. Quieted
         // at the source via level_for; diagnostics/log_file.py is ALSO target-aware for any
         // other dependency that turns out to be equally chatty in the future.
-        .plugin(
-            tauri_plugin_log::Builder::new()
-                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout))
-                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                    file_name: Some("chromasmith".into()),
-                }))
-                .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview))
-                .level(log::LevelFilter::Info)
-                .level_for("rawler", log::LevelFilter::Error)
-                .build(),
-        )
-        .invoke_handler(tauri::generate_handler![
+        ;
+    let builder = with_log_plugin(builder);
+    builder.invoke_handler(tauri::generate_handler![
             #[cfg(target_os = "macos")]
             write_gainmap_heic,
             #[cfg(target_os = "macos")]

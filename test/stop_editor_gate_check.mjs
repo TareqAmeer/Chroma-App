@@ -17,8 +17,7 @@ async function fixture(panel = 'masks') {
   await writeFile(path.join(dir, '.claude/hooks/stop-editor-gate-check.sh'), hook, { mode: 0o755 });
   await writeFile(path.join(dir, '.claude/state/active-panel'), panel + '\n');
   await writeFile(path.join(dir, 'chromasmith-22.html'), 'source-a\n');
-  await writeFile(path.join(dir, 'build-desktop.sh'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-  await writeFile(path.join(dir, 'bin/node'), '#!/bin/sh\ncat "$CLAUDE_PROJECT_DIR/diff-result.json"\nexit "$(cat "$CLAUDE_PROJECT_DIR/diff-code")"\n', { mode: 0o755 });
+  await writeFile(path.join(dir, 'bin/node'), '#!/bin/sh\nif [ "$1" = "scripts/build-desktop.mjs" ]; then\n  exit 0\nfi\ncat "$CLAUDE_PROJECT_DIR/diff-result.json"\nexit "$(cat "$CLAUDE_PROJECT_DIR/diff-code")"\n', { mode: 0o755 });
   await writeFile(path.join(dir, 'bin/git'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   return dir;
 }

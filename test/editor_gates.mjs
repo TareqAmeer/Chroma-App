@@ -32,19 +32,22 @@
 // real signal worth reading, not something to retry away.
 //
 // ⚠️ STALE-BUILD GUARD (added 2026-09-10, found while auditing the test tooling itself): every
-// gate below loads desktop/dist/index.html, a STAGED COPY that build-desktop.sh generates from
+// gate below loads desktop/dist/index.html, a STAGED COPY that scripts/build-desktop.mjs generates from
 // chromasmith-22.html + desktop/library-ui.js. This script used to run every gate straight
 // against whatever was already in desktop/dist/ — so `npm test` (which calls this) could report
 // PASS or FAIL against code from a previous session's build, silently ignoring every edit made
 // since. test/verify.py already rebuilds before its gates; this was the one entry point that
 // didn't, and it's the one wired into `npm test` and the pre-commit hook. Now this always runs
-// build-desktop.sh first and fails loudly (before any gate) if the build itself is broken,
+// the cross-platform Node staging script first and fails loudly (before any gate) if the build itself is broken,
 // rather than letting every gate below quietly grade stale HTML.
 import { spawnSync, spawn } from 'node:child_process';
 
-const build = spawnSync('bash', ['build-desktop.sh'], { encoding: 'utf8' });
+// Do not route this through build-desktop.sh: the wrapper is for interactive Unix shells, while
+// the underlying Node script is the canonical cross-platform staging path and works on Windows
+// without Bash installed.
+const build = spawnSync(process.execPath, ['scripts/build-desktop.mjs'], { encoding: 'utf8' });
 if (build.status !== 0) {
-  console.log('BLOCKED: build-desktop.sh failed — cannot verify against stale desktop/dist/.');
+  console.log('BLOCKED: desktop staging failed — cannot verify against stale desktop/dist/.');
   console.log((build.stdout || '') + (build.stderr || ''));
   process.exit(1);
 }

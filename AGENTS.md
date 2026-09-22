@@ -2,6 +2,18 @@
 
 ## AI Linear Workflow Rules
 
+### Linear Connector Availability
+
+Linear is installed and connected for this repository. Treat it as available whenever an issue
+identifier (for example, `CHR-141`) or Linear workflow is referenced.
+
+- Linear tools may be lazily surfaced rather than appearing in the initially displayed tool list.
+  Do not conclude that Linear is unavailable from that list alone.
+- Retrieve a referenced issue directly with the Linear issue tool (for example,
+  `mcp__codex_apps__linear_get_issue`) before reporting that its details cannot be accessed.
+- Only report Linear as unavailable after attempting the applicable Linear tool and receiving an
+  actual availability, authorization, or connection error.
+
 ### 1. In-Linear Triage Protocol
 
 When instructed to "run triage" or "triage linear":

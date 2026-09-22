@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "splash-redesign",
+  "reference": {
+    "provenance": {
+      "origin": "User-supplied image attachment",
+      "creator": "User",
+      "capturedAt": "2026-09-22",
+      "usageNotes": "Draft wireframe/spec only. Reference remains unchanged. Five-hour usage cap applies to this analysis."
+    },
+    "views": [
+      {
+        "id": "reference-full",
+        "kind": "full",
+        "assetRef": "C:/Users/Tareq/AppData/Local/Temp/codex-clipboard-1e6b8a8b-3d0a-47e1-ba93-acd69a851f95.png",
+        "description": "Orange splash card over a desaturated forest background.",
+        "visibleScope": "Single static desktop composition at 1024x856 pixels."
+      }
+    ]
+  },
+  "scope": {
+    "componentFamily": "boot-splash",
+    "registryScope": {
+      "includedSubfamilies": ["desktop boot splash", "splash artwork", "loading status"],
+      "excludedFamilies": ["editor", "library", "marketing landing page"],
+      "notes": "No production implementation in this draft."
+    }
+  },
+  "generated": {
+    "visibleObservations": [
+      {"id":"obs-card","viewId":"reference-full","area":"geometry-spacing","fact":"A solid orange rectangular card sits inset from the viewport edges; its visible bounds are approximately x=35..970 and y=35..785.","measurement":{"value":"935x750","unit":"px approximate bounds from supplied image"},"sourceClass":"deterministic measurement","sourceRef":"reference-full; measurements JSON in evidence/splash-redesign","certainty":"high"},
+      {"id":"obs-wordmark","viewId":"reference-full","area":"typography","fact":"CHRO-MA-SMITH is set vertically along the left side in bold black lettering.","sourceClass":"direct observation","sourceRef":"reference-full","certainty":"high"},
+      {"id":"obs-version","viewId":"reference-full","area":"typography","fact":"Version text is vertical, white, and placed between the wordmark and image.","sourceClass":"direct observation","sourceRef":"reference-full","certainty":"high"},
+      {"id":"obs-photo","viewId":"reference-full","area":"geometry-spacing","fact":"A landscape photo is centered in a white frame with a dark inner keyline and appears desaturated.","sourceClass":"direct observation","sourceRef":"reference-full","certainty":"high"},
+      {"id":"obs-credit","viewId":"reference-full","area":"typography","fact":"The photo credit is centered beneath the image in white italic text.","sourceClass":"direct observation","sourceRef":"reference-full","certainty":"high"},
+      {"id":"obs-progress","viewId":"reference-full","area":"geometry-spacing","fact":"Loading and percentage are large white display text near the lower portion; percentage is shifted down and right relative to loading.","sourceClass":"direct observation","sourceRef":"reference-full","certainty":"high"}
+    ],
+    "repositoryEvidence": [
+      {"id":"repo-splash","fact":"Current boot splash markup is inline in chromasmith-22.html around the boot-splash element and currently uses a progress bar plus small status/version text.","sourceRef":"chromasmith-22.html:1551-1593","certainty":"high"},
+      {"id":"repo-font","fact":"The repository embeds Gramatika and exposes sans/mono font roles; the requested display font identity is not determinable from the screenshot alone.","sourceRef":"chromasmith-22.html:43-51","certainty":"high"},
+      {"id":"repo-current-asset","fact":"assets/splash.png is a dark square C mark, not the photographic artwork shown in the supplied reference.","sourceRef":"assets/splash.png","certainty":"high"}
+    ],
+    "stateCoverage": {"shown":["static loading composition"],"missing":["0%", "50%", "100%", "error/stall", "mobile", "light/dark", "reduced motion"]},
+    "variantCoverage": {"shown":["orange card with white photo frame"],"missing":["other viewport ratios", "alternate artwork"]}
+  },
+  "authored": {
+    "applicableDesignRules": ["Preserve the existing boot gate and progress lifecycle; redesign visual presentation only after approval.", "Do not infer a font identity from pixels alone."],
+    "proposedInterpretations": ["Use a near-square orange card with generous outer margin and a responsive photo frame.", "Use the existing Gramatika family for the bold/shifted display treatment if approved.", "Use CSS grayscale for the approved photo while preserving contrast and crop."],
+    "userDecisions": [],
+    "unresolvedQuestions": ["Which exact approved photo asset should be used?", "Should the orange be sampled exactly from the attachment, or use a named repository token?", "What exact typeface should 'the font' and 'shifted bold font' mean?", "What version string should appear, and should the splash apply to desktop, iOS, web, or all builds?", "Should the forest/background outside the orange card remain, or should the card become full-bleed?", "Should the loading percentage reflect the existing real boot progress, and should the progress bar be removed entirely?"]
+  },
+  "implementation": {
+    "geometrySpacing": ["Orange card: preserve approximately 91% viewport width and 88% viewport height at the reference ratio; tune responsively after approval.", "Left rail: vertical wordmark and version; main column: framed desaturated photo, credit, then shifted loading readout."],
+    "typography": ["Wordmark: bold black vertical uppercase.", "Version: white vertical text.", "Credit: white italic.", "Loading/percentage: bold white display treatment with percentage offset down/right."],
+    "colorsContrastRoles": ["Orange card color is unresolved pending user decision.", "Wordmark black; all other text white; photo grayscale."],
+    "icons": [],
+    "motionInteraction": ["Retain current boot progress timing/lifecycle; visual animation details unresolved."],
+    "responsiveBehavior": ["Unresolved until target platforms and minimum viewport are confirmed."],
+    "accessibility": ["Ensure vertical text remains readable to screen readers in logical reading order.", "Provide meaningful alt text for the photo credit/artwork if the image remains semantic."],
+    "targets": ["chromasmith-22.html boot-splash markup/styles", "approved photo asset location"],
+    "acceptanceCriteria": ["Approved reference composition is reproduced at the target desktop ratio.", "Existing boot progress remains functional.", "Desaturated approved photo and credit are visible.", "No production changes occur before explicit approval of this draft."]
+  },
+  "validation": {"requiredScreenshots": ["desktop reference-size", "narrow desktop", "mobile if in scope"],"evidence": []},
+  "approval": {"status":"draft","approvedBy":"","approvedAt":"","userDecisionRefs":[]}
+}

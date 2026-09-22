@@ -114,6 +114,32 @@ for (const width of [90, 150, 280]) {
   });
 }
 
+for (const width of [90, 150, 280]) {
+  test(`docked filmstrip preserves portrait and landscape geometry at ${width}px`, async ({ libraryFolder: { page } }) => {
+    await page.locator('#lib-grid .lib-card').first().dblclick();
+    await page.waitForFunction(() => !document.getElementById('lib-overlay').classList.contains('full'), { timeout: 10000 });
+    await setDockWidth(page, width);
+    const result = await page.evaluate(async () => {
+      const imgs = [...document.querySelectorAll('#lib-grid .lib-thumb-wrap img')].slice(0, 2);
+      const svg = (w, h, color) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="100%" height="100%" fill="${color}"/></svg>`)}`;
+      imgs[0].src = svg(300, 200, '#8ab');
+      imgs[1].src = svg(200, 300, '#b8a');
+      await Promise.all(imgs.map((img) => img.decode()));
+      const measure = (img) => {
+        const r = img.parentElement.getBoundingClientRect();
+        const cs = getComputedStyle(img);
+        return { width: r.width, height: r.height, position: cs.position, inset: cs.inset };
+      };
+      return imgs.map(measure);
+    });
+    const [landscape, portrait] = result;
+    expect(landscape.position).toBe('static');
+    expect(landscape.inset).toBe('auto');
+    expect(landscape.height / landscape.width).toBeCloseTo(2 / 3, 2);
+    expect(portrait.height / portrait.width).toBeCloseTo(3 / 2, 2);
+  });
+}
+
 // Behaviour test, not structure — CLICKS the Library/Develop tabs themselves and asserts what's
 // actually on screen after each click, rather than snapshotting fixed-width DOM shape. Exists
 // because that structural gap let a REAL regression through: the Develop tab's handler called

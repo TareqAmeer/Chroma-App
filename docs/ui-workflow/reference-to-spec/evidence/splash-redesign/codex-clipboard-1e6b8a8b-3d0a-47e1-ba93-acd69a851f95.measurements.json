@@ -1,0 +1,75 @@
+{
+  "asset": {
+    "path": "C:\\Users\\Tareq\\AppData\\Local\\Temp\\codex-clipboard-1e6b8a8b-3d0a-47e1-ba93-acd69a851f95.png",
+    "sha256": "be12e7ecf64e551bc1b821e01fbf9769e9b1d98063a9a37f0f2776b9361ed469",
+    "format": "png",
+    "dimensions": {
+      "width": 1026,
+      "height": 856
+    }
+  },
+  "samples": [],
+  "crops": [
+    {
+      "id": "orange-card",
+      "rect": {
+        "x": 35,
+        "y": 35,
+        "width": 935,
+        "height": 750
+      },
+      "pixelStatistics": {
+        "pixelCount": 701250,
+        "rgbaMean": [
+          143.6400071301248,
+          74.1317376114082,
+          41.821888057041,
+          255
+        ],
+        "rgbaMin": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "rgbaMax": [
+          255,
+          255,
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "id": "photo",
+      "rect": {
+        "x": 256,
+        "y": 80,
+        "width": 675,
+        "height": 466
+      },
+      "pixelStatistics": {
+        "pixelCount": 314550,
+        "rgbaMean": [
+          64.24529009696391,
+          64.24529009696391,
+          64.24529009696391,
+          255
+        ],
+        "rgbaMin": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "rgbaMax": [
+          255,
+          255,
+          255,
+          255
+        ]
+      }
+    }
+  ],
+  "method": "pngjs PNG decode; exact RGBA byte samples and source-image crop rectangles"
+}
