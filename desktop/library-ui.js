@@ -2402,7 +2402,12 @@
   // reuse an older decoded image.
   const displayPrefetch = new Map();
   const DISPLAY_CACHE_BUDGET = 96 * 1024 * 1024;
-  const DISPLAY_IMAGE_PREFETCH_LIMIT = 1;
+  // CHR-120 (c): was 1 (next photo only). Culling is bidirectional (arrow-key back-and-forth is
+  // as common as forward-only), so widen to the 2 previous + 3 next around wherever the user
+  // currently is — still bounded by DISPLAY_CACHE_BUDGET (96MB) via trimDisplayCache, so this
+  // only changes what gets warmed ahead of time, not how much stays resident.
+  const DISPLAY_PREFETCH_BACK = 2;
+  const DISPLAY_PREFETCH_FORWARD = 3;
   let displayPinnedKey = '';
   function displayCacheKey(path, recipeKey) {
     const entry = (state.entries || []).find((e) => e.path === path);
@@ -2452,12 +2457,23 @@
     return job;
   }
   function prefetchDisplayProxies(paths) {
-    // Do not precompute the first visible RAW: that is the one users most often open next,
-    // and competing with its display-tier request recreates the exact cold-reopen stall this
-    // cache is meant to remove. Batch caching remains responsible for the full selected set.
+    // Do not precompute the currently-open RAW itself: that one's display-tier request is
+    // already in flight (or done) via the real open path, and competing with it recreates the
+    // exact cold-reopen stall this cache is meant to remove. Batch caching remains responsible
+    // for the full selected set.
     const recipeKey = rawRecipeKey();
-    displayPinnedKey = displayCacheKey(state.openedPath || paths[0] || '', recipeKey);
-    const queue = paths.filter((p) => RAW_EXT_RE.test(p) && !displayCacheHas(p, recipeKey)).slice(1, 1 + DISPLAY_IMAGE_PREFETCH_LIMIT);
+    const pinnedPath = state.openedPath || paths[0] || '';
+    displayPinnedKey = displayCacheKey(pinnedPath, recipeKey);
+    // CHR-120 (c): window around the current position, not just forward from the start of
+    // `paths` — culling moves both directions (arrow-key back-and-forth), and `paths` here is
+    // the grid's own sort order so the opened photo's index tells us where "around" actually is.
+    const openIdx = pinnedPath ? paths.indexOf(pinnedPath) : -1;
+    const from = openIdx >= 0 ? openIdx : 0;
+    const around = openIdx >= 0
+      ? paths.slice(Math.max(0, from - DISPLAY_PREFETCH_BACK), from)
+          .concat(paths.slice(from + 1, from + 1 + DISPLAY_PREFETCH_FORWARD))
+      : paths.slice(1, 1 + DISPLAY_PREFETCH_FORWARD);
+    const queue = around.filter((p) => RAW_EXT_RE.test(p) && !displayCacheHas(p, recipeKey));
     let cursor = 0;
     const worker = async () => {
       while (cursor < queue.length) {
