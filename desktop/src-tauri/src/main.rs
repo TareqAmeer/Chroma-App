@@ -948,8 +948,21 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
         if let Ok(meta) = std::fs::metadata(&path) {
             let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|d| d.as_secs()).unwrap_or(0);
-            let cache_path = library::decode_cache_dir().join(library::decode_cache_key(&path, mtime, meta.len(), &recipe_key));
-            if let Ok(bytes) = std::fs::read(&cache_path) {
+            // CHR-120: skip the PNG read+decode entirely when RAW_EDITOR_CACHE already holds
+            // this exact (path, recipe, mtime, size) — this branch used to pay it every single
+            // call regardless, so calling "Cache RAWs" twice on the same already-cached photo in
+            // one session (or an interactive reopen right after a batch cache, which takes this
+            // same shortcut) re-read and re-decoded a PNG it had JUST put in memory moments
+            // earlier. Confirmed live via diagnostics/raw_bench.py's "cached" scenario.
+            let already_in_process = RAW_EDITOR_CACHE.lock().ok()
+                .map(|g| g.iter().any(|e| e.path == path && e.recipe_key == recipe_key
+                    && e.mtime == mtime && e.size == meta.len()))
+                .unwrap_or(false);
+            if already_in_process {
+                diag::stage("cache", &file_name, "already_in_process_cache", &mut stage_t);
+            } else if let Ok(bytes) = std::fs::read(
+                library::decode_cache_dir().join(library::decode_cache_key(&path, mtime, meta.len(), &recipe_key))
+            ) {
                 if let Ok(img) = image::load_from_memory(&bytes) {
                     let rgba_img = img.to_rgba8();
                     let (w, h) = (rgba_img.width(), rgba_img.height());
@@ -963,6 +976,7 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
                         if guard.len() > MAX_IN_PROCESS_RAW_CACHES { guard.remove(0); }
                     }
                 }
+                diag::stage("cache", &file_name, "reread_png_into_process_cache", &mut stage_t);
             }
         }
         return Ok("cached".into());
