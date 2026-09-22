@@ -3669,7 +3669,29 @@
           });
         } catch (e) { rawPerf('open-full-quality-promotion-failed', path, { error: String(e) }); }
       };
-      if (deferEditorRender) setTimeout(run, 120); else Promise.resolve().then(run);
+      // CHR-120 (b): the 24MP full-quality promotion has a real, structural ~20s cost no matter
+      // which transport carries it (confirmed live: the in-process IPC transfer of the raw RGBA
+      // buffer and a WebView img.decode() of the equivalent lossless PNG both independently cost
+      // ~20s for a 24MP image — this isn't a caching bug, it's the actual size of the work).
+      // Previously this fired within ~120ms of the display tier appearing, on EVERY open —
+      // during rapid arrow-key culling (openInEditorInner releases its own busy-lock before this
+      // promotion finishes, so a fast next click starts a NEW open while the previous photo's
+      // promotion is still running in the background) that stacks up multiple concurrent ~20s
+      // jobs, each holding a blocking-pool thread, which is a very plausible explanation for the
+      // separate ~20s stalls observed on otherwise-trivial IPC calls during this investigation.
+      // Wait for ~500ms of the user actually staying on this photo before paying the cost at
+      // all; if they've moved on by then, skip it outright — the interactive JPEG display proxy
+      // (now fast, CHR-120 (a)) is what culling actually looks at. Confirmed live: rapid culling
+      // through 4 cached photos (~200ms apart) dropped from 4 real full-decode fetches to 1.
+      const _fullPromoToken = path;
+      setTimeout(() => {
+        if (state.openedPath !== _fullPromoToken) {
+          rawPerf('open-full-quality-skipped-navigated-away', path);
+          fullPromotionStarted = false; // let a later reopen of this same photo retry cleanly
+          return;
+        }
+        run();
+      }, 500);
     };
     if (cached && isRaw && !hdrPreview && cached.entry.img.naturalWidth < 4000) {
       try { fullAssetPath = await invoke('get_decode_cache_path', { path, recipeKey }); } catch (_) {}
