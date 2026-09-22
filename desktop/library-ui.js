@@ -8271,7 +8271,7 @@
     const row = (scope, toggleKey, label, count, hasChildren, open, lvl) => `
       <div class="lib-tree-row lib-tree-row-${lvl}${state.catalogScope === scope ? ' on' : ''}" data-date-scope="${scope}" data-date-toggle="${hasChildren ? toggleKey : ''}">
         ${hasChildren ? chev(open) : leafChevSlot}
-        <span style="flex:1">${label}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut)">${count}</span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut);flex:none">${count}</span>
       </div>`;
     let html = '';
     for (const y of sortedYears) {
@@ -8345,7 +8345,7 @@
         const scope = `kw:${n.path}`;
         return `<div class="lib-tree-row${state.catalogScope === scope ? ' on' : ''}" data-kw-scope="${scope}" data-kw-id="${n.id}" data-kw-toggle="${hasChildren ? n.id : ''}" data-kw-path="${esc(n.path)}">
             ${hasChildren ? chev(open) : leafChevSlot}
-            <span style="flex:1">${esc(n.leaf)}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut)">${n.n || ''}</span>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.leaf)}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut);flex:none">${n.n || ''}</span>
           </div>${hasChildren && open ? `<div class="lib-tree-children">${renderLevel(n.id)}</div>` : ''}`;
       }).join('');
     };
