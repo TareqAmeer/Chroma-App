@@ -854,6 +854,37 @@ pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32
     Ok(out_path.to_string_lossy().into_owned())
 }
 
+/// Same output as get_display_decode_cache, but for a caller that JUST decoded this exact photo
+/// and still has the pixels in hand (cache_raw_decode's fresh-decode path) — skips the
+/// read-the-PNG-back-in + re-decode-it round trip entirely (CHR-120: confirmed live as ~220ms of
+/// get_display_decode_cache's ~1s "regenerate the proxy AGAIN right after the decode that just
+/// produced these exact pixels" cost). Resize/encode/write are otherwise identical, so this is
+/// the same finished JPEG a fresh get_display_decode_cache call would have produced, and a caller
+/// that doesn't have pixels on hand (prewarming, the "already cached" shortcut) still uses that.
+pub fn write_display_cache_from_rgba(path: &str, recipe_key: &str, width: u32, height: u32, rgba: &[u8],
+                                      long_edge: u32, file_name: &str, stage_t: &mut std::time::Instant) -> Result<String, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let edge = long_edge.clamp(512, 4096);
+    let out_path = display_cache_path(path, mtime, meta.len(), recipe_key, edge);
+    if out_path.is_file() {
+        crate::diag::stage("display_proxy", file_name, "already_exists_check", stage_t);
+        return Ok(out_path.to_string_lossy().into_owned());
+    }
+    let img = image::RgbaImage::from_raw(width, height, rgba.to_vec())
+        .ok_or("rgba dimensions do not match")?;
+    let scaled = image::DynamicImage::ImageRgba8(img).resize(edge, edge, image::imageops::FilterType::Lanczos3);
+    crate::diag::stage("display_proxy", file_name, "resize_lanczos", stage_t);
+    let mut encoded = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut Cursor::new(&mut encoded), 92)
+        .encode_image(&scaled)
+        .map_err(|e| format!("encode display preview: {e}"))?;
+    crate::diag::stage("display_proxy", file_name, "jpeg_encode", stage_t);
+    std::fs::write(&out_path, encoded).map_err(|e| format!("write display preview: {e}"))?;
+    crate::diag::stage("display_proxy", file_name, "jpeg_write", stage_t);
+    Ok(out_path.to_string_lossy().into_owned())
+}
+
 /// Returns an already-generated display proxy without triggering the expensive first-time
 /// resize/PNG encode. Library prewarming uses this probe so it never competes with an active RAW
 /// open by generating proxies that batch caching has not prepared yet.

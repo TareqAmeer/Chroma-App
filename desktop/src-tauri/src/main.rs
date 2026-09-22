@@ -1010,8 +1010,11 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
     }
     diag::stage("cache", &file_name, "in_process_cache_insert", &mut stage_t);
     // Persistent fallback for the next launch. The in-process cache above is the fast path.
+    // Cloned (not moved) so `rgba` is still available below — the display proxy is built from
+    // these SAME pixels directly rather than reading the PNG this write just produced back off
+    // disk and decoding it again (see write_display_cache_from_rgba's doc comment).
     let mut out = Cursor::new(Vec::new());
-    image::DynamicImage::ImageRgba8(image::RgbaImage::from_raw(decoded.width, decoded.height, rgba)
+    image::DynamicImage::ImageRgba8(image::RgbaImage::from_raw(decoded.width, decoded.height, rgba.clone())
         .ok_or("cached RGBA dimensions do not match")?)
         .write_to(&mut out, image::ImageFormat::Png)
         .map_err(|e| format!("encode decode cache: {e}"))?;
@@ -1020,7 +1023,8 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
     diag::stage("cache", &file_name, "png_write", &mut stage_t);
     // Batch caching is complete only when the display-sized asset is ready too; otherwise the
     // first reopen still pays the proxy-generation cost that the batch action appeared to cover.
-    library::get_display_decode_cache(path, recipe_key, 2560)?;
+    library::write_display_cache_from_rgba(&path, &recipe_key, decoded.width, decoded.height, &rgba, 2560,
+        &file_name, &mut stage_t)?;
     diag::stage("cache", &file_name, "display_proxy_generate", &mut stage_t);
     Ok("written".into())
 }
