@@ -1631,14 +1631,12 @@
     .imp-tile-thumb.loaded{opacity:1}
     #lib-filters select,#lib-filters input{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:7px;padding:5px 8px;font-size:11px;min-width:0}
-    /* The incoming preview occupies the fitted canvas while the reveal frame owns the aspect
-       change. It is transparent outside its bounds so it can cross-fade to the canvas below. */
-    #lib-provisional{position:absolute;inset:0;width:100%;height:100%;background:transparent;
+    /* The provisional preview fully replaces the previous photo while the native decode runs.
+       Its opaque backing prevents differently-shaped old canvas pixels showing through. */
+    #lib-provisional{position:absolute;inset:0;width:100%;height:100%;background:#000;
       object-fit:contain;pointer-events:none;z-index:50;display:none}
     #lib-provisional.on{display:block}
-    /* The reveal controller owns this image as the temporary incoming-pixel layer. Keeping the
-       canvas visible underneath lets the controller cross-fade instead of hard-swapping tiers. */
-    body.lib-provisional-on:not(.lib-reveal-active) #fx-canvas,body.lib-provisional-on:not(.lib-reveal-active) #fx-canvas-orig{visibility:hidden}
+    body.lib-provisional-on #fx-canvas,body.lib-provisional-on #fx-canvas-orig{visibility:hidden}
     #fx-reveal{position:absolute;inset:0;pointer-events:none;contain:strict;z-index:51;display:none}
     #fx-reveal.on{display:block}
     #fx-reveal .fx-reveal-line{position:absolute;background:var(--bdr);will-change:transform}
@@ -3535,34 +3533,25 @@
     };
     const startPixels = () => {
       const p = pending; pending = null; if (!p) return;
-      const zoom = document.getElementById('fx-zoom-wrap'), el = ensureProvisionalEl();
+      // Pixel installation is owned exclusively by the established decode/canvas paths. The
+      // reveal layer may draw its frame, but must never animate the zoom container: that node
+      // is also the live canvas transform and an unfinished animation can hide new pixels.
       const actual = fitted(); if (actual) paint(actual);
-      if (!enabled()) { if (zoom) { zoom.style.opacity = ''; zoom.style.clipPath = ''; } if (el) { el.style.opacity = ''; el.style.clipPath = ''; el.style.filter = ''; } perf('instant', p.path, { tier: p.tier }); return; }
-      const src = p.img && (p.img.currentSrc || p.img.src);
-      const layer = src && el ? el : zoom;
-      if (!layer) return;
-      if (src && el) { el.src = src; el.classList.add('on'); el.style.filter = p.tier === 'thumbnail' ? 'blur(6px) brightness(1.12) saturate(.72)' : ''; }
-      layer.style.opacity = '1'; layer.style.clipPath = 'inset(0 0 100% 0)';
-      const a = layer.animate([{ clipPath: 'inset(0 0 100% 0)' }, { clipPath: 'inset(0)' }], { duration: motion('--reveal-wipe', 180), easing: revealEase(), fill: 'forwards' });
-      active.push(a); perf('pixels', p.path, { tier: p.tier });
+      perf(enabled() ? 'pixels' : 'instant', p.path, { tier: p.tier });
     };
     return {
       begin(aspect, path) {
         finish(); pending = null;
         if (!enabled()) { this.cancel(); perf('instant', path, { phase: 'begin' }); return; }
         document.body.classList.add('lib-reveal-active');
-        const zoom = document.getElementById('fx-zoom-wrap'); if (zoom) {
-          const a = zoom.animate([{ opacity: 1, clipPath: 'inset(0)' }, { opacity: 0, clipPath: 'inset(0 0 100% 0)' }], { duration: motion('--reveal-exit', 150), easing: 'ease-out', fill: 'forwards' }); active.push(a);
-        }
         const start = frameRect || fitted(); if (start) paint(start);
         perf('begin', path, { aspect: aspect || 0 }); morphTo(targetFor(aspect), path);
       },
       pixels(tier, img, path) { pending = { tier, img, path }; if (!morph) startPixels(); },
       upgrade(path) {
-        const el = ensureProvisionalEl(), zoom = document.getElementById('fx-zoom-wrap');
+        const el = ensureProvisionalEl();
         if (!enabled()) { this.cancel(); return; }
-        if (zoom) { zoom.style.opacity = '1'; zoom.style.clipPath = 'inset(0)'; }
-        if (el && el.classList.contains('on')) { const duration = motion('--reveal-sharpen', 300); const a = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration, easing: revealEase(), fill: 'forwards' }); active.push(a); const clean = () => { el.classList.remove('on'); el.style.opacity = ''; el.style.clipPath = ''; el.style.filter = ''; }; a.onfinish = clean; setTimeout(clean, duration + 50); }
+        if (el && el.classList.contains('on')) { el.classList.remove('on'); el.style.opacity = ''; el.style.clipPath = ''; el.style.filter = ''; }
         if (host) host.classList.remove('on'); document.body.classList.remove('lib-reveal-active'); perf('upgrade', path);
       },
       cancel() { finish(); pending = null; document.body.classList.remove('lib-reveal-active'); const zoom = document.getElementById('fx-zoom-wrap'), el = ensureProvisionalEl(); if (zoom) { zoom.style.opacity = ''; zoom.style.clipPath = ''; } if (el) { el.classList.remove('on'); el.style.opacity = ''; el.style.clipPath = ''; el.style.filter = ''; } if (host) host.classList.remove('on'); }
