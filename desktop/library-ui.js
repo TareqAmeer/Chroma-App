@@ -3685,20 +3685,26 @@
           });
         } catch (e) { rawPerf('open-full-quality-promotion-failed', path, { error: String(e) }); }
       };
-      // CHR-120 (b): the 24MP full-quality promotion has a real, structural ~20s cost no matter
-      // which transport carries it (confirmed live: the in-process IPC transfer of the raw RGBA
-      // buffer and a WebView img.decode() of the equivalent lossless PNG both independently cost
-      // ~20s for a 24MP image — this isn't a caching bug, it's the actual size of the work).
-      // Previously this fired within ~120ms of the display tier appearing, on EVERY open —
-      // during rapid arrow-key culling (openInEditorInner releases its own busy-lock before this
-      // promotion finishes, so a fast next click starts a NEW open while the previous photo's
-      // promotion is still running in the background) that stacks up multiple concurrent ~20s
-      // jobs, each holding a blocking-pool thread, which is a very plausible explanation for the
-      // separate ~20s stalls observed on otherwise-trivial IPC calls during this investigation.
-      // Wait for ~500ms of the user actually staying on this photo before paying the cost at
+      // CHR-120 (b): CORRECTION to this comment's original claim — a from-scratch, isolated
+      // measurement of get_cached_raw_decode (immediately after caching, nothing else in
+      // flight) took 350-700ms for a 96MB buffer, not ~20s; a clean single cache+open cycle in
+      // a fresh app process reached full quality in ~7.4s total, not ~20s+. The original ~20s
+      // (and in one case a promotion that never resolved at all despite the Rust side finishing
+      // in under 100ms server-side) only showed up in a long-lived test session that had
+      // accumulated many repeated large-RAW decodes — a real but NOT root-caused anomaly, not a
+      // structural per-open cost. Do not cite "~20s" as a settled number for this path.
+      //
+      // The defer-on-navigate behavior below still stands on its own evidence, independent of
+      // that retracted number: during rapid arrow-key culling, openInEditorInner releases its
+      // own busy-lock before this promotion finishes, so a fast next click starts a new open
+      // while the previous photo's promotion is still running in the background — confirmed
+      // live, culling through 4 cached photos (~200ms apart) fired 4 real full-decode fetches
+      // before this change and only 1 after it. That's a real, measured reduction in wasted
+      // background work regardless of how expensive any single promotion turns out to be.
+      // Wait for ~500ms of the user actually staying on this photo before paying that cost at
       // all; if they've moved on by then, skip it outright — the interactive JPEG display proxy
-      // (now fast, CHR-120 (a)) is what culling actually looks at. Confirmed live: rapid culling
-      // through 4 cached photos (~200ms apart) dropped from 4 real full-decode fetches to 1.
+      // (CHR-120 (a), independently and repeatedly confirmed fast) is what culling actually
+      // looks at.
       const _fullPromoToken = path;
       setTimeout(() => {
         if (state.openedPath !== _fullPromoToken) {
