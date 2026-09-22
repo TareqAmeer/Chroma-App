@@ -3544,7 +3544,11 @@
       // Pixel installation is owned exclusively by the established decode/canvas paths. The
       // reveal layer may draw its frame, but must never animate the zoom container: that node
       // is also the live canvas transform and an unfinished animation can hide new pixels.
-      const actual = fitted(); if (actual) paint(actual);
+      // The frame and temporary pixel layer are both calculated from the incoming source's
+      // aspect ratio. Never take the outgoing canvas rect here: that was the race that made
+      // the frame sometimes land on the previous photo's shape.
+      const iw = p.img && (p.img.naturalWidth || p.img.width), ih = p.img && (p.img.naturalHeight || p.img.height);
+      const actual = iw && ih ? targetFor(iw / ih) : fitted(); if (actual) paint(actual);
       const src = p.img && (p.img.currentSrc || p.img.src);
       if (src && pixelLayer && actual) {
         pixelLayer.src = src; pixelLayer.style.display = 'block'; pixelLayer.style.left = `${actual.x}px`; pixelLayer.style.top = `${actual.y}px`; pixelLayer.style.width = `${actual.w}px`; pixelLayer.style.height = `${actual.h}px`;
@@ -3564,7 +3568,7 @@
       pixels(tier, img, path) { pending = { tier, img, path }; if (!morph) startPixels(); },
       upgrade(path) {
         if (!enabled()) { this.cancel(); return; }
-        if (pixelLayer && pixelLayer.style.display !== 'none') { const duration = motion('--reveal-sharpen', 300); const a = pixelLayer.animate([{ opacity: 1 }, { opacity: 0 }], { duration, easing: revealEase(), fill: 'forwards' }); active.push(a); a.onfinish = () => { pixelLayer.style.display = 'none'; pixelLayer.style.filter = ''; if (host) host.classList.remove('on'); }; }
+        if (pixelLayer && pixelLayer.style.display !== 'none') { const duration = motion('--reveal-sharpen', 300); const a = pixelLayer.animate([{ clipPath: 'inset(0)' }, { clipPath: 'inset(0 0 100% 0)' }], { duration, easing: revealEase(), fill: 'forwards' }); active.push(a); a.onfinish = () => { pixelLayer.style.display = 'none'; pixelLayer.style.filter = ''; if (host) host.classList.remove('on'); }; }
         if (oldLayer) oldLayer.style.display = 'none';
         if (!pixelLayer || pixelLayer.style.display === 'none') { if (host) host.classList.remove('on'); } document.body.classList.remove('lib-reveal-active'); perf('upgrade', path);
       },
