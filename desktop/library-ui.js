@@ -1454,10 +1454,17 @@
        stays the light #e0e0e0 value. Can't use var(--hairline) here — that token itself IS
        remapped to a dark value at #lib-overlay scope (line 740) for everything else; this is the
        one place that deliberately opts out, so the literal value is the only way to pin it. */
-    .lib-thumb-wrap{position:relative;box-shadow:inset 0 0 0 1px #e0e0e0}
+    /* CHR-12: was `inset 0 0 0 1px` — confirmed live that an INSET box-shadow can still render 1
+       device px PAST its own box's edge on a fractionally-sized tile (a real WebKit rasterization
+       quirk, reproduced even after drawing the ring directly on the <img> instead of the wrap, so
+       it isn't a wrap-vs-img mismatch). An OUTER ring sits outside the tile in the gap instead of
+       competing with the photo's own edge, so it can never be painted over or peek past it — the
+       same approach the sel/multi/flag rings below already use without this bug. overflow:hidden
+       on the wrap does not clip its own box-shadow (only its content), so the ring still shows. */
+    .lib-thumb-wrap{position:relative;box-shadow:0 0 0 1px #e0e0e0}
     .lib-card{background:transparent;border:none;border-radius:0;overflow:hidden;
       cursor:pointer;position:relative;box-shadow:none;transition:box-shadow var(--duration-press) ease}
-    .lib-card:hover .lib-thumb-wrap{box-shadow:inset 0 0 0 1px var(--acc2)}
+    .lib-card:hover .lib-thumb-wrap{box-shadow:0 0 0 1px var(--acc2)}
     .lib-card.sel{box-shadow:0 0 0 2px var(--acc2)}
     .lib-card.multi{box-shadow:0 0 0 2px var(--acc2)}
     .lib-card.sel.multi{box-shadow:0 0 0 2px var(--acc2),0 0 0 4px var(--acc2)}
