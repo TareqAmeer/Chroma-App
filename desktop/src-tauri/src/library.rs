@@ -296,7 +296,17 @@ const PHASH_VER: &str = "phash-v1";
 // v2 switches the editor-render cache from lossy JPEG to lossless PNG. A cache entry is used as
 // the actual editor source on a later open, so it must preserve every developed display pixel.
 const DECODE_RENDER_VER: &str = "decode-v2";
-const DISPLAY_PROXY_VER: &str = "display-v3-webp-lossless";
+// CHR-120 (a): v3's lossless WebP was confirmed LIVE to be the actual first-open bottleneck —
+// not proxy generation (that was already fast) but *decoding* an already-cached lossless WebP
+// through the WKWebView's img.decode(): measured 20+ seconds for a single 2560px-long-edge image
+// in isolation (invoke to fetch the path: ~1s; img.decode() alone: ~20s), dwarfing every other
+// step in the open path combined. Lossless WebP decode is known to be far slower than JPEG in
+// most decoder implementations, and this is a DISPLAY-tier proxy only — never the export source
+// (that stays lossless PNG, DECODE_RENDER_VER) — so a high-quality JPEG (indistinguishable at
+// interactive zoom levels, decodes via a mature/fast path in every WebView — confirmed live:
+// ~71ms decode for the same image) is the right tradeoff. v4 bump invalidates every v3 entry so
+// nothing old is misread as the new format.
+const DISPLAY_PROXY_VER: &str = "display-v4-jpeg";
 const LR_THUMB_VER: &str = "lr-thumb-v1";
 /// Bump this if `is_evictable_cache_file`'s notion of what belongs to the thumbnail tier ever
 /// changes shape again — see `migrate_thumb_cache_v2` below, which uses it as a one-time-per-
@@ -802,11 +812,12 @@ pub fn get_decode_cache_path(path: String, recipe_key: String) -> Result<String,
 }
 
 fn display_cache_path(path: &str, mtime: u64, size: u64, recipe_key: &str, long_edge: u32) -> PathBuf {
-    decode_cache_dir().join(format!("{:016x}.display-{}.webp", fnv1a(&[path, &mtime.to_string(), &size.to_string(), recipe_key, DISPLAY_PROXY_VER]), long_edge))
+    decode_cache_dir().join(format!("{:016x}.display-{}.jpg", fnv1a(&[path, &mtime.to_string(), &size.to_string(), recipe_key, DISPLAY_PROXY_VER]), long_edge))
 }
 
-/// Returns a display-sized, lossless WebP preview through the asset protocol. The pixels come from
-/// the same finished full-resolution decode cache; this only changes the transport/display tier.
+/// Returns a display-sized JPEG preview through the asset protocol (CHR-120: was lossless WebP —
+/// see DISPLAY_PROXY_VER). The pixels come from the same finished full-resolution decode cache;
+/// this only changes the transport/display tier, never the export source.
 #[tauri::command]
 pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32) -> Result<String, String> {
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
@@ -820,7 +831,11 @@ pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32
         let img = image::load_from_memory(&bytes).map_err(|e| format!("decode cached preview: {e}"))?;
         let scaled = img.resize(edge, edge, image::imageops::FilterType::Lanczos3);
         let mut encoded = Vec::new();
-        scaled.write_to(&mut Cursor::new(&mut encoded), image::ImageFormat::WebP)
+        // Quality 92: visually indistinguishable from the source at interactive zoom (this is a
+        // DISPLAY proxy, never the export path), while decoding through a mature/fast JPEG path
+        // in every WebView instead of the previous lossless-WebP encoding's 20+ second decode.
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut Cursor::new(&mut encoded), 92)
+            .encode_image(&scaled)
             .map_err(|e| format!("encode display preview: {e}"))?;
         std::fs::write(&out_path, encoded).map_err(|e| format!("write display preview: {e}"))?;
     }

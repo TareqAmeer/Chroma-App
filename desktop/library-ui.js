@@ -5243,8 +5243,21 @@
           // 'full' key. openInEditorInner prefers a 'full' entry when one exists, and export skips its
           // own deferred-cleanup pass for photos opened from it (window.__chromasmithFullCleanupPaths).
           const cacheNr = rawNr === 'off' ? 'off' : 'fast';
-          const recipeKey = [profile, rawNr !== 'off' ? 1 : 0, demosaicAlgo, autoLens ? 1 : 0,
-            lensOverride, lensOverrideFocal, 'full'].join('|');
+          // CHR-120: this used to rebuild the key inline, field-by-field, in parallel with
+          // rawRecipeKey() (the function openInEditorInner's lookup actually calls) — two
+          // independent formulas over the same fields WILL drift eventually, and when they do,
+          // the open-time lookup silently misses this exact cache entry and falls through to a
+          // full fresh RAW decode (confirmed live: a photo batch-cached moments earlier still
+          // took a full ~2min re-decode on open because of exactly this). Call the SAME function
+          // instead, briefly substituting this photo's own sidecar-resolved rawNr/demosaicAlgo
+          // for the globals rawRecipeKey() reads, so a per-photo sidecar override still applies
+          // to the key without needing a second implementation of it.
+          const _prevRawNr = window.chromasmithRawNr, _prevDemosaic = window.chromasmithDemosaicAlgo;
+          window.chromasmithRawNr = rawNr;
+          window.chromasmithDemosaicAlgo = demosaicAlgo;
+          const recipeKey = rawRecipeKey(true);
+          window.chromasmithRawNr = _prevRawNr;
+          window.chromasmithDemosaicAlgo = _prevDemosaic;
           const readT0 = performance.now(); const bytes = new Uint8Array(await invoke('read_file_bytes', { path })); rawPerf('cache-read', path, { ms: performance.now() - readT0, bytes: bytes.byteLength });
           const identT0 = performance.now(); const ident = await invoke('peek_raw_camera', bytes); rawPerf('cache-identify', path, { ms: performance.now() - identT0 });
           let mode = 'srgb', lutKey = '';
