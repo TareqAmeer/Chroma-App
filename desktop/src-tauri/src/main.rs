@@ -931,7 +931,36 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
         return Err("selected file is not a RAW photo".into());
     }
     if library::decode_cache_exists(&path, &recipe_key)? {
-        library::get_display_decode_cache(path, recipe_key, 2560)?;
+        library::get_display_decode_cache(path.clone(), recipe_key.clone(), 2560)?;
+        // CHR-120: this shortcut used to return without ever touching RAW_EDITOR_CACHE — so a
+        // "Cache RAWs" batch action on a photo already cached from an earlier app launch (the
+        // common case: the on-disk PNG persists across relaunches, RAW_EDITOR_CACHE does not)
+        // warmed nothing, and the very next interactive open fell through to the much slower
+        // asset-protocol PNG-decode path instead of the fast in-process path — confirmed live:
+        // this exact case measured ~9s to full quality vs ~6s when the in-process cache really
+        // was warm. Best-effort: read the existing PNG back in and populate the in-process
+        // cache from it, same shape as the fresh-decode path below; a failure here just means
+        // the interactive open falls back to the PNG path as it always did, no regression.
+        if let Ok(meta) = std::fs::metadata(&path) {
+            let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs()).unwrap_or(0);
+            let cache_path = library::decode_cache_dir().join(library::decode_cache_key(&path, mtime, meta.len(), &recipe_key));
+            if let Ok(bytes) = std::fs::read(&cache_path) {
+                if let Ok(img) = image::load_from_memory(&bytes) {
+                    let rgba_img = img.to_rgba8();
+                    let (w, h) = (rgba_img.width(), rgba_img.height());
+                    if let Ok(mut guard) = RAW_EDITOR_CACHE.lock() {
+                        guard.retain(|entry| !(entry.path == path && entry.recipe_key == recipe_key));
+                        guard.push(RawEditorCacheEntry {
+                            path: path.clone(), recipe_key: recipe_key.clone(), mtime, size: meta.len(),
+                            width: w, height: h, rgba: std::sync::Arc::new(rgba_img.into_raw()),
+                        });
+                        const MAX_IN_PROCESS_RAW_CACHES: usize = 3;
+                        if guard.len() > MAX_IN_PROCESS_RAW_CACHES { guard.remove(0); }
+                    }
+                }
+            }
+        }
         return Ok("cached".into());
     }
     let demosaic_algo = match demosaic_algo.as_str() { "" | "ahd" | "vng" | "mhc" => demosaic_algo.as_str(), _ => "" };

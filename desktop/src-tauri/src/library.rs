@@ -768,7 +768,7 @@ pub(crate) fn decode_cache_dir() -> PathBuf {
     let _ = std::fs::create_dir_all(&dir);
     dir
 }
-fn decode_cache_key(path: &str, mtime: u64, size: u64, recipe_key: &str) -> String {
+pub(crate) fn decode_cache_key(path: &str, mtime: u64, size: u64, recipe_key: &str) -> String {
     let mtime_s = mtime.to_string();
     let size_s = size.to_string();
     // recipe_key folds in RAW profile / native-NR / demosaic-algo / auto-lens — anything that
