@@ -1454,7 +1454,7 @@
        stays the light #e0e0e0 value. Can't use var(--hairline) here — that token itself IS
        remapped to a dark value at #lib-overlay scope (line 740) for everything else; this is the
        one place that deliberately opts out, so the literal value is the only way to pin it. */
-    /* CHR-12: was `inset 0 0 0 1px` — confirmed live that an INSET box-shadow can still render 1
+    /* CHR-12: was inset 0 0 0 1px — confirmed live that an INSET box-shadow can still render 1
        device px PAST its own box's edge on a fractionally-sized tile (a real WebKit rasterization
        quirk, reproduced even after drawing the ring directly on the <img> instead of the wrap, so
        it isn't a wrap-vs-img mismatch). An OUTER ring sits outside the tile in the gap instead of
@@ -1649,6 +1649,7 @@
     #fx-reveal .fx-reveal-line{position:absolute;background:var(--bdr);will-change:transform}
     #fx-reveal .fx-reveal-h{width:100%;height:1px}
     #fx-reveal .fx-reveal-v{width:1px;height:100%}
+    #fx-reveal .fx-reveal-old,#fx-reveal .fx-reveal-pixels{position:absolute;display:none;object-fit:contain;pointer-events:none}
     /* deskx (DRK shell): the docked panel becomes a 120px thumbnail FILMSTRIP — pure
        thumbnails, single column, no filters/tree/name chrome (all of that lives in the
        full-window grid, G / ⛶). .full keeps its own 100vw rules and overrides these. */
@@ -3486,7 +3487,7 @@
   // run independently. All geometry is measured from the real fitted canvas, so resizers,
   // zoom, and both themes share the exact Editor fit maths rather than a second approximation.
   const reveal = (() => {
-    let host, lines, frameRect = null, pending = null, active = [], morph = null;
+    let host, lines, oldLayer, pixelLayer, frameRect = null, pending = null, active = [], morph = null;
     const perf = (event, path, extra = {}) => rawPerf(`reveal-${event}`, path || '', extra);
     const enabled = () => window.chromasmithPhotoTransitions !== false &&
       !matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -3500,8 +3501,8 @@
       if (host) return host;
       const wrap = document.getElementById('fx-wrap'); if (!wrap) return null;
       host = document.createElement('div'); host.id = 'fx-reveal';
-      host.innerHTML = '<i class="fx-reveal-line fx-reveal-h"></i><i class="fx-reveal-line fx-reveal-h"></i><i class="fx-reveal-line fx-reveal-v"></i><i class="fx-reveal-line fx-reveal-v"></i>';
-      wrap.appendChild(host); lines = [...host.children]; return host;
+      host.innerHTML = '<canvas class="fx-reveal-old"></canvas><img class="fx-reveal-pixels"><i class="fx-reveal-line fx-reveal-h"></i><i class="fx-reveal-line fx-reveal-h"></i><i class="fx-reveal-line fx-reveal-v"></i><i class="fx-reveal-line fx-reveal-v"></i>';
+      wrap.appendChild(host); oldLayer = host.querySelector('.fx-reveal-old'); pixelLayer = host.querySelector('.fx-reveal-pixels'); lines = [...host.querySelectorAll('.fx-reveal-line')]; return host;
     };
     const fitted = () => {
       const wrap = document.getElementById('fx-wrap'), zoom = document.getElementById('fx-zoom-wrap');
@@ -3544,6 +3545,12 @@
       // reveal layer may draw its frame, but must never animate the zoom container: that node
       // is also the live canvas transform and an unfinished animation can hide new pixels.
       const actual = fitted(); if (actual) paint(actual);
+      const src = p.img && (p.img.currentSrc || p.img.src);
+      if (src && pixelLayer && actual) {
+        pixelLayer.src = src; pixelLayer.style.display = 'block'; pixelLayer.style.left = `${actual.x}px`; pixelLayer.style.top = `${actual.y}px`; pixelLayer.style.width = `${actual.w}px`; pixelLayer.style.height = `${actual.h}px`;
+        pixelLayer.style.filter = p.tier === 'thumbnail' ? 'blur(6px) brightness(1.12) saturate(.72)' : '';
+        const a = pixelLayer.animate([{ clipPath: 'inset(0 0 100% 0)' }, { clipPath: 'inset(0)' }], { duration: motion('--reveal-wipe', 180), easing: revealEase(), fill: 'forwards' }); active.push(a);
+      }
       perf(enabled() ? 'pixels' : 'instant', p.path, { tier: p.tier });
     };
     return {
@@ -3551,15 +3558,15 @@
         finish(); pending = null;
         if (!enabled()) { this.cancel(); perf('instant', path, { phase: 'begin' }); return; }
         document.body.classList.add('lib-reveal-active');
-        const start = frameRect || fitted(); if (start) paint(start);
+        const start = frameRect || fitted(); if (start) { paint(start); const cv = document.getElementById('fx-canvas'); if (cv && oldLayer) { try { oldLayer.width = cv.width; oldLayer.height = cv.height; oldLayer.getContext('2d').drawImage(cv, 0, 0); oldLayer.style.cssText = `display:block;left:${start.x}px;top:${start.y}px;width:${start.w}px;height:${start.h}px`; const a = oldLayer.animate([{ opacity: 1, clipPath: 'inset(0)' }, { opacity: 0, clipPath: 'inset(0 0 100% 0)' }], { duration: motion('--reveal-exit', 150), easing: 'ease-out', fill: 'forwards' }); active.push(a); } catch (_) {} } }
         perf('begin', path, { aspect: aspect || 0 }); morphTo(targetFor(aspect), path);
       },
       pixels(tier, img, path) { pending = { tier, img, path }; if (!morph) startPixels(); },
       upgrade(path) {
-        const el = ensureProvisionalEl();
         if (!enabled()) { this.cancel(); return; }
-        if (el && el.classList.contains('on')) { el.classList.remove('on'); el.style.opacity = ''; el.style.clipPath = ''; el.style.filter = ''; }
-        if (host) host.classList.remove('on'); document.body.classList.remove('lib-reveal-active'); perf('upgrade', path);
+        if (pixelLayer && pixelLayer.style.display !== 'none') { const duration = motion('--reveal-sharpen', 300); const a = pixelLayer.animate([{ opacity: 1 }, { opacity: 0 }], { duration, easing: revealEase(), fill: 'forwards' }); active.push(a); a.onfinish = () => { pixelLayer.style.display = 'none'; pixelLayer.style.filter = ''; if (host) host.classList.remove('on'); }; }
+        if (oldLayer) oldLayer.style.display = 'none';
+        if (!pixelLayer || pixelLayer.style.display === 'none') { if (host) host.classList.remove('on'); } document.body.classList.remove('lib-reveal-active'); perf('upgrade', path);
       },
       cancel() { finish(); pending = null; document.body.classList.remove('lib-reveal-active'); const zoom = document.getElementById('fx-zoom-wrap'), el = ensureProvisionalEl(); if (zoom) { zoom.style.opacity = ''; zoom.style.clipPath = ''; } if (el) { el.classList.remove('on'); el.style.opacity = ''; el.style.clipPath = ''; el.style.filter = ''; } if (host) host.classList.remove('on'); }
     };
