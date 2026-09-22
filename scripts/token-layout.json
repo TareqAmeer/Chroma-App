@@ -220,6 +220,11 @@
       "pre": "",
       "hadSemi": true
     },
+    {"var":"--reveal-exit","pre":"\n  ","hadSemi":true},
+    {"var":"--reveal-morph","pre":"","hadSemi":true},
+    {"var":"--reveal-wipe","pre":"","hadSemi":true},
+    {"var":"--reveal-sharpen","pre":"","hadSemi":true},
+    {"var":"--reveal-ease","pre":"","hadSemi":true},
     {
       "var": "--sat",
       "pre": null,

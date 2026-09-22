@@ -92,6 +92,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
      subtly uneven even when each one looked fine on its own. */
   --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;--sp-7:32px;--sp-8:40px;--sp-9:60px;--sp-10:84px;--sp-11:100px;
   --ease:cubic-bezier(.2,.8,.3,1);--dur-1:120ms;--dur-2:220ms;--dur-3:400ms;
+  --reveal-exit:150ms;--reveal-morph:260ms;--reveal-wipe:180ms;--reveal-sharpen:300ms;--reveal-ease:cubic-bezier(.4,0,.2,1);
   /* Safe-area insets as overridable custom props: layout rules use var(--sat)/var(--sab)
      instead of env() directly, so desktop-Chrome testing can inject real iPhone values
      (e.g. --sat:47px --sab:34px) and render the exact device geometry Chrome can't emulate. */
@@ -21237,6 +21238,7 @@ function viewMenuBuild(){
   h+=`<button class="fx-ovf-item${fxLoupe?' on':''}" onclick="viewMenuClose();toggleLoupe()"><span>True 1:1 view</span>${chk}</button>`;
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)"><span>Editor background…</span></button>`;
   h+=`<button class="fx-ovf-item${fxHistOn?' on':''}" onclick="viewMenuClose();toggleHist()"><span>Scope overlay</span>${chk}</button>`;
+  h+=`<button class="fx-ovf-item${window.chromasmithPhotoTransitions!==false?' on':''}" onclick="photoTransitionsToggle()"><span>Photo transitions</span>${chk}</button>`;
   h+='<div class="fx-ovf-sep"></div>';
   h+=`<button class="fx-ovf-item${fxGamutWarn?' on':''}" onclick="viewMenuClose();toggleGamutWarn()"><span>Show gamut warning</span>${chk}</button>`;
   h+='<div class="fx-ovf-sep"></div>';
@@ -21244,6 +21246,12 @@ function viewMenuBuild(){
   h+=`<button class="fx-ovf-item${!curLight?' on':''}" onclick="fxSetTheme('dark')"><span>Dark</span>${chk}</button>`;
   h+=`<button class="fx-ovf-item${curLight?' on':''}" onclick="fxSetTheme('light')"><span>Light</span>${chk}</button>`;
   m.innerHTML=h;
+}
+try{window.chromasmithPhotoTransitions=localStorage.getItem('chromasmithPhotoTransitions')!=='0';}catch(e){window.chromasmithPhotoTransitions=true;}
+function photoTransitionsToggle(){
+  window.chromasmithPhotoTransitions=!window.chromasmithPhotoTransitions;
+  try{localStorage.setItem('chromasmithPhotoTransitions',window.chromasmithPhotoTransitions?'1':'0');}catch(e){}
+  viewMenuBuild();
 }
 function viewMenuClose(){settingsClose();}
 // Single open/close surface for the merged settings dropdown (2026-09-09) — see the HTML

@@ -1631,14 +1631,19 @@
     .imp-tile-thumb.loaded{opacity:1}
     #lib-filters select,#lib-filters input{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:7px;padding:5px 8px;font-size:11px;min-width:0}
-    /* Provisional preview must fully REPLACE the previous photo, not float over it: it fills
-       the whole zoom-wrap with an opaque black backing and hides the canvas underneath —
-       otherwise a portrait provisional over a landscape canvas left slices of the OLD photo
-       visible around it ("photos load on top of each other"). */
-    #lib-provisional{position:absolute;inset:0;width:100%;height:100%;background:#000;
+    /* The incoming preview occupies the fitted canvas while the reveal frame owns the aspect
+       change. It is transparent outside its bounds so it can cross-fade to the canvas below. */
+    #lib-provisional{position:absolute;inset:0;width:100%;height:100%;background:transparent;
       object-fit:contain;pointer-events:none;z-index:50;display:none}
     #lib-provisional.on{display:block}
-    body.lib-provisional-on #fx-canvas,body.lib-provisional-on #fx-canvas-orig{visibility:hidden}
+    /* The reveal controller owns this image as the temporary incoming-pixel layer. Keeping the
+       canvas visible underneath lets the controller cross-fade instead of hard-swapping tiers. */
+    body.lib-provisional-on:not(.lib-reveal-active) #fx-canvas,body.lib-provisional-on:not(.lib-reveal-active) #fx-canvas-orig{visibility:hidden}
+    #fx-reveal{position:absolute;inset:0;pointer-events:none;contain:strict;z-index:51;display:none}
+    #fx-reveal.on{display:block}
+    #fx-reveal .fx-reveal-line{position:absolute;background:var(--bdr);will-change:transform}
+    #fx-reveal .fx-reveal-h{width:100%;height:1px}
+    #fx-reveal .fx-reveal-v{width:1px;height:100%}
     /* deskx (DRK shell): the docked panel becomes a 120px thumbnail FILMSTRIP — pure
        thumbnails, single column, no filters/tree/name chrome (all of that lives in the
        full-window grid, G / ⛶). .full keeps its own 100vw rules and overrides these. */
@@ -2334,7 +2339,7 @@
       img.src = url;
       el.src = url;
       el.classList.add('on');
-      document.body.classList.add('lib-provisional-on'); // hides the canvas (old photo) beneath
+      document.body.classList.add('lib-provisional-on');
       el.onload = () => URL.revokeObjectURL(url);
     } catch (e) {
       rawPerf('open-provisional-miss', path, { error: String(e) });
@@ -2357,6 +2362,7 @@
       el.src = img.src;
       el.classList.add('on');
       document.body.classList.add('lib-provisional-on');
+      reveal.pixels('display', img, path);
       rawPerf('open-display-overlay', path, { width: img.naturalWidth, height: img.naturalHeight });
     } catch (e) {
       rawPerf('open-display-overlay-miss', path, { error: String(e) });
@@ -3498,8 +3504,103 @@
     window.__rawPerfLog.push({ event, path, t: performance.now(), wall: Date.now(), ...extra });
     if (window.__rawPerfLog.length > 2000) window.__rawPerfLog.splice(0, window.__rawPerfLog.length - 2000);
   };
+  // Presentation-only photo reveal. It deliberately never returns a Promise to the opener:
+  // native decode and render stay on their existing critical path while compositor animations
+  // run independently. All geometry is measured from the real fitted canvas, so resizers,
+  // zoom, and both themes share the exact Editor fit maths rather than a second approximation.
+  const reveal = (() => {
+    let host, lines, frameRect = null, pending = null, active = [], morph = null;
+    const perf = (event, path, extra = {}) => rawPerf(`reveal-${event}`, path || '', extra);
+    const enabled = () => window.chromasmithPhotoTransitions !== false &&
+      !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const motion = (name, fallback) => {
+      const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return value.endsWith('ms') ? parseFloat(value) : fallback;
+    };
+    const revealEase = () => getComputedStyle(document.documentElement).getPropertyValue('--reveal-ease').trim() || 'cubic-bezier(.4,0,.2,1)';
+    const finish = () => { active.splice(0).forEach((a) => { try { a.finish(); } catch (_) {} }); morph = null; };
+    const ensure = () => {
+      if (host) return host;
+      const wrap = document.getElementById('fx-wrap'); if (!wrap) return null;
+      host = document.createElement('div'); host.id = 'fx-reveal';
+      host.innerHTML = '<i class="fx-reveal-line fx-reveal-h"></i><i class="fx-reveal-line fx-reveal-h"></i><i class="fx-reveal-line fx-reveal-v"></i><i class="fx-reveal-line fx-reveal-v"></i>';
+      wrap.appendChild(host); lines = [...host.children]; return host;
+    };
+    const fitted = () => {
+      const wrap = document.getElementById('fx-wrap'), zoom = document.getElementById('fx-zoom-wrap');
+      if (!wrap || !zoom) return null;
+      const a = wrap.getBoundingClientRect(), b = zoom.getBoundingClientRect();
+      return b.width > 0 && b.height > 0 ? { x: b.left - a.left, y: b.top - a.top, w: b.width, h: b.height } : null;
+    };
+    const targetFor = (aspect) => {
+      const wrap = document.getElementById('fx-wrap'); if (!wrap || !aspect) return fitted();
+      const w = wrap.clientWidth, h = wrap.clientHeight; if (!w || !h) return fitted();
+      let tw = w, th = tw / aspect; if (th > h) { th = h; tw = th * aspect; }
+      return { x: (w - tw) / 2, y: (h - th) / 2, w: tw, h: th };
+    };
+    const paint = (r) => {
+      if (!r || !ensure()) return;
+      frameRect = r; host.classList.add('on');
+      const fullW = host.clientWidth, fullH = host.clientHeight;
+      lines[0].style.transform = `translate(${r.x}px,${r.y}px)`; lines[0].style.clipPath = `inset(0 ${Math.max(0, fullW - r.w)}px 0 0)`;
+      lines[1].style.transform = `translate(${r.x}px,${r.y + r.h - 1}px)`; lines[1].style.clipPath = `inset(0 ${Math.max(0, fullW - r.w)}px 0 0)`;
+      lines[2].style.transform = `translate(${r.x}px,${r.y}px)`; lines[2].style.clipPath = `inset(0 0 ${Math.max(0, fullH - r.h)}px 0)`;
+      lines[3].style.transform = `translate(${r.x + r.w - 1}px,${r.y}px)`; lines[3].style.clipPath = `inset(0 0 ${Math.max(0, fullH - r.h)}px 0)`;
+    };
+    const morphTo = (next, path) => {
+      const prev = frameRect || fitted(); if (!prev || !next) return;
+      const same = Math.abs(prev.w / prev.h - next.w / next.h) < .004;
+      if (same) { paint(next); return; }
+      const from = { ...prev }; paint(next);
+      const duration = motion('--reveal-morph', 260);
+      const a = host.animate([{ opacity: 1 }], { duration }); // keeps host on compositor without scaling its hairline
+      morph = a; active.push(a);
+      // Lines move by translation and reveal their fixed-length strips with clipping; no scaled
+      // border or width/height animation can soften the 1px hairline.
+      const started = performance.now();
+      const tick = () => { if (morph !== a) return; const linear = Math.min(1, (performance.now() - started) / duration); const t = 1 - Math.pow(1 - linear, 3); paint({ x: from.x + (next.x - from.x) * t, y: from.y + (next.y - from.y) * t, w: from.w + (next.w - from.w) * t, h: from.h + (next.h - from.h) * t }); if (linear < 1) requestAnimationFrame(tick); else { morph = null; perf('morph-end', path); if (pending) startPixels(); } };
+      perf('morph', path); requestAnimationFrame(tick);
+    };
+    const startPixels = () => {
+      const p = pending; pending = null; if (!p) return;
+      const zoom = document.getElementById('fx-zoom-wrap'), el = ensureProvisionalEl();
+      const actual = fitted(); if (actual) paint(actual);
+      if (!enabled()) { if (zoom) { zoom.style.opacity = ''; zoom.style.clipPath = ''; } if (el) { el.style.opacity = ''; el.style.clipPath = ''; el.style.filter = ''; } perf('instant', p.path, { tier: p.tier }); return; }
+      const src = p.img && (p.img.currentSrc || p.img.src);
+      const layer = src && el ? el : zoom;
+      if (!layer) return;
+      if (src && el) { el.src = src; el.classList.add('on'); el.style.filter = p.tier === 'thumbnail' ? 'blur(6px) brightness(1.12) saturate(.72)' : ''; }
+      layer.style.opacity = '1'; layer.style.clipPath = 'inset(0 0 100% 0)';
+      const a = layer.animate([{ clipPath: 'inset(0 0 100% 0)' }, { clipPath: 'inset(0)' }], { duration: motion('--reveal-wipe', 180), easing: revealEase(), fill: 'forwards' });
+      active.push(a); perf('pixels', p.path, { tier: p.tier });
+    };
+    return {
+      begin(aspect, path) {
+        finish(); pending = null;
+        if (!enabled()) { this.cancel(); perf('instant', path, { phase: 'begin' }); return; }
+        document.body.classList.add('lib-reveal-active');
+        const zoom = document.getElementById('fx-zoom-wrap'); if (zoom) {
+          const a = zoom.animate([{ opacity: 1, clipPath: 'inset(0)' }, { opacity: 0, clipPath: 'inset(0 0 100% 0)' }], { duration: motion('--reveal-exit', 150), easing: 'ease-out', fill: 'forwards' }); active.push(a);
+        }
+        const start = frameRect || fitted(); if (start) paint(start);
+        perf('begin', path, { aspect: aspect || 0 }); morphTo(targetFor(aspect), path);
+      },
+      pixels(tier, img, path) { pending = { tier, img, path }; if (!morph) startPixels(); },
+      upgrade(path) {
+        const el = ensureProvisionalEl(), zoom = document.getElementById('fx-zoom-wrap');
+        if (!enabled()) { this.cancel(); return; }
+        if (zoom) { zoom.style.opacity = '1'; zoom.style.clipPath = 'inset(0)'; }
+        if (el && el.classList.contains('on')) { const duration = motion('--reveal-sharpen', 300); const a = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration, easing: revealEase(), fill: 'forwards' }); active.push(a); const clean = () => { el.classList.remove('on'); el.style.opacity = ''; el.style.clipPath = ''; el.style.filter = ''; }; a.onfinish = clean; setTimeout(clean, duration + 50); }
+        if (host) host.classList.remove('on'); document.body.classList.remove('lib-reveal-active'); perf('upgrade', path);
+      },
+      cancel() { finish(); pending = null; document.body.classList.remove('lib-reveal-active'); const zoom = document.getElementById('fx-zoom-wrap'), el = ensureProvisionalEl(); if (zoom) { zoom.style.opacity = ''; zoom.style.clipPath = ''; } if (el) { el.classList.remove('on'); el.style.opacity = ''; el.style.clipPath = ''; el.style.filter = ''; } if (host) host.classList.remove('on'); }
+    };
+  })();
+  if (LIBTEST) window.__chromasmithReveal = reveal;
   async function openInEditor(path) {
     rawPerf('open-click', path);
+    const thumb = document.querySelector(`.lib-card[data-path="${CSS.escape(path)}"] img`);
+    reveal.begin(thumb?.naturalWidth && thumb?.naturalHeight ? thumb.naturalWidth / thumb.naturalHeight : 0, path);
     if (openBusy) { openPendingPath = path; return; }
     openBusy = true;
     window.chromasmithLibraryBusy = true;
@@ -3560,6 +3661,7 @@
       window.chromasmithFullQualityReady = false;
       const exportBtn = document.getElementById('btn-fx-export'); if (exportBtn) exportBtn.disabled = true;
       rawPerf('open-fast-preview', path, { width: img.naturalWidth, height: img.naturalHeight });
+      reveal.pixels(url ? 'provisional' : 'thumbnail', img, path);
       rawPerf('open-editor-ready', path, { ms: performance.now() - openT0, source: 'provisional' });
       // Keep the asset URL alive for the editor's Image element until the RAW decode replaces it.
       // The overlay's onload owns revocation after it has painted the same URL.
@@ -3677,6 +3779,9 @@
           try { autoDetectBW(fullImg); } catch (_) {}
           const workT0 = performance.now(); updateWork(); rawPerf('open-full-quality-work', path, { ms: performance.now() - workT0 });
           const renderT0 = performance.now(); renderPreview(); rawPerf('open-full-quality-render', path, { ms: performance.now() - renderT0 });
+          // The later native RAW-refine callback replaces this same canvas in place. It gets no
+          // second fade: that avoids adding visual delay to an already-visible photograph.
+          reveal.upgrade(path);
           window.chromasmithFullQualityReady = true;
           const exportBtn = document.getElementById('btn-fx-export'); if (exportBtn) exportBtn.disabled = false;
           rawPerf('open-full-quality-promoted', path, {
@@ -3798,6 +3903,7 @@
         deferEditorRender = !!(fullAssetPath || fullCachedEntry) && diskCached.img.naturalWidth < 4000;
         deferredDisplayRender = deferEditorRender;
         installFXImages([diskCached], loadKey, { deferRender: deferEditorRender });
+        reveal.pixels('display', diskCached.img, path);
         // Keep the in-memory reopen source at the display tier. The active entry is promoted
         // independently; sharing the same object would make the next reopen pay the full GPU
         // upload again instead of taking the fast display path.
@@ -3807,6 +3913,7 @@
         deferEditorRender = false;
         deferredDisplayRender = false;
         installFXImages([cached.entry], cached.loadKey, { deferRender: false });
+        reveal.pixels('cached', cached.entry.img, path);
       } else {
         // N1a piece 1: a real decode source for a cached-only (offline) photo. There is no
         // full-resolution offline cache — building one would be a separate, much bigger
@@ -3859,6 +3966,7 @@
         window.chromasmithSourcePath = path;
         window.chromasmithDecodeRecipeKey = recipeKey;
         const decodeT0 = performance.now(); await loadFXImages([file]); rawPerf('open-decode', path, { ms: performance.now() - decodeT0, bytes: buf.byteLength }); // bare identifier — see desktop-native.js's note on this
+        reveal.pixels('decoded', null, path);
         if (fxImages[0]) {
           fxImages[0].fileSize = buf.byteLength; // shown as the "Size" row in the metadata panel
           fxImages[0].offlinePreview = offlinePreview;
@@ -3990,7 +4098,7 @@
       scrollLibraryToPath(path);
       const card = overlay.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
       if (card) card.classList.add('sel');
-      if (fullAssetPath || fullCachedEntry) startFullPromotion(); else window.chromasmithFullQualityReady = true;
+      if (fullAssetPath || fullCachedEntry) startFullPromotion(); else { window.chromasmithFullQualityReady = true; reveal.upgrade(path); }
     } catch (e) {
       console.error('openInEditor', e);
       if (typeof toast === 'function') toast(`Couldn't open ${baseName(path)} — ${friendlyRawError(e)}`, false);
