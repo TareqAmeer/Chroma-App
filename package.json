@@ -58,6 +58,7 @@
     "editor:hover-focus-matrix": "node test/editor_hover_focus_matrix.mjs",
     "editor:forced-colors-check": "node test/editor_forced_colors_check.mjs",
     "editor:empty-error-states": "node test/editor_empty_error_states.mjs",
+    "editor:pan-check": "node test/editor_pan_check.mjs",
     "editor:zoom-check": "node test/editor_zoom_check.mjs",
     "editor:long-string-check": "node test/editor_long_string_check.mjs",
     "editor:hidpi-check": "node test/editor_hidpi_check.mjs",
