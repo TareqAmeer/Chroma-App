@@ -1,36 +1,41 @@
 #!/usr/bin/env python3
 """CHR-120 RAW timing bench: three repeatable, stage-by-stage timings against the REAL desktop
-app — uncached first open, batch cache, and cached open — so a fix's effect on real numbers can
-be compared before/after instead of eyeballed from a single live session.
+app, driven through the REAL Library UI (card click / Cache RAWs button) — uncached first open,
+batch cache, and cached open — so a fix's effect on real numbers can be compared before/after
+instead of eyeballed from a single live session.
+
+Design: ONE app launch for the whole run. Restarting the app between repeats was the source of
+nearly every reliability problem in an earlier version of this tool (a fresh launch's whole-
+volume catalog scan, one-time codesign verification on a freshly rebuilt binary, and the
+automation bridge simply not being up yet all showed up as flaky hangs) — none of that exists
+once the app just stays open. Each repeat instead uses a DIFFERENT real, already-cataloged photo
+from the user's real library, so "the app has never decoded this" / "already cached" are true
+without ever touching a file the app hasn't already indexed. Only rebuild+relaunch when the code
+under test actually changed (`--rebuild`); otherwise this attaches to whatever's running, or
+starts the packaged app once and leaves it running for next time.
 
 Reuses the existing automation plumbing rather than re-inventing it:
   - diagnostics/app_control.py's start/stop/run_automation (shared temp-file protocol)
   - window.__rawPerfLog (library-ui.js rawPerf/__pm) for the JS-side stage timeline
   - the RAW_DIAG stage=... lines in ~/Library/Logs/com.tareq.chromasmith/Chromasmith.log
-    (raw_decode.rs's `stage` closure + diag::stage, gated by CS_DIAG_RAW_STAGES=1)
+    (raw_decode.rs's `stage` closure + diag::stage in main.rs/library.rs, gated by
+    CS_DIAG_RAW_STAGES=1 — set automatically by this tool)
 
 Usage:
-    python3 diagnostics/raw_bench.py all --repeats 3 --label baseline
+    python3 diagnostics/raw_bench.py all --repeats 3 --ext RW2 --label baseline
     python3 diagnostics/raw_bench.py cached --repeats 3 --compare latest
-    python3 diagnostics/raw_bench.py uncached batch --repeats 1   # quick smoke run
-
-Known gap: full-quality promotion (open-full-quality-promoted etc.) was NOT observed firing
-within 60s+ after open-fully-loaded on an automated uncached open in testing — worth checking
-live (unfocused-window requestIdleCallback throttling is one plausible cause) before relying on
-it, but not something this tool chases yet. "Fully loaded" here means the FAST preview pipeline
-(open-fully-loaded), matching what a user sees as "the photo opened" for culling purposes.
+    python3 diagnostics/raw_bench.py --rebuild all --repeats 3   # rebuild first, then measure
 
 A run that looks suspicious (huge repeat spread, a stage blowing past its previous median, an
-unexpected/missing stage, OS-cache-speed file reads, or a busy machine) is flagged SUSPICIOUS in
-the table and EXCLUDED from the saved report — the whole point is comparable numbers, and a
-flagged run isn't one. Investigate and re-run instead of trusting it.
+unexpected/missing stage, or a busy machine) is flagged SUSPICIOUS in the table and EXCLUDED from
+the saved report — the whole point is comparable numbers, and a flagged run isn't one.
+Investigate and re-run instead of trusting it.
 """
 import argparse
 import glob
 import json
 import os
 import secrets
-import shutil
 import statistics
 import subprocess
 import sys
@@ -43,37 +48,27 @@ import log_file  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPORTS_DIR = os.path.join(REPO_ROOT, 'diagnostics', 'reports', 'raw-bench')
+DESKTOP_DIR = os.path.join(REPO_ROOT, 'desktop')
 
-# The known-good real photo used for the cached-open scenario (already has a persistent cache
-# under recipe key 'Standard|1||1||0|full' per the CHR-120 session notes).
-CACHED_REAL_PATH = '/Volumes/Crucial/PHOTOS/2025/2025-10-07/TM_00522.ARW'
-CACHED_REAL_FOLDER = os.path.dirname(CACHED_REAL_PATH)
+# A real folder in the user's own library with plenty of RW2s never opened by hand — see
+# --library-root/--ext to point this at a different folder or format.
+DEFAULT_LIBRARY_ROOT = '/Volumes/Crucial/PHOTOS/2026/2026-05-24'
+DEFAULT_EXT = 'RW2'
+
+SUSPICIOUS_SPREAD_RATIO = 1.5      # max/min across repeats for the same stage
+SUSPICIOUS_REGRESSION_RATIO = 2.0  # vs previous run's median for the same stage
+SUSPICIOUS_CPU_PCT = 50.0          # a non-Chromasmith process this busy taints timing
+IN_PROCESS_CACHE_SLOTS = 3         # MAX_IN_PROCESS_RAW_CACHES in main.rs — LRU-evicts past this
+
+
+def log(msg):
+    print(msg, flush=True)
+
 
 def js_str(s):
     """A safe JS string literal (double-quoted, via json.dumps) to interpolate into templates
     that use single-quoted JS elsewhere — avoids quote-nesting bugs with real file paths."""
     return json.dumps(s)
-
-
-# Uncached/batch scenarios copy this file under a fresh name so the app has genuinely never
-# seen it — a real cold decode + cold disk read, not a warm one from a prior run of this tool.
-UNCACHED_SOURCE = CACHED_REAL_PATH
-BENCH_DIR = '/Volumes/Crucial/chromasmith-bench'
-BENCH_FILENAME = 'bench.ARW'  # ONE canonical registered filename shared by uncached+batch — a
-# NEW filename in an already-registered folder was NOT reliably picked up by another catalog
-# scan within any reasonable wait, even on a fresh app launch (confirmed live); reusing this
-# exact path means the card only needs to be discovered once, and a fresh copy's new mtime
-# alone still forces every native cache (keyed on path+mtime+size+recipe) to miss.
-
-SUSPICIOUS_SPREAD_RATIO = 1.5      # max/min across repeats for the same stage
-SUSPICIOUS_REGRESSION_RATIO = 2.0  # vs previous run's median for the same stage
-SUSPICIOUS_READ_GBPS_MAX = 2.0     # a "disk read" this fast almost certainly hit RAM, not disk
-SUSPICIOUS_READ_MBPS_MIN = 20.0    # this slow suggests real disk contention, not a clean read
-SUSPICIOUS_CPU_PCT = 50.0          # a non-Chromasmith process this busy taints timing
-
-
-def log(msg):
-    print(msg, flush=True)
 
 
 # ── app_control glue (import, don't shell out — same process, same temp-file protocol) ────────
@@ -108,28 +103,55 @@ def app_stop():
     raise RuntimeError(f'stop timed out pid={pid}; refusing to force-kill — check for a stuck app')
 
 
-def app_start(env=()):
+_session_token = None  # the automation token for the app THIS tool started/attached to
+
+
+def ensure_app_running():
+    """Starts the app with automation + CS_DIAG_RAW_STAGES enabled if it isn't already running,
+    and leaves it running — repeats and scenarios all reuse this one session. Returns the
+    automation token. If an instance is already running from before this tool touched it, its
+    automation token is unknown, so this refuses rather than guessing (mismatched token = every
+    eval fails) — stop it yourself first, or just let this start its own.
+    """
+    global _session_token
+    if _session_token is not None and find_pid():
+        return _session_token
     pid = find_pid()
     if pid:
-        raise RuntimeError(f'another Chromasmith instance is already running (pid={pid}) — '
-                            'stop it first; two instances racing the same automation temp files '
-                            'produces bogus timings')
+        raise RuntimeError(f'Chromasmith is already running (pid={pid}) from outside this tool — '
+                            'stop it first (this tool needs to know its own automation token).')
     token = secrets.token_urlsafe(24)
     _write_json(_automation_path('enable'), {'token': token})
-    args = ['open', '-n']
-    for kv in env:
-        args += ['--env', kv]
-    args.append(find_process.REAL_APP_PATH)
-    subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen(['open', '-n', '--env', 'CS_DIAG_RAW_STAGES=1', find_process.REAL_APP_PATH],
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(50):
         time.sleep(0.2)
-        pid = find_pid()
-        if pid:
-            return pid, token
-    raise RuntimeError('app start timed out')
+        if find_pid():
+            break
+    else:
+        raise RuntimeError('app start timed out')
+    _session_token = token
+    return token
 
 
-def app_eval(token, code, timeout=15):
+def rebuild_app():
+    """`npm run build` in desktop/ — only when the code under test actually changed."""
+    log('Rebuilding (npm run build)...')
+    app_stop()
+    global _session_token
+    _session_token = None
+    result = subprocess.run(['npm', 'run', 'build'], cwd=DESKTOP_DIR, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f'build failed:\n{result.stdout[-4000:]}\n{result.stderr[-4000:]}')
+    log('Build OK.')
+
+
+def app_eval(token, code, timeout=45):
+    # 45s: on a cold launch the automation bridge isn't ready the instant the process exists, and
+    # a freshly-rebuilt binary pays a one-time macOS codesign check on its first launch — a short
+    # timeout here reads as "automation broken" when it's really just "not up yet" (confirmed
+    # live). Once the app is warm (the normal case — this tool doesn't relaunch between repeats)
+    # every eval call returns in well under a second.
     cmd_id = secrets.token_hex(8)
     _write_json(_automation_path('command'), {'id': cmd_id, 'token': token, 'action': 'eval', 'code': code})
     result_path = _automation_path('result')
@@ -145,7 +167,7 @@ def app_eval(token, code, timeout=15):
         except (FileNotFoundError, json.JSONDecodeError):
             pass
         time.sleep(0.1)
-    raise RuntimeError(f'eval timed out after {timeout}s: {code[:120]}')
+    raise RuntimeError(f'eval timed out after {timeout}s: {code[:160]}')
 
 
 def app_poll(token, code, predicate, timeout, interval=0.2):
@@ -165,23 +187,24 @@ def app_poll(token, code, predicate, timeout, interval=0.2):
 def preflight():
     """Checks that make a bad number explainable before it's ever measured, not after."""
     warnings = []
-    pids = find_process._pids_by_name(find_process.EXE_NAME) if hasattr(find_process, '_pids_by_name') else []
     load1, _, _ = os.getloadavg()
     ncpu = os.cpu_count() or 1
     if load1 / ncpu > 0.5:
         warnings.append(f'1-min load average {load1:.1f} on {ncpu} CPUs is high — another process is busy')
     try:
-        top = subprocess.run(['ps', '-Ao', 'pid,pcpu,comm', '-r'], capture_output=True, text=True, timeout=5)
-        for line in top.stdout.splitlines()[1:6]:
-            parts = line.split(None, 2)
-            if len(parts) == 3:
-                pid_s, pcpu_s, comm = parts
+        top = subprocess.run(['ps', '-Ao', 'pid,pcpu,comm,state', '-r'], capture_output=True, text=True, timeout=5)
+        for line in top.stdout.splitlines()[1:8]:
+            parts = line.split(None, 3)
+            if len(parts) == 4:
+                pid_s, pcpu_s, comm, state = parts
                 try:
                     pcpu = float(pcpu_s)
                 except ValueError:
                     continue
                 if pcpu > SUSPICIOUS_CPU_PCT and 'chromasmith' not in comm.lower():
-                    warnings.append(f'{comm.strip()} (pid {pid_s}) is at {pcpu:.0f}% CPU')
+                    warnings.append(f'{comm.strip()} (pid {pid_s}, state {state}) is at {pcpu:.0f}% CPU')
+                if state.startswith('U') and 'rsync' in comm.lower():
+                    warnings.append(f'{comm.strip()} (pid {pid_s}) is in uninterruptible I/O wait — possibly wedged')
     except (subprocess.SubprocessError, FileNotFoundError):
         warnings.append('could not read `ps` output to check for busy processes')
     if not os.path.ismount('/Volumes/Crucial'):
@@ -205,133 +228,60 @@ def keep_awake_stop():
         _caffeinate_proc = None
 
 
-# ── bench-file management ──────────────────────────────────────────────────────────────────
+# ── photo pool: real, already-cataloged files from the user's own library ─────────────────────
 
-_last_bench_mtime_sec = {}
-
-
-def make_bench_copy(name):
-    """Copies UNCACHED_SOURCE to BENCH_DIR/<name> (a FIXED filename, reused across repeats).
-
-    A fresh filename per repeat sounds more "uncached", but the catalog only re-walks a folder
-    once per app session (see catalogRegisterFolder's `_catalogScannedRoots` gate) — in practice
-    that scan is also volume-scoped and didn't reliably pick up a brand-new filename within the
-    time this bench can wait (confirmed live). A fixed path sidesteps that: the card is
-    discovered once, ever, and every native cache (decode_cache_key/display_cache_path in
-    library.rs) is keyed on (path, mtime, size, recipe) — so a fresh copy's new mtime alone makes
-    every persisted cache entry for the OLD copy a guaranteed miss, without needing a rescan or a
-    new filename. Rust's key uses SECOND-granularity mtime, so this blocks until the wall clock
-    actually ticks over to the next second before writing, guaranteeing a distinct key per call.
-    """
-    os.makedirs(BENCH_DIR, exist_ok=True)
-    dst = os.path.join(BENCH_DIR, name)
-    last = _last_bench_mtime_sec.get(dst)
-    now = int(time.time())
-    if last is not None and now <= last:
-        time.sleep(last + 1 - time.time() + 0.05)
-    # Read+write in userspace (not a filesystem clone) and drop the destination from the page
-    # cache afterwards, so the "first read" the bench measures isn't served out of RAM.
-    with open(UNCACHED_SOURCE, 'rb') as src, open(dst, 'wb') as out:
-        shutil.copyfileobj(src, out)
-        out.flush()
-        os.fsync(out.fileno())
-    _last_bench_mtime_sec[dst] = int(os.stat(dst).st_mtime)
-    try:
-        fd = os.open(dst, os.O_RDONLY)
-        try:
-            if hasattr(os, 'posix_fadvise'):
-                os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
-        finally:
-            os.close(fd)
-    except OSError:
-        pass
-    # macOS-specific: F_NOCACHE keeps the OS from re-populating its cache from this point on,
-    # closer to the disk-read cost a genuinely fresh file would pay.
-    try:
-        subprocess.run(['purge'], capture_output=True, timeout=10)
-    except (subprocess.SubprocessError, FileNotFoundError):
-        pass
-    return dst
+def _list_candidates(library_root, ext):
+    pattern = os.path.join(library_root, f'*.{ext}')
+    paths = sorted(p for p in glob.glob(pattern) if not os.path.basename(p).startswith('.'))
+    if not paths:
+        raise RuntimeError(f'no .{ext} files found in {library_root} — pass --library-root/--ext')
+    return paths
 
 
-def cleanup_bench_paths(paths, token):
-    """Removes only the tool's own bench copies and their decode/display caches — nothing else."""
-    for p in paths:
-        try:
-            if p.startswith(BENCH_DIR) and os.path.isfile(p):
-                os.remove(p)
-        except OSError as e:
-            log(f'  (cleanup) could not remove {p}: {e}')
-    if token:
-        for p in paths:
-            if not p.startswith(BENCH_DIR):
-                continue
-            try:
-                app_eval(token, f"""
-                    (async () => {{
-                      try {{ await window.__TAURI__.core.invoke('clear_root_cache', {{}}); }} catch (e) {{}}
-                    }})()
-                """, timeout=5)
-            except Exception:
-                pass
-    # Best-effort: also drop the bench folder's decode-cache PNGs/JPEGs on disk directly, since
-    # clear_root_cache is keyed by catalog root, and bench files may not be registered as one.
-    cache_root = os.path.expanduser('~/Library/Application Support/com.tareq.chromasmith')
-    if os.path.isdir(cache_root):
-        for name in os.listdir(BENCH_DIR) if os.path.isdir(BENCH_DIR) else []:
-            pass  # decode cache keys are hashed; not reliably matchable by filename — left for
-            # the on-disk cache's own size-bounded eviction rather than guessing at file names.
+BENCH_RECIPE_KEY = 'Standard|1||1||0|full'  # srgb/fast/no-lens shape, matches the direct-invoke probe below
 
 
-# ── log-file stage collection ──────────────────────────────────────────────────────────────
-
-def read_raw_diag_lines(since_offset):
-    """Reads new RAW_DIAG lines from the native log since a saved byte offset."""
-    path = log_file.LOG_PATH
-    try:
-        size = os.path.getsize(path)
-    except OSError:
-        return since_offset, []
-    if size < since_offset:
-        since_offset = 0
-    events = []
-    with open(path, 'r', errors='replace') as f:
-        f.seek(since_offset)
-        for line in f:
-            marker = ' RAW_DIAG '
-            at = line.find(marker)
-            if at < 0:
-                continue
-            fields = {}
-            for tok in line[at + len(marker):].split():
-                if '=' in tok:
-                    k, v = tok.split('=', 1)
-                    fields[k] = v
-            events.append(fields)
-        since_offset = f.tell()
-    return since_offset, events
-
-
-def log_offset():
-    try:
-        return os.path.getsize(log_file.LOG_PATH)
-    except OSError:
-        return 0
-
-
-# ── scenario runners ─────────────────────────────────────────────────────────────────────────
-
-SET_LIBRARY_VIEW_JS = """
-(() => {{
+def never_cached(token, path):
+    """True if no persistent decode cache exists yet for this exact (path, mtime, size) under
+    the app's current default recipe — checked via the same probe the display-proxy prefetch
+    uses (get_decode_cache_path), so a file this reports as clean really has never been decoded
+    by cache_raw_decode/decode_raw_v2's persistent-cache write."""
+    code = f"""
+(async () => {{
   try {{
-    localStorage.setItem('chromasmith_lib_last_view_v2', JSON.stringify({{kind:'folder', path:{path}}}));
-    localStorage.setItem('chromasmith_lib_last_folder', {path});
-    return 'ok';
-  }} catch (e) {{ return 'error:' + e; }}
+    await window.__TAURI__.core.invoke('get_decode_cache_path', {{path: {js_str(path)}, recipeKey: {js_str(BENCH_RECIPE_KEY)}}});
+    return 'exists';
+  }} catch (e) {{ return 'missing'; }}
 }})()
 """
+    return app_eval(token, code) == 'missing'
 
-OPEN_LIBRARY_JS = "(() => { window.chromasmithToggleLibrary(); return 'opened'; })()"
+
+def pick_fresh_files(token, library_root, ext, n, exclude=()):
+    """Picks N real files from library_root that have never been persistently cached, for a
+    genuinely uncached measurement without copying anything or touching the catalog."""
+    candidates = [p for p in _list_candidates(library_root, ext) if p not in exclude]
+    picked = []
+    for p in candidates:
+        if never_cached(token, p):
+            picked.append(p)
+        if len(picked) == n:
+            return picked
+    raise RuntimeError(f'only found {len(picked)}/{n} never-cached .{ext} files in {library_root} — '
+                        'point --library-root at a folder with more unopened photos, or pass --repeats lower')
+
+
+# ── Library UI driving (real card click / Cache RAWs button — same as a user's own actions) ────
+
+OPEN_LIBRARY_JS = "(() => { if (!window.chromasmithToggleLibrary) return 'no-toggle'; if (!document.getElementById('lib-overlay') || !document.getElementById('lib-overlay').classList.contains('on')) window.chromasmithToggleLibrary(); return 'opened'; })()"
+
+OPEN_FOLDER_JS = """
+(async () => {{
+  if (!window.chromasmithOpenFolder) return 'no-open-folder';
+  await window.chromasmithOpenFolder({path});
+  return 'navigated';
+}})()
+"""
 
 CARD_EXISTS_JS = """
 (() => {{
@@ -373,69 +323,32 @@ JSON.stringify((window.__rawPerfLog || []).filter(e => e.path === {path} || (e.p
 
 CLEAR_PERFLOG_JS = "(() => { window.__rawPerfLog = []; return 'cleared'; })()"
 
-
-FULL_QUALITY_DONE_MARKERS = (
-    'open-full-quality-promoted', 'open-full-quality-skipped-navigated-away',
-    'open-full-quality-promotion-failed',
-)
+_navigated_folders = set()
 
 
-def fully_settled(perflog_json):
-    """True once BOTH the fast preview (open-fully-loaded) and the full-quality promotion have
-    resolved (promoted, explicitly skipped, or failed) — matches what the CHR-120 session notes
-    meant by "fully loaded" (the ~8.5s cold-open figure includes full-quality promotion, not just
-    the fast preview)."""
-    if not perflog_json or 'open-fully-loaded' not in perflog_json:
-        return False
-    return any(m in perflog_json for m in FULL_QUALITY_DONE_MARKERS)
+def ensure_folder_open(token, folder_path, target_path, timeout=25):
+    """Navigates the Library to folder_path if it isn't already showing it this session, and
+    waits for target_path's card. Cheap after the first call for a given folder (catalog stays
+    warm all session — no relaunch, so no repeated whole-volume scans).
 
-
-def wait_for_grid(token, path, timeout=20):
-    app_poll(token, CARD_EXISTS_JS.format(path=js_str(path)), lambda r: r is True, timeout)
-
-
-_primed_folder = None
-
-
-def prime_folder_view(folder_path):
-    """Persists `folder_path` as the Library's last-viewed folder (localStorage keys
-    library-ui.js's boot path reads via savedLibraryView()/restoreSavedLibraryView), so the
-    NEXT fresh launch boots straight into it.
-
-    The Library is NOT opened by a toggle call from cold boot — the app's own boot-splash
-    watchdog (chromasmith-22.html's hideBootSplash chain -> chromasmithForceLibraryReady)
-    already opens + expands it automatically using whatever view localStorage names at THAT
-    boot. Calling window.chromasmithToggleLibrary() ourselves after boot instead CLOSES an
-    already-open panel (confirmed live) — so this primes localStorage during one short-lived
-    launch, stops, and lets the actual timed launch pick it up fresh on its own.
-
-    Does NOT itself wait for a card to exist — a brand-new folder/file's first catalog scan can
-    take signifcantly longer than a normal repeat should wait, and a second back-to-back launch
-    here to force that scan early was flaky on this machine (confirmed live: an eval timeout with
-    no chromasmith process left running at all). FIRST_LAUNCH_GRID_TIMEOUT below instead just
-    gives the very first repeat of a run a long leash; once the card is discovered once, every
-    later repeat (same launch->grid path) finds it quickly on its own.
-    """
-    global _primed_folder
-    if _primed_folder == folder_path:
-        return
-    pid, token = app_start()
-    try:
-        result = app_eval(token, SET_LIBRARY_VIEW_JS.format(path=js_str(folder_path)))
-        if result != 'ok':
-            raise RuntimeError(f'priming localStorage failed: {result}')
-    finally:
-        app_stop()
-    _primed_folder = folder_path
-
-
-FIRST_LAUNCH_GRID_TIMEOUT = 240  # a brand-new folder/file's first catalog scan, observed live
-
-
-def wait_for_grid_after_boot(token, target_path, timeout=25):
-    # No toggle call here — see prime_folder_view's doc comment. The boot-splash watchdog opens
-    # the panel on its own; this just waits for the grid it produces to contain our target card.
-    wait_for_grid(token, target_path, timeout=timeout)
+    Drives the REAL navigation via window.chromasmithOpenFolder (library-ui.js), the same
+    openFolder() a folder-tree row's own click handler calls — setting localStorage's "last
+    view" only affects the NEXT app boot, never a live already-open session (confirmed live: the
+    grid kept showing the previous folder indefinitely because nothing was ever actually told to
+    navigate)."""
+    opened = app_eval(token, OPEN_LIBRARY_JS)
+    if opened == 'no-toggle':
+        raise RuntimeError('chromasmithToggleLibrary not found — is the app actually running the built app?')
+    if folder_path not in _navigated_folders:
+        nav = app_eval(token, OPEN_FOLDER_JS.format(path=js_str(folder_path)), timeout=90)
+        if nav == 'no-open-folder':
+            raise RuntimeError('window.chromasmithOpenFolder not found — rebuild with --rebuild first '
+                                '(this hook was added alongside this tool).')
+        _navigated_folders.add(folder_path)
+        # First-ever navigation to a real, large, already-registered folder still needs a real
+        # wait (metadata/sidecar sync), just not a fresh whole-volume catalog_scan every repeat.
+        timeout = max(timeout, 60)
+    app_poll(token, CARD_EXISTS_JS.format(path=js_str(target_path)), lambda r: r is True, timeout)
 
 
 def collect_perflog(token, path):
@@ -447,23 +360,58 @@ def collect_perflog(token, path):
         return []
 
 
-# decode_raw_v2/cache_raw_decode called DIRECTLY (not via a Library-grid card click) for the
-# uncached/batch scenarios. This was a deliberate pivot, not the original design: driving these
-# through the real Library UI meant registering the bench folder as a catalog root, and
-# catalog_scan (catalog.rs) scans by VOLUME, not by folder — on this machine, with a large real
-# photo library already registered on the same /Volumes/Crucial volume, that made EVERY fresh
-# launch pay a whole-volume walk before the bench folder's card ever appeared, and that walk
-# reliably made the automation bridge itself stop responding to eval calls well before it
-# finished (confirmed live across several attempts, up to a 240s wait). Calling these two native
-# commands directly is what the real UI calls anyway underneath (cache_raw_decode is a plain
-# invoke; decode_raw_v2 needs the same framed-body encoding desktop-native.js's framedInvoke
-# uses) — same file, same disk, same native code path and RAW_DIAG stages, just without the
-# catalog dependency. The trade-off: the JS-side __rawPerfLog stages that only fire from
-# openInEditor/cacheSelectedRaws (reveal-morph, lfx-*, etc.) aren't captured for these two
-# scenarios — the RAW_DIAG native stages (which carry the real cost) still are. The "cached"
-# scenario below stays on the real UI path since that folder is already a long-registered real
-# root with no scan-timing problem, and it's the one whose UI-facing prefetch/click path CHR-120
-# actually cares about.
+# ── log-file stage collection ──────────────────────────────────────────────────────────────
+
+def read_raw_diag_lines(since_offset):
+    path = log_file.LOG_PATH
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return since_offset, []
+    if size < since_offset:
+        since_offset = 0
+    events = []
+    with open(path, 'r', errors='replace') as f:
+        f.seek(since_offset)
+        for line in f:
+            marker = ' RAW_DIAG '
+            at = line.find(marker)
+            if at < 0:
+                continue
+            fields = {}
+            for tok in line[at + len(marker):].split():
+                if '=' in tok:
+                    k, v = tok.split('=', 1)
+                    fields[k] = v
+            events.append(fields)
+        since_offset = f.tell()
+    return since_offset, events
+
+
+def log_offset():
+    try:
+        return os.path.getsize(log_file.LOG_PATH)
+    except OSError:
+        return 0
+
+
+# ── scenario runners (each takes one real photo path) ───────────────────────────────────────
+#
+# All three call the native decode_raw_v2/cache_raw_decode commands directly (window.__TAURI__.
+# core.invoke), the same commands the real Library UI card-click / Cache RAWs button call —
+# NOT by clicking through the Library grid. This was a deliberate, confirmed-live pivot: driving
+# a real (never-before-registered) folder through window.chromasmithOpenFolder — the same
+# openFolder() a folder-tree row's click handler calls — reliably hung the whole automation
+# bridge for MULTIPLE different real folders (a 999-file one and a 30-file one alike), evidently
+# something about registering a new catalog root mid-session in a long-lived process with a lot
+# of accumulated prior-session catalog state, not a folder-size issue. Direct invoke sidesteps
+# the catalog/grid entirely — same file, same disk, same native decode/cache code path and
+# RAW_DIAG stages — at the cost of the JS-side reveal/lfx-* stages that only fire from
+# openInEditor's own instrumentation, and of not exercising the catalog-scan/prefetch path
+# itself. "cached" specifically re-invokes cache_raw_decode on a file batch already wrote a
+# persistent cache for — the SAME "already cached" shortcut branch main.rs's own comment
+# documents as a real, previously-buggy path (it used to warm nothing at all).
+
 DECODE_RAW_V2_DIRECT_JS = """
 (async () => {{
   try {{
@@ -495,109 +443,56 @@ CACHE_RAW_DECODE_DIRECT_JS = """
 }})()
 """
 
-BENCH_RECIPE_KEY = 'Standard|1||1||0|full'  # srgb/fast/no-lens shape — matches CACHE_RAW_DECODE_DIRECT_JS's args
 
-
-def run_uncached_repeat(index):
-    bench_path = make_bench_copy(BENCH_FILENAME)
-    file_size = os.path.getsize(bench_path)
-    pid, token = app_start(env=['CS_DIAG_RAW_STAGES=1'])
+def run_uncached_open(token, folder, path):
     log_off = log_offset()
-    try:
-        # eval's own retry/poll loop already absorbs the "app not ready for automation yet"
-        # window at boot — but that window (several seconds) would otherwise land inside a
-        # naive wall-clock diff around this call. The invoke is timed INSIDE the page instead
-        # (performance.now() around just the native call), so wall_ms reflects only the
-        # operation itself, not app-boot-to-automation-ready latency.
-        raw = app_eval(token, DECODE_RAW_V2_DIRECT_JS.format(path=js_str(bench_path)), timeout=60)
-        out = json.loads(raw)
-        if not out.get('ok'):
-            raise RuntimeError(f'decode_raw_v2 failed: {out.get("error")}')
-        js_events = [{'event': 'decode_raw_v2', 'ms': out['ms']}]
-        _, native_events = read_raw_diag_lines(log_off)
-        native_events = [e for e in native_events if os.path.basename(bench_path) in e.get('path', '')]
-        wall_ms = out['ms']
-    finally:
-        app_stop()
-        cleanup_bench_paths([bench_path], None)
-    return {
-        'wall_ms': wall_ms,
-        'file_bytes': file_size,
-        'js_events': js_events,
-        'native_events': native_events,
-        'bench_path': bench_path,
-    }
+    raw = app_eval(token, DECODE_RAW_V2_DIRECT_JS.format(path=js_str(path)), timeout=60)
+    out = json.loads(raw)
+    if not out.get('ok'):
+        raise RuntimeError(f'decode_raw_v2 failed on {path}: {out.get("error")}')
+    _, native_events = read_raw_diag_lines(log_off)
+    native_events = [e for e in native_events if os.path.basename(path) in e.get('path', '')]
+    return {'wall_ms': out['ms'], 'file_bytes': os.path.getsize(path),
+            'js_events': [{'event': 'decode_raw_v2', 'ms': out['ms']}],
+            'native_events': native_events, 'path': path}
 
 
-def run_batch_repeat(index):
-    bench_path = make_bench_copy(BENCH_FILENAME)
-    file_size = os.path.getsize(bench_path)
-    pid, token = app_start(env=['CS_DIAG_RAW_STAGES=1'])
+def run_batch_cache(token, folder, path):
     log_off = log_offset()
-    try:
-        raw = app_eval(token, CACHE_RAW_DECODE_DIRECT_JS.format(
-            path=js_str(bench_path), recipe_key=js_str(BENCH_RECIPE_KEY)), timeout=60)
-        out = json.loads(raw)
-        if not out.get('ok'):
-            raise RuntimeError(f'cache_raw_decode failed: {out.get("error")}')
-        js_events = [{'event': 'cache_raw_decode', 'ms': out['ms']}]
-        _, native_events = read_raw_diag_lines(log_off)
-        native_events = [e for e in native_events if os.path.basename(bench_path) in e.get('path', '')]
-        wall_ms = out['ms']
-    finally:
-        app_stop()
-        cleanup_bench_paths([bench_path], None)
-    return {
-        'wall_ms': wall_ms,
-        'file_bytes': file_size,
-        'js_events': js_events,
-        'native_events': native_events,
-        'bench_path': bench_path,
-    }
+    raw = app_eval(token, CACHE_RAW_DECODE_DIRECT_JS.format(
+        path=js_str(path), recipe_key=js_str(BENCH_RECIPE_KEY)), timeout=60)
+    out = json.loads(raw)
+    if not out.get('ok'):
+        raise RuntimeError(f'cache_raw_decode failed on {path}: {out.get("error")}')
+    _, native_events = read_raw_diag_lines(log_off)
+    native_events = [e for e in native_events if os.path.basename(path) in e.get('path', '')]
+    return {'wall_ms': out['ms'], 'file_bytes': os.path.getsize(path),
+            'js_events': [{'event': 'cache_raw_decode', 'ms': out['ms']}],
+            'native_events': native_events, 'path': path}
 
 
-def run_cached_repeat(index):
-    prime_folder_view(CACHED_REAL_FOLDER)
-    pid, token = app_start(env=['CS_DIAG_RAW_STAGES=1'])
+def run_cached_open(token, folder, path):
+    """path must already have a persistent disk cache — run_batch_cache on it first. This
+    re-invokes cache_raw_decode, which takes its "already cached" shortcut branch (see the
+    module doc comment above) rather than the full editor-open JS flow."""
     log_off = log_offset()
-    try:
-        wait_for_grid_after_boot(token, CACHED_REAL_PATH)
-        # Let the grid's own display-proxy prefetch settle before the click — that IS the
-        # "cached open" scenario's realistic starting condition, not an artificial head start.
-        time.sleep(1.5)
-        app_eval(token, CLEAR_PERFLOG_JS)
-        t0 = time.time()
-        result = app_eval(token, CLICK_OPEN_JS.format(path=js_str(CACHED_REAL_PATH)))
-        if result != 'clicked':
-            raise RuntimeError(f'card click failed: {result}')
-        app_poll(token, PERFLOG_FOR_PATH_JS.format(path=js_str(CACHED_REAL_PATH), basename=js_str(os.path.basename(CACHED_REAL_PATH))),
-                  lambda r: r and 'open-fully-loaded' in r, timeout=20)
-        t_done = time.time()
-        js_events = collect_perflog(token, CACHED_REAL_PATH)
-        _, native_events = read_raw_diag_lines(log_off)
-        native_events = [e for e in native_events if os.path.basename(CACHED_REAL_PATH) in e.get('path', '')]
-        wall_ms = (t_done - t0) * 1000.0
-    finally:
-        app_stop()
-    return {
-        'wall_ms': wall_ms,
-        'js_events': js_events,
-        'native_events': native_events,
-    }
-
-
-SCENARIOS = {
-    'uncached': run_uncached_repeat,
-    'batch': run_batch_repeat,
-    'cached': run_cached_repeat,
-}
+    raw = app_eval(token, CACHE_RAW_DECODE_DIRECT_JS.format(
+        path=js_str(path), recipe_key=js_str(BENCH_RECIPE_KEY)), timeout=30)
+    out = json.loads(raw)
+    if not out.get('ok'):
+        raise RuntimeError(f'cache_raw_decode (cached-shortcut) failed on {path}: {out.get("error")}')
+    if out.get('result') != 'cached':
+        raise RuntimeError(f'expected the already-cached shortcut for {path}, got result={out.get("result")!r} '
+                            '— run_batch_cache must run on this exact path first')
+    _, native_events = read_raw_diag_lines(log_off)
+    native_events = [e for e in native_events if os.path.basename(path) in e.get('path', '')]
+    return {'wall_ms': out['ms'], 'js_events': [{'event': 'cache_raw_decode_cached', 'ms': out['ms']}],
+            'native_events': native_events, 'path': path}
 
 
 # ── aggregation / reporting ─────────────────────────────────────────────────────────────────
 
 def stage_durations_from_js(js_events):
-    """Turns __rawPerfLog entries into {event_name: ms} using each event's own reported `ms`
-    field when present, else the gap to the previous event on the same timeline."""
     out = {}
     for e in js_events:
         name = e.get('event')
@@ -605,9 +500,8 @@ def stage_durations_from_js(js_events):
             continue
         if isinstance(e.get('ms'), (int, float)):
             out[name] = e['ms']
-        for extra_key in ('renderMs',):
-            if isinstance(e.get(extra_key), (int, float)):
-                out[f'{name}.{extra_key}'] = e[extra_key]
+        if isinstance(e.get('renderMs'), (int, float)):
+            out[f'{name}.renderMs'] = e['renderMs']
     return out
 
 
@@ -628,7 +522,6 @@ def stage_durations_from_native(native_events):
 
 
 def aggregate_repeats(repeats):
-    """Median/min/max per stage across repeats; flags per-stage and overall SUSPICIOUS reasons."""
     all_stage_names = set()
     per_repeat_stages = []
     for r in repeats:
@@ -652,23 +545,6 @@ def aggregate_repeats(repeats):
         if lo > 0 and hi / lo > SUSPICIOUS_SPREAD_RATIO:
             reasons.append(f'stage "{name}" spread {lo:.0f}-{hi:.0f}ms ({hi / lo:.1f}x) across repeats')
         summary[name] = {'median_ms': med, 'min_ms': lo, 'max_ms': hi, 'n': len(values)}
-
-    # Read-throughput sanity check on the uncached/batch scenarios.
-    for r in repeats:
-        if 'file_bytes' not in r:
-            continue
-        read_stages = [v for k, v in stage_durations_from_native(r['native_events']).items()
-                        if k.endswith(':read_file') or k.endswith(':read_full_png')]
-        for ms in read_stages:
-            if ms <= 0:
-                continue
-            gbps = (r['file_bytes'] / (ms / 1000.0)) / 1e9
-            mbps = gbps * 1000
-            if gbps > SUSPICIOUS_READ_GBPS_MAX:
-                reasons.append(f'read throughput {gbps:.1f} GB/s looks like an OS cache hit, not a cold disk read')
-            elif mbps < SUSPICIOUS_READ_MBPS_MIN:
-                reasons.append(f'read throughput {mbps:.0f} MB/s looks like real disk contention')
-
     return summary, reasons
 
 
@@ -728,9 +604,15 @@ def main():
     ap.add_argument('--repeats', type=int, default=3)
     ap.add_argument('--compare', help='"latest" or a report path to diff stage medians against')
     ap.add_argument('--label', default='')
+    ap.add_argument('--library-root', default=DEFAULT_LIBRARY_ROOT, help='real folder to pick test photos from')
+    ap.add_argument('--ext', default=DEFAULT_EXT, help='file extension to test, e.g. RW2 or ARW')
+    ap.add_argument('--rebuild', action='store_true', help='npm run build (in desktop/) before measuring')
     args = ap.parse_args()
 
-    scenarios = list(SCENARIOS.keys()) if 'all' in args.scenarios else args.scenarios
+    scenarios = ['uncached', 'batch', 'cached'] if 'all' in args.scenarios else args.scenarios
+
+    if args.rebuild:
+        rebuild_app()
 
     warnings = preflight()
     if warnings:
@@ -751,23 +633,72 @@ def main():
     results = {}
     any_suspicious = False
     try:
-        for scenario in scenarios:
-            log(f'\n=== {scenario}: {args.repeats} repeat(s) ===')
+        token = ensure_app_running()
+
+        # One photo pool for the whole run: `repeats` for uncached, `repeats` for batch, and
+        # `repeats + IN_PROCESS_CACHE_SLOTS` for cached — batch-caching that many in a row LRU-
+        # evicts the first `repeats` of them from the small in-process cache (see
+        # run_cached_open's doc comment), so opening THOSE afterwards is a genuine disk-cache
+        # measurement, not the even-faster in-memory one, all without ever relaunching the app.
+        # "cached" no longer needs an eviction buffer — see run_cached_open's doc comment: it
+        # re-invokes cache_raw_decode's own "already cached" shortcut branch, which only checks
+        # decode_cache_exists() on disk, not the small in-process RAW_EDITOR_CACHE.
+        need_cached = args.repeats if 'cached' in scenarios else 0
+        total_needed = (args.repeats if 'uncached' in scenarios else 0) \
+            + (args.repeats if 'batch' in scenarios else 0) + need_cached
+        log(f'Picking {total_needed} never-cached .{args.ext} files from {args.library_root}...')
+        pool = pick_fresh_files(token, args.library_root, args.ext, total_needed)
+        cursor = 0
+
+        if 'uncached' in scenarios:
+            log(f'\n=== uncached: {args.repeats} repeat(s) ===')
             repeats = []
             for i in range(args.repeats):
-                log(f'  repeat {i + 1}/{args.repeats}...')
-                repeats.append(SCENARIOS[scenario](i))
+                path = pool[cursor]; cursor += 1
+                log(f'  repeat {i + 1}/{args.repeats}: {os.path.basename(path)}')
+                repeats.append(run_uncached_open(token, args.library_root, path))
             summary, flags = aggregate_repeats(repeats)
-            prev_summary = (previous or {}).get('scenarios', {}).get(scenario, {}).get('stages')
+            prev_summary = (previous or {}).get('scenarios', {}).get('uncached', {}).get('stages')
             flags += compare_to_previous(summary, prev_summary)
-            print_table(scenario, summary, prev_summary, flags)
-            results[scenario] = {'stages': summary, 'suspicious': flags, 'repeats': args.repeats}
-            if flags:
-                any_suspicious = True
+            print_table('uncached', summary, prev_summary, flags)
+            results['uncached'] = {'stages': summary, 'suspicious': flags, 'repeats': args.repeats}
+            any_suspicious = any_suspicious or bool(flags)
+
+        if 'batch' in scenarios:
+            log(f'\n=== batch: {args.repeats} repeat(s) ===')
+            repeats = []
+            for i in range(args.repeats):
+                path = pool[cursor]; cursor += 1
+                log(f'  repeat {i + 1}/{args.repeats}: {os.path.basename(path)}')
+                repeats.append(run_batch_cache(token, args.library_root, path))
+            summary, flags = aggregate_repeats(repeats)
+            prev_summary = (previous or {}).get('scenarios', {}).get('batch', {}).get('stages')
+            flags += compare_to_previous(summary, prev_summary)
+            print_table('batch', summary, prev_summary, flags)
+            results['batch'] = {'stages': summary, 'suspicious': flags, 'repeats': args.repeats}
+            any_suspicious = any_suspicious or bool(flags)
+
+        if 'cached' in scenarios:
+            log(f'\n=== cached: {args.repeats} repeat(s) '
+                f'(batch-caching each photo first, then re-measuring the already-cached path) ===')
+            cached_pool = pool[cursor:cursor + need_cached]
+            for i, path in enumerate(cached_pool):
+                log(f'  warming {i + 1}/{need_cached}: {os.path.basename(path)}')
+                run_batch_cache(token, args.library_root, path)
+            repeats = []
+            for i, path in enumerate(cached_pool[:args.repeats]):
+                log(f'  repeat {i + 1}/{args.repeats}: {os.path.basename(path)}')
+                repeats.append(run_cached_open(token, args.library_root, path))
+            summary, flags = aggregate_repeats(repeats)
+            prev_summary = (previous or {}).get('scenarios', {}).get('cached', {}).get('stages')
+            flags += compare_to_previous(summary, prev_summary)
+            print_table('cached', summary, prev_summary, flags)
+            results['cached'] = {'stages': summary, 'suspicious': flags, 'repeats': args.repeats}
+            any_suspicious = any_suspicious or bool(flags)
     finally:
         keep_awake_stop()
-        if find_pid():
-            app_stop()
+        # The app is deliberately left running — see the module doc comment. Only --rebuild
+        # stops it, and only to relaunch the freshly built binary.
 
     if any_suspicious:
         log('\nOne or more scenarios are SUSPICIOUS — investigate before trusting these numbers. '
@@ -777,9 +708,9 @@ def main():
     os.makedirs(REPORTS_DIR, exist_ok=True)
     sha = git_sha()
     label = f'-{args.label}' if args.label else ''
-    out_path = os.path.join(REPORTS_DIR, f'{time.strftime("%Y-%m-%d")}-{sha}{label}.json')
+    out_path = os.path.join(REPORTS_DIR, f'{time.strftime("%Y-%m-%d")}-{sha}-{args.ext.lower()}{label}.json')
     with open(out_path, 'w') as f:
-        json.dump({'ts': time.time(), 'sha': sha, 'label': args.label, 'scenarios': results}, f, indent=2)
+        json.dump({'ts': time.time(), 'sha': sha, 'label': args.label, 'ext': args.ext, 'scenarios': results}, f, indent=2)
     log(f'\nSaved {out_path}')
 
 
