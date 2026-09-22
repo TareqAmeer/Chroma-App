@@ -894,27 +894,6 @@ pub fn save_decode_cache(request: tauri::ipc::Request) -> Result<(), String> {
     std::fs::write(decode_cache_dir().join(&key), payload).map_err(|e| format!("write decode cache: {e}"))
 }
 
-/// Fast provisional preview for opening a RAW into the editor: the camera's own embedded
-/// JPEG (rawler's extract_preview_pixels — bigger than the grid thumbnail, no demosaic), so
-/// the editor shows *something* in well under a second while the full native decode (PPG
-/// demosaic + DCP LUT, ~3-5s) runs behind it and swaps in. Not cached — it's a one-shot
-/// provisional frame, not reused.
-#[tauri::command]
-pub fn get_preview(path: String) -> Result<tauri::ipc::Response, String> {
-    let ext = ext_lower(Path::new(&path));
-    if !is_raw_ext(&ext) {
-        return Err("get_preview is for RAW files only".into());
-    }
-    let img = rawler::analyze::extract_preview_pixels(&path, &RawDecodeParams::default())
-        .map_err(|e| format!("preview decode: {e}"))?;
-    let img = apply_orientation_dynamic(img, raw_orientation(&path));
-    let mut out = Cursor::new(Vec::new());
-    img.to_rgb8()
-        .write_to(&mut out, image::ImageFormat::Jpeg)
-        .map_err(|e| format!("jpeg encode: {e}"))?;
-    Ok(tauri::ipc::Response::new(out.into_inner()))
-}
-
 /// The Library's full-screen Quick Look (Space bar): a fast, LARGE preview for rapid culling —
 /// Photo Mechanic's whole trick, judge sharpness/composition at speed without ever paying for a
 /// full RAW demosaic. Three sources, in the same priority order `get_thumbnail_inner` already
