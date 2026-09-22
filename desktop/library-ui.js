@@ -2447,7 +2447,10 @@
     const around = openIdx >= 0
       ? paths.slice(Math.max(0, from - DISPLAY_PREFETCH_BACK), from)
           .concat(paths.slice(from + 1, from + 1 + DISPLAY_PREFETCH_FORWARD))
-      : paths.slice(1, 1 + DISPLAY_PREFETCH_FORWARD);
+      // Before anything is open, the first visible card is a likely first click. The old
+      // `slice(1, …)` skipped it as though its open request were already in flight, making a
+      // freshly launched Library pay the JPEG proxy decode on that exact first selection.
+      : paths.slice(0, DISPLAY_PREFETCH_FORWARD);
     const queue = around.filter((p) => RAW_EXT_RE.test(p) && !displayCacheHas(p, recipeKey));
     let cursor = 0;
     const worker = async () => {
@@ -3849,7 +3852,9 @@
         const loadKey = `${baseName(path)}:diskcache:${recipeKey}`;
         deferEditorRender = !!(fullAssetPath || fullCachedEntry) && diskCached.img.naturalWidth < 4000;
         deferredDisplayRender = deferEditorRender;
+        const installT0 = performance.now();
         installFXImages([diskCached], loadKey, { deferRender: deferEditorRender });
+        rawPerf('open-display-install', path, { ms: performance.now() - installT0, deferred: deferEditorRender });
         reveal.pixels('display', diskCached.img, path);
         // Keep the in-memory reopen source at the display tier. The active entry is promoted
         // independently; sharing the same object would make the next reopen pay the full GPU
@@ -4061,8 +4066,8 @@
         requestAnimationFrame(() => {
           try {
             if (deferredRecipeApply) deferredRecipeApply();
-            renderPreview();
-            rawPerf('open-display-render', path, { ms: performance.now() - openT0, width: FX.w, height: FX.h });
+            const renderT0 = performance.now(); renderPreview();
+            rawPerf('open-display-render', path, { ms: performance.now() - openT0, renderMs: performance.now() - renderT0, width: FX.w, height: FX.h });
           } catch (e) { rawPerf('open-display-render-failed', path, { error: String(e) }); }
           hideDisplayOverlay();
         });
@@ -6116,7 +6121,10 @@
     // work: two bounded workers, at most twelve candidates, and only after the current grid is
     // mounted. This makes navigation feel instant without retaining full-resolution canvases.
     const prefetchPaths = built.map(({ entry }) => entry.path);
-    setTimeout(() => prefetchDisplayProxies(prefetchPaths), 1200);
+    // Persistent RAW proxies are already batch-produced and this probe never generates work on
+    // a miss. Start as soon as cards mount so a first click can reuse a decoded JPEG instead of
+    // waiting through the former arbitrary 1.2s delay.
+    queueMicrotask(() => prefetchDisplayProxies(prefetchPaths));
     if (opts && opts.padBot) {
       const pad = document.createElement('div');
       pad.className = 'lib-virt-pad';
@@ -10890,6 +10898,11 @@
     }
   }
   window.chromasmithToggleLibrary = toggleLibrary; // called from the header button in desktop-native.js
+  // Unconditional (not LIBTEST-gated), same reasoning as window.__libInfo above: a real hook
+  // for navigating the Library to an arbitrary folder without going through the folder-tree
+  // click or the OS picker dialog — used by diagnostics/raw_bench.py to drive scenarios against
+  // real, already-cataloged photos in a single long-lived session (no relaunch between repeats).
+  window.chromasmithOpenFolder = openFolder;
 
   window.__TAURI__.event.listen('menu-library', toggleLibrary);
   // File > Open Recent (main.rs) — surfaces the SAME recents dropdown the header's own Recent
