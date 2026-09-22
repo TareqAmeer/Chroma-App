@@ -820,16 +820,24 @@ fn display_cache_path(path: &str, mtime: u64, size: u64, recipe_key: &str, long_
 /// this only changes the transport/display tier, never the export source.
 #[tauri::command]
 pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32) -> Result<String, String> {
+    let file_name = Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?").to_string();
+    let mut stage_t = std::time::Instant::now();
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
     let edge = long_edge.clamp(512, 4096);
     let out_path = display_cache_path(&path, mtime, meta.len(), &recipe_key, edge);
     if !out_path.is_file() {
+        // This is the hidden cost a "batch cache complete" or "already cached" shortcut still
+        // pays on first use: the full-resolution PNG this function reads back in was very
+        // possibly just written moments earlier by cache_raw_decode's own png_write stage.
         let full_key = decode_cache_key(&path, mtime, meta.len(), &recipe_key);
         let full_path = decode_cache_dir().join(full_key);
         let bytes = std::fs::read(&full_path).map_err(|_| "no cached decode".to_string())?;
+        crate::diag::stage("display_proxy", &file_name, "read_full_png", &mut stage_t);
         let img = image::load_from_memory(&bytes).map_err(|e| format!("decode cached preview: {e}"))?;
+        crate::diag::stage("display_proxy", &file_name, "decode_full_png", &mut stage_t);
         let scaled = img.resize(edge, edge, image::imageops::FilterType::Lanczos3);
+        crate::diag::stage("display_proxy", &file_name, "resize_lanczos", &mut stage_t);
         let mut encoded = Vec::new();
         // Quality 92: visually indistinguishable from the source at interactive zoom (this is a
         // DISPLAY proxy, never the export path), while decoding through a mature/fast JPEG path
@@ -837,7 +845,11 @@ pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32
         image::codecs::jpeg::JpegEncoder::new_with_quality(&mut Cursor::new(&mut encoded), 92)
             .encode_image(&scaled)
             .map_err(|e| format!("encode display preview: {e}"))?;
+        crate::diag::stage("display_proxy", &file_name, "jpeg_encode", &mut stage_t);
         std::fs::write(&out_path, encoded).map_err(|e| format!("write display preview: {e}"))?;
+        crate::diag::stage("display_proxy", &file_name, "jpeg_write", &mut stage_t);
+    } else {
+        crate::diag::stage("display_proxy", &file_name, "already_exists_check", &mut stage_t);
     }
     Ok(out_path.to_string_lossy().into_owned())
 }

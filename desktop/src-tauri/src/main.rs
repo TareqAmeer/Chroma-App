@@ -921,7 +921,9 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 #[tauri::command]
 fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: String, raw_nr: String, auto_lens: bool,
                     demosaic_algo: String, lens_override: String, lens_override_focal: f64) -> Result<String, String> {
-    let _raw_diag = diag::raw_op(format!("cache_raw_decode file={}", Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?")));
+    let file_name = Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?").to_string();
+    let _raw_diag = diag::raw_op(format!("cache_raw_decode file={file_name}"));
+    let mut stage_t = std::time::Instant::now();
     let ext = Path::new(&path)
         .extension()
         .and_then(|e| e.to_str())
@@ -931,7 +933,9 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
         return Err("selected file is not a RAW photo".into());
     }
     if library::decode_cache_exists(&path, &recipe_key)? {
+        diag::stage("cache", &file_name, "already_cached_check", &mut stage_t);
         library::get_display_decode_cache(path.clone(), recipe_key.clone(), 2560)?;
+        diag::stage("cache", &file_name, "display_proxy_from_existing", &mut stage_t);
         // CHR-120: this shortcut used to return without ever touching RAW_EDITOR_CACHE — so a
         // "Cache RAWs" batch action on a photo already cached from an earlier app launch (the
         // common case: the on-disk PNG persists across relaunches, RAW_EDITOR_CACHE does not)
@@ -968,13 +972,19 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
         (false, true) => Some((lens_override.as_str(), lens_override_focal as f32)), _ => None,
     };
     let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
+    diag::stage("cache", &file_name, "read_file", &mut stage_t);
     let nr = match raw_nr.as_str() {
         "off" => raw_decode::NrTier::Off,
         "chroma" => raw_decode::NrTier::Chroma,
         _ => raw_decode::NrTier::Fast,
     };
+    // decode_rw2_bytes emits its own finer-grained RAW_DIAG stage= lines (demosaic_or_cache,
+    // high_nr, false_color, hue_defringe, orientation, lens, native_nr — raw_decode.rs) under
+    // op=decode; this coarser "decode_total" line below lets a consumer that only wants the
+    // top-level breakdown skip summing those without losing them for one that wants the detail.
     let decoded = raw_decode::decode_rw2_bytes(&bytes, auto_lens, nr,
         demosaic_algo, false, lens_override)?;
+    diag::stage("cache", &file_name, "decode_total", &mut stage_t);
     let (effective_mode, _) = effective_dcp_mode(&mode, &decoded.make, (!lut_key.is_empty()).then_some(lut_key.as_str()));
     let rgba = if effective_mode == "lut" {
         let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
@@ -982,6 +992,7 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
         let n = ((lut.len() / 3) as f64).cbrt().round() as usize;
         raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
     } else { raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam) };
+    diag::stage("cache", &file_name, "colour_convert", &mut stage_t);
     let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba).ok_or("decoded RGBA dimensions do not match")?;
     let rgba = img.into_raw();
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
@@ -997,16 +1008,20 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
         const MAX_IN_PROCESS_RAW_CACHES: usize = 3;
         if guard.len() > MAX_IN_PROCESS_RAW_CACHES { guard.remove(0); }
     }
+    diag::stage("cache", &file_name, "in_process_cache_insert", &mut stage_t);
     // Persistent fallback for the next launch. The in-process cache above is the fast path.
     let mut out = Cursor::new(Vec::new());
     image::DynamicImage::ImageRgba8(image::RgbaImage::from_raw(decoded.width, decoded.height, rgba)
         .ok_or("cached RGBA dimensions do not match")?)
         .write_to(&mut out, image::ImageFormat::Png)
         .map_err(|e| format!("encode decode cache: {e}"))?;
+    diag::stage("cache", &file_name, "png_encode", &mut stage_t);
     library::write_decode_cache_file(&path, &recipe_key, out.get_ref())?;
+    diag::stage("cache", &file_name, "png_write", &mut stage_t);
     // Batch caching is complete only when the display-sized asset is ready too; otherwise the
     // first reopen still pays the proxy-generation cost that the batch action appeared to cover.
     library::get_display_decode_cache(path, recipe_key, 2560)?;
+    diag::stage("cache", &file_name, "display_proxy_generate", &mut stage_t);
     Ok("written".into())
 }
 

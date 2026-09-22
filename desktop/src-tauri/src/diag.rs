@@ -134,3 +134,24 @@ pub fn diag_native_state() -> DiagNativeState {
         thumb_remaining: if remaining == u64::MAX { None } else { Some(remaining) },
     }
 }
+
+/// True when `CS_DIAG_RAW_STAGES` is set — gates the per-stage `RAW_DIAG` lines below so
+/// there's no cost when diagnostics aren't running. Shared so every stage-timed command
+/// (raw_decode.rs's own `stage` closure, plus cache_raw_decode/get_display_decode_cache/
+/// decode_raw_v2 below) checks the same env var the same way.
+pub fn stage_timing_enabled() -> bool {
+    std::env::var_os("CS_DIAG_RAW_STAGES").is_some()
+}
+
+/// One `RAW_DIAG stage=<name> op=<op> path=<file> duration_ms=<ms>` line, matching the shape
+/// raw_decode.rs's local `stage` closure already emits (log_file.py's `_raw_diag_event`
+/// parses `key=value` tokens after the ` RAW_DIAG ` marker) — `op`/`path` let a consumer
+/// (diagnostics/raw_bench.py) separate an interactive open's stages from a batch-cache run's
+/// on the same photo, run concurrently or back to back. Resets `started` to now either way,
+/// so call sites read as a flat sequence of `stage(...)` calls between real work.
+pub fn stage(op: &str, file: &str, name: &str, started: &mut Instant) {
+    if stage_timing_enabled() {
+        log("info", format!("RAW_DIAG stage={name} op={op} path={file} duration_ms={}", started.elapsed().as_millis()));
+    }
+    *started = Instant::now();
+}
