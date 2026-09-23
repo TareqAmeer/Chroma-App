@@ -13,10 +13,10 @@ await pg.keyboard.press('Escape');
 await pg.waitForFunction(() => document.querySelectorAll('#lib-grid .lib-card').length > 0, { timeout: 15000 });
 await pg.waitForTimeout(800);
 let fails = 0;
-for (const theme of ['dark', 'light']) for (const w of [90, 150, 280]) {
-  const res = await pg.evaluate(async ({ w, theme }) => {
+for (const theme of ['dark', 'light']) for (const av of [false, true]) for (const w of [90, 150, 280]) {
+  const res = await pg.evaluate(async ({ w, theme, av }) => {
     document.body.classList.toggle('light', theme === 'light');
-    document.querySelector('#lib-overlay').classList.remove('full');
+    document.querySelector('#lib-overlay').classList.remove('full'); document.querySelector('#lib-grid').classList.toggle('aspect-view', av);
     document.querySelector('.fx-layout')?.style.setProperty('--dock-w-user', w + 'px');
     await new Promise(r => setTimeout(r, 300));
     const dims = [[360, 240], [240, 360], [360, 202], [360, 360]];
@@ -29,9 +29,10 @@ for (const theme of ['dark', 'light']) for (const w of [90, 150, 280]) {
       await imgs[i].decode();
     }
     await new Promise(r => setTimeout(r, 200));
-    return imgs.map((im, i) => { const rc = im.getBoundingClientRect(), wr = im.parentElement.getBoundingClientRect(); return { want: dims[i][0] / dims[i][1], imgW: rc.width, imgH: rc.height, wrapW: wr.width, wrapH: wr.height, pos: getComputedStyle(im).position, full: document.querySelector('#lib-overlay').classList.contains('full') }; });
-  }, { w, theme });
-  for (const r of res) { const got = r.wrapW / r.wrapH; const ok = Math.abs(got - r.want) / r.want < 0.03; if (!ok) fails++; console.log(theme, w, ok ? 'ok ' : 'BAD', JSON.stringify(r)); }
+    const mb=document.querySelector('#lib-main').getBoundingClientRect(), cs=getComputedStyle(document.querySelector('#lib-main')); const cl=mb.left+parseFloat(cs.paddingLeft), cr=mb.right-parseFloat(cs.paddingRight)-(document.querySelector('#lib-main').offsetWidth-document.querySelector('#lib-main').clientWidth);
+    return imgs.map((im, i) => { const cd=im.closest('.lib-card').getBoundingClientRect(); const rc0=im.getBoundingClientRect(); const inside=cd.left>=cl-0.5&&cd.right<=cr+0.5&&rc0.left>=cd.left-0.5&&rc0.right<=cd.right+0.5; const rc = im.getBoundingClientRect(), wr = im.parentElement.getBoundingClientRect(); return { inside, cl, cr, cardL: cd.left, cardR: cd.right, want: dims[i][0] / dims[i][1], imgW: rc.width, imgH: rc.height, wrapW: wr.width, wrapH: wr.height, pos: getComputedStyle(im).position, full: document.querySelector('#lib-overlay').classList.contains('full') }; });
+  }, { w, theme, av });
+  for (const r of res) { const got = r.wrapW / r.wrapH; const ok = r.inside && Math.abs(got - r.want) / r.want < 0.03; if (!ok) fails++; console.log(theme, w, 'av=' + av, ok ? 'ok ' : 'BAD', JSON.stringify(r)); }
 }
 await br.close(); srv.close();
 if (fails) { console.error('FAIL', fails); process.exit(1); }

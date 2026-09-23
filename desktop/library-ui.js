@@ -1895,19 +1895,21 @@
        size, so a wide thumbnail image blew the grid (and the whole 120px column) out past the
        editor preview it sits in front of ("images covering the editor"). min-width:0 on the
        card is the matching fix for the flex/grid item itself. */
-    body.deskx #lib-overlay:not(.full) #lib-grid{grid-template-columns:minmax(0,1fr);gap:12px}
+    body.deskx #lib-overlay:not(.full) #lib-grid,body.deskx #lib-overlay:not(.full) #lib-grid.aspect-view{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}
+    body.deskx #lib-overlay:not(.full) #lib-grid.aspect-view .lib-card{width:auto;flex:none}
     body.deskx #lib-overlay:not(.full) .lib-card{min-width:0}
     body.deskx #lib-overlay:not(.full) .lib-card .lib-name,
     body.deskx #lib-overlay:not(.full) .lib-tagrow{display:none}
     /* Lightroom-style filmstrip cells: the photo keeps its REAL aspect ratio (no square
        crop) inside a bordered cell. object-fit:contain + auto height so portrait frames are
        tall and landscape frames are short, like Lightroom's filmstrip. */
-    body.deskx #lib-overlay:not(.full) .lib-thumb-wrap{aspect-ratio:auto;height:auto;min-height:40px}
+    body.deskx #lib-overlay:not(.full) .lib-thumb-wrap{aspect-ratio:auto;height:auto;min-height:40px;width:100%;max-width:100%}
+    body.deskx #lib-overlay:not(.full) #lib-grid .lib-thumb-wrap:has(img.loaded){width:100%}
     /* CHR-143: CHR-12 pins normal square-grid images with position:absolute;inset:0. The
        selector also matches this single-column dock, where taking the image out of flow makes
        every card fall back to its 40px minimum height. Restore normal flow here so each card
        derives its height from the photo's real intrinsic aspect ratio. */
-    body.deskx #lib-overlay:not(.full) .lib-thumb-wrap img{position:static;inset:auto;width:100%;height:auto;object-fit:contain}
+    body.deskx #lib-overlay:not(.full) #lib-grid .lib-thumb-wrap img{position:static;inset:auto;width:100%;height:auto;max-width:100%;object-fit:contain}
     body.deskx #lib-overlay:not(.full) .lib-card{border:none;border-radius:0}
     /* the fixed 44px deskbar sits above everything; keep the docked strip below it. .full is a
        genuine takeover (chromasmith-22.html hides #fx-deskbar via body.lib-full) and reclaims
