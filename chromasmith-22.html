@@ -267,7 +267,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
    .btn already had for free via its own always-on `border:1px solid`. */
 @media (forced-colors:active){.fx-toggle{border-color:CanvasText}}
 .fx-toggle.on{background:var(--acc);box-shadow:none}
-.fx-toggle::after{content:'';position:absolute;width:var(--ctl-toggle-h);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--txt);top:-1px;left:-1px;transition:transform var(--dur-2) cubic-bezier(.75,.02,.86,1.31);transform-origin:bottom right;box-shadow:none}
+.fx-toggle::after{content:'';position:absolute;width:var(--ctl-toggle-h);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--txt);top:-1px;left:-1px;transition:transform var(--dur-2) cubic-bezier(.4,0,.2,1);transform-origin:bottom right;will-change:transform;backface-visibility:hidden;box-shadow:none}
 .fx-toggle.on::after{transform:rotate(90deg)}
 /* The 32x18 track is a precise mouse target but a cramped touch one — scale up to roughly
    native iOS switch proportions on mobile rather than adding an invisible hit-area hack. */
@@ -5063,7 +5063,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0923K';
+const BUILD='1.0923L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
