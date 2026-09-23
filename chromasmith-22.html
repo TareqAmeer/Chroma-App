@@ -5062,8 +5062,8 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0922A';
-{const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;const oldVersion=document.getElementById('boot-splash-version');if(oldVersion)oldVersion.textContent='v. '+BUILD;}
+const BUILD='1.0923B';
+{const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
@@ -10131,9 +10131,14 @@ async function loadRw2(file){
   finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
   // No bundled DCP for this camera (iPhone/Pixel/Samsung DNG, other bodies…): fall back to
   // LibRaw's own sRGB render, which uses the colour matrix embedded in the file, instead of failing.
+  // ⚠️ NOT gated on window.__TAURI__ (CHR-133 follow-up): the original fix only handled the
+  // browser/wasm path. On desktop, NativeLibRawShim.open() independently downgrades to
+  // mode='linear16' when camPrefix is missing (it never throws), but THIS function still ran
+  // the DCP branch below against that linear16 buffer and threw on the missing camPrefix —
+  // so desktop iPhone/DNG opens failed even though the native shim itself handled it gracefully.
   let embDcp=null;
-  if(profile&&!window.__TAURI__&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(bytesCopy);
-  if(profile&&!window.__TAURI__&&!embDcp&&!cameraDcpPrefix(m.make,m.model)){
+  if(profile&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(bytesCopy);
+  if(profile&&!embDcp&&!cameraDcpPrefix(m.make,m.model)){
     profile=null;
     const raw2=new LibRaw();
     try{
