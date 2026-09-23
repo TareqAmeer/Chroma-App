@@ -1793,11 +1793,11 @@
        on purpose: it's the one column meant to shrink below its content's natural size (the
        search box), via its own minmax(0,280px) track below. */
     body.deskx #lib-overlay #lib-top-left{grid-column:1;justify-self:start;display:flex;
-      align-items:center;gap:12px;min-width:0;max-width:100%;overflow:hidden}
+      align-items:center;gap:12px;min-width:0;max-width:100%;overflow:visible}
     body.deskx #lib-overlay #lib-top-center{grid-column:2;justify-self:center;display:flex;
       width:100%;min-width:0}
     body.deskx #lib-overlay #lib-top-right{grid-column:3;justify-self:end;display:flex;
-      align-items:center;gap:12px;min-width:0;max-width:100%;overflow:hidden}
+      align-items:center;gap:12px;min-width:0;max-width:100%;overflow:visible}
     /* The side tracks are allowed to shrink, but their controls must never paint into the
        centre search track.  The live overflow classes below progressively remove optional
        labels/zoom affordances before the track gets tight enough to clip a button. */
