@@ -4276,6 +4276,11 @@
       await openFolder(path);
       await renderTree(); // openFolder() doesn't re-render the tree itself — needed for the .on highlight
     };
+    // Top-level row: right-click opens the library-folder menu (Remove … from library).
+    if (path === state.root) {
+      row.title = 'Right-click to remove this folder from the library';
+      row.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showCacheMenu(e); };
+    }
     wrap.appendChild(row);
     if (isExpanded) {
       try {
@@ -10486,6 +10491,7 @@
   /// Decode cache stays global-only (opaque hashed cache keys, no root column to filter on —
   /// see catalog_root_cache_usage's own doc comment) — one item, not one per root, for that.
   async function showCacheMenu(e) {
+    if (!cacheUsage) { try { await refreshCacheUsage(); } catch (_) {} }
     if (!cacheUsage) return;
     const x = Math.min(e.clientX, window.innerWidth - 260);
     const y = Math.min(e.clientY, window.innerHeight - 90);
@@ -10502,7 +10508,7 @@
         }]);
       }
     }
-    if (rootUsage.length > 1) {
+    {
       for (const r of rootUsage) {
         items.push([`Remove ${rootLabel(r)} from library`, async () => {
           if (!await window.confirmModal(`Remove ${rootLabel(r)} from the library?\n\nIts ${r.photo_count} photo${r.photo_count === 1 ? '' : 's'} disappear from the library only — nothing is deleted from disk, and ratings and labels are kept if you add it again.`, 'Remove')) return;
