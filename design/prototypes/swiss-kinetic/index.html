@@ -35,6 +35,8 @@ body[data-dim=zone] .zone:not(:hover):not(:focus-within){opacity:calc(.25 + var(
 
 /* ── dock ──────────────────────────────────────────────────────── */
 #dock{border-right:1px solid var(--line);overflow:auto;padding:16px 16px 40px;background:#141414}
+body.dock-off{grid-template-columns:0 1fr}body.dock-off #dock{overflow:visible;padding:0;border:0}body.dock-off #dock>*:not(#dock-tg){display:none}
+#dock-tg{float:right}body.dock-off #dock-tg{position:fixed;left:8px;bottom:8px;z-index:99;float:none;background:var(--bg)}
 #dock h1{font:700 15px/1 var(--f);letter-spacing:-.01em;margin:0 0 4px;text-transform:uppercase}
 #dock .sub{color:var(--mut);font-size:11px;margin-bottom:14px}
 #dock fieldset{border:0;border-top:1px solid var(--line);margin:0;padding:12px 0 10px}
@@ -262,6 +264,80 @@ body[data-side=offset] .side .opt.on{color:#fff;transform:translateX(12px)}
 .splash .wm{position:absolute;left:60px;bottom:26px;font:700 50px/1 var(--f);letter-spacing:-.03em;writing-mode:vertical-rl;transform:rotate(180deg);text-transform:uppercase;color:#fff}
 .splash .ld{position:absolute;right:130px;bottom:30px;font:italic 700 34px/1 var(--f);letter-spacing:-.04em;color:#fff}
 
+/* ── real top bars (captured markup, restyled) ────────────────── */
+.topbar{height:auto;min-height:60px;gap:18px;padding:10px 16px;min-width:max-content}
+.brand{display:flex;align-items:center;gap:18px;flex:none}
+.rbar{flex:1;min-width:0}
+.rbar[hidden]{display:none}
+.rbar [data-was-hidden]{display:none!important}
+body[data-cond=hide] .rbar [data-conditional]{display:none!important}
+.rbar #lib-top,.rbar #fx-deskbar{display:flex!important;justify-content:space-between;align-items:center;gap:24px}
+.rbar #lib-top-left,.rbar #fx-deskbar-left{display:flex;align-items:center;gap:8px;justify-self:start}
+.rbar #lib-top-right,.rbar #fx-deskbar-right,.rbar #fx-deskbar-tools,.rbar #fx-preview-tools,.rbar #fx-zoom-ctrl,.rbar #lib-zoomflag-cluster,.rbar .lib-zoomrow,.rbar .lib-flagrow,.rbar .fx-undogrp{display:flex;align-items:center;gap:8px}
+.rbar #lib-top-right,.rbar #fx-deskbar-right{justify-self:end}
+.rbar .fx-undogrp{gap:0}.rbar .fx-undogrp .k-ic+.k-ic{border-left-width:0}
+.rbar #lib-settings,.rbar #fx-settings,.rbar #lib-top-left>div{position:relative}
+.rbar svg{width:16px;height:16px;flex:none}
+.rbar .k-btn{gap:7px;height:30px;padding:0 12px}
+.rbar .k-btn svg{width:14px;height:14px}
+.rbar .k-ic{width:30px;height:30px;color:var(--ink)}
+.rbar .k-ic svg{width:15px;height:15px}
+.rbar .k-ic.flag-btn-red:hover,.rbar #lib-flag-reject:hover{--ca:#e02c00}
+.rbar #btn-loupe{font:700 11px/1 var(--f)}
+.rbar #fx-zoom-pct{font-size:11px;color:var(--mut);min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
+.rbar .k-sl{width:110px}
+.rbar .lib-search-wrap{display:flex;align-items:center;gap:8px;width:280px;height:30px;padding:0 10px;border:1.5px solid var(--line);position:relative;background:var(--bg)}
+.rbar .lib-search-wrap::after{content:'';position:absolute;left:-1.5px;top:-1.5px;bottom:-1.5px;width:4px;background:var(--ca);transform:scaleY(0);transform-origin:top;transition:transform var(--dur) var(--ease)}
+.rbar .lib-search-wrap:focus-within{border-color:var(--ink)}.rbar .lib-search-wrap:focus-within::after{transform:scaleY(1)}
+.rbar .lib-search-wrap svg{width:14px;height:14px;color:var(--mut)}
+.rbar .lib-search-wrap input{border:0;background:none;outline:none;flex:1;font-size:13px}
+.rbar .lib-search-wrap input::placeholder{color:var(--mut);text-transform:uppercase;letter-spacing:.12em;font-size:10px;font-weight:700}
+.rbar #fx-deskbar-title{text-align:center;line-height:1.15;white-space:nowrap}
+.rbar #db-title-name{display:block;font-weight:700;font-size:14px}
+.rbar #db-title-status{color:var(--mut);font-size:12px}
+.rbar #btn-editor-bg span{width:12px;height:12px;background:#333;border:1px solid var(--mut);display:block}
+.rbar .sw.seg .opt{padding:0 6px;display:grid;place-items:center;height:22px;background:none;border:0;cursor:pointer}
+.rbar .sw.seg .opt.on{color:#fff}
+.rbar .sw.seg{padding:2px}
+/* real menus -> hard-inverted menu */
+.rbar .lib-menu{position:absolute;top:calc(100% + 6px);z-index:20;min-width:230px;background:var(--ink);color:var(--bg);border:1px solid var(--ink);padding:4px 0;font-size:13px;clip-path:inset(0 0 100% 0);transition:clip-path var(--dur) var(--ease);pointer-events:none;display:block!important}
+.rbar #lib-settings .lib-menu{right:0}
+.rbar .lib-menu.open{clip-path:inset(0 0 -2px 0);pointer-events:auto}
+.rbar .lib-menu .grp-label{font:700 9px/1 var(--f);letter-spacing:.16em;text-transform:uppercase;opacity:.55;padding:8px 12px 4px}
+.rbar .lib-menu hr{border:0;border-top:1px solid rgba(0,0,0,.18);margin:4px 0}
+.rbar .lib-menu .opt,.rbar .lib-menu .opt-action{position:relative;isolation:isolate;display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:7px 12px;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.rbar .lib-menu .opt-action{justify-content:flex-start}
+.rbar .lib-menu .opt-action.opt-toggle{justify-content:space-between}
+.rbar .lib-menu .opt svg,.rbar .lib-menu .opt-action svg{width:13px;height:13px}
+.rbar .lib-menu .opt:not(.sel)>svg{visibility:hidden}
+.rbar .lib-menu .opt::before,.rbar .lib-menu .opt-action::before{content:'';position:absolute;inset:0;background:var(--ca);z-index:-1;transform:scaleX(0);transform-origin:left;transition:transform var(--dur-fast) var(--ease)}
+.rbar .lib-menu .opt:hover,.rbar .lib-menu .opt-action:hover{color:#fff}
+.rbar .lib-menu .opt:hover::before,.rbar .lib-menu .opt-action:hover::before{transform:scaleX(1)}
+body[data-menu=invert] .rbar .lib-menu .opt::before,body[data-menu=invert] .rbar .lib-menu .opt-action::before{background:var(--bg)}
+body[data-menu=invert] .rbar .lib-menu .opt:hover,body[data-menu=invert] .rbar .lib-menu .opt-action:hover{color:var(--ink)}
+
+/* ── notes ─────────────────────────────────────────────────────── */
+#notes-count{color:var(--a)}
+#notes-list{margin:0 0 8px;padding:0;list-style:none;display:grid;gap:6px}
+#notes-list li{display:grid;grid-template-columns:20px 1fr 16px;gap:6px;font-size:11px;align-items:start;cursor:pointer}
+#notes-list li b{background:var(--a);color:#fff;text-align:center;font-size:10px;line-height:16px}
+#notes-list li span small{display:block;color:var(--mut)}
+#notes-list li i{font-style:normal;color:var(--mut);cursor:pointer;text-align:center}
+#notes-list li i:hover{color:var(--ink)}
+#note-general{width:100%;background:var(--bg);border:1px solid var(--line);padding:6px;font:400 11px/1.4 var(--f);color:var(--ink);resize:vertical}
+#note-mode.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+body.noting #stage,body.noting #stage *{cursor:crosshair!important}
+#note-hl{position:fixed;z-index:90;pointer-events:none;outline:1.5px dashed var(--ink);outline-offset:2px;display:none}
+#note-hl span{position:absolute;left:-2px;top:-20px;background:var(--ink);color:var(--bg);font:700 10px/1 var(--f);padding:3px 5px;white-space:nowrap}
+#note-pop{position:fixed;z-index:95;width:280px;background:var(--ink);color:var(--bg);padding:10px;display:none;border:1px solid var(--ink)}
+#note-pop small{display:block;font:700 9px/1.3 var(--f);letter-spacing:.1em;text-transform:uppercase;opacity:.6;margin-bottom:6px;word-break:break-all}
+#note-pop textarea{width:100%;height:70px;border:1px solid rgba(0,0,0,.3);background:#fff;color:#111;font:400 12px/1.4 var(--f);padding:6px;resize:vertical}
+#note-pop div{display:flex;gap:6px;justify-content:flex-end;margin-top:6px}
+#note-pop button{border:1px solid #111;background:none;color:#111;font:700 11px/1 var(--f);padding:5px 9px;cursor:pointer}
+#note-pop button.go{background:var(--a);border-color:var(--a);color:#fff}
+.pin{position:absolute;z-index:80;width:18px;height:18px;background:var(--a);color:#fff;font:700 10px/18px var(--f);text-align:center;pointer-events:auto;cursor:pointer;box-shadow:2px 2px 0 var(--ink)}
+#stage{position:relative}
+
 /* ── reduced motion (real setting or simulated) ────────────────── */
 body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;animation-duration:1ms!important}
 @media (max-width:760px){body{grid-template-columns:1fr;overflow:auto}#dock{max-height:none}#stage{overflow:visible}.sec{padding:24px 16px}.grid{grid-template-columns:repeat(2,1fr)}}
@@ -270,6 +346,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 <body data-dim="colour" data-slab="stepped" data-sel="slab" data-side="bar" data-menu="slab" data-italic="primary" data-bw="on" data-win="tint" data-tg="flip">
 
 <aside id="dock">
+  <button id="dock-tg" class="dock-act" title="Hide the settings panel to see the page at full width. Shortcut: backslash">Hide panel</button>
   <h1>Swiss Kinetic</h1>
   <div class="sub">Tune here. Settings save as you go. When happy, press Copy settings and paste the result back.</div>
 
@@ -320,25 +397,38 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
     <div class="dr full"><label>Value readout</label><select id="roll"><option value="roll">Rolling digits</option><option value="plain">Plain</option></select></div>
   </fieldset>
 
+  <fieldset><legend>Top bar</legend>
+    <div class="dr full"><label>State-only controls</label><select id="cond"><option value="show">Show all</option><option value="hide">Hide (as captured)</option></select></div>
+  </fieldset>
+
+  <fieldset id="notes-fs"><legend>Notes <span id="notes-count"></span></legend>
+    <button class="dock-act" id="note-mode" title="Shortcut: N">Add a note</button>
+    <div class="sub" style="margin:8px 0 6px">Click Add a note, then click anything on the page and type. Esc cancels.</div>
+    <ol id="notes-list"></ol>
+    <textarea id="note-general" rows="3" placeholder="General notes (not tied to one element)"></textarea>
+  </fieldset>
+
   <fieldset>
-    <button class="dock-act go" id="copy">Copy settings</button><button class="dock-act" id="reset">Reset</button><span id="copied"></span>
+    <button class="dock-act go" id="copy">Copy settings</button><button class="dock-act" id="reset">Reset settings</button><button class="dock-act" id="clear-notes">Clear notes</button><span id="copied"></span>
   </fieldset>
 </aside>
 
 <main id="stage">
 
-<section class="sec zone">
-  <div class="eyebrow"><b>01</b> Top bar · Library + Editor</div>
+<section class="sec zone" style="padding-left:16px;padding-right:16px;overflow:visible;position:relative;z-index:3">
+  <div class="eyebrow"><b>01</b> Top bar · real controls from the app</div>
   <h2>Top bar</h2>
-  <p class="note">Drag the colour slab between gallery and studio, or click a word. Throw it past the end to feel the bounce. Colours dim until your pointer enters the bar.</p>
-  <div class="topbar zone">
-    <div class="win"><i style="--c:#c0392b" title="Close"></i><i style="--c:#d68910" title="Minimise"></i><i style="--c:#27ae60" title="Full screen"></i></div>
-    <div class="wordmark">Chro-ma-smith</div>
-    <div class="sw mid" data-idx="1"><span class="slab2"></span><span class="slab"></span><span class="opt">gallery</span><span class="sep"></span><span class="opt">studio</span></div>
-    <div class="tb-ic"><button class="k-ic" data-hv="" title="Undo"><svg viewBox="0 0 16 16"><path d="M5 3 2 6l3 3M2 6h8a4 4 0 0 1 0 8H7"/></svg></button><button class="k-ic" data-hv="" title="Redo"><svg viewBox="0 0 16 16"><path d="m11 3 3 3-3 3m3-3H6a4 4 0 0 0 0 8h3"/></svg></button></div>
-    <div class="meta"><b>TM_56784</b><span>6000 × 4000 · RW2</span></div>
-    <div class="tb-right"><button class="k-btn outline">All FX</button><button class="k-btn primary">Export</button></div>
+  <p class="note">Every control here is the app's own top bar, captured from the running app, in its current order. Only the look is new. gallery / studio swaps between the Library and Editor bars, as in the app: click a word, or drag or throw the slab. Sort and the gear open their real menus.</p>
+  <div class="topbar zone" id="tb">
+    <div class="brand">
+      <div class="win"><i style="--c:#c0392b" title="Close"></i><i style="--c:#d68910" title="Minimise"></i><i style="--c:#27ae60" title="Full screen"></i></div>
+      <div class="wordmark">Chro-ma-smith</div>
+      <div class="sw mid" data-idx="0" id="mode-sw" title="Library / Editor (L)"><span class="slab2"></span><span class="slab"></span><span class="opt">gallery</span><span class="sep"></span><span class="opt">studio</span></div>
+    </div>
+    <div class="rbar" id="rbar-lib"></div>
+    <div class="rbar" id="rbar-ed" hidden></div>
   </div>
+  <p class="note" style="margin-top:14px" id="cond-note"></p>
 </section>
 
 <section class="sec zone">
@@ -425,6 +515,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 </section>
 </main>
 
+<script src="bars.js"></script>
 <script>
 (() => {
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -437,7 +528,7 @@ const HOVERS = { slip: 'Text slip', slab: 'Slab slide-in', flood: 'Instant inver
 const PRESETS = { 'Cadmium / Cobalt': { '--a': '#e0500c', '--b': '#1414a0' }, 'Klein / Signal': { '--a': '#0015ff', '--b': '#e02c00' }, 'Orange / Ink': { '--a': '#e0500c', '--b': '#f2f2f0' }, 'Splash': { '--a': '#d84300', '--b': '#1013a0' } };
 const DEFAULTS = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#1b1b1b', '--ink': '#f2f2f0', '--mut': '#7c7c78', '--ox': '6px', '--oy': '6px', '--slab-top': '34%', '--dim': '0.35', '--dim-dur': '220ms', '--dur': '500ms', '--dur-fast': '180ms' },
   attrs: { dim: 'colour', slab: 'stepped', sel: 'slab', side: 'bar', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip' },
-  ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'off', hvBtn: 'slip', hvIc: 'offset', roll: 'roll' };
+  cond: 'show', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'off', hvBtn: 'slip', hvIc: 'offset', roll: 'roll' };
 let S = Object.assign(structuredClone(DEFAULTS), store.get('settings') || {});
 S.vars = Object.assign({}, DEFAULTS.vars, S.vars); S.attrs = Object.assign({}, DEFAULTS.attrs, S.attrs);
 const save = () => store.set('settings', S);
@@ -447,6 +538,7 @@ function apply() {
   root.style.setProperty('--ease', `cubic-bezier(${S.ease})`);
   for (const [k, v] of Object.entries(S.attrs)) body.dataset[k] = v;
   body.classList.toggle('rm', reduced());
+  body.dataset.cond = S.cond;
   $$('.k-btn:not([data-fixed])').forEach((b) => { b.dataset.hv = S.hvBtn; });
   $$('.k-ic').forEach((b) => { b.dataset.hv = S.hvIc; });
   $$('.k-sl').forEach(paintSlider);
@@ -468,9 +560,11 @@ ease.value = Object.values(EASES).includes(S.ease) ? S.ease : 'custom'; $('#ease
 ease.addEventListener('change', () => { if (ease.value !== 'custom') { S.ease = ease.value; $('#ease-custom').value = S.ease; apply(); save(); } });
 $('#ease-custom').addEventListener('change', (e) => { const p = e.target.value.split(',').map(Number); if (p.length === 4 && p.every(isFinite)) { S.ease = p.join(','); ease.value = Object.values(EASES).includes(S.ease) ? S.ease : 'custom'; apply(); save(); } });
 for (const id of ['bounce', 'throw', 'rubber']) { const i = $('#' + id), o = i.parentElement.querySelector('output'); i.value = S[id]; o.textContent = S[id]; i.addEventListener('input', () => { S[id] = +i.value; o.textContent = i.value; save(); }); }
-for (const [id, key] of [['rm', 'rm'], ['snd', 'snd'], ['hv-ic', 'hvIc'], ['roll', 'roll']]) { const i = $('#' + id); i.value = S[key]; i.addEventListener('change', () => { S[key] = i.value; apply(); save(); if (id === 'snd') snap(); }); }
+for (const [id, key] of [['rm', 'rm'], ['snd', 'snd'], ['hv-ic', 'hvIc'], ['roll', 'roll'], ['cond', 'cond']]) { const i = $('#' + id); i.value = S[key]; i.addEventListener('change', () => { S[key] = i.value; apply(); save(); if (id === 'snd') snap(); }); }
 const hvb = $('#hv-btn'); for (const [k, n] of Object.entries(HOVERS)) hvb.add(new Option(n, k)); hvb.value = S.hvBtn; hvb.addEventListener('change', () => { S.hvBtn = hvb.value; apply(); save(); });
 for (const [n, p] of Object.entries(PRESETS)) { const b = document.createElement('button'); b.textContent = n; b.onclick = () => { Object.assign(S.vars, p); $$('#dock [data-var]').forEach((i) => { if (p[i.dataset.var]) { i.value = p[i.dataset.var]; i.dispatchEvent(new Event('input')); } }); }; $('#presets').append(b); }
+const dockTg = () => { body.classList.toggle('dock-off'); $('#dock-tg').textContent = body.classList.contains('dock-off') ? 'Show panel' : 'Hide panel'; switches.forEach((x) => x.snap()); placePins(); };
+$('#dock-tg').onclick = dockTg; document.addEventListener('keydown', (e) => { if (e.key === '\\' && !e.target.closest('input,textarea,select')) dockTg(); });
 $('#reset').onclick = () => { S = structuredClone(DEFAULTS); save(); location.reload(); };
 $('#copy').onclick = async () => {
   const c = (v) => ({ $type: 'color', $value: v }), d = (v) => ({ $type: 'dimension', $value: v }), t = (v) => ({ $type: 'duration', $value: v });
@@ -479,7 +573,8 @@ $('#copy').onclick = async () => {
     offset: { x: d(S.vars['--ox']), y: d(S.vars['--oy']), slabTop: d(S.vars['--slab-top']), slabStyle: S.attrs.slab },
     dim: { mode: S.attrs.dim, level: { $type: 'number', $value: +S.vars['--dim'] }, fade: t(S.vars['--dim-dur']) },
     motion: { duration: t(S.vars['--dur']), hover: t(S.vars['--dur-fast']), easing: { $type: 'cubicBezier', $value: S.ease.split(',').map(Number) }, dragBounce: S.bounce, throw: S.throw, edgeStretch: S.rubber, reduceMotion: S.rm, snapSound: S.snd },
-    variants: { buttonHover: S.hvBtn, iconHover: S.hvIc, menuHover: S.attrs.menu, photoSelection: S.attrs.sel, sideMenu: S.attrs.side, toggle: S.attrs.tg, italics: S.attrs.italic, thumbnails: S.attrs.bw, windowSquares: S.attrs.win, valueReadout: S.roll } };
+    variants: { buttonHover: S.hvBtn, iconHover: S.hvIc, menuHover: S.attrs.menu, photoSelection: S.attrs.sel, sideMenu: S.attrs.side, toggle: S.attrs.tg, italics: S.attrs.italic, thumbnails: S.attrs.bw, windowSquares: S.attrs.win, valueReadout: S.roll, topBarStateOnlyControls: S.cond },
+    notes: notes.map((x) => ({ n: x.n, where: x.where, note: x.note })), generalNotes: $('#note-general').value.trim() };
   const txt = JSON.stringify(out, null, 2);
   try { await navigator.clipboard.writeText(txt); $('#copied').textContent = 'Copied'; } catch { prompt('Copy these settings:', txt); }
   setTimeout(() => { $('#copied').textContent = ''; }, 1600);
@@ -534,13 +629,13 @@ function makeSwitch(el) {
       render(); if (Math.abs(p - target) > 0.0008 || Math.abs(v) > 0.002) raf = requestAnimationFrame(step); else { p = target; render(); } };
     raf = requestAnimationFrame(step);
   }
-  function go(i, how, v = 0) { const changed = i !== idx; idx = i; el.dataset.idx = i; how === 'spring' ? springTo(i, v) : tweenTo(i); if (changed) snap(); }
+  function go(i, how, v = 0) { const changed = i !== idx; idx = i; el.dataset.idx = i; how === 'spring' ? springTo(i, v) : tweenTo(i); if (changed) { snap(); el.dispatchEvent(new CustomEvent('swchange', { detail: i })); } }
   opts.forEach((o, i) => o.addEventListener('click', (e) => { if (el._dragged) return; go(i, 'tween'); }));
   // drag (horizontal/vertical both)
   let start = null;
-  el.addEventListener('pointerdown', (e) => { if (e.button) return; start = { c: vert ? e.clientY : e.clientX, p, t: performance.now(), hist: [] }; el._dragged = false; el.setPointerCapture(e.pointerId); cancelAnimationFrame(raf); });
+  el.addEventListener('pointerdown', (e) => { if (e.button) return; start = { c: vert ? e.clientY : e.clientX, p, t: performance.now(), hist: [], id: e.pointerId }; el._dragged = false; });
   el.addEventListener('pointermove', (e) => {
-    if (!start) return; const c = vert ? e.clientY : e.clientX, d = c - start.c; if (Math.abs(d) > 3) { el._dragged = true; el.classList.add('dragging'); }
+    if (!start) return; const c = vert ? e.clientY : e.clientX, d = c - start.c; if (Math.abs(d) > 3 && !el._dragged) { el._dragged = true; el.classList.add('dragging'); cancelAnimationFrame(raf); try { el.setPointerCapture(start.id); } catch {} }
     if (!el._dragged) return; const unit = (g(Math.min(opts.length - 1, idx)).w + 8); let np = start.p + d / unit; const n = opts.length - 1;
     if (np < 0) np = -(1 - 1 / (1 + (-np) * S.rubber * 3)) / 3; if (np > n) np = n + (1 - 1 / (1 + (np - n) * S.rubber * 3)) / 3;
     p = np; render(); start.hist.push([performance.now(), p]); if (start.hist.length > 6) start.hist.shift();
@@ -604,7 +699,101 @@ document.addEventListener('click', (e) => { if (!e.target.closest('#sel')) $('#s
 $('#card header').addEventListener('click', (e) => { if (e.target.closest('.rst')) { $$('#card .k-sl').forEach((s) => { s.value = s.dataset.def; paintSlider(s); }); return; } $('#card').classList.toggle('shut'); });
 $$('.win i').forEach((w) => w.addEventListener('click', snap));
 let pc = 0; setInterval(() => { pc = (pc + 7) % 101; $('#pct').textContent = pc; }, 400);
+// ── real top bars: captured app markup, restyled with the playground's components ──
+function mountBar(host, html) {
+  host.innerHTML = html;
+  const seg = host.querySelector('#lib-viewmode-seg');
+  if (seg) { seg.classList.add('sw', 'seg'); seg.dataset.idx = 0; seg.insertAdjacentHTML('afterbegin', '<span class="slab2"></span><span class="slab"></span>'); $$('button', seg).forEach((b) => b.classList.add('opt')); }
+  $$('button', host).forEach((b) => {
+    if (b.closest('.lib-menu') || b.closest('.sw')) return;
+    b.removeAttribute('disabled');
+    const text = [...b.childNodes].filter((n) => n.nodeType === 3 || (n.nodeType === 1 && n.tagName !== 'svg' && !n.querySelector('svg') && !n.matches('#lib-filters-badge'))).map((n) => n.textContent).join('').trim();
+    if (!text || b.id === 'btn-loupe') { b.classList.add('k-ic'); return; }
+    const icons = $$('svg', b).map((x) => x.closest('span.fx-db-ic') || x);
+    b.textContent = ''; icons.forEach((x) => b.append(x));
+    b.insertAdjacentHTML('beforeend', `<span class="lbl"><span class="trk"><span>${text}</span><span>${text}</span></span></span>`);
+    b.classList.add('k-btn');
+    if (/export/i.test(b.id) || b.id === 'db-save-lr') b.classList.add('primary'); else if (/allfx/.test(b.id + b.className)) b.classList.add('outline');
+  });
+  $$('input[type=range]', host).forEach((r) => { r.classList.add('k-sl'); r.dataset.def = r.min; if (!r.value || r.id === 'lib-thumbsize') r.value = r.id === 'lib-thumbsize' ? 180 : r.value; r.addEventListener('input', () => { paintSlider(r); if (r.id === 'fx-zoom-slider') $('#fx-zoom-pct').textContent = r.value + '%'; }); });
+  // real menus open/close
+  for (const [btn, menu] of [['#lib-sort-btn', '#lib-sort-menu'], ['#lib-view-menu-btn', '#lib-view-menu']]) {
+    const b = host.querySelector(btn), m = host.querySelector(menu); if (!b || !m) continue;
+    b.addEventListener('click', (e) => { e.stopPropagation(); const open = !m.classList.contains('open'); $$('.lib-menu.open').forEach((x) => x.classList.remove('open')); m.classList.toggle('open', open); });
+    m.addEventListener('click', (e) => { e.stopPropagation(); const o = e.target.closest('.opt'); if (!o) return; const key = [...o.attributes].find((a) => /^data-(sort|meta|theme)/.test(a.name));
+      if (key) { $$(`.opt[${key.name}]`, m).forEach((x) => x.classList.toggle('sel', x === o)); if (key.name === 'data-sortval') $('#lib-sort-label').textContent = o.textContent.trim(); } else o.classList.toggle('sel'); snap(); });
+  }
+}
+mountBar($('#rbar-lib'), (window.REAL_BARS || {}).library || '<p class="note">bars.js missing: run node scripts/redesign-capture-bars.mjs</p>');
+mountBar($('#rbar-ed'), (window.REAL_BARS || {}).editor || '');
+if ($('#db-title-name')) { $('#db-title-name').textContent = 'TM_56784'; $('#db-title-status').textContent = '6000 × 4000 · RW2'; }
+document.addEventListener('click', () => $$('.lib-menu.open').forEach((x) => x.classList.remove('open')));
+$('#mode-sw').addEventListener('swchange', (e) => { $('#rbar-lib').hidden = e.detail !== 0; $('#rbar-ed').hidden = e.detail !== 1; placePins(); });
+$('#cond-note').textContent = 'Shown only in some states in the app (hide them with State-only controls): ' + $$('#tb [data-conditional]').map((x) => (x.getAttribute('title') || x.querySelector('[title]')?.getAttribute('title') || x.id).split(/[—(·]/)[0].trim()).join(' · ') + '.';
+
+// ── notes: click anything, type, exported with Copy settings ─────
+let notes = store.get('notes') || [], noting = false, pendingEl = null;
+const stage = $('#stage');
+const hl = document.createElement('div'); hl.id = 'note-hl'; hl.innerHTML = '<span></span>'; document.body.append(hl);
+const pop = document.createElement('div'); pop.id = 'note-pop'; pop.innerHTML = '<small></small><textarea placeholder="What should change?"></textarea><div><button data-a="cancel">Cancel</button><button class="go" data-a="save">Save note</button></div>'; document.body.append(pop);
+$('#note-general').value = store.get('noteGeneral') || '';
+$('#note-general').addEventListener('input', (e) => store.set('noteGeneral', e.target.value));
+const PICK = 'button,input,select,.opt,.th,.k-chip,.k-tg,.k-info,.k-search,.lib-search-wrap,.k-menu>div,.win i,.wordmark,.slab,.slab2,.tool,.splash,h2,.k-card header,[id]';
+const pickEl = (t) => { const e = t.closest(PICK); return e && stage.contains(e) && e !== stage ? e : null; };
+function cssPath(e) { const parts = []; while (e && e !== stage) { if (e.id) { parts.unshift('#' + CSS.escape(e.id)); break; } parts.unshift(`${e.tagName.toLowerCase()}:nth-child(${[...e.parentElement.children].indexOf(e) + 1})`); e = e.parentElement; } return parts.join('>'); }
+function describe(e) {
+  const sec = e.closest('.sec'), secName = sec ? sec.querySelector('.eyebrow').textContent.replace(/\s+/g, ' ').trim().split(' · ')[0] : '';
+  const bar = e.closest('#rbar-lib') ? 'Library bar' : e.closest('#rbar-ed') ? 'Editor bar' : '';
+  const idEl = e.id ? e : e.closest('.rbar [id]'), label = ((e.getAttribute('title') || e.getAttribute('placeholder') || e.textContent || '').trim().replace(/\s+/g, ' ').split(/ — | · /)[0]).slice(0, 40);
+  return [secName, bar, idEl && idEl.id ? '#' + idEl.id : e.tagName.toLowerCase() + (e.classList[0] ? '.' + e.classList[0] : ''), label && `"${label}"`].filter(Boolean).join(' › ');
+}
+function setNoting(on) { noting = on; body.classList.toggle('noting', on); $('#note-mode').classList.toggle('on', on); $('#note-mode').textContent = on ? 'Done adding notes' : 'Add a note'; if (!on) { hl.style.display = 'none'; closePop(); } }
+function closePop() { pop.style.display = 'none'; pendingEl = null; }
+$('#note-mode').addEventListener('click', () => setNoting(!noting));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (pendingEl) closePop(); else setNoting(false); } if ((e.key === 'n' || e.key === 'N') && !e.target.closest('input,textarea,select') && !e.metaKey && !e.ctrlKey) setNoting(!noting); });
+for (const type of ['pointerdown', 'mousedown', 'click']) document.addEventListener(type, (e) => {
+  if (!noting || pop.contains(e.target) || !stage.contains(e.target) || e.target.closest('.pin')) return;
+  e.preventDefault(); e.stopPropagation();
+  if (type !== 'click') return;
+  const el = pickEl(e.target); if (!el) return;
+  pendingEl = el; pop.querySelector('small').textContent = describe(el); pop.querySelector('textarea').value = '';
+  pop.style.display = 'block'; pop.style.left = Math.min(innerWidth - 296, e.clientX + 12) + 'px'; pop.style.top = Math.min(innerHeight - 150, e.clientY + 12) + 'px';
+  pop.querySelector('textarea').focus();
+}, true);
+document.addEventListener('pointermove', (e) => {
+  if (!noting || pendingEl) return; const el = stage.contains(e.target) && pickEl(e.target); if (!el) { hl.style.display = 'none'; return; }
+  const r = el.getBoundingClientRect(); Object.assign(hl.style, { display: 'block', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' }); hl.firstChild.textContent = describe(el);
+}, true);
+pop.addEventListener('click', (e) => { const a = e.target.dataset.a; if (a === 'cancel') closePop(); if (a === 'save') saveNote(); });
+pop.querySelector('textarea').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveNote(); });
+function saveNote() {
+  const txt = pop.querySelector('textarea').value.trim(); if (!txt || !pendingEl) return closePop();
+  notes.push({ n: (notes.at(-1)?.n || 0) + 1, path: cssPath(pendingEl), where: describe(pendingEl), note: txt, bar: pendingEl.closest('#rbar-ed') ? 1 : pendingEl.closest('#rbar-lib') ? 0 : null });
+  store.set('notes', notes); closePop(); renderNotes();
+}
+function findNoteEl(x) { try { return stage.querySelector(x.path); } catch { return null; } }
+function renderNotes() {
+  $('#notes-count').textContent = notes.length ? `· ${notes.length}` : '';
+  $('#notes-list').innerHTML = notes.map((x) => `<li data-n="${x.n}"><b>${x.n}</b><span>${x.note.replace(/</g, '&lt;')}<small>${x.where.replace(/</g, '&lt;')}</small></span><i title="Delete note">×</i></li>`).join('');
+  placePins();
+}
+function placePins() {
+  $$('.pin', stage).forEach((p) => p.remove()); const sr = stage.getBoundingClientRect();
+  for (const x of notes) { const el = findNoteEl(x); if (!el || !el.getClientRects().length) continue; const r = el.getBoundingClientRect();
+    const pin = document.createElement('div'); pin.className = 'pin'; pin.textContent = x.n; pin.title = x.note;
+    pin.style.left = (r.right - sr.left + stage.scrollLeft - 10) + 'px'; pin.style.top = (r.top - sr.top + stage.scrollTop - 10) + 'px'; stage.append(pin); }
+}
+$('#notes-list').addEventListener('click', (e) => {
+  const li = e.target.closest('li'); if (!li) return; const x = notes.find((y) => y.n === +li.dataset.n);
+  if (e.target.tagName === 'I') { notes = notes.filter((y) => y !== x); store.set('notes', notes); renderNotes(); return; }
+  if (x.bar !== null && x.bar !== undefined && +$('#mode-sw').dataset.idx !== x.bar) $$('#mode-sw .opt')[x.bar].click();
+  setTimeout(() => { const el = findNoteEl(x); if (el) { el.scrollIntoView({ block: 'center', behavior: reduced() ? 'auto' : 'smooth' }); setTimeout(placePins, 400); } }, 50);
+});
+$('#clear-notes').addEventListener('click', () => { if (!notes.length && !$('#note-general').value) return; if (confirm('Delete all notes?')) { notes = []; store.set('notes', notes); $('#note-general').value = ''; store.set('noteGeneral', ''); renderNotes(); } });
+addEventListener('resize', placePins); document.fonts.ready.then(() => setTimeout(placePins, 100));
+
 $$('.sw').forEach(makeSwitch);
+renderNotes();
 matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', apply);
 addEventListener('resize', () => switches.forEach((s) => s.snap()));
 document.fonts.ready.then(() => switches.forEach((s) => s.snap()));
