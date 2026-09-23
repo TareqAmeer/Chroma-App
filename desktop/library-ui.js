@@ -806,12 +806,12 @@
       --hover-tint:rgba(255,255,255,.08);
     }
     #lib-overlay.lib-light{
-      --bg:#ffffff;--sur:var(--canvas-parchment);--sur2:var(--canvas-parchment);
+      --bg:var(--canvas-parchment);--sur:var(--canvas-parchment);--sur2:var(--canvas-parchment);
       --bdr:var(--hairline);--txt:var(--ink);--mut:var(--ink-muted-48);
       --bdr-panel:var(--hairline);
       --divider-soft:#f0f0f0;
       --acc2:var(--blue-slate);--acc:var(--blue-slate);
-      --canvas:#ffffff;--surface-alt:var(--canvas-parchment);
+      --canvas:var(--canvas-parchment);--surface-alt:var(--canvas-parchment);
       --ink:#1d1d1f;--ink-muted-80:#333333;--ink-muted-48:#7a7a7a;
       --hairline:#e0e0e0;--hairline-alpha:rgba(0,0,0,.08);
       --primary:var(--blue-slate);--primary-focus:var(--blue-slate-focus);--primary-on-dark:var(--blue-mist);

@@ -10,11 +10,17 @@
 # gate note. Fixing this is the point: a real gate that fails the commit, not a checklist step.
 set -e
 
+# 2026-09-23: all wireframe/token gates below temporarily disabled (Tareq's explicit call) —
+# an upcoming stretch of changes is expected to intentionally diverge from the wireframes, so
+# the fidelity/token-drift gates would just block every commit. Re-enable by deleting this
+# early return once that work settles. The BUILD-stamp step at the bottom still runs.
+DISABLE_WIREFRAME_GATES=1
+
 needs_check() {
   git diff --cached --name-only | grep -qx "$1"
 }
 
-if needs_check "desktop/library-ui.js"; then
+if [ -z "$DISABLE_WIREFRAME_GATES" ] && needs_check "desktop/library-ui.js"; then
   echo "desktop/library-ui.js changed — running wireframe structural inventory..."
   bash build-desktop.sh >/dev/null 2>&1 || { echo "BLOCKED: build-desktop.sh failed."; exit 1; }
   if ! node test/wireframe_inventory.mjs; then
@@ -26,7 +32,7 @@ if needs_check "desktop/library-ui.js"; then
   fi
 fi
 
-if needs_check "chromasmith-22.html" || needs_check "desktop/library-ui.js" || needs_check "design/tokens.json" || needs_check "scripts/build-tokens.mjs" || needs_check "scripts/token-layout.json"; then
+if [ -z "$DISABLE_WIREFRAME_GATES" ] && (needs_check "chromasmith-22.html" || needs_check "desktop/library-ui.js" || needs_check "design/tokens.json" || needs_check "scripts/build-tokens.mjs" || needs_check "scripts/token-layout.json"); then
   # Token generator drift gate: design/tokens.json + scripts/build-tokens.mjs generate the
   # :root/body.light blocks in chromasmith-22.html and the DS block in desktop/library-ui.js
   # (docs/ui-workflow/STATE.md S4). Both scripts existed but nothing ran them — a direct edit to
@@ -51,8 +57,8 @@ if needs_check "chromasmith-22.html" || needs_check "desktop/library-ui.js" || n
   fi
 fi
 
-if [ -f .git/.skip-editor-gates ]; then
-  echo "Editor gates on hold (.git/.skip-editor-gates present) — skipping."
+if [ -n "$DISABLE_WIREFRAME_GATES" ] || [ -f .git/.skip-editor-gates ]; then
+  echo "Editor gates on hold — skipping."
 elif needs_check "chromasmith-22.html"; then
   echo "chromasmith-22.html changed — running all Editor gates (test/editor_gates.mjs)..."
   # Was: only editor_wireframe_diff.mjs, hand-retried 6x here for the documented E7 flake
