@@ -41,10 +41,14 @@ When instructed to "start work" or "next task":
 
 ### 3. Completion Protocol (Codebase -> Linear & DEVLOG)
 
-When code changes pass verification and testing:
+When implementation and verification are complete, run this mandatory task-completion hook before reporting completion:
 
-1. Update active issue status in Linear to `Done`.
+1. Resolve the exact Linear issue for this work. Prefer the issue identifier supplied by the user; otherwise search by task title and only use a unique, clearly matching result. Do not guess or update an unrelated issue.
 2. Append a 2–3 bullet summary of completed work, modified files, and issue ID to `DEVLOG.md`.
+3. Stage only task-owned files. Preserve unrelated and pre-existing working-tree changes; never use `git add -A` to publish them.
+4. Commit the completed task on `main` with a concise, descriptive message. If the current branch is not `main`, or unrelated local changes prevent a safe commit on `main`, stop and report the blocker instead of rewriting or discarding work.
+5. Push to `origin main`; never force-push. If remote `main` has advanced, integrate it safely and rerun relevant verification before pushing. Stop if a safe fast-forward update is not possible.
+6. Update the matching Linear issue with the completion summary, verification performed, and commit hash. Keep the issue in `In Review`; never mark it `Done` because the user does their own final testing.
 
 ### 4. Visual Attachment Protocol
 
