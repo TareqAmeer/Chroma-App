@@ -85,8 +85,9 @@ elif needs_check "chromasmith-22.html"; then
 fi
 
 # Version stamp: BUILD = 1.MMDDx, letter bumps per commit (scripts/bump-build.py).
-if git diff --cached --name-only | grep -qx "chromasmith-22.html"; then
-  python3 scripts/bump-build.py || python scripts/bump-build.py || true
-fi
+# Runs on EVERY commit (not only ones staging chromasmith-22.html): bump-build.py patches the
+# index blob directly, so the stamp advances even when the commit touches only other files
+# (CHR-124: library-ui.js-only commits left the splash stuck on the same letter).
+python3 scripts/bump-build.py || python scripts/bump-build.py || true
 
 exit 0
