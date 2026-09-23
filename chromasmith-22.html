@@ -1346,7 +1346,7 @@ body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px var(--sp-2);
    image (indistinguishable from the app's own Borders FX), which is not what was asked for —
    "border" meant panel separation (library <-> editor), not framing the canvas. Back to
    edge-to-edge, matching DRK; only the library/editor divider (library-ui.js) is thicker now. */
-body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:var(--bg);border:none;border-radius:0;margin:0;padding:var(--sp-6);box-sizing:border-box}
+body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:var(--bg);border:none;border-radius:0;margin:0;padding:16px;box-sizing:border-box}
 body.deskx #fx-canvas{max-height:none}
 body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:var(--z-float);
   background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:8px 12px}
@@ -5063,7 +5063,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0923N';
+const BUILD='1.0923O';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17061,7 +17061,7 @@ function renderLoupe(){
   // deskx: don't cap at 900 — same reasoning as renderPreview's own maxW (a large desktop window
   // has far more than 900px to show real detail in); web/mobile keep the 900 cap.
   const deskx=document.body.classList.contains('deskx');
-  const maxW=deskx?(wrap.clientWidth||900):Math.min(900,wrap.clientWidth||900);
+  const maxW=deskx?(fxWrapInner().w||900):Math.min(900,wrap.clientWidth||900);
   const fit=Math.min(1,maxW/fw,fxPreviewMaxH()/fh),cw=fw*fit|0,ch=fh*fit|0; // on-screen footprint at fxZoom=1 (matches normal preview)
   const dpr=Math.min(window.devicePixelRatio||1,2);
   // fxZoom used to be pure CSS (transform:scale on the wrapper) applied ON TOP of a crop that
@@ -17100,6 +17100,11 @@ function renderLoupe(){
 // the viewport — otherwise a portrait image would fill the screen and bury the controls.
 // Mobile: measure the LIVE preview area (flex-allocated — full height when the tool sheet is
 // closed, reduced while it's open) so the render always fits what's actually on screen.
+function fxWrapInner(){ // content box of #fx-wrap (clientWidth/Height include the fixed canvas inset padding)
+  const w=document.getElementById('fx-wrap');if(!w)return{w:0,h:0};
+  const cs=getComputedStyle(w);
+  return{w:w.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0),h:w.clientHeight-(parseFloat(cs.paddingTop)||0)-(parseFloat(cs.paddingBottom)||0)};
+}
 function fxPreviewMaxH(){
   if(window.innerWidth<=700){
     const wrap=document.getElementById('fx-wrap');
@@ -17112,7 +17117,7 @@ function fxPreviewMaxH(){
     // deskx: the wrap is a flex cell that IS the available space — measure it live, same as
     // the mobile branch, so JS sizing can never drift from the CSS grid.
     const wrap=document.getElementById('fx-wrap');
-    return Math.max(360,(wrap&&wrap.clientHeight)||window.innerHeight-52);
+    return Math.max(360,(wrap&&fxWrapInner().h)||window.innerHeight-52);
   }
   return Math.max(360,window.innerHeight-150);
 }
@@ -17275,7 +17280,7 @@ function renderPreview(){
   const deskx=document.body.classList.contains('deskx');
   // deskx: no 900px cap — the photo fills the whole preview cell (DRK-style). The GPU
   // cost is bounded by the BACKING-STORE cap below, not the CSS size.
-  const maxW=deskx?(wrap.clientWidth||900):Math.min(900,wrap.clientWidth||900);
+  const maxW=deskx?(fxWrapInner().w||900):Math.min(900,wrap.clientWidth||900);
   const maxH=fxPreviewMaxH();                           // cap height on phones (sticky preview)
   const sc=Math.min(1,maxW/iw,maxH/ih);
   const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
