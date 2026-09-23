@@ -8183,6 +8183,9 @@
       <div style="padding:0 10px 6px"><div style="height:3px;border-radius:2px;background:var(--sur2);overflow:hidden">
         <div style="height:100%;width:${pct}%;background:${nearFull ? 'var(--err,#e05454)' : 'var(--acc)'}"></div>
       </div></div>
+      <div class="lib-coll-row" data-lib-roots="1" style="cursor:pointer" title="Every folder the library is indexing — remove any of them (files are never deleted)">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Library folders…</span>
+      </div>
       <div class="lib-coll-row" data-cache-free="1" style="cursor:pointer">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Free up space…</span>
       </div>
@@ -10490,7 +10493,7 @@
   /// with an old archive volume plus a current one otherwise has no way to clear just one.
   /// Decode cache stays global-only (opaque hashed cache keys, no root column to filter on —
   /// see catalog_root_cache_usage's own doc comment) — one item, not one per root, for that.
-  async function showCacheMenu(e) {
+  async function showCacheMenu(e, rootsOnly) {
     if (!cacheUsage) { try { await refreshCacheUsage(); } catch (_) {} }
     if (!cacheUsage) return;
     const x = Math.min(e.clientX, window.innerWidth - 260);
@@ -10517,7 +10520,7 @@
         }]);
       }
     }
-    if (rootUsage.length > 1) {
+    if (!rootsOnly && rootUsage.length > 1) {
       for (const r of rootUsage) {
         const label = r.rel_path ? `${r.volume_label} / ${r.rel_path}` : `${r.volume_label} (whole volume)`;
         items.push([`Clear ${label} thumbnails (${fmtGB(r.offline_thumbs_bytes)} GB)`, async () => {
@@ -10526,7 +10529,7 @@
           catch (err) { toast(humanizeErr('clear that root\'s thumbnails', err), 'err'); }
         }]);
       }
-    } else {
+    } else if (!rootsOnly) {
       items.push([`Clear offline thumbnails (${fmtGB(cacheUsage.offline_thumbs_bytes)} GB)`, async () => {
         // confirmModal, never window.confirm — matches the album-delete confirm above. Worth
         // spelling out what's actually lost: nothing on the drive, just the never-pruned
@@ -10536,7 +10539,7 @@
         catch (err) { toast(humanizeErr('clear offline thumbnails', err), 'err'); }
       }]);
     }
-    items.push([`Clear decode cache (${fmtGB(cacheUsage.decode_cache_bytes)} GB)`, async () => {
+    if (!rootsOnly) items.push([`Clear decode cache (${fmtGB(cacheUsage.decode_cache_bytes)} GB)`, async () => {
       try { await invoke('clear_cache_tier', { tier: 'decode' }); toast('Decode cache cleared'); refreshCacheUsage(); }
       catch (err) { toast(humanizeErr('clear the decode cache', err), 'err'); }
     }]);
@@ -10655,6 +10658,8 @@
         await openCatalogView('all');
       };
     }
+    const rootsRow = host2.querySelector('[data-lib-roots]');
+    if (rootsRow) rootsRow.onclick = (e) => showCacheMenu(e, true);
     const freeUpRow = host2.querySelector('[data-cache-free]');
     if (freeUpRow) freeUpRow.onclick = (e) => showCacheMenu(e);
     const verifyRow = host2.querySelector('[data-verify-library]');
