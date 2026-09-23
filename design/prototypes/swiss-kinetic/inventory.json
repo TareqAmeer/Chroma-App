@@ -1,0 +1,1029 @@
+{
+  "generatedAt": "2026-09-23T21:27:12.481Z",
+  "states": [
+    "page:fx",
+    "page:match",
+    "page:copy",
+    "page:collage",
+    "page:guide",
+    "editor:image",
+    "editor:looks",
+    "editor:adjust",
+    "editor:nr",
+    "editor:deconv",
+    "editor:curves",
+    "editor:hsl",
+    "editor:wheels",
+    "editor:pointcolor",
+    "editor:local",
+    "editor:lens",
+    "editor:crop",
+    "editor:grain",
+    "editor:art",
+    "editor:hal",
+    "editor:bloom",
+    "editor:vig",
+    "editor:borders",
+    "editor:retouch",
+    "editor:canvas",
+    "editor:diag",
+    "editor:export",
+    "editor:wm",
+    "editor:exppreset",
+    "editor:style",
+    "editor:share",
+    "editor:info",
+    "editor:masks-radial",
+    "editor:masks-linear",
+    "editor:masks-brush",
+    "editor:masks-sky",
+    "editor:masks-skin",
+    "editor:masks-coat",
+    "editor:masks-ai",
+    "editor:masks-color",
+    "editor:masks-lum",
+    "editor:masks-depth",
+    "library:full",
+    "mobile",
+    "catalog"
+  ],
+  "families": {
+    "section-card": 5,
+    "control-row": 25,
+    "toggle": 10,
+    "slider": 25,
+    "select": 10,
+    "segmented-control": 10,
+    "button": 71,
+    "icon-button": 5,
+    "chip": 5,
+    "info-button": 15,
+    "search-input": 5,
+    "menu": 5
+  },
+  "registryUnlocated": {
+    "dynamic": [
+      "chromasmith-22.html:15511:button",
+      "chromasmith-22.html:16154:button",
+      "chromasmith-22.html:16155:button",
+      "chromasmith-22.html:16155:icon-button",
+      "chromasmith-22.html:16156:button",
+      "chromasmith-22.html:16156:icon-button",
+      "chromasmith-22.html:19727:button",
+      "chromasmith-22.html:19727:button",
+      "chromasmith-22.html:19745:button",
+      "chromasmith-22.html:20941:button",
+      "chromasmith-22.html:20999:button",
+      "chromasmith-22.html:21001:button",
+      "chromasmith-22.html:21003:button",
+      "chromasmith-22.html:21006:button",
+      "chromasmith-22.html:21007:button",
+      "chromasmith-22.html:21032:button",
+      "desktop/library-ui.js:1989:button",
+      "desktop/library-ui.js:4728:button",
+      "desktop/library-ui.js:5879:select",
+      "desktop/library-ui.js:5880:select",
+      "desktop/library-ui.js:6906:button",
+      "desktop/library-ui.js:9272:select",
+      "desktop/library-ui.js:9278:select"
+    ],
+    "withoutStableSelector": [
+      "chromasmith-22.html:338:select",
+      "chromasmith-22.html:529:select",
+      "chromasmith-22.html:1763:button",
+      "chromasmith-22.html:1956:button",
+      "chromasmith-22.html:1969:button",
+      "chromasmith-22.html:2030:button",
+      "chromasmith-22.html:2090:button",
+      "chromasmith-22.html:2091:button",
+      "chromasmith-22.html:2095:button",
+      "chromasmith-22.html:2096:button",
+      "chromasmith-22.html:2097:button",
+      "chromasmith-22.html:2098:button",
+      "chromasmith-22.html:2174:button",
+      "chromasmith-22.html:2194:button",
+      "chromasmith-22.html:2197:button",
+      "chromasmith-22.html:2197:button",
+      "chromasmith-22.html:2197:button",
+      "chromasmith-22.html:2197:button",
+      "chromasmith-22.html:2255:select",
+      "chromasmith-22.html:2288:button",
+      "chromasmith-22.html:2288:icon-button",
+      "chromasmith-22.html:2289:button",
+      "chromasmith-22.html:2289:icon-button",
+      "chromasmith-22.html:2290:button",
+      "chromasmith-22.html:2290:icon-button",
+      "chromasmith-22.html:2291:button",
+      "chromasmith-22.html:2291:icon-button",
+      "chromasmith-22.html:2297:button",
+      "chromasmith-22.html:2354:button",
+      "chromasmith-22.html:2434:button",
+      "chromasmith-22.html:2517:button",
+      "chromasmith-22.html:2518:button",
+      "chromasmith-22.html:2542:button",
+      "chromasmith-22.html:2543:button",
+      "chromasmith-22.html:2568:button",
+      "chromasmith-22.html:2582:button",
+      "chromasmith-22.html:2583:button",
+      "chromasmith-22.html:2601:button",
+      "chromasmith-22.html:2735:button",
+      "chromasmith-22.html:2735:icon-button",
+      "chromasmith-22.html:2737:button",
+      "chromasmith-22.html:2737:icon-button",
+      "chromasmith-22.html:2756:button",
+      "chromasmith-22.html:2757:button",
+      "chromasmith-22.html:2758:button",
+      "chromasmith-22.html:2817:button",
+      "chromasmith-22.html:3069:button",
+      "chromasmith-22.html:3070:button",
+      "chromasmith-22.html:3071:button",
+      "chromasmith-22.html:3086:button",
+      "chromasmith-22.html:3089:button",
+      "chromasmith-22.html:5058:button",
+      "chromasmith-22.html:5059:button",
+      "chromasmith-22.html:5061:button",
+      "chromasmith-22.html:8403:select",
+      "chromasmith-22.html:11199:button",
+      "chromasmith-22.html:11230:select",
+      "chromasmith-22.html:11552:button",
+      "chromasmith-22.html:12199:button",
+      "chromasmith-22.html:12200:button",
+      "chromasmith-22.html:12201:button",
+      "chromasmith-22.html:12202:button",
+      "chromasmith-22.html:12203:button",
+      "chromasmith-22.html:12215:button",
+      "chromasmith-22.html:12216:button",
+      "chromasmith-22.html:12221:button",
+      "chromasmith-22.html:12225:button",
+      "chromasmith-22.html:12232:button",
+      "chromasmith-22.html:12233:button",
+      "chromasmith-22.html:12535:button",
+      "chromasmith-22.html:12540:button",
+      "chromasmith-22.html:12617:button",
+      "chromasmith-22.html:12618:button",
+      "chromasmith-22.html:12620:button",
+      "chromasmith-22.html:12620:segmented-control",
+      "chromasmith-22.html:14410:button",
+      "chromasmith-22.html:14465:button",
+      "chromasmith-22.html:14466:button",
+      "chromasmith-22.html:14467:button",
+      "chromasmith-22.html:14472:button",
+      "chromasmith-22.html:14491:button",
+      "chromasmith-22.html:14492:button",
+      "chromasmith-22.html:14493:button",
+      "chromasmith-22.html:14606:button",
+      "chromasmith-22.html:14632:button",
+      "chromasmith-22.html:14656:button",
+      "chromasmith-22.html:14660:button",
+      "chromasmith-22.html:14670:button",
+      "chromasmith-22.html:14671:button",
+      "chromasmith-22.html:14693:button",
+      "chromasmith-22.html:15511:button",
+      "chromasmith-22.html:16154:button",
+      "chromasmith-22.html:16155:button",
+      "chromasmith-22.html:16155:icon-button",
+      "chromasmith-22.html:16156:button",
+      "chromasmith-22.html:16156:icon-button",
+      "chromasmith-22.html:17691:select",
+      "chromasmith-22.html:19727:button",
+      "chromasmith-22.html:19727:button",
+      "chromasmith-22.html:19745:button",
+      "chromasmith-22.html:20999:button",
+      "chromasmith-22.html:21001:button",
+      "chromasmith-22.html:21003:button",
+      "chromasmith-22.html:21006:button",
+      "chromasmith-22.html:21007:button",
+      "chromasmith-22.html:21914:select",
+      "chromasmith-22.html:21931:select",
+      "chromasmith-22.html:22230:select",
+      "desktop/library-ui.js:950:button",
+      "desktop/library-ui.js:1940:button",
+      "desktop/library-ui.js:1941:button",
+      "desktop/library-ui.js:2163:select",
+      "desktop/library-ui.js:3279:select",
+      "desktop/library-ui.js:4728:button",
+      "desktop/library-ui.js:6068:select",
+      "desktop/library-ui.js:6569:select",
+      "desktop/library-ui.js:6574:select",
+      "desktop/library-ui.js:6602:select"
+    ]
+  },
+  "special": [
+    {
+      "sig": "div.lib-card",
+      "seen": 720,
+      "states": 40,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "lib-grid"
+      ],
+      "examples": [
+        "R IMG_1001.RW2",
+        "R IMG_1002.RW2",
+        "R IMG_1003.RW2"
+      ]
+    },
+    {
+      "sig": "img",
+      "seen": 720,
+      "states": 40,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "lib-grid"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "div.fx-zoom-wrap",
+      "seen": 40,
+      "states": 40,
+      "cursor": "grab",
+      "role": "",
+      "hosts": [
+        "fx-zoom-wrap"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "canvas#fx-canvas",
+      "seen": 40,
+      "states": 40,
+      "cursor": "grab",
+      "role": "",
+      "hosts": [
+        "fx-canvas"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "div.fx-ctrl-title",
+      "seen": 43,
+      "states": 39,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "panel-fx",
+        "catalog-root"
+      ],
+      "examples": [
+        "Presets & LooksReset",
+        "Basic Adjustments Reset",
+        "Noise Reduction Reset"
+      ]
+    },
+    {
+      "sig": "div.lib-dock-resizer",
+      "seen": 38,
+      "states": 38,
+      "cursor": "col-resize",
+      "role": "",
+      "hosts": [
+        "lib-dock-resizer"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "div.fx-val",
+      "seen": 66,
+      "states": 16,
+      "cursor": "text",
+      "role": "",
+      "hosts": [
+        "vl-adj-exp",
+        "vl-adj-con",
+        "vl-adj-hi",
+        "vl-adj-sh"
+      ],
+      "examples": [
+        "Tap to type a value"
+      ]
+    },
+    {
+      "sig": "input[checkbox]",
+      "seen": 22,
+      "states": 12,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "local-ctl"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "input[color]#msk-col-picker",
+      "seen": 12,
+      "states": 12,
+      "cursor": "default",
+      "role": "",
+      "hosts": [
+        "msk-col-picker"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "div.dz",
+      "seen": 7,
+      "states": 5,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "dz-fx-img",
+        "dz-before",
+        "dz-target",
+        "dz-cp-src"
+      ],
+      "examples": [
+        "Drop imageportrait",
+        "Before / Original Ungraded flat image",
+        "After / Target Graded Lightroom result"
+      ]
+    },
+    {
+      "sig": "canvas#msk-paint-overlay",
+      "seen": 5,
+      "states": 5,
+      "cursor": "grab",
+      "role": "",
+      "hosts": [
+        "msk-paint-overlay"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "input[checkbox]#ck-msk-selview-outline",
+      "seen": 4,
+      "states": 4,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "ck-msk-selview-outline"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "div.dz.opt-dz",
+      "seen": 3,
+      "states": 3,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "dz-fx-lut",
+        "dz-start"
+      ],
+      "examples": [
+        "Apply LUT (.cube or processed LUT chart)",
+        "Starting LUT (.cube) or Preset (.xmp) Optional — helps boots"
+      ]
+    },
+    {
+      "sig": "input.vinput",
+      "seen": 3,
+      "states": 3,
+      "cursor": "text",
+      "role": "",
+      "hosts": [
+        "match-name",
+        "cp-name",
+        "fx-fname"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "summary",
+      "seen": 3,
+      "states": 3,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "cl-tray-hint",
+        "ff-deconv",
+        "ff-wheels"
+      ],
+      "examples": [
+        "i How this works"
+      ]
+    },
+    {
+      "sig": "input[color].fx-color",
+      "seen": 2,
+      "states": 2,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "cl-bg",
+        "cl-canvas-bg"
+      ],
+      "examples": [
+        "Background",
+        "Custom"
+      ]
+    },
+    {
+      "sig": "div.look-cell",
+      "seen": 114,
+      "states": 1,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "fx-looks"
+      ],
+      "examples": [
+        "Original",
+        "A Beach Preset",
+        "Astia"
+      ]
+    },
+    {
+      "sig": "canvas",
+      "seen": 114,
+      "states": 1,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "fx-looks"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "div.opt",
+      "seen": 25,
+      "states": 1,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "catalog-root"
+      ],
+      "examples": [
+        "Date taken",
+        "Date added",
+        "Date edited"
+      ]
+    },
+    {
+      "sig": "div.lib-coll-row",
+      "seen": 17,
+      "states": 1,
+      "cursor": "pointer",
+      "role": "button",
+      "hosts": [
+        "lib-collections"
+      ],
+      "examples": [
+        "All Photos 0",
+        "Recents 4",
+        "Offline Photos 0"
+      ]
+    },
+    {
+      "sig": "div.lib-coll-heading.lib-sec-h",
+      "seen": 7,
+      "states": 1,
+      "cursor": "grab",
+      "role": "button",
+      "hosts": [
+        "lib-collections",
+        "lib-folders-header",
+        "lib-collections-post"
+      ],
+      "examples": [
+        "Collections",
+        "People & Pets",
+        "Albums+"
+      ]
+    },
+    {
+      "sig": "a",
+      "seen": 6,
+      "states": 1,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "panel-guide"
+      ],
+      "examples": [
+        "Getting started",
+        "Effects & Export",
+        "Preview & zoom"
+      ]
+    },
+    {
+      "sig": "div.fx-label.fx-preset-head",
+      "seen": 1,
+      "states": 1,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "fx-preset-head"
+      ],
+      "examples": [
+        "Collapse/expand presets"
+      ]
+    },
+    {
+      "sig": "input[search].vinput",
+      "seen": 1,
+      "states": 1,
+      "cursor": "text",
+      "role": "",
+      "hosts": [
+        "fx-looks-search"
+      ],
+      "examples": [
+        "Filter the looks by name — matches letters in order, so \"p80"
+      ]
+    },
+    {
+      "sig": "canvas#cv-curve",
+      "seen": 1,
+      "states": 1,
+      "cursor": "crosshair",
+      "role": "",
+      "hosts": [
+        "cv-curve"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "canvas#cv-wheel-lift",
+      "seen": 1,
+      "states": 1,
+      "cursor": "crosshair",
+      "role": "",
+      "hosts": [
+        "cv-wheel-lift"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "canvas#cv-wheel-gamma",
+      "seen": 1,
+      "states": 1,
+      "cursor": "crosshair",
+      "role": "",
+      "hosts": [
+        "cv-wheel-gamma"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "canvas#cv-wheel-gain",
+      "seen": 1,
+      "states": 1,
+      "cursor": "crosshair",
+      "role": "",
+      "hosts": [
+        "cv-wheel-gain"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "div.fx-toggle-lb",
+      "seen": 1,
+      "states": 1,
+      "cursor": "pointer",
+      "role": "button",
+      "hosts": [
+        "panel-fx"
+      ],
+      "examples": [
+        "Reset"
+      ]
+    },
+    {
+      "sig": "input[checkbox]#lib-subfolders",
+      "seen": 1,
+      "states": 1,
+      "cursor": "default",
+      "role": "",
+      "hosts": [
+        "lib-subfolders"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "div.lib-side-resizer",
+      "seen": 1,
+      "states": 1,
+      "cursor": "col-resize",
+      "role": "",
+      "hosts": [
+        "lib-side-resizer"
+      ],
+      "examples": []
+    },
+    {
+      "sig": "div.lib-tree-row",
+      "seen": 1,
+      "states": 1,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "lib-tree"
+      ],
+      "examples": [
+        "Right-click to remove this folder from the library"
+      ]
+    },
+    {
+      "sig": "div#fx-sheet-handle",
+      "seen": 1,
+      "states": 1,
+      "cursor": "pointer",
+      "role": "",
+      "hosts": [
+        "fx-sheet-handle"
+      ],
+      "examples": [
+        "Close"
+      ]
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "cl-cellpanel",
+      "reachedInWalk": false
+    },
+    {
+      "id": "cl-secnav",
+      "reachedInWalk": false
+    },
+    {
+      "id": "cs-modal",
+      "reachedInWalk": false
+    },
+    {
+      "id": "db-history-wrap",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-actionbar",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fx-ahroi-overlay",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-ask-modal",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-bgmenu",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-clip-info",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-confirm-modal",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-crop-overlay",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-deskbar",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fx-filmstrip",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-guides-overlay",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-hist",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-mask-overlay",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fx-more-menu",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-overflow-menu",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-rail-foot",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-rail-show",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-secnav",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fx-settings-history-list",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-settings-menu",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-settings-split-list",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-sheet-handle",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fx-split-line",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-split-popover",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-timeline-popover",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-toast",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fx-toolrail",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fx-tools-menu",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fx-view-menu",
+      "reachedInWalk": false
+    },
+    {
+      "id": "fxsec-adjust",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-art",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-bloom",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-borders",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-canvas",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-crop",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-curves",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-deconv",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-diag",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-export",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-grain",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-hal",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-hsl",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-image",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-info",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-lens",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-local",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-looks",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-nr",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-pointcolor",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-retouch",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-vig",
+      "reachedInWalk": true
+    },
+    {
+      "id": "fxsec-wheels",
+      "reachedInWalk": true
+    },
+    {
+      "id": "hdr-about",
+      "reachedInWalk": false
+    },
+    {
+      "id": "hq-offline-quit-modal",
+      "reachedInWalk": false
+    },
+    {
+      "id": "ic-split",
+      "reachedInWalk": false
+    },
+    {
+      "id": "ic-splitmenu",
+      "reachedInWalk": false
+    },
+    {
+      "id": "ic-timeline",
+      "reachedInWalk": false
+    },
+    {
+      "id": "imp-bar",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-astro-modal",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-batchbar",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-blocking-wait-modal",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-bottom",
+      "reachedInWalk": true
+    },
+    {
+      "id": "lib-cat-panels",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-collage-modal",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-compare",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-dock-reopen",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-empty-nofolder",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-empty-nomatch",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-empty-noroot",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-filters-panel",
+      "reachedInWalk": true
+    },
+    {
+      "id": "lib-grid",
+      "reachedInWalk": true
+    },
+    {
+      "id": "lib-info",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-main",
+      "reachedInWalk": true
+    },
+    {
+      "id": "lib-offline-bar",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-offq-modal",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-review-grid",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-side",
+      "reachedInWalk": true
+    },
+    {
+      "id": "lib-sort-menu",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-thumb-progress",
+      "reachedInWalk": false
+    },
+    {
+      "id": "lib-top",
+      "reachedInWalk": true
+    },
+    {
+      "id": "lib-view-menu",
+      "reachedInWalk": false
+    },
+    {
+      "id": "library",
+      "reachedInWalk": false
+    },
+    {
+      "id": "mobile-sheet",
+      "reachedInWalk": false
+    },
+    {
+      "id": "msk-paint-overlay",
+      "reachedInWalk": true
+    },
+    {
+      "id": "panel-collage",
+      "reachedInWalk": true
+    },
+    {
+      "id": "panel-copy",
+      "reachedInWalk": true
+    },
+    {
+      "id": "panel-fx",
+      "reachedInWalk": true
+    },
+    {
+      "id": "panel-guide",
+      "reachedInWalk": true
+    },
+    {
+      "id": "panel-match",
+      "reachedInWalk": true
+    },
+    {
+      "id": "row-nr-high-progress",
+      "reachedInWalk": false
+    },
+    {
+      "id": "splash",
+      "reachedInWalk": false
+    },
+    {
+      "id": "step-history",
+      "reachedInWalk": false
+    },
+    {
+      "id": "vid-thumbstrip",
+      "reachedInWalk": false
+    }
+  ]
+}
