@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-[#FFFFFF]" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CHRO-MA SPECIMEN 03A // KINETIC GALLERY PRECISION &amp; FOUNDRY WORKBENCH</title>
+<!-- Google Fonts: Space Grotesk & Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            porcelain: '#FFFFFF',
+            paper: '#F6F6F4',
+            surfaceSoft: '#EEEEEC',
+            ink: '#000000',
+            charcoal: '#1A1A1A',
+            hairline: '#E5E5E0',
+            hairlineDark: '#D4D4CE',
+            meta: '#888884',
+            lightMeta: '#B0B0AA',
+            klein: '#0015FF',
+            signalRed: '#E02C00'
+          },
+          fontFamily: {
+            headline: ['"Space Grotesk"', 'sans-serif'],
+            mono: ['"Space Grotesk"', 'monospace'],
+            body: ['"Inter"', 'sans-serif']
+          },
+          letterSpacing: {
+            'tight-clean': '-0.03em',
+            'catalog': '0.14em',
+            'spacious': '0.22em'
+          }
+        }
+      }
+    }
+</script>
+<style>
+    /* Strict Ultra-Minimalist Mandate: Zero Curves */
+    *, *::before, *::after {
+      border-radius: 0px !important;
+      -webkit-font-smoothing: antialiased;
+      box-sizing: border-box;
+    }
+
+    /* Architectural Hairlines */
+    .border-hairline { border-color: #E5E5E0; }
+    .divide-hairline > * + * { border-color: #E5E5E0; }
+
+    /* Minimalist Precision Scrollbar */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #FFFFFF; }
+    ::-webkit-scrollbar-thumb { background: #D4D4CE; }
+    ::-webkit-scrollbar-thumb:hover { background: #000000; }
+
+    /* --- KINETIC ANIMATIONS & CUSTOM BEHAVIORS --- */
+
+    /* Terminal Blinking Square Cursor */
+    @keyframes blink-square {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0; }
+    }
+    .cursor-blink {
+      animation: blink-square 1s infinite steps(1);
+    }
+
+    /* Type Slip / Reveal CTA Effect */
+    .type-slip-container {
+      position: relative;
+      overflow: hidden;
+      display: inline-block;
+    }
+    .type-slip-track {
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.28s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    .type-slip-btn:hover .type-slip-track {
+      transform: translateY(-50%);
+    }
+    .underline-expand {
+      position: relative;
+    }
+    .underline-expand::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      width: 0;
+      height: 1px;
+      background: #0015FF;
+      transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .type-slip-btn:hover .underline-expand::after {
+      width: 100%;
+      left: 0;
+    }
+
+    /* Bracket Shutter Button Dynamic Snap */
+    .bracket-shutter {
+      position: relative;
+      transition: color 0.2s ease;
+    }
+    .bracket-l, .bracket-r {
+      transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .bracket-shutter:hover .bracket-l {
+      transform: translateX(4px);
+    }
+    .bracket-shutter:hover .bracket-r {
+      transform: translateX(-4px);
+    }
+    .bracket-shutter .shutter-fill {
+      transform: scaleX(0);
+      transform-origin: center;
+      transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .bracket-shutter:hover .shutter-fill {
+      transform: scaleX(1);
+    }
+
+    /* Tumble Cube Toggle (180deg Mechanical Flip) */
+    .tumble-cube {
+      transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transform-style: preserve-3d;
+    }
+    .tumble-cube.active {
+      transform: rotateY(180deg);
+    }
+
+    /* Sliding Strata Physical Plate Indicator */
+    .strata-track {
+      position: relative;
+    }
+    .strata-slider-plate {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background-color: #000000;
+      transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+      z-index: 0;
+    }
+
+    /* Tumbling Rolling Square Slider (Key requested innovation) */
+    .slider-rail {
+      position: relative;
+      user-select: none;
+      touch-action: none;
+    }
+    .rolling-square-thumb {
+      position: absolute;
+      top: 50%;
+      width: 22px;
+      height: 22px;
+      margin-top: -11px;
+      margin-left: -11px;
+      transform-origin: center center;
+      transition: box-shadow 0.15s ease;
+      cursor: grab;
+      z-index: 20;
+    }
+    .rolling-square-thumb:active {
+      cursor: grabbing;
+      box-shadow: 0 0 0 1px #0015FF;
+    }
+
+    /* Magnetic catalog dot effect */
+    .catalog-item .indicator-dot {
+      transform: scale(0.6);
+      opacity: 0;
+      transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease, background-color 0.2s ease;
+    }
+    .catalog-item:hover .indicator-dot {
+      transform: scale(1);
+      opacity: 1;
+    }
+    .catalog-item.is-selected .indicator-dot {
+      transform: scale(1);
+      opacity: 1;
+      background-color: #0015FF;
+    }
+
+    /* Interactive number pulse */
+    .pulse-tick {
+      display: inline-block;
+      transition: transform 0.15s ease, color 0.15s ease;
+    }
+    .pulse-tick.pulsed {
+      transform: translateY(-3px);
+      color: #0015FF;
+    }
+
+    /* Accordion transitions */
+    .accordion-body {
+      transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+    }
+</style>
+</head>
+<body class="min-h-full bg-[#FFFFFF] text-ink font-mono selection:bg-klein selection:text-white flex flex-col antialiased">
+<!-- TOP GALLERY MASTHEAD & CURATION INDEX -->
+<header class="border-b border-hairline bg-porcelain sticky top-0 z-50">
+<!-- Minimalist Micro Plinth -->
+<div class="h-9 border-b border-hairline px-6 sm:px-12 flex items-center justify-between text-[11px] font-mono tracking-catalog uppercase text-meta bg-paper">
+<div class="flex items-center gap-6">
+<span class="text-ink font-semibold flex items-center gap-2">
+<span class="w-1.5 h-1.5 bg-klein inline-block animate-pulse"></span>
+        SPECIMEN // C-03A
+      </span>
+<span class="hidden md:inline border-l border-hairlineDark pl-4 text-meta">KINETIC GALLERY PRECISION &amp; TUMBLING TACTILE CONTROLS</span>
+<span class="hidden xl:inline border-l border-hairlineDark pl-4 text-lightMeta">COSMOS / BEDOW / KINETIC FOUNDRY</span>
+</div>
+<div class="flex items-center gap-6 text-[10px]">
+<span class="text-ink font-medium tracking-widest uppercase">PORCELAIN #FFFFFF · KLEIN #0015FF</span>
+<span class="border-l border-hairlineDark pl-4 text-ink font-bold">0PX STRICT // KINETIC PHYSICS</span>
+</div>
+</div>
+<!-- Primary Exhibition Title Plaque -->
+<div class="px-6 sm:px-12 py-7 sm:py-9 flex flex-col lg:flex-row lg:items-baseline justify-between gap-6 bg-porcelain">
+<div class="space-y-2">
+<div class="text-[10px] font-mono text-klein tracking-spacious uppercase font-semibold flex items-center gap-2">
+<span>INDEX SHEET NO. 03A</span>
+<span class="w-1 h-1 bg-klein"></span>
+<span>FOUNDRY KINETIC ARCHIVE</span>
+</div>
+<h1 class="text-3xl sm:text-5xl lg:text-6xl font-headline font-semibold tracking-tight-clean text-ink uppercase leading-none">
+        CHRO-MA // SPECIMEN 03A
+      </h1>
+<p class="text-xs sm:text-sm font-body text-meta max-w-2xl pt-1 leading-relaxed">
+        Evolution of Stark Minimalist Gallery: High-restraint editorial Swiss typography combined with innovative kinetic micro-interactions. Featuring the rolling/tumbling square slider, 180° flip toggles, bracket shutter cues, and sliding strata mechanics.
+      </p>
+</div>
+<!-- Clean Navigation Jumps -->
+<div class="flex flex-wrap items-center gap-6 self-start lg:self-baseline text-xs font-mono tracking-wider uppercase">
+<a class="text-ink hover:text-klein pb-1 border-b border-transparent hover:border-klein transition-colors" href="#sliders">
+        01. Rolling Sliders
+      </a>
+<span class="text-lightMeta">/</span>
+<a class="text-ink hover:text-klein pb-1 border-b border-transparent hover:border-klein transition-colors" href="#buttons">
+        02. Kinetic Buttons
+      </a>
+<span class="text-lightMeta">/</span>
+<a class="text-ink hover:text-klein pb-1 border-b border-transparent hover:border-klein transition-colors" href="#sidebars">
+        03. Sidebars &amp; Inputs
+      </a>
+<span class="text-lightMeta">/</span>
+<a class="text-ink hover:text-klein pb-1 border-b border-transparent hover:border-klein transition-colors" href="#workbench">
+        04. Live Workbench
+      </a>
+</div>
+</div>
+</header>
+<!-- MAIN GALLERY COMPONENT SPEC SHEET -->
+<main class="flex-1 w-full max-w-[1720px] mx-auto p-6 sm:p-12 space-y-20">
+<!-- ========================================================================= -->
+<!-- SECTION 01: INNOVATIVE KINETIC SLIDERS (TUMBLING SQUARE & STEPPED SCALE)   -->
+<!-- ========================================================================= -->
+<section class="space-y-8" id="sliders">
+<div class="border-b border-ink pb-4 flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+<div>
+<span class="text-[10px] text-meta tracking-spacious uppercase block">SPECIMEN GROUP 01 // KINETIC PHYSICS</span>
+<h2 class="text-2xl sm:text-3xl font-headline font-semibold uppercase tracking-tight text-ink">
+          TUMBLING SQUARE &amp; STEPPED PRECISION SLIDERS
+        </h2>
+</div>
+<div class="text-[11px] font-mono text-meta uppercase tracking-wider">
+        TUMBLING EDGE ROTATION // MECHANICAL SOUND HINTS // SNAP COORDINATES
+      </div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+<!-- SLIDER 01: THE TUMBLING / ROLLING SQUARE SLIDER -->
+<div class="border border-hairline bg-porcelain p-6 sm:p-8 space-y-6 flex flex-col justify-between">
+<div class="space-y-2">
+<div class="flex items-center justify-between text-[10px] font-mono uppercase">
+<span class="text-ink font-semibold flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 bg-klein"></span>
+              SLD.01
+            </span>
+<span class="text-klein font-mono font-semibold">ROTATIONAL PHYSICS: 90° PER TRAVERSE STRIDE</span>
+</div>
+<h3 class="font-headline font-semibold text-lg uppercase tracking-tight">
+            THE TUMBLING SQUARE TRAVERSE SLIDER
+          </h3>
+<p class="text-xs font-body text-meta">
+            As the user drags or clicks along the rail, the square thumb rolls along its vertices, completing 90° rotations relative to traversal distance. Includes dynamic coordinate readout and tactile tick friction.
+          </p>
+</div>
+<!-- Interactive Playground -->
+<div class="bg-paper border border-hairline p-6 space-y-6 select-none">
+<div class="flex items-baseline justify-between font-mono text-xs">
+<div class="flex items-center gap-2">
+<span class="text-meta uppercase text-[10px] tracking-wider">LOUPE SCALE:</span>
+<span class="text-ink font-bold text-sm" id="rolling-val-readout">140%</span>
+</div>
+<div class="text-[10px] text-meta">
+              ROTATION: <span class="text-klein font-semibold" id="rolling-angle-readout">315°</span>
+</div>
+</div>
+<!-- The Rail Container -->
+<div class="py-6">
+<div class="slider-rail relative h-8 flex items-center cursor-pointer" id="rolling-rail">
+<!-- Base Rail Line -->
+<div class="absolute inset-x-0 h-px bg-hairline"></div>
+<!-- Active Highlight Line -->
+<div class="absolute left-0 h-[2px] bg-ink" id="rolling-fill" style="width: 35%;"></div>
+<!-- Rail Precision Hash Ticks -->
+<div class="absolute inset-x-0 flex justify-between pointer-events-none px-1">
+<span class="w-px h-2 bg-hairlineDark"></span>
+<span class="w-px h-1.5 bg-hairline"></span>
+<span class="w-px h-3 bg-hairlineDark"></span>
+<span class="w-px h-1.5 bg-hairline"></span>
+<span class="w-px h-3 bg-hairlineDark"></span>
+<span class="w-px h-1.5 bg-hairline"></span>
+<span class="w-px h-2 bg-hairlineDark"></span>
+</div>
+<!-- Tumbling Square Thumb -->
+<div class="rolling-square-thumb bg-ink border border-ink flex items-center justify-center text-white" id="rolling-thumb" style="left: 35%;">
+<div class="w-2 h-2 bg-klein"></div>
+</div>
+</div>
+<!-- Coordinate Scale Legend -->
+<div class="flex justify-between text-[9px] font-mono text-lightMeta pt-2">
+<span>0% [FIT]</span>
+<span>50%</span>
+<span>100% [1:1]</span>
+<span>200%</span>
+<span>400% [PIXEL]</span>
+</div>
+</div>
+<!-- Quick Jump Buttons to observe tumbling flip -->
+<div class="flex items-center justify-between pt-2 border-t border-hairline text-xs font-mono">
+<span class="text-[10px] text-meta">SNAP PRESETS:</span>
+<div class="flex gap-2">
+<button class="border border-hairline bg-porcelain px-2 py-1 text-[10px] hover:border-ink" onclick="setRollingSlider(0)">0%</button>
+<button class="border border-hairline bg-porcelain px-2 py-1 text-[10px] hover:border-ink" onclick="setRollingSlider(0.25)">100%</button>
+<button class="border border-ink bg-ink text-white px-2 py-1 text-[10px]" onclick="setRollingSlider(0.5)">200%</button>
+<button class="border border-hairline bg-porcelain px-2 py-1 text-[10px] hover:border-ink" onclick="setRollingSlider(1)">400%</button>
+</div>
+</div>
+</div>
+<div class="flex justify-between items-center text-[10px] font-mono text-meta">
+<span>DRAG SQUARE OR CLICK RAIL</span>
+<span>STRICT 0PX SHARP SQUARE VERTICES</span>
+</div>
+</div>
+<!-- SLIDER 02: STEPPED COORDINATE MATRIX SLIDER -->
+<div class="border border-hairline bg-porcelain p-6 sm:p-8 space-y-6 flex flex-col justify-between">
+<div class="space-y-2">
+<div class="flex items-center justify-between text-[10px] font-mono uppercase">
+<span class="text-ink font-semibold flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 bg-klein"></span>
+              SLD.02
+            </span>
+<span class="text-meta">STEPPED COORDINATES</span>
+</div>
+<h3 class="font-headline font-semibold text-lg uppercase tracking-tight">
+            STEPPED EXPOSURE VALUE (EV) MATRIX
+          </h3>
+<p class="text-xs font-body text-meta">
+            Quantized mechanical stop slider. Dragging snaps to discrete 1/3-stop steps; active micro-square jumps instantly with an audible click feel and instant hairline bracket highlight.
+          </p>
+</div>
+<!-- Interactive Playground -->
+<div class="bg-paper border border-hairline p-6 space-y-6 select-none">
+<div class="flex items-baseline justify-between font-mono text-xs">
+<div class="flex items-center gap-2">
+<span class="text-meta uppercase text-[10px] tracking-wider">COMPENSATION:</span>
+<span class="text-klein font-bold text-sm" id="stepped-val-readout">+0.7 EV</span>
+</div>
+<div class="text-[10px] text-meta">
+              FRAME ACCELERATION: <span class="text-ink font-semibold">1/250s</span>
+</div>
+</div>
+<!-- Stepped Graphic Rail -->
+<div class="py-6">
+<div class="relative h-8 flex items-center cursor-pointer" id="stepped-rail">
+<!-- Center Zero Hairline Axis -->
+<div class="absolute inset-x-0 h-px bg-hairlineDark"></div>
+<!-- 7 Discrete Stop Markers -->
+<div class="absolute inset-x-0 flex justify-between items-center pointer-events-none px-2" id="stepped-ticks">
+<span class="w-2 h-2 border border-hairlineDark bg-porcelain step-node" data-val="-1.0 EV"></span>
+<span class="w-2 h-2 border border-hairlineDark bg-porcelain step-node" data-val="-0.7 EV"></span>
+<span class="w-2 h-2 border border-hairlineDark bg-porcelain step-node" data-val="-0.3 EV"></span>
+<span class="w-2.5 h-2.5 bg-ink step-node" data-val="0.0 EV"></span>
+<span class="w-2 h-2 border border-hairlineDark bg-porcelain step-node" data-val="+0.3 EV"></span>
+<span class="w-2 h-2 border border-klein bg-klein step-node" data-val="+0.7 EV"></span>
+<span class="w-2 h-2 border border-hairlineDark bg-porcelain step-node" data-val="+1.0 EV"></span>
+</div>
+<!-- Stepped Carrier Bracket Thumb -->
+<div class="absolute w-6 h-6 border-2 border-klein flex items-center justify-center transition-all duration-200 pointer-events-none -ml-3" id="stepped-thumb" style="left: 83.3%;">
+<div class="w-1.5 h-1.5 bg-klein"></div>
+</div>
+</div>
+<!-- Labels under stops -->
+<div class="flex justify-between text-[9px] font-mono text-meta pt-2">
+<span>-1.0</span>
+<span>-0.7</span>
+<span>-0.3</span>
+<span class="text-ink font-bold">0.0</span>
+<span>+0.3</span>
+<span class="text-klein font-bold">+0.7</span>
+<span>+1.0</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2 border-t border-hairline text-xs font-mono">
+<span class="text-[10px] text-meta">MANUAL STOP BUTTONS:</span>
+<div class="flex gap-1.5">
+<button class="border border-hairline px-2 py-0.5 text-[10px] bg-porcelain hover:border-ink" onclick="setStepIndex(0)">MIN</button>
+<button class="border border-hairline px-2 py-0.5 text-[10px] bg-porcelain hover:border-ink" onclick="setStepIndex(3)">0.0</button>
+<button class="border border-hairline px-2 py-0.5 text-[10px] bg-porcelain hover:border-ink" onclick="setStepIndex(6)">MAX</button>
+</div>
+</div>
+</div>
+<div class="flex justify-between items-center text-[10px] font-mono text-meta">
+<span>DISCRETE 7-STOP BRAKE</span>
+<span>CLICK ANY NODE TO SNAP</span>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================================================= -->
+<!-- SECTION 02: TACTILE KINETIC BUTTONS & TUMBLING TOGGLES                    -->
+<!-- ========================================================================= -->
+<section class="space-y-8" id="buttons">
+<div class="border-b border-ink pb-4 flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+<div>
+<span class="text-[10px] text-meta tracking-spacious uppercase block">SPECIMEN GROUP 02 // TACTILE MOTION</span>
+<h2 class="text-2xl sm:text-3xl font-headline font-semibold uppercase tracking-tight text-ink">
+          KINETIC BUTTONS &amp; REVERSIBLE MECHANISMS
+        </h2>
+</div>
+<div class="text-[11px] font-mono text-meta uppercase tracking-wider">
+        TUMBLE CUBE FLIP // BRACKET COMPRESSION // SLIP TEXT REVEALS
+      </div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- BUTTON 01: TUMBLING / ROLLING CUBE TOGGLE -->
+<div class="border border-hairline bg-porcelain p-6 space-y-6 flex flex-col justify-between">
+<div class="space-y-2">
+<div class="flex items-center justify-between text-[10px] font-mono uppercase">
+<span class="text-ink font-semibold">BTN.01</span>
+<span class="text-klein font-semibold">TUMBLE FLIP 180°</span>
+</div>
+<h3 class="font-headline font-semibold text-base uppercase tracking-tight">ROLLING CUBE TOGGLE</h3>
+<p class="text-xs font-body text-meta">
+            Mechanical state switch. Tapping triggers a physical 180-degree tumble flip with inverted polarity.
+          </p>
+</div>
+<div class="space-y-4 pt-4 border-t border-hairline">
+<div class="flex flex-col gap-3">
+<span class="text-[9px] font-mono text-meta uppercase">CLICK TO TRIGGER 180° MECHANICAL FLIP</span>
+<!-- Interactive Tumble Button 1 -->
+<button class="w-full border border-hairline hover:border-ink bg-paper p-3 flex items-center justify-between text-xs font-mono group" onclick="toggleCube(this)" type="button">
+<span class="text-ink font-medium">CURATION OVERLAY</span>
+<div class="w-6 h-6 border border-ink flex items-center justify-center tumble-cube relative bg-porcelain">
+<span class="cube-face-front absolute text-[10px] font-bold text-ink">0</span>
+<span class="cube-face-back absolute text-[10px] font-bold text-white bg-klein w-full h-full flex items-center justify-center [transform:rotateY(180deg)]">1</span>
+</div>
+</button>
+<!-- Interactive Tumble Button 2 -->
+<button class="w-full border border-hairline hover:border-ink bg-paper p-3 flex items-center justify-between text-xs font-mono group" onclick="toggleCube(this)" type="button">
+<span class="text-ink font-medium">LOUPE LOCK</span>
+<div class="w-6 h-6 border border-ink flex items-center justify-center tumble-cube relative bg-porcelain active">
+<span class="cube-face-front absolute text-[10px] font-bold text-ink">0</span>
+<span class="cube-face-back absolute text-[10px] font-bold text-white bg-ink w-full h-full flex items-center justify-center [transform:rotateY(180deg)]">✓</span>
+</div>
+</button>
+</div>
+</div>
+<div class="text-[9px] font-mono text-meta">SPRING TENSION: 0.4S DAMPED EASE</div>
+</div>
+<!-- BUTTON 02: DYNAMIC BRACKET SHUTTER BUTTON -->
+<div class="border border-hairline bg-porcelain p-6 space-y-6 flex flex-col justify-between">
+<div class="space-y-2">
+<div class="flex items-center justify-between text-[10px] font-mono uppercase">
+<span class="text-ink font-semibold">BTN.02</span>
+<span class="text-meta">BRACKET SHUTTER</span>
+</div>
+<h3 class="font-headline font-semibold text-base uppercase tracking-tight">BRACKET SHUTTER CUE</h3>
+<p class="text-xs font-body text-meta">
+            Outer bracket glyphs compress inward on hover, while a center razor-hairline wash snaps open in electric Klein blue.
+          </p>
+</div>
+<div class="space-y-4 pt-4 border-t border-hairline">
+<span class="text-[9px] font-mono text-meta uppercase block">HOVER TO TEST SHUTTER CLOSURE</span>
+<button class="w-full relative overflow-hidden border border-ink py-3 px-4 text-xs font-mono uppercase tracking-catalog text-ink bracket-shutter group">
+<span class="shutter-fill absolute inset-0 bg-klein"></span>
+<span class="relative z-10 flex items-center justify-between group-hover:text-white transition-colors duration-200">
+<span class="bracket-l font-bold text-sm">[</span>
+<span class="font-medium tracking-wider">CAPTURE SPECIMEN</span>
+<span class="bracket-r font-bold text-sm">]</span>
+</span>
+</button>
+<button class="w-full relative overflow-hidden border border-hairline hover:border-signalRed py-3 px-4 text-xs font-mono uppercase tracking-catalog text-meta hover:text-signalRed bracket-shutter group bg-paper">
+<span class="shutter-fill absolute inset-0 bg-signalRed"></span>
+<span class="relative z-10 flex items-center justify-between group-hover:text-white transition-colors duration-200">
+<span class="bracket-l font-bold text-sm">[</span>
+<span class="font-medium tracking-wider">PURGE NEGATIVE</span>
+<span class="bracket-r font-bold text-sm">]</span>
+</span>
+</button>
+</div>
+<div class="text-[9px] font-mono text-meta">COMPRESSION: 4PX INWARD AXIS</div>
+</div>
+<!-- BUTTON 03: TYPE SLIP / REVEAL CTA -->
+<div class="border border-hairline bg-porcelain p-6 space-y-6 flex flex-col justify-between">
+<div class="space-y-2">
+<div class="flex items-center justify-between text-[10px] font-mono uppercase">
+<span class="text-ink font-semibold">BTN.03</span>
+<span class="text-meta">TYPE SLIP</span>
+</div>
+<h3 class="font-headline font-semibold text-base uppercase tracking-tight">TYPE SLIP / EXPAND CTA</h3>
+<p class="text-xs font-body text-meta">
+            Typographic elevator reveal. On hover, initial line slides up while its blue clone emerges from below, anchored by centered hairline expansion.
+          </p>
+</div>
+<div class="space-y-4 pt-4 border-t border-hairline">
+<span class="text-[9px] font-mono text-meta uppercase block">HOVER TYPE REVEAL</span>
+<!-- Interactive Slip CTA 1 -->
+<div class="type-slip-btn w-full border-b border-hairline py-2.5 cursor-pointer underline-expand">
+<div class="type-slip-container h-5">
+<div class="type-slip-track text-xs font-mono uppercase tracking-wider font-semibold">
+<span class="h-5 flex items-center text-ink justify-between">
+<span>DISPATCH DOSSIER</span>
+<span class="text-meta">→</span>
+</span>
+<span class="h-5 flex items-center text-klein justify-between">
+<span>DISPATCH DOSSIER</span>
+<span class="text-klein">→</span>
+</span>
+</div>
+</div>
+</div>
+<!-- Interactive Slip CTA 2 -->
+<div class="type-slip-btn w-full border-b border-hairline py-2.5 cursor-pointer underline-expand">
+<div class="type-slip-container h-5">
+<div class="type-slip-track text-xs font-mono uppercase tracking-wider font-semibold">
+<span class="h-5 flex items-center text-meta justify-between">
+<span>DOWNLOAD RAW ICC</span>
+<span class="text-lightMeta">↓</span>
+</span>
+<span class="h-5 flex items-center text-ink justify-between">
+<span>DOWNLOAD RAW ICC</span>
+<span class="text-ink">↓</span>
+</span>
+</div>
+</div>
+</div>
+</div>
+<div class="text-[9px] font-mono text-meta">EXPANSION: CENTER OUTWARD HAIRLINE</div>
+</div>
+<!-- BUTTON 04: MONOGRAM SELECT SEQUENCE -->
+<div class="border border-hairline bg-porcelain p-6 space-y-6 flex flex-col justify-between">
+<div class="space-y-2">
+<div class="flex items-center justify-between text-[10px] font-mono uppercase">
+<span class="text-ink font-semibold">BTN.04</span>
+<span class="text-meta">TACTILE MONOGRAM</span>
+</div>
+<h3 class="font-headline font-semibold text-base uppercase tracking-tight">KINETIC MONOGRAM PADS</h3>
+<p class="text-xs font-body text-meta">
+            Rapid 1-5 rating &amp; mark array. Click to test active state jump and numeric feedback.
+          </p>
+</div>
+<div class="space-y-4 pt-4 border-t border-hairline">
+<span class="text-[9px] font-mono text-meta uppercase block">CLICK TO ENGAGE RATING</span>
+<div class="flex items-center gap-1.5" id="monogram-group">
+<button class="w-9 h-9 border border-hairline bg-porcelain text-ink hover:border-ink font-mono text-xs flex items-center justify-center transition-all" onclick="selectMonogram(this)">1</button>
+<button class="w-9 h-9 border border-ink bg-ink text-white font-mono text-xs flex items-center justify-center transition-all font-semibold" onclick="selectMonogram(this)">2</button>
+<button class="w-9 h-9 border border-hairline bg-porcelain text-ink hover:border-ink font-mono text-xs flex items-center justify-center transition-all" onclick="selectMonogram(this)">3</button>
+<button class="w-9 h-9 border border-hairline bg-porcelain text-ink hover:border-ink font-mono text-xs flex items-center justify-center transition-all" onclick="selectMonogram(this)">★</button>
+<button class="w-9 h-9 border border-hairline hover:border-signalRed hover:text-signalRed bg-porcelain text-meta font-mono text-xs flex items-center justify-center transition-all" onclick="selectMonogram(this)">✕</button>
+</div>
+</div>
+<div class="text-[9px] font-mono text-meta">TACTILE LATENCY: 0MS INSTANT</div>
+</div>
+</div>
+<!-- BUTTON 05: SLIDING SEGMENTED STRATA PLATE -->
+<div class="border border-hairline bg-porcelain p-6 sm:p-8 space-y-4">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+<div class="space-y-1">
+<div class="text-[10px] font-mono uppercase text-klein font-semibold flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 bg-klein"></span>
+            BTN.05 // PHYSICAL SLIDING CARD PLATE
+          </div>
+<h3 class="font-headline font-semibold text-lg uppercase tracking-tight">
+            SEGMENTED STRATA PLATE SELECTOR
+          </h3>
+</div>
+<span class="text-xs font-mono text-meta">CLICK CELLS TO GLIDE ACTIVE MATTE PLATE</span>
+</div>
+<!-- Strata Component Container -->
+<div class="pt-2">
+<div class="strata-track inline-flex border border-ink bg-porcelain p-1 text-xs font-mono relative" id="strata-bar">
+<!-- The Physical Sliding Matte Plate -->
+<div class="strata-slider-plate" id="strata-plate" style="left: 4px; width: 140px; top: 4px; bottom: 4px;"></div>
+<button class="relative z-10 px-5 py-2 text-white font-medium uppercase tracking-wider transition-colors duration-200 strata-btn" onclick="moveStrata(this, 0)">
+            Index Grid [3×3]
+          </button>
+<button class="relative z-10 px-5 py-2 text-ink uppercase tracking-wider transition-colors duration-200 strata-btn hover:text-klein" onclick="moveStrata(this, 1)">
+            Folio Loupe [1:1]
+          </button>
+<button class="relative z-10 px-5 py-2 text-ink uppercase tracking-wider transition-colors duration-200 strata-btn hover:text-klein" onclick="moveStrata(this, 2)">
+            Survey A/B
+          </button>
+<button class="relative z-10 px-5 py-2 text-ink uppercase tracking-wider transition-colors duration-200 strata-btn hover:text-klein" onclick="moveStrata(this, 3)">
+            Exif Matrix
+          </button>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================================================= -->
+<!-- SECTION 03: SIDEBARS & KINETIC TYPOGRAPHIC INPUTS                         -->
+<!-- ========================================================================= -->
+<section class="space-y-8" id="sidebars">
+<div class="border-b border-ink pb-4 flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+<div>
+<span class="text-[10px] text-meta tracking-spacious uppercase block">SPECIMEN GROUP 03 // ARCHITECTURAL CHROME</span>
+<h2 class="text-2xl sm:text-3xl font-headline font-semibold uppercase tracking-tight text-ink">
+          MAGNETIC SIDEBARS &amp; TERMINAL INPUTS
+        </h2>
+</div>
+<div class="text-[11px] font-mono text-meta uppercase tracking-wider">
+        MAGNETIC DOT TRACKERS // ACCORDION PARTITIONS // TERMINAL BLINK
+      </div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+<!-- SIDEBAR VARIATION A: MAGNETIC HOVER CATALOG (4 Cols) -->
+<div class="lg:col-span-4 space-y-4">
+<div class="flex items-center justify-between pb-2 border-b border-hairline">
+<span class="text-xs font-mono uppercase text-ink font-semibold flex items-center gap-2">
+<span class="w-1.5 h-1.5 bg-klein"></span>
+            CATALOG WITH MAGNETIC DOTS
+          </span>
+<span class="text-[10px] text-meta font-mono">HOVER TO ENGAGE</span>
+</div>
+<div class="border border-hairline bg-paper p-6">
+<div class="w-full bg-porcelain border border-hairline p-5 space-y-5">
+<div class="flex items-center justify-between border-b border-hairline pb-3">
+<span class="text-xs font-headline uppercase font-semibold tracking-catalog text-ink">CATALOG INDEX</span>
+<span class="text-[10px] font-mono text-klein font-bold">2026.K</span>
+</div>
+<!-- Kinetic Catalog List -->
+<div class="space-y-1 text-xs font-mono" id="magnetic-catalog">
+<div class="catalog-item is-selected flex items-center justify-between py-1.5 px-2 cursor-pointer transition-colors" onclick="selectCatalogItem(this)">
+<span class="flex items-center gap-2.5">
+<span class="indicator-dot w-1.5 h-1.5 bg-klein"></span>
+<span class="font-medium text-ink">All Specimen</span>
+</span>
+<span class="text-ink font-semibold count-badge text-[11px]">230</span>
+</div>
+<div class="catalog-item flex items-center justify-between py-1.5 px-2 cursor-pointer text-meta hover:text-ink transition-colors" onclick="selectCatalogItem(this)">
+<span class="flex items-center gap-2.5">
+<span class="indicator-dot w-1.5 h-1.5 bg-ink"></span>
+<span>Architecture</span>
+</span>
+<span class="text-lightMeta count-badge text-[11px]">20</span>
+</div>
+<div class="catalog-item flex items-center justify-between py-1.5 px-2 cursor-pointer text-meta hover:text-ink transition-colors" onclick="selectCatalogItem(this)">
+<span class="flex items-center gap-2.5">
+<span class="indicator-dot w-1.5 h-1.5 bg-ink"></span>
+<span>Editorial &amp; Type</span>
+</span>
+<span class="text-lightMeta count-badge text-[11px]">14</span>
+</div>
+<div class="catalog-item flex items-center justify-between py-1.5 px-2 cursor-pointer text-meta hover:text-ink transition-colors" onclick="selectCatalogItem(this)">
+<span class="flex items-center gap-2.5">
+<span class="indicator-dot w-1.5 h-1.5 bg-ink"></span>
+<span>Interior &amp; Object</span>
+</span>
+<span class="text-lightMeta count-badge text-[11px]">24</span>
+</div>
+<div class="catalog-item flex items-center justify-between py-1.5 px-2 cursor-pointer text-meta hover:text-ink transition-colors" onclick="selectCatalogItem(this)">
+<span class="flex items-center gap-2.5">
+<span class="indicator-dot w-1.5 h-1.5 bg-ink"></span>
+<span>Workspaces</span>
+</span>
+<span class="text-lightMeta count-badge text-[11px]">08</span>
+</div>
+</div>
+<!-- Lower Accordion Folio Batch -->
+<div class="pt-4 border-t border-hairline space-y-2">
+<div class="flex items-center justify-between text-xs font-mono cursor-pointer py-1 text-ink font-medium select-none" onclick="toggleAccordion('folio-acc', this)">
+<span class="flex items-center gap-2">
+<span class="text-[9px] text-klein font-bold">▼</span>
+<span>TIMELINE BATCHES</span>
+</span>
+<span class="text-[10px] text-meta">4 SETS</span>
+</div>
+<div class="accordion-body space-y-1 pl-4 text-xs font-mono overflow-hidden transition-all duration-300" id="folio-acc">
+<div class="py-1 text-meta hover:text-ink cursor-pointer flex justify-between">
+<span>OCT 24 RAW</span>
+<span class="text-lightMeta">[140]</span>
+</div>
+<div class="py-1 text-meta hover:text-ink cursor-pointer flex justify-between">
+<span>SEP 18 MASTER</span>
+<span class="text-lightMeta">[62]</span>
+</div>
+<div class="py-1 text-meta hover:text-ink cursor-pointer flex justify-between">
+<span>AUG 02 STUDIO</span>
+<span class="text-lightMeta">[28]</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- INPUT FIELD 01 & 02: TERMINAL CURSOR & NUMERIC MATRIX (8 Cols) -->
+<div class="lg:col-span-8 space-y-6">
+<!-- INPUT 01: TERMINAL BLINK QUERY FIELD -->
+<div class="border border-hairline bg-porcelain p-6 space-y-4">
+<div class="flex items-center justify-between text-[10px] font-mono uppercase">
+<span class="text-ink font-semibold flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 bg-klein"></span>
+              INP.01 // BLINKING TERMINAL QUERY FIELD
+            </span>
+<span class="text-meta">CMD+K FOCUS CUE</span>
+</div>
+<div class="space-y-3">
+<p class="text-xs font-body text-meta">
+              Architectural hairline field with animated monochrome square cursor that pauses on user keystrokes.
+            </p>
+<div class="relative py-2 border-b border-ink focus-within:border-klein transition-colors bg-porcelain flex items-center">
+<span class="text-[10px] font-mono uppercase text-meta tracking-widest mr-3">QUERY:</span>
+<input class="w-full bg-transparent border-none p-0 text-sm font-mono text-ink placeholder:text-lightMeta focus:ring-0 focus:outline-none" id="kinetic-query-input" placeholder="Type lens, rating, ISO..." type="text" value="TAG:EDITORIAL ISO:800 LOUPE:100%"/>
+<div class="cursor-blink w-2 h-3.5 bg-klein shrink-0 ml-1" id="square-cursor"></div>
+<span class="text-[10px] font-mono text-lightMeta ml-4 shrink-0">[CMD+K]</span>
+</div>
+<div class="flex justify-between text-[10px] font-mono text-meta">
+<span>ACTIVE SYNTAX MATCHES: <span class="text-ink font-bold" id="match-counter">14 SPECIMENS</span></span>
+<span class="text-ink hover:text-klein cursor-pointer" onclick="document.getElementById('kinetic-query-input').value=''; updateMatches();">CLEAR FIELD [ESC]</span>
+</div>
+</div>
+</div>
+<!-- INPUT 02: NUMERIC MATRIX FILTER WITH LIVE PULSING SUPERSCRIPTS -->
+<div class="border border-hairline bg-porcelain p-6 space-y-4">
+<div class="flex items-center justify-between text-[10px] font-mono uppercase">
+<span class="text-ink font-semibold flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 bg-klein"></span>
+              INP.02 // KINETIC SUPERSCRIPT CHIP MATRIX
+            </span>
+<span class="text-klein font-semibold">CLICK CHIPS TO PULSE &amp; INCREMENT</span>
+</div>
+<div class="space-y-3">
+<p class="text-xs font-body text-meta">
+              Pure typographic filter chips utilizing dynamic superscript counters. Clicking ticks the filter active and triggers tactile kinetic lift.
+            </p>
+<div class="flex flex-wrap gap-4 pt-2" id="superscript-matrix">
+<!-- Chip 1 (Active) -->
+<button class="border-b-2 border-ink text-xs font-mono uppercase text-ink font-semibold pb-1 flex items-baseline gap-1 group" onclick="pulseChip(this)">
+<span>CANINE</span>
+<sup class="pulse-tick text-[10px] text-klein font-bold">26</sup>
+</button>
+<!-- Chip 2 (Active Klein) -->
+<button class="border-b-2 border-klein text-xs font-mono uppercase text-klein font-semibold pb-1 flex items-baseline gap-1 group" onclick="pulseChip(this)">
+<span>STUDIO</span>
+<sup class="pulse-tick text-[10px] text-klein font-bold">14</sup>
+</button>
+<!-- Chip 3 (Idle) -->
+<button class="border-b border-transparent hover:border-hairlineDark text-xs font-mono uppercase text-meta hover:text-ink transition-colors pb-1 flex items-baseline gap-1 group" onclick="pulseChip(this)">
+<span>RAW CR3</span>
+<sup class="pulse-tick text-[10px] text-lightMeta">50K</sup>
+</button>
+<!-- Chip 4 (Idle) -->
+<button class="border-b border-transparent hover:border-hairlineDark text-xs font-mono uppercase text-meta hover:text-ink transition-colors pb-1 flex items-baseline gap-1 group" onclick="pulseChip(this)">
+<span>SELECTS</span>
+<sup class="pulse-tick text-[10px] text-lightMeta">05</sup>
+</button>
+<!-- Chip 5 (Idle) -->
+<button class="border-b border-transparent hover:border-hairlineDark text-xs font-mono uppercase text-meta hover:text-ink transition-colors pb-1 flex items-baseline gap-1 group" onclick="pulseChip(this)">
+<span>50MM ƒ/1.2</span>
+<sup class="pulse-tick text-[10px] text-lightMeta">18</sup>
+</button>
+</div>
+<div class="text-[10px] font-mono text-meta pt-2 border-t border-hairline flex justify-between">
+<span>ZERO PILL BLOAT // SUPERSCRIPT COUNTER FEEDBACK</span>
+<span>LIVE KINETIC METRIC TICK</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================================================= -->
+<!-- REAL-WORLD INTEGRATION: STARK GALLERY CURATION WORKBENCH                  -->
+<!-- ========================================================================= -->
+<section class="border-t border-ink pt-10 space-y-6" id="workbench">
+<div class="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+<div>
+<span class="text-[10px] text-meta tracking-spacious uppercase block">SPECIMEN GROUP 04 // LIVE WORKFLOW DEMO</span>
+<h2 class="text-2xl sm:text-3xl font-headline font-semibold uppercase tracking-tight text-ink">
+          STARK GALLERY KINETIC WORKBENCH
+        </h2>
+</div>
+<div class="text-[11px] font-mono text-ink border-b border-ink pb-0.5">
+        DIRECTION C-03A REAL-WORLD IMPLEMENTATION
+      </div>
+</div>
+<!-- Integrated Workbench Frame -->
+<div class="border border-hairline bg-porcelain overflow-hidden shadow-sm">
+<!-- Top Chrome Bar -->
+<div class="h-12 border-b border-hairline px-6 flex items-center justify-between bg-porcelain">
+<div class="flex items-center gap-6">
+<span class="font-headline font-semibold text-sm uppercase tracking-catalog text-ink">CHRO-MA</span>
+<span class="text-xs font-mono text-meta hidden sm:inline">/ ATELIER GALLERY KINETIC CULL</span>
+</div>
+<!-- Live Hairline Underline Search in Top Bar -->
+<div class="flex-1 max-w-sm mx-6 hidden md:block">
+<div class="border-b border-hairline focus-within:border-ink py-1 flex items-center justify-between">
+<input class="w-full bg-transparent border-none p-0 text-xs font-mono text-ink focus:ring-0 focus:outline-none" type="text" value="INDEX:EDITORIAL RATING:★"/>
+<span class="text-[10px] font-mono text-lightMeta">[CMD+K]</span>
+</div>
+</div>
+<div class="flex items-center gap-4 text-xs font-mono">
+<button class="text-meta hover:text-ink uppercase transition-colors" onclick="resetDemo()">Reset State</button>
+<!-- Bracket Shutter Button integrated -->
+<button class="relative overflow-hidden border border-ink py-1 px-3 text-xs font-mono uppercase tracking-wider text-ink bracket-shutter group">
+<span class="shutter-fill absolute inset-0 bg-ink"></span>
+<span class="relative z-10 flex items-center gap-2 group-hover:text-white transition-colors duration-200">
+<span class="bracket-l font-bold text-xs">[</span>
+<span>Export Folio</span>
+<span class="bracket-r font-bold text-xs">]</span>
+</span>
+</button>
+</div>
+</div>
+<!-- Workbench Body Split -->
+<div class="flex flex-col md:flex-row min-h-[500px]">
+<!-- Left Sidebar: Minimalist Index with Magnetic Dots -->
+<div class="w-full md:w-64 border-r border-hairline bg-porcelain p-6 space-y-6 shrink-0">
+<div>
+<div class="text-[9px] font-mono uppercase text-lightMeta tracking-catalog">EXHIBITION</div>
+<div class="font-headline font-semibold text-sm uppercase text-ink">SERIES 2026 ARCHIVE</div>
+<div class="text-[10px] font-mono text-meta pt-0.5">230 ASSETS MOUNTED</div>
+</div>
+<!-- Quick Filters with Pulsing Superscripts -->
+<div class="space-y-1.5 text-xs font-mono">
+<div class="flex justify-between items-center py-1 cursor-pointer font-semibold text-ink">
+<span class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 bg-klein"></span>
+<span>All Specimen</span>
+</span>
+<span>230</span>
+</div>
+<div class="flex justify-between items-center py-1 cursor-pointer text-meta hover:text-ink transition-colors pl-3.5">
+<span>Architecture</span>
+<span class="text-lightMeta">20</span>
+</div>
+<div class="flex justify-between items-center py-1 cursor-pointer text-meta hover:text-ink transition-colors pl-3.5">
+<span>Editorial</span>
+<span class="text-lightMeta">14</span>
+</div>
+<div class="flex justify-between items-center py-1 cursor-pointer text-meta hover:text-ink transition-colors pl-3.5">
+<span>Interior</span>
+<span class="text-lightMeta">24</span>
+</div>
+<div class="flex justify-between items-center py-1 cursor-pointer text-ink font-medium pl-3.5">
+<span>Photography</span>
+<span class="text-ink">11</span>
+</div>
+</div>
+<!-- Workbench Flags with Live Counter -->
+<div class="pt-6 border-t border-hairline space-y-2">
+<span class="text-[9px] font-mono uppercase text-lightMeta tracking-catalog block">FLAGS &amp; SELECTIONS</span>
+<div class="flex flex-wrap gap-2 text-[11px] font-mono">
+<span class="border-b-2 border-klein text-klein font-semibold cursor-pointer" onclick="pulseChip(this)">
+                PICK<sup class="pulse-tick" id="pick-count">14</sup>
+</span>
+<span class="text-meta hover:text-ink cursor-pointer" onclick="pulseChip(this)">
+                REJECT<sup class="pulse-tick">02</sup>
+</span>
+<span class="text-meta hover:text-ink cursor-pointer" onclick="pulseChip(this)">
+                FLAG<sup class="pulse-tick">05</sup>
+</span>
+</div>
+</div>
+<!-- Micro Tumbling Toggle in Sidebar -->
+<div class="pt-4 border-t border-hairline space-y-2">
+<div class="flex items-center justify-between text-[11px] font-mono">
+<span class="text-meta">FOCUS PEAKING</span>
+<div class="w-5 h-5 border border-ink flex items-center justify-center tumble-cube relative cursor-pointer" onclick="toggleCube(this)">
+<span class="cube-face-front absolute text-[9px] font-bold text-ink">0</span>
+<span class="cube-face-back absolute text-[9px] font-bold text-white bg-klein w-full h-full flex items-center justify-center [transform:rotateY(180deg)]">✓</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Main Gallery Floor: Generous whitespace & high-end kinetic culling cards -->
+<div class="flex-1 bg-paper p-6 sm:p-8 overflow-y-auto space-y-6">
+<!-- Viewport Metadata Plinth with Interactive Rolling Mini-Slider -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-hairline pb-4 gap-4 text-xs font-mono">
+<div class="flex items-center gap-4">
+<span class="text-ink font-medium">VIEW: 3 SELECTS DISPLAYED</span>
+<span class="text-lightMeta">/</span>
+<span class="text-meta">ORDER: CAPTURE CHRONO</span>
+</div>
+<!-- Mini Interactive Loupe Stepper in Toolbar -->
+<div class="flex items-center gap-3">
+<span class="text-meta text-[11px]">MAGNIFICATION:</span>
+<div class="flex items-center gap-1 border border-hairline bg-porcelain p-1">
+<button class="px-2 py-0.5 text-[10px] hover:bg-paper" onclick="setWorkbenchZoom('50%')">50%</button>
+<button class="px-2 py-0.5 text-[10px] bg-ink text-white font-bold" id="wb-zoom-badge" onclick="setWorkbenchZoom('100%')">100%</button>
+<button class="px-2 py-0.5 text-[10px] hover:bg-paper" onclick="setWorkbenchZoom('200%')">200%</button>
+</div>
+</div>
+</div>
+<!-- Specimen Gallery Grid (Pure Paper Cards with 1px Hairline Borders) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" id="workbench-cards">
+<!-- Asset 1: Idle Archival Card -->
+<div class="bg-porcelain border border-hairline p-3 space-y-2 cursor-pointer hover:border-ink transition-all group" onclick="setActiveCard(this, 'CR3_9082.RAW', 'ISO 800', false)">
+<div class="aspect-[4/5] bg-surfaceSoft relative flex items-center justify-center overflow-hidden">
+<div class="w-full h-full bg-[#E8E8E4] flex flex-col justify-between p-4 group-hover:scale-[1.02] transition-transform duration-300">
+<span class="text-[9px] font-mono text-meta">REF: 9082</span>
+<div class="w-20 h-28 border border-hairlineDark mx-auto"></div>
+<span class="text-[9px] font-mono text-meta">CANON R5</span>
+</div>
+</div>
+<div class="flex justify-between items-baseline text-[11px] font-mono pt-1">
+<span class="text-ink font-medium">CR3_9082.RAW</span>
+<span class="text-lightMeta">ISO 800</span>
+</div>
+</div>
+<!-- Asset 2: Focused Specimen with Klein Accent Hairline -->
+<div class="bg-porcelain border-2 border-klein p-3 space-y-2 cursor-pointer shadow-sm active-card" onclick="setActiveCard(this, 'CR3_9095.RAW', '50MM ƒ/1.2', true)">
+<div class="aspect-[4/5] bg-surfaceSoft relative flex items-center justify-center overflow-hidden">
+<div class="w-full h-full bg-[#E2E2DC] flex flex-col justify-between p-4">
+<div class="flex justify-between items-center text-[9px] font-mono text-klein font-bold">
+<span>★ ACTIVE PICK</span>
+<span>50MM ƒ/1.2</span>
+</div>
+<div class="w-24 h-32 bg-[#D0D0C8] mx-auto border border-hairlineDark flex items-center justify-center text-[10px] font-mono text-meta">
+                    1:1 FOCUS
+                  </div>
+<span class="text-[9px] font-mono text-ink">48.2 MB · RAW</span>
+</div>
+</div>
+<div class="flex justify-between items-baseline text-[11px] font-mono pt-1">
+<span class="text-klein font-semibold">CR3_9095.RAW</span>
+<span class="text-klein font-semibold">SELECTED</span>
+</div>
+</div>
+<!-- Asset 3: Purged / Rejected Specimen -->
+<div class="bg-porcelain border border-hairline p-3 space-y-2 opacity-60 hover:opacity-100 transition-opacity cursor-pointer" onclick="setActiveCard(this, 'CR3_9096.RAW', 'REJECTED', false)">
+<div class="aspect-[4/5] bg-surfaceSoft relative flex items-center justify-center overflow-hidden">
+<div class="w-full h-full bg-[#EAEAE6] flex flex-col justify-between p-4">
+<span class="text-[9px] font-mono text-signalRed">✕ REJECTED</span>
+<div class="w-20 h-28 border border-hairlineDark mx-auto opacity-50"></div>
+<span class="text-[9px] font-mono text-lightMeta">CR3_9096</span>
+</div>
+</div>
+<div class="flex justify-between items-baseline text-[11px] font-mono pt-1">
+<span class="text-meta line-through">CR3_9096.RAW</span>
+<span class="text-signalRed text-[10px]">PURGED</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Integrated Split Dock with Kinetic Interactions -->
+<div class="border-t border-hairline bg-porcelain px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-mono">
+<div class="flex items-center gap-3">
+<span class="text-ink font-semibold" id="wb-dock-title">ACTIVE: CR3_9095.RAW</span>
+<span class="text-lightMeta">/</span>
+<span class="text-meta" id="wb-dock-meta">FRAME 02 OF 230 · 50MM ƒ/1.2</span>
+</div>
+<div class="flex items-center gap-2">
+<!-- Type-slip Pick Button -->
+<button class="bg-ink hover:bg-klein text-white px-5 py-2 text-xs font-mono uppercase tracking-wider transition-colors" onclick="triggerPick()">
+            [P] PICK
+          </button>
+<!-- Reject button -->
+<button class="bg-porcelain hover:bg-paper text-signalRed border border-hairline hover:border-signalRed px-4 py-2 text-xs font-mono uppercase tracking-wider transition-colors" onclick="triggerReject()">
+            [X] REJECT
+          </button>
+<!-- Monogram Star Mark -->
+<button class="w-8 h-8 border border-hairline hover:border-klein hover:text-klein bg-porcelain text-ink font-mono text-xs flex items-center justify-center transition-colors" onclick="this.classList.toggle('bg-klein'); this.classList.toggle('text-white');">
+            ★
+          </button>
+<button class="bg-porcelain hover:bg-paper text-meta hover:text-ink border border-hairline px-3 py-2 text-xs font-mono uppercase tracking-wider transition-colors" onclick="triggerClear()">
+            [U] CLEAR
+          </button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- GALLERY SPECIFICATION FOOTER -->
+<footer class="border-t border-ink bg-porcelain py-10 px-6 sm:px-12 mt-auto">
+<div class="max-w-[1720px] mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 font-mono text-xs text-ink">
+<div class="space-y-1">
+<div class="font-headline font-semibold uppercase tracking-wider flex items-center gap-2">
+<span class="w-2 h-2 bg-klein"></span>
+        CHRO-MA // SPECIMEN DOSSIER 03A
+      </div>
+<div class="text-[11px] font-mono text-meta">
+        DIRECTION C EVOLUTION: KINETIC GALLERY PRECISION (COSMOS / BEDOW / FOUNDRY ARCHIVE)
+      </div>
+</div>
+<div class="flex items-center gap-6 text-[11px] uppercase text-meta">
+<span>TUMBLING SQUARE SLIDER</span>
+<span class="border-l border-hairline pl-4">180° FLIP TOGGLES</span>
+<span class="border-l border-hairline pl-4 text-ink font-bold">0PX STRICT CORNERS</span>
+</div>
+</div>
+</footer>
+<!-- LIGHTWEIGHT INLINE JAVASCRIPT FOR TACTILE CONTROLS & ROLLING PHYSICS -->
+<script>
+  // 1. TUMBLING / ROLLING SQUARE SLIDER LOGIC
+  const rail = document.getElementById('rolling-rail');
+  const thumb = document.getElementById('rolling-thumb');
+  const fill = document.getElementById('rolling-fill');
+  const valReadout = document.getElementById('rolling-val-readout');
+  const angleReadout = document.getElementById('rolling-angle-readout');
+
+  let isDraggingSlider = false;
+
+  function updateRollingSlider(clientX) {
+    const rect = rail.getBoundingClientRect();
+    let ratio = (clientX - rect.left) / rect.width;
+    ratio = Math.max(0, Math.min(1, ratio));
+
+    // Position
+    const pct = ratio * 100;
+    thumb.style.left = pct + '%';
+    fill.style.width = pct + '%';
+
+    // Rotational Physics: As it traverses 0% to 100%, it rolls continuously.
+    // 100% traversal = 900 degrees (10 full quarter turns)
+    const angle = Math.round(ratio * 900);
+    thumb.style.transform = `rotate(${angle}deg)`;
+
+    // Value mapping: 0% to 400% zoom
+    const zoomVal = Math.round(ratio * 400);
+    valReadout.textContent = zoomVal + '%';
+    angleReadout.textContent = (angle % 360) + '°';
+  }
+
+  function setRollingSlider(ratio) {
+    if (!rail) return;
+    const rect = rail.getBoundingClientRect();
+    updateRollingSlider(rect.left + (rect.width * ratio));
+  }
+
+  rail.addEventListener('mousedown', (e) => {
+    isDraggingSlider = true;
+    updateRollingSlider(e.clientX);
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (isDraggingSlider) {
+      updateRollingSlider(e.clientX);
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDraggingSlider = false;
+  });
+
+  // Touch Support
+  rail.addEventListener('touchstart', (e) => {
+    isDraggingSlider = true;
+    if (e.touches.length > 0) updateRollingSlider(e.touches[0].clientX);
+  }, { passive: true });
+
+  window.addEventListener('touchmove', (e) => {
+    if (isDraggingSlider && e.touches.length > 0) {
+      updateRollingSlider(e.touches[0].clientX);
+    }
+  }, { passive: true });
+
+  window.addEventListener('touchend', () => {
+    isDraggingSlider = false;
+  });
+
+  // 2. STEPPED MATRIX SLIDER
+  const steppedRail = document.getElementById('stepped-rail');
+  const steppedThumb = document.getElementById('stepped-thumb');
+  const steppedReadout = document.getElementById('stepped-val-readout');
+  const steppedNodes = document.querySelectorAll('.step-node');
+
+  function setStepIndex(index) {
+    const stops = [0, 16.6, 33.3, 50, 66.6, 83.3, 100];
+    const vals = ["-1.0 EV", "-0.7 EV", "-0.3 EV", "0.0 EV", "+0.3 EV", "+0.7 EV", "+1.0 EV"];
+    
+    steppedThumb.style.left = stops[index] + '%';
+    steppedReadout.textContent = vals[index];
+
+    steppedNodes.forEach((node, i) => {
+      node.classList.remove('bg-klein', 'border-klein', 'bg-ink');
+      if (i === index) {
+        node.classList.add('bg-klein', 'border-klein');
+      } else if (i === 3) {
+        node.classList.add('bg-ink');
+      }
+    });
+  }
+
+  steppedRail.addEventListener('click', (e) => {
+    const rect = steppedRail.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    const index = Math.round(ratio * 6);
+    setStepIndex(Math.max(0, Math.min(6, index)));
+  });
+
+  // 3. TUMBLING CUBE TOGGLE
+  function toggleCube(btn) {
+    const cube = btn.querySelector('.tumble-cube') || btn;
+    cube.classList.toggle('active');
+  }
+
+  // 4. SEGMENTED STRATA PLATE
+  function moveStrata(btn, index) {
+    const plate = document.getElementById('strata-plate');
+    const allBtns = document.querySelectorAll('.strata-btn');
+
+    allBtns.forEach((b) => {
+      b.classList.remove('text-white');
+      b.classList.add('text-ink');
+    });
+
+    btn.classList.remove('text-ink');
+    btn.classList.add('text-white');
+
+    plate.style.left = btn.offsetLeft + 'px';
+    plate.style.width = btn.offsetWidth + 'px';
+  }
+
+  // 5. MONOGRAM BUTTONS
+  function selectMonogram(btn) {
+    const parent = btn.parentElement;
+    parent.querySelectorAll('button').forEach(b => {
+      b.classList.remove('bg-ink', 'text-white', 'font-semibold');
+      b.classList.add('bg-porcelain', 'text-ink');
+    });
+    btn.classList.remove('bg-porcelain');
+    btn.classList.add('bg-ink', 'text-white', 'font-semibold');
+  }
+
+  // 6. MAGNETIC CATALOG SELECTOR
+  function selectCatalogItem(item) {
+    document.querySelectorAll('#magnetic-catalog .catalog-item').forEach(el => {
+      el.classList.remove('is-selected');
+    });
+    item.classList.add('is-selected');
+  }
+
+  // 7. ACCORDION TOGGLE
+  function toggleAccordion(id, header) {
+    const body = document.getElementById(id);
+    const arrow = header.querySelector('span span');
+    if (body.style.maxHeight && body.style.maxHeight !== '0px') {
+      body.style.maxHeight = '0px';
+      body.style.opacity = '0';
+      if (arrow) arrow.textContent = '▶';
+    } else {
+      body.style.maxHeight = '200px';
+      body.style.opacity = '1';
+      if (arrow) arrow.textContent = '▼';
+    }
+  }
+
+  // 8. PULSING SUPERSCRIPT COUNTER
+  function pulseChip(chip) {
+    const sup = chip.querySelector('.pulse-tick');
+    if (sup) {
+      sup.classList.add('pulsed');
+      setTimeout(() => {
+        sup.classList.remove('pulsed');
+      }, 200);
+    }
+  }
+
+  // 9. TERMINAL QUERY INPUT LIVE MATCHES
+  const qInput = document.getElementById('kinetic-query-input');
+  const matchCounter = document.getElementById('match-counter');
+  
+  if (qInput) {
+    qInput.addEventListener('input', () => {
+      const len = qInput.value.trim().length;
+      matchCounter.textContent = Math.max(1, len * 2) + ' SPECIMENS';
+    });
+  }
+
+  function updateMatches() {
+    if (matchCounter) matchCounter.textContent = '0 SPECIMENS';
+  }
+
+  // 10. WORKBENCH INTERACTIVITY
+  function setActiveCard(cardEl, filename, meta, isSelected) {
+    document.querySelectorAll('#workbench-cards > div').forEach(c => {
+      c.classList.remove('border-2', 'border-klein', 'shadow-sm');
+      c.classList.add('border-hairline');
+    });
+    cardEl.classList.remove('border-hairline');
+    cardEl.classList.add('border-2', 'border-klein', 'shadow-sm');
+
+    document.getElementById('wb-dock-title').textContent = 'ACTIVE: ' + filename;
+    document.getElementById('wb-dock-meta').textContent = 'FRAME // ' + meta;
+  }
+
+  function triggerPick() {
+    const pickCount = document.getElementById('pick-count');
+    if (pickCount) {
+      const current = parseInt(pickCount.textContent, 10);
+      pickCount.textContent = current + 1;
+      pickCount.classList.add('pulsed');
+      setTimeout(() => pickCount.classList.remove('pulsed'), 200);
+    }
+  }
+
+  function triggerReject() {
+    alert('SPECIMEN PURGED TO NEGATIVE BIN');
+  }
+
+  function triggerClear() {
+    document.querySelectorAll('#workbench-cards > div').forEach(c => {
+      c.classList.remove('border-2', 'border-klein');
+      c.classList.add('border-hairline');
+    });
+  }
+
+  function setWorkbenchZoom(zoom) {
+    document.getElementById('wb-zoom-badge').textContent = zoom;
+  }
+
+  function resetDemo() {
+    setRollingSlider(0.35);
+    setStepIndex(5);
+    document.getElementById('kinetic-query-input').value = 'TAG:EDITORIAL ISO:800 LOUPE:100%';
+    document.getElementById('pick-count').textContent = '14';
+  }
+
+  // Initialize strata bar dimensions
+  window.addEventListener('DOMContentLoaded', () => {
+    const firstStrataBtn = document.querySelector('.strata-btn');
+    if (firstStrataBtn) {
+      moveStrata(firstStrataBtn, 0);
+    }
+  });
+</script>
+</body></html>

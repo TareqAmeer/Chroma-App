@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"surface-bright":"#f9f9f7","inverse-on-surface":"#f1f1ef","surface-variant":"#e2e3e1","on-tertiary-fixed":"#1c1b1b","secondary":"#b32100","surface-container-lowest":"#ffffff","on-surface-variant":"#444557","on-secondary-fixed-variant":"#8c1800","primary-fixed-dim":"#bec2ff","outline":"#757589","surface-dim":"#dadad8","primary-fixed":"#e0e0ff","primary-container":"#0015ff","on-tertiary-fixed-variant":"#474646","on-background":"#1a1c1b","surface-container-low":"#f4f4f2","inverse-primary":"#bec2ff","on-secondary-container":"#fffbff","on-primary-fixed-variant":"#0012e7","inverse-surface":"#2f3130","on-secondary":"#ffffff","on-primary":"#ffffff","on-primary-fixed":"#00046a","on-error-container":"#93000a","on-primary-container":"#b7bcff","tertiary":"#383737","secondary-fixed":"#ffdad3","surface-container-highest":"#e2e3e1","on-surface":"#1a1c1b","secondary-container":"#e02c00","secondary-fixed-dim":"#ffb4a4","error":"#ba1a1a","on-tertiary":"#ffffff","error-container":"#ffdad6","on-secondary-fixed":"#3e0500","tertiary-container":"#4f4e4e","on-tertiary-container":"#c2bfbf","outline-variant":"#c5c4db","tertiary-fixed":"#e5e2e1","surface-tint":"#303eff","surface":"#f9f9f7","surface-container":"#eeeeec","primary":"#000dbd","on-error":"#ffffff","tertiary-fixed-dim":"#c9c6c5","background":"#f9f9f7","surface-container-high":"#e8e8e6"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"space-xs":"0.25rem","space-lg":"1.5rem","space-sm":"0.5rem","space-md":"1rem","space-xl":"3rem","margin-desktop":"2.5rem",margin:"1rem","gutter-desktop":"1px",gutter:"0px"},fontFamily:{"body-md":["Inter"],"body-sm":["Inter"],"headline-lg":["Space Grotesk"],"headline-md":["Space Grotesk"],"label-caps-sm":["Space Grotesk"],"display-hero":["Space Grotesk"],"headline-sm":["Space Grotesk"],"body-lg":["Inter"],"headline-xl-mobile":["Space Grotesk"],"display-hero-mobile":["Space Grotesk"],"label-caps-lg":["Space Grotesk"],"code-telemetry":["Space Grotesk"],"headline-xl":["Space Grotesk"]},fontSize:{"body-md":["14px",{lineHeight:"20px",letterSpacing:"0em",fontWeight:"400"}],"body-sm":["12px",{lineHeight:"16px",letterSpacing:"0.01em",fontWeight:"400"}],"headline-lg":["32px",{lineHeight:"38px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-md":["22px",{lineHeight:"28px",letterSpacing:"-0.01em",fontWeight:"500"}],"label-caps-sm":["10px",{lineHeight:"12px",letterSpacing:"0.16em",fontWeight:"700"}],"display-hero":["88px",{lineHeight:"84px",letterSpacing:"-0.04em",fontWeight:"700"}],"headline-sm":["16px",{lineHeight:"20px",letterSpacing:"0.02em",fontWeight:"600"}],"body-lg":["16px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"400"}],"headline-xl-mobile":["32px",{lineHeight:"36px",letterSpacing:"-0.02em",fontWeight:"600"}],"display-hero-mobile":["44px",{lineHeight:"44px",letterSpacing:"-0.03em",fontWeight:"700"}],"label-caps-lg":["13px",{lineHeight:"16px",letterSpacing:"0.12em",fontWeight:"700"}],"code-telemetry":["11px",{lineHeight:"14px",letterSpacing:"0.04em",fontWeight:"500"}],"headline-xl":["48px",{lineHeight:"52px",letterSpacing:"-0.03em",fontWeight:"600"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-surface border-r border-outline/30 z-50 flex flex-col justify-between"><div class="flex flex-col"><div class="h-14 px-space-md border-b border-outline/30 flex items-center justify-between"><span class="font-label-caps-lg text-label-caps-lg font-bold tracking-widest uppercase text-on-surface"> LABORATORY</span><span class="font-code-telemetry text-code-telemetry px-space-xs py-[2px] bg-primary text-on-primary uppercase">LIVE</span></div><div class="px-space-md py-space-sm border-b border-outline/20"><div class="font-code-telemetry text-code-telemetry text-outline uppercase">COMPONENT UNDER TEST</div><div class="font-headline-sm text-headline-sm text-on-surface mt-[2px]">TOGGLE // G:S</div></div><nav class="flex flex-col" data-active-classes="bg-inverse-surface text-inverse-on-surface font-semibold"><a class="px-space-md py-space-sm border-b border-outline/10 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-caps-lg text-label-caps-lg uppercase transition-none" data-path="workbench-lab" href="#">01 // Workbench Lab</a><a aria-current="page" class="px-space-md py-space-sm border-b border-outline/10 uppercase transition-none bg-inverse-surface text-inverse-on-surface font-semibold" data-path="interactive-sandbox" href="#">02 // Mode Ergonomics</a><a class="px-space-md py-space-sm border-b border-outline/10 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-caps-lg text-label-caps-lg uppercase transition-none" data-path="stress-benchmarks" href="#">03 // Stress &amp; Events</a><a class="px-space-md py-space-sm border-b border-outline/10 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-caps-lg text-label-caps-lg uppercase transition-none" data-path="contrast-and-specs" href="#">04 // Telemetry / Spec</a></nav></div><div class="p-space-md border-t border-outline/30 font-code-telemetry text-code-telemetry text-on-surface-variant space-y-space-xs"><div class="">PIPELINE: <span class="text-on-surface font-bold">ZERO-RADIUS</span></div><div class="">CHROMA ACCENT: <span class="text-primary-container font-bold">#0015FF</span></div><div class="">VIEWPORT: <span class="text-on-surface">DESKTOP-TRI</span></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-14 bg-surface border-b border-outline/30 z-40 flex items-center justify-between px-space-lg"><div class="flex items-center gap-space-md"><span class="font-label-caps-sm text-label-caps-sm uppercase tracking-wider text-outline">STATUS:</span><span class="font-code-telemetry text-code-telemetry px-space-xs py-[2px] bg-surface-container-high text-on-surface border border-outline/30">CALIBRATED [48FPS]</span></div><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-xs font-code-telemetry text-code-telemetry text-on-surface-variant"><span class="text-primary-container font-bold">GALLERY</span><span class="text-outline">|</span><span class="">STUDIO</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="relative pt-14 bg-surface min-h-[calc(100vh)]"><div class="flex flex-col w-full">
+<!-- SECTION 1: ARCHITECTURAL SPECIMEN HEADER & EXPERIMENT TELEMETRY -->
+<section class="w-full bg-surface px-space-lg py-space-xl">
+<div class="max-w-[1440px] mx-auto flex flex-col gap-space-lg">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
+<div class="flex flex-col">
+<div class="flex items-center gap-space-sm mb-space-xs">
+<span class="font-code-telemetry text-code-telemetry px-space-xs py-[2px] bg-secondary text-on-secondary uppercase">SPECIMEN V-01</span>
+<span class="font-code-telemetry text-code-telemetry text-on-surface-variant uppercase tracking-widest">KINETIC DISPLACEMENT RESEARCH</span>
+</div>
+<h1 class="font-display-hero text-display-hero uppercase tracking-tighter text-on-surface leading-none">
+            SWIPE // SLIDE
+          </h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mt-space-sm">
+            High-fashion neo-brutalist viewport toggle. Engineered around deliberate optical un-centering, sharp zero-radius geometry, and severe letterform ascender overhang.
+          </p>
+</div>
+<!-- Telemetry readout strip -->
+<div class="bg-surface-container-high p-space-md flex flex-wrap items-center gap-space-lg">
+<div class="flex flex-col">
+<span class="font-label-caps-sm text-label-caps-sm text-outline uppercase">Active Anchor</span>
+<span class="font-headline-sm text-headline-sm text-secondary font-bold uppercase tracking-wider" id="telemetry-state-label">STUDIO [POS_R]</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-caps-sm text-label-caps-sm text-outline uppercase">Ascender Overhang</span>
+<span class="font-code-telemetry text-code-telemetry text-on-surface font-semibold" id="telemetry-ascender-readout">34% DROP (13.5 PX)</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-caps-sm text-label-caps-sm text-outline uppercase">Translation Vector</span>
+<span class="font-code-telemetry text-code-telemetry text-on-surface font-semibold" id="telemetry-matrix">ΔX: 181.0px [STUDIO] (L-10px / R+36px)</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-caps-sm text-label-caps-sm text-outline uppercase">Current Curve</span>
+<span class="font-code-telemetry text-code-telemetry text-primary font-semibold" id="telemetry-curve-label">DAMPENED INERTIA</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 2: THE DUAL MODE TESTBED (LIGHT & DARK SIMULTANEOUS SPECIMEN) -->
+<section class="w-full bg-surface-container-low px-space-lg py-space-xl">
+<div class="max-w-[1440px] mx-auto flex flex-col gap-space-lg">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="w-2.5 h-2.5 bg-secondary"></span>
+<span class="font-label-caps-lg text-label-caps-lg text-on-surface uppercase tracking-wider">CANVAS 01: TWIN PHASE FIELD TESTING</span>
+</div>
+<div class="font-code-telemetry text-code-telemetry text-on-surface-variant uppercase">
+          TRIGGER: [CLICK WORD] • [DRAG SLAB] • [SPACE] / [← / →]
+        </div>
+</div>
+<!-- Side-by-side Dual Canvas Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-space-lg">
+<!-- DARK CANVAS SPECIMEN (Direct user reference translation) -->
+<div class="relative bg-[#121212] p-space-xl overflow-hidden min-h-[440px] flex flex-col justify-between">
+<div class="flex items-center justify-between text-[#7a7a7a] font-code-telemetry text-code-telemetry">
+<div class="flex items-center gap-space-xs">
+<span class="w-1.5 h-1.5 bg-[#ea580c]"></span>
+<span class="">CHROMA: CADMIUM ORANGE [#EA580C]</span>
+</div>
+<span class="">MODE: OBSIDIAN DARK</span>
+</div>
+<!-- THE HERO TOGGLE MECHANISM (DARK) -->
+<div class="my-auto py-space-xl flex flex-col items-center justify-center">
+<div aria-label="Viewport Toggle Dark Mode" class="relative select-none cursor-grab active:cursor-grabbing inline-flex items-baseline focus:outline-none group/toggle px-4 py-2" id="specimen-dark" role="radiogroup" tabindex="0">
+<!-- Kinetic Asymmetric Color Plinth Layer (Behind text, strictly un-centered) -->
+<div class="absolute pointer-events-auto bg-[#ea580c] transition-all cursor-grab active:cursor-grabbing hover:brightness-105" id="block-dark" style="top: 34%; bottom: -18%; left: 0px; width: 182px; transform: translateX(181px); transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1), width 500ms cubic-bezier(0.16, 1, 0.3, 1);"></div>
+<!-- Subscript reference marker [+] below vertical pipe -->
+<div class="absolute left-1/2 -translate-x-1/2 -bottom-4 pointer-events-none select-none text-[#505050] font-code-telemetry text-[11px] font-bold border border-[#505050] px-[3px] py-0 leading-none">
+  +
+</div>
+<!-- Gallery Option -->
+<button class="relative z-10 font-headline-lg text-headline-lg md:text-[48px] md:leading-none font-bold tracking-tight lowercase px-2 transition-all duration-150 focus:outline-none hover:scale-[1.02] cursor-pointer" id="btn-dark-gallery" style="color: rgb(122, 122, 122);" type="button">
+                gallery
+              </button>
+<!-- Severe Swiss Monospaced Pipe Separator -->
+<span class="relative z-10 font-headline-lg text-headline-lg md:text-[48px] md:leading-none text-[#505050] font-light px-2 select-none">
+                |
+              </span>
+<!-- Studio Option -->
+<button class="relative z-10 font-headline-lg text-headline-lg md:text-[48px] md:leading-none font-bold tracking-tight lowercase px-2 transition-all duration-150 focus:outline-none hover:scale-[1.02] cursor-pointer" id="btn-dark-studio" style="color: rgb(255, 255, 255);" type="button">
+                studio
+              </button>
+</div>
+<!-- Optical Alignment Guide Overlay Callout -->
+<div class="mt-space-lg flex items-center gap-space-md text-[#666666] font-code-telemetry text-code-telemetry"><span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-[#ea580c]">pan_tool</span>Click &amp; Drag Plinth or Click Words</span><span class="">•</span><span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-[#ea580c]">arrow_upward</span>Ascenders <span class="text-[#f9f9f7]">"t","d","ll"</span> pierce out</span></div>
+</div>
+<!-- Bottom Telemetry readout -->
+<div class="flex items-center justify-between text-[#555555] font-code-telemetry text-code-telemetry pt-space-md">
+<span class="">SURFACE: CARBON MATTE</span>
+<span class="text-[#ea580c] font-bold" id="dark-status-metric">STATE: STUDIO ACTIVE</span>
+</div>
+</div>
+<!-- LIGHT CANVAS SPECIMEN (Stepped Two-Tone Stack Reference) -->
+<div class="relative bg-[#ebebe9] p-space-xl overflow-hidden min-h-[440px] flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant font-code-telemetry text-code-telemetry">
+<div class="flex items-center gap-space-xs">
+<span class="w-1.5 h-1.5 bg-[#e03812]"></span>
+<span class="w-1.5 h-1.5 bg-[#0015ff]"></span>
+<span class="font-bold text-on-surface">VARIANT 01: STEPPED TWO-TONE SLAB [#E03812 / #0015FF]</span>
+</div>
+<span class="">MODE: PORCELAIN ALABASTER</span>
+</div>
+<!-- THE HERO TOGGLE MECHANISM (LIGHT - TWO TONE STEPPED SLAB) -->
+<div class="my-auto py-space-xl flex flex-col items-center justify-center">
+<div aria-label="Viewport Toggle Light Mode" class="relative select-none cursor-grab active:cursor-grabbing inline-flex items-baseline focus:outline-none group/toggle px-4 py-2" id="specimen-light" role="radiogroup" tabindex="0">
+<!-- Stepped Two-Tone Compound Plinth (Exact translation of image rows 3 & 4) -->
+<div class="absolute pointer-events-auto cursor-grab active:cursor-grabbing transition-all hover:scale-[1.01]" id="block-light" style="top: 34%; bottom: -18%; left: 0px; width: 182px; transform: translateX(181px); transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1), width 500ms cubic-bezier(0.16, 1, 0.3, 1);">
+<!-- Top Stepped Rectangular Block (Cadmium Red/Orange: #E03812) -->
+<div class="absolute top-0 h-[52%] bg-[#e03812] transition-all duration-300" id="light-block-top" style="left: -6px; right: 0px;"></div>
+<!-- Bottom Stepped Rectangular Block (Electric Cobalt Blue: #0015ff) with slight horizontal offset step -->
+<div class="absolute bottom-0 h-[48%] bg-[#0015ff] transition-all duration-300" id="light-block-bottom" style="left: 8px; right: -12px;"></div>
+</div>
+<!-- Subscript reference marker [+] below vertical pipe -->
+<div class="absolute left-1/2 -translate-x-1/2 -bottom-4 pointer-events-none select-none text-on-surface-variant font-code-telemetry text-[11px] font-bold border border-outline px-[3px] py-0 leading-none">
+  +
+</div>
+<!-- Gallery Option -->
+<button class="relative z-10 font-headline-lg text-headline-lg md:text-[48px] md:leading-none font-bold tracking-tight lowercase px-2 transition-all duration-150 focus:outline-none text-[#555756] hover:scale-[1.02] cursor-pointer" id="btn-light-gallery" type="button">
+                gallery
+              </button>
+<!-- Severe Swiss Monospaced Pipe Separator -->
+<span class="relative z-10 font-headline-lg text-headline-lg md:text-[48px] md:leading-none text-[#444557] font-semibold px-2 select-none">
+                |
+              </span>
+<!-- Studio Option -->
+<button class="relative z-10 font-headline-lg text-headline-lg md:text-[48px] md:leading-none font-bold tracking-tight lowercase px-2 transition-all duration-150 focus:outline-none text-white hover:scale-[1.02] cursor-pointer" id="btn-light-studio" type="button">
+                studio
+              </button>
+</div>
+<!-- Light Mode Optical Note -->
+<div class="mt-space-lg flex items-center gap-space-md text-on-surface-variant font-code-telemetry text-code-telemetry"><span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-primary">drag_indicator</span>INTERACTIVE DRAGGABLE SLAB</span><span class="">•</span><span class="text-on-surface font-semibold">DUAL CADMIUM/COBALT OVERLAP</span><span class="">•</span><span class="">[+] SUB-TICK CALIBRATED</span></div>
+</div>
+<!-- Bottom Telemetry readout -->
+<div class="flex items-center justify-between text-on-surface-variant font-code-telemetry text-code-telemetry pt-space-md">
+<span class="">SURFACE: REFINED BONE</span>
+<span class="text-primary font-bold" id="light-status-metric">STATE: STUDIO ACTIVE</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 3: MOTION CONTROL BENCH & KINEMATIC DYNAMICS -->
+<section class="w-full bg-surface px-space-lg py-space-xl">
+<div class="max-w-[1440px] mx-auto flex flex-col gap-space-lg">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-sm">
+<div>
+<span class="font-label-caps-sm text-label-caps-sm text-secondary uppercase tracking-widest">CALIBRATION CONSOLE</span>
+<h2 class="font-headline-lg text-headline-lg uppercase text-on-surface">Kinetic Toggle Var 01: Dual-Block Stepped Slab // 500ms Inertia &amp; Drag</h2>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="px-space-md py-space-sm bg-surface-container-high text-on-surface font-label-caps-lg text-label-caps-lg uppercase hover:bg-inverse-surface hover:text-inverse-on-surface transition-none" id="cycle-toggle-btn">
+            [SPACE] DISPLACE
+          </button>
+</div>
+</div>
+<!-- Parameter Controllers Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<!-- Speed & Duration -->
+<div class="bg-surface-container p-space-md flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-caps-lg text-label-caps-lg text-on-surface uppercase">Temporal Velocity</span>
+<span class="font-code-telemetry text-code-telemetry text-secondary font-bold" id="duration-readout">500 MS</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Default calibrated to 500ms for smooth physical sweep feeling.</p>
+<div class="grid grid-cols-3 gap-space-xs mt-space-xs">
+<button class="speed-btn px-2 py-1.5 font-code-telemetry text-code-telemetry text-center uppercase hover:bg-secondary hover:text-on-secondary bg-surface-container-high text-on-surface" data-speed="120">
+              120ms
+            </button>
+<button class="speed-btn px-2 py-1.5 font-code-telemetry text-code-telemetry text-center uppercase hover:bg-secondary hover:text-on-secondary bg-surface-container-high text-on-surface" data-speed="280">
+              280ms
+            </button>
+<button class="speed-btn px-2 py-1.5 font-code-telemetry text-code-telemetry text-center uppercase bg-inverse-surface text-inverse-on-surface" data-speed="500">
+              500ms
+            </button>
+</div>
+</div>
+<!-- Easing Interpolation -->
+<div class="bg-surface-container p-space-md flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-caps-lg text-label-caps-lg text-on-surface uppercase">Easing Profile</span>
+<span class="font-code-telemetry text-code-telemetry text-on-surface-variant">BEZIER</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Curvature of the kinetic plinth translation.</p>
+<div class="grid grid-cols-3 gap-space-xs mt-space-xs">
+<button class="curve-btn px-2 py-1.5 font-code-telemetry text-code-telemetry text-center uppercase bg-inverse-surface text-inverse-on-surface" data-curve="cubic-bezier(0.16, 1, 0.3, 1)" data-curvename="DAMPENED INERTIA">
+              Inertia
+            </button>
+<button class="curve-btn px-2 py-1.5 font-code-telemetry text-code-telemetry text-center uppercase hover:bg-secondary hover:text-on-secondary bg-surface-container-high text-on-surface" data-curve="cubic-bezier(0.68, -0.6, 0.32, 1.6)" data-curvename="ELASTIC RETRACTION">
+              Elastic
+            </button>
+<button class="curve-btn px-2 py-1.5 font-code-telemetry text-code-telemetry text-center uppercase hover:bg-secondary hover:text-on-secondary bg-surface-container-high text-on-surface" data-curve="cubic-bezier(0, 0, 0.2, 1)" data-curvename="BRUTAL LINEAR ACCEL">
+              Linear
+            </button>
+</div>
+</div>
+<!-- Asymmetry Vertical Bias Control -->
+<div class="bg-surface-container p-space-md flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-caps-lg text-label-caps-lg text-on-surface uppercase">Ascender Overhang Ratio</span>
+<span class="font-code-telemetry text-code-telemetry text-secondary font-bold" id="overhang-readout">34% DROP</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Calibrated exactly to 34% drop so 't', 'd', 'll' pierce out.</p>
+<div class="flex items-center gap-space-sm mt-space-xs">
+<input class="w-full accent-secondary cursor-pointer h-2 bg-surface-variant rounded-none" id="overhang-slider" max="55" min="20" type="range" value="34"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 4: INTEGRATED LIVE WORKSPACE REACTION (GALLERY VS STUDIO) -->
+<section class="w-full bg-surface-container-high px-space-lg py-space-xl">
+<div class="max-w-[1440px] mx-auto flex flex-col gap-space-md">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-sm">
+<div>
+<span class="font-label-caps-sm text-label-caps-sm text-outline uppercase tracking-wider">HARNESS INTEGRATION</span>
+<h2 class="font-headline-md text-headline-md uppercase text-on-surface">SYNCHRONIZED VIEWPORT STATE</h2>
+</div>
+<div class="font-code-telemetry text-code-telemetry text-on-surface-variant">
+          VIEWPORT EMULATION: <span class="font-bold text-secondary" id="viewport-emulation-mode">STUDIO INSPECTION PLATFORM [1:1 LOUPE]</span>
+</div>
+</div>
+<!-- WORKSPACE CONTAINER WITH DYNAMIC VIEW -->
+<div class="bg-surface p-space-lg min-h-[460px] relative overflow-hidden flex flex-col">
+<!-- STATE 1: GALLERY CONTACT SHEET VIEW -->
+<div class="w-full h-full flex flex-col gap-space-md hidden" id="view-gallery">
+<div class="flex items-center justify-between font-code-telemetry text-code-telemetry text-outline pb-space-sm">
+<span class="">CONTACT SHEET // REEL #0492-BERLIN</span>
+<span class="">FILTER: 4 SELECTED / 16 CAPTURES</span>
+</div>
+<!-- Contact Grid -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-space-sm">
+<div class="flex flex-col bg-surface-container-low group">
+<div class="relative w-full aspect-[4/5] bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover grayscale contrast-125" data-alt="Editorial avant-garde high fashion monochrome portrait photograph taken with a medium format camera, harsh geometric architectural shadows falling across the cheekbones, stark contrast with deep blacks and clinical alabaster highlights." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNPv4WEwrbyaRkI3L_msZDElbpzuni_f-xIj8q9M4824TOh90pBkjx-FHKtzS7mTyjti5N2y_7XrvwBshBUehGh5HHuw6Op-ncinM9xAaBr_0Fv7dOM3pGvcn-T54kbX96rOvH9h507DiIeZq1Hms_sSvnVrd1j1x3ya_T_8I2ybooG_bRzZ2qbilkZOx7FX-wDc9LmMsiUduV7XZ8xlvMhQ7GMLAaXZ4DVbepDZ24dUnhbfJsd0vJ"/>
+<div class="absolute top-2 left-2 px-1.5 py-0.5 bg-inverse-surface text-inverse-on-surface font-code-telemetry text-[9px] uppercase">P1 RAW</div>
+</div>
+<div class="p-space-xs flex items-center justify-between font-code-telemetry text-code-telemetry text-on-surface">
+<span class="">DSC_8491.NEF</span>
+<span class="text-outline">85mm ƒ/1.4</span>
+</div>
+</div>
+<div class="flex flex-col bg-surface-container-low group">
+<div class="relative w-full aspect-[4/5] bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover grayscale contrast-125" data-alt="High-concept architectural fashion photograph of a structured severe trench coat silhouetted in a Brutalist concrete stairwell, cold morning light spilling through slit windows, minimalist geometric framing." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCR13k66W_XFekrOvrFLlvQ-bYJVGmrJnPCFgD-tf2Q1LheXf96rzgFSjtipH7NQRZB3KwFEVAMqprZW2GNQgeb1vnaIGrw61M03miJ7ls85HX7uY20tB8uIsncQnPGub5-OWTY4uSSicliXeKw_W-DBmL5oju9uBuBUsSvuYUdXFJrFIDDtq6RIaCMHQDPXe5qRmOCNJbrYyMJ3a-g96qTCfQvM3PrKl9ZEKaOAsr3K6FcpHc4yjjv"/>
+<div class="absolute top-2 left-2 px-1.5 py-0.5 bg-secondary text-on-secondary font-code-telemetry text-[9px] uppercase">SELECTED</div>
+</div>
+<div class="p-space-xs flex items-center justify-between font-code-telemetry text-code-telemetry text-on-surface">
+<span class="">DSC_8492.NEF</span>
+<span class="text-outline">50mm ƒ/2.0</span>
+</div>
+</div>
+<div class="flex flex-col bg-surface-container-low group">
+<div class="relative w-full aspect-[4/5] bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover grayscale contrast-125" data-alt="Close-up macro fashion texture photography of high tensile technical silver fabric reflecting tungsten studio lighting, extremely sharp fiber detail, brutalist aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB_0qVpcDf7RQKe5l9iEdQa-vzbYPH5R3h8cM4XgZTvQDnhFOXFTuXXjut9NH65-q1ixyoqy_UTDhZHTZyGdIrTEAwC1us7PUVmbubgypnhNqPjXZ35UinKLF3TZvbTzjvsL7pgatkotcRu8DpqPch9g4ScJX7u0kN4xVJiidDDg4oHNR6eORtIV8Oak4LxoYSbjWsd7kvGgNNvs4mgcPt1juUdtA9Z3TaaEsKMhsoDSwVde_lsY_IW"/>
+<div class="absolute top-2 left-2 px-1.5 py-0.5 bg-inverse-surface text-inverse-on-surface font-code-telemetry text-[9px] uppercase">RAW</div>
+</div>
+<div class="p-space-xs flex items-center justify-between font-code-telemetry text-code-telemetry text-on-surface">
+<span class="">DSC_8493.NEF</span>
+<span class="text-outline">105mm ƒ/2.8</span>
+</div>
+</div>
+<div class="flex flex-col bg-surface-container-low group">
+<div class="relative w-full aspect-[4/5] bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover grayscale contrast-125" data-alt="Minimalist modern Scandinavian studio portrait of a model looking sideways, high-key clean bone background, precise catchlight in iris, high fashion catalog aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDUtc_h72VJyBfXxurY9K66QIOLHKRmDS1BB5PHNVd0Im9E6aEbwvE6yEhVgDm47HeYxgEnob4Yzi6frhS4iGMDEEHZaGzFYWRXgHYgeexfTIYGkcK1bNRwysDnD-wc2QIlDsBsYfuyHzp5fR5zFz1NK7XW3pkd2Ch6ifVbsIV1o8NZTs3mdfD8FgtitCuDn-Ee_XtL2jAzN1OLUw87n_wT3zSm_CkrBD-GvsW0s-sto-LPbO0-c1z_"/>
+<div class="absolute top-2 left-2 px-1.5 py-0.5 bg-inverse-surface text-inverse-on-surface font-code-telemetry text-[9px] uppercase">RAW</div>
+</div>
+<div class="p-space-xs flex items-center justify-between font-code-telemetry text-code-telemetry text-on-surface">
+<span class="">DSC_8494.NEF</span>
+<span class="text-outline">50mm ƒ/1.8</span>
+</div>
+</div>
+</div>
+</div>
+<!-- STATE 2: STUDIO 1:1 COLOR PLINTH INSPECTOR (DEFAULT ACTIVE) -->
+<div class="w-full h-full flex flex-col lg:flex-row gap-space-lg items-stretch" id="view-studio">
+<!-- Large Format Plate Preview with Crosshairs -->
+<div class="relative flex-1 bg-surface-container-lowest flex items-center justify-center p-space-md min-h-[320px]">
+<div class="relative w-full max-w-lg aspect-[4/5] overflow-hidden bg-surface-dim">
+<img class="w-full h-full object-cover" data-alt="Master studio exposure fashion plate of an haute couture structured wool cape, deep obsidian tones with precise rim highlights, sharp edge sharpness and subtle grain texture, shot in an editorial studio with pristine calibrated grey plinth." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDy8P2cnt0ta8YNeXiZjcrB9V1pS0LyFwcLcqoGV7hI-J0on0c9Hfj6pjeSlE-vA3Nssgkiw8732TkbT2UQqrkA5-MZNhmd3zMesAr1aM6aPJkM88GPiwausgE34cZONeqfk3KyAVN2OvFjbVT7JH3aNNv1moDAMOU5eRc0ndQFPGdIrRD0wcllWvv0jFREUsn05HHahDTz74qTj_P47QSMzmMIPXjz-sckNiyQHX1ChU_FRL8JBlFi"/>
+<!-- Optical Precision Center Reticle -->
+<div class="absolute inset-0 pointer-events-none flex items-center justify-center">
+<div class="w-8 h-8 flex items-center justify-center">
+<div class="w-full h-[1px] bg-secondary"></div>
+<div class="h-full w-[1px] bg-secondary absolute"></div>
+</div>
+</div>
+<div class="absolute bottom-3 left-3 bg-inverse-surface text-inverse-on-surface px-2 py-1 font-code-telemetry text-[10px]">
+                100% 1:1 PEAK FOCUS [98.4%]
+              </div>
+</div>
+</div>
+<!-- Studio Calibration & Chromatic Telemetry Sidecar -->
+<div class="w-full lg:w-80 flex flex-col justify-between bg-surface-container-low p-space-md">
+<div class="flex flex-col gap-space-md">
+<div class="flex items-center justify-between font-code-telemetry text-code-telemetry text-on-surface border-b pb-space-xs">
+<span class="font-bold">LOUPE TELEMETRY</span>
+<span class="text-secondary">PRO-RAW</span>
+</div>
+<!-- Inline Histogram Representation -->
+<div class="flex flex-col gap-1">
+<span class="font-label-caps-sm text-label-caps-sm text-outline uppercase">Luma Distribution</span>
+<div class="w-full h-16 bg-surface-container flex items-end gap-[1px] px-1 py-1">
+<div class="w-1 bg-on-surface h-[30%]"></div>
+<div class="w-1 bg-on-surface h-[45%]"></div>
+<div class="w-1 bg-on-surface h-[60%]"></div>
+<div class="w-1 bg-secondary h-[95%]"></div>
+<div class="w-1 bg-secondary h-[88%]"></div>
+<div class="w-1 bg-on-surface h-[70%]"></div>
+<div class="w-1 bg-on-surface h-[52%]"></div>
+<div class="w-1 bg-on-surface h-[38%]"></div>
+<div class="w-1 bg-on-surface h-[22%]"></div>
+<div class="w-1 bg-on-surface h-[18%]"></div>
+<div class="w-1 bg-on-surface h-[14%]"></div>
+<div class="w-1 bg-on-surface h-[10%]"></div>
+<div class="w-1 bg-on-surface h-[12%]"></div>
+<div class="w-1 bg-primary h-[84%]"></div>
+<div class="w-1 bg-primary h-[76%]"></div>
+<div class="w-1 bg-on-surface h-[30%]"></div>
+<div class="w-1 bg-on-surface h-[15%]"></div>
+<div class="w-1 bg-on-surface h-[8%]"></div>
+</div>
+</div>
+<!-- Metadata specs -->
+<div class="space-y-1.5 font-code-telemetry text-code-telemetry text-on-surface-variant">
+<div class="flex justify-between">
+<span class="">EXPOSURE</span>
+<span class="text-on-surface font-semibold">1/250s · f/2.8</span>
+</div>
+<div class="flex justify-between">
+<span class="">ISO SENSITIVITY</span>
+<span class="text-on-surface font-semibold">ISO 100 [CLEAN]</span>
+</div>
+<div class="flex justify-between">
+<span class="">COLOR PROFILE</span>
+<span class="text-on-surface font-semibold">ProPhoto RGB 16b</span>
+</div>
+<div class="flex justify-between">
+<span class="">CLIPPING WARN</span>
+<span class="text-secondary font-semibold">0.0% SHADOWS</span>
+</div>
+</div>
+</div>
+<div class="pt-space-md">
+<button class="w-full py-space-sm bg-inverse-surface text-inverse-on-surface font-label-caps-lg text-label-caps-lg uppercase hover:bg-secondary transition-none text-center">
+                EXPORT ARCHIVAL TIFF
+              </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 5: ARCHITECTURAL CODE & BEZIER SPECIFICATION -->
+<section class="w-full bg-surface px-space-lg py-space-xl">
+<div class="max-w-[1440px] mx-auto flex flex-col gap-space-lg">
+<div class="flex items-center justify-between">
+<div>
+<span class="font-label-caps-sm text-label-caps-sm text-outline uppercase tracking-wider">SPECIFICATION SHEET</span>
+<h2 class="font-headline-sm text-headline-sm uppercase text-on-surface">MATHEMATICAL OFFSET ANATOMY</h2>
+</div>
+<span class="font-code-telemetry text-code-telemetry px-space-xs py-[2px] bg-surface-container-high text-on-surface">REV 1.4</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-lg">
+<!-- Geometry Breakdown Cards -->
+<div class="bg-surface-container-low p-space-lg flex flex-col gap-space-md">
+<span class="font-headline-sm text-headline-sm text-on-surface">Geometric Asymmetry Rules</span>
+<ul class="space-y-space-sm font-body-sm text-body-sm text-on-surface-variant"><li class="flex items-start gap-space-xs"><span class="material-symbols-outlined text-[16px] text-secondary mt-0.5">check</span><span class=""><strong>Stepped Dual-Block Slab (Var 01):</strong> Exact match of Reference Image rows 3-4. Cadmium red slab sits above electric cobalt blue slab with calibrated horizontal shear offset and tactile subscript [+] tick mark.</span></li><li class="flex items-start gap-space-xs"><span class="material-symbols-outlined text-[16px] text-secondary mt-0.5">check</span><span class=""><strong>Ascender Exposure:</strong> The solid plinth's top edge starts at exactly 34% drop, allowing the tall stems of 't', 'd', and 'll' to emerge cleanly above into bare ground.</span></li><li class="flex items-start gap-space-xs"><span class="material-symbols-outlined text-[16px] text-secondary mt-0.5">check</span><span class=""><strong>500ms Inertial Dampening:</strong> Calibrated with `cubic-bezier(0.16, 1, 0.3, 1)` for deliberate architectural deceleration upon snapping or clicking.</span></li><li class="flex items-start gap-space-xs"><span class="material-symbols-outlined text-[16px] text-secondary mt-0.5">check</span><span class=""><strong>Pointer Drag &amp; Inertial Snap:</strong> Real-time pointer tracking with live translation vector readout, smooth threshold snapping, and grab/grabbing physical states.</span></li></ul>
+</div>
+<!-- Matrix Telemetry & Dynamic CSS Token Inspection -->
+<div class="bg-surface-container-low p-space-lg flex flex-col justify-between">
+<div class="flex flex-col gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface">Active Kinematic Token</span>
+<span class="font-code-telemetry text-code-telemetry text-outline">CSS TRANSFORMATION MATRIX</span>
+<div class="bg-inverse-surface text-inverse-on-surface p-space-md mt-space-sm font-code-telemetry text-code-telemetry space-y-1"><div class="text-[#888888]">/* Asymmetric Kinetic Stepped Slide Plinth */</div><div class=""><span class="text-secondary font-bold">.kinetic-plinth</span> {</div><div class="pl-4">position: absolute;</div><div class="pl-4">top: <span class="text-[#ffb4a4]" id="css-top-val">34%</span>;</div><div class="pl-4">bottom: -18%;</div><div class="pl-4">/* Asymmetric overhang: tight left (-8px), extended right (+36px) */</div><div class="pl-4">transform: <span class="text-[#b7bcff]" id="css-transform-val">translateX(181.0px)</span>;</div><div class="pl-4">width: <span class="text-[#ffb4a4]">calc(var(--target-width) + 44px)</span>;</div><div class="pl-4">border-radius: 0px;</div><div class="pl-4">transition: transform <span class="text-[#bec2ff]" id="css-dur-val">500ms</span> <span class="text-[#ffdad3]" id="css-ease-val">cubic-bezier(0.16, 1, 0.3, 1)</span>;</div><div class="">}</div></div>
+</div>
+<div class="flex items-center justify-between font-code-telemetry text-code-telemetry text-on-surface-variant pt-space-md">
+<span class="">WCAG AAA COMPLIANT CONTRAST</span>
+<span class="text-secondary font-bold">PASS 16.2:1</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- COMPONENT LOGIC & SYNCHRONIZED INTERACTION SCRIPTS -->
+<script>
+  (function() {
+    // Current Global State: 'studio' (default) or 'gallery'
+    let activeState = 'studio';
+    let currentSpeed = 500; // Default 500ms
+    let currentCurve = 'cubic-bezier(0.16, 1, 0.3, 1)'; // Default Inertia
+    let currentOverhang = 34; // Default 34% drop
+
+    // Elements Dark
+    const specimenDark = document.getElementById('specimen-dark');
+    const blockDark = document.getElementById('block-dark');
+    const btnDarkGallery = document.getElementById('btn-dark-gallery');
+    const btnDarkStudio = document.getElementById('btn-dark-studio');
+    const darkStatusMetric = document.getElementById('dark-status-metric');
+
+    // Elements Light (Two-Tone Stepped)
+    const specimenLight = document.getElementById('specimen-light');
+    const blockLight = document.getElementById('block-light');
+    const lightBlockTop = document.getElementById('light-block-top');
+    const lightBlockBottom = document.getElementById('light-block-bottom');
+    const btnLightGallery = document.getElementById('btn-light-gallery');
+    const btnLightStudio = document.getElementById('btn-light-studio');
+    const lightStatusMetric = document.getElementById('light-status-metric');
+
+    // Telemetry readouts
+    const telStateLabel = document.getElementById('telemetry-state-label');
+    const telMatrix = document.getElementById('telemetry-matrix');
+    const telCurveLabel = document.getElementById('telemetry-curve-label');
+    const telAscenderReadout = document.getElementById('telemetry-ascender-readout');
+    const durReadout = document.getElementById('duration-readout');
+    const overhangReadout = document.getElementById('overhang-readout');
+    const overhangSlider = document.getElementById('overhang-slider');
+    const cssTopVal = document.getElementById('css-top-val');
+    const cssTransformVal = document.getElementById('css-transform-val');
+    const cssDurVal = document.getElementById('css-dur-val');
+    const cssEaseVal = document.getElementById('css-ease-val');
+    const cycleBtn = document.getElementById('cycle-toggle-btn');
+
+    // Synchronized Workspace Views
+    const viewGallery = document.getElementById('view-gallery');
+    const viewStudio = document.getElementById('view-studio');
+    const viewportEmulationMode = document.getElementById('viewport-emulation-mode');
+
+    // Track Dragging State
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartOffset = 0;
+    let currentDragTarget = null; // 'dark' or 'light'
+    let currentX = 0;
+
+    function getTargetPositions(container, btnGallery, btnStudio) {
+      const gOffset = btnGallery.offsetLeft;
+      const sOffset = btnStudio.offsetLeft;
+      const gWidth = btnGallery.offsetWidth;
+      const sWidth = btnStudio.offsetWidth;
+      return { gOffset, sOffset, gWidth, sWidth };
+    }
+
+    // Update geometry calculation based on active targets
+    function recalculatePositions(withTransition = true) {
+      const transStyle = withTransition ? `transform ${currentSpeed}ms ${currentCurve}, width ${currentSpeed}ms ${currentCurve}` : 'none';
+      blockDark.style.transition = transStyle;
+      blockLight.style.transition = transStyle;
+
+      // Dark calculations
+      const targetDark = activeState === 'gallery' ? btnDarkGallery : btnDarkStudio;
+      const xOffsetDark = targetDark.offsetLeft;
+      const widthDark = targetDark.offsetWidth;
+
+      blockDark.style.width = widthDark + 'px';
+      blockDark.style.transform = `translateX(${xOffsetDark}px)`;
+
+      // Light calculations
+      const targetLight = activeState === 'gallery' ? btnLightGallery : btnLightStudio;
+      const xOffsetLight = targetLight.offsetLeft;
+      const widthLight = targetLight.offsetWidth;
+
+      blockLight.style.width = widthLight + 'px';
+      blockLight.style.transform = `translateX(${xOffsetLight}px)`;
+
+      // Adjust stepped slabs offset in Light mode according to active word
+      if (activeState === 'gallery') {
+        // Matching row 4 of image: top bar shifted right, bottom bar shifted left
+        lightBlockTop.style.left = '8px';
+        lightBlockTop.style.right = '-12px';
+        lightBlockBottom.style.left = '-8px';
+        lightBlockBottom.style.right = '4px';
+
+        btnDarkGallery.style.color = '#ffffff';
+        btnDarkStudio.style.color = '#7a7a7a';
+        darkStatusMetric.textContent = 'STATE: GALLERY ACTIVE';
+
+        btnLightGallery.style.color = '#ffffff';
+        btnLightStudio.style.color = '#555756';
+        lightStatusMetric.textContent = 'STATE: GALLERY ACTIVE';
+      } else {
+        // Matching row 3 of image: top bar left, bottom bar right
+        lightBlockTop.style.left = '-6px';
+        lightBlockTop.style.right = '0px';
+        lightBlockBottom.style.left = '8px';
+        lightBlockBottom.style.right = '-12px';
+
+        btnDarkGallery.style.color = '#7a7a7a';
+        btnDarkStudio.style.color = '#ffffff';
+        darkStatusMetric.textContent = 'STATE: STUDIO ACTIVE';
+
+        btnLightGallery.style.color = '#555756';
+        btnLightStudio.style.color = '#ffffff';
+        lightStatusMetric.textContent = 'STATE: STUDIO ACTIVE';
+      }
+
+      // Telemetry update
+      const activeX = activeState === 'gallery' ? btnDarkGallery.offsetLeft : btnDarkStudio.offsetLeft;
+      telStateLabel.textContent = activeState === 'gallery' ? 'GALLERY [POS_L]' : 'STUDIO [POS_R]';
+      telMatrix.textContent = `ΔX: ${activeX.toFixed(1)}px [${activeState.toUpperCase()}]`;
+      cssTransformVal.textContent = `translateX(${activeX.toFixed(1)}px)`;
+
+      // Workspace harness reaction
+      if (activeState === 'gallery') {
+        viewGallery.classList.remove('hidden');
+        viewStudio.classList.add('hidden');
+        viewportEmulationMode.textContent = 'HIGH-DENSITY CONTACT GRID [BATCH CULL]';
+        viewportEmulationMode.classList.remove('text-secondary');
+        viewportEmulationMode.classList.add('text-primary');
+      } else {
+        viewGallery.classList.add('hidden');
+        viewStudio.classList.remove('hidden');
+        viewportEmulationMode.textContent = 'STUDIO INSPECTION PLATFORM [1:1 LOUPE]';
+        viewportEmulationMode.classList.remove('text-primary');
+        viewportEmulationMode.classList.add('text-secondary');
+      }
+    }
+
+    // Set transition styles dynamically
+    function applyMotionStyles() {
+      const transStyle = `transform ${currentSpeed}ms ${currentCurve}, width ${currentSpeed}ms ${currentCurve}`;
+      blockDark.style.transition = transStyle;
+      blockLight.style.transition = transStyle;
+
+      blockDark.style.top = `${currentOverhang}%`;
+      blockLight.style.top = `${currentOverhang}%`;
+
+      durReadout.textContent = `${currentSpeed} MS`;
+      cssDurVal.textContent = `${currentSpeed}ms`;
+      cssEaseVal.textContent = currentCurve;
+      cssTopVal.textContent = `${currentOverhang}%`;
+      telAscenderReadout.textContent = `${currentOverhang}% DROP (13.5 PX)`;
+    }
+
+    function setState(newState) {
+      if (activeState === newState) return;
+      activeState = newState;
+      recalculatePositions(true);
+    }
+
+    function toggleState() {
+      setState(activeState === 'studio' ? 'gallery' : 'studio');
+    }
+
+    // DIRECT POINTER DRAGGING IMPLEMENTATION
+    function setupDraggable(container, isLight) {
+      const plinth = isLight ? blockLight : blockDark;
+      const btnG = isLight ? btnLightGallery : btnLightStudio;
+
+      container.addEventListener('pointerdown', (e) => {
+        // Only start drag if clicking toggle container / plinth
+        isDragging = true;
+        currentDragTarget = isLight ? 'light' : 'dark';
+        dragStartX = e.clientX;
+        
+        const gLeft = isLight ? btnLightGallery.offsetLeft : btnDarkGallery.offsetLeft;
+        const sLeft = isLight ? btnLightStudio.offsetLeft : btnDarkStudio.offsetLeft;
+        
+        dragStartOffset = activeState === 'gallery' ? gLeft : sLeft;
+        currentX = dragStartOffset;
+
+        plinth.style.transition = 'none';
+        container.setPointerCapture(e.pointerId);
+        container.classList.add('cursor-grabbing');
+      });
+
+      container.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - dragStartX;
+        const gLeft = isLight ? btnLightGallery.offsetLeft : btnDarkGallery.offsetLeft;
+        const sLeft = isLight ? btnLightStudio.offsetLeft : btnDarkStudio.offsetLeft;
+
+        let newX = dragStartOffset + dx;
+        // Clamp with elastic drag limit
+        newX = Math.max(gLeft - 20, Math.min(sLeft + 20, newX));
+        currentX = newX;
+
+        // Apply real-time translation
+        plinth.style.transform = `translateX(${newX}px)`;
+        telMatrix.textContent = `ΔX: ${newX.toFixed(1)}px [DRAGGING]`;
+      });
+
+      const onPointerEnd = (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        container.classList.remove('cursor-grabbing');
+
+        const gLeft = isLight ? btnLightGallery.offsetLeft : btnDarkGallery.offsetLeft;
+        const sLeft = isLight ? btnLightStudio.offsetLeft : btnDarkStudio.offsetLeft;
+        const midPoint = (gLeft + sLeft) / 2;
+
+        // Snap to closest target
+        if (currentX < midPoint) {
+          activeState = 'gallery';
+        } else {
+          activeState = 'studio';
+        }
+        recalculatePositions(true);
+      };
+
+      container.addEventListener('pointerup', onPointerEnd);
+      container.addEventListener('pointercancel', onPointerEnd);
+    }
+
+    setupDraggable(specimenDark, false);
+    setupDraggable(specimenLight, true);
+
+    // Direct Clicks on labels
+    btnDarkGallery.addEventListener('click', (e) => { e.stopPropagation(); setState('gallery'); });
+    btnDarkStudio.addEventListener('click', (e) => { e.stopPropagation(); setState('studio'); });
+    btnLightGallery.addEventListener('click', (e) => { e.stopPropagation(); setState('gallery'); });
+    btnLightStudio.addEventListener('click', (e) => { e.stopPropagation(); setState('studio'); });
+
+    // Tactile Hover State: subtle twitch / chromatic registration feedback
+    [specimenDark, specimenLight].forEach(specimen => {
+      specimen.addEventListener('mouseenter', () => {
+        if (isDragging) return;
+        const activeBlock = specimen === specimenDark ? blockDark : blockLight;
+        activeBlock.style.transform += ' scale(1.02)';
+      });
+      specimen.addEventListener('mouseleave', () => {
+        if (isDragging) return;
+        recalculatePositions(true);
+      });
+    });
+
+    // Keyboard navigation (Space, Arrow keys)
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        toggleState();
+      } else if (e.code === 'ArrowLeft') {
+        setState('gallery');
+      } else if (e.code === 'ArrowRight') {
+        setState('studio');
+      }
+    });
+
+    cycleBtn.addEventListener('click', toggleState);
+
+    // Speed Controls
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.speed-btn').forEach(b => {
+          b.classList.remove('bg-inverse-surface', 'text-inverse-on-surface');
+          b.classList.add('bg-surface-container-high', 'text-on-surface');
+        });
+        btn.classList.add('bg-inverse-surface', 'text-inverse-on-surface');
+        btn.classList.remove('bg-surface-container-high', 'text-on-surface');
+        currentSpeed = parseInt(btn.getAttribute('data-speed'), 10);
+        applyMotionStyles();
+      });
+    });
+
+    // Easing Curve Controls
+    document.querySelectorAll('.curve-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.curve-btn').forEach(b => {
+          b.classList.remove('bg-inverse-surface', 'text-inverse-on-surface');
+          b.classList.add('bg-surface-container-high', 'text-on-surface');
+        });
+        btn.classList.add('bg-inverse-surface', 'text-inverse-on-surface');
+        btn.classList.remove('bg-surface-container-high', 'text-on-surface');
+        currentCurve = btn.getAttribute('data-curve');
+        telCurveLabel.textContent = btn.getAttribute('data-curvename');
+        applyMotionStyles();
+      });
+    });
+
+    // Overhang Slider
+    overhangSlider.addEventListener('input', (e) => {
+      currentOverhang = e.target.value;
+      overhangReadout.textContent = `${currentOverhang}% DROP`;
+      applyMotionStyles();
+    });
+
+    // Window Resize Recalibration
+    window.addEventListener('resize', () => recalculatePositions(false));
+
+    // Initialize layout after DOM font render
+    setTimeout(() => {
+      applyMotionStyles();
+      recalculatePositions(false);
+    }, 80);
+
+  })();
+</script></main></div></body></html>
