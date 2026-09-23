@@ -824,14 +824,14 @@
     /* overflow:hidden — nothing (grid blowout, an oversized top bar) can ever paint past this
        column into the editor preview, whatever mode/width it's in. */
     #lib-overlay{position:fixed;top:0;left:0;bottom:0;width:${DOCK_W}px;z-index:4000;overflow:hidden;
-      background:var(--bg);display:none;border-right:1px solid var(--bdr-panel);
+      background:var(--bg);display:none;border-right:none;
       /* Only the right edge has a real (visible) border, but with no border-width on the other
          three sides their computed border-color still resolves to currentColor (the text color),
          not var(--bdr) — so getComputedStyle().borderColor reported 3 mismatched sides even
          though nothing renders differently. Setting the color explicitly on all sides keeps the
          computed style honest without adding any visible border. */
       border-color:var(--bdr-panel);
-      box-shadow:6px 0 20px -8px rgba(0,0,0,.5);
+      box-shadow:none;
       grid-template-rows:auto auto auto minmax(120px,26%) 1fr 28px;color:var(--txt);
       font-family:var(--font-text);transition:width var(--duration-press) ease;
       /* chromasmith-22.html's body{font-size:14px;line-height:1.5} otherwise cascades in here —
@@ -863,7 +863,7 @@
        docked 356px filmstrip keeps the vertical stacking below — a left column can't fit there. */
     #lib-overlay.full{width:100vw;grid-template-columns:var(--lib-side-w,230px) 1fr;grid-template-rows:auto auto auto 1fr 28px}
     #lib-overlay.full #lib-top{grid-column:1/3;grid-row:1}
-    #lib-overlay.full #lib-side{grid-column:1;grid-row:2/5;border-right:1px solid var(--bdr);border-top:none;border-bottom:none}
+    #lib-overlay.full #lib-side{grid-column:1;grid-row:2/5;border-right:none;border-top:none;border-bottom:none}
     #lib-overlay.full #lib-filters{grid-column:2;grid-row:2}
     #lib-overlay.full #lib-viewbar{grid-column:2;grid-row:3}
     #lib-overlay.full #lib-main{grid-column:2;grid-row:4}
@@ -901,7 +901,7 @@
     /* CHR-144: desktop bars read as continuous surfaces. Remove only the outer container
        edges; control outlines and internal separators remain unchanged. Mobile keeps the
        base borders above until a mobile-specific pass is requested. */
-    body.deskx #lib-overlay{border:none}
+    body.deskx #lib-overlay{border:none;box-shadow:none}
     body.deskx #lib-top{border-bottom:none}
     body.deskx #lib-side{border-top:none;border-bottom:none}
     body.deskx #lib-bottom{border-top:none}
