@@ -145,6 +145,16 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
 
 #[cfg(test)]
 mod list_dir_tests {
+    /// CHR-143: ARW grid thumbnails must keep the photo's real 3:2 shape, not the 4:3 EXIF thumb.
+    #[test]
+    fn arw_thumbnail_keeps_real_aspect() {
+        let p = "/Volumes/Crucial/PHOTOS/2025/2025-10-07/TM_00522.ARW";
+        if !std::path::Path::new(p).exists() { return; }
+        let img = raw_embedded_pixels(p).unwrap();
+        let a = img.width() as f32 / img.height() as f32;
+        assert!((a - 1.5).abs() < 0.03, "aspect {a} ({}x{})", img.width(), img.height());
+    }
+
     use super::*;
 
     fn scratch(tag: &str) -> PathBuf {
@@ -287,7 +297,7 @@ fn fnv1a(parts: &[&str]) -> u64 {
 // `.replace(".jpg", "...")` filename trick on meta/phash), so bumping it to fix a THUMBNAIL
 // rendering change also silently invalidated every cached EXIF read and every perceptual hash —
 // at 100k photos, a multi-minute metadata re-read to fix something that only touched pixels.
-const THUMB_RENDER_VER: &str = "thumb-v3"; // bumped: key is now STABLE (path-only) — see cache_key
+const THUMB_RENDER_VER: &str = "thumb-v4"; // v4: RAW thumbs prefer the embedded preview (CHR-143: Sony 160x120 thumb is 4:3, not the real 3:2). Earlier: bumped: key is now STABLE (path-only) — see cache_key
 const META_READER_VER: &str = "meta-v5";   // bumped when the RW2-lens EXIF garbage-value fix landed
 /// Videos get their OWN meta-cache version so adding duration/dimensions to PhotoMeta did not
 /// invalidate every photo's cached EXIF read. See meta_cache_path.
@@ -615,6 +625,22 @@ mod missing_thumbnail_error_tests {
     }
 }
 
+/// Embedded RAW pixels for a grid thumbnail. Prefers the camera's PREVIEW over its tiny EXIF
+/// "thumbnail": Sony ARW thumbnails are 160x120 (4:3) while the sensor is 3:2, so the thumbnail
+/// gave every ARW tile the wrong aspect (and was upscaled from 160px). The preview carries the
+/// real frame shape. Same order for every RAW format; falls back thumbnail -> full decode.
+fn raw_embedded_pixels(path: &str) -> Result<image::DynamicImage, String> {
+    let params = RawDecodeParams::default();
+    if let Ok(src) = rawler::rawsource::RawSource::new(Path::new(path)) {
+        if let Ok(dec) = rawler::get_decoder(&src) {
+            if let Ok(Some(img)) = dec.preview_image(&src, &params) {
+                return Ok(img);
+            }
+        }
+    }
+    rawler::analyze::extract_thumbnail_pixels(path, &params).map_err(|e| e.to_string())
+}
+
 pub(crate) fn get_thumbnail_inner(path: String) -> Result<Vec<u8>, String> {
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
@@ -710,8 +736,7 @@ pub(crate) fn get_thumbnail_inner(path: String) -> Result<Vec<u8>, String> {
         return Err("heic thumbnail: sips could not decode this file".into());
     }
     let img = if is_raw_ext(&ext) {
-        let img = rawler::analyze::extract_thumbnail_pixels(&path, &RawDecodeParams::default())
-            .map_err(|e| format!("thumbnail decode: {e}"))?;
+        let img = raw_embedded_pixels(&path).map_err(|e| format!("thumbnail decode: {e}"))?;
         apply_orientation_dynamic(img, raw_orientation(&path))
     } else {
         // still_decode::open_any_path (not a bare image::open) so a widened IMAGE_EXTS format
