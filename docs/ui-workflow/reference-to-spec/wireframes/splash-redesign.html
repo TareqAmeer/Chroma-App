@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Chromasmith splash redesign wireframe</title>
+<style>
+@font-face{font-family:Gramatika;src:url('../../../../vendor/fonts/gramatika/GramatikaRegular.otf')}@font-face{font-family:Gramatika;src:url('../../../../vendor/fonts/gramatika/GramatikaBold.otf');font-weight:700}@font-face{font-family:Shifted;src:url('../../../../vendor/fonts/gramatika/GramatikaBoldSlanted.otf');font-weight:700}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#171512;color:#fff;font-family:Gramatika,Arial,sans-serif}body{display:grid;place-items:center;padding:4vh 4vw}.card{width:min(1120px,92vw);height:min(820px,88vh);min-height:620px;background:#D54400;display:grid;grid-template-columns:190px 1fr;grid-template-rows:1fr 145px;padding:32px 34px;gap:22px;overflow:hidden}.rail{position:relative}.name{position:absolute;left:0;top:0;height:100%;writing-mode:vertical-rl;transform:rotate(180deg);font-size:clamp(64px,8.2vh,92px);line-height:.82;font-weight:700;letter-spacing:-3px;color:#000;white-space:nowrap}.version{position:absolute;right:-2px;top:0;writing-mode:vertical-rl;transform:rotate(180deg);font-size:clamp(34px,4.5vh,50px);line-height:.9;color:#fff}.main{display:flex;flex-direction:column;align-items:center;min-width:0}.photo-frame{width:100%;height:calc(100% - 56px);display:flex}.photo-frame img{width:100%;height:100%;object-fit:cover;filter:grayscale(1)}.credit{font-family:Shifted,Gramatika,sans-serif;font-size:18px;font-weight:700;font-style:italic;margin-top:9px}.progress{grid-column:1 / -1;grid-row:2;display:flex;align-items:flex-end;justify-content:center;gap:8px;max-width:100%;overflow:visible;font-family:Shifted,Gramatika,sans-serif;font-weight:700;color:#fff;line-height:.75}.loading{font-size:74px;letter-spacing:-5px}.percent{font-size:68px;letter-spacing:-5px;transform:translateY(22px)}
+</style>
+<main class="card" aria-label="Splash screen wireframe">
+  <aside class="rail"><div class="name">CHRO-MA-SMITH</div><div class="version">v. 1.0922A</div></aside>
+  <section class="main"><div class="photo-frame"><img src="../evidence/splash-redesign/approved-photo.png" alt="Desaturated approved cover photograph"></div><div class="credit">cover photo by tareq ameer</div></section>
+  <div class="progress"><span class="loading">loading</span><span class="percent">50%</span></div>
+</main>

@@ -1605,7 +1605,27 @@ L.onclick=function(){go(true)};S.onclick=function(){go(false)};})();</script>
     </div>
   </div>
 </div>
+<style id="boot-splash-redesign">
+  html.cs-boot-tauri #boot-splash{background:transparent!important;padding:3vh 3vw;box-sizing:border-box}
+  html.cs-boot-tauri #boot-splash>.boot-card{box-sizing:border-box;width:min(940px,88vw,104vh)!important;height:auto!important;max-height:84vh!important;aspect-ratio:935/750;background:#D54400!important;display:grid!important;grid-template-columns:130px minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr) 112px!important;padding:26px 28px!important;gap:16px!important;overflow:hidden!important;box-shadow:none!important;border-radius:0!important}
+  #boot-splash .boot-rail{position:relative!important;grid-column:1!important;grid-row:1!important;min-width:0;min-height:0;padding:0!important;background:transparent!important;border:0!important;overflow:hidden!important}
+  #boot-splash .boot-name{position:absolute!important;left:0!important;top:0!important;height:100%!important;width:100%!important;writing-mode:vertical-rl!important;transform:rotate(180deg)!important;font-family:'Gramatika',sans-serif!important;font-style:normal!important;font-size:clamp(34px,6.4vh,66px)!important;line-height:.9!important;font-weight:700!important;letter-spacing:-2px!important;color:#000!important;white-space:nowrap!important;text-shadow:none!important;overflow:hidden!important}
+  #boot-splash .boot-version{position:absolute!important;right:0!important;top:0!important;writing-mode:vertical-rl!important;transform:rotate(180deg)!important;font-family:'Gramatika',sans-serif!important;font-size:clamp(24px,3.2vh,38px)!important;line-height:1!important;color:#fff!important;white-space:nowrap}
+  #boot-splash .boot-art{grid-column:2!important;grid-row:1!important;position:relative!important;display:flex!important;flex-direction:column!important;min-width:0!important;min-height:0!important;overflow:hidden!important;background:transparent!important}
+  #boot-splash .boot-art img{position:static!important;display:block!important;width:100%!important;height:0!important;min-height:0!important;flex:1 1 auto!important;object-fit:contain!important;object-position:center!important;transform:none!important;filter:grayscale(1)!important}
+  #boot-splash .boot-photo-credit{flex:0 0 28px;align-self:center;padding-top:5px;font-family:'Gramatika',sans-serif!important;font-size:clamp(12px,1.5vh,18px)!important;font-style:italic!important;font-weight:700!important;color:#fff!important;white-space:nowrap}
+  #boot-splash-progress{grid-column:1/-1!important;grid-row:2!important;display:flex!important;align-items:flex-end!important;justify-content:center!important;min-width:0!important;overflow:visible!important;padding:0!important}
+  #boot-splash-progress>.boot-legacy{display:none!important}
+  #boot-splash-label.boot-sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+  #boot-splash .boot-readout{display:flex;align-items:flex-end;justify-content:center;gap:10px;max-width:100%;font-family:'Gramatika',sans-serif;font-weight:700;font-style:italic;line-height:.78;color:#fff;white-space:nowrap}
+  #boot-splash .boot-loading{font-size:clamp(42px,7.2vh,76px);letter-spacing:-3px}
+  #boot-splash .boot-percent{font-size:clamp(36px,6.4vh,68px);letter-spacing:-3px;transform:translateY(12px)}
+  @media(max-width:640px){html.cs-boot-tauri #boot-splash>.boot-card{width:94vw!important;grid-template-columns:95px minmax(0,1fr)!important;padding:16px!important;gap:10px!important;grid-template-rows:minmax(0,1fr) 80px!important}}
+</style>
 <script>
+// Give the boot splash explicit semantic nodes so text and progress do not depend on pseudo-element layout.
+(()=>{const card=document.querySelector('#boot-splash>div');if(!card)return;card.classList.add('boot-card');const rail=card.children[0],art=card.children[1],name=rail?.firstElementChild,progress=document.getElementById('boot-splash-progress'),img=art?.querySelector('img'),label=document.getElementById('boot-splash-label');if(!rail||!art||!name||!progress||!img)return;rail.classList.add('boot-rail');name.id='boot-splash-name';name.classList.add('boot-name');name.textContent='CHRO-MA-SMITH';for(const child of [...progress.children])if(child!==label)child.classList.add('boot-legacy');if(label)label.classList.add('boot-sr-only');const version=document.createElement('div');version.id='boot-splash-version';version.className='boot-version';rail.append(version);art.className='boot-art';img.src='vendor/splash/approved-photo.png';const credit=document.createElement('div');credit.className='boot-photo-credit';credit.textContent='cover photo by tareq ameer';art.append(credit);const readout=document.createElement('div');readout.className='boot-readout';readout.innerHTML='<span class="boot-loading">loading</span><span id="boot-splash-percent" class="boot-percent">0%</span>';progress.append(readout);card.append(progress);})();
+// ONE bar for the whole boot sequence, not a series of per-phase bars that each restart from 0 —
 // ONE bar for the whole boot sequence, not a series of per-phase bars that each restart from 0 —
 // that restart-on-phase-change look (confirmed live: "the loading bar reaches the end and then
 // restarts again") is exactly what this replaces. Each boot phase owns a fixed SLICE of the 0-100
@@ -1625,6 +1645,8 @@ function _bootPaintPct(pct){
   pct=Math.max(0,Math.min(100,pct));
   if(pct<window._bootShownPct)return; // monotonic guard — never regress the bar
   window._bootShownPct=pct;
+  const splash=document.querySelector('#boot-splash>div');if(splash)splash.style.setProperty('--boot-pct',Math.round(pct)+'%');
+  const percent=document.getElementById('boot-splash-percent');if(percent)percent.textContent=Math.round(pct)+'%';
   bar.style.width=pct.toFixed(1)+'%';
 }
 window.bootProgressSet=function(phase,done,total){
@@ -5041,7 +5063,7 @@ const PRINT_PRESETS={
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
 const BUILD='1.0922A';
-{const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
+{const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;const oldVersion=document.getElementById('boot-splash-version');if(oldVersion)oldVersion.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.

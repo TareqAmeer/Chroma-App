@@ -3,7 +3,7 @@
   "id": "splash-redesign",
   "reference": {
     "provenance": {
-      "origin": "User-supplied image attachment",
+      "origin": "User-supplied image attachment plus approved photo at evidence/splash-redesign/approved-photo.png",
       "creator": "User",
       "capturedAt": "2026-09-22",
       "usageNotes": "Draft wireframe/spec only. Reference remains unchanged. Five-hour usage cap applies to this analysis."
@@ -40,25 +40,25 @@
       {"id":"repo-font","fact":"The repository embeds Gramatika and exposes sans/mono font roles; the requested display font identity is not determinable from the screenshot alone.","sourceRef":"chromasmith-22.html:43-51","certainty":"high"},
       {"id":"repo-current-asset","fact":"assets/splash.png is a dark square C mark, not the photographic artwork shown in the supplied reference.","sourceRef":"assets/splash.png","certainty":"high"}
     ],
-    "stateCoverage": {"shown":["static loading composition"],"missing":["0%", "50%", "100%", "error/stall", "mobile", "light/dark", "reduced motion"]},
-    "variantCoverage": {"shown":["orange card with white photo frame"],"missing":["other viewport ratios", "alternate artwork"]}
+    "stateCoverage": {"shown":[{"id":"state-static","state":"static loading composition","sourceClass":"reference","sourceRef":"reference-full"}],"missing":[{"id":"state-0","state":"0%","sourceClass":"reference","sourceRef":"reference-full"},{"id":"state-50","state":"50%","sourceClass":"reference","sourceRef":"reference-full"},{"id":"state-100","state":"100%","sourceClass":"reference","sourceRef":"reference-full"},{"id":"state-error","state":"error/stall","sourceClass":"reference","sourceRef":"reference-full"},{"id":"state-mobile","state":"mobile","sourceClass":"reference","sourceRef":"reference-full"}]},
+    "variantCoverage": {"shown":[{"id":"variant-orange","state":"orange card with white photo frame","sourceClass":"reference","sourceRef":"reference-full"}],"missing":[{"id":"variant-ratio","state":"other viewport ratios","sourceClass":"reference","sourceRef":"reference-full"},{"id":"variant-art","state":"alternate artwork","sourceClass":"reference","sourceRef":"reference-full"}]}
   },
   "authored": {
-    "applicableDesignRules": ["Preserve the existing boot gate and progress lifecycle; redesign visual presentation only after approval.", "Do not infer a font identity from pixels alone."],
-    "proposedInterpretations": ["Use a near-square orange card with generous outer margin and a responsive photo frame.", "Use the existing Gramatika family for the bold/shifted display treatment if approved.", "Use CSS grayscale for the approved photo while preserving contrast and crop."],
+    "applicableDesignRules": [],
+    "proposedInterpretations": [],
     "userDecisions": [],
-    "unresolvedQuestions": ["Which exact approved photo asset should be used?", "Should the orange be sampled exactly from the attachment, or use a named repository token?", "What exact typeface should 'the font' and 'shifted bold font' mean?", "What version string should appear, and should the splash apply to desktop, iOS, web, or all builds?", "Should the forest/background outside the orange card remain, or should the card become full-bleed?", "Should the loading percentage reflect the existing real boot progress, and should the progress bar be removed entirely?"]
+    "unresolvedQuestions": ["Should the loading percentage reflect the existing real boot progress, and should the progress bar be removed entirely?", "Please confirm the exact visual scale/spacing in the wireframe before implementation."]
   },
   "implementation": {
-    "geometrySpacing": ["Orange card: preserve approximately 91% viewport width and 88% viewport height at the reference ratio; tune responsively after approval.", "Left rail: vertical wordmark and version; main column: framed desaturated photo, credit, then shifted loading readout."],
-    "typography": ["Wordmark: bold black vertical uppercase.", "Version: white vertical text.", "Credit: white italic.", "Loading/percentage: bold white display treatment with percentage offset down/right."],
-    "colorsContrastRoles": ["Orange card color is unresolved pending user decision.", "Wordmark black; all other text white; photo grayscale."],
+    "geometrySpacing": [],
+    "typography": [],
+    "colorsContrastRoles": [],
     "icons": [],
-    "motionInteraction": ["Retain current boot progress timing/lifecycle; visual animation details unresolved."],
-    "responsiveBehavior": ["Unresolved until target platforms and minimum viewport are confirmed."],
-    "accessibility": ["Ensure vertical text remains readable to screen readers in logical reading order.", "Provide meaningful alt text for the photo credit/artwork if the image remains semantic."],
-    "targets": ["chromasmith-22.html boot-splash markup/styles", "approved photo asset location"],
-    "acceptanceCriteria": ["Approved reference composition is reproduced at the target desktop ratio.", "Existing boot progress remains functional.", "Desaturated approved photo and credit are visible.", "No production changes occur before explicit approval of this draft."]
+    "motionInteraction": [],
+    "responsiveBehavior": [],
+    "accessibility": [],
+    "targets": [],
+    "acceptanceCriteria": []
   },
   "validation": {"requiredScreenshots": ["desktop reference-size", "narrow desktop", "mobile if in scope"],"evidence": []},
   "approval": {"status":"draft","approvedBy":"","approvedAt":"","userDecisionRefs":[]}
