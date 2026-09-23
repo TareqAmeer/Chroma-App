@@ -1862,12 +1862,6 @@
        the Editor's are, so copying only one of them here would have been a new mismatch. */
     body.deskx #lib-overlay #lib-settings{margin-left:var(--sp-2);padding-left:var(--sp-2);
       border-left:1px solid var(--bdr)}
-    /* Gear submenu two-column drill-down == the Editor's #fx-settings-menu (chromasmith-22.html).
-       .lib-menu's own base rule sets display:block/width:230px for the old flat single-column
-       list this replaced; both are overridden here rather than in .lib-menu itself since every
-       OTHER .lib-menu (sort, filters) still wants the plain single-column popover. */
-    body.deskx #lib-overlay .lib-menu.fx-settings-menu-drill{width:auto}
-    body.deskx #lib-overlay .lib-menu.fx-settings-menu-drill.open{display:flex;align-items:stretch}
     /* The tree toggle only means anything in full mode (the filmstrip already force-hides
        #lib-side's tree children via .lib-fullview-only above) — its text label doesn't fit the
        120px filmstrip's icon-only top bar. */
@@ -2066,53 +2060,44 @@
            row's flat 8px gap — see the #lib-settings CSS rule below, copied from #fx-settings. -->
       <div style="position:relative" id="lib-settings">
         <button class="lib-btn lib-btn-icon" id="lib-view-menu-btn" title="View settings"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
-        <!-- 2026-09-11 (gear submenu parity): two-column category drill-down, matching the
-             Editor's #fx-settings-menu (chromasmith-22.html) exactly — reuses ITS CSS classes
-             (.fx-settings-cat / .fx-settings-pane, and the #fx-settings-cats/#fx-settings-page
-             selectors extended to also match .fx-settings-cats/.fx-settings-page below) rather
-             than a parallel copy, so a future tweak to the Editor's drill-down styling (padth,
-             active-state color, pane width) can't silently drift out of sync here again. The
-             flat single-list #lib-view-menu this replaces bundled 5 unrelated groups (Library
-             actions / Thumbnails / Metadata overlay / Panels / Appearance) into one long scroll
-             with no equivalent to the Editor's own Transform/View/Compare/History/More tabs. -->
-        <div class="lib-menu fx-settings-menu-drill" id="lib-view-menu">
-          <div class="fx-settings-cats" id="lib-settings-cats"></div>
-          <div class="fx-settings-page" id="lib-settings-page">
-            <div class="fx-settings-pane" id="lib-cat-library">
-              <button class="lib-btn opt-action" id="lib-pick" title="Choose root folder">${ic('library',15)}<span>Choose folder…</span></button>
-              <button class="lib-btn opt-action" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',15)}<span>Import from Google Photos…</span></button>
-              <button class="lib-btn opt-action" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">${ic('history',15)}<span>Recent folders…</span></button>
-              <button class="lib-btn opt-action" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',15)}<span>Get Info</span></button>
-              <button class="lib-btn opt-action" id="lib-expand" title="Full-window view — G">${ic('fit',15)}<span>Full-window view</span></button>
-              <button class="lib-btn opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C">${ic('compare',15)}<span>Compare view</span></button>
-            </div>
-            <div class="fx-settings-pane" id="lib-cat-thumbnails">
-              <div class="opt" id="lib-hideicons"><span>Hide flag &amp; type icons</span>${LIB_CHECK_SVG}</div>
-              <div class="opt" id="lib-zerogap"><span>No spacing between photos</span>${LIB_CHECK_SVG}</div>
-              <div class="opt" id="lib-showtitle"><span>Show title</span>${LIB_CHECK_SVG}</div>
-              <!-- #10/#11: no leading icon — every other option row in this menu (metadata/theme/
-                   panels) is icon-less; this one's ${ic('image',15)} was its own inconsistency,
-                   confirmed by wireframe_inventory.mjs's self-consistency check. -->
-              <button class="lib-btn opt-action opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to)."><span>Real aspect ratio</span>${LIB_CHECK_SVG}</button>
-            </div>
-            <div class="fx-settings-pane" id="lib-cat-metadata">
-              <select id="lib-metadisp" style="display:none">
-                <option value="off">Off</option>
-                <option value="hover">On hover</option>
-                <option value="always">Always on</option>
-              </select>
-              <div class="opt" data-metaval="off"><span>Off</span>${LIB_CHECK_SVG}</div>
-              <div class="opt" data-metaval="always"><span>Always on</span>${LIB_CHECK_SVG}</div>
-              <div class="opt" data-metaval="hover"><span>On hover</span>${LIB_CHECK_SVG}</div>
-            </div>
-            <div class="fx-settings-pane" id="lib-cat-panels">
-              <button class="lib-btn opt-action opt-toggle" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)"><span>Show sidebar</span>${LIB_CHECK_SVG}</button>
-            </div>
-            <div class="fx-settings-pane" id="lib-cat-appearance">
-              <div class="opt" data-theme="dark"><span>Dark</span>${LIB_CHECK_SVG}</div>
-              <div class="opt" data-theme="light"><span>Light</span>${LIB_CHECK_SVG}</div>
-            </div>
-          </div>
+        <!-- CHR-147 fix: reverted to a flat single-list menu. The 2026-09-11 two-column
+             category drill-down (matching the Editor's #fx-settings-menu) hid every option
+             outside the default "Library" pane behind a tab click with no strong visual cue,
+             so toggles like "Hide flag & type icons" and the theme switch appeared unresponsive
+             — reported as "settings button doesn't work in library view". Library has far fewer
+             settings than the Editor, so the drill-down's scroll-avoidance tradeoff wasn't
+             worth the discoverability cost here. -->
+        <div class="lib-menu" id="lib-view-menu">
+          <div class="grp-label">Library</div>
+          <button class="lib-btn opt-action" id="lib-pick" title="Choose root folder">${ic('library',15)}<span>Choose folder…</span></button>
+          <button class="lib-btn opt-action" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',15)}<span>Import from Google Photos…</span></button>
+          <button class="lib-btn opt-action" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">${ic('history',15)}<span>Recent folders…</span></button>
+          <button class="lib-btn opt-action" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',15)}<span>Get Info</span></button>
+          <button class="lib-btn opt-action" id="lib-expand" title="Full-window view — G">${ic('fit',15)}<span>Full-window view</span></button>
+          <button class="lib-btn opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C">${ic('compare',15)}<span>Compare view</span></button>
+          <hr>
+          <div class="grp-label">Thumbnails</div>
+          <div class="opt" id="lib-hideicons"><span>Hide flag &amp; type icons</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" id="lib-zerogap"><span>No spacing between photos</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" id="lib-showtitle"><span>Show title</span>${LIB_CHECK_SVG}</div>
+          <button class="lib-btn opt-action opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to)."><span>Real aspect ratio</span>${LIB_CHECK_SVG}</button>
+          <hr>
+          <div class="grp-label">Metadata overlay</div>
+          <select id="lib-metadisp" style="display:none">
+            <option value="off">Off</option>
+            <option value="hover">On hover</option>
+            <option value="always">Always on</option>
+          </select>
+          <div class="opt" data-metaval="off"><span>Off</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" data-metaval="always"><span>Always on</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" data-metaval="hover"><span>On hover</span>${LIB_CHECK_SVG}</div>
+          <hr>
+          <div class="grp-label">Panels</div>
+          <button class="lib-btn opt-action opt-toggle" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)"><span>Show sidebar</span>${LIB_CHECK_SVG}</button>
+          <hr>
+          <div class="grp-label">Appearance</div>
+          <div class="opt" data-theme="dark"><span>Dark</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" data-theme="light"><span>Light</span>${LIB_CHECK_SVG}</div>
         </div>
       </div>
       </div>
@@ -7538,40 +7523,6 @@
   // ── Gear / View menu popover (design transplant: Library View.html's #btn-view-menu) ──
   const viewMenuBtn = overlay.querySelector('#lib-view-menu-btn');
   const viewMenu = overlay.querySelector('#lib-view-menu');
-  // 2026-09-11 (gear submenu parity): two-column category drill-down, same shape as the
-  // Editor's own SETTINGS_CATS/settingsShowCat (chromasmith-22.html) — a fixed category list on
-  // the left, one pane visible at a time on the right. _libSettingsCat persists across opens (a
-  // plain closure var, not reset per-open) so reopening the menu lands back where it was left,
-  // matching the Editor's _settingsCat behaviour exactly.
-  const LIB_SETTINGS_CATS = [
-    { key: 'library', label: 'Library' },
-    { key: 'thumbnails', label: 'Thumbnails' },
-    { key: 'metadata', label: 'Metadata' },
-    { key: 'panels', label: 'Panels' },
-    { key: 'appearance', label: 'Appearance' },
-  ];
-  const LIB_SETTINGS_PANE_ID = { library: 'lib-cat-library', thumbnails: 'lib-cat-thumbnails',
-    metadata: 'lib-cat-metadata', panels: 'lib-cat-panels', appearance: 'lib-cat-appearance' };
-  let _libSettingsCat = 'library';
-  function libSettingsShowCat(key) {
-    if (!LIB_SETTINGS_PANE_ID[key]) return;
-    _libSettingsCat = key;
-    viewMenu.querySelectorAll('.fx-settings-cat').forEach((b) => b.classList.toggle('active', b.dataset.cat === key));
-    viewMenu.querySelectorAll('.fx-settings-pane').forEach((p) => p.classList.toggle('active', p.id === LIB_SETTINGS_PANE_ID[key]));
-  }
-  const libSettingsCatsHost = overlay.querySelector('#lib-settings-cats');
-  libSettingsCatsHost.innerHTML = LIB_SETTINGS_CATS.map((c) =>
-    `<button type="button" class="fx-settings-cat" data-cat="${c.key}">${c.label}</button>`).join('');
-  // Delegated, not per-button — same DETACH bug settingsShowCat() in chromasmith-22.html
-  // documents avoiding: rebuilding libSettingsCatsHost.innerHTML from inside a click handler on
-  // one of its own buttons would detach the very node the "click outside closes the menu"
-  // listener below is mid-check against. Nothing here rebuilds the cats on click (only
-  // libSettingsShowCat's classList.toggle calls run), but delegation keeps this file's pattern
-  // identical to the Editor's rather than relying on that never changing.
-  libSettingsCatsHost.addEventListener('click', (e) => {
-    const btn = e.target.closest('.fx-settings-cat'); if (btn) libSettingsShowCat(btn.dataset.cat);
-  });
-  libSettingsShowCat(_libSettingsCat);
   viewMenuBtn.onclick = (e) => { viewMenu.classList.toggle('open'); sortMenu.classList.remove('open'); e.stopPropagation(); };
   document.addEventListener('click', (e) => { if (!viewMenu.contains(e.target) && e.target !== viewMenuBtn) viewMenu.classList.remove('open'); });
   function syncViewMenuChecks() {
