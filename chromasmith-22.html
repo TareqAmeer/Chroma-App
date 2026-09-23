@@ -238,7 +238,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 /* FX TAB */
 .fx-layout{display:grid;grid-template-columns:640px 1fr;gap:16px;align-items:start}
 .fx-panel{column-count:2;column-gap:var(--sp-2)}
-.fx-ctrl{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:var(--sp-2);break-inside:avoid;margin-bottom:var(--sp-4);box-shadow:var(--lift-1)}
+.fx-ctrl{background:var(--sur);border-radius:var(--r);padding:var(--sp-2);break-inside:avoid;margin-bottom:var(--sp-4);}
 /* Tall cards (the 46+-preset Looks gallery) can hit a multicol layout edge case where a
    break-inside:avoid child still gets column-formatting-context box sizing quirks even at
    column-count:1, rendering its content outside the visible panel. column-span:all fully
@@ -1175,12 +1175,12 @@ body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:var(--sp-9) 
    position:absolute centering for the older body.fx-deskb-only flex layout, untouched. */
 body.deskx #fx-deskbar{display:grid;grid-template-columns:minmax(max-content,1fr) minmax(0,240px) minmax(max-content,1fr);align-items:center;column-gap:var(--deskbar-control-gap);
   position:fixed;top:0;left:0;right:0;z-index:var(--z-overlay);height:var(--deskx-topbar-h);
-  margin:0;padding:0 12px;border:none;border-bottom:1px solid var(--bdr-panel);border-radius:0;
+  margin:0;padding:0 12px;border:none;border-radius:0;
   background:var(--glass-bg);
   /* Only the bottom edge has real width, but with border-color unset on the other three sides
      it computes to currentColor, not var(--bdr-panel) — see the identical #lib-overlay fix and
      its comment (library-ui.js). Set explicitly so getComputedStyle().borderColor is uniform. */
-  border-color:var(--bdr-panel)}
+  border-color:transparent}
 /* The 84px LEFT clearance above is for macOS's overlaid traffic-light buttons (titleBarStyle:
    Overlay, tauri.macos.conf.json) — Windows uses a native title bar (decorations:true,
    tauri.windows.conf.json) with its own min/max/close already occupying that space, so reserving
@@ -1290,7 +1290,7 @@ body.deskx.rail-hidden{--rail-w:0px}
 body.deskx.rail-hidden #fx-toolrail{display:none}
 /* Foot of the rail: one button that narrows it a step (labels -> icons) and puts them back.
    margin-top:auto pins it to the bottom however many tools are above it. */
-body.deskx #fx-rail-foot{margin-top:auto;padding-top:6px;border-top:1px solid var(--bdr);flex:0 0 auto}
+body.deskx #fx-rail-foot{margin-top:auto;padding-top:6px;flex:0 0 auto}
 body.deskx #fx-rail-foot .fx-rail-btn{width:100%}
 body.deskx.rail-icons #fx-rail-foot .fx-rail-ic{transform:scaleX(-1)}
 /* Restore button for a HIDDEN rail — the panel needs no equivalent, because clicking any tool
@@ -1321,14 +1321,14 @@ body.deskx .fx-preview-col{grid-column:2;order:1;position:static;top:auto;align-
 /* Editor (Developer) View.dc.html's .toolpanel/.rail both use --surface-tile-1 (same as the
    topbar/statusbar's --bg), not --surface-tile-2/--sur — and carry no box-shadow at all. */
 body.deskx .fx-panel{grid-column:3;order:2;max-height:none;height:100%;columns:initial;
-  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;border-left:1px solid var(--bdr-panel);padding:22px var(--sp-2) var(--sp-2);box-sizing:border-box;
+  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:22px var(--sp-2) var(--sp-2);box-sizing:border-box;
   background:var(--bg);box-shadow:none;
   /* See #fx-deskbar's identical comment — only the left edge has real width. */
-  border-color:var(--bdr-panel)}
+  border-color:transparent}
 body.deskx #fx-toolrail{grid-column:4;order:3;position:static;top:auto;align-self:stretch;width:var(--rail-w);box-sizing:border-box;
   border:none;border-radius:0;padding:22px 4px 4px;overflow-y:auto;overflow-x:hidden;
   display:flex;flex-direction:column;gap:2px;background:var(--bg);box-shadow:none;
-  border-color:var(--bdr-panel)}
+  border-color:transparent}
 /* Icons keep tiny text labels (approved wireframe) — a narrow labelled rail, not icon-only.
    Widened 64 -> 72px so the label can sit at 10px instead of 9px (the smallest text anywhere in
    the app, and the reason 14 rail items all read as one grey smear). The active item now also
@@ -1346,7 +1346,7 @@ body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px var(--sp-2);
    image (indistinguishable from the app's own Borders FX), which is not what was asked for —
    "border" meant panel separation (library <-> editor), not framing the canvas. Back to
    edge-to-edge, matching DRK; only the library/editor divider (library-ui.js) is thicker now. */
-body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:var(--bg);border:none;border-radius:0;margin:0}
+body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:var(--bg);border:none;border-radius:0;margin:0;padding:var(--sp-6);box-sizing:border-box}
 body.deskx #fx-canvas{max-height:none}
 body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:var(--z-float);
   background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:8px 12px}
@@ -5063,7 +5063,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0923L';
+const BUILD='1.0923M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
