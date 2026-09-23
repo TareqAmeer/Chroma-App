@@ -1049,7 +1049,16 @@
     .lib-zoom-btn{display:flex;align-items:center;justify-content:center;flex:none;padding:4px;
       margin:-4px;border:none;background:none;color:inherit;cursor:pointer;border-radius:6px}
     .lib-zoom-btn:hover{background:var(--hover-tint)}
-    .lib-zoomrow input[type=range]{width:100%;min-width:50px;accent-color:var(--acc2)}
+    /* Match the Editor's square slider thumb; the default native thumb is round and can
+       differ between Chromium/Firefox. Keep a compact track for overflow mode below. */
+    .lib-zoomrow input[type=range]{width:100%;min-width:50px;height:20px;margin:0;accent-color:var(--acc2);
+      appearance:none;-webkit-appearance:none;background:transparent;cursor:pointer}
+    .lib-zoomrow input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:0;background:var(--bdr)}
+    .lib-zoomrow input[type=range]::-moz-range-track{height:3px;border-radius:0;background:var(--bdr)}
+    .lib-zoomrow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;
+      margin-top:-4.5px;border:1px solid var(--txt);border-radius:0;background:var(--sl-thumb,var(--txt))}
+    .lib-zoomrow input[type=range]::-moz-range-thumb{width:10px;height:10px;border:1px solid var(--txt);
+      border-radius:0;background:var(--sl-thumb,var(--txt))}
     #lib-overlay:not(.full) .lib-zoomrow{display:none}
     /* #8 squeeze: wireframe's own compact contract (Library View.html:61) hides the zoom row's
        icons under squeeze — the app never did, so .lib-zoomrow kept its full ~76px floor
@@ -1792,7 +1801,11 @@
     /* The side tracks are allowed to shrink, but their controls must never paint into the
        centre search track.  The live overflow classes below progressively remove optional
        labels/zoom affordances before the track gets tight enough to clip a button. */
-    body.deskx #lib-overlay #lib-top.lib-top-overflow1 .lib-zoomrow{display:none}
+    /* Preserve thumbnail zoom when the toolbar is tight. The slider can use less space before
+       the essential zoom control disappears; flags remain the first group folded away. */
+    body.deskx #lib-overlay #lib-top.lib-top-overflow1 .lib-zoomrow{min-width:0;gap:2px}
+    body.deskx #lib-overlay #lib-top.lib-top-overflow1 .lib-zoomrow input[type=range]{width:44px;min-width:0}
+    body.deskx #lib-overlay #lib-top.lib-top-overflow1 .lib-zoom-btn{display:none}
     body.deskx #lib-overlay #lib-top.lib-top-overflow1 .lib-flagrow{display:none}
     body.deskx #lib-overlay #lib-top.lib-top-overflow2 .lbl{display:none}
     body.deskx #lib-overlay #lib-top.lib-top-overflow2 .lib-pill,

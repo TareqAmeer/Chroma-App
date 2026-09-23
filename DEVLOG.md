@@ -11,3 +11,7 @@ Agent-generated changelog of completed features and architectural decisions.
 
 - CHR-140: Added persistent labels above every Library filter dropdown so filter purpose is visible before opening controls.
 - Updated `desktop/library-ui.js`; syntax and library-content lint pass. Full browser gates remain environment-blocked by desktop staging and Playwright launch permissions.
+
+- CHR-145: Styled the Library thumbnail zoom slider with a square thumb and consistent track across Chromium and Firefox.
+- CHR-146: Kept the Library zoom slider visible when the desktop toolbar enters its first overflow state, shrinking the track and removing only its step buttons and flags.
+- Updated `desktop/library-ui.js`; the cause was responsive overflow CSS hiding the whole zoom row. No automated tests were run.
