@@ -5062,7 +5062,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0923B';
+const BUILD='1.0923C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11664,6 +11664,7 @@ function appHSync(){
 // left/right button groups and the real image wrapper, then clamps the shift so the title can
 // never be pushed into either group — it recenters as far as genuine slack allows and no further.
 function fxSyncDeskbarTitleOffset(){
+  document.documentElement.style.setProperty('--db-title-off','0px');return; // CHR-127: title stays on the bar's own centre, never tracks the image/panels
   const bar=document.getElementById('fx-deskbar');
   const title=document.getElementById('fx-deskbar-title');
   const left=document.getElementById('fx-deskbar-left');
