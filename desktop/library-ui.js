@@ -643,6 +643,7 @@
   function displayTierEntry(entry) {
     const full = entry && entry.img;
     const fw = full && (full.naturalWidth || full.width), fh = full && (full.naturalHeight || full.height);
+    if (entry.fullImg) return { ...entry, exif: entry.exif ? { ...entry.exif } : entry.exif }; // already a working copy (loadFXImages by-path RAW)
     if (!fw || !fh || Math.max(fw, fh) <= 3000) return entry;
     const k = 2560 / Math.max(fw, fh);
     const c = document.createElement('canvas');
@@ -4273,6 +4274,26 @@
           // Never cache a low-res offline stand-in under the real path's key — a later ONLINE
           // open must not be served this reduced preview from imgCache.
           if (!offlinePreview) imgCacheStore(path, isRaw && !hdrPreview ? displayTierEntry(fxImages[0]) : fxImages[0], loadKey);
+          // First-ever open of a by-path RAW installs a working copy (loadFXImages); the full
+          // decoded frame is right there in memory — promote to it only when it's needed.
+          const opened = fxImages[0];
+          if (opened.fullImg && opened.img !== opened.fullImg) {
+            window.chromasmithFullQualityReady = false;
+            let done = null;
+            window.chromasmithEnsureFullQuality = () => {
+              if (state.openedPath !== path || fxImages[0] !== opened) return Promise.resolve();
+              if (!done) done = new Promise((resolve) => requestAnimationFrame(() => {
+                const t0 = performance.now();
+                opened.img = opened.fullImg; fxImg = opened.img;
+                try { autoDetectBW(opened.img); } catch (_) {}
+                updateWork(); renderPreview();
+                window.chromasmithFullQualityReady = true;
+                rawPerf('open-full-quality-promoted', path, { ms: performance.now() - t0, source: 'decoded-frame' });
+                resolve();
+              }));
+              return done;
+            };
+          }
         }
       }
       state.openedPath = path;
@@ -4347,7 +4368,8 @@
       scrollLibraryToPath(path);
       const card = overlay.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
       if (card) card.classList.add('sel');
-      if (fullAssetPath || fullCachedEntry) startFullPromotion(); else window.chromasmithFullQualityReady = true;
+      if (fullAssetPath || fullCachedEntry) startFullPromotion();
+      else if (!(fxImages[0] && fxImages[0].fullImg && fxImages[0].img !== fxImages[0].fullImg)) window.chromasmithFullQualityReady = true;
     } catch (e) {
       console.error('openInEditor', e);
       reveal.cancel(path);

@@ -5063,7 +5063,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0924H';
+const BUILD='1.0924I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10275,8 +10275,8 @@ async function loadRw2(file){
   if(window.__TAURI__&&typeof raw.refine==='function'){
     raw.refine().then(refined=>{
       if(!refined)return; // this decode didn't need refining (NR was off)
-      const stillCurrent=fxImages.some(it=>it.img===c);
-      if(!stillCurrent)return; // user switched photos while refine was running
+      const owner=fxImages.find(it=>it.img===c||it.fullImg===c);
+      if(!owner)return; // user switched photos while refine was running
       let rgba2;
       if(refined.rgba){rgba2=refined.data;}
       else{const rgb2=refined.data,ch2=refined.colors||3;rgba2=new Uint8ClampedArray(refined.width*refined.height*4);
@@ -10297,6 +10297,7 @@ async function loadRw2(file){
       }else{
         delete c._sceneLinear;delete c._sceneLinearPresent;
       }
+      if(owner.img!==c){const w=fxDisplayTierCanvas(c);if(w)owner.img=w;if(fxImages[fxCurIdx]===owner)fxImg=owner.img;} // working copy of the refined frame
       if(typeof updateWork==='function')updateWork();
       if(typeof renderPreview==='function')renderPreview();
       // The persistent decode cache for these refined pixels is written natively by decode_raw_v2 (desktop-native.js passes cachePath/recipeKey).
@@ -10408,6 +10409,17 @@ function installFXImages(entries,loadKey,opts){
   showExif(fxImages[0].exif||{});
   log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
 }
+// A ~2560px long-edge copy of a full-resolution canvas for fit-view editing; null if the source is
+// already about that size. naturalWidth/Height are defined so size checks treat it like an image.
+function fxDisplayTierCanvas(full){
+  const fw=full.naturalWidth||full.width,fh=full.naturalHeight||full.height;
+  if(!fw||!fh||Math.max(fw,fh)<=3000)return null;
+  const k=2560/Math.max(fw,fh),c=document.createElement('canvas');
+  c.width=Math.round(fw*k);c.height=Math.round(fh*k);
+  const x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(full,0,0,c.width,c.height);
+  Object.defineProperty(c,'naturalWidth',{value:c.width});Object.defineProperty(c,'naturalHeight',{value:c.height});
+  return c;
+}
 async function loadFXImages(fileList){
   window.__pm&&window.__pm('lfx-start');
   fxPhotoActivityInvalidate();
@@ -10486,7 +10498,11 @@ async function loadFXImages(fileList){
         // Attach lens/camera/iso at decode time (native shell) so the metadata panel shows them
         // on EVERY open path — library-ui's get_meta refines this later on library opens.
         const exif=meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):''}:undefined;
-        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif,fileSize:file.size}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
+        // Desktop Library RAW (by-path): install a ~2560px working copy — uploading/analysing/
+        // rendering the 24MP canvas cost ~1.2-1.6s per open — and keep the full frame as
+        // `fullImg` for on-demand promotion (library-ui.js's chromasmithEnsureFullQuality).
+        const work=file.__csSourcePath?fxDisplayTierCanvas(canvas):null;
+        entries.push({img:work||canvas,fullImg:work?canvas:undefined,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif,fileSize:file.size}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
         continue;
       }
       // EXR/HDR/TGA/DDS/QOI/FF/PNM*/JXL — desktop-only (still_decode.rs). RUST_ONLY_RE files are

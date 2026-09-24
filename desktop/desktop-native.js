@@ -440,9 +440,11 @@
   // installed from the Library's decode cache).
   window.chromasmithApplyFullCleanup = async function (it, sourcePath) {
     if (!it || !it.img) return { applied: false, reason: 'no item' };
-    let bytes;
-    if (it.rawFile) bytes = new Uint8Array(await it.rawFile.arrayBuffer());
-    else if (sourcePath) bytes = new Uint8Array(await invoke('read_file_bytes', { path: sourcePath }));
+    let bytes, byPath = null;
+    // Prefer letting Rust read the file (no 30MB IPC round trip) whenever there's a real path.
+    if (it.rawFile && it.rawFile.__csSourcePath) { byPath = it.rawFile.__csSourcePath; bytes = new Uint8Array(0); }
+    else if (it.rawFile) bytes = new Uint8Array(await it.rawFile.arrayBuffer());
+    else if (sourcePath) { byPath = sourcePath; bytes = new Uint8Array(0); }
     else return { applied: false, reason: 'no source' };
     let c = it.img;
     const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
@@ -469,6 +471,7 @@
       lensOverride: window.chromasmithLensOverride || '', lensOverrideFocal: window.chromasmithLensOverrideFocal || 0,
     };
     if (mode === 'lut') { req.lutKey = lutKey; req.wantExt = !!window.chromasmithHdrPreview; }
+    if (byPath) req.sourcePath = byPath;
     const buf = await framedInvoke('decode_raw_v2', req, bytes);
     const head = new Uint32Array(buf, 0, 6);
     const w = head[0], h = head[1];
