@@ -104,8 +104,8 @@ def process(path):
     Y = ndi.median_filter(Y, 3)
     H, W = Y.shape; S = min(H, W)
     blk = np.percentile(Y, 2)
-    global THR
     THR = blk + 0.16
+    globals()['THR'] = THR
     sat = rgb.max(-1) - rgb.min(-1)
     bright = ((Y > blk + 0.28) | (sat > 0.25)) & (Y < 0.999)
     maxd = int(0.16 * S)
@@ -117,12 +117,22 @@ def process(path):
         if photo is not None:
             if mk['none'][side]:
                 rep['flags'].append(f'side{side}: marked no frame'); continue
-            pv = side_view(photo, side)[:maxd]
+            pv = side_view(photo, side)[:int(0.45 * S)]
             has = pv.any(0)
             if has.mean() < 0.5: rep['flags'].append(f'side{side}: mark outside search band'); continue
             first = np.where(has, pv.argmax(0), 0).astype(float)
             mline = np.interp(np.arange(len(first)), np.flatnonzero(has), first[has])
-        r = analyse_side(Yv, maxd, mline)
+        md = maxd
+        if mline is not None:
+            md = int(min(0.45 * S, mline.max() + 0.03 * S))
+            # local frame black: a strip just outside the marked edge is known frame
+            dd = np.arange(md)[:, None]
+            strip = (dd < mline[None, :] - 0.004 * S) & (dd > mline[None, :] - 0.02 * S)
+            vals = Yv[:md][strip]
+            if vals.size: THR = float(np.percentile(vals, 50)) + 0.12
+        globals()['THR'] = THR
+        r = analyse_side(Yv, md, mline)
+        THR = blk + 0.16
         if r is None:
             rep['flags'].append(f'side{side}: no frame found'); continue
         line, T, dirty = r['line'], r['T'], r['dirty']
@@ -158,6 +168,28 @@ def process(path):
         cover = np.maximum(cover, unview(a, side))
         Y = np.where(unview(m, side) > 0, unview(Yv, side), Y)
         rep['sides'][side] = dict(thick=round(T / S, 4), patched=npatch, okfrac=round(r['okfrac'], 2))
+        # Straightened edge strip for the app: rows = depth from outer (line - T) to inner
+        # (line + margin), so the photo edge is horizontal. Columns span photo corner to
+        # photo corner plus T at each end, so the real corners come with the strip.
+        if photo is not None:
+            hv = side_view(photo, side).any(0); cols = np.flatnonzero(hv)
+        else:
+            cols = np.flatnonzero(~r['dirty']) if (~r['dirty']).any() else np.arange(len(line))
+        u0, u1 = int(max(0, cols[0] - T)), int(min(len(line) - 1, cols[-1] + T))
+        h = int(round(T + margin)); uu = np.arange(u0, u1 + 1)
+        rows = (line[uu][None, :] - T) + np.arange(h)[:, None]
+        cc = np.broadcast_to(uu[None, :], rows.shape)
+        tv = np.clip((Yv - blk) / 0.35, 0, 1)
+        st_t = ndi.map_coordinates(tv, [rows, cc], order=1, mode='nearest')
+        st_a = ndi.map_coordinates(a, [rows, cc], order=1, mode='constant')
+        os.makedirs(os.path.join(OUT, 'pieces'), exist_ok=True)
+        pn = f'{name}__s{side}.png'
+        Ti = int(round(T))
+        solid = float(st_a[:max(1, Ti - 1)].mean()) if Ti > 1 else 0
+        if solid < 0.97:   # holes/gaps left inside the black band -> unusable strip
+            rep['flags'].append(f'side{side}: strip has gaps in the black ({solid:.2f})'); rep['sides'][side]['bad'] = True
+        Image.fromarray((np.dstack([st_t, st_t, st_t, st_a]) * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, 'pieces', pn))
+        rep['sides'][side].update(piece=pn, T=int(round(T)), h=h, corner=int(round(min(T, cols[0] - u0))))
     tex = np.clip((Y - blk) / 0.35, 0, 1)
     out = np.dstack([tex, tex, tex, cover])
     Image.fromarray((out * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, name + '.png'))

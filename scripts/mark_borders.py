@@ -63,6 +63,89 @@ addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('next'
 boot();
 </script>'''
 
+SAMPLES = r"""<!doctype html><meta charset=utf-8><title>Border Samples</title>
+<style>
+body{margin:0;background:#1b1a19;color:#e8e4dc;font:14px system-ui;padding:14px}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;position:sticky;top:0;background:#1b1a19;padding:6px 0;z-index:2}
+button,select,input{font:inherit;background:#2c2a27;color:inherit;border:1px solid #444;border-radius:6px;padding:5px 9px;cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px}
+.card{display:grid;gap:6px;align-content:start}
+.card canvas{width:100%;height:auto;display:block}
+.v.on[data-v=y]{background:#2f7a4a}.v.on[data-v=n]{background:#a3402e}
+h2{font-size:15px;margin:22px 0 8px}
+small{opacity:.65}
+</style>
+<div class=bar>
+<select id=asp><option value=1.5>3:2</option><option value=0.8 selected>4:5</option><option value=1>1:1</option><option value=1.778>16:9</option><option value=0.5625>9:16</option><option value=2.35>2.35:1</option><option value=0.667>2:3</option></select>
+<label>Thickness <input id=th type=range min=1 max=8 step=.1 value=3></label>
+<label>Black <input id=tone type=color value=#0a0a0b></label>
+<select id=paper><option value="#f4f2ec">Paper: white</option><option value="#ebe3d3">Paper: cream</option><option value="">No paper</option></select>
+<label><input id=grain type=checkbox checked> Grain on top</label>
+<label>Photo <input id=file type=file accept="image/*"></label>
+<button id=shuf>Shuffle all</button><small id=tally></small></div>
+<h2>Mixed: pieces from every scan you haven't voted no on</h2>
+<div class=grid id=mix></div>
+<h2>One card per scan: vote on each source</h2>
+<div class=grid id=per></div>
+<script>
+let R,strips=[],photo=null,votes={},seedBase=1;
+const $=id=>document.getElementById(id);
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+async function boot(){const r=await (await fetch('/report')).json();votes=r.votes||{};
+ const ps=[];for(const f of r.reps)for(const [sd,v] of Object.entries(f.sides||{}))if(v.piece&&!v.bad)ps.push(new Promise(ok=>{const im=new Image();im.onload=()=>ok({scan:f.file,side:+sd,img:im,T:v.T,h:v.h,corner:v.corner});im.onerror=()=>ok(null);im.src='/pieces/'+v.piece}));
+ strips=(await Promise.all(ps)).filter(Boolean);build()}
+function tinted(st,tone){const c=document.createElement('canvas');c.width=st.img.width;c.height=st.img.height;const x=c.getContext('2d');x.drawImage(st.img,0,0);
+ const d=x.getImageData(0,0,c.width,c.height),p=d.data,t=[1,3,5].map(i=>parseInt(tone.substr(i,2),16));
+ for(let i=0;i<p.length;i+=4){const v=p[i]/255;p[i]=Math.min(255,t[0]+v*90);p[i+1]=Math.min(255,t[1]+v*90);p[i+2]=Math.min(255,t[2]+v*90)}x.putImageData(d,0,0);return c}
+// build one side of length L (px) at thickness t (px) from a strip: real ends (corners) kept,
+// middle filled with random real sections joined with short cross-fades. Never stretched.
+function sideCanvas(st,L,t,R){const k=t/st.T,sw=st.img.width,H=Math.round(st.h*k),src=tinted(st,$('tone').value);
+ const c=document.createElement('canvas');c.width=L;c.height=H;const x=c.getContext('2d');
+ const end=Math.min(sw*k*.25,Math.max(st.corner*k*1.6,t*2.5)),endS=end/k;
+ const flip=R()<.5;x.save();if(flip){x.translate(L,0);x.scale(-1,1)}
+ const midS0=endS,midS1=sw-endS,midLen=midS1-midS0;const fade=Math.max(8,t*1.2);
+ let pos=end-fade;const segMax=Math.max(midLen*.6,40);
+ const tmp=document.createElement('canvas');tmp.height=H;const tx=tmp.getContext('2d');
+ while(pos<L-end){const segS=Math.min(segMax,midLen)*(0.5+R()*.5),s0=midS0+R()*(midLen-segS),w=Math.round(segS*k);
+  tmp.width=w;tx.clearRect(0,0,w,H);tx.drawImage(src,s0,0,segS,st.h,0,0,w,H);
+  tx.globalCompositeOperation='destination-in';const g=tx.createLinearGradient(0,0,w,0),f=Math.min(.45,fade/w);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(f,'#000');g.addColorStop(1-f,'#000');g.addColorStop(1,'rgba(0,0,0,0)');tx.fillStyle=g;tx.fillRect(0,0,w,H);tx.globalCompositeOperation='source-over';
+  x.drawImage(tmp,Math.round(pos),0);pos+=w-fade}
+ // real ends (with their corners) on top, feathered on the inner side only
+ for(const [s0,dx] of [[0,0],[sw-endS,L-end]]){const w=Math.round(end);tmp.width=w;tx.drawImage(src,s0,0,endS,st.h,0,0,w,H);
+  tx.globalCompositeOperation='destination-in';const g=tx.createLinearGradient(0,0,w,0),f=Math.min(.4,fade/w);
+  if(dx===0){g.addColorStop(0,'#000');g.addColorStop(1-f,'#000');g.addColorStop(1,'rgba(0,0,0,0)')}else{g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(f,'#000');g.addColorStop(1,'#000')}
+  tx.fillStyle=g;tx.fillRect(0,0,w,H);tx.globalCompositeOperation='source-over';x.drawImage(tmp,Math.round(dx),0)}
+ x.restore();return c}
+function scene(W,H){const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+ if(photo){const s=Math.max(W/photo.width,H/photo.height);x.drawImage(photo,(W-photo.width*s)/2,(H-photo.height*s)/2,photo.width*s,photo.height*s);return c}
+ const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#9aa6ae');g.addColorStop(.5,'#c8bfa9');g.addColorStop(.51,'#5f6d6b');g.addColorStop(1,'#2d3634');x.fillStyle=g;x.fillRect(0,0,W,H);
+ x.fillStyle='#b8392a';x.beginPath();x.moveTo(W*.2,H*.6);x.lineTo(W*.3,H*.65);x.lineTo(W*.2,H*.7);x.fill();return c}
+function render(cv,pool,seed){const R=rng(seed),asp=+$('asp').value,base=1000,W=asp>=1?base:Math.round(base*asp),H=asp>=1?Math.round(base/asp):base;
+ const pm=$('paper').value?Math.round(Math.min(W,H)*.05):0;cv.width=W+2*pm;cv.height=H+2*pm;const x=cv.getContext('2d');
+ x.fillStyle=$('paper').value||'#000';x.fillRect(0,0,cv.width,cv.height);x.drawImage(scene(W,H),pm,pm);
+ const t=Math.min(W,H)*$('th').value/100;
+ const sides=[[0,W],[1,H],[2,W],[3,H]];
+ for(const [s,L] of sides){const st=pool[Math.floor(R()*pool.length)];const sc=sideCanvas(st,L,t,R);
+  x.save();x.translate(pm,pm);
+  if(s===0){}else if(s===1){x.translate(W,0);x.rotate(Math.PI/2)}else if(s===2){x.translate(W,H);x.rotate(Math.PI)}else{x.translate(0,H);x.rotate(-Math.PI/2)}
+  x.drawImage(sc,0,0);x.restore()}
+ if($('grain').checked){const g=x.getImageData(pm,pm,W,H),p=g.data;for(let i=0;i<p.length;i+=4){const n=(R()-.5)*16;p[i]+=n;p[i+1]+=n;p[i+2]+=n}x.putImageData(g,pm,pm)}}
+function card(host,pool,label,key){const d=document.createElement('div');d.className='card';const cv=document.createElement('canvas');d.appendChild(cv);
+ let seed=seedBase*7919+host.children.length*104729;const draw=()=>render(cv,pool,seed);draw();
+ const row=document.createElement('div');row.style.cssText='display:flex;gap:6px;align-items:center;flex-wrap:wrap';
+ const b=document.createElement('button');b.textContent='Shuffle';b.onclick=()=>{seed=Math.random()*1e9|0;draw()};row.appendChild(b);
+ if(key){for(const [v,t] of [['y','Yes'],['n','No']]){const vb=document.createElement('button');vb.className='v'+(votes[key]===v?' on':'');vb.dataset.v=v;vb.textContent=t;
+  vb.onclick=async()=>{votes[key]=votes[key]===v?null:v;await fetch('/vote',{method:'POST',body:JSON.stringify(votes)});build()};row.appendChild(vb)}}
+ const l=document.createElement('small');l.textContent=label;row.appendChild(l);d.appendChild(row);host.appendChild(d)}
+function build(){$('mix').innerHTML='';$('per').innerHTML='';const ok=strips.filter(s=>votes[s.scan]!=='n');
+ if(ok.length)for(let i=0;i<6;i++)card($('mix'),ok,'');
+ const scans=[...new Set(strips.map(s=>s.scan))];scans.forEach(sc=>card($('per'),strips.filter(s=>s.scan===sc),sc.slice(0,38),sc));
+ const y=scans.filter(s=>votes[s]==='y').length,n=scans.filter(s=>votes[s]==='n').length;$('tally').textContent=`${scans.length} scans · ${y} yes · ${n} no`}
+['asp','th','tone','paper','grain'].forEach(id=>$(id).onchange=build);$('shuf').onclick=()=>{seedBase=Math.random()*1e9|0;build()};
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;const i=new Image();i.onload=()=>{photo=i;build()};i.src=URL.createObjectURL(f)};
+boot();
+</script>"""
+
 def load_marks():
     try: return json.load(open(MARKS))
     except Exception: return {}
@@ -73,6 +156,14 @@ class H(BaseHTTPRequestHandler):
         self.send_response(200); self.send_header('Content-Type', ct); self.send_header('Content-Length', len(body)); self.end_headers(); self.wfile.write(body)
     def do_GET(self):
         if self.path == '/': return self.send(PAGE.encode(), 'text/html')
+        if self.path == '/samples': return self.send(SAMPLES.encode(), 'text/html')
+        if self.path == '/report':
+            try: votes = json.load(open(os.path.join(OUT, 'votes.json')))
+            except Exception: votes = {}
+            return self.send(json.dumps(dict(reps=json.load(open(os.path.join(OUT, 'report.json'))), votes=votes)).encode(), 'application/json')
+        if self.path.startswith('/pieces/'):
+            f = os.path.join(OUT, 'pieces', os.path.basename(self.path[8:]))
+            return self.send(open(f, 'rb').read(), 'image/png') if os.path.exists(f) else self.send_error(404)
         if self.path == '/api': return self.send(json.dumps(dict(files=FILES, marks=load_marks())).encode(), 'application/json')
         if self.path.startswith('/img?f='):
             from urllib.parse import unquote
@@ -83,6 +174,9 @@ class H(BaseHTTPRequestHandler):
             return self.send(_cache[f], 'image/jpeg')
         self.send_error(404)
     def do_POST(self):
+        if self.path == '/vote':
+            open(os.path.join(OUT, 'votes.json'), 'wb').write(self.rfile.read(int(self.headers['Content-Length'])))
+            return self.send(b'ok', 'text/plain')
         d = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         m = load_marks(); m[d['f']] = d['m']; json.dump(m, open(MARKS, 'w'), indent=1)
         self.send(b'ok', 'text/plain')
