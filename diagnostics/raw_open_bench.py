@@ -43,10 +43,16 @@ OPEN_JS = """
   const log0 = () => (window.__rawPerfLog || []);
   const fl = log0().find(e => e.event === 'open-fully-loaded');
   const needsPromo = fl && fl.source !== 'decode' && log0().some(e => e.event === 'open-cache-display-asset');
-  while (needsPromo && !done() && performance.now() < deadline) await new Promise(r => setTimeout(r, 50));
+  // On-demand promotion (screen-sized editing): nothing promotes at fit, so "full" = what the
+  // first edit/zoom/export would wait for — requested right after the open settles.
+  let promoteMs = null;
+  if (needsPromo && typeof window.chromasmithEnsureFullQuality === 'function') {{
+    const p0 = performance.now(); await window.chromasmithEnsureFullQuality(); promoteMs = performance.now() - p0;
+  }}
+  while (needsPromo && promoteMs === null && !done() && performance.now() < deadline) await new Promise(r => setTimeout(r, 50));
   const fullMs = performance.now() - t0;
   const ev = log0().filter(e => !e.path || e.path === p).map(e => ({{event: e.event, at: Math.round(e.t - t0), ms: e.ms != null ? Math.round(e.ms) : undefined, source: e.source}}));
-  return JSON.stringify({{ok:true, openMs, fullMs: needsPromo ? fullMs : openMs, source: fl && fl.source, key: window.chromasmithDecodeRecipeKey || '', events: ev}});
+  return JSON.stringify({{ok:true, openMs, fullMs: needsPromo ? fullMs : openMs, promoteMs, zoom: window.fxZoom, source: fl && fl.source, key: window.chromasmithDecodeRecipeKey || '', events: ev}});
 }})()
 """
 
@@ -184,7 +190,7 @@ def main():
         for p in picks:
             r = open_photo(token, p); r['path'] = p; res['relaunch'].append(r)
             rss_peak = max(rss_peak, app_rss_mb() or 0)
-            rb.log(f'relaunch {os.path.basename(p)}: open {r["openMs"]:.0f}ms full {r["fullMs"]:.0f}ms src={r["source"]}')
+            rb.log(f'relaunch {os.path.basename(p)}: open {r["openMs"]:.0f}ms full {r["fullMs"]:.0f}ms (on-demand promote {r.get("promoteMs") or 0:.0f}ms) zoom={r.get("zoom")} src={r["source"]}')
         res['rss_peak_mb'] = rss_peak
         res['swap_delta_mb'] = (swap_used_mb() or 0) - (swap0 or 0)
 

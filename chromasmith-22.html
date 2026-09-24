@@ -5063,7 +5063,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0924G';
+const BUILD='1.0924H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10379,7 +10379,8 @@ function installFXImages(entries,loadKey,opts){
   // (library-ui.js's applyUISnapshot, if this photo has a saved edit) runs AFTER installFXImages
   // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
   // not back to whatever was last saved.
-  _resetZoom(); fxHistory=[{j:JSON.stringify(getUISnapshot()),rasters:[],label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush (rasters:[] matches fxHistoryPush's own shape — a later push whose snapshot happens to equal 'Start' byte-for-byte used to crash reading .length off a missing key here)
+  _resetZoom(); if(isNewPhoto&&fxImages[0].kind!=='video'){fxZoom=0.9;_applyZoom();} // new photos open at 90% (a margin around the frame); double-click still fits to 100%
+  fxHistory=[{j:JSON.stringify(getUISnapshot()),rasters:[],label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush (rasters:[] matches fxHistoryPush's own shape — a later push whose snapshot happens to equal 'Start' byte-for-byte used to crash reading .length off a missing key here)
   if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled(); // fresh photo: fxHistIdx=0 -> Undo starts disabled, Redo too
   // Masks are PER-PHOTO (unlike the rest of fxState, which is intentionally batch-shared —
   // see fxSelectImage's own comment on broadcastGeom): fxState.masks now always points at the
@@ -15539,6 +15540,7 @@ function snapDiffLabel(prevSnap,nextSnap){
 // slider-only session therefore keeps ONE raster shared across all 20 entries.
 function fxHistoryPush(){
   if(_fxHistLocked)return;
+  fxEnsureFullQuality(); // first real edit → full-resolution source (see fxEnsureFullQuality)
   const snap=getUISnapshot({skipRaster:true});
   const j=JSON.stringify(snap);
   const rasters=fxState.masks.map(m=>(m.px&&m.px.length)?m.px:null);
@@ -16056,11 +16058,16 @@ function _applyZoom(smooth){
   // Above 100%, pan remains deliberately unconstrained: editors use this to let people
   // inspect and reposition any part of the enlarged photo, including beyond the frame edge.
   zw.style.transform=`scale(${fxZoom}) translate(${baseX+fxPanX}px,${baseY+fxPanY}px)`;
+  if(fxZoom>1)fxEnsureFullQuality();
   _updateZoomReadout();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
   if(typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
 }
 function _resetZoom(smooth){fxZoom=1;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
+// Desktop Library RAW opens edit on the 2560px display tier until full resolution is actually
+// needed (library-ui.js's chromasmithEnsureFullQuality): zoom past fit, loupe, first edit, crop,
+// export. No-op everywhere else (browser, non-RAW, already promoted).
+function fxEnsureFullQuality(){return (typeof window.chromasmithEnsureFullQuality==='function')?window.chromasmithEnsureFullQuality():Promise.resolve();}
 function _updateZoomReadout(){
   const pct=document.getElementById('fx-zoom-pct');if(!pct)return;
   pct.textContent=fxLoupe?'1:1':Math.round(fxZoom*100)+'%';
@@ -16097,6 +16104,7 @@ window.addEventListener('mouseup',()=>{const z=document.getElementById('fx-zoom-
 function toggleLoupe(){
   if(!fxWork){log('Load an image first','warn');return;}
   fxLoupe=!fxLoupe;
+  if(fxLoupe)fxEnsureFullQuality();
   const btn=document.getElementById('btn-loupe');if(btn)btn.classList.toggle('on',fxLoupe);
   if(fxLoupe){
     // Carry the current CSS-zoom view-centre into the loupe instead of snapping to the
@@ -18622,6 +18630,7 @@ function cropDefaultForAR(){
 }
 function cropEnter(){
   const it=curItem();if(!it){log('Load an image first','warn');return;}
+  fxEnsureFullQuality();
   cropMode=true;
   const g=it.geom||(it.geom=defGeom()),saved=g.crop;
   g.crop=null;cropBase=geomCanvas(it);g.crop=saved; // base = geometry WITHOUT user crop
@@ -19104,6 +19113,8 @@ async function chromasmithSaveToLightroom(){
 }
 async function exportFX(){
   if(!fxImages.length){log('No image loaded','warn');return}
+  await fxEnsureFullQuality(); // never export the display-tier stand-in
+  if(window.chromasmithFullQualityReady===false){toast('Full-resolution photo could not be loaded — export cancelled. Reopen the photo and try again.',false);return}
   const scope=fxImages.length>1?fxExportScope:'all';
   const items=scope==='current'?[fxImages[fxCurIdx]]:fxImages;
   // Video export is a completely different pipeline (VideoEncoder/mux vs toBlob) — mixing

@@ -637,9 +637,24 @@
       if (imgCacheSize() <= IMG_CACHE_BUDGET) break;
     }
   }
+  // Reopen source for a RAW decoded this session: a ~2560px copy to install (a 24MP canvas cost
+  // ~1.5-2s to upload + analyse + render on every reopen) plus the full frame for on-demand
+  // promotion (openInEditor's fullCachedEntry). Same pixels, just a screen-sized working copy.
+  function displayTierEntry(entry) {
+    const full = entry && entry.img;
+    const fw = full && (full.naturalWidth || full.width), fh = full && (full.naturalHeight || full.height);
+    if (!fw || !fh || Math.max(fw, fh) <= 3000) return entry;
+    const k = 2560 / Math.max(fw, fh);
+    const c = document.createElement('canvas');
+    c.width = Math.round(fw * k); c.height = Math.round(fh * k);
+    const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(full, 0, 0, c.width, c.height);
+    Object.defineProperty(c, 'naturalWidth', { value: c.width }); Object.defineProperty(c, 'naturalHeight', { value: c.height });
+    return { ...entry, img: c, fullImg: full, exif: entry.exif ? { ...entry.exif } : entry.exif };
+  }
   function imgCacheStore(path, entry, loadKey) {
-    const c = entry.img;
-    const size = (c && c.width && c.height) ? c.width * c.height * 4 : 32 * 1024 * 1024; // heuristic fallback
+    const c = entry.img, f = entry.fullImg;
+    const size = ((c && c.width && c.height) ? c.width * c.height * 4 : 32 * 1024 * 1024) // heuristic fallback
+      + ((f && f.width && f.height) ? f.width * f.height * 4 : 0);
     imgCache.set(path, { entry, size, ts: Date.now(), loadKey });
     imgCacheEvict();
   }
@@ -4013,6 +4028,7 @@
     if (isRaw && !hdrPreview) {
       displayOverlayPromise = showDisplayProvisional(path, recipeKey);
     }
+    window.chromasmithEnsureFullQuality = null; // the previous photo's promotion hook must not outlive it
     let diskCached = null;
     let fullAssetPath = null;
     let fullCachedEntry = null;
@@ -4025,7 +4041,6 @@
       if (fullPromotionStarted || (!fullAssetPath && !fullCachedEntry) || !previewEntry || previewEntry.img.naturalWidth >= 4000) return;
       fullPromotionStarted = true;
       window.chromasmithFullQualityReady = false;
-      const exportBtn = document.getElementById('btn-fx-export'); if (exportBtn) exportBtn.disabled = true;
       const promoteT0 = performance.now();
       const run = async () => {
         try {
@@ -4060,35 +4075,19 @@
           });
         } catch (e) { rawPerf('open-full-quality-promotion-failed', path, { error: String(e) }); }
       };
-      // CHR-120 (b): CORRECTION to this comment's original claim — a from-scratch, isolated
-      // measurement of get_cached_raw_decode (immediately after caching, nothing else in
-      // flight) took 350-700ms for a 96MB buffer, not ~20s; a clean single cache+open cycle in
-      // a fresh app process reached full quality in ~7.4s total, not ~20s+. The original ~20s
-      // (and in one case a promotion that never resolved at all despite the Rust side finishing
-      // in under 100ms server-side) only showed up in a long-lived test session that had
-      // accumulated many repeated large-RAW decodes — a real but NOT root-caused anomaly, not a
-      // structural per-open cost. Do not cite "~20s" as a settled number for this path.
-      //
-      // The defer-on-navigate behavior below still stands on its own evidence, independent of
-      // that retracted number: during rapid arrow-key culling, openInEditorInner releases its
-      // own busy-lock before this promotion finishes, so a fast next click starts a new open
-      // while the previous photo's promotion is still running in the background — confirmed
-      // live, culling through 4 cached photos (~200ms apart) fired 4 real full-decode fetches
-      // before this change and only 1 after it. That's a real, measured reduction in wasted
-      // background work regardless of how expensive any single promotion turns out to be.
-      // Wait for ~500ms of the user actually staying on this photo before paying that cost at
-      // all; if they've moved on by then, skip it outright — the interactive JPEG display proxy
-      // (CHR-120 (a), independently and repeatedly confirmed fast) is what culling actually
-      // looks at.
-      const _fullPromoToken = path;
-      setTimeout(() => {
-        if (state.openedPath !== _fullPromoToken) {
-          rawPerf('open-full-quality-skipped-navigated-away', path);
-          fullPromotionStarted = false; // let a later reopen of this same photo retry cleanly
-          return;
-        }
-        run();
-      }, 500);
+      // Screen-sized editing (the Lightroom/darktable model): fit view — and this app's "100%"
+      // IS fit, not 1:1 — never needs the 24MP frame, and promoting it cost ~2.5-3.5s of
+      // main-thread PNG decode + GPU upload + re-render on every cache-hit open (measured,
+      // raw_open_bench). So the photo stays on the 2560px display tier until something actually
+      // needs full resolution: zooming past fit, the 1:1 loupe, the first edit, crop, or export
+      // (chromasmith-22.html calls window.chromasmithEnsureFullQuality at each of those). Export
+      // awaits it, so an export is always full resolution.
+      let promo = null;
+      window.chromasmithEnsureFullQuality = () => {
+        if (state.openedPath !== path) return Promise.resolve();
+        if (!promo) { rawPerf('open-full-quality-requested', path, { ms: performance.now() - promoteT0 }); promo = run(); }
+        return promo;
+      };
     };
     if (cached && isRaw && !hdrPreview && cached.entry.img.naturalWidth < 4000) {
       try { fullAssetPath = await invoke('get_decode_cache_path', { path, recipeKey }); } catch (_) {}
@@ -4096,6 +4095,9 @@
     if (cached && isRaw && !hdrPreview && cached.entry.img.naturalWidth >= 4000) {
       fullCachedEntry = cached.entry;
     }
+    // A decoded-this-session RAW is kept at the display tier with its full frame alongside
+    // (displayTierEntry): reopen installs the small one, the full one is the on-demand promotion.
+    if (cached && isRaw && !hdrPreview && cached.entry.fullImg) fullCachedEntry = { img: cached.entry.fullImg };
     if (isRaw && !hdrPreview && (!cached || cached.entry.img.naturalWidth >= 4000)) {
       // The display tier is the first editor source. It is already prepared by batch caching,
       // so the first paint never waits for the 24MP GPU texture/FBO chain. Full quality is
@@ -4188,7 +4190,9 @@
         cached.ts = Date.now(); // touch for LRU
         deferEditorRender = false;
         deferredDisplayRender = false;
-        installFXImages([cached.entry], cached.loadKey, { deferRender: false });
+        // A copy: promotion swaps the ACTIVE entry's img to full resolution, and the cached
+        // entry must stay at the display tier so the next reopen is fast too.
+        installFXImages([{ ...cached.entry, exif: { ...(cached.entry.exif || {}) } }], cached.loadKey, { deferRender: false });
       } else {
         // N1a piece 1: a real decode source for a cached-only (offline) photo. There is no
         // full-resolution offline cache — building one would be a separate, much bigger
@@ -4268,7 +4272,7 @@
           const loadKey = `${baseName(path)}:${byteLen}:0`; // must match loadFXImages' own key formula
           // Never cache a low-res offline stand-in under the real path's key — a later ONLINE
           // open must not be served this reduced preview from imgCache.
-          if (!offlinePreview) imgCacheStore(path, fxImages[0], loadKey);
+          if (!offlinePreview) imgCacheStore(path, isRaw && !hdrPreview ? displayTierEntry(fxImages[0]) : fxImages[0], loadKey);
         }
       }
       state.openedPath = path;
