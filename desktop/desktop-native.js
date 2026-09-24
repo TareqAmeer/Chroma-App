@@ -198,8 +198,18 @@
       // unquantized companion buffer alongside the normal RGBA8 body, so a real blown
       // highlight's headroom survives instead of being clamped away before this IPC round trip.
       const wantHdrPreview = !!window.chromasmithHdrPreview;
+      // Persistent decode cache: library-ui.js's openInEditor arms a one-shot target
+      // ({path, recipeKey, size}) right before loadFXImages for a real on-disk RAW (never an
+      // offline/hq-offline stand-in). Rust writes the cache from the FINAL pixels itself, so a
+      // single-pass open (no refine) is cached too — it used to be written only from the refine
+      // callback, which the single-pass chroma tier never reaches, so nothing was cached at all.
+      // The size check keeps a dropped file (Match/Collage) from ever using a stale target.
+      const pt = window.__chromasmithPersistTarget;
+      window.__chromasmithPersistTarget = null;
+      this._persist = (pt && pt.size === bytes.byteLength) ? { cachePath: pt.path, recipeKey: pt.recipeKey } : null;
+      const persistNow = (this._persist && !this._needsRefine) ? this._persist : {};
       window.__pm('native-fast-invoke');
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, fast: !single } : { mode, ...extra, fast: !single }, bytes);
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...persistNow, fast: !single } : { mode, ...extra, ...persistNow, fast: !single }, bytes);
       _lap('decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at');
       // 4th header word: whether Rust actually applied the requested LUT. Rust re-checks the
       // camera make independently (main.rs's KNOWN_DCP_MAKES) as a backstop in case this
@@ -255,7 +265,8 @@
       const { _mode: mode, _lutKey: lutKey, _extra: extra, _bytes: bytes } = this;
       const wantHdrPreview = !!window.chromasmithHdrPreview;
       window.__pm('native-refine-invoke');
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, fast: false } : { mode, ...extra, fast: false }, bytes);
+      const persist = this._persist || {};
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...persist, fast: false } : { mode, ...extra, ...persist, fast: false }, bytes);
       window.__pm('native-refine-returned');
       const head = new Uint32Array(buf, 0, 6);
       const w = head[0], h = head[1];

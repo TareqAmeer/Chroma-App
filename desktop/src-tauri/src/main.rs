@@ -12,6 +12,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::path::{Path, PathBuf};
 use std::io::Cursor;
+use image::ImageEncoder;
 #[cfg(target_os = "macos")]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
@@ -198,6 +199,65 @@ struct RawEditorCacheEntry {
     rgba: std::sync::Arc<Vec<u8>>,
 }
 static RAW_EDITOR_CACHE: Mutex<Vec<RawEditorCacheEntry>> = Mutex::new(Vec::new());
+
+/// Inserts a developed frame into RAW_EDITOR_CACHE (FIFO, 3 entries).
+fn raw_editor_cache_insert(path: &str, recipe_key: &str, mtime: u64, size: u64, width: u32, height: u32,
+                           rgba: std::sync::Arc<Vec<u8>>) {
+    if let Ok(mut guard) = RAW_EDITOR_CACHE.lock() {
+        guard.retain(|entry| !(entry.path == path && entry.recipe_key == recipe_key));
+        guard.push(RawEditorCacheEntry {
+            path: path.to_string(), recipe_key: recipe_key.to_string(), mtime, size, width, height, rgba,
+        });
+        const MAX_IN_PROCESS_RAW_CACHES: usize = 3;
+        if guard.len() > MAX_IN_PROCESS_RAW_CACHES { guard.remove(0); }
+    }
+}
+
+/// Persists a final developed RAW frame: the lossless PNG the next launch reopens from, and the
+/// 2560px display proxy the Library/editor show first. Shared by the batch action
+/// (cache_raw_decode) and every interactive open (decode_raw_v2 with cachePath) so the two can
+/// never write different shapes or keys.
+fn persist_decoded_rgba(path: &str, recipe_key: &str, width: u32, height: u32, rgba: &[u8],
+                        file_name: &str, stage_t: &mut std::time::Instant) -> Result<(), String> {
+    let mut out = Cursor::new(Vec::new());
+    image::codecs::png::PngEncoder::new(&mut out)
+        .write_image(rgba, width, height, image::ExtendedColorType::Rgba8)
+        .map_err(|e| format!("encode decode cache: {e}"))?;
+    diag::stage("cache", file_name, "png_encode", stage_t);
+    library::write_decode_cache_file(path, recipe_key, out.get_ref())?;
+    diag::stage("cache", file_name, "png_write", stage_t);
+    library::write_display_cache_from_rgba(path, recipe_key, width, height, rgba, 2560, file_name, stage_t)?;
+    Ok(())
+}
+
+/// One background worker for writing developed frames to the persistent decode cache after an
+/// interactive open. Bounded on purpose: at most one write in flight plus one queued, and a
+/// newer request than that is simply dropped (the cache is best-effort — the next open of that
+/// photo decodes and tries again). Each job holds a ~96MB frame, so an unbounded queue during
+/// fast culling would be exactly the memory growth an 8GB Mac can't afford.
+static PERSIST_POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
+static PERSIST_PENDING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+fn persist_in_background(path: String, recipe_key: String, width: u32, height: u32, rgba: std::sync::Arc<Vec<u8>>) {
+    use std::sync::atomic::Ordering;
+    if PERSIST_PENDING.fetch_add(1, Ordering::SeqCst) >= 2 {
+        PERSIST_PENDING.fetch_sub(1, Ordering::SeqCst);
+        return;
+    }
+    let pool = PERSIST_POOL.get_or_init(|| rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .thread_name(|_| "cs-decode-persist".into())
+        .start_handler(|_| bgwork::mark_current_thread_background())
+        .build().ok());
+    let job = move || {
+        let file_name = Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?").to_string();
+        let mut stage_t = std::time::Instant::now();
+        if let Err(e) = persist_decoded_rgba(&path, &recipe_key, width, height, &rgba, &file_name, &mut stage_t) {
+            eprintln!("persist decode cache for {file_name}: {e}");
+        }
+        PERSIST_PENDING.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    };
+    match pool { Some(p) => p.spawn(job), None => { PERSIST_PENDING.fetch_sub(1, Ordering::SeqCst); } }
+}
 
 fn parse_framed(body: &tauri::ipc::InvokeBody) -> Result<(serde_json::Value, &[u8]), String> {
     let tauri::ipc::InvokeBody::Raw(bytes) = body else {
@@ -900,6 +960,25 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
         "srgb" => raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam),
         _ => decoded.rgb16.iter().flat_map(|v| v.to_le_bytes()).collect(),
     };
+    // Persistent decode cache for an interactive open (desktop-native.js sends cachePath +
+    // recipeKey only on the call whose pixels are FINAL, and only for a real on-disk source).
+    // Only the RGBA8 display-referred body is cacheable — same shape cache_raw_decode writes; a
+    // linear16 or HDR-companion decode keeps today's uncached behaviour. The size check refuses
+    // a request whose bytes aren't that file's (e.g. a stale path from another open path).
+    if let (Some(cache_path), Some(recipe_key)) = (json["cachePath"].as_str(), json["recipeKey"].as_str()) {
+        let rgba_body = matches!(effective_mode, "lut" | "srgb") && ext.is_none();
+        if rgba_body && !cache_path.is_empty() && !recipe_key.is_empty() {
+            if let Ok(meta) = std::fs::metadata(cache_path) {
+                if meta.len() == payload.len() as u64 {
+                    let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs()).unwrap_or(0);
+                    let frame = std::sync::Arc::new(body.clone());
+                    raw_editor_cache_insert(cache_path, recipe_key, mtime, meta.len(), decoded.width, decoded.height, frame.clone());
+                    persist_in_background(cache_path.to_string(), recipe_key.to_string(), decoded.width, decoded.height, frame);
+                }
+            }
+        }
+    }
     let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };
     let has_ext: u32 = if ext.is_some() { 1 } else { 0 };
     let ext_bytes = ext.map(|e| e.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap_or_default();
@@ -966,15 +1045,7 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
                 if let Ok(img) = image::load_from_memory(&bytes) {
                     let rgba_img = img.to_rgba8();
                     let (w, h) = (rgba_img.width(), rgba_img.height());
-                    if let Ok(mut guard) = RAW_EDITOR_CACHE.lock() {
-                        guard.retain(|entry| !(entry.path == path && entry.recipe_key == recipe_key));
-                        guard.push(RawEditorCacheEntry {
-                            path: path.clone(), recipe_key: recipe_key.clone(), mtime, size: meta.len(),
-                            width: w, height: h, rgba: std::sync::Arc::new(rgba_img.into_raw()),
-                        });
-                        const MAX_IN_PROCESS_RAW_CACHES: usize = 3;
-                        if guard.len() > MAX_IN_PROCESS_RAW_CACHES { guard.remove(0); }
-                    }
+                    raw_editor_cache_insert(&path, &recipe_key, mtime, meta.len(), w, h, std::sync::Arc::new(rgba_img.into_raw()));
                 }
                 diag::stage("cache", &file_name, "reread_png_into_process_cache", &mut stage_t);
             }
@@ -1012,34 +1083,12 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs()).unwrap_or(0);
-    {
-        let mut guard = RAW_EDITOR_CACHE.lock().map_err(|_| "RAW editor cache lock poisoned".to_string())?;
-        guard.retain(|entry| !(entry.path == path && entry.recipe_key == recipe_key));
-        guard.push(RawEditorCacheEntry {
-            path: path.clone(), recipe_key: recipe_key.clone(), mtime, size: meta.len(),
-            width: decoded.width, height: decoded.height, rgba: std::sync::Arc::new(rgba.clone()),
-        });
-        const MAX_IN_PROCESS_RAW_CACHES: usize = 3;
-        if guard.len() > MAX_IN_PROCESS_RAW_CACHES { guard.remove(0); }
-    }
+    let rgba = std::sync::Arc::new(rgba);
+    raw_editor_cache_insert(&path, &recipe_key, mtime, meta.len(), decoded.width, decoded.height, rgba.clone());
     diag::stage("cache", &file_name, "in_process_cache_insert", &mut stage_t);
-    // Persistent fallback for the next launch. The in-process cache above is the fast path.
-    // Cloned (not moved) so `rgba` is still available below — the display proxy is built from
-    // these SAME pixels directly rather than reading the PNG this write just produced back off
-    // disk and decoding it again (see write_display_cache_from_rgba's doc comment).
-    let mut out = Cursor::new(Vec::new());
-    image::DynamicImage::ImageRgba8(image::RgbaImage::from_raw(decoded.width, decoded.height, rgba.clone())
-        .ok_or("cached RGBA dimensions do not match")?)
-        .write_to(&mut out, image::ImageFormat::Png)
-        .map_err(|e| format!("encode decode cache: {e}"))?;
-    diag::stage("cache", &file_name, "png_encode", &mut stage_t);
-    library::write_decode_cache_file(&path, &recipe_key, out.get_ref())?;
-    diag::stage("cache", &file_name, "png_write", &mut stage_t);
-    // Batch caching is complete only when the display-sized asset is ready too; otherwise the
-    // first reopen still pays the proxy-generation cost that the batch action appeared to cover.
-    library::write_display_cache_from_rgba(&path, &recipe_key, decoded.width, decoded.height, &rgba, 2560,
-        &file_name, &mut stage_t)?;
-    diag::stage("cache", &file_name, "display_proxy_generate", &mut stage_t);
+    // Persistent fallback for the next launch (PNG) + the display-sized proxy — the in-process
+    // cache above is the fast path. Same helper the interactive open uses (decode_raw_v2).
+    persist_decoded_rgba(&path, &recipe_key, decoded.width, decoded.height, &rgba, &file_name, &mut stage_t)?;
     Ok("written".into())
 }
 
@@ -2286,7 +2335,11 @@ fn with_log_plugin(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri:
 #[cfg(not(target_os = "windows"))]
 fn with_log_plugin(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
     builder.plugin(
+        // clear_targets(): Builder::new() already carries Stdout + LogDir{file_name: None}
+        // ("Chromasmith.log"), and .target() ADDS — on a case-insensitive disk that default and
+        // the "chromasmith" LogDir below are the SAME file, so every line was written twice.
         tauri_plugin_log::Builder::new()
+            .clear_targets()
             .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout))
             .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
                 file_name: Some("chromasmith".into()),

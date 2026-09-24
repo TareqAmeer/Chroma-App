@@ -2840,6 +2840,22 @@ pub(crate) fn is_evictable_cache_file(name: &str) -> bool {
         || name.ends_with(".meta.json") || name.ends_with(".phash.json") || name.ends_with(".meta4.json")
 }
 
+/// The decode cache's own shapes: `<16 hex>.png` (full developed frame) and
+/// `<16 hex>.display-<edge>.{jpg,png,webp}` (display proxies, incl. retired formats), plus the
+/// generic temp/sidecar shapes. The shared thumbnail predicate above only knew ".jpg", so full
+/// decode PNGs were never evicted and the directory grew past its 14GB cap without bound.
+pub(crate) fn is_evictable_decode_file(name: &str) -> bool {
+    if is_evictable_cache_file(name) { return true; }
+    let (stem, ext) = match name.rsplit_once('.') { Some(v) => v, None => return false };
+    if !matches!(ext, "png" | "jpg" | "webp") { return false; }
+    let hex = match stem.split_once(".display-") {
+        Some((h, edge)) if !edge.is_empty() && edge.bytes().all(|b| b.is_ascii_digit()) => h,
+        Some(_) => return false,
+        None => stem,
+    };
+    hex.len() == 16 && hex.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 /// Launch-time cache pruning — both cache dirs were unbounded (thumbnails ~50-150KB each,
 /// decode-cache JPEGs 5-15MB each; stale mtime/recipe keys accumulate forever since keys change
 /// whenever the source file or its RAW-stage settings do). Cap each dir and evict least-
@@ -2866,7 +2882,9 @@ pub fn prune_caches() {
             .filter_map(|e| e.ok())
             .filter_map(|e| {
                 let name = e.file_name();
-                if !is_evictable_cache_file(&name.to_string_lossy()) { return None; }
+                let name = name.to_string_lossy();
+                let evictable = if dir == decode_cache_dir() { is_evictable_decode_file(&name) } else { is_evictable_cache_file(&name) };
+                if !evictable { return None; }
                 let m = e.metadata().ok()?;
                 if !m.is_file() { return None; }
                 let when = m.accessed().or_else(|_| m.modified()).ok()?;

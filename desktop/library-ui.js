@@ -4227,7 +4227,11 @@
         const file = new File([buf], baseName(path), { type: fileMime, lastModified: 0 });
         window.chromasmithSourcePath = path;
         window.chromasmithDecodeRecipeKey = recipeKey;
-        const decodeT0 = performance.now(); await loadFXImages([file]); rawPerf('open-decode', path, { ms: performance.now() - decodeT0, bytes: buf.byteLength }); // bare identifier — see desktop-native.js's note on this
+        // Persistent decode cache target (desktop-native.js consumes it one-shot): Rust writes
+        // the cache from the final decoded pixels, keyed by this path + recipe. Never for an
+        // offline preview or an hq-offline copy — those bytes aren't the real file's.
+        window.__chromasmithPersistTarget = (isRaw && !offlinePreview && !hqOfflineCacheExt) ? { path, recipeKey, size: buf.byteLength } : null;
+        const decodeT0 = performance.now(); try { await loadFXImages([file]); } finally { window.__chromasmithPersistTarget = null; } rawPerf('open-decode', path, { ms: performance.now() - decodeT0, bytes: buf.byteLength }); // bare identifier — see desktop-native.js's note on this
         if (fxImages[0]) {
           fxImages[0].fileSize = buf.byteLength; // shown as the "Size" row in the metadata panel
           fxImages[0].offlinePreview = offlinePreview;
@@ -4243,48 +4247,6 @@
           // Never cache a low-res offline stand-in under the real path's key — a later ONLINE
           // open must not be served this reduced preview from imgCache.
           if (!offlinePreview) imgCacheStore(path, fxImages[0], loadKey);
-          // Write the disk cache in the background — best-effort, never blocks the UI. Only for
-          // RAWs (a JPEG/PNG/TIFF decode is already fast; caching those buys nothing). Waits a
-          // beat for the two-phase RAW decode's background NR refine (desktop-native.js) to
-          // land first, so the CACHED copy is full quality, not the fast/no-NR first pass.
-          if (isRaw && fxImages[0].img && !offlinePreview) {
-            // Capture THIS photo's canvas now — the timeout used to re-read fxImages[0] when it
-            // fired, so opening another photo within 1.5s encoded the NEW photo's canvas and
-            // wrote it under the OLD photo's path+recipeKey, silently poisoning the cache (the
-            // wrong image would come back on every future open of that path). The openedPath
-            // check is a second guard for the same race on the invoke side.
-            const cachedCanvas = fxImages[0].img;
-            // desktop-native's refine callback invokes this only after the full-quality pixels
-            // replace the fast first paint. Caching a timed snapshot here could persist the
-            // provisional, unrefined frame when the native pass takes longer than the timeout.
-            window.chromasmithCacheRefinedCanvas = (refinedPath, refinedKey, canvas) => {
-              if (refinedPath !== path || refinedKey !== recipeKey || state.openedPath !== path || canvas !== cachedCanvas || !canvas.toBlob) return;
-              const save = (blob) => {
-                if (!blob || state.openedPath !== path) return;
-                blob.arrayBuffer().then((ab) => framedInvoke('save_decode_cache', { path, recipeKey }, new Uint8Array(ab)))
-                  .catch((e) => console.error('save_decode_cache', e));
-              };
-              // canvas.toBlob('image/png') encodes a 24MP canvas SYNCHRONOUSLY on the main thread
-              // (measured live: the call itself blocks ~1.7s, more under load) — a UI freeze right
-              // after the refined photo lands. Encode in a worker instead (main thread pays only the
-              // ~0.1s createImageBitmap); fall back to toBlob where OffscreenCanvas isn't available.
-              if (typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap === 'function' && typeof Worker === 'function') {
-                try {
-                  if (!window.__pngEncodeWorker) {
-                    const src = 'self.onmessage=async e=>{try{const {bm,w,h}=e.data;const oc=new OffscreenCanvas(w,h);oc.getContext("2d").drawImage(bm,0,0);bm.close&&bm.close();const b=await oc.convertToBlob({type:"image/png"});self.postMessage({ok:true,b})}catch(err){self.postMessage({ok:false,err:String(err)})}}';
-                    window.__pngEncodeWorker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
-                  }
-                  const wk = window.__pngEncodeWorker;
-                  createImageBitmap(canvas).then((bm) => {
-                    wk.onmessage = (ev) => { if (ev.data && ev.data.ok) save(ev.data.b); else canvas.toBlob(save, 'image/png'); };
-                    wk.postMessage({ bm, w: canvas.width, h: canvas.height }, [bm]);
-                  }).catch(() => canvas.toBlob(save, 'image/png'));
-                  return;
-                } catch (e) { /* fall through to toBlob */ }
-              }
-              canvas.toBlob(save, 'image/png');
-            };
-          }
         }
       }
       state.openedPath = path;
@@ -11254,6 +11216,10 @@
   // click or the OS picker dialog — used by diagnostics/raw_bench.py to drive scenarios against
   // real, already-cataloged photos in a single long-lived session (no relaunch between repeats).
   window.chromasmithOpenFolder = openFolder;
+  // Same reasoning: lets diagnostics/raw_open_bench.py time the REAL editor open (openInEditor,
+  // the path a card click takes) by file path, without the Library grid having that folder open.
+  window.chromasmithOpenInEditor = openInEditor;
+  window.chromasmithRawRecipeKey = rawRecipeKey;
 
   window.__TAURI__.event.listen('menu-library', toggleLibrary);
   // File > Open Recent (main.rs) — surfaces the SAME recents dropdown the header's own Recent
