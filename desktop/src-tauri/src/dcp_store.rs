@@ -84,7 +84,7 @@ pub struct DcpProfileSet {
 /// unconditional and always wins, resolved entirely in JS before this is ever called (see
 /// `cameraDcpPrefix`'s doc comment in chromasmith-22.html), so this function only runs for a
 /// camera the bundled 2-entry table doesn't already cover.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_dcp_profiles(make: String, model: String) -> Option<DcpProfileSet> {
     if !is_safe_path_component(&make) || !is_safe_path_component(&model) {
         return None; // malformed/hostile EXIF — decline rather than guess at a sanitized form

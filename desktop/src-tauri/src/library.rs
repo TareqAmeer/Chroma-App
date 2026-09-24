@@ -811,7 +811,7 @@ pub(crate) fn decode_cache_key(path: &str, mtime: u64, size: u64, recipe_key: &s
 /// ~100-200ms JPEG decode instead of the multi-second native RAW pipeline. `recipe_key` is
 /// whatever RAW-stage settings (profile, native NR, demosaic algo, auto-lens) were in effect
 /// when it was cached — changing any of them changes the key, so a stale cache is never served.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_decode_cache(path: String, recipe_key: String) -> Result<tauri::ipc::Response, String> {
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
@@ -827,7 +827,7 @@ pub fn get_decode_cache(path: String, recipe_key: String) -> Result<tauri::ipc::
 
 /// Returns the existing full-quality cache path so the WebView can load the PNG through the
 /// native asset protocol instead of transferring its tens of megabytes through IPC.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_decode_cache_path(path: String, recipe_key: String) -> Result<String, String> {
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
@@ -843,7 +843,7 @@ fn display_cache_path(path: &str, mtime: u64, size: u64, recipe_key: &str, long_
 /// Returns a display-sized JPEG preview through the asset protocol (CHR-120: was lossless WebP —
 /// see DISPLAY_PROXY_VER). The pixels come from the same finished full-resolution decode cache;
 /// this only changes the transport/display tier, never the export source.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32) -> Result<String, String> {
     let file_name = Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?").to_string();
     let mut stage_t = std::time::Instant::now();
@@ -913,7 +913,7 @@ pub fn write_display_cache_from_rgba(path: &str, recipe_key: &str, width: u32, h
 /// Returns an already-generated display proxy without triggering the expensive first-time
 /// resize/PNG encode. Library prewarming uses this probe so it never competes with an active RAW
 /// open by generating proxies that batch caching has not prepared yet.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_display_decode_cache_path(path: String, recipe_key: String, long_edge: u32) -> Result<String, String> {
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
@@ -940,7 +940,7 @@ pub(crate) fn write_decode_cache_file(path: &str, recipe_key: &str, payload: &[u
 /// avoid a multi-megabyte JSON-array argument. Best-effort: the caller (library-ui.js) fires
 /// this in the background after a successful decode and doesn't block on it; a write failure
 /// just means the next open re-decodes, same as today.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_decode_cache(request: tauri::ipc::Request) -> Result<(), String> {
     let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
         return Err("expected raw invoke body".into());
@@ -1365,7 +1365,7 @@ pub fn read_meta_public(path: &str) -> PhotoMeta {
     read_meta(path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_meta(path: String) -> PhotoMeta {
     let Ok(meta) = std::fs::metadata(&path) else { return PhotoMeta::default() };
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
@@ -1548,7 +1548,7 @@ fn xmp_get(xmp: &str, name: &str) -> Option<String> {
     None
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_sidecar(path: String) -> Sidecar {
     let Ok(text) = std::fs::read_to_string(sidecar_path(&path)) else { return Sidecar::default() };
     let recipe = xmp_get(&text, "chromasmith:Recipe").unwrap_or_default();

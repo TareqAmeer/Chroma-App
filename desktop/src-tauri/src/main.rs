@@ -275,7 +275,7 @@ fn parse_framed(body: &tauri::ipc::InvokeBody) -> Result<(serde_json::Value, &[u
     Ok((json, &bytes[4 + jlen..]))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn store_dcp_lut(request: tauri::ipc::Request) -> Result<(), String> {
     let (json, payload) = parse_framed(request.body())?;
     let key = json["key"].as_str().ok_or("missing key")?.to_string();
@@ -840,7 +840,7 @@ fn collage_output_path(first_source: String) -> String {
     merge_output_path(&first_source, "-collage")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
     let mode = json["mode"].as_str().unwrap_or("linear16");
@@ -997,7 +997,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 /// Warms the persistent editor cache without opening photos in the WebView. One native full
 /// decode is used per photo; future opens use the lossless in-process pixels instead of paying
 /// the RAW demosaic cost again. The persistent PNG remains the restart fallback.
-#[tauri::command]
+#[tauri::command(async)]
 fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: String, raw_nr: String, auto_lens: bool,
                     demosaic_algo: String, lens_override: String, lens_override_focal: f64) -> Result<String, String> {
     let file_name = Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?").to_string();
@@ -1093,7 +1093,7 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
 }
 
 /// Returns the lossless in-process RAW cache populated by cache_raw_decode.
-#[tauri::command]
+#[tauri::command(async)]
 fn get_cached_raw_decode(path: String, recipe_key: String) -> Result<tauri::ipc::Response, String> {
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
@@ -1116,7 +1116,7 @@ fn get_cached_raw_decode(path: String, recipe_key: String) -> Result<tauri::ipc:
 ///
 /// Request : [u32 jsonLen][json {"ext":"exr"}][file bytes]
 /// Response: [u32 hdrLen][json {"w","h","dpi","dpiKnown","note"}][RGBA8 w*h*4]
-#[tauri::command]
+#[tauri::command(async)]
 fn decode_image_v1(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
     let ext = json["ext"].as_str().unwrap_or("").to_lowercase();
@@ -1472,7 +1472,7 @@ struct CameraIdent {
 // Cheap EXIF-only peek (no demosaic) so the JS side can pick the right DCP profile file
 // BEFORE committing to a full 'lut'-mode decode — NativeLibRawShim.open() only receives raw
 // bytes (not a filesystem path), so it can't just call library::get_meta(path) for this.
-#[tauri::command]
+#[tauri::command(async)]
 fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> {
     let bytes = match request.body() {
         tauri::ipc::InvokeBody::Raw(b) => b.as_slice(),
@@ -1507,7 +1507,7 @@ fn native_build_tag() -> &'static str {
 
 // Read a file's raw bytes for the Library view to open a selected photo into the editor (a
 // plain File-shaped object, same as picking it from the OS file dialog or dragging it in).
-#[tauri::command]
+#[tauri::command(async)]
 fn read_file_bytes(path: String) -> Result<tauri::ipc::Response, String> {
     let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
     Ok(tauri::ipc::Response::new(bytes))
