@@ -93,20 +93,28 @@ const $=id=>document.getElementById(id);
 function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 async function boot(){const r=await (await fetch('/report')).json();votes=r.votes||{};
  const ps=[];for(const f of r.reps)for(const [sd,v] of Object.entries(f.sides||{}))if(v.piece&&!v.bad)ps.push(new Promise(ok=>{const im=new Image();im.onload=()=>ok({scan:f.file,side:+sd,img:im,T:v.T,h:v.h,corner:v.corner});im.onerror=()=>ok(null);im.src='/pieces/'+v.piece}));
- strips=(await Promise.all(ps)).filter(Boolean);build()}
+ strips=(await Promise.all(ps)).filter(Boolean);strips.forEach(prof);build()}
+function prof(st){const c=document.createElement('canvas');c.width=st.img.width;c.height=st.img.height;const x=c.getContext('2d');x.drawImage(st.img,0,0);
+ const p=x.getImageData(0,0,c.width,c.height).data,W=c.width,H=c.height,a=new Float32Array(W);
+ for(let u=0;u<W;u++){let s=0;for(let y=0;y<H;y++)s+=p[(y*W+u)*4+3];a[u]=s/255}
+ const sm=new Float32Array(W);for(let u=0;u<W;u++){let s=0,n=0;for(let k=-6;k<=6;k++){const v=a[u+k];if(v!==undefined){s+=v;n++}}sm[u]=s/n}
+ st.prof=sm;st.depth=[...sm].sort((a,b)=>a-b)[W>>1]}
 function tinted(st,tone){const c=document.createElement('canvas');c.width=st.img.width;c.height=st.img.height;const x=c.getContext('2d');x.drawImage(st.img,0,0);
  const d=x.getImageData(0,0,c.width,c.height),p=d.data,t=[1,3,5].map(i=>parseInt(tone.substr(i,2),16));
  for(let i=0;i<p.length;i+=4){const v=p[i]/255;p[i]=Math.min(255,t[0]+v*90);p[i+1]=Math.min(255,t[1]+v*90);p[i+2]=Math.min(255,t[2]+v*90)}x.putImageData(d,0,0);return c}
 // build one side of length L (px) at thickness t (px) from a strip: real ends (corners) kept,
 // middle filled with random real sections joined with short cross-fades. Never stretched.
-function sideCanvas(st,L,t,R){const k=t/st.T,sw=st.img.width,H=Math.round(st.h*k),src=tinted(st,$('tone').value);
+function sideCanvas(st,L,t,R){const k=t/st.depth,sw=st.img.width,H=Math.round(st.h*k),src=tinted(st,$('tone').value);
  const c=document.createElement('canvas');c.width=L;c.height=H;const x=c.getContext('2d');
  const end=Math.min(sw*k*.25,Math.max(st.corner*k*1.6,t*2.5)),endS=end/k;
  const flip=R()<.5;x.save();if(flip){x.translate(L,0);x.scale(-1,1)}
- const midS0=endS,midS1=sw-endS,midLen=midS1-midS0;const fade=Math.max(8,t*1.2);
+ const midS0=endS,midS1=sw-endS,midLen=midS1-midS0;const fade=Math.max(12,t*3);
  let pos=end-fade;const segMax=Math.max(midLen*.6,40);
  const tmp=document.createElement('canvas');tmp.height=H;const tx=tmp.getContext('2d');
- while(pos<L-end){const segS=Math.min(segMax,midLen)*(0.5+R()*.5),s0=midS0+R()*(midLen-segS),w=Math.round(segS*k);
+ let cur=st.prof[Math.round(endS)]||st.depth;
+ while(pos<L-end){const segS=Math.min(segMax,midLen)*(0.5+R()*.5);let s0=0,bd=1e9;
+  for(let q=0;q<40;q++){const c0=midS0+R()*(midLen-segS),e=Math.abs(st.prof[Math.round(c0+fade/k/2)]-cur);if(e<bd){bd=e;s0=c0}}
+  cur=st.prof[Math.round(s0+segS-fade/k/2)]||cur;const w=Math.round(segS*k);
   tmp.width=w;tx.clearRect(0,0,w,H);tx.drawImage(src,s0,0,segS,st.h,0,0,w,H);
   tx.globalCompositeOperation='destination-in';const g=tx.createLinearGradient(0,0,w,0),f=Math.min(.45,fade/w);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(f,'#000');g.addColorStop(1-f,'#000');g.addColorStop(1,'rgba(0,0,0,0)');tx.fillStyle=g;tx.fillRect(0,0,w,H);tx.globalCompositeOperation='source-over';
   x.drawImage(tmp,Math.round(pos),0);pos+=w-fade}

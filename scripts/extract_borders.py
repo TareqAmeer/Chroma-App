@@ -139,10 +139,10 @@ def process(path):
         if T < 0.006 * S:
             rep['flags'].append(f'side{side}: solid band too thin after removing holes/text'); continue
         d = np.arange(Yv.shape[0])[:, None].astype(float)
-        margin = max(3.0, 0.35 * T)
+        margin = max(4.0, 0.9 * T)   # room for the real ragged edge; never clip it straight
         lo, hi = line - T, line + margin
         # band membership with soft ends; the inner roughness is decided by darkness below
-        m = np.clip(d - lo[None, :] + 1, 0, 1) * np.clip(hi[None, :] - d, 0, 1)
+        m = np.clip(d - lo[None, :] + 1, 0, 1) * np.clip((hi[None, :] - d) / (0.4 * margin), 0, 1)
         Yv = Yv.copy()
         npatch = 0
         if dirty.any():
@@ -160,8 +160,8 @@ def process(path):
                     col = np.roll(Yv[:, s0], sh)
                     Yv[:, t] = Yv[:, t] * (1 - wgt[j]) + col * wgt[j]
                 npatch += 1
-        dk = np.clip((THR + 0.06 - Yv) / 0.14, 0, 1)
-        core = (d < line[None, :] - 2).astype(np.float32)   # the solid band is always opaque
+        z = np.clip((THR + 0.10 - Yv) / 0.22, 0, 1); dk = z * z * (3 - 2 * z)   # soft, luminance-driven edge
+        core = (d < line[None, :] - 0.5 * T).astype(np.float32)   # only the outer half is forced solid; the inner half keeps its real bites
         a = m * np.maximum(dk, core)
         fillb = (core * m > 0) & (dk < 0.5)
         Yv[fillb] = blk + np.random.default_rng(side).normal(0, 0.012, fillb.sum())
