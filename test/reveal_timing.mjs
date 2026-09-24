@@ -164,6 +164,18 @@ try {
   await waitPhase('exiting', 2000);
   await waitPhase('idle', 10000);
   ok('replay runs the full sequence back to idle');
+  console.log('7. Reveal lab on/off switch');
+  const sw = await page.evaluate(() => {
+    window.chromasmithRevealLab();
+    const cb = document.querySelector('#fx-reveal-lab .rl-enable');
+    cb.checked = false; cb.dispatchEvent(new Event('change'));
+    const off = window.chromasmithPhotoTransitions === false && localStorage.getItem('chromasmithPhotoTransitions') === '0';
+    cb.checked = true; cb.dispatchEvent(new Event('change'));
+    const on = window.chromasmithPhotoTransitions === true && localStorage.getItem('chromasmithPhotoTransitions') === '1';
+    document.getElementById('fx-reveal-lab').remove();
+    return { off, on };
+  });
+  if (sw.off && sw.on) ok('lab switch turns photo transitions off and back on (same preference as the menu)'); else fail(`lab switch: ${JSON.stringify(sw)}`);
   if (errors.length) fail(`page errors: ${errors.join(' | ')}`);
   await page.close();
 } finally { await browser.close(); await new Promise((resolve) => server.close(resolve)); }

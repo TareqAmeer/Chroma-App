@@ -1693,7 +1693,8 @@
     #fx-reveal-lab .rl-x{background:none;border:0;color:var(--mut);font-size:16px;cursor:pointer}
     #fx-reveal-lab .rl-row{display:grid;grid-template-columns:110px 1fr 60px;align-items:center;gap:6px;margin:4px 0}
     #fx-reveal-lab .rl-row select{grid-column:2/4;background:var(--sur2);color:var(--txt);border:1px solid var(--bdr);border-radius:6px;padding:3px 6px;font-size:11px}
-    #fx-reveal-lab input[type=range]{accent-color:var(--acc);min-width:0}
+    #fx-reveal-lab input[type=range],#fx-reveal-lab input[type=checkbox]{accent-color:var(--acc);min-width:0}
+    #fx-reveal-lab .rl-on input{justify-self:start}
     #fx-reveal-lab output{text-align:right;color:var(--mut);font-variant-numeric:tabular-nums}
     #fx-reveal-lab .rl-sep{height:1px;background:var(--bdr);margin:8px 0}
     #fx-reveal-lab .rl-btns{display:flex;gap:6px;margin-top:10px}
@@ -3554,12 +3555,20 @@
   // until they are locked into design/tokens.json.
   const REVEAL_LS = 'chromasmithRevealLab';
   const REVEAL_EASE = { standard: 'cubic-bezier(.4,0,.2,1)', gentle: 'cubic-bezier(.25,.1,.25,1)', expo: 'cubic-bezier(.16,1,.3,1)', linear: 'linear' };
-  const REVEAL_DEFAULTS = { exit: 400, morph: 800, fill: 450, settle: 500, speedup: 3, ease: 'standard',
-    waiting: 'still', pulse: 1400, strength: 0.5, edge: 'hard', simulate: 0, from: 'inverse' };
+  // Defaults = the values tuned in the Reveal lab (2026-09-24). Durations come from the
+  // --reveal-* tokens (design/tokens.json) so there is one source for them.
+  const REVEAL_DEFAULTS = { exit: 550, morph: 575, fill: 450, settle: 500, speedup: 3, ease: 'standard',
+    waiting: 'pulse', pulse: 800, strength: 0.4, edge: 'hard', simulate: 0, from: 'inverse' };
+  const revealTokenMs = (name, fallback) => {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return /ms$/.test(v) ? parseFloat(v) : fallback;
+  };
   const revealCfg = () => {
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(REVEAL_LS) || '{}') || {}; } catch (_) {}
-    return { ...REVEAL_DEFAULTS, ...saved };
+    const d = REVEAL_DEFAULTS;
+    return { ...d, exit: revealTokenMs('--reveal-exit', d.exit), morph: revealTokenMs('--reveal-morph', d.morph),
+      fill: revealTokenMs('--reveal-wipe', d.fill), settle: revealTokenMs('--reveal-sharpen', d.settle), ...saved };
   };
   const reveal = (() => {
     let host, snap, frame, lines;
@@ -3830,7 +3839,9 @@
     const sel = (key, label, opts) => `<label class="rl-row"><span>${label}</span><select data-k="${key}">${opts.map(([v, t]) => `<option value="${v}"${String(cfg[key]) === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
     panel = document.createElement('div');
     panel.id = 'fx-reveal-lab';
+    const on = window.chromasmithPhotoTransitions !== false;
     panel.innerHTML = `<div class="rl-head"><b>Reveal lab</b><button class="rl-x" title="Close">×</button></div>
+      <label class="rl-row rl-on"><span>Photo transitions</span><input type="checkbox" class="rl-enable"${on ? ' checked' : ''}><output>${on ? 'On' : 'Off'}</output></label>
       ${num('exit', 'Old photo out', 0, 1500, 25, 'ms')}
       ${num('morph', 'Frame reshape', 0, 2500, 25, 'ms')}
       ${num('fill', 'New photo in', 0, 1500, 25, 'ms')}
@@ -3853,6 +3864,11 @@
         const out = el.parentElement.querySelector('output');
         if (out) out.textContent = out.textContent.replace(/^[\d.]+/, String(v));
       });
+    });
+    // Same preference as the settings menu's "Photo transitions" item (off = instant swaps).
+    panel.querySelector('.rl-enable').addEventListener('change', (ev) => {
+      if ((window.chromasmithPhotoTransitions !== false) !== ev.target.checked && typeof photoTransitionsToggle === 'function') photoTransitionsToggle();
+      ev.target.parentElement.querySelector('output').textContent = ev.target.checked ? 'On' : 'Off';
     });
     panel.querySelector('.rl-x').onclick = () => panel.remove();
     panel.querySelector('.rl-replay').onclick = () => { if (!reveal.replay() && typeof toast === 'function') toast('Open a photo first, then replay.', false); };
