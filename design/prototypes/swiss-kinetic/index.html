@@ -460,8 +460,8 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
   <div class="sub">Tune here. Settings save as you go. When happy, press Copy settings and paste the result back.</div>
 
   <fieldset><legend>Colour</legend>
-    <div class="dr full"><label>Theme</label><select data-attr="theme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
-    <div class="sub" style="margin:0 0 8px">Background, ink and muted are kept separately for each theme.</div>
+    <div class="dr full"><label>Theme</label><select id="theme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
+    <div class="sub" style="margin:0 0 8px">Dark and light are tuned separately: every setting below, and your notes, belong to the theme shown here.</div>
     <div class="presets" id="presets"></div>
     <div class="dr"><label>Colour A</label><input type="color" data-var="--a"><output></output></div>
     <div class="dr"><label>Colour B</label><input type="color" data-var="--b"><output></output></div>
@@ -524,7 +524,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
     <div class="dr"><label>Slider width</label><input type="range" min="40" max="140" step="2" data-var="--tb-sl" data-unit="px"><output></output></div>
   </fieldset>
 
-  <fieldset id="notes-fs"><legend>Notes <span id="notes-count"></span></legend>
+  <fieldset id="notes-fs"><legend>Notes · <span id="notes-theme"></span> <span id="notes-count"></span></legend>
     <button class="dock-act" id="note-mode" title="Shortcut: N">Add a note</button>
     <div class="sub" style="margin:8px 0 6px">Click Add a note, then click anything on the page and type. Esc cancels.</div>
     <ol id="notes-list"></ol>
@@ -645,7 +645,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 (() => {
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const root = document.documentElement, body = document.body;
-const store = { get(k) { try { return JSON.parse(localStorage.getItem('sk4.' + k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem('sk4.' + k, JSON.stringify(v)); } catch {} } };
+const store = { get(k) { try { return JSON.parse(localStorage.getItem('sk5.' + k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem('sk5.' + k, JSON.stringify(v)); } catch {} } };
 
 // ── settings model ────────────────────────────────────────────────
 const EASES = { 'Inertia (0.16,1,0.3,1)': '.16,1,.3,1', 'Expo out': '.19,1,.22,1', 'Soft overshoot': '.34,1.56,.64,1', 'Hard overshoot': '.68,-.6,.32,1.6', 'Standard': '.4,0,.2,1', 'Linear': '0,0,1,1' };
@@ -654,17 +654,27 @@ const PRESETS = { 'Cadmium / Cobalt': { '--a': '#e0500c', '--b': '#1414a0' }, 'K
 // Defaults = the 2026-09-24 review round 2 export. Storage keys move per round so the new picks show on first open.
 const DEFAULTS = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#1b1b1b', '--ink': '#f2f2f0', '--mut': '#7c7c78', '--ox': '6px', '--oy': '6px', '--slab-top': '34%', '--dim': '0.35', '--dim-dur': '220ms', '--dur': '500ms', '--dur-fast': '180ms',
     '--bw-btn': '0.5px', '--bw-ic': '1px', '--menu-dur': '900ms', '--msx': '10px', '--msy': '5px', '--tb-sl': '62px' },
-  lvars: { '--bg': '#f2f2ee', '--ink': '#161616', '--mut': '#77776f' },
-  attrs: { dim: 'off', slab: 'single', sel: 'slab', side: 'offset', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved', theme: 'dark' },
+  attrs: { dim: 'off', slab: 'single', sel: 'slab', side: 'offset', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved' },
   cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'slabturn', roll: 'roll', segv: 'cell', swap: 'slide' };
-let S = Object.assign(structuredClone(DEFAULTS), store.get('settings') || {});
-S.vars = Object.assign({}, DEFAULTS.vars, S.vars); S.attrs = Object.assign({}, DEFAULTS.attrs, S.attrs); S.lvars = Object.assign({}, DEFAULTS.lvars, S.lvars);
-const THEMED = ['--bg', '--ink', '--mut'], tv = (k) => (S.attrs.theme === 'light' && THEMED.includes(k) ? S.lvars : S.vars);
-const save = () => store.set('settings', S);
+// Dark and light are separate setting sets (and separate notes). Light starts as a copy of dark with light colours.
+const LIGHT_COLOURS = { '--bg': '#f2f2ee', '--ink': '#161616', '--mut': '#77776f' };
+const themeDefaults = (t) => { const d = structuredClone(DEFAULTS); if (t === 'light') Object.assign(d.vars, LIGHT_COLOURS); return d; };
+const norm = (x, t) => { const d = themeDefaults(t), o = Object.assign(d, x || {}); o.vars = Object.assign({}, d.vars, x?.vars); o.attrs = Object.assign({}, d.attrs, x?.attrs); return o; };
+let P = store.get('themes');
+if (!P) { // first open since the split: carry the previous round's settings and notes over as dark mode
+  const old = (k) => { try { return JSON.parse(localStorage.getItem('sk4.' + k)); } catch { return null; } };
+  const prev = old('settings'); if (prev) { delete prev.lvars; if (prev.attrs) delete prev.attrs.theme; }
+  P = { dark: prev || undefined }; if (old('notes')) store.set('notes-dark', old('notes')); if (old('noteGeneral')) store.set('noteGeneral-dark', old('noteGeneral'));
+}
+P.theme = P.theme === 'light' ? 'light' : 'dark'; P.dark = norm(P.dark, 'dark'); P.light = norm(P.light, 'light');
+let S = P[P.theme];
+const tv = () => S.vars;
+const save = () => store.set('themes', P);
 
 function apply() {
   for (const k of Object.keys(S.vars)) root.style.setProperty(k, tv(k)[k]);
-  $$('.lib-menu .opt[data-theme]').forEach((o) => o.classList.toggle('sel', o.dataset.theme === S.attrs.theme));
+  $$('.lib-menu .opt[data-theme]').forEach((o) => o.classList.toggle('sel', o.dataset.theme === P.theme));
+  body.dataset.theme = P.theme;
   root.style.setProperty('--ease', `cubic-bezier(${S.ease})`);
   for (const [k, v] of Object.entries(S.attrs)) body.dataset[k] = v;
   body.classList.toggle('rm', reduced());
@@ -686,8 +696,9 @@ $$('#dock [data-var]').forEach((inp) => {
   inp._sync = () => { inp.value = inp.type === 'color' ? tv(k)[k] : num(tv(k)[k]); show(); }; inp._sync();
   inp.addEventListener('input', () => { tv(k)[k] = inp.value + unit; show(); apply(); save(); });
 });
-const setTheme = (t) => { S.attrs.theme = t; $('#dock [data-attr=theme]').value = t; $$('#dock [data-var]').forEach((i) => i._sync()); apply(); save(); };
-$$('#dock [data-attr]').forEach((sel) => { sel.value = S.attrs[sel.dataset.attr]; sel.addEventListener('change', () => { if (sel.dataset.attr === 'theme') return setTheme(sel.value); S.attrs[sel.dataset.attr] = sel.value; apply(); save(); }); });
+const setTheme = (t) => { if (t === P.theme) return; P.theme = t; save(); location.reload(); };
+$('#theme').value = P.theme; $('#theme').addEventListener('change', (e) => setTheme(e.target.value));
+$$('#dock [data-attr]').forEach((sel) => { sel.value = S.attrs[sel.dataset.attr]; sel.addEventListener('change', () => { S.attrs[sel.dataset.attr] = sel.value; apply(); save(); }); });
 const ease = $('#ease'); for (const [n, v] of Object.entries(EASES)) ease.add(new Option(n, v)); ease.add(new Option('Custom', 'custom'));
 ease.value = Object.values(EASES).includes(S.ease) ? S.ease : 'custom'; $('#ease-custom').value = S.ease;
 ease.addEventListener('change', () => { if (ease.value !== 'custom') { S.ease = ease.value; $('#ease-custom').value = S.ease; apply(); save(); } });
@@ -698,19 +709,22 @@ const hvb = $('#hv-btn'); for (const [k, n] of Object.entries(HOVERS)) hvb.add(n
 for (const [n, p] of Object.entries(PRESETS)) { const b = document.createElement('button'); b.textContent = n; b.onclick = () => { Object.assign(S.vars, p); $$('#dock [data-var]').forEach((i) => { if (p[i.dataset.var]) { i.value = p[i.dataset.var]; i.dispatchEvent(new Event('input')); } }); }; $('#presets').append(b); }
 const dockTg = () => { body.classList.toggle('dock-off'); $('#dock-tg').textContent = body.classList.contains('dock-off') ? 'Show panel' : 'Hide panel'; switches.forEach((x) => x.snap()); placePins(); };
 $('#dock-tg').onclick = dockTg; document.addEventListener('keydown', (e) => { if (e.key === '\\' && !e.target.closest('input,textarea,select')) dockTg(); });
-$('#reset').onclick = () => { S = structuredClone(DEFAULTS); save(); location.reload(); };
-$('#copy').onclick = async () => {
+$('#reset').onclick = () => { if (!confirm(`Reset the ${P.theme} settings? The other theme is kept.`)) return; P[P.theme] = themeDefaults(P.theme); save(); location.reload(); };
+const exportTheme = (S, th) => {
   const c = (v) => ({ $type: 'color', $value: v }), d = (v) => ({ $type: 'dimension', $value: v }), t = (v) => ({ $type: 'duration', $value: v });
-  const out = { $description: 'Swiss Kinetic playground export ' + new Date().toISOString(),
-    color: { accentA: c(S.vars['--a']), accentB: c(S.vars['--b']), bg: c(S.vars['--bg']), ink: c(S.vars['--ink']), muted: c(S.vars['--mut']),
-      light: { bg: c(S.lvars['--bg']), ink: c(S.lvars['--ink']), muted: c(S.lvars['--mut']) } }, theme: S.attrs.theme,
+  const tn = th === P.theme ? notes : store.get('notes-' + th) || [], tg = th === P.theme ? $('#note-general').value : store.get('noteGeneral-' + th) || '';
+  return {
+    color: { accentA: c(S.vars['--a']), accentB: c(S.vars['--b']), bg: c(S.vars['--bg']), ink: c(S.vars['--ink']), muted: c(S.vars['--mut']) },
     offset: { x: d(S.vars['--ox']), y: d(S.vars['--oy']), slabTop: d(S.vars['--slab-top']), slabStyle: S.attrs.slab },
     border: { button: d(S.vars['--bw-btn']), icon: S.attrs.icb === 'none' ? 'none' : d(S.vars['--bw-ic']) },
     menu: { wipe: t(S.vars['--menu-dur']), slabShiftX: d(S.vars['--msx']), slabShiftY: d(S.vars['--msy']) },
     dim: { mode: S.attrs.dim, level: { $type: 'number', $value: +S.vars['--dim'] }, fade: t(S.vars['--dim-dur']) },
     motion: { duration: t(S.vars['--dur']), hover: t(S.vars['--dur-fast']), easing: { $type: 'cubicBezier', $value: S.ease.split(',').map(Number) }, dragBounce: S.bounce, throw: S.throw, edgeStretch: S.rubber, reduceMotion: S.rm, snapSound: S.snd },
     variants: { buttonHover: S.hvBtn, iconHover: S.hvIc, menuHover: S.attrs.menu, photoSelection: S.attrs.sel, sideMenu: S.attrs.side, toggle: S.attrs.tg, italics: S.attrs.italic, thumbnails: S.attrs.bw, windowSquares: S.attrs.win, valueReadout: S.roll, topBarStateOnlyControls: S.cond, iconSelected: S.attrs.icsel, segmented: S.segv, photoHover: S.attrs.thhv, sliderResetDot: S.attrs.dot, barSwap: S.swap, topBarSliderWidth: S.vars['--tb-sl'] },
-    notes: notes.map((x) => ({ n: x.n, where: x.where, note: x.note })), generalNotes: $('#note-general').value.trim() };
+    notes: tn.map((x) => ({ n: x.n, where: x.where, note: x.note })), generalNotes: tg.trim() };
+};
+$('#copy').onclick = async () => {
+  const out = { $description: 'Swiss Kinetic playground export ' + new Date().toISOString() + ' — dark and light are separate; notes belong to the theme they sit under', viewing: P.theme, dark: exportTheme(P.dark, 'dark'), light: exportTheme(P.light, 'light') };
   const txt = JSON.stringify(out, null, 2);
   try { await navigator.clipboard.writeText(txt); $('#copied').textContent = 'Copied'; } catch { prompt('Copy these settings:', txt); }
   setTimeout(() => { $('#copied').textContent = ''; }, 1600);
@@ -910,12 +924,13 @@ fOpen(true); rowOpen(true);
 $('#cond-note').textContent = 'Shown only in some states in the app (hide them with State-only controls): ' + $$('#tb [data-conditional]').map((x) => (x.getAttribute('title') || x.querySelector('[title]')?.getAttribute('title') || x.id).split(/[—(·]/)[0].trim()).join(' · ') + '.';
 
 // ── notes: click anything, type, exported with Copy settings ─────
-let notes = store.get('notes') || [], noting = false, pendingEl = null;
+let notes = store.get('notes-' + P.theme) || [], noting = false, pendingEl = null;
 const stage = $('#stage');
 const hl = document.createElement('div'); hl.id = 'note-hl'; hl.innerHTML = '<span></span>'; document.body.append(hl);
 const pop = document.createElement('div'); pop.id = 'note-pop'; pop.innerHTML = '<small></small><textarea placeholder="What should change?"></textarea><div><button data-a="cancel">Cancel</button><button class="go" data-a="save">Save note</button></div>'; document.body.append(pop);
-$('#note-general').value = store.get('noteGeneral') || '';
-$('#note-general').addEventListener('input', (e) => store.set('noteGeneral', e.target.value));
+$('#note-general').value = store.get('noteGeneral-' + P.theme) || '';
+$('#note-general').placeholder = `General notes for ${P.theme} mode (not tied to one element)`;
+$('#note-general').addEventListener('input', (e) => store.set('noteGeneral-' + P.theme, e.target.value));
 const PICK = 'button,input,select,.opt,.th,.k-chip,.k-tg,.k-info,.k-search,.lib-search-wrap,.k-menu>div,.win i,.wordmark,.slab,.slab2,.tool,.splash,h2,.k-card header,[id]';
 const pickEl = (t) => { const e = t.closest(PICK); return e && stage.contains(e) && e !== stage ? e : null; };
 function cssPath(e) { const parts = []; while (e && e !== stage) { if (e.id) { parts.unshift('#' + CSS.escape(e.id)); break; } parts.unshift(`${e.tagName.toLowerCase()}:nth-child(${[...e.parentElement.children].indexOf(e) + 1})`); e = e.parentElement; } return parts.join('>'); }
@@ -947,10 +962,11 @@ pop.querySelector('textarea').addEventListener('keydown', (e) => { if (e.key ===
 function saveNote() {
   const txt = pop.querySelector('textarea').value.trim(); if (!txt || !pendingEl) return closePop();
   notes.push({ n: (notes.at(-1)?.n || 0) + 1, path: cssPath(pendingEl), where: describe(pendingEl), note: txt, bar: pendingEl.closest('#rbar-ed') ? 1 : pendingEl.closest('#rbar-lib') ? 0 : null });
-  store.set('notes', notes); closePop(); renderNotes();
+  store.set('notes-' + P.theme, notes); closePop(); renderNotes();
 }
 function findNoteEl(x) { try { return stage.querySelector(x.path); } catch { return null; } }
 function renderNotes() {
+  $('#notes-theme').textContent = P.theme + ' mode';
   $('#notes-count').textContent = notes.length ? `· ${notes.length}` : '';
   $('#notes-list').innerHTML = notes.map((x) => `<li data-n="${x.n}"><b>${x.n}</b><span>${x.note.replace(/</g, '&lt;')}<small>${x.where.replace(/</g, '&lt;')}</small></span><i title="Delete note">×</i></li>`).join('');
   placePins();
@@ -963,11 +979,11 @@ function placePins() {
 }
 $('#notes-list').addEventListener('click', (e) => {
   const li = e.target.closest('li'); if (!li) return; const x = notes.find((y) => y.n === +li.dataset.n);
-  if (e.target.tagName === 'I') { notes = notes.filter((y) => y !== x); store.set('notes', notes); renderNotes(); return; }
+  if (e.target.tagName === 'I') { notes = notes.filter((y) => y !== x); store.set('notes-' + P.theme, notes); renderNotes(); return; }
   if (x.bar !== null && x.bar !== undefined && +$('#mode-sw').dataset.idx !== x.bar) $$('#mode-sw .opt')[x.bar].click();
   setTimeout(() => { const el = findNoteEl(x); if (el) { el.scrollIntoView({ block: 'center', behavior: reduced() ? 'auto' : 'smooth' }); setTimeout(placePins, 400); } }, 50);
 });
-$('#clear-notes').addEventListener('click', () => { if (!notes.length && !$('#note-general').value) return; if (confirm('Delete all notes?')) { notes = []; store.set('notes', notes); $('#note-general').value = ''; store.set('noteGeneral', ''); renderNotes(); } });
+$('#clear-notes').addEventListener('click', () => { if (!notes.length && !$('#note-general').value) return; if (confirm(`Delete all ${P.theme}-mode notes?`)) { notes = []; store.set('notes-' + P.theme, notes); $('#note-general').value = ''; store.set('noteGeneral-' + P.theme, ''); renderNotes(); } });
 addEventListener('resize', placePins); document.fonts.ready.then(() => setTimeout(placePins, 100));
 
 $$('.sw').forEach(makeSwitch);
