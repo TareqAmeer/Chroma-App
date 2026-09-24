@@ -16,6 +16,7 @@
   --ox:6px; --oy:6px; --slab-top:34%;
   --dim:.35; --dim-dur:220ms;
   --dur:500ms; --ease:cubic-bezier(.16,1,.3,1); --dur-fast:180ms;
+  --bw-btn:1.5px; --bw-ic:1px; --menu-dur:320ms; --msx:4px; --msy:2px;
   --ca:var(--a); --cb:var(--b);
   --f:'Gramatika',system-ui,sans-serif;
 }
@@ -71,7 +72,7 @@ h2{font:700 28px/1 var(--f);letter-spacing:-.03em;margin:0 0 6px;text-transform:
 /* ── top bar ───────────────────────────────────────────────────── */
 .topbar{min-width:max-content;display:flex;align-items:center;gap:22px;height:64px;padding:0 20px;background:var(--bg);border:1px solid var(--line)}
 .win{display:flex;gap:6px}
-.win i{width:14px;height:14px;border:1.5px solid var(--c);display:block;cursor:pointer;transition:background var(--dur-fast)}
+.win i{width:13px;height:13px;border:1px solid var(--c);display:block;cursor:pointer;transition:background var(--dur-fast)}
 .win i:hover{background:var(--c)}
 body[data-win=mono] .win i{--c:var(--ink)!important}
 .wordmark{font:700 22px/1 var(--f);letter-spacing:-.02em;text-transform:uppercase;white-space:nowrap}
@@ -85,8 +86,11 @@ body[data-win=mono] .win i{--c:var(--ink)!important}
 .sw.dragging{cursor:grabbing}
 .sw .opt{position:relative;z-index:2;padding:0 6px;color:var(--mut);cursor:pointer;transition:color var(--dur-fast)}
 .sw .opt.on{color:#fff}
+#mode-sw .opt{transition:color var(--dur-fast),transform var(--dur-fast) var(--ease);transform-origin:50% 80%}
+#mode-sw .opt:hover{transform:scale(1.07)}
+#mode-sw .sep{margin:4px 5px}
 .sw .sep{position:relative;z-index:2;width:2px;align-self:stretch;background:var(--mut);margin:4px 2px}
-.sw .slab{position:absolute;z-index:1;left:0;top:var(--slab-top);bottom:calc(var(--oy) * -1);width:10px;background:var(--ca);will-change:transform,width}
+.sw .slab,.sw .slab2{position:absolute;z-index:1;left:0;top:var(--slab-top);bottom:calc(var(--oy) * -1);width:10px;background:var(--ca);will-change:transform,width}
 .sw .slab2{z-index:0;background:var(--cb);top:calc(var(--slab-top) + var(--oy) * 2);bottom:calc(var(--oy) * -2.2)}
 body[data-slab=single] .sw .slab2{display:none}
 body[data-slab=outline] .sw .slab{background:none;border:2px solid var(--ca)}
@@ -94,16 +98,19 @@ body[data-slab=outline] .sw .slab2{display:none}
 body[data-slab=outline] .sw .opt.on{color:var(--ink)}
 .sw.big{font:700 44px/1 var(--f);letter-spacing:-.04em}
 .sw.mid{font:700 26px/1 var(--f);letter-spacing:-.03em}
-.sw.seg{font:700 12px/1 var(--f);border:1px solid var(--line);padding:6px 2px;align-items:center}
+.sw.seg{font:700 11px/1 var(--f);letter-spacing:.1em;text-transform:uppercase;align-items:stretch;height:26px;box-shadow:inset 0 -1px 0 var(--mut)}
+.sw.seg .opt{display:grid;place-items:center;padding:0 11px;background:none;border:0;cursor:pointer}
+.sw.seg .opt+.opt{box-shadow:inset 1px 0 0 var(--line)}
+.sw.seg .opt:not(.on):hover{color:var(--ink)}
 .sw.seg .slab{top:0;bottom:0}
-.sw.seg .slab2{top:auto;bottom:-4px;height:3px}
+.sw.seg .slab2{top:calc(var(--oy)*.5);bottom:calc(var(--oy)*-.5)}
 .sw.vert{flex-direction:column;align-items:stretch;cursor:default}
 .sw.vert .slab{top:0;left:0;right:auto;height:10px;bottom:auto;width:4px}
 .sw.vert .slab2{display:none}
 
 /* ── buttons ───────────────────────────────────────────────────── */
 .k-btn{box-shadow:0 0 0 transparent;--fill:transparent;--fg:var(--ink);--bd:var(--ink);position:relative;display:inline-flex;align-items:center;justify-content:center;
-  height:32px;padding:0 16px;background:var(--fill);color:var(--fg);border:1.5px solid var(--bd);font:700 13px/1 var(--f);letter-spacing:.01em;
+  height:32px;padding:0 16px;background:var(--fill);color:var(--fg);border:var(--bw-btn) solid var(--bd);font:700 13px/1 var(--f);letter-spacing:.01em;
   text-transform:uppercase;cursor:pointer;isolation:isolate;overflow:visible;transition:transform var(--dur-fast) var(--ease),background var(--dur-fast),color var(--dur-fast),letter-spacing var(--dur-fast)}
 .k-btn.primary{--fill:var(--ca);--bd:var(--ca);--fg:#fff}
 .k-btn.outline{--bd:var(--ca)}
@@ -116,12 +123,16 @@ body[data-italic=primary] .k-btn.primary .lbl,body[data-italic=hover] .k-btn:hov
 /* hover variants — no underlines, by request */
 .k-btn[data-hv=slip] .trk span+span{display:block}
 .k-btn[data-hv=slip]:hover:not(:disabled) .trk{transform:translateY(-50%)}
-.k-btn[data-hv=slab]::after{content:'';position:absolute;inset:-1.5px;background:var(--cb);z-index:-1;transform:scaleX(0);transform-origin:left;transition:transform var(--dur-fast) var(--ease)}
+.k-btn[data-hv=slab]::after{content:'';position:absolute;inset:calc(var(--bw-btn)*-1);background:var(--cb);z-index:-1;transform:scaleX(0);transform-origin:left;transition:transform var(--dur-fast) var(--ease)}
 .k-btn[data-hv=slab]:hover:not(:disabled){--fg:#fff}
 .k-btn[data-hv=slab]:hover:not(:disabled)::after{transform:scaleX(1)}
 .k-btn[data-hv=flood]:hover:not(:disabled){--fill:var(--ink);--fg:var(--bg);--bd:var(--ink);transition:none}
 .k-btn[data-hv=jump]{transition:transform var(--dur-fast) var(--ease),box-shadow var(--dur-fast) var(--ease),background var(--dur-fast),color var(--dur-fast)}
 .k-btn[data-hv=jump]:hover:not(:disabled){transform:translate(calc(var(--ox)*-.5),calc(var(--oy)*-.5));box-shadow:var(--ox) var(--oy) 0 var(--cb)}
+/* Stable hit area: the button face moves on hover, so an invisible zone that counter-moves keeps the
+   hovered region still. Without it the edge of the button slides out from under the pointer and flickers. */
+.k-btn[data-hv=jump]::before,.k-ic[data-hv=offset]::before,.k-ic[data-hv=turnjump]::before{content:'';position:absolute;inset:-4px;transition:transform var(--dur-fast) var(--ease)}
+.k-btn[data-hv=jump]:hover:not(:disabled)::before,.k-ic[data-hv=offset]:hover::before,.k-ic[data-hv=turnjump]:hover::before{transform:translate(calc(var(--ox)*.5),calc(var(--oy)*.5))}
 .k-btn[data-hv=skew] .lbl{transition:transform var(--dur-fast) var(--ease)}
 .k-btn[data-hv=skew]:hover:not(:disabled) .lbl{transform:skewX(-12deg) translateX(2px)}
 .k-btn[data-hv=breathe]:hover:not(:disabled){letter-spacing:.14em}
@@ -129,13 +140,16 @@ body[data-italic=primary] .k-btn.primary .lbl,body[data-italic=hover] .k-btn:hov
 .k-btn:active:not(:disabled){transform:translate(1px,1px)}
 
 /* ── icon buttons ──────────────────────────────────────────────── */
-.k-ic{width:32px;height:32px;display:inline-grid;place-items:center;background:none;border:1.5px solid var(--line);cursor:pointer;position:relative;transition:transform var(--dur-fast) var(--ease),background var(--dur-fast),border-color var(--dur-fast)}
+.k-ic{width:32px;height:32px;display:inline-grid;place-items:center;background:none;border:var(--bw-ic) solid var(--line);cursor:pointer;position:relative;transition:transform var(--dur-fast) var(--ease),background var(--dur-fast),border-color var(--dur-fast)}
 .k-ic svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;transition:transform var(--dur) var(--ease)}
 .k-ic[data-hv=fill]:hover{background:var(--ca);border-color:var(--ca);color:#fff}
 .k-ic[data-hv=turn]:hover svg{transform:rotate(90deg)}
 .k-ic[data-hv=turn]:hover{border-color:var(--ink)}
-.k-ic[data-hv=offset]{box-shadow:0 0 0 var(--ca);transition:transform var(--dur-fast) var(--ease),box-shadow var(--dur-fast) var(--ease),border-color var(--dur-fast)}
-.k-ic[data-hv=offset]:hover{border-color:var(--ink);transform:translate(calc(var(--ox)*-.5),calc(var(--oy)*-.5));box-shadow:var(--ox) var(--oy) 0 var(--ca)}
+.k-ic[data-hv=offset],.k-ic[data-hv=turnjump]{box-shadow:0 0 0 var(--ca);transition:transform var(--dur-fast) var(--ease),box-shadow var(--dur-fast) var(--ease),border-color var(--dur-fast),background var(--dur-fast)}
+.k-ic[data-hv=offset]:hover,.k-ic[data-hv=turnjump]:hover{border-color:var(--ink);background:var(--bg);transform:translate(calc(var(--ox)*-.5),calc(var(--oy)*-.5));box-shadow:var(--ox) var(--oy) 0 var(--ca)}
+.k-ic[data-hv=turnjump]:hover svg{transform:rotate(90deg)}
+body[data-icb=none] .k-ic{border-color:transparent}
+body[data-icb=none] .k-ic[data-hv=turn]:hover{border-color:transparent}
 
 /* ── toggle (existing tumble, recoloured) ──────────────────────── */
 .k-tg{width:44px;height:22px;background:var(--line);position:relative;cursor:pointer;border:1px solid transparent;transition:background var(--dur-fast)}
@@ -147,12 +161,15 @@ body[data-tg=slab] .k-tg.on::after{background:var(--cb)}
 /* ── slider (existing rolling square) ──────────────────────────── */
 .k-row{display:grid;grid-template-columns:110px 220px 56px;gap:12px;align-items:center}
 .k-row label{color:var(--mut)}
-.k-sl{-webkit-appearance:none;appearance:none;width:100%;height:20px;background:transparent;margin:0;cursor:grab}
+.k-sl{-webkit-appearance:none;appearance:none;width:100%;height:24px;margin:0;cursor:grab;
+  background:radial-gradient(circle,var(--ink) 0 1.6px,transparent 2.1px) no-repeat var(--dotx,0) 0/5px 5px}
 .k-sl::-webkit-slider-runnable-track{height:2px;background:linear-gradient(to right,var(--line) 0 var(--lo),var(--ca) var(--lo) var(--hi),var(--line) var(--hi) 100%)}
 .k-sl::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-7px;background:var(--bg);border:2px solid var(--ink);transform:rotate(var(--roll,0deg));transition:transform 80ms linear,background var(--dur-fast)}
-.k-sl:hover::-webkit-slider-thumb{background:var(--ca);border-color:var(--ca)}
+/* Filled with a white border on hover, and stays filled while the value is away from its default. */
+.k-sl:hover::-webkit-slider-thumb,.k-sl.mod::-webkit-slider-thumb{background:var(--ca)}
 .k-sl::-moz-range-track{height:2px;background:var(--line)}
 .k-sl::-moz-range-thumb{width:16px;height:16px;background:var(--bg);border:2px solid var(--ink);transform:rotate(var(--roll,0deg))}
+.k-sl.mod::-moz-range-thumb{background:var(--ca)}
 .val{font-variant-numeric:tabular-nums;text-align:right;display:flex;justify-content:flex-end;height:1.2em;overflow:hidden;line-height:1.2em}
 .val .d{display:inline-flex;flex-direction:column;transition:transform var(--dur-fast) var(--ease)}
 
@@ -172,10 +189,10 @@ body[data-tg=slab] .k-tg.on::after{background:var(--cb)}
 .k-sel.open button svg{transform:rotate(180deg)}
 .k-menu{background:var(--ink);color:var(--bg);border:1px solid var(--ink);min-width:200px;padding:4px 0;font-size:13px}
 .k-sel .k-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:5;clip-path:inset(0 0 100% 0);transition:clip-path var(--dur) var(--ease);pointer-events:none}
-.k-sel.open .k-menu{clip-path:inset(0 0 0 0);pointer-events:auto}
+.k-sel.open .k-menu{clip-path:inset(0 -20px -20px 0);pointer-events:auto}
 .k-menu div{position:relative;padding:7px 12px;cursor:pointer;isolation:isolate;display:flex;justify-content:space-between}
 .k-menu div small{opacity:.5}
-.k-menu div::before{content:'';position:absolute;inset:0;background:var(--ca);z-index:-1;transform:scaleX(0);transform-origin:left;transition:transform var(--dur-fast) var(--ease)}
+.k-menu div::before{content:'';position:absolute;inset:var(--msy) calc(var(--msx)*-1) calc(var(--msy)*-1) var(--msx);background:var(--ca);z-index:-1;transform:scaleX(0);transform-origin:left;transition:transform var(--menu-dur) var(--ease)}
 .k-menu div:hover{color:#fff}
 .k-menu div:hover::before{transform:scaleX(1)}
 body[data-menu=invert] .k-menu div::before{background:var(--bg)}
@@ -185,16 +202,17 @@ body[data-menu=shift] .k-menu div{transition:transform var(--dur-fast) var(--eas
 body[data-menu=shift] .k-menu div:hover{color:var(--bg);transform:translateX(6px)}
 .k-menu hr{border:0;border-top:1px solid rgba(0,0,0,.2);margin:4px 0}
 .k-search{display:flex;align-items:center;gap:8px;width:260px;height:32px;padding:0 10px;border:1.5px solid var(--line);position:relative;isolation:isolate;background:var(--bg)}
-.k-search::after{content:'';position:absolute;left:-1.5px;top:-1.5px;bottom:-1.5px;width:4px;background:var(--ca);transform:scaleY(0);transform-origin:top;transition:transform var(--dur) var(--ease)}
 .k-search:focus-within{border-color:var(--ink)}
-.k-search:focus-within::after{transform:scaleY(1)}
+.k-search svg,.rbar .lib-search-wrap svg{flex:none;transition:transform var(--dur-fast) var(--ease),filter var(--dur-fast) var(--ease),stroke var(--dur-fast)}
+.k-search:is(:hover,:focus-within) svg,.rbar .lib-search-wrap:is(:hover,:focus-within) svg{stroke:var(--ink);color:var(--ink);transform:translate(calc(var(--ox)*-.35),calc(var(--oy)*-.35));filter:drop-shadow(calc(var(--ox)*.5) calc(var(--oy)*.5) 0 var(--ca))}
 .k-search input{border:0;background:none;outline:none;flex:1;font-size:13px}
 .k-search input::placeholder{color:var(--mut);text-transform:uppercase;letter-spacing:.12em;font-size:10px;font-weight:700}
 .k-search svg{width:14px;height:14px;stroke:var(--mut);fill:none;stroke-width:1.8}
 .k-info{width:16px;height:16px;display:inline-grid;place-items:center;border:1px solid var(--mut);color:var(--mut);font:700 10px/1 var(--f);cursor:help;transition:all var(--dur-fast)}
 .k-info:hover{background:var(--cb);border-color:var(--cb);color:#fff}
-.k-card{width:340px;border-top:1.5px solid var(--ink);padding-top:10px}
-.k-card header{display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:12px}
+.k-card{width:340px;border-top:1.5px solid var(--ink);padding-top:3px}
+.k-card header{display:flex;align-items:center;gap:8px;cursor:pointer;margin:0 -8px 12px;padding:7px 8px;transition:background var(--dur-fast)}
+.k-card header:hover{background:color-mix(in srgb,var(--ink) 11%,transparent)}
 .k-card header b{font:700 11px/1 var(--f);letter-spacing:.14em;text-transform:uppercase;flex:1}
 .k-card header .rst{color:var(--mut);font-size:11px;cursor:pointer}
 .k-card header .rst:hover{color:var(--ca)}
@@ -211,7 +229,7 @@ body[data-menu=shift] .k-menu div:hover{color:var(--bg);transform:translateX(6px
 .th .im{position:relative;isolation:isolate}
 .th .im img{display:block;width:100%;aspect-ratio:3/2;object-fit:cover;transition:filter var(--dur) var(--ease)}
 .th.p .im img{aspect-ratio:3/4}
-body[data-bw=on] .th:not(:hover):not(.on) img{filter:grayscale(1) contrast(1.1)}
+body[data-bw=on] .film .th:not(:hover):not(.on) img{filter:grayscale(1) contrast(1.1)}
 .th .im::before{content:'';position:absolute;z-index:-1;background:var(--ca);transition:transform var(--dur) var(--ease),opacity var(--dur-fast);opacity:0}
 .th .im::after{content:'';position:absolute;inset:0;border:2px solid var(--mut);opacity:0;transition:transform var(--dur) var(--ease),opacity var(--dur-fast);pointer-events:none}
 /* selection variants */
@@ -227,8 +245,9 @@ body[data-sel=tag] .th.on .im::after{opacity:1;border-color:var(--ca)}
 .th:hover:not(.on) .im::after{opacity:.5;border-color:var(--ink)}
 .th .cap{display:flex;justify-content:space-between;font-size:10px;color:var(--mut);margin-top:5px;letter-spacing:.04em}
 .th .cap b{color:var(--ink);font-weight:700}
-.flag{position:absolute;top:6px;left:6px;font:700 9px/1 var(--f);letter-spacing:.1em;padding:3px 4px;background:var(--bg);color:var(--ink)}
-.flag.pick{background:var(--cb);color:#fff}.flag.rej{background:#e02c00;color:#fff}
+.flag{position:absolute;top:6px;left:6px;display:inline-flex;align-items:center;gap:4px;font:700 9px/1 var(--f);letter-spacing:.1em;padding:3px 5px 3px 4px;background:var(--bg);color:var(--ink)}
+.flag svg{width:9px;height:9px;fill:currentColor;stroke:currentColor;stroke-width:1.4}
+.flag.pick{background:var(--cb);color:#fff}.flag.rej{background:#e02c00;color:#fff}.flag.fav{background:var(--ink);color:var(--bg)}
 
 /* ── library side menu ─────────────────────────────────────────── */
 .side{width:240px;border:1px solid var(--line);padding:16px 0}
@@ -256,17 +275,29 @@ body[data-side=offset] .side .opt.on{color:#fff;transform:translateX(12px)}
 .split{position:absolute;top:0;bottom:0;left:50%;width:1px;background:#fff}
 .split b{position:absolute;top:50%;left:-7px;width:14px;height:14px;margin-top:-7px;background:#fff;border:1px solid #000}
 
-/* ── splash ────────────────────────────────────────────────────── */
-.splash{position:relative;height:340px;width:560px;overflow:hidden;background:#2b3a2b}
-.splash .bl{position:absolute;right:30px;top:20px;width:390px;height:250px;background:var(--b)}
-.splash .or{position:absolute;left:20px;top:110px;width:300px;height:210px;background:var(--a)}
-.splash img{position:absolute;right:50px;top:40px;width:260px;border:6px solid #fff}
-.splash .wm{position:absolute;left:60px;bottom:26px;font:700 50px/1 var(--f);letter-spacing:-.03em;writing-mode:vertical-rl;transform:rotate(180deg);text-transform:uppercase;color:#fff}
-.splash .ld{position:absolute;right:130px;bottom:30px;font:italic 700 34px/1 var(--f);letter-spacing:-.04em;color:#fff}
+/* ── splash (matches Redesign Ideas/Screenshot 9.11.16) ────────── */
+.splash{position:relative;height:560px;width:720px;overflow:hidden;color:#fff;
+  background:linear-gradient(90deg,#3a2418 0 9%,transparent 9% 13%,#2f1d14 13% 17%,transparent 17% 80%,#3b2619 80% 86%,transparent 86%),
+    radial-gradient(ellipse at 85% 70%,#c9c3a4 0,#7d806a 30%,transparent 60%),linear-gradient(#5d6b4e,#394232 55%,#2d3326)}
+.splash .bl{position:absolute;left:144px;top:29px;width:533px;height:421px;background:var(--b)}
+.splash .or{position:absolute;left:61px;top:160px;width:480px;height:379px;background:var(--a)}
+.splash .ph{position:absolute;left:259px;top:59px;width:397px;height:273px;background:#fff;padding:7px}
+.splash .ph img{display:block;width:100%;height:100%;object-fit:cover;object-position:center 40%;filter:grayscale(1) contrast(1.1);border:3px solid #000}
+.splash .wm{position:absolute;left:153px;top:64px;height:400px;font:700 52px/1 var(--f);letter-spacing:-.02em;writing-mode:vertical-rl;transform:rotate(180deg);text-transform:uppercase;white-space:nowrap;text-align:right}
+.splash .ver{position:absolute;left:234px;top:74px;font:400 19px/1 var(--f);writing-mode:vertical-rl;transform:rotate(180deg);height:100px;text-align:left;white-space:nowrap}
+.splash .cr{position:absolute;left:389px;top:338px;width:160px;text-align:right;font:italic 400 12px/1 var(--f);white-space:nowrap}
+.splash .ld{position:absolute;left:343px;top:380px;font:italic 700 38px/1 var(--f);letter-spacing:-.04em}
+.splash .pc{position:absolute;left:452px;top:404px;font:italic 700 38px/1 var(--f);letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+/* "Shifted" type: the top slice of each glyph slides right, as in the reference. */
+.shift{position:relative;color:transparent;white-space:nowrap}
+.shift::before,.shift::after{content:attr(data-t);position:absolute;left:0;top:0;color:#fff}
+.shift::before{clip-path:inset(0 -1em 54% 0);transform:translateX(.09em)}
+.shift::after{clip-path:inset(46% -1em 0 0)}
 
 /* ── real top bars (captured markup, restyled) ────────────────── */
 .topbar{height:auto;min-height:60px;gap:18px;padding:10px 16px;min-width:max-content}
 .brand{display:flex;align-items:center;gap:18px;flex:none}
+.brand #mode-sw{margin-left:-6px}
 .rbar{flex:1;min-width:0}
 .rbar[hidden]{display:none}
 .rbar [data-was-hidden]{display:none!important}
@@ -280,15 +311,15 @@ body[data-cond=hide] .rbar [data-conditional]{display:none!important}
 .rbar svg{width:16px;height:16px;flex:none}
 .rbar .k-btn{gap:7px;height:30px;padding:0 12px}
 .rbar .k-btn svg{width:14px;height:14px}
-.rbar .k-ic{width:30px;height:30px;color:var(--ink)}
+.rbar .k-ic{width:30px;height:30px;color:var(--ink);border-color:transparent!important}
+.rbar #lib-sort-label{display:none}
 .rbar .k-ic svg{width:15px;height:15px}
 .rbar .k-ic.flag-btn-red:hover,.rbar #lib-flag-reject:hover{--ca:#e02c00}
 .rbar #btn-loupe{font:700 11px/1 var(--f)}
 .rbar #fx-zoom-pct{font-size:11px;color:var(--mut);min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
 .rbar .k-sl{width:110px}
 .rbar .lib-search-wrap{display:flex;align-items:center;gap:8px;width:280px;height:30px;padding:0 10px;border:1.5px solid var(--line);position:relative;background:var(--bg)}
-.rbar .lib-search-wrap::after{content:'';position:absolute;left:-1.5px;top:-1.5px;bottom:-1.5px;width:4px;background:var(--ca);transform:scaleY(0);transform-origin:top;transition:transform var(--dur) var(--ease)}
-.rbar .lib-search-wrap:focus-within{border-color:var(--ink)}.rbar .lib-search-wrap:focus-within::after{transform:scaleY(1)}
+.rbar .lib-search-wrap:focus-within{border-color:var(--ink)}
 .rbar .lib-search-wrap svg{width:14px;height:14px;color:var(--mut)}
 .rbar .lib-search-wrap input{border:0;background:none;outline:none;flex:1;font-size:13px}
 .rbar .lib-search-wrap input::placeholder{color:var(--mut);text-transform:uppercase;letter-spacing:.12em;font-size:10px;font-weight:700}
@@ -296,13 +327,12 @@ body[data-cond=hide] .rbar [data-conditional]{display:none!important}
 .rbar #db-title-name{display:block;font-weight:700;font-size:14px}
 .rbar #db-title-status{color:var(--mut);font-size:12px}
 .rbar #btn-editor-bg span{width:12px;height:12px;background:#333;border:1px solid var(--mut);display:block}
-.rbar .sw.seg .opt{padding:0 6px;display:grid;place-items:center;height:22px;background:none;border:0;cursor:pointer}
-.rbar .sw.seg .opt.on{color:#fff}
-.rbar .sw.seg{padding:2px}
+.rbar .sw.seg{height:30px}
+.rbar .sw.seg .opt{padding:0 9px}
 /* real menus -> hard-inverted menu */
 .rbar .lib-menu{position:absolute;top:calc(100% + 6px);z-index:20;min-width:230px;background:var(--ink);color:var(--bg);border:1px solid var(--ink);padding:4px 0;font-size:13px;clip-path:inset(0 0 100% 0);transition:clip-path var(--dur) var(--ease);pointer-events:none;display:block!important}
 .rbar #lib-settings .lib-menu{right:0}
-.rbar .lib-menu.open{clip-path:inset(0 0 -2px 0);pointer-events:auto}
+.rbar .lib-menu.open{clip-path:inset(-2px -20px -20px -2px);pointer-events:auto}
 .rbar .lib-menu .grp-label{font:700 9px/1 var(--f);letter-spacing:.16em;text-transform:uppercase;opacity:.55;padding:8px 12px 4px}
 .rbar .lib-menu hr{border:0;border-top:1px solid rgba(0,0,0,.18);margin:4px 0}
 .rbar .lib-menu .opt,.rbar .lib-menu .opt-action{position:relative;isolation:isolate;display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:7px 12px;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
@@ -310,7 +340,7 @@ body[data-cond=hide] .rbar [data-conditional]{display:none!important}
 .rbar .lib-menu .opt-action.opt-toggle{justify-content:space-between}
 .rbar .lib-menu .opt svg,.rbar .lib-menu .opt-action svg{width:13px;height:13px}
 .rbar .lib-menu .opt:not(.sel)>svg{visibility:hidden}
-.rbar .lib-menu .opt::before,.rbar .lib-menu .opt-action::before{content:'';position:absolute;inset:0;background:var(--ca);z-index:-1;transform:scaleX(0);transform-origin:left;transition:transform var(--dur-fast) var(--ease)}
+.rbar .lib-menu .opt::before,.rbar .lib-menu .opt-action::before{content:'';position:absolute;inset:var(--msy) calc(var(--msx)*-1) calc(var(--msy)*-1) var(--msx);background:var(--ca);z-index:-1;transform:scaleX(0);transform-origin:left;transition:transform var(--menu-dur) var(--ease)}
 .rbar .lib-menu .opt:hover,.rbar .lib-menu .opt-action:hover{color:#fff}
 .rbar .lib-menu .opt:hover::before,.rbar .lib-menu .opt-action:hover::before{transform:scaleX(1)}
 body[data-menu=invert] .rbar .lib-menu .opt::before,body[data-menu=invert] .rbar .lib-menu .opt-action::before{background:var(--bg)}
@@ -343,7 +373,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 @media (max-width:760px){body{grid-template-columns:1fr;overflow:auto}#dock{max-height:none}#stage{overflow:visible}.sec{padding:24px 16px}.grid{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
-<body data-dim="colour" data-slab="stepped" data-sel="slab" data-side="bar" data-menu="slab" data-italic="primary" data-bw="on" data-win="tint" data-tg="flip">
+<body data-dim="off" data-slab="stepped" data-sel="slab" data-side="fill" data-menu="slab" data-italic="primary" data-bw="on" data-win="tint" data-tg="flip" data-icb="on">
 
 <aside id="dock">
   <button id="dock-tg" class="dock-act" title="Hide the settings panel to see the page at full width. Shortcut: backslash">Hide panel</button>
@@ -386,13 +416,19 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 
   <fieldset><legend>Hover &amp; selection</legend>
     <div class="dr full"><label>Buttons</label><select id="hv-btn"></select></div>
-    <div class="dr full"><label>Icon buttons</label><select id="hv-ic"><option value="offset">Offset block</option><option value="fill">Fill</option><option value="turn">Quarter turn</option></select></div>
+    <div class="dr"><label>Button border</label><input type="range" min="0" max="4" step="0.5" data-var="--bw-btn" data-unit="px"><output></output></div>
+    <div class="dr full"><label>Icon buttons</label><select id="hv-ic"><option value="offset">Offset block</option><option value="fill">Fill</option><option value="turn">Quarter turn</option><option value="turnjump">Quarter turn + offset jump</option></select></div>
+    <div class="dr full"><label>Icon borders</label><select data-attr="icb"><option value="on">Borders</option><option value="none">No borders</option></select></div>
+    <div class="dr"><label>Icon border</label><input type="range" min="0.5" max="4" step="0.5" data-var="--bw-ic" data-unit="px"><output></output></div>
     <div class="dr full"><label>Menu rows</label><select data-attr="menu"><option value="slab">Slab wipe</option><option value="invert">Invert</option><option value="shift">Shift right</option></select></div>
+    <div class="dr"><label>Menu wipe speed</label><input type="range" min="0" max="1000" step="20" data-var="--menu-dur" data-unit="ms"><output></output></div>
+    <div class="dr"><label>Menu slab shift X</label><input type="range" min="-12" max="12" step="1" data-var="--msx" data-unit="px"><output></output></div>
+    <div class="dr"><label>Menu slab shift Y</label><input type="range" min="-8" max="8" step="1" data-var="--msy" data-unit="px"><output></output></div>
     <div class="dr full"><label>Photo selection</label><select data-attr="sel"><option value="slab">Offset slab + outline</option><option value="block">Offset block</option><option value="outline">Shifted outline</option><option value="tag">Corner tag</option></select></div>
     <div class="dr full"><label>Side menu</label><select data-attr="side"><option value="bar">Sliding bar</option><option value="fill">Sliding fill</option><option value="offset">Offset slab</option></select></div>
     <div class="dr full"><label>Toggle on</label><select data-attr="tg"><option value="flip">Tumble (current)</option><option value="slab">Tumble, colour B square</option></select></div>
     <div class="dr full"><label>Italics</label><select data-attr="italic"><option value="primary">Main action only</option><option value="hover">On hover</option><option value="none">None</option></select></div>
-    <div class="dr full"><label>Thumbnails</label><select data-attr="bw"><option value="on">B&amp;W until hover</option><option value="off">Always colour</option></select></div>
+    <div class="dr full"><label>Filmstrip</label><select data-attr="bw"><option value="on">Filmstrip B&amp;W until hover</option><option value="off">Always colour</option></select></div>
     <div class="dr full"><label>Window squares</label><select data-attr="win"><option value="tint">Tinted</option><option value="mono">Ink</option></select></div>
     <div class="dr full"><label>Value readout</label><select id="roll"><option value="roll">Rolling digits</option><option value="plain">Plain</option></select></div>
   </fieldset>
@@ -434,7 +470,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 <section class="sec zone">
   <div class="eyebrow"><b>02</b> Library</div>
   <h2>Side menu, grid, filmstrip</h2>
-  <p class="note">Click photos to select them. Thumbnails stay black and white until hovered or selected. The side menu's highlight slides between rows.</p>
+  <p class="note">Click photos to select them. The grid is always in colour; the docked filmstrip stays black and white until hovered or selected. (The selfie and two dog samples are black-and-white files themselves, cropped from your screenshot; the canal shows the grid's colour.) The side menu's highlight slides between rows.</p>
   <div class="row">
     <div class="side zone">
       <h4>Collections</h4>
@@ -461,7 +497,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 <section class="sec zone">
   <div class="eyebrow"><b>04</b> Controls</div>
   <h2>Toggle · slider · segmented · chips</h2>
-  <p class="note">Toggle keeps the current tumble. The slider thumb keeps the rolling square. Segmented controls use the same draggable slab as the top bar.</p>
+  <p class="note">Toggle keeps the current tumble. The slider keeps the rolling square: the dot above the line marks where it resets to, the thumb fills once moved away from it, and double-click resets. Segmented controls sit on a baseline rule with the slab filling the chosen cell.</p>
   <div class="row">
     <div class="spec"><small>Toggle</small><div style="display:flex;gap:14px"><div class="k-tg on"></div><div class="k-tg"></div></div></div>
     <div class="spec"><small>Slider row</small>
@@ -511,7 +547,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 <section class="sec zone">
   <div class="eyebrow"><b>07</b> Splash</div>
   <h2>Loading screen</h2>
-  <div class="splash"><div class="bl"></div><div class="or"></div><img src="photos/dog-sitting.webp" alt=""><div class="wm">Chro-ma-smith</div><div class="ld">loading <span id="pct">50</span>%</div></div>
+  <div class="splash"><div class="bl"></div><div class="or"></div><div class="ph"><img src="photos/dog-sitting.webp" alt=""></div><div class="wm">Chro-ma-smith</div><div class="ver">v. 1.0921B</div><div class="cr">cover photo by tareq ameer</div><div class="ld shift" data-t="loading">loading</div><div class="pc shift" id="pct" data-t="50%">50%</div></div>
 </section>
 </main>
 
@@ -520,15 +556,17 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 (() => {
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const root = document.documentElement, body = document.body;
-const store = { get(k) { try { return JSON.parse(localStorage.getItem('sk.' + k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem('sk.' + k, JSON.stringify(v)); } catch {} } };
+const store = { get(k) { try { return JSON.parse(localStorage.getItem('sk2.' + k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem('sk2.' + k, JSON.stringify(v)); } catch {} } };
 
 // ── settings model ────────────────────────────────────────────────
 const EASES = { 'Inertia (0.16,1,0.3,1)': '.16,1,.3,1', 'Expo out': '.19,1,.22,1', 'Soft overshoot': '.34,1.56,.64,1', 'Hard overshoot': '.68,-.6,.32,1.6', 'Standard': '.4,0,.2,1', 'Linear': '0,0,1,1' };
 const HOVERS = { slip: 'Text slip', slab: 'Slab slide-in', flood: 'Instant invert', jump: 'Offset jump', skew: 'Italic lean', breathe: 'Letter-spacing breathe', scramble: 'Letter scramble' };
 const PRESETS = { 'Cadmium / Cobalt': { '--a': '#e0500c', '--b': '#1414a0' }, 'Klein / Signal': { '--a': '#0015ff', '--b': '#e02c00' }, 'Orange / Ink': { '--a': '#e0500c', '--b': '#f2f2f0' }, 'Splash': { '--a': '#d84300', '--b': '#1013a0' } };
-const DEFAULTS = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#1b1b1b', '--ink': '#f2f2f0', '--mut': '#7c7c78', '--ox': '6px', '--oy': '6px', '--slab-top': '34%', '--dim': '0.35', '--dim-dur': '220ms', '--dur': '500ms', '--dur-fast': '180ms' },
-  attrs: { dim: 'colour', slab: 'stepped', sel: 'slab', side: 'bar', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip' },
-  cond: 'show', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'off', hvBtn: 'slip', hvIc: 'offset', roll: 'roll' };
+// Defaults = the 2026-09-24 review export. Storage keys moved to v2 so those picks show on first open.
+const DEFAULTS = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#1b1b1b', '--ink': '#f2f2f0', '--mut': '#7c7c78', '--ox': '6px', '--oy': '6px', '--slab-top': '34%', '--dim': '0.35', '--dim-dur': '220ms', '--dur': '500ms', '--dur-fast': '180ms',
+    '--bw-btn': '1.5px', '--bw-ic': '1px', '--menu-dur': '320ms', '--msx': '4px', '--msy': '2px' },
+  attrs: { dim: 'off', slab: 'stepped', sel: 'slab', side: 'fill', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'on' },
+  cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'turn', roll: 'roll' };
 let S = Object.assign(structuredClone(DEFAULTS), store.get('settings') || {});
 S.vars = Object.assign({}, DEFAULTS.vars, S.vars); S.attrs = Object.assign({}, DEFAULTS.attrs, S.attrs);
 const save = () => store.set('settings', S);
@@ -571,6 +609,8 @@ $('#copy').onclick = async () => {
   const out = { $description: 'Swiss Kinetic playground export ' + new Date().toISOString(),
     color: { accentA: c(S.vars['--a']), accentB: c(S.vars['--b']), bg: c(S.vars['--bg']), ink: c(S.vars['--ink']), muted: c(S.vars['--mut']) },
     offset: { x: d(S.vars['--ox']), y: d(S.vars['--oy']), slabTop: d(S.vars['--slab-top']), slabStyle: S.attrs.slab },
+    border: { button: d(S.vars['--bw-btn']), icon: S.attrs.icb === 'none' ? 'none' : d(S.vars['--bw-ic']) },
+    menu: { wipe: t(S.vars['--menu-dur']), slabShiftX: d(S.vars['--msx']), slabShiftY: d(S.vars['--msy']) },
     dim: { mode: S.attrs.dim, level: { $type: 'number', $value: +S.vars['--dim'] }, fade: t(S.vars['--dim-dur']) },
     motion: { duration: t(S.vars['--dur']), hover: t(S.vars['--dur-fast']), easing: { $type: 'cubicBezier', $value: S.ease.split(',').map(Number) }, dragBounce: S.bounce, throw: S.throw, edgeStretch: S.rubber, reduceMotion: S.rm, snapSound: S.snd },
     variants: { buttonHover: S.hvBtn, iconHover: S.hvIc, menuHover: S.attrs.menu, photoSelection: S.attrs.sel, sideMenu: S.attrs.side, toggle: S.attrs.tg, italics: S.attrs.italic, thumbnails: S.attrs.bw, windowSquares: S.attrs.win, valueReadout: S.roll, topBarStateOnlyControls: S.cond },
@@ -607,8 +647,11 @@ function makeSwitch(el) {
     const n = opts.length - 1, c = Math.max(0, Math.min(n, p)), i0 = Math.floor(c), i1 = Math.min(n, i0 + 1), f = c - i0;
     const a = g(i0), b = g(i1); let x = a.x + (b.x - a.x) * f, w = a.w + (b.w - a.w) * f;
     if (p < 0) { x += p * a.w; } if (p > n) { x += (p - n) * b.w; }
+    // Slab offsets: segmented sits in its cell (B steps half an offset), the mode switch leans away from
+    // its divider (left on the first word, right on the last) so the slab never touches the line.
+    const lean = el.id === 'mode-sw' ? -0.5 + 1.5 * (c / (n || 1)) : 1, seg = el.classList.contains('seg');
     for (const s of slabs) {
-      const ox = s.classList.contains('slab2') ? `calc(var(--ox) * 2)` : `var(--ox)`;
+      const k = s.classList.contains('slab2') ? (seg ? 0.5 : 2 * lean) : (seg ? 0 : lean), ox = `calc(var(--ox) * ${k.toFixed(3)})`;
       if (vert) { s.style.transform = `translateY(${x}px)`; s.style.height = w + 'px'; }
       else { s.style.transform = `translateX(calc(${x}px + ${ox}))`; s.style.width = w + 'px'; }
     }
@@ -657,6 +700,8 @@ function paintSlider(sl) {
   const pv = (v - min) / (max - min) * 100, pd = (def - min) / (max - min) * 100;
   sl.style.setProperty('--lo', Math.min(pv, pd) + '%'); sl.style.setProperty('--hi', Math.max(pv, pd) + '%');
   sl.style.setProperty('--roll', ((v - def) * 6 * 200 / (max - min)) + 'deg');
+  sl.style.setProperty('--dotx', `calc(${pd}% + ${(5.5 - 0.11 * pd).toFixed(2)}px)`); // dot centre = thumb centre at the default
+  sl.classList.toggle('mod', Math.abs(v - def) > 1e-9);
   const out = sl.parentElement.querySelector('.val'); if (!out) return;
   const txt = (Math.abs(max - min) <= 20 ? v.toFixed(2) : Math.round(v).toString()).replace('-', '−');
   const s = (v > def && min < 0 ? '+' : '') + txt;
@@ -665,7 +710,8 @@ function paintSlider(sl) {
   [...s].forEach((ch, i) => { const d = out.children[i]; if (/\d/.test(ch)) { if (!d.dataset.dg) { d.dataset.dg = 1; d.innerHTML = '0123456789'.split('').map((n) => `<span>${n}</span>`).join(''); } d.style.transform = `translateY(${-ch * 1.2}em)`; }
     else { d.dataset.dg = ''; d.textContent = ch; d.style.transform = ''; } });
 }
-$$('.k-sl').forEach((sl) => sl.addEventListener('input', () => paintSlider(sl)));
+const wireSlider = (sl) => { sl.addEventListener('input', () => paintSlider(sl)); sl.addEventListener('dblclick', () => { sl.value = sl.dataset.def || 0; paintSlider(sl); sl.dispatchEvent(new Event('input')); snap(); }); };
+$$('.k-sl').forEach(wireSlider);
 
 // ── scramble hover ────────────────────────────────────────────────
 const GLYPHS = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
@@ -685,8 +731,9 @@ for (const [k, n] of Object.entries(HOVERS)) {
   spec.append(r); $$('.k-btn', r).forEach(wrapBtn);
 }
 { const r = document.createElement('div'); r.style.cssText = 'display:grid;grid-template-columns:170px auto 1fr;gap:14px;align-items:center'; r.innerHTML = '<small class="eyebrow" style="margin:0">Disabled</small><button class="k-btn primary" disabled>Export</button><span></span>'; spec.append(r); wrapBtn($('.k-btn', r)); }
-const PH = [['canal.webp', 'TM_56784', 'RW2', 'pick'], ['selfie.webp', 'TM_56701', 'RW2', '', 'p'], ['dog-lying.webp', 'TM_56655', 'JPG', ''], ['dog-sitting.webp', 'TM_56612', 'RW2', 'rej'], ['canal.webp', 'TM_56590', 'RW2', '', '', 'top'], ['dog-lying.webp', 'TM_56588', 'RW2', 'pick'], ['canal.webp', 'TM_56577', 'HEIC', '', '', 'bottom'], ['selfie.webp', 'TM_56570', 'RW2', '', 'p']];
-const thumb = ([src, name, ext, flag, p, pos], cap) => `<div class="th ${p || ''}" tabindex="0"><div class="im"><img src="photos/${src}" alt="" style="object-position:center ${pos || 'center'}">${flag ? `<span class="flag ${flag}">${flag === 'pick' ? '★ PICK' : 'REJ'}</span>` : ''}</div>${cap ? `<div class="cap"><b>${name}</b><span>${ext}</span></div>` : ''}</div>`;
+const FLAGS = { rej: '✕ REJ', pick: '<svg viewBox="0 0 10 10"><path d="M2 9.5V1h6L6.6 3 8 5H2"/></svg>PICK', fav: '<svg viewBox="0 0 10 10"><path d="M5 9 1.3 5.3a2.1 2.1 0 0 1 3-3L5 3l.7-.7a2.1 2.1 0 0 1 3 3z"/></svg>FAV' };
+const PH = [['canal.webp', 'TM_56784', 'RW2', 'pick'], ['selfie.webp', 'TM_56701', 'RW2', 'fav', 'p'], ['dog-lying.webp', 'TM_56655', 'JPG', ''], ['dog-sitting.webp', 'TM_56612', 'RW2', 'rej'], ['canal.webp', 'TM_56590', 'RW2', '', '', 'top'], ['dog-lying.webp', 'TM_56588', 'RW2', 'pick'], ['canal.webp', 'TM_56577', 'HEIC', '', '', 'bottom'], ['selfie.webp', 'TM_56570', 'RW2', '', 'p']];
+const thumb = ([src, name, ext, flag, p, pos], cap) => `<div class="th ${p || ''}" tabindex="0"><div class="im"><img src="photos/${src}" alt="" style="object-position:center ${pos || 'center'}">${flag ? `<span class="flag ${flag}">${FLAGS[flag]}</span>` : ''}</div>${cap ? `<div class="cap"><b>${name}</b><span>${ext}</span></div>` : ''}</div>`;
 $('#grid').innerHTML = PH.map((x) => thumb([...x.slice(0, 4), ''], true)).join('');
 $('#film').innerHTML = PH.slice(0, 5).map((x) => thumb(x, false)).join('');
 for (const box of [$('#grid'), $('#film')]) { box.firstElementChild.classList.add('on'); box.addEventListener('click', (e) => { const t = e.target.closest('.th'); if (!t) return; if (!(e.metaKey || e.shiftKey)) $$('.th.on', box).forEach((x) => x !== t && x.classList.remove('on')); t.classList.toggle('on', e.metaKey || e.shiftKey ? !t.classList.contains('on') : true); snap(); }); }
@@ -698,24 +745,26 @@ $$('#sel .k-menu div').forEach((d) => d.addEventListener('click', () => { $('#se
 document.addEventListener('click', (e) => { if (!e.target.closest('#sel')) $('#sel').classList.remove('open'); });
 $('#card header').addEventListener('click', (e) => { if (e.target.closest('.rst')) { $$('#card .k-sl').forEach((s) => { s.value = s.dataset.def; paintSlider(s); }); return; } $('#card').classList.toggle('shut'); });
 $$('.win i').forEach((w) => w.addEventListener('click', snap));
-let pc = 0; setInterval(() => { pc = (pc + 7) % 101; $('#pct').textContent = pc; }, 400);
+let pc = 0; setInterval(() => { pc = (pc + 7) % 101; $('#pct').textContent = $('#pct').dataset.t = pc + '%'; }, 400);
 // ── real top bars: captured app markup, restyled with the playground's components ──
 function mountBar(host, html) {
   host.innerHTML = html;
+  // Not part of the Editor top bar (review notes 1-9): state-only extras, the zoom % readout, and their popovers.
+  if (host.id === 'rbar-ed') $$('[data-conditional],#fx-zoom-pct,#btn-split-menu,#fx-split-popover,#fx-timeline-popover,#sel-scope-mode', host).forEach((x) => x.remove());
   const seg = host.querySelector('#lib-viewmode-seg');
   if (seg) { seg.classList.add('sw', 'seg'); seg.dataset.idx = 0; seg.insertAdjacentHTML('afterbegin', '<span class="slab2"></span><span class="slab"></span>'); $$('button', seg).forEach((b) => b.classList.add('opt')); }
   $$('button', host).forEach((b) => {
     if (b.closest('.lib-menu') || b.closest('.sw')) return;
     b.removeAttribute('disabled');
     const text = [...b.childNodes].filter((n) => n.nodeType === 3 || (n.nodeType === 1 && n.tagName !== 'svg' && !n.querySelector('svg') && !n.matches('#lib-filters-badge'))).map((n) => n.textContent).join('').trim();
-    if (!text || b.id === 'btn-loupe') { b.classList.add('k-ic'); return; }
+    if (!text || b.id === 'btn-loupe' || b.id === 'lib-sort-btn') { b.classList.add('k-ic'); return; }
     const icons = $$('svg', b).map((x) => x.closest('span.fx-db-ic') || x);
     b.textContent = ''; icons.forEach((x) => b.append(x));
     b.insertAdjacentHTML('beforeend', `<span class="lbl"><span class="trk"><span>${text}</span><span>${text}</span></span></span>`);
     b.classList.add('k-btn');
     if (/export/i.test(b.id) || b.id === 'db-save-lr') b.classList.add('primary'); else if (/allfx/.test(b.id + b.className)) b.classList.add('outline');
   });
-  $$('input[type=range]', host).forEach((r) => { r.classList.add('k-sl'); r.dataset.def = r.min; if (!r.value || r.id === 'lib-thumbsize') r.value = r.id === 'lib-thumbsize' ? 180 : r.value; r.addEventListener('input', () => { paintSlider(r); if (r.id === 'fx-zoom-slider') $('#fx-zoom-pct').textContent = r.value + '%'; }); });
+  $$('input[type=range]', host).forEach((r) => { r.classList.add('k-sl'); r.dataset.def = r.id === 'lib-thumbsize' ? 180 : r.value || r.min; if (r.id === 'lib-thumbsize') r.value = 180; wireSlider(r); });
   // real menus open/close
   for (const [btn, menu] of [['#lib-sort-btn', '#lib-sort-menu'], ['#lib-view-menu-btn', '#lib-view-menu']]) {
     const b = host.querySelector(btn), m = host.querySelector(menu); if (!b || !m) continue;
