@@ -5063,7 +5063,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0924F';
+const BUILD='1.0924G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10115,15 +10115,20 @@ async function loadRw2(file){
   if(!self.crossOriginIsolated)throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
   let profile=rawProfile();
   const LibRaw=await getLibRaw();
-  const bytes=new Uint8Array(await file.arrayBuffer());
-  const bytesCopy=bytes.slice(); // raw.open() transfers (detaches) `bytes`; kept for the embedded-profile parse / sRGB fallback re-decode
+  // By-path RAW (desktop Library open, see library-ui's makePathRawFile): the native shim reads
+  // the file itself, so no bytes are loaded here; the rare paths below that need them (embedded
+  // DNG profile, sRGB fallback) fetch them on demand.
+  const srcPath=(window.__TAURI__&&file.__csSourcePath)||null;
+  const bytes=srcPath?new Uint8Array(0):new Uint8Array(await file.arrayBuffer());
+  let bytesCopy=srcPath?null:bytes.slice(); // raw.open() transfers (detaches) `bytes`; kept for the embedded-profile parse / sRGB fallback re-decode
+  const fullBytes=async()=>bytesCopy||(bytesCopy=new Uint8Array(await file.arrayBuffer()));
   const t0=performance.now();
   const raw=new LibRaw();
   let m,img;
   const dcpSettings={useCameraWb:true,outputColor:0,outputBps:16,gamm:[1,1],noAutoBright:true,userQual:3,userFlip:-1}; // linear 16-bit camera RGB (DCP input space)
   const sdrSettings={useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1};                               // sRGB, 8-bit, AHD, camera WB
   try{
-    await raw.open(bytes,profile?dcpSettings:sdrSettings);
+    await raw.open(bytes,srcPath?{...(profile?dcpSettings:sdrSettings),sourcePath:srcPath}:(profile?dcpSettings:sdrSettings));
     window.__pm&&window.__pm('loadRw2-opened');
     m=await raw.metadata();
     img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
@@ -10138,12 +10143,12 @@ async function loadRw2(file){
   // the DCP branch below against that linear16 buffer and threw on the missing camPrefix —
   // so desktop iPhone/DNG opens failed even though the native shim itself handled it gracefully.
   let embDcp=null;
-  if(profile&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(bytesCopy);
+  if(profile&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(await fullBytes());
   if(profile&&!embDcp&&!cameraDcpPrefix(m.make,m.model)){
     profile=null;
     const raw2=new LibRaw();
     try{
-      await raw2.open(bytesCopy,sdrSettings);
+      await raw2.open(await fullBytes(),sdrSettings);
       img=await raw2.imageData();
     }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
     finally{try{raw2.worker.terminate()}catch(_){}}
@@ -10455,7 +10460,9 @@ async function loadFXImages(fileList){
   for(const file of files){
     fxDeskbarTitle(file.name,'Opening photo…',true);
     try{
-      const bytes=new Uint8Array(await file.arrayBuffer());
+      // A by-path RAW (desktop Library open) carries only its header: that's all the sniff needs,
+      // and the native decode reads the file itself. Anything else reads the whole file as before.
+      let bytes=file.__csHead?file.__csHead:new Uint8Array(await file.arrayBuffer());
       window.__pm&&window.__pm('lfx-arraybuffer');
       let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';if(ext==='tiff')ext='tif';
       // A RAW-extension file whose bytes are actually a JPEG/PNG (see sniffRealImageKind) —
@@ -10463,6 +10470,7 @@ async function loadFXImages(fileList){
       // correctly-but-uselessly reject it as "no decoder". Most commonly a Google Photos
       // Picker import handing back the JPEG twin of an iPhone ProRAW/RAW+JPEG pair.
       const sniffedKind=isRw2File(file)?sniffRealImageKind(bytes):null;
+      if(sniffedKind&&file.__csHead)bytes=new Uint8Array(await file.arrayBuffer()); // not really RAW: the image path needs every byte
       if(sniffedKind){
         ext=sniffedKind;
         log(`${file.name}: this isn't actually RAW data — the source (likely Google Photos) only had a ${sniffedKind.toUpperCase()} copy. Imported as ${sniffedKind.toUpperCase()}; RAW-only adjustments (Color NR, RAW profile) won't apply.`,'warn');

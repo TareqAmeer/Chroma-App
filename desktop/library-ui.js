@@ -2357,6 +2357,19 @@
   // Minimal framed raw-body invoke (JSON header + binary payload) — same wire format
   // desktop-native.js's framedInvoke uses for store_dcp_lut, duplicated here (not exposed on
   // window there) since it's a one-liner and this file is meant to stay self-contained.
+  // A File for a RAW the native side reads by path: it carries only the header bytes (enough for
+  // loadFXImages' format sniff) but reports the real size, so every "same photo" key built from
+  // file.size is unchanged. `__csSourcePath` tells loadRw2/NativeLibRawShim to decode by path;
+  // arrayBuffer() still returns the WHOLE file (read on demand) for the later consumers that
+  // really need the bytes — High-tier NR, Full cleanup, the Diagnostics DCP re-decode.
+  function makePathRawFile(path, head, size, type) {
+    const file = new File([head], baseName(path), { type, lastModified: 0 });
+    Object.defineProperty(file, 'size', { value: size });
+    file.__csSourcePath = path;
+    file.__csHead = head;
+    file.arrayBuffer = () => invoke('read_file_bytes', { path });
+    return file;
+  }
   function framedInvoke(cmd, jsonObj, payload) {
     const json = new TextEncoder().encode(JSON.stringify(jsonObj));
     const framed = new Uint8Array(4 + json.length + payload.length);
@@ -4184,8 +4197,16 @@
         // 360px-long-edge JPEG the Library grid already shows offline (catalog.rs's "Scan phase
         // D: offline thumbnails"). Editing against it is real but REDUCED-QUALITY, and the UI
         // must stay honest about that (the toast below), not pretend it's the original.
-        let buf, offlinePreview = false, hqOfflineCacheExt = null;
-        try {
+        let buf, offlinePreview = false, hqOfflineCacheExt = null, pathSource = null;
+        // A RAW on a readable disk: only its header crosses IPC (format sniffing); the native
+        // decode reads the file itself by path (makePathRawFile / decode_raw_v2 sourcePath).
+        // Shipping the whole ~30MB file into the WebView and back cost ~0.5-1s per open.
+        if (isRaw) {
+          try { pathSource = await invoke('read_file_head', { path, len: 262144 }); } catch (_) { pathSource = null; }
+        }
+        if (pathSource) {
+          buf = null;
+        } else try {
           buf = await invoke('read_file_bytes', { path });
         } catch (readErr) {
           // ⚠️ Checked BEFORE the reduced-quality fallback below — a photo in the guaranteed-
@@ -4223,17 +4244,18 @@
         // JPEG. A byte-copied still (already JPEG/HEIC/etc originally) has a matching extension
         // either way, so this is a no-op for that case.
         const fileMime = offlinePreview ? 'image/jpeg' : (hqOfflineCacheExt ? mimeFromName('x.' + hqOfflineCacheExt) : mimeFromName(path));
-        rawPerf('open-read-source', path, { ms: 0, bytes: buf.byteLength, offlinePreview });
-        const file = new File([buf], baseName(path), { type: fileMime, lastModified: 0 });
+        const byteLen = pathSource ? Number(new DataView(pathSource).getBigUint64(0, true)) : buf.byteLength;
+        rawPerf('open-read-source', path, { ms: 0, bytes: byteLen, offlinePreview, byPath: !!pathSource });
+        const file = pathSource ? makePathRawFile(path, new Uint8Array(pathSource, 8), byteLen, fileMime) : new File([buf], baseName(path), { type: fileMime, lastModified: 0 });
         window.chromasmithSourcePath = path;
         window.chromasmithDecodeRecipeKey = recipeKey;
         // Persistent decode cache target (desktop-native.js consumes it one-shot): Rust writes
         // the cache from the final decoded pixels, keyed by this path + recipe. Never for an
         // offline preview or an hq-offline copy — those bytes aren't the real file's.
-        window.__chromasmithPersistTarget = (isRaw && !offlinePreview && !hqOfflineCacheExt) ? { path, recipeKey, size: buf.byteLength } : null;
-        const decodeT0 = performance.now(); try { await loadFXImages([file]); } finally { window.__chromasmithPersistTarget = null; } rawPerf('open-decode', path, { ms: performance.now() - decodeT0, bytes: buf.byteLength }); // bare identifier — see desktop-native.js's note on this
+        window.__chromasmithPersistTarget = (isRaw && !offlinePreview && !hqOfflineCacheExt) ? { path, recipeKey, size: byteLen } : null;
+        const decodeT0 = performance.now(); try { await loadFXImages([file]); } finally { window.__chromasmithPersistTarget = null; } rawPerf('open-decode', path, { ms: performance.now() - decodeT0, bytes: byteLen }); // bare identifier — see desktop-native.js's note on this
         if (fxImages[0]) {
-          fxImages[0].fileSize = buf.byteLength; // shown as the "Size" row in the metadata panel
+          fxImages[0].fileSize = byteLen; // shown as the "Size" row in the metadata panel
           fxImages[0].offlinePreview = offlinePreview;
           if (offlinePreview) {
             state.offlineEditPaths.add(path);
@@ -4243,7 +4265,7 @@
           } else {
             state.offlineEditPaths.delete(path);
           }
-          const loadKey = `${baseName(path)}:${buf.byteLength}:0`; // must match loadFXImages' own key formula
+          const loadKey = `${baseName(path)}:${byteLen}:0`; // must match loadFXImages' own key formula
           // Never cache a low-res offline stand-in under the real path's key — a later ONLINE
           // open must not be served this reduced preview from imgCache.
           if (!offlinePreview) imgCacheStore(path, fxImages[0], loadKey);

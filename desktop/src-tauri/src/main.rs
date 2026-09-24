@@ -843,6 +843,16 @@ fn collage_output_path(first_source: String) -> String {
 #[tauri::command(async)]
 fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
+    // sourcePath + empty payload: read the RAW natively (Library opens) instead of receiving the
+    // whole file over IPC. Same bytes either way, so the decode (and its memo key) is identical.
+    let path_bytes;
+    let payload: &[u8] = match (payload.is_empty(), json["sourcePath"].as_str()) {
+        (true, Some(p)) if !p.is_empty() => {
+            path_bytes = std::fs::read(p).map_err(|e| format!("read {p}: {e}"))?;
+            &path_bytes
+        }
+        _ => payload,
+    };
     let mode = json["mode"].as_str().unwrap_or("linear16");
     let auto_lens = json["autoLens"].as_bool().unwrap_or(false);
     // "off"|"fast" ONLY — decode_raw_v2 is also the Library's thumbnail-decode path, so it must
@@ -1478,6 +1488,18 @@ fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> 
         tauri::ipc::InvokeBody::Raw(b) => b.as_slice(),
         _ => return Err("expected raw body".into()),
     };
+    peek_raw_camera_bytes(bytes)
+}
+
+/// Same as peek_raw_camera, but Rust reads the file itself — a Library open no longer ships the
+/// whole RAW into the WebView and straight back just to read its EXIF.
+#[tauri::command(async)]
+fn peek_raw_camera_path(path: String) -> Result<CameraIdent, String> {
+    let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
+    peek_raw_camera_bytes(&bytes)
+}
+
+fn peek_raw_camera_bytes(bytes: &[u8]) -> Result<CameraIdent, String> {
     let source = rawler::rawsource::RawSource::new_from_slice(bytes);
     let decoder = rawler::get_decoder(&source).map_err(|e| format!("no decoder: {e}"))?;
     let md = decoder
@@ -1511,6 +1533,22 @@ fn native_build_tag() -> &'static str {
 fn read_file_bytes(path: String) -> Result<tauri::ipc::Response, String> {
     let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
     Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// The first `len` bytes of a file plus its real size: [u64 LE size][head bytes]. A Library RAW
+/// open only needs the header in the WebView (format sniffing) — the native decode reads the
+/// file by path (decode_raw_v2's sourcePath), so the full ~30MB never crosses IPC.
+#[tauri::command(async)]
+fn read_file_head(path: String, len: u32) -> Result<tauri::ipc::Response, String> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(&path).map_err(|e| format!("open {path}: {e}"))?;
+    let size = f.metadata().map_err(|e| format!("stat {path}: {e}"))?.len();
+    let mut head = Vec::with_capacity(len as usize);
+    (&mut f).take(len as u64).read_to_end(&mut head).map_err(|e| format!("read {path}: {e}"))?;
+    let mut out = Vec::with_capacity(8 + head.len());
+    out.extend_from_slice(&size.to_le_bytes());
+    out.extend_from_slice(&head);
+    Ok(tauri::ipc::Response::new(out))
 }
 
 // Overwrites a file in place with rendered export bytes — used by "Save to Lightroom" (see
@@ -2530,6 +2568,8 @@ fn main() {
             platform_capabilities,
             peek_raw_camera,
             read_file_bytes,
+            read_file_head,
+            peek_raw_camera_path,
             write_file_bytes,
             write_file_bytes_raw,
             write_lightroom_tiff,

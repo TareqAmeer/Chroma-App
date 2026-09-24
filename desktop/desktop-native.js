@@ -125,7 +125,11 @@
       const _t0 = performance.now();
       const _lap = (label) => { window.__pm('native-lap: ' + label); if (typeof log === 'function') log(`RAW load: ${label} ${(performance.now() - _t0).toFixed(0)}ms`, 'info'); };
       this._ident = { make: '', model: '', lens: '' };
-      try { this._ident = await invoke('peek_raw_camera', bytes); } catch (e) { console.error('peek_raw_camera', e); }
+      // By-path open (library-ui's makePathRawFile → loadRw2): Rust reads the file for both the
+      // peek and the decode, so the RAW never crosses IPC. Everything else sends its bytes.
+      const sourcePath = (settings && settings.sourcePath) || null;
+      this._sourcePath = sourcePath;
+      try { this._ident = sourcePath ? await invoke('peek_raw_camera_path', { path: sourcePath }) : await invoke('peek_raw_camera', bytes); } catch (e) { console.error('peek_raw_camera', e); }
       _lap('peek_raw_camera done at');
       if (settings && settings.outputBps === 16) {
         // ROADMAP.md's F1: bundled (Panasonic DC-S9 / Sony DSC-RX100M5) always wins when it
@@ -206,10 +210,11 @@
       // The size check keeps a dropped file (Match/Collage) from ever using a stale target.
       const pt = window.__chromasmithPersistTarget;
       window.__chromasmithPersistTarget = null;
-      this._persist = (pt && pt.size === bytes.byteLength) ? { cachePath: pt.path, recipeKey: pt.recipeKey } : null;
+      this._persist = (pt && (sourcePath ? pt.path === sourcePath : pt.size === bytes.byteLength)) ? { cachePath: pt.path, recipeKey: pt.recipeKey } : null;
+      const src = sourcePath ? { sourcePath } : {};
       const persistNow = (this._persist && !this._needsRefine) ? this._persist : {};
       window.__pm('native-fast-invoke');
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...persistNow, fast: !single } : { mode, ...extra, ...persistNow, fast: !single }, bytes);
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...persistNow, ...src, fast: !single } : { mode, ...extra, ...persistNow, ...src, fast: !single }, bytes);
       _lap('decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at');
       // 4th header word: whether Rust actually applied the requested LUT. Rust re-checks the
       // camera make independently (main.rs's KNOWN_DCP_MAKES) as a backstop in case this
@@ -261,12 +266,13 @@
     // already-displayed canvas without any new pixel-format handling. Returns null if this
     // instance's first decode didn't actually need refining (NR was off) or already failed.
     async refine() {
-      if (!this._needsRefine || !this._bytes) return null;
+      if (!this._needsRefine || (!this._bytes && !this._sourcePath)) return null;
       const { _mode: mode, _lutKey: lutKey, _extra: extra, _bytes: bytes } = this;
       const wantHdrPreview = !!window.chromasmithHdrPreview;
       window.__pm('native-refine-invoke');
       const persist = this._persist || {};
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...persist, fast: false } : { mode, ...extra, ...persist, fast: false }, bytes);
+      const src = this._sourcePath ? { sourcePath: this._sourcePath } : {};
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...persist, ...src, fast: false } : { mode, ...extra, ...persist, ...src, fast: false }, bytes);
       window.__pm('native-refine-returned');
       const head = new Uint32Array(buf, 0, 6);
       const w = head[0], h = head[1];
