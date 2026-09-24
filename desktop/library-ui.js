@@ -1709,6 +1709,13 @@
       object-fit:contain;pointer-events:none;z-index:50;display:none}
     #lib-provisional.on{display:block}
     body.lib-provisional-on #fx-canvas,body.lib-provisional-on #fx-canvas-orig{visibility:hidden}
+    /* Preview -> full-resolution swap in progress: a soft pulsing accent border on the photo so
+       the user can see the sharper version is still loading. Removed the moment it lands. */
+    #fx-zoom-wrap.lib-full-loading::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;
+      border-radius:2px;box-shadow:inset 0 0 0 2px var(--acc,#7aa2ff),0 0 14px 2px var(--acc,#7aa2ff);
+      opacity:.35;animation:lib-full-glow 1.1s ease-in-out infinite alternate}
+    @keyframes lib-full-glow{from{opacity:.2}to{opacity:.85}}
+    @media (prefers-reduced-motion:reduce){#fx-zoom-wrap.lib-full-loading::after{animation:none;opacity:.6}}
     /* Photo reveal (see the controller near openInEditor). The hold hides every editor pixel
        layer at once — canvas, #lib-provisional, mask overlays — until the new photo fills in. */
     body.lib-reveal-hold #fx-zoom-wrap{opacity:0}
@@ -4045,6 +4052,7 @@
       displayOverlayPromise = showDisplayProvisional(path, recipeKey);
     }
     window.chromasmithEnsureFullQuality = null; // the previous photo's promotion hook must not outlive it
+    document.getElementById('fx-zoom-wrap')?.classList.remove('lib-full-loading');
     _warmToken++; // a pending neighbour warm-up for the previous photo is stale now
     // Opening the very photo being warmed: wait for it (a cache hit) rather than decode it twice.
     if (_warmInflight && _warmInflight.path === path) { const w0 = performance.now(); await _warmInflight.promise; rawPerf('open-waited-for-warm', path, { ms: performance.now() - w0 }); }
@@ -4061,7 +4069,9 @@
       fullPromotionStarted = true;
       window.chromasmithFullQualityReady = false;
       const promoteT0 = performance.now();
+      const glowEl = document.getElementById('fx-zoom-wrap');
       const run = async () => {
+        if (glowEl) glowEl.classList.add('lib-full-loading');
         try {
           let fullImg;
           let promotionSource = 'asset';
@@ -4093,6 +4103,7 @@
             height: fullImg.naturalHeight || fullImg.height, source: promotionSource,
           });
         } catch (e) { rawPerf('open-full-quality-promotion-failed', path, { error: String(e) }); }
+        finally { if (glowEl && (!state.openedPath || state.openedPath === path)) glowEl.classList.remove('lib-full-loading'); }
       };
       // Screen-sized editing (the Lightroom/darktable model): fit view — and this app's "100%"
       // IS fit, not 1:1 — never needs the 24MP frame, and promoting it cost ~2.5-3.5s of
@@ -4107,6 +4118,16 @@
         if (!promo) { rawPerf('open-full-quality-requested', path, { ms: performance.now() - promoteT0 }); promo = run(); }
         return promo;
       };
+      // Load full resolution quietly once the user settles on this photo, instead of waiting
+      // for the first edit/zoom to ask for it — by the time they reach for a slider it is
+      // usually already there. The settle delay keeps fast arrow-key culling from starting
+      // (and throwing away) a 24MP load for every photo it passes.
+      const ensureForThis = window.chromasmithEnsureFullQuality;
+      setTimeout(() => {
+        if (state.openedPath !== path || window.chromasmithEnsureFullQuality !== ensureForThis) return;
+        const go = () => { if (state.openedPath === path && window.chromasmithEnsureFullQuality === ensureForThis) ensureForThis(); };
+        if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 500 }); else go();
+      }, 700);
     };
     if (cached && isRaw && !hdrPreview && cached.entry.img.naturalWidth < 4000) {
       try { fullAssetPath = await invoke('get_decode_cache_path', { path, recipeKey }); } catch (_) {}

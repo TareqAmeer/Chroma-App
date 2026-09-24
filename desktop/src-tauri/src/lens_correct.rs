@@ -347,21 +347,33 @@ fn bilinear_sample(src: &[u16], w: usize, h: usize, x: f32, y: f32) -> [u16; 3] 
 /// Geometrically undistorts `rgb16` (interleaved, w*h*3) in place using the matched lens
 /// profile. Returns false (buffer untouched) if no camera/lens/distortion-model match exists —
 /// a graceful no-op, since the DC-S9 + LUMIX S18-40 pairing may not be in the community DB yet.
-pub fn correct_distortion(
-    rgb16: &mut Vec<u16>,
-    w: usize,
-    h: usize,
+///
+/// `rgb16` is the PRE-orientation buffer (`sw` x `sh`); `orientation` is the EXIF tag the caller
+/// would otherwise apply as its own rotation pass. The correction and the rotation are fused
+/// into one resample: every output pixel's undistorted coordinate is computed in the rotated
+/// frame, then mapped back into the unrotated source — one full-frame pass and no 144MB source
+/// clone, instead of a rotate pass followed by a clone + resample pass. Exact, not approximate:
+/// lensfun's distortion models are radial about the frame centre, so they commute with a 90°/
+/// 180° rotation. On success returns the corrected, rotated buffer and its dimensions; on no
+/// match returns the untouched input in `Err` so the caller rotates it the ordinary way.
+pub fn correct_distortion_oriented(
+    rgb16: Vec<u16>,
+    sw: usize,
+    sh: usize,
+    orientation: u16,
     make: &str,
     model: &str,
     lens_model: &str,
     focal_len: f32,
-) -> bool {
+) -> Result<(Vec<u16>, usize, usize), Vec<u16>> {
     if focal_len <= 0.0 {
-        return false;
+        return Err(rgb16);
     }
-    let Some(db) = db() else { return false };
-    let Some(camera) = db.find_cameras(Some(make), model).into_iter().next() else { return false };
-    let Some(lens) = db.find_lenses(Some(camera), lens_model).into_iter().next() else { return false };
+    let Some(db) = db() else { return Err(rgb16) };
+    let Some(camera) = db.find_cameras(Some(make), model).into_iter().next() else { return Err(rgb16) };
+    let Some(lens) = db.find_lenses(Some(camera), lens_model).into_iter().next() else { return Err(rgb16) };
+    // Output (rotated) frame dimensions — the geometry the correction is defined in.
+    let (w, h) = if matches!(orientation, 6 | 8) { (sh, sw) } else { (sw, sh) };
     // `reverse` MUST be false here: per lensfun's own docs, reverse=false corrects distortion
     // in an existing photo, while reverse=true does the opposite — simulates/ADDS the lens's
     // distortion to a clean image. This was passing `true`, so every photo got the real
@@ -369,7 +381,7 @@ pub fn correct_distortion(
     // top (reported: straight lamppost/horizon visibly bowed after "correction").
     let mut modifier = Modifier::new(lens, focal_len, camera.crop_factor, w as u32, h as u32, false);
     if !modifier.enable_distortion_correction(lens) {
-        return false; // lens has no distortion calibration in the DB — leave pixels as-is
+        return Err(rgb16); // lens has no distortion calibration in the DB — leave pixels as-is
     }
 
     // Auto-scale ("Constrain Crop"): correcting real barrel/pincushion distortion without any
@@ -414,8 +426,20 @@ pub fn correct_distortion(
         scale += 0.002;
     }
 
-    let src = rgb16.clone();
-    rgb16
+    // Rotated-frame coordinate -> unrotated source coordinate. Same mapping apply_orientation
+    // (raw_decode.rs) uses per pixel, extended to fractional positions.
+    let (swm, shm) = ((sw - 1) as f32, (sh - 1) as f32);
+    let to_src = |x: f32, y: f32| -> (f32, f32) {
+        match orientation {
+            3 => (swm - x, shm - y),
+            6 => (y, shm - x),
+            8 => (swm - y, x),
+            _ => (x, y),
+        }
+    };
+    let src = rgb16;
+    let mut out = vec![0u16; src.len()];
+    out
         .par_chunks_mut(w * 3)
         .enumerate()
         .for_each(|(row, out_row)| {
@@ -424,18 +448,60 @@ pub fn correct_distortion(
                 let qx = cx + (col as f32 - cx) / scale;
                 let qy = cy + (row as f32 - cy) / scale;
                 modifier.apply_geometry_distortion(qx, qy, 1, 1, &mut coords);
-                let sample = bilinear_sample(&src, w, h, coords[0], coords[1]);
+                let (sx, sy) = to_src(coords[0], coords[1]);
+                let sample = bilinear_sample(&src, sw, sh, sx, sy);
                 out_row[col * 3] = sample[0];
                 out_row[col * 3 + 1] = sample[1];
                 out_row[col * 3 + 2] = sample[2];
             }
         });
-    true
+    Ok((out, w, h))
+}
+
+/// In-place, already-oriented form of `correct_distortion_oriented` (orientation 1).
+pub fn correct_distortion(
+    rgb16: &mut Vec<u16>,
+    w: usize,
+    h: usize,
+    make: &str,
+    model: &str,
+    lens_model: &str,
+    focal_len: f32,
+) -> bool {
+    match correct_distortion_oriented(std::mem::take(rgb16), w, h, 1, make, model, lens_model, focal_len) {
+        Ok((out, _, _)) => { *rgb16 = out; true }
+        Err(orig) => { *rgb16 = orig; false }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The fused correct+rotate pass must match the old two-pass order (rotate, then correct).
+    #[test]
+    fn fused_orientation_matches_rotate_then_correct() {
+        let (sw, sh) = (96usize, 64usize);
+        let src: Vec<u16> = (0..sw * sh * 3).map(|i| ((i * 2654435761usize) % 65536) as u16).collect();
+        let rotate = |o: u16| -> (Vec<u16>, usize, usize) {
+            let (w, h) = if matches!(o, 6 | 8) { (sh, sw) } else { (sw, sh) };
+            let mut d = vec![0u16; src.len()];
+            for y in 0..h { for x in 0..w {
+                let (sx, sy) = match o { 3 => (sw - 1 - x, sh - 1 - y), 6 => (y, sh - 1 - x), 8 => (sw - 1 - y, x), _ => (x, y) };
+                d[(y * w + x) * 3..(y * w + x) * 3 + 3].copy_from_slice(&src[(sy * sw + sx) * 3..(sy * sw + sx) * 3 + 3]);
+            }}
+            (d, w, h)
+        };
+        let (make, model, lens) = ("Panasonic", "DC-S9", "LUMIX S 18-40/F4.5-6.3");
+        for o in [1u16, 3, 6, 8] {
+            let (mut want, w, h) = rotate(o);
+            if !correct_distortion(&mut want, w, h, make, model, lens, 18.0) { return; } // no DB match here
+            let (got, gw, gh) = correct_distortion_oriented(src.clone(), sw, sh, o, make, model, lens, 18.0).ok().unwrap();
+            assert_eq!((gw, gh), (w, h));
+            let off = got.iter().zip(&want).filter(|(a, b)| (**a as i32 - **b as i32).abs() > 2).count();
+            assert!(off * 200 < got.len(), "orientation {o}: {off} of {} samples differ", got.len());
+        }
+    }
 
     #[test]
     fn bundled_db_loads() {

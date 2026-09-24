@@ -11,8 +11,6 @@
 // still show println!/log output in a console, matching Tauri's own project-template default.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::path::{Path, PathBuf};
-use std::io::Cursor;
-use image::ImageEncoder;
 #[cfg(target_os = "macos")]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
@@ -219,13 +217,8 @@ fn raw_editor_cache_insert(path: &str, recipe_key: &str, mtime: u64, size: u64, 
 /// never write different shapes or keys.
 fn persist_decoded_rgba(path: &str, recipe_key: &str, width: u32, height: u32, rgba: &[u8],
                         file_name: &str, stage_t: &mut std::time::Instant) -> Result<(), String> {
-    let mut out = Cursor::new(Vec::new());
-    image::codecs::png::PngEncoder::new(&mut out)
-        .write_image(rgba, width, height, image::ExtendedColorType::Rgba8)
-        .map_err(|e| format!("encode decode cache: {e}"))?;
-    diag::stage("cache", file_name, "png_encode", stage_t);
-    library::write_decode_cache_file(path, recipe_key, out.get_ref())?;
-    diag::stage("cache", file_name, "png_write", stage_t);
+    library::write_decode_cache_rgba(path, recipe_key, width, height, rgba)?;
+    diag::stage("cache", file_name, "qoi_write", stage_t);
     library::write_display_cache_from_rgba(path, recipe_key, width, height, rgba, 2560, file_name, stage_t)?;
     Ok(())
 }
@@ -1049,15 +1042,10 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
                 .unwrap_or(false);
             if already_in_process {
                 diag::stage("cache", &file_name, "already_in_process_cache", &mut stage_t);
-            } else if let Ok(bytes) = std::fs::read(
-                library::decode_cache_dir().join(library::decode_cache_key(&path, mtime, meta.len(), &recipe_key))
-            ) {
-                if let Ok(img) = image::load_from_memory(&bytes) {
-                    let rgba_img = img.to_rgba8();
-                    let (w, h) = (rgba_img.width(), rgba_img.height());
-                    raw_editor_cache_insert(&path, &recipe_key, mtime, meta.len(), w, h, std::sync::Arc::new(rgba_img.into_raw()));
-                }
-                diag::stage("cache", &file_name, "reread_png_into_process_cache", &mut stage_t);
+            } else if let Ok(rgba_img) = library::read_decode_cache_rgba(&path, &recipe_key) {
+                let (w, h) = (rgba_img.width(), rgba_img.height());
+                raw_editor_cache_insert(&path, &recipe_key, mtime, meta.len(), w, h, std::sync::Arc::new(rgba_img.into_raw()));
+                diag::stage("cache", &file_name, "reread_cache_into_process_cache", &mut stage_t);
             }
         }
         return Ok("cached".into());
@@ -1108,13 +1096,26 @@ fn get_cached_raw_decode(path: String, recipe_key: String) -> Result<tauri::ipc:
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs()).unwrap_or(0);
-    let guard = RAW_EDITOR_CACHE.lock().map_err(|_| "RAW editor cache lock poisoned".to_string())?;
-    let entry = guard.iter().rev().find(|entry| entry.path == path && entry.recipe_key == recipe_key
-        && entry.mtime == mtime && entry.size == meta.len()).ok_or("no in-process cached decode")?;
-    let mut out = Vec::with_capacity(8 + entry.rgba.len());
-    out.extend_from_slice(&entry.width.to_le_bytes());
-    out.extend_from_slice(&entry.height.to_le_bytes());
-    out.extend_from_slice(entry.rgba.as_ref());
+    let hit = {
+        let guard = RAW_EDITOR_CACHE.lock().map_err(|_| "RAW editor cache lock poisoned".to_string())?;
+        guard.iter().rev().find(|entry| entry.path == path && entry.recipe_key == recipe_key
+            && entry.mtime == mtime && entry.size == meta.len())
+            .map(|e| (e.width, e.height, e.rgba.clone()))
+    };
+    // After a relaunch the in-process cache is empty: decode the persistent cache natively
+    // (QOI, a fraction of a second) instead of making the WebView decode a 24MP PNG (3-4s).
+    // Not inserted into RAW_EDITOR_CACHE — the WebView keeps its own copy of this frame.
+    let (width, height, rgba) = match hit {
+        Some(v) => v,
+        None => {
+            let img = library::read_decode_cache_rgba(&path, &recipe_key).map_err(|_| "no cached decode".to_string())?;
+            (img.width(), img.height(), std::sync::Arc::new(img.into_raw()))
+        }
+    };
+    let mut out = Vec::with_capacity(8 + rgba.len());
+    out.extend_from_slice(&width.to_le_bytes());
+    out.extend_from_slice(&height.to_le_bytes());
+    out.extend_from_slice(rgba.as_ref());
     Ok(tauri::ipc::Response::new(out))
 }
 

@@ -646,8 +646,8 @@ pub fn decode_rw2_bytes_ex(
     stage("hue_defringe", &mut stage_started);
 
     // 5) EXIF orientation (resolved into DemosaicOut at demosaic time — cameras emit 1/3/6/8 only).
-    let (mut rgb16, out_w, out_h) = apply_orientation(rgb16, out_w, out_h, orientation);
-    stage("orientation", &mut stage_started);
+    // Applied together with the lens correction below when that runs (one fused resample
+    // instead of a rotate pass + a clone-and-resample pass), otherwise on its own after it.
 
     // 5.5) Optional automatic lens-profile correction (distortion) — see lens_correct.rs.
     // Graceful no-op when the camera/lens pairing has no match in the bundled DB. `lens_applied`
@@ -660,6 +660,8 @@ pub fn decode_rw2_bytes_ex(
     // being very slightly off for one frame during first paint is invisible; the wasted resample
     // pass on every RAW open was not.
     let mut lens_applied = false;
+    let mut rgb16 = Some(rgb16);
+    let mut oriented: Option<(Vec<u16>, usize, usize)> = None;
     if auto_lens && !fast {
         // Manual/adapted lenses (e.g. TTArtisan, other fully-mechanical primes with no
         // electronic contacts) write no lens EXIF at all — no fallback can recover a tag the
@@ -685,12 +687,20 @@ pub fn decode_rw2_bytes_ex(
             (lens_model, focal_len)
         };
         if !lens_model.is_empty() && focal_len > 0.0 {
-            lens_applied = crate::lens_correct::correct_distortion(
-                &mut rgb16, out_w, out_h, &make, &model, &lens_model, focal_len,
-            );
+            match crate::lens_correct::correct_distortion_oriented(
+                rgb16.take().unwrap(), out_w, out_h, orientation, &make, &model, &lens_model, focal_len,
+            ) {
+                Ok(done) => { lens_applied = true; oriented = Some(done); }
+                Err(orig) => rgb16 = Some(orig),
+            }
         }
     }
     stage("lens", &mut stage_started);
+    let (mut rgb16, out_w, out_h) = match oriented {
+        Some(done) => done,
+        None => apply_orientation(rgb16.take().unwrap(), out_w, out_h, orientation),
+    };
+    stage("orientation", &mut stage_started);
 
     // 6/7) Native (Rust) noise reduction — user-toggleable (default Fast) via the "RAW Noise
     //    Reduction" select in the Noise Reduction panel. Both passes run on true-linear data,

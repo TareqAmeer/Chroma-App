@@ -831,8 +831,8 @@ pub fn get_decode_cache(path: String, recipe_key: String) -> Result<tauri::ipc::
 pub fn get_decode_cache_path(path: String, recipe_key: String) -> Result<String, String> {
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
-    let cache_path = decode_cache_dir().join(decode_cache_key(&path, mtime, meta.len(), &recipe_key));
-    if !cache_path.is_file() { return Err("no cached decode".into()); }
+    let _ = mtime;
+    let cache_path = decode_cache_file(&path, &recipe_key)?.ok_or("no cached decode")?;
     Ok(cache_path.to_string_lossy().into_owned())
 }
 
@@ -855,13 +855,8 @@ pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32
         // This is the hidden cost a "batch cache complete" or "already cached" shortcut still
         // pays on first use: the full-resolution PNG this function reads back in was very
         // possibly just written moments earlier by cache_raw_decode's own png_write stage.
-        let full_key = decode_cache_key(&path, mtime, meta.len(), &recipe_key);
-        let full_path = decode_cache_dir().join(full_key);
-        let bytes = std::fs::read(&full_path).map_err(|_| "no cached decode".to_string())?;
-        crate::diag::stage("display_proxy", &file_name, "read_full_png", &mut stage_t);
-        let img = image::load_from_memory(&bytes).map_err(|e| format!("decode cached preview: {e}"))?;
-        crate::diag::stage("display_proxy", &file_name, "decode_full_png", &mut stage_t);
-        let full = img.to_rgba8();
+        let full = read_decode_cache_rgba(&path, &recipe_key)?;
+        crate::diag::stage("display_proxy", &file_name, "read_decode_full", &mut stage_t);
         let scaled = image::DynamicImage::ImageRgba8(resize_rgba_lanczos(full.as_raw(), full.width(), full.height(), edge)?);
         crate::diag::stage("display_proxy", &file_name, "resize_lanczos", &mut stage_t);
         let mut encoded = Vec::new();
@@ -941,17 +936,57 @@ pub fn get_display_decode_cache_path(path: String, recipe_key: String, long_edge
     Ok(out_path.to_string_lossy().into_owned())
 }
 
-pub(crate) fn decode_cache_exists(path: &str, recipe_key: &str) -> Result<bool, String> {
-    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
-    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
-    Ok(decode_cache_dir().join(decode_cache_key(path, mtime, meta.len(), recipe_key)).is_file())
+/// The full-resolution decode cache is written as lossless QOI (same pixels as the PNG it
+/// replaces, same key stem): PNG's inflate + unfilter cost 3-4s per 24MP frame on the Intel dev
+/// Mac every time a relaunched session first needed full resolution; QOI decodes the same frame
+/// in a fraction of that, at roughly 1.5-2x the disk size. Entries written before this as `.png`
+/// are still read (same hash, so no re-decode is forced) until the LRU prune retires them.
+fn decode_cache_qoi_name(png_key: &str) -> String {
+    format!("{}.qoi", png_key.trim_end_matches(".png"))
 }
 
-pub(crate) fn write_decode_cache_file(path: &str, recipe_key: &str, payload: &[u8]) -> Result<(), String> {
+/// The existing full-resolution cache file for this photo+recipe, QOI preferred over legacy PNG.
+pub(crate) fn decode_cache_file(path: &str, recipe_key: &str) -> Result<Option<PathBuf>, String> {
     let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
-    std::fs::write(decode_cache_dir().join(decode_cache_key(path, mtime, meta.len(), recipe_key)), payload)
-        .map_err(|e| format!("write decode cache: {e}"))
+    let png_key = decode_cache_key(path, mtime, meta.len(), recipe_key);
+    let qoi = decode_cache_dir().join(decode_cache_qoi_name(&png_key));
+    if qoi.is_file() { return Ok(Some(qoi)); }
+    let png = decode_cache_dir().join(png_key);
+    Ok(png.is_file().then_some(png))
+}
+
+pub(crate) fn decode_cache_exists(path: &str, recipe_key: &str) -> Result<bool, String> {
+    Ok(decode_cache_file(path, recipe_key)?.is_some())
+}
+
+/// Decodes the full-resolution cache (either format) to RGBA8.
+pub(crate) fn read_decode_cache_rgba(path: &str, recipe_key: &str) -> Result<image::RgbaImage, String> {
+    let file = decode_cache_file(path, recipe_key)?.ok_or("no cached decode")?;
+    let bytes = std::fs::read(&file).map_err(|e| format!("read decode cache: {e}"))?;
+    let fmt = if file.extension().and_then(|e| e.to_str()) == Some("qoi") { image::ImageFormat::Qoi } else { image::ImageFormat::Png };
+    Ok(image::load_from_memory_with_format(&bytes, fmt).map_err(|e| format!("decode cache: {e}"))?.to_rgba8())
+}
+
+/// Encodes and writes the full-resolution cache (QOI). Written to a temp name and renamed so a
+/// reader never sees a half-written frame.
+pub(crate) fn write_decode_cache_rgba(path: &str, recipe_key: &str, width: u32, height: u32, rgba: &[u8]) -> Result<(), String> {
+    use image::ImageEncoder;
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let png_key = decode_cache_key(path, mtime, meta.len(), recipe_key);
+    let mut out = Vec::with_capacity(rgba.len() / 2);
+    image::codecs::qoi::QoiEncoder::new(&mut out)
+        .write_image(rgba, width, height, image::ExtendedColorType::Rgba8)
+        .map_err(|e| format!("encode decode cache: {e}"))?;
+    let dir = decode_cache_dir();
+    let name = decode_cache_qoi_name(&png_key);
+    let tmp = dir.join(format!("{name}.tmp.{}", std::process::id()));
+    std::fs::write(&tmp, &out).map_err(|e| format!("write decode cache: {e}"))?;
+    std::fs::rename(&tmp, dir.join(&name)).map_err(|e| format!("write decode cache: {e}"))?;
+    // The legacy PNG under the same stem is now dead weight.
+    let _ = std::fs::remove_file(dir.join(&png_key));
+    Ok(())
 }
 
 /// Writes the decode cache — framed raw body (JSON header + PNG bytes) like store_dcp_lut, to
@@ -2858,14 +2893,14 @@ pub(crate) fn is_evictable_cache_file(name: &str) -> bool {
         || name.ends_with(".meta.json") || name.ends_with(".phash.json") || name.ends_with(".meta4.json")
 }
 
-/// The decode cache's own shapes: `<16 hex>.png` (full developed frame) and
+/// The decode cache's own shapes: `<16 hex>.{qoi,png}` (full developed frame) and
 /// `<16 hex>.display-<edge>.{jpg,png,webp}` (display proxies, incl. retired formats), plus the
 /// generic temp/sidecar shapes. The shared thumbnail predicate above only knew ".jpg", so full
 /// decode PNGs were never evicted and the directory grew past its 14GB cap without bound.
 pub(crate) fn is_evictable_decode_file(name: &str) -> bool {
     if is_evictable_cache_file(name) { return true; }
     let (stem, ext) = match name.rsplit_once('.') { Some(v) => v, None => return false };
-    if !matches!(ext, "png" | "jpg" | "webp") { return false; }
+    if !matches!(ext, "png" | "qoi" | "jpg" | "webp") { return false; }
     let hex = match stem.split_once(".display-") {
         Some((h, edge)) if !edge.is_empty() && edge.bytes().all(|b| b.is_ascii_digit()) => h,
         Some(_) => return false,
