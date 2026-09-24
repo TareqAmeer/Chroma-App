@@ -5063,7 +5063,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0924K';
+const BUILD='1.0924L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9581,10 +9581,15 @@ async function resolveDcpSource(make,model){
   const bundled=cameraDcpPrefix(make,model);
   if(bundled)return{prefix:bundled,source:'bundled'};
   if(!window.__TAURI__||!make||!model)return null;
+  // Cached per session: the on-disk Adobe profile set for a camera doesn't change mid-session,
+  // and this ran an IPC round trip on every RAW open of a non-bundled camera.
+  const ck=make+'\u0000'+model;
+  if(resolveDcpSource._c&&resolveDcpSource._c.has(ck))return resolveDcpSource._c.get(ck);
   try{
     const set=await window.__TAURI__.core.invoke('list_dcp_profiles',{make,model});
-    if(!set)return null;
-    return{prefix:set.prefix,source:set.source,styles:set.styles};
+    const out=set?{prefix:set.prefix,source:set.source,styles:set.styles}:null;
+    (resolveDcpSource._c||(resolveDcpSource._c=new Map())).set(ck,out);
+    return out;
   }catch(e){
     console.error('list_dcp_profiles',e);
     return null;
