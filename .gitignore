@@ -129,3 +129,7 @@ diagnostics/tools/
 
 # Local archive of non-essential files (kept on disk, untracked)
 Archive/
+
+# Personal-use film border scans (licences forbid redistribution) - local only
+local borders/
+local-borders/
