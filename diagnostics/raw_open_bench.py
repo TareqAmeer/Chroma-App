@@ -136,6 +136,7 @@ def bring_to_front(token):
     transfer then stalls a flat ~20s (measured: document.visibilityState 'hidden' -> 20s, the
     same call 'visible' -> 50-100ms). Real users open photos in a visible window, so timing a
     hidden one measures macOS, not the app — bring it forward and refuse to time until visible."""
+    subprocess.run(['caffeinate', '-u', '-t', '2'], capture_output=True)  # wake a sleeping display (a slept display = hidden window too)
     pid = rb.find_pid()
     subprocess.run(['osascript', '-e', f'tell application "System Events" to set frontmost of (first process whose unix id is {pid}) to true'],
                    capture_output=True)

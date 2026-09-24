@@ -627,7 +627,22 @@
   // Module scope: used by the header markup AND by renderGrid's per-card badges.
   const ic = (n, sz) => (typeof window.icon === 'function' ? window.icon(n, sz || 16) : '');
   function imgCacheSize() { let s = 0; imgCache.forEach((v) => { s += v.size; }); return s; }
+  // Full-resolution frames are only worth keeping in RAM for the most recent couple of photos
+  // (the likely back-and-forth); older entries keep just their ~2560px working copy (~17MB, not
+  // ~96MB) and promote from the native/persistent cache if ever needed. On an 8GB Mac ten 24MP
+  // canvases in the page was a real contributor to swapping.
+  const IMG_CACHE_FULL_FRAMES = 2;
+  function imgCacheTrimFullFrames() {
+    const withFull = Array.from(imgCache.entries()).filter(([p, v]) => v.entry.fullImg && p !== state.openedPath)
+      .sort((a, b) => b[1].ts - a[1].ts);
+    for (const [, v] of withFull.slice(IMG_CACHE_FULL_FRAMES)) {
+      const f = v.entry.fullImg;
+      delete v.entry.fullImg;
+      if (f && f.width && f.height) v.size -= f.width * f.height * 4;
+    }
+  }
   function imgCacheEvict() {
+    imgCacheTrimFullFrames();
     if (imgCacheSize() <= IMG_CACHE_BUDGET) return;
     const entries = Array.from(imgCache.entries())
       .filter(([p]) => p !== state.openedPath)

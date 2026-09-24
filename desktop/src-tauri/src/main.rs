@@ -980,10 +980,10 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
         if rgba_body && !cache_path.is_empty() && !recipe_key.is_empty() {
             if let Ok(meta) = std::fs::metadata(cache_path) {
                 if meta.len() == payload.len() as u64 {
-                    let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_secs()).unwrap_or(0);
+                    // Not also inserted into RAW_EDITOR_CACHE: the WebView already holds this frame
+                    // for promotion (imgCache fullImg), and a second 96MB-per-photo copy here was
+                    // measurable extra swap on an 8GB Mac. The Arc is dropped once persisted.
                     let frame = std::sync::Arc::new(body.clone());
-                    raw_editor_cache_insert(cache_path, recipe_key, mtime, meta.len(), decoded.width, decoded.height, frame.clone());
                     persist_in_background(cache_path.to_string(), recipe_key.to_string(), decoded.width, decoded.height, frame);
                 }
             }

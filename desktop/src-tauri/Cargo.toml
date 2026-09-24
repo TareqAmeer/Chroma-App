@@ -140,6 +140,7 @@ tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
 # Windows gets HDR export too. See gainmap_uhdr.rs for how it reuses write_gainmap_heic_from_map's
 # existing headroom-map contract.
 ultrahdr-rs = "0.3"
+fast_image_resize = { version = "6.1.0", default-features = false, features = ["rayon"] }
 
 [profile.release]
 strip = true

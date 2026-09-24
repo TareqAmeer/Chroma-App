@@ -861,7 +861,8 @@ pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32
         crate::diag::stage("display_proxy", &file_name, "read_full_png", &mut stage_t);
         let img = image::load_from_memory(&bytes).map_err(|e| format!("decode cached preview: {e}"))?;
         crate::diag::stage("display_proxy", &file_name, "decode_full_png", &mut stage_t);
-        let scaled = img.resize(edge, edge, image::imageops::FilterType::Lanczos3);
+        let full = img.to_rgba8();
+        let scaled = image::DynamicImage::ImageRgba8(resize_rgba_lanczos(full.as_raw(), full.width(), full.height(), edge)?);
         crate::diag::stage("display_proxy", &file_name, "resize_lanczos", &mut stage_t);
         let mut encoded = Vec::new();
         // Quality 92: visually indistinguishable from the source at interactive zoom (this is a
@@ -877,6 +878,25 @@ pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32
         crate::diag::stage("display_proxy", &file_name, "already_exists_check", &mut stage_t);
     }
     Ok(out_path.to_string_lossy().into_owned())
+}
+
+/// Display-proxy downscale: Lanczos3 like before, but SIMD + multi-threaded (fast_image_resize).
+/// The image crate's single-threaded Lanczos3 took 3.5-5s per 24MP frame on the Intel dev Mac,
+/// running in the background exactly while the user's NEXT photo decoded — measured doubling
+/// that decode. Returns RGBA8 (alpha is always opaque here, so no premultiply step is needed).
+fn resize_rgba_lanczos(rgba: &[u8], w: u32, h: u32, long_edge: u32) -> Result<image::RgbaImage, String> {
+    use fast_image_resize as fr;
+    let k = long_edge as f64 / w.max(h) as f64;
+    if k >= 1.0 {
+        return image::RgbaImage::from_raw(w, h, rgba.to_vec()).ok_or_else(|| "rgba dimensions do not match".to_string());
+    }
+    let (dw, dh) = (((w as f64 * k).round() as u32).max(1), ((h as f64 * k).round() as u32).max(1));
+    let src = fr::images::ImageRef::new(w, h, rgba, fr::PixelType::U8x4).map_err(|e| format!("resize src: {e}"))?;
+    let mut dst = fr::images::Image::new(dw, dh, fr::PixelType::U8x4);
+    fr::Resizer::new()
+        .resize(&src, &mut dst, &fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::Lanczos3)))
+        .map_err(|e| format!("resize: {e}"))?;
+    image::RgbaImage::from_raw(dw, dh, dst.into_vec()).ok_or_else(|| "resize output dimensions".to_string())
 }
 
 /// Same output as get_display_decode_cache, but for a caller that JUST decoded this exact photo
@@ -896,9 +916,7 @@ pub fn write_display_cache_from_rgba(path: &str, recipe_key: &str, width: u32, h
         crate::diag::stage("display_proxy", file_name, "already_exists_check", stage_t);
         return Ok(out_path.to_string_lossy().into_owned());
     }
-    let img = image::RgbaImage::from_raw(width, height, rgba.to_vec())
-        .ok_or("rgba dimensions do not match")?;
-    let scaled = image::DynamicImage::ImageRgba8(img).resize(edge, edge, image::imageops::FilterType::Lanczos3);
+    let scaled = image::DynamicImage::ImageRgba8(resize_rgba_lanczos(rgba, width, height, edge)?);
     crate::diag::stage("display_proxy", file_name, "resize_lanczos", stage_t);
     let mut encoded = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut Cursor::new(&mut encoded), 92)
