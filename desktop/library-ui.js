@@ -4030,6 +4030,9 @@
       displayOverlayPromise = showDisplayProvisional(path, recipeKey);
     }
     window.chromasmithEnsureFullQuality = null; // the previous photo's promotion hook must not outlive it
+    _warmToken++; // a pending neighbour warm-up for the previous photo is stale now
+    // Opening the very photo being warmed: wait for it (a cache hit) rather than decode it twice.
+    if (_warmInflight && _warmInflight.path === path) { const w0 = performance.now(); await _warmInflight.promise; rawPerf('open-waited-for-warm', path, { ms: performance.now() - w0 }); }
     let diskCached = null;
     let fullAssetPath = null;
     let fullCachedEntry = null;
@@ -4400,6 +4403,7 @@
       if (!deferredDisplayRender) reveal.pixels(path);
       if (fullAssetPath || fullCachedEntry) startFullPromotion();
       rawPerf('open-fully-loaded', path, { ms: performance.now() - openT0, source: cached ? 'memory' : (diskCached ? 'persistent-cache' : 'decode') });
+      if (isRaw && state.openedPath === path) warmNeighbour(path);
     }
   }
 
@@ -5639,6 +5643,95 @@
     return files;
   }
 
+  // One RAW → persistent decode cache (+ display proxy). tier 'full' (the Cache RAWs action) runs
+  // the complete cleanup under the 'full' key; 'interactive' (neighbour warm-up) produces what an
+  // interactive open would, under the normal key. Rust reads the file by path.
+  async function cacheOneRaw(path, tier) {
+    let rawNr = window.chromasmithRawNr || 'fast';
+    let demosaicAlgo = window.chromasmithDemosaicAlgo || '';
+    try {
+      const sc = await getSidecar(path);
+      if (sc.recipe) {
+        const snap = snapshotFromB64(sc.recipe);
+        rawNr = snap.rawNr !== undefined ? snap.rawNr : (snap.nativeNr === false ? 'off' : rawNr);
+        if (snap.demosaicAlgo !== undefined) demosaicAlgo = snap.demosaicAlgo;
+      }
+    } catch (e) {}
+    const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
+    const autoLens = !!window.chromasmithAutoLens;
+    const lensOverride = window.chromasmithLensOverride || '';
+    const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
+    // The batch cache is the "wait once, get the finished image" path: it always runs the COMPLETE
+    // cleanup (shadow NR + false-colour + hue defringe + chroma NR) and is stored under the
+    // 'full' key. openInEditorInner prefers a 'full' entry when one exists, and export skips its
+    // own deferred-cleanup pass for photos opened from it (window.__chromasmithFullCleanupPaths).
+    const cacheNr = rawNr === 'off' ? 'off' : (tier === 'interactive' && !window.chromasmithRawFullCleanup ? 'chroma' : 'fast');
+    // CHR-120: this used to rebuild the key inline, field-by-field, in parallel with
+    // rawRecipeKey() (the function openInEditorInner's lookup actually calls) — two
+    // independent formulas over the same fields WILL drift eventually, and when they do,
+    // the open-time lookup silently misses this exact cache entry and falls through to a
+    // full fresh RAW decode (confirmed live: a photo batch-cached moments earlier still
+    // took a full ~2min re-decode on open because of exactly this). Call the SAME function
+    // instead, briefly substituting this photo's own sidecar-resolved rawNr/demosaicAlgo
+    // for the globals rawRecipeKey() reads, so a per-photo sidecar override still applies
+    // to the key without needing a second implementation of it.
+    const _prevRawNr = window.chromasmithRawNr, _prevDemosaic = window.chromasmithDemosaicAlgo;
+    window.chromasmithRawNr = rawNr;
+    window.chromasmithDemosaicAlgo = demosaicAlgo;
+    const recipeKey = rawRecipeKey(tier !== 'interactive');
+    window.chromasmithRawNr = _prevRawNr;
+    window.chromasmithDemosaicAlgo = _prevDemosaic;
+    const identT0 = performance.now(); const ident = await invoke('peek_raw_camera_path', { path }); rawPerf('cache-identify', path, { ms: performance.now() - identT0 });
+    let mode = 'srgb', lutKey = '';
+    if (profile && typeof resolveDcpSource === 'function') {
+      const source = await resolveDcpSource(ident.make || '', ident.model || '');
+      if (source) {
+        mode = 'lut'; lutKey = `dcp:${source.prefix}:${profile}`;
+        if (!window.__chromasmithRustLuts) window.__chromasmithRustLuts = {};
+        if (!window.__chromasmithRustLuts[lutKey]) {
+          const lut = await getDcpLUT(source.prefix, profile, 200, source.source);
+          await framedInvoke('store_dcp_lut', { key: lutKey, make: ident.make || '' },
+            new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
+          window.__chromasmithRustLuts[lutKey] = true;
+        }
+      }
+    }
+    const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { path, recipeKey, mode, lutKey, rawNr: cacheNr,
+      autoLens, demosaicAlgo, lensOverride, lensOverrideFocal });
+    rawPerf('cache-decode-write', path, { ms: performance.now() - decodeT0, result });
+    return result;
+  }
+
+  // ── Neighbour warm-up: after a photo has been open ~1.5s, prepare the NEXT photo in the
+  // direction the user is moving (one photo, one at a time, on the native side) so the arrow key
+  // lands on a cache hit instead of a 4-6s decode. Lightroom/Capture One do the same. Cancelled
+  // by the next open; an open of the photo being warmed waits for it instead of decoding twice.
+  // localStorage chromasmithNeighbourWarm = '0' turns it off.
+  let _warmToken = 0, _warmInflight = null, _lastOpenIdx = -1, _warmDir = 1;
+  function warmNeighbour(path) {
+    const token = ++_warmToken;
+    let off = false; try { off = localStorage.getItem('chromasmithNeighbourWarm') === '0'; } catch (_) {}
+    if (off) return;
+    const sorted = sortEntries(state.entries.filter(passesFilters)).map((e) => e.path);
+    const idx = sorted.indexOf(path);
+    if (idx < 0) return;
+    if (_lastOpenIdx >= 0 && idx !== _lastOpenIdx) _warmDir = idx > _lastOpenIdx ? 1 : -1;
+    _lastOpenIdx = idx;
+    const target = sorted[idx + _warmDir];
+    if (!target || !RAW_EXT_RE.test(target)) return;
+    setTimeout(async () => {
+      if (token !== _warmToken || state.openedPath !== path || _warmInflight) return;
+      for (const k of [rawRecipeKey(), rawRecipeKey(true)]) {
+        try { await invoke('get_decode_cache_path', { path: target, recipeKey: k }); return; } catch (_) {}
+      }
+      const t0 = performance.now();
+      const promise = cacheOneRaw(target, 'interactive').catch((e) => { rawPerf('neighbour-warm-failed', target, { error: String(e) }); });
+      _warmInflight = { path: target, promise };
+      try { await promise; } finally { _warmInflight = null; }
+      rawPerf('neighbour-warmed', target, { ms: performance.now() - t0 });
+    }, 1500);
+  }
+
   // Warm the persistent full-resolution RAW cache without opening photos in the editor.
   let _cacheWarmCancel = null;
   async function cacheSelectedRaws(paths) {
@@ -5655,59 +5748,7 @@
         const path = rawPaths[i];
         const itemT0 = performance.now(); rawPerf('cache-item-start', path);
         try {
-          let rawNr = window.chromasmithRawNr || 'fast';
-          let demosaicAlgo = window.chromasmithDemosaicAlgo || '';
-          try {
-            const sc = await getSidecar(path);
-            if (sc.recipe) {
-              const snap = snapshotFromB64(sc.recipe);
-              rawNr = snap.rawNr !== undefined ? snap.rawNr : (snap.nativeNr === false ? 'off' : rawNr);
-              if (snap.demosaicAlgo !== undefined) demosaicAlgo = snap.demosaicAlgo;
-            }
-          } catch (e) {}
-          const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
-          const autoLens = !!window.chromasmithAutoLens;
-          const lensOverride = window.chromasmithLensOverride || '';
-          const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
-          // The batch cache is the "wait once, get the finished image" path: it always runs the COMPLETE
-          // cleanup (shadow NR + false-colour + hue defringe + chroma NR) and is stored under the
-          // 'full' key. openInEditorInner prefers a 'full' entry when one exists, and export skips its
-          // own deferred-cleanup pass for photos opened from it (window.__chromasmithFullCleanupPaths).
-          const cacheNr = rawNr === 'off' ? 'off' : 'fast';
-          // CHR-120: this used to rebuild the key inline, field-by-field, in parallel with
-          // rawRecipeKey() (the function openInEditorInner's lookup actually calls) — two
-          // independent formulas over the same fields WILL drift eventually, and when they do,
-          // the open-time lookup silently misses this exact cache entry and falls through to a
-          // full fresh RAW decode (confirmed live: a photo batch-cached moments earlier still
-          // took a full ~2min re-decode on open because of exactly this). Call the SAME function
-          // instead, briefly substituting this photo's own sidecar-resolved rawNr/demosaicAlgo
-          // for the globals rawRecipeKey() reads, so a per-photo sidecar override still applies
-          // to the key without needing a second implementation of it.
-          const _prevRawNr = window.chromasmithRawNr, _prevDemosaic = window.chromasmithDemosaicAlgo;
-          window.chromasmithRawNr = rawNr;
-          window.chromasmithDemosaicAlgo = demosaicAlgo;
-          const recipeKey = rawRecipeKey(true);
-          window.chromasmithRawNr = _prevRawNr;
-          window.chromasmithDemosaicAlgo = _prevDemosaic;
-          const readT0 = performance.now(); const bytes = new Uint8Array(await invoke('read_file_bytes', { path })); rawPerf('cache-read', path, { ms: performance.now() - readT0, bytes: bytes.byteLength });
-          const identT0 = performance.now(); const ident = await invoke('peek_raw_camera', bytes); rawPerf('cache-identify', path, { ms: performance.now() - identT0 });
-          let mode = 'srgb', lutKey = '';
-          if (profile && typeof resolveDcpSource === 'function') {
-            const source = await resolveDcpSource(ident.make || '', ident.model || '');
-            if (source) {
-              mode = 'lut'; lutKey = `dcp:${source.prefix}:${profile}`;
-              if (!window.__chromasmithRustLuts) window.__chromasmithRustLuts = {};
-              if (!window.__chromasmithRustLuts[lutKey]) {
-                const lut = await getDcpLUT(source.prefix, profile, 200, source.source);
-                await framedInvoke('store_dcp_lut', { key: lutKey, make: ident.make || '' },
-                  new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
-                window.__chromasmithRustLuts[lutKey] = true;
-              }
-            }
-          }
-          const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { path, recipeKey, mode, lutKey, rawNr: cacheNr,
-            autoLens, demosaicAlgo, lensOverride, lensOverrideFocal });
-          rawPerf('cache-decode-write', path, { ms: performance.now() - decodeT0, result });
+          const result = await cacheOneRaw(path, 'full');
           if (result === 'cached') cached++; else written++;
         } catch (e) { failed.push(`${baseName(path)}: ${humanizeErr('cache', e)}`); }
         rawPerf('cache-item-complete', path, { ms: performance.now() - itemT0 });
