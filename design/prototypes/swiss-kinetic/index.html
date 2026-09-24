@@ -12,7 +12,7 @@
 @property --ca{syntax:'<color>';inherits:true;initial-value:#e0500c}
 @property --cb{syntax:'<color>';inherits:true;initial-value:#1414a0}
 :root{
-  --a:#e0500c; --b:#1414a0; --bg:#1b1b1b; --sur:#232323; --ink:#f2f2f0; --mut:#7c7c78; --line:rgba(242,242,240,.12);
+  --a:#e0500c; --b:#1414a0; --bg:#1b1b1b; --sur:#232323; --ink:#f2f2f0; --mut:#7c7c78; --line:color-mix(in srgb,var(--ink) 13%,transparent); --hr:color-mix(in srgb,var(--bg) 22%,transparent);
   --ox:6px; --oy:6px; --slab-top:34%;
   --dim:.35; --dim-dur:220ms;
   --dur:500ms; --ease:cubic-bezier(.16,1,.3,1); --dur-fast:180ms;
@@ -35,7 +35,7 @@ body[data-dim=colour] .zone:not(:hover):not(:focus-within){--ca:color-mix(in srg
 body[data-dim=zone] .zone:not(:hover):not(:focus-within){opacity:calc(.25 + var(--dim)*.75)}
 
 /* ── dock ──────────────────────────────────────────────────────── */
-#dock{border-right:1px solid var(--line);overflow:auto;padding:16px 16px 40px;background:#141414}
+#dock{border-right:1px solid var(--line);overflow:auto;padding:16px 16px 40px;background:color-mix(in srgb,var(--bg) 93%,var(--ink))}
 body.dock-off{grid-template-columns:0 1fr}body.dock-off #dock{overflow:visible;padding:0;border:0}body.dock-off #dock>*:not(#dock-tg){display:none}
 #dock-tg{float:right}body.dock-off #dock-tg{position:fixed;left:8px;bottom:8px;z-index:99;float:none;background:var(--bg)}
 #dock h1{font:700 15px/1 var(--f);letter-spacing:-.01em;margin:0 0 4px;text-transform:uppercase}
@@ -100,7 +100,8 @@ body[data-slab=outline] .sw .opt.on{color:var(--ink)}
 .sw.mid{font:700 26px/1 var(--f);letter-spacing:-.03em}
 .sw.seg{font:700 11px/1 var(--f);letter-spacing:.1em;text-transform:uppercase;align-items:stretch;height:26px;box-shadow:inset 0 -1px 0 var(--mut)}
 .sw.seg .opt{display:grid;place-items:center;padding:0 11px;background:none;border:0;cursor:pointer}
-.sw.seg .opt+.opt{box-shadow:inset 1px 0 0 var(--line)}
+.sw.seg .opt+.opt::before{content:'';position:absolute;left:-1px;top:7px;bottom:7px;width:2px;background:var(--mut)}
+.sw.seg[data-segv=box] .opt+.opt::before{display:none}
 .sw.seg .opt:not(.on):hover{color:var(--ink)}
 .sw.seg .slab{top:0;bottom:0}
 .sw.seg .slab2{top:calc(var(--oy)*.5);bottom:calc(var(--oy)*-.5)}
@@ -224,7 +225,7 @@ body[data-menu=invert] .k-menu div:hover{color:var(--ink)}
 body[data-menu=shift] .k-menu div::before{display:none}
 body[data-menu=shift] .k-menu div{transition:transform var(--dur-fast) var(--ease)}
 body[data-menu=shift] .k-menu div:hover{color:var(--bg);transform:translateX(6px)}
-.k-menu hr{border:0;border-top:1px solid rgba(0,0,0,.2);margin:4px 0}
+.k-menu hr{border:0;border-top:1px solid var(--hr);margin:4px 0}
 .k-search{display:flex;align-items:center;gap:8px;width:260px;height:32px;padding:0 10px;border:1.5px solid var(--line);position:relative;isolation:isolate;background:var(--bg)}
 .k-search:focus-within{border-color:var(--ink)}
 .k-search svg,.rbar .lib-search-wrap svg{flex:none;transition:transform var(--dur-fast) var(--ease),stroke var(--dur-fast)}
@@ -284,6 +285,7 @@ body[data-thhv=offset] .th:hover:not(.on) .im::after{opacity:.85;transform:trans
 .side .opt{display:flex;justify-content:space-between;padding:7px 16px;font-size:13px;color:var(--ink);transition:transform var(--dur-fast) var(--ease),color var(--dur-fast)}
 .side .opt small{color:var(--mut);font-variant-numeric:tabular-nums}
 .side .opt.on{color:var(--ink);font-weight:700}
+.side .opt.on small{color:inherit;opacity:.85}
 body[data-side=bar] .side .slab{width:4px!important}
 body[data-side=fill] .side .slab{width:100%!important;background:var(--ca)}
 body[data-side=fill] .side .opt.on{color:#fff}
@@ -308,7 +310,7 @@ body[data-side=offset] .side .opt.on{color:#fff;transform:translateX(12px)}
   background:linear-gradient(90deg,#3a2418 0 9%,transparent 9% 13%,#2f1d14 13% 17%,transparent 17% 80%,#3b2619 80% 86%,transparent 86%),
     radial-gradient(ellipse at 85% 70%,#c9c3a4 0,#7d806a 30%,transparent 60%),linear-gradient(#5d6b4e,#394232 55%,#2d3326)}
 .splash .bl{position:absolute;left:144px;top:29px;width:533px;height:421px;background:var(--b)}
-.splash .or{position:absolute;left:61px;top:160px;width:480px;height:379px;background:var(--a)}
+.splash .or{position:absolute;left:61px;top:160px;width:480px;height:322px;background:var(--a)}
 .splash .ph{position:absolute;left:259px;top:59px;width:397px;height:273px;background:#fff;padding:7px}
 .splash .ph img{display:block;width:100%;height:100%;object-fit:cover;object-position:center 40%;filter:grayscale(1) contrast(1.1);border:3px solid #000}
 .splash .wm{position:absolute;left:153px;top:64px;height:400px;font:700 52px/1 var(--f);letter-spacing:-.02em;writing-mode:vertical-rl;transform:rotate(180deg);text-transform:uppercase;white-space:nowrap;text-align:right}
@@ -365,14 +367,14 @@ body[data-cond=hide] .rbar [data-conditional]{display:none!important}
 .rbar #lib-settings .lib-menu{right:0}
 .rbar .lib-menu.open{clip-path:inset(-2px -20px -20px -2px);pointer-events:auto}
 .rbar .lib-menu .grp-label{font:700 9px/1 var(--f);letter-spacing:.16em;text-transform:uppercase;opacity:.55;padding:8px 12px 4px}
-.rbar .lib-menu hr{border:0;border-top:1px solid rgba(0,0,0,.18);margin:4px 0}
+.rbar .lib-menu hr{border:0;border-top:1px solid var(--hr);margin:4px 0}
 .rbar .lib-menu .opt,.rbar .lib-menu .opt-action{position:relative;isolation:isolate;display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:7px 12px;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .rbar .lib-menu .opt-action{justify-content:flex-start}
 .rbar .lib-menu .opt-action.opt-toggle{justify-content:space-between}
 .rbar .lib-menu .opt svg,.rbar .lib-menu .opt-action svg{width:13px;height:13px}
 .rbar .lib-menu .sq{width:8px;height:8px;flex:none;background:var(--ca);visibility:hidden}
-.rbar .lib-menu .opt.sel .sq{visibility:visible}
-.rbar .lib-menu .opt:hover .sq{background:#fff}
+.rbar .lib-menu .opt.sel .sq,.rbar .lib-menu .opt-toggle.on .sq{visibility:visible}
+.rbar .lib-menu .opt:hover .sq,.rbar .lib-menu .opt-toggle:hover .sq{background:#fff}
 .rbar .lib-menu .opt::before,.rbar .lib-menu .opt-action::before{content:'';position:absolute;inset:var(--msy) calc(var(--msx)*-1) calc(var(--msy)*-1) var(--msx);background:var(--ca);z-index:-1;transform:scaleX(0);transform-origin:left;transition:transform var(--menu-dur) var(--ease)}
 .rbar .lib-menu .opt:hover,.rbar .lib-menu .opt-action:hover{color:#fff}
 .rbar .lib-menu .opt:hover::before,.rbar .lib-menu .opt-action:hover::before{transform:scaleX(1)}
@@ -391,13 +393,27 @@ body[data-menu=invert] .rbar .lib-menu .opt:hover,body[data-menu=invert] .rbar .
 .lib-filter-field label,.lib-fp-label{font:700 9px/1 var(--f);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
 .lib-fp-label{margin-top:6px;padding-top:12px;border-top:1px solid var(--line)}
 .fwrap select{-webkit-appearance:none;appearance:none;width:100%;height:30px;padding:0 28px 0 10px;background:var(--bg) linear-gradient(var(--ca),var(--ca)) no-repeat right 11px center/6px 6px;border:1px solid var(--line);font-size:12px;cursor:pointer;transition:border-color var(--dur-fast),background-size var(--dur-fast) var(--ease)}
-.fwrap select:hover{border-color:var(--ink);background-size:8px 8px}
+.fwrap select{background-size:0 0}
+.fwrap select:hover{border-color:var(--ink)}
+.fwrap select.set{background-size:6px 6px}
 .fwrap select.set{border-color:var(--ca);box-shadow:calc(var(--ox)*.5) calc(var(--oy)*.5) 0 var(--ca)}
 #lib-subfolders-wrap{display:flex;align-items:center;gap:9px;font-size:12px;cursor:pointer}
 #lib-subfolders{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin:0;border:1px solid var(--ink);background:var(--bg);cursor:pointer;transition:background var(--dur-fast),transform var(--dur) var(--ease)}
 #lib-subfolders:checked{background:var(--ca);border-color:var(--ca);transform:rotate(90deg)}
 #lib-filters-clear{align-self:flex-start}
 #lib-filters-btn.on{background:var(--ink);color:var(--bg)}
+
+/* ── secondary filter row (captured #lib-filter-row) ─────────────── */
+.frow{min-width:max-content;display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--dur) var(--ease)}
+.frow.open{grid-template-rows:1fr}
+.frow>div{min-height:0;overflow:clip}
+.frow #lib-filter-row{display:flex;align-items:center;gap:6px;padding:10px 16px;border:1px solid var(--line);border-top:0;background:var(--bg)}
+.frow .lib-flabel{font:700 9px/1 var(--f);letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-right:4px}
+.frow .lib-filterdiv{width:2px;height:16px;background:var(--mut);margin:0 10px}
+.frow button.k-chip{color:inherit;display:inline-flex;align-items:center;height:24px}
+.frow .k-chip.ic{padding:0 7px}.frow .k-chip.ic svg{width:12px;height:12px}
+.frow .k-chip.rej{--ca:var(--mut)}.frow .k-chip.fav{--ca:var(--cb)}
+.frow [data-conditional]{display:none!important}.frow.more [data-conditional]{display:inline-flex!important}
 
 /* ── submenus ──────────────────────────────────────────────────── */
 .k-menu .has-sub{position:relative}
@@ -444,6 +460,8 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
   <div class="sub">Tune here. Settings save as you go. When happy, press Copy settings and paste the result back.</div>
 
   <fieldset><legend>Colour</legend>
+    <div class="dr full"><label>Theme</label><select data-attr="theme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
+    <div class="sub" style="margin:0 0 8px">Background, ink and muted are kept separately for each theme.</div>
     <div class="presets" id="presets"></div>
     <div class="dr"><label>Colour A</label><input type="color" data-var="--a"><output></output></div>
     <div class="dr"><label>Colour B</label><input type="color" data-var="--b"><output></output></div>
@@ -532,6 +550,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
     </div>
     <div class="rbars"><div class="rbar" id="rbar-lib"></div><div class="rbar" id="rbar-ed" hidden></div></div>
   </div>
+  <div class="frow zone open" id="frow"><div></div></div>
   <p class="note" style="margin-top:14px" id="cond-note"></p>
 </section>
 
@@ -626,7 +645,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 (() => {
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const root = document.documentElement, body = document.body;
-const store = { get(k) { try { return JSON.parse(localStorage.getItem('sk3.' + k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem('sk3.' + k, JSON.stringify(v)); } catch {} } };
+const store = { get(k) { try { return JSON.parse(localStorage.getItem('sk4.' + k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem('sk4.' + k, JSON.stringify(v)); } catch {} } };
 
 // ── settings model ────────────────────────────────────────────────
 const EASES = { 'Inertia (0.16,1,0.3,1)': '.16,1,.3,1', 'Expo out': '.19,1,.22,1', 'Soft overshoot': '.34,1.56,.64,1', 'Hard overshoot': '.68,-.6,.32,1.6', 'Standard': '.4,0,.2,1', 'Linear': '0,0,1,1' };
@@ -634,15 +653,18 @@ const HOVERS = { slip: 'Text slip', slab: 'Slab slide-in', flood: 'Instant inver
 const PRESETS = { 'Cadmium / Cobalt': { '--a': '#e0500c', '--b': '#1414a0' }, 'Klein / Signal': { '--a': '#0015ff', '--b': '#e02c00' }, 'Orange / Ink': { '--a': '#e0500c', '--b': '#f2f2f0' }, 'Splash': { '--a': '#d84300', '--b': '#1013a0' } };
 // Defaults = the 2026-09-24 review round 2 export. Storage keys move per round so the new picks show on first open.
 const DEFAULTS = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#1b1b1b', '--ink': '#f2f2f0', '--mut': '#7c7c78', '--ox': '6px', '--oy': '6px', '--slab-top': '34%', '--dim': '0.35', '--dim-dur': '220ms', '--dur': '500ms', '--dur-fast': '180ms',
-    '--bw-btn': '0.5px', '--bw-ic': '1px', '--menu-dur': '900ms', '--msx': '10px', '--msy': '5px', '--tb-sl': '72px' },
-  attrs: { dim: 'off', slab: 'single', sel: 'slab', side: 'fill', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved' },
-  cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'turnjump', roll: 'roll', segv: 'cell', swap: 'slide' };
+    '--bw-btn': '0.5px', '--bw-ic': '1px', '--menu-dur': '900ms', '--msx': '10px', '--msy': '5px', '--tb-sl': '62px' },
+  lvars: { '--bg': '#f2f2ee', '--ink': '#161616', '--mut': '#77776f' },
+  attrs: { dim: 'off', slab: 'single', sel: 'slab', side: 'offset', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved', theme: 'dark' },
+  cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'slabturn', roll: 'roll', segv: 'cell', swap: 'slide' };
 let S = Object.assign(structuredClone(DEFAULTS), store.get('settings') || {});
-S.vars = Object.assign({}, DEFAULTS.vars, S.vars); S.attrs = Object.assign({}, DEFAULTS.attrs, S.attrs);
+S.vars = Object.assign({}, DEFAULTS.vars, S.vars); S.attrs = Object.assign({}, DEFAULTS.attrs, S.attrs); S.lvars = Object.assign({}, DEFAULTS.lvars, S.lvars);
+const THEMED = ['--bg', '--ink', '--mut'], tv = (k) => (S.attrs.theme === 'light' && THEMED.includes(k) ? S.lvars : S.vars);
 const save = () => store.set('settings', S);
 
 function apply() {
-  for (const [k, v] of Object.entries(S.vars)) root.style.setProperty(k, v);
+  for (const k of Object.keys(S.vars)) root.style.setProperty(k, tv(k)[k]);
+  $$('.lib-menu .opt[data-theme]').forEach((o) => o.classList.toggle('sel', o.dataset.theme === S.attrs.theme));
   root.style.setProperty('--ease', `cubic-bezier(${S.ease})`);
   for (const [k, v] of Object.entries(S.attrs)) body.dataset[k] = v;
   body.classList.toggle('rm', reduced());
@@ -661,10 +683,11 @@ const num = (v) => parseFloat(v);
 $$('#dock [data-var]').forEach((inp) => {
   const k = inp.dataset.var, unit = inp.dataset.unit || '', out = inp.parentElement.querySelector('output');
   const show = () => { if (out) out.textContent = inp.type === 'color' ? inp.value.toUpperCase().slice(1) : inp.value + unit; };
-  inp.value = inp.type === 'color' ? S.vars[k] : num(S.vars[k]); show();
-  inp.addEventListener('input', () => { S.vars[k] = inp.value + unit; show(); apply(); save(); });
+  inp._sync = () => { inp.value = inp.type === 'color' ? tv(k)[k] : num(tv(k)[k]); show(); }; inp._sync();
+  inp.addEventListener('input', () => { tv(k)[k] = inp.value + unit; show(); apply(); save(); });
 });
-$$('#dock [data-attr]').forEach((sel) => { sel.value = S.attrs[sel.dataset.attr]; sel.addEventListener('change', () => { S.attrs[sel.dataset.attr] = sel.value; apply(); save(); }); });
+const setTheme = (t) => { S.attrs.theme = t; $('#dock [data-attr=theme]').value = t; $$('#dock [data-var]').forEach((i) => i._sync()); apply(); save(); };
+$$('#dock [data-attr]').forEach((sel) => { sel.value = S.attrs[sel.dataset.attr]; sel.addEventListener('change', () => { if (sel.dataset.attr === 'theme') return setTheme(sel.value); S.attrs[sel.dataset.attr] = sel.value; apply(); save(); }); });
 const ease = $('#ease'); for (const [n, v] of Object.entries(EASES)) ease.add(new Option(n, v)); ease.add(new Option('Custom', 'custom'));
 ease.value = Object.values(EASES).includes(S.ease) ? S.ease : 'custom'; $('#ease-custom').value = S.ease;
 ease.addEventListener('change', () => { if (ease.value !== 'custom') { S.ease = ease.value; $('#ease-custom').value = S.ease; apply(); save(); } });
@@ -679,7 +702,8 @@ $('#reset').onclick = () => { S = structuredClone(DEFAULTS); save(); location.re
 $('#copy').onclick = async () => {
   const c = (v) => ({ $type: 'color', $value: v }), d = (v) => ({ $type: 'dimension', $value: v }), t = (v) => ({ $type: 'duration', $value: v });
   const out = { $description: 'Swiss Kinetic playground export ' + new Date().toISOString(),
-    color: { accentA: c(S.vars['--a']), accentB: c(S.vars['--b']), bg: c(S.vars['--bg']), ink: c(S.vars['--ink']), muted: c(S.vars['--mut']) },
+    color: { accentA: c(S.vars['--a']), accentB: c(S.vars['--b']), bg: c(S.vars['--bg']), ink: c(S.vars['--ink']), muted: c(S.vars['--mut']),
+      light: { bg: c(S.lvars['--bg']), ink: c(S.lvars['--ink']), muted: c(S.lvars['--mut']) } }, theme: S.attrs.theme,
     offset: { x: d(S.vars['--ox']), y: d(S.vars['--oy']), slabTop: d(S.vars['--slab-top']), slabStyle: S.attrs.slab },
     border: { button: d(S.vars['--bw-btn']), icon: S.attrs.icb === 'none' ? 'none' : d(S.vars['--bw-ic']) },
     menu: { wipe: t(S.vars['--menu-dur']), slabShiftX: d(S.vars['--msx']), slabShiftY: d(S.vars['--msy']) },
@@ -730,16 +754,16 @@ function makeSwitch(el) {
     opts.forEach((o, i) => o.classList.toggle('on', i === Math.round(c)));
   }
   function tweenTo(target) {
-    cancelAnimationFrame(raf); const from = p, dur = num(getComputedStyle(root).getPropertyValue('--dur')), e = bezier(...S.ease.split(',').map(Number)), t0 = performance.now();
+    cancelAnimationFrame(raf); const from = p, dur = num(getComputedStyle(root).getPropertyValue('--dur')), e = bezier(...S.ease.split(',').map(Number)); let t0 = 0;
     if (reduced() || dur <= 0) { p = target; render(); return; }
-    const step = (now) => { const k = Math.min(1, (now - t0) / dur); p = from + (target - from) * e(k); render(); if (k < 1) raf = requestAnimationFrame(step); };
+    const step = (now) => { if (!t0) t0 = now; const k = Math.min(1, (now - t0) / dur); p = from + (target - from) * e(k); render(); if (k < 1) raf = requestAnimationFrame(step); };
     raf = requestAnimationFrame(step);
   }
   function springTo(target, v) {
     cancelAnimationFrame(raf); if (reduced()) { p = target; render(); return; }
     const T = num(getComputedStyle(root).getPropertyValue('--dur')) / 1000 || 0.5, w0 = 2 * Math.PI / T, z = Math.max(0.12, 1 - S.bounce * 1.1);
-    let last = performance.now();
-    const step = (now) => { let dt = Math.min(0.032, (now - last) / 1000); last = now;
+    let last = 0;
+    const step = (now) => { let dt = last ? Math.min(0.032, (now - last) / 1000) : 1 / 60; last = now;
       for (let i = 0; i < 4; i++) { const h = dt / 4, a = -w0 * w0 * (p - target) - 2 * z * w0 * v; v += a * h; p += v * h; }
       render(); if (Math.abs(p - target) > 0.0008 || Math.abs(v) > 0.002) raf = requestAnimationFrame(step); else { p = target; render(); } };
     raf = requestAnimationFrame(step);
@@ -844,9 +868,9 @@ function mountBar(host, html) {
   // real menus open/close
   for (const [btn, menu] of [['#lib-sort-btn', '#lib-sort-menu'], ['#lib-view-menu-btn', '#lib-view-menu']]) {
     const b = host.querySelector(btn), m = host.querySelector(menu); if (!b || !m) continue;
-    $$('.opt>svg', m).forEach((x) => x.replaceWith(Object.assign(document.createElement('i'), { className: 'sq' })));
+    $$('.opt>svg,.opt-toggle>svg', m).forEach((x) => x.replaceWith(Object.assign(document.createElement('i'), { className: 'sq' })));
     b.addEventListener('click', (e) => { e.stopPropagation(); const open = !m.classList.contains('open'); $$('.lib-menu.open').forEach((x) => x.classList.remove('open')); m.classList.toggle('open', open); });
-    m.addEventListener('click', (e) => { e.stopPropagation(); const o = e.target.closest('.opt'); if (!o) return; const key = [...o.attributes].find((a) => /^data-(sort|meta|theme)/.test(a.name));
+    m.addEventListener('click', (e) => { e.stopPropagation(); const tg = e.target.closest('.opt-toggle'); if (tg) { tg.classList.toggle('on'); snap(); return; } const o = e.target.closest('.opt'); if (!o) return; if (o.dataset.theme) { setTheme(o.dataset.theme); snap(); return; } const key = [...o.attributes].find((a) => /^data-(sort|meta|theme)/.test(a.name));
       if (key) { $$(`.opt[${key.name}]`, m).forEach((x) => x.classList.toggle('sel', x === o)); if (key.name === 'data-sortval') $('#lib-sort-label').textContent = o.textContent.trim(); } else o.classList.toggle('sel'); snap(); });
   }
 }
@@ -871,10 +895,18 @@ $('#mode-sw').addEventListener('swchange', (e) => { swapBars(e.detail); placePin
 $('#fwrap').innerHTML = (window.REAL_BARS || {}).filters || '<p class="note">Re-run node scripts/redesign-capture-bars.mjs</p>';
 $$('#fwrap select').forEach((x) => { x.value = x.options[0]?.value; x.addEventListener('change', () => { x.classList.toggle('set', x.selectedIndex > 0); snap(); }); });
 if ($('#lib-filters-clear')) { $('#lib-filters-clear').className = 'k-btn'; wrapBtn($('#lib-filters-clear')); $('#lib-filters-clear').addEventListener('click', () => $$('#fwrap select').forEach((x) => { x.selectedIndex = 0; x.classList.remove('set'); })); }
-const fOpen = (on) => { $('#fwrap').classList.toggle('open', on); $('#lib-filters-btn')?.classList.toggle('on', on); };
+const fOpen = (on) => { $('#fwrap').classList.toggle('open', on); };
 $('#lib-filters-panel-close')?.addEventListener('click', () => fOpen(false));
-$('#lib-filters-btn')?.addEventListener('click', (e) => { e.stopPropagation(); const on = !$('#fwrap').classList.contains('open'); fOpen(on); if (on) $('#fwrap').scrollIntoView({ block: 'nearest', behavior: reduced() ? 'auto' : 'smooth' }); });
-fOpen(true);
+$('#frow > div').innerHTML = (window.REAL_BARS || {}).filterRow || '';
+$$('#frow .lib-chip').forEach((c) => { c.classList.add('k-chip'); if (c.classList.contains('lib-sel')) c.classList.add('on'); if (c.classList.contains('lib-iconchip')) c.classList.add('ic', { red: 'rej', favorite: 'fav' }[c.dataset.fval] || 'x'); });
+$('#frow').addEventListener('click', (e) => { const c = e.target.closest('.k-chip'); if (!c) return; e.stopPropagation();
+  if (c.id === 'lib-types-more') { $('#frow').classList.toggle('more'); c.classList.toggle('on', $('#frow').classList.contains('more')); return; }
+  if (c.id === 'lib-more-filters') { fOpen(true); $('#fwrap').scrollIntoView({ block: 'nearest', behavior: reduced() ? 'auto' : 'smooth' }); return; }
+  if (c.dataset.fgrp === 'type') $$('#frow .k-chip[data-fgrp=type]').forEach((x) => x.classList.toggle('on', x === c)); else c.classList.toggle('on'); snap(); });
+const rowOpen = (on) => { $('#frow').classList.toggle('open', on); $('#lib-filters-btn')?.classList.toggle('on', on); };
+$('#lib-filters-btn')?.addEventListener('click', (e) => { e.stopPropagation(); rowOpen(!$('#frow').classList.contains('open')); });
+$('#mode-sw').addEventListener('swchange', (e) => { if (e.detail) rowOpen(false); });
+fOpen(true); rowOpen(true);
 $('#cond-note').textContent = 'Shown only in some states in the app (hide them with State-only controls): ' + $$('#tb [data-conditional]').map((x) => (x.getAttribute('title') || x.querySelector('[title]')?.getAttribute('title') || x.id).split(/[—(·]/)[0].trim()).join(' · ') + '.';
 
 // ── notes: click anything, type, exported with Copy settings ─────
