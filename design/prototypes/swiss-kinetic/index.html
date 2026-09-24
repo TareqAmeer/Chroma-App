@@ -104,6 +104,19 @@ body[data-slab=outline] .sw .opt.on{color:var(--ink)}
 .sw.seg .opt:not(.on):hover{color:var(--ink)}
 .sw.seg .slab{top:0;bottom:0}
 .sw.seg .slab2{top:calc(var(--oy)*.5);bottom:calc(var(--oy)*-.5)}
+/* Segmented variants (data-segv). --sk/--sk2 scale the slabs' sideways offset (read by makeSwitch). */
+.sw.seg[data-segv=slab],.sw.seg[data-segv=box],.sw.seg[data-segv=outline]{box-shadow:none}
+.sw.seg[data-segv=slab] .opt+.opt,.sw.seg[data-segv=box] .opt+.opt,.sw.seg[data-segv=outline] .opt+.opt{box-shadow:none}
+.sw.seg[data-segv=slab]{--sk:.5;--sk2:1}
+.sw.seg[data-segv=slab] .slab{top:var(--slab-top);bottom:calc(var(--oy)*-.5)}
+.sw.seg[data-segv=slab] .slab2{top:calc(var(--slab-top) + var(--oy));bottom:calc(var(--oy)*-1)}
+.sw.seg[data-segv=box]{box-shadow:inset 0 0 0 1px var(--line)}
+.sw.seg[data-segv=box] .slab{background:var(--ink)}
+.sw.seg[data-segv=box] .opt.on{color:var(--bg)}
+.sw.seg[data-segv=outline]{--sk:.4;--sk2:0}
+.sw.seg[data-segv=outline] .slab{background:none;border:1.5px solid var(--ca);top:calc(var(--oy)*-.4);bottom:calc(var(--oy)*.4)}
+.sw.seg[data-segv=outline] .slab2{display:block!important;background:color-mix(in srgb,var(--ink) 12%,transparent);top:0;bottom:0}
+.sw.seg[data-segv=outline] .opt.on{color:var(--ink)}
 .sw.vert{flex-direction:column;align-items:stretch;cursor:default}
 .sw.vert .slab{top:0;left:0;right:auto;height:10px;bottom:auto;width:4px}
 .sw.vert .slab2{display:none}
@@ -140,7 +153,7 @@ body[data-italic=primary] .k-btn.primary .lbl,body[data-italic=hover] .k-btn:hov
 .k-btn:active:not(:disabled){transform:translate(1px,1px)}
 
 /* ── icon buttons ──────────────────────────────────────────────── */
-.k-ic{width:32px;height:32px;display:inline-grid;place-items:center;background:none;border:var(--bw-ic) solid var(--line);cursor:pointer;position:relative;transition:transform var(--dur-fast) var(--ease),background var(--dur-fast),border-color var(--dur-fast)}
+.k-ic{isolation:isolate;width:32px;height:32px;display:inline-grid;place-items:center;background:none;border:var(--bw-ic) solid var(--line);cursor:pointer;position:relative;transition:transform var(--dur-fast) var(--ease),background var(--dur-fast),border-color var(--dur-fast)}
 .k-ic svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;transition:transform var(--dur) var(--ease)}
 .k-ic[data-hv=fill]:hover{background:var(--ca);border-color:var(--ca);color:#fff}
 .k-ic[data-hv=turn]:hover svg{transform:rotate(90deg)}
@@ -150,6 +163,16 @@ body[data-italic=primary] .k-btn.primary .lbl,body[data-italic=hover] .k-btn:hov
 .k-ic[data-hv=turnjump]:hover svg{transform:rotate(90deg)}
 body[data-icb=none] .k-ic{border-color:transparent}
 body[data-icb=none] .k-ic[data-hv=turn]:hover{border-color:transparent}
+/* Low slab behind the icon, like gallery/studio: used by the slab hovers and the slab selected state. */
+.k-ic::after{content:'';position:absolute;z-index:-1;left:calc(var(--ox)*.5);right:calc(var(--ox)*-.5);top:var(--slab-top);bottom:calc(var(--oy)*-.5);background:var(--ca);transform:scaleX(0);transform-origin:left;transition:transform var(--dur-fast) var(--ease)}
+.k-ic[data-hv=slab]:hover::after,.k-ic[data-hv=slabturn]:hover::after{transform:scaleX(1)}
+.k-ic[data-hv=slab]:hover,.k-ic[data-hv=slabturn]:hover{color:#fff}
+.k-ic[data-hv=slabturn]:hover svg{transform:rotate(90deg)}
+/* Selected (clicked) icons */
+body[data-icsel=slab] .k-ic.on::after{transform:scaleX(1)}
+body[data-icsel=slab] .k-ic.on{color:#fff}
+body[data-icsel=fill] .k-ic.on{background:var(--ca);color:#fff}
+body[data-icsel=block] .k-ic.on{box-shadow:var(--ox) var(--oy) 0 var(--ca);background:var(--bg);outline:1px solid var(--ink);outline-offset:-1px}
 
 /* ── toggle (existing tumble, recoloured) ──────────────────────── */
 .k-tg{width:44px;height:22px;background:var(--line);position:relative;cursor:pointer;border:1px solid transparent;transition:background var(--dur-fast)}
@@ -162,7 +185,8 @@ body[data-tg=slab] .k-tg.on::after{background:var(--cb)}
 .k-row{display:grid;grid-template-columns:110px 220px 56px;gap:12px;align-items:center}
 .k-row label{color:var(--mut)}
 .k-sl{-webkit-appearance:none;appearance:none;width:100%;height:24px;margin:0;cursor:grab;
-  background:radial-gradient(circle,var(--ink) 0 1.6px,transparent 2.1px) no-repeat var(--dotx,0) 0/5px 5px}
+  background:radial-gradient(circle,var(--ink) 0 1.6px,transparent 2.1px) no-repeat var(--dotx,0) 4px/5px 5px}
+body[data-dot=moved] .k-sl:not(.mod){background-size:0 0}
 .k-sl::-webkit-slider-runnable-track{height:2px;background:linear-gradient(to right,var(--line) 0 var(--lo),var(--ca) var(--lo) var(--hi),var(--line) var(--hi) 100%)}
 .k-sl::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-7px;background:var(--bg);border:2px solid var(--ink);transform:rotate(var(--roll,0deg));transition:transform 80ms linear,background var(--dur-fast)}
 /* Filled with a white border on hover, and stays filled while the value is away from its default. */
@@ -203,8 +227,11 @@ body[data-menu=shift] .k-menu div:hover{color:var(--bg);transform:translateX(6px
 .k-menu hr{border:0;border-top:1px solid rgba(0,0,0,.2);margin:4px 0}
 .k-search{display:flex;align-items:center;gap:8px;width:260px;height:32px;padding:0 10px;border:1.5px solid var(--line);position:relative;isolation:isolate;background:var(--bg)}
 .k-search:focus-within{border-color:var(--ink)}
-.k-search svg,.rbar .lib-search-wrap svg{flex:none;transition:transform var(--dur-fast) var(--ease),filter var(--dur-fast) var(--ease),stroke var(--dur-fast)}
-.k-search:is(:hover,:focus-within) svg,.rbar .lib-search-wrap:is(:hover,:focus-within) svg{stroke:var(--ink);color:var(--ink);transform:translate(calc(var(--ox)*-.35),calc(var(--oy)*-.35));filter:drop-shadow(calc(var(--ox)*.5) calc(var(--oy)*.5) 0 var(--ca))}
+.k-search svg,.rbar .lib-search-wrap svg{flex:none;transition:transform var(--dur-fast) var(--ease),stroke var(--dur-fast)}
+/* Search icon offset jump: the icon lifts and a square slab lands behind it. */
+.k-search::before,.rbar .lib-search-wrap::before{content:'';position:absolute;z-index:-1;left:calc(10px + var(--ox)*.25);top:50%;width:14px;height:14px;margin-top:calc(-7px + var(--oy)*.25);background:var(--ca);transform:scale(0);transition:transform var(--dur-fast) var(--ease)}
+.k-search:is(:hover,:focus-within)::before,.rbar .lib-search-wrap:is(:hover,:focus-within)::before{transform:none}
+.k-search:is(:hover,:focus-within) svg,.rbar .lib-search-wrap:is(:hover,:focus-within) svg{stroke:var(--ink);color:var(--ink);transform:translate(calc(var(--ox)*-.25),calc(var(--oy)*-.25))}
 .k-search input{border:0;background:none;outline:none;flex:1;font-size:13px}
 .k-search input::placeholder{color:var(--mut);text-transform:uppercase;letter-spacing:.12em;font-size:10px;font-weight:700}
 .k-search svg{width:14px;height:14px;stroke:var(--mut);fill:none;stroke-width:1.8}
@@ -243,11 +270,12 @@ body[data-sel=tag] .th .im::before{width:18px;height:18px;left:-6px;top:-6px;z-i
 body[data-sel=tag] .th.on .im::before{opacity:1}
 body[data-sel=tag] .th.on .im::after{opacity:1;border-color:var(--ca)}
 .th:hover:not(.on) .im::after{opacity:.5;border-color:var(--ink)}
+body[data-thhv=offset] .th:hover:not(.on) .im::after{opacity:.85;transform:translate(calc(var(--ox)*1.2),calc(var(--oy)*-1.2))}
 .th .cap{display:flex;justify-content:space-between;font-size:10px;color:var(--mut);margin-top:5px;letter-spacing:.04em}
 .th .cap b{color:var(--ink);font-weight:700}
 .flag{position:absolute;top:6px;left:6px;display:inline-flex;align-items:center;gap:4px;font:700 9px/1 var(--f);letter-spacing:.1em;padding:3px 5px 3px 4px;background:var(--bg);color:var(--ink)}
 .flag svg{width:9px;height:9px;fill:currentColor;stroke:currentColor;stroke-width:1.4}
-.flag.pick{background:var(--cb);color:#fff}.flag.rej{background:#e02c00;color:#fff}.flag.fav{background:var(--ink);color:var(--bg)}
+.flag.pick{background:var(--ca);color:#fff}.flag.rej{background:var(--mut);color:#fff}.flag.fav{background:var(--cb);color:#fff}
 
 /* ── library side menu ─────────────────────────────────────────── */
 .side{width:240px;border:1px solid var(--line);padding:16px 0}
@@ -298,9 +326,10 @@ body[data-side=offset] .side .opt.on{color:#fff;transform:translateX(12px)}
 .topbar{height:auto;min-height:60px;gap:18px;padding:10px 16px;min-width:max-content}
 .brand{display:flex;align-items:center;gap:18px;flex:none}
 .brand #mode-sw{margin-left:-6px}
-.rbar{flex:1;min-width:0}
+.rbars{flex:1;min-width:0;display:grid}.rbars>.rbar{grid-area:1/1}.rbars.swapping{overflow:clip}
+.rbar{min-width:0}
 .rbar[hidden]{display:none}
-.rbar [data-was-hidden]{display:none!important}
+.rbar [data-was-hidden],.fwrap [data-was-hidden]{display:none!important}
 body[data-cond=hide] .rbar [data-conditional]{display:none!important}
 .rbar #lib-top,.rbar #fx-deskbar{display:flex!important;justify-content:space-between;align-items:center;gap:24px}
 .rbar #lib-top-left,.rbar #fx-deskbar-left{display:flex;align-items:center;gap:8px;justify-self:start}
@@ -314,11 +343,13 @@ body[data-cond=hide] .rbar [data-conditional]{display:none!important}
 .rbar .k-ic{width:30px;height:30px;color:var(--ink);border-color:transparent!important}
 .rbar #lib-sort-label{display:none}
 .rbar .k-ic svg{width:15px;height:15px}
-.rbar .k-ic.flag-btn-red:hover,.rbar #lib-flag-reject:hover{--ca:#e02c00}
+/* Flag colours: reject grey, pick orange (A), favourite blue (B). */
+.rbar #lib-flag-reject,.rbar #btn-flag-red{--ca:var(--mut)}
+.rbar #lib-flag-fav,.rbar #btn-favorite,.k-ic.fav{--ca:var(--cb)}
 .rbar #btn-loupe{font:700 11px/1 var(--f)}
 .rbar #fx-zoom-pct{font-size:11px;color:var(--mut);min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
-.rbar .k-sl{width:110px}
-.rbar .lib-search-wrap{display:flex;align-items:center;gap:8px;width:280px;height:30px;padding:0 10px;border:1.5px solid var(--line);position:relative;background:var(--bg)}
+.rbar .k-sl{width:var(--tb-sl)}
+.rbar .lib-search-wrap{isolation:isolate;display:flex;align-items:center;gap:8px;width:280px;height:30px;padding:0 10px;border:1.5px solid var(--line);position:relative;background:var(--bg)}
 .rbar .lib-search-wrap:focus-within{border-color:var(--ink)}
 .rbar .lib-search-wrap svg{width:14px;height:14px;color:var(--mut)}
 .rbar .lib-search-wrap input{border:0;background:none;outline:none;flex:1;font-size:13px}
@@ -339,12 +370,44 @@ body[data-cond=hide] .rbar [data-conditional]{display:none!important}
 .rbar .lib-menu .opt-action{justify-content:flex-start}
 .rbar .lib-menu .opt-action.opt-toggle{justify-content:space-between}
 .rbar .lib-menu .opt svg,.rbar .lib-menu .opt-action svg{width:13px;height:13px}
-.rbar .lib-menu .opt:not(.sel)>svg{visibility:hidden}
+.rbar .lib-menu .sq{width:8px;height:8px;flex:none;background:var(--ca);visibility:hidden}
+.rbar .lib-menu .opt.sel .sq{visibility:visible}
+.rbar .lib-menu .opt:hover .sq{background:#fff}
 .rbar .lib-menu .opt::before,.rbar .lib-menu .opt-action::before{content:'';position:absolute;inset:var(--msy) calc(var(--msx)*-1) calc(var(--msy)*-1) var(--msx);background:var(--ca);z-index:-1;transform:scaleX(0);transform-origin:left;transition:transform var(--menu-dur) var(--ease)}
 .rbar .lib-menu .opt:hover,.rbar .lib-menu .opt-action:hover{color:#fff}
 .rbar .lib-menu .opt:hover::before,.rbar .lib-menu .opt-action:hover::before{transform:scaleX(1)}
 body[data-menu=invert] .rbar .lib-menu .opt::before,body[data-menu=invert] .rbar .lib-menu .opt-action::before{background:var(--bg)}
 body[data-menu=invert] .rbar .lib-menu .opt:hover,body[data-menu=invert] .rbar .lib-menu .opt-action:hover{color:var(--ink)}
+
+/* ── filters panel (captured #lib-filters-panel, restyled) ──────── */
+.fwrap{overflow:clip;flex:none}
+.fwrap #lib-filters-panel{width:260px;display:flex;flex-direction:column;gap:12px;padding:12px 16px 16px;border:1px solid var(--line);background:var(--bg);transition:transform var(--dur) var(--ease)}
+.fwrap:not(.open) #lib-filters-panel{transform:translateX(105%)}
+#lib-filters-panel-head{display:flex;justify-content:space-between;align-items:center;font:700 11px/1 var(--f);letter-spacing:.14em;text-transform:uppercase;padding-bottom:10px;border-bottom:1.5px solid var(--ink)}
+#lib-filters-panel-close{display:inline-grid;place-items:center;cursor:pointer;color:var(--mut);transition:transform var(--dur) var(--ease),color var(--dur-fast)}
+#lib-filters-panel-close:hover{color:var(--ink);transform:rotate(90deg)}
+#lib-filters-panel-close svg{width:14px;height:14px}
+.lib-filter-field{display:flex;flex-direction:column;gap:5px}
+.lib-filter-field label,.lib-fp-label{font:700 9px/1 var(--f);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.lib-fp-label{margin-top:6px;padding-top:12px;border-top:1px solid var(--line)}
+.fwrap select{-webkit-appearance:none;appearance:none;width:100%;height:30px;padding:0 28px 0 10px;background:var(--bg) linear-gradient(var(--ca),var(--ca)) no-repeat right 11px center/6px 6px;border:1px solid var(--line);font-size:12px;cursor:pointer;transition:border-color var(--dur-fast),background-size var(--dur-fast) var(--ease)}
+.fwrap select:hover{border-color:var(--ink);background-size:8px 8px}
+.fwrap select.set{border-color:var(--ca);box-shadow:calc(var(--ox)*.5) calc(var(--oy)*.5) 0 var(--ca)}
+#lib-subfolders-wrap{display:flex;align-items:center;gap:9px;font-size:12px;cursor:pointer}
+#lib-subfolders{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin:0;border:1px solid var(--ink);background:var(--bg);cursor:pointer;transition:background var(--dur-fast),transform var(--dur) var(--ease)}
+#lib-subfolders:checked{background:var(--ca);border-color:var(--ca);transform:rotate(90deg)}
+#lib-filters-clear{align-self:flex-start}
+#lib-filters-btn.on{background:var(--ink);color:var(--bg)}
+
+/* ── submenus ──────────────────────────────────────────────────── */
+.k-menu .has-sub{position:relative}
+.k-menu .has-sub>i{font-style:normal;opacity:.5}
+.k-menu div.subm{position:absolute;left:100%;top:-5px;margin-left:1px;min-width:170px;display:block;padding:4px 0;z-index:6;color:var(--bg);clip-path:inset(0 100% 0 0);pointer-events:none;transition:clip-path var(--dur) var(--ease) 60ms}
+.k-menu div.subm::before{display:none}
+.k-menu .has-sub:hover>.subm{clip-path:inset(-10px -20px -20px 0);pointer-events:auto}
+.k-menu .subm div{color:var(--bg)}
+.k-menu .subm div:hover{color:#fff}
+body[data-menu=invert] .k-menu .subm div:hover{color:var(--ink)}
 
 /* ── notes ─────────────────────────────────────────────────────── */
 #notes-count{color:var(--a)}
@@ -373,7 +436,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 @media (max-width:760px){body{grid-template-columns:1fr;overflow:auto}#dock{max-height:none}#stage{overflow:visible}.sec{padding:24px 16px}.grid{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
-<body data-dim="off" data-slab="stepped" data-sel="slab" data-side="fill" data-menu="slab" data-italic="primary" data-bw="on" data-win="tint" data-tg="flip" data-icb="on">
+<body data-dim="off" data-slab="stepped" data-sel="slab" data-side="fill" data-menu="slab" data-italic="primary" data-bw="on" data-win="tint" data-tg="flip" data-icb="none" data-icsel="slab" data-thhv="offset" data-dot="moved">
 
 <aside id="dock">
   <button id="dock-tg" class="dock-act" title="Hide the settings panel to see the page at full width. Shortcut: backslash">Hide panel</button>
@@ -417,7 +480,10 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
   <fieldset><legend>Hover &amp; selection</legend>
     <div class="dr full"><label>Buttons</label><select id="hv-btn"></select></div>
     <div class="dr"><label>Button border</label><input type="range" min="0" max="4" step="0.5" data-var="--bw-btn" data-unit="px"><output></output></div>
-    <div class="dr full"><label>Icon buttons</label><select id="hv-ic"><option value="offset">Offset block</option><option value="fill">Fill</option><option value="turn">Quarter turn</option><option value="turnjump">Quarter turn + offset jump</option></select></div>
+    <div class="dr full"><label>Icon buttons</label><select id="hv-ic"><option value="offset">Offset block</option><option value="fill">Fill</option><option value="turn">Quarter turn</option><option value="turnjump">Quarter turn + offset jump</option><option value="slab">Low slab (like gallery/studio)</option><option value="slabturn">Low slab + quarter turn</option></select></div>
+    <div class="dr full"><label>Icon selected</label><select data-attr="icsel"><option value="slab">Low slab</option><option value="fill">Fill</option><option value="block">Offset block</option></select></div>
+    <div class="dr full"><label>Segmented</label><select id="segv"><option value="cell">Cell on a baseline</option><option value="slab">Low slab</option><option value="box">Boxed, inverted</option><option value="outline">Shifted outline</option></select></div>
+    <div class="dr full"><label>Slider reset dot</label><select data-attr="dot"><option value="moved">Only once moved</option><option value="always">Always</option></select></div>
     <div class="dr full"><label>Icon borders</label><select data-attr="icb"><option value="on">Borders</option><option value="none">No borders</option></select></div>
     <div class="dr"><label>Icon border</label><input type="range" min="0.5" max="4" step="0.5" data-var="--bw-ic" data-unit="px"><output></output></div>
     <div class="dr full"><label>Menu rows</label><select data-attr="menu"><option value="slab">Slab wipe</option><option value="invert">Invert</option><option value="shift">Shift right</option></select></div>
@@ -428,6 +494,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
     <div class="dr full"><label>Side menu</label><select data-attr="side"><option value="bar">Sliding bar</option><option value="fill">Sliding fill</option><option value="offset">Offset slab</option></select></div>
     <div class="dr full"><label>Toggle on</label><select data-attr="tg"><option value="flip">Tumble (current)</option><option value="slab">Tumble, colour B square</option></select></div>
     <div class="dr full"><label>Italics</label><select data-attr="italic"><option value="primary">Main action only</option><option value="hover">On hover</option><option value="none">None</option></select></div>
+    <div class="dr full"><label>Photo hover</label><select data-attr="thhv"><option value="offset">Offset outline</option><option value="plain">Outline in place</option></select></div>
     <div class="dr full"><label>Filmstrip</label><select data-attr="bw"><option value="on">Filmstrip B&amp;W until hover</option><option value="off">Always colour</option></select></div>
     <div class="dr full"><label>Window squares</label><select data-attr="win"><option value="tint">Tinted</option><option value="mono">Ink</option></select></div>
     <div class="dr full"><label>Value readout</label><select id="roll"><option value="roll">Rolling digits</option><option value="plain">Plain</option></select></div>
@@ -435,6 +502,8 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 
   <fieldset><legend>Top bar</legend>
     <div class="dr full"><label>State-only controls</label><select id="cond"><option value="show">Show all</option><option value="hide">Hide (as captured)</option></select></div>
+    <div class="dr full"><label>Library / Editor swap</label><select id="swap"><option value="slide">Tools slide with the slab</option><option value="stagger">Tools slide, staggered</option><option value="instant">Instant</option></select></div>
+    <div class="dr"><label>Slider width</label><input type="range" min="40" max="140" step="2" data-var="--tb-sl" data-unit="px"><output></output></div>
   </fieldset>
 
   <fieldset id="notes-fs"><legend>Notes <span id="notes-count"></span></legend>
@@ -461,8 +530,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
       <div class="wordmark">Chro-ma-smith</div>
       <div class="sw mid" data-idx="0" id="mode-sw" title="Library / Editor (L)"><span class="slab2"></span><span class="slab"></span><span class="opt">gallery</span><span class="sep"></span><span class="opt">studio</span></div>
     </div>
-    <div class="rbar" id="rbar-lib"></div>
-    <div class="rbar" id="rbar-ed" hidden></div>
+    <div class="rbars"><div class="rbar" id="rbar-lib"></div><div class="rbar" id="rbar-ed" hidden></div></div>
   </div>
   <p class="note" style="margin-top:14px" id="cond-note"></p>
 </section>
@@ -484,13 +552,14 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
     </div>
     <div class="grid zone" id="grid"></div>
     <div class="film zone" id="film"></div>
+    <div class="spec"><small>Filters panel · from the app</small><div class="fwrap zone open" id="fwrap"></div></div>
   </div>
 </section>
 
 <section class="sec zone">
   <div class="eyebrow"><b>03</b> Buttons · 266 in app</div>
-  <h2>Hover variants</h2>
-  <p class="note">Each row is one hover style, fixed so you can compare them. The dropdown under Hover &amp; selection sets the style used everywhere else on this page.</p>
+  <h2>Buttons</h2>
+  <p class="note">Shown with the hover style picked under Hover &amp; selection (switch it there to compare others).</p>
   <div id="btn-spec" style="display:grid;gap:18px"></div>
 </section>
 
@@ -504,11 +573,11 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
       <div class="k-row"><label>Exposure</label><input class="k-sl" type="range" min="-5" max="5" step="0.01" value="0.35" data-def="0"><span class="val"></span></div>
       <div class="k-row"><label>Grain</label><input class="k-sl" type="range" min="0" max="100" step="1" value="42" data-def="0"><span class="val"></span></div>
     </div>
-    <div class="spec"><small>Segmented</small><div class="sw seg" data-idx="0"><span class="slab2"></span><span class="slab"></span><span class="opt">FIT</span><span class="opt">FILL</span><span class="opt">1:1</span><span class="opt">2:1</span></div></div>
+    <div class="spec"><small>Segmented · variants (panel picks the one used everywhere)</small><div id="seg-spec" style="display:grid;grid-template-columns:auto auto;gap:14px 16px;align-items:center"></div></div>
     <div class="spec"><small>Chips</small><div style="display:flex;gap:8px;flex-wrap:wrap;max-width:280px" id="chips"></div></div>
     <div class="spec"><small>Icon buttons</small><div style="display:flex;gap:10px">
       <button class="k-ic" data-hv="" title="Flag"><svg viewBox="0 0 16 16"><path d="M3 14V2h9l-2 3 2 3H3"/></svg></button>
-      <button class="k-ic" data-hv="" title="Like"><svg viewBox="0 0 16 16"><path d="M8 14 2.5 8.5a3 3 0 0 1 4.3-4.3L8 5.4l1.2-1.2a3 3 0 0 1 4.3 4.3z"/></svg></button>
+      <button class="k-ic fav" data-hv="" title="Like"><svg viewBox="0 0 16 16"><path d="M8 14 2.5 8.5a3 3 0 0 1 4.3-4.3L8 5.4l1.2-1.2a3 3 0 0 1 4.3 4.3z"/></svg></button>
       <button class="k-ic" data-hv="" title="Add"><svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12"/></svg></button>
       <button class="k-ic" data-hv="" title="Compare"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10"/><path d="M8 3v10"/></svg></button></div></div>
   </div>
@@ -521,6 +590,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
     <div class="spec"><small>Select</small><div class="k-sel" id="sel"><button><span>Date taken</span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"/></svg></button>
       <div class="k-menu"><div>Date taken</div><div>Date added</div><div>Date edited</div><div>File name</div></div></div></div>
     <div class="spec"><small>Menu</small><div class="k-menu"><div>Copy settings <small>⌘⇧C</small></div><div>Paste settings <small>⌘⇧V</small></div><hr><div>Reveal in Finder</div><div>Remove from library</div></div></div>
+    <div class="spec" style="margin-right:170px"><small>Menu with submenus</small><div class="k-menu"><div>Copy settings <small>⌘⇧C</small></div><div class="has-sub">Export as <i>›</i><div class="k-menu subm"><div>JPEG</div><div>TIFF 16-bit</div><div>.cube LUT</div></div></div><div class="has-sub">Add to collection <i>›</i><div class="k-menu subm"><div>Picks</div><div>Birmingham canal</div><div>Sequoia</div><hr><div>New collection…</div></div></div><hr><div>Remove from library</div></div></div>
     <div class="spec"><small>Search</small><label class="k-search"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input placeholder="Filter looks"></label>
       <small style="margin-top:14px">Info</small><span>Halation <span class="k-info" title="Red glow around highlights">i</span></span></div>
     <div class="spec"><small>Section card + control rows</small>
@@ -556,17 +626,17 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 (() => {
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const root = document.documentElement, body = document.body;
-const store = { get(k) { try { return JSON.parse(localStorage.getItem('sk2.' + k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem('sk2.' + k, JSON.stringify(v)); } catch {} } };
+const store = { get(k) { try { return JSON.parse(localStorage.getItem('sk3.' + k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem('sk3.' + k, JSON.stringify(v)); } catch {} } };
 
 // ── settings model ────────────────────────────────────────────────
 const EASES = { 'Inertia (0.16,1,0.3,1)': '.16,1,.3,1', 'Expo out': '.19,1,.22,1', 'Soft overshoot': '.34,1.56,.64,1', 'Hard overshoot': '.68,-.6,.32,1.6', 'Standard': '.4,0,.2,1', 'Linear': '0,0,1,1' };
 const HOVERS = { slip: 'Text slip', slab: 'Slab slide-in', flood: 'Instant invert', jump: 'Offset jump', skew: 'Italic lean', breathe: 'Letter-spacing breathe', scramble: 'Letter scramble' };
 const PRESETS = { 'Cadmium / Cobalt': { '--a': '#e0500c', '--b': '#1414a0' }, 'Klein / Signal': { '--a': '#0015ff', '--b': '#e02c00' }, 'Orange / Ink': { '--a': '#e0500c', '--b': '#f2f2f0' }, 'Splash': { '--a': '#d84300', '--b': '#1013a0' } };
-// Defaults = the 2026-09-24 review export. Storage keys moved to v2 so those picks show on first open.
+// Defaults = the 2026-09-24 review round 2 export. Storage keys move per round so the new picks show on first open.
 const DEFAULTS = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#1b1b1b', '--ink': '#f2f2f0', '--mut': '#7c7c78', '--ox': '6px', '--oy': '6px', '--slab-top': '34%', '--dim': '0.35', '--dim-dur': '220ms', '--dur': '500ms', '--dur-fast': '180ms',
-    '--bw-btn': '1.5px', '--bw-ic': '1px', '--menu-dur': '320ms', '--msx': '4px', '--msy': '2px' },
-  attrs: { dim: 'off', slab: 'stepped', sel: 'slab', side: 'fill', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'on' },
-  cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'turn', roll: 'roll' };
+    '--bw-btn': '0.5px', '--bw-ic': '1px', '--menu-dur': '900ms', '--msx': '10px', '--msy': '5px', '--tb-sl': '72px' },
+  attrs: { dim: 'off', slab: 'single', sel: 'slab', side: 'fill', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved' },
+  cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'turnjump', roll: 'roll', segv: 'cell', swap: 'slide' };
 let S = Object.assign(structuredClone(DEFAULTS), store.get('settings') || {});
 S.vars = Object.assign({}, DEFAULTS.vars, S.vars); S.attrs = Object.assign({}, DEFAULTS.attrs, S.attrs);
 const save = () => store.set('settings', S);
@@ -579,6 +649,8 @@ function apply() {
   body.dataset.cond = S.cond;
   $$('.k-btn:not([data-fixed])').forEach((b) => { b.dataset.hv = S.hvBtn; });
   $$('.k-ic').forEach((b) => { b.dataset.hv = S.hvIc; });
+  $$('.sw.seg:not([data-fixed])').forEach((x) => { x.dataset.segv = S.segv; });
+  if ($('#btn-cur')) $('#btn-cur').textContent = HOVERS[S.hvBtn];
   $$('.k-sl').forEach(paintSlider);
   switches.forEach((s) => s.snap(false));
 }
@@ -598,7 +670,7 @@ ease.value = Object.values(EASES).includes(S.ease) ? S.ease : 'custom'; $('#ease
 ease.addEventListener('change', () => { if (ease.value !== 'custom') { S.ease = ease.value; $('#ease-custom').value = S.ease; apply(); save(); } });
 $('#ease-custom').addEventListener('change', (e) => { const p = e.target.value.split(',').map(Number); if (p.length === 4 && p.every(isFinite)) { S.ease = p.join(','); ease.value = Object.values(EASES).includes(S.ease) ? S.ease : 'custom'; apply(); save(); } });
 for (const id of ['bounce', 'throw', 'rubber']) { const i = $('#' + id), o = i.parentElement.querySelector('output'); i.value = S[id]; o.textContent = S[id]; i.addEventListener('input', () => { S[id] = +i.value; o.textContent = i.value; save(); }); }
-for (const [id, key] of [['rm', 'rm'], ['snd', 'snd'], ['hv-ic', 'hvIc'], ['roll', 'roll'], ['cond', 'cond']]) { const i = $('#' + id); i.value = S[key]; i.addEventListener('change', () => { S[key] = i.value; apply(); save(); if (id === 'snd') snap(); }); }
+for (const [id, key] of [['rm', 'rm'], ['snd', 'snd'], ['hv-ic', 'hvIc'], ['roll', 'roll'], ['cond', 'cond'], ['segv', 'segv'], ['swap', 'swap']]) { const i = $('#' + id); i.value = S[key]; i.addEventListener('change', () => { S[key] = i.value; apply(); save(); if (id === 'snd') snap(); }); }
 const hvb = $('#hv-btn'); for (const [k, n] of Object.entries(HOVERS)) hvb.add(new Option(n, k)); hvb.value = S.hvBtn; hvb.addEventListener('change', () => { S.hvBtn = hvb.value; apply(); save(); });
 for (const [n, p] of Object.entries(PRESETS)) { const b = document.createElement('button'); b.textContent = n; b.onclick = () => { Object.assign(S.vars, p); $$('#dock [data-var]').forEach((i) => { if (p[i.dataset.var]) { i.value = p[i.dataset.var]; i.dispatchEvent(new Event('input')); } }); }; $('#presets').append(b); }
 const dockTg = () => { body.classList.toggle('dock-off'); $('#dock-tg').textContent = body.classList.contains('dock-off') ? 'Show panel' : 'Hide panel'; switches.forEach((x) => x.snap()); placePins(); };
@@ -613,7 +685,7 @@ $('#copy').onclick = async () => {
     menu: { wipe: t(S.vars['--menu-dur']), slabShiftX: d(S.vars['--msx']), slabShiftY: d(S.vars['--msy']) },
     dim: { mode: S.attrs.dim, level: { $type: 'number', $value: +S.vars['--dim'] }, fade: t(S.vars['--dim-dur']) },
     motion: { duration: t(S.vars['--dur']), hover: t(S.vars['--dur-fast']), easing: { $type: 'cubicBezier', $value: S.ease.split(',').map(Number) }, dragBounce: S.bounce, throw: S.throw, edgeStretch: S.rubber, reduceMotion: S.rm, snapSound: S.snd },
-    variants: { buttonHover: S.hvBtn, iconHover: S.hvIc, menuHover: S.attrs.menu, photoSelection: S.attrs.sel, sideMenu: S.attrs.side, toggle: S.attrs.tg, italics: S.attrs.italic, thumbnails: S.attrs.bw, windowSquares: S.attrs.win, valueReadout: S.roll, topBarStateOnlyControls: S.cond },
+    variants: { buttonHover: S.hvBtn, iconHover: S.hvIc, menuHover: S.attrs.menu, photoSelection: S.attrs.sel, sideMenu: S.attrs.side, toggle: S.attrs.tg, italics: S.attrs.italic, thumbnails: S.attrs.bw, windowSquares: S.attrs.win, valueReadout: S.roll, topBarStateOnlyControls: S.cond, iconSelected: S.attrs.icsel, segmented: S.segv, photoHover: S.attrs.thhv, sliderResetDot: S.attrs.dot, barSwap: S.swap, topBarSliderWidth: S.vars['--tb-sl'] },
     notes: notes.map((x) => ({ n: x.n, where: x.where, note: x.note })), generalNotes: $('#note-general').value.trim() };
   const txt = JSON.stringify(out, null, 2);
   try { await navigator.clipboard.writeText(txt); $('#copied').textContent = 'Copied'; } catch { prompt('Copy these settings:', txt); }
@@ -651,7 +723,7 @@ function makeSwitch(el) {
     // its divider (left on the first word, right on the last) so the slab never touches the line.
     const lean = el.id === 'mode-sw' ? -0.5 + 1.5 * (c / (n || 1)) : 1, seg = el.classList.contains('seg');
     for (const s of slabs) {
-      const k = s.classList.contains('slab2') ? (seg ? 0.5 : 2 * lean) : (seg ? 0 : lean), ox = `calc(var(--ox) * ${k.toFixed(3)})`;
+      const two = s.classList.contains('slab2'), k = two ? (seg ? 0.5 : 2 * lean) : (seg ? 0 : lean), ox = `calc(var(--ox) * var(${two ? '--sk2' : '--sk'}, ${k.toFixed(3)}))`;
       if (vert) { s.style.transform = `translateY(${x}px)`; s.style.height = w + 'px'; }
       else { s.style.transform = `translateX(calc(${x}px + ${ox}))`; s.style.width = w + 'px'; }
     }
@@ -725,12 +797,16 @@ document.addEventListener('pointerover', (e) => {
 function wrapBtn(b) { const t = b.textContent; b.innerHTML = `<span class="lbl"><span class="trk"><span>${t}</span><span>${t}</span></span></span>`; }
 $$('.k-btn').forEach(wrapBtn);
 const spec = $('#btn-spec');
-for (const [k, n] of Object.entries(HOVERS)) {
-  const r = document.createElement('div'); r.style.cssText = 'display:grid;grid-template-columns:170px repeat(4,auto) 1fr;gap:14px;align-items:center';
-  r.innerHTML = `<small class="eyebrow" style="margin:0">${n}</small>` + [['primary', 'Export'], ['outline', 'All FX'], ['', 'Download .cube'], ['danger', 'Remove']].map(([c, t]) => `<button class="k-btn ${c}" data-fixed data-hv="${k}">${t}</button>`).join('') + '<span></span>';
-  spec.append(r); $$('.k-btn', r).forEach(wrapBtn);
-}
+{ const r = document.createElement('div'); r.style.cssText = 'display:grid;grid-template-columns:170px repeat(4,auto) 1fr;gap:14px;align-items:center';
+  r.innerHTML = '<small class="eyebrow" style="margin:0" id="btn-cur"></small>' + [['primary', 'Export'], ['outline', 'All FX'], ['', 'Download .cube'], ['danger', 'Remove']].map(([c, t]) => `<button class="k-btn ${c}">${t}</button>`).join('') + '<span></span>';
+  spec.append(r); $$('.k-btn', r).forEach(wrapBtn); }
 { const r = document.createElement('div'); r.style.cssText = 'display:grid;grid-template-columns:170px auto 1fr;gap:14px;align-items:center'; r.innerHTML = '<small class="eyebrow" style="margin:0">Disabled</small><button class="k-btn primary" disabled>Export</button><span></span>'; spec.append(r); wrapBtn($('.k-btn', r)); }
+const SEGV = { cell: 'Cell on a baseline', slab: 'Low slab', box: 'Boxed, inverted', outline: 'Shifted outline' };
+$('#seg-spec').innerHTML = Object.entries(SEGV).map(([k, n]) => `<small class="eyebrow" style="margin:0">${n}</small><div class="sw seg" data-fixed data-segv="${k}" data-idx="0"><span class="slab2"></span><span class="slab"></span><span class="opt">FIT</span><span class="opt">FILL</span><span class="opt">1:1</span><span class="opt">2:1</span></div>`).join('');
+// Icon buttons select on click (flag/pick exclusive, as in the app).
+document.addEventListener('click', (e) => { const b = e.target.closest('.k-ic'); if (!b || noting) return;
+  const grp = { 'lib-flag-reject': 'f', 'lib-flag-pick': 'f', 'btn-flag-red': 'f', 'btn-flag-green': 'f' }[b.id];
+  if (b.closest('.spec') || grp || /fav/.test(b.id)) { const on = !b.classList.contains('on'); if (grp) $$('.k-ic', b.parentElement.closest('.rbar')).forEach((x) => { if (x !== b && /flag-(reject|pick|red|green)/.test(x.id)) x.classList.remove('on'); }); b.classList.toggle('on', on); snap(); } });
 const FLAGS = { rej: '✕ REJ', pick: '<svg viewBox="0 0 10 10"><path d="M2 9.5V1h6L6.6 3 8 5H2"/></svg>PICK', fav: '<svg viewBox="0 0 10 10"><path d="M5 9 1.3 5.3a2.1 2.1 0 0 1 3-3L5 3l.7-.7a2.1 2.1 0 0 1 3 3z"/></svg>FAV' };
 const PH = [['canal.webp', 'TM_56784', 'RW2', 'pick'], ['selfie.webp', 'TM_56701', 'RW2', 'fav', 'p'], ['dog-lying.webp', 'TM_56655', 'JPG', ''], ['dog-sitting.webp', 'TM_56612', 'RW2', 'rej'], ['canal.webp', 'TM_56590', 'RW2', '', '', 'top'], ['dog-lying.webp', 'TM_56588', 'RW2', 'pick'], ['canal.webp', 'TM_56577', 'HEIC', '', '', 'bottom'], ['selfie.webp', 'TM_56570', 'RW2', '', 'p']];
 const thumb = ([src, name, ext, flag, p, pos], cap) => `<div class="th ${p || ''}" tabindex="0"><div class="im"><img src="photos/${src}" alt="" style="object-position:center ${pos || 'center'}">${flag ? `<span class="flag ${flag}">${FLAGS[flag]}</span>` : ''}</div>${cap ? `<div class="cap"><b>${name}</b><span>${ext}</span></div>` : ''}</div>`;
@@ -768,6 +844,7 @@ function mountBar(host, html) {
   // real menus open/close
   for (const [btn, menu] of [['#lib-sort-btn', '#lib-sort-menu'], ['#lib-view-menu-btn', '#lib-view-menu']]) {
     const b = host.querySelector(btn), m = host.querySelector(menu); if (!b || !m) continue;
+    $$('.opt>svg', m).forEach((x) => x.replaceWith(Object.assign(document.createElement('i'), { className: 'sq' })));
     b.addEventListener('click', (e) => { e.stopPropagation(); const open = !m.classList.contains('open'); $$('.lib-menu.open').forEach((x) => x.classList.remove('open')); m.classList.toggle('open', open); });
     m.addEventListener('click', (e) => { e.stopPropagation(); const o = e.target.closest('.opt'); if (!o) return; const key = [...o.attributes].find((a) => /^data-(sort|meta|theme)/.test(a.name));
       if (key) { $$(`.opt[${key.name}]`, m).forEach((x) => x.classList.toggle('sel', x === o)); if (key.name === 'data-sortval') $('#lib-sort-label').textContent = o.textContent.trim(); } else o.classList.toggle('sel'); snap(); });
@@ -777,7 +854,27 @@ mountBar($('#rbar-lib'), (window.REAL_BARS || {}).library || '<p class="note">ba
 mountBar($('#rbar-ed'), (window.REAL_BARS || {}).editor || '');
 if ($('#db-title-name')) { $('#db-title-name').textContent = 'TM_56784'; $('#db-title-status').textContent = '6000 × 4000 · RW2'; }
 document.addEventListener('click', () => $$('.lib-menu.open').forEach((x) => x.classList.remove('open')));
-$('#mode-sw').addEventListener('swchange', (e) => { $('#rbar-lib').hidden = e.detail !== 0; $('#rbar-ed').hidden = e.detail !== 1; placePins(); });
+// Library <-> Editor swap: the tools slide the same way the slab travels (right to studio, left to gallery).
+function swapBars(i) {
+  const show = i ? $('#rbar-ed') : $('#rbar-lib'), hide = i ? $('#rbar-lib') : $('#rbar-ed'), wrap = $('.rbars');
+  if (!show.hidden) return; show.hidden = false;
+  if (S.swap === 'instant' || reduced()) { hide.hidden = true; return; }
+  const dir = i ? 1 : -1, d = num(getComputedStyle(root).getPropertyValue('--dur')) || 500, easing = `cubic-bezier(${S.ease})`, dist = 56;
+  wrap.classList.add('swapping');
+  hide.animate([{ transform: 'none', opacity: 1 }, { transform: `translateX(${dir * dist}px)`, opacity: 0 }], { duration: d * 0.55, easing, fill: 'forwards' })
+    .onfinish = (ev) => { hide.hidden = true; ev.target.cancel(); wrap.classList.remove('swapping'); placePins(); };
+  const parts = S.swap === 'stagger' ? $$(':scope > * > * > *', show).filter((x) => x.offsetParent) : [show];
+  parts.forEach((x, n) => x.animate([{ transform: `translateX(${-dir * dist}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: d, easing, delay: S.swap === 'stagger' ? (dir > 0 ? parts.length - 1 - n : n) * 22 : 0, fill: 'backwards' }));
+}
+$('#mode-sw').addEventListener('swchange', (e) => { swapBars(e.detail); placePins(); });
+// Filters panel: the app's own markup; the top bar's Filters button slides it in and out.
+$('#fwrap').innerHTML = (window.REAL_BARS || {}).filters || '<p class="note">Re-run node scripts/redesign-capture-bars.mjs</p>';
+$$('#fwrap select').forEach((x) => { x.value = x.options[0]?.value; x.addEventListener('change', () => { x.classList.toggle('set', x.selectedIndex > 0); snap(); }); });
+if ($('#lib-filters-clear')) { $('#lib-filters-clear').className = 'k-btn'; wrapBtn($('#lib-filters-clear')); $('#lib-filters-clear').addEventListener('click', () => $$('#fwrap select').forEach((x) => { x.selectedIndex = 0; x.classList.remove('set'); })); }
+const fOpen = (on) => { $('#fwrap').classList.toggle('open', on); $('#lib-filters-btn')?.classList.toggle('on', on); };
+$('#lib-filters-panel-close')?.addEventListener('click', () => fOpen(false));
+$('#lib-filters-btn')?.addEventListener('click', (e) => { e.stopPropagation(); const on = !$('#fwrap').classList.contains('open'); fOpen(on); if (on) $('#fwrap').scrollIntoView({ block: 'nearest', behavior: reduced() ? 'auto' : 'smooth' }); });
+fOpen(true);
 $('#cond-note').textContent = 'Shown only in some states in the app (hide them with State-only controls): ' + $$('#tb [data-conditional]').map((x) => (x.getAttribute('title') || x.querySelector('[title]')?.getAttribute('title') || x.id).split(/[—(·]/)[0].trim()).join(' · ') + '.';
 
 // ── notes: click anything, type, exported with Copy settings ─────
