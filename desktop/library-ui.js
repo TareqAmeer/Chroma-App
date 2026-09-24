@@ -44,8 +44,20 @@
   // listDirRecursive — see Fix 1 of the catalog-backed-grid plan. Exposed on window below.
   let libtestListDirCalls = 0, libtestCatalogQueryCalls = 0;
   window.__libtestCallCounts = () => ({ listDir: libtestListDirCalls, catalogQuery: libtestCatalogQueryCalls });
+  // ?libshapes=1: odd-numbered photos are a 3:2 red landscape, even ones a 2:3 blue portrait
+  // (white band across the top), so the photo-reveal test can check the frame reshaping and the
+  // top-down fill on real pixels instead of the 1×1 stand-in every other test uses.
+  const LT_SHAPES = /[?&]libshapes=1/.test(location.search);
+  async function ltShapePng(p) {
+    const n = parseInt((/(\d+)\.\w+$/.exec(p || '') || [])[1] || '0', 10), land = n % 2 === 1;
+    const c = new OffscreenCanvas(land ? 600 : 400, land ? 400 : 600), g = c.getContext('2d');
+    g.fillStyle = land ? '#c0392b' : '#2e86de'; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, Math.round(c.height * 0.1));
+    return (await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer());
+  }
   function libtestInvoke(cmd, args) {
     const A = args || {};
+    if (LT_SHAPES && (cmd === 'get_thumbnail' || cmd === 'get_thumbnail_or_offline' || cmd === 'read_file_bytes')) return ltShapePng(A.path);
     const px = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XBhAAAAABJRU5ErkJggg==';
     const png = Uint8Array.from(atob(px), (c) => c.charCodeAt(0));
     switch (cmd) {
@@ -1666,12 +1678,27 @@
       object-fit:contain;pointer-events:none;z-index:50;display:none}
     #lib-provisional.on{display:block}
     body.lib-provisional-on #fx-canvas,body.lib-provisional-on #fx-canvas-orig{visibility:hidden}
-    #fx-reveal{position:absolute;inset:0;pointer-events:none;contain:strict;z-index:51;display:none}
+    /* Photo reveal (see the controller near openInEditor). The hold hides every editor pixel
+       layer at once — canvas, #lib-provisional, mask overlays — until the new photo fills in. */
+    body.lib-reveal-hold #fx-zoom-wrap{opacity:0}
+    #fx-reveal{position:absolute;inset:0;pointer-events:none;z-index:51;display:none;overflow:hidden;contain:layout paint}
     #fx-reveal.on{display:block}
-    #fx-reveal .fx-reveal-line{position:absolute;background:var(--bdr);will-change:transform}
-    #fx-reveal .fx-reveal-h{width:100%;height:1px}
-    #fx-reveal .fx-reveal-v{width:1px;height:100%}
-    #fx-reveal .fx-reveal-old,#fx-reveal .fx-reveal-pixels{position:absolute;display:none;object-fit:contain;pointer-events:none}
+    #fx-reveal .fx-reveal-snap{position:absolute;display:none}
+    #fx-reveal .fx-reveal-frame{position:absolute;inset:0;opacity:0}
+    #fx-reveal .fx-reveal-line{position:absolute;left:0;top:0;width:1px;height:1px;background:var(--txt);
+      transform-origin:0 0;will-change:transform}
+    #fx-reveal-lab{position:fixed;right:16px;bottom:16px;z-index:9000;width:320px;padding:12px;border-radius:10px;
+      background:var(--sur);color:var(--txt);border:1px solid var(--bdr);box-shadow:0 8px 30px rgba(0,0,0,.35);font-size:11px}
+    #fx-reveal-lab .rl-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px}
+    #fx-reveal-lab .rl-x{background:none;border:0;color:var(--mut);font-size:16px;cursor:pointer}
+    #fx-reveal-lab .rl-row{display:grid;grid-template-columns:110px 1fr 60px;align-items:center;gap:6px;margin:4px 0}
+    #fx-reveal-lab .rl-row select{grid-column:2/4;background:var(--sur2);color:var(--txt);border:1px solid var(--bdr);border-radius:6px;padding:3px 6px;font-size:11px}
+    #fx-reveal-lab input[type=range]{accent-color:var(--acc);min-width:0}
+    #fx-reveal-lab output{text-align:right;color:var(--mut);font-variant-numeric:tabular-nums}
+    #fx-reveal-lab .rl-sep{height:1px;background:var(--bdr);margin:8px 0}
+    #fx-reveal-lab .rl-btns{display:flex;gap:6px;margin-top:10px}
+    #fx-reveal-lab .rl-btns button{flex:1;padding:6px 0;border-radius:6px;border:1px solid var(--bdr);background:var(--sur2);color:var(--txt);cursor:pointer;font-size:11px}
+    #fx-reveal-lab .rl-replay{background:var(--acc)!important;border-color:var(--acc)!important;color:var(--bg)!important}
     /* deskx (DRK shell): the docked panel becomes a 120px thumbnail FILMSTRIP — pure
        thumbnails, single column, no filters/tree/name chrome (all of that lives in the
        full-window grid, G / ⛶). .full keeps its own 100vw rules and overrides these. */
@@ -2367,7 +2394,6 @@
       el.src = img.src;
       el.classList.add('on');
       document.body.classList.add('lib-provisional-on');
-      reveal.pixels('display', img, path);
       rawPerf('open-display-overlay', path, { width: img.naturalWidth, height: img.naturalHeight });
     } catch (e) {
       rawPerf('open-display-overlay-miss', path, { error: String(e) });
@@ -3512,104 +3538,340 @@
     window.__rawPerfLog.push({ event, path, t: performance.now(), wall: Date.now(), ...extra });
     if (window.__rawPerfLog.length > 2000) window.__rawPerfLog.splice(0, window.__rawPerfLog.length - 2000);
   };
-  // Presentation-only photo reveal. It deliberately never returns a Promise to the opener:
-  // native decode and render stay on their existing critical path while compositor animations
-  // run independently. All geometry is measured from the real fitted canvas, so resizers,
-  // zoom, and both themes share the exact Editor fit maths rather than a second approximation.
+  // ── Photo reveal: frame-first transition when a photo opens in the Editor ──────────────────
+  // Sequence (reference: adambricker.com): the old photo's bottom edge rises while it fades,
+  // inside a 1px frame that stays put → only then the empty frame morphs to the new photo's
+  // shape → the new photo fills the frame top to bottom → the frame fades to nothing.
+  // Ownership rules (the previous attempt broke each of these):
+  //  • The reveal owns VISIBILITY of the real editor pixels: body.lib-reveal-hold hides the whole
+  //    #fx-zoom-wrap (canvas, #lib-provisional, mask overlays) until the fill. It never touches
+  //    that element's transform (the zoom) — only opacity/clip-path/mask during the fill.
+  //  • It never makes the load wait: the opener only calls begin()/pixels()/cancel(), nothing is
+  //    awaited. Pixels that are ready early just speed the remaining animation up.
+  //  • Every call carries the path as a token; calls for any other path are ignored, so a
+  //    superseded open (fast arrow-key culling) can never fill the new frame with the old photo.
+  // Timings are tuned live through the Reveal lab (settings menu) and stored in localStorage
+  // until they are locked into design/tokens.json.
+  const REVEAL_LS = 'chromasmithRevealLab';
+  const REVEAL_EASE = { standard: 'cubic-bezier(.4,0,.2,1)', gentle: 'cubic-bezier(.25,.1,.25,1)', expo: 'cubic-bezier(.16,1,.3,1)', linear: 'linear' };
+  const REVEAL_DEFAULTS = { exit: 400, morph: 800, fill: 450, settle: 500, speedup: 3, ease: 'standard',
+    waiting: 'still', pulse: 1400, strength: 0.5, edge: 'hard', simulate: 0, from: 'inverse' };
+  const revealCfg = () => {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(REVEAL_LS) || '{}') || {}; } catch (_) {}
+    return { ...REVEAL_DEFAULTS, ...saved };
+  };
   const reveal = (() => {
-    let host, lines, oldLayer, pixelLayer, frameRect = null, pending = null, active = [], morph = null;
+    let host, snap, frame, lines;
+    let token = null, phase = 'idle', gen = 0, rect = null, target = null, ready = false;
+    let anims = [], morphAnim = null, morphFrom = null, pulseAnim = null, watchdog = 0, softRaf = 0;
     const perf = (event, path, extra = {}) => rawPerf(`reveal-${event}`, path || '', extra);
     const enabled = () => window.chromasmithPhotoTransitions !== false &&
       !matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const motion = (name, fallback) => {
-      const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-      return value.endsWith('ms') ? parseFloat(value) : fallback;
-    };
-    const revealEase = () => getComputedStyle(document.documentElement).getPropertyValue('--reveal-ease').trim() || 'cubic-bezier(.4,0,.2,1)';
-    const finish = () => { active.splice(0).forEach((a) => { try { a.finish(); } catch (_) {} }); morph = null; };
+    const wrapEl = () => document.getElementById('fx-wrap');
+    const zoomEl = () => document.getElementById('fx-zoom-wrap');
+    const hasPhoto = () => { try { return !!(FX && FX.w); } catch (_) { return false; } };
     const ensure = () => {
-      if (host) return host;
-      const wrap = document.getElementById('fx-wrap'); if (!wrap) return null;
+      if (host && host.isConnected) return host;
+      const wrap = wrapEl(); if (!wrap) return null;
       host = document.createElement('div'); host.id = 'fx-reveal';
-      host.innerHTML = '<canvas class="fx-reveal-old"></canvas><img class="fx-reveal-pixels"><i class="fx-reveal-line fx-reveal-h"></i><i class="fx-reveal-line fx-reveal-h"></i><i class="fx-reveal-line fx-reveal-v"></i><i class="fx-reveal-line fx-reveal-v"></i>';
-      wrap.appendChild(host); oldLayer = host.querySelector('.fx-reveal-old'); pixelLayer = host.querySelector('.fx-reveal-pixels'); lines = [...host.querySelectorAll('.fx-reveal-line')]; return host;
+      host.innerHTML = '<canvas class="fx-reveal-snap"></canvas><div class="fx-reveal-frame">' +
+        '<i class="fx-reveal-line"></i><i class="fx-reveal-line"></i><i class="fx-reveal-line"></i><i class="fx-reveal-line"></i></div>';
+      wrap.appendChild(host);
+      snap = host.querySelector('.fx-reveal-snap'); frame = host.querySelector('.fx-reveal-frame');
+      lines = [...host.querySelectorAll('.fx-reveal-line')];
+      return host;
     };
-    const fitted = () => {
-      const wrap = document.getElementById('fx-wrap'), zoom = document.getElementById('fx-zoom-wrap');
-      if (!wrap || !zoom) return null;
-      const a = wrap.getBoundingClientRect(), b = zoom.getBoundingClientRect();
-      return b.width > 0 && b.height > 0 ? { x: b.left - a.left, y: b.top - a.top, w: b.width, h: b.height } : null;
+    const round = (r) => r && { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) };
+    const relRect = (el) => {
+      const wrap = wrapEl(); if (!wrap || !el) return null;
+      const a = wrap.getBoundingClientRect(), b = el.getBoundingClientRect();
+      return b.width > 1 && b.height > 1 && a.width > 1 ? round({ x: b.left - a.left, y: b.top - a.top, w: b.width, h: b.height }) : null;
     };
-    const targetFor = (aspect) => {
-      const wrap = document.getElementById('fx-wrap'); if (!wrap || !aspect) return fitted();
-      const w = wrap.clientWidth, h = wrap.clientHeight; if (!w || !h) return fitted();
-      let tw = w, th = tw / aspect; if (th > h) { th = h; tw = th * aspect; }
-      return { x: (w - tw) / 2, y: (h - th) / 2, w: tw, h: th };
+    // Where renderPreview will put a photo of this aspect: #fx-wrap's content box (the fixed
+    // canvas inset is padding — fxWrapInner), capped by fxPreviewMaxH, centred by the wrap's
+    // flexbox. Large photos always hit the fit cap, so the aspect alone is enough; fill()
+    // reconciles against the real canvas rect for the rare exception (framing, tiny images).
+    const fitRect = (aspect) => {
+      const wrap = wrapEl(); if (!wrap || !aspect || typeof fxWrapInner !== 'function') return null;
+      const inner = fxWrapInner(); if (inner.w < 2 || inner.h < 2) return null;
+      const cs = getComputedStyle(wrap);
+      const maxH = typeof fxPreviewMaxH === 'function' ? Math.min(inner.h, fxPreviewMaxH()) : inner.h;
+      const w = Math.min(inner.w, maxH * aspect), h = w / aspect;
+      return round({ x: (parseFloat(cs.paddingLeft) || 0) + (inner.w - w) / 2, y: (parseFloat(cs.paddingTop) || 0) + (inner.h - h) / 2, w, h });
     };
-    const paint = (r) => {
-      if (!r || !ensure()) return;
-      frameRect = r; host.classList.add('on');
-      const fullW = host.clientWidth, fullH = host.clientHeight;
-      lines[0].style.transform = `translate(${r.x}px,${r.y}px)`; lines[0].style.clipPath = `inset(0 ${Math.max(0, fullW - r.w)}px 0 0)`;
-      lines[1].style.transform = `translate(${r.x}px,${r.y + r.h - 1}px)`; lines[1].style.clipPath = `inset(0 ${Math.max(0, fullW - r.w)}px 0 0)`;
-      lines[2].style.transform = `translate(${r.x}px,${r.y}px)`; lines[2].style.clipPath = `inset(0 0 ${Math.max(0, fullH - r.h)}px 0)`;
-      lines[3].style.transform = `translate(${r.x + r.w - 1}px,${r.y}px)`; lines[3].style.clipPath = `inset(0 0 ${Math.max(0, fullH - r.h)}px 0)`;
-    };
-    const morphTo = (next, path) => {
-      const prev = frameRect || fitted(); if (!prev || !next) return;
-      const same = Math.abs(prev.w / prev.h - next.w / next.h) < .004;
-      if (same) { paint(next); return; }
-      const from = { ...prev }; paint(next);
-      const duration = motion('--reveal-morph', 260);
-      const a = host.animate([{ opacity: 1 }], { duration }); // keeps host on compositor without scaling its hairline
-      morph = a; active.push(a);
-      // Lines move by translation and reveal their fixed-length strips with clipping; no scaled
-      // border or width/height animation can soften the 1px hairline.
-      const started = performance.now();
-      const tick = () => { if (morph !== a) return; const linear = Math.min(1, (performance.now() - started) / duration); const t = 1 - Math.pow(1 - linear, 3); paint({ x: from.x + (next.x - from.x) * t, y: from.y + (next.y - from.y) * t, w: from.w + (next.w - from.w) * t, h: from.h + (next.h - from.h) * t }); if (linear < 1) requestAnimationFrame(tick); else { morph = null; perf('morph-end', path); if (pending) startPixels(); } };
-      perf('morph', path); requestAnimationFrame(tick);
-    };
-    const startPixels = () => {
-      const p = pending; pending = null; if (!p) return;
-      // Pixel installation is owned exclusively by the established decode/canvas paths. The
-      // reveal layer may draw its frame, but must never animate the zoom container: that node
-      // is also the live canvas transform and an unfinished animation can hide new pixels.
-      // The frame and temporary pixel layer are both calculated from the incoming source's
-      // aspect ratio. Never take the outgoing canvas rect here: that was the race that made
-      // the frame sometimes land on the previous photo's shape.
-      const iw = p.img && (p.img.naturalWidth || p.img.width), ih = p.img && (p.img.naturalHeight || p.img.height);
-      const actual = iw && ih ? targetFor(iw / ih) : fitted(); if (actual) paint(actual);
-      const src = p.img && (p.img.currentSrc || p.img.src);
-      if (src && pixelLayer && actual) {
-        pixelLayer.src = src; pixelLayer.style.display = 'block'; pixelLayer.style.left = `${actual.x}px`; pixelLayer.style.top = `${actual.y}px`; pixelLayer.style.width = `${actual.w}px`; pixelLayer.style.height = `${actual.h}px`;
-        pixelLayer.style.filter = p.tier === 'thumbnail' ? 'blur(6px) brightness(1.12) saturate(.72)' : '';
-        const a = pixelLayer.animate([{ clipPath: 'inset(0 0 100% 0)' }, { clipPath: 'inset(0)' }], { duration: motion('--reveal-wipe', 180), easing: revealEase(), fill: 'forwards' }); active.push(a);
+    // The frame is four 1px lines; each is scaled only ALONG its length, so the hairline stays
+    // exactly 1px while translate+scale animate on the compositor.
+    const lineTf = (r) => [
+      `translate(${r.x}px,${r.y}px) scale(${r.w},1)`,
+      `translate(${r.x}px,${r.y + r.h - 1}px) scale(${r.w},1)`,
+      `translate(${r.x}px,${r.y}px) scale(1,${r.h})`,
+      `translate(${r.x + r.w - 1}px,${r.y}px) scale(1,${r.h})`,
+    ];
+    const setFrame = (r) => { rect = r; if (!r) return; lineTf(r).forEach((t, i) => { lines[i].style.transform = t; }); };
+    const lerpRect = (a, b, t) => round({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, w: a.w + (b.w - a.w) * t, h: a.h + (b.h - a.h) * t });
+    const same = (a, b) => a && b && Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1 && Math.abs(a.w - b.w) <= 1 && Math.abs(a.h - b.h) <= 1;
+    const rate = (cfg) => (ready ? Math.max(1, +cfg.speedup || 1) : 1);
+    // Test step mode (libtest only): every reveal animation starts paused so a test can set
+    // its time and finish() it deterministically, independent of how long the page's own
+    // main-thread work takes in a software-GL browser.
+    const track = (a) => { anims.push(a); if (LIBTEST && window.__revealStep) a.pause(); return a; };
+    // Current frame rect even mid-morph, so an interrupted morph continues from where it is.
+    const liveRect = () => {
+      if (morphAnim && morphFrom && target) {
+        const p = morphAnim.effect && morphAnim.effect.getComputedTiming().progress;
+        if (p != null) return lerpRect(morphFrom, target, p);
       }
-      perf(enabled() ? 'pixels' : 'instant', p.path, { tier: p.tier });
+      return rect;
+    };
+    const clearZoomStyles = () => {
+      const z = zoomEl(); if (!z) return;
+      z.style.clipPath = ''; z.style.webkitMaskImage = ''; z.style.maskImage = ''; z.style.opacity = '';
+    };
+    const stopAnims = () => {
+      gen++;
+      if (softRaf) { cancelAnimationFrame(softRaf); softRaf = 0; }
+      anims.splice(0).forEach((a) => { try { a.cancel(); } catch (_) {} });
+      if (pulseAnim) { try { pulseAnim.cancel(); } catch (_) {} pulseAnim = null; }
+      morphAnim = null;
+    };
+    // Top-down edge. 'out' = visible region shrinks upward (bottom edge rises); 'in' = visible
+    // region grows downward. Hard edge = clip-path on the compositor; soft edge = a gradient mask
+    // driven from a timing-only animation's eased progress (so easing + speed-up still apply).
+    const sweep = (el, dir, cfg, duration, extraFrames, done) => {
+      const g = gen, easing = REVEAL_EASE[cfg.ease] || REVEAL_EASE.standard;
+      if (cfg.edge === 'soft') {
+        const a = track(el.animate(extraFrames || [{}, {}], { duration, easing, fill: 'forwards' }));
+        const band = 18;
+        const paint = () => {
+          if (g !== gen) return;
+          const p = a.effect.getComputedTiming().progress ?? 1;
+          const edge = (dir === 'in' ? p : 1 - p) * (100 + band);
+          const m = `linear-gradient(to bottom,#000 ${edge - band}%,transparent ${edge}%)`;
+          el.style.webkitMaskImage = m; el.style.maskImage = m;
+          if (a.playState !== 'finished') softRaf = requestAnimationFrame(paint);
+        };
+        paint();
+        a.onfinish = () => { if (g === gen) done(); };
+        return a;
+      }
+      const from = dir === 'in' ? 'inset(0 0 100% 0)' : 'inset(0 0 0 0)', to = dir === 'in' ? 'inset(0 0 0 0)' : 'inset(0 0 100% 0)';
+      const frames = [{ clipPath: from, ...(extraFrames ? extraFrames[0] : {}) }, { clipPath: to, ...(extraFrames ? extraFrames[1] : {}) }];
+      const a = track(el.animate(frames, { duration, easing, fill: 'forwards' }));
+      a.onfinish = () => { if (g === gen) done(); };
+      return a;
+    };
+    const reset = () => {
+      stopAnims();
+      clearTimeout(watchdog); watchdog = 0;
+      document.body.classList.remove('lib-reveal-hold');
+      clearZoomStyles();
+      if (snap) { snap.style.display = 'none'; snap.style.webkitMaskImage = ''; snap.style.maskImage = ''; }
+      if (frame) frame.style.opacity = '0';
+      if (host) host.classList.remove('on');
+      phase = 'idle'; token = null; ready = false; target = null; morphFrom = null;
+    };
+    const settle = () => {
+      phase = 'settling';
+      const cfg = revealCfg(), g = gen;
+      const a = track(frame.animate([{ opacity: +cfg.strength }, { opacity: 0 }], { duration: +cfg.settle, easing: REVEAL_EASE[cfg.ease], fill: 'forwards' }));
+      a.onfinish = () => { if (g === gen) { const p = token; reset(); perf('done', p); } };
+    };
+    const doFill = () => {
+      const cfg = revealCfg(), z = zoomEl();
+      if (!z) { reset(); return; }
+      perf('fill', token, { edge: cfg.edge });
+      // Set the first frame of the sweep BEFORE lifting the hold, in the same task, so the
+      // canvas can never flash fully visible for a frame.
+      if (cfg.edge === 'soft') { const m = 'linear-gradient(to bottom,#000 -18%,transparent 0%)'; z.style.webkitMaskImage = m; z.style.maskImage = m; }
+      else z.style.clipPath = 'inset(0 0 100% 0)';
+      document.body.classList.remove('lib-reveal-hold');
+      sweep(z, 'in', cfg, +cfg.fill, null, () => {
+        anims.splice(0).forEach((a) => { try { a.cancel(); } catch (_) {} });
+        clearZoomStyles(); settle();
+      });
+    };
+    const fill = () => {
+      if (phase === 'filling' || phase === 'settling') return;
+      phase = 'filling';
+      if (pulseAnim) { try { pulseAnim.cancel(); } catch (_) {} pulseAnim = null; }
+      const cfg = revealCfg(), g = gen;
+      frame.style.opacity = String(+cfg.strength);
+      const real = relRect(zoomEl());
+      if (!real) { doFill(); return; }
+      if (!rect) { setFrame(real); doFill(); return; }
+      if (same(rect, real)) { setFrame(real); doFill(); return; }
+      // Framing/borders or a small image made the real canvas differ from the predicted shape:
+      // glide the frame onto it before filling, never fill outside the frame.
+      const from = lineTf(rect), to = lineTf(real);
+      const glide = lines.map((l, i) => track(l.animate([{ transform: from[i] }, { transform: to[i] }], { duration: 160, easing: REVEAL_EASE[cfg.ease], fill: 'forwards' })));
+      setFrame(real);
+      glide[0].onfinish = () => { if (g === gen) doFill(); };
+    };
+    const waitOrFill = () => {
+      morphAnim = null;
+      if (ready) { fill(); return; }
+      phase = 'waiting';
+      const cfg = revealCfg();
+      perf('waiting', token, { mode: cfg.waiting });
+      if (cfg.waiting === 'pulse') {
+        const s = +cfg.strength;
+        pulseAnim = frame.animate([{ opacity: s }, { opacity: s * 0.3 }], { duration: +cfg.pulse, iterations: Infinity, direction: 'alternate', easing: 'ease-in-out' });
+      }
+    };
+    const morph = () => {
+      phase = 'morphing';
+      const cfg = revealCfg(), g = gen;
+      if (snap) snap.style.display = 'none';
+      if (!target) { waitOrFill(); return; }
+      if (!rect) { // nothing on screen before (first open / editor was hidden): draw the frame in place
+        setFrame(target);
+        const a = track(frame.animate([{ opacity: 0 }, { opacity: +cfg.strength }], { duration: 200, fill: 'forwards' }));
+        frame.style.opacity = String(+cfg.strength);
+        a.onfinish = () => { if (g === gen) waitOrFill(); };
+        return;
+      }
+      if (same(rect, target)) { setFrame(target); waitOrFill(); return; }
+      const from = lineTf(rect), to = lineTf(target), easing = REVEAL_EASE[cfg.ease] || REVEAL_EASE.standard;
+      const duration = +cfg.morph / rate(cfg);
+      morphFrom = rect;
+      const list = lines.map((l, i) => track(l.animate([{ transform: from[i] }, { transform: to[i] }], { duration, easing, fill: 'forwards' })));
+      morphAnim = list[0];
+      setFrame(target); // resting value underneath the running animations
+      perf('morph', token, { ms: duration });
+      list[0].onfinish = () => { if (g === gen) waitOrFill(); };
     };
     return {
-      begin(aspect, path) {
-        finish(); pending = null;
-        if (!enabled()) { this.cancel(); perf('instant', path, { phase: 'begin' }); return; }
-        document.body.classList.add('lib-reveal-active');
-        const start = frameRect || fitted(); if (start) { paint(start); const cv = document.getElementById('fx-canvas'); if (cv && oldLayer) { try { oldLayer.width = cv.width; oldLayer.height = cv.height; oldLayer.getContext('2d').drawImage(cv, 0, 0); oldLayer.style.cssText = `display:block;left:${start.x}px;top:${start.y}px;width:${start.w}px;height:${start.h}px`; const a = oldLayer.animate([{ opacity: 1, clipPath: 'inset(0)' }, { opacity: 0, clipPath: 'inset(0 0 100% 0)' }], { duration: motion('--reveal-exit', 150), easing: 'ease-out', fill: 'forwards' }); active.push(a); } catch (_) {} } }
-        perf('begin', path, { aspect: aspect || 0 }); morphTo(targetFor(aspect), path);
+      phase: () => phase,
+      token: () => token,
+      // aspect: the incoming photo's width/height (from its grid thumbnail — dimensions only,
+      // never its pixels). opts.fromRect is the Reveal lab's stand-in "previous photo" shape.
+      begin(path, aspect, opts = {}) {
+        if (!enabled()) { if (phase !== 'idle') reset(); perf('instant', path); return; }
+        if (token === path && phase !== 'idle') return; // the queued open of a path already revealing
+        if (!ensure()) return;
+        const cfg = revealCfg();
+        // Anything still animating ends where it is. The pixels on screen right now are the
+        // "old photo": the canvas when idle / mid-fill, nothing when the frame was still empty.
+        const canvasVisible = phase === 'idle' || phase === 'filling' || phase === 'settling';
+        const startRect = liveRect();
+        stopAnims();
+        clearZoomStyles();
+        clearTimeout(watchdog);
+        token = path; ready = false; phase = 'exiting';
+        target = opts.targetRect || (aspect ? fitRect(aspect) : null);
+        const cv = document.getElementById('fx-canvas'), zoomRect = relRect(zoomEl());
+        const photoRect = opts.fromRect || zoomRect;
+        let snapped = false;
+        if (canvasVisible && hasPhoto() && cv && cv.width && photoRect) {
+          try {
+            snap.width = cv.width; snap.height = cv.height;
+            const ctx = snap.getContext('2d');
+            if (opts.fromRect) { // cover-crop the current photo into the stand-in shape
+              const ar = photoRect.w / photoRect.h, car = cv.width / cv.height;
+              let sw = cv.width, sh = cv.height; if (car > ar) sw = sh * ar; else sh = sw / ar;
+              snap.width = Math.round(sw); snap.height = Math.round(sh);
+              ctx.drawImage(cv, (cv.width - sw) / 2, (cv.height - sh) / 2, sw, sh, 0, 0, snap.width, snap.height);
+            } else ctx.drawImage(cv, 0, 0);
+            snap.style.cssText = `display:block;left:${photoRect.x}px;top:${photoRect.y}px;width:${photoRect.w}px;height:${photoRect.h}px`;
+            snapped = true;
+          } catch (_) {}
+        }
+        if (!snapped) snap.style.display = 'none';
+        document.body.classList.add('lib-reveal-hold');
+        host.classList.add('on');
+        rect = snapped ? photoRect : (canvasVisible ? null : startRect);
+        if (rect) { setFrame(rect); frame.style.opacity = String(+cfg.strength); } else frame.style.opacity = '0';
+        watchdog = setTimeout(() => { if (token === path) { perf('watchdog', path); reset(); } }, 15000 + (+cfg.simulate || 0) * 1000);
+        perf('begin', path, { aspect: aspect || 0, snapped });
+        if (!snapped) { morph(); return; }
+        const g = gen;
+        sweep(snap, 'out', cfg, +cfg.exit, [{ opacity: 1 }, { opacity: 0 }], () => { if (g === gen) morph(); });
       },
-      pixels(tier, img, path) { pending = { tier, img, path }; if (!morph) startPixels(); },
-      upgrade(path) {
-        if (!enabled()) { this.cancel(); return; }
-        if (pixelLayer && pixelLayer.style.display !== 'none') { const duration = motion('--reveal-sharpen', 300); const a = pixelLayer.animate([{ clipPath: 'inset(0)' }, { clipPath: 'inset(0 0 100% 0)' }], { duration, easing: revealEase(), fill: 'forwards' }); active.push(a); a.onfinish = () => { pixelLayer.style.display = 'none'; pixelLayer.style.filter = ''; if (host) host.classList.remove('on'); }; }
-        if (oldLayer) oldLayer.style.display = 'none';
-        if (!pixelLayer || pixelLayer.style.display === 'none') { if (host) host.classList.remove('on'); } document.body.classList.remove('lib-reveal-active'); perf('upgrade', path);
+      // The new photo's pixels are rendered in the canvas (called after the open's final render).
+      pixels(path) {
+        if (path !== token || phase === 'idle' || ready) return;
+        const g = gen;
+        // Two frames: let any render the recipe restore scheduled land before revealing.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (g !== gen || path !== token || ready) return;
+          ready = true;
+          const cfg = revealCfg(), r = rate(cfg);
+          perf('pixels', path, { phase });
+          if (r > 1) anims.forEach((a) => { try { a.updatePlaybackRate ? a.updatePlaybackRate(r) : (a.playbackRate = r); } catch (_) {} });
+          if (phase === 'waiting') fill();
+        }));
       },
-      cancel() { finish(); pending = null; document.body.classList.remove('lib-reveal-active'); const zoom = document.getElementById('fx-zoom-wrap'), el = ensureProvisionalEl(); if (zoom) { zoom.style.opacity = ''; zoom.style.clipPath = ''; } if (el) { el.classList.remove('on'); el.style.opacity = ''; el.style.clipPath = ''; el.style.filter = ''; } if (host) host.classList.remove('on'); }
+      cancel(path) { if (path != null && path !== token) return; if (phase !== 'idle') { perf('cancel', token); reset(); } },
+      // Reveal lab: replay the whole transition on the photo already open, with no decode.
+      replay() {
+        if (!hasPhoto()) return false;
+        if (phase !== 'idle') reset();
+        const cfg = revealCfg(), cur = relRect(zoomEl());
+        if (!cur) return false;
+        const asp = cur.w / cur.h;
+        const fromAsp = cfg.from === 'square' ? 1 : cfg.from === 'wide' ? 16 / 9 : cfg.from === 'same' ? asp : 1 / asp;
+        const tok = `__replay__${Date.now()}`;
+        this.begin(tok, asp, { fromRect: fitRect(fromAsp) || cur, targetRect: cur });
+        setTimeout(() => this.pixels(tok), Math.max(0, +cfg.simulate || 0) * 1000);
+        return true;
+      },
     };
   })();
   if (LIBTEST) window.__chromasmithReveal = reveal;
+  // ── Reveal lab: live tuning panel for the transition above (Editor settings → Reveal lab…).
+  // Temporary: removed once the values are locked into design/tokens.json.
+  window.chromasmithRevealLab = () => {
+    let panel = document.getElementById('fx-reveal-lab');
+    if (panel) { panel.remove(); return; }
+    const cfg = revealCfg();
+    const save = (patch) => { const next = { ...revealCfg(), ...patch }; try { localStorage.setItem(REVEAL_LS, JSON.stringify(next)); } catch (_) {} };
+    const num = (key, label, min, max, step, unit) => `<label class="rl-row"><span>${label}</span><input type="range" data-k="${key}" min="${min}" max="${max}" step="${step}" value="${cfg[key]}"><output>${cfg[key]}${unit}</output></label>`;
+    const sel = (key, label, opts) => `<label class="rl-row"><span>${label}</span><select data-k="${key}">${opts.map(([v, t]) => `<option value="${v}"${String(cfg[key]) === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
+    panel = document.createElement('div');
+    panel.id = 'fx-reveal-lab';
+    panel.innerHTML = `<div class="rl-head"><b>Reveal lab</b><button class="rl-x" title="Close">×</button></div>
+      ${num('exit', 'Old photo out', 0, 1500, 25, 'ms')}
+      ${num('morph', 'Frame reshape', 0, 2500, 25, 'ms')}
+      ${num('fill', 'New photo in', 0, 1500, 25, 'ms')}
+      ${num('settle', 'Border fade', 0, 1500, 25, 'ms')}
+      ${num('speedup', 'Speed-up when ready', 1, 8, 0.5, '×')}
+      ${sel('ease', 'Easing', [['standard', 'Standard'], ['gentle', 'Gentle'], ['expo', 'Fast start'], ['linear', 'Linear']])}
+      ${sel('edge', 'Edge', [['hard', 'Hard edge'], ['soft', 'Soft edge']])}
+      ${sel('waiting', 'While loading', [['still', 'Frame sits still'], ['pulse', 'Frame pulses']])}
+      ${num('pulse', 'Pulse speed', 400, 3000, 100, 'ms')}
+      ${num('strength', 'Border strength', 0.05, 1, 0.05, '')}
+      <div class="rl-sep"></div>
+      ${sel('from', 'Replay from shape', [['inverse', 'Opposite orientation'], ['square', 'Square'], ['wide', 'Wide 16:9'], ['same', 'Same shape']])}
+      ${num('simulate', 'Simulate slow load', 0, 6, 0.25, 's')}
+      <div class="rl-btns"><button class="rl-replay">Replay</button><button class="rl-copy">Copy settings</button><button class="rl-reset">Defaults</button></div>`;
+    document.body.appendChild(panel);
+    panel.querySelectorAll('[data-k]').forEach((el) => {
+      el.addEventListener('input', () => {
+        const v = el.type === 'range' ? parseFloat(el.value) : el.value;
+        save({ [el.dataset.k]: v });
+        const out = el.parentElement.querySelector('output');
+        if (out) out.textContent = out.textContent.replace(/^[\d.]+/, String(v));
+      });
+    });
+    panel.querySelector('.rl-x').onclick = () => panel.remove();
+    panel.querySelector('.rl-replay').onclick = () => { if (!reveal.replay() && typeof toast === 'function') toast('Open a photo first, then replay.', false); };
+    panel.querySelector('.rl-reset').onclick = () => { try { localStorage.removeItem(REVEAL_LS); } catch (_) {} panel.remove(); window.chromasmithRevealLab(); };
+    panel.querySelector('.rl-copy').onclick = async () => {
+      const text = JSON.stringify(revealCfg());
+      try { await navigator.clipboard.writeText(text); if (typeof toast === 'function') toast('Reveal settings copied — paste them to Claude.', true); }
+      catch (_) { window.prompt('Copy these settings:', text); }
+    };
+  };
   async function openInEditor(path) {
     rawPerf('open-click', path);
-    const thumb = document.querySelector(`.lib-card[data-path="${CSS.escape(path)}"] img`);
-    reveal.begin(thumb?.naturalWidth && thumb?.naturalHeight ? thumb.naturalWidth / thumb.naturalHeight : 0, path);
+    // The reveal starts on the click, before the busy check, so a queued arrow-key open still
+    // answers instantly. Aspect comes from the grid thumbnail's dimensions (never its pixels).
+    // Reopening the photo already on screen (reload after an NR/lens toggle) doesn't replay it.
+    if (path !== state.openedPath || reveal.phase() !== 'idle') {
+      const thumb = document.querySelector(`.lib-card[data-path="${CSS.escape(path)}"] img`);
+      reveal.begin(path, thumb?.naturalWidth && thumb?.naturalHeight ? thumb.naturalWidth / thumb.naturalHeight : 0);
+    }
     if (openBusy) { openPendingPath = path; return; }
     openBusy = true;
     window.chromasmithLibraryBusy = true;
@@ -3761,9 +4023,6 @@
           try { autoDetectBW(fullImg); } catch (_) {}
           const workT0 = performance.now(); updateWork(); rawPerf('open-full-quality-work', path, { ms: performance.now() - workT0 });
           const renderT0 = performance.now(); renderPreview(); rawPerf('open-full-quality-render', path, { ms: performance.now() - renderT0 });
-          // The later native RAW-refine callback replaces this same canvas in place. It gets no
-          // second fade: that avoids adding visual delay to an already-visible photograph.
-          reveal.upgrade(path);
           window.chromasmithFullQualityReady = true;
           const exportBtn = document.getElementById('btn-fx-export'); if (exportBtn) exportBtn.disabled = false;
           rawPerf('open-full-quality-promoted', path, {
@@ -3892,7 +4151,6 @@
         const installT0 = performance.now();
         installFXImages([diskCached], loadKey, { deferRender: deferEditorRender });
         rawPerf('open-display-install', path, { ms: performance.now() - installT0, deferred: deferEditorRender });
-        reveal.pixels('display', diskCached.img, path);
         // Keep the in-memory reopen source at the display tier. The active entry is promoted
         // independently; sharing the same object would make the next reopen pay the full GPU
         // upload again instead of taking the fast display path.
@@ -3902,7 +4160,6 @@
         deferEditorRender = false;
         deferredDisplayRender = false;
         installFXImages([cached.entry], cached.loadKey, { deferRender: false });
-        reveal.pixels('cached', cached.entry.img, path);
       } else {
         // N1a piece 1: a real decode source for a cached-only (offline) photo. There is no
         // full-resolution offline cache — building one would be a separate, much bigger
@@ -3955,7 +4212,6 @@
         window.chromasmithSourcePath = path;
         window.chromasmithDecodeRecipeKey = recipeKey;
         const decodeT0 = performance.now(); await loadFXImages([file]); rawPerf('open-decode', path, { ms: performance.now() - decodeT0, bytes: buf.byteLength }); // bare identifier — see desktop-native.js's note on this
-        reveal.pixels('decoded', null, path);
         if (fxImages[0]) {
           fxImages[0].fileSize = buf.byteLength; // shown as the "Size" row in the metadata panel
           fxImages[0].offlinePreview = offlinePreview;
@@ -4087,9 +4343,10 @@
       scrollLibraryToPath(path);
       const card = overlay.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
       if (card) card.classList.add('sel');
-      if (fullAssetPath || fullCachedEntry) startFullPromotion(); else { window.chromasmithFullQualityReady = true; reveal.upgrade(path); }
+      if (fullAssetPath || fullCachedEntry) startFullPromotion(); else window.chromasmithFullQualityReady = true;
     } catch (e) {
       console.error('openInEditor', e);
+      reveal.cancel(path);
       if (typeof toast === 'function') toast(`Couldn't open ${baseName(path)} — ${friendlyRawError(e)}`, false);
     } finally {
       const hideDisplayOverlay = await displayOverlayPromise;
@@ -4107,10 +4364,14 @@
             rawPerf('open-display-render', path, { ms: performance.now() - openT0, renderMs: performance.now() - renderT0, width: FX.w, height: FX.h });
           } catch (e) { rawPerf('open-display-render-failed', path, { error: String(e) }); }
           hideDisplayOverlay();
+          reveal.pixels(path);
         });
       } else if ((diskCached || cached) && FX && !FX.w) {
         try { renderPreview(); } catch (e) { rawPerf('open-display-render-failed', path, { error: String(e) }); }
       }
+      // Every non-deferred path has rendered (and restored the recipe) by now; the deferred
+      // display path signals from its own rAF above. The reveal ignores this for a stale path.
+      if (!deferredDisplayRender) reveal.pixels(path);
       if (fullAssetPath || fullCachedEntry) startFullPromotion();
       rawPerf('open-fully-loaded', path, { ms: performance.now() - openT0, source: cached ? 'memory' : (diskCached ? 'persistent-cache' : 'decode') });
     }
