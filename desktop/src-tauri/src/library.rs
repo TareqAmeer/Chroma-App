@@ -2409,6 +2409,8 @@ pub fn list_collection(name: String) -> Vec<DirEntry> {
     let mut out: Vec<DirEntry> = registry_read(&name)
         .into_iter()
         .map(|path| {
+            // Heal registry entries written with a guessed-lowercase extension (see real_case_sibling).
+            let path = real_case_sibling(Path::new(&path)).map(|c| c.to_string_lossy().into_owned()).unwrap_or(path);
             let p = Path::new(&path);
             let file_name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
             let ext = ext_lower(p);
