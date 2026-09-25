@@ -72,7 +72,7 @@
     "editor:gates:behavior": "node test/editor_gates.mjs --only=behavior",
     "tokens:check": "node scripts/build-tokens.mjs --check",
     "tokens:verify": "node scripts/run-python.mjs design/verify_tokens.py",
-    "tokens:gates": "npm run tokens:check && npm run tokens:verify",
+    "tokens:gates": "npm run tokens:check && npm run tokens:verify && node scripts/check-kinetic-tokens.mjs",
     "components:build": "node scripts/build-component-registry.mjs && node test/component_runtime_check.mjs",
     "components:check": "node scripts/build-component-registry.mjs --check && node test/component_runtime_check.mjs --check && node scripts/component-visuals-check.mjs",
     "components:contracts:scaffold": "node scripts/scaffold-component-contracts.mjs",

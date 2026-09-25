@@ -131,7 +131,75 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   --ls-1:0.03em;--ls-2:0.04em;--ls-3:0.05em;--ls-4:0.06em;--ls-5:0.08em;--ls-6:0.1em;
   /* Border-width ramp (T-bw): the 4 non-1px widths found in the app — see design/tokens.json
      borderWidth for the full audit (1px itself stays a plain literal, not a token). */
-  --bw-1:1.5px;--bw-2:2px;--bw-3:3px;--bw-4:4px/* TOKENS:ROOT:END */}
+  --bw-1:1.5px;--bw-2:2px;--bw-3:3px;--bw-4:4px;
+  /* Swiss Kinetic (design/tokens.json kinetic, from approved.json) */
+  --k-color-accent-a:#e0500c;
+  --k-color-accent-b:#1414a0;
+  --k-color-bg:#1b1b1b;
+  --k-color-ink:#f2f2f0;
+  --k-color-muted:#7c7c78;
+  --k-offset-x:4px;
+  --k-offset-y:4px;
+  --k-offset-slab-top:41%;
+  --k-offset-slab-style:single;
+  --k-two-tone-slab-in-front:a;
+  --k-two-tone-slab-a-x:6px;
+  --k-two-tone-slab-a-top:9px;
+  --k-two-tone-slab-a-bottom:6px;
+  --k-two-tone-slab-a-extra-width:0px;
+  --k-two-tone-slab-b-x:12px;
+  --k-two-tone-slab-b-top:21px;
+  --k-two-tone-slab-b-bottom:13px;
+  --k-two-tone-slab-b-extra-width:0px;
+  --k-segmented-style:cell;
+  --k-segmented-text-size:11px;
+  --k-segmented-case:upper;
+  --k-segmented-padding:11px;
+  --k-segmented-dividers:bar;
+  --k-segmented-baseline:off;
+  --k-segmented-selected-text:white;
+  --k-segmented-slab-top:34%;
+  --k-segmented-slab-below:3px;
+  --k-segmented-slab-x:3px;
+  --k-segmented-slab2-x:6px;
+  --k-segmented-slab2-y:6px;
+  --k-menu-colour:ink;
+  --k-slider-thumb-border:1px;
+  --k-splash-orange:#e0500c;
+  --k-splash-blue:#1414a0;
+  --k-border-button:0.5px;
+  --k-border-icon:none;
+  --k-menu-wipe:900ms;
+  --k-menu-slab-shift-x:10px;
+  --k-menu-slab-shift-y:5px;
+  --k-dim-mode:off;
+  --k-dim-level:0.35;
+  --k-dim-fade:220ms;
+  --k-motion-duration:500ms;
+  --k-motion-hover:180ms;
+  --k-motion-easing:cubic-bezier(0.16,1,0.3,1);
+  --k-motion-drag-bounce:0.3;
+  --k-motion-throw:0.18;
+  --k-motion-edge-stretch:0.35;
+  --k-motion-reduce-motion:system;
+  --k-motion-snap-sound:thud;
+  --k-variants-button-hover:jump;
+  --k-variants-icon-hover:slabturn;
+  --k-variants-menu-hover:slab;
+  --k-variants-photo-selection:slab;
+  --k-variants-side-menu:offset;
+  --k-variants-toggle:flip;
+  --k-variants-italics:primary;
+  --k-variants-thumbnails:on;
+  --k-variants-window-squares:tint;
+  --k-variants-value-readout:roll;
+  --k-variants-top-bar-state-only-controls:hide;
+  --k-variants-icon-selected:slab;
+  --k-variants-segmented:cell;
+  --k-variants-photo-hover:offset;
+  --k-variants-slider-reset-dot:moved;
+  --k-variants-bar-swap:slide;
+  --k-variants-top-bar-slider-width:62px/* TOKENS:ROOT:END */}
 body.light{--glass-bg:#edeeee}
 *{scrollbar-width:thin;scrollbar-color:transparent transparent}
 *:hover,*.fx-scrolling{scrollbar-color:rgba(255,255,255,.28) transparent}
@@ -1479,6 +1547,74 @@ body.light{
      it would paint a near-invisible near-white line on an already-light thumb. */
   --sl-thumb:#3a3a35;
   --sl-thumb-sh:inset 0 1px 0 rgba(255,255,255,.5),0 1px 2px rgba(0,0,0,.25);
+  /* Swiss Kinetic light set */
+  --k-color-accent-a:#e0500c;
+  --k-color-accent-b:#1414a0;
+  --k-color-bg:#f2f2ee;
+  --k-color-ink:#000000;
+  --k-color-muted:#77776f;
+  --k-offset-x:6px;
+  --k-offset-y:6px;
+  --k-offset-slab-top:10%;
+  --k-offset-slab-style:stepped;
+  --k-two-tone-slab-in-front:a;
+  --k-two-tone-slab-a-x:7px;
+  --k-two-tone-slab-a-top:15px;
+  --k-two-tone-slab-a-bottom:8px;
+  --k-two-tone-slab-a-extra-width:0px;
+  --k-two-tone-slab-b-x:0px;
+  --k-two-tone-slab-b-top:1px;
+  --k-two-tone-slab-b-bottom:2px;
+  --k-two-tone-slab-b-extra-width:-2px;
+  --k-segmented-style:slab;
+  --k-segmented-text-size:11px;
+  --k-segmented-case:upper;
+  --k-segmented-padding:14px;
+  --k-segmented-dividers:none;
+  --k-segmented-baseline:off;
+  --k-segmented-selected-text:white;
+  --k-segmented-slab-top:22%;
+  --k-segmented-slab-below:-1px;
+  --k-segmented-slab-x:3px;
+  --k-segmented-slab2-x:8px;
+  --k-segmented-slab2-y:7px;
+  --k-menu-colour:surface;
+  --k-slider-thumb-border:1px;
+  --k-splash-orange:#e0500c;
+  --k-splash-blue:#1413a0;
+  --k-border-button:0.5px;
+  --k-border-icon:none;
+  --k-menu-wipe:900ms;
+  --k-menu-slab-shift-x:10px;
+  --k-menu-slab-shift-y:5px;
+  --k-dim-mode:off;
+  --k-dim-level:0.35;
+  --k-dim-fade:220ms;
+  --k-motion-duration:500ms;
+  --k-motion-hover:180ms;
+  --k-motion-easing:cubic-bezier(0.16,1,0.3,1);
+  --k-motion-drag-bounce:0.3;
+  --k-motion-throw:0.18;
+  --k-motion-edge-stretch:0.35;
+  --k-motion-reduce-motion:system;
+  --k-motion-snap-sound:thud;
+  --k-variants-button-hover:jump;
+  --k-variants-icon-hover:slabturn;
+  --k-variants-menu-hover:slab;
+  --k-variants-photo-selection:outline;
+  --k-variants-side-menu:offset;
+  --k-variants-toggle:flip;
+  --k-variants-italics:primary;
+  --k-variants-thumbnails:on;
+  --k-variants-window-squares:tint;
+  --k-variants-value-readout:roll;
+  --k-variants-top-bar-state-only-controls:hide;
+  --k-variants-icon-selected:slab;
+  --k-variants-segmented:slab;
+  --k-variants-photo-hover:offset;
+  --k-variants-slider-reset-dot:moved;
+  --k-variants-bar-swap:slide;
+  --k-variants-top-bar-slider-width:62px;
 /* TOKENS:BODYLIGHT:END */
 }
 body.light #status-cap{background:#000}
@@ -5117,7 +5253,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0925T';
+const BUILD='1.0926A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
