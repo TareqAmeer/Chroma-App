@@ -3056,7 +3056,7 @@
   /// directly (same coordinate space virtUpdate reads: scroller.scrollTop - gridEl.offsetTop),
   /// then forces a virtUpdate so the row actually mounts. Non-virtualized grids fall back to a
   /// plain scrollIntoView on the existing card.
-  function scrollLibraryToPath(path) {
+  function scrollLibraryToPath(path, center) {
     if (!path) return;
     const gridEl = document.getElementById('lib-grid');
     if (!gridEl) return;
@@ -3076,7 +3076,7 @@
       const inRange = state._virtRange && idx >= state._virtRange[0] * state._virtMetrics.cols && idx < (state._virtRange[1] + 1) * state._virtMetrics.cols;
       if (inRange) {
         const card = gridEl.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-        if (card) { card.scrollIntoView({ block: 'nearest' }); return; }
+        if (card) { card.scrollIntoView({ block: center ? 'center' : 'nearest' }); return; }
       }
       const scroller = gridEl.parentElement && gridEl.parentElement.scrollHeight > gridEl.parentElement.clientHeight
         ? gridEl.parentElement : (gridEl.closest('#lib-overlay') || document.documentElement);
@@ -3087,7 +3087,7 @@
       return;
     }
     const card = gridEl.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    if (card) card.scrollIntoView({ block: 'nearest' });
+    if (card) card.scrollIntoView({ block: center ? 'center' : 'nearest' });
   }
 
   // Thumbnail loader with a small concurrency pool + viewport priority. renderGrid used to
@@ -8122,6 +8122,8 @@
     dockWantsClose = raw < LIB_DOCK_CLOSE_ZONE;
     const w = Math.min(LIB_DOCK_MAX, Math.max(LIB_DOCK_MIN, raw));
     fxLayout.style.setProperty('--dock-w-user', w + 'px');
+    // Column count/row height change with width, so keep the open photo pinned in view.
+    if (state.openedPath) requestAnimationFrame(() => { virtUpdate && state._virtOn && (state._virtMetrics = virtMetrics(document.getElementById('lib-grid')) || state._virtMetrics, state._virtRange = null); scrollLibraryToPath(state.openedPath, true); });
   });
   window.addEventListener('mouseup', () => {
     if (!dockResizing) return;
