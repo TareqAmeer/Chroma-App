@@ -141,8 +141,10 @@ def process(path):
         d = np.arange(Yv.shape[0])[:, None].astype(float)
         margin = max(4.0, 0.9 * T)   # room for the real ragged edge; never clip it straight
         keep_outer = bool(mk and mk.get('outer', name.endswith('_n')))
-        if keep_outer:   # keep the real ragged outer edge: band runs to the image edge, alpha from darkness only
-            T = float(np.max(line))
+        if keep_outer:
+            # keep the real ragged outer edge, but only just past the solid band: screenshots with
+            # several frames side by side would otherwise pull in the neighbouring frames/photos
+            T = float(min(np.max(line), 1.8 * T))
         lo, hi = line - T, line + margin
         # band membership with soft ends; the inner roughness is decided by darkness below
         m = np.clip(d - lo[None, :] + 1, 0, 1) * np.clip((hi[None, :] - d) / (0.4 * margin), 0, 1)
@@ -186,10 +188,22 @@ def process(path):
         tv = np.clip((Yv - blk) / 0.35, 0, 1)
         st_t = ndi.map_coordinates(tv, [rows, cc], order=1, mode='nearest')
         st_a = ndi.map_coordinates(a, [rows, cc], order=1, mode='constant')
+        # Keep only dark stuff connected to the frame band: past the first real transparent gap
+        # (outward: a neighbouring frame in multi-frame screenshots; inward: dark photo content)
+        # everything is dropped. Drips and ragged bits touching the band survive.
+        gap = max(3, int(0.15 * T)); Tr = int(round(T))
+        clear = ndi.uniform_filter1d((st_a < 0.2).astype(float), gap, axis=0) > 0.99
+        for uc in range(st_a.shape[1]):
+            up = np.flatnonzero(clear[:max(1, Tr - 1), uc])
+            if len(up): st_a[:up[-1], uc] = 0
+            dn = np.flatnonzero(clear[Tr:, uc])
+            if len(dn): st_a[Tr + dn[0]:, uc] = 0
         os.makedirs(os.path.join(OUT, 'pieces'), exist_ok=True)
         pn = f'{name}__s{side}.png'
         Ti = int(round(T))
         solid = 1 - holefrac   # share of the solid half that was really black before filling
+        if T > 0.07 * S * (1.8 if keep_outer else 1):   # real frames are ~1-5% of the short side; bigger means it caught a neighbouring frame/photo
+            rep['flags'].append(f'side{side}: band implausibly thick ({T / S:.3f})'); rep['sides'][side]['bad'] = True
         if solid < 0.97 and not keep_outer:   # holes/gaps left inside the black band -> unusable strip
             rep['flags'].append(f'side{side}: strip has gaps in the black ({solid:.2f})'); rep['sides'][side]['bad'] = True
         Image.fromarray((np.dstack([st_t, st_t, st_t, st_a]) * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, 'pieces', pn))
