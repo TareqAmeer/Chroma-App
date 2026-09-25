@@ -94,7 +94,7 @@ const $=id=>document.getElementById(id);
 function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 async function boot(){const r=await (await fetch('/report')).json();votes=r.votes||{};const rej=new Set(r.rejects||[]);
  const ps=[];for(const f of r.reps)for(const [sd,v] of Object.entries(f.sides||{}))if(v.piece&&!v.bad&&!rej.has(v.piece))ps.push(new Promise(ok=>{const im=new Image();im.onload=()=>ok({scan:f.file,side:+sd,img:im,T:v.T,h:v.h,corner:v.corner});im.onerror=()=>ok(null);im.src='/pieces/'+encodeURIComponent(v.piece)}));
- strips=(await Promise.all(ps)).filter(Boolean);strips.forEach(prof);build()}
+ strips=(await Promise.all(ps)).filter(Boolean);strips.forEach(prof);strips=strips.filter(s=>s.depth>=2&&isFinite(s.depth));build()}  // empty strips (all cut away) would give infinite scale
 function prof(st){const c=document.createElement('canvas');c.width=st.img.width;c.height=st.img.height;const x=c.getContext('2d');x.drawImage(st.img,0,0);
  const p=x.getImageData(0,0,c.width,c.height).data,W=c.width,H=c.height,a=new Float32Array(W);
  for(let u=0;u<W;u++){let s=0;for(let y=0;y<H;y++)s+=p[(y*W+u)*4+3];a[u]=s/255}
