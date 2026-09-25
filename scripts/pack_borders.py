@@ -14,6 +14,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, '..', 'local borders', '_out')
 DST = os.path.join(HERE, '..', 'vendor', 'frames', 'film')
 MAXW = 2000
+DROP_SMUDGED = False   # owner kept these after review; set True to drop strips with photo past the edge
 
 def jl(name, dflt):
     try: return json.load(open(os.path.join(OUT, name)))
@@ -48,7 +49,7 @@ for r in sorted(reps, key=lambda r: r['file']):
         # stay close to the band, so drop strips carrying real mass well past it.
         t0, b0 = float(np.median(tops)), float(np.median(bands))
         deep = a[int(min(a.shape[0] - 1, t0 + 1.8 * b0)):, :, 3]
-        if deep.size and deep.mean() / 255 > 0.06:
+        if DROP_SMUDGED and deep.size and deep.mean() / 255 > 0.06:
             print('  drop (photo past the edge):', v['piece'], round(deep.mean() / 255, 3)); continue
         s = min(1.0, MAXW / im.width)
         if s < 1: im = im.resize((round(im.width * s), max(2, round(im.height * s))), Image.LANCZOS)
