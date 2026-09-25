@@ -44,6 +44,7 @@ mod platform;
 mod lens_correct;
 mod formats;
 mod still_decode;
+mod canon;
 mod library;
 mod raw_decode;
 mod arcface;
@@ -2762,6 +2763,7 @@ fn main() {
                 .unwrap()
         })
         .setup(|app| {
+            library::migrate_case_duplicate_keys();
             let handle = app.handle();
 
             // Deep links are only registered with the OS at INSTALL time (the NSIS installer,

@@ -101,14 +101,14 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
     // SEPARATE code path (the Library tree's single-level browser, also used by the recursive
     // subfolder walk) that never got the same fix, so it still paid it on every directory listed.
     let entries: Vec<std::fs::DirEntry> = rd.flatten().collect();
-    let mut xmp_mtimes: std::collections::HashMap<std::ffi::OsString, u64> = std::collections::HashMap::new();
+    let mut xmp_mtimes: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
     for e in &entries {
         let p = e.path();
         if ext_lower(&p) == "xmp" {
             if let Some(stem) = p.file_stem() {
                 let mt = e.metadata().ok().and_then(|m| m.modified().ok())
                     .and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
-                xmp_mtimes.insert(stem.to_os_string(), mt);
+                xmp_mtimes.insert(stem.to_string_lossy().to_lowercase(), mt);
             }
         }
     }
@@ -135,7 +135,7 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
             // an .xmp on disk the way photo edits are) — 0 is honest, not a placeholder.
             // Equivalent to the old `edited_ts_of(&path_s)`: `with_extension` only ever replaces
             // the extension, so the stem is unchanged and both sides come from the SAME listing.
-            let edited_ts = if is_image { p.file_stem().and_then(|s| xmp_mtimes.get(s)).copied().unwrap_or(0) } else { 0 };
+            let edited_ts = if is_image { p.file_stem().and_then(|s| xmp_mtimes.get(&s.to_string_lossy().to_lowercase())).copied().unwrap_or(0) } else { 0 };
             out.push(DirEntry { name, path: path_s, is_dir, is_image, is_video, kind, mtime, size, missing: false, edited_ts });
         }
     }
@@ -1452,7 +1452,7 @@ pub fn get_meta_batch(paths: Vec<String>) -> Vec<PhotoMeta> {
 // Chromasmith-specific bits (edited flag, base64 edit recipe) live in their own namespace
 // other tools simply ignore. A plain "<name>.xmp" next to the photo — portable, no DB. ──────
 fn sidecar_path(photo_path: &str) -> PathBuf {
-    Path::new(photo_path).with_extension("xmp")
+    crate::canon::sidecar_path_for(Path::new(photo_path))
 }
 
 #[derive(Serialize, Default)]
@@ -2274,10 +2274,13 @@ fn registry_path(name: &str) -> PathBuf {
     cache_dir().join(format!("{name}_registry.json"))
 }
 fn registry_read(name: &str) -> Vec<String> {
-    std::fs::read_to_string(registry_path(name))
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default()
+    // Case-duplicate entries (".RW2" + ".rw2") collapse on every read; the next write persists it.
+    crate::canon::dedupe_paths(
+        std::fs::read_to_string(registry_path(name))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default(),
+    )
 }
 fn registry_write(name: &str, list: &[String]) {
     if let Ok(text) = serde_json::to_string(list) {
@@ -2302,12 +2305,13 @@ pub fn registry_set_cmd(name: String, path: String, present: bool) -> Result<(),
 
 fn registry_set(name: &str, path: &str, present_target: bool) {
     let mut list = registry_read(name);
-    let present = list.iter().any(|p| p == path);
+    let key = crate::canon::canonical_key(path);
+    let present = list.iter().any(|p| crate::canon::canonical_key(p) == key);
     if present_target && !present {
         list.push(path.to_string());
         registry_write(name, &list);
     } else if !present_target && present {
-        list.retain(|p| p != path);
+        list.retain(|p| crate::canon::canonical_key(p) != key);
         registry_write(name, &list);
     }
 }
@@ -2324,18 +2328,19 @@ pub fn registry_set_many(name: String, present: Vec<String>, absent: Vec<String>
     if !matches!(name.as_str(), "duplicates" | "gphotos") {
         return Err(format!("registry_set_many: unknown registry '{name}'"));
     }
-    let mut set: std::collections::HashSet<String> = registry_read(&name).into_iter().collect();
-    let before: std::collections::HashSet<String> = set.clone();
+    use crate::canon::canonical_key as ck;
+    let mut map: HashMap<String, String> = registry_read(&name).into_iter().map(|p| (ck(&p), p)).collect();
+    let before: std::collections::HashSet<String> = map.keys().cloned().collect();
     for p in present {
-        set.insert(p);
+        map.entry(ck(&p)).or_insert(p);
     }
     for p in &absent {
-        set.remove(p);
+        map.remove(&ck(p));
     }
-    if set == before {
+    if map.len() == before.len() && map.keys().all(|k| before.contains(k)) {
         return Ok(()); // membership genuinely unchanged — skip the write, not just the count
     }
-    let mut list: Vec<String> = set.into_iter().collect();
+    let mut list: Vec<String> = map.into_values().collect();
     list.sort();
     registry_write(&name, &list);
     Ok(())
@@ -2365,10 +2370,51 @@ fn export_history_store_path() -> PathBuf {
     cache_dir().join("export_history.json")
 }
 pub(crate) fn export_history_read_all() -> HashMap<String, Vec<ExportHistoryEntry>> {
-    std::fs::read_to_string(export_history_store_path())
+    let raw: HashMap<String, Vec<ExportHistoryEntry>> = std::fs::read_to_string(export_history_store_path())
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    merge_export_history_keys(raw)
+}
+/// Case-variant keys from older files merge (entries by ts, cap 30); surviving key keeps a real spelling.
+fn merge_export_history_keys(raw: HashMap<String, Vec<ExportHistoryEntry>>) -> HashMap<String, Vec<ExportHistoryEntry>> {
+    let mut out = crate::canon::merge_case_keys(raw, |mut a, b| {
+        a.extend(b);
+        a.sort_by_key(|e| e.ts);
+        a
+    });
+    for v in out.values_mut() {
+        if v.len() > 30 {
+            let drop = v.len() - 30;
+            v.drain(0..drop);
+        }
+    }
+    out
+}
+/// One-time migration: rewrite export_history.json (backing it up) and the registries with
+/// case-duplicates merged. No-op when nothing is duplicated.
+pub fn migrate_case_duplicate_keys() {
+    if let Ok(text) = std::fs::read_to_string(export_history_store_path()) {
+        if let Ok(raw) = serde_json::from_str::<HashMap<String, Vec<ExportHistoryEntry>>>(&text) {
+            let n = raw.len();
+            let merged = merge_export_history_keys(raw);
+            if merged.len() != n {
+                let _ = std::fs::write(export_history_store_path().with_extension("json.bak"), &text);
+                export_history_write_all(&merged);
+            }
+        }
+    }
+    for name in ["edited", "favorites", "flagged", "rejected", "recents", "duplicates", "gphotos"] {
+        if let Ok(text) = std::fs::read_to_string(registry_path(name)) {
+            if let Ok(raw) = serde_json::from_str::<Vec<String>>(&text) {
+                let n = raw.len();
+                let d = crate::canon::dedupe_paths(raw);
+                if d.len() != n {
+                    registry_write(name, &d);
+                }
+            }
+        }
+    }
 }
 fn export_history_write_all(map: &HashMap<String, Vec<ExportHistoryEntry>>) {
     if let Ok(text) = serde_json::to_string(map) {
@@ -2378,7 +2424,11 @@ fn export_history_write_all(map: &HashMap<String, Vec<ExportHistoryEntry>>) {
 
 #[tauri::command]
 pub fn get_export_history(path: String) -> Vec<ExportHistoryEntry> {
-    export_history_read_all().remove(&path).unwrap_or_default()
+    {
+        let mut all = export_history_read_all();
+        let k = crate::canon::find_key(&all, &path).cloned();
+        k.and_then(|k| all.remove(&k)).unwrap_or_default()
+    }
 }
 
 /// Capped at 30 entries per photo (newest last) — plenty of undo depth without the store
@@ -2390,7 +2440,8 @@ pub fn append_export_history(path: String, version: String, recipe: String, dest
         .map(|d| d.as_secs())
         .unwrap_or(0);
     let mut all = export_history_read_all();
-    let list = all.entry(path).or_default();
+    let key = crate::canon::find_key(&all, &path).cloned().unwrap_or(path);
+    let list = all.entry(key).or_default();
     list.push(ExportHistoryEntry { ts, version, recipe, dest: dest.unwrap_or_default() });
     if list.len() > 30 {
         let drop = list.len() - 30;
@@ -2588,7 +2639,8 @@ pub fn phash_batch(paths: Vec<String>) -> Result<Vec<(String, String)>, String> 
 #[tauri::command]
 pub fn touch_recent(path: String) {
     let mut list = registry_read("recents");
-    list.retain(|p| p != &path);
+    let key = crate::canon::canonical_key(&path);
+    list.retain(|p| crate::canon::canonical_key(p) != key);
     list.push(path);
     if list.len() > 50 {
         let drop = list.len() - 50;
@@ -2602,12 +2654,7 @@ pub fn touch_recent(path: String) {
 /// match more than one (e.g. edited AND favorited). Shared by `backfill_edited_registry`
 /// (root + recents only) and `rescan_edited_registry_recursive` (whole tree) so the two never
 /// drift on what counts as a match.
-/// The on-disk spelling of `candidate` (same directory, name matched case-insensitively).
-fn real_case_sibling(candidate: &Path) -> Option<PathBuf> {
-    let dir = candidate.parent()?;
-    let want = candidate.file_name()?.to_string_lossy().to_lowercase();
-    std::fs::read_dir(dir).ok()?.flatten().find(|e| e.file_name().to_string_lossy().to_lowercase() == want).map(|e| e.path())
-}
+use crate::canon::real_case_sibling;
 
 fn scan_folder_for_registry(
     folder: &str,
@@ -2618,9 +2665,13 @@ fn scan_folder_for_registry(
 ) -> usize {
     let mut added = 0usize;
     let Ok(rd) = std::fs::read_dir(folder) else { return 0 };
+    // ONE listing per folder: lowercase stem -> real photo paths (extension priority). Resolves
+    // each sidecar to the photo's real on-disk spelling with no per-extension probing.
+    let photos = crate::canon::photo_index_for_dir(Path::new(folder));
+    let has = |v: &Vec<String>, s: &str| { let k = crate::canon::canonical_key(s); v.iter().any(|p2| crate::canon::canonical_key(p2) == k) };
     for entry in rd.flatten() {
         let p = entry.path();
-        if p.extension().and_then(|e| e.to_str()) != Some("xmp") {
+        if ext_lower(&p) != "xmp" {
             continue;
         }
         let Ok(text) = std::fs::read_to_string(&p) else { continue };
@@ -2632,28 +2683,15 @@ fn scan_folder_for_registry(
         if !(is_edited || is_favorite || is_flagged || is_rejected) {
             continue;
         }
-        let photo = p.with_extension(""); // best-effort; sidecar_path() is <photo>.xmp exactly
-        // Try every image extension the sidecar could belong to (with_extension("") strips
-        // the .xmp but the photo's real extension is unknown from the sidecar name alone).
-        for ext in crate::formats::all_image_exts() {
-            let candidate = photo.with_extension(ext);
-            if candidate.exists() {
-                // ⚠️ Canonicalise to the file's REAL on-disk name: on a case-insensitive volume
-                // (exFAT/APFS) `exists()` succeeds for "X.rw2" while the file is "X.RW2", and the
-                // lowercase guess used to be registered as the photo's path. Sidecar caches and
-                // export history are keyed by exact path string, so opening from a collection
-                // then split edits/exports across two keys ("the app doesn't remember").
-                let candidate = real_case_sibling(&candidate).unwrap_or(candidate);
-                let s = candidate.to_string_lossy().into_owned();
-                let mut matched = false;
-                if is_edited && !edited.iter().any(|p2| p2 == &s) { edited.push(s.clone()); matched = true; }
-                if is_favorite && !favorites.iter().any(|p2| p2 == &s) { favorites.push(s.clone()); matched = true; }
-                if is_flagged && !flagged.iter().any(|p2| p2 == &s) { flagged.push(s.clone()); matched = true; }
-                if is_rejected && !rejected.iter().any(|p2| p2 == &s) { rejected.push(s); matched = true; }
-                if matched { added += 1; }
-                break;
-            }
-        }
+        let Some(stem) = p.file_stem().map(|s| s.to_string_lossy().to_lowercase()) else { continue };
+        let Some(candidate) = photos.get(&stem).and_then(|v| v.first()) else { continue };
+        let s = candidate.to_string_lossy().into_owned();
+        let mut matched = false;
+        if is_edited && !has(edited, &s) { edited.push(s.clone()); matched = true; }
+        if is_favorite && !has(favorites, &s) { favorites.push(s.clone()); matched = true; }
+        if is_flagged && !has(flagged, &s) { flagged.push(s.clone()); matched = true; }
+        if is_rejected && !has(rejected, &s) { rejected.push(s); matched = true; }
+        if matched { added += 1; }
     }
     added
 }
@@ -4043,5 +4081,41 @@ mod quicklook_tests {
     fn quicklook_preview_declines_video_cleanly() {
         let err = get_quicklook_preview("/nonexistent/clip.mp4".to_string());
         assert!(err.is_err(), "video must be refused, not attempted");
+    }
+}
+
+#[cfg(test)]
+mod case_canon_tests {
+    use super::*;
+    fn entry(ts: u64) -> ExportHistoryEntry { ExportHistoryEntry { ts, version: "v".into(), recipe: String::new(), dest: String::new() } }
+
+    #[test]
+    fn export_history_migration_merges_case_variant_keys() {
+        let mut m = HashMap::new();
+        m.insert("/nope/A.RW2".to_string(), vec![entry(1), entry(3)]);
+        m.insert("/nope/A.rw2".to_string(), vec![entry(2)]);
+        m.insert("/nope/B.rw2".to_string(), vec![entry(9)]);
+        let out = merge_export_history_keys(m);
+        assert_eq!(out.len(), 2);
+        let k = crate::canon::find_key(&out, "/nope/a.RW2").unwrap();
+        assert_eq!(out[k].iter().map(|e| e.ts).collect::<Vec<_>>(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn scan_registers_uppercase_xmp_and_resolves_real_photo_case() {
+        let d = std::env::temp_dir().join(format!("scan_reg_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("P1.RW2"), b"").unwrap();
+        std::fs::write(d.join("p1.jpg"), b"").unwrap();
+        std::fs::write(d.join("P1.XMP"), r#"<x chromasmith:Edited="True" xmp:Label="Green"/>"#).unwrap();
+        let (mut e, mut f, mut fl, mut r) = (vec![], vec![], vec![], vec![]);
+        let n = scan_folder_for_registry(d.to_str().unwrap(), &mut e, &mut f, &mut fl, &mut r);
+        assert_eq!(n, 1, "edited={e:?}");
+        assert!(e[0].ends_with("P1.RW2"), "RAW preferred, real case: {e:?}");
+        assert_eq!(fl.len(), 1);
+        e[0] = e[0].replace("P1.RW2", "p1.rw2");
+        scan_folder_for_registry(d.to_str().unwrap(), &mut e, &mut f, &mut fl, &mut r);
+        assert_eq!(e.len(), 1);
     }
 }

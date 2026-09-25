@@ -380,14 +380,14 @@ pub fn scan_card_run(path: String, dest_root: Option<String>, progress: &mut dyn
     if let Some(dest) = dest_root.filter(|d| !d.is_empty()) {
         let existing = index_destination(Path::new(&dest));
         for f in files.iter_mut() {
-            f.duplicate = existing.get(&f.name).is_some_and(|&s| s == f.size);
+            f.duplicate = existing.get(&f.name.to_lowercase()).is_some_and(|&s| s == f.size);
         }
     }
     progress(ScanProgress { scanned, current: String::new() });
     Ok(files)
 }
 
-/// name -> size for every media file under `dest`, used for duplicate detection. Walks once and
+/// lowercased name -> size for every media file under `dest`, used for duplicate detection. Walks once and
 /// caches nothing: an import is rare enough that a stale index would be a worse trade than a walk.
 fn index_destination(dest: &Path) -> std::collections::HashMap<String, u64> {
     let mut map = std::collections::HashMap::new();
@@ -400,7 +400,7 @@ fn index_destination(dest: &Path) -> std::collections::HashMap<String, u64> {
                 stack.push(p);
             } else if media_kind(&ext_lower(&p)).is_some() {
                 let name = entry.file_name().to_string_lossy().into_owned();
-                map.insert(name, entry.metadata().map(|m| m.len()).unwrap_or(0));
+                map.insert(name.to_lowercase(), entry.metadata().map(|m| m.len()).unwrap_or(0));
             }
         }
     }
@@ -512,7 +512,7 @@ pub fn ingest_run(
     let existing = index_destination(&dest_root);
     let mut all = files;
     for f in all.iter_mut() {
-        f.duplicate = existing.get(&f.name).is_some_and(|&s| s == f.size);
+        f.duplicate = existing.get(&f.name.to_lowercase()).is_some_and(|&s| s == f.size);
     }
 
     let after_only: Vec<CardFile> = all

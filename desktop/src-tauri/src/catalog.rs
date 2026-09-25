@@ -1301,7 +1301,7 @@ fn ext_lower(p: &Path) -> String {
 }
 
 fn sidecar_mtime_of(photo_path: &Path) -> u64 {
-    std::fs::metadata(photo_path.with_extension("xmp"))
+    std::fs::metadata(crate::canon::sidecar_path_for(photo_path))
         .ok()
         .and_then(|m| m.modified().ok())
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
@@ -1348,12 +1348,12 @@ fn walk_root(volume_mount: &Path, root_rel: &str, on_found: &mut dyn FnMut(usize
         // ~29,663 failing `stat` calls (sidecar_mtime_of's old per-file probe, ~4.6s of the ~14s
         // a walk cost) into zero extra syscalls, since every .xmp's existence and mtime are read
         // off the SAME entries this loop already enumerated.
-        let mut xmp_mtimes: std::collections::HashMap<std::ffi::OsString, u64> = std::collections::HashMap::new();
+        let mut xmp_mtimes: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
         for e in &entries {
             let p = e.path();
             if ext_lower(&p) == "xmp" {
                 if let Some(stem) = p.file_stem() {
-                    xmp_mtimes.insert(stem.to_os_string(), sidecar_mtime_of(&p));
+                    xmp_mtimes.insert(stem.to_string_lossy().to_lowercase(), sidecar_mtime_of(&p));
                 }
             }
         }
@@ -1398,7 +1398,7 @@ fn walk_root(volume_mount: &Path, root_rel: &str, on_found: &mut dyn FnMut(usize
             // though `with_extension` might on a case-insensitive filesystem — an edge case this
             // app's own sidecar writer never produces, since it always writes the photo's exact
             // stem.)
-            let sidecar_mtime = p.file_stem().and_then(|s| xmp_mtimes.get(s)).copied().unwrap_or(0);
+            let sidecar_mtime = p.file_stem().and_then(|s| xmp_mtimes.get(&s.to_string_lossy().to_lowercase())).copied().unwrap_or(0);
             out.push(WalkedFile {
                 rel_path,
                 rel_dir,

@@ -102,7 +102,13 @@ pub fn list_dcp_profiles(make: String, model: String) -> Option<DcpProfileSet> {
             let mut styles: Vec<String> = entries
                 .flatten()
                 .filter_map(|e| e.file_name().to_str().map(str::to_string))
-                .filter_map(|name| name.strip_prefix(&file_prefix).and_then(|s| s.strip_suffix(".dcp")).map(str::to_string))
+                .filter_map(|name| {
+                    // Case-insensitive prefix and ".dcp" suffix (ASCII-only affixes, so byte slicing is safe).
+                    let (pl, nl) = (file_prefix.len(), name.len());
+                    if nl < pl + 4 || !name.is_char_boundary(pl) || !name.is_char_boundary(nl - 4) { return None; }
+                    (name[..pl].eq_ignore_ascii_case(&file_prefix) && name[nl - 4..].eq_ignore_ascii_case(".dcp"))
+                        .then(|| name[pl..nl - 4].to_string())
+                })
                 .collect();
             if !styles.is_empty() {
                 styles.sort();
