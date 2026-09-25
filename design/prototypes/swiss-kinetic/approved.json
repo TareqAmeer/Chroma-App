@@ -1,0 +1,409 @@
+{
+  "$description": "APPROVED Swiss Kinetic spec (2026-09-25 review). Source of truth for implementing the redesign in the app. Dark and light are separate.",
+  "dark": {
+    "color": {
+      "accentA": {
+        "$type": "color",
+        "$value": "#e0500c"
+      },
+      "accentB": {
+        "$type": "color",
+        "$value": "#1414a0"
+      },
+      "bg": {
+        "$type": "color",
+        "$value": "#1b1b1b"
+      },
+      "ink": {
+        "$type": "color",
+        "$value": "#f2f2f0"
+      },
+      "muted": {
+        "$type": "color",
+        "$value": "#7c7c78"
+      }
+    },
+    "offset": {
+      "x": {
+        "$type": "dimension",
+        "$value": "4px"
+      },
+      "y": {
+        "$type": "dimension",
+        "$value": "4px"
+      },
+      "slabTop": {
+        "$type": "dimension",
+        "$value": "41%"
+      },
+      "slabStyle": "single"
+    },
+    "twoToneSlab": {
+      "inFront": "a",
+      "a": {
+        "x": {
+          "$type": "dimension",
+          "$value": "6px"
+        },
+        "top": {
+          "$type": "dimension",
+          "$value": "9px"
+        },
+        "bottom": {
+          "$type": "dimension",
+          "$value": "6px"
+        },
+        "extraWidth": {
+          "$type": "dimension",
+          "$value": "0px"
+        }
+      },
+      "b": {
+        "x": {
+          "$type": "dimension",
+          "$value": "12px"
+        },
+        "top": {
+          "$type": "dimension",
+          "$value": "21px"
+        },
+        "bottom": {
+          "$type": "dimension",
+          "$value": "13px"
+        },
+        "extraWidth": {
+          "$type": "dimension",
+          "$value": "0px"
+        }
+      }
+    },
+    "segmented": {
+      "style": "cell",
+      "textSize": {
+        "$type": "dimension",
+        "$value": "11px"
+      },
+      "case": "upper",
+      "padding": {
+        "$type": "dimension",
+        "$value": "11px"
+      },
+      "dividers": "bar",
+      "baseline": "off",
+      "selectedText": "white",
+      "slabTop": {
+        "$type": "dimension",
+        "$value": "34%"
+      },
+      "slabBelow": {
+        "$type": "dimension",
+        "$value": "3px"
+      },
+      "slabX": {
+        "$type": "dimension",
+        "$value": "3px"
+      },
+      "slab2X": {
+        "$type": "dimension",
+        "$value": "6px"
+      },
+      "slab2Y": {
+        "$type": "dimension",
+        "$value": "6px"
+      }
+    },
+    "menuColour": "ink",
+    "sliderThumbBorder": {
+      "$type": "dimension",
+      "$value": "1px"
+    },
+    "splash": {
+      "orange": {
+        "$type": "color",
+        "$value": "#e0500c"
+      },
+      "blue": {
+        "$type": "color",
+        "$value": "#1414a0"
+      }
+    },
+    "border": {
+      "button": {
+        "$type": "dimension",
+        "$value": "0.5px"
+      },
+      "icon": "none"
+    },
+    "menu": {
+      "wipe": {
+        "$type": "duration",
+        "$value": "900ms"
+      },
+      "slabShiftX": {
+        "$type": "dimension",
+        "$value": "10px"
+      },
+      "slabShiftY": {
+        "$type": "dimension",
+        "$value": "5px"
+      }
+    },
+    "dim": {
+      "mode": "off",
+      "level": {
+        "$type": "number",
+        "$value": 0.35
+      },
+      "fade": {
+        "$type": "duration",
+        "$value": "220ms"
+      }
+    },
+    "motion": {
+      "duration": {
+        "$type": "duration",
+        "$value": "500ms"
+      },
+      "hover": {
+        "$type": "duration",
+        "$value": "180ms"
+      },
+      "easing": {
+        "$type": "cubicBezier",
+        "$value": [
+          0.16,
+          1,
+          0.3,
+          1
+        ]
+      },
+      "dragBounce": 0.3,
+      "throw": 0.18,
+      "edgeStretch": 0.35,
+      "reduceMotion": "system",
+      "snapSound": "thud"
+    },
+    "variants": {
+      "buttonHover": "jump",
+      "iconHover": "slabturn",
+      "menuHover": "slab",
+      "photoSelection": "slab",
+      "sideMenu": "offset",
+      "toggle": "flip",
+      "italics": "primary",
+      "thumbnails": "on",
+      "windowSquares": "tint",
+      "valueReadout": "roll",
+      "topBarStateOnlyControls": "hide",
+      "iconSelected": "slab",
+      "segmented": "cell",
+      "photoHover": "offset",
+      "sliderResetDot": "moved",
+      "barSwap": "slide",
+      "topBarSliderWidth": "62px"
+    }
+  },
+  "light": {
+    "color": {
+      "accentA": {
+        "$type": "color",
+        "$value": "#e0500c"
+      },
+      "accentB": {
+        "$type": "color",
+        "$value": "#1414a0"
+      },
+      "bg": {
+        "$type": "color",
+        "$value": "#f2f2ee"
+      },
+      "ink": {
+        "$type": "color",
+        "$value": "#000000"
+      },
+      "muted": {
+        "$type": "color",
+        "$value": "#77776f"
+      }
+    },
+    "offset": {
+      "x": {
+        "$type": "dimension",
+        "$value": "6px"
+      },
+      "y": {
+        "$type": "dimension",
+        "$value": "6px"
+      },
+      "slabTop": {
+        "$type": "dimension",
+        "$value": "10%"
+      },
+      "slabStyle": "stepped"
+    },
+    "twoToneSlab": {
+      "inFront": "a",
+      "a": {
+        "x": {
+          "$type": "dimension",
+          "$value": "7px"
+        },
+        "top": {
+          "$type": "dimension",
+          "$value": "15px"
+        },
+        "bottom": {
+          "$type": "dimension",
+          "$value": "8px"
+        },
+        "extraWidth": {
+          "$type": "dimension",
+          "$value": "0px"
+        }
+      },
+      "b": {
+        "x": {
+          "$type": "dimension",
+          "$value": "0px"
+        },
+        "top": {
+          "$type": "dimension",
+          "$value": "1px"
+        },
+        "bottom": {
+          "$type": "dimension",
+          "$value": "2px"
+        },
+        "extraWidth": {
+          "$type": "dimension",
+          "$value": "-2px"
+        }
+      }
+    },
+    "segmented": {
+      "style": "slab",
+      "textSize": {
+        "$type": "dimension",
+        "$value": "11px"
+      },
+      "case": "upper",
+      "padding": {
+        "$type": "dimension",
+        "$value": "14px"
+      },
+      "dividers": "none",
+      "baseline": "off",
+      "selectedText": "white",
+      "slabTop": {
+        "$type": "dimension",
+        "$value": "22%"
+      },
+      "slabBelow": {
+        "$type": "dimension",
+        "$value": "-1px"
+      },
+      "slabX": {
+        "$type": "dimension",
+        "$value": "3px"
+      },
+      "slab2X": {
+        "$type": "dimension",
+        "$value": "8px"
+      },
+      "slab2Y": {
+        "$type": "dimension",
+        "$value": "7px"
+      }
+    },
+    "menuColour": "surface",
+    "sliderThumbBorder": {
+      "$type": "dimension",
+      "$value": "1px"
+    },
+    "splash": {
+      "orange": {
+        "$type": "color",
+        "$value": "#e0500c"
+      },
+      "blue": {
+        "$type": "color",
+        "$value": "#1413a0"
+      }
+    },
+    "border": {
+      "button": {
+        "$type": "dimension",
+        "$value": "0.5px"
+      },
+      "icon": "none"
+    },
+    "menu": {
+      "wipe": {
+        "$type": "duration",
+        "$value": "900ms"
+      },
+      "slabShiftX": {
+        "$type": "dimension",
+        "$value": "10px"
+      },
+      "slabShiftY": {
+        "$type": "dimension",
+        "$value": "5px"
+      }
+    },
+    "dim": {
+      "mode": "off",
+      "level": {
+        "$type": "number",
+        "$value": 0.35
+      },
+      "fade": {
+        "$type": "duration",
+        "$value": "220ms"
+      }
+    },
+    "motion": {
+      "duration": {
+        "$type": "duration",
+        "$value": "500ms"
+      },
+      "hover": {
+        "$type": "duration",
+        "$value": "180ms"
+      },
+      "easing": {
+        "$type": "cubicBezier",
+        "$value": [
+          0.16,
+          1,
+          0.3,
+          1
+        ]
+      },
+      "dragBounce": 0.3,
+      "throw": 0.18,
+      "edgeStretch": 0.35,
+      "reduceMotion": "system",
+      "snapSound": "thud"
+    },
+    "variants": {
+      "buttonHover": "jump",
+      "iconHover": "slabturn",
+      "menuHover": "slab",
+      "photoSelection": "outline",
+      "sideMenu": "offset",
+      "toggle": "flip",
+      "italics": "primary",
+      "thumbnails": "on",
+      "windowSquares": "tint",
+      "valueReadout": "roll",
+      "topBarStateOnlyControls": "hide",
+      "iconSelected": "slab",
+      "segmented": "slab",
+      "photoHover": "offset",
+      "sliderResetDot": "moved",
+      "barSwap": "slide",
+      "topBarSliderWidth": "62px"
+    }
+  }
+}

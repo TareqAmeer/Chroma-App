@@ -705,28 +705,29 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 (() => {
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const root = document.documentElement, body = document.body;
-const store = { get(k) { try { return JSON.parse(localStorage.getItem('sk6.' + k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem('sk6.' + k, JSON.stringify(v)); } catch {} } };
+const store = { get(k) { try { return JSON.parse(localStorage.getItem('sk7.' + k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem('sk7.' + k, JSON.stringify(v)); } catch {} } };
 
 // ── settings model ────────────────────────────────────────────────
 const EASES = { 'Inertia (0.16,1,0.3,1)': '.16,1,.3,1', 'Expo out': '.19,1,.22,1', 'Soft overshoot': '.34,1.56,.64,1', 'Hard overshoot': '.68,-.6,.32,1.6', 'Standard': '.4,0,.2,1', 'Linear': '0,0,1,1' };
 const HOVERS = { slip: 'Text slip', slab: 'Slab slide-in', flood: 'Instant invert', jump: 'Offset jump', skew: 'Italic lean', breathe: 'Letter-spacing breathe', scramble: 'Letter scramble' };
 const PRESETS = { 'Cadmium / Cobalt': { '--a': '#e0500c', '--b': '#1414a0' }, 'Klein / Signal': { '--a': '#0015ff', '--b': '#e02c00' }, 'Orange / Ink': { '--a': '#e0500c', '--b': '#f2f2f0' }, 'Splash': { '--a': '#d84300', '--b': '#1013a0' } };
 // Defaults = the 2026-09-24 review round 2 export. Storage keys move per round so the new picks show on first open.
-const DEFAULTS = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#1b1b1b', '--ink': '#f2f2f0', '--mut': '#7c7c78', '--ox': '6px', '--oy': '6px', '--slab-top': '34%', '--dim': '0.35', '--dim-dur': '220ms', '--dur': '500ms', '--dur-fast': '180ms',
+const DEFAULTS = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#1b1b1b', '--ink': '#f2f2f0', '--mut': '#7c7c78', '--ox': '4px', '--oy': '4px', '--slab-top': '41%', '--dim': '0.35', '--dim-dur': '220ms', '--dur': '500ms', '--dur-fast': '180ms',
     '--bw-btn': '0.5px', '--bw-ic': '1px', '--menu-dur': '900ms', '--msx': '10px', '--msy': '5px', '--tb-sl': '62px',
     '--sa-x': '6px', '--sa-top': '9px', '--sa-bot': '6px', '--sa-w': '0px', '--sb-x': '12px', '--sb-top': '21px', '--sb-bot': '13px', '--sb-w': '0px',
     '--sg-fs': '11px', '--sg-pad': '11px', '--sg-top': '34%', '--sg-bot': '3px', '--sg-x': '3px', '--sg-x2': '6px', '--sg-y2': '6px', '--sl-bw': '1px', '--splash-a': '#e0500c', '--splash-b': '#1414a0' },
-  attrs: { front: 'a', sgcase: 'upper', sgsep: 'bar', sgbase: 'off', sgon: 'white', menubg: 'ink', dim: 'off', slab: 'single', sel: 'tag', side: 'fill', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved' },
-  cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'slabturn', roll: 'roll', segv: 'slab', swap: 'slide' };
+  attrs: { front: 'a', sgcase: 'upper', sgsep: 'bar', sgbase: 'off', sgon: 'white', menubg: 'ink', dim: 'off', slab: 'single', sel: 'slab', side: 'offset', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved' },
+  cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'slabturn', roll: 'roll', segv: 'cell', swap: 'slide' };
 // Dark and light are separate setting sets (and separate notes). Light starts as a copy of dark with light colours.
-// Light defaults = the 2026-09-25 light export (A/B swapped, black ink, stepped slab laid out like the gallery|studio sketch).
-const LIGHT = { vars: { '--a': '#1413a0', '--b': '#e0500c', '--bg': '#f2f2ee', '--ink': '#000000', '--mut': '#77776f', '--slab-top': '10%',
-    '--sa-x': '5px', '--sa-top': '10px', '--sa-bot': '8px', '--sb-x': '-3px', '--sb-top': '-4px', '--sb-bot': '-8px' },
-  attrs: { slab: 'stepped', sel: 'outline', side: 'offset', menubg: 'surface', front: 'a' } };
-const themeDefaults = (t) => { const d = structuredClone(DEFAULTS); if (t === 'light') { Object.assign(d.vars, LIGHT.vars); Object.assign(d.attrs, LIGHT.attrs); } return d; };
-const norm = (x, t) => { const d = themeDefaults(t), o = Object.assign(d, x || {}); o.vars = Object.assign({}, d.vars, x?.vars); o.attrs = Object.assign({}, d.attrs, x?.attrs); return o; };
+// Defaults = the approved 2026-09-25 export (approved.json). Light: black ink, stepped slab laid out like the gallery|studio sketch.
+const LIGHT = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#f2f2ee', '--ink': '#000000', '--mut': '#77776f', '--ox': '6px', '--oy': '6px', '--slab-top': '10%',
+    '--sa-x': '7px', '--sa-top': '15px', '--sa-bot': '8px', '--sa-w': '0px', '--sb-x': '0px', '--sb-top': '1px', '--sb-bot': '2px', '--sb-w': '-2px',
+    '--sg-pad': '14px', '--sg-top': '22%', '--sg-bot': '-1px', '--sg-x': '3px', '--sg-x2': '8px', '--sg-y2': '7px', '--splash-b': '#1413a0' },
+  attrs: { slab: 'stepped', sel: 'outline', side: 'offset', menubg: 'surface', front: 'a', sgsep: 'none' }, segv: 'slab' };
+const themeDefaults = (t) => { const d = structuredClone(DEFAULTS); if (t === 'light') { Object.assign(d.vars, LIGHT.vars); Object.assign(d.attrs, LIGHT.attrs); d.segv = LIGHT.segv; } return d; };
+const norm = (x, t) => { const d = themeDefaults(t), o = Object.assign({}, d, x || {}); o.vars = Object.assign({}, d.vars, x?.vars); o.attrs = Object.assign({}, d.attrs, x?.attrs); return o; };
 let P = store.get('themes');
-if (!P) { try { P = JSON.parse(localStorage.getItem('sk5.themes')); } catch {} } // round 4: keep round-3 settings, start notes fresh
+if (!P) { } // approved round: start from the approved defaults
 if (!P) { // first open since the split: carry the previous round's settings and notes over as dark mode
   const old = (k) => { try { return JSON.parse(localStorage.getItem('sk4.' + k)); } catch { return null; } };
   const prev = old('settings'); if (prev) { delete prev.lvars; if (prev.attrs) delete prev.attrs.theme; }
