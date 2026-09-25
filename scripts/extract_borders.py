@@ -117,14 +117,14 @@ def process(path):
         if photo is not None:
             if mk['none'][side]:
                 rep['flags'].append(f'side{side}: marked no frame'); continue
-            pv = side_view(photo, side)[:int(0.45 * S)]
+            pv = side_view(photo, side)[:int(0.6 * S)]
             has = pv.any(0)
             if has.mean() < 0.5: rep['flags'].append(f'side{side}: mark outside search band'); continue
             first = np.where(has, pv.argmax(0), 0).astype(float)
             mline = np.interp(np.arange(len(first)), np.flatnonzero(has), first[has])
         md = maxd
         if mline is not None:
-            md = int(min(0.45 * S, mline.max() + 0.03 * S))
+            md = int(min(0.6 * S, mline.max() + 0.03 * S))
             # local frame black: a strip just outside the marked edge is known frame
             dd = np.arange(md)[:, None]
             strip = (dd < mline[None, :] - 0.004 * S) & (dd > mline[None, :] - 0.02 * S)
@@ -167,6 +167,7 @@ def process(path):
         core = np.zeros_like(m) if keep_outer else (d < line[None, :] - 0.5 * T).astype(np.float32)   # only the outer half is forced solid; the inner half keeps its real bites
         a = m * np.maximum(dk, core)
         fillb = (core * m > 0) & (dk < 0.5)
+        holefrac = float(fillb.sum()) / max(1.0, float((core * m > 0).sum()))
         Yv[fillb] = blk + np.random.default_rng(side).normal(0, 0.012, fillb.sum())
         cover = np.maximum(cover, unview(a, side))
         Y = np.where(unview(m, side) > 0, unview(Yv, side), Y)
@@ -188,7 +189,7 @@ def process(path):
         os.makedirs(os.path.join(OUT, 'pieces'), exist_ok=True)
         pn = f'{name}__s{side}.png'
         Ti = int(round(T))
-        solid = float(st_a[:max(1, Ti - 1)].mean()) if Ti > 1 else 0
+        solid = 1 - holefrac   # share of the solid half that was really black before filling
         if solid < 0.97 and not keep_outer:   # holes/gaps left inside the black band -> unusable strip
             rep['flags'].append(f'side{side}: strip has gaps in the black ({solid:.2f})'); rep['sides'][side]['bad'] = True
         Image.fromarray((np.dstack([st_t, st_t, st_t, st_a]) * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, 'pieces', pn))
