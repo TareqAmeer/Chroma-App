@@ -15,7 +15,7 @@ OUT = os.path.join(ROOT, '_out'); os.makedirs(OUT, exist_ok=True)
 MARKS = os.path.join(OUT, 'marks.json')
 SKIP = ('Pack-Cover', 'KODAK-GOLD', 'KODAK-PORTRA-400---', 'KODAK-PORTRA-800---', 'rawpixel-id-13960581')
 FILES = sorted(os.path.basename(f) for f in glob.glob(os.path.join(ROOT, '*'))
-               if f.lower().endswith(('jpg', 'jpeg', 'webp')) and not any(s in f for s in SKIP) and ' copy' not in f)
+               if f.lower().endswith(('jpg', 'jpeg', 'webp', 'tif', 'tiff')) and not any(s in f for s in SKIP) and ' copy' not in f)
 _cache = {}
 
 PAGE = r'''<!doctype html><meta charset=utf-8><title>Mark Borders</title>
@@ -30,7 +30,7 @@ kbd{background:#333;border-radius:3px;padding:0 4px}
 </style>
 <header><b id=name></b><span id=pos></span>
 <button id=prev>&larr; Prev</button><button id=next>Save &amp; next &rarr;</button>
-<button id=skip>Skip scan</button>
+<button id=skip>Skip scan</button><button id=outer>Keep messy outer edge</button>
 <span>No frame on side:</span><button class=nf data-s=0>Top</button><button class=nf data-s=1>Right</button><button class=nf data-s=2>Bottom</button><button class=nf data-s=3>Left</button>
 <span style="opacity:.7">Drag the red dots onto the photo's edge &middot; <kbd>Enter</kbd> save &amp; next</span></header>
 <div id=wrap><canvas id=c></canvas></div>
@@ -39,7 +39,7 @@ let files=[],marks={},i=0,img=new Image(),st=null,drag=null;
 const c=document.getElementById('c'),x=c.getContext('2d');
 async function boot(){const r=await (await fetch('/api')).json();files=r.files;marks=r.marks;i=Math.max(0,files.findIndex(f=>!marks[f]));if(i<0)i=0;load()}
 function def(){return{pts:[[.08,.08],[.92,.08],[.92,.92],[.08,.92]].map(p=>p.slice()),none:[false,false,false,false],skip:false}}
-function load(){const f=files[i];st=JSON.parse(JSON.stringify(marks[f]||def()));
+function load(){const f=files[i];st=JSON.parse(JSON.stringify(marks[f]||def()));if(st.outer===undefined)st.outer=/_n\.jpe?g$/i.test(f);
  document.getElementById('name').textContent=f;document.getElementById('pos').textContent=`${i+1} / ${files.length}`;
  img.onload=()=>{c.width=img.width;c.height=img.height;draw()};img.src='/img?f='+encodeURIComponent(f)}
 function draw(){x.drawImage(img,0,0);const W=c.width,H=c.height,P=st.pts.map(p=>[p[0]*W,p[1]*H]);
@@ -49,7 +49,7 @@ function draw(){x.drawImage(img,0,0);const W=c.width,H=c.height,P=st.pts.map(p=>
   const dx=b[0]-a[0],dy=b[1]-a[1];x.beginPath();x.moveTo(a[0]-dx*2,a[1]-dy*2);x.lineTo(b[0]+dx*2,b[1]+dy*2);x.stroke()}
  x.setLineDash([]);P.forEach(p=>{x.fillStyle='#ff3b2f';x.beginPath();x.arc(p[0],p[1],W/110,0,7);x.fill();x.strokeStyle='#fff';x.stroke()});
  if(st.skip){x.fillStyle='rgba(0,0,0,.6)';x.fillRect(0,0,W,H);x.fillStyle='#fff';x.font=`${W/20}px system-ui`;x.fillText('SKIPPED',W*.38,H/2)}
- document.querySelectorAll('.nf').forEach(b=>b.classList.toggle('on',st.none[+b.dataset.s]));document.getElementById('skip').classList.toggle('on',st.skip)}
+ document.querySelectorAll('.nf').forEach(b=>b.classList.toggle('on',st.none[+b.dataset.s]));document.getElementById('skip').classList.toggle('on',st.skip);document.getElementById('outer').classList.toggle('on',!!st.outer)}
 function pos(e){const r=c.getBoundingClientRect();return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]}
 c.onpointerdown=e=>{const p=pos(e);let best=-1,bd=.04;st.pts.forEach((q,k)=>{const d=Math.hypot(q[0]-p[0],q[1]-p[1]);if(d<bd){bd=d;best=k}});drag=best>=0?best:null;c.setPointerCapture(e.pointerId)};
 c.onpointermove=e=>{if(drag==null)return;st.pts[drag]=pos(e).map(v=>Math.min(1,Math.max(0,v)));draw()};
@@ -58,6 +58,7 @@ async function save(){marks[files[i]]=st;await fetch('/save',{method:'POST',body
 document.getElementById('next').onclick=async()=>{await save();if(i<files.length-1){i++;load()}else alert('All done')};
 document.getElementById('prev').onclick=()=>{if(i>0){i--;load()}};
 document.getElementById('skip').onclick=()=>{st.skip=!st.skip;draw()};
+document.getElementById('outer').onclick=()=>{st.outer=!st.outer;draw()};
 document.querySelectorAll('.nf').forEach(b=>b.onclick=()=>{st.none[+b.dataset.s]^=true;st.none=st.none.map(Boolean);draw()});
 addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('next').click()});
 boot();

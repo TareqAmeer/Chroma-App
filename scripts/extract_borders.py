@@ -140,12 +140,15 @@ def process(path):
             rep['flags'].append(f'side{side}: solid band too thin after removing holes/text'); continue
         d = np.arange(Yv.shape[0])[:, None].astype(float)
         margin = max(4.0, 0.9 * T)   # room for the real ragged edge; never clip it straight
+        keep_outer = bool(mk and mk.get('outer', name.endswith('_n')))
+        if keep_outer:   # keep the real ragged outer edge: band runs to the image edge, alpha from darkness only
+            T = float(np.max(line))
         lo, hi = line - T, line + margin
         # band membership with soft ends; the inner roughness is decided by darkness below
         m = np.clip(d - lo[None, :] + 1, 0, 1) * np.clip((hi[None, :] - d) / (0.4 * margin), 0, 1)
         Yv = Yv.copy()
         npatch = 0
-        if dirty.any():
+        if dirty.any() and not keep_outer:
             lab, nlab = ndi.label(ndi.binary_dilation(dirty, iterations=8))
             for k in range(1, nlab + 1):
                 span = np.flatnonzero(lab == k); L = len(span)
@@ -161,7 +164,7 @@ def process(path):
                     Yv[:, t] = Yv[:, t] * (1 - wgt[j]) + col * wgt[j]
                 npatch += 1
         z = np.clip((THR + 0.10 - Yv) / 0.22, 0, 1); dk = z * z * (3 - 2 * z)   # soft, luminance-driven edge
-        core = (d < line[None, :] - 0.5 * T).astype(np.float32)   # only the outer half is forced solid; the inner half keeps its real bites
+        core = np.zeros_like(m) if keep_outer else (d < line[None, :] - 0.5 * T).astype(np.float32)   # only the outer half is forced solid; the inner half keeps its real bites
         a = m * np.maximum(dk, core)
         fillb = (core * m > 0) & (dk < 0.5)
         Yv[fillb] = blk + np.random.default_rng(side).normal(0, 0.012, fillb.sum())
@@ -186,10 +189,10 @@ def process(path):
         pn = f'{name}__s{side}.png'
         Ti = int(round(T))
         solid = float(st_a[:max(1, Ti - 1)].mean()) if Ti > 1 else 0
-        if solid < 0.97:   # holes/gaps left inside the black band -> unusable strip
+        if solid < 0.97 and not keep_outer:   # holes/gaps left inside the black band -> unusable strip
             rep['flags'].append(f'side{side}: strip has gaps in the black ({solid:.2f})'); rep['sides'][side]['bad'] = True
         Image.fromarray((np.dstack([st_t, st_t, st_t, st_a]) * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, 'pieces', pn))
-        rep['sides'][side].update(piece=pn, T=int(round(T)), h=h, corner=int(round(min(T, cols[0] - u0))))
+        rep['sides'][side].update(outer=keep_outer, piece=pn, T=int(round(T)), h=h, corner=int(round(min(T, cols[0] - u0))))
     tex = np.clip((Y - blk) / 0.35, 0, 1)
     out = np.dstack([tex, tex, tex, cover])
     Image.fromarray((out * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, name + '.png'))
@@ -211,7 +214,7 @@ def sheet(reps):
 
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
-    fs = sorted(f for f in glob.glob(os.path.join(ROOT, '*')) if f.lower().endswith(('jpg', 'jpeg', 'png', 'webp')))
+    fs = sorted(f for f in glob.glob(os.path.join(ROOT, '*')) if f.lower().endswith(('jpg', 'jpeg', 'png', 'webp', 'tif', 'tiff')))
     fs = [f for f in fs if not any(s in f for s in SKIP) and 'copy' not in os.path.basename(f)]
     if sys.argv[1:]: fs = [f for f in fs if any(a in f for a in sys.argv[1:])]
     try: MARKS.update(json.load(open(os.path.join(OUT, 'marks.json'))))
