@@ -2600,6 +2600,13 @@ pub fn touch_recent(path: String) {
 /// match more than one (e.g. edited AND favorited). Shared by `backfill_edited_registry`
 /// (root + recents only) and `rescan_edited_registry_recursive` (whole tree) so the two never
 /// drift on what counts as a match.
+/// The on-disk spelling of `candidate` (same directory, name matched case-insensitively).
+fn real_case_sibling(candidate: &Path) -> Option<PathBuf> {
+    let dir = candidate.parent()?;
+    let want = candidate.file_name()?.to_string_lossy().to_lowercase();
+    std::fs::read_dir(dir).ok()?.flatten().find(|e| e.file_name().to_string_lossy().to_lowercase() == want).map(|e| e.path())
+}
+
 fn scan_folder_for_registry(
     folder: &str,
     edited: &mut Vec<String>,
@@ -2629,6 +2636,12 @@ fn scan_folder_for_registry(
         for ext in crate::formats::all_image_exts() {
             let candidate = photo.with_extension(ext);
             if candidate.exists() {
+                // ⚠️ Canonicalise to the file's REAL on-disk name: on a case-insensitive volume
+                // (exFAT/APFS) `exists()` succeeds for "X.rw2" while the file is "X.RW2", and the
+                // lowercase guess used to be registered as the photo's path. Sidecar caches and
+                // export history are keyed by exact path string, so opening from a collection
+                // then split edits/exports across two keys ("the app doesn't remember").
+                let candidate = real_case_sibling(&candidate).unwrap_or(candidate);
                 let s = candidate.to_string_lossy().into_owned();
                 let mut matched = false;
                 if is_edited && !edited.iter().any(|p2| p2 == &s) { edited.push(s.clone()); matched = true; }
@@ -3391,6 +3404,16 @@ mod registry_rescan_tests {
         assert_eq!(added, 1);
         assert!(flagged.iter().any(|p| p.ends_with("__tm4224.rw2")));
         let _ = (edited, favorites, rejected);
+    }
+
+    #[test]
+    fn scan_folder_registers_the_real_case_extension() {
+        let dir = scratch("real_case_ext");
+        std::fs::write(dir.join("__TM6559 (2).RW2"), b"raw").unwrap();
+        std::fs::write(dir.join("__TM6559 (2).xmp"), br#"<x><rdf:Description xmp:Label="Green"/></x>"#).unwrap();
+        let (mut e, mut f, mut fl, mut r) = (vec![], vec![], vec![], vec![]);
+        scan_folder_for_registry(&dir.to_string_lossy(), &mut e, &mut f, &mut fl, &mut r);
+        assert!(fl.iter().any(|p| p.ends_with("__TM6559 (2).RW2")), "got {fl:?}");
     }
 
     /// A sidecar whose photo doesn't exist under ANY known extension must be skipped rather than
