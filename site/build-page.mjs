@@ -29,7 +29,7 @@ function gallery(pairs) {
   return `\n${pairs.map((p, i) => {
     const cap = p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : '';
     return `      <figure class="ba">
-        <div class="ba-stage" style="--x:50%">
+        <div class="ba-stage" data-real-pair style="--x:50%">
           <img src="${p.after.src}" alt="After: the same photo graded in Chromasmith" loading="lazy" width="${p.after.w}" height="${p.after.h}">
           <img class="b" src="${p.before.src}" alt="Before: the original camera file" loading="lazy" width="${p.before.w}" height="${p.before.h}">
           <span class="ba-handle"></span>
@@ -50,7 +50,7 @@ const g = gallery(manifest.pairs || []);
 if (g) html = replaceRegion(html, 'GALLERY', `\n    <div class="ba-grid">${g}</div>\n    `);
 if (manifest.hero) {
   html = replaceRegion(html, 'HERO-IMG',
-    `<div class="hero-img" style="background-image:url('${manifest.hero.src}'),url('${manifest.hero.lqip}')"></div>`);
+    `<div class="hero-img" role="img" aria-label="Featured photograph" style="background-image:url('${manifest.hero.src}'),url('${manifest.hero.lqip}')"></div>`);
 }
 if (html === html0) { console.log('index.html unchanged.'); process.exit(0); }
 await writeFile(PAGE, html);
