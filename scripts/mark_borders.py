@@ -89,23 +89,29 @@ small{opacity:.65}
 <h2>One card per scan: vote on each source</h2>
 <div class=grid id=per></div>
 <script>
-let R,strips=[],photo=null,votes={},seedBase=1;
+let adjust={},R,strips=[],photo=null,votes={},seedBase=1;
 const $=id=>document.getElementById(id);
 function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-async function boot(){const r=await (await fetch('/report')).json();votes=r.votes||{};const rej=new Set(r.rejects||[]);
+async function boot(){const r=await (await fetch('/report')).json();votes=r.votes||{};adjust=r.adjust||{};const rej=new Set(r.rejects||[]);
  const ps=[];for(const f of r.reps)for(const [sd,v] of Object.entries(f.sides||{}))if(v.piece&&!v.bad&&!rej.has(v.piece))ps.push(new Promise(ok=>{const im=new Image();im.onload=()=>ok({scan:f.file,side:+sd,img:im,T:v.T,h:v.h,corner:v.corner});im.onerror=()=>ok(null);im.src='/pieces/'+encodeURIComponent(v.piece)}));
  strips=(await Promise.all(ps)).filter(Boolean);strips.forEach(prof);strips=strips.filter(s=>s.depth>=2&&isFinite(s.depth));build()}  // empty strips (all cut away) would give infinite scale
 function prof(st){const c=document.createElement('canvas');c.width=st.img.width;c.height=st.img.height;const x=c.getContext('2d');x.drawImage(st.img,0,0);
  const p=x.getImageData(0,0,c.width,c.height).data,W=c.width,H=c.height,a=new Float32Array(W);
  for(let u=0;u<W;u++){let s=0;for(let y=0;y<H;y++)s+=p[(y*W+u)*4+3];a[u]=s/255}
  const sm=new Float32Array(W);for(let u=0;u<W;u++){let s=0,n=0;for(let k=-6;k<=6;k++){const v=a[u+k];if(v!==undefined){s+=v;n++}}sm[u]=s/n}
- st.prof=sm;st.depth=[...sm].sort((a,b)=>a-b)[W>>1]}
+ st.prof=sm;st.depth=[...sm].sort((a,b)=>a-b)[W>>1];
+ // where the black band really starts and how thick it is (median over columns), so the
+ // band lands on the image edge at the chosen thickness instead of floating inside the photo
+ const tops=[],bands=[];for(let u=0;u<W;u+=3){let y=0;while(y<H&&p[(y*W+u)*4+3]<128)y++;if(y>=H)continue;let e=y,gap=0;
+  for(let q=y;q<H;q++){if(p[(q*W+u)*4+3]>=128){e=q;gap=0}else if(++gap>3)break}tops.push(y);bands.push(e-y+1)}
+ const med=a=>a.length?a.sort((x,y)=>x-y)[a.length>>1]:0;st.top=med(tops);st.band=Math.max(1,med(bands))}
 function tinted(st,tone){const c=document.createElement('canvas');c.width=st.img.width;c.height=st.img.height;const x=c.getContext('2d');x.drawImage(st.img,0,0);
  const d=x.getImageData(0,0,c.width,c.height),p=d.data,t=[1,3,5].map(i=>parseInt(tone.substr(i,2),16));
  for(let i=0;i<p.length;i+=4){const v=p[i]/255;p[i]=Math.min(255,t[0]+v*90);p[i+1]=Math.min(255,t[1]+v*90);p[i+2]=Math.min(255,t[2]+v*90)}x.putImageData(d,0,0);return c}
 // build one side of length L (px) at thickness t (px) from a strip: real ends (corners) kept,
 // middle filled with random real sections joined with short cross-fades. Never stretched.
-function sideCanvas(st,L,t,R){const k=t/st.depth,sw=st.img.width,H=Math.round(st.h*k),src=tinted(st,$('tone').value);
+function sideCanvas(st,L,t,R){const ad=adjust[st.scan]||{s:1,o:0},k=t/(st.band*ad.s),sw=st.img.width,
+ sy=Math.min(st.h-2,Math.max(0,st.top+ad.o*st.band)),sh=st.h-sy,H=Math.max(2,Math.round(sh*k)),src=tinted(st,$('tone').value);
  const c=document.createElement('canvas');c.width=L;c.height=H;const x=c.getContext('2d');
  const end=Math.min(sw*k*.25,Math.max(st.corner*k*1.6,t*2.5)),endS=end/k;
  const flip=R()<.5;x.save();if(flip){x.translate(L,0);x.scale(-1,1)}
@@ -116,11 +122,11 @@ function sideCanvas(st,L,t,R){const k=t/st.depth,sw=st.img.width,H=Math.round(st
  while(pos<L-end){const segS=Math.min(midLen,Math.max(Math.min(segMax,midLen)*(0.5+R()*.5),3*fade/k));let s0=0,bd=1e9;
   for(let q=0;q<40;q++){const c0=midS0+R()*(midLen-segS),e=Math.abs(st.prof[Math.round(c0+fade/k/2)]-cur);if(e<bd){bd=e;s0=c0}}
   cur=st.prof[Math.round(s0+segS-fade/k/2)]||cur;const w=Math.round(segS*k);
-  tmp.width=w;tx.clearRect(0,0,w,H);tx.drawImage(src,s0,0,segS,st.h,0,0,w,H);
+  tmp.width=w;tx.clearRect(0,0,w,H);tx.drawImage(src,s0,sy,segS,sh,0,0,w,H);
   tx.globalCompositeOperation='destination-in';const g=tx.createLinearGradient(0,0,w,0),f=Math.min(.45,fade/w);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(f,'#000');g.addColorStop(1-f,'#000');g.addColorStop(1,'rgba(0,0,0,0)');tx.fillStyle=g;tx.fillRect(0,0,w,H);tx.globalCompositeOperation='source-over';
   x.drawImage(tmp,Math.round(pos),0);pos+=Math.max(w-fade,fade*.5,4)}  // always advance: a segment shorter than the fade used to loop forever
  // real ends (with their corners) on top, feathered on the inner side only
- for(const [s0,dx] of [[0,0],[sw-endS,L-end]]){const w=Math.round(end);tmp.width=w;tx.drawImage(src,s0,0,endS,st.h,0,0,w,H);
+ for(const [s0,dx] of [[0,0],[sw-endS,L-end]]){const w=Math.round(end);tmp.width=w;tx.drawImage(src,s0,sy,endS,sh,0,0,w,H);
   tx.globalCompositeOperation='destination-in';const g=tx.createLinearGradient(0,0,w,0),f=Math.min(.4,fade/w);
   if(dx===0){g.addColorStop(0,'#000');g.addColorStop(1-f,'#000');g.addColorStop(1,'rgba(0,0,0,0)')}else{g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(f,'#000');g.addColorStop(1,'#000')}
   tx.fillStyle=g;tx.fillRect(0,0,w,H);tx.globalCompositeOperation='source-over';x.drawImage(tmp,Math.round(dx),0)}
@@ -145,7 +151,13 @@ function card(host,pool,label,key){const d=document.createElement('div');d.class
  const b=document.createElement('button');b.textContent='Shuffle';b.onclick=()=>{seed=Math.random()*1e9|0;draw()};row.appendChild(b);
  if(key){for(const [v,t] of [['y','Yes'],['n','No']]){const vb=document.createElement('button');vb.className='v'+(votes[key]===v?' on':'');vb.dataset.v=v;vb.textContent=t;
   vb.onclick=async()=>{votes[key]=votes[key]===v?null:v;await fetch('/vote',{method:'POST',body:JSON.stringify(votes)});build()};row.appendChild(vb)}}
- const l=document.createElement('small');l.textContent=label;row.appendChild(l);d.appendChild(row);host.appendChild(d)}
+ const l=document.createElement('small');l.textContent=label;row.appendChild(l);d.appendChild(row);
+ if(key){const ad=adjust[key]||(adjust[key]={s:1,o:0});const r2=document.createElement('div');r2.style.cssText='display:flex;gap:10px;flex-wrap:wrap;font-size:12px';
+  for(const [f,lab,mn,mx] of [['s','Size',0.3,3],['o','Position (out / in)',-1.5,1.5]]){const lb=document.createElement('label');lb.textContent=lab+' ';const sl=document.createElement('input');
+   sl.type='range';sl.min=mn;sl.max=mx;sl.step=.05;sl.value=ad[f];sl.oninput=()=>{ad[f]=+sl.value;draw()};
+   sl.onchange=()=>fetch('/adjust',{method:'POST',body:JSON.stringify(adjust)});lb.appendChild(sl);r2.appendChild(lb)}
+  const rs=document.createElement('button');rs.textContent='Reset';rs.onclick=()=>{ad.s=1;ad.o=0;fetch('/adjust',{method:'POST',body:JSON.stringify(adjust)});build()};r2.appendChild(rs);d.appendChild(r2)}
+ host.appendChild(d)}
 function build(){$('mix').innerHTML='';$('per').innerHTML='';const ok=strips.filter(s=>votes[s.scan]!=='n');
  if(ok.length)for(let i=0;i<6;i++)card($('mix'),ok,'');
  const scans=[...new Set(strips.map(s=>s.scan))];scans.forEach(sc=>card($('per'),strips.filter(s=>s.scan===sc),sc.slice(0,38),sc));
@@ -191,7 +203,9 @@ class H(BaseHTTPRequestHandler):
             except Exception: votes = {}
             try: rejects = json.load(open(os.path.join(OUT, 'rejects.json')))
             except Exception: rejects = []
-            return self.send(json.dumps(dict(reps=json.load(open(os.path.join(OUT, 'report.json'))), votes=votes, rejects=rejects)).encode(), 'application/json')
+            try: adjust = json.load(open(os.path.join(OUT, 'adjust.json')))
+            except Exception: adjust = {}
+            return self.send(json.dumps(dict(reps=json.load(open(os.path.join(OUT, 'report.json'))), votes=votes, rejects=rejects, adjust=adjust)).encode(), 'application/json')
         if self.path.startswith('/pieces/'):
             from urllib.parse import unquote
             f = os.path.join(OUT, 'pieces', os.path.basename(unquote(self.path[8:])))
@@ -206,6 +220,9 @@ class H(BaseHTTPRequestHandler):
             return self.send(_cache[f], 'image/jpeg')
         self.send_error(404)
     def do_POST(self):
+        if self.path == '/adjust':
+            open(os.path.join(OUT, 'adjust.json'), 'wb').write(self.rfile.read(int(self.headers['Content-Length'])))
+            return self.send(b'ok', 'text/plain')
         if self.path == '/rejects':
             open(os.path.join(OUT, 'rejects.json'), 'wb').write(self.rfile.read(int(self.headers['Content-Length'])))
             return self.send(b'ok', 'text/plain')
