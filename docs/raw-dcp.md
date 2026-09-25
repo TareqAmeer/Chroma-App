@@ -42,6 +42,9 @@ Deep-dive on RAW decoding and the DCP colour pipeline. Load this when touching `
   `cargo run --release --example dump_rw2 -- in.RW2 out.bin 8`).
 - ⚠️ Memory: terminate the libraw worker after each decode (it leaked ~0.5–1GB shared wasm
   memory per file). Per-file try/catch + readable error strings already in place.
+- Web libraw decoding has a 45-second deadline per worker, including open, metadata, and
+  imageData. A stalled worker is terminated and the import reports a browser-decoder timeout
+  with a desktop-app alternative. Native desktop decoding is not subject to this deadline.
 - **When the user says "doesn't match Lightroom", FIRST ask what's rendering the comparison
   image** — macOS Preview of a `.RAW` shows the camera's embedded JPEG (warmer/darker), not
   the real RAW render.

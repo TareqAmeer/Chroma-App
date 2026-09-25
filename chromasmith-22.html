@@ -9012,6 +9012,21 @@ function sniffRealImageKind(bytes){
 function errStr(e){if(e&&e.message)return e.message;if(typeof e==='object'&&e!==null){try{return JSON.stringify(e)}catch(_){return String(e)}}return String(e)}
 let _LibRaw=null;
 async function getLibRaw(){if(!_LibRaw)_LibRaw=(await import('./vendor/libraw/index.js')).default;return _LibRaw;}
+// A failed libraw worker can leave open()/imageData() pending forever without posting an error.
+// Terminating the worker is essential: Promise.race alone leaves its wasm memory alive.
+async function withRawDecodeTimeout(raw, decode, ms=45000){
+  if(window.__TAURI__)return decode(); // native decoding has its own lifecycle
+  let timer;
+  try{
+    return await Promise.race([
+      decode(),
+      new Promise((_,reject)=>{timer=setTimeout(()=>{
+        try{raw.worker.terminate()}catch(_){}
+        reject(new Error(`RAW decoder timed out after ${Math.round(ms/1000)} seconds. This file may be too large for the browser decoder; try the desktop app.`));
+      },ms)})
+    ]);
+  }finally{clearTimeout(timer)}
+}
 let _Mediabunny=null;
 async function getMediabunny(){if(!_Mediabunny)_Mediabunny=await import('./vendor/mediabunny/mediabunny.min.mjs');return _Mediabunny;}
 // videoSupported() gates every video affordance (accept attribute, drop handling, transport bar,
@@ -10187,11 +10202,13 @@ async function loadRw2(file){
   const dcpSettings={useCameraWb:true,outputColor:0,outputBps:16,gamm:[1,1],noAutoBright:true,userQual:3,userFlip:-1}; // linear 16-bit camera RGB (DCP input space)
   const sdrSettings={useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1};                               // sRGB, 8-bit, AHD, camera WB
   try{
-    await raw.open(bytes,srcPath?{...(profile?dcpSettings:sdrSettings),sourcePath:srcPath}:(profile?dcpSettings:sdrSettings));
-    window.__pm&&window.__pm('loadRw2-opened');
-    m=await raw.metadata();
-    img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
-    window.__pm&&window.__pm('loadRw2-imagedata');
+    await withRawDecodeTimeout(raw,async()=>{
+      await raw.open(bytes,srcPath?{...(profile?dcpSettings:sdrSettings),sourcePath:srcPath}:(profile?dcpSettings:sdrSettings));
+      window.__pm&&window.__pm('loadRw2-opened');
+      m=await raw.metadata();
+      img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
+      window.__pm&&window.__pm('loadRw2-imagedata');
+    });
   }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
   finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
   // No bundled DCP for this camera (iPhone/Pixel/Samsung DNG, other bodies…): fall back to
@@ -10207,8 +10224,10 @@ async function loadRw2(file){
     profile=null;
     const raw2=new LibRaw();
     try{
-      await raw2.open(await fullBytes(),sdrSettings);
-      img=await raw2.imageData();
+      await withRawDecodeTimeout(raw2,async()=>{
+        await raw2.open(await fullBytes(),sdrSettings);
+        img=await raw2.imageData();
+      });
     }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
     finally{try{raw2.worker.terminate()}catch(_){}}
     log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the file's embedded colour matrix (LibRaw sRGB)`,'info');
