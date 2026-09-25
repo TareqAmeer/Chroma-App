@@ -130,6 +130,6 @@ diagnostics/tools/
 # Local archive of non-essential files (kept on disk, untracked)
 Archive/
 
-# Personal-use film border scans (licences forbid redistribution) - local only
+# Raw film-border scans + extraction workspace (packed output ships in vendor/frames/film/)
 local borders/
 local-borders/
