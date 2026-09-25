@@ -92,8 +92,8 @@ small{opacity:.65}
 let R,strips=[],photo=null,votes={},seedBase=1;
 const $=id=>document.getElementById(id);
 function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-async function boot(){const r=await (await fetch('/report')).json();votes=r.votes||{};
- const ps=[];for(const f of r.reps)for(const [sd,v] of Object.entries(f.sides||{}))if(v.piece&&!v.bad)ps.push(new Promise(ok=>{const im=new Image();im.onload=()=>ok({scan:f.file,side:+sd,img:im,T:v.T,h:v.h,corner:v.corner});im.onerror=()=>ok(null);im.src='/pieces/'+v.piece}));
+async function boot(){const r=await (await fetch('/report')).json();votes=r.votes||{};const rej=new Set(r.rejects||[]);
+ const ps=[];for(const f of r.reps)for(const [sd,v] of Object.entries(f.sides||{}))if(v.piece&&!v.bad&&!rej.has(v.piece))ps.push(new Promise(ok=>{const im=new Image();im.onload=()=>ok({scan:f.file,side:+sd,img:im,T:v.T,h:v.h,corner:v.corner});im.onerror=()=>ok(null);im.src='/pieces/'+encodeURIComponent(v.piece)}));
  strips=(await Promise.all(ps)).filter(Boolean);strips.forEach(prof);build()}
 function prof(st){const c=document.createElement('canvas');c.width=st.img.width;c.height=st.img.height;const x=c.getContext('2d');x.drawImage(st.img,0,0);
  const p=x.getImageData(0,0,c.width,c.height).data,W=c.width,H=c.height,a=new Float32Array(W);
@@ -155,6 +155,25 @@ $('file').onchange=e=>{const f=e.target.files[0];if(!f)return;const i=new Image(
 boot();
 </script>"""
 
+STRIPS = r"""<!doctype html><meta charset=utf-8><title>Strip Review</title>
+<style>body{margin:0;background:#1b1a19;color:#e8e4dc;font:13px system-ui;padding:14px}
+.bar{position:sticky;top:0;background:#1b1a19;padding:8px 0;z-index:2}
+.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px}
+.s{cursor:pointer;border:2px solid transparent;border-radius:4px;padding:4px;background:#f1eee6}
+.s img{width:100%;height:auto;display:block;max-height:140px;object-fit:contain;object-position:top}
+.s small{display:block;color:#555;margin-top:3px;word-break:break-all}
+.s.x{border-color:#e0442e;opacity:.35}</style>
+<div class=bar>Click any strip that looks wrong (photo stuck to it, blocks, a second frame). Click again to undo. Saved instantly. <b id=n></b> &middot; <a href="/samples" style="color:#e0804f">Samples</a></div>
+<div class=g id=g></div>
+<script>
+(async()=>{const r=await (await fetch('/report')).json();let rej=new Set(r.rejects||[]);const g=document.getElementById('g');
+ const cnt=()=>document.getElementById('n').textContent=rej.size+' rejected';
+ for(const f of r.reps)for(const v of Object.values(f.sides||{}))if(v.piece&&!v.bad){const d=document.createElement('div');d.className='s'+(rej.has(v.piece)?' x':'');
+  d.innerHTML=`<img loading=lazy src="/pieces/${encodeURIComponent(v.piece)}"><small>${v.piece}</small>`;
+  d.onclick=async()=>{rej.has(v.piece)?rej.delete(v.piece):rej.add(v.piece);d.classList.toggle('x');cnt();await fetch('/rejects',{method:'POST',body:JSON.stringify([...rej])})};g.appendChild(d)}
+ cnt()})();
+</script>"""
+
 def load_marks():
     try: return json.load(open(MARKS))
     except Exception: return {}
@@ -165,13 +184,17 @@ class H(BaseHTTPRequestHandler):
         self.send_response(200); self.send_header('Content-Type', ct); self.send_header('Content-Length', len(body)); self.end_headers(); self.wfile.write(body)
     def do_GET(self):
         if self.path == '/': return self.send(PAGE.encode(), 'text/html')
+        if self.path == '/strips': return self.send(STRIPS.encode(), 'text/html')
         if self.path == '/samples': return self.send(SAMPLES.encode(), 'text/html')
         if self.path == '/report':
             try: votes = json.load(open(os.path.join(OUT, 'votes.json')))
             except Exception: votes = {}
-            return self.send(json.dumps(dict(reps=json.load(open(os.path.join(OUT, 'report.json'))), votes=votes)).encode(), 'application/json')
+            try: rejects = json.load(open(os.path.join(OUT, 'rejects.json')))
+            except Exception: rejects = []
+            return self.send(json.dumps(dict(reps=json.load(open(os.path.join(OUT, 'report.json'))), votes=votes, rejects=rejects)).encode(), 'application/json')
         if self.path.startswith('/pieces/'):
-            f = os.path.join(OUT, 'pieces', os.path.basename(self.path[8:]))
+            from urllib.parse import unquote
+            f = os.path.join(OUT, 'pieces', os.path.basename(unquote(self.path[8:])))
             return self.send(open(f, 'rb').read(), 'image/png') if os.path.exists(f) else self.send_error(404)
         if self.path == '/api': return self.send(json.dumps(dict(files=FILES, marks=load_marks())).encode(), 'application/json')
         if self.path.startswith('/img?f='):
@@ -183,6 +206,9 @@ class H(BaseHTTPRequestHandler):
             return self.send(_cache[f], 'image/jpeg')
         self.send_error(404)
     def do_POST(self):
+        if self.path == '/rejects':
+            open(os.path.join(OUT, 'rejects.json'), 'wb').write(self.rfile.read(int(self.headers['Content-Length'])))
+            return self.send(b'ok', 'text/plain')
         if self.path == '/vote':
             open(os.path.join(OUT, 'votes.json'), 'wb').write(self.rfile.read(int(self.headers['Content-Length'])))
             return self.send(b'ok', 'text/plain')
