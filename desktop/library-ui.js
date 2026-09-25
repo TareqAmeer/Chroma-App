@@ -984,10 +984,9 @@
     #lib-overlay:not(.full) #lib-top .lbl,#lib-top.lib-top-compact .lbl{display:none}
     #lib-overlay:not(.full) #lib-top .lib-btn-export,#lib-overlay:not(.full) #lib-top .lib-pill,
     #lib-top.lib-top-compact .lib-btn-export,#lib-top.lib-top-compact .lib-pill{padding:0;width:30px;justify-content:center}
-    /* Retired: every real toolbar control moved into #lib-top above or the gear's View menu
-       (see the comment on its markup) — only the Lightroom-connected chip and active-filter
-       chip list remain, shown only when non-empty (both start empty/hidden). */
-    #lib-filters{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 12px 8px}
+    /* This pinned row sits below the top bar, outside #lib-main's photo scrollport. */
+    #lib-filters{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0}
+    #lib-filters #lib-lr-chip{margin-right:12px}
     .lib-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px}
     .lib-btn svg{display:block;flex:0 0 auto}
     .lib-btn.lib-btn-icon{width:30px;height:30px;padding:0}
@@ -1005,7 +1004,7 @@
     .lib-btn.lib-pill.active{background:var(--blue-mist-soft);border-color:var(--acc2)!important;color:var(--acc2)}
     #lib-filters-btn-wrap{position:relative}
     /* #5 — Library View.html:111-117,74-82, copied literally. */
-    .lib-filterrow{display:none;height:40px;flex:none;align-items:center;justify-content:center;gap:10px;padding:0 16px;
+    .lib-filterrow{display:none;height:40px;width:100%;flex:none;align-items:center;justify-content:center;gap:10px;padding:0 16px;
       border-bottom:1px solid var(--bdr);overflow-x:auto}
     .lib-filterrow.open{display:flex}
     .lib-filterrow .lib-flabel{font-size:11px;color:var(--mut);flex:none}
@@ -1169,7 +1168,8 @@
       font-weight:700;border-radius:8px;padding:1px 5px;line-height:1.4;font-variant-numeric:tabular-nums}
     #lib-filters-badge.on{display:inline-block}
     #lib-filters-clear{font-size:11px}
-    #lib-filter-chips{flex-basis:100%;display:flex;flex-wrap:wrap;gap:5px}
+    #lib-filter-chips{flex-basis:100%;display:flex;flex-wrap:wrap;gap:5px;padding:0 12px}
+    #lib-filter-chips:empty{display:none}
     .lib-chip{display:flex;align-items:center;gap:4px;background:var(--sur2);border:1px solid var(--bdr);
       border-radius:12px;padding:2px 4px 2px 8px;font-size:10px;color:var(--txt)}
     .lib-chip-x{cursor:pointer;opacity:.6;font-size:11px;line-height:1;padding:0 2px}
@@ -2170,11 +2170,27 @@
       </div>
       </div>
     </div>
-    <!-- Retired: every control this row used to hold moved into #lib-top above or the gear's
-         View menu. Kept as an empty, always-hidden pinned grid child rather than removed
-         outright, so the #lib-overlay grid's pinned row numbering (see the comment on that
-         rule) never has to be renumbered. -->
+    <!-- The filter row stays in this pinned grid track while #lib-main scrolls below it. -->
     <div id="lib-filters" class="lib-fullview-only">
+      <div class="lib-filterrow" id="lib-filter-row">
+        <span class="lib-flabel">Types</span>
+        <button class="lib-chip lib-sel" data-fgrp="type" data-fval="all">All</button>
+        <button class="lib-chip" data-fgrp="type" data-fval="raw">RAW</button>
+        <button class="lib-chip" data-fgrp="type" data-fval="jpeg">JPEG</button>
+        <button class="lib-chip" data-fgrp="type" data-fval="video">Video</button>
+        <button class="lib-chip" id="lib-types-more" title="More types">…</button>
+        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="heic" hidden>HEIC</button>
+        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="tiff" hidden>TIFF</button>
+        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="png" hidden>PNG</button>
+        <div class="lib-filterdiv"></div>
+        <span class="lib-flabel">Flags &amp; tags</span>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="green" title="Picked">${ic('flagGreen', 14)}</button>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="red" title="Rejected">${ic('close', 14)}</button>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="favorite" title="Favorited">${ic('heart', 14)}</button>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="none" title="Unflagged"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+        <div class="lib-filterdiv"></div>
+        <button class="lib-chip" id="lib-more-filters" title="Camera, lens, ISO, duplicates, sync and rating filters">More…</button>
+      </div>
       <span id="lib-lr-chip">✓ Lightroom connected <span class="lib-lr-signout" title="Sign out of Adobe Lightroom">Sign out</span></span>
       <div id="lib-filter-chips"></div>
     </div>
@@ -2282,33 +2298,6 @@
       <div id="lib-collections" class="lib-fullview-only"></div><div id="lib-folders-header" class="lib-fullview-only"></div><div id="lib-tree" class="lib-fullview-only"></div><div id="lib-collections-post" class="lib-fullview-only"></div>
     </div>
     <div id="lib-main">
-      <!-- #5: the wireframe's own inline filter chip row (Library View.html:375-392), built
-           literally rather than re-derived — Types pills + a "…" more-types expander, then
-           Flags & tags icon chips. Drives the SAME state.typeFilter/tagFilter the (still-present,
-           still holding camera/lens/ISO/duplicates/sync/faces/rating — real features the
-           wireframe's static mock has no equivalent for) Filters popover panel already used, the
-           same way #lib-metadisp is a hidden <select> driven by the View menu's visible rows. -->
-      <div class="lib-filterrow" id="lib-filter-row">
-        <span class="lib-flabel">Types</span>
-        <button class="lib-chip lib-sel" data-fgrp="type" data-fval="all">All</button>
-        <button class="lib-chip" data-fgrp="type" data-fval="raw">RAW</button>
-        <button class="lib-chip" data-fgrp="type" data-fval="jpeg">JPEG</button>
-        <button class="lib-chip" data-fgrp="type" data-fval="video">Video</button>
-        <button class="lib-chip" id="lib-types-more" title="More types">…</button>
-        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="heic" hidden>HEIC</button>
-        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="tiff" hidden>TIFF</button>
-        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="png" hidden>PNG</button>
-        <div class="lib-filterdiv"></div>
-        <span class="lib-flabel">Flags &amp; tags</span>
-        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="green" title="Picked">${ic('flagGreen', 14)}</button>
-        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="red" title="Rejected">${ic('close', 14)}</button>
-        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="favorite" title="Favorited">${ic('heart', 14)}</button>
-        <!-- No 'circleSlash' key in ICONS — wireframe's own unflagged glyph (Library View.html
-             :392) inlined verbatim: a plain circle with a diagonal line through it. -->
-        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="none" title="Unflagged"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
-        <div class="lib-filterdiv"></div>
-        <button class="lib-chip" id="lib-more-filters" title="Camera, lens, ISO, duplicates, sync and rating filters">More…</button>
-      </div>
       <div id="lib-list-head">
         <div class="lib-lh-cell lib-lh-thumb"></div>
         <div class="lib-lh-cell" data-sort="name">Name</div>

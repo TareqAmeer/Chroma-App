@@ -202,6 +202,34 @@ test.describe('topbar', () => {
     await expect(page.locator('#lib-filter-row')).not.toHaveClass(/\bopen\b/);
   });
 
+  test('open filters stay centered below the top bar as photos scroll', async ({ lib: { page } }) => {
+    for (const width of [1440, 820]) {
+      await page.setViewportSize({ width, height: 900 });
+      const closedGap = await page.evaluate(() => document.getElementById('lib-main').getBoundingClientRect().top
+        - document.getElementById('lib-top').getBoundingClientRect().bottom);
+      expect(closedGap).toBeLessThan(2);
+      await page.locator('#lib-filters-btn').dispatchEvent('click');
+      const layout = await page.evaluate(() => {
+        const top = document.getElementById('lib-top').getBoundingClientRect();
+        const row = document.getElementById('lib-filter-row').getBoundingClientRect();
+        const main = document.getElementById('lib-main');
+        return { topBottom: top.bottom, rowTop: row.top, rowCenter: row.left + row.width / 2,
+          mainCenter: main.getBoundingClientRect().left + main.clientWidth / 2 };
+      });
+      expect(Math.abs(layout.rowTop - layout.topBottom)).toBeLessThan(2);
+      expect(Math.abs(layout.rowCenter - layout.mainCenter)).toBeLessThan(2);
+      const scrolled = await page.evaluate(() => {
+        const main = document.getElementById('lib-main');
+        const row = document.getElementById('lib-filter-row');
+        main.scrollTop = 300;
+        return { scrollTop: main.scrollTop, rowTop: row.getBoundingClientRect().top };
+      });
+      expect(scrolled.scrollTop).toBeGreaterThan(0);
+      expect(Math.abs(scrolled.rowTop - layout.rowTop)).toBeLessThan(2);
+      await page.locator('#lib-filters-btn').dispatchEvent('click');
+    }
+  });
+
   test('the chip row\'s "More…" chip opens the extra-filters panel', async ({ lib: { page } }) => {
     await page.click('#lib-filters-btn');
     await page.click('#lib-more-filters');
