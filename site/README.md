@@ -2,15 +2,20 @@
 
 `index.html` at the repository root is the GitHub Pages landing page. It is hand-written and
 self-contained (one file, inline CSS/JS, no framework, no build step — the same rule the app
-itself follows), and it borrows its colour and type tokens verbatim from `chromasmith-22.html`
-so the site and the product look like the same object.
+itself follows). The page is an eight-chapter scrolling story with a fixed brand rail and
+section index.
+
+The hero and one-click comparison currently use `site/assets/hero-placeholder.webp`, made from
+the repository's approved splash photo. The comparison is labelled as a layout preview because
+its two sides are not a real Chromasmith edit. The CHRO-MA-GUY portrait and copy are explicitly
+temporary. Replace these when the original reference photos and founder material arrive.
 
 Three scripts feed it. All of them are optional: the page renders without any of them.
 
 ```bash
 node site/shoot-screenshots.mjs   # re-capture the UI screenshots from the REAL app
 node site/build-assets.mjs        # optimise your photos from site/photos-src/
-node site/build-page.mjs          # inject those photos into index.html
+node site/build-page.mjs          # inject hero and real comparison into index.html
 ```
 
 ## Adding before/after photos
@@ -20,13 +25,14 @@ Drop full-size files into `site/photos-src/` (gitignored — the originals are y
 ```
 01-before.jpg   01-after.jpg   01.txt      <- 01.txt is a one-line caption
 02-before.jpg   02-after.jpg   02.txt
-hero.jpg                                   <- the photo behind the headline
+hero.jpg                                   <- the opening full-screen photo
 ```
 
 Then run `build-assets.mjs` (downsizes and re-encodes into `site/assets/`) followed by
 `build-page.mjs` (rewrites the regions between the `<!-- GALLERY:START -->` and
 `<!-- HERO-IMG:START -->` markers). Everything outside those markers is hand-edited and is never
-touched by a script.
+touched by a script. `GALLERY` is the one-click comparison in section 04; `HERO-IMG` is
+the opening photograph in section 01.
 
 ## Notes worth knowing before editing
 
