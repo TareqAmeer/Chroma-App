@@ -5427,8 +5427,14 @@
   // Apple's non-standard MouseEvent.webkitForce: a real button press reads ≥ WEBKIT_FORCE_AT_
   // MOUSE_DOWN (1); a tap-to-click registers lower. Returns 'press' | 'tap' | null (no sensor —
   // mice, non-Force-Touch trackpads, the libtest browser → caller uses the click-again fallback).
+  // webkitForce is usually 0 on the click event itself (fired after release), so the peak seen
+  // during mousedown/force-change/mouseup is tracked per gesture and read here.
+  let _peakForce = 0;
+  function trackForce(e) { const f = e && e.webkitForce; if (typeof f === 'number' && f > _peakForce) _peakForce = f; }
   function classifyPress(e) {
-    const f = e && e.webkitForce;
+    trackForce(e);
+    const f = _peakForce || (e && e.webkitForce);
+    _peakForce = 0;
     if (typeof f !== 'number' || f <= 0) return null;
     const threshold = (typeof MouseEvent !== 'undefined' && MouseEvent.WEBKIT_FORCE_AT_MOUSE_DOWN) || 1;
     return f >= threshold ? 'press' : 'tap';
@@ -6473,7 +6479,11 @@
       // stay the RAW leader — the plan's explicit split between "what you look at" and "what
       // opening/editing/rating acts on".
       loadThumb(entry.thumb_path || entry.path, img, entry.is_video, entry.mtime);
-      card.querySelector('.lib-thumb-wrap').onclick = (e) => handleCardClick(e, entry, idx, shown);
+      const _tw = card.querySelector('.lib-thumb-wrap');
+      _tw.onmousedown = (e) => { _peakForce = 0; trackForce(e); };
+      _tw.onmouseup = trackForce;
+      _tw.addEventListener('webkitmouseforcechanged', trackForce);
+      _tw.onclick = (e) => handleCardClick(e, entry, idx, shown);
       card.querySelector('.lib-thumb-wrap').ondblclick = (e) => { e.stopPropagation(); handleCardDblClick(e, entry); };
       const stackBadgeEl = card.querySelector('.lib-stack-badge');
       if (stackBadgeEl) stackBadgeEl.onclick = (e) => { e.stopPropagation(); toggleStackExpanded(entry.id); };
