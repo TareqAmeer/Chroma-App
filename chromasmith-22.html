@@ -5073,7 +5073,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0925M';
+const BUILD='1.0925N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10545,7 +10545,7 @@ async function loadFXImages(fileList){
         continue;
       }
       const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
-      const exif=(ext==='jpg'||ext==='jpeg')?readExifTags(bytes):{};
+      const exif=['jpg','jpeg','heic','heif','png','webp','tif','tiff'].includes(ext)?readExifTags(bytes):{};
       const img=await loadImg(file);
       // fileSize: without this, non-library JPEGs (drag-drop / Google Photos) showed no "Size"
       // row in the metadata panel at all — only photos opened via the desktop Library set it.
@@ -16624,6 +16624,21 @@ function _fmtShutter(s){if(!s||s<=0)return'';return s>=1?s.toFixed(s>=10?0:1)+'s
 function readExifTags(b){
   const res={};
   if(!b||b.length<12)return res;
+  // HEIC/HEIF, PNG (eXIf), WebP (EXIF), TIFF carry no JPEG APP1 segment: locate the embedded TIFF
+  // block and re-wrap it as a synthetic JPEG APP1 so the one parser below handles every format.
+  if(!(b[0]===0xFF&&b[1]===0xD8)){
+    const isTiff=o=>(b[o]===0x49&&b[o+1]===0x49&&b[o+2]===0x2A&&b[o+3]===0)||(b[o]===0x4D&&b[o+1]===0x4D&&b[o+2]===0&&b[o+3]===0x2A);
+    let t=-1;
+    if(isTiff(0))t=0;
+    else for(let k=0;k<b.length-12;k++){
+      if(b[k]===0x45&&b[k+1]===0x78&&b[k+2]===0x69&&b[k+3]===0x66&&b[k+4]===0&&b[k+5]===0&&isTiff(k+6)){t=k+6;break;} // "Exif\0\0"+TIFF
+      if(b[k]===0x65&&b[k+1]===0x58&&b[k+2]===0x49&&b[k+3]===0x66&&isTiff(k+4)){t=k+4;break;} // PNG eXIf chunk data
+    }
+    if(t<0)return res;
+    const tiff=b.subarray(t,Math.min(b.length,t+65000)),w=new Uint8Array(12+tiff.length),L=tiff.length+8;
+    w.set([0xFF,0xD8,0xFF,0xE1,L>>8,L&255,0x45,0x78,0x69,0x66,0,0]);w.set(tiff,12);
+    return readExifTags(w);
+  }
   try{
     let i=2;
     while(i<b.length-3){
