@@ -731,13 +731,6 @@ export const CONTROL_PAIRS = [
     "fxsec": "borders"
   },
   {
-    "wf": ".tp-panel[data-panel=\"frame\"] .grp[data-fxsec=\"borders\"] input.txt",
-    "app": "#in-frame-edge",
-    "label": "Edge text",
-    "panel": "frame",
-    "fxsec": "borders"
-  },
-  {
     "wf": ".tp-panel[data-panel=\"frame\"] .grp[data-fxsec=\"canvas\"] button.sw",
     "app": "#tg-canvas",
     "label": "Canvas",

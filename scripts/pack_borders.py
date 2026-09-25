@@ -43,6 +43,13 @@ for r in sorted(reps, key=lambda r: r['file']):
                     if gap > 3: break
             tops.append(y); bands.append(e - y + 1)
         if not tops: continue
+        # Stray photo content hanging far inside the frame edge (dark photo that touched the band
+        # during extraction) reads as a grey smudge over the picture. Real ragged edges and drips
+        # stay close to the band, so drop strips carrying real mass well past it.
+        t0, b0 = float(np.median(tops)), float(np.median(bands))
+        deep = a[int(min(a.shape[0] - 1, t0 + 1.8 * b0)):, :, 3]
+        if deep.size and deep.mean() / 255 > 0.06:
+            print('  drop (photo past the edge):', v['piece'], round(deep.mean() / 255, 3)); continue
         s = min(1.0, MAXW / im.width)
         if s < 1: im = im.resize((round(im.width * s), max(2, round(im.height * s))), Image.LANCZOS)
         # store as luminance+alpha: the app tints the texture itself
@@ -60,4 +67,9 @@ for r in sorted(reps, key=lambda r: r['file']):
     pmap[n] = r['file']
 json.dump(dict(version=1, scans=manifest), open(os.path.join(DST, 'manifest.json'), 'w'), separators=(',', ':'))
 json.dump(pmap, open(os.path.join(OUT, 'pack_map.json'), 'w'), indent=1)
+import re
+app = os.path.join(HERE, '..', 'chromasmith-22.html')
+html = open(app).read()
+html2 = re.sub(r'const FILM_EDGE_SCANS=\d+;', f'const FILM_EDGE_SCANS={len(manifest)};', html, count=1)
+if html2 != html: open(app, 'w').write(html2)
 print(f'{len(manifest)} scans, {sum(len(m["strips"]) for m in manifest)} strips, {total / 1e6:.1f} MB')

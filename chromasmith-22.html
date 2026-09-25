@@ -2439,24 +2439,32 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <div class="fx-ctrl" data-fxsec="borders">
         <div class="fx-ctrl-title">Border <div class="fx-toggle" id="tg-borders" onclick="toggleFX('borders')"></div></div>
         <div class="fx-fields ff-off" id="ff-borders">
+        <div class="fx-row"><div class="fx-label">Inner type</div>
+          <select class="fx-select" id="sel-b1-type" onchange="borderTypeChanged()" style="flex:1"><option value="plain">Plain colour</option><option value="film">Film frame</option></select>
+        </div>
         <div class="fx-row"><div class="fx-label">Inner colour</div><input type="color" class="fx-color" id="cl-b1" value="#000000" oninput="fxUpdate()"></div>
-        <div class="fx-row"><div class="fx-label">Inner thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="1" id="sl-b1-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-t">1%</div></div>
-        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Outer colour</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" oninput="fxUpdate()"></div>
-        <div class="fx-row"><div class="fx-label">Outer thickness</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="2" id="sl-b2-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-t">2%</div></div>
-        <div class="fx-row"><div class="fx-label">Style <button class="fx-info-i" title="The sprocket styles are drawn to the real 35mm standard, so they stay correct at any aspect ratio. Load frame… takes any scanned rebate PNG you have a licence to use.">i</button></div>
+        <div class="fx-row"><div class="fx-label">Inner width</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="1" id="sl-b1-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-t">1%</div></div>
+        <div class="fx-row"><div class="fx-label">Inner grain</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b1-g" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-g">0</div></div>
+        <div class="fx-row" data-film-row="b1" hidden><div class="fx-label">Source</div>
+          <select class="fx-select" id="sel-b1-src" onchange="fxUpdate()" style="flex:1"><option value="all">All scans</option></select>
+        </div>
+        <div class="fx-row" data-film-row="b1" hidden><div class="fx-label">Edge glow</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b1-glow" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-glow">0</div></div>
+        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Outer type</div>
+          <select class="fx-select" id="sel-b2-type" onchange="borderTypeChanged()" style="flex:1"><option value="plain">Plain colour</option><option value="film">Film frame</option></select>
+        </div>
+        <div class="fx-row"><div class="fx-label">Outer colour</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" oninput="fxUpdate()"></div>
+        <div class="fx-row"><div class="fx-label">Outer width</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="2" id="sl-b2-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-t">2%</div></div>
+        <div class="fx-row"><div class="fx-label">Outer grain</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b2-g" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-g">0</div></div>
+        <div class="fx-row" data-film-row="b2" hidden><div class="fx-label">Source</div>
+          <select class="fx-select" id="sel-b2-src" onchange="fxUpdate()" style="flex:1"><option value="all">All scans</option></select>
+        </div>
+        <div class="fx-row" data-film-row="b2" hidden><div class="fx-label">Edge glow</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b2-glow" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-glow">0</div></div>
+        <div class="fx-row"><div class="fx-label">Film variation</div><button class="fx-btn" id="btn-frame-shuffle" type="button" onclick="frameShuffle()" style="flex:1">Shuffle</button></div>
+        <div class="fx-row"><div class="fx-label">Overlay <button class="fx-info-i" title="Load frame… lays any frame PNG you have over the photo, on top of the border layers.">i</button></div>
           <select class="fx-select" id="sel-film-frame" onchange="filmFrameChanged(this.value)" style="flex:1">
             <option value="none">None</option>
-            <option value="sprocket35">35mm sprockets</option>
-            <option value="sprocket35-wide">35mm sprocket bleed</option>
-            <option value="rollfilm">120 roll film</option>
-            <option value="halfframe35">Half-frame 35mm</option>
-            <option value="instantborder">Instant border</option>
-            <option value="carrier">Ragged carrier</option>
             <option value="custom">Load frame…</option>
           </select>
-        </div>
-        <div class="fx-row" id="row-frame-edge"><div class="fx-label">Edge text</div>
-          <input class="fx-select" type="text" id="in-frame-edge" placeholder="e.g. KODAK PORTRA 400   12A" style="flex:1;min-width:0" oninput="fxUpdate()">
         </div>
         </div>
       </div>
@@ -5063,7 +5071,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0925I';
+const BUILD='1.0925J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10595,7 +10603,7 @@ document.addEventListener('input',_ffAutoEnable,true);
 document.addEventListener('change',_ffAutoEnable,true);
 document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
 function fxUpdate(){
-  ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t',
+  ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow',
    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
@@ -15327,13 +15335,13 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   // ever actually appear; resetDeconv() itself already worked, only the visibility signal didn't.
   'deconv-amt','deconv-rad',
   'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
-  'b1-t','b2-t','vig','lut-mix'];
+  'b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','vig','lut-mix'];
 // nr/deconv added 2026-09-15 (found by the Editor snap-list cross-check hook) — same gap the
 // deconv-amt/deconv-rad sliders comment above describes: Noise Reduction and Deconvolution
 // predate the shared fx-mod/header-reset mechanism, so their toggle state was silently skipped
 // by reset/undo/session persistence.
 const _FX_SNAP_TOGGLES=['adjust','curves','hsl','wheels','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas','nr','deconv'];
-const _FX_SNAP_SELECTS=['sel-input','sel-tonemap','sel-lut','sel-print','sel-grain-fmt','sel-debug'];
+const _FX_SNAP_SELECTS=['sel-input','sel-tonemap','sel-lut','sel-print','sel-grain-fmt','sel-debug','sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src','sel-film-frame'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
 function getUISnapshot(opts){
   const s={sliders:{},toggles:{},selects:{},colors:{}};
@@ -15357,6 +15365,7 @@ function getUISnapshot(opts){
   s.hsl=_clone(fxState.hsl);         // HSL mixer band settings
   s.pointColors=_clone(fxState.pointColors||[]); // point color picks
   s.artSeed=fxState.artSeed;                              // artifact placement seed
+  s.frameShuffle=fxState.frameShuffle||0;                 // film-frame variation offset
   s.dustMode=fxState.dustMode||0;                         // dust speck colour mode (0 both,1 black,2 white) — was missing, so it wasn't undoable and undo clobbered it
   // Masks carry a typed raster that JSON cannot represent — _mskToSnap base64s it. `skipRaster`
   // is set only by fxHistoryPush, which keeps rasters alive by reference instead.
@@ -15389,7 +15398,7 @@ const PASTE_CATEGORIES=[
   {key:'halation',label:'Halation',sliders:['hal-a','hal-r','hal-p'],toggles:['tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme'],selects:[]},
   {key:'bloom',label:'Bloom',sliders:['bloom-a','bloom-th','bloom-r'],toggles:['tg-bloom'],selects:[]},
   {key:'masks',label:'Local Adjustments (masks)',sliders:[],toggles:['tg-local'],selects:[],extra:['masks']},
-  {key:'canvas',label:'Canvas / Borders / Vignette',sliders:['b1-t','b2-t','vig'],toggles:['tg-vig','tg-borders','tg-canvas'],selects:[],extra:['canvas'],colors:['cl-b1','cl-b2']},
+  {key:'canvas',label:'Canvas / Borders / Vignette',sliders:['b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','vig'],toggles:['tg-vig','tg-borders','tg-canvas'],selects:['sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src','sel-film-frame'],extra:['canvas','frameShuffle'],colors:['cl-b1','cl-b2']},
 ];
 function pasteEditSelectiveApply(base,src,checkedKeys){
   PASTE_CATEGORIES.filter(c=>checkedKeys.includes(c.key)).forEach(c=>{
@@ -15458,6 +15467,8 @@ function applyUISnapshot(s,opts){
   if(s.hsl){fxState.hsl=JSON.parse(JSON.stringify(s.hsl));bakeHsl();hslSyncUI({deferHist:true});}
   if(s.pointColors){fxState.pointColors=JSON.parse(JSON.stringify(s.pointColors));pcSel=Math.min(pcSel,fxState.pointColors.length-1);pcRebuild();pcSyncUI();bakeHsl();}
   if(s.artSeed!=null)fxState.artSeed=s.artSeed;
+  if(s.frameShuffle!=null)fxState.frameShuffle=s.frameShuffle;
+  _borderUISync();
   if(s.dustMode!==undefined){fxState.dustMode=s.dustMode;if(typeof dustModeBuildChips==='function')dustModeBuildChips();}
   if(s.masks){fxState.masks=s.masks.map(_mskFromSnap);mskSel=Math.min(mskSel,fxState.masks.length-1);mskRebuild();
     if(fxImages[fxCurIdx])fxImages[fxCurIdx].masks=fxState.masks;} // keep the per-photo array reference (fxSelectImage/installFXImages) in sync with a restored recipe
@@ -16494,9 +16505,9 @@ const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-w
   'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
   'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
-  'sl-b1-t','sl-b2-t','sl-canvas-z','sl-vig','sl-exp-q'];
+  'sl-b1-t','sl-b2-t','sl-b1-g','sl-b2-g','sl-b1-glow','sl-b2-glow','sl-canvas-z','sl-vig','sl-exp-q'];
 const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-wheels','tg-pointcolor','tg-local','tg-nr','tg-deconv','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
-const _SESS_SELECTS=['sel-input','sel-tonemap','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt','sel-exp-size','sel-exp-sharp'];
+const _SESS_SELECTS=['sel-input','sel-tonemap','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt','sel-exp-size','sel-exp-sharp','sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(quiet){
   const s={};
@@ -16511,6 +16522,7 @@ function saveSession(quiet){
   s._hsl=fxState.hsl;         // HSL mixer band settings
   s._pointColors=fxState.pointColors; // point color picks
   s._artSeed=fxState.artSeed; // artifact placement seed
+  s._frameShuffle=fxState.frameShuffle||0;
   s._dustMode=fxState.dustMode; // dust speck colour mode (0 both,1 black,2 white)
   s._masks=fxState.masks.map(m=>_mskToSnap(m));  // local-adjustment masks (raster -> base64; a live typed array does not survive JSON)
   s._canvas=fxState.canvas;   // canvas matte (ar/bg/blur)
@@ -16573,6 +16585,8 @@ function loadSession(userTriggered){
     if(s._hsl){fxState.hsl=s._hsl;bakeHsl();hslSyncUI();}
     if(s._pointColors){fxState.pointColors=s._pointColors;pcSel=Math.min(pcSel,fxState.pointColors.length-1);pcRebuild();pcSyncUI();bakeHsl();}
     if(s._artSeed!=null)fxState.artSeed=s._artSeed;
+    if(s._frameShuffle!=null)fxState.frameShuffle=s._frameShuffle;
+    _borderUISync();
     if(s._dustMode!=null){fxState.dustMode=s._dustMode;dustModeBuildChips();}
     if(s._masks){fxState.masks=s._masks.map(_mskFromSnap);mskSel=fxState.masks.length-1;mskRebuild();}
     if(s._canvas){fxState.canvas=s._canvas;cvBuildChips();}
@@ -17047,8 +17061,7 @@ function getFXParams(adjValsOverride){return{
     const sel=document.getElementById('sel-film-frame');
     const style=(sel&&sel.value)||'none';
     if(style==='none')return null;
-    const t=document.getElementById('in-frame-edge');
-    return{style,edgeText:(t&&t.value.trim())||'',customUrl:fxState.frameUrl||null};
+    return{style,customUrl:fxState.frameUrl||null};
   })(),
   lens:{dist:adjVal('sl-lens-dist')/200, vig:adjVal('sl-lens-vig')/200, ca:adjVal('sl-lens-ca')/1000, defringe:adjVal('sl-lens-defr')/100,
     // Perspective in -0.4..0.4: past that the near edge stretches faster than any amount of
@@ -17081,9 +17094,19 @@ function getFXParams(adjValsOverride){return{
   canvas:{enabled:!!(document.getElementById('tg-canvas')||{classList:{contains:()=>false}}).classList.contains('on'),
     ar:fxState.canvas.ar,zoom:adjVal('sl-canvas-z')/100||1,bg:fxState.canvas.bg,blur:fxState.canvas.blur},
   bordersEnabled:document.getElementById('tg-borders').classList.contains('on'),
-  b1:{thickness:parseFloat(document.getElementById('sl-b1-t').value),color:document.getElementById('cl-b1').value},
-  b2:{thickness:parseFloat(document.getElementById('sl-b2-t').value),color:document.getElementById('cl-b2').value},
+  b1:_borderLayerParams('b1'),
+  b2:_borderLayerParams('b2'),
+  frameShuffle:fxState.frameShuffle||0,
 };}
+// One border layer (inner b1 / outer b2): plain colour band or real-scan film frame.
+function _borderLayerParams(k){
+  const v=id=>document.getElementById(id);
+  return{thickness:parseFloat(v('sl-'+k+'-t').value),color:v('cl-'+k).value,
+    type:(v('sel-'+k+'-type')||{}).value||'plain',
+    grain:parseFloat((v('sl-'+k+'-g')||{value:0}).value)||0,
+    glow:parseFloat((v('sl-'+k+'-glow')||{value:0}).value)||0,
+    src:(v('sel-'+k+'-src')||{}).value||'all'};
+}
 // True 1:1 loupe: render a NATIVE-resolution crop (centred on loupeCX/CY) through the full
 // pipeline with scOverride = fullWidth/REF, so grain & halation render at the SAME pixel scale
 // as export — unlike the normal preview, which CSS-upscales a ~1800px buffer and shows grain/
@@ -17737,33 +17760,12 @@ async function exportResample(cv){
   if(out.width!==w0||out.height!==h0)log(`Resized ${w0}×${h0} → ${out.width}×${out.height}`,'info');
   return out;
 }
-// ══ FILM FRAME (D4) ═══════════════════════════════════════════════════════════════════════
-// Mounts the photo in a film frame, between the borders and the canvas matte. ONE function, called
-// by both the preview and the export path, so "does the export match what I saw" is not a
-// question anyone has to ask — it is the same code on the same input.
-//
-// ⚠️ Two kinds of frame, because neither alone is enough:
-//
-//  · PROCEDURAL (sprocket35 / sprocket35-wide / rollfilm) draws the rebate from ISO 1007 / SMPTE
-//    nominal geometry — 35mm film width, 24x36mm frame, KS-1870 perforations at 0.187in
-//    (4.7498mm) pitch, 8 per frame. Those are published measurements, i.e. facts, so nothing is
-//    copied from anyone. This is the DEFAULT because it is the only kind that adapts: a plate is
-//    locked to the aspect it was scanned at (the bundled one is 1.625), and stretching it onto a
-//    4:3 photo visibly ovals the sprocket holes and smears the grain.
-//  · PLATE — a real scan composited over the photo. Photographic texture no formula reproduces.
-//    Only ONE is bundled (MIT — see vendor/frames/README.md); "Load frame…" takes any PNG the
-//    USER has a licence to, which is what makes the good commercial rebate packs usable without
-//    this repo redistributing them.
-const FILM_FRAMES={
-  none:{label:'None'},
-  sprocket35:{label:'35mm sprockets',kind:'proc',mode:'full'},
-  'sprocket35-wide':{label:'35mm sprocket bleed',kind:'proc',mode:'bleed'},
-  rollfilm:{label:'120 roll film',kind:'proc',mode:'roll'},
-  halfframe35:{label:'Half-frame 35mm',kind:'proc',mode:'half'},
-  instantborder:{label:'Instant border',kind:'proc',mode:'instant'},
-  carrier:{label:'Ragged carrier',kind:'plate',src:'vendor/frames/carrier-ragged.png'},
-  custom:{label:'Load frame…',kind:'plate',src:null},
-};
+// ══ FRAME OVERLAY ("Load frame…") ═════════════════════════════════════════════════════════
+// Lays a user-supplied frame PNG over the bordered photo, between the border layers and the
+// canvas matte. Drawn to COVER (cropped, never stretched). The real-scan film frames are border
+// layers now (see REAL-SCAN FILM FRAMES) — the old procedural sprocket/roll/instant styles and
+// the bundled ragged-carrier plate were removed.
+const FILM_FRAMES={none:{label:'None'},custom:{label:'Load frame…',kind:'plate',src:null}};
 const _framePlates=new Map();   // url -> HTMLImageElement, decoded once
 function _framePlate(url){
   if(!url)return null;
@@ -17775,136 +17777,24 @@ function _framePlate(url){
   _framePlates.set(url,img);
   return null;
 }
-/// 35mm still film, in millimetres — ISO 1007 nominal. Kept as real units rather than baked
-/// fractions so the numbers can be checked against the standard rather than reverse-engineered.
-const FILM35={width:35.0,frameH:24.0,frameW:36.0,perfW:1.98,perfH:2.79,pitch:4.7498,perfEdge:0.66};
-/// Output size a film frame produces for a given input, WITHOUT rendering. The video export path
-/// pre-allocates its canvases once per clip (border thickness and matte aspect are invariant
-/// across frames), so it needs the size before the first frame exists.
-///
-/// ⚠️ Shared with filmFrameCompose rather than duplicated: a second copy of the rebate maths
-/// would drift, and the failure mode is a per-frame canvas one row too small — i.e. a clipped
-/// sprocket row on export and nowhere else.
-// ⚠️ Frames INSET within the photo's existing dimensions — they never grow the canvas. The first
-// version of 'full'/'roll' modes did (h+2*reb, exactly like the Border feature), which is right
-// for a literal print mount but wrong for what users actually wanted: a frame that reads as the
-// photo's own border, at the size they already cropped/exported to, the same way sprocket35-wide
-// ("bleed") always worked. filmFrameOutSize now always returns the INPUT size — callers that used
-// to pre-allocate a taller canvas (the video export path) need no special-casing any more.
+/// Overlays never grow the canvas; kept as a function because the video path pre-sizes with it.
 function filmFrameOutSize(w,h,FR){
   return{w,h,reb:0};
 }
-function _filmFrameRebFrac(mode){
-  if(mode==='roll')return 0.12;
-  if(mode==='half')return((FILM35.width-18.0)/2)/18.0;   // half-frame: 18×24mm image on the same 35mm stock
-  return((FILM35.width-FILM35.frameH)/2)/FILM35.frameH;  // full/bleed/instant: standard full-frame 35mm
-}
-/// Mounts `src` in a film frame. Returns a NEW canvas, or `src` untouched when the style is off
-/// or a plate has not decoded yet — never a half-drawn frame.
+/// Returns a NEW canvas, or `src` untouched when off or the plate has not decoded yet.
 function filmFrameCompose(src,FR){
   if(!FR||!FR.style||FR.style==='none')return src;
   const spec=FILM_FRAMES[FR.style];
-  if(!spec||spec.kind==='none')return src;
+  if(!spec||spec.kind!=='plate')return src;
+  const plate=_framePlate(FR.customUrl);
+  if(!plate)return src;
   const sw=src.width,sh=src.height;
-  if(spec.kind==='plate'){
-    const url=FR.style==='custom'?FR.customUrl:spec.src;
-    const plate=_framePlate(url);
-    if(!plate)return src;                       // still decoding — show the photo, not a flash of frame
-    // The plate's own aspect is honoured: the OUTPUT takes the photo's size, and the plate is
-    // drawn to cover it, cropping the plate rather than stretching it. Stretching is what makes
-    // a bundled border look cheap — it ovals every sprocket hole and shears the grain.
-    const out=document.createElement('canvas');out.width=sw;out.height=sh;
-    const x=out.getContext('2d');
-    x.drawImage(src,0,0);
-    const sc=Math.max(sw/plate.naturalWidth,sh/plate.naturalHeight);
-    const pw=plate.naturalWidth*sc,ph=plate.naturalHeight*sc;
-    x.drawImage(plate,(sw-pw)/2,(sh-ph)/2,pw,ph);
-    return out;
-  }
-  // ── instant (Polaroid-style) border: pure procedural geometry, no licensed asset — thick
-  // bottom margin, even side/top margins, all INSET so the frame reads as the photo's own border
-  // rather than a mount added around it. Proportions are the well-known generic instant-print
-  // ratio (public geometry, not a copied texture/asset). ──
-  if(spec.mode==='instant'){
-    const side=Math.round(Math.min(sw,sh)*0.06),bot=Math.round(Math.min(sw,sh)*0.20),top=side;
-    const out=document.createElement('canvas');out.width=sw;out.height=sh;
-    const x=out.getContext('2d');
-    x.fillStyle=FR.color||'#f2ede2';
-    x.fillRect(0,0,sw,sh);
-    const iw=sw-2*side,ih=sh-top-bot;
-    // Crop-and-inset (never grow the canvas): the photo's own outer band is what the border
-    // replaces, same convention as the sprocket modes below.
-    x.drawImage(src,side,top,iw,ih,side,top,iw,ih);
-    if(FR.edgeText){
-      x.save();
-      x.fillStyle=FR.edgeColor||'rgba(30,26,20,0.7)';
-      x.font=`${Math.max(9,Math.round(bot*0.28))}px ui-monospace,Menlo,monospace`;
-      x.textAlign='center';x.textBaseline='middle';
-      x.fillText(FR.edgeText,sw/2,sh-bot/2);
-      x.restore();
-    }
-    return out;
-  }
-  // ── procedural (sprocketed) ──
-  const M=FILM35;
-  const roll=spec.mode==='roll';
-  // Rebate depth as a fraction of the IMAGE height, straight from the standard: a 24mm frame on
-  // 35mm stock leaves 5.5mm each side. Roll film has no perforations and a wider rebate.
-  const reb=Math.round(sh*_filmFrameRebFrac(spec.mode));
-  const bleed=spec.mode==='bleed';
-  const outW=sw,outH=sh;
-  const out=document.createElement('canvas');out.width=outW;out.height=outH;
+  const out=document.createElement('canvas');out.width=sw;out.height=sh;
   const x=out.getContext('2d');
-  // Rebate colour: unexposed processed film is not black — it is a dense near-neutral with a
-  // slight warm cast from the base. Pure #000 is the tell of a fake border.
-  x.fillStyle=FR.color||(roll?'#0a0908':'#0d0b0a');
-  x.fillRect(0,0,outW,outH);
-  // "Sprocket bleed" draws the photo at full canvas size and punches holes through it (the
-  // scanner-wider-than-the-gate look). Every other mode INSETS: the outer `reb` px of the photo
-  // are cropped away and the rebate/sprockets take their place, so the frame is the photo's own
-  // border rather than something added around it — the canvas never grows past sw×sh.
-  if(bleed)x.drawImage(src,0,0,sw,sh);
-  else x.drawImage(src,0,reb,sw,sh-2*reb,0,reb,sw,sh-2*reb);
-  // Where edge printing may sit, in px from the top of the rebate. On perforated stock this is
-  // the narrow band BETWEEN the perforation row and the image — printing across the holes is the
-  // one mistake that instantly reads as fake, and the first version of this did exactly that.
-  let textTop=0,textBot=reb;
-  if(!roll){
-    // Perforations, at true pitch. Everything derives from the mm table, so the hole count is
-    // whatever the photo's width actually implies rather than a hardcoded 8.
-    const mmPx=sh/M.frameH;                       // px per mm, from the image height = 24mm
-    const pw=M.perfW*mmPx,phh=M.perfH*mmPx,pitch=M.pitch*mmPx;
-    const edge=M.perfEdge*mmPx;
-    const r=Math.min(pw,phh)*0.22;                // corner radius — 135 perfs are rounded, not square
-    const n=Math.max(1,Math.round(outW/pitch));
-    const start=(outW-(n-1)*pitch)/2;
-    x.save();
-    // Punching with destination-out on the bleed variant lets the photo show THROUGH nothing —
-    // the hole is the scanner's backlight, so it reads as bright, not as a black rectangle.
-    x.fillStyle=FR.holeColor||'#e8e4dc';
-    for(let i=0;i<n;i++){
-      const cx=start+i*pitch-pw/2;
-      for(const cy of [edge,outH-edge-phh]){
-        x.beginPath();
-        if(x.roundRect)x.roundRect(cx,cy,pw,phh,r);else x.rect(cx,cy,pw,phh);
-        x.fill();
-      }
-    }
-    x.restore();
-    textTop=edge+phh;                             // just below the perforation row
-  }
-  // Edge printing. Real stock carries frame numbers and a stock name along the rebate; without
-  // something there the frame reads as a plain black bar. Kept subtle and off by default.
-  if(FR.edgeText){
-    const band=Math.max(1,textBot-textTop);
-    x.save();
-    x.fillStyle=FR.edgeColor||'rgba(232,168,90,0.85)';
-    // Sized to the BAND, not the whole rebate, so it cannot grow back over the perforations.
-    x.font=`${Math.max(7,Math.round(band*0.62))}px ui-monospace,Menlo,monospace`;
-    x.textBaseline='middle';
-    x.fillText(FR.edgeText,Math.round(outW*0.04),Math.round(textTop+band*0.5));
-    x.restore();
-  }
+  x.drawImage(src,0,0);
+  const sc=Math.max(sw/plate.naturalWidth,sh/plate.naturalHeight);
+  const pw=plate.naturalWidth*sc,ph=plate.naturalHeight*sc;
+  x.drawImage(plate,(sw-pw)/2,(sh-ph)/2,pw,ph);
   return out;
 }
 function canvasCompose(src,CV){
@@ -17931,6 +17821,188 @@ function canvasCompose(src,CV){
   x.drawImage(src,(outW-sw*zoom)/2,(outH-sh*zoom)/2,sw*zoom,sh*zoom);
   return out;
 }
+// ══ REAL-SCAN FILM FRAMES ══════════════════════════════════════════════════════════════════
+// Border layers can be a plain colour band or a film frame built from real scanned film edges
+// (vendor/frames/film/, packed by scripts/pack_borders.py). Each strip is one straightened edge:
+// rows run from the frame's outer side to past its ragged inner edge, and its two ends carry the
+// scan's real corners. A side of any length is assembled from REAL sections only — ends kept,
+// middle filled with sections whose edge depth matches where the previous one stopped, joined
+// with long cross-fades — so any aspect ratio works and nothing is ever stretched.
+const FILM_EDGE={manifest:null,loading:null,imgs:new Map(),tint:new Map(),rings:new Map()};
+function filmEdgeManifest(){
+  if(FILM_EDGE.manifest)return Promise.resolve(FILM_EDGE.manifest);
+  if(!FILM_EDGE.loading)FILM_EDGE.loading=fetch('vendor/frames/film/manifest.json',{cache:'force-cache'})
+    .then(r=>r.json()).then(m=>{FILM_EDGE.manifest=m;_filmEdgeFillSources(m);return m;})
+    .catch(e=>{FILM_EDGE.loading=null;log('Film frames failed to load: '+e.message,'warn');return null;});
+  return FILM_EDGE.loading;
+}
+// Scan count is written here by scripts/pack_borders.py so the Source list exists synchronously —
+// a saved "Scan 12" choice restored before the manifest arrives would otherwise be lost.
+const FILM_EDGE_SCANS=55;
+function _filmEdgeFillSources(m){
+  const n=m?m.scans.length:FILM_EDGE_SCANS;
+  for(const k of ['b1','b2']){const sel=document.getElementById('sel-'+k+'-src');if(!sel||sel.options.length>1)continue;
+    for(let i=1;i<=n;i++){const o=document.createElement('option');o.value=String(i);o.textContent='Scan '+i;sel.appendChild(o);}}
+}
+_filmEdgeFillSources(null);
+function _filmEdgeImg(file){
+  let im=FILM_EDGE.imgs.get(file);
+  if(!im){im=new Image();im.decoding='async';
+    im._ready=new Promise(ok=>{im.onload=()=>{ok(im);if(typeof renderPreview==='function')renderPreview();};im.onerror=()=>ok(null);});
+    im.src='vendor/frames/film/'+file;FILM_EDGE.imgs.set(file,im);}
+  return im;
+}
+function _filmEdgePool(m,L){
+  const scans=L.src&&L.src!=='all'?m.scans.filter(s=>String(s.id)===String(L.src)):m.scans;
+  const pool=[];for(const s of (scans.length?scans:m.scans))for(const st of s.strips)pool.push({st,scan:s});
+  return pool;
+}
+/// Await every strip a layer set could use — export calls this so a frame is never silently
+/// dropped because a strip had not decoded yet (the old plate path's failure mode).
+async function filmEdgeReady(P){
+  const layers=[P.b1,P.b2].filter(L=>L&&L.type==='film'&&L.thickness>0);
+  if(!P.bordersEnabled||!layers.length)return;
+  const m=await filmEdgeManifest();if(!m)return;
+  const need=new Set();for(const L of layers)for(const{st}of _filmEdgePool(m,L))need.add(st.file);
+  await Promise.all([...need].map(f=>_filmEdgeImg(f)._ready));
+}
+function _filmEdgeTinted(st,color){
+  const key=st.file+'|'+color;let c=FILM_EDGE.tint.get(key);if(c)return c;
+  const im=_filmEdgeImg(st.file);if(!im.complete||!im.naturalWidth)return null;
+  c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;
+  const x=c.getContext('2d');x.drawImage(im,0,0);
+  const d=x.getImageData(0,0,c.width,c.height),p=d.data;
+  const t=[1,3,5].map(i=>parseInt((color||'#0a0a0b').substr(i,2),16)||0);
+  // texture sits on top of the chosen tone: dense black stays the tone, dust/scratches lift it
+  for(let i=0;i<p.length;i+=4){const v=p[i]/255*90;p[i]=Math.min(255,t[0]+v);p[i+1]=Math.min(255,t[1]+v);p[i+2]=Math.min(255,t[2]+v);}
+  x.putImageData(d,0,0);
+  if(!st.prof){   // per-column edge depth, for matching joins
+    const W=c.width,H=c.height,a=new Float32Array(W);
+    for(let y=0;y<H;y++)for(let u=0;u<W;u++)a[u]+=p[(y*W+u)*4+3];
+    const sm=new Float32Array(W);for(let u=0;u<W;u++){let s=0,n=0;for(let k=-6;k<=6;k++){const q=a[u+k];if(q!==undefined){s+=q;n++;}}sm[u]=s/n/255;}
+    st.prof=sm;
+  }
+  if(FILM_EDGE.tint.size>400)FILM_EDGE.tint.clear();
+  FILM_EDGE.tint.set(key,c);return c;
+}
+function _filmRng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+/// One side of length L px at band thickness t px, as a canvas whose row 0 is the outer edge.
+function _filmEdgeSide(item,L,t,color,R){
+  const st=item.st,sc=item.scan,src=_filmEdgeTinted(st,color);if(!src)return null;
+  const band=Math.max(1,st.band*(sc.scale||1)),k=t/band,sw=src.width;
+  const sy=Math.min(st.h-2,Math.max(0,st.top+(sc.offset||0)*st.band)),shh=st.h-sy;
+  const H=Math.max(2,Math.round(shh*k));
+  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(L));c.height=H;const x=c.getContext('2d');
+  const end=Math.min(sw*k*.25,Math.max((st.corner||0)*k*1.6,t*2.5)),endS=end/k;
+  const midS0=endS,midLen=Math.max(1,sw-2*endS),fade=Math.max(12,t*3);
+  const flip=R()<.5;x.save();if(flip){x.translate(c.width,0);x.scale(-1,1);}
+  const tmp=document.createElement('canvas');tmp.height=H;const tx=tmp.getContext('2d');
+  const feather=(w,left,right)=>{tx.globalCompositeOperation='destination-in';const g=tx.createLinearGradient(0,0,w,0),f=Math.min(.45,fade/w);
+    g.addColorStop(0,left?'rgba(0,0,0,0)':'#000');g.addColorStop(f,'#000');g.addColorStop(1-f,'#000');g.addColorStop(1,right?'rgba(0,0,0,0)':'#000');
+    tx.fillStyle=g;tx.fillRect(0,0,w,H);tx.globalCompositeOperation='source-over';};
+  let pos=end-fade,cur=st.prof[Math.round(endS)]||0;
+  const segMax=Math.max(midLen*.6,40);
+  while(pos<c.width-end){
+    const segS=Math.min(midLen,Math.max(Math.min(segMax,midLen)*(0.5+R()*.5),3*fade/k));let s0=midS0,bd=1e9;
+    for(let q=0;q<40;q++){const c0=midS0+R()*Math.max(0,midLen-segS),e=Math.abs((st.prof[Math.round(c0+fade/k/2)]||0)-cur);if(e<bd){bd=e;s0=c0;}}
+    cur=st.prof[Math.round(s0+segS-fade/k/2)]||cur;const w=Math.max(2,Math.round(segS*k));
+    tmp.width=w;tx.drawImage(src,s0,sy,segS,shh,0,0,w,H);feather(w,true,true);
+    x.drawImage(tmp,Math.round(pos),0);pos+=Math.max(w-fade,fade*.5,4);   // always advance
+  }
+  for(const[s0,dx,first]of[[0,0,true],[sw-endS,c.width-end,false]]){const w=Math.max(2,Math.round(end));tmp.width=w;
+    tx.drawImage(src,s0,sy,endS,shh,0,0,w,H);feather(w,!first,first);x.drawImage(tmp,Math.round(dx),0);}
+  x.restore();tmp.width=tmp.height=0;return c;
+}
+/// The film ring for one layer: a transparent W×H canvas whose film band, t px thick, hugs the
+/// outer edge on all four sides. Cached — video export redraws it every frame otherwise.
+function _filmRing(W,H,t,L,seed){
+  const m=FILM_EDGE.manifest;if(!m){filmEdgeManifest().then(()=>{if(typeof renderPreview==='function')renderPreview();});return null;}
+  const key=[W,H,t,L.color,L.src,L.grain,seed].join('|');const hit=FILM_EDGE.rings.get(key);if(hit)return hit;
+  const pool=_filmEdgePool(m,L);if(!pool.length)return null;
+  const R=_filmRng(Math.floor(seed*1e6)^0x5f3759df);
+  const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+  for(const[s,len]of[[0,W],[1,H],[2,W],[3,H]]){
+    const side=_filmEdgeSide(pool[Math.floor(R()*pool.length)],len,t,L.color,R);
+    if(!side){c.width=c.height=0;return null;}   // a strip still decoding — caller retries on load
+    x.save();
+    if(s===1){x.translate(W,0);x.rotate(Math.PI/2);}else if(s===2){x.translate(W,H);x.rotate(Math.PI);}else if(s===3){x.translate(0,H);x.rotate(-Math.PI/2);}
+    x.drawImage(side,0,0);x.restore();side.width=side.height=0;
+  }
+  if(L.grain>0)_layerGrain(x,W,H,L.grain,R,'source-atop');
+  if(FILM_EDGE.rings.size>12){for(const v of FILM_EDGE.rings.values())v.width=v.height=0;FILM_EDGE.rings.clear();}
+  FILM_EDGE.rings.set(key,c);return c;
+}
+/// Seeded grain on a layer. `op` source-atop keeps it on the frame's own pixels.
+function _layerGrain(x,W,H,amt,R,op){
+  const n=document.createElement('canvas');n.width=n.height=256;const nx=n.getContext('2d');
+  const d=nx.createImageData(256,256),p=d.data;
+  for(let i=0;i<p.length;i+=4){const v=R()*255;p[i]=p[i+1]=p[i+2]=v;p[i+3]=255;}
+  nx.putImageData(d,0,0);
+  x.save();x.globalCompositeOperation=op||'source-over';x.globalAlpha=Math.min(1,amt/100)*0.35;
+  x.fillStyle=x.createPattern(n,'repeat');x.fillRect(0,0,W,H);x.restore();n.width=n.height=0;
+}
+/// Faint light bleed from the photo's highlights into a film layer's pixels.
+function _filmGlow(x,ring,photo,px,py,pw,ph,amt){
+  const W=ring.width,H=ring.height,s=64/Math.max(pw,ph);
+  const sm=document.createElement('canvas');sm.width=Math.max(2,Math.round(pw*s));sm.height=Math.max(2,Math.round(ph*s));
+  const sx=sm.getContext('2d');sx.drawImage(photo,0,0,sm.width,sm.height);
+  const d=sx.getImageData(0,0,sm.width,sm.height),p=d.data;
+  for(let i=0;i<p.length;i+=4){const l=(p[i]*.3+p[i+1]*.59+p[i+2]*.11)/255,k=Math.max(0,(l-0.55)/0.45);p[i]*=k;p[i+1]*=k;p[i+2]*=k;}
+  sx.putImageData(d,0,0);
+  // pad + shrink again so the light falls off softly past the photo's edge instead of stopping
+  // in a hard rectangle (ctx.filter blur is not trustworthy on iOS, see canvasCompose)
+  const pad=Math.round(Math.max(sm.width,sm.height)*0.25),pc=document.createElement('canvas');
+  pc.width=Math.max(2,Math.round((sm.width+2*pad)/4));pc.height=Math.max(2,Math.round((sm.height+2*pad)/4));
+  const pcx=pc.getContext('2d');pcx.imageSmoothingEnabled=true;pcx.drawImage(sm,pad/4,pad/4,sm.width/4,sm.height/4);
+  const g=document.createElement('canvas');g.width=W;g.height=H;const gx=g.getContext('2d');
+  gx.imageSmoothingEnabled=true;gx.imageSmoothingQuality='high';
+  const sx2=pw/sm.width,ox=px-pad*sx2,oy=py-pad*(ph/sm.height);
+  gx.drawImage(pc,ox,oy,pw+2*pad*sx2,ph+2*pad*(ph/sm.height));   // upscaled = blurred, reaching into the frame
+  pc.width=pc.height=0;
+  gx.globalCompositeOperation='destination-in';gx.drawImage(ring,0,0);
+  x.save();x.globalCompositeOperation='screen';x.globalAlpha=Math.min(1,amt/100);x.drawImage(g,0,0);x.restore();
+  sm.width=sm.height=g.width=g.height=0;
+}
+/// Per-photo variation: stable for a photo (name+size), shifted by the Shuffle button.
+function borderSeed(it,P){
+  const nm=(it&&(it.name||(it.file&&it.file.name)))||'',sz=(it&&it.file&&it.file.size)||0;
+  return fxClipSeed(nm,sz,0)/100+(P.frameShuffle||0);
+}
+/// Draws `src` with both border layers into ctx `x` (size src + 2*(b1t+b2t)). Shared by preview,
+/// still export and video so they can never disagree.
+function drawBorderLayers(x,src,P,b1t,b2t,seed){
+  const sw=src.width,sh=src.height,tw=sw+2*(b1t+b2t),th=sh+2*(b1t+b2t);
+  const L1=P.b1,L2=P.b2,f1=L1.type==='film'&&b1t>0,f2=L2.type==='film'&&b2t>0;
+  // backing: outer plain colour, or paper behind a film outer layer's ragged edge
+  x.fillStyle=f2?'#f4f2ec':L2.color;x.fillRect(0,0,tw,th);
+  if(!f1){x.fillStyle=L1.color;x.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);}
+  else if(!f2){x.fillStyle=L2.color;x.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);}
+  x.drawImage(src,b1t+b2t,b1t+b2t,sw,sh);
+  const R=_filmRng(Math.floor(seed*7919e3));
+  if(!f1&&b1t>0&&L1.grain>0){x.save();x.beginPath();x.rect(b2t,b2t,tw-2*b2t,th-2*b2t);x.rect(b1t+b2t,b1t+b2t,sw,sh);x.clip('evenodd');_layerGrain(x,tw,th,L1.grain,R,'overlay');x.restore();}
+  if(!f2&&b2t>0&&L2.grain>0){x.save();x.beginPath();x.rect(0,0,tw,th);x.rect(b2t,b2t,tw-2*b2t,th-2*b2t);x.clip('evenodd');_layerGrain(x,tw,th,L2.grain,R,'overlay');x.restore();}
+  if(f1){const ring=_filmRing(tw-2*b2t,th-2*b2t,b1t,L1,seed);
+    if(ring){x.drawImage(ring,b2t,b2t);if(L1.glow>0){x.save();x.translate(b2t,b2t);_filmGlow(x,ring,src,b1t,b1t,sw,sh,L1.glow);x.restore();}}}
+  if(f2){const ring=_filmRing(tw,th,b2t,L2,seed+0.5);
+    if(ring){x.drawImage(ring,0,0);if(L2.glow>0)_filmGlow(x,ring,src,b1t+b2t,b1t+b2t,sw,sh,L2.glow);}}
+}
+function borderLayerSizes(P,w){
+  return{b1t:P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t:P.bordersEnabled?Math.round(w*P.b2.thickness/100):0};
+}
+function frameShuffle(){fxState.frameShuffle=Math.random()*100;fxUpdate();}
+/// After a restore: show the film rows for film layers, and remember a Source choice whose
+/// option list has not arrived yet (it fills from the manifest).
+function _borderUISync(){
+  for(const k of ['b1','b2']){const t=document.getElementById('sel-'+k+'-type');if(!t)continue;
+    const film=t.value==='film';document.querySelectorAll('[data-film-row="'+k+'"]').forEach(r=>r.hidden=!film);
+    if(film)filmEdgeManifest();}
+}
+function borderTypeChanged(){
+  for(const k of ['b1','b2']){const film=(document.getElementById('sel-'+k+'-type')||{}).value==='film';
+    document.querySelectorAll('[data-film-row="'+k+'"]').forEach(r=>r.hidden=!film);
+    if(film)filmEdgeManifest();}
+  fxUpdate();
+}
 // Bug C fix: borders were only drawn at export. Draw them in the preview too (onto a 2D
 // overlay canvas) so the toggle/colours/thickness are actually visible while editing.
 // Extended for the CANVAS matte: borders first, then canvasCompose around the result.
@@ -17941,7 +18013,7 @@ function applyPreviewBorders(P,pw,ph){
   // effect whenever Borders/Canvas-matte was on and this overlay was the visible layer.
   const wrap=document.getElementById('fx-zoom-wrap');
   let bd=document.getElementById('fx-canvas-bd');
-  const b1t=P.bordersEnabled?Math.round(pw*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(pw*P.b2.thickness/100):0;
+  const{b1t,b2t}=borderLayerSizes(P,pw);
   const cvOn=P.canvas&&P.canvas.enabled&&P.canvas.ar;
   const frameOn=P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none';
   if(!b1t&&!b2t&&!cvOn&&!frameOn){if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;return;}
@@ -17951,10 +18023,7 @@ function applyPreviewBorders(P,pw,ph){
   if(b1t||b2t){
     const tw=pw+2*(b1t+b2t),th=ph+2*(b1t+b2t);
     stage=document.createElement('canvas');stage.width=tw;stage.height=th;
-    const x=stage.getContext('2d');
-    x.fillStyle=P.b2.color;x.fillRect(0,0,tw,th);
-    x.fillStyle=P.b1.color;x.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
-    x.drawImage(FX.cv,b1t+b2t,b1t+b2t,pw,ph);
+    drawBorderLayers(stage.getContext('2d'),FX.cv,P,b1t,b2t,borderSeed(fxImages[fxCurIdx],P));
   }
   // stage 1b: film frame around the bordered image, BEFORE the matte — the frame is part of the
   // photograph, the matte is the wall behind it.
@@ -19280,17 +19349,15 @@ async function exportFX(){
         const proc=await processToCanvas(P,src,iw,ih,
           (t,tot)=>setProg(idx+t/tot,`Rendering ${idx+1}/${N}: ${it.name} — tile ${t}/${tot}…`));
         const w=proc.width,h=proc.height;
-        const b1t=P.bordersEnabled?Math.round(w*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(w*P.b2.thickness/100):0;
+        const{b1t,b2t}=borderLayerSizes(P,w);
+        await filmEdgeReady(P);   // never export before the film strips have decoded
         // Only allocate a second full-res canvas when borders actually need one; free `proc`
         // BEFORE encoding so at most one full-res canvas is alive at toBlob time.
         let ec=proc;
         if(b1t||b2t){
           const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
           ec=document.createElement('canvas');ec.width=tw;ec.height=th;
-          const ctx=ec.getContext('2d');
-          ctx.fillStyle=P.b2.color;ctx.fillRect(0,0,tw,th);
-          ctx.fillStyle=P.b1.color;ctx.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
-          ctx.drawImage(proc,b1t+b2t,b1t+b2t);
+          drawBorderLayers(ec.getContext('2d'),proc,P,b1t,b2t,borderSeed(it,P));
           proc.width=proc.height=0;
         }
         // Film frame around the bordered image, BEFORE the matte — same order the preview uses
@@ -19563,10 +19630,7 @@ function _videoComposeBorderMatte(gradeCanvas,P,dims,borderedCanvas,finalCanvas,
   const{gradedW,gradedH,b1t,b2t,borderedW,borderedH,framedW,framedH,hasFrame,finalW,finalH,hasMatte}=dims;
   let bordered=gradeCanvas;
   if(b1t||b2t){
-    const bctx=borderedCanvas.getContext('2d');
-    bctx.fillStyle=P.b2.color;bctx.fillRect(0,0,borderedW,borderedH);
-    bctx.fillStyle=P.b1.color;bctx.fillRect(b2t,b2t,borderedW-2*b2t,borderedH-2*b2t);
-    bctx.drawImage(gradeCanvas,b1t+b2t,b1t+b2t);
+    drawBorderLayers(borderedCanvas.getContext('2d'),gradeCanvas,P,b1t,b2t,dims.borderSeed||0);
     bordered=borderedCanvas;
   }
   if(hasFrame&&framedCanvas){
@@ -19676,7 +19740,8 @@ async function fxVideoExportSmall(it){
   // compute them ONCE and pre-allocate every canvas the per-frame loop needs — mirrors the
   // "allocate-only-when-used" treatment exportFX gives stills.
   const P=getFXParams(it.adjustOverride||undefined);
-  const b1t=P.bordersEnabled?Math.round(outW*P.b1.thickness/100):0,b2t=P.bordersEnabled?Math.round(outW*P.b2.thickness/100):0;
+  const{b1t,b2t}=borderLayerSizes(P,outW);
+  await filmEdgeReady(P);
   const borderedW=outW+2*(b1t+b2t),borderedH=outH+2*(b1t+b2t);
   // Film frame sits between the borders and the matte, exactly as it does for stills. Its size is
   // as invariant across the clip as the borders are, so it folds into this same precompute rather
@@ -19693,7 +19758,7 @@ async function fxVideoExportSmall(it){
     finalW=Math.max(2,Math.round(mw/2)*2);finalH=Math.max(2,Math.round(mh/2)*2);
   }else{finalW=Math.max(2,Math.round(framedW/2)*2);finalH=Math.max(2,Math.round(framedH/2)*2);}
   const composeDims={gradedW:outW,gradedH:outH,b1t,b2t,borderedW,borderedH,
-                     framedW,framedH,hasFrame,filmFrame:P.filmFrame,finalW,finalH,hasMatte};
+                     framedW,framedH,hasFrame,filmFrame:P.filmFrame,finalW,finalH,hasMatte,borderSeed:borderSeed(it,P)};
 
   const gradeCanvas=document.createElement('canvas');gradeCanvas.width=outW;gradeCanvas.height=outH;
   const gradeCtx=gradeCanvas.getContext('2d');

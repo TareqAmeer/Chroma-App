@@ -296,32 +296,36 @@ async function main() {
 
     // [7] Film frame through the VIDEO path. Its sizes are precomputed once per clip alongside
     // the borders and matte (see _videoComposeBorderMatte), which is exactly the kind of thing
-    // that silently goes one row short — a clipped sprocket row on export and nowhere else. So
+    // that silently goes one row short — a clipped frame edge on export and nowhere else. So
     // assert the composed size matches filmFrameOutSize, the same function the renderer uses.
     console.log('\n[7] Film frame in video export');
     const frameResult = await page.evaluate(async () => {
       const it = curItem();
-      document.getElementById('sel-film-frame').value = 'sprocket35';
-      const sz = filmFrameOutSize(200, 100, { style: 'sprocket35' });
-      // Compose a fake graded frame through the real function, with the real dims shape.
+      // Real-scan film border layer through the video path: sizes precomputed once per clip.
+      document.getElementById('sel-b1-type').value = 'film';
+      await filmEdgeReady({ bordersEnabled: true, b1: { type: 'film', thickness: 5, src: 'all' }, b2: { type: 'plain', thickness: 0 } });
+      const sz = { w: 220, h: 120, reb: 0 };
       const mk = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h });
-      const dims = { gradedW: 200, gradedH: 100, b1t: 0, b2t: 0, borderedW: 200, borderedH: 100,
-                     framedW: sz.w, framedH: sz.h, hasFrame: true, filmFrame: { style: 'sprocket35' },
-                     finalW: sz.w, finalH: sz.h, hasMatte: false };
-      const out = _videoComposeBorderMatte(mk(200, 100), getFXParams(), dims, null, null, mk(sz.w, sz.h));
+      const P = getFXParams(); P.bordersEnabled = true; P.b1 = { ...P.b1, type: 'film', thickness: 5 }; P.b2 = { ...P.b2, thickness: 0 };
+      const dims = { gradedW: 200, gradedH: 100, b1t: 10, b2t: 0, borderedW: 220, borderedH: 120,
+                     framedW: 220, framedH: 120, hasFrame: false, filmFrame: null,
+                     finalW: 220, finalH: 120, hasMatte: false, borderSeed: 0.3 };
+      const out = _videoComposeBorderMatte(mk(200, 100), P, dims, mk(220, 120), null, null);
       let saved = null;
       const orig = window.saveFile;
       window.saveFile = async (c, f) => { saved = { size: c.size ?? c.byteLength, fname: f }; };
       let err = null;
       try { await fxVideoExportSmall(it); } catch (e) { err = String(e && e.message || e); }
       window.saveFile = orig;
-      document.getElementById('sel-film-frame').value = 'none';
-      return { expect: [sz.w, sz.h], got: [out.width, out.height], reb: sz.reb, saved, err };
+      document.getElementById('sel-b1-type').value = 'plain';
+      const px = out.getContext('2d').getImageData(4, 60, 1, 1).data;
+      const edgeDark = (px[0] + px[1] + px[2]) / 3 < 80;   // the film band really drew on the edge
+      return { expect: [sz.w, sz.h], got: [out.width, out.height], edgeDark, saved, err };
     });
     check('film frame composes to the precomputed size',
       frameResult.got[0] === frameResult.expect[0] && frameResult.got[1] === frameResult.expect[1],
       `expected ${frameResult.expect} got ${frameResult.got}`);
-    check('film frame adds a real rebate', frameResult.reb > 0, String(frameResult.reb));
+    check('film border layer draws a dark film edge', frameResult.edgeDark, String(frameResult.edgeDark));
     check('export with a film frame does not throw', frameResult.err === null, frameResult.err || '');
     check('export with a film frame produces an MP4', !!frameResult.saved && frameResult.saved.size > 200,
       JSON.stringify(frameResult.saved));

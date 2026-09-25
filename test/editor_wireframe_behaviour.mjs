@@ -551,14 +551,15 @@ test.describe('frame panel (FR1)', () => {
     await expect(color).toHaveValue('#000000');
   });
 
-  test('Style select keeps its fx-info-i tooltip and filmFrameChanged still fires', async ({ editor: { page, errors } }) => {
+  test('Overlay info tooltip stays and the film layer type shows its film rows', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="frame"]');
     await page.click('.fx-ctrl[data-fxsec="borders"] #tg-borders');
     await expect(page.locator('.fx-ctrl[data-fxsec="borders"] .fx-info-i')).toBeVisible();
-    await page.selectOption('#sel-film-frame', 'sprocket35');
+    await page.selectOption('#sel-b1-type', 'film');
     await page.waitForTimeout(100);
     expect(errors).toEqual([]);
-    await expect(page.locator('#sel-film-frame')).toHaveValue('sprocket35');
+    await expect(page.locator('#sel-b1-type')).toHaveValue('film');
+    await expect(page.locator('[data-film-row="b1"]').first()).toBeVisible();
   });
 });
 
