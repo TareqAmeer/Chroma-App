@@ -5117,7 +5117,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0925P';
+const BUILD='1.0925Q';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8302,6 +8302,7 @@ let fxSplit=false, fxSplitPos=0.5;       // split before/after view
 // — default 'orig' means zero-interaction behaviour is byte-identical to the pre-B3 hardcoded original.
 let fxPinned=null, fxSplitSrc='orig';
 let fxHistOn=false;                        // live histogram toggle
+const FX_FIT=0.9; // displayed 100% = whole photo fits the canvas with a margin (room for a border)
 let fxZoom=1, fxPanX=0, fxPanY=0;        // CSS-zoom/pan state (upscales the preview buffer)
 let fxLoupe=false, loupeCX=0.5, loupeCY=0.5, fxLoupeSeed=Math.random()*100; // true 1:1 native-res loupe
 // Full-res preview: unlike the 1:1 loupe (a fixed cropped zoom for pixel-peeping), this swaps
@@ -16160,22 +16161,21 @@ function _applyZoom(smooth){
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
   if(typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
 }
-function _resetZoom(smooth){fxZoom=1;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
+function _resetZoom(smooth){fxZoom=FX_FIT;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
 // Desktop Library RAW opens edit on the 2560px display tier until full resolution is actually
 // needed (library-ui.js's chromasmithEnsureFullQuality): zoom past fit, loupe, first edit, crop,
 // export. No-op everywhere else (browser, non-RAW, already promoted).
 function fxEnsureFullQuality(){return (typeof window.chromasmithEnsureFullQuality==='function')?window.chromasmithEnsureFullQuality():Promise.resolve();}
 function _updateZoomReadout(){
   const pct=document.getElementById('fx-zoom-pct');if(!pct)return;
-  pct.textContent=fxLoupe?'1:1':Math.round(fxZoom*100)+'%';
+  pct.textContent=fxLoupe?'1:1':Math.round(fxZoom/FX_FIT*100)+'%';
   const sl=document.getElementById('fx-zoom-slider');
-  if(sl&&document.activeElement!==sl){sl.value=Math.round(fxZoom*100);fxPaintSlider(sl);}
+  if(sl&&document.activeElement!==sl){sl.value=Math.round(fxZoom/FX_FIT*100);fxPaintSlider(sl);}
 }
 // Absolute zoom set (from the slider), anchored on the frame centre.
 function zoomSet(z){
   if(fxLoupe)toggleLoupe();
-  fxZoom=Math.max(0.25,Math.min(8,z));
-  if(fxZoom<=1){fxPanX=0;fxPanY=0;}
+  fxZoom=Math.max(0.25,Math.min(8,z*FX_FIT));
   _applyZoom();
 }
 // Zoom by a multiplicative step, anchored on the frame centre.
@@ -16183,8 +16183,7 @@ function zoomBy(factor){
   if(fxLoupe)toggleLoupe();                 // leave loupe before CSS-zooming
   const prev=fxZoom;
   fxZoom=Math.max(0.25,Math.min(8,fxZoom*factor));
-  if(fxZoom<=1){fxPanX=0;fxPanY=0;}
-  else{ // keep the frame centre fixed under the new zoom (ox=oy=0.5 in the cursor-zoom invariant)
+  { // keep the frame centre fixed under the new zoom (ox=oy=0.5 in the cursor-zoom invariant)
     const {w:cw,h:ch}=_fxZoomFootprint();
     fxPanX+=0.5*cw*(1/fxZoom-1/prev);fxPanY+=0.5*ch*(1/fxZoom-1/prev);
   }
@@ -16210,7 +16209,7 @@ function toggleLoupe(){
     const {w,h}=_fxZoomFootprint();
     loupeCX=Math.min(1,Math.max(0,0.5/fxZoom-fxPanX/w));
     loupeCY=Math.min(1,Math.max(0,0.5/fxZoom-fxPanY/h));
-    _resetZoom();fxLoupeSeed=Math.random()*100;
+    _resetZoom();fxZoom=1;fxLoupeSeed=Math.random()*100;
   }
   _updateZoomReadout();
   renderPreview();
@@ -16264,7 +16263,7 @@ function initZoomPan(){
     // was slamming in/out almost instantly. 2.5% per tick is ~4x gentler — a full pinch still
     // reaches the same 1x-8x range, it just takes noticeably more travel to get there.
     fxZoom=Math.max(0.25,Math.min(8,fxZoom*(e.deltaY<0?1.025:0.975)));
-    if(fxZoom<=1){fxPanX=0;fxPanY=0;}else{
+    {
       // Zoom toward cursor: keep the local point under the cursor fixed on screen.
       // transform is scale(z)·translate(pan) about origin (0,0), so a local point p maps to
       // screen z*(p+pan) — invariant p ⇒ pan_new = pan_old + o*size*(1/z_new − 1/z_old), same
@@ -16279,7 +16278,7 @@ function initZoomPan(){
   // Drag-to-pan (CSS zoom) OR drag-to-move the loupe crop
   let pd=null;
   zw.addEventListener('pointerdown',e=>{
-    if(_wbEyedropperActive||mskPaintMode||(!fxLoupe&&fxZoom===1))return;
+    if(_wbEyedropperActive||mskPaintMode))return;
     e.preventDefault();pd={x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
     _fxPreviewInteracting=true;  // E1: drag-pan never set this — see the wheel handler above
@@ -16320,7 +16319,7 @@ function initZoomPan(){
   };
   zw.addEventListener('pointerup',pup);zw.addEventListener('pointercancel',pup);
   // Double-click to reset
-  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(fxZoom>1){e.stopPropagation();_resetZoom(true);}else if(fxWork){e.stopPropagation();fxZoom=2.5;_applyZoom(true);}}); // dbl-tap: Fit ↔ zoomed (animated)
+  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(Math.abs(fxZoom-FX_FIT)>0.001){e.stopPropagation();_resetZoom(true);}else if(fxWork){e.stopPropagation();fxZoom=2.5;_applyZoom(true);}}); // dbl-tap: Fit ↔ zoomed (animated)
   // Pinch
   let _pt={};
   wrap.addEventListener('touchstart',e=>{[...e.changedTouches].forEach(t=>_pt[t.identifier]={x:t.clientX,y:t.clientY});},{passive:true});
@@ -16338,7 +16337,6 @@ function initZoomPan(){
       const p1=_pt[t1.identifier]||{x:t1.clientX,y:t1.clientY};
       const prev=Math.hypot(p0.x-p1.x,p0.y-p1.y)||dist;
       fxZoom=Math.max(0.25,Math.min(8,fxZoom*(dist/prev)));
-      if(fxZoom<=1){fxPanX=0;fxPanY=0;}
       _applyZoom();
     }
     [...e.changedTouches].forEach(t=>_pt[t.identifier]={x:t.clientX,y:t.clientY});
