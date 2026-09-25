@@ -112,12 +112,12 @@ function sideCanvas(st,L,t,R){const k=t/st.depth,sw=st.img.width,H=Math.round(st
  let pos=end-fade;const segMax=Math.max(midLen*.6,40);
  const tmp=document.createElement('canvas');tmp.height=H;const tx=tmp.getContext('2d');
  let cur=st.prof[Math.round(endS)]||st.depth;
- while(pos<L-end){const segS=Math.min(segMax,midLen)*(0.5+R()*.5);let s0=0,bd=1e9;
+ while(pos<L-end){const segS=Math.min(midLen,Math.max(Math.min(segMax,midLen)*(0.5+R()*.5),3*fade/k));let s0=0,bd=1e9;
   for(let q=0;q<40;q++){const c0=midS0+R()*(midLen-segS),e=Math.abs(st.prof[Math.round(c0+fade/k/2)]-cur);if(e<bd){bd=e;s0=c0}}
   cur=st.prof[Math.round(s0+segS-fade/k/2)]||cur;const w=Math.round(segS*k);
   tmp.width=w;tx.clearRect(0,0,w,H);tx.drawImage(src,s0,0,segS,st.h,0,0,w,H);
   tx.globalCompositeOperation='destination-in';const g=tx.createLinearGradient(0,0,w,0),f=Math.min(.45,fade/w);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(f,'#000');g.addColorStop(1-f,'#000');g.addColorStop(1,'rgba(0,0,0,0)');tx.fillStyle=g;tx.fillRect(0,0,w,H);tx.globalCompositeOperation='source-over';
-  x.drawImage(tmp,Math.round(pos),0);pos+=w-fade}
+  x.drawImage(tmp,Math.round(pos),0);pos+=Math.max(w-fade,fade*.5,4)}  // always advance: a segment shorter than the fade used to loop forever
  // real ends (with their corners) on top, feathered on the inner side only
  for(const [s0,dx] of [[0,0],[sw-endS,L-end]]){const w=Math.round(end);tmp.width=w;tx.drawImage(src,s0,0,endS,st.h,0,0,w,H);
   tx.globalCompositeOperation='destination-in';const g=tx.createLinearGradient(0,0,w,0),f=Math.min(.4,fade/w);
