@@ -977,7 +977,36 @@ body.mobile-fx #fx-actionbar{display:flex;gap:0;padding:var(--sp-2) 4px;justify-
 /* horizontal section strip */
 /* bottom padding = home-indicator safe area: without it the tool row's lower half sits
    under the iPhone home indicator (34px) — the "bottom bar not visible" report. */
-body.mobile-fx #fx-secnav{display:flex;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:10px 4px max(10px,var(--sab));border-top:1px solid var(--bdr);background:var(--sur)}
+body.mobile-fx #fx-secnav{display:none}
+#fx-quicknav,#fx-mobile-nav{display:none}
+body.mobile-fx{background:#121212}
+body.mobile-fx .fx-preview-col{background:#121212;padding-top:0}
+body.mobile-fx #fx-actionbar{height:62px;flex:0 0 62px;align-items:center;background:#121212;padding:0 4px}
+body.mobile-fx .fx-act{flex:1;min-width:0;padding:6px 2px;color:#f2f2f2}
+body.mobile-fx .fx-act-ic{font-family:var(--sans);font-size:30px;font-weight:300}
+body.mobile-fx .fx-canvas-wrap{margin:0;background:#121212}
+body.mobile-fx #fx-quicknav{display:flex;flex:0 0 88px;align-items:center;justify-content:space-around;gap:2px;padding:4px 5px;background:#121212}
+body.mobile-fx #fx-quicknav button{display:flex;flex:1;min-width:0;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:74px;border:0;background:none;color:#bbb;font:12px var(--sans);cursor:pointer}
+body.mobile-fx #fx-quicknav button span{font-size:27px;line-height:1;color:#f5f5f5}
+body.mobile-fx #fx-mobile-nav{display:flex;flex:0 0 70px;align-items:stretch;padding:0 0 max(8px,var(--sab));background:#121212}
+body.mobile-fx #fx-mobile-nav button{flex:1;border:0;background:none;color:#f5f5f5;font:600 17px var(--sans);cursor:pointer}
+body.mobile-fx #fx-mobile-nav button.on{color:#fff}
+body.mobile-fx #fx-mobile-nav button.on::before{content:'⌃';display:block;height:14px;line-height:14px;font-size:24px}
+body.mobile-fx.sheet-open #fx-quicknav{display:none}
+body.mobile-fx.tools-open #fx-actionbar,body.mobile-fx.tools-open #fx-quicknav,body.mobile-fx.tools-open #fx-mobile-nav{display:none}
+body.mobile-fx.tools-open .fx-preview-col{flex:0 0 min(34vh,280px)}
+body.mobile-fx.tools-open #fx-preview-tools,body.mobile-fx.tools-open #fx-zoom-ctrl{display:none!important}
+body.mobile-fx.tools-open .fx-panel{display:none}
+body.mobile-fx.tools-open #fx-secnav{display:flex;position:fixed;z-index:var(--z-overlay);left:0;right:0;top:min(34vh,280px);bottom:0;flex-direction:column;overflow:hidden;padding:0 0 max(10px,var(--sab));background:#121212;color:#f3f3f3;border:0}
+body.mobile-fx #fx-tool-cats{display:flex;flex:0 0 62px;align-items:center;gap:4px;overflow-x:auto;padding:8px 10px;scrollbar-width:none}
+body.mobile-fx #fx-tool-cats button{flex:0 0 auto;min-width:72px;padding:12px;border:0;border-radius:3px;background:none;color:#f3f3f3;font:600 14px var(--sans);text-transform:uppercase;cursor:pointer}
+body.mobile-fx #fx-tool-cats button.on{background:#ffbd00;color:#111}
+body.mobile-fx #fx-tool-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-content:start;gap:8px 0;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px 8px 60px}
+body.mobile-fx #fx-tool-grid .fx-sec-btn{width:100%;min-width:0;min-height:90px;gap:8px;padding:8px 2px;border-radius:0;color:#ddd;font-family:var(--sans)}
+body.mobile-fx #fx-tool-grid .fx-sec-btn[hidden]{display:none}
+body.mobile-fx #fx-tool-grid .fx-sec-ic{font-size:28px;color:#f3f3f3}
+body.mobile-fx #fx-tool-grid .fx-sec-lb{white-space:normal;font-size:12px;font-weight:400;text-align:center}
+body.mobile-fx #fx-tools-close{flex:0 0 46px;align-self:center;min-width:88px;border:1px solid #eee;border-radius:2px;background:#121212;color:#fff;font:600 14px var(--sans);text-transform:uppercase;cursor:pointer}
 #fx-fab-export{display:none}
 /* One-handed reach: #fx-actionbar (with Undo/Redo/Export/etc.) is top-anchored on mobile so its
    height is reserved before the photo lays out (fxPreviewMaxH()) — export, the most-tapped and
@@ -991,6 +1020,8 @@ body.mobile-fx #fx-fab-export{display:flex;align-items:center;justify-content:ce
 body.mobile-fx #fx-fab-export:disabled{opacity:var(--op-2);background:var(--sur2);color:var(--mut)}
 body.mobile-fx #fx-fab-export .fx-act-ic{font-size:var(--fs-6)}
 body.mobile-fx.sheet-open #fx-fab-export{display:none} /* the sheet already has its own controls in reach */
+body.mobile-fx #fx-fab-export{display:none}
+body.mobile-fx.sheet-open #fx-actionbar{height:50px;flex-basis:50px;padding:0 4px}
 .fx-sec-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:none;border:none;color:var(--mut);cursor:pointer;padding:6px 12px;font-family:var(--mono);border-radius:8px;min-width:60px;min-height:44px}
 .fx-sec-btn .fx-sec-ic{font-size:24px;line-height:1}
 .fx-sec-btn .fx-sec-lb{font-size:var(--fs-1);font-weight:500;letter-spacing:0;white-space:nowrap}
@@ -2878,11 +2909,19 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       </div>
       <!-- PERSISTENT ACTION BAR (mobile) -->
       <div id="fx-actionbar">
-        <button class="fx-act" onclick="fxUndo()" title="Undo (⌘Z)"><span class="fx-act-ic">↩</span><span class="fx-act-lb">Undo</span></button>
-        <button class="fx-act" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-act-ic">↪</span><span class="fx-act-lb">Redo</span></button>
-        <button class="fx-act js-allfx" onclick="enableAll()" title="Toggle all FX"><span class="fx-act-ic">✨</span><span class="fx-act-lb">All FX</span></button>
-        <button class="fx-act fx-act-pri" onclick="exportFX()" title="Export at full resolution"><span class="fx-act-ic">↧</span><span class="fx-act-lb">Export</span></button>
-        <button class="fx-act" onclick="fxMoreMenu()" title="More tools (Match &amp; Refine, Color Copy, Collage, Guide, Log)"><span class="fx-act-ic">⋯</span><span class="fx-act-lb">More</span></button>
+        <button class="fx-act" onclick="fxMobileBack()" title="Back" aria-label="Back"><span class="fx-act-ic">‹</span></button>
+        <button class="fx-act" onclick="fxPickPhotos()" title="Open photo" aria-label="Open photo"><span class="fx-act-ic">▣</span></button>
+        <button class="fx-act" onclick="fxUndo()" title="Undo" aria-label="Undo"><span class="fx-act-ic">↶</span></button>
+        <button class="fx-act" onclick="fxRedo()" title="Redo" aria-label="Redo"><span class="fx-act-ic">↷</span></button>
+        <button class="fx-act" onclick="fxSection('info')" title="Photo information" aria-label="Photo information"><span class="fx-act-ic">ⓘ</span></button>
+        <button class="fx-act" onclick="fxMoreMenu()" title="More" aria-label="More"><span class="fx-act-ic">⋯</span></button>
+      </div>
+      <div id="fx-quicknav" aria-label="Quick tools">
+        <button onclick="fxSection('adjust')"><span>☷</span>Adjust</button>
+        <button onclick="fxSection('curves')"><span>⌁</span>Curves</button>
+        <button onclick="fxSection('canvas')"><span>▣</span>Expand</button>
+        <button onclick="fxSection('crop')"><span>⌗</span>Crop</button>
+        <button onclick="fxToolsOpen()"><span>⊞</span>More</button>
       </div>
       <!-- HORIZONTAL SECTION STRIP (mobile) -->
       <div id="fx-secnav"></div>
@@ -2892,6 +2931,11 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
            purely additive bottom-pinned duplicate for thumb reach, guarded on the same disabled
            state as the real button rather than duplicating exportFX()'s own guards. -->
       <button id="fx-fab-export" onclick="if(!this.disabled)exportFX()" title="Export at full resolution"><span class="fx-act-ic">↧</span></button>
+    </div>
+    <div id="fx-mobile-nav" aria-label="Editor navigation">
+      <button id="fx-nav-looks" onclick="fxToolsClose();fxSection('looks')">Looks</button>
+      <button id="fx-nav-tools" onclick="fxToolsOpen()">Tools</button>
+      <button id="fx-nav-export" onclick="exportFX()">Export</button>
     </div>
   </div>
 </div>
@@ -21753,15 +21797,60 @@ function _activeSec(){
   const key=c.dataset.fxsec;
   return (document.body.classList.contains('deskx')&&FX_GROUP_OF[key])?FX_GROUP_OF[key]:key;
 }
-function buildSecNav(){          // mobile horizontal strip
+const FX_MOBILE_CATS={
+  all:null,
+  refine:new Set(['adjust','curves','hsl','pointcolor','nr','lens','retouch','local']),
+  fix:new Set(['crop','canvas','borders','vig','hal','bloom','art']),
+  style:new Set(['looks','grain','style','wm','exppreset','export','share'])
+};
+let _fxMobileCat='all';
+function fxToolsOpen(){
+  if(!document.body.classList.contains('mobile-fx'))return;
+  document.body.classList.remove('sheet-open');
+  document.body.classList.add('tools-open');
+  document.getElementById('fx-nav-tools')?.classList.add('on');
+  document.getElementById('fx-nav-looks')?.classList.remove('on');
+  fxMobileFilter(_fxMobileCat);
+  fxLiveFit(360);
+  requestAnimationFrame(()=>renderPreview());
+}
+function fxToolsClose(){
+  document.body.classList.remove('tools-open');
+  document.getElementById('fx-nav-tools')?.classList.add('on');
+  fxLiveFit(360);
+  requestAnimationFrame(()=>renderPreview());
+}
+function fxMobileBack(){
+  if(document.body.classList.contains('tools-open')){fxToolsClose();return;}
+  if(document.body.classList.contains('sheet-open')){fxSheetClose();return;}
+  fxSection('image');
+}
+function fxMobileFilter(cat){
+  _fxMobileCat=cat;
+  document.querySelectorAll('#fx-tool-cats button').forEach(b=>b.classList.toggle('on',b.dataset.cat===cat));
+  document.querySelectorAll('#fx-tool-grid .fx-sec-btn').forEach(b=>{
+    b.hidden=!!FX_MOBILE_CATS[cat]&&!FX_MOBILE_CATS[cat].has(b.dataset.sec);
+  });
+}
+function buildSecNav(){          // mobile categorized tool grid
   const nav=document.getElementById('fx-secnav');if(!nav)return;
   nav.innerHTML='';
+  const cats=document.createElement('div');cats.id='fx-tool-cats';
+  [['all','All'],['refine','Refine'],['fix','Fix'],['style','Style']].forEach(([key,label])=>{
+    const b=document.createElement('button');b.type='button';b.dataset.cat=key;b.textContent=label;
+    b.onclick=()=>fxMobileFilter(key);cats.appendChild(b);
+  });
+  nav.appendChild(cats);
+  const grid=document.createElement('div');grid.id='fx-tool-grid';nav.appendChild(grid);
   _eachSection((key,lb)=>{
+    if(key==='image'||key==='info'||key==='diag')return;
     const b=document.createElement('button');b.className='fx-sec-btn';b.dataset.sec=key;
     b.innerHTML=`<span class="fx-sec-ic">${icon(key,18)}</span><span class="fx-sec-lb">${lb}</span>`;
     b.onclick=()=>fxSection(key);
-    nav.appendChild(b);
+    grid.appendChild(b);
   });
+  const close=document.createElement('button');close.id='fx-tools-close';close.type='button';close.textContent='Close';close.onclick=fxToolsClose;nav.appendChild(close);
+  fxMobileFilter(_fxMobileCat);
   fxSection(_activeSec()||(window.__TAURI__?'looks':'image'),true);
 }
 function buildToolRail(){        // desktop vertical labelled rail
@@ -21891,6 +21980,7 @@ function fxInitEdges(){
   });
 }
 function fxSection(name,noSheet){
+  if(document.body.classList.contains('tools-open'))fxToolsClose();
   const dx=document.body.classList.contains('deskx');
   const members=(dx&&FX_GROUPS[name])?FX_GROUPS[name].members:[name];
   const cards=members.map(_fxSectionCard).filter(Boolean);
@@ -21898,6 +21988,10 @@ function fxSection(name,noSheet){
   if(members.includes('hsl'))setTimeout(hslBuildHist,60);
   if(typeof mskOverlaySync==='function')setTimeout(mskOverlaySync,60);
   const mob=document.body.classList.contains('mobile-fx');
+  if(mob){
+    document.getElementById('fx-nav-looks')?.classList.toggle('on',name==='looks');
+    document.getElementById('fx-nav-tools')?.classList.toggle('on',name!=='looks');
+  }
   const isActive=cards.some(c=>c.classList.contains('sec-active'));
   // Mobile bottom-sheet behavior: tapping the ACTIVE tool's icon again closes the sheet.
   if(mob&&!noSheet&&isActive&&document.body.classList.contains('sheet-open')){fxSheetClose();return;}
@@ -21936,6 +22030,8 @@ function fxSection(name,noSheet){
 function fxSheetClose(){
   document.body.classList.remove('sheet-open');
   document.querySelectorAll('#fx-secnav .fx-sec-btn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('fx-nav-looks')?.classList.remove('on');
+  document.getElementById('fx-nav-tools')?.classList.add('on');
   fxLiveFit(360);
 }
 // ── Live-fit: while the bottom sheet animates or is being dragged, rescale the EXISTING
@@ -22220,6 +22316,7 @@ function applyFxLayout(){
   document.body.classList.toggle('fx-deskb',desk);
   document.body.classList.toggle('fx-single',mob||desk);
   if(!mob)document.body.classList.remove('sheet-open'); // sheet state is mobile-only
+  if(!mob)document.body.classList.remove('tools-open');
   if(mob){buildSecNav();if(!_activeSec())fxSection(window.__TAURI__?'looks':'image',true);}
   else if(desk){buildToolRail();if(!_activeSec())fxSection(window.__TAURI__?'looks':'image',true);}
   // Idempotent: the handles are static markup, so this only ever (re)binds them once per element.
