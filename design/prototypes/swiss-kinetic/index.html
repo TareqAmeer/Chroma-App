@@ -92,32 +92,46 @@ body[data-win=mono] .win i{--c:var(--ink)!important}
 .sw .sep{position:relative;z-index:2;width:2px;align-self:stretch;background:var(--mut);margin:4px 2px}
 .sw .slab,.sw .slab2{position:absolute;z-index:1;left:0;top:var(--slab-top);bottom:calc(var(--oy) * -1);width:10px;background:var(--ca);will-change:transform,width}
 .sw .slab2{z-index:0;background:var(--cb);top:calc(var(--slab-top) + var(--oy) * 2);bottom:calc(var(--oy) * -2.2)}
+/* Two-tone slab: each slab's top/bottom/x/width is its own control; x mirrors away from the divider on gallery|studio. */
+.sw:not(.seg):not(.vert) .slab{top:var(--sa-top);bottom:calc(var(--sa-bot) * -1)}
+.sw:not(.seg):not(.vert) .slab2{top:var(--sb-top);bottom:calc(var(--sb-bot) * -1)}
+body[data-front=b] .sw:not(.seg):not(.vert) .slab2{z-index:1}
+body[data-front=b] .sw:not(.seg):not(.vert) .slab{z-index:0}
 body[data-slab=single] .sw .slab2{display:none}
 body[data-slab=outline] .sw .slab{background:none;border:2px solid var(--ca)}
 body[data-slab=outline] .sw .slab2{display:none}
 body[data-slab=outline] .sw .opt.on{color:var(--ink)}
 .sw.big{font:700 44px/1 var(--f);letter-spacing:-.04em}
 .sw.mid{font:700 26px/1 var(--f);letter-spacing:-.03em}
-.sw.seg{font:700 11px/1 var(--f);letter-spacing:.1em;text-transform:uppercase;align-items:stretch;height:26px;box-shadow:inset 0 -1px 0 var(--mut)}
-.sw.seg .opt{display:grid;place-items:center;padding:0 11px;background:none;border:0;cursor:pointer}
-.sw.seg .opt+.opt::before{content:'';position:absolute;left:-1px;top:7px;bottom:7px;width:2px;background:var(--mut)}
-.sw.seg[data-segv=box] .opt+.opt::before{display:none}
+.sw.seg{font:700 var(--sg-fs)/1 var(--f);letter-spacing:.1em;text-transform:uppercase;align-items:stretch;height:calc(var(--sg-fs) + 15px)}
+body[data-sgcase=lower] .sw.seg{text-transform:none;letter-spacing:-.01em}
+body[data-sgbase=on] .sw.seg{box-shadow:inset 0 -1px 0 var(--mut)}
+.sw.seg .opt{display:grid;place-items:center;padding:0 var(--sg-pad);background:none;border:0;cursor:pointer}
+.sw.seg .opt+.opt::before{content:'';position:absolute;left:-1px;top:28%;bottom:28%;width:2px;background:var(--mut)}
+body[data-sgsep=line] .sw.seg .opt+.opt::before{width:1px;top:0;bottom:0;background:var(--line)}
+body[data-sgsep=none] .sw.seg .opt+.opt::before{display:none}
 .sw.seg .opt:not(.on):hover{color:var(--ink)}
-.sw.seg .slab{top:0;bottom:0}
-.sw.seg .slab2{top:calc(var(--oy)*.5);bottom:calc(var(--oy)*-.5)}
-/* Segmented variants (data-segv). --sk/--sk2 scale the slabs' sideways offset (read by makeSwitch). */
-.sw.seg[data-segv=slab],.sw.seg[data-segv=box],.sw.seg[data-segv=outline]{box-shadow:none}
-.sw.seg[data-segv=slab] .opt+.opt,.sw.seg[data-segv=box] .opt+.opt,.sw.seg[data-segv=outline] .opt+.opt{box-shadow:none}
-.sw.seg[data-segv=slab]{--sk:.5;--sk2:1}
-.sw.seg[data-segv=slab] .slab{top:var(--slab-top);bottom:calc(var(--oy)*-.5)}
-.sw.seg[data-segv=slab] .slab2{top:calc(var(--slab-top) + var(--oy));bottom:calc(var(--oy)*-1)}
-.sw.seg[data-segv=box]{box-shadow:inset 0 0 0 1px var(--line)}
-.sw.seg[data-segv=box] .slab{background:var(--ink)}
-.sw.seg[data-segv=box] .opt.on{color:var(--bg)}
-.sw.seg[data-segv=outline]{--sk:.4;--sk2:0}
-.sw.seg[data-segv=outline] .slab{background:none;border:1.5px solid var(--ca);top:calc(var(--oy)*-.4);bottom:calc(var(--oy)*.4)}
+body[data-sgon=ink] .sw.seg .opt.on{color:var(--ink)}
+.sw.seg .slab{top:var(--sg-top);bottom:calc(var(--sg-bot) * -1)}
+.sw.seg .slab2{top:calc(var(--sg-top) + var(--sg-y2));bottom:calc(var(--sg-bot) * -1 - var(--sg-y2))}
+/* Segmented variants (data-segv); the Segmented knobs in the panel apply on top of each one. */
+.sw.seg[data-segv=cell] .slab{top:0;bottom:0}
+.sw.seg[data-segv=cell] .slab2{top:var(--sg-y2);bottom:calc(var(--sg-y2) * -1)}
+.sw.seg[data-segv=box]{box-shadow:inset 0 0 0 1px var(--line)!important;--sg-x:0px}
+.sw.seg[data-segv=box] .slab{background:var(--ink);top:0;bottom:0}
+.sw.seg[data-segv=box] .slab2{display:none}
+.sw.seg[data-segv=box] .opt.on{color:var(--bg)!important}
+.sw.seg[data-segv=box] .opt+.opt::before{display:none}
+.sw.seg[data-segv=outline]{--sg-x2:0px}
+.sw.seg[data-segv=outline] .slab{background:none;border:1.5px solid var(--ca)}
 .sw.seg[data-segv=outline] .slab2{display:block!important;background:color-mix(in srgb,var(--ink) 12%,transparent);top:0;bottom:0}
 .sw.seg[data-segv=outline] .opt.on{color:var(--ink)}
+.sw.seg[data-segv=text] .slab,.sw.seg[data-segv=text] .slab2{display:none!important}
+.sw.seg[data-segv=text] .opt{color:var(--mut)}
+.sw.seg[data-segv=text] .opt.on{color:var(--ink)!important}
+.sw.seg[data-segv=text] .opt.on::after{content:'';position:absolute;left:50%;bottom:-3px;width:5px;height:5px;margin-left:-2.5px;background:var(--ca)}
+.sw.seg[data-segv=gs]{font-size:calc(var(--sg-fs) * 1.6);text-transform:none;letter-spacing:-.03em;height:calc(var(--sg-fs) * 1.6 + 12px)}
+.sw.seg[data-segv=gs] .slab2{display:block!important}
 .sw.vert{flex-direction:column;align-items:stretch;cursor:default}
 .sw.vert .slab{top:0;left:0;right:auto;height:10px;bottom:auto;width:4px}
 .sw.vert .slab2{display:none}
@@ -189,11 +203,11 @@ body[data-tg=slab] .k-tg.on::after{background:var(--cb)}
   background:radial-gradient(circle,var(--ink) 0 1.6px,transparent 2.1px) no-repeat var(--dotx,0) 4px/5px 5px}
 body[data-dot=moved] .k-sl:not(.mod){background-size:0 0}
 .k-sl::-webkit-slider-runnable-track{height:2px;background:linear-gradient(to right,var(--line) 0 var(--lo),var(--ca) var(--lo) var(--hi),var(--line) var(--hi) 100%)}
-.k-sl::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-7px;background:var(--bg);border:2px solid var(--ink);transform:rotate(var(--roll,0deg));transition:transform 80ms linear,background var(--dur-fast)}
+.k-sl::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-7px;background:var(--bg);border:var(--sl-bw) solid var(--ink);transform:rotate(var(--roll,0deg));transition:transform 80ms linear,background var(--dur-fast)}
 /* Filled with a white border on hover, and stays filled while the value is away from its default. */
 .k-sl:hover::-webkit-slider-thumb,.k-sl.mod::-webkit-slider-thumb{background:var(--ca)}
 .k-sl::-moz-range-track{height:2px;background:var(--line)}
-.k-sl::-moz-range-thumb{width:16px;height:16px;background:var(--bg);border:2px solid var(--ink);transform:rotate(var(--roll,0deg))}
+.k-sl::-moz-range-thumb{width:16px;height:16px;background:var(--bg);border:var(--sl-bw) solid var(--ink);transform:rotate(var(--roll,0deg))}
 .k-sl.mod::-moz-range-thumb{background:var(--ca)}
 .val{font-variant-numeric:tabular-nums;text-align:right;display:flex;justify-content:flex-end;height:1.2em;overflow:hidden;line-height:1.2em}
 .val .d{display:inline-flex;flex-direction:column;transition:transform var(--dur-fast) var(--ease)}
@@ -309,8 +323,8 @@ body[data-side=offset] .side .opt.on{color:#fff;transform:translateX(12px)}
 .splash{position:relative;height:560px;width:720px;overflow:hidden;color:#fff;
   background:linear-gradient(90deg,#3a2418 0 9%,transparent 9% 13%,#2f1d14 13% 17%,transparent 17% 80%,#3b2619 80% 86%,transparent 86%),
     radial-gradient(ellipse at 85% 70%,#c9c3a4 0,#7d806a 30%,transparent 60%),linear-gradient(#5d6b4e,#394232 55%,#2d3326)}
-.splash .bl{position:absolute;left:144px;top:29px;width:533px;height:421px;background:var(--b)}
-.splash .or{position:absolute;left:61px;top:160px;width:480px;height:322px;background:var(--a)}
+.splash .bl{position:absolute;left:144px;top:29px;width:533px;height:421px;background:var(--splash-b)}
+.splash .or{position:absolute;left:61px;top:160px;width:480px;height:322px;background:var(--splash-a)}
 .splash .ph{position:absolute;left:259px;top:59px;width:397px;height:273px;background:#fff;padding:7px}
 .splash .ph img{display:block;width:100%;height:100%;object-fit:cover;object-position:center 40%;filter:grayscale(1) contrast(1.1);border:3px solid #000}
 .splash .wm{position:absolute;left:153px;top:64px;height:400px;font:700 52px/1 var(--f);letter-spacing:-.02em;writing-mode:vertical-rl;transform:rotate(180deg);text-transform:uppercase;white-space:nowrap;text-align:right}
@@ -382,7 +396,7 @@ body[data-menu=invert] .rbar .lib-menu .opt::before,body[data-menu=invert] .rbar
 body[data-menu=invert] .rbar .lib-menu .opt:hover,body[data-menu=invert] .rbar .lib-menu .opt-action:hover{color:var(--ink)}
 
 /* ── filters panel (captured #lib-filters-panel, restyled) ──────── */
-.fwrap{overflow:clip;flex:none}
+.fwrap{overflow:clip;flex:none}.fwrap.open{overflow:visible}
 .fwrap #lib-filters-panel{width:260px;display:flex;flex-direction:column;gap:12px;padding:12px 16px 16px;border:1px solid var(--line);background:var(--bg);transition:transform var(--dur) var(--ease)}
 .fwrap:not(.open) #lib-filters-panel{transform:translateX(105%)}
 #lib-filters-panel-head{display:flex;justify-content:space-between;align-items:center;font:700 11px/1 var(--f);letter-spacing:.14em;text-transform:uppercase;padding-bottom:10px;border-bottom:1.5px solid var(--ink)}
@@ -390,6 +404,14 @@ body[data-menu=invert] .rbar .lib-menu .opt:hover,body[data-menu=invert] .rbar .
 #lib-filters-panel-close:hover{color:var(--ink);transform:rotate(90deg)}
 #lib-filters-panel-close svg{width:14px;height:14px}
 .lib-filter-field{display:flex;flex-direction:column;gap:5px}
+.fwrap .lib-filter-field>label,.fwrap select{display:none!important}
+.fwrap #lib-filters-panel{gap:8px}
+.fwrap .k-sel{width:100%}
+.fwrap .k-sel button{font-size:12px;border-width:1px;gap:8px}
+.fwrap .k-sel button .dl{color:var(--mut)}
+.fwrap .k-sel button .dv{flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fwrap .k-sel.set button{border-color:var(--ca);box-shadow:calc(var(--ox)*.5) calc(var(--oy)*.5) 0 var(--ca)}
+.fwrap .k-sel .k-menu{min-width:0;max-height:260px;overflow:auto}
 .lib-filter-field label,.lib-fp-label{font:700 9px/1 var(--f);letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
 .lib-fp-label{margin-top:6px;padding-top:12px;border-top:1px solid var(--line)}
 .fwrap select{-webkit-appearance:none;appearance:none;width:100%;height:30px;padding:0 28px 0 10px;background:var(--bg) linear-gradient(var(--ca),var(--ca)) no-repeat right 11px center/6px 6px;border:1px solid var(--line);font-size:12px;cursor:pointer;transition:border-color var(--dur-fast),background-size var(--dur-fast) var(--ease)}
@@ -400,7 +422,7 @@ body[data-menu=invert] .rbar .lib-menu .opt:hover,body[data-menu=invert] .rbar .
 #lib-subfolders-wrap{display:flex;align-items:center;gap:9px;font-size:12px;cursor:pointer}
 #lib-subfolders{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin:0;border:1px solid var(--ink);background:var(--bg);cursor:pointer;transition:background var(--dur-fast),transform var(--dur) var(--ease)}
 #lib-subfolders:checked{background:var(--ca);border-color:var(--ca);transform:rotate(90deg)}
-#lib-filters-clear{align-self:flex-start}
+#lib-filters-clear{align-self:stretch;height:30px;font-size:11px;padding:0 10px}
 #lib-filters-btn.on{background:var(--ink);color:var(--bg)}
 
 /* ── secondary filter row (captured #lib-filter-row) ─────────────── */
@@ -412,7 +434,7 @@ body[data-menu=invert] .rbar .lib-menu .opt:hover,body[data-menu=invert] .rbar .
 .frow .lib-filterdiv{width:2px;height:16px;background:var(--mut);margin:0 10px}
 .frow button.k-chip{color:inherit;display:inline-flex;align-items:center;height:24px}
 .frow .k-chip.ic{padding:0 7px}.frow .k-chip.ic svg{width:12px;height:12px}
-.frow .k-chip.rej{--ca:var(--mut)}.frow .k-chip.fav{--ca:var(--cb)}
+.frow .k-chip.rej{--ca:var(--mut)}.frow .k-chip.fav{--ca:var(--b);--cb:var(--a)}
 .frow [data-conditional]{display:none!important}.frow.more [data-conditional]{display:inline-flex!important}
 
 /* ── submenus ──────────────────────────────────────────────────── */
@@ -422,6 +444,13 @@ body[data-menu=invert] .rbar .lib-menu .opt:hover,body[data-menu=invert] .rbar .
 .k-menu div.subm::before{display:none}
 .k-menu .has-sub:hover>.subm{clip-path:inset(-10px -20px -20px 0);pointer-events:auto}
 .k-menu .subm div{color:var(--bg)}
+/* Menu colour: inverted (ink) or surface (page colour with a hairline). */
+body[data-menubg=surface]{--hr:var(--line)}
+body[data-menubg=surface] .k-menu,body[data-menubg=surface] .rbar .lib-menu{background:var(--bg);color:var(--ink);border-color:var(--line)}
+body[data-menubg=surface] .k-menu .subm div{color:var(--ink)}
+.k-menu .sq{width:8px;height:8px;flex:none;background:var(--ca);visibility:hidden;margin-left:10px}
+.k-menu .on>.sq{visibility:visible}
+.k-menu div:hover>.sq{background:#fff}
 .k-menu .subm div:hover{color:#fff}
 body[data-menu=invert] .k-menu .subm div:hover{color:var(--ink)}
 
@@ -468,6 +497,8 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
     <div class="dr"><label>Background</label><input type="color" data-var="--bg"><output></output></div>
     <div class="dr"><label>Ink</label><input type="color" data-var="--ink"><output></output></div>
     <div class="dr"><label>Muted</label><input type="color" data-var="--mut"><output></output></div>
+    <div class="dr"><label>Splash orange</label><input type="color" data-var="--splash-a"><output></output></div>
+    <div class="dr"><label>Splash blue</label><input type="color" data-var="--splash-b"><output></output></div>
   </fieldset>
 
   <fieldset><legend>Imperfection</legend>
@@ -481,6 +512,34 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
     <div class="dr full"><label>What dims</label><select data-attr="dim"><option value="colour">Colours only</option><option value="zone">Whole area</option><option value="off">Nothing</option></select></div>
     <div class="dr"><label>Resting level</label><input type="range" min="0.1" max="1" step="0.05" data-var="--dim"><output></output></div>
     <div class="dr"><label>Fade time</label><input type="range" min="0" max="800" step="20" data-var="--dim-dur" data-unit="ms"><output></output></div>
+  </fieldset>
+
+  <fieldset><legend>Two-tone slab · gallery / studio</legend>
+    <div class="sub" style="margin:0 0 6px">Set Slab style to Two-tone stepped. Top and bottom are measured from the word's box (bottom = how far below it). X mirrors away from the divider.</div>
+    <div class="dr full"><label>In front</label><select data-attr="front"><option value="a">Colour A slab</option><option value="b">Colour B slab</option></select></div>
+    <div class="dr"><label>A · x</label><input type="range" min="-30" max="30" step="1" data-var="--sa-x" data-unit="px"><output></output></div>
+    <div class="dr"><label>A · top</label><input type="range" min="-20" max="30" step="1" data-var="--sa-top" data-unit="px"><output></output></div>
+    <div class="dr"><label>A · bottom</label><input type="range" min="-20" max="30" step="1" data-var="--sa-bot" data-unit="px"><output></output></div>
+    <div class="dr"><label>A · extra width</label><input type="range" min="-30" max="40" step="1" data-var="--sa-w" data-unit="px"><output></output></div>
+    <div class="dr"><label>B · x</label><input type="range" min="-30" max="30" step="1" data-var="--sb-x" data-unit="px"><output></output></div>
+    <div class="dr"><label>B · top</label><input type="range" min="-20" max="30" step="1" data-var="--sb-top" data-unit="px"><output></output></div>
+    <div class="dr"><label>B · bottom</label><input type="range" min="-20" max="30" step="1" data-var="--sb-bot" data-unit="px"><output></output></div>
+    <div class="dr"><label>B · extra width</label><input type="range" min="-30" max="40" step="1" data-var="--sb-w" data-unit="px"><output></output></div>
+  </fieldset>
+
+  <fieldset><legend>Segmented</legend>
+    <div class="dr full"><label>Style</label><select id="segv"><option value="cell">Cell</option><option value="slab">Low slab</option><option value="box">Boxed, inverted</option><option value="outline">Shifted outline</option><option value="text">Text + square</option><option value="gs">Like gallery / studio</option></select></div>
+    <div class="dr"><label>Text size</label><input type="range" min="9" max="20" step="1" data-var="--sg-fs" data-unit="px"><output></output></div>
+    <div class="dr full"><label>Case</label><select data-attr="sgcase"><option value="upper">UPPERCASE</option><option value="lower">lowercase</option></select></div>
+    <div class="dr"><label>Cell padding</label><input type="range" min="3" max="22" step="1" data-var="--sg-pad" data-unit="px"><output></output></div>
+    <div class="dr full"><label>Dividers</label><select data-attr="sgsep"><option value="bar">Bars, like gallery | studio</option><option value="line">Full-height hairlines</option><option value="none">None</option></select></div>
+    <div class="dr full"><label>Baseline rule</label><select data-attr="sgbase"><option value="off">Off</option><option value="on">On</option></select></div>
+    <div class="dr full"><label>Selected text</label><select data-attr="sgon"><option value="white">White</option><option value="ink">Ink</option></select></div>
+    <div class="dr"><label>Slab top</label><input type="range" min="-10" max="80" step="1" data-var="--sg-top" data-unit="%"><output></output></div>
+    <div class="dr"><label>Slab below</label><input type="range" min="-10" max="14" step="1" data-var="--sg-bot" data-unit="px"><output></output></div>
+    <div class="dr"><label>Slab x</label><input type="range" min="-12" max="12" step="1" data-var="--sg-x" data-unit="px"><output></output></div>
+    <div class="dr"><label>2nd slab x</label><input type="range" min="-12" max="16" step="1" data-var="--sg-x2" data-unit="px"><output></output></div>
+    <div class="dr"><label>2nd slab y</label><input type="range" min="-10" max="12" step="1" data-var="--sg-y2" data-unit="px"><output></output></div>
   </fieldset>
 
   <fieldset><legend>Motion</legend>
@@ -500,10 +559,11 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
     <div class="dr"><label>Button border</label><input type="range" min="0" max="4" step="0.5" data-var="--bw-btn" data-unit="px"><output></output></div>
     <div class="dr full"><label>Icon buttons</label><select id="hv-ic"><option value="offset">Offset block</option><option value="fill">Fill</option><option value="turn">Quarter turn</option><option value="turnjump">Quarter turn + offset jump</option><option value="slab">Low slab (like gallery/studio)</option><option value="slabturn">Low slab + quarter turn</option></select></div>
     <div class="dr full"><label>Icon selected</label><select data-attr="icsel"><option value="slab">Low slab</option><option value="fill">Fill</option><option value="block">Offset block</option></select></div>
-    <div class="dr full"><label>Segmented</label><select id="segv"><option value="cell">Cell on a baseline</option><option value="slab">Low slab</option><option value="box">Boxed, inverted</option><option value="outline">Shifted outline</option></select></div>
     <div class="dr full"><label>Slider reset dot</label><select data-attr="dot"><option value="moved">Only once moved</option><option value="always">Always</option></select></div>
     <div class="dr full"><label>Icon borders</label><select data-attr="icb"><option value="on">Borders</option><option value="none">No borders</option></select></div>
     <div class="dr"><label>Icon border</label><input type="range" min="0.5" max="4" step="0.5" data-var="--bw-ic" data-unit="px"><output></output></div>
+    <div class="dr full"><label>Menu colour</label><select data-attr="menubg"><option value="ink">Inverted (ink)</option><option value="surface">Page colour + hairline</option></select></div>
+    <div class="dr"><label>Slider thumb border</label><input type="range" min="0.5" max="3" step="0.25" data-var="--sl-bw" data-unit="px"><output></output></div>
     <div class="dr full"><label>Menu rows</label><select data-attr="menu"><option value="slab">Slab wipe</option><option value="invert">Invert</option><option value="shift">Shift right</option></select></div>
     <div class="dr"><label>Menu wipe speed</label><input type="range" min="0" max="1000" step="20" data-var="--menu-dur" data-unit="ms"><output></output></div>
     <div class="dr"><label>Menu slab shift X</label><input type="range" min="-12" max="12" step="1" data-var="--msx" data-unit="px"><output></output></div>
@@ -645,7 +705,7 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
 (() => {
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const root = document.documentElement, body = document.body;
-const store = { get(k) { try { return JSON.parse(localStorage.getItem('sk5.' + k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem('sk5.' + k, JSON.stringify(v)); } catch {} } };
+const store = { get(k) { try { return JSON.parse(localStorage.getItem('sk6.' + k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem('sk6.' + k, JSON.stringify(v)); } catch {} } };
 
 // ── settings model ────────────────────────────────────────────────
 const EASES = { 'Inertia (0.16,1,0.3,1)': '.16,1,.3,1', 'Expo out': '.19,1,.22,1', 'Soft overshoot': '.34,1.56,.64,1', 'Hard overshoot': '.68,-.6,.32,1.6', 'Standard': '.4,0,.2,1', 'Linear': '0,0,1,1' };
@@ -653,14 +713,20 @@ const HOVERS = { slip: 'Text slip', slab: 'Slab slide-in', flood: 'Instant inver
 const PRESETS = { 'Cadmium / Cobalt': { '--a': '#e0500c', '--b': '#1414a0' }, 'Klein / Signal': { '--a': '#0015ff', '--b': '#e02c00' }, 'Orange / Ink': { '--a': '#e0500c', '--b': '#f2f2f0' }, 'Splash': { '--a': '#d84300', '--b': '#1013a0' } };
 // Defaults = the 2026-09-24 review round 2 export. Storage keys move per round so the new picks show on first open.
 const DEFAULTS = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#1b1b1b', '--ink': '#f2f2f0', '--mut': '#7c7c78', '--ox': '6px', '--oy': '6px', '--slab-top': '34%', '--dim': '0.35', '--dim-dur': '220ms', '--dur': '500ms', '--dur-fast': '180ms',
-    '--bw-btn': '0.5px', '--bw-ic': '1px', '--menu-dur': '900ms', '--msx': '10px', '--msy': '5px', '--tb-sl': '62px' },
-  attrs: { dim: 'off', slab: 'single', sel: 'slab', side: 'offset', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved' },
-  cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'slabturn', roll: 'roll', segv: 'cell', swap: 'slide' };
+    '--bw-btn': '0.5px', '--bw-ic': '1px', '--menu-dur': '900ms', '--msx': '10px', '--msy': '5px', '--tb-sl': '62px',
+    '--sa-x': '6px', '--sa-top': '9px', '--sa-bot': '6px', '--sa-w': '0px', '--sb-x': '12px', '--sb-top': '21px', '--sb-bot': '13px', '--sb-w': '0px',
+    '--sg-fs': '11px', '--sg-pad': '11px', '--sg-top': '34%', '--sg-bot': '3px', '--sg-x': '3px', '--sg-x2': '6px', '--sg-y2': '6px', '--sl-bw': '1px', '--splash-a': '#e0500c', '--splash-b': '#1414a0' },
+  attrs: { front: 'a', sgcase: 'upper', sgsep: 'bar', sgbase: 'off', sgon: 'white', menubg: 'ink', dim: 'off', slab: 'single', sel: 'tag', side: 'fill', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved' },
+  cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'slabturn', roll: 'roll', segv: 'slab', swap: 'slide' };
 // Dark and light are separate setting sets (and separate notes). Light starts as a copy of dark with light colours.
-const LIGHT_COLOURS = { '--bg': '#f2f2ee', '--ink': '#161616', '--mut': '#77776f' };
-const themeDefaults = (t) => { const d = structuredClone(DEFAULTS); if (t === 'light') Object.assign(d.vars, LIGHT_COLOURS); return d; };
+// Light defaults = the 2026-09-25 light export (A/B swapped, black ink, stepped slab laid out like the gallery|studio sketch).
+const LIGHT = { vars: { '--a': '#1413a0', '--b': '#e0500c', '--bg': '#f2f2ee', '--ink': '#000000', '--mut': '#77776f', '--slab-top': '10%',
+    '--sa-x': '5px', '--sa-top': '10px', '--sa-bot': '8px', '--sb-x': '-3px', '--sb-top': '-4px', '--sb-bot': '-8px' },
+  attrs: { slab: 'stepped', sel: 'outline', side: 'offset', menubg: 'surface', front: 'a' } };
+const themeDefaults = (t) => { const d = structuredClone(DEFAULTS); if (t === 'light') { Object.assign(d.vars, LIGHT.vars); Object.assign(d.attrs, LIGHT.attrs); } return d; };
 const norm = (x, t) => { const d = themeDefaults(t), o = Object.assign(d, x || {}); o.vars = Object.assign({}, d.vars, x?.vars); o.attrs = Object.assign({}, d.attrs, x?.attrs); return o; };
 let P = store.get('themes');
+if (!P) { try { P = JSON.parse(localStorage.getItem('sk5.themes')); } catch {} } // round 4: keep round-3 settings, start notes fresh
 if (!P) { // first open since the split: carry the previous round's settings and notes over as dark mode
   const old = (k) => { try { return JSON.parse(localStorage.getItem('sk4.' + k)); } catch { return null; } };
   const prev = old('settings'); if (prev) { delete prev.lvars; if (prev.attrs) delete prev.attrs.theme; }
@@ -716,6 +782,9 @@ const exportTheme = (S, th) => {
   return {
     color: { accentA: c(S.vars['--a']), accentB: c(S.vars['--b']), bg: c(S.vars['--bg']), ink: c(S.vars['--ink']), muted: c(S.vars['--mut']) },
     offset: { x: d(S.vars['--ox']), y: d(S.vars['--oy']), slabTop: d(S.vars['--slab-top']), slabStyle: S.attrs.slab },
+    twoToneSlab: { inFront: S.attrs.front, a: { x: d(S.vars['--sa-x']), top: d(S.vars['--sa-top']), bottom: d(S.vars['--sa-bot']), extraWidth: d(S.vars['--sa-w']) }, b: { x: d(S.vars['--sb-x']), top: d(S.vars['--sb-top']), bottom: d(S.vars['--sb-bot']), extraWidth: d(S.vars['--sb-w']) } },
+    segmented: { style: S.segv, textSize: d(S.vars['--sg-fs']), case: S.attrs.sgcase, padding: d(S.vars['--sg-pad']), dividers: S.attrs.sgsep, baseline: S.attrs.sgbase, selectedText: S.attrs.sgon, slabTop: d(S.vars['--sg-top']), slabBelow: d(S.vars['--sg-bot']), slabX: d(S.vars['--sg-x']), slab2X: d(S.vars['--sg-x2']), slab2Y: d(S.vars['--sg-y2']) },
+    menuColour: S.attrs.menubg, sliderThumbBorder: d(S.vars['--sl-bw']), splash: { orange: c(S.vars['--splash-a']), blue: c(S.vars['--splash-b']) },
     border: { button: d(S.vars['--bw-btn']), icon: S.attrs.icb === 'none' ? 'none' : d(S.vars['--bw-ic']) },
     menu: { wipe: t(S.vars['--menu-dur']), slabShiftX: d(S.vars['--msx']), slabShiftY: d(S.vars['--msy']) },
     dim: { mode: S.attrs.dim, level: { $type: 'number', $value: +S.vars['--dim'] }, fade: t(S.vars['--dim-dur']) },
@@ -759,11 +828,12 @@ function makeSwitch(el) {
     if (p < 0) { x += p * a.w; } if (p > n) { x += (p - n) * b.w; }
     // Slab offsets: segmented sits in its cell (B steps half an offset), the mode switch leans away from
     // its divider (left on the first word, right on the last) so the slab never touches the line.
-    const lean = el.id === 'mode-sw' ? -0.5 + 1.5 * (c / (n || 1)) : 1, seg = el.classList.contains('seg');
+    const sign = el.id === 'mode-sw' ? -1 + 2 * (c / (n || 1)) : 1, seg = el.classList.contains('seg');
     for (const s of slabs) {
-      const two = s.classList.contains('slab2'), k = two ? (seg ? 0.5 : 2 * lean) : (seg ? 0 : lean), ox = `calc(var(--ox) * var(${two ? '--sk2' : '--sk'}, ${k.toFixed(3)}))`;
+      const two = s.classList.contains('slab2');
+      const ox = seg ? `var(${two ? '--sg-x2' : '--sg-x'})` : `var(${two ? '--sb-x' : '--sa-x'}) * ${sign.toFixed(3)}`, xw = seg ? '0px' : `var(${two ? '--sb-w' : '--sa-w'})`;
       if (vert) { s.style.transform = `translateY(${x}px)`; s.style.height = w + 'px'; }
-      else { s.style.transform = `translateX(calc(${x}px + ${ox}))`; s.style.width = w + 'px'; }
+      else { s.style.transform = `translateX(calc(${x}px + ${ox} - ${xw} / 2))`; s.style.width = `calc(${w}px + ${xw})`; }
     }
     opts.forEach((o, i) => o.classList.toggle('on', i === Math.round(c)));
   }
@@ -839,7 +909,7 @@ const spec = $('#btn-spec');
   r.innerHTML = '<small class="eyebrow" style="margin:0" id="btn-cur"></small>' + [['primary', 'Export'], ['outline', 'All FX'], ['', 'Download .cube'], ['danger', 'Remove']].map(([c, t]) => `<button class="k-btn ${c}">${t}</button>`).join('') + '<span></span>';
   spec.append(r); $$('.k-btn', r).forEach(wrapBtn); }
 { const r = document.createElement('div'); r.style.cssText = 'display:grid;grid-template-columns:170px auto 1fr;gap:14px;align-items:center'; r.innerHTML = '<small class="eyebrow" style="margin:0">Disabled</small><button class="k-btn primary" disabled>Export</button><span></span>'; spec.append(r); wrapBtn($('.k-btn', r)); }
-const SEGV = { cell: 'Cell on a baseline', slab: 'Low slab', box: 'Boxed, inverted', outline: 'Shifted outline' };
+const SEGV = { cell: 'Cell', slab: 'Low slab', box: 'Boxed, inverted', outline: 'Shifted outline', text: 'Text + square', gs: 'Like gallery / studio' };
 $('#seg-spec').innerHTML = Object.entries(SEGV).map(([k, n]) => `<small class="eyebrow" style="margin:0">${n}</small><div class="sw seg" data-fixed data-segv="${k}" data-idx="0"><span class="slab2"></span><span class="slab"></span><span class="opt">FIT</span><span class="opt">FILL</span><span class="opt">1:1</span><span class="opt">2:1</span></div>`).join('');
 // Icon buttons select on click (flag/pick exclusive, as in the app).
 document.addEventListener('click', (e) => { const b = e.target.closest('.k-ic'); if (!b || noting) return;
@@ -907,20 +977,49 @@ function swapBars(i) {
 $('#mode-sw').addEventListener('swchange', (e) => { swapBars(e.detail); placePins(); });
 // Filters panel: the app's own markup; the top bar's Filters button slides it in and out.
 $('#fwrap').innerHTML = (window.REAL_BARS || {}).filters || '<p class="note">Re-run node scripts/redesign-capture-bars.mjs</p>';
-$$('#fwrap select').forEach((x) => { x.value = x.options[0]?.value; x.addEventListener('change', () => { x.classList.toggle('set', x.selectedIndex > 0); snap(); }); });
-if ($('#lib-filters-clear')) { $('#lib-filters-clear').className = 'k-btn'; wrapBtn($('#lib-filters-clear')); $('#lib-filters-clear').addEventListener('click', () => $$('#fwrap select').forEach((x) => { x.selectedIndex = 0; x.classList.remove('set'); })); }
+// Filter state shared by the secondary row and the panel. File type and Tags are multi-select sets (empty = all).
+const F = { type: new Set(), flag: new Set() };
+const MULTI = { 'lib-type-filter': 'type', 'lib-tag-filter': 'flag' };
+const DD = [];
+$$('#fwrap select').forEach((sel) => {
+  if (sel.closest('[data-was-hidden]')) return;
+  const lab = sel.closest('.lib-filter-field')?.querySelector('label')?.textContent.trim() || '', key = MULTI[sel.id];
+  const opts = [...sel.options].map((o) => ({ v: o.value, t: o.textContent.trim() }));
+  const dd = document.createElement('div'); dd.className = 'k-sel fdd';
+  dd.innerHTML = `<button type="button">${lab ? `<span class="dl">${lab}:</span>` : ''}<span class="dv"></span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"/></svg></button><div class="k-menu">${opts.map((o) => `<div data-v="${o.v}">${o.t}<i class="sq"></i></div>`).join('')}</div>`;
+  sel.after(dd);
+  const api = { sel, key, opts, dd, val: opts[0]?.v,
+    render() { const on = (v) => key ? (v === opts[0].v ? F[key].size === 0 : F[key].has(v)) : v === api.val;
+      $$('.k-menu>div', dd).forEach((d) => d.classList.toggle('on', on(d.dataset.v)));
+      const txt = key ? (F[key].size ? opts.filter((o) => F[key].has(o.v)).map((o) => o.t).join(' + ') : opts[0].t) : opts.find((o) => o.v === api.val)?.t;
+      $('.dv', dd).textContent = txt; dd.classList.toggle('set', key ? F[key].size > 0 : api.val !== opts[0].v); } };
+  $('button', dd).addEventListener('click', (e) => { e.stopPropagation(); const open = !dd.classList.contains('open'); $$('.k-sel.open').forEach((x) => x.classList.remove('open')); dd.classList.toggle('open', open); });
+  $('.k-menu', dd).addEventListener('click', (e) => { e.stopPropagation(); const d = e.target.closest('[data-v]'); if (!d) return; const v = d.dataset.v;
+    if (key) { if (v === opts[0].v) F[key].clear(); else F[key].has(v) ? F[key].delete(v) : F[key].add(v); } else { api.val = v; dd.classList.remove('open'); }
+    renderFilters(); snap(); });
+  DD.push(api);
+});
+function renderFilters() {
+  DD.forEach((x) => x.render());
+  $$('#frow .k-chip[data-fgrp]').forEach((c) => { const set = F[c.dataset.fgrp]; if (!set) return; c.classList.toggle('on', c.dataset.fval === 'all' ? set.size === 0 : set.has(c.dataset.fval)); });
+}
+document.addEventListener('click', (e) => $$('.fdd.open').forEach((x) => { if (!x.contains(e.target)) x.classList.remove('open'); }));
+if ($('#lib-filters-clear')) { $('#lib-filters-clear').className = 'k-btn'; wrapBtn($('#lib-filters-clear')); $('#lib-filters-clear').addEventListener('click', () => { F.type.clear(); F.flag.clear(); DD.forEach((x) => { x.val = x.opts[0]?.v; }); renderFilters(); snap(); }); }
 const fOpen = (on) => { $('#fwrap').classList.toggle('open', on); };
 $('#lib-filters-panel-close')?.addEventListener('click', () => fOpen(false));
 $('#frow > div').innerHTML = (window.REAL_BARS || {}).filterRow || '';
+{ const red = $('#frow [data-fval=red]'), green = $('#frow [data-fval=green]'); if (red && green) green.before(red); } // order: reject, pick, fav, none
 $$('#frow .lib-chip').forEach((c) => { c.classList.add('k-chip'); if (c.classList.contains('lib-sel')) c.classList.add('on'); if (c.classList.contains('lib-iconchip')) c.classList.add('ic', { red: 'rej', favorite: 'fav' }[c.dataset.fval] || 'x'); });
 $('#frow').addEventListener('click', (e) => { const c = e.target.closest('.k-chip'); if (!c) return; e.stopPropagation();
   if (c.id === 'lib-types-more') { $('#frow').classList.toggle('more'); c.classList.toggle('on', $('#frow').classList.contains('more')); return; }
   if (c.id === 'lib-more-filters') { fOpen(true); $('#fwrap').scrollIntoView({ block: 'nearest', behavior: reduced() ? 'auto' : 'smooth' }); return; }
-  if (c.dataset.fgrp === 'type') $$('#frow .k-chip[data-fgrp=type]').forEach((x) => x.classList.toggle('on', x === c)); else c.classList.toggle('on'); snap(); });
+  const set = F[c.dataset.fgrp]; if (!set) return; const v = c.dataset.fval;
+  if (v === 'all') set.clear(); else set.has(v) ? set.delete(v) : set.add(v);
+  renderFilters(); snap(); });
 const rowOpen = (on) => { $('#frow').classList.toggle('open', on); $('#lib-filters-btn')?.classList.toggle('on', on); };
 $('#lib-filters-btn')?.addEventListener('click', (e) => { e.stopPropagation(); rowOpen(!$('#frow').classList.contains('open')); });
 $('#mode-sw').addEventListener('swchange', (e) => { if (e.detail) rowOpen(false); });
-fOpen(true); rowOpen(true);
+fOpen(true); rowOpen(true); renderFilters();
 $('#cond-note').textContent = 'Shown only in some states in the app (hide them with State-only controls): ' + $$('#tb [data-conditional]').map((x) => (x.getAttribute('title') || x.querySelector('[title]')?.getAttribute('title') || x.id).split(/[—(·]/)[0].trim()).join(' · ') + '.';
 
 // ── notes: click anything, type, exported with Copy settings ─────
