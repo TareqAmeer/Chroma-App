@@ -847,6 +847,9 @@
       /* wireframe Library View.html:24 — a fixed-alpha overlay hover, not a surface-colour
          swap, so it stays visible no matter how --sur/--sur2 are aliased. */
       --hover-tint:rgba(255,255,255,.08);
+      /* One row-state language for every sidebar row and text menu: neutral grey hover,
+         solid primary fill for the selection. */
+      --row-hover:rgba(255,255,255,.10);--row-sel-bg:var(--primary);--row-sel-fg:#10222a;
     }
     #lib-overlay.lib-light{
       --bg:var(--canvas-parchment);--sur:var(--canvas-parchment);--sur2:var(--canvas-parchment);
@@ -861,6 +864,7 @@
       --blue-mist-soft:#e3edf0;
       /* wireframe Library View.html:143 — .row:hover{background:rgba(0,0,0,.035)}. */
       --hover-tint:rgba(0,0,0,.035);
+      --row-hover:rgba(0,0,0,.06);--row-sel-bg:var(--primary);--row-sel-fg:#ffffff;
     }
   `;
   style.textContent = DS_FONTS + `
@@ -1137,7 +1141,9 @@
     .lib-menu .opt{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;
       border-radius:5px;font-size:13px;cursor:pointer;color:var(--txt);width:100%;text-align:left;
       background:none;border:none;font-family:var(--sans)}
-    .lib-menu .opt:hover,.lib-menu button.opt-action:hover{background:var(--sur2)}
+    .lib-menu .opt:hover,.lib-menu button.opt-action:hover,.lib-menu button.opt-toggle:hover{background:var(--row-hover)}
+    .lib-menu .opt.sel,.lib-menu button.opt-toggle.on{background:var(--row-sel-bg);color:var(--row-sel-fg)}
+    .lib-menu .opt.sel .check,.lib-menu button.opt-toggle.on .check{stroke:var(--row-sel-fg)!important}
     .lib-menu button.opt-action{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:5px;
       font-size:13px;color:var(--txt);width:100%;justify-content:flex-start;background:none;border:none}
     .lib-menu .opt-check{accent-color:var(--acc2)}
@@ -1240,15 +1246,9 @@
        comfortably readable in both themes; .on below restores the full selection contrast. */
     .lib-coll-row{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 20px;border-radius:var(--radius-xs,5px);
       cursor:pointer;font-size:13px;color:var(--ink-muted-80)}
-    .lib-coll-row:hover{background:var(--hover-tint)}
-    .lib-coll-row.on{background:var(--blue-mist-soft);color:var(--primary);font-weight:var(--weight-semibold)}
-    .lib-coll-row.on .lib-coll-ic{color:var(--primary)}
-    /* Dark mode's selected row is NOT accent-coloured text — Library View.html:25 keeps it white
-       and marks the selection with an inset left bar instead (light mode uses coloured text with
-       no bar — Library View.html's plain, unqualified .row.sel rule). */
-    #lib-overlay:not(.lib-light) .lib-coll-row.on{color:var(--ink-on-dark);box-shadow:inset 2px 0 0 var(--primary-on-dark)}
-    #lib-overlay:not(.lib-light) .lib-coll-row.on .lib-coll-ic,
-    #lib-overlay:not(.lib-light) .lib-coll-row.on .lib-coll-count{color:var(--ink-on-dark)}
+    .lib-coll-row:hover{background:var(--row-hover)}
+    .lib-coll-row.on,.lib-coll-row.on:hover{background:var(--row-sel-bg);color:var(--row-sel-fg);font-weight:var(--weight-semibold)}
+    .lib-coll-row.on .lib-coll-ic,.lib-coll-row.on .lib-coll-count,.lib-coll-row.on .lib-coll-lb{color:var(--row-sel-fg)!important}
     .lib-coll-row.offline{cursor:default}
     .lib-coll-row.offline:hover{background:transparent}
     .lib-coll-ic{display:inline-flex;flex-shrink:0;color:inherit}
@@ -1257,7 +1257,6 @@
        named exception to "no bold on non-selected rows". */
     .lib-coll-row[data-catalog="all"]{font-weight:var(--weight-semibold)}
     .lib-coll-count{font-family:var(--sans);font-size:11px;color:var(--mut)}
-    .lib-coll-row.on .lib-coll-count{color:var(--primary);font-weight:var(--weight-semibold)}
     /* HANDOVER §3.1: was height:1px + padding-top:6px with no box-sizing:border-box, so the
        painted box was 7px, not 1px — a real border avoids the box-model trap entirely. Also
        now uses the wireframe's own token (Library View.html:135 .sec+.sec) instead of --bdr. */
@@ -1279,7 +1278,7 @@
       margin:0 8px;padding:6px 8px}
     .lib-sec-h .lib-sec-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .lib-sec-h .lib-sec-trail{margin-left:auto;flex:none}
-    .lib-sec-h:hover{background:var(--hover-tint)}
+    .lib-sec-h:hover{background:var(--row-hover)}
     .lib-sec-h .lib-tree-chev{color:var(--mut);opacity:.7}
     .lib-sec-h .lib-coll-count{margin-left:auto;font-family:var(--sans);font-size:11px;color:var(--mut)}
     /* People & Pets — face avatar in place of the generic .lib-coll-ic user glyph (people-pets
@@ -1374,22 +1373,20 @@
     #lib-ql-img.loaded{opacity:1}
     #lib-ql-caption{color:var(--mut);font-size:12px;font-family:var(--mono);letter-spacing:.02em}
     .lib-tree-node{font-size:12px;white-space:nowrap;user-select:none}
-    .lib-tree-row{display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:6px;cursor:pointer}
+    .lib-tree-row{display:flex;align-items:center;gap:4px;padding:5px 8px 5px 6px;border-radius:var(--radius-xs,5px);cursor:pointer}
     /* Date-tree size hierarchy — Library View.html's .row.datehead/.monthhead/.sub (13/12/11px).
        Without an explicit size these inherited the sidebar's 16px base font. */
     .lib-tree-row-year{font-size:13px}
     .lib-tree-row-month{font-size:12px}
     .lib-tree-row-day{font-size:11px}
     .lib-tree-row .dayname{color:var(--mut);font-weight:400}
-    .lib-tree-row:hover{background:var(--hover-tint)}
+    .lib-tree-row:hover{background:var(--row-hover)}
     /* HANDOVER §8 item #16: was var(--bdr) — a neutral grey overlay, the SAME token :hover
        above uses. Every other selected sidebar row (.lib-coll-row.on, :983-990) is blue; this
        one silently wasn't. Mirrors that rule's exact shape, including the dark-mode ink/accent
        override, rather than inventing a new one. */
-    .lib-tree-row.on{background:var(--blue-mist-soft);color:var(--primary);font-weight:var(--weight-semibold)}
-    #lib-overlay:not(.lib-light) .lib-tree-row.on{color:var(--ink-on-dark);box-shadow:inset 2px 0 0 var(--primary-on-dark)}
-    #lib-overlay:not(.lib-light) .lib-tree-row.on .coll-count{color:var(--ink-on-dark)}
-    .lib-tree-row.on .coll-count{color:var(--primary);font-weight:var(--weight-semibold)}
+    .lib-tree-row.on,.lib-tree-row.on:hover{background:var(--row-sel-bg);color:var(--row-sel-fg);font-weight:var(--weight-semibold)}
+    .lib-tree-row.on .coll-count,.lib-tree-row.on .dayname,.lib-tree-row.on span{color:var(--row-sel-fg)!important}
     .lib-tree-chev{width:14px;flex:0 0 14px;display:inline-flex;align-items:center;justify-content:center;opacity:.6;
       transform:rotate(-90deg);transition:transform var(--duration-press) ease}
     .lib-tree-chev.open{transform:rotate(0)}
@@ -2816,7 +2813,7 @@
       } else el.textContent = label;
       el.title = path;
       el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center';
-      el.onmouseenter = () => { el.style.background = 'var(--bdr)'; };
+      el.onmouseenter = () => { el.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
       el.onmouseleave = () => { el.style.background = ''; };
       el.onclick = async (ev) => { ev.stopPropagation(); closeRecentMenu(); await openAsRoot(path); };
       recentMenu.appendChild(el);
@@ -2843,7 +2840,7 @@
       const pinEl = document.createElement('div');
       pinEl.innerHTML = `<span style="display:inline-flex;vertical-align:-3px;margin-right:7px">${ic(isPinned ? 'close' : 'pin', 14)}</span>${isPinned ? 'Unpin current folder' : 'Pin current folder'}`;
       pinEl.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;color:var(--mut);display:flex;align-items:center';
-      pinEl.onmouseenter = () => { pinEl.style.background = 'var(--bdr)'; };
+      pinEl.onmouseenter = () => { pinEl.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
       pinEl.onmouseleave = () => { pinEl.style.background = ''; };
       pinEl.onclick = (ev) => { ev.stopPropagation(); togglePinnedFolder(state.currentFolder); closeRecentMenu(); };
       recentMenu.appendChild(pinEl);
@@ -4641,7 +4638,7 @@
     const wrap = document.createElement('div');
     wrap.className = 'lib-tree-node';
     const row = document.createElement('div');
-    row.className = 'lib-tree-row' + (state.currentFolder === path ? ' on' : '');
+    row.className = 'lib-tree-row' + (state.source === 'folder' && state.currentFolder === path ? ' on' : '');
     const isExpanded = state.expanded.has(path);
     // Chevron rotates rather than swapping ▾/▸ glyphs — same mechanism as the editor's
     // .msk-group-chev, so a leaf's permanently-empty chevron slot doesn't need its own case.
@@ -6038,7 +6035,7 @@
       const el = document.createElement('div');
       el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:14px';
       el.innerHTML = `<span>${label}</span>` + (shortcut ? `<span style="font-family:var(--mono);font-size:10px;color:var(--mut);white-space:nowrap">${shortcut}</span>` : '');
-      el.onmouseenter = () => { el.style.background = 'var(--bdr)'; };
+      el.onmouseenter = () => { el.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
       el.onmouseleave = () => { el.style.background = ''; };
       el.onclick = async (ev) => { ev.stopPropagation(); closeContextMenu(); await fn(); };
       container.appendChild(el);
@@ -6063,7 +6060,7 @@
         ctxMenu.querySelectorAll(':scope > div > div[data-cs-pop]').forEach((p) => { if (p !== pop) p.style.display = 'none'; });
         pop.style.display = 'block';
         pop.dataset.csPop = '1';
-        row.style.background = 'var(--bdr)';
+        row.style.background = 'var(--row-hover, rgba(128,128,128,.18))';
         const r = pop.getBoundingClientRect();
         if (r.right > window.innerWidth - 8) { pop.style.left = 'auto'; pop.style.right = '100%'; pop.style.marginLeft = '0'; pop.style.marginRight = '4px'; }
       };
@@ -8882,7 +8879,7 @@
     // .row.monthhead 12px, .row.sub/day 11px) — `lvl` picks the matching class so each level
     // gets its own font-size instead of silently inheriting the sidebar's 16px base font.
     const row = (scope, toggleKey, label, count, hasChildren, open, lvl) => `
-      <div class="lib-tree-row lib-tree-row-${lvl}${state.catalogScope === scope ? ' on' : ''}" data-date-scope="${scope}" data-date-toggle="${hasChildren ? toggleKey : ''}">
+      <div class="lib-tree-row lib-tree-row-${lvl}${state.source === 'catalog' && state.catalogScope === scope ? ' on' : ''}" data-date-scope="${scope}" data-date-toggle="${hasChildren ? toggleKey : ''}">
         ${hasChildren ? chev(open) : leafChevSlot}
         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut);flex:none">${fmtN(count)}</span>
       </div>`;
@@ -8956,7 +8953,7 @@
         const hasChildren = byParent.has(n.id);
         const open = kwExpanded.has(n.id);
         const scope = `kw:${n.path}`;
-        return `<div class="lib-tree-row${state.catalogScope === scope ? ' on' : ''}" data-kw-scope="${scope}" data-kw-id="${n.id}" data-kw-toggle="${hasChildren ? n.id : ''}" data-kw-path="${esc(n.path)}">
+        return `<div class="lib-tree-row${state.source === 'catalog' && state.catalogScope === scope ? ' on' : ''}" data-kw-scope="${scope}" data-kw-id="${n.id}" data-kw-toggle="${hasChildren ? n.id : ''}" data-kw-path="${esc(n.path)}">
             ${hasChildren ? chev(open) : leafChevSlot}
             <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.leaf)}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut);flex:none">${fmtN(n.n) || ''}</span>
           </div>${hasChildren && open ? `<div class="lib-tree-children">${renderLevel(n.id)}</div>` : ''}`;
@@ -9017,7 +9014,7 @@
     const namedRows = named.length
       ? `<div class="lib-people-scroll">${named.map(row).join('')}</div>`
       : `<div class="lib-coll-row" style="opacity:.5;cursor:default">Review faces to name people</div>`;
-    const unnamedRow = `<div class="lib-coll-row${state.catalogScope === 'person:unnamed' ? ' on' : ''}" data-people-review="1">
+    const unnamedRow = `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'person:unnamed' ? ' on' : ''}" data-people-review="1">
         <span class="lib-face-ava unnamed"></span><span class="lib-coll-lb">Unnamed</span>
         <span class="lib-coll-count">${fmtN(unnamedCount ?? '')}</span>
       </div>`;
@@ -9256,7 +9253,7 @@
       const it = document.createElement('div');
       it.textContent = label;
       it.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
-      it.onmouseenter = () => { it.style.background = 'var(--bdr)'; };
+      it.onmouseenter = () => { it.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
       it.onmouseleave = () => { it.style.background = ''; };
       it.onclick = () => { menu.remove(); fn(); };
       menu.appendChild(it);
@@ -10973,7 +10970,7 @@
       const el = document.createElement('div');
       el.textContent = label;
       el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
-      el.onmouseenter = () => { el.style.background = 'var(--bdr)'; };
+      el.onmouseenter = () => { el.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
       el.onmouseleave = () => { el.style.background = ''; };
       el.onclick = async (ev) => { ev.stopPropagation(); closeContextMenu(); await fn(); };
       ctxMenu.appendChild(el);
@@ -11116,7 +11113,7 @@
       const it = document.createElement('div');
       it.textContent = label;
       it.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
-      it.onmouseenter = () => { it.style.background = 'var(--bdr)'; };
+      it.onmouseenter = () => { it.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
       it.onmouseleave = () => { it.style.background = ''; };
       it.onclick = () => { menu.remove(); fn(); };
       menu.appendChild(it);
@@ -11196,7 +11193,7 @@
       it.setAttribute('role', 'menuitem');
       it.tabIndex = 0;
       it.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
-      it.onmouseenter = () => { it.style.background = 'var(--bdr)'; };
+      it.onmouseenter = () => { it.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
       it.onmouseleave = () => { it.style.background = ''; };
       it.onclick = () => { menu.remove(); fn(); };
       menu.appendChild(it);
