@@ -1807,7 +1807,8 @@ body.deskx #lib-overlay .lib-side-tabs{display:none}
    <html data-k-menu> by Kinetic.syncTheme). Opening wipes down; a row hover wipes an accent-A
    slab in from the left, shifted by --k-menu-slab-shift-x/y, over --k-menu-wipe. The settings
    drill-down (categories -> page) is the submenu. */
-body{--k-menu-bg:var(--k-color-ink);--k-menu-fg:var(--k-color-bg);--k-menu-line:color-mix(in srgb,var(--k-color-bg) 22%,transparent)}
+/* CHR-156: dark menus are a grey panel with ink text (was a white ink panel); light keeps "surface". */
+body{--k-menu-bg:#2c2c2a;--k-menu-fg:var(--k-color-ink);--k-menu-line:color-mix(in srgb,var(--k-color-ink) 16%,transparent)}
 [data-k-menu=surface] body{--k-menu-bg:var(--k-color-bg);--k-menu-fg:var(--k-color-ink);--k-menu-line:var(--bdr)}
 #lib-overlay .lib-menu,#fx-settings-menu,.fx-bgmenu{background:var(--k-menu-bg)!important;color:var(--k-menu-fg);border:1px solid var(--k-menu-line);border-radius:0!important;box-shadow:none!important;
   -webkit-backdrop-filter:none;backdrop-filter:none}
@@ -1824,6 +1825,17 @@ body{--k-menu-bg:var(--k-color-ink);--k-menu-fg:var(--k-color-bg);--k-menu-line:
 #fx-settings-cats,.fx-settings-cats{border-right-color:var(--k-menu-line)}
 #lib-overlay .lib-menu .opt .check,#lib-overlay .lib-menu button.opt-toggle .check,.fx-ovf-item .fx-ovf-check{stroke:var(--k-color-accent-a);color:var(--k-color-accent-a)}
 #lib-overlay .lib-menu .opt:hover .check,#lib-overlay .lib-menu button.opt-action:hover .check,.fx-settings-cat:hover .check,.fx-ovf-item:hover .check,.fx-ovf-item:hover .fx-ovf-check{stroke:#fff;color:#fff}
+/* CHR-156: one row style for every menu entry — action buttons, toggles and radio rows all share
+   the .opt metrics (13px regular, sentence case, left-aligned, 30px, no border/outline/italic);
+   toggles keep their state square on the right. Group labels stay the only uppercase text. */
+#lib-overlay .lib-menu button.lib-btn{display:flex;align-items:center;justify-content:flex-start;gap:10px;width:100%;min-height:30px;height:auto;padding:0 8px;margin:0;
+  border:0!important;outline:none;box-shadow:none!important;font:400 13px/1.2 var(--sans)!important;font-style:normal!important;text-transform:none!important;letter-spacing:normal!important;
+  text-align:left;white-space:nowrap;color:var(--k-menu-fg)}
+#lib-overlay .lib-menu button.lib-btn>span{overflow:hidden;text-overflow:ellipsis}
+#lib-overlay .lib-menu button.lib-btn svg:not(.check){flex:none;width:15px;height:15px}
+#lib-overlay .lib-menu button.opt-toggle{justify-content:space-between}
+#lib-overlay .lib-menu button.lib-btn:focus-visible{outline:1px solid var(--k-color-accent-a);outline-offset:-1px}
+#lib-overlay .lib-menu .opt{min-height:30px;padding:0 8px;font:400 13px/1.2 var(--sans)}
 @media (prefers-reduced-motion:reduce){#lib-overlay .lib-menu.open,#fx-settings-menu.open,.fx-bgmenu.open,#fx-settings-menu.on,.fx-bgmenu{animation:none}#lib-overlay .lib-menu .opt::before,#lib-overlay .lib-menu button.opt-action::before,.fx-settings-cat::before,.fx-ovf-item::before{transition:none}}
 /* ── Swiss Kinetic: section card (prototype .k-card) ──
    No panel fill or radius; a 1.5px ink rule on top, bold 11px tracked uppercase header that
@@ -5558,7 +5570,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926X';
+const BUILD='1.0926Y';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
