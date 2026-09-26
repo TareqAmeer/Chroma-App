@@ -37,3 +37,6 @@ Agent-generated changelog of completed features and architectural decisions.
 - CHR-152: Rebuilt the home page as eight viewport-sized, benefit-led chapters with eased one-chapter wheel paging, touch snapping, a changing CHRO-MA rail, numbered navigation, and a comparison control.
 - Updated `index.html`, `site/build-page.mjs`, site assets and documentation; recorded 28 animation and product-page research takeaways in `site/animation-research.md`.
 - Verified desktop, laptop, tablet and phone layouts, chapter paging, images, comparison keyboard input, and accessibility with `test/homepage_smoke.mjs`; the original photographs and founder portrait/copy remain explicit placeholders.
+
+- CHR-152: Increased home page letter spacing by 0.02em across body copy, headings, the CHRO-MA rail, and small labels in `index.html`.
+- Verified the updated typography visually on desktop and phone and reran `test/homepage_smoke.mjs` across six viewport sizes.
