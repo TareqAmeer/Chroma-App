@@ -7656,7 +7656,7 @@
     // A selected type hidden behind "…" keeps the extra types expanded so the selection is visible.
     if (types.some((t) => fr.querySelector(`.lib-more-type[data-fval="${t}"]`))) fr.classList.add('types-expanded');
   }
-  overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; syncFilterChips(); applyCatalogFilterChange(); };
+  overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; syncFilterChips(); syncFilterUI(); applyCatalogFilterChange(); };
   overlay.querySelector('#lib-camera-filter').onchange = (e) => { state.cameraFilter = e.target.value; applyCatalogFilterChange(); };
   overlay.querySelector('#lib-lens-filter').onchange = (e) => { state.lensFilter = e.target.value; applyCatalogFilterChange(); };
   overlay.querySelector('#lib-iso-filter').onchange = (e) => { state.isoFilter = e.target.value; applyCatalogFilterChange(); };
@@ -7681,10 +7681,37 @@
   }
   // ── Filters panel: toggle button, active-filter chips, clear-all ──────────────────────
   const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-faces-filter', 'lib-tag-filter', 'lib-rating-filter'];
+  // One filter state, two views: state.* is the source of truth and both the chip row and the
+  // panel dropdowns are redrawn from it. A multi-type chip selection ("raw,video") gets its own
+  // transient option in the type dropdown instead of the dropdown falsely reading "All types".
+  // Also re-applies the panel's orange "set" highlight (k-set), which only listened for user
+  // 'change' events — resets done in code (clear-all, saved views, sidebar shortcuts) left it stale.
+  const FILTER_STATE_KEYS = { 'lib-type-filter': 'typeFilter', 'lib-camera-filter': 'cameraFilter',
+    'lib-lens-filter': 'lensFilter', 'lib-iso-filter': 'isoFilter', 'lib-dupe-filter': 'dupeFilter',
+    'lib-synced-filter': 'syncedFilter', 'lib-faces-filter': 'facesFilter', 'lib-tag-filter': 'tagFilter',
+    'lib-rating-filter': 'ratingFilter' };
+  function syncFilterSelectsFromState() {
+    Object.entries(FILTER_STATE_KEYS).forEach(([id, key]) => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      const v = state[key] === undefined ? 'all' : String(state[key]);
+      if (id === 'lib-type-filter') {
+        let multi = sel.querySelector('option[data-multi]');
+        if (v.includes(',')) {
+          if (!multi) { multi = document.createElement('option'); multi.dataset.multi = '1'; sel.appendChild(multi); }
+          multi.value = v;
+          multi.textContent = v.split(',').map((t) => { const o = [...sel.options].find((x) => x.value === t); return o ? o.textContent : t.toUpperCase(); }).join(' + ');
+        } else if (multi) multi.remove();
+      }
+      if ([...sel.options].some((o) => o.value === v)) { if (sel.value !== v) sel.value = v; }
+      sel.classList.toggle('k-set', sel.selectedIndex > 0 && sel.value !== 'all');
+    });
+  }
   function syncFilterUI() {
     const chipsEl = document.getElementById('lib-filter-chips');
     const badgeEl = document.getElementById('lib-filters-badge');
     if (!chipsEl || !badgeEl) return;
+    syncFilterSelectsFromState();
     // CHR-161: several chip-row types at once can't be shown by the single-value select, so
     // they get their own pill ("RAW + Video") whose × clears the type filter.
     const multiType = state.typeFilter.includes(',');
@@ -7798,14 +7825,14 @@
         const cur = new Set(state.typeFilter === 'all' ? [] : state.typeFilter.split(','));
         if (val === 'all') cur.clear(); else if (cur.has(val)) cur.delete(val); else cur.add(val);
         state.typeFilter = cur.size ? [...cur].join(',') : 'all';
-        const sel = overlay.querySelector('#lib-type-filter');
-        if (sel) sel.value = cur.size === 1 ? [...cur][0] : 'all';
         syncFilterChips();
+        syncFilterUI();
         applyCatalogFilterChange();
       } else if (grp === 'flag') {
         // Clicking the active flag/tag chip again turns it off.
         state.tagFilter = state.tagFilter === val ? 'all' : val;
         syncFilterChips();
+        syncFilterUI();
         applyCatalogFilterChange();
       }
     };
