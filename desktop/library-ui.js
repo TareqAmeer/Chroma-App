@@ -5461,21 +5461,24 @@
   // multi-selects WITHOUT opening, building up a batch; ⌘/Ctrl-double-click opens that whole
   // batch selection in the editor. Shift-click range-selects (also without opening), extending
   // from the last ⌘-click/shift-click anchor — same anchor plain single-click opens don't move.
-  // Force Touch discriminator (the user's requested "light tap = select, firm press = open").
-  // Apple's non-standard MouseEvent.webkitForce: a real button press reads ≥ WEBKIT_FORCE_AT_
-  // MOUSE_DOWN (1); a tap-to-click registers lower. Returns 'press' | 'tap' | null (no sensor —
-  // mice, non-Force-Touch trackpads, the libtest browser → caller uses the click-again fallback).
-  // webkitForce is usually 0 on the click event itself (fired after release), so the peak seen
-  // during mousedown/force-change/mouseup is tracked per gesture and read here.
-  let _peakForce = 0;
+  // Tap vs physical click (CHR-154). macOS tap-to-click synthesises an ordinary mouseDown/Up
+  // pair, and WebKit stamps EVERY mousedown with webkitForce = WEBKIT_FORCE_AT_MOUSE_DOWN (1) —
+  // so the old "peak force >= 1 means press" test read every tap as a press and opened the photo.
+  // What actually differs: a physical click on a Force Touch trackpad streams NSEvent pressure
+  // events, which WebKit surfaces as `webkitmouseforcechanged`; a tap never touches the
+  // actuator, so it produces none. So: pressure events seen during this gesture → 'press';
+  // none, on a machine that has shown us pressure events before → 'tap'; never seen any (mouse,
+  // older trackpad, Chromium/libtest) → null, and callers use the click-again-to-open fallback.
+  // Listeners are document-level capture so every grid (local, filmstrip, cloud) shares them.
+  let _gesturePressure = false, _forceSensorSeen = false, _peakForce = 0;
   function trackForce(e) { const f = e && e.webkitForce; if (typeof f === 'number' && f > _peakForce) _peakForce = f; }
+  document.addEventListener('mousedown', () => { _gesturePressure = false; _peakForce = 0; }, true);
+  document.addEventListener('webkitmouseforcechanged', (e) => { _gesturePressure = true; _forceSensorSeen = true; trackForce(e); }, true);
   function classifyPress(e) {
-    trackForce(e);
-    const f = _peakForce || (e && e.webkitForce);
-    _peakForce = 0;
-    if (typeof f !== 'number' || f <= 0) return null;
-    const threshold = (typeof MouseEvent !== 'undefined' && MouseEvent.WEBKIT_FORCE_AT_MOUSE_DOWN) || 1;
-    return f >= threshold ? 'press' : 'tap';
+    const pressed = _gesturePressure;
+    _gesturePressure = false; _peakForce = 0;
+    if (pressed) return 'press';
+    return _forceSensorSeen ? 'tap' : null;
   }
   // Selection model (both grids): light tap selects, firm press opens. Where Force Touch isn't
   // available, degrade to "click selects; clicking the already-sole-selected card opens"
@@ -6522,9 +6525,6 @@
       // opening/editing/rating acts on".
       loadThumb(entry.thumb_path || entry.path, img, entry.is_video, entry.mtime);
       const _tw = card.querySelector('.lib-thumb-wrap');
-      _tw.onmousedown = (e) => { _peakForce = 0; trackForce(e); };
-      _tw.onmouseup = trackForce;
-      _tw.addEventListener('webkitmouseforcechanged', trackForce);
       _tw.onclick = (e) => handleCardClick(e, entry, idx, shown);
       card.querySelector('.lib-thumb-wrap').ondblclick = (e) => { e.stopPropagation(); handleCardDblClick(e, entry); };
       const stackBadgeEl = card.querySelector('.lib-stack-badge');
