@@ -542,6 +542,7 @@ body[data-railsel=invert] .rail .slab{width:100%!important;background:var(--ink)
 body[data-railsel=invert] .rail .opt.on{color:var(--bg)}
 /* toggled on (the tool is doing something to the photo) */
 .rail .opt.tg::after{content:'';position:absolute;pointer-events:none;z-index:3}
+body[data-railtg=tone] .rail .opt.tg{background:color-mix(in srgb,var(--ink) 12%,transparent)}
 body[data-railtg=dot] .rail .opt.tg::after{width:5px;height:5px;background:var(--cb);top:7px;right:8px}
 body[data-railtg=corner] .rail .opt.tg::after{width:9px;height:9px;background:var(--cb);top:0;right:0;clip-path:polygon(0 0,100% 0,100% 100%)}
 body[data-railtg=edge] .rail .opt.tg::after{width:2px;top:6px;bottom:6px;right:0;background:var(--cb)}
@@ -659,7 +660,7 @@ body[data-railtg=under] .rail .opt.tg .ic::after{content:'';position:absolute;le
     <div class="dr full"><label>Label case</label><select data-attr="railcase"><option value="upper">UPPERCASE</option><option value="lower">lowercase</option><option value="title">Title case</option></select></div>
     <div class="dr full"><label>Hover</label><select data-attr="railhv"><option value="ink">Brighten only</option><option value="nudge">Nudge right</option><option value="peek">Slab peeks in</option><option value="tilt">Icon tilts 45°</option><option value="lift">Offset lift + shadow</option><option value="outline">Hairline box</option><option value="strike">Line under label</option><option value="none">Nothing</option></select></div>
     <div class="dr full"><label>Current tool</label><select data-attr="railsel"><option value="offset">Offset slab</option><option value="fill">Full fill</option><option value="lowslab">Low slab</option><option value="bar">Edge bar</option><option value="outline">Outline</option><option value="tone">Grey tone</option><option value="invert">Inverted ink</option></select></div>
-    <div class="dr full"><label>Toggled on</label><select data-attr="railtg"><option value="dot">Square, colour B</option><option value="corner">Corner wedge</option><option value="edge">Right edge bar</option><option value="tint">Icon greys turn colour B</option><option value="under">Line under icon</option><option value="none">Not shown</option></select></div>
+    <div class="dr full"><label>Toggled on</label><select data-attr="railtg"><option value="tone">Grey tone</option><option value="dot">Square, colour B</option><option value="corner">Corner wedge</option><option value="edge">Right edge bar</option><option value="tint">Icon greys turn colour B</option><option value="under">Line under icon</option><option value="none">Not shown</option></select></div>
     <div class="dr"><label>Line weight</label><input type="range" min="0.5" max="2" step="0.25" data-var="--ti-sw" data-unit="px"><output></output></div>
     <div class="dr"><label>Grey tone</label><input type="range" min="0" max="0.7" step="0.05" data-var="--ti-tone"><output></output></div>
   </fieldset>
@@ -807,7 +808,7 @@ const DEFAULTS = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#1b1b1b'
     '--bw-btn': '0.5px', '--bw-ic': '1px', '--menu-dur': '900ms', '--msx': '10px', '--msy': '5px', '--tb-sl': '62px',
     '--sa-x': '6px', '--sa-top': '9px', '--sa-bot': '6px', '--sa-w': '0px', '--sb-x': '12px', '--sb-top': '21px', '--sb-bot': '13px', '--sb-w': '0px',
     '--sg-fs': '11px', '--sg-pad': '11px', '--sg-top': '34%', '--sg-bot': '3px', '--sg-x': '3px', '--sg-x2': '6px', '--sg-y2': '6px', '--sl-bw': '1px', '--splash-a': '#e0500c', '--splash-b': '#1414a0', '--ti-sw': '1px', '--ti-tone': '0.35' },
-  attrs: { front: 'a', sgcase: 'upper', sgsep: 'bar', sgbase: 'off', sgon: 'white', menubg: 'ink', dim: 'off', slab: 'single', sel: 'slab', side: 'offset', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved', iconset: 'construct', raillb: 'below', railsel: 'offset', railcase: 'upper', railhv: 'nudge', railtg: 'dot' },
+  attrs: { front: 'a', sgcase: 'upper', sgsep: 'bar', sgbase: 'off', sgon: 'white', menubg: 'ink', dim: 'off', slab: 'single', sel: 'slab', side: 'offset', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved', iconset: 'construct4', raillb: 'abbr', railsel: 'outline', railcase: 'upper', railhv: 'tilt', railtg: 'tone' },
   cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'slabturn', roll: 'roll', segv: 'cell', swap: 'slide' };
 // Dark and light are separate setting sets (and separate notes). Light starts as a copy of dark with light colours.
 // Defaults = the approved 2026-09-25 export (approved.json). Light: black ink, stepped slab laid out like the gallery|studio sketch.
@@ -825,6 +826,8 @@ if (!P) { // first open since the split: carry the previous round's settings and
   P = { dark: prev || undefined }; if (old('notes')) store.set('notes-dark', old('notes')); if (old('noteGeneral')) store.set('noteGeneral-dark', old('noteGeneral'));
 }
 P.theme = P.theme === 'light' ? 'light' : 'dark'; P.dark = norm(P.dark, 'dark'); P.light = norm(P.light, 'light');
+// 2026-09-26 tool-rail picks: applied once over saved settings, both themes.
+if (!store.get('rail-pick-1')) { for (const t of ['dark', 'light']) { Object.assign(P[t].attrs, { iconset: 'construct4', raillb: 'abbr', railcase: 'upper', railhv: 'tilt', railsel: 'outline', railtg: 'tone' }); P[t].vars['--ti-sw'] = '1px'; } store.set('rail-pick-1', true); store.set('themes', P); }
 let S = P[P.theme];
 const tv = () => S.vars;
 const save = () => store.set('themes', P);
