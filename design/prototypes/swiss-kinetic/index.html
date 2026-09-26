@@ -479,6 +479,36 @@ body.noting #stage,body.noting #stage *{cursor:crosshair!important}
 /* ── reduced motion (real setting or simulated) ────────────────── */
 body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;animation-duration:1ms!important}
 @media (max-width:760px){body{grid-template-columns:1fr;overflow:auto}#dock{max-height:none}#stage{overflow:visible}.sec{padding:24px 16px}.grid{grid-template-columns:repeat(2,1fr)}}
+
+/* ── tool rail (08) ── */
+svg.ti{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:var(--ti-sw);stroke-linecap:square;stroke-linejoin:miter;overflow:visible;flex:none}
+svg.ti .t,svg.ti .t2{fill:currentColor;stroke:none;fill-opacity:var(--ti-tone)}
+svg.ti .t2{fill-opacity:calc(var(--ti-tone) * .45)}
+svg.ti .k{fill:currentColor;stroke:none}
+svg.ti .k.t{fill-opacity:calc(var(--ti-tone) * 1.2)}
+.rail{display:flex!important;flex-direction:column;align-items:stretch;border:1px solid var(--line);padding:6px 0;cursor:default;width:max-content;min-width:64px}
+.rail .opt{display:flex;flex-direction:column;align-items:center;gap:6px;padding:9px 12px;font:600 9px/1 var(--f);letter-spacing:.12em;text-transform:uppercase;color:var(--mut);transition:color var(--dur-fast),transform var(--dur-fast) var(--ease)}
+.rail .opt:not(.on):hover{color:var(--ink)}
+.rail .rsep{height:1px;background:var(--line);margin:4px 10px;position:relative;z-index:2}
+body[data-raillb=beside] .rail .opt{flex-direction:row;gap:12px;font-size:10px;padding:8px 18px 8px 14px}
+body[data-raillb=none] .rail .opt .lb{display:none}
+.rail .slab{left:0!important;top:0!important;bottom:auto!important}
+body[data-railsel=bar] .rail .slab{width:2px!important}
+body[data-railsel=bar] .rail .opt.on{color:var(--ink)}
+body[data-railsel=fill] .rail .slab{width:100%!important}
+body[data-railsel=offset] .rail .slab{width:calc(100% - 12px)!important;left:6px!important}
+body[data-railsel=offset] .rail .opt.on{transform:translate(calc(var(--ox)*-.6),calc(var(--oy)*-.6))}
+body[data-railsel=outline] .rail .slab{width:calc(100% - 12px)!important;left:6px!important;background:none;outline:1px solid var(--ca);outline-offset:-1px}
+body[data-railsel=outline] .rail .opt.on{color:var(--ink)}
+.fams{display:grid;grid-template-columns:150px repeat(11,34px);gap:6px 4px;align-items:center}
+.fams .hd{font:700 9px/1 var(--f);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);text-align:center;writing-mode:vertical-rl;transform:rotate(180deg);height:52px}
+.fams .fn{font:700 11px/1.2 var(--f);color:var(--mut);cursor:pointer;padding:8px 0}
+.fams .cell{display:grid;place-items:center;height:34px;color:var(--mut);cursor:pointer}
+.fams .row{display:contents}
+.fams .row:hover .fn,.fams .row:hover .cell{color:var(--ink)}
+.fams .row.on .fn{color:var(--ink)}.fams .row.on .cell{color:var(--ink);background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.fams .row.on .fn::before{content:'';display:inline-block;width:7px;height:7px;background:var(--ca);margin-right:7px}
+.famnote{max-width:52ch;min-height:3em}
 </style>
 </head>
 <body data-dim="off" data-slab="stepped" data-sel="slab" data-side="fill" data-menu="slab" data-italic="primary" data-bw="on" data-win="tint" data-tg="flip" data-icb="none" data-icsel="slab" data-thhv="offset" data-dot="moved">
@@ -582,6 +612,14 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
     <div class="dr full"><label>State-only controls</label><select id="cond"><option value="show">Show all</option><option value="hide">Hide (as captured)</option></select></div>
     <div class="dr full"><label>Library / Editor swap</label><select id="swap"><option value="slide">Tools slide with the slab</option><option value="stagger">Tools slide, staggered</option><option value="instant">Instant</option></select></div>
     <div class="dr"><label>Slider width</label><input type="range" min="40" max="140" step="2" data-var="--tb-sl" data-unit="px"><output></output></div>
+  </fieldset>
+
+  <fieldset><legend>Tool rail</legend>
+    <div class="dr full"><label>Icon family</label><select data-attr="iconset"><option value="current">Current (app)</option><option value="bauhaus">A · Primitives</option><option value="hatch">B · Line fields</option><option value="dots">C · Dot matrix</option><option value="arcs">D · Arcs</option><option value="construct">E · Constructivist</option><option value="line">F · Single line</option><option value="orbit">G · Orbits</option><option value="planes">H · Two-tone planes</option></select></div>
+    <div class="dr full"><label>Labels</label><select data-attr="raillb"><option value="below">Below icon</option><option value="beside">Beside icon</option><option value="none">Icons only</option></select></div>
+    <div class="dr full"><label>Selected tool</label><select data-attr="railsel"><option value="offset">Offset slab</option><option value="fill">Full fill</option><option value="bar">Edge bar</option><option value="outline">Outline</option></select></div>
+    <div class="dr"><label>Line weight</label><input type="range" min="0.5" max="2" step="0.25" data-var="--ti-sw" data-unit="px"><output></output></div>
+    <div class="dr"><label>Grey tone</label><input type="range" min="0" max="0.7" step="0.05" data-var="--ti-tone"><output></output></div>
   </fieldset>
 
   <fieldset id="notes-fs"><legend>Notes · <span id="notes-theme"></span> <span id="notes-count"></span></legend>
@@ -698,9 +736,20 @@ body.rm *,body.rm *::before,body.rm *::after{transition-duration:1ms!important;a
   <h2>Loading screen</h2>
   <div class="splash"><div class="bl"></div><div class="or"></div><div class="ph"><img src="photos/dog-sitting.webp" alt=""></div><div class="wm">Chro-ma-smith</div><div class="ver">v. 1.0921B</div><div class="cr">cover photo by tareq ameer</div><div class="ld shift" data-t="loading">loading</div><div class="pc shift" id="pct" data-t="50%">50%</div></div>
 </section>
+<section class="sec zone">
+  <div class="eyebrow"><b>08</b> Tool rail · the Editor's 11 tools, grouped as in the app</div>
+  <h2>Tool rail &amp; icon families</h2>
+  <p class="note">The rail on the left is live: click or drag the slab, and switch family, labels, selection, line weight and grey tone in the panel under Tool rail. Click any row on the right to put that family in the rail.</p>
+  <div class="row" style="gap:48px">
+    <div class="sw vert rail zone" id="rail" data-idx="0"><span class="slab"></span></div>
+    <div class="spec"><small>Families · click a row to try it</small><div class="fams" id="fams"></div><p class="note famnote" id="famnote"></p></div>
+  </div>
+</section>
+
 </main>
 
 <script src="bars.js"></script>
+<script src="toolicons.js"></script>
 <script>
 (() => {
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -715,8 +764,8 @@ const PRESETS = { 'Cadmium / Cobalt': { '--a': '#e0500c', '--b': '#1414a0' }, 'K
 const DEFAULTS = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#1b1b1b', '--ink': '#f2f2f0', '--mut': '#7c7c78', '--ox': '4px', '--oy': '4px', '--slab-top': '41%', '--dim': '0.35', '--dim-dur': '220ms', '--dur': '500ms', '--dur-fast': '180ms',
     '--bw-btn': '0.5px', '--bw-ic': '1px', '--menu-dur': '900ms', '--msx': '10px', '--msy': '5px', '--tb-sl': '62px',
     '--sa-x': '6px', '--sa-top': '9px', '--sa-bot': '6px', '--sa-w': '0px', '--sb-x': '12px', '--sb-top': '21px', '--sb-bot': '13px', '--sb-w': '0px',
-    '--sg-fs': '11px', '--sg-pad': '11px', '--sg-top': '34%', '--sg-bot': '3px', '--sg-x': '3px', '--sg-x2': '6px', '--sg-y2': '6px', '--sl-bw': '1px', '--splash-a': '#e0500c', '--splash-b': '#1414a0' },
-  attrs: { front: 'a', sgcase: 'upper', sgsep: 'bar', sgbase: 'off', sgon: 'white', menubg: 'ink', dim: 'off', slab: 'single', sel: 'slab', side: 'offset', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved' },
+    '--sg-fs': '11px', '--sg-pad': '11px', '--sg-top': '34%', '--sg-bot': '3px', '--sg-x': '3px', '--sg-x2': '6px', '--sg-y2': '6px', '--sl-bw': '1px', '--splash-a': '#e0500c', '--splash-b': '#1414a0', '--ti-sw': '1px', '--ti-tone': '0.35' },
+  attrs: { front: 'a', sgcase: 'upper', sgsep: 'bar', sgbase: 'off', sgon: 'white', menubg: 'ink', dim: 'off', slab: 'single', sel: 'slab', side: 'offset', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved', iconset: 'current', raillb: 'below', railsel: 'offset' },
   cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'slabturn', roll: 'roll', segv: 'cell', swap: 'slide' };
 // Dark and light are separate setting sets (and separate notes). Light starts as a copy of dark with light colours.
 // Defaults = the approved 2026-09-25 export (approved.json). Light: black ink, stepped slab laid out like the gallery|studio sketch.
@@ -751,6 +800,7 @@ function apply() {
   $$('.sw.seg:not([data-fixed])').forEach((x) => { x.dataset.segv = S.segv; });
   if ($('#btn-cur')) $('#btn-cur').textContent = HOVERS[S.hvBtn];
   $$('.k-sl').forEach(paintSlider);
+  if (typeof paintRail === 'function') paintRail();
   switches.forEach((s) => s.snap(false));
 }
 const reduced = () => S.rm === 'on' || matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -791,6 +841,7 @@ const exportTheme = (S, th) => {
     dim: { mode: S.attrs.dim, level: { $type: 'number', $value: +S.vars['--dim'] }, fade: t(S.vars['--dim-dur']) },
     motion: { duration: t(S.vars['--dur']), hover: t(S.vars['--dur-fast']), easing: { $type: 'cubicBezier', $value: S.ease.split(',').map(Number) }, dragBounce: S.bounce, throw: S.throw, edgeStretch: S.rubber, reduceMotion: S.rm, snapSound: S.snd },
     variants: { buttonHover: S.hvBtn, iconHover: S.hvIc, menuHover: S.attrs.menu, photoSelection: S.attrs.sel, sideMenu: S.attrs.side, toggle: S.attrs.tg, italics: S.attrs.italic, thumbnails: S.attrs.bw, windowSquares: S.attrs.win, valueReadout: S.roll, topBarStateOnlyControls: S.cond, iconSelected: S.attrs.icsel, segmented: S.segv, photoHover: S.attrs.thhv, sliderResetDot: S.attrs.dot, barSwap: S.swap, topBarSliderWidth: S.vars['--tb-sl'] },
+    toolRail: { iconFamily: S.attrs.iconset, labels: S.attrs.raillb, selected: S.attrs.railsel, lineWeight: d(S.vars['--ti-sw']), greyTone: { $type: 'number', $value: +S.vars['--ti-tone'] } },
     notes: tn.map((x) => ({ n: x.n, where: x.where, note: x.note })), generalNotes: tg.trim() };
 };
 $('#copy').onclick = async () => {
@@ -1086,6 +1137,19 @@ $('#notes-list').addEventListener('click', (e) => {
 $('#clear-notes').addEventListener('click', () => { if (!notes.length && !$('#note-general').value) return; if (confirm(`Delete all ${P.theme}-mode notes?`)) { notes = []; store.set('notes-' + P.theme, notes); $('#note-general').value = ''; store.set('noteGeneral-' + P.theme, ''); renderNotes(); } });
 addEventListener('resize', placePins); document.fonts.ready.then(() => setTimeout(placePins, 100));
 
+// ── tool rail + icon families (08) ──
+let _tiU = 0;
+const tiSvg = (fam, key) => `<svg class="ti" viewBox="0 0 24 24">${ICON_FAMILIES[fam].icons('ti' + (++_tiU))[key]}</svg>`;
+$('#rail').insertAdjacentHTML('beforeend', TOOL_RAIL.map(([k, lb, br], i) => `${br ? '<i class="rsep"></i>' : ''}<span class="opt" data-k="${k}"><span class="ic"></span><span class="lb">${lb}</span></span>`).join(''));
+$('#fams').innerHTML = '<span></span>' + TOOL_RAIL.map(([, lb]) => `<span class="hd">${lb}</span>`).join('') +
+  Object.entries(ICON_FAMILIES).map(([f, d]) => `<div class="row" data-f="${f}"><span class="fn">${d.name}</span>${TOOL_RAIL.map(([k]) => `<span class="cell" title="${d.name} · ${k}">${tiSvg(f, k)}</span>`).join('')}</div>`).join('');
+$('#fams').addEventListener('click', (e) => { const r = e.target.closest('.row'); if (!r) return; S.attrs.iconset = r.dataset.f; $('#dock [data-attr=iconset]').value = r.dataset.f; apply(); save(); snap(); });
+function paintRail() {
+  const f = ICON_FAMILIES[S.attrs.iconset] ? S.attrs.iconset : 'current';
+  $$('#rail .opt').forEach((o) => { $('.ic', o).innerHTML = tiSvg(f, o.dataset.k); });
+  $$('#fams .row').forEach((r) => r.classList.toggle('on', r.dataset.f === f));
+  $('#famnote').textContent = ICON_FAMILIES[f].note;
+}
 $$('.sw').forEach(makeSwitch);
 renderNotes();
 matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', apply);
