@@ -10110,10 +10110,93 @@
   /// Toggles a stack's expanded/collapsed state (the badge's click handler) and re-renders via
   /// the same path a filter change uses, so the splice-in logic above is the only place that
   /// needs to know about expansion at all.
-  function toggleStackExpanded(leaderId) {
-    if (state._expandedStacks.has(leaderId)) state._expandedStacks.delete(leaderId);
-    else state._expandedStacks.add(leaderId);
-    refreshView();
+  // CHR-158: expand/collapse in place instead of refreshView() — that re-queried the whole
+  // catalog, painted the skeleton over the grid and re-rendered every card, so the entire
+  // Library visibly reloaded for a one-stack change. Now only this stack's members are fetched
+  // and spliced into state.entries, the grid re-renders from memory (thumbnails carried over so
+  // nothing flashes), and a FLIP animation slides the other cards to their new slots while the
+  // members fan out of (or fold back into) the leader. Falls back to refreshView() outside the
+  // catalog view or if the leader isn't on screen.
+  const _stackLeaderRows = new Map(); // leader id -> the collapsed grouped row, for collapsing back
+  function stackCardRects() {
+    const m = new Map();
+    const g = document.getElementById('lib-grid');
+    if (g) g.querySelectorAll('.lib-card').forEach((c) => {
+      const img = c.querySelector('img');
+      m.set(c.dataset.path, { r: c.getBoundingClientRect(), src: img && img.getAttribute('src') });
+    });
+    return m;
+  }
+  function stackFlip(before, leaderPath) {
+    const g = document.getElementById('lib-grid');
+    if (!g) return;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const from = before.get(leaderPath);
+    g.querySelectorAll('.lib-card').forEach((c) => {
+      const old = before.get(c.dataset.path);
+      const img = c.querySelector('img');
+      if (old && old.src && img && !img.getAttribute('src')) img.src = old.src; // no thumbnail flash
+      if (reduce) return;
+      const now = c.getBoundingClientRect();
+      if (old) {
+        const dx = old.r.left - now.left, dy = old.r.top - now.top;
+        if (dx || dy) c.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }],
+          { duration: 260, easing: 'cubic-bezier(.16,1,.3,1)' });
+      } else if (from) {
+        const dx = from.r.left - now.left, dy = from.r.top - now.top;
+        c.animate([{ transform: `translate(${dx}px,${dy}px) scale(.85)`, opacity: 0 }, { transform: 'none', opacity: 1 }],
+          { duration: 300, easing: 'cubic-bezier(.16,1,.3,1)' });
+      }
+    });
+  }
+  async function toggleStackExpanded(leaderId) {
+    const expanding = !state._expandedStacks.has(leaderId);
+    const idx = state.entries.findIndex((e) => e.id === leaderId && e._stackOf == null);
+    if (state.source !== 'catalog' || idx < 0) {
+      if (expanding) state._expandedStacks.add(leaderId); else state._expandedStacks.delete(leaderId);
+      return refreshView();
+    }
+    const leader = state.entries[idx];
+    let next;
+    if (expanding) {
+      let sub;
+      try { sub = await invoke('catalog_query', { q: { expandStack: leaderId } }); } catch (e) { return; }
+      for (const m of sub.entries) if (m.id !== leaderId) m._stackOf = leaderId;
+      _stackLeaderRows.set(leaderId, leader);
+      next = state.entries.slice(0, idx).concat(sub.entries, state.entries.slice(idx + 1));
+      await getSidecarsBatch(sub.entries.filter((e) => !e.offline).map((e) => e.path));
+      state._expandedStacks.add(leaderId);
+    } else {
+      // Fold the members back into the leader before they leave the DOM.
+      const g = document.getElementById('lib-grid');
+      const lc = g && g.querySelector(`.lib-card[data-path="${CSS.escape(leader.path)}"]`);
+      if (g && lc && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const lr = lc.getBoundingClientRect();
+        const anims = [];
+        state.entries.filter((e) => e._stackOf === leaderId).forEach((e) => {
+          const c = g.querySelector(`.lib-card[data-path="${CSS.escape(e.path)}"]`);
+          if (!c) return;
+          const r = c.getBoundingClientRect();
+          anims.push(c.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${lr.left - r.left}px,${lr.top - r.top}px) scale(.85)`, opacity: 0 }],
+            { duration: 180, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).finished.catch(() => {}));
+        });
+        // Bounded: a hidden/throttled window never advances animations, so never wait on them alone.
+        await Promise.race([Promise.all(anims), new Promise((r) => setTimeout(r, 240))]);
+      }
+      const row = _stackLeaderRows.get(leaderId) || leader;
+      const first = state.entries.findIndex((e) => e.id === leaderId || e._stackOf === leaderId);
+      next = state.entries.filter((e) => e._stackOf !== leaderId && !(e.id === leaderId));
+      next.splice(Math.min(first, next.length), 0, row);
+      _stackLeaderRows.delete(leaderId);
+      state._expandedStacks.delete(leaderId);
+    }
+    const before = stackCardRects();
+    const scroller = document.getElementById('lib-grid')?.parentElement;
+    const top = scroller ? scroller.scrollTop : 0;
+    state.entries = next;
+    await renderGrid();
+    if (scroller) scroller.scrollTop = top;
+    stackFlip(before, leader.path);
   }
 
   /// The one thing every post-mutation refresh (delete, duplicate, ...) should call instead of
