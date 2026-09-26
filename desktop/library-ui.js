@@ -1898,6 +1898,9 @@
        between its two halves. */
     /* CHR-155: Swiss Kinetic playground (.rbar rules) — one 8px rhythm, no divider rules. */
     body.deskx #lib-overlay #lib-zoomflag-cluster{display:flex;align-items:center;gap:8px}
+    /* CHR-150: the dock column tracks the cursor 1:1 while dragging (no 200ms grid tween). */
+    body.lib-dock-dragging .fx-layout{transition:none!important}
+    body.lib-dock-dragging{cursor:col-resize;user-select:none;-webkit-user-select:none}
     /* Thumbnail-size zoom row: fixed, compact width matching the Editor's own zoom slider —
        no longer needs to grow into empty row space now that it's a #lib-top-right cluster. */
     body.deskx #lib-overlay .lib-zoomrow{flex:none;min-width:0;gap:4px}
@@ -1906,7 +1909,7 @@
        first flag offset 4px from the zoom controls it now shares a cluster with — both numbers
        copied from body.deskx .fx-zoom-ctrl .flag-btn / #btn-flag-red's inline margin-left,
        not the old 30x30/28x28 sizes this used to run at. */
-    body.deskx #lib-overlay .lib-flagrow{border-left:none;border-right:none;padding:0;gap:8px}
+    body.deskx #lib-overlay .lib-flagrow{border-left:none;border-right:none;padding:0;gap:1px}
     body.deskx #lib-overlay .lib-flagrow .lib-btn-icon{width:32px!important;height:32px!important;
       border-radius:8px}
     body.deskx #lib-overlay .lib-flagrow .lib-btn-icon svg{width:18px;height:18px}
@@ -6418,7 +6421,7 @@
       _virtScrollBound = { el: scroller, fn };
       if (_virtRO) _virtRO.disconnect();
       let roW = -1;
-      _virtRO = new ResizeObserver(() => { const w = scroller.clientWidth; if (roW >= 0 && w !== roW) virtRemeasure(); roW = w; });
+      _virtRO = new ResizeObserver(() => { const w = scroller.clientWidth; if (roW >= 0 && w !== roW && !document.body.classList.contains('lib-dock-dragging')) virtRemeasure(); roW = w; });
       _virtRO.observe(scroller);
     } else if (_virtScrollBound) {
       _virtScrollBound.el.removeEventListener('scroll', _virtScrollBound.fn);
@@ -8166,20 +8169,52 @@
   dockResizer.addEventListener('mousedown', (e) => {
     if (dockCollapsed) return; // nothing to drag — resizer/dock are both hidden while collapsed
     dockResizing = true; dockWantsClose = false; dockResizer.classList.add('active'); e.preventDefault();
+    document.body.classList.add('lib-dock-dragging');
   });
+  // CHR-150: smooth drag. Three things made it judder: (1) .fx-layout animates
+  // grid-template-columns over 200ms, so every mousemove restarted a transition and the column
+  // lagged/rubber-banded behind the cursor — body.lib-dock-dragging turns that off; (2) each
+  // mousemove queued its own rAF, and each one re-windowed the virtual grid from scratch
+  // (_virtRange = null → every card rebuilt, thumbnails flashed) — now one rAF per frame, and
+  // the grid only re-windows when the COLUMN COUNT changes; (3) the grid's own ResizeObserver
+  // restored a scroll anchor captured at drag start 80ms after each pause, fighting the pin —
+  // virtRemeasure is skipped while dragging and one clean remeasure runs on release.
+  let dockPendingW = 0, dockRaf = 0;
+  function pinOpenedDuringDrag() {
+    const g = document.getElementById('lib-grid');
+    if (!g || !state.openedPath) return;
+    if (state._virtOn) {
+      const raw = virtMetrics(g), o = state._virtMetrics;
+      if (raw && (!o || raw.cols !== o.cols)) { state._virtMetrics = raw; scrollLibraryToPath(state.openedPath, true); return; }
+    }
+    const card = g.querySelector(`.lib-card[data-path="${CSS.escape(state.openedPath)}"]`);
+    if (!card) { scrollLibraryToPath(state.openedPath, true); return; }
+    const scroller = g.parentElement;
+    const cr = card.getBoundingClientRect(), sr = scroller.getBoundingClientRect();
+    scroller.scrollTop += (cr.top + cr.height / 2) - (sr.top + scroller.clientHeight / 2);
+  }
   window.addEventListener('mousemove', (e) => {
     if (!dockResizing || !fxLayout) return;
     const raw = e.clientX - overlay.getBoundingClientRect().left;
     dockWantsClose = raw < LIB_DOCK_CLOSE_ZONE;
-    const w = Math.min(LIB_DOCK_MAX, Math.max(LIB_DOCK_MIN, raw));
-    fxLayout.style.setProperty('--dock-w-user', w + 'px');
-    // Column count/row height change with width, so keep the open photo pinned in view.
-    if (state.openedPath) requestAnimationFrame(() => { virtUpdate && state._virtOn && (state._virtMetrics = virtMetrics(document.getElementById('lib-grid')) || state._virtMetrics, state._virtRange = null); scrollLibraryToPath(state.openedPath, true); });
+    dockPendingW = Math.round(Math.min(LIB_DOCK_MAX, Math.max(LIB_DOCK_MIN, raw)));
+    if (dockRaf) return;
+    dockRaf = requestAnimationFrame(() => {
+      dockRaf = 0;
+      fxLayout.style.setProperty('--dock-w-user', dockPendingW + 'px');
+      pinOpenedDuringDrag();
+    });
   });
   window.addEventListener('mouseup', () => {
     if (!dockResizing) return;
     dockResizing = false; dockResizer.classList.remove('active');
+    document.body.classList.remove('lib-dock-dragging');
+    if (dockRaf) { cancelAnimationFrame(dockRaf); dockRaf = 0; if (fxLayout && dockPendingW) fxLayout.style.setProperty('--dock-w-user', dockPendingW + 'px'); }
     if (dockWantsClose) { setDockCollapsed(true); return; }
+    // Settle: real metrics (spacers were left at the pre-drag row height), then re-pin.
+    const g = document.getElementById('lib-grid');
+    if (g && state._virtOn) { const m = virtMetrics(g); if (m) { state._virtMetrics = m; state._virtRange = null; virtUpdate(true); } }
+    if (state.openedPath) scrollLibraryToPath(state.openedPath, true);
     const w = fxLayout ? parseInt(getComputedStyle(fxLayout).getPropertyValue('--dock-w-user'), 10) : 0;
     if (w) localStorage.setItem('chromasmith_lib_dock_w', w);
   });
