@@ -1759,6 +1759,18 @@ body.deskx #lib-overlay .lib-side-tabs{display:none}
 .fx-slider:hover::-webkit-slider-thumb,.fx-slider.fx-knob-on::-webkit-slider-thumb,.fx-row.fx-mod .fx-slider::-webkit-slider-thumb{background:var(--knob,var(--k-color-accent-a));box-shadow:none}
 .fx-slider:hover::-moz-range-thumb,.fx-slider.fx-knob-on::-moz-range-thumb,.fx-row.fx-mod .fx-slider::-moz-range-thumb{background:var(--knob,var(--k-color-accent-a))}
 @media (prefers-reduced-motion:reduce){.fx-slider::-webkit-slider-thumb{transform:none;transition:none}.fx-slider::-moz-range-thumb{transform:none;transition:none}}
+/* ── Swiss Kinetic: chip (prototype .k-chip) ──
+   Square, hairline line border, bold 10px tracked uppercase. Selected (.lib-sel) fills accent A
+   from the bottom up with white text and drops a hard accent-B block at 0.6 of the offset.
+   Icon chips keep the icon-button slab instead. */
+#lib-overlay .lib-chip:not(.lib-iconchip){position:relative;isolation:isolate;border-radius:0!important;border:1px solid var(--bdr);background:var(--k-color-bg);color:var(--k-color-ink);
+  font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.12em;text-transform:uppercase;box-shadow:0 0 0 var(--k-color-accent-b);
+  transition:border-color var(--k-motion-hover),color var(--k-motion-hover),box-shadow var(--k-motion-duration) var(--k-motion-easing)}
+#lib-overlay .lib-chip:not(.lib-iconchip)::after{content:'';display:block;position:absolute;inset:-1px;background:var(--k-color-accent-a);z-index:-1;transform:scaleY(0);transform-origin:bottom;transition:transform var(--k-motion-duration) var(--k-motion-easing)}
+#lib-overlay .lib-chip:not(.lib-iconchip):hover{border-color:var(--k-color-ink);background:var(--k-color-bg)}
+#lib-overlay .lib-chip:not(.lib-iconchip).lib-sel{color:#fff;border-color:var(--k-color-accent-a);background:var(--k-color-bg);box-shadow:calc(var(--k-offset-x)*.6) calc(var(--k-offset-y)*.6) 0 var(--k-color-accent-b)}
+#lib-overlay .lib-chip:not(.lib-iconchip).lib-sel::after{transform:scaleY(1)}
+@media (prefers-reduced-motion:reduce){#lib-overlay .lib-chip:not(.lib-iconchip),#lib-overlay .lib-chip:not(.lib-iconchip)::after{transition:none}}
 </style>
 </head>
 <body>
@@ -5305,7 +5317,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926I';
+const BUILD='1.0926J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
