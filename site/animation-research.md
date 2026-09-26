@@ -37,11 +37,11 @@ Product-page references: [Lightroom mobile](https://www.adobe.com/products/photo
 
 ### Motion and interaction
 
-17. Let normal scrolling set the pace; animation should clarify movement between chapters.
+17. Let visitor input set the pace; use directional chapter movement to clarify each transition.
 18. Use a short slide and fade to introduce text and imagery, then let them rest.
 19. Give the large photograph and framed screenshots slightly different motion for visual rhythm.
 20. Keep the brand word and numbered index in sync with the chapter at the viewport centre.
-21. Use proximity snapping near section boundaries; strict snapping can trap tall content.
+21. Use one-viewport chapters with mandatory snap when they fit, and natural scrolling on short viewports or expanded details.
 22. Keep the comparison visitor-controlled rather than automatically moving its divider.
 23. Prefer transform and opacity for motion; avoid repeatedly animating layout dimensions.
 24. Use an IntersectionObserver for entry and active-section changes instead of heavy scroll work.
@@ -60,12 +60,13 @@ Technical references: [CSS scroll snap](https://developer.mozilla.org/en-US/docs
 
 ## Motion choices for this iteration
 
-The page uses short entry reveals, a changing rail word, an active numbered index, a
-visitor-controlled comparison, native proximity snapping on larger screens, and subtle
-scroll-linked image drift where supported. It avoids an animation library for now because these
-effects fit the self-contained page. [GSAP ScrollTrigger](https://gsap.com/docs/v3/Plugins/ScrollTrigger/)
-remains an option if later revisions need directional chapter snapping, longer pinned narratives,
-or tightly choreographed timelines.
+The page uses short title, image, panel, phone and portrait arrivals; a changing rail word;
+an active numbered index; and a visitor-controlled comparison. One wheel gesture eases to the
+next chapter and stops. Touch input uses native mandatory section snapping, with natural
+scrolling on short viewports and for reduced-motion visitors. Subtle image drift runs only where
+scroll-linked CSS is supported. These effects fit the self-contained page without an animation
+library. [GSAP ScrollTrigger](https://gsap.com/docs/v3/Plugins/ScrollTrigger/) remains an option
+if later revisions need longer pinned narratives or tightly choreographed timelines.
 
 Once the original photos arrive, consider a masked original-to-export reveal, a small sequence
 showing one image through Gallery → Studio → Click → Film, and a photographic closing frame.

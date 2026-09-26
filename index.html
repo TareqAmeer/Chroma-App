@@ -20,7 +20,7 @@
   --ease:cubic-bezier(.22,1,.36,1);--sans:Arial,Helvetica,sans-serif;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth;scroll-snap-type:y proximity}
+html{scroll-behavior:smooth;scroll-snap-type:y mandatory}
 body{margin:0;background:var(--ink);color:var(--white);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:clip}
 button,input{font:inherit}
 a{color:inherit}
@@ -52,8 +52,8 @@ html.light-chapter .top-actions{color:#111;background:linear-gradient(#f4f1ecee,
 html.light-chapter .chapter-nav a{color:#64605d}
 html.light-chapter .chapter-nav a[aria-current="location"],html.light-chapter .chapter-nav a:hover{color:#111}
 
-main,footer.site{margin-left:var(--rail)}
-.chapter{position:relative;min-height:100svh;scroll-snap-align:start;isolation:isolate;overflow:hidden;border-bottom:1px solid #252525}
+main{margin-left:var(--rail)}
+.chapter{position:relative;min-height:100svh;scroll-snap-align:start;scroll-snap-stop:always;isolation:isolate;overflow:hidden;border-bottom:1px solid #252525}
 .chapter-inner{position:relative;z-index:2;min-height:100svh;max-width:1650px;margin:auto;padding:130px calc(var(--index) + clamp(28px,6vw,110px)) 80px clamp(34px,6vw,110px)}
 .chapter-num,.eyebrow{font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
 .chapter-num{color:#dbd2ce}
@@ -183,8 +183,8 @@ html.motion-ready .reveal.delay-2{transition-delay:.16s}
 .download-grid h3{font-size:19px}
 .download-grid p{font-size:14px;line-height:1.5;color:#f9dedb}
 .download-grid a{text-underline-offset:3px}
-footer.site{padding:20px clamp(24px,6vw,110px);background:#050505;color:#a9a6a3;font-size:12px;line-height:1.5}
-footer.site a{text-underline-offset:3px}
+.site-credit{margin:clamp(12px,2svh,24px) 0 0;color:#f8dfd9;font-size:12px;line-height:1.5}
+.site-credit a{text-underline-offset:3px}
 
 /* Gentle movement follows the actual scroll position where view timelines are supported. */
 @supports (animation-timeline:view()) {
@@ -243,6 +243,92 @@ footer.site a{text-underline-offset:3px}
   .top-actions{gap:9px}
   .brand-rail a{font-size:23px}
   .chapter-inner{padding-left:18px;padding-right:38px}
+}
+/* Each chapter occupies one browser viewport. Tall-content devices get a natural-scroll fallback. */
+.chapter{height:100svh;min-height:0}
+.chapter-inner{height:100%;min-height:0;padding-top:clamp(80px,11svh,120px);padding-bottom:clamp(22px,4.5svh,58px)}
+html.is-gliding,html.details-open{scroll-snap-type:none}
+html.is-gliding{scroll-behavior:auto}
+html.details-open .yours{height:auto;min-height:100svh;overflow:visible}
+html.details-open .yours .chapter-inner{height:auto;min-height:100svh}
+h1{font-size:clamp(50px,min(7.7vw,11svh),124px)}
+h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
+.btn-row{margin-top:clamp(14px,2.6svh,32px)}
+.rule{margin:14px 0}
+.gallery .chapter-inner{gap:clamp(12px,2svh,28px)}
+.gallery .display-shot{height:min(43svh,500px);max-height:none;aspect-ratio:auto}
+.gallery .split-copy h2{font-size:clamp(40px,min(5vw,8svh),80px)}
+.studio .display-shot,.film .display-shot{max-height:58svh;aspect-ratio:16/9}
+.mini-list{margin-top:18px;gap:8px}
+.ba-stage,.ba-grid .ba-stage{height:min(58svh,550px);aspect-ratio:auto}
+.phone-frame{height:min(60svh,560px);width:auto;aspect-ratio:9/18.6}
+.privacy-line{margin-top:18px}
+.portrait-placeholder{height:min(60svh,500px);width:min(100%,calc(60svh * 4 / 5));aspect-ratio:4/5}
+.yours h2{font-size:clamp(60px,min(10vw,11svh),150px)}
+.download-details{margin-top:clamp(16px,3svh,30px);padding-top:clamp(12px,2svh,22px)}
+@media(prefers-reduced-motion:no-preference){
+  .chapter.is-active h2{animation:title-unfold .72s var(--ease) both}
+  .chapter.is-active .display-shot{animation:frame-arrive .8s var(--ease) both}
+  .chapter.is-active .red-panel{animation:panel-arrive .7s var(--ease) both}
+  .chapter.is-active .rule{animation:rule-grow .7s var(--ease) both;transform-origin:left}
+  .chapter.is-active .phone-frame{animation:phone-arrive .85s var(--ease) both}
+  .chapter.is-active .portrait-placeholder{animation:portrait-arrive .85s var(--ease) both}
+}
+@keyframes title-unfold{from{clip-path:inset(0 0 95% 0);transform:translateY(15px)}to{clip-path:inset(0 0 0 0);transform:none}}
+@keyframes frame-arrive{from{opacity:.35;transform:translateY(28px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes panel-arrive{from{opacity:.3;transform:translateX(42px)}to{opacity:1;transform:none}}
+@keyframes rule-grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes phone-arrive{from{opacity:.4;transform:translateY(35px) rotate(-5deg)}to{opacity:1;transform:none}}
+@keyframes portrait-arrive{from{opacity:.5;transform:translateX(-32px) rotate(-2deg)}to{opacity:1;transform:none}}
+@media(max-width:1050px){
+  .studio .chapter-inner,.film .chapter-inner{gap:clamp(12px,2svh,20px)}
+  .studio .display-shot,.film .display-shot{height:min(24svh,210px);max-height:none;aspect-ratio:auto}
+  .guy .portrait-placeholder{height:min(28svh,230px);width:min(100%,calc(28svh * 5 / 4));aspect-ratio:5/4}
+}
+@media(max-width:720px){
+  html{scroll-snap-type:y mandatory}
+  .chapter-inner{padding:clamp(62px,9svh,76px) 40px clamp(14px,3svh,26px) 20px}
+  .chapter-num{font-size:11px}
+  h1{font-size:clamp(39px,min(10vw,7svh),68px)}
+  h2{font-size:clamp(35px,min(9vw,6svh),58px)}
+  .lede{font-size:clamp(14px,3.8vw,17px)}
+  .btn-row{margin-top:14px;gap:8px}
+  .action{min-height:38px;padding:8px 12px;font-size:12px}
+  .gallery .chapter-inner{gap:clamp(10px,1.6svh,18px)}
+  .gallery .display-shot{height:min(24svh,220px);aspect-ratio:auto}
+  .gallery .split-copy h2{font-size:clamp(35px,min(9vw,6svh),58px)}
+  .split-copy{gap:10px}
+  .red-panel{padding:12px;font-size:clamp(14px,3.8vw,17px)}
+  .studio .chapter-inner,.film .chapter-inner,.guy .chapter-inner{gap:clamp(10px,1.6svh,18px)}
+  .studio .display-shot,.film .display-shot{height:min(22svh,190px);aspect-ratio:auto}
+  .mini-list{margin-top:12px;gap:5px}
+  .mini-list li{padding-top:6px;font-size:12px}
+  .click .chapter-inner{gap:12px}
+  .ba-stage,.ba-grid .ba-stage{height:min(29svh,230px);aspect-ratio:auto}
+  .ba figcaption{font-size:11px;padding:7px 0}
+  .anywhere .chapter-inner{gap:10px}
+  .phone-frame{height:clamp(140px,25svh,230px);width:auto;aspect-ratio:9/18.6;padding:5px;border-radius:22px}
+  .phone-frame img{border-radius:13px}
+  .privacy-line{gap:10px;margin-top:12px;font-size:11px}
+  .guy .portrait-placeholder{height:min(22svh,190px);width:min(100%,calc(22svh * 4 / 3));aspect-ratio:4/3}
+  .portrait-placeholder strong{font-size:90px}
+  .portrait-placeholder span{bottom:13px;left:13px;font-size:8px}
+  .guy blockquote{font-size:clamp(15px,4vw,20px)}
+  .guy .provisional{font-size:10px;margin-top:10px}
+  .yours h2{font-size:clamp(47px,min(10vw,7svh),80px)}
+  .download-details{margin-top:15px;padding-top:12px}
+  .download-details summary{font-size:13px}
+}
+@media (min-width:721px) and (max-height:700px){
+  .chapter-inner{padding-top:60px;padding-bottom:16px}
+  .studio h2,.guy h2{font-size:clamp(40px,6svh,52px)}
+  .studio .mini-list{margin-top:10px;gap:4px}
+  .guy .portrait-placeholder{height:22svh;width:calc(22svh * 5 / 4)}
+}
+@media(max-height:560px){
+  html{scroll-snap-type:none}
+  .chapter{height:auto;min-height:100svh;overflow:visible}
+  .chapter-inner{height:auto;min-height:100svh}
 }
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto;scroll-snap-type:none}
@@ -399,10 +485,10 @@ footer.site a{text-underline-offset:3px}
           <div><h3>Mac desktop</h3><p><a href="https://github.com/TareqAmeer/Chroma-App/releases/latest">Get the latest Mac release</a> for the local library, card import and on-device search.</p></div>
         </div>
       </details>
+      <p class="site-credit reveal delay-2">Chromasmith is free software under the GPL-3.0 licence. Built by Tareq Ameer. &nbsp; <a href="https://github.com/TareqAmeer/Chroma-App">Source code</a></p>
     </div>
   </section>
 </main>
-<footer class="site">Chromasmith is free software under the GPL-3.0 licence. Built by Tareq Ameer. &nbsp; <a href="https://github.com/TareqAmeer/Chroma-App">Source code</a></footer>
 <script>
 // A range input keeps the comparison usable with mouse, touch, and keyboard.
 document.querySelectorAll(".ba").forEach(function (figure) {
@@ -418,10 +504,13 @@ var sections = Array.from(document.querySelectorAll(".chapter"));
 var links = Array.from(document.querySelectorAll(".chapter-nav a"));
 var railWord = document.querySelector(".rail-word");
 var activeId = "";
+var root = document.documentElement;
+var reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 function setActive(section) {
   if (!section || section.id === activeId) return;
   activeId = section.id;
-  document.documentElement.classList.toggle("light-chapter", activeId === "anywhere");
+  root.classList.toggle("light-chapter", activeId === "anywhere");
+  sections.forEach(function (item) { item.classList.toggle("is-active", item === section); });
   links.forEach(function (link) {
     if (link.getAttribute("href") === "#" + activeId) link.setAttribute("aria-current", "location");
     else link.removeAttribute("aria-current");
@@ -453,6 +542,86 @@ if ("IntersectionObserver" in window) {
   addEventListener("scroll", updateActive, { passive: true });
   updateActive();
 }
+
+// One wheel gesture moves one chapter. The scroll position eases into place and then stops.
+// Touch scrolling uses native scroll snap; short viewports and reduced-motion mode keep native scrolling.
+var scrollFrame = 0;
+var gliding = false;
+var wheelSum = 0;
+var lastWheel = 0;
+var wheelLockedUntil = 0;
+function pageMode() {
+  return !reducedMotion.matches && innerHeight > 560 && !root.classList.contains("details-open");
+}
+function glideTo(index, updateHash) {
+  var section = sections[index];
+  if (!section) return;
+  if (updateHash) history.pushState(null, "", "#" + section.id);
+  if (!pageMode()) {
+    section.scrollIntoView({ block: "start", behavior: "auto" });
+    setActive(section);
+    return;
+  }
+  cancelAnimationFrame(scrollFrame);
+  var start = scrollY;
+  var end = section.offsetTop;
+  var distance = end - start;
+  if (Math.abs(distance) < 2) { setActive(section); return; }
+  var started = performance.now();
+  var duration = 650;
+  gliding = true;
+  root.classList.add("is-gliding");
+  function tick(now) {
+    var t = Math.min(1, (now - started) / duration);
+    var eased = t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    scrollTo(0, start + distance * eased);
+    if (t < 1) scrollFrame = requestAnimationFrame(tick);
+    else {
+      scrollTo(0, end);
+      root.classList.remove("is-gliding");
+      gliding = false;
+      wheelLockedUntil = performance.now() + 280;
+      setActive(section);
+    }
+  }
+  scrollFrame = requestAnimationFrame(tick);
+}
+addEventListener("wheel", function (event) {
+  if (event.ctrlKey || !pageMode() || (event.target instanceof Element && event.target.closest("input, textarea, select"))) return;
+  var now = performance.now();
+  var delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1);
+  if (!delta) return;
+  var current = sections.findIndex(function (section) { return section.id === activeId; });
+  if (current < 0) current = 0;
+  if (!gliding && now >= wheelLockedUntil && ((current === 0 && delta < 0) || (current === sections.length - 1 && delta > 0))) return;
+  event.preventDefault();
+  var elapsed = now - lastWheel;
+  lastWheel = now;
+  if (gliding || now < wheelLockedUntil) {
+    wheelLockedUntil = Math.max(wheelLockedUntil, now + 170);
+    return;
+  }
+  if (elapsed > 220) wheelSum = 0;
+  wheelSum += delta;
+  if (Math.abs(wheelSum) < 18) return;
+  var direction = Math.sign(wheelSum);
+  wheelSum = 0;
+  glideTo(current + direction, false);
+}, { passive: false });
+
+document.querySelectorAll('a[href^="#"]').forEach(function (link) {
+  link.addEventListener("click", function (event) {
+    var id = link.getAttribute("href").slice(1);
+    var index = sections.findIndex(function (section) { return section.id === id; });
+    if (index < 0) return;
+    event.preventDefault();
+    glideTo(index, true);
+  });
+});
+var downloads = document.querySelector(".download-details");
+if (downloads) downloads.addEventListener("toggle", function () {
+  root.classList.toggle("details-open", downloads.open);
+});
 
 // Content is visible by default. Reveal motion is an enhancement only.
 if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: reduce)").matches) {

@@ -5,6 +5,12 @@ self-contained (one file, inline CSS/JS, no framework, no build step — the sam
 itself follows). The page is an eight-chapter scrolling story with a fixed brand rail and
 section index.
 
+On wheel input, one gesture eases to the next chapter and stops. Touch devices use native
+mandatory section snapping. Each chapter is sized to one viewport; very short browser windows
+use natural scrolling so content remains reachable. Reduced-motion visitors get a still,
+ordinary-scroll version. The opening photo, product frames, panels and chapter titles have
+short, separate arrival animations.
+
 The hero and one-click comparison currently use `site/assets/hero-placeholder.webp`, made from
 the repository's approved splash photo. The comparison is labelled as a layout preview because
 its two sides are not a real Chromasmith edit. The CHRO-MA-GUY portrait and copy are explicitly
