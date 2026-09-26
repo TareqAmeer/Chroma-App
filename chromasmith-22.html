@@ -3188,7 +3188,6 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <!-- INFO / METADATA -->
       <div class="fx-ctrl" data-fxsec="info">
         <div class="fx-ctrl-title">Preview Info &amp; Metadata</div>
-        <div style="font-family:var(--mono);font-size:11px;color:var(--mut);line-height:1.6" id="fx-info"></div>
         <!-- People & Pets (people-pets wireframes screen I) — deliberately lives HERE, not as
              its own rail section: it's a fact about the photo, not a grading control, same
              reasoning as EXIF sitting right below it. `fx-people` is populated by
@@ -3200,6 +3199,9 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
              populates this, called from the same showExif() choke point as People & Pets. -->
         <div id="fx-keywords"></div>
         <div id="fx-exif"></div>
+        <!-- CHR-164: preview render size sits BELOW the table — the table's Dimensions row is the
+             photo's full size; this is only what the live preview is currently drawing. -->
+        <div style="font-family:var(--mono);font-size:11px;color:var(--mut);line-height:1.6;margin-top:8px" id="fx-info"></div>
       </div>
     </div>
     <!-- PREVIEW -->
@@ -5610,7 +5612,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926F';
+const BUILD='1.0926G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17407,7 +17409,7 @@ function showExif(exif){
   // Lens, Camera Make, Camera Model. Extra fields (dims/fileName/fileSize/format/make) are
   // attached by the loaders / library opener; missing ones simply don't render.
   const it=fxImages[fxCurIdx]||fxImages[0]||{};
-  const dims=(it.img&&it.img.width)?`${it.img.width}×${it.img.height}`:'';
+  const dims=fxFullDimsText(it);
   const fmtDate=d=>{if(!d)return'';const m=String(d).match(/^(\d{4})[:-](\d{2})[:-](\d{2})/);
     if(!m)return d;const MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return `${MO[parseInt(m[2],10)-1]||m[2]} ${parseInt(m[3],10)}, ${m[1]}`;};
@@ -17415,7 +17417,7 @@ function showExif(exif){
   let make=exif.make||'',model=exif.model||'';
   if(!make&&model.includes(' ')){const i=model.indexOf(' ');make=model.slice(0,i);model=model.slice(i+1);}
   el.innerHTML=
-    row('Date',fmtDate(exif.date))+row('Dimensions',dims)+
+    row('Date',fmtDate(exif.date))+row('Dimensions',dims).replace('class="fx-exif-val"','class="fx-exif-val" id="fx-exif-dims"')+
     (chips.length?`<div class="fx-exif-grid">${chips.join('')}</div>`:'')+
     row('File Name',it.name?(it.ext?`${it.name}.${it.ext}`:it.name):'')+row('Size',fmtSize(it.fileSize))+
     row('File Format',it.ext?it.ext.toUpperCase():'')+
@@ -17450,6 +17452,23 @@ async function fxSetIcoFrame(v){
 // made INDEPENDENT per photo (adjScopeToggle) — everything else (LUT, curves, HSL, grain,
 // halation, bloom, etc.) still applies to the whole batch automatically. `adjValsOverride`, when
 // given, is a raw-slider-value object (see domAdjustVals) sourced from that photo's own
+// CHR-164: ONE definition of "the photo's full size" — the full-resolution decode when the item
+// carries one (RAW opens on a display proxy first), else the loaded image itself.
+function fxFullDimsText(it){
+  const f=(it&&(it.fullImg||it.img))||null;
+  const w=f&&(f.naturalWidth||f.width),h=f&&(f.naturalHeight||f.height);
+  return w&&h?`${w}×${h}`:'';
+}
+// Header shows what's loaded right now (proxy until the full decode is in, then the full size);
+// the table's Dimensions row is always the full size. Both are re-synced on every preview render
+// so a background full-quality promotion updates them instead of leaving stale numbers behind.
+function fxRefreshDims(){
+  const it=fxImages[fxCurIdx]||fxImages[0];if(!it||it.kind==='video')return;
+  const s=document.getElementById('db-title-status');
+  if(s&&!s.classList.contains('spin')){const t=fxDimsFmt(it.name,it.img,it.ext);if(t&&s.textContent!==t)s.textContent=t;}
+  const d=document.getElementById('fx-exif-dims');
+  if(d){const t=fxFullDimsText(it);if(t&&d.textContent!==t)d.textContent=t;}
+}
 // it.adjustOverride instead of the live DOM — used by exportFX so each photo renders with ITS
 // own Adjust values instead of whichever photo happens to be previewed at export time.
 // ══ MATCH SERIES TO A REFERENCE ═══════════════════════════════════════════════════════════
@@ -18021,8 +18040,9 @@ function renderPreview(){
   // previews visibly pixelated; CSS scales the finished canvas to the fit footprint below.
   applyPreviewBorders(P,pw,ph);
   document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
-    ?`Full res ${Math.round(fxZoom*100)}% — rendered ${pw}\u00d7${ph}; export full ${iw}\u00d7${ih}`
-    :`Preview ${pw}\u00d7${ph} — export full ${iw}\u00d7${ih}`;
+    ?`Full res ${Math.round(fxZoom*100)}% — rendered ${pw}\u00d7${ph}`
+    :`Preview ${pw}\u00d7${ph}`;
+  fxRefreshDims();
   document.getElementById('btn-fx-export').disabled=false;
   if(fxHistOn)drawHistogram();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // canvas rect may have just changed (new photo / resize)

@@ -2384,6 +2384,7 @@
   // drift test/lint_formats.mjs exists to catch, and on desktop RAW_FILE_EXT_RE already
   // includes formats (like .ari) that a narrower local copy would silently exclude.
   const RAW_EXT_RE = RAW_FILE_EXT_RE;
+  const STILL_META_RE = /\.(jpe?g|tiff?|hei[cf])$/i; // formats library.rs read_meta parses via EXIF
   // Minimal framed raw-body invoke (JSON header + binary payload) — same wire format
   // desktop-native.js's framedInvoke uses for store_dcp_lut, duplicated here (not exposed on
   // window there) since it's a one-liner and this file is meant to stay self-contained.
@@ -4020,7 +4021,9 @@
     // They must never enter the Editor path: the first editor pixels always come from our
     // batch-produced display proxy (or our full native decode), so culling and final render use
     // the same colour pipeline.
-    const rawMetaPromise = isRaw ? getMeta(path).catch(() => ({})) : Promise.resolve({});
+    // CHR-164: every still (HEIC/JPEG/TIFF too, not just RAW) gets the native metadata read —
+    // the browser-side EXIF parser can't read HEIC at all, so a HEIC's Info panel stayed empty.
+    const rawMetaPromise = (isRaw || STILL_META_RE.test(path)) ? getMeta(path).catch(() => ({})) : Promise.resolve({});
     const spin = document.getElementById('fx-fname-spin');
     if (spin && !cached) spin.style.display = '';
     // Deskbar title: show the incoming photo's name + a spinner immediately (RapidRAW-style);
@@ -4419,14 +4422,22 @@
       // Metadata is panel-only and can be slow on an external volume. Do not block the first
       // visible cached frame on it; populate EXIF asynchronously and ignore stale completions
       // when the user navigates before the native metadata read returns.
+      // CHR-164: the Editor's People & Pets and Keywords sections look the photo up by its
+      // library path — entries built here never carried one, so both always rendered empty.
+      if (fxImages[0]) fxImages[0].path = path;
+      if (typeof showExif === 'function' && fxImages[0]) showExif(fxImages[0].exif || {});
       rawMetaPromise.then((m) => {
         if (state.openedPath && state.openedPath !== path) return;
         if (typeof showExif === 'function' && fxImages[0]) {
-          const exif = {
+          const native = {
             model: m.model || m.camera || '', make: m.make || '',
             lens: m.lens || '', shutter: m.shutter || '', aperture: m.aperture || '',
             iso: m.iso ? `ISO ${m.iso}` : '', focalLen: m.focal_len || '', date: m.date || '',
           };
+          // CHR-164: merge, never blank — a field the native read lacks keeps whatever the
+          // loader's own parser found (this used to overwrite a JPEG's EXIF with all-empty).
+          const exif = { ...(fxImages[0].exif || {}) };
+          for (const k in native) if (native[k]) exif[k] = native[k];
           fxImages[0].exif = exif;
           showExif(exif);
           if (typeof window.chromasmithLensStatusRefresh === 'function') window.chromasmithLensStatusRefresh();
