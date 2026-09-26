@@ -751,6 +751,13 @@
     {"var":"--k-variants-slider-reset-dot","pre":"\n  ","hadSemi":true},
     {"var":"--k-variants-bar-swap","pre":"\n  ","hadSemi":true},
     {"var":"--k-variants-top-bar-slider-width","pre":"\n  ","hadSemi":true},
+    {"var":"--glass-bg","pre":"\n  /* Re-resolve var(--k-*)-based tokens against the light set */\n  ","hadSemi":true},
+    {"var":"--tint-1","pre":"","hadSemi":true},
+    {"var":"--tint-2","pre":"","hadSemi":true},
+    {"var":"--tint-3","pre":"","hadSemi":true},
+    {"var":"--tint-4","pre":"","hadSemi":true},
+    {"var":"--tint-5","pre":"","hadSemi":true},
+    {"var":"--tint-6","pre":"","hadSemi":true},
     {
       "trailing": "\n"
     }
