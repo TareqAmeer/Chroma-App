@@ -12,10 +12,24 @@
   --act:#ff3b1f; --onact:#fff;
   --font:'Gramatika','Helvetica Neue',Helvetica,Arial,sans-serif;
 }
+/* Palettes: --act = the one action/position colour, --sel = optional second colour (selection only). */
 body[data-pal=b]{--act:#ff5a1f}
+body[data-pal=klein]{--act:#1f3fff}
+body[data-pal=racing]{--act:#0f6b43}
+body[data-pal=signal]{--act:#e8ff2a;--onact:#111}
+body[data-pal=pink]{--act:#ff4f9a}
+body[data-pal=te]{--act:#ff6a00}
+body[data-pal=mondrian]{--act:#e3261b}
+body[data-pal=violet]{--act:#6b3cff}
+body[data-pal=mint]{--act:#1fcf8f;--onact:#111}
+body[data-pal=mono]{--act:#111;--onact:#fff}
+body[data-pal=mono] .dark{--act:#f2f0ea;--onact:#111}
+body[data-pal=b] .dark,body[data-pal=b] .light{--sel:#2b44ff}
+body[data-pal=mondrian] .dark,body[data-pal=mondrian] .light{--sel:#1f3dff}
+body[data-pal=te] .dark,body[data-pal=te] .light{--sel:#8a8a86}
+body[data-pal=pink] .dark,body[data-pal=pink] .light{--sel:#1f3fff}
 .dark{--bg:#141414;--sur:#1c1c1c;--line:#292929;--ink:#f2f0ea;--mute:#76746e;--dim:#45443f}
 .light{--bg:#f4f2ec;--sur:#ebe8e0;--line:#dcd8ce;--ink:#111;--mute:#77746c;--dim:#bcb8ae}
-body[data-pal=b] .dark{--sel:#3550ff} body[data-pal=b] .light{--sel:#2b44ff}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{font-family:var(--font);font-size:12px;overflow:hidden}
@@ -108,8 +122,10 @@ body.cmp .split{display:block}
 
 /* concept switcher (not part of the design) */
 .dev{position:fixed;right:16px;bottom:16px;background:#fff;color:#111;border:1px solid #ccc;padding:10px;display:flex;gap:6px;align-items:center;font-size:11px;z-index:9}
-.dev button{padding:4px 8px;border:1px solid #ccc}
-.dev button.on{background:#111;color:#fff;border-color:#111}
+.dev{flex-wrap:wrap;max-width:420px}
+.dev button{display:flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid #ddd}
+.dev button i{width:10px;height:10px;display:inline-block}
+.dev button.on{border-color:#111;box-shadow:inset 0 0 0 1px #111}
 </style>
 </head>
 <body data-pal="a">
@@ -162,7 +178,7 @@ body.cmp .split{display:block}
   <div class="strip" id="strip"></div>
 </section>
 
-<div class="dev"><span>Accent</span><button data-p="a" class="on">Vermilion</button><button data-p="b">Orange + blue</button></div>
+<div class="dev"><span>Accent</span></div>
 
 <script>
 const P=[['canal','Canal at dusk',''],['dog-sitting','Towpath',''],['dog-lying','Sofa','wide'],['selfie','Waterfall',''],
@@ -204,6 +220,10 @@ document.getElementById('cmpBtn').onclick=()=>{const on=document.body.classList.
 split.onpointerdown=e=>{split.setPointerCapture(e.pointerId);split.onpointermove=m=>{const r=split.parentElement.getBoundingClientRect();setSplit(Math.min(100,Math.max(0,(m.clientX-r.left)/r.width*100)));};};
 split.onpointerup=()=>split.onpointermove=null;
 
+const PALS=[['a','Vermilion','#ff3b1f'],['b','Orange + blue','#ff5a1f','#2b44ff'],['mondrian','Mondrian red + blue','#e3261b','#1f3dff'],['te','TE orange + grey','#ff6a00','#8a8a86'],
+  ['klein','Klein blue','#1f3fff'],['racing','Racing green','#0f6b43'],['signal','Signal lime','#e8ff2a'],['pink','Hot pink + blue','#ff4f9a','#1f3fff'],
+  ['violet','Violet','#6b3cff'],['mint','Mint','#1fcf8f'],['mono','No colour','#111']];
+document.querySelector('.dev').insertAdjacentHTML('beforeend',PALS.map(([k,n,c,c2],i)=>`<button data-p="${k}" class="${i?'':'on'}"><i style="background:${c}"></i>${c2?`<i style="background:${c2}"></i>`:''}${n}</button>`).join(''));
 document.querySelector('.dev').onclick=e=>{const b=e.target.closest('button');if(!b)return;
   document.querySelectorAll('.dev button').forEach(x=>x.classList.toggle('on',x===b));document.body.dataset.pal=b.dataset.p;};
 drawNav();drawPanel();
