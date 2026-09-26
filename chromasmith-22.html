@@ -1771,6 +1771,30 @@ body.deskx #lib-overlay .lib-side-tabs{display:none}
 #lib-overlay .lib-chip:not(.lib-iconchip).lib-sel{color:#fff;border-color:var(--k-color-accent-a);background:var(--k-color-bg);box-shadow:calc(var(--k-offset-x)*.6) calc(var(--k-offset-y)*.6) 0 var(--k-color-accent-b)}
 #lib-overlay .lib-chip:not(.lib-iconchip).lib-sel::after{transform:scaleY(1)}
 @media (prefers-reduced-motion:reduce){#lib-overlay .lib-chip:not(.lib-iconchip),#lib-overlay .lib-chip:not(.lib-iconchip)::after{transition:none}}
+/* ── Swiss Kinetic: segmented (prototype .sw.seg, approved segmented.*) ──
+   The selected cell carries an accent-A slab (::before) with an accent-B slab (::after) stepped
+   behind it. Kinetic.attachSwitch() (script at the end of <body>) writes --k-sx/--k-sw from the
+   .on button, tweens/springs between cells, lets the slab be dragged and plays the snap sound;
+   the buttons and their click handlers are untouched. Dark = "cell" (slab fills the cell, bar
+   dividers), light = "slab" (slab starts --k-segmented-slab-top down, no dividers): the helper
+   mirrors --k-segmented-style/--k-segmented-dividers onto <html data-k-seg/data-k-segdiv>. */
+.seg,#lib-overlay .lib-seg{position:relative;isolation:isolate;background:transparent;border:0;border-radius:0;overflow:visible;box-shadow:none}
+.seg>button,#lib-overlay .lib-seg>button{position:relative;z-index:2;background:transparent!important;border:0;border-radius:0;box-shadow:none!important;color:var(--k-color-muted);
+  font-family:var(--sans);font-weight:700;font-size:var(--k-segmented-text-size);letter-spacing:.1em;text-transform:uppercase;padding:0 var(--k-segmented-padding);
+  transition:color var(--k-motion-hover)}
+#lib-overlay .lib-seg>button{padding:0;width:auto;min-width:28px}
+.seg>button:not(.on):hover,#lib-overlay .lib-seg>button:not(.on):hover{color:var(--k-color-ink);background:transparent}
+.seg>button.on,#lib-overlay .lib-seg>button.on{color:#fff}
+.seg::before,.seg::after,#lib-overlay .lib-seg::before,#lib-overlay .lib-seg::after{content:'';display:block;position:absolute;left:0;width:var(--k-sw,0px);pointer-events:none;
+  transform:translateX(calc(var(--k-sx,0px) + var(--k-segmented-slab-x)))}
+.seg::before,#lib-overlay .lib-seg::before{z-index:1;background:var(--k-color-accent-a);top:var(--k-segmented-slab-top);bottom:calc(var(--k-segmented-slab-below)*-1)}
+.seg::after,#lib-overlay .lib-seg::after{z-index:0;background:var(--k-color-accent-b);transform:translateX(calc(var(--k-sx,0px) + var(--k-segmented-slab2-x)));
+  top:calc(var(--k-segmented-slab-top) + var(--k-segmented-slab2-y));bottom:calc(var(--k-segmented-slab-below)*-1 - var(--k-segmented-slab2-y))}
+[data-k-seg=cell] .seg::before,[data-k-seg=cell] #lib-overlay .lib-seg::before{top:0;bottom:0}
+[data-k-seg=cell] .seg::after,[data-k-seg=cell] #lib-overlay .lib-seg::after{top:var(--k-segmented-slab2-y);bottom:calc(var(--k-segmented-slab2-y)*-1)}
+.seg:not([data-k-on])::before,.seg:not([data-k-on])::after,#lib-overlay .lib-seg:not([data-k-on])::before,#lib-overlay .lib-seg:not([data-k-on])::after{display:none}
+[data-k-segdiv=bar] .seg>button+button::before,[data-k-segdiv=bar] #lib-overlay .lib-seg>button+button::before{content:'';position:absolute;left:-1px;top:28%;bottom:28%;width:2px;background:var(--k-color-muted)}
+.seg.k-dragging,#lib-overlay .lib-seg.k-dragging{cursor:grabbing}
 </style>
 </head>
 <body>
@@ -5317,7 +5341,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926J';
+const BUILD='1.0926K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23690,6 +23714,83 @@ if(/[?&]catalog=1/.test(location.search)){
   };
   if(document.readyState==='complete')_startCatalog();else window.addEventListener('load',_startCatalog);
 }
+</script>
+<script>
+/* ── Swiss Kinetic helper (design/prototypes/swiss-kinetic/index.html makeSwitch/snap/bezier) ──
+   One shared implementation for the Editor and the Library (desktop/library-ui.js renders into
+   this same document, so its .lib-seg controls are picked up by the same observer; window.Kinetic
+   is exposed for any control that needs to attach explicitly). Look-only: selection still happens
+   through each button's own click handler — a drag just ends by clicking the button it lands on. */
+(function(){
+  const root=document.documentElement;
+  const tok=(n)=>getComputedStyle(document.body||root).getPropertyValue(n).trim();
+  const num=(v)=>parseFloat(v)||0;
+  const reduced=()=>tok('--k-motion-reduce-motion')!=='off'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let ac;
+  function snap(){
+    if(tok('--k-motion-snap-sound')==='off'||reduced())return;
+    const tick=tok('--k-motion-snap-sound')==='tick';
+    try{ac=ac||new AudioContext();const o=ac.createOscillator(),g=ac.createGain(),now=ac.currentTime;
+      o.type=tick?'square':'sine';o.frequency.setValueAtTime(tick?2400:180,now);o.frequency.exponentialRampToValueAtTime(tick?1200:60,now+0.05);
+      g.gain.setValueAtTime(tick?0.05:0.25,now);g.gain.exponentialRampToValueAtTime(0.0001,now+(tick?0.03:0.09));
+      o.connect(g).connect(ac.destination);o.start(now);o.stop(now+0.1);}catch(e){}
+  }
+  function bezier(x1,y1,x2,y2){
+    const A=(a,b)=>1-3*b+3*a,B=(a,b)=>3*b-6*a,C=(a)=>3*a;
+    const calc=(t,a,b)=>((A(a,b)*t+B(a,b))*t+C(a))*t,slope=(t,a,b)=>3*A(a,b)*t*t+2*B(a,b)*t+C(a);
+    return(x)=>{if(x<=0)return 0;if(x>=1)return 1;let t=x;for(let i=0;i<8;i++){const s=slope(t,x1,x2);if(Math.abs(s)<1e-6)break;t-=(calc(t,x1,x2)-x)/s;}return calc(t,y1,y2);};
+  }
+  const ease=()=>{const m=/cubic-bezier\(([^)]*)\)/.exec(tok('--k-motion-easing'));return bezier(...(m?m[1]:'.16,1,.3,1').split(',').map(Number));};
+  function syncTheme(){root.dataset.kSeg=tok('--k-segmented-style')||'cell';root.dataset.kSegdiv=tok('--k-segmented-dividers')||'none';}
+  function attachSwitch(el){
+    if(el._kSwitch)return el._kSwitch;
+    const opts=()=>[...el.children].filter(c=>c.tagName==='BUTTON'&&c.offsetParent!==null);
+    const cur=()=>{const o=opts();const i=o.findIndex(b=>b.classList.contains('on'));return i;};
+    let p=Math.max(0,cur()),idx=cur(),raf=0,start=null,dragged=false;
+    function render(){
+      const o=opts();if(!o.length||idx<0){el.removeAttribute('data-k-on');return;}
+      const n=o.length-1,c=Math.max(0,Math.min(n,p)),i0=Math.floor(c),i1=Math.min(n,i0+1),f=c-i0;
+      const a=o[i0],b=o[i1];let x=a.offsetLeft+(b.offsetLeft-a.offsetLeft)*f,w=a.offsetWidth+(b.offsetWidth-a.offsetWidth)*f;
+      if(p<0)x+=p*a.offsetWidth;if(p>n)x+=(p-n)*b.offsetWidth;
+      el.style.setProperty('--k-sx',x+'px');el.style.setProperty('--k-sw',w+'px');el.setAttribute('data-k-on','');
+    }
+    function tweenTo(t){cancelAnimationFrame(raf);const from=p,dur=num(tok('--k-motion-duration')),e=ease();let t0=0;
+      if(reduced()||dur<=0||from===t){p=t;render();return;}
+      const step=(now)=>{if(!t0)t0=now;const k=Math.min(1,(now-t0)/dur);p=from+(t-from)*e(k);render();if(k<1)raf=requestAnimationFrame(step);else raf=0;};raf=requestAnimationFrame(step);}
+    function springTo(t,v){cancelAnimationFrame(raf);if(reduced()){p=t;render();return;}
+      const T=num(tok('--k-motion-duration'))/1000||0.5,w0=2*Math.PI/T,z=Math.max(0.12,1-num(tok('--k-motion-drag-bounce'))*1.1);let last=0;
+      const step=(now)=>{const dt=last?Math.min(0.032,(now-last)/1000):1/60;last=now;
+        for(let i=0;i<4;i++){const h=dt/4,a=-w0*w0*(p-t)-2*z*w0*v;v+=a*h;p+=v*h;}
+        render();if(Math.abs(p-t)>0.0008||Math.abs(v)>0.002)raf=requestAnimationFrame(step);else{p=t;raf=0;render();}};raf=requestAnimationFrame(step);}
+    // Follow the app's own .on changes (click handlers, programmatic state restores).
+    const mo=new MutationObserver(()=>{const i=cur();if(i===idx){if(!raf)render();return;}const was=idx;idx=i;
+      if(i<0){render();return;}if(was<0){p=i;render();return;}if(el._kSpring){el._kSpring=false;return;}if(dragged)return;tweenTo(i);snap();});
+    mo.observe(el,{subtree:true,attributes:true,attributeFilter:['class'],childList:true});
+    el.addEventListener('pointerdown',(e)=>{if(e.button||idx<0)return;start={x:e.clientX,p,hist:[],id:e.pointerId};dragged=false;});
+    el.addEventListener('pointermove',(e)=>{if(!start)return;const d=e.clientX-start.x;
+      if(Math.abs(d)>3&&!dragged){dragged=true;el.classList.add('k-dragging');cancelAnimationFrame(raf);try{el.setPointerCapture(start.id);}catch(_){}}
+      if(!dragged)return;const o=opts(),n=o.length-1,unit=(o[Math.min(n,idx)].offsetWidth+8),rub=num(tok('--k-motion-edge-stretch'));let np=start.p+d/unit;
+      if(np<0)np=-(1-1/(1+(-np)*rub*3))/3;if(np>n)np=n+(1-1/(1+(np-n)*rub*3))/3;
+      p=np;render();start.hist.push([performance.now(),p]);if(start.hist.length>6)start.hist.shift();});
+    const end=()=>{if(!start)return;el.classList.remove('k-dragging');const s=start;start=null;if(!dragged)return;
+      const h=s.hist,v=h.length>1?(h[h.length-1][1]-h[0][1])/Math.max(0.016,(h[h.length-1][0]-h[0][0])/1000):0;
+      const o=opts(),t=Math.max(0,Math.min(o.length-1,Math.round(p+v*num(tok('--k-motion-throw'))))),changed=t!==idx;
+      springTo(t,v);if(changed){el._kSpring=true;idx=t;snap();o[t].click();}
+      // Swallow the click the browser fires at the end of a drag so it doesn't select the start cell.
+      el.addEventListener('click',(ev)=>{ev.stopPropagation();ev.preventDefault();},{capture:true,once:true});setTimeout(()=>{dragged=false;},0);};
+    window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',end,true);
+    if('ResizeObserver' in window)new ResizeObserver(()=>{if(!start){cancelAnimationFrame(raf);raf=0;idx=cur();p=Math.max(0,idx);render();}}).observe(el);
+    requestAnimationFrame(()=>{render();requestAnimationFrame(render);});
+    return(el._kSwitch={render,snapTo:()=>{p=Math.max(0,idx);render();}});
+  }
+  const SEL='.seg,#lib-overlay .lib-seg';
+  function scan(n){if(!n||n.nodeType!==1)return;if(n.matches(SEL))attachSwitch(n);n.querySelectorAll&&n.querySelectorAll(SEL).forEach(attachSwitch);}
+  function boot(){syncTheme();scan(document.body);
+    new MutationObserver((ms)=>{for(const m of ms)m.addedNodes.forEach(scan);}).observe(document.body,{childList:true,subtree:true});
+    new MutationObserver(syncTheme).observe(document.body,{attributes:true,attributeFilter:['class']});}
+  window.Kinetic={snap,bezier,attachSwitch,syncTheme};
+  if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot);
+})();
 </script>
 </body>
 </html>
