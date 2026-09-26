@@ -5169,17 +5169,7 @@
       // source check: without it, opening a folder then clicking a Lightroom album while this
       // background meta pass was still running clobbered the cloud grid seconds later.
       if (state._openToken !== openToken || state.currentFolder !== path || state.source !== 'folder') return; // user moved on
-      populateSelect(document.getElementById('lib-camera-filter'), state.entries.map((e) => state.meta.get(e.path)?.camera), 'All cameras');
-      populateSelect(document.getElementById('lib-lens-filter'), state.entries.map((e) => state.meta.get(e.path)?.lens), 'All lenses');
-      {
-        // ISO needs a NUMERIC sort (100 < 1600 < 6400), unlike camera/lens names — populateSelect's
-        // plain .sort() would put "1600" before "200" lexicographically, so build this one by hand.
-        const sel = document.getElementById('lib-iso-filter');
-        const cur = sel.value;
-        const distinct = Array.from(new Set(state.entries.map((e) => state.meta.get(e.path)?.iso).filter(Boolean))).sort((a, b) => (+a) - (+b));
-        sel.innerHTML = '<option value="all">All ISOs</option>' + distinct.map((v) => `<option value="${v}">ISO ${v}</option>`).join('');
-        sel.value = distinct.includes(cur) ? cur : 'all';
-      }
+      refreshFacetSelects();
       renderGrid();
     });
   }
@@ -5233,6 +5223,34 @@
     return `<div class="lib-meta-strip ${cls}">${parts.join(' · ')}</div>`;
   }
 
+  // Camera/Lens/ISO option lists. Built from the metadata of every photo seen in the current
+  // view and only ever grown while it is open — rebuilding from the (already filtered) entries
+  // shrank the list to the one chosen value, and catalog views (All Photos, dates, keywords)
+  // never populated these at all, so the dropdowns stayed on "All …" with nothing to pick.
+  const facetSeen = { key: null, camera: new Set(), lens: new Set(), iso: new Set() };
+  function refreshFacetSelects() {
+    const key = state.source === 'folder' ? 'f:' + state.currentFolder : state.source + ':' + (state.catalogScope || '');
+    const filtered = state.cameraFilter !== 'all' || state.lensFilter !== 'all' || state.isoFilter !== 'all';
+    if (facetSeen.key !== key && !filtered) { facetSeen.camera.clear(); facetSeen.lens.clear(); facetSeen.iso.clear(); }
+    facetSeen.key = key;
+    for (const e of state.entries) {
+      const m = state.meta.get(e.path); if (!m) continue;
+      if (m.camera) facetSeen.camera.add(m.camera);
+      if (m.lens) facetSeen.lens.add(m.lens);
+      if (m.iso) facetSeen.iso.add(String(m.iso));
+    }
+    const fill = (id, vals, allLabel, fmt, cur) => {
+      const sel = document.getElementById(id); if (!sel) return;
+      if (cur !== 'all' && !vals.includes(cur)) vals.push(cur);
+      sel.innerHTML = `<option value="all">${allLabel}</option>` + vals.map((v) => `<option value="${escapeAttrFacet(v)}">${escapeAttrFacet(fmt(v))}</option>`).join('');
+      sel.value = cur;
+    };
+    fill('lib-camera-filter', Array.from(facetSeen.camera).sort(), 'All cameras', (v) => v, state.cameraFilter);
+    fill('lib-lens-filter', Array.from(facetSeen.lens).sort(), 'All lenses', (v) => v, state.lensFilter);
+    fill('lib-iso-filter', Array.from(facetSeen.iso).sort((a, b) => (+a) - (+b)), 'All ISOs', (v) => 'ISO ' + v, state.isoFilter);
+  }
+  function escapeAttrFacet(v) { return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
   function passesFilters(entry) {
     // A missing/unreadable file (deleted/moved since the last scan — real for the cross-folder
     // "recents"/"edited"/"exported"/album views, which stat fresh and flag rather than error)
@@ -5242,9 +5260,13 @@
     const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
     const m = state.meta.get(entry.path) || {};
     if (state.typeFilter !== 'all' && !state.typeFilter.split(',').includes(entry.kind)) return false;
-    if (state.cameraFilter !== 'all' && m.camera !== state.cameraFilter) return false;
-    if (state.lensFilter !== 'all' && m.lens !== state.lensFilter) return false;
-    if (state.isoFilter !== 'all' && String(m.iso || '') !== state.isoFilter) return false;
+    // Catalog-backed views already filtered camera/lens/ISO in the query, and their metadata
+    // loads in the background — re-checking here hid every photo whose meta hadn't arrived yet.
+    if (!(state._catalogPaged && (state.source === 'catalog' || state.source === 'folder'))) {
+      if (state.cameraFilter !== 'all' && m.camera !== state.cameraFilter) return false;
+      if (state.lensFilter !== 'all' && m.lens !== state.lensFilter) return false;
+      if (state.isoFilter !== 'all' && String(m.iso || '') !== state.isoFilter) return false;
+    }
     if (state.dupeFilter === 'dupes' && !state.dupeClusters.has(entry.path)) return false;
     if (state.syncedFilter === 'synced' && !state.syncedPaths.has(entry.path)) return false;
     if (state.syncedFilter === 'notsynced' && state.syncedPaths.has(entry.path)) return false;
@@ -6560,8 +6582,14 @@
         e.dataTransfer.setData('application/x-chromasmith-paths', JSON.stringify(paths));
         e.dataTransfer.effectAllowed = 'copy';
       };
-      card.querySelectorAll('.lib-flag').forEach((flag) => {
-        flag.onclick = (e) => {
+      // Delegated on the .lib-flags row: setLabel/setFavorite redraw the chips with innerHTML,
+      // so per-chip handlers were lost after the first click and the next click fell through
+      // to the card (selecting/deselecting the photo instead of toggling the flag).
+      const flagRow = card.querySelector('.lib-flags');
+      if (flagRow) {
+        flagRow.onclick = (e) => {
+          const flag = e.target.closest('.lib-flag');
+          if (!flag) return;
           e.stopPropagation();
           const which = flag.dataset.flag;
           if (which === 'Favorite') {
@@ -6572,7 +6600,7 @@
           const cur = state.sidecars.get(entry.path) || { label: '' };
           setLabel(entry.path, cur.label === which ? '' : which); // click same flag again to clear
         };
-      });
+      }
     });
     // Keep the next visible RAWs at the display-preview tier without competing with thumbnail
     // work: two bounded workers, at most twelve candidates, and only after the current grid is
@@ -10153,6 +10181,7 @@
       await getSidecarsBatch(paths);
       getMetaBatch(paths).then(() => {
         if (state._openToken !== openToken || state.source !== 'catalog') return; // user moved on
+        refreshFacetSelects();
         renderGrid();
       });
     }

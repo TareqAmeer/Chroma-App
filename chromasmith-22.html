@@ -1973,6 +1973,9 @@ body.deskx #cs-brand{gap:18px}
 #lib-overlay #lib-grid:not(.list-view) .lib-card:is(:hover,:has(.lib-flag.on)) :is(.lib-raw-badge,.lib-video-badge){top:24px}
 #lib-overlay #lib-grid:not(.list-view) :is(.lib-raw-badge,.lib-video-badge){transition:top var(--k-motion-hover) var(--k-motion-easing)}
 #lib-overlay .lib-card.lbl-red .lib-thumb-wrap::after{display:none}
+/* Rejected photos read as set aside: the photo fades, and comes back on hover/selection. */
+#lib-overlay #lib-grid .lib-card.lbl-red .lib-thumb-wrap img{opacity:.3;transition:opacity var(--k-motion-hover),filter var(--k-motion-duration) var(--k-motion-easing)}
+#lib-overlay #lib-grid .lib-card.lbl-red:is(:hover,.sel,.multi) .lib-thumb-wrap img{opacity:1}
 #lib-overlay .lib-card .lib-name{overflow:hidden;text-overflow:ellipsis}
 body.deskx #lib-overlay:not(.full) .lib-card img{transition:filter var(--k-motion-duration) var(--k-motion-easing)}
 body.deskx #lib-overlay:not(.full) .lib-card:not(:hover):not(.sel):not(.multi) img{filter:grayscale(1) contrast(1.1)}
@@ -2015,6 +2018,30 @@ body.deskx #lib-overlay:not(.full) .lib-card:not(:hover):not(.sel):not(.multi) i
 #lib-overlay #lib-filters-panel select{-webkit-appearance:none;appearance:none;width:100%;height:30px;padding:0 28px 0 10px;font:400 12px/1 var(--sans);color:var(--k-color-ink);
   background:var(--k-color-bg) linear-gradient(var(--k-color-accent-a),var(--k-color-accent-a)) no-repeat right 11px center/0 0;border:1px solid var(--bdr);border-radius:0;box-shadow:none;cursor:pointer}
 #lib-overlay #lib-filters-panel select.k-set{background-size:6px 6px}
+/* Filters panel dropdowns: the playground's k-sel (in-button "Label:" + value, wipe-down menu,
+   accent square on the chosen row, bounded scrolling list). Native select + caption hidden. */
+#lib-overlay #lib-filters-panel .lib-filter-field>label,#lib-overlay #lib-filters-panel .lib-filter-field>select{display:none!important}
+#lib-overlay #lib-filters-panel{gap:8px}
+#lib-overlay .k-fsel{position:relative;width:100%}
+#lib-overlay .k-fsel>button{width:100%;display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;background:var(--k-color-bg);color:var(--k-color-ink);border:1px solid var(--bdr);border-radius:0;
+  font:400 12px/1 var(--sans);cursor:pointer;transition:border-color var(--k-motion-hover),box-shadow var(--k-motion-hover) var(--k-motion-easing)}
+#lib-overlay .k-fsel>button:hover{border-color:var(--k-color-ink)}
+#lib-overlay .k-fsel .dl{color:var(--k-color-muted);flex:none}
+#lib-overlay .k-fsel .dv{flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#lib-overlay .k-fsel svg{width:10px;height:10px;flex:none;stroke:currentColor;fill:none;stroke-width:2;transition:transform var(--k-motion-duration) var(--k-motion-easing)}
+#lib-overlay .k-fsel.open svg{transform:rotate(180deg)}
+#lib-overlay .k-fsel.k-set>button{border-color:var(--k-color-accent-a);box-shadow:calc(var(--k-offset-x)*.5) calc(var(--k-offset-y)*.5) 0 var(--k-color-accent-a)}
+#lib-overlay .k-fmenu{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:30;max-height:260px;overflow:auto;padding:4px 0;background:var(--k-menu-bg);color:var(--k-menu-fg);border:1px solid var(--k-menu-line);
+  font:400 12px/1.2 var(--sans);clip-path:inset(0 0 100% 0);pointer-events:none;transition:clip-path var(--k-motion-duration) var(--k-motion-easing)}
+#lib-overlay .k-fsel.open .k-fmenu{clip-path:inset(0 -20px -20px 0);pointer-events:auto}
+#lib-overlay .k-fmenu>div{position:relative;isolation:isolate;display:flex;justify-content:space-between;align-items:center;padding:7px 12px;cursor:pointer}
+#lib-overlay .k-fmenu>div::before{content:'';position:absolute;inset:0;background:var(--k-color-accent-a);z-index:-1;transform:scaleX(0);transform-origin:left;transition:transform var(--k-menu-wipe) var(--k-motion-easing)}
+#lib-overlay .k-fmenu>div:hover{color:#fff}
+#lib-overlay .k-fmenu>div:hover::before{transform:scaleX(1)}
+#lib-overlay .k-fmenu>div.dis{opacity:.4;cursor:default}#lib-overlay .k-fmenu>div.dis::before{display:none}
+#lib-overlay .k-fmenu .sq{width:8px;height:8px;flex:none;margin-left:10px;background:var(--k-color-accent-a);visibility:hidden}
+#lib-overlay .k-fmenu>[aria-selected]>.sq{visibility:visible}
+#lib-overlay .k-fmenu>div:hover>.sq{background:#fff}
 #lib-overlay #lib-subfolders-wrap{gap:9px!important;color:var(--k-color-ink)!important}
 #lib-overlay #lib-subfolders{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin:0;border:1px solid var(--k-color-ink);background:var(--k-color-bg);border-radius:0;cursor:pointer;transition:background var(--k-motion-hover),transform var(--k-motion-duration) var(--k-motion-easing)}
 #lib-overlay #lib-subfolders:checked{background:var(--k-color-accent-a);border-color:var(--k-color-accent-a);transform:rotate(90deg)}
@@ -5612,7 +5639,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926L';
+const BUILD='1.0926M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24193,7 +24220,33 @@ if(/[?&]catalog=1/.test(location.search)){
   function attachFilterField(f){
     if(f._kField)return;const lb=f.querySelector(':scope>label'),sel=f.querySelector(':scope>select');if(!lb||!sel)return;f._kField=1;
     const set=()=>sel.classList.toggle('k-set',sel.selectedIndex>0);
-    sel.addEventListener('change',set);new MutationObserver(set).observe(sel,{childList:true});set();
+    // Approved playground dropdown: a k-sel button ("Camera: All cameras") + a wipe-down menu
+    // with an accent square on the chosen row, bounded and scrolling — replaces the native
+    // option list (a long unstyled system popup for camera/lens/ISO). The <select> stays the
+    // source of truth, so every existing onchange handler and state redraw keeps working.
+    const dd=document.createElement('div');dd.className='k-fsel';
+    dd.innerHTML='<button type="button"><span class="dl"></span><span class="dv"></span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"/></svg></button><div class="k-fmenu" role="listbox"></div>';
+    sel.after(dd);const btn=dd.firstChild,menu=dd.lastChild;
+    const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    const render=()=>{
+      dd.querySelector('.dl').textContent=lb.textContent.trim()+':';
+      const o=sel.options[sel.selectedIndex];dd.querySelector('.dv').textContent=o?o.textContent.trim():'';
+      menu.innerHTML=[...sel.options].map((o,i)=>'<div data-i="'+i+'"'+(o.disabled?' class="dis"':'')+(i===sel.selectedIndex?' aria-selected="true"':'')+'>'+esc(o.textContent.trim())+'<i class="sq"></i></div>').join('');
+      dd.classList.toggle('k-set',sel.selectedIndex>0);
+    };
+    const close=()=>dd.classList.remove('open');
+    btn.addEventListener('click',e=>{e.stopPropagation();const open=!dd.classList.contains('open');
+      document.querySelectorAll('.k-fsel.open').forEach(x=>x.classList.remove('open'));if(open){render();dd.classList.add('open');}});
+    menu.addEventListener('click',e=>{e.stopPropagation();const d=e.target.closest('[data-i]');if(!d||d.classList.contains('dis'))return;
+      const i=+d.dataset.i;close();if(i!==sel.selectedIndex){sel.selectedIndex=i;sel.dispatchEvent(new Event('change',{bubbles:true}));}render();});
+    document.addEventListener('click',e=>{if(!dd.contains(e.target))close();});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
+    // Code sets sel.value directly (clear-all, saved views, shared filter state) without a
+    // change event — route those writes through render too.
+    const P=HTMLSelectElement.prototype;
+    for(const k of ['value','selectedIndex']){const d=Object.getOwnPropertyDescriptor(P,k);
+      Object.defineProperty(sel,k,{configurable:true,get(){return d.get.call(this);},set(v){d.set.call(this,v);set();render();}});}
+    sel.addEventListener('change',render);new MutationObserver(()=>{set();render();}).observe(sel,{childList:true,subtree:true,attributes:true,attributeFilter:["disabled","selected"]});render();
     // CHR-161: label now sits above the select (CSS), so no in-field padding.
   }
   const SEL='.seg,#lib-overlay .lib-seg,#cs-brand-tog';
