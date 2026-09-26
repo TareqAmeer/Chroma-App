@@ -2,14 +2,20 @@
 
 `index.html` at the repository root is the GitHub Pages landing page. It is hand-written and
 self-contained (one file, inline CSS/JS, no framework, no build step — the same rule the app
-itself follows). The page is an eight-chapter scrolling story with a fixed brand rail and
-section index.
+itself follows). The page is a ten-chapter scrolling story with a fixed brand rail and
+section index. It uses the bundled Gramatika family throughout. The index shows only the
+current chapter and its neighbors, plus a return-to-top arrow.
 
 On wheel input, one gesture eases to the next chapter and stops. Touch devices use native
 mandatory section snapping. Each chapter is sized to one viewport; very short browser windows
 use natural scrolling so content remains reachable. Reduced-motion visitors get a still,
 ordinary-scroll version. The opening photo, product frames, panels and chapter titles have
 short, separate arrival animations.
+
+The Coming Soon chapter labels video editing, astro stacking and the current two-photo
+panorama as beta. The Features chapter holds 100 short, expandable descriptions in an
+independently scrolling directory. The wheel handler lets that directory scroll before
+advancing to another chapter. See `less-powerpoint-ideas.md` for the next design review.
 
 The hero and one-click comparison currently use `site/assets/hero-placeholder.webp`, made from
 the repository's approved splash photo. The comparison is labelled as a layout preview because

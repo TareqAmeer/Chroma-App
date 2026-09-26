@@ -14,10 +14,11 @@
 @font-face{font-family:Gramatika;font-style:normal;font-weight:300 500;src:url(vendor/fonts/gramatika/GramatikaRegular.otf) format("opentype")}
 @font-face{font-family:Gramatika;font-style:normal;font-weight:600 800;src:url(vendor/fonts/gramatika/GramatikaBold.otf) format("opentype")}
 @font-face{font-family:Gramatika;font-style:italic;font-weight:300 500;src:url(vendor/fonts/gramatika/GramatikaSlanted.otf) format("opentype")}
+@font-face{font-family:Gramatika;font-style:italic;font-weight:600 800;src:url(vendor/fonts/gramatika/GramatikaBoldSlanted.otf) format("opentype")}
 :root{
   --red:#970500;--red-bright:#cf170b;--ink:#060606;--paper:#f4f1ec;--white:#fff;
   --muted:#b9b7b4;--rail:clamp(82px,9vw,132px);--index:82px;
-  --ease:cubic-bezier(.22,1,.36,1);--sans:Arial,Helvetica,sans-serif;
+  --ease:cubic-bezier(.22,1,.36,1);--sans:Gramatika;
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth;scroll-snap-type:y mandatory}
@@ -32,8 +33,7 @@ img{display:block;max-width:100%}
 
 /* The three fixed pieces frame the scrolling story. */
 .brand-rail{position:fixed;z-index:60;inset:0 auto 0 0;width:var(--rail);background:var(--red);display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(255,255,255,.2)}
-.brand-rail a{display:flex;align-items:center;gap:.04em;writing-mode:vertical-rl;transform:rotate(180deg);text-decoration:none;font-size:clamp(31px,4.4vw,68px);font-weight:600;letter-spacing:-.045em;line-height:1;white-space:nowrap}
-.brand-rail a{font-family:Gramatika,Arial,Helvetica,sans-serif}
+.brand-rail a{display:flex;align-items:center;gap:.04em;writing-mode:vertical-rl;transform:rotate(180deg);text-decoration:none;font-size:clamp(31px,4.4vw,68px);font-weight:600;letter-spacing:.005em;line-height:1;white-space:nowrap}
 .brand-rail .rail-fixed{opacity:.98}
 .brand-rail .rail-word{display:inline-block;min-height:1em}
 .brand-rail .rail-word.is-changing{animation:rail-change .48s var(--ease) both}
@@ -46,7 +46,9 @@ img{display:block;max-width:100%}
 .chapter-nav a{display:grid;place-items:center;width:44px;height:38px;text-decoration:none;color:#a6a6a6;font-size:17px;line-height:1;transition:color .25s ease,transform .35s var(--ease),font-size .35s var(--ease)}
 .chapter-nav a[aria-current="location"]{color:#fff;font-size:25px;font-weight:600;transform:scale(1.08)}
 .chapter-nav a:hover{color:#fff}
-.chapter-nav a:not(:last-child)::after{content:"";position:absolute;width:1px;height:10px;background:#777;transform:translateY(25px);pointer-events:none}
+.chapter-nav a[hidden]{display:none}
+.chapter-nav .back-to-top{height:40px;margin-bottom:14px;border:1px solid currentColor}
+.chapter-nav .back-to-top svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:square;stroke-linejoin:miter}
 .chapter-nav a:focus-visible{outline-offset:0}
 html.light-chapter .top-actions{color:#111;background:linear-gradient(#f4f1ecee,#f4f1ec00)}
 html.light-chapter .chapter-nav a{color:#64605d}
@@ -55,12 +57,11 @@ html.light-chapter .chapter-nav a[aria-current="location"],html.light-chapter .c
 main{margin-left:var(--rail)}
 .chapter{position:relative;min-height:100svh;scroll-snap-align:start;scroll-snap-stop:always;isolation:isolate;overflow:hidden;border-bottom:1px solid #252525}
 .chapter-inner{position:relative;z-index:2;min-height:100svh;max-width:1650px;margin:auto;padding:130px calc(var(--index) + clamp(28px,6vw,110px)) 80px clamp(34px,6vw,110px)}
-.chapter-num,.eyebrow{font-size:13px;font-weight:600;letter-spacing:.18em;text-transform:uppercase}
-.chapter-num{color:#dbd2ce}
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:.18em;text-transform:uppercase}
 .eyebrow{color:#d1b0a8;margin:0 0 20px}
 h1,h2,h3,p{margin-top:0}
 h1,h2{font-weight:600;line-height:.98}
-h1,h2{font-family:Gramatika,Arial,Helvetica,sans-serif;letter-spacing:-.02em}
+h1,h2{letter-spacing:-.02em}
 h1{font-size:clamp(52px,7.7vw,124px)}
 h2{font-size:clamp(48px,6.4vw,104px)}
 h3{font-size:clamp(25px,2.3vw,39px);line-height:1.05;letter-spacing:-.02em}
@@ -98,7 +99,7 @@ html.motion-ready .reveal.delay-2{transition-delay:.16s}
 
 /* 02 — Gallery */
 .gallery{background:#050505}
-.gallery .chapter-inner{display:grid;grid-template-rows:auto 1fr auto;gap:32px}
+.gallery .chapter-inner{display:grid;grid-template-rows:1fr auto;gap:32px}
 .gallery .display-shot{align-self:center;width:100%;aspect-ratio:16/8.2;border-radius:10px}
 .gallery .display-shot img{object-position:top center}
 .split-copy{display:grid;grid-template-columns:minmax(0,1fr) minmax(290px,.8fr);align-items:end;gap:38px}
@@ -149,7 +150,7 @@ html.motion-ready .reveal.delay-2{transition-delay:.16s}
 
 /* 06 — Anywhere */
 .anywhere{background:var(--paper);color:#0d0d0d}
-.anywhere .chapter-num,.anywhere .eyebrow{color:#970500}
+.anywhere .eyebrow{color:#970500}
 .anywhere .chapter-inner{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(250px,.9fr);gap:50px;align-items:center}
 .anywhere .lede{color:#333}
 .anywhere .action{border-color:#111;color:#111}
@@ -168,6 +169,28 @@ html.motion-ready .reveal.delay-2{transition-delay:.16s}
 .guy h2{max-width:9ch}
 .guy blockquote{margin:0;font-size:clamp(19px,2vw,30px);line-height:1.3}
 .guy .provisional{margin-top:20px;color:#aaa;font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+
+/* Roadmap and feature index keep the same chapter rhythm but invite exploration within it. */
+.next{background:#22100c}
+.next .chapter-inner{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:clamp(32px,6vw,100px);align-items:center}
+.next h2{max-width:8ch}
+.next-list{display:grid;gap:14px}
+.next-card{border-top:1px solid #a8897b;padding:15px 0}
+.next-card h3{margin:0 0 6px;font-size:clamp(20px,2vw,30px)}
+.next-card p{margin:0;color:#d8c5bb;font-size:clamp(13px,1.1vw,17px);line-height:1.45}
+.next-note{font-size:13px;color:#c6a79b}
+.features{background:#0d0d10}
+.features .chapter-inner{display:grid;grid-template-columns:minmax(0,.64fr) minmax(0,1.36fr);gap:clamp(30px,5vw,80px);align-items:center}
+.features h2{max-width:8ch}
+.features .lede{color:#b9b9bd}
+.feature-directory{height:min(68svh,700px);overflow-y:auto;overscroll-behavior:auto;scrollbar-width:thin;scrollbar-color:#b5b1ad #222;touch-action:pan-y;border-top:1px solid #777;outline-offset:6px}
+.feature-group h3{position:sticky;top:0;z-index:1;margin:0;padding:12px 10px;background:#252226;color:#fff;font-size:15px;letter-spacing:.08em;text-transform:uppercase}
+.feature-directory details{border-bottom:1px solid #454248;padding:0 10px}
+.feature-directory summary{padding:11px 24px 11px 0;cursor:pointer;font-size:15px;font-weight:600;list-style:none;position:relative}
+.feature-directory summary::-webkit-details-marker{display:none}
+.feature-directory summary::after{content:"+";position:absolute;right:0;top:9px;font-size:20px;font-weight:400}
+.feature-directory details[open] summary::after{content:"−"}
+.feature-directory details p{margin:0;padding:0 22px 13px 0;color:#bdbbc0;font-size:14px;line-height:1.4}
 
 /* 08 — Final invitation */
 .yours{background:#8d0500}
@@ -202,6 +225,9 @@ html.motion-ready .reveal.delay-2{transition-delay:.16s}
   .guy .portrait-placeholder{max-width:380px;aspect-ratio:5/4;order:-1}
   .portrait-placeholder strong{font-size:170px}
   .gallery .display-shot{aspect-ratio:16/10}
+  .next .chapter-inner,.features .chapter-inner{grid-template-columns:1fr;gap:16px;align-content:center}
+  .next h2,.features h2{max-width:none}
+  .feature-directory{height:min(46svh,430px)}
 }
 @media(max-width:720px){
   :root{--rail:58px;--index:34px}
@@ -212,7 +238,7 @@ html.motion-ready .reveal.delay-2{transition-delay:.16s}
   .chapter-nav{right:2px}
   .chapter-nav a{width:32px;height:27px;font-size:12px}
   .chapter-nav a[aria-current="location"]{font-size:17px}
-  .chapter-nav a:not(:last-child)::after{height:5px;transform:translateY(17px)}
+  .chapter-nav .back-to-top{height:32px;margin-bottom:8px}
   .chapter-inner{min-height:100svh;padding:88px 45px 54px 24px}
   h1{font-size:clamp(43px,10.8vw,77px)}
   h2{font-size:clamp(42px,9vw,66px)}
@@ -237,12 +263,30 @@ html.motion-ready .reveal.delay-2{transition-delay:.16s}
   .portrait-placeholder{aspect-ratio:4/3}
   .portrait-placeholder strong{font-size:130px}
   .download-grid{grid-template-columns:1fr}
+  .next-list{gap:6px}
+  .next-card{padding:8px 0}
+  .next-card h3{font-size:18px}
+  .next-card p{font-size:13px}
+  .features .chapter-inner{gap:10px}
+  .features h2{font-size:clamp(40px,9vw,60px)}
+  .features .lede{font-size:14px}
+  .feature-directory{height:min(49svh,410px)}
+  .feature-directory summary{font-size:13px;padding-top:8px;padding-bottom:8px}
+  .feature-directory details p{font-size:12px}
 }
 @media(max-width:390px){
   .top-actions a{font-size:11px}
   .top-actions{gap:9px}
   .brand-rail a{font-size:23px}
   .chapter-inner{padding-left:18px;padding-right:38px}
+  .next .chapter-inner{gap:6px}
+  .next h2{font-size:35px}
+  .next .lede{font-size:13px}
+  .next-note{font-size:11px;margin-bottom:7px}
+  .next-card{padding:6px 0}
+  .next-card h3{font-size:16px}
+  .next-card p{font-size:12px}
+  .next .btn-row{margin-top:6px}
 }
 /* Each chapter occupies one browser viewport. Tall-content devices get a natural-scroll fallback. */
 .chapter{height:100svh;min-height:0}
@@ -284,11 +328,11 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
   .studio .chapter-inner,.film .chapter-inner{gap:clamp(12px,2svh,20px)}
   .studio .display-shot,.film .display-shot{height:min(24svh,210px);max-height:none;aspect-ratio:auto}
   .guy .portrait-placeholder{height:min(28svh,230px);width:min(100%,calc(28svh * 5 / 4));aspect-ratio:5/4}
+  .next h2,.features h2{font-size:clamp(42px,min(6vw,8svh),72px)}
 }
 @media(max-width:720px){
   html{scroll-snap-type:y mandatory}
   .chapter-inner{padding:clamp(62px,9svh,76px) 40px clamp(14px,3svh,26px) 20px}
-  .chapter-num{font-size:11px}
   h1{font-size:clamp(39px,min(10vw,7svh),68px)}
   h2{font-size:clamp(35px,min(9vw,6svh),58px)}
   .lede{font-size:clamp(14px,3.8vw,17px)}
@@ -318,12 +362,20 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
   .yours h2{font-size:clamp(47px,min(10vw,7svh),80px)}
   .download-details{margin-top:15px;padding-top:12px}
   .download-details summary{font-size:13px}
+  .next h2,.features h2{font-size:clamp(38px,min(9vw,6svh),58px)}
 }
 @media (min-width:721px) and (max-height:700px){
   .chapter-inner{padding-top:60px;padding-bottom:16px}
   .studio h2,.guy h2{font-size:clamp(40px,6svh,52px)}
   .studio .mini-list{margin-top:10px;gap:4px}
   .guy .portrait-placeholder{height:22svh;width:calc(22svh * 5 / 4)}
+  .next .chapter-inner{gap:8px}
+  .next h2{font-size:40px}
+  .next .lede{font-size:15px}
+  .next-card{padding:5px 0}
+  .next-card p{font-size:12px}
+  .next .btn-row{margin-top:7px}
+  .feature-directory{height:48svh}
 }
 @media(max-height:560px){
   html{scroll-snap-type:none}
@@ -348,6 +400,7 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
   <a href="chromasmith-22.html">Launch</a>
 </nav>
 <nav class="chapter-nav" aria-label="Page sections">
+  <a class="back-to-top" href="#smith" aria-label="Back to top"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17V3M10 3 4 9M10 3l6 6"/></svg></a>
   <a href="#smith" aria-label="Section 1: Chromasmith" aria-current="location">1</a>
   <a href="#gallery" aria-label="Section 2: Gallery">2</a>
   <a href="#studio" aria-label="Section 3: Studio">3</a>
@@ -355,14 +408,15 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
   <a href="#film" aria-label="Section 5: Film">5</a>
   <a href="#anywhere" aria-label="Section 6: Anywhere">6</a>
   <a href="#guy" aria-label="Section 7: About the maker">7</a>
-  <a href="#yours" aria-label="Section 8: Yours">8</a>
+  <a href="#next" aria-label="Section 8: Coming soon">8</a>
+  <a href="#features" aria-label="Section 9: All features">9</a>
+  <a href="#yours" aria-label="Section 10: Yours">10</a>
 </nav>
 
 <main id="story">
   <section class="chapter hero" id="smith" data-rail="SMITH" aria-labelledby="smith-title">
     <!-- HERO-IMG:START --><div class="hero-img" role="img" aria-label="Black and white photograph of a dog"></div><!-- HERO-IMG:END -->
     <div class="chapter-inner">
-      <p class="chapter-num reveal">01 / 08 &nbsp; Your photos, your vision</p>
       <h1 id="smith-title" class="reveal delay-1">THE APP <span>THAT</span><em>DOES IT ALL*</em></h1>
       <p class="lede reveal delay-2">A whole photo studio, wherever inspiration finds you. Make a look in a click or take control of every detail.</p>
       <div class="btn-row reveal delay-2">
@@ -375,7 +429,6 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
 
   <section class="chapter gallery" id="gallery" data-rail="GALLERY" aria-labelledby="gallery-title">
     <div class="chapter-inner">
-      <div class="reveal"><p class="chapter-num">02 / 08 &nbsp; CHRO-MA-GALLERY</p></div>
       <figure class="display-shot reveal delay-1">
         <img src="site/assets/ui/library.webp" alt="Chromasmith desktop library with photo thumbnails, collections, and search" width="1600" height="1000" loading="lazy">
       </figure>
@@ -389,7 +442,6 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
   <section class="chapter studio" id="studio" data-rail="STUDIO" aria-labelledby="studio-title">
     <div class="chapter-inner">
       <div>
-        <p class="chapter-num reveal">03 / 08 &nbsp; CHRO-MA-STUDIO</p>
         <h2 id="studio-title" class="reveal delay-1">A studio for every frame.</h2>
         <div class="rule reveal delay-1"></div>
         <p class="lede reveal delay-2">Start with a look. Then shape the light, colour and composition until the photo feels exactly right.</p>
@@ -420,7 +472,6 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
         <!-- GALLERY:END -->
       </div>
       <div class="click-copy">
-        <p class="chapter-num reveal">04 / 08 &nbsp; CHRO-MA-CLICK</p>
         <h2 id="click-title" class="reveal delay-1">One click is all it takes.</h2>
         <p class="red-panel reveal delay-2">Find your starting point in over a hundred film looks. Then make it yours.</p>
         <div class="btn-row reveal delay-2"><a class="action dark" href="chromasmith-22.html">Try a look ↗</a></div>
@@ -431,7 +482,6 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
   <section class="chapter film" id="film" data-rail="FILM" aria-labelledby="film-title">
     <div class="chapter-inner">
       <div>
-        <p class="chapter-num reveal">05 / 08 &nbsp; CHRO-MA-FILM</p>
         <h2 id="film-title" class="reveal delay-1">Let the light <em>linger.</em></h2>
         <div class="rule reveal delay-1"></div>
         <p class="lede reveal delay-2">Grain in the shadows. A warm halo at the edge of the light. Film texture with room to make it subtle or unmistakable.</p>
@@ -444,7 +494,6 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
   <section class="chapter anywhere" id="anywhere" data-rail="ANYWHERE" aria-labelledby="anywhere-title">
     <div class="chapter-inner">
       <div>
-        <p class="chapter-num reveal">06 / 08 &nbsp; CHRO-MA-ANYWHERE</p>
         <h2 id="anywhere-title" class="reveal delay-1">Make it wherever you are.</h2>
         <div class="rule reveal delay-1"></div>
         <p class="lede reveal delay-2">Open it in your browser. Keep it on your phone. Take your photos somewhere with no signal. The tools still come with you.</p>
@@ -459,7 +508,6 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
     <div class="chapter-inner">
       <div class="portrait-placeholder reveal" role="img" aria-label="Graphic portrait placeholder with the initials TA"><strong>TA</strong><span>Portrait coming soon</span></div>
       <div>
-        <p class="chapter-num reveal">07 / 08 &nbsp; CHRO-MA-GUY</p>
         <h2 id="guy-title" class="reveal delay-1">One person, a whole darkroom.</h2>
         <div class="rule reveal delay-1"></div>
         <blockquote class="reveal delay-2">“I built Chromasmith because I wanted powerful photo tools that felt immediate, stayed on my device, and left me free to make the image my own.”</blockquote>
@@ -468,9 +516,152 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
     </div>
   </section>
 
+  <section class="chapter next" id="next" data-rail="NEXT" aria-labelledby="next-title">
+    <div class="chapter-inner">
+      <div>
+        <h2 id="next-title" class="reveal">Coming soon.<br>In beta now.</h2>
+        <div class="rule reveal delay-1"></div>
+        <p class="lede reveal delay-2">The darkroom keeps growing. Try these early features today and help shape what comes next.</p>
+        <p class="next-note reveal delay-2">Beta features may change as they develop.</p>
+      </div>
+      <div class="next-list">
+        <div class="next-card reveal"><h3>Video editing</h3><p>Grade and trim a clip with the still-photo look stack, then export it with its audio intact. Available in beta.</p></div>
+        <div class="next-card reveal delay-1"><h3>Astro stacking</h3><p>Combine night-sky frames into a cleaner image from the desktop library. Available in beta.</p></div>
+        <div class="next-card reveal delay-2"><h3>Panorama</h3><p>Stitch two photos into a wider view. The current two-photo workflow is available in beta; larger sets are still planned.</p></div>
+        <div class="btn-row reveal delay-2"><a class="action" href="chromasmith-22.html">Try the beta tools ↗</a></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="chapter features" id="features" data-rail="FEATURES" aria-labelledby="features-title">
+    <div class="chapter-inner">
+      <div>
+        <h2 id="features-title" class="reveal">The whole darkroom.</h2>
+        <p class="lede reveal delay-1">Every tool has a purpose. Select a feature to see what it does. The directory scrolls independently, so you can explore without leaving this chapter.</p>
+      </div>
+      <div class="feature-directory reveal delay-1" tabindex="0" aria-label="Chromasmith feature directory">
+        <div class="feature-group"><h3>Looks and film</h3>
+          <details><summary>113 film looks</summary><p>Start with calibrated colour, cinema, instant, reversal or black-and-white looks.</p></details>
+          <details><summary>One-tap Looks gallery</summary><p>Preview a look on your photo and apply it with one click.</p></details>
+          <details><summary>Custom .cube LUTs</summary><p>Load a LUT you already own and use it as the starting look.</p></details>
+          <details><summary>Kodak and Fuji print profiles</summary><p>Add a print-film response after the base look.</p></details>
+          <details><summary>Film grain</summary><p>Add grain shaped for formats from 8mm to 65mm.</p></details>
+          <details><summary>Halation</summary><p>Let bright edges glow into neighbouring dark areas.</p></details>
+          <details><summary>No-remjet halation</summary><p>Push halation toward a stronger, stylised glow.</p></details>
+          <details><summary>Bloom</summary><p>Give bright areas a softer spread of light.</p></details>
+          <details><summary>Film dust and scratches</summary><p>Layer procedurally placed dust, hairs and scratches onto the image.</p></details>
+          <details><summary>Light leaks</summary><p>Add warm film-like light intrusions and reshuffle their placement.</p></details>
+          <details><summary>Film frames</summary><p>Finish with sprockets, rebates and edge printing.</p></details>
+          <details><summary>Vignette</summary><p>Draw attention inward by shaping the edge brightness.</p></details>
+          <details><summary>Reusable Styles</summary><p>Save a finished editing recipe and apply it again later.</p></details>
+        </div>
+        <div class="feature-group"><h3>Light and colour</h3>
+          <details><summary>Exposure</summary><p>Brighten or darken the image without changing the chosen look.</p></details>
+          <details><summary>Contrast</summary><p>Shape the separation between lighter and darker tones.</p></details>
+          <details><summary>White balance</summary><p>Adjust temperature and tint to make the colour feel right.</p></details>
+          <details><summary>White-balance eyedropper</summary><p>Click a neutral area to correct the colour cast.</p></details>
+          <details><summary>Auto-enhance</summary><p>Set a quick starting point for levels and white balance.</p></details>
+          <details><summary>Master tone curve</summary><p>Draw the overall tonal response directly.</p></details>
+          <details><summary>RGB channel curves</summary><p>Shape the red, green and blue channels independently.</p></details>
+          <details><summary>Parametric curves</summary><p>Adjust shadows, darks, lights and highlights with four controls.</p></details>
+          <details><summary>Eight-band colour mixer</summary><p>Tune hue, saturation and luminance by colour band.</p></details>
+          <details><summary>Lift, gamma and gain wheels</summary><p>Tint shadows, midtones and highlights separately.</p></details>
+          <details><summary>Dehaze</summary><p>Recover clarity in flat or hazy scenes.</p></details>
+          <details><summary>Noise reduction</summary><p>Quiet unwanted image noise while keeping useful detail.</p></details>
+          <details><summary>Sharpening</summary><p>Restore crispness at the level the image needs.</p></details>
+          <details><summary>Deconvolution sharpening</summary><p>Recover detail softened by lens or sensor blur.</p></details>
+          <details><summary>Highlight roll-off</summary><p>Keep bright regions gentler with filmic tone-mapping options.</p></details>
+        </div>
+        <div class="feature-group"><h3>Masks and retouching</h3>
+          <details><summary>Radial masks</summary><p>Make a soft oval adjustment around a subject or light source.</p></details>
+          <details><summary>Linear masks</summary><p>Grade one side of the frame with a graduated transition.</p></details>
+          <details><summary>Brush masks</summary><p>Paint an adjustment exactly where it belongs.</p></details>
+          <details><summary>Sky masks</summary><p>Separate the sky for its own grade.</p></details>
+          <details><summary>AI subject masks</summary><p>Select a subject from the photo for local editing.</p></details>
+          <details><summary>Colour-range masks</summary><p>Target pixels by colour rather than by location.</p></details>
+          <details><summary>Luminance-range masks</summary><p>Target an adjustment to a chosen brightness range.</p></details>
+          <details><summary>Depth masks</summary><p>Use estimated scene depth to separate near and far areas on desktop.</p></details>
+          <details><summary>Mask edge refinement</summary><p>Snap rough mask edges toward real image boundaries.</p></details>
+          <details><summary>Skin-tone tools</summary><p>Even out patchy skin colour while keeping the image's character.</p></details>
+          <details><summary>Face-feature exclusion</summary><p>Keep eyes, lips and other facial details out of a skin adjustment.</p></details>
+          <details><summary>Named-subject masks</summary><p>Teach a subject from examples and find it again in other photos.</p></details>
+          <details><summary>Heal</summary><p>Blend away a spot before the film look and grain are applied.</p></details>
+          <details><summary>Clone</summary><p>Copy a source area precisely to repair the frame.</p></details>
+        </div>
+        <div class="feature-group"><h3>Composition and multi-image</h3>
+          <details><summary>Crop and aspect ratio</summary><p>Reframe the photo for its final destination.</p></details>
+          <details><summary>Rotate and flip</summary><p>Change image orientation without leaving the editor.</p></details>
+          <details><summary>Straighten and auto-level</summary><p>Level the horizon manually or let the app find a dominant line.</p></details>
+          <details><summary>Perspective correction</summary><p>Bring leaning lines back into shape.</p></details>
+          <details><summary>Borders and canvas mattes</summary><p>Place the image inside a chosen border, aspect and background.</p></details>
+          <details><summary>Collage layouts</summary><p>Place multiple images in adjustable rows, columns and grids.</p></details>
+          <details><summary>HDR merge</summary><p>Blend bracketed exposures into one image on desktop.</p></details>
+          <details><summary>Focus stacking</summary><p>Combine frames focused at different distances on desktop.</p></details>
+          <details><summary>Astro stacking — beta</summary><p>Stack night-sky captures from the desktop library.</p></details>
+          <details><summary>Two-photo panorama — beta</summary><p>Stitch a pair of photos into one wider image.</p></details>
+        </div>
+        <div class="feature-group"><h3>Desktop photo library</h3>
+          <details><summary>Local library</summary><p>Browse your archive on your machine without uploading it.</p></details>
+          <details><summary>Folder and collection browsing</summary><p>Move through folders, dates and curated groups of images.</p></details>
+          <details><summary>SD-card import</summary><p>Copy a shoot by capture date and make a verified second copy.</p></details>
+          <details><summary>Keywords</summary><p>Add searchable words to describe and group photos.</p></details>
+          <details><summary>Duplicate detection</summary><p>Find repeated files while reviewing the library.</p></details>
+          <details><summary>Culling</summary><p>Pick the keepers from a shoot before editing.</p></details>
+          <details><summary>People recognition</summary><p>Find and name faces with processing on your device.</p></details>
+          <details><summary>Natural-language search</summary><p>Describe a photo in words and search locally for it.</p></details>
+          <details><summary>Suggested tags</summary><p>Get on-device tag suggestions for a selected photo.</p></details>
+          <details><summary>Virtual copies</summary><p>Keep more than one edit version of the same photo.</p></details>
+          <details><summary>Offline edits</summary><p>Work from a cached preview and apply the edit when the source returns.</p></details>
+          <details><summary>Lightroom round-trip</summary><p>Open a Lightroom photo in Chromasmith and return the result.</p></details>
+          <details><summary>Lightroom cloud browser</summary><p>Browse connected Lightroom cloud photos from the desktop app.</p></details>
+        </div>
+        <div class="feature-group"><h3>Input, export and workflow</h3>
+          <details><summary>RAW decoding</summary><p>Open camera RAW files and develop them locally.</p></details>
+          <details><summary>DCP camera profiles</summary><p>Use camera colour profiles for more faithful RAW starting colour.</p></details>
+          <details><summary>V-Log input</summary><p>Convert Lumix V-Log material before grading it.</p></details>
+          <details><summary>Multi-photo filmstrip</summary><p>Load several images and switch between their previews.</p></details>
+          <details><summary>Shared and per-photo edits</summary><p>Apply a look to the batch, then adjust an individual frame.</p></details>
+          <details><summary>Match a series</summary><p>Align exposure and white balance across a shoot to one reference photo.</p></details>
+          <details><summary>Before-and-after comparison</summary><p>Check your grade against the original image.</p></details>
+          <details><summary>Live histogram</summary><p>Watch tonal distribution while you edit.</p></details>
+          <details><summary>1:1 loupe</summary><p>Inspect the full rendering pipeline at native image scale.</p></details>
+          <details><summary>Undo and redo</summary><p>Move safely backward and forward through editing decisions.</p></details>
+          <details><summary>Session save and restore</summary><p>Keep slider settings locally and return to them later.</p></details>
+          <details><summary>Full-resolution export</summary><p>Render the finished image at its original resolution.</p></details>
+          <details><summary>JPEG, PNG, WebP and TIFF</summary><p>Choose the output format that suits the job.</p></details>
+          <details><summary>HDR gain-map HEIC</summary><p>Export extended-range highlights from a RAW source.</p></details>
+          <details><summary>XMP sidecars</summary><p>Keep an edit record alongside the source file.</p></details>
+          <details><summary>Export presets</summary><p>Save quality, format, resize and sharpening settings as a preset.</p></details>
+          <details><summary>LUT from a before/after pair</summary><p>Build a reusable .cube look from two versions of one image.</p></details>
+          <details><summary>Colour Copy</summary><p>Match a reference image's colour into a .cube LUT or XMP preset.</p></details>
+          <details><summary>Lumix Lab LUT export</summary><p>Tag a .cube file for a look you can take back to a Lumix camera.</p></details>
+        </div>
+        <div class="feature-group"><h3>Video — beta</h3>
+          <details><summary>Clip grading</summary><p>Use the still-photo look stack on a video clip.</p></details>
+          <details><summary>Trim in and out</summary><p>Choose the segment of a clip to export.</p></details>
+          <details><summary>Audio passthrough</summary><p>Keep the source audio without re-encoding it.</p></details>
+          <details><summary>Scopes</summary><p>Read the clip's signal as you grade.</p></details>
+          <details><summary>Safe-area guides</summary><p>Check framing with overlay guides.</p></details>
+          <details><summary>Fades</summary><p>Ease the picture in or out of a clip.</p></details>
+          <details><summary>Gate weave and film breath</summary><p>Add restrained analogue motion to a graded clip.</p></details>
+          <details><summary>Frame capture</summary><p>Export the current video frame as a still image.</p></details>
+        </div>
+        <div class="feature-group"><h3>Access and privacy</h3>
+          <details><summary>Browser editor</summary><p>Open the app without installing a desktop package.</p></details>
+          <details><summary>Phone layout</summary><p>Edit with a touch-first tool sheet on a smaller screen.</p></details>
+          <details><summary>Offline web use</summary><p>Keep editing after the first load when the connection goes away.</p></details>
+          <details><summary>Home-screen install</summary><p>Add the web app to your phone's home screen.</p></details>
+          <details><summary>Swipe between photos</summary><p>Move through a loaded batch with a touch gesture.</p></details>
+          <details><summary>Hold to compare</summary><p>Press and hold on mobile to check the original.</p></details>
+          <details><summary>On-device processing</summary><p>Keep your photos on the device where you edit them.</p></details>
+          <details><summary>No account or subscription</summary><p>Open the free, open-source app without signing in.</p></details>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="chapter yours" id="yours" data-rail="YOURS" aria-labelledby="yours-title">
     <div class="chapter-inner">
-      <p class="chapter-num reveal">08 / 08 &nbsp; CHRO-MA-YOURS</p>
       <h2 id="yours-title" class="reveal delay-1">Now make it yours.</h2>
       <p class="lede reveal delay-2">Your photos. Your taste. Your machine. Chromasmith is free and open source, and ready when you are.</p>
       <div class="btn-row reveal delay-2">
@@ -501,7 +692,7 @@ document.querySelectorAll(".ba").forEach(function (figure) {
 });
 
 var sections = Array.from(document.querySelectorAll(".chapter"));
-var links = Array.from(document.querySelectorAll(".chapter-nav a"));
+var links = Array.from(document.querySelectorAll(".chapter-nav a:not(.back-to-top)"));
 var railWord = document.querySelector(".rail-word");
 var activeId = "";
 var root = document.documentElement;
@@ -511,7 +702,9 @@ function setActive(section) {
   activeId = section.id;
   root.classList.toggle("light-chapter", activeId === "anywhere");
   sections.forEach(function (item) { item.classList.toggle("is-active", item === section); });
-  links.forEach(function (link) {
+  var activeIndex = sections.indexOf(section);
+  links.forEach(function (link, index) {
+    link.hidden = Math.abs(index - activeIndex) > 1;
     if (link.getAttribute("href") === "#" + activeId) link.setAttribute("aria-current", "location");
     else link.removeAttribute("aria-current");
   });
@@ -523,6 +716,7 @@ function setActive(section) {
     railWord.classList.add("is-changing");
   }
 }
+setActive(sections[0]);
 if ("IntersectionObserver" in window) {
   var sectionObserver = new IntersectionObserver(function (entries) {
     entries.forEach(function (entry) { if (entry.isIntersecting) setActive(entry.target); });
@@ -591,6 +785,9 @@ addEventListener("wheel", function (event) {
   var now = performance.now();
   var delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1);
   if (!delta) return;
+  var directory = event.target instanceof Element && event.target.closest(".feature-directory");
+  if (directory && ((delta > 0 && directory.scrollTop + directory.clientHeight < directory.scrollHeight - 2) ||
+    (delta < 0 && directory.scrollTop > 1))) return;
   var current = sections.findIndex(function (section) { return section.id === activeId; });
   if (current < 0) current = 0;
   if (!gliding && now >= wheelLockedUntil && ((current === 0 && delta < 0) || (current === sections.length - 1 && delta > 0))) return;

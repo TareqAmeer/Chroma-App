@@ -40,3 +40,7 @@ Agent-generated changelog of completed features and architectural decisions.
 
 - CHR-152: Increased home page letter spacing by 0.02em across body copy, headings, the CHRO-MA rail, and small labels in `index.html`.
 - Verified the updated typography visually on desktop and phone and reran `test/homepage_smoke.mjs` across six viewport sizes.
+
+- CHR-152: Removed number-and-subheading labels from all chapters, limited the right index to neighboring pages with a top arrow, widened the left wordmark, and applied bundled Gramatika to every text element in `index.html`.
+- Added beta chapters for video editing, astro stacking and two-photo panorama, plus 100 expandable feature descriptions; recorded 20 proposals in `site/less-powerpoint-ideas.md` and updated `site/README.md`.
+- Verified ten chapters across six viewports, the feature directory's independent scroll and disclosures, navigation, font loading, images and accessibility with `test/homepage_smoke.mjs`.
