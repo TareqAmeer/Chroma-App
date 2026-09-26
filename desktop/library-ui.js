@@ -2317,12 +2317,13 @@
       <div id="lib-compare"></div>
     </div>
     <div id="lib-bottom" class="lib-fullview-only">
-      <span style="font-size:11px;color:var(--mut)" id="lib-count"></span>
       <span style="font-size:11px;color:var(--mut)" id="lib-thumb-progress"></span>
       <span id="lib-status-labels" style="font-size:11px;color:var(--mut);display:flex;gap:8px;align-items:center"></span>
       <span id="lib-activity"></span>
       <span style="flex:1"></span>
       <span style="font-size:11px;color:var(--mut)" id="lib-status-sel"></span>
+      <!-- CHR-157: the photo count sits at the right end of the status bar. -->
+      <span style="font-size:11px;color:var(--mut)" id="lib-count"></span>
     </div>
   `;
   // Make the dock a real grid-column sibling of the preview/panel/rail row instead of a
@@ -6875,8 +6876,8 @@
       if (openBtn) openBtn.onclick = () => { const b = document.getElementById('lib-pick'); if (b) b.click(); };
     }
     document.getElementById('lib-count').textContent = state.selected.size
-      ? `${fmtN(state.selected.size)} selected — ${fmtN(shown.length)} of ${fmtN(state.entries.length)} photo(s)`
-      : `${fmtN(shown.length)} of ${fmtN(state.entries.length)} photo(s)`;
+      ? `${fmtN(state.selected.size)} selected — ${fmtN(shown.length)} of ${fmtN(state.entries.length)} ${state.entries.length === 1 ? 'photo' : 'photos'}`
+      : `${fmtN(shown.length)} of ${fmtN(state.entries.length)} ${state.entries.length === 1 ? 'photo' : 'photos'}`;
     if (typeof syncFilterUI === 'function') syncFilterUI();
   }
 
@@ -10724,7 +10725,7 @@
     const assets = lrState.assets || [];
     const albumName = (lrState.albums || []).find((a) => a.id === lrState.album)?.name || '';
     const count = document.getElementById('lib-count');
-    if (count) count.textContent = `${fmtN(assets.length)} cloud photo(s)${albumName ? ' — ' + albumName : ''} · connected to Adobe Lightroom`;
+    if (count) count.textContent = `${fmtN(assets.length)} cloud ${assets.length === 1 ? 'photo' : 'photos'}${albumName ? ' — ' + albumName : ''} · connected to Adobe Lightroom`;
     // "on disk" badge: compare against what's already in ~/Documents/Lightroom Download.
     const onDisk = new Set();
     try {

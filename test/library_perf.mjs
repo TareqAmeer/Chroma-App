@@ -54,7 +54,7 @@ for (const [label, saved, activeSelector] of [
     cards:document.querySelectorAll('#lib-grid .lib-card[data-path]').length,
     footer:document.getElementById('lib-count')?.textContent?.trim(),
   }));
-  const ok=r.sidebar==='8'&&r.cards===8&&r.footer==='8 of 8 photo(s)';
+  const ok=r.sidebar==='8'&&r.cards===8&&r.footer==='8 of 8 photos';
   console.log(`stale collection records: sidebar ${r.sidebar}, cards ${r.cards}, footer "${r.footer}"  ${ok?'PASS':'FAIL'}`);
   if(!ok)failures.push(`stale collection records disagree with the visible collection: ${JSON.stringify(r)}`);
   await p.close();
@@ -115,7 +115,7 @@ for (const n of [200,1000,5000]) {
     cards:document.querySelectorAll('#lib-grid .lib-card[data-path]').length,
     footer:document.getElementById('lib-count')?.textContent?.trim(),
   }));
-  const ok=r.sidebar==='8'&&r.cards===8&&r.footer==='8 of 8 photo(s)';
+  const ok=r.sidebar==='8'&&r.cards===8&&r.footer==='8 of 8 photos';
   console.log(`stale collection records: sidebar ${r.sidebar}, cards ${r.cards}, footer "${r.footer}"  ${ok?'PASS':'FAIL'}`);
   if(!ok)failures.push(`stale collection records disagree with the visible collection: ${JSON.stringify(r)}`);
   await p.close();
