@@ -1124,7 +1124,7 @@
     .lib-btn.lib-btn-export svg{stroke:var(--on-primary)}
     /* Sort/View popovers — transplanted verbatim from the wireframe's .menu/.opt/.grp-label. */
     .lib-menu{position:absolute;top:36px;right:0;width:230px;background:var(--bg);border:1px solid var(--bdr);
-      border-radius:var(--r);box-shadow:0 3px 30px rgba(0,0,0,.35);padding:6px;z-index:4600;display:none;
+      border-radius:var(--r);box-shadow:none;padding:6px;z-index:4600;display:none;
       max-height:80vh;overflow-y:auto}
     /* Topbar Parity pass: the sort menu's own wrapper (position:relative around #lib-sort-btn)
        moved from the right cluster into #lib-top-left, so right:0 no longer anchors it under the
@@ -1370,7 +1370,7 @@
       display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px}
     #lib-quicklook.on{display:flex}
     #lib-ql-img{max-width:92vw;max-height:86vh;object-fit:contain;opacity:0;transition:opacity var(--duration-press) ease;
-      border-radius:4px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+      border-radius:4px;box-shadow:none}
     #lib-ql-img.loaded{opacity:1}
     #lib-ql-caption{color:var(--mut);font-size:12px;font-family:var(--mono);letter-spacing:.02em}
     .lib-tree-node{font-size:12px;white-space:nowrap;user-select:none}
@@ -1444,7 +1444,7 @@
     #lib-filters-panel{grid-row:5;justify-self:end;align-self:stretch;position:relative;
       width:280px;max-width:82vw;background:var(--bg);border-left:1px solid var(--bdr);z-index:15;
       overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;
-      box-shadow:-10px 0 24px -14px rgba(0,0,0,.5);transform:translateX(105%);transition:transform .18s ease}
+      box-shadow:none;transform:translateX(105%);transition:transform .18s ease}
     #lib-filters-panel.open{transform:translateX(0)}
     #lib-overlay.full #lib-filters-panel{grid-row:4;grid-column:2}
     #lib-filters-panel select,#lib-filters-panel input[type=range]{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
@@ -1533,10 +1533,10 @@
     .lib-card.sel{box-shadow:0 0 0 2px var(--acc2)}
     .lib-card.multi{box-shadow:0 0 0 2px var(--acc2)}
     .lib-card.sel.multi{box-shadow:0 0 0 2px var(--acc2),0 0 0 4px var(--acc2)}
-    .lib-card.flag-red{box-shadow:0 0 0 2px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
-    .lib-card.flag-green{box-shadow:0 0 0 2px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
-    .lib-card.flag-red.sel{box-shadow:0 0 0 1px var(--acc2),0 0 0 3px #e5484d,0 0 14px 1px rgba(229,72,77,.55)}
-    .lib-card.flag-green.sel{box-shadow:0 0 0 1px var(--acc2),0 0 0 3px #46a758,0 0 14px 1px rgba(70,167,88,.55)}
+    .lib-card.flag-red{box-shadow:0 0 0 2px #e5484d}
+    .lib-card.flag-green{box-shadow:0 0 0 2px #46a758}
+    .lib-card.flag-red.sel{box-shadow:0 0 0 1px var(--acc2),0 0 0 3px #e5484d}
+    .lib-card.flag-green.sel{box-shadow:0 0 0 1px var(--acc2),0 0 0 3px #46a758}
     /* "Canvas" matte, not a center-crop: the cell stays a fixed size for a tidy grid, but the
        photo sits on its own letterbox background at its REAL aspect ratio (object-fit:contain)
        instead of being cropped to fill a square — same treatment as the docked filmstrip. */
@@ -1712,7 +1712,7 @@
     /* Preview -> full-resolution swap in progress: a soft pulsing accent border on the photo so
        the user can see the sharper version is still loading. Removed the moment it lands. */
     #fx-zoom-wrap.lib-full-loading::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;
-      border-radius:2px;box-shadow:inset 0 0 0 2px var(--acc,#7aa2ff),0 0 14px 2px var(--acc,#7aa2ff);
+      border-radius:2px;box-shadow:inset 0 0 0 2px var(--acc,#7aa2ff);
       opacity:.35;animation:lib-full-glow 1.1s ease-in-out infinite alternate}
     @keyframes lib-full-glow{from{opacity:.2}to{opacity:.85}}
     @media (prefers-reduced-motion:reduce){#fx-zoom-wrap.lib-full-loading::after{animation:none;opacity:.6}}
@@ -1726,7 +1726,7 @@
     #fx-reveal .fx-reveal-line{position:absolute;left:0;top:0;width:1px;height:1px;background:var(--txt);
       transform-origin:0 0;will-change:transform}
     #fx-reveal-lab{position:fixed;right:16px;bottom:16px;z-index:9000;width:320px;padding:12px;border-radius:10px;
-      background:var(--sur);color:var(--txt);border:1px solid var(--bdr);box-shadow:0 8px 30px rgba(0,0,0,.35);font-size:11px}
+      background:var(--sur);color:var(--txt);border:1px solid var(--bdr);box-shadow:none;font-size:11px}
     #fx-reveal-lab .rl-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px}
     #fx-reveal-lab .rl-x{background:none;border:0;color:var(--mut);font-size:16px;cursor:pointer}
     #fx-reveal-lab .rl-row{display:grid;grid-template-columns:110px 1fr 60px;align-items:center;gap:6px;margin:4px 0}
@@ -8647,7 +8647,7 @@
     const menu = document.createElement('div');
     menu.style.cssText = 'position:fixed;z-index:9999;left:50%;top:50%;transform:translate(-50%,-50%);'
       + 'background:var(--sur2);border:1px solid var(--bdr);border-radius:9px;padding:14px;'
-      + 'min-width:320px;max-width:480px;max-height:60vh;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:12px';
+      + 'min-width:320px;max-width:480px;max-height:60vh;overflow:auto;box-shadow:none;font-size:12px';
     const esc2 = (s2) => String(s2 || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
     menu.innerHTML = `<div style="font-weight:600;margin-bottom:8px;color:#e5484d">${result.corrupt.length} photo${result.corrupt.length === 1 ? '' : 's'} may be corrupted</div>`
       + `<div style="color:var(--mut);margin-bottom:10px">Content changed without the file's own modified date changing — the pattern real bit rot looks like, not an edit.</div>`
@@ -9107,7 +9107,7 @@
     ];
     const menu = document.createElement('div');
     menu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);'
-      + 'border-radius:7px;padding:4px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px';
+      + 'border-radius:7px;padding:4px;min-width:180px;box-shadow:none;font-size:12px';
     items.forEach(([label, fn]) => {
       const it = document.createElement('div');
       it.textContent = label;
@@ -10881,7 +10881,7 @@
     ];
     const menu = document.createElement('div');
     menu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);'
-      + 'border-radius:7px;padding:4px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px';
+      + 'border-radius:7px;padding:4px;min-width:180px;box-shadow:none;font-size:12px';
     items.forEach(([label, fn]) => {
       const it = document.createElement('div');
       it.textContent = label;
@@ -10959,7 +10959,7 @@
     // just addressability for the trigger itself.
     menu.setAttribute('role', 'menu');
     menu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);'
-      + 'border-radius:7px;padding:4px;min-width:220px;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px';
+      + 'border-radius:7px;padding:4px;min-width:220px;max-width:320px;box-shadow:none;font-size:12px';
     items.forEach(([label, fn]) => {
       const it = document.createElement('div');
       it.textContent = label;

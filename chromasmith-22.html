@@ -260,7 +260,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .btn{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:var(--sp-2) 14px;border-radius:var(--r-sm);border:1px solid;cursor:pointer;transition:background var(--dur-1) ease,border-color var(--dur-1) ease,color var(--dur-1) ease,transform var(--dur-1) ease,box-shadow var(--dur-1) ease;display:flex;align-items:center;gap:6px;white-space:nowrap}
 .btn:disabled{opacity:var(--op-2);cursor:not-allowed}
 .btn:active:not(:disabled){transform:scale(.96)}
-.bpri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600;box-shadow:inset 0 1px 0 var(--scrim-w1),0 1px 2px var(--scrim-b1)}
+.bpri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600;box-shadow:inset 0 1px 0 var(--scrim-w1)}
 .bpri:not(:disabled):hover{filter:brightness(1.15)}
 .bsec{background:transparent;border-color:var(--acc2);color:var(--acc2)}.bsec:not(:disabled):hover{background:var(--tint-2)}
 .bgh{background:var(--sur2);border-color:var(--bdr);color:var(--mut)}.bgh:not(:disabled):hover{border-color:var(--txt);color:var(--txt);background:var(--sur)}.bgh.on{border-color:var(--k-color-accent-a);color:#fff;background:var(--k-color-accent-a)}
@@ -286,7 +286,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .sl-ca{display:block;width:100%;height:auto}
 .sl-cb{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
 .sl-line{position:absolute;top:0;bottom:0;width:2px;background:var(--scrim-w3);transform:translateX(-50%);pointer-events:none}
-.sl-knob{position:absolute;top:50%;transform:translate(-50%,-50%);width:32px;height:32px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:col-resize;box-shadow:0 2px 10px var(--scrim-b5)}
+.sl-knob{position:absolute;top:50%;transform:translate(-50%,-50%);width:32px;height:32px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:col-resize;box-shadow:none}
 .sl-lbl{position:absolute;bottom:7px;background:var(--scrim-b5);color:#fff;font-family:var(--sans);font-size:var(--fs-1);padding:2px var(--sp-2);border-radius:3px;pointer-events:none;letter-spacing:var(--ls-2)}
 .sl-ll{left:7px}.sl-lr{right:7px}
 .sl-cap{font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);text-align:center;padding:3px 0 var(--sp-2);letter-spacing:0}
@@ -369,7 +369,7 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
    the same title text as a small anchored bubble; see _fxInfoTapInit(). */
 #fx-info-pop{position:fixed;z-index:9999;max-width:260px;padding:8px 10px;border-radius:8px;
   border:1px solid var(--bdr);background:var(--sur2);color:var(--txt);font-family:var(--sans);
-  font-size:var(--fs-2);line-height:var(--lh-base);box-shadow:0 4px 16px rgba(0,0,0,.35);
+  font-size:var(--fs-2);line-height:var(--lh-base);box-shadow:none;
   pointer-events:none}
 #fx-info-pop[hidden]{display:none}
 /* Collapsed long-form explanation — for a paragraph too long to sit comfortably on an ⓘ tooltip
@@ -501,7 +501,7 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .msk-prevmode-seg{display:flex;width:100%}
 .msk-prevmode-seg>button{flex:1 1 0;min-width:0;padding:0 4px;overflow:hidden;text-overflow:ellipsis}
 .seg>button:hover{color:var(--txt)}
-.seg>button.on{background:var(--sur);color:var(--txt);box-shadow:0 1px 2px var(--scrim-b2),inset 0 1px 0 var(--hov)}
+.seg>button.on{background:var(--sur);color:var(--txt);box-shadow:inset 0 1px 0 var(--hov)}
 /* ══ MASK PANEL ══════════════════════════════════════════════════════════════════════════════ */
 .msk-rowbar{display:flex;align-items:center;gap:6px;padding:2px 0 8px;border-bottom:1px solid var(--bdr);margin-bottom:var(--sp-2)}
 .msk-rowbar-nm{font-size:var(--fs-3);font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -873,7 +873,7 @@ body.mobile-fx .fx-canvas-wrap{flex:1 1 auto;height:auto;min-height:120px}
 body.mobile-fx #fx-canvas{object-fit:contain}
 /* bottom sheet = the tool panel; height animates 0 ↔ 34vh, flex gives the freed space
    back to the photo. Drag-handle row (#fx-sheet-handle) closes it. */
-body.mobile-fx .fx-panel{flex:0 0 auto;min-height:0;height:0;overflow:hidden;column-count:auto;column-width:auto;padding:0 var(--sp-2);background:var(--sur);border-radius:14px 14px 0 0;box-shadow:0 -6px 24px var(--scrim-b3);transition:height var(--dur-2) ease}
+body.mobile-fx .fx-panel{flex:0 0 auto;min-height:0;height:0;overflow:hidden;column-count:auto;column-width:auto;padding:0 var(--sp-2);background:var(--sur);border-radius:14px 14px 0 0;box-shadow:none;transition:height var(--dur-2) ease}
 /* NOTE: plain 34vh for the ANIMATED value — Chrome refuses to interpolate a height
    transition to a min()/calc() endpoint (sticks at 0), so the real size cap lives in
    max-height (never transitioned → min()/calc() on the JS-owned --app-h is safe there).
@@ -1003,7 +1003,7 @@ body.mobile-fx .fx-slider::-webkit-slider-thumb{width:22px;height:22px}
 /* mobile: the editor IS the app — web tabs live behind the ⋯ sheet */
 body.mobile-fx .tabs{display:none}
 body.mobile-fx .ni-hint{display:none}
-#fx-add-btn{display:flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:50%;background:var(--acc);color:#000;font-size:var(--fs-7);line-height:1;border:none;cursor:pointer;margin:var(--sp-4) auto 6px;box-shadow:0 4px 22px var(--tint-6)}
+#fx-add-btn{display:flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:50%;background:var(--acc);color:#000;font-size:var(--fs-7);line-height:1;border:none;cursor:pointer;margin:var(--sp-4) auto 6px;box-shadow:none}
 #fx-add-btn:active{transform:scale(.94)}
 .ni-add-lb{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;color:var(--acc);letter-spacing:0}
 #fx-more-menu{position:fixed;inset:0;background:var(--scrim-b4);z-index:var(--z-overlay);display:flex;align-items:flex-end}
@@ -1641,7 +1641,7 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-controls .fx-ctrl{margin-bottom:0}
 .cl-stage{position:relative;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);height:calc(100vh - 170px);min-height:380px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:var(--sp-4);position:sticky;top:16px}
 .cl-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:var(--fs-2);pointer-events:none}
-#cl-frame{position:relative;box-shadow:0 6px 30px var(--scrim-b2);display:none}
+#cl-frame{position:relative;box-shadow:none;display:none}
 .cl-cell{position:absolute;overflow:hidden;cursor:pointer;background:transparent}
 .cl-cell.sel{outline:var(--bw-2) solid var(--acc);outline-offset:-2px;z-index:var(--z-raise);touch-action:none}
 #cl-dz.hot{border-style:solid;border-color:var(--acc);background:var(--tint-1)}
@@ -1964,6 +1964,42 @@ body.deskx #lib-overlay:not(.full) #lib-overlay .lib-card:not(:hover):not(.sel):
   transition:border-color var(--k-motion-hover),box-shadow var(--k-motion-hover) var(--k-motion-easing)}
 #lib-overlay #lib-filters-panel .lib-filter-field>select:hover{border-color:var(--k-color-ink)}
 #lib-overlay #lib-filters-panel .lib-filter-field>select.k-set{border-color:var(--k-color-accent-a);box-shadow:calc(var(--k-offset-x)*.5) calc(var(--k-offset-y)*.5) 0 var(--k-color-accent-a)}
+/* ── Swiss Kinetic: global parts + Editor surfaces (phase 6) ──
+   0px corners everywhere except the on-photo tools the inventory marks restyle-neutral (crop,
+   guides, masks, brush cursor, split knob, histogram), which keep their shapes. Soft drop
+   shadows were stripped at source; only hard 0-blur blocks remain. */
+:where(*,*::before,*::after):not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *,:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *::before,:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *::after){border-radius:0!important}
+::selection{background:var(--k-color-accent-a);color:#fff}
+::-webkit-scrollbar-thumb{border-radius:0}
+:hover::-webkit-scrollbar-thumb,.fx-scrolling::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--k-color-ink) 28%,transparent)}
+::-webkit-scrollbar-thumb:hover{background:var(--k-color-ink)}
+/* Tool rail: bold labels; the chosen tool sits on an accent-A slab (approved iconSelected
+   "slab"), hovering wipes one in and turns the glyph (iconHover "slabturn"). */
+.fx-rail-btn{position:relative;isolation:isolate;color:var(--k-color-muted);font-weight:700;background:none!important;transition:color var(--k-motion-hover)}
+.fx-rail-btn::before,body.deskx .fx-rail-btn.on::before{content:'';display:block;position:absolute;z-index:-1;width:auto;left:calc(var(--k-offset-x)*.5);right:calc(var(--k-offset-x)*-.5);
+  top:var(--k-offset-slab-top);bottom:calc(var(--k-offset-y)*-.5);background:var(--k-color-accent-a);transform:scaleX(0);transform-origin:left;
+  transition:transform var(--k-motion-hover) var(--k-motion-easing);pointer-events:none}
+.fx-rail-btn:hover::before,.fx-rail-btn.on::before,body.deskx .fx-rail-btn.on::before{transform:scaleX(1)}
+.fx-rail-btn:hover,.fx-rail-btn.on{color:#fff}
+.fx-rail-btn svg{transition:transform var(--k-motion-duration) var(--k-motion-easing)}
+.fx-rail-btn:hover:not(.on) svg{transform:rotate(90deg)}
+/* Toast: page-colour block, hairline ink border, hard accent-B offset. */
+#fx-toast{background:var(--k-color-bg);-webkit-backdrop-filter:none;backdrop-filter:none;border:1px solid var(--k-color-ink);box-shadow:var(--k-offset-x) var(--k-offset-y) 0 var(--k-color-accent-b)}
+/* Looks grid: the chosen look gets an accent frame kicked up-right with an accent-B block. */
+.look-cell{border-color:transparent;background:var(--k-color-bg);overflow:visible;transition:transform var(--k-motion-hover) var(--k-motion-easing),box-shadow var(--k-motion-hover) var(--k-motion-easing)}
+.look-cell:hover{transform:translate(calc(var(--k-offset-x)*-.5),calc(var(--k-offset-y)*-.5));box-shadow:var(--k-offset-x) var(--k-offset-y) 0 var(--k-color-accent-b)}
+.look-cell.sel{border-color:var(--k-color-accent-a);box-shadow:var(--k-offset-x) var(--k-offset-y) 0 var(--k-color-accent-b)}
+/* Drop zones + text inputs: square, dashed line border that goes ink on hover. */
+.dz{background:transparent;border:1px dashed var(--bdr)}
+.dz:hover,.dz.over,.dz.drag{border-color:var(--k-color-ink);border-style:solid}
+.vinput{background:var(--k-color-bg);border:var(--bw-1) solid var(--bdr);font-family:var(--sans);color:var(--k-color-ink)}
+.vinput:focus{border-color:var(--k-color-ink);outline:none}
+summary{font-weight:700;letter-spacing:.04em}
+input[type=checkbox]{accent-color:var(--k-color-accent-a)}
+/* Add photos: square accent-A button with a hard accent-B block instead of the soft glow. */
+#fx-add-btn{box-shadow:var(--k-offset-x) var(--k-offset-y) 0 var(--k-color-accent-b);background:var(--k-color-accent-a);transition:transform var(--k-motion-hover) var(--k-motion-easing),box-shadow var(--k-motion-hover) var(--k-motion-easing)}
+#fx-add-btn:hover{transform:translate(calc(var(--k-offset-x)*-.5),calc(var(--k-offset-y)*-.5));box-shadow:calc(var(--k-offset-x)*1.5) calc(var(--k-offset-y)*1.5) 0 var(--k-color-accent-b)}
+@media (prefers-reduced-motion:reduce){.fx-rail-btn::before,.fx-rail-btn svg,.look-cell,#fx-add-btn{transition:none}.fx-rail-btn:hover svg,.look-cell:hover,#fx-add-btn:hover{transform:none}}
 @media (prefers-reduced-motion:reduce){#lib-overlay .lib-card::before,#lib-overlay .lib-card::after,body.deskx #lib-overlay:not(.full) #lib-overlay .lib-card img,#lib-overlay .lib-coll-row,#lib-overlay .lib-coll-row::before{transition:none}}
 .fx-val{color:var(--k-color-ink);font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){#lib-overlay .lib-search-wrap::before,#lib-overlay .lib-search-wrap svg,.fx-ctrl-chev,.fx-ctrl-title{transition:none}}
@@ -1992,7 +2028,7 @@ L.onclick=function(){go(true)};S.onclick=function(){go(false)};})();</script>
   align-items:center;justify-content:center;transition:opacity var(--dur-3) ease-out;opacity:1">
   <div style="position:relative;width:min(640px,92vw);height:300px;background:#0f1c24;
     border-radius:0;overflow:hidden;display:grid;grid-template-columns:220px 1fr;
-    box-shadow:0 24px 70px rgba(0,0,0,.85),0 8px 24px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.12)">
+    box-shadow:0 0 0 1px rgba(255,255,255,.12)">
     <!-- Left pane: wordmark, progress, version -->
     <div style="position:relative;display:flex;flex-direction:column;justify-content:space-between;
       padding:22px 18px;background:linear-gradient(165deg,rgb(30,13,7) 0%,rgb(21,8,4) 100%);
@@ -2172,7 +2208,7 @@ window.showBootStallBanner=function(phase,elapsedMs){
     b.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:var(--z-splash);'
       +'background:#3a2a12;color:#f0ece2;border:1px solid rgba(212,144,58,.4);border-radius:8px;'
       +'padding:8px 14px;font-size:12px;font-family:var(--sans);display:flex;'
-      +'align-items:center;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.35)';
+      +'align-items:center;gap:10px;box-shadow:none';
     document.body.appendChild(b);
   }
   const msg=document.createElement('span');
@@ -3190,11 +3226,11 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <button class="db-btn" id="btn-split" onclick="toggleSplit()" title="Split before/after view"><span class="fx-db-ic" id="ic-split"></span></button>
           <div style="position:relative;display:inline-flex">
             <button class="db-btn db-btn-narrow" id="btn-split-menu" onclick="fxToggleSplitMenu(event)" title="Choose what the split's before-side compares against"><span class="fx-db-ic" id="ic-splitmenu"></span></button>
-            <div id="fx-split-popover" style="display:none;position:absolute;top:100%;left:0;margin-top:6px;min-width:210px;max-height:320px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:4px;z-index:var(--z-dropdown);box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
+            <div id="fx-split-popover" style="display:none;position:absolute;top:100%;left:0;margin-top:6px;min-width:210px;max-height:320px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:4px;z-index:var(--z-dropdown);box-shadow:none"></div>
           </div>
           <div style="position:relative;display:inline-flex">
             <button class="db-btn" id="btn-history" onclick="fxToggleTimelinePopover()" title="Edit history timeline"><span class="fx-db-ic" id="ic-timeline"></span></button>
-            <div id="fx-timeline-popover" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;width:260px;max-height:360px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:8px;z-index:var(--z-dropdown);box-shadow:0 8px 24px rgba(0,0,0,.35)"></div>
+            <div id="fx-timeline-popover" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;width:260px;max-height:360px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:8px;z-index:var(--z-dropdown);box-shadow:none"></div>
           </div>
           <button class="db-btn" id="btn-hist" onclick="toggleHist()" title="Toggle scope overlay"><span class="fx-db-ic" id="ic-scope"></span></button>
           <!-- Gamut warning's own toggle button lived here (3.1.6: "gamut button should be
@@ -5513,7 +5549,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926R';
+const BUILD='1.0926S';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21156,7 +21192,7 @@ async function gpImportClick(){ // entry point (button onclick)
 function gpTapOpen(uri){ // popup blocked → a real <a> the user taps (fresh activation)
   let h=document.getElementById('gp-tap-open');
   if(!h){h=document.createElement('a');h.id='gp-tap-open';h.target='_blank';h.rel='noopener';
-    h.style.cssText='position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:var(--z-system);background:var(--acc);color:#000;font:600 13px system-ui;padding:11px 18px;border-radius:22px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,.45)';
+    h.style.cssText='position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:var(--z-system);background:var(--acc);color:#000;font:600 13px system-ui;padding:11px 18px;border-radius:22px;text-decoration:none;box-shadow:none';
     document.body.appendChild(h);}
   h.href=uri;h.textContent='Tap to open the Google Photos picker';
   // target=_blank is a no-op in the WKWebView shell (no browser chrome to open a tab in) —
