@@ -2094,6 +2094,9 @@ input[type=checkbox]{accent-color:var(--k-color-accent-a)}
 @media (prefers-reduced-motion:reduce){#lib-overlay .lib-card::before,#lib-overlay .lib-card::after,body.deskx #lib-overlay:not(.full) #lib-overlay .lib-card img,#lib-overlay .lib-coll-row,#lib-overlay .lib-coll-row::before{transition:none}}
 .fx-val{color:var(--k-color-ink);font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){#lib-overlay .lib-search-wrap::before,#lib-overlay .lib-search-wrap svg,.fx-ctrl-chev,.fx-ctrl-title{transition:none}}
+@keyframes fxExpSpin{to{transform:rotate(360deg)}}
+body.fx-exporting #db-export svg{animation:fxExpSpin 1.1s linear infinite;transform-origin:50% 50%}
+@media (prefers-reduced-motion:reduce){body.fx-exporting #db-export svg{animation-duration:3s}}
 </style>
 </head>
 <body>
@@ -5648,7 +5651,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926V';
+const BUILD='1.0926W';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -19908,7 +19911,15 @@ async function chromasmithSaveToLightroom(){
   fxExportScope=Array.isArray(window.chromasmithEditInPath)?'all':'current';
   await exportFX();
 }
-async function exportFX(){
+// Export button icon spins for the whole export (body.fx-exporting), counted so overlapping calls
+// don't stop it early; finally guarantees it stops on errors and early returns too.
+let _fxExportRuns=0;
+async function exportFX(...a){
+  _fxExportRuns++;document.body.classList.add('fx-exporting');
+  try{return await _exportFXRun(...a);}
+  finally{if(--_fxExportRuns<=0){_fxExportRuns=0;document.body.classList.remove('fx-exporting');}}
+}
+async function _exportFXRun(){
   if(!fxImages.length){log('No image loaded','warn');return}
   await fxEnsureFullQuality(); // never export the display-tier stand-in
   if(window.chromasmithFullQualityReady===false){toast('Full-resolution photo could not be loaded — export cancelled. Reopen the photo and try again.',false);return}
