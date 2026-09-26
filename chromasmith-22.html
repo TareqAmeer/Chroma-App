@@ -2097,6 +2097,60 @@ input[type=checkbox]{accent-color:var(--k-color-accent-a)}
 @keyframes fxExpSpin{to{transform:rotate(360deg)}}
 body.fx-exporting #db-export svg{animation:fxExpSpin 1.1s linear infinite;transform-origin:50% 50%}
 @media (prefers-reduced-motion:reduce){body.fx-exporting #db-export svg{animation-duration:3s}}
+/* ── Swiss v2 — WEB TRIAL (body.sk2) ─────────────────────────────────────────────────────────
+   A calmer layer over Swiss Kinetic for the web build only (never the Tauri app): one vermilion
+   accent, no offset blocks or two-tone slabs, one shape (a small square) marking "where you are",
+   tools as a word list, sentence-case hairline buttons, dimmed untouched controls. Every rule is
+   scoped to body.sk2, so ?classic=1 (or the "Classic look" button) removes all of it at once.
+   Concept: design/prototypes/swiss-kinetic/editor-concept.html. */
+body.sk2.sk2{--k-color-muted:#8d8b85;--mut:#8d8b85;--k-color-accent-a:#ff3b1f;--k-color-accent-b:#ff3b1f;--k-offset-x:0px;--k-offset-y:0px;--acc:#ff3b1f;--acc2:#ff3b1f;--k-splash-orange:#ff3b1f;--k-splash-blue:#141414}
+body.sk2.deskx{--rail-w:136px}
+/* Brand + Library/Studio switch: plain words, the active one underlined — no orange/blue slabs. */
+body.sk2 #cs-brand-name{font-size:16px;font-weight:500;text-transform:none;letter-spacing:-.01em;display:inline-flex;align-items:center;gap:10px}
+body.sk2 #cs-brand-name::before{content:'';width:12px;height:12px;background:var(--k-color-accent-a);flex:none}
+body.sk2 #cs-brand-tog{margin-left:24px;gap:22px;cursor:default}
+body.sk2 #cs-brand-tog::before,body.sk2 #cs-brand-tog::after,body.sk2 #cs-brand-tog button+button::before{display:none!important}
+body.sk2 #cs-brand-tog button{font-size:14px;font-weight:400;letter-spacing:0;padding:4px 0;margin:0!important;transform:none!important}
+body.sk2 #cs-brand-tog button.on{color:var(--k-color-ink);box-shadow:inset 0 -2px 0 var(--k-color-ink)}
+/* Tool rail → word list. The open tool gets the square; a tool that is doing something gets ink text. */
+body.sk2 #fx-toolrail .fx-rail-ic,body.sk2 #fx-toolrail .fx-rail-sep{display:none!important}
+body.sk2 #fx-toolrail .fx-rail-lb[data-ab]{font-size:14px;font-weight:400;text-transform:none;letter-spacing:-.005em;text-align:left!important;white-space:nowrap!important}
+body.sk2 #fx-toolrail .fx-rail-lb[data-ab]::after{content:none}
+body.sk2 #fx-toolrail{padding-top:16px!important;gap:0!important}
+body.sk2 .fx-rail-btn{flex-direction:row!important;justify-content:flex-start!important;padding:7px 12px 7px 30px!important;min-height:0!important}
+body.sk2 .fx-rail-btn::before{outline:0!important;background:none!important}
+body.sk2 .fx-rail-btn.on::after{content:'';position:absolute;left:12px;top:50%;width:9px;height:9px;margin-top:-4.5px;background:var(--k-color-accent-a)}
+body.sk2 .fx-rail-btn.enabled:not(.on) .fx-rail-lb::before{content:'';display:inline-block;width:4px;height:4px;margin:0 8px 2px -14px;background:var(--k-color-ink);vertical-align:middle}
+body.sk2 .fx-rail-btn:hover:not(.on) svg{transform:none}
+/* Buttons: sentence case, hairline, no fills; Export is the only solid block of colour. */
+body.sk2 .btn,body.sk2 .fx-db{text-transform:none!important;letter-spacing:0!important;font-weight:400!important;border-radius:0!important;box-shadow:none!important}
+body.sk2 .bgh{background:transparent!important;border-color:var(--bdr)!important;color:var(--k-color-ink)!important}
+body.sk2 .bgh:disabled{color:var(--k-color-muted)!important;opacity:.55}
+body.sk2 .bgh:not(:disabled):hover{border-color:var(--k-color-ink)!important}
+body.sk2 .bgh.on,body.sk2 .bgh[aria-pressed=true]{background:var(--k-color-ink)!important;border-color:var(--k-color-ink)!important;color:var(--k-color-bg)!important}
+body.sk2 .fx-db{background:transparent!important;border-color:transparent!important;color:var(--k-color-muted)!important}
+body.sk2 .fx-db:not(:disabled):hover{color:var(--k-color-ink)!important}
+body.sk2 .fx-undogrp{border:0!important;background:none!important}
+body.sk2 #btn-export-db,body.sk2 .fx-db-pri{background:var(--k-color-accent-a)!important;border-color:var(--k-color-accent-a)!important;color:#fff!important;font-weight:500!important}
+/* Panels: sentence-case section titles with real size; untouched sliders recede. */
+body.sk2 .fx-ctrl-title{font-size:15px;font-weight:500;text-transform:none;letter-spacing:-.01em}
+body.sk2 summary{letter-spacing:0;font-weight:500}
+body.sk2 .fx-slider::-webkit-slider-thumb{width:10px;height:10px;border:0;background:var(--k-color-muted)}
+body.sk2 .fx-row.fx-mod .fx-slider::-webkit-slider-thumb,body.sk2 .fx-slider.fx-knob-on::-webkit-slider-thumb{background:var(--k-color-ink);box-shadow:none}
+body.sk2 .fx-row.fx-mod .fx-label{color:var(--k-color-ink)}
+body.sk2 .fx-row:not(.fx-mod) .fx-val{color:var(--k-color-muted)}
+/* Looks: the chosen look is marked by the square, not a kicked-out frame. */
+body.sk2 .look-cell:hover{transform:none;box-shadow:none}
+body.sk2 .look-cell.sel{border-color:transparent;box-shadow:none;position:relative}
+body.sk2 .look-cell.sel::after{content:'';position:absolute;right:0;bottom:0;width:12px;height:12px;background:var(--k-color-accent-a);z-index:3}
+body.sk2 #fx-add-btn{box-shadow:none}
+body.sk2 #fx-add-btn:hover{transform:none;box-shadow:none}
+body.sk2 #fx-toast{box-shadow:none}
+/* The switch back. */
+#sk2-toggle{display:none}
+body:not(.deskx) #sk2-toggle{display:none!important}
+body.deskx #sk2-toggle{display:block;position:fixed;left:16px;bottom:10px;z-index:50;background:var(--k-color-bg);border:1px solid var(--bdr);color:var(--k-color-muted);font:400 11px var(--sans);cursor:pointer;padding:4px 8px}
+#sk2-toggle:hover{color:var(--k-color-ink)}
 </style>
 </head>
 <body>
@@ -2106,6 +2160,16 @@ function sync(){var f=b.classList.contains('lib-full');L.classList.toggle('on',f
 new MutationObserver(sync).observe(b,{attributes:true,attributeFilter:['class']});sync();
 function go(lib){if(b.classList.contains('lib-full')===lib)return;var t=document.getElementById(lib?'lib-side-tab-library':'lib-side-tab-develop');if(t)t.click();else if(window.chromasmithToggleLibrary)window.chromasmithToggleLibrary()}
 L.onclick=function(){go(true)};S.onclick=function(){go(false)};})();</script>
+<script>/* Swiss v2 web trial switch — see body.sk2 CSS. Web only; ?classic=1 / ?sk2=1 persist a choice. */
+(function(){try{if(window.__TAURI__)return;var b=document.body,q=new URLSearchParams(location.search),K='chromasmith_sk2';
+if(q.has('classic'))localStorage.setItem(K,'0');if(q.has('sk2'))localStorage.setItem(K,'1');
+// Automated runs (Playwright/Puppeteer set navigator.webdriver) keep the current design unless ?sk2=1,
+// so the UI gates and goldens keep measuring the shipped desktop look.
+var pref=localStorage.getItem(K),on=pref==='1'||(pref!=='0'&&!navigator.webdriver);b.classList.toggle('sk2',on);
+var t=document.createElement('button');t.id='sk2-toggle';t.type='button';t.textContent=on?'Classic look':'Try the new look';
+t.title='Switch between the new Swiss look (trial) and the current design';
+t.onclick=function(){localStorage.setItem(K,on?'0':'1');location.reload()};
+document.body.appendChild(t);var n=document.getElementById('cs-brand-name');if(on&&n)n.textContent='Chro-ma-smith';}catch(e){}})();</script>
 <!-- Boot splash — the Swiss Kinetic playground splash (design/prototypes/swiss-kinetic/index.html
      section 07, .splash), transplanted 1:1: every box keeps the prototype's 720x560 px geometry,
      scaled to the window by one unit (--u). Static markup + inline styles so the FIRST paint is
@@ -5610,7 +5674,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0927B';
+const BUILD='1.0927C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
