@@ -5227,7 +5227,7 @@
     if (entry.missing) return false;
     const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
     const m = state.meta.get(entry.path) || {};
-    if (state.typeFilter !== 'all' && entry.kind !== state.typeFilter) return false;
+    if (state.typeFilter !== 'all' && !state.typeFilter.split(',').includes(entry.kind)) return false;
     if (state.cameraFilter !== 'all' && m.camera !== state.cameraFilter) return false;
     if (state.lensFilter !== 'all' && m.lens !== state.lensFilter) return false;
     if (state.isoFilter !== 'all' && String(m.iso || '') !== state.isoFilter) return false;
@@ -7144,8 +7144,7 @@
     // sidebar Raw/Videos shortcut, the "More filters" panel, or clearAllLibFilters).
     const fr = document.getElementById('lib-filter-row');
     if (fr) {
-      fr.querySelectorAll('.lib-chip[data-fgrp="type"]').forEach((c) => c.classList.toggle('lib-sel', c.dataset.fval === state.typeFilter));
-      fr.querySelectorAll('.lib-chip[data-fgrp="flag"]').forEach((c) => c.classList.toggle('lib-sel', c.dataset.fval === state.tagFilter));
+      syncFilterChips();
     }
     // HANDOVER §3.10: this called updateFilterChips(), which never existed — typeof-guarded so
     // it silently no-op'd every time instead of throwing. syncFilterUI is the real function.
@@ -7641,7 +7640,16 @@
     }
     applyCatalogFilterChange();
   }
-  overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; applyCatalogFilterChange(); };
+  function syncFilterChips() {
+    const fr = document.getElementById('lib-filter-row');
+    if (!fr) return;
+    const types = state.typeFilter === 'all' ? ['all'] : state.typeFilter.split(',');
+    fr.querySelectorAll('.lib-chip[data-fgrp="type"]').forEach((c) => c.classList.toggle('lib-sel', types.includes(c.dataset.fval)));
+    fr.querySelectorAll('.lib-chip[data-fgrp="flag"]').forEach((c) => c.classList.toggle('lib-sel', c.dataset.fval === state.tagFilter));
+    // A selected type hidden behind "…" keeps the extra types expanded so the selection is visible.
+    if (types.some((t) => fr.querySelector(`.lib-more-type[data-fval="${t}"]`))) fr.classList.add('types-expanded');
+  }
+  overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; syncFilterChips(); applyCatalogFilterChange(); };
   overlay.querySelector('#lib-camera-filter').onchange = (e) => { state.cameraFilter = e.target.value; applyCatalogFilterChange(); };
   overlay.querySelector('#lib-lens-filter').onchange = (e) => { state.lensFilter = e.target.value; applyCatalogFilterChange(); };
   overlay.querySelector('#lib-iso-filter').onchange = (e) => { state.isoFilter = e.target.value; applyCatalogFilterChange(); };
@@ -7670,10 +7678,16 @@
     const chipsEl = document.getElementById('lib-filter-chips');
     const badgeEl = document.getElementById('lib-filters-badge');
     if (!chipsEl || !badgeEl) return;
-    const active = FILTER_SELECT_IDS.map((id) => document.getElementById(id)).filter((sel) => sel && sel.value !== 'all');
-    badgeEl.textContent = active.length ? String(active.length) : '';
-    badgeEl.classList.toggle('on', active.length > 0);
-    chipsEl.innerHTML = active.map((sel) => {
+    // CHR-161: several chip-row types at once can't be shown by the single-value select, so
+    // they get their own pill ("RAW + Video") whose × clears the type filter.
+    const multiType = state.typeFilter.includes(',');
+    const active = FILTER_SELECT_IDS.map((id) => document.getElementById(id)).filter((sel) => sel && sel.value !== 'all' && !(multiType && sel.id === 'lib-type-filter'));
+    const n = active.length + (multiType ? 1 : 0);
+    badgeEl.textContent = n ? String(n) : '';
+    badgeEl.classList.toggle('on', n > 0);
+    const typeSel = document.getElementById('lib-type-filter');
+    const typeName = (v) => { const o = typeSel && [...typeSel.options].find((x) => x.value === v); return o ? o.textContent : v.toUpperCase(); };
+    chipsEl.innerHTML = (multiType ? `<span class="lib-chip">${state.typeFilter.split(',').map(typeName).join(' + ')}<span class="lib-chip-x" data-for="lib-type-filter" title="Remove filter">${ic('close', 10)}</span></span>` : '') + active.map((sel) => {
       const opt = sel.options[sel.selectedIndex];
       return `<span class="lib-chip">${opt ? opt.textContent : sel.value}<span class="lib-chip-x" data-for="${sel.id}" title="Remove filter">${ic('close', 10)}</span></span>`;
     }).join('');
@@ -7771,14 +7785,20 @@
     chip.onclick = () => {
       const grp = chip.dataset.fgrp;
       const val = chip.dataset.fval;
-      filterRow.querySelectorAll(`.lib-chip[data-fgrp="${grp}"]`).forEach((c) => c.classList.remove('lib-sel'));
-      chip.classList.add('lib-sel');
       if (grp === 'type') {
+        // CHR-161: types multi-select — each chip toggles in/out of a comma list in
+        // state.typeFilter ("raw,jpeg"); "All" (or deselecting the last one) clears it.
+        const cur = new Set(state.typeFilter === 'all' ? [] : state.typeFilter.split(','));
+        if (val === 'all') cur.clear(); else if (cur.has(val)) cur.delete(val); else cur.add(val);
+        state.typeFilter = cur.size ? [...cur].join(',') : 'all';
         const sel = overlay.querySelector('#lib-type-filter');
-        sel.value = val;
-        sel.onchange({ target: sel });
+        if (sel) sel.value = cur.size === 1 ? [...cur][0] : 'all';
+        syncFilterChips();
+        applyCatalogFilterChange();
       } else if (grp === 'flag') {
-        state.tagFilter = val;
+        // Clicking the active flag/tag chip again turns it off.
+        state.tagFilter = state.tagFilter === val ? 'all' : val;
+        syncFilterChips();
         applyCatalogFilterChange();
       }
     };
@@ -10135,7 +10155,7 @@
     g.querySelectorAll('.lib-card').forEach((c) => {
       const old = before.get(c.dataset.path);
       const img = c.querySelector('img');
-      if (old && old.src && img && !img.getAttribute('src')) img.src = old.src; // no thumbnail flash
+      if (old && old.src && img && !img.getAttribute("src")) { img.src = old.src; img.classList.add("loaded"); } // no thumbnail flash
       if (reduce) return;
       const now = c.getBoundingClientRect();
       if (old) {

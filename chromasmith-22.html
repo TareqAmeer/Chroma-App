@@ -1934,6 +1934,11 @@ body.deskx #cs-brand{gap:18px}
    and white until a frame is hovered or selected; the full grid is always in colour. */
 #lib-overlay .lib-card{overflow:visible;isolation:isolate;box-shadow:none!important;--k-flag:var(--k-color-accent-a)}
 #lib-overlay .lib-card .lib-thumb-wrap{box-shadow:none!important}
+/* CHR-12: the white hairline under thumbnails was the wrap's light parchment mount showing
+   through the sub-pixel seam where a fractionally-sized photo doesn't quite reach the wrap's
+   edge (worst at the bottom, where rows round). Once the photo has loaded there is nothing for
+   the mount to do, so it goes; the page colour behind is the same as the gap between cards. */
+#lib-overlay .lib-thumb-wrap:has(img.loaded){background:transparent!important}
 #lib-overlay .lib-card::before{content:'';display:block;position:absolute;z-index:-1;background:var(--k-flag);opacity:0;pointer-events:none;
   left:calc(var(--k-offset-x)*-2);right:18%;top:35%;bottom:calc(var(--k-offset-y)*-1.4);transform:translateX(-12px);
   transition:transform var(--k-motion-duration) var(--k-motion-easing),opacity var(--k-motion-hover)}
@@ -2000,6 +2005,19 @@ body.deskx #lib-overlay:not(.full) .lib-card:not(:hover):not(.sel):not(.multi) i
   transition:border-color var(--k-motion-hover),box-shadow var(--k-motion-hover) var(--k-motion-easing)}
 #lib-overlay #lib-filters-panel .lib-filter-field>select:hover{border-color:var(--k-color-ink)}
 #lib-overlay #lib-filters-panel .lib-filter-field>select.k-set{border-color:var(--k-color-accent-a);box-shadow:calc(var(--k-offset-x)*.5) calc(var(--k-offset-y)*.5) 0 var(--k-color-accent-a)}
+/* CHR-161: the in-dropdown label was painted over the select's own value text (both showed at
+   once, and WKWebView kept its glossy native select). Label now sits above as the playground's
+   9px tracked caption, and the select is flat: no native chrome, accent-A square when set. */
+#lib-overlay #lib-filters-panel{gap:10px}
+#lib-overlay #lib-filters-panel .lib-filter-field{display:flex;flex-direction:column;align-items:stretch;gap:5px;text-align:left}
+#lib-overlay #lib-filters-panel select{text-align:left;text-align-last:left}
+#lib-overlay #lib-filters-panel .lib-filter-field>label{padding:0;font:700 9px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted)}
+#lib-overlay #lib-filters-panel select{-webkit-appearance:none;appearance:none;width:100%;height:30px;padding:0 28px 0 10px;font:400 12px/1 var(--sans);color:var(--k-color-ink);
+  background:var(--k-color-bg) linear-gradient(var(--k-color-accent-a),var(--k-color-accent-a)) no-repeat right 11px center/0 0;border:1px solid var(--bdr);border-radius:0;box-shadow:none;cursor:pointer}
+#lib-overlay #lib-filters-panel select.k-set{background-size:6px 6px}
+#lib-overlay #lib-subfolders-wrap{gap:9px!important;color:var(--k-color-ink)!important}
+#lib-overlay #lib-subfolders{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin:0;border:1px solid var(--k-color-ink);background:var(--k-color-bg);border-radius:0;cursor:pointer;transition:background var(--k-motion-hover),transform var(--k-motion-duration) var(--k-motion-easing)}
+#lib-overlay #lib-subfolders:checked{background:var(--k-color-accent-a);border-color:var(--k-color-accent-a);transform:rotate(90deg)}
 /* ── Swiss Kinetic: global parts + Editor surfaces (phase 6) ──
    0px corners everywhere except the on-photo tools the inventory marks restyle-neutral (crop,
    guides, masks, brush cursor, split knob, histogram), which keep their shapes. Soft drop
@@ -5592,7 +5610,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926D';
+const BUILD='1.0926E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24065,13 +24083,12 @@ if(/[?&]catalog=1/.test(location.search)){
     const dir=i?1:-1,d=num(tok('--k-motion-duration'))||500,easing=tok('--k-motion-easing')||'ease';
     [...bar.children].filter(x=>x.offsetParent!==null).forEach(x=>x.animate([{transform:`translateX(${-dir*56}px)`,opacity:0},{transform:'none',opacity:1}],{duration:d,easing}));
   }
-  // Filters panel: label inside the dropdown (pad the select past it) + "set" state.
+  // Filters panel: "set" state on each dropdown (accent square + offset shadow).
   function attachFilterField(f){
     if(f._kField)return;const lb=f.querySelector(':scope>label'),sel=f.querySelector(':scope>select');if(!lb||!sel)return;f._kField=1;
-    const pad=()=>{const w=lb.getBoundingClientRect().width;if(w)sel.style.paddingLeft=(w+6)+'px';};
     const set=()=>sel.classList.toggle('k-set',sel.selectedIndex>0);
     sel.addEventListener('change',set);new MutationObserver(set).observe(sel,{childList:true});set();
-    if('ResizeObserver' in window)new ResizeObserver(pad).observe(lb);pad();
+    // CHR-161: label now sits above the select (CSS), so no in-field padding.
   }
   const SEL='.seg,#lib-overlay .lib-seg,#cs-brand-tog';
   function scan(n){if(!n||n.nodeType!==1||n.classList.contains('k-roll-strip'))return;if(n.matches(SEL))attachSwitch(n);if(n.matches('.fx-val'))attachRoll(n);n.querySelectorAll(SEL).forEach(attachSwitch);n.querySelectorAll('.fx-val').forEach(attachRoll);n.querySelectorAll('#lib-filters-panel .lib-filter-field').forEach(attachFilterField);}

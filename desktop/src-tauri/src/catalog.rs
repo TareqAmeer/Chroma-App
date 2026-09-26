@@ -5332,9 +5332,12 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
         }
 
         if let Some(k) = &q.kind {
-            if k != "all" {
-                where_parts.push(format!("p.kind = ?{}", values.len() + 1));
-                values.push(Box::new(k.clone()));
+            // CHR-161: a comma-separated list ("raw,jpeg") is a multi-select type filter.
+            let kinds: Vec<&str> = k.split(',').map(str::trim).filter(|s| !s.is_empty() && *s != "all").collect();
+            if !kinds.is_empty() {
+                let marks: Vec<String> = kinds.iter().enumerate().map(|(i, _)| format!("?{}", values.len() + 1 + i)).collect();
+                where_parts.push(format!("p.kind IN ({})", marks.join(",")));
+                for kd in kinds { values.push(Box::new(kd.to_string())); }
             }
         }
         if let Some(t) = &q.text {
