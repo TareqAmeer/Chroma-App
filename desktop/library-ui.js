@@ -3000,7 +3000,7 @@
     // Row pitch from the first card that actually starts a new row.
     const next = cards[cols];
     const rowH = next ? (next.offsetTop - top0) : (cards[0].offsetHeight + 16);
-    return { cols, rowH: Math.max(1, rowH), cardH: cards[0].offsetHeight };
+    return { cols, rowH: Math.max(1, rowH), cardH: cards[0].offsetHeight, cardW: cards[0].offsetWidth };
   }
 
   /// Spends the whole mounted-card budget on overscan rather than mounting a fixed two rows.
@@ -3047,6 +3047,44 @@
       padTop: firstRow * m.rowH,
       padBot: Math.max(0, (totalRows - 1 - lastRow) * m.rowH),
     });
+  }
+
+  /// Re-measures cols/rowH after the grid's width changed (dock resizer, window resize) and keeps
+  /// the same photo at the same viewport offset: scrollTop is in pixels, so without this the old
+  /// rowH/cols leave it pointing at a different photo. The anchor is a fractional ITEM index so it
+  /// survives a column-count change too.
+  let _virtRO = null, _virtAnchor = null, _virtRmTimer = 0;
+  function virtRemeasure() {
+    const gridEl = document.getElementById('lib-grid');
+    const old = state._virtMetrics;
+    if (!gridEl || !state._virtOn || !old) return;
+    const scroller = gridEl.parentElement;
+    // Capture the anchor ONCE per resize burst, from the still-committed old metrics, before any
+    // relayout/clamping moves scrollTop; commit only after layout settles (transient mid-layout
+    // measurements, e.g. one giant row while thumbnails re-flow, are not real geometry).
+    if (_virtAnchor == null) _virtAnchor = Math.max(0, scroller.scrollTop - gridEl.offsetTop) / old.rowH * old.cols;
+    clearTimeout(_virtRmTimer);
+    // Card HEIGHT is not measurable right after the width changes (thumbnails size themselves a
+    // beat later: freshly laid-out cards read 40px against a real 279px), but the column count
+    // and card width are. So scale the last good height by the width ratio and take the gap from the fresh layout (row pitch minus card height is right
+    // even while thumbs are unloaded).
+    _virtRmTimer = setTimeout(() => {
+      const g = document.getElementById('lib-grid');
+      const anchor = _virtAnchor; _virtAnchor = null;
+      const o = state._virtMetrics;
+      if (!g || !state._virtOn || !o) return;
+      const raw = virtMetrics(g);
+      if (!raw || !o.cardW) { if (raw) { state._virtMetrics = raw; state._virtRange = null; virtUpdate(true); } return; }
+      const cardH = o.cardH * raw.cardW / o.cardW;
+      const fresh = { cols: raw.cols, cardW: raw.cardW, cardH, rowH: Math.max(1, cardH + (raw.rowH - raw.cardH)) };
+      if (fresh.cols === o.cols && Math.abs(fresh.rowH - o.rowH) < 0.5) return;
+      state._virtMetrics = fresh; state._virtRange = null;
+      // Spacers first (right scrollHeight), then scroll, then re-window.
+      virtUpdate(true);
+      scroller.scrollTop = g.offsetTop + anchor / fresh.cols * fresh.rowH;
+      state._virtRange = null;
+      virtUpdate(true);
+    }, 80);
   }
 
   /// Scrolls the sidebar grid so the given path's card is visible. Used after opening a photo
@@ -6376,6 +6414,10 @@
       const fn = () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; virtUpdate(false); }); };
       scroller.addEventListener('scroll', fn, { passive: true });
       _virtScrollBound = { el: scroller, fn };
+      if (_virtRO) _virtRO.disconnect();
+      let roW = -1;
+      _virtRO = new ResizeObserver(() => { const w = scroller.clientWidth; if (roW >= 0 && w !== roW) virtRemeasure(); roW = w; });
+      _virtRO.observe(scroller);
     } else if (_virtScrollBound) {
       _virtScrollBound.el.removeEventListener('scroll', _virtScrollBound.fn);
       _virtScrollBound = null;
