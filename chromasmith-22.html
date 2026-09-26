@@ -1164,7 +1164,9 @@ body.deskx #fx-deskbar-tools{display:flex;align-items:center;gap:2px}
 /* Hairline cluster separators — grouping by rule rather than by inconsistent sizing. */
 body.deskx #fx-deskbar-tools>*+*{margin-left:0}
 body.deskx #fx-deskbar-tools .fx-zoom-ctrl{margin-left:var(--sp-3);padding-left:var(--sp-3)}
-body.deskx #fx-settings{margin-left:var(--sp-2);padding-left:var(--sp-2)}
+/* CHR-155: playground .rbar rhythm — gear sits one 8px gap from Export, flags 8px from zoom (Library matches). */
+body.deskx #fx-settings{margin-left:0;padding-left:0}
+body.deskx #btn-flag-red{margin-left:7px!important}
 /* Zoom cluster: was bare 18px text controls with no button affordance at all. */
 .zc-ic{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px}
 body.deskx .fx-zoom-ctrl{position:static;background:transparent;border:none;padding:0;gap:1px}
@@ -5570,7 +5572,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926Z';
+const BUILD='1.0926A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
