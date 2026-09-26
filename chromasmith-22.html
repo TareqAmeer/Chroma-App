@@ -5610,7 +5610,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926E';
+const BUILD='1.0926F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22555,7 +22555,6 @@ function fxLiveFitStop(){_lfUntil=0;if(_lfRaf){cancelAnimationFrame(_lfRaf);_lfR
 function fxLiveFit(ms){
   if(!document.body.classList.contains('mobile-fx')&&!document.body.classList.contains('deskx'))return;
   _lfUntil=performance.now()+(ms||360);
-  if(_lfRaf)return; // already running — the deadline extension above is enough
   const wrap=document.getElementById('fx-wrap');
   const bd=document.getElementById('fx-canvas-bd');
   const cv=(bd&&bd.style.display!=='none'&&bd.width)?bd:document.getElementById('fx-canvas');
@@ -22563,8 +22562,12 @@ function fxLiveFit(ms){
   const w0=parseFloat(cv.style.width)||cv.clientWidth,h0=parseFloat(cv.style.height)||cv.clientHeight;
   const nativeW=cv.width||w0,nativeH=cv.height||h0;
   if(!nativeW||!nativeH)return;
-  const step=()=>{
-    const aw=wrap.clientWidth,ah=wrap.clientHeight;
+  // CHR-163: fit to the CONTENT box (fxWrapInner — what renderPreview uses), not clientWidth/
+  // Height, which include the wrap's 16px inset. Fitting the padded box made the canvas wider
+  // than #fx-canvas{max-width:100%} allows, so CSS clamped the width on its own while the
+  // pinned height lagged until the final renderPreview — the photo resized width-then-height.
+  const fit=()=>{
+    const {w:aw,h:ah}=fxWrapInner();
     if(aw>0&&ah>0){
       // Use the CURRENT canvas intrinsic dimensions, not the previous photo's CSS dimensions.
       // A pasted edit can switch from portrait to landscape while this observer is still
@@ -22572,8 +22575,10 @@ function fxLiveFit(ms){
       const s=Math.min(aw/nativeW,ah/nativeH,1);
       cv.style.width=(nativeW*s)+'px';cv.style.height=(nativeH*s)+'px';
     }
-    _lfRaf=(performance.now()<_lfUntil)?requestAnimationFrame(step):0;
   };
+  const step=()=>{fit();_lfRaf=(performance.now()<_lfUntil)?requestAnimationFrame(step):0;};
+  fit(); // same frame as the size change (ResizeObserver runs pre-paint) — no one-frame lag
+  if(_lfRaf)return; // already running — the deadline extension above is enough
   _lfRaf=requestAnimationFrame(step);
 }
 // E4 fix (2026-09-10): a plain OS window resize (drag the window edge/titlebar — NOT the
