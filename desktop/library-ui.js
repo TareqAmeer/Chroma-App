@@ -34,7 +34,16 @@
   // real Tauri backend.
   let ltLastResetRecipe = null, ltLastResetEdited = false, ltRecipe = '', ltEdited = false;
   let ltOfflineQueue = [], ltOfflineQueueNextId = 0;
+  // ?libdates=1 spreads the mock capture dates (one photo every ~9h from 2026-03-01) so the
+  // grid's scrolling date title can be exercised; without it every photo shares one date.
+  const LT_DATES = /[?&]libdates=1/.test(location.search);
   function ltMetaFor(p) {
+    if (LT_DATES) {
+      const n = parseInt((/(\d+)\.\w+$/.exec(p || '') || [])[1] || '0', 10) % 1000;
+      const d = new Date(Date.UTC(2026, 2, 1) + n * 9.3 * 3600e3), z = (v) => String(v).padStart(2, '0');
+      const date = `${d.getUTCFullYear()}:${z(d.getUTCMonth() + 1)}:${z(d.getUTCDate())} ${z(d.getUTCHours())}:${z(d.getUTCMinutes())}:00`;
+      return { camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date };
+    }
     return /\.(mp4|mov|m4v)$/i.test(String(p || ''))
       ? { dur: 12.5, width: 3840, height: 2160, date: '2026-07-20' }
       : { camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' };
@@ -455,6 +464,7 @@
         return Promise.resolve();
       }
       case 'catalog_clip_embed': return Promise.resolve({ embedded: 0 });
+      case 'catalog_places': return Promise.resolve(/[?&]libcat=1/.test(location.search) ? [{ place: 'London, Greater London, England, United Kingdom', count: 3 }] : []);
       case 'catalog_clip_tags': {
         // R10: fixed fake suggestions so the Info panel's "Suggested" section is exercisable
         // under ?libtest=1 without a real CLIP model — deterministic per photo id so re-renders
@@ -756,7 +766,8 @@
     showTitle: localStorage.getItem('chromasmith_lib_showtitle') === '1',
     gridAspect: localStorage.getItem('chromasmith_lib_gridaspect') === '1', // item 31: real aspect ratio vs square-crop thumbnails
     hideIcons: localStorage.getItem('chromasmith_lib_hideicons') === '1', // View menu: hide flag/badge icons drawn over photos
-    zeroGap: localStorage.getItem('chromasmith_lib_zerogap') === '1',     // View menu: Lightroom-style zero-gap grid
+    zeroGap: localStorage.getItem('chromasmith_lib_zerogap') === '1',
+    gridMat: localStorage.getItem('chromasmith_lib_mat') === '1',         // View menu: white border (mat) around each photo     // View menu: Lightroom-style zero-gap grid
     // Matches Lightroom's "Include Photos from Subfolders" — list_dir is deliberately one level
     // only (see its own doc comment), so a folder tree built by date (2026/08/22, 2026/08/23...)
     // showed nothing when the PARENT folder was selected, only when a leaf was. Real reported
@@ -1371,6 +1382,24 @@
       background:transparent;border:1px dashed var(--bdr);font-size:10px;color:var(--mut);cursor:pointer}
     .lib-kw-suggest-chip:hover{color:var(--txt);border-color:var(--acc2)}
     .lib-kw-suggest-chip-add{opacity:.7;font-size:11px;line-height:1}
+    /* Search suggestions (renderSearchSuggest): places with counts, keywords, then the AI "looks like" row. */
+    .lib-search-wrap{position:relative}
+    #lib-search-suggest{position:absolute;top:calc(100% + 6px);left:0;right:0;min-width:240px;z-index:60;padding:4px;
+      background:var(--sur);border:1px solid var(--bdr);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    #lib-search-suggest[hidden]{display:none}
+    .lib-ss-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--txt)}
+    .lib-ss-row:hover{background:var(--sur2)}
+    .lib-ss-row[data-kind="ai"]{color:var(--mut)}
+    .lib-ss-ic{display:inline-flex;color:var(--mut)}
+    .lib-ss-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .lib-ss-n{color:var(--mut);font-variant-numeric:tabular-nums}
+    /* Info panel keyword section (renderInfoPanel). */
+    .lib-info-sec{margin-top:10px;padding-top:8px;border-top:1px solid var(--bdr)}
+    .lib-info-sec-h{display:flex;align-items:center;justify-content:space-between;color:var(--mut);margin-bottom:6px;
+      font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+    .lib-info-hint{color:var(--mut);font-size:11px;line-height:1.4}
+    .lib-info-link{background:none;border:none;padding:0;color:var(--acc2);cursor:pointer;font:inherit;font-size:11px}
+    .lib-info-link:disabled{opacity:.5;cursor:default}
     /* Quick Look (Space bar) — a full-viewport overlay, never part of the editor's own DOM,
        so it stays trivially cheap to open/close: no shader, no canvas, just an <img>. */
     #lib-quicklook{position:fixed;inset:0;z-index:500;background:rgba(10,10,10,.96);
@@ -1484,6 +1513,18 @@
     #lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lib-thumb,140px),1fr));gap:16px}
     /* View menu: "No spacing between photos" — a la Lightroom's zero-gutter grid. */
     #lib-grid.lib-zero-gap{gap:0}
+    /* Border around photos: the photo sits inset on its mount (real aspect, uncropped) like a
+       matted print. Square grid only — list/aspect views size the image themselves. */
+    #lib-grid.lib-mat:not(.list-view):not(.aspect-view) .lib-thumb-wrap>img{inset:9%;width:82%;height:82%;object-fit:contain}
+    /* !important: chromasmith-22.html clears a loaded tile's plate (:has(img.loaded) → transparent!important). */
+    #lib-overlay #lib-grid.lib-mat:not(.list-view):not(.aspect-view) .lib-thumb-wrap{background:#efece5!important}
+    #lib-grid-title{position:sticky;top:-16px;z-index:21;margin:-16px -16px 16px;padding:18px 16px 14px;
+      background:var(--bg);display:none;flex-direction:column;gap:6px}
+    #lib-overlay.full #lib-grid-title.has{display:flex}
+    #lib-overlay:has(#lib-list-head.on) #lib-grid-title{display:none!important}
+    #lib-grid-title .lgt-k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);min-height:12px}
+    #lib-grid-title .lgt-h{font-family:var(--sans);font-size:44px;font-weight:400;letter-spacing:-.04em;line-height:.95;margin:0;color:var(--txt);
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     #lib-grid.lib-dragover{outline:2px dashed var(--acc2);outline-offset:-6px;border-radius:8px}
     .lib-coll-row.lib-coll-dragover{outline:2px dashed var(--acc2);outline-offset:-2px;background:var(--sur2)}
     /* Real table: header row (#lib-list-head) and every .lib-card in list mode share this exact
@@ -2097,7 +2138,8 @@
       <div id="lib-top-center">
       <div class="lib-search-wrap">
         ${ic('search', 14)}
-        <input id="lib-search" placeholder="Search" title="Search by filename, or press Enter to describe a photo (e.g. &quot;dog on a beach&quot;) for AI search" />
+        <input id="lib-search" placeholder="Search places, keywords, anything" autocomplete="off" title="Type a place, keyword or filename; press Enter to also find photos that look like it (e.g. &quot;dog on a beach&quot;)" />
+        <div id="lib-search-suggest" hidden></div>
       </div>
       </div>
       <div id="lib-top-right">
@@ -2163,6 +2205,7 @@
           <hr>          
           <div class="opt" id="lib-hideicons"><span>Hide flag &amp; type icons</span>${LIB_CHECK_SVG}</div>
           <div class="opt" id="lib-zerogap"><span>No spacing between photos</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" id="lib-mat"><span>Border around photos</span>${LIB_CHECK_SVG}</div>
           <div class="opt" id="lib-showtitle"><span>Show title</span>${LIB_CHECK_SVG}</div>
           <button class="lib-btn opt-action opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to)."><span>Real aspect ratio</span>${LIB_CHECK_SVG}</button>
           </div>
@@ -2320,6 +2363,10 @@
       <div id="lib-collections" class="lib-fullview-only"></div><div id="lib-folders-header" class="lib-fullview-only"></div><div id="lib-tree" class="lib-fullview-only"></div><div id="lib-collections-post" class="lib-fullview-only"></div>
     </div>
     <div id="lib-main">
+      <!-- Grid title: the view's name at the top; while scrolling it becomes the date of the top
+           visible row (month / day / hour, picked from the view's own date span) so a
+           several-thousand-photo folder reads as a timeline instead of one undivided wall. -->
+      <div id="lib-grid-title"><span class="lgt-k"></span><h1 class="lgt-h"></h1></div>
       <div id="lib-list-head">
         <div class="lib-lh-cell lib-lh-thumb"></div>
         <div class="lib-lh-cell" data-sort="name">Name</div>
@@ -5289,7 +5336,7 @@
     if (state.syncedFilter === 'notsynced' && state.syncedPaths.has(entry.path)) return false;
     if (state.facesFilter === 'indexed' && !entry.faces_scanned) return false;
     if (state.facesFilter === 'pending' && entry.faces_scanned) return false;
-    if (state.search && !entry.name.toLowerCase().includes(state.search)) return false;
+    if (state.search && !entryMatchesSearch(entry, sc, state.search)) return false;
     // "N or more", except '0' which means exactly unrated — the two useful questions.
     if (state.ratingFilter !== 'all') {
       const want = parseInt(state.ratingFilter, 10);
@@ -6417,6 +6464,7 @@
     const docked = document.body.classList.contains('deskx') && overlayEl && !overlayEl.classList.contains('full');
     const isList = state.viewMode === 'list' && !docked;
     grid.classList.toggle('list-view', isList);
+    grid.classList.toggle('lib-mat', !!state.gridMat);
     grid.style.setProperty('--lib-thumb', state.thumbSize + 'px');
     const listHead = document.getElementById('lib-list-head');
     if (listHead) { listHead.classList.toggle('on', isList); syncListHead(); }
@@ -6475,6 +6523,67 @@
       _virtScrollBound = null;
     }
     renderGridTail(shown);
+    gridTitleIndex(shown);
+    gridTitleUpdate();
+  }
+
+  // ── Grid title (see #lib-grid-title) ──────────────────────────────────────────────────────
+  // EXIF "2026:07:20 14:32:11" or ISO "2026-07-20[T14:32]" → Date (local), or null.
+  function parseMetaDate(v) {
+    const m = /(\d{4})[:-](\d{2})[:-](\d{2})(?:[ T](\d{2}):(\d{2}))?/.exec(String(v || ''));
+    return m ? new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0)) : null;
+  }
+  let _gt = { dates: [], unit: null };
+  function gridTitleIndex(shown) {
+    const dates = shown.map((e) => parseMetaDate((state.meta.get(e.path) || {}).date));
+    const ts = dates.filter(Boolean).map((d) => d.getTime());
+    let unit = null;
+    if (ts.length) {
+      const span = Math.max(...ts) - Math.min(...ts), DAY = 864e5;
+      unit = span > 45 * DAY ? 'month' : span > 1.5 * DAY ? 'day' : 'hour';
+    }
+    _gt = { dates, unit, n: shown.length };
+    if (LIBTEST) window.__gridTitle = { gt: _gt, metaN: state.meta.size };
+  }
+  function gridSourceTitle() {
+    if (state.source === 'folder' && state.currentFolder) return String(state.currentFolder).split(/[\\/]/).filter(Boolean).pop() || 'Library';
+    const row = document.querySelector('#lib-side .lib-tree-row.on, #lib-side .lib-coll-row.on');
+    const t = row ? row.textContent.replace(/[\d,.\s]+$/, '').trim() : '';
+    return t || 'Library';
+  }
+  function fmtGridDate(d, unit) {
+    if (unit === 'month') return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    if (unit === 'day') return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/:\d\d(?=\D*$)/, ':00');
+  }
+  function gridTitleUpdate() {
+    const el = document.getElementById('lib-grid-title');
+    const main = document.getElementById('lib-main');
+    const gridEl = document.getElementById('lib-grid');
+    if (!el || !main || !gridEl) return;
+    const src = gridSourceTitle();
+    el.classList.toggle('has', !!(_gt.n));
+    const k = el.querySelector('.lgt-k'), h = el.querySelector('.lgt-h');
+    const scrolled = main.scrollTop > 24;
+    let d = null;
+    if (scrolled && _gt.unit) {
+      // First card whose bottom is below the title band = the top visible row.
+      const edge = main.scrollTop + el.offsetHeight;
+      for (const c of gridEl.querySelectorAll('.lib-card')) {
+        if (c.offsetTop + c.offsetHeight > edge) {
+          const i = (state._virtAll || []).findIndex((e) => e.path === c.dataset.path);
+          d = i >= 0 ? _gt.dates[i] : null;
+          break;
+        }
+      }
+    }
+    if (d) {
+      h.textContent = fmtGridDate(d, _gt.unit);
+      k.textContent = _gt.unit === 'hour' ? `${src} · ${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}` : src;
+    } else {
+      h.textContent = src;
+      k.textContent = _gt.n ? `${_gt.n.toLocaleString()} ${_gt.n === 1 ? 'item' : 'items'}` : '';
+    }
   }
 
   /// Builds and wires a set of cards into the grid, replacing whatever was there. `allList` is the
@@ -6730,25 +6839,60 @@
     // right after a keyword is added — never costs a second round trip. A photo not yet
     // CLIP-analyzed comes back an empty array (not an error, see catalog_clip_tags), which is
     // indistinguishable here from "no cache entry yet" only until the fetch below resolves.
-    const kwSet = new Set(sc.keywords || []);
-    let suggestChips = '';
+    // Suggestions come from three places, so the section is useful even before any AI pass:
+    // where the photo was taken (GPS -> "London"), what CLIP sees in it, and keywords already
+    // used elsewhere in the library. The old version showed nothing at all for a photo that
+    // hadn't been CLIP-analyzed, which read as "suggestions are broken".
+    const kwLeaves = new Set((sc.keywords || []).map((k) => k.split('|').pop().toLowerCase()));
+    const place = entry.place || m.place || '';
+    const sugg = []; // {term, title, kind}
+    const pushSugg = (term, title, kind) => {
+      if (!term || kwLeaves.has(term.toLowerCase()) || sugg.some((x) => x.term.toLowerCase() === term.toLowerCase())) return;
+      sugg.push({ term, title, kind });
+    };
+    if (place) {
+      const parts = place.split(', ');
+      pushSugg(parts[0], `Taken in ${place}`, 'place');
+      if (parts.length > 1) pushSugg(parts[parts.length - 1], `Taken in ${place}`, 'place');
+    }
+    let clipState = 'none'; // 'loading' | 'ready' | 'none' (not analyzed / no id)
     if (entry.id != null) {
       if (!state.clipTags.has(entry.id)) {
-        state.clipTags.set(entry.id, []); // placeholder so we don't refetch while the real request is in flight
+        clipState = 'loading';
+        state.clipTags.set(entry.id, null); // placeholder so we don't refetch while the real request is in flight
         invoke('catalog_clip_tags', { photoId: entry.id })
           .then((hits) => { state.clipTags.set(entry.id, hits || []); if (state.showInfo) renderInfoPanel(); })
-          .catch(() => {});
+          .catch(() => { state.clipTags.set(entry.id, []); });
       } else {
-        const suggestions = (state.clipTags.get(entry.id) || []).filter((h) => !kwSet.has(h.term));
-        if (suggestions.length) {
-          suggestChips = `<div style="margin-top:8px"><div style="color:var(--mut);margin-bottom:4px">Suggested</div>`
-            + `<div id="lib-info-suggest-chips" style="display:flex;flex-wrap:wrap;gap:4px">`
-            + suggestions.map((h) => `<span class="lib-kw-suggest-chip" data-suggest="${esc(h.term)}" title="${Math.round(h.score * 100)}% match">`
-              + `${esc(h.term)}<span class="lib-kw-suggest-chip-add">+</span></span>`).join('')
-            + `</div></div>`;
-        }
+        const hits = state.clipTags.get(entry.id);
+        if (hits === null) clipState = 'loading';
+        else if (hits.length) { clipState = 'ready'; hits.forEach((h) => pushSugg(h.term, `${Math.round(h.score * 100)}% match`, 'ai')); }
       }
     }
+    // Library keywords this photo's neighbours in the current view already carry — the usual
+    // "same shoot, same tags" case — ranked by how many of them use it.
+    {
+      const counts = new Map();
+      for (const e of (state.entries || []).slice(0, 400)) {
+        if (e.path === path) continue;
+        for (const k of ((state.sidecars.get(e.path) || {}).keywords || [])) counts.set(k, (counts.get(k) || 0) + 1);
+      }
+      [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6)
+        .forEach(([k, n]) => { if (!kwLeaves.has(k.split('|').pop().toLowerCase())) pushSugg(k, `Used on ${n} photo${n > 1 ? 's' : ''} in this view`, 'kw'); });
+    }
+    const suggIcon = (kind) => kind === 'place' ? ic('pin', 11) : '';
+    const suggestChips = `<div class="lib-info-sec"><div class="lib-info-sec-h"><span>Suggested</span>`
+      + (clipState === 'none' && entry.id != null ? `<button class="lib-info-link" id="lib-info-analyze" title="Let the AI look at this photo and suggest keywords">Analyze photo</button>` : '')
+      + `</div>`
+      + (sugg.length
+        ? `<div id="lib-info-suggest-chips" style="display:flex;flex-wrap:wrap;gap:4px">`
+          + sugg.slice(0, 12).map((h) => `<span class="lib-kw-suggest-chip" data-suggest="${esc(h.term)}" title="${esc(h.title)} — click to add">`
+            + `${suggIcon(h.kind)}${esc(h.term.split('|').pop())}<span class="lib-kw-suggest-chip-add">+</span></span>`).join('')
+          + `</div>`
+        : `<div class="lib-info-hint">${clipState === 'loading' ? 'Looking for suggestions…'
+          : entry.id == null ? 'Add this folder to the library to get suggestions.'
+          : 'No suggestions yet — analyze the photo to get some.'}</div>`)
+      + `</div>`;
     // Autocomplete against every keyword path already known to the catalog — best-effort
     // (keywordTree only refreshes on the same cadence as the rest of the catalog, i.e. on
     // scan/folder-open, matching how ratings/labels already lag one scan behind a foreign
@@ -6758,9 +6902,10 @@
       + row('Date', m.date) + row('Camera', m.camera) + row('Lens', m.lens)
       + row('ISO', m.iso) + row('Shutter', m.shutter) + row('Aperture', m.aperture)
       + row('Focal', m.focal_len) + row('Size', fmt(entry.size))
+      + row('Location', place)
       + row('Label', sc.label) + row('Edited', sc.edited ? 'Yes' : '')
-      + `<div style="margin-top:8px"><div style="color:var(--mut);margin-bottom:4px">Keywords</div>`
-      + `<div id="lib-info-kw-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px">${kwChips}</div>`
+      + `<div class="lib-info-sec"><div class="lib-info-sec-h"><span>Keywords</span>${(sc.keywords || []).length ? `<span>${sc.keywords.length}</span>` : ''}</div>`
+      + `<div id="lib-info-kw-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${kwChips || '<span class="lib-info-hint">No keywords yet.</span>'}</div>`
       + `<input id="lib-info-kw-add" list="lib-kw-datalist" placeholder="Add keyword…" `
       + `style="width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;border-radius:5px;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt)">`
       + `<datalist id="lib-kw-datalist">${kwOptions}</datalist></div>`
@@ -6774,6 +6919,14 @@
     el.querySelectorAll('[data-suggest]').forEach((x) => {
       x.onclick = (e) => { e.stopPropagation(); addKeywordToPhoto(path, x.dataset.suggest); };
     });
+    const an = document.getElementById('lib-info-analyze');
+    if (an) an.onclick = async (e) => {
+      e.stopPropagation();
+      an.disabled = true; an.textContent = 'Analyzing…';
+      try { await invoke('catalog_clip_embed', { photoIds: [entry.id] }); } catch (err) { toast('Could not analyze this photo'); }
+      state.clipTags.delete(entry.id);
+      if (state.showInfo) renderInfoPanel();
+    };
     const addInput = document.getElementById('lib-info-kw-add');
     if (addInput) {
       addInput.onkeydown = (e) => {
@@ -7897,14 +8050,20 @@
   const searchInput = overlay.querySelector('#lib-search');
   searchInput.oninput = (e) => {
     clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(() => { state.search = e.target.value.toLowerCase(); renderGrid(); }, 150);
+    searchDebounce = setTimeout(() => { state.search = e.target.value.toLowerCase(); renderGrid(); renderSearchSuggest(e.target.value); }, 150);
   };
+  searchInput.onfocus = () => { if (!placeList.length) refreshPlaces(); renderSearchSuggest(searchInput.value); };
+  searchInput.onblur = () => { const b = document.getElementById('lib-search-suggest'); if (b) b.hidden = true; };
   // AI stack Phase D: Enter runs a semantic (CLIP) search over the whole catalog instead of the
   // live filename filter oninput already does — a deliberately different gesture (type-to-filter
   // vs press-Enter-to-search) so the common case (narrowing the current view by filename) stays
   // instant with no round trip, and the AI search is opt-in per query, not a live-as-you-type
   // model call on every keystroke.
-  searchInput.onkeydown = (e) => { if (e.key === 'Enter' && searchInput.value.trim()) runClipTextSearch(searchInput.value.trim()); };
+  searchInput.onkeydown = (e) => {
+    const b = document.getElementById('lib-search-suggest');
+    if (e.key === 'Escape' && b) b.hidden = true;
+    if (e.key === 'Enter' && searchInput.value.trim()) { if (b) b.hidden = true; runClipTextSearch(searchInput.value.trim()); }
+  };
 
   // ── view options: view mode, sort, thumb size, metadata display, source ─────────────────
   const viewSeg = overlay.querySelector('#lib-viewmode-seg');
@@ -8024,6 +8183,21 @@
     hideIconsOpt.classList.toggle('sel', state.hideIcons);
     overlay.classList.toggle('lib-hide-icons', state.hideIcons);
   };
+  const matOpt = overlay.querySelector('#lib-mat');
+  matOpt.classList.toggle('sel', !!state.gridMat);
+  if (grid) grid.classList.toggle('lib-mat', state.gridMat);
+  matOpt.onclick = () => {
+    state.gridMat = !state.gridMat;
+    localStorage.setItem('chromasmith_lib_mat', state.gridMat ? '1' : '0');
+    matOpt.classList.toggle('sel', state.gridMat);
+    const g = document.getElementById('lib-grid');
+    if (g) g.classList.toggle('lib-mat', state.gridMat);
+  };
+  {
+    let q = false;
+    const lm = overlay.querySelector('#lib-main');
+    if (lm) lm.addEventListener('scroll', () => { if (q) return; q = true; requestAnimationFrame(() => { q = false; gridTitleUpdate(); }); }, { passive: true });
+  }
   const zeroGapOpt = overlay.querySelector('#lib-zerogap');
   zeroGapOpt.classList.toggle('sel', !!state.zeroGap);
   if (grid) grid.classList.toggle('lib-zero-gap', state.zeroGap);
@@ -8584,6 +8758,7 @@
     invoke('catalog_date_counts').then((counts) => { dateCounts = counts; renderCollections(); }).catch(() => {});
     invoke('catalog_volumes').then((vols) => { catalogVolumes = vols || []; renderCollections(); }).catch(() => {});
     invoke('catalog_keywords').then((nodes) => { keywordTree = nodes || []; renderCollections(); }).catch(() => {});
+    refreshPlaces();
     refreshPeople();
     refreshCacheUsage();
   }
@@ -8645,6 +8820,61 @@
   /// new `photoIds` override filter (mirrors `expandStack`'s own override shape) fetches the real
   /// grid rows for those exact ids. SQL's `IN (...)` does not preserve input order, so the
   /// returned entries are re-sorted here by the score list — the whole point of a ranked search.
+  /// Live (type-to-filter) match: filename, where the photo was taken, or any keyword segment —
+  /// so typing "london" narrows the view to London photos without pressing Enter.
+  function entryMatchesSearch(entry, sc, q) {
+    if (entry.name.toLowerCase().includes(q)) return true;
+    const place = entry.place || (state.meta.get(entry.path) || {}).place;
+    if (place && place.toLowerCase().includes(q)) return true;
+    return (sc.keywords || []).some((k) => k.toLowerCase().includes(q));
+  }
+
+  let placeList = []; // [{place, count}] from catalog_places — refreshed with the keyword tree
+  function refreshPlaces() { invoke('catalog_places').then((p) => { placeList = p || []; }).catch(() => {}); }
+
+  /// Suggestions under the search box: places (with photo counts) and keywords whose name
+  /// contains the typed text. Picking one runs the full search for it.
+  function renderSearchSuggest(q) {
+    const box = document.getElementById('lib-search-suggest');
+    if (!box) return;
+    q = (q || '').trim().toLowerCase();
+    if (!q) { box.hidden = true; box.innerHTML = ''; return; }
+    // Collapse "London, Greater London, …" rows into one entry per matching name segment.
+    const places = new Map();
+    for (const { place, count } of placeList) {
+      const parts = place.split(', ');
+      const hit = parts.find((seg) => seg.toLowerCase().includes(q));
+      if (!hit) continue;
+      const i = parts.indexOf(hit);
+      const label = parts.slice(i, i + 1).concat(parts.slice(-1)).filter((v, j, a) => a.indexOf(v) === j).join(', ');
+      const cur = places.get(label) || { term: hit, count: 0 };
+      cur.count += count;
+      places.set(label, cur);
+    }
+    const placeRows = [...places.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, 5)
+      .map(([label, v]) => ({ kind: 'place', label, term: v.term, count: v.count }));
+    const kwRows = keywordTree.filter((n) => n.leaf && n.leaf.toLowerCase().includes(q)).slice(0, 5)
+      .map((n) => ({ kind: 'kw', label: n.path.split('|').join(' › '), term: n.leaf }));
+    const rows = [...placeRows, ...kwRows];
+    const all = { kind: 'ai', label: `Photos that look like “${q}”`, term: q };
+    box.innerHTML = [...rows, all].map((r, i) => `<div class="lib-ss-row" data-ss="${i}" data-kind="${r.kind}">`
+      + `<span class="lib-ss-ic">${r.kind === 'place' ? ic('pin', 13) : r.kind === 'kw' ? ic('tag', 13) : ic('search', 13)}</span>`
+      + `<span class="lib-ss-label">${esc(r.label)}</span>`
+      + (r.count ? `<span class="lib-ss-n">${r.count}</span>` : '') + `</div>`).join('');
+    box.hidden = false;
+    const list = [...rows, all];
+    box.querySelectorAll('[data-ss]').forEach((el) => {
+      el.onmousedown = (e) => {
+        e.preventDefault();
+        const r = list[+el.dataset.ss];
+        const input = document.getElementById('lib-search');
+        if (input) input.value = r.term;
+        box.hidden = true;
+        runClipTextSearch(r.term);
+      };
+    });
+  }
+
   async function runClipTextSearch(text) {
     state.source = 'catalog';
     state.catalogScope = `search:${text}`;
@@ -8655,9 +8885,37 @@
     state.search = '';
     const grid = document.getElementById('lib-grid');
     grid.innerHTML = libSkeletonHtml();
-    let hits;
-    try { hits = await invoke('catalog_clip_search', { text, limit: 200 }); }
-    catch (e) { grid.innerHTML = '<div id="lib-empty">Could not search photos.</div>'; return; }
+    // Two kinds of result, exact first: photos whose place / keyword / filename contains the
+    // text ("london" -> every photo GPS-tagged in London), then photos CLIP thinks LOOK like it
+    // (landmarks, "dog on a beach") — the "and any that could be" half.
+    let hits = [];
+    let exact = [];
+    const [clipRes, exactRes] = await Promise.allSettled([
+      invoke('catalog_clip_search', { text, limit: 200 }),
+      invoke('catalog_query', { q: { text } }),
+    ]);
+    if (clipRes.status === 'fulfilled') hits = clipRes.value || [];
+    if (exactRes.status === 'fulfilled') exact = (exactRes.value && exactRes.value.entries) || [];
+    if (clipRes.status === 'rejected' && exactRes.status === 'rejected') { grid.innerHTML = '<div id="lib-empty">Could not search photos.</div>'; return; }
+    if (exact.length) {
+      const exactIds = new Set(exact.map((e) => e.id));
+      const extraIds = hits.map((h) => h.id).filter((id) => !exactIds.has(id));
+      let extra = [];
+      if (extraIds.length) {
+        try {
+          const page = await invoke('catalog_query', { q: { photoIds: extraIds } });
+          const order = new Map(extraIds.map((id, i) => [id, i]));
+          extra = page.entries.slice().sort((a, b) => (order.get(a.id) ?? 1e9) - (order.get(b.id) ?? 1e9));
+        } catch (e) {}
+      }
+      state.entries = [...exact, ...extra];
+      toast(`${exact.length} matching “${text}”` + (extra.length ? ` · ${extra.length} that look similar` : ''));
+      const paths = state.entries.filter((e) => !e.offline).map((e) => e.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+      await renderGrid();
+      renderCollections();
+      return;
+    }
     if (!hits.length) {
       // Bug #1 fix: catalog_clip_search now drops photos scoring below a real minimum-similarity
       // cutoff (see catalog.rs's CLIP_SEARCH_MIN_SCORE), so an empty result is no longer proof
