@@ -1712,7 +1712,7 @@
     /* Preview -> full-resolution swap in progress: a soft pulsing accent border on the photo so
        the user can see the sharper version is still loading. Removed the moment it lands. */
     #fx-zoom-wrap.lib-full-loading::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;
-      border-radius:2px;box-shadow:inset 0 0 0 2px var(--acc,#7aa2ff);
+      border-radius:2px;box-shadow:inset 0 0 0 2px var(--k-color-ink,var(--txt));
       opacity:.35;animation:lib-full-glow 1.1s ease-in-out infinite alternate}
     @keyframes lib-full-glow{from{opacity:.2}to{opacity:.85}}
     @media (prefers-reduced-motion:reduce){#fx-zoom-wrap.lib-full-loading::after{animation:none;opacity:.6}}
