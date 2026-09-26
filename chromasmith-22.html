@@ -2060,16 +2060,20 @@ body.deskx #lib-overlay:not(.full) .lib-card:not(:hover):not(.sel):not(.multi) i
 ::-webkit-scrollbar-thumb{border-radius:0}
 :hover::-webkit-scrollbar-thumb,.fx-scrolling::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--k-color-ink) 28%,transparent)}
 ::-webkit-scrollbar-thumb:hover{background:var(--k-color-ink)}
-/* Tool rail: bold labels; the chosen tool sits on an accent-A slab (approved iconSelected
-   "slab"), hovering wipes one in and turns the glyph (iconHover "slabturn"). */
+/* Tool rail (playground 2026-09-26 picks): short uppercase codes, the open tool gets an accent-A
+   hairline outline, a tool that is switched on (doing something to the photo) sits on a grey tone,
+   and hovering tilts the glyph 45 degrees. */
 .fx-rail-btn{position:relative;isolation:isolate;color:var(--k-color-muted);font-weight:700;background:none!important;transition:color var(--k-motion-hover)}
-.fx-rail-btn::before,body.deskx .fx-rail-btn.on::before{content:'';display:block;position:absolute;z-index:-1;width:auto;left:calc(var(--k-offset-x)*.5);right:calc(var(--k-offset-x)*-.5);
-  top:var(--k-offset-slab-top);bottom:calc(var(--k-offset-y)*-.5);background:var(--k-color-accent-a);transform:scaleX(0);transform-origin:left;
-  transition:transform var(--k-motion-hover) var(--k-motion-easing);pointer-events:none}
-.fx-rail-btn:hover::before,.fx-rail-btn.on::before,body.deskx .fx-rail-btn.on::before{transform:scaleX(1)}
-.fx-rail-btn:hover,.fx-rail-btn.on{color:#fff}
+.fx-rail-btn::before,body.deskx .fx-rail-btn.on::before{content:'';display:block;position:absolute;z-index:-1;left:3px;right:3px;top:2px;bottom:2px;width:auto;border-radius:0;
+  background:none;outline:1px solid transparent;outline-offset:-1px;transition:outline-color var(--k-motion-hover),background var(--k-motion-hover);pointer-events:none}
+.fx-rail-btn.enabled,.fx-rail-btn.enabled .fx-rail-ic{color:var(--k-color-ink)}
+.fx-rail-btn.enabled::before{background:color-mix(in srgb,var(--k-color-ink) 12%,transparent)}
+.fx-rail-btn.on::before,body.deskx .fx-rail-btn.on::before{outline-color:var(--k-color-accent-a)}
+.fx-rail-btn:hover,.fx-rail-btn.on{color:var(--k-color-ink)}
 .fx-rail-btn svg{transition:transform var(--k-motion-duration) var(--k-motion-easing)}
-.fx-rail-btn:hover:not(.on) svg{transform:rotate(90deg)}
+.fx-rail-btn:hover:not(.on) svg{transform:rotate(-45deg)}
+#fx-toolrail .fx-rail-lb[data-ab]{font-size:0;text-transform:uppercase}
+#fx-toolrail .fx-rail-lb[data-ab]::after{content:attr(data-ab);font-size:9px;letter-spacing:.14em}
 /* Toast: page-colour block, hairline ink border, hard accent-B offset. */
 #fx-toast{background:var(--k-color-bg);-webkit-backdrop-filter:none;backdrop-filter:none;border:1px solid var(--k-color-ink);box-shadow:var(--k-offset-x) var(--k-offset-y) 0 var(--k-color-accent-b)}
 /* Looks grid: the chosen look gets an accent frame kicked up-right with an accent-B block. */
@@ -5644,7 +5648,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926Q';
+const BUILD='1.0926R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22496,6 +22500,8 @@ function buildSecNav(){          // mobile categorized tool grid
   fxMobileFilter(_fxMobileCat);
   fxSection(_activeSec()||(window.__TAURI__?'looks':'image'),true);
 }
+// Short uppercase codes shown under the rail icons (full name stays in the tooltip + a11y text).
+const RAIL_CODE={image:'IMG',looks:'LK',adjust:'ADJ',color:'COL',detail:'DET',retouch:'RET',crop:'CRP',local:'MSK',film:'FLM',frame:'FRM',exportgrp:'EXP',info:'INF',diag:'DIA'};
 function buildToolRail(){        // desktop vertical labelled rail
   const rail=document.getElementById('fx-toolrail');if(!rail)return;
   rail.innerHTML='';
@@ -22515,7 +22521,8 @@ function buildToolRail(){        // desktop vertical labelled rail
       const sep=document.createElement('i');sep.className='fx-rail-sep';rail.appendChild(sep);
     }
     const b=document.createElement('button');b.className='fx-rail-btn';b.dataset.sec=bKey;
-    b.innerHTML=`<span class="fx-rail-ic">${icon(bIcon,22)}</span><span class="fx-rail-lb">${bLb}</span>`;
+    b.title=bLb;
+    b.innerHTML=`<span class="fx-rail-ic">${icon(bIcon,22)}</span><span class="fx-rail-lb" data-ab="${RAIL_CODE[bKey]||bLb.slice(0,3).toUpperCase()}">${bLb}</span>`;
     b.onclick=()=>fxSection(bKey);
     rail.appendChild(b);
   });
