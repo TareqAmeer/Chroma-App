@@ -5648,7 +5648,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926S';
+const BUILD='1.0926T';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9248,14 +9248,17 @@ let lastUploadedLUT=null; // {name,lut} — most recent .cube upload, candidate 
 function prettyLUT(k){return k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());}
 // Built-in LUT category order for grouped UI (dropdown optgroups + Looks gallery sections).
 // LUT_META maps key -> category string; keys missing from LUT_META fall into "Other".
-const LUT_CATEGORY_ORDER=['User Looks','C41 Still','Cinema','Reversal','Instant','Niche','B&W','Film','Other'];
+const LUT_CATEGORY_ORDER=['User Looks','C41 Still','Cinema','Reversal','Instant','Niche','B&W','Film','Spektrafilm','Other'];
 // ⚠️ Iterates LUT_META, NOT LUT_PRESETS: since the split (calib/split_lut_presets.py) only the
 // core looks are still inline, so LUT_PRESETS is no longer the list of built-in presets — it is
 // the list of presets that happen not to need a fetch. LUT_META is the authoritative key list.
 function groupedLutKeys(){
   const byCat={};
   Object.keys(typeof LUT_META!=='undefined'?LUT_META:LUT_PRESETS).forEach(k=>{
-    const cat=(typeof LUT_META!=='undefined'&&LUT_META[k])||'Other';
+    // A category missing from LUT_CATEGORY_ORDER used to drop its looks from every menu
+    // silently (all 20 Spektrafilm stocks vanished that way) — file it under Other instead.
+    let cat=(typeof LUT_META!=='undefined'&&LUT_META[k])||'Other';
+    if(!LUT_CATEGORY_ORDER.includes(cat))cat='Other';
     (byCat[cat]=byCat[cat]||[]).push(k);
   });
   return LUT_CATEGORY_ORDER.map(cat=>[cat,byCat[cat]||[]]).filter(([,ks])=>ks.length);
