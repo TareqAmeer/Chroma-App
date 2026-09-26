@@ -1825,6 +1825,37 @@ body.deskx #lib-overlay .lib-side-tabs{display:none}
 #lib-overlay .lib-menu .opt .check,#lib-overlay .lib-menu button.opt-toggle .check,.fx-ovf-item .fx-ovf-check{stroke:var(--k-color-accent-a);color:var(--k-color-accent-a)}
 #lib-overlay .lib-menu .opt:hover .check,#lib-overlay .lib-menu button.opt-action:hover .check,.fx-settings-cat:hover .check,.fx-ovf-item:hover .check,.fx-ovf-item:hover .fx-ovf-check{stroke:#fff;color:#fff}
 @media (prefers-reduced-motion:reduce){#lib-overlay .lib-menu.open,#fx-settings-menu.open,.fx-bgmenu.open,#fx-settings-menu.on,.fx-bgmenu{animation:none}#lib-overlay .lib-menu .opt::before,#lib-overlay .lib-menu button.opt-action::before,.fx-settings-cat::before,.fx-ovf-item::before{transition:none}}
+/* ── Swiss Kinetic: section card (prototype .k-card) ──
+   No panel fill or radius; a 1.5px ink rule on top, bold 11px tracked uppercase header that
+   takes an ink-11% wash on hover; chevron turns on the approved spring timing. */
+.fx-ctrl{background:transparent;border-radius:0;border-top:var(--bw-1) solid var(--k-color-ink);padding-top:3px;box-shadow:none}
+.fx-ctrl-title{font-weight:700;font-size:11px;letter-spacing:.14em;color:var(--k-color-ink);margin-left:-8px;margin-right:-8px;padding:7px 8px;transition:background var(--k-motion-hover)}
+.fx-ctrl-title:hover{background:color-mix(in srgb,var(--k-color-ink) 11%,transparent)}
+.fx-ctrl-chev{transition:transform var(--k-motion-duration) var(--k-motion-easing)}
+/* ── Swiss Kinetic: search (prototype .k-search) ──
+   Square box, 1.5px line border that goes ink while focused; an accent-A square pops in behind
+   the magnifier on hover/focus and the glyph lifts off it by a quarter offset. Placeholder is
+   bold tracked uppercase. */
+#lib-overlay .lib-search-wrap{position:relative;isolation:isolate;border-radius:0!important;border:var(--bw-1) solid var(--bdr);background:var(--k-color-bg)!important;padding-left:10px;overflow:visible}
+#lib-overlay .lib-search-wrap:focus-within{border-color:var(--k-color-ink)}
+#lib-overlay .lib-search-wrap::before{content:'';display:block;position:absolute;z-index:-1;left:calc(10px + var(--k-offset-x)*.25);top:50%;width:14px;height:14px;margin-top:calc(-7px + var(--k-offset-y)*.25);
+  background:var(--k-color-accent-a);transform:scale(0);transition:transform var(--k-motion-hover) var(--k-motion-easing)}
+#lib-overlay .lib-search-wrap:is(:hover,:focus-within)::before{transform:none}
+#lib-overlay .lib-search-wrap svg{transition:transform var(--k-motion-hover) var(--k-motion-easing),stroke var(--k-motion-hover)}
+#lib-overlay .lib-search-wrap:is(:hover,:focus-within) svg{stroke:var(--k-color-ink);transform:translate(calc(var(--k-offset-x)*-.25),calc(var(--k-offset-y)*-.25))}
+#lib-overlay .lib-search-wrap input{color:var(--k-color-ink)}
+#lib-overlay .lib-search-wrap input::placeholder{color:var(--k-color-muted);text-transform:uppercase;letter-spacing:.12em;font-size:10px;font-weight:700}
+/* ── Swiss Kinetic: info button (prototype .k-info) ──
+   A 16px muted square (not a circle) that floods accent B with a white glyph on hover. */
+.fx-info-i{width:16px;height:16px;border-radius:0;border:1px solid var(--k-color-muted);color:var(--k-color-muted);font-weight:700;font-style:normal;font-size:10px;
+  transition:background var(--k-motion-hover),border-color var(--k-motion-hover),color var(--k-motion-hover)}
+.fx-info-i:hover,.fx-info-i:focus-visible{background:var(--k-color-accent-b);border-color:var(--k-color-accent-b);color:#fff}
+/* ── Swiss Kinetic: control row (prototype .k-row) ──
+   Muted label, ink value readout in tabular figures; a modified row's label goes ink. */
+.fx-row>label{color:var(--k-color-muted)}
+.fx-row.fx-mod>label{color:var(--k-color-ink)}
+.fx-val{color:var(--k-color-ink);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){#lib-overlay .lib-search-wrap::before,#lib-overlay .lib-search-wrap svg,.fx-ctrl-chev,.fx-ctrl-title{transition:none}}
 </style>
 </head>
 <body>
@@ -5371,7 +5402,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926L';
+const BUILD='1.0926M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
