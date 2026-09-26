@@ -549,6 +549,14 @@ body[data-railtg=edge] .rail .opt.tg::after{width:2px;top:6px;bottom:6px;right:0
 body[data-railtg=tint] .rail .opt.tg svg.ti .t,body[data-railtg=tint] .rail .opt.tg svg.ti .t2{fill:var(--cb);fill-opacity:1}
 body[data-railtg=tint] .rail .opt.tg svg.ti g[clip-path]{stroke:var(--cb)}
 body[data-railtg=under] .rail .opt.tg .ic::after{content:'';position:absolute;left:3px;right:3px;bottom:-4px;height:1px;background:var(--cb)}
+.ia{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));border-top:1px solid var(--line);border-left:1px solid var(--line)}
+.ia .c{border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg);padding:12px 12px 10px;display:grid;grid-template-columns:auto auto 1fr;gap:10px;align-items:center}
+.ia .c b{grid-column:1/-1;font:600 10px/1 var(--f);letter-spacing:.06em;color:var(--mut)}
+.ia svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-linecap:square;stroke-linejoin:miter}
+.ia svg.old{color:var(--mut);opacity:.55;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;width:18px;height:18px}
+.ia svg.ti{stroke-width:var(--ti-sw)}
+.ia .sm{width:16px;height:16px}
+.ia .c:hover{background:color-mix(in srgb,var(--ink) 5%,var(--bg))}
 </style>
 </head>
 <body data-dim="off" data-slab="stepped" data-sel="slab" data-side="fill" data-menu="slab" data-italic="primary" data-bw="on" data-win="tint" data-tg="flip" data-icb="none" data-icsel="slab" data-thhv="offset" data-dot="moved">
@@ -789,10 +797,18 @@ body[data-railtg=under] .rail .opt.tg .ic::after{content:'';position:absolute;le
   </div>
 </section>
 
+<section class="sec zone">
+  <div class="eyebrow"><b>09</b> Every app icon · E4 constructivist lines</div>
+  <h2>Icon set for review</h2>
+  <p class="note">All 75 icons the app draws (72 in the Editor set, plus the Library's filters, unflagged and edited-badge glyphs). Each cell: today's icon (faded), the E4 redraw at 24px and at 16px. Line weight follows the Tool rail slider. Use Add a note on any cell to flag one.</p>
+  <div class="ia" id="ia"></div>
+</section>
+
 </main>
 
 <script src="bars.js"></script>
 <script src="toolicons.js"></script>
+<script src="e4icons.js"></script>
 <script>
 (() => {
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -1190,6 +1206,7 @@ $('#fams').innerHTML = '<span></span>' + TOOL_RAIL.map(([, lb]) => `<span class=
   Object.entries(ICON_FAMILIES).map(([f, d]) => `<div class="row" data-f="${f}"><span class="fn">${d.name}</span>${TOOL_RAIL.map(([k]) => `<span class="cell" title="${d.name} · ${k}">${tiSvg(f, k)}</span>`).join('')}</div>`).join('');
 $('#fams').addEventListener('click', (e) => { const r = e.target.closest('.row'); if (!r) return; S.attrs.iconset = r.dataset.f; $('#dock [data-attr=iconset]').value = r.dataset.f; apply(); save(); snap(); });
 $('#rail').addEventListener('dblclick', (e) => { const o = e.target.closest('.opt'); if (o) { o.classList.toggle('tg'); snap(); } });
+$('#ia').innerHTML = Object.keys(E4_ICONS).map((k) => `<div class="c" title="${k}"><b>${k}</b><svg class="old" viewBox="0 0 24 24">${APP_ICONS[k]}</svg><svg class="ti" viewBox="0 0 24 24">${E4_ICONS[k]}</svg><svg class="ti sm" viewBox="0 0 24 24">${E4_ICONS[k]}</svg></div>`).join('');
 function paintRail() {
   const f = ICON_FAMILIES[S.attrs.iconset] ? S.attrs.iconset : 'current';
   $$('#rail .opt').forEach((o) => { $('.ic', o).innerHTML = tiSvg(f, o.dataset.k); });
