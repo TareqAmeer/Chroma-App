@@ -1744,6 +1744,21 @@ body.deskx #lib-overlay .lib-side-tabs{display:none}
 #lib-overlay .lib-iconchip.lib-sel{box-shadow:none!important}
 @media (prefers-reduced-motion:reduce){.btn-icon::after,#lib-overlay .lib-btn-icon::after,#lib-overlay .lib-iconchip::after,.btn-icon svg,#lib-overlay .lib-btn-icon svg,#lib-overlay .lib-iconchip svg{transition:none}
   .btn-icon:hover svg,#lib-overlay .lib-btn-icon:hover svg,#lib-overlay .lib-iconchip:hover svg{transform:none}}
+/* ── Swiss Kinetic: slider (prototype .k-sl) ──
+   Square thumb on the page colour with a --k-slider-thumb-border ink ring, rolling with the value
+   (fxPaintSlider's --sl-roll); fills accent A on hover and whenever the value is off its default
+   (.fx-knob-on). Track is a hairline with the moved span in accent A. The default marker is a
+   small ink dot above the track at --sl-def-pct, shown only once the slider has moved
+   (variant sliderResetDot "moved"); double-click resets (initSliderErgonomics). */
+.fx-slider{background:radial-gradient(circle,var(--k-color-ink) 0 1.6px,transparent 2.1px) no-repeat calc(var(--sl-def-pct,0%) + (var(--ctl-slider-thumb)/2) - (var(--sl-def-pct,0%) * var(--ctl-slider-thumb) / 100%) - 2.5px) 0/5px 5px}
+.fx-slider:not(.fx-knob-on){background-size:0 0}
+.fx-slider::-webkit-slider-runnable-track{border-radius:0;background:linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--k-color-accent-a) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
+.fx-slider::-moz-range-track{border-radius:0;background:linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--k-color-accent-a) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
+.fx-slider::-webkit-slider-thumb{background:var(--k-color-bg);border:var(--k-slider-thumb-border) solid var(--k-color-ink);border-radius:0;box-shadow:none;transition:transform 80ms linear,background var(--k-motion-hover)}
+.fx-slider::-moz-range-thumb{background:var(--k-color-bg);border:var(--k-slider-thumb-border) solid var(--k-color-ink);border-radius:0;box-shadow:none;transition:transform 80ms linear,background var(--k-motion-hover)}
+.fx-slider:hover::-webkit-slider-thumb,.fx-slider.fx-knob-on::-webkit-slider-thumb,.fx-row.fx-mod .fx-slider::-webkit-slider-thumb{background:var(--knob,var(--k-color-accent-a));box-shadow:none}
+.fx-slider:hover::-moz-range-thumb,.fx-slider.fx-knob-on::-moz-range-thumb,.fx-row.fx-mod .fx-slider::-moz-range-thumb{background:var(--knob,var(--k-color-accent-a))}
+@media (prefers-reduced-motion:reduce){.fx-slider::-webkit-slider-thumb{transform:none;transition:none}.fx-slider::-moz-range-thumb{transform:none;transition:none}}
 </style>
 </head>
 <body>
@@ -5290,7 +5305,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926H';
+const BUILD='1.0926I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
