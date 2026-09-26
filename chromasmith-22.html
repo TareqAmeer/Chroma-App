@@ -263,7 +263,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .bpri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600;box-shadow:inset 0 1px 0 var(--scrim-w1),0 1px 2px var(--scrim-b1)}
 .bpri:not(:disabled):hover{filter:brightness(1.15)}
 .bsec{background:transparent;border-color:var(--acc2);color:var(--acc2)}.bsec:not(:disabled):hover{background:var(--tint-2)}
-.bgh{background:var(--sur2);border-color:var(--bdr);color:var(--mut)}.bgh:not(:disabled):hover{border-color:var(--txt);color:var(--txt);background:var(--sur)}.bgh.on{border-color:#61a0af;color:#fff;background:#61a0af}
+.bgh{background:var(--sur2);border-color:var(--bdr);color:var(--mut)}.bgh:not(:disabled):hover{border-color:var(--txt);color:var(--txt);background:var(--sur)}.bgh.on{border-color:var(--k-color-accent-a);color:#fff;background:var(--k-color-accent-a)}
 /* .bdot removed: a decorative leading dot on every single button, carrying no meaning and
    pushing every label off-centre. State is now shown by the button's own .on treatment. */
 .pb{height:3px;background:var(--bdr);border-radius:2px;margin-top:var(--sp-2);overflow:hidden;display:none}
@@ -568,7 +568,7 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .fx-row input[type=checkbox]{width:18px;height:18px;accent-color:var(--acc);cursor:pointer;flex:0 0 auto;margin:var(--sp-1) 6px var(--sp-1) 0}
 /* ══ FOCUS ═══════════════════════════════════════════════════════════════════════════════════
    There was no visible focus state anywhere in the app — keyboard navigation was invisible. */
-:where(button,input,select,textarea,[tabindex]):focus-visible{outline:var(--bw-2) solid rgba(97,160,175,.55);outline-offset:2px;border-radius:4px}
+:where(button,input,select,textarea,[tabindex]):focus-visible{outline:var(--bw-2) solid var(--k-color-accent-a);outline-offset:2px;border-radius:0}
 /* ══ MOTION ══════════════════════════════════════════════════════════════════════════════════
    Every transition/animation in the file is opt-out here. The app previously honoured no
    reduced-motion preference at all. */
@@ -1120,11 +1120,11 @@ body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:
 .fx-undogrp{display:inline-flex;flex:0 0 auto;gap:2px}
 .fx-undogrp .fx-db{border-radius:8px}
 .fx-db .fx-db-ic{display:inline-flex;color:var(--mut)}
-/* Editor (Developer) View.dc.html:46's .btn-export uses --primary-on-dark (Mist Blue #61a0af),
+/* Editor (Developer) View.dc.html:46's .btn-export uses --primary-on-dark (Mist Blue originally; now the Swiss Kinetic accent A),
    not the app's own amber --acc brand color — per explicit decision, matched literally here. */
-.fx-db-pri{background:#61a0af;border-color:#61a0af;color:#10222a;font-weight:600;border-radius:9999px;height:28px}
+.fx-db-pri{background:var(--k-color-accent-a);border-color:var(--k-color-accent-a);color:#fff;font-weight:700;border-radius:0;height:28px}
 .fx-db-pri .fx-db-ic{color:#000}
-.fx-db-pri:hover{background:#61a0af}
+.fx-db-pri:hover{background:var(--k-color-accent-a)}
 .fx-db-icon{padding:8px;gap:0;justify-content:center}
 body.deskx .fx-db-icon{padding:var(--sp-1)}
 .flag-btn{width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:var(--r-sm);cursor:pointer;color:var(--mut);transition:color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
@@ -5402,7 +5402,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926M';
+const BUILD='1.0926N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
