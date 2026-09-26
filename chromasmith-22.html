@@ -1709,6 +1709,22 @@ body.deskx.mac-titlebar-overlay #fx-deskbar{padding-left:calc(84px + var(--cs-br
 body.deskx #lib-overlay #lib-top{padding-left:calc(12px + var(--cs-brand-w))}
 body.deskx.mac-titlebar-overlay #lib-overlay #lib-top{padding-left:calc(84px + var(--cs-brand-w))}
 body.deskx #lib-overlay .lib-side-tabs{display:none}
+/* ── Swiss Kinetic: button (design/prototypes/swiss-kinetic/index.html .k-btn, variant "jump") ──
+   Shared by the Editor (.btn/.bpri) and the Library (#lib-overlay .lib-btn). Square, hairline ink
+   border, bold uppercase label; hover lifts by half the offset and drops a hard accent-B block
+   (0 blur, the only shadow style allowed); primary fills accent A with an italic label. */
+.btn,#lib-overlay .lib-btn{border-radius:0!important;border:var(--k-border-button) solid var(--k-color-ink);background:transparent;color:var(--k-color-ink);
+  font-family:var(--sans);font-weight:700;text-transform:uppercase;letter-spacing:.01em;text-decoration:none;box-shadow:0 0 0 transparent;filter:none;
+  transition:transform var(--k-motion-hover) var(--k-motion-easing),box-shadow var(--k-motion-hover) var(--k-motion-easing),background var(--k-motion-hover),color var(--k-motion-hover)}
+.btn:hover:not(:disabled),#lib-overlay .lib-btn:hover:not(:disabled){transform:translate(calc(var(--k-offset-x)*-.5),calc(var(--k-offset-y)*-.5));
+  box-shadow:var(--k-offset-x) var(--k-offset-y) 0 var(--k-color-accent-b);filter:none;text-decoration:none}
+.btn:active:not(:disabled),#lib-overlay .lib-btn:active:not(:disabled){transform:translate(1px,1px);box-shadow:0 0 0 transparent}
+.bpri,#lib-overlay .lib-btn.on,#lib-overlay .lib-btn.lib-btn-export{background:var(--k-color-accent-a);border-color:var(--k-color-accent-a);color:#fff;font-style:italic}
+.bpri:not(:disabled):hover,#lib-overlay .lib-btn.on:hover,#lib-overlay .lib-btn.lib-btn-export:hover{background:var(--k-color-accent-a);border-color:var(--k-color-accent-a);filter:none}
+#lib-overlay .lib-btn.lib-btn-export svg{stroke:#fff}
+.btn:disabled,#lib-overlay .lib-btn:disabled{opacity:.35;transform:none;box-shadow:0 0 0 transparent}
+.btn:focus-visible,#lib-overlay .lib-btn:focus-visible{outline:var(--k-border-button) solid var(--k-color-accent-a);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.btn,#lib-overlay .lib-btn{transition:none}.btn:hover:not(:disabled),#lib-overlay .lib-btn:hover:not(:disabled){transform:none}}
 </style>
 </head>
 <body>
@@ -5255,7 +5271,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926E';
+const BUILD='1.0926F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16416,7 +16432,7 @@ function initZoomPan(){
   // Drag-to-pan (CSS zoom) OR drag-to-move the loupe crop
   let pd=null;
   zw.addEventListener('pointerdown',e=>{
-    if(_wbEyedropperActive||mskPaintMode))return;
+    if(_wbEyedropperActive||mskPaintMode)return;
     e.preventDefault();pd={x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
     _fxPreviewInteracting=true;  // E1: drag-pan never set this — see the wheel handler above
