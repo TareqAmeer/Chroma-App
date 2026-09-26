@@ -9412,8 +9412,9 @@
       confirmBtn.innerHTML = 'Add &amp; next';
     } else {
       const speciesHint = c.species ? ` · ${c.species[0].toUpperCase()}${c.species.slice(1)} detected` : '';
+      const tentHint = c.tentative ? ' · maybe the same person — click any that aren\'t' : '';
       const lookHint = c.suggested_name ? ` · looks like ${c.suggested_name} (${Math.round((c.suggested_similarity || 0) * 100)}%)` : '';
-      document.getElementById('lib-review-pos').textContent = `· cluster ${reviewState.idx + 1} of ${reviewState.clusters.length} · ${c.face_count} face${c.face_count === 1 ? '' : 's'}${speciesHint}${lookHint}`;
+      document.getElementById('lib-review-pos').textContent = `· cluster ${reviewState.idx + 1} of ${reviewState.clusters.length} · ${c.face_count} face${c.face_count === 1 ? '' : 's'}${speciesHint}${tentHint}${lookHint}`;
       // Pre-filled with the look-alike's name: Enter merges this group into them.
       nameInput.value = c.suggested_name || '';
       confirmBtn.innerHTML = 'Name &amp; next';
@@ -9450,6 +9451,19 @@
     if (!name) { toast('Type a name first'); return; }
     const selectedIds = c.face_ids.filter((id) => !reviewState.deselected.has(id));
     const excludedIds = c.face_ids.filter((id) => reviewState.deselected.has(id));
+    if (c.tentative) {
+      // A loose "maybe" group belongs to nobody yet: only the kept faces move; excluded ones
+      // simply stay unassigned.
+      if (!selectedIds.length) { reviewGoTo(reviewState.idx + 1); return; }
+      try {
+        const existing = peopleList.find((p) => !p.auto && p.name.toLowerCase() === name.toLowerCase());
+        await invoke('catalog_split_faces', { faceIds: selectedIds, intoId: existing ? existing.id : null, intoName: existing ? null : name });
+        await refreshPeople();
+        toast(`Named ${selectedIds.length} face${selectedIds.length === 1 ? '' : 's'} "${name}"`, true);
+        reviewGoTo(reviewState.idx + 1);
+      } catch (err) { toast(humanizeErr('confirm this person', err), 'err'); }
+      return;
+    }
     try {
       const existing = peopleList.find((p) => !p.auto && p.name.toLowerCase() === name.toLowerCase());
       if (excludedIds.length) await invoke('catalog_split_faces', { faceIds: excludedIds, intoId: null, intoName: null });
@@ -9469,6 +9483,7 @@
   async function reviewIgnoreCurrent() {
     const c = reviewState.clusters[reviewState.idx];
     if (!c || reviewState.suggest) return;
+    if (c.tentative) { reviewGoTo(reviewState.idx + 1); return; }
     try {
       await invoke('catalog_set_person_ignored', { personId: c.person_id, ignored: true });
       await refreshPeople();
@@ -9524,7 +9539,7 @@
     const p = peopleList.find((x) => x.id === id);
     if (!p) return;
     const items = [
-      ...(!p.auto && p.kind !== 'pet' ? [[`Find more photos of ${p.name}…`, () => openFindMore(p)]] : []),
+      ...(!p.auto ? [[`Find more photos of ${p.name}…`, () => openFindMore(p)]] : []),
       ['Rename…', async () => {
         const name = await window.askTextModal('Rename person', '', p.name);
         if (!name) return;

@@ -2897,7 +2897,7 @@ pub fn faces_run(
                         crate::bgwork::mark_current_thread_background();
                         let faces = crate::library::decode_rgb8_capped(&abs, DECODE_LONG_EDGE)
                             .ok()
-                            .and_then(|(rgb, w, h)| crate::scrfd::detect(&rgb, w, h).ok().map(|faces| (faces, w, h)))
+                            .and_then(|(rgb, w, h)| crate::scrfd::detect_multiscale(&rgb, w, h).ok().map(|faces| (faces, w, h)))
                             .map(|(faces, w, h)| {
                                 faces
                                     .into_iter()
@@ -3324,7 +3324,8 @@ pub fn pets_run(
 
         const DECODE_LONG_EDGE: u32 = 1600;
         const CHUNK: usize = 4; // same "stuck at 0%" fix faces_run's own comment explains
-        let mut detected: Vec<(i64, i64, Option<Vec<crate::petdetect::PetDetection>>)> = Vec::with_capacity(total_in_batch);
+        type PetHit = (crate::petdetect::PetDetection, Option<Vec<f32>>);
+        let mut detected: Vec<(i64, i64, Option<Vec<PetHit>>)> = Vec::with_capacity(total_in_batch);
         for chunk in batch.chunks(CHUNK) {
             progress(ScanProgress {
                 phase: "pets".into(),
@@ -3332,12 +3333,18 @@ pub fn pets_run(
                 total: base_scanned + total_in_batch,
                 current: photo_batch_current(chunk.iter().map(|(_, path, _)| path.clone())),
             });
-            let mut part: Vec<(i64, i64, Option<Vec<crate::petdetect::PetDetection>>)> = chunk
+            let mut part: Vec<(i64, i64, Option<Vec<PetHit>>)> = chunk
                 .par_iter()
                 .map(|(id, abs, mtime)| {
-                    let dets = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE)
-                        .ok()
-                        .and_then(|(rgb, w, h)| crate::petdetect::detect(&rgb, w, h).ok());
+                    let dets = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok().and_then(|(rgb, w, h)| {
+                        let dets = crate::petdetect::detect(&rgb, w, h).map_err(|e| eprintln!("pets: detect {abs}: {e}")).ok()?;
+                        // Each animal also gets a CLIP embedding of its own crop — what lets two
+                        // sightings of the same dog land in one group instead of "Pet 1..Pet 400".
+                        Some(dets.into_iter().map(|d| {
+                            let emb = pet_crop_embedding(&rgb, w, h, d.x0, d.y0, d.x1, d.y1);
+                            (d, emb)
+                        }).collect())
+                    });
                     (*id, *mtime, dets)
                 })
                 .collect();
@@ -3360,9 +3367,34 @@ pub fn pets_run(
                 .unwrap_or(None);
             max.unwrap_or(0) as usize + 1
         };
+        let mut groups = pet_groups(&tx)?;
         for (id, mtime, dets) in &detected {
             let Some(dets) = dets else { continue }; // unreadable right now — leave unscanned, retried next pass
-            for d in dets {
+            for (d, emb) in dets {
+                let emb_blob = emb.as_ref().map(|e| f32_vec_to_blob(e));
+                // Same animal as an existing group (named or not)? File it there, unconfirmed.
+                let join = emb.as_ref().and_then(|e| {
+                    groups
+                        .iter()
+                        .filter(|g| species_match(&g.1, d.species))
+                        .map(|g| (g.0, g.2.iter().map(|x| dot(e, x)).fold(f32::MIN, f32::max)))
+                        .filter(|(_, sim)| *sim >= PET_AUTO_JOIN_SIM)
+                        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                        .map(|(pid, _)| pid)
+                });
+                if let Some(person_id) = join {
+                    tx.execute(
+                        "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps, person_id, confirmed, species, embedding)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, '[]', ?7, 0, ?8, ?9)",
+                        params![id, d.x0, d.y0, d.x1, d.y1, d.score, person_id, d.species, emb_blob],
+                    )
+                    .map_err(|e| e.to_string())?;
+                    if let (Some(g), Some(e)) = (groups.iter_mut().find(|g| g.0 == person_id), emb) {
+                        g.2.push(e.clone());
+                    }
+                    result.pets_found += 1;
+                    continue;
+                }
                 let name = loop {
                     let candidate = format!("Pet {next_auto_num}");
                     next_auto_num += 1;
@@ -3382,12 +3414,15 @@ pub fn pets_run(
                 .map_err(|e| e.to_string())?;
                 let person_id = tx.last_insert_rowid();
                 tx.execute(
-                    "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps, person_id, confirmed, species)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, '[]', ?7, 0, ?8)",
-                    params![id, d.x0, d.y0, d.x1, d.y1, d.score, person_id, d.species],
+                    "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps, person_id, confirmed, species, embedding)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, '[]', ?7, 0, ?8, ?9)",
+                    params![id, d.x0, d.y0, d.x1, d.y1, d.score, person_id, d.species, emb_blob],
                 )
                 .map_err(|e| e.to_string())?;
                 let cover_id = tx.last_insert_rowid();
+                if let Some(e) = emb {
+                    groups.push((person_id, d.species.to_string(), vec![e.clone()]));
+                }
                 tx.execute("UPDATE people SET cover_face_id = ?1 WHERE id = ?2", params![cover_id, person_id]).map_err(|e| e.to_string())?;
                 result.pets_found += 1;
             }
@@ -3399,8 +3434,213 @@ pub fn pets_run(
             break;
         }
     }
+    if !scoped && !cancel.load(Ordering::Relaxed) {
+        pets_backfill_and_merge(conn, cancel)?;
+    }
     progress(ScanProgress { phase: "done".into(), done: result.scanned, total: result.scanned, current: String::new() });
     Ok(result)
+}
+
+/// Pet sightings found before pets carried embeddings each became their own "Pet N". This embeds
+/// those old crops, then folds each unnamed pet group into an earlier group of the same species
+/// it clearly matches (`PET_AUTO_JOIN_SIM`) — named pets are never folded away, only into.
+fn pets_backfill_and_merge(conn: &Connection, cancel: &AtomicBool) -> Result<(), String> {
+    const DECODE_LONG_EDGE: u32 = 1600;
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT f.id, f.x0, f.y0, f.x1, f.y1, p.rel_path, v.last_path, v.is_local
+                 FROM photo_faces f JOIN photos p ON p.id = f.photo_id JOIN volumes v ON v.id = p.volume_id
+                 WHERE f.embedding IS NULL AND p.present = 1
+                   AND (f.species IS NOT NULL OR f.person_id IN (SELECT id FROM people WHERE kind = 'pet'))
+                 ORDER BY f.photo_id LIMIT 32",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows: Vec<(i64, f32, f32, f32, f32, String)> = stmt
+            .query_map([], |r| {
+                let (rel, last, local): (String, String, i64) = (r.get(5)?, r.get(6)?, r.get(7)?);
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, abs_path(&last, local != 0, &rel)))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        drop(stmt);
+        if rows.is_empty() {
+            break;
+        }
+        let embs: Vec<(i64, Option<Vec<f32>>)> = rows
+            .par_iter()
+            .map(|(fid, x0, y0, x1, y1, abs)| {
+                let e = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE)
+                    .ok()
+                    .and_then(|(rgb, w, h)| pet_crop_embedding(&rgb, w, h, *x0, *y0, *x1, *y1));
+                (*fid, e)
+            })
+            .collect();
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (fid, e) in &embs {
+            // An unreadable crop gets an empty blob so it isn't retried forever; empty never
+            // matches anything (dot over zero dims).
+            let blob = e.as_ref().map(|e| f32_vec_to_blob(e)).unwrap_or_default();
+            // A hand-placed pet sighting has no detector species — "pet" marks it as a pet row
+            // (the pet/human split everywhere is `species IS NOT NULL`) and matches any species.
+            tx.execute("UPDATE photo_faces SET embedding = ?1, species = COALESCE(species, 'pet') WHERE id = ?2", params![blob, fid])
+                .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+    }
+
+    group_orphan_pets(conn)?;
+    let groups = pet_groups(conn)?;
+    let auto: std::collections::HashSet<i64> = {
+        let mut st = conn.prepare("SELECT id FROM people WHERE kind = 'pet' AND auto = 1").map_err(|e| e.to_string())?;
+        let ids = st.query_map([], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+        ids
+    };
+    let centroids: Vec<(i64, &str, Vec<f32>)> = groups
+        .iter()
+        .map(|(pid, sp, es)| (*pid, sp.as_str(), unit_mean(es.iter().filter(|e| !e.is_empty()).map(|e| e.as_slice()))))
+        .filter(|(_, _, c)| !c.is_empty())
+        .collect();
+    // Union-find by merging each auto group into the earliest (lowest id, named first) match.
+    let mut into: std::collections::HashMap<i64, i64> = Default::default();
+    for (i, (pid, sp, c)) in centroids.iter().enumerate() {
+        if !auto.contains(pid) {
+            continue;
+        }
+        let target = centroids[..i]
+            .iter()
+            .chain(centroids.iter().filter(|(p, _, _)| !auto.contains(p)))
+            .filter(|(p, s, _)| p != pid && species_match(s, sp) && !into.contains_key(p))
+            .map(|(p, _, c2)| (*p, dot(c, c2)))
+            .filter(|(_, sim)| *sim >= PET_AUTO_JOIN_SIM)
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        if let Some((t, _)) = target {
+            into.insert(*pid, t);
+        }
+    }
+    if into.is_empty() {
+        return Ok(());
+    }
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    for (from, to) in &into {
+        tx.execute("UPDATE photo_faces SET person_id = ?1, confirmed = 0 WHERE person_id = ?2", params![to, from]).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM people WHERE id = ?1 AND auto = 1", params![from]).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    eprintln!("pets: merged {} duplicate pet groups", into.len());
+    Ok(())
+}
+
+fn species_match(a: &str, b: &str) -> bool {
+    a == b || a == "pet" || b == "pet"
+}
+
+/// Pet sightings that belong to no group (older re-clusters deleted their "Pet N" rows) are
+/// filed into the best matching group, or grouped with each other into fresh "Pet N"s.
+fn group_orphan_pets(conn: &Connection) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, species, embedding FROM photo_faces
+             WHERE person_id IS NULL AND species IS NOT NULL AND length(embedding) > 0 ORDER BY score DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let orphans: Vec<(i64, String, Vec<f32>)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, Vec<u8>>(2)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, sp, b)| (id, sp, blob_to_f32_vec(&b)))
+        .collect();
+    drop(stmt);
+    if orphans.is_empty() {
+        return Ok(());
+    }
+    let mut groups = pet_groups(conn)?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let mut next_num: usize = tx
+        .query_row("SELECT MAX(CAST(SUBSTR(name, 5) AS INTEGER)) FROM people WHERE kind = 'pet' AND name LIKE 'Pet %'", [], |r| r.get::<_, Option<i64>>(0))
+        .unwrap_or(None)
+        .unwrap_or(0) as usize
+        + 1;
+    let now = now_secs() as i64;
+    for (fid, sp, e) in orphans {
+        let best = groups
+            .iter()
+            .enumerate()
+            .filter(|(_, g)| species_match(&g.1, &sp))
+            .map(|(i, g)| (i, g.2.iter().map(|x| dot(&e, x)).fold(f32::MIN, f32::max)))
+            .filter(|(_, sim)| *sim >= PET_AUTO_JOIN_SIM)
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        let idx = match best {
+            Some((i, _)) => i,
+            None => {
+                let name = loop {
+                    let n = format!("Pet {next_num}");
+                    next_num += 1;
+                    let taken = tx.query_row("SELECT 1 FROM people WHERE name = ?1", params![n], |_| Ok(())).optional().map_err(|e| e.to_string())?.is_some();
+                    if !taken {
+                        break n;
+                    }
+                };
+                tx.execute(
+                    "INSERT INTO people (name, cover_face_id, created, auto, kind) VALUES (?1, ?2, ?3, 1, 'pet')",
+                    params![name, fid, now],
+                )
+                .map_err(|e| e.to_string())?;
+                groups.push((tx.last_insert_rowid(), sp.clone(), Vec::new()));
+                groups.len() - 1
+            }
+        };
+        tx.execute("UPDATE photo_faces SET person_id = ?1, confirmed = 0 WHERE id = ?2", params![groups[idx].0, fid]).map_err(|e| e.to_string())?;
+        groups[idx].2.push(e);
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// CLIP embedding of one animal's box, padded 10% so ears/tail context is included.
+fn pet_crop_embedding(rgb: &[u8], w: u32, h: u32, x0: f32, y0: f32, x1: f32, y1: f32) -> Option<Vec<f32>> {
+    let (px, py) = ((x1 - x0) * 0.1, (y1 - y0) * 0.1);
+    let cx0 = (((x0 - px).max(0.0)) * w as f32) as u32;
+    let cy0 = (((y0 - py).max(0.0)) * h as f32) as u32;
+    let cx1 = ((((x1 + px).min(1.0)) * w as f32) as u32).min(w);
+    let cy1 = ((((y1 + py).min(1.0)) * h as f32) as u32).min(h);
+    if cx1 <= cx0 + 8 || cy1 <= cy0 + 8 {
+        return None;
+    }
+    let (cw, ch) = (cx1 - cx0, cy1 - cy0);
+    let mut crop = Vec::with_capacity((cw * ch * 3) as usize);
+    for y in cy0..cy1 {
+        let row = ((y * w + cx0) * 3) as usize;
+        crop.extend_from_slice(&rgb[row..row + (cw * 3) as usize]);
+    }
+    crate::clip::embed_image(&crop, cw, ch).map_err(|e| eprintln!("pets: embed crop: {e}")).ok()
+}
+
+/// Every non-ignored pet group with its crop embeddings: (person_id, species, embeddings).
+/// Species comes from the group's own detections; a group with none embedded is left out.
+fn pet_groups(conn: &Connection) -> Result<Vec<(i64, String, Vec<Vec<f32>>)>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT f.person_id, f.species, f.embedding FROM photo_faces f JOIN people p ON p.id = f.person_id
+             WHERE p.kind = 'pet' AND p.ignored = 0 AND f.species IS NOT NULL AND length(f.embedding) > 0",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(i64, String, Vec<u8>)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let mut by: std::collections::BTreeMap<i64, (String, Vec<Vec<f32>>)> = Default::default();
+    for (pid, sp, b) in rows {
+        by.entry(pid).or_insert_with(|| (sp, Vec::new())).1.push(blob_to_f32_vec(&b));
+    }
+    Ok(by.into_iter().map(|(pid, (sp, es))| (pid, sp, es)).collect())
 }
 
 #[tauri::command]
@@ -3749,7 +3989,7 @@ pub fn embed_run(
             let sql = format!(
                 "SELECT DISTINCT p.id, p.rel_path, v.last_path, v.is_local
                  FROM photo_faces pf JOIN photos p ON p.id = pf.photo_id JOIN volumes v ON v.id = p.volume_id
-                 WHERE p.present = 1 AND p.id IN ({}) AND pf.embedding IS NULL",
+                 WHERE p.present = 1 AND p.id IN ({}) AND pf.embedding IS NULL AND pf.kps != '[]'",
                 placeholders.join(",")
             );
             let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
@@ -3771,7 +4011,7 @@ pub fn embed_run(
                 .prepare(
                     "SELECT DISTINCT p.id, p.rel_path, v.last_path, v.is_local
                      FROM photo_faces pf JOIN photos p ON p.id = pf.photo_id JOIN volumes v ON v.id = p.volume_id
-                     WHERE pf.embedding IS NULL AND p.present = 1
+                     WHERE pf.embedding IS NULL AND pf.kps != '[]' AND p.present = 1
                      LIMIT 16"
                 )
                 .map_err(|e| e.to_string())?;
@@ -3798,7 +4038,7 @@ pub fn embed_run(
         let mut face_rows: Vec<(i64, i64, String)> = Vec::new(); // (photo_id, face_id, kps json)
         for (photo_id, _) in &photo_batch {
             let mut fstmt = conn
-                .prepare("SELECT id, kps FROM photo_faces WHERE photo_id = ?1 AND embedding IS NULL")
+                .prepare("SELECT id, kps FROM photo_faces WHERE photo_id = ?1 AND embedding IS NULL AND kps != '[]'")
                 .map_err(|e| e.to_string())?;
             let rows: Vec<(i64, String)> = fstmt
                 .query_map(params![photo_id], |r| Ok((r.get(0)?, r.get(1)?)))
@@ -3971,7 +4211,7 @@ pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<Clu
     // face you had already confirmed belonged to someone. Now a confirmed face's `person_id` is
     // never touched by this function again — DBSCAN only ever proposes fresh/unconfirmed faces.
     let mut stmt = conn
-        .prepare("SELECT id, embedding, person_id FROM photo_faces WHERE embedding IS NOT NULL AND confirmed = 0")
+        .prepare("SELECT id, embedding, person_id FROM photo_faces WHERE embedding IS NOT NULL AND confirmed = 0 AND species IS NULL")
         .map_err(|e| e.to_string())?;
     let rows: Vec<(i64, Vec<f32>, Option<i64>)> = stmt
         .query_map([], |r| {
@@ -4016,7 +4256,9 @@ pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<Clu
     // face without remembering to do the same (a real gap caught by
     // confirmed_faces_survive_a_recluster_untouched's own test setup, which does exactly that).
     tx.execute(
-        "DELETE FROM people WHERE auto = 1
+        // ⚠️ `kind = 'person'`: pet groups are made by pets_run, not by this function — wiping
+        // them here orphaned every pet sighting (person_id -> NULL) on each re-cluster.
+        "DELETE FROM people WHERE auto = 1 AND kind = 'person'
          AND id NOT IN (SELECT DISTINCT person_id FROM photo_faces WHERE confirmed = 1 AND person_id IS NOT NULL)",
         [],
     )
@@ -4227,6 +4469,64 @@ pub struct UnnamedCluster {
     pub suggested_person_id: Option<i64>,
     pub suggested_name: Option<String>,
     pub suggested_similarity: Option<f32>,
+    /// A "maybe the same person" group from the loose second pass over faces the strict
+    /// clustering left alone (`person_id` is 0 — these faces belong to nobody yet). Naming one
+    /// moves its faces into a person; nothing happens to them until then.
+    pub tentative: bool,
+}
+
+/// Groups the strict clustering left as noise, re-clustered at `LOOSE_CLUSTER_EPS`. Bounded to
+/// the best-detected faces so a huge backlog can't make the review screen slow to open.
+fn loose_clusters(conn: &Connection) -> Result<Vec<UnnamedCluster>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, embedding FROM photo_faces
+             WHERE person_id IS NULL AND confirmed = 0 AND species IS NULL AND embedding IS NOT NULL AND score >= 0.6
+             ORDER BY score DESC LIMIT 1500",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(i64, Vec<f32>)> = stmt
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Vec<u8>>(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, b)| (id, blob_to_f32_vec(&b)))
+        .collect();
+    if rows.len() < 2 {
+        return Ok(Vec::new());
+    }
+    let dim = rows[0].1.len();
+    let mut data = ndarray::Array2::<f64>::zeros((rows.len(), dim));
+    for (i, (_, e)) in rows.iter().enumerate() {
+        for (j, v) in e.iter().enumerate() {
+            data[[i, j]] = *v as f64;
+        }
+    }
+    use linfa::traits::Transformer;
+    let labels = linfa_clustering::Dbscan::params(2).tolerance(LOOSE_CLUSTER_EPS).transform(&data).map_err(|e| e.to_string())?;
+    let mut groups: std::collections::BTreeMap<usize, Vec<i64>> = Default::default();
+    for (i, (id, _)) in rows.iter().enumerate() {
+        if let Some(l) = labels[i] {
+            groups.entry(l).or_default().push(*id);
+        }
+    }
+    let mut out: Vec<UnnamedCluster> = groups
+        .into_values()
+        .map(|ids| UnnamedCluster {
+            person_id: 0,
+            cover_face_id: ids.first().copied(),
+            face_count: ids.len() as i64,
+            face_ids: ids,
+            species: None,
+            suggested_person_id: None,
+            suggested_name: None,
+            suggested_similarity: None,
+            tentative: true,
+        })
+        .collect();
+    out.sort_by(|a, b| b.face_count.cmp(&a.face_count));
+    Ok(out)
 }
 
 #[tauri::command]
@@ -4270,17 +4570,18 @@ fn catalog_unnamed_clusters_run(conn: &Connection) -> Result<Vec<UnnamedCluster>
             suggested_person_id: None,
             suggested_name: None,
             suggested_similarity: None,
+            tentative: false,
         });
     }
+    out.extend(loose_clusters(conn)?);
     if out.is_empty() {
         return Ok(out);
     }
-    let profiles = person_profiles(conn)?;
-    if profiles.is_empty() {
-        return Ok(out);
-    }
+    let people = person_profiles(conn, "person")?;
+    let pets = person_profiles(conn, "pet")?;
     for c in out.iter_mut() {
-        if c.species.is_some() {
+        let (profiles, bar) = if c.species.is_some() { (&pets, PET_CLUSTER_SUGGEST_SIM) } else { (&people, CLUSTER_SUGGEST_SIM) };
+        if profiles.is_empty() {
             continue;
         }
         let embs = face_embeddings(conn, &c.face_ids)?;
@@ -4288,8 +4589,8 @@ fn catalog_unnamed_clusters_run(conn: &Connection) -> Result<Vec<UnnamedCluster>
             continue;
         }
         let centroid = unit_mean(embs.iter().map(|(_, e)| e.as_slice()));
-        if let Some((pid, sim)) = best_profile_match(&centroid, &profiles, None) {
-            if sim >= CLUSTER_SUGGEST_SIM {
+        if let Some((pid, sim)) = best_profile_match(&centroid, profiles, None) {
+            if sim >= bar {
                 c.suggested_person_id = Some(pid);
                 c.suggested_name = profiles.iter().find(|p| p.id == pid).map(|p| p.name.clone());
                 c.suggested_similarity = Some(sim);
@@ -4318,9 +4619,28 @@ const CLUSTER_SUGGEST_SIM: f32 = 0.5;
 /// A face must beat the next-best named person by this much, so a face that looks equally like
 /// two siblings is not confidently offered to either.
 const FACE_SUGGEST_MARGIN: f32 = 0.05;
+/// Same-day context: a candidate taken on a day this person already has a confirmed photo from
+/// gets this added to its score — enough to lift a borderline face over the bar, never enough
+/// to pull in a clear stranger.
+const SAME_DAY_BOOST: f32 = 0.04;
+/// Pets are compared with CLIP image embeddings of the animal crop, not ArcFace — a much denser
+/// space (two different tabbies still score ~0.8), so the bars sit far higher.
+const PET_SUGGEST_SIM: f32 = 0.86;
+const PET_CLUSTER_SUGGEST_SIM: f32 = 0.88;
+const PET_SUGGEST_MARGIN: f32 = 0.02;
+/// pets_run files a new sighting straight into an existing pet group at/above this.
+const PET_AUTO_JOIN_SIM: f32 = 0.92;
+/// Second, looser DBSCAN pass over faces the strict pass left alone ("maybe the same person"),
+/// eps 0.9 ≈ cosine 0.6. Only ever shown for review; never assigned on its own.
+const LOOSE_CLUSTER_EPS: f64 = 0.9;
+
+fn is_pet_kind(kind: &str) -> bool {
+    kind == "pet"
+}
 
 struct PersonProfile {
     id: i64,
+    kind: String,
     name: String,
     centroid: Vec<f32>,
     exemplars: Vec<Vec<f32>>,
@@ -4362,6 +4682,7 @@ fn profile_sim(emb: &[f32], p: &PersonProfile) -> f32 {
 /// Best-matching profile and its similarity, requiring a `FACE_SUGGEST_MARGIN` lead over the
 /// runner-up. `only` restricts the winner to one person (the runner-up still counts).
 fn best_profile_match(emb: &[f32], profiles: &[PersonProfile], only: Option<i64>) -> Option<(i64, f32)> {
+    let margin = if profiles.first().map_or(false, |p| is_pet_kind(&p.kind)) { PET_SUGGEST_MARGIN } else { FACE_SUGGEST_MARGIN };
     let mut scored: Vec<(i64, f32)> = profiles.iter().map(|p| (p.id, profile_sim(emb, p))).collect();
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     let (best_id, best) = *scored.first()?;
@@ -4371,11 +4692,11 @@ fn best_profile_match(emb: &[f32], profiles: &[PersonProfile], only: Option<i64>
         }
     }
     let runner = scored.get(1).map(|x| x.1).unwrap_or(-1.0);
-    (best - runner >= FACE_SUGGEST_MARGIN).then_some((best_id, best))
+    (best - runner >= margin).then_some((best_id, best))
 }
 
 fn face_embeddings(conn: &Connection, ids: &[i64]) -> Result<Vec<(i64, Vec<f32>)>, String> {
-    let mut stmt = conn.prepare("SELECT embedding FROM photo_faces WHERE id = ?1 AND embedding IS NOT NULL").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT embedding FROM photo_faces WHERE id = ?1 AND length(embedding) > 0").map_err(|e| e.to_string())?;
     let mut out = Vec::with_capacity(ids.len());
     for id in ids {
         if let Some(b) = stmt.query_row(params![id], |r| r.get::<_, Vec<u8>>(0)).optional().map_err(|e| e.to_string())? {
@@ -4385,18 +4706,20 @@ fn face_embeddings(conn: &Connection, ids: &[i64]) -> Result<Vec<(i64, Vec<f32>)
     Ok(out)
 }
 
-/// Profiles for every named (non-auto), non-ignored human person. Built from confirmed faces;
-/// a named person with none confirmed yet falls back to all their assigned faces.
-fn person_profiles(conn: &Connection) -> Result<Vec<PersonProfile>, String> {
+/// Profiles for every named (non-auto), non-ignored person of `kind` ('person' | 'pet'). Built
+/// from confirmed faces; a named one with none confirmed yet falls back to all assigned faces.
+/// Human profiles use ArcFace rows only, pet profiles CLIP rows only (`species IS NULL` or not).
+fn person_profiles(conn: &Connection, kind: &str) -> Result<Vec<PersonProfile>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT p.id, p.name, f.embedding, f.confirmed FROM people p
              JOIN photo_faces f ON f.person_id = p.id
-             WHERE p.auto = 0 AND p.ignored = 0 AND p.kind = 'person' AND f.embedding IS NOT NULL",
+             WHERE p.auto = 0 AND p.ignored = 0 AND p.kind = ?1 AND length(f.embedding) > 0
+               AND ((?1 = 'pet') = (f.species IS NOT NULL))",
         )
         .map_err(|e| e.to_string())?;
     let rows: Vec<(i64, String, Vec<u8>, i64)> = stmt
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .query_map(params![kind], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
@@ -4410,7 +4733,7 @@ fn person_profiles(conn: &Connection) -> Result<Vec<PersonProfile>, String> {
         .map(|(id, (name, conf, rest))| {
             let exemplars = if conf.is_empty() { rest } else { conf };
             let centroid = unit_mean(exemplars.iter().map(|v| v.as_slice()));
-            PersonProfile { id, name, centroid, exemplars }
+            PersonProfile { id, kind: kind.to_string(), name, centroid, exemplars }
         })
         .filter(|p| !p.exemplars.is_empty())
         .collect())
@@ -4431,43 +4754,67 @@ pub fn catalog_person_suggestions(
     limit: Option<usize>,
 ) -> Result<Vec<FaceSuggestion>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    person_suggestions_run(&conn, person_id, min_similarity.unwrap_or(FACE_SUGGEST_SIM), limit.unwrap_or(300))
+    person_suggestions_run(&conn, person_id, min_similarity, limit.unwrap_or(300))
 }
 
-fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: f32, limit: usize) -> Result<Vec<FaceSuggestion>, String> {
-    let profiles = person_profiles(conn)?;
+fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: Option<f32>, limit: usize) -> Result<Vec<FaceSuggestion>, String> {
+    let kind: String = match conn.query_row("SELECT kind FROM people WHERE id = ?1", params![person_id], |r| r.get(0)).optional().map_err(|e| e.to_string())? {
+        Some(k) => k,
+        None => return Ok(Vec::new()),
+    };
+    let pet = is_pet_kind(&kind);
+    let min_sim = min_sim.unwrap_or(if pet { PET_SUGGEST_SIM } else { FACE_SUGGEST_SIM });
+    let profiles = person_profiles(conn, &kind)?;
     if !profiles.iter().any(|p| p.id == person_id) {
         return Ok(Vec::new());
     }
+    // Days (y, m, d) this person already has a confirmed photo from — see SAME_DAY_BOOST.
+    let mut dstmt = conn
+        .prepare(
+            "SELECT DISTINCT p.cap_y, p.cap_m, p.cap_d FROM photo_faces f JOIN photos p ON p.id = f.photo_id
+             WHERE f.person_id = ?1 AND f.confirmed = 1 AND p.cap_d IS NOT NULL",
+        )
+        .map_err(|e| e.to_string())?;
+    let days: std::collections::HashSet<(i64, i64, i64)> = dstmt
+        .query_map(params![person_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(dstmt);
     // Candidates: any unconfirmed face not already this person's, not in an ignored group, and
     // not previously rejected for this person. Faces in other auto "Person N" groups and the
     // unclustered pile are exactly what this is meant to reach.
     let mut stmt = conn
         .prepare(
-            "SELECT f.id, f.photo_id, f.embedding FROM photo_faces f
+            "SELECT f.id, f.photo_id, f.embedding, ph.cap_y, ph.cap_m, ph.cap_d FROM photo_faces f
+             JOIN photos ph ON ph.id = f.photo_id
              LEFT JOIN people o ON o.id = f.person_id
-             WHERE f.embedding IS NOT NULL AND f.confirmed = 0
+             WHERE length(f.embedding) > 0 AND f.confirmed = 0
+               AND ((?2 = 1) = (f.species IS NOT NULL))
                AND (f.person_id IS NULL OR (f.person_id != ?1 AND o.ignored = 0))
                AND NOT EXISTS (SELECT 1 FROM face_rejections r WHERE r.face_id = f.id AND r.person_id = ?1)",
         )
         .map_err(|e| e.to_string())?;
-    let rows: Vec<(i64, i64, Vec<u8>)> = stmt
-        .query_map(params![person_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+    type Row = (i64, i64, Vec<u8>, Option<i64>, Option<i64>, Option<i64>);
+    let rows: Vec<Row> = stmt
+        .query_map(params![person_id, pet as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
     let mut out: Vec<FaceSuggestion> = rows
         .into_iter()
-        .filter_map(|(face_id, photo_id, blob)| {
+        .filter_map(|(face_id, photo_id, blob, y, m, d)| {
             let emb = blob_to_f32_vec(&blob);
             let (_, sim) = best_profile_match(&emb, &profiles, Some(person_id))?;
-            (sim >= min_sim).then_some(FaceSuggestion { face_id, photo_id, similarity: sim })
+            let same_day = matches!((y, m, d), (Some(y), Some(m), Some(d)) if days.contains(&(y, m, d)));
+            let sim = if same_day { sim + SAME_DAY_BOOST } else { sim };
+            (sim >= min_sim).then_some(FaceSuggestion { face_id, photo_id, similarity: sim.min(1.0) })
         })
         .collect();
     // Unassigned pending faces too: the person's OWN unconfirmed faces (from a cluster that
     // majority-voted into them) are also worth a yes/no, ranked in with the rest.
     let mut own = conn
-        .prepare("SELECT id, photo_id FROM photo_faces WHERE person_id = ?1 AND confirmed = 0 AND embedding IS NOT NULL")
+        .prepare("SELECT id, photo_id FROM photo_faces WHERE person_id = ?1 AND confirmed = 0 AND length(embedding) > 0")
         .map_err(|e| e.to_string())?;
     let own_rows: Vec<(i64, i64)> = own
         .query_map(params![person_id], |r| Ok((r.get(0)?, r.get(1)?)))
@@ -9266,14 +9613,14 @@ mod tests {
         let other_group = face(photo("d.jpg"), emb(0.7, 0.0, 0.7), None, 0); // cos ~0.71
         let _ = stranger;
 
-        let got: Vec<i64> = person_suggestions_run(&conn, me, FACE_SUGGEST_SIM, 100).unwrap().iter().map(|s| s.face_id).collect();
+        let got: Vec<i64> = person_suggestions_run(&conn, me, None, 100).unwrap().iter().map(|s| s.face_id).collect();
         assert_eq!(got, vec![similar, other_group], "look-alikes ranked, stranger excluded");
 
         resolve_suggestions_run(&conn, me, &[similar], &[other_group]).unwrap();
         let (pid, conf): (i64, i64) =
             conn.query_row("SELECT person_id, confirmed FROM photo_faces WHERE id = ?1", params![similar], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
         assert_eq!((pid, conf), (me, 1));
-        assert!(person_suggestions_run(&conn, me, FACE_SUGGEST_SIM, 100).unwrap().is_empty(), "a rejected face is never re-offered");
+        assert!(person_suggestions_run(&conn, me, None, 100).unwrap().is_empty(), "a rejected face is never re-offered");
 
         std::fs::remove_dir_all(&dir).ok();
     }

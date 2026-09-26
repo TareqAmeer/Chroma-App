@@ -189,6 +189,41 @@ pub fn detect(rgb: &[u8], w: u32, h: u32) -> Result<Vec<Face>, String> {
     Ok(nms(candidates, NMS_THRESH))
 }
 
+/// `detect`, plus a second look at small faces. The model sees the whole photo squeezed to
+/// 640px, so a face under ~1.5% of the frame's width (back rows of a group shot, anyone in a
+/// wide/landscape frame) is only a few pixels and is missed. When the whole-frame pass finds no
+/// face wider than 8% of the frame — i.e. nobody is close to the camera, the case small faces
+/// live in — it also runs on 4 overlapping quarter tiles (2x the resolution) and merges by NMS.
+/// Portraits and close-ups skip the tiles, so they cost nothing extra.
+pub fn detect_multiscale(rgb: &[u8], w: u32, h: u32) -> Result<Vec<Face>, String> {
+    let whole = detect(rgb, w, h)?;
+    if whole.iter().any(|f| (f.x1 - f.x0) > 0.08 * w as f32) || w < 800 || h < 600 {
+        return Ok(whole);
+    }
+    let (tw, th) = ((w as f32 * 0.6) as u32, (h as f32 * 0.6) as u32);
+    let mut all = whole;
+    for (ox, oy) in [(0, 0), (w - tw, 0), (0, h - th), (w - tw, h - th)] {
+        let mut tile = Vec::with_capacity((tw * th * 3) as usize);
+        for y in oy..oy + th {
+            let row = ((y * w + ox) * 3) as usize;
+            tile.extend_from_slice(&rgb[row..row + (tw * 3) as usize]);
+        }
+        for mut f in detect(&tile, tw, th)? {
+            let (dx, dy) = (ox as f32, oy as f32);
+            f.x0 += dx;
+            f.x1 += dx;
+            f.y0 += dy;
+            f.y1 += dy;
+            for k in f.kps.iter_mut() {
+                k.0 += dx;
+                k.1 += dy;
+            }
+            all.push(f);
+        }
+    }
+    Ok(nms(all, NMS_THRESH))
+}
+
 fn iou(a: &Face, b: &Face) -> f32 {
     let ix0 = a.x0.max(b.x0);
     let iy0 = a.y0.max(b.y0);
