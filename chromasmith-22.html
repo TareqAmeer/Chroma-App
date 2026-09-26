@@ -1909,6 +1909,62 @@ body.deskx{--cs-brand-w:350px}
 #lib-overlay .lib-menu .opt .check,#lib-overlay .lib-menu button.opt-toggle .check{width:8px;height:8px;background:var(--k-color-accent-a);stroke:none;margin-left:10px}
 #lib-overlay .lib-menu .opt .check *,#lib-overlay .lib-menu button.opt-toggle .check *{display:none}
 #lib-overlay .lib-menu .opt:hover .check,#lib-overlay .lib-menu button.opt-toggle:hover .check{background:#fff}
+/* ── Swiss Kinetic: Library grid, filmstrip, selection, flags, side menu (phase 5) ──
+   Selection follows approved photoSelection (dark "slab": an accent-A slab behind the photo's
+   lower left plus a muted frame kicked up-right; light "outline": an accent frame offset
+   up-right), mirrored to <html data-k-psel> by Kinetic.syncTheme. Hover ("offset") shows an ink
+   frame. The old soft glow rings are gone (hard edges only). Flags use the card's flag colour
+   (--k-flag): reject grey, pick accent A, favourite accent B. The docked filmstrip stays black
+   and white until a frame is hovered or selected; the full grid is always in colour. */
+#lib-overlay .lib-card{overflow:visible;isolation:isolate;box-shadow:none!important;--k-flag:var(--k-color-accent-a)}
+#lib-overlay .lib-card .lib-thumb-wrap{box-shadow:none!important}
+#lib-overlay .lib-card::before{content:'';display:block;position:absolute;z-index:-1;background:var(--k-flag);opacity:0;pointer-events:none;
+  left:calc(var(--k-offset-x)*-2);right:18%;top:35%;bottom:calc(var(--k-offset-y)*-1.4);transform:translateX(-12px);
+  transition:transform var(--k-motion-duration) var(--k-motion-easing),opacity var(--k-motion-hover)}
+#lib-overlay .lib-card::after{content:'';display:block;position:absolute;inset:0;border:2px solid var(--k-color-muted);opacity:0;pointer-events:none;z-index:2;
+  transition:transform var(--k-motion-duration) var(--k-motion-easing),opacity var(--k-motion-hover)}
+#lib-overlay .lib-card:hover:not(.sel):not(.multi)::after{opacity:.5;border-color:var(--k-color-ink)}
+[data-k-psel=slab] #lib-overlay .lib-card:is(.sel,.multi)::before{opacity:1;transform:none}
+[data-k-psel=slab] #lib-overlay .lib-card:is(.sel,.multi)::after{opacity:.8;transform:translate(calc(var(--k-offset-x)*2.4),calc(var(--k-offset-y)*-2.4)) scale(1.06)}
+[data-k-psel=outline] #lib-overlay .lib-card:is(.sel,.multi)::after{opacity:1;border-color:var(--k-flag);transform:translate(calc(var(--k-offset-x)*.8),calc(var(--k-offset-y)*-.8))}
+#lib-overlay .lib-card.lbl-red{--k-flag:var(--k-color-muted)}
+#lib-overlay .lib-card.lbl-green{--k-flag:var(--k-color-accent-a)}
+#lib-overlay .lib-card.lbl-favorite,#lib-overlay .lib-card.lbl-fav{--k-flag:var(--k-color-accent-b)}
+#lib-overlay .lib-card:is(.lbl-red,.lbl-green,.lbl-favorite,.lbl-fav) .lib-thumb-wrap{box-shadow:0 0 0 2px var(--k-flag)!important}
+#lib-overlay .lib-card.lbl-red .lib-thumb-wrap::after{display:none}
+#lib-overlay .lib-card .lib-name{overflow:hidden;text-overflow:ellipsis}
+body.deskx #lib-overlay:not(.full) #lib-overlay .lib-card img{transition:filter var(--k-motion-duration) var(--k-motion-easing)}
+body.deskx #lib-overlay:not(.full) #lib-overlay .lib-card:not(:hover):not(.sel):not(.multi) img{filter:grayscale(1) contrast(1.1)}
+/* Flag buttons + filter chips: reject grey, pick accent A, favourite accent B (their slab). */
+#lib-overlay [id$=flag-reject],#lib-overlay .lib-iconchip[data-fval=red]{--k-flag:var(--k-color-muted)}
+#lib-overlay [id$=flag-pick],#lib-overlay .lib-iconchip[data-fval=green]{--k-flag:var(--k-color-accent-a)}
+#lib-overlay [id$=flag-fav],#lib-overlay .lib-iconchip[data-fval=favorite]{--k-flag:var(--k-color-accent-b)}
+#lib-overlay :is([id$=flag-reject],[id$=flag-pick],[id$=flag-fav],.lib-iconchip[data-fval])::after{background:var(--k-flag,var(--k-color-accent-a))}
+#lib-overlay .lib-iconchip[data-fval] svg,#lib-overlay :is([id$=flag-reject],[id$=flag-pick],[id$=flag-fav]) svg{stroke:currentColor!important}
+/* Side menu (approved sideMenu "offset"): the active row gets an accent-A slab starting 28px
+   in, wiped in from the left, with its label pushed 12px right in white; other rows nudge 4px
+   on hover. */
+#lib-overlay .lib-coll-row{position:relative;isolation:isolate;border-radius:0;box-shadow:none!important;background:transparent!important;
+  transition:transform var(--k-motion-hover) var(--k-motion-easing),color var(--k-motion-hover)}
+#lib-overlay .lib-coll-row::before{content:'';display:block;position:absolute;z-index:-1;left:28px;right:0;top:0;bottom:0;background:var(--k-color-accent-a);
+  transform:scaleX(0);transform-origin:left;transition:transform var(--k-motion-duration) var(--k-motion-easing);pointer-events:none}
+#lib-overlay .lib-coll-row.on{color:#fff!important;font-weight:700;transform:translateX(12px)}
+#lib-overlay .lib-coll-row.on::before{transform:none}
+#lib-overlay .lib-coll-row.on :is(.lib-coll-ic,.lib-coll-count){color:#fff!important}
+#lib-overlay .lib-coll-row:not(.on):not(.offline):hover{transform:translateX(4px)}
+#lib-overlay .lib-coll-heading{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--k-color-muted)}
+/* Filters panel (prototype .fwrap): each field's label sits INSIDE its dropdown, muted, ahead
+   of the value (Kinetic.attachFilterField pads the select past the label); a filter that is set
+   (value differs from its first option) takes an accent border and a hard half-offset block. */
+#lib-overlay #lib-filters-panel{background:var(--k-color-bg);border-left:1px solid var(--bdr);box-shadow:none;border-radius:0}
+#lib-overlay #lib-filters-panel-head{font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+#lib-overlay #lib-filters-panel .lib-filter-field{display:grid;align-items:center}
+#lib-overlay #lib-filters-panel .lib-filter-field>label{grid-area:1/1;z-index:1;padding-left:10px;pointer-events:none;font-size:12px;color:var(--k-color-muted);line-height:1;white-space:nowrap}
+#lib-overlay #lib-filters-panel .lib-filter-field>select{grid-area:1/1;width:100%;height:30px;font-size:12px;border-radius:0;background-color:var(--k-color-bg);border:1px solid var(--bdr);
+  transition:border-color var(--k-motion-hover),box-shadow var(--k-motion-hover) var(--k-motion-easing)}
+#lib-overlay #lib-filters-panel .lib-filter-field>select:hover{border-color:var(--k-color-ink)}
+#lib-overlay #lib-filters-panel .lib-filter-field>select.k-set{border-color:var(--k-color-accent-a);box-shadow:calc(var(--k-offset-x)*.5) calc(var(--k-offset-y)*.5) 0 var(--k-color-accent-a)}
+@media (prefers-reduced-motion:reduce){#lib-overlay .lib-card::before,#lib-overlay .lib-card::after,body.deskx #lib-overlay:not(.full) #lib-overlay .lib-card img,#lib-overlay .lib-coll-row,#lib-overlay .lib-coll-row::before{transition:none}}
 .fx-val{color:var(--k-color-ink);font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){#lib-overlay .lib-search-wrap::before,#lib-overlay .lib-search-wrap svg,.fx-ctrl-chev,.fx-ctrl-title{transition:none}}
 </style>
@@ -5457,7 +5513,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926Q';
+const BUILD='1.0926R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23857,7 +23913,7 @@ if(/[?&]catalog=1/.test(location.search)){
     return(x)=>{if(x<=0)return 0;if(x>=1)return 1;let t=x;for(let i=0;i<8;i++){const s=slope(t,x1,x2);if(Math.abs(s)<1e-6)break;t-=(calc(t,x1,x2)-x)/s;}return calc(t,y1,y2);};
   }
   const ease=()=>{const m=/cubic-bezier\(([^)]*)\)/.exec(tok('--k-motion-easing'));return bezier(...(m?m[1]:'.16,1,.3,1').split(',').map(Number));};
-  function syncTheme(){root.dataset.kSlabFront=tok('--k-two-tone-slab-in-front')||'a';root.dataset.kMenu=tok('--k-menu-colour')||'ink';root.dataset.kSeg=tok('--k-segmented-style')||'cell';root.dataset.kSegdiv=tok('--k-segmented-dividers')||'none';}
+  function syncTheme(){root.dataset.kPsel=tok('--k-variants-photo-selection')||'slab';root.dataset.kSlabFront=tok('--k-two-tone-slab-in-front')||'a';root.dataset.kMenu=tok('--k-menu-colour')||'ink';root.dataset.kSeg=tok('--k-segmented-style')||'cell';root.dataset.kSegdiv=tok('--k-segmented-dividers')||'none';}
   function attachSwitch(el){
     if(el._kSwitch)return el._kSwitch;
     const opts=()=>[...el.children].filter(c=>c.tagName==='BUTTON'&&c.offsetParent!==null);
@@ -23930,8 +23986,16 @@ if(/[?&]catalog=1/.test(location.search)){
     const dir=i?1:-1,d=num(tok('--k-motion-duration'))||500,easing=tok('--k-motion-easing')||'ease';
     [...bar.children].filter(x=>x.offsetParent!==null).forEach(x=>x.animate([{transform:`translateX(${-dir*56}px)`,opacity:0},{transform:'none',opacity:1}],{duration:d,easing}));
   }
+  // Filters panel: label inside the dropdown (pad the select past it) + "set" state.
+  function attachFilterField(f){
+    if(f._kField)return;const lb=f.querySelector(':scope>label'),sel=f.querySelector(':scope>select');if(!lb||!sel)return;f._kField=1;
+    const pad=()=>{const w=lb.getBoundingClientRect().width;if(w)sel.style.paddingLeft=(w+6)+'px';};
+    const set=()=>sel.classList.toggle('k-set',sel.selectedIndex>0);
+    sel.addEventListener('change',set);new MutationObserver(set).observe(sel,{childList:true});set();
+    if('ResizeObserver' in window)new ResizeObserver(pad).observe(lb);pad();
+  }
   const SEL='.seg,#lib-overlay .lib-seg,#cs-brand-tog';
-  function scan(n){if(!n||n.nodeType!==1||n.classList.contains('k-roll-strip'))return;if(n.matches(SEL))attachSwitch(n);if(n.matches('.fx-val'))attachRoll(n);n.querySelectorAll(SEL).forEach(attachSwitch);n.querySelectorAll('.fx-val').forEach(attachRoll);}
+  function scan(n){if(!n||n.nodeType!==1||n.classList.contains('k-roll-strip'))return;if(n.matches(SEL))attachSwitch(n);if(n.matches('.fx-val'))attachRoll(n);n.querySelectorAll(SEL).forEach(attachSwitch);n.querySelectorAll('.fx-val').forEach(attachRoll);n.querySelectorAll('#lib-filters-panel .lib-filter-field').forEach(attachFilterField);}
   function boot(){syncTheme();scan(document.body);
     const bt=document.getElementById('cs-brand-tog');if(bt)bt.addEventListener('k-switch',(e)=>requestAnimationFrame(()=>slideBar(e.detail)));
     new MutationObserver((ms)=>{for(const m of ms)m.addedNodes.forEach(scan);}).observe(document.body,{childList:true,subtree:true});
