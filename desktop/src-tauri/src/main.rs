@@ -2527,6 +2527,39 @@ fn main() {
         let photo_ids: Option<Vec<i64>> = args.get(3).and_then(|f| std::fs::read_to_string(f).ok()).map(|text| {
             text.lines().filter_map(|l| l.trim().parse().ok()).collect()
         });
+        // ⚠️ `.setup()` below never runs in a worker process, so the ORT dylib + model paths it sets must be
+        // set here too. Without this, every worker-side ArcFace/RT-DETR/CLIP call failed with
+        // "model path not set" and the failure was swallowed as "unreadable, retry later" — from
+        // the day scans moved into worker processes, no new face got an embedding (so it could
+        // never be clustered or suggested) and the pet scan found nothing. Same lookup order as
+        // `.setup()`'s resolve_vendor: the bundle's Resources dir, the exe's dir (Windows), dev.
+        {
+            let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf()));
+            let resolve_vendor = |rel: &str| -> PathBuf {
+                let candidates = [
+                    exe_dir.as_ref().map(|d| d.join("../Resources").join(rel)),
+                    exe_dir.as_ref().map(|d| d.join(rel)),
+                ];
+                candidates
+                    .into_iter()
+                    .flatten()
+                    .find(|p| p.exists())
+                    .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel))
+            };
+            let bundled_ort = resolve_vendor(&format!("vendor/onnxruntime/{}", platform::ort_lib_filename()));
+            sam::set_dylib_path(if bundled_ort.exists() {
+                bundled_ort
+            } else {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(platform::ort_lib_dev_path())
+            });
+            petdetect::set_model_path(resolve_vendor("vendor/rtdetr/model_quantized.onnx"));
+            arcface::set_model_path(resolve_vendor("vendor/arcface/w600k_r50.onnx"));
+            clip::set_model_paths(
+                resolve_vendor("vendor/clip/vision_model.onnx"),
+                resolve_vendor("vendor/clip/text_model.onnx"),
+                resolve_vendor("vendor/clip/tokenizer.json"),
+            );
+        }
         std::process::exit(worker_fn(std::path::Path::new(db_path), photo_ids.as_deref()));
     }
     // ⚠️ The rayon cap above only bounds RAYON's own worker threads. Every `#[tauri::command]

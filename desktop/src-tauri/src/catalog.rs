@@ -3812,7 +3812,11 @@ pub fn embed_run(
             let mut part: Vec<(i64, Option<Vec<f32>>)> = chunk
                 .par_iter()
                 .flat_map(|(photo_id, abs)| {
-                    let decoded = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok();
+                    // Failures are logged, not just dropped: a silent "retry later" hid a
+                    // months-long outage where no face got an embedding at all.
+                    let decoded = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE)
+                        .map_err(|e| eprintln!("embed: decode {abs}: {e}"))
+                        .ok();
                     let my_faces: Vec<&(i64, i64, String)> = face_rows.iter().filter(|(pid, _, _)| pid == photo_id).collect();
                     my_faces
                         .into_iter()
@@ -3824,7 +3828,7 @@ pub fn embed_run(
                                 }
                                 let kps_px: [(f32, f32); 5] =
                                     std::array::from_fn(|i| (kps_frac[i].0 * *w as f32, kps_frac[i].1 * *h as f32));
-                                crate::arcface::embed(rgb, *w, *h, &kps_px).ok()
+                                crate::arcface::embed(rgb, *w, *h, &kps_px).map_err(|e| eprintln!("embed: face {face_id}: {e}")).ok()
                             });
                             (*face_id, emb)
                         })
