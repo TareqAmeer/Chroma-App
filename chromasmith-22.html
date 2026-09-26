@@ -5648,7 +5648,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926R';
+const BUILD='1.0926S';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22517,7 +22517,7 @@ function buildToolRail(){        // desktop vertical labelled rail
     }
     // Hairline between groups, so the rail reads as sections rather than one 14-item list.
     // Emitted BEFORE the button that opens a new group (never leading, never doubled).
-    if(dx&&rail.childElementCount&&RAIL_GROUP_BREAK.has(bKey)){
+    if(dx&&rail.childElementCount){ // hairline between EVERY tool (was group breaks only — read as inconsistent)
       const sep=document.createElement('i');sep.className='fx-rail-sep';rail.appendChild(sep);
     }
     const b=document.createElement('button');b.className='fx-rail-btn';b.dataset.sec=bKey;
