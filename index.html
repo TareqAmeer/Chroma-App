@@ -21,7 +21,7 @@
   --ease:cubic-bezier(.22,1,.36,1);--sans:Gramatika;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth;scroll-snap-type:y mandatory}
+html{scroll-behavior:auto;scroll-snap-type:none}
 body{margin:0;background:var(--ink);color:var(--white);font-family:var(--sans);letter-spacing:.02em;-webkit-font-smoothing:antialiased;overflow-x:clip}
 button,input{font:inherit}
 a{color:inherit}
@@ -209,15 +209,6 @@ html.motion-ready .reveal.delay-2{transition-delay:.16s}
 .site-credit{margin:clamp(12px,2svh,24px) 0 0;color:#f8dfd9;font-size:12px;line-height:1.5}
 .site-credit a{text-underline-offset:3px}
 
-/* Gentle movement follows the actual scroll position where view timelines are supported. */
-@supports (animation-timeline:view()) {
-  @media (prefers-reduced-motion:no-preference) {
-    .hero-img{animation:hero-drift linear both;animation-timeline:view();animation-range:cover}
-    .studio .display-shot img,.film .display-shot img{animation:shot-drift linear both;animation-timeline:view();animation-range:entry exit}
-  }
-}
-@keyframes hero-drift{from{transform:scale(1.04) translateY(-1%)}to{transform:scale(1.08) translateY(1%)}}
-@keyframes shot-drift{from{transform:scale(1.04) translateY(-1.5%)}to{transform:scale(1.04) translateY(1.5%)}}
 
 @media(max-width:1050px){
   .studio .chapter-inner,.film .chapter-inner,.guy .chapter-inner{grid-template-columns:1fr;align-content:center}
@@ -291,7 +282,7 @@ html.motion-ready .reveal.delay-2{transition-delay:.16s}
 /* Each chapter occupies one browser viewport. Tall-content devices get a natural-scroll fallback. */
 .chapter{height:100svh;min-height:0}
 .chapter-inner{height:100%;min-height:0;padding-top:clamp(80px,11svh,120px);padding-bottom:clamp(22px,4.5svh,58px)}
-html.is-gliding,html.details-open{scroll-snap-type:none}
+html.is-gliding,html.is-wheeling,html.details-open{scroll-snap-type:none}
 html.is-gliding{scroll-behavior:auto}
 html.details-open .yours{height:auto;min-height:100svh;overflow:visible}
 html.details-open .yours .chapter-inner{height:auto;min-height:100svh}
@@ -310,14 +301,6 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
 .portrait-placeholder{height:min(60svh,500px);width:min(100%,calc(60svh * 4 / 5));aspect-ratio:4/5}
 .yours h2{font-size:clamp(60px,min(10vw,11svh),150px)}
 .download-details{margin-top:clamp(16px,3svh,30px);padding-top:clamp(12px,2svh,22px)}
-@media(prefers-reduced-motion:no-preference){
-  .chapter.is-active h2{animation:title-unfold .72s var(--ease) both}
-  .chapter.is-active .display-shot{animation:frame-arrive .8s var(--ease) both}
-  .chapter.is-active .red-panel{animation:panel-arrive .7s var(--ease) both}
-  .chapter.is-active .rule{animation:rule-grow .7s var(--ease) both;transform-origin:left}
-  .chapter.is-active .phone-frame{animation:phone-arrive .85s var(--ease) both}
-  .chapter.is-active .portrait-placeholder{animation:portrait-arrive .85s var(--ease) both}
-}
 @keyframes title-unfold{from{clip-path:inset(0 0 95% 0);transform:translateY(15px)}to{clip-path:inset(0 0 0 0);transform:none}}
 @keyframes frame-arrive{from{opacity:.35;transform:translateY(28px) scale(.96)}to{opacity:1;transform:none}}
 @keyframes panel-arrive{from{opacity:.3;transform:translateX(42px)}to{opacity:1;transform:none}}
@@ -386,74 +369,152 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
   html{scroll-behavior:auto;scroll-snap-type:none}
   *,*::before,*::after{animation:none!important;transition:none!important}
   html.motion-ready .reveal:not(.is-visible){opacity:1;transform:none}
+  .film-before{display:none}
 }
-/* The one-photo story changes composition at each stop. */
+/* Shared photographic elements. */
 .story-frame{position:relative;margin:0;overflow:hidden;background:#191919;box-shadow:0 32px 85px #0008}
 .story-main{width:100%;height:100%;object-fit:cover}
 .story-ui{position:absolute;z-index:2;object-fit:cover;object-position:top center;border:1px solid #ffffff70;box-shadow:0 20px 42px #000a}
 .story-frame figcaption{position:absolute;z-index:3;left:16px;bottom:15px;padding:7px 10px;background:#050505bb;color:#fff;font-size:11px;letter-spacing:.06em}
-.gallery .chapter-inner{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);grid-template-rows:1fr;align-items:center;gap:clamp(30px,4vw,74px)}
-.gallery-frame{width:100%;height:min(72svh,730px);border-radius:150px 5px 5px 5px}
-.gallery-frame .story-main{object-position:center 62%}
-.gallery-ui{right:-1px;bottom:8%;width:55%;height:31%}
-.gallery .split-copy{display:flex;flex-direction:column;align-items:flex-start;gap:clamp(18px,4svh,38px)}
-.gallery .split-copy h2{font-size:clamp(48px,min(5.5vw,8svh),90px)}
-.gallery .red-panel{max-width:420px}
-.studio .chapter-inner{grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:clamp(35px,7vw,115px)}
-.studio-frame{width:min(100%,680px);height:min(72svh,740px);justify-self:end;transform:rotate(1deg)}
-.studio-frame .story-main{object-position:center 58%}
-.studio-ui{right:0;bottom:5%;width:60%;height:30%}
-.studio-frame figcaption{top:14px;bottom:auto}
-.click .chapter-inner{grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr)}
-.click .compare-wrap{max-width:560px;width:100%;margin:0}
-.click .ba-stage{height:min(70svh,680px);aspect-ratio:auto;border:0}
-.click .ba figcaption{max-width:52ch}
-.film{background:radial-gradient(circle at 70% 40%,#542c25,#130b09 66%)}
-.film .chapter-inner{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:clamp(25px,5vw,80px)}
-.film-frame{height:min(78svh,790px);width:100%;max-width:700px;justify-self:end;border:14px solid #e8ddd0;box-shadow:0 35px 90px #000b}
+/* Motion direction v3: contact sheet, open editor, full-screen comparison, print. */
+.chapter-shutter{position:fixed;z-index:50;inset:0 0 0 var(--rail);overflow:hidden;pointer-events:none;background:#0b0807;animation:shutter-back .98s ease both}
+.chapter-shutter span{position:absolute;top:0;width:20%;height:100%;overflow:hidden;will-change:transform}
+.chapter-shutter img{position:absolute;top:0;width:500%;max-width:none;height:100%;object-fit:cover}
+@keyframes shutter-back{0%{opacity:0}15%,78%{opacity:1}100%{opacity:0}}
+.gallery .chapter-inner{display:block}
+.gallery-collage{position:absolute;inset:11svh 5% 7svh 3%;perspective:1100px}
+.gallery-frame{position:absolute;right:0;top:0;width:53%;height:100%;border-radius:2px;box-shadow:0 25px 90px #000b}
+.gallery-frame .story-main{object-position:center 60%}
+.gallery-ui{right:-3%;bottom:5%;width:47%;height:23%;transform:rotate(4deg)}
+.contact-tile{position:absolute;margin:0;overflow:hidden;background:#242424;border:7px solid #e7e0d7;box-shadow:0 20px 60px #000b;will-change:transform}
+.contact-tile img{width:100%;height:100%;object-fit:cover}
+.contact-a{left:0;top:0;width:30%;height:25%;transform:rotate(-9deg)}
+.contact-b{left:5%;bottom:0;width:29%;height:25%;transform:rotate(7deg)}
+.gallery .split-copy{position:absolute;z-index:4;left:6%;top:32%;width:42%;display:flex;flex-direction:column;align-items:flex-start;gap:24px}
+.gallery .split-copy h2{font-size:clamp(47px,min(5.5vw,8svh),88px);line-height:.94;text-shadow:0 6px 18px #0009}
+.gallery .split-copy h2 em{font-style:italic;color:#f1b8a7}
+.gallery .red-panel{max-width:28ch;padding:0 0 0 20px;border-left:3px solid var(--red-bright);background:transparent;font-size:clamp(16px,1.6vw,23px);line-height:1.25}
+.studio{background:#08090d}
+.studio::before{content:"STUDIO";position:absolute;z-index:1;left:3%;top:6%;font-size:clamp(110px,20vw,360px);font-weight:800;line-height:1;color:transparent;-webkit-text-stroke:1px #ffffff21;pointer-events:none}
+.studio .chapter-inner{display:block}
+.studio .chapter-inner>div:first-child{position:absolute;z-index:4;left:6%;top:27%;width:39%;text-shadow:0 3px 18px #000}
+.studio h2{font-size:clamp(54px,min(7vw,10svh),112px)}
+.studio .lede{font-size:clamp(17px,1.7vw,26px);color:#f1ebe6}
+.studio-frame{position:absolute;top:0;right:0;width:60%;max-width:none;height:100%;max-height:none;transform:none;box-shadow:none}
+.studio-frame::before{content:"";position:absolute;z-index:1;inset:0;background:linear-gradient(90deg,#08090d 0%,transparent 35%);pointer-events:none}
+.studio-frame .story-main{object-position:center 57%}
+.studio-ui{left:1%;right:auto;bottom:7%;width:55%;height:30%;transform:rotate(-4deg)}
+.studio-frame figcaption{left:auto;right:18px;top:16px;bottom:auto}
+.click{background:#090909}
+.click .chapter-inner{display:block;padding:0}
+.click .compare-wrap,.click .ba-grid,.click .ba{position:absolute;inset:0;width:100%;max-width:none;height:100%;margin:0}
+.click .ba-stage{width:100%;height:100%;border:0}
+.click .ba-stage img{object-position:center 57%}
+.click .ba-stage::before{content:"";position:absolute;z-index:1;inset:0;background:linear-gradient(90deg,#0006,transparent 38%,#0007);pointer-events:none}
+.click .ba-handle{z-index:2;width:3px;background:#fff}
+.click .ba-handle::after{width:62px;height:62px;font-size:28px;box-shadow:0 0 0 12px #ffffff30}
+.click .ba-tag{z-index:2;top:12svh;padding:8px 13px;font-size:14px}
+.click .ba-tag.l{left:7%}.click .ba-tag.r{right:8%}
+.click .ba input[type=range]{z-index:3}
+.click .ba figcaption{position:absolute;z-index:3;left:5%;bottom:4%;max-width:55ch;color:#fff;background:#000a;padding:8px 12px}
+.click-copy{position:absolute;z-index:5;right:11%;bottom:12%;max-width:480px;padding:25px;background:#090909dc;backdrop-filter:blur(15px)}
+.click-copy h2{font-size:clamp(52px,min(6.2vw,9svh),100px)}
+.click-copy .red-panel{background:none;padding:0;border:0;color:#f5e7dd;font-size:clamp(18px,1.7vw,25px)}
+.film{background:#e6ded3;color:#1a1110}
+.film .chapter-inner{display:block}
+.film .chapter-inner>div:first-child{position:absolute;z-index:4;left:6%;bottom:17%;width:42%}
+.film h2{font-size:clamp(62px,min(7vw,10svh),120px)}
+.film h2 em{color:#8b2d20}
+.film .lede{color:#43332f}
+.film .rule{background:#8b2d20}
+.film-tags span{border-color:#8b2d2080}
+.film-frame{position:absolute;top:9%;right:5%;width:45%;height:80%;max-width:none;max-height:none;border:clamp(9px,1.1vw,17px) solid #f9f4ea;transform:rotate(-5deg);box-shadow:18px 35px 90px #44251b75}
 .film-frame .story-main{object-position:center 55%}
-.film-frame figcaption{left:auto;right:8px;bottom:7px}
-.story-flight{position:fixed;z-index:45;overflow:hidden;pointer-events:none;transform-origin:top left;box-shadow:0 24px 55px #0007}
-.story-flight img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.story-flight .story-flight-to{opacity:0}
-.story-flight-source .story-main,.story-flight-target .story-main,.story-flight-source.ba-stage>img,.story-flight-target.ba-stage>img{visibility:hidden}
-@media(prefers-reduced-motion:no-preference){
-  .gallery.is-active .gallery-frame{animation:gallery-open .95s var(--ease) both}
-  .gallery.is-active .gallery-ui{animation:ui-slide .9s .18s var(--ease) both}
-  .studio.is-active .studio-ui{animation:ui-slide .8s .22s var(--ease) both}
-  .film.is-active .film-frame{animation:film-arrive 1s var(--ease) both}
-  .film.is-active .film-frame::after{content:"";position:absolute;inset:0;background:url("site/assets/story/original.webp") center 55%/cover no-repeat;animation:develop 1.4s .25s ease-out both;pointer-events:none}
-}
-@keyframes gallery-open{from{clip-path:inset(0 100% 0 0);transform:scale(1.04)}to{clip-path:inset(0 0 0 0);transform:none}}
-@keyframes ui-slide{from{opacity:0;transform:translateY(45px) rotate(-3deg)}to{opacity:1;transform:none}}
-@keyframes film-arrive{from{opacity:.4;transform:translateX(45px) rotate(3deg)}to{opacity:1;transform:none}}
-@keyframes develop{from{opacity:1}to{opacity:0}}
+.film-before{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 55%;pointer-events:none}
+.film-frame figcaption{left:8px;right:auto;background:#eee9e0;color:#30211e}
+.anywhere::before{content:"OFFLINE";position:absolute;z-index:0;right:-3%;top:16%;color:#1616160b;font-size:clamp(145px,22vw,360px);font-weight:800;letter-spacing:-.08em;transform:rotate(-15deg);pointer-events:none}
+.next{background:radial-gradient(circle at 52% 22%,#3d1b12,#120e0d 70%)}
+.next::before{content:"BETA";position:absolute;left:6%;top:1%;font-size:clamp(145px,24vw,400px);line-height:1;font-weight:800;color:transparent;-webkit-text-stroke:1px #ffbea51b;pointer-events:none}
+.next .chapter-inner{display:block}
+.next .chapter-inner>div:first-child{position:absolute;z-index:2;left:6%;top:13%;width:68%}
+.next h2{max-width:none;font-size:clamp(60px,min(7.5vw,10svh),118px);line-height:.9;margin-bottom:20px}
+.next .lede{max-width:28em;font-size:clamp(16px,1.5vw,21px);margin-bottom:8px}
+.next-list{position:absolute;z-index:2;left:6%;right:calc(var(--index) + 5%);bottom:8%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.next-card{position:relative;display:flex;flex-direction:column;justify-content:flex-end;min-height:220px;overflow:hidden;padding:22px;border:1px solid #ffffff70;background:linear-gradient(145deg,#7b2014,#300c09)}
+.next-card:nth-child(2){background:linear-gradient(145deg,#392b4b,#120d18)}
+.next-card:nth-child(3){background:linear-gradient(145deg,#9e4933,#3e1a14)}
+.next-card::before{content:attr(data-glyph);position:absolute;top:-30px;right:7px;font-size:clamp(100px,10vw,170px);line-height:1;color:#ffffff29}
+.next-card h3,.next-card p{position:relative;z-index:1}
+.next-card h3{font-size:clamp(21px,2vw,31px)}
+.next-card p{font-size:clamp(12px,1vw,15px);color:#f1dcd4}
+.next-list .btn-row{grid-column:1/-1;justify-content:flex-end;margin-top:4px}
+.features::before{content:"100+";position:absolute;z-index:0;left:5%;bottom:3%;font-size:clamp(150px,18vw,330px);line-height:1;font-weight:800;color:transparent;-webkit-text-stroke:1px #ffffff15;pointer-events:none}
+.yours::before{content:"";position:absolute;inset:0 0 0 36%;background:linear-gradient(90deg,#970500 0%,#97050033 55%,#97050066),url("site/assets/story/film.webp") center 48%/cover no-repeat;opacity:.48;mix-blend-mode:multiply;pointer-events:none}
+.yours::after{content:"";position:absolute;width:65vw;height:65vw;right:-20vw;top:50%;border:1px solid #ffffff55;border-radius:50%;transform:translateY(-50%);box-shadow:0 0 0 10vw #ffffff09,0 0 0 20vw #ffffff08;pointer-events:none}
+.anywhere .phone-frame{will-change:transform}
+.guy .portrait-placeholder{will-change:transform}
+.next-card{will-change:transform}
 @media(max-width:1050px){
-  .gallery .chapter-inner{gap:24px}
-  .gallery-frame{height:min(62svh,620px)}
-  .studio .chapter-inner,.film .chapter-inner{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr)}
-  .studio-frame,.film-frame{height:min(60svh,600px)}
-  .studio-ui{width:65%;height:25%}
+  .gallery .split-copy{left:4%;width:45%}
+  .studio .chapter-inner>div:first-child{left:4%;width:43%}
+  .studio-frame{width:62%;height:100%}
+  .film .chapter-inner>div:first-child{left:4%;width:42%}
+  .next .chapter-inner>div:first-child{left:4%}
+  .next-list{left:4%;gap:10px}
+  .next-card{min-height:190px;padding:15px}
 }
 @media(max-width:720px){
-  .gallery .chapter-inner,.studio .chapter-inner,.film .chapter-inner{display:flex;flex-direction:column;justify-content:center;align-items:stretch;gap:clamp(12px,2svh,24px)}
-  .gallery-frame{width:100%;height:min(38svh,340px);border-radius:80px 4px 4px 4px}
-  .gallery-ui{width:54%;height:34%}
-  .gallery .split-copy{gap:12px}
-  .gallery .split-copy h2{font-size:clamp(34px,min(8vw,6svh),58px)}
-  .gallery .red-panel{font-size:clamp(13px,3.5vw,17px)}
-  .studio-frame{order:-1;align-self:center;width:100%;height:min(32svh,300px);transform:none}
-  .studio-ui{width:53%;height:32%}
-  .studio-frame figcaption{font-size:9px}
-  .studio .mini-list{margin-top:8px}
-  .studio .mini-list li{padding-top:3px}
-  .click .ba-stage{height:min(38svh,360px)}
-  .film-frame{order:-1;align-self:center;width:100%;height:min(39svh,340px);border-width:7px}
-  .film h2{font-size:clamp(36px,min(9vw,6svh),58px)}
-  .film-tags{margin-top:10px}
+  .gallery .chapter-inner,.studio .chapter-inner,.click .chapter-inner,.film .chapter-inner{display:block;padding:0}
+  .gallery-collage{inset:11svh 8% auto 6%;height:54svh}
+  .gallery-frame{right:0;top:0;width:62%;height:100%;border-radius:2px}
+  .gallery-ui{height:22%;width:56%}
+  .contact-tile{border-width:4px}
+  .contact-a{width:33%;height:28%}.contact-b{left:0;width:35%;height:28%}
+  .gallery .split-copy{left:6%;top:68svh;width:83%;gap:10px}
+  .gallery .split-copy h2{font-size:clamp(35px,min(9vw,6svh),57px)}
+  .gallery .red-panel{max-width:28ch;padding-left:12px;font-size:clamp(14px,3.6vw,17px)}
+  .studio::before{font-size:28vw;top:5svh}
+  .studio-frame{top:7svh;right:0;width:83%;height:52svh}
+  .studio .chapter-inner>div:first-child{left:6%;top:61svh;width:82%}
+  .studio h2{font-size:clamp(39px,min(10vw,6svh),60px);margin-bottom:7px}
+  .studio .rule{margin:9px 0}
+  .studio .lede{font-size:clamp(14px,3.8vw,17px);margin-bottom:8px}
+  .studio .mini-list{margin-top:5px;gap:3px}
+  .studio .mini-list li{font-size:11px;padding-top:2px}
+  .studio-ui{width:56%;height:29%}
+  .click .ba-stage{height:100%}
+  .click .ba-tag{top:10svh;font-size:11px}
+  .click .ba figcaption{left:6%;bottom:3%;max-width:74%;font-size:10px}
+  .click-copy{right:11%;left:7%;bottom:13%;max-width:none;padding:14px 16px}
+  .click-copy h2{font-size:clamp(39px,min(10vw,6svh),62px);margin-bottom:10px}
+  .click-copy .red-panel{font-size:14px}
+  .click-copy .btn-row{margin-top:9px}
+  .film-frame{top:9svh;right:12%;width:73%;height:54svh;border-width:7px}
+  .film .chapter-inner>div:first-child{left:6%;bottom:6svh;width:82%}
+  .film h2{font-size:clamp(39px,min(9.5vw,6svh),62px);margin-bottom:7px}
+  .film .rule{margin:10px 0}
+  .film .lede{font-size:clamp(14px,3.8vw,17px);margin-bottom:7px}
+  .film-tags{margin-top:7px;gap:5px}
+  .film-tags span{font-size:10px;padding:5px 7px}
+  .next .chapter-inner>div:first-child{left:6%;top:12svh;width:82%}
+  .next h2{font-size:clamp(39px,min(9.5vw,6svh),58px);margin-bottom:10px}
+  .next .lede{font-size:clamp(13px,3.5vw,16px);margin-bottom:5px}
+  .next-list{left:6%;right:11%;top:42svh;bottom:auto;grid-template-columns:1fr;gap:6px}
+  .next-card{min-height:92px;padding:11px 14px}
+  .next-card h3{font-size:18px;margin-bottom:4px}
+  .next-card p{font-size:11px;line-height:1.3}
+  .next-card::before{font-size:70px;right:2px;top:-8px}
+  .next-list .btn-row{margin-top:4px}
+  .next-list .action{min-height:36px}
+  .yours::before{inset:0 0 0 20%}
 }
 @media(max-height:560px){
-  .gallery-frame,.studio-frame,.film-frame{height:50svh}
+  .gallery-collage{height:52svh}
+  .gallery .split-copy{position:relative;left:auto;top:auto;padding:58svh 6% 30px;width:auto}
+  .studio-frame{height:54svh}
+  .studio .chapter-inner>div:first-child{position:relative;left:auto;top:auto;padding:58svh 6% 30px;width:auto}
+  .film-frame{height:55svh}
+  .film .chapter-inner>div:first-child{position:relative;left:auto;bottom:auto;padding:60svh 6% 30px;width:auto}
 }
 </style>
 </head>
@@ -497,14 +558,18 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
 
   <section class="chapter gallery" id="gallery" data-rail="GALLERY" aria-labelledby="gallery-title">
     <div class="chapter-inner">
-      <figure class="story-frame gallery-frame reveal delay-1" data-story-photo="site/assets/story/original.webp">
-        <img class="story-main" src="site/assets/story/original.webp" alt="Temporary sample photograph of a dog beside a canal at sunset" width="844" height="1125" loading="lazy">
-        <img class="story-ui gallery-ui" src="site/assets/ui/library.webp" alt="Chromasmith library showing photo thumbnails" width="1600" height="1000" loading="lazy">
-        <figcaption>One photo, from the archive to the finished frame.</figcaption>
-      </figure>
+      <div class="gallery-collage">
+        <figure class="contact-tile contact-a"><img src="design/prototypes/swiss-kinetic/photos/dog-sitting.webp" alt="A dog sitting outdoors" width="665" height="448" loading="lazy"></figure>
+        <figure class="contact-tile contact-b"><img src="design/prototypes/swiss-kinetic/photos/dog-lying.webp" alt="A dog lying down" width="225" height="156" loading="lazy"></figure>
+        <figure class="story-frame gallery-frame" data-story-photo="site/assets/story/original.webp">
+          <img class="story-main" src="site/assets/story/original.webp" alt="Temporary sample photograph of a dog beside a canal at sunset" width="844" height="1125" loading="lazy">
+          <img class="story-ui gallery-ui" src="site/assets/ui/library.webp" alt="Chromasmith library showing photo thumbnails" width="1600" height="1000" loading="lazy">
+          <figcaption>One frame. An entire archive.</figcaption>
+        </figure>
+      </div>
       <div class="split-copy">
-        <h2 id="gallery-title" class="reveal">Your whole photo library. In reach.</h2>
-        <p class="red-panel reveal delay-1">Import a shoot, find a face, or search for the moment you remember. Your archive stays on your machine.</p>
+        <h2 id="gallery-title">Find the frame.<br><em>Keep the feeling.</em></h2>
+        <p class="red-panel">A library for every shoot, every face, every almost-forgotten moment. All yours. All on your machine.</p>
       </div>
     </div>
   </section>
@@ -564,6 +629,7 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
       </div>
       <figure class="story-frame film-frame reveal delay-1" data-story-photo="site/assets/story/film.webp">
         <img class="story-main" src="site/assets/story/film.webp" alt="The finished canal photo exported with Classic Neg, grain and halation" width="844" height="1125" loading="lazy">
+        <img class="film-before" src="site/assets/story/original.webp" alt="" width="844" height="1125" loading="lazy" aria-hidden="true">
         <figcaption>Made in Chromasmith · Sample photograph</figcaption>
       </figure>
     </div>
@@ -603,9 +669,9 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
         <p class="next-note reveal delay-2">Beta features may change as they develop.</p>
       </div>
       <div class="next-list">
-        <div class="next-card reveal"><h3>Video editing</h3><p>Grade and trim a clip with the still-photo look stack, then export it with its audio intact. Available in beta.</p></div>
-        <div class="next-card reveal delay-1"><h3>Astro stacking</h3><p>Combine night-sky frames into a cleaner image from the desktop library. Available in beta.</p></div>
-        <div class="next-card reveal delay-2"><h3>Panorama</h3><p>Stitch two photos into a wider view. The current two-photo workflow is available in beta; larger sets are still planned.</p></div>
+        <div class="next-card reveal" data-glyph="▶"><h3>Video editing</h3><p>Grade and trim a clip with the still-photo look stack, then export it with its audio intact. Available in beta.</p></div>
+        <div class="next-card reveal delay-1" data-glyph="✦"><h3>Astro stacking</h3><p>Combine night-sky frames into a cleaner image from the desktop library. Available in beta.</p></div>
+        <div class="next-card reveal delay-2" data-glyph="▱"><h3>Panorama</h3><p>Stitch two photos into a wider view. The current two-photo workflow is available in beta; larger sets are still planned.</p></div>
         <div class="btn-row reveal delay-2"><a class="action" href="chromasmith-22.html">Try the beta tools ↗</a></div>
       </div>
     </div>
@@ -778,7 +844,7 @@ var reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 function setActive(section) {
   if (!section || section.id === activeId) return;
   activeId = section.id;
-  root.classList.toggle("light-chapter", activeId === "anywhere");
+  root.classList.toggle("light-chapter", activeId === "film" || activeId === "anywhere");
   sections.forEach(function (item) { item.classList.toggle("is-active", item === section); });
   var activeIndex = sections.indexOf(section);
   links.forEach(function (link, index) {
@@ -815,57 +881,58 @@ if ("IntersectionObserver" in window) {
   updateActive();
 }
 
-// One wheel gesture moves one chapter. The scroll position eases into place and then stops.
-// Touch scrolling uses native scroll snap; short viewports and reduced-motion mode keep native scrolling.
+// Let the wheel move the document naturally. After the gesture settles, pull it to
+// the next chapter with a damped spring. A new gesture interrupts immediately.
 var scrollFrame = 0;
 var gliding = false;
-var wheelSum = 0;
-var lastWheel = 0;
-var wheelLockedUntil = 0;
-var finishFlight = null;
-function makeStoryFlight(fromIndex, toIndex, scrollDistance) {
-  if (Math.abs(fromIndex - toIndex) !== 1 || fromIndex < 1 || toIndex < 1 || fromIndex > 4 || toIndex > 4) return null;
-  var from = sections[fromIndex].querySelector("[data-story-photo]");
-  var to = sections[toIndex].querySelector("[data-story-photo]");
-  if (!from || !to) return null;
-  var a = from.getBoundingClientRect();
-  var b = to.getBoundingClientRect();
-  if (!a.width || !a.height || !b.width || !b.height) return null;
-  var flight = document.createElement("div");
-  flight.className = "story-flight";
-  flight.setAttribute("aria-hidden", "true");
-  flight.style.left = a.left + "px";
-  flight.style.top = a.top + "px";
-  flight.style.width = a.width + "px";
-  flight.style.height = a.height + "px";
-  var first = document.createElement("img");
-  first.src = from.dataset.storyPhoto;
-  first.alt = "";
-  var second = document.createElement("img");
-  second.src = to.dataset.storyPhoto;
-  second.alt = "";
-  second.className = "story-flight-to";
-  flight.append(first, second);
-  document.body.appendChild(flight);
-  from.classList.add("story-flight-source");
-  to.classList.add("story-flight-target");
-  var dy = b.top - scrollDistance - a.top;
-  var dx = b.left - a.left;
-  var sx = b.width / a.width;
-  var sy = b.height / a.height;
-  var cleanup = function () {
-    flight.remove();
-    from.classList.remove("story-flight-source");
-    to.classList.remove("story-flight-target");
-  };
-  return {
-    paint: function (progress) {
-      flight.style.transform = "translate3d(" + (dx * progress) + "px," + (dy * progress) + "px,0) scale(" + (1 + (sx - 1) * progress) + "," + (1 + (sy - 1) * progress) + ")";
-      second.style.opacity = Math.max(0, Math.min(1, (progress - .25) / .5));
-      first.style.opacity = 1 - Math.max(0, Math.min(1, (progress - .25) / .5));
-    },
-    cleanup: cleanup
-  };
+var wheelTimer = 0;
+var wheelBase = -1;
+var wheelDirection = 0;
+var lastScrollY = scrollY;
+var lastScrollTime = performance.now();
+var scrollVelocity = 0;
+var shutter = null;
+function nearestIndex() {
+  var position = scrollY;
+  return sections.reduce(function (best, section, index) {
+    return Math.abs(section.offsetTop - position) < Math.abs(sections[best].offsetTop - position) ? index : best;
+  }, 0);
+}
+function clearShutter() {
+  if (shutter) { shutter.remove(); shutter = null; }
+}
+function makeShutter(index) {
+  if (reducedMotion.matches) return;
+  clearShutter();
+  var photo = sections[index].querySelector("[data-story-photo]");
+  var source = photo && photo.dataset.storyPhoto;
+  if (!source && index === 0) source = "site/assets/hero-placeholder.webp";
+  shutter = document.createElement("div");
+  shutter.className = "chapter-shutter";
+  shutter.setAttribute("aria-hidden", "true");
+  var animations = [];
+  for (var i = 0; i < 5; i++) {
+    var strip = document.createElement("span");
+    strip.style.left = (i * 20) + "%";
+    if (source) {
+      var image = document.createElement("img");
+      image.src = source;
+      image.alt = "";
+      image.style.left = (-i * 100) + "%";
+      strip.appendChild(image);
+    } else strip.style.backgroundColor = index % 2 ? "#970500" : "#160906";
+    shutter.appendChild(strip);
+    animations.push(strip.animate([
+      { transform: "translate3d(0," + (i % 2 ? "-" : "") + "110%,0)" },
+      { transform: "translate3d(0,0,0)", offset: .34 },
+      { transform: "translate3d(0,0,0)", offset: .66 },
+      { transform: "translate3d(0," + (i % 2 ? "" : "-") + "110%,0)" }
+    ], { duration: 980, easing: "cubic-bezier(.76,0,.24,1)", fill: "both" }));
+  }
+  document.body.appendChild(shutter);
+  var own = shutter;
+  Promise.all(animations.map(function (animation) { return animation.finished.catch(function () {}); }))
+    .then(function () { if (shutter === own) clearShutter(); });
 }
 function pageMode() {
   return !reducedMotion.matches && innerHeight > 560 && !root.classList.contains("details-open");
@@ -874,66 +941,63 @@ function glideTo(index, updateHash) {
   var section = sections[index];
   if (!section) return;
   if (updateHash) history.pushState(null, "", "#" + section.id);
+  clearTimeout(wheelTimer);
+  wheelBase = -1;
   if (!pageMode()) {
     section.scrollIntoView({ block: "start", behavior: "auto" });
     setActive(section);
     return;
   }
   cancelAnimationFrame(scrollFrame);
-  if (finishFlight) { finishFlight(); finishFlight = null; }
-  var start = scrollY;
+  var y = scrollY;
   var end = section.offsetTop;
-  var distance = end - start;
-  if (Math.abs(distance) < 2) { setActive(section); return; }
-  var fromIndex = sections.findIndex(function (item) { return item.id === activeId; });
-  var flight = makeStoryFlight(fromIndex, index, distance);
-  if (flight) finishFlight = flight.cleanup;
+  if (Math.abs(end - y) < 2) { root.classList.remove("is-wheeling"); setActive(section); return; }
+  var velocity = Math.max(-2.5, Math.min(2.5, scrollVelocity));
   var started = performance.now();
-  var duration = 650;
+  var previous = started;
   gliding = true;
   root.classList.add("is-gliding");
+  root.classList.remove("is-wheeling");
+  makeShutter(index);
   function tick(now) {
-    var t = Math.min(1, (now - started) / duration);
-    var eased = t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    scrollTo(0, start + distance * eased);
-    if (flight) flight.paint(eased);
-    if (t < 1) scrollFrame = requestAnimationFrame(tick);
-    else {
+    var dt = Math.min(32, now - previous);
+    previous = now;
+    var omega = .013;
+    var acceleration = omega * omega * (end - y) - 2 * omega * velocity;
+    velocity += acceleration * dt;
+    y += velocity * dt;
+    if ((Math.abs(end - y) < .7 && Math.abs(velocity) < .015) || now - started > 1250) {
       scrollTo(0, end);
-      if (finishFlight) { finishFlight(); finishFlight = null; }
       root.classList.remove("is-gliding");
       gliding = false;
-      wheelLockedUntil = performance.now() + 280;
       setActive(section);
-    }
+    } else { scrollTo(0, y); scrollFrame = requestAnimationFrame(tick); }
   }
   scrollFrame = requestAnimationFrame(tick);
 }
 addEventListener("wheel", function (event) {
   if (event.ctrlKey || !pageMode() || (event.target instanceof Element && event.target.closest("input, textarea, select"))) return;
-  var now = performance.now();
   var delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1);
   if (!delta) return;
   var directory = event.target instanceof Element && event.target.closest(".feature-directory");
   if (directory && ((delta > 0 && directory.scrollTop + directory.clientHeight < directory.scrollHeight - 2) ||
     (delta < 0 && directory.scrollTop > 1))) return;
-  var current = sections.findIndex(function (section) { return section.id === activeId; });
-  if (current < 0) current = 0;
-  if (!gliding && now >= wheelLockedUntil && ((current === 0 && delta < 0) || (current === sections.length - 1 && delta > 0))) return;
-  event.preventDefault();
-  var elapsed = now - lastWheel;
-  lastWheel = now;
-  if (gliding || now < wheelLockedUntil) {
-    wheelLockedUntil = Math.max(wheelLockedUntil, now + 170);
-    return;
+  if (gliding) {
+    cancelAnimationFrame(scrollFrame);
+    gliding = false;
+    root.classList.remove("is-gliding");
+    clearShutter();
   }
-  if (elapsed > 220) wheelSum = 0;
-  wheelSum += delta;
-  if (Math.abs(wheelSum) < 18) return;
-  var direction = Math.sign(wheelSum);
-  wheelSum = 0;
-  glideTo(current + direction, false);
-}, { passive: false });
+  if (wheelBase < 0) wheelBase = nearestIndex();
+  wheelDirection = Math.sign(delta);
+  root.classList.add("is-wheeling");
+  clearTimeout(wheelTimer);
+  wheelTimer = setTimeout(function () {
+    var target = Math.max(0, Math.min(sections.length - 1, wheelBase + wheelDirection));
+    wheelBase = -1;
+    glideTo(target, false);
+  }, 155);
+}, { passive: true });
 
 document.querySelectorAll('a[href^="#"]').forEach(function (link) {
   link.addEventListener("click", function (event) {
@@ -949,22 +1013,82 @@ if (downloads) downloads.addEventListener("toggle", function () {
   root.classList.toggle("details-open", downloads.open);
 });
 
-// Content is visible by default. Reveal motion is an enhancement only.
-if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-  var revealObserver = new IntersectionObserver(function (entries, observer) {
-    entries.forEach(function (entry) {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("is-visible");
-        observer.unobserve(entry.target);
-      }
+// A single scroll read drives all motion. The photographs and tiles move with the
+// gesture itself, so reversing scroll reverses the scene instead of replaying an entrance.
+var motionFrame = 0;
+var clamp01 = function (value) { return Math.max(0, Math.min(1, value)); };
+var motion = {
+  hero: document.querySelector(".hero-img"),
+  gallery: document.querySelector(".gallery-frame"),
+  galleryMain: document.querySelector(".gallery-frame .story-main"),
+  contactA: document.querySelector(".contact-a"),
+  contactB: document.querySelector(".contact-b"),
+  galleryTitle: document.querySelector(".gallery .split-copy"),
+  studio: document.querySelector(".studio-frame"),
+  studioUI: document.querySelector(".studio-ui"),
+  studioCopy: document.querySelector(".studio .chapter-inner>div:first-child"),
+  comparison: document.querySelector(".click .compare-wrap"),
+  clickCopy: document.querySelector(".click-copy"),
+  film: document.querySelector(".film-frame"),
+  filmBefore: document.querySelector(".film-before"),
+  filmCopy: document.querySelector(".film .chapter-inner>div:first-child"),
+  phone: document.querySelector(".anywhere .phone-frame"),
+  portrait: document.querySelector(".guy .portrait-placeholder"),
+  nextCards: Array.from(document.querySelectorAll(".next-card"))
+};
+function paintMotion() {
+  motionFrame = 0;
+  var now = performance.now();
+  var dy = scrollY - lastScrollY;
+  if (!gliding && now > lastScrollTime) scrollVelocity = Math.max(-2.5, Math.min(2.5, dy / (now - lastScrollTime)));
+  lastScrollY = scrollY;
+  lastScrollTime = now;
+  if (reducedMotion.matches) {
+    [motion.hero,motion.gallery,motion.galleryMain,motion.contactA,motion.contactB,motion.galleryTitle,
+      motion.studio,motion.studioUI,motion.studioCopy,motion.comparison,motion.clickCopy,motion.film,
+      motion.filmCopy,motion.phone,motion.portrait].concat(motion.nextCards).forEach(function (element) {
+      if (element) element.style.transform = "";
     });
-  }, { rootMargin: "0px 0px -7% 0px", threshold: 0 });
-  document.querySelectorAll(".reveal").forEach(function (element) {
-    if (element.getBoundingClientRect().top < innerHeight) element.classList.add("is-visible");
-    else revealObserver.observe(element);
+    motion.filmBefore.style.opacity = "0";
+    return;
+  }
+  var h = innerHeight;
+  var state = function (index) {
+    var top = sections[index].offsetTop - scrollY;
+    return [clamp01(1 - top / h), clamp01(-top / h)];
+  };
+  var hero = state(0), gallery = state(1), studio = state(2), click = state(3), film = state(4);
+  var anywhere = state(5), guy = state(6), next = state(7);
+  motion.hero.style.transform = "translate3d(0," + (-hero[1] * 95) + "px,0) scale(" + (1.04 + hero[1] * .21) + ")";
+  var g = gallery[0], gx = gallery[1];
+  motion.gallery.style.transform = "translate3d(" + ((1 - g) * 210 - gx * 110) + "px," + (gx * -65) + "px,0) rotateY(" + ((1 - g) * -21) + "deg) scale(" + (.78 + g * .22 + gx * .18) + ")";
+  motion.galleryMain.style.transform = "scale(" + (1 + gx * .2) + ")";
+  motion.contactA.style.transform = "translate3d(" + ((1 - g) * -170 - gx * 110) + "px," + ((1 - g) * -90 - gx * 60) + "px,0) rotate(" + (-22 + g * 13 - gx * 17) + "deg)";
+  motion.contactB.style.transform = "translate3d(" + ((1 - g) * -220 - gx * 140) + "px," + ((1 - g) * 90 + gx * 80) + "px,0) rotate(" + (19 - g * 12 + gx * 18) + "deg)";
+  motion.galleryTitle.style.transform = "translate3d(0," + ((1 - g) * 130 - gx * 90) + "px,0)";
+  var s = studio[0], sx = studio[1];
+  motion.studio.style.transform = "translate3d(" + ((1 - s) * 230 - sx * 90) + "px,0,0) scale(" + (1.15 - s * .15 + sx * .12) + ")";
+  motion.studioUI.style.transform = "translate3d(" + ((1 - s) * 160) + "px," + ((1 - s) * 80) + "px,0) rotate(" + (-11 + s * 7) + "deg)";
+  motion.studioCopy.style.transform = "translate3d(" + ((1 - s) * -100 - sx * 90) + "px,0,0)";
+  var c = click[0], cx = click[1];
+  motion.comparison.style.transform = "scale(" + (1.18 - c * .18 + cx * .11) + ")";
+  motion.clickCopy.style.transform = "translate3d(0," + ((1 - c) * 150 - cx * 70) + "px,0)";
+  var f = film[0], fx = film[1];
+  motion.film.style.transform = "translate3d(" + ((1 - f) * 170 - fx * 90) + "px,0,0) rotate(" + (-14 + f * 9 + fx * 8) + "deg) scale(" + (.8 + f * .2 + fx * .08) + ")";
+  motion.filmBefore.style.opacity = String(1 - f);
+  motion.filmCopy.style.transform = "translate3d(" + ((1 - f) * -140 - fx * 90) + "px,0,0)";
+  motion.phone.style.transform = "translate3d(0," + ((1 - anywhere[0]) * 130 - anywhere[1] * 70) + "px,0) rotate(" + ((1 - anywhere[0]) * -11 + anywhere[1] * 8) + "deg)";
+  motion.portrait.style.transform = "translate3d(" + ((1 - guy[0]) * -150) + "px,0,0) rotate(" + ((1 - guy[0]) * -10) + "deg)";
+  motion.nextCards.forEach(function (card, index) {
+    var p = clamp01((next[0] - index * .12) / (1 - index * .12));
+    card.style.transform = "translate3d(" + ((1 - p) * (index % 2 ? 140 : -140)) + "px," + ((1 - p) * 55) + "px,0) rotate(" + ((1 - p) * (index % 2 ? 7 : -7)) + "deg)";
   });
-  document.documentElement.classList.add("motion-ready");
 }
+function scheduleMotion() { if (!motionFrame) motionFrame = requestAnimationFrame(paintMotion); }
+addEventListener("scroll", scheduleMotion, { passive: true });
+addEventListener("resize", scheduleMotion);
+reducedMotion.addEventListener("change", scheduleMotion);
+scheduleMotion();
 </script>
 </body>
 </html>

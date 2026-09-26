@@ -53,18 +53,15 @@ try {
     }
     if (name === 'desktop') {
       await page.mouse.wheel(0, 120);
+      await page.waitForFunction(() => scrollY > 10 && scrollY < document.getElementById('gallery').offsetTop);
+      await page.waitForFunction(() => document.querySelector('.chapter-shutter') !== null);
+      assert.equal(await page.locator('.chapter-shutter span').count(), 5, 'five film-shutter strips cross the chapter');
       await page.waitForFunction(() => Math.abs(scrollY - document.getElementById('gallery').offsetTop) < 2);
       assert.equal(await page.locator('.rail-word').textContent(), 'GALLERY', 'wheel advances to Gallery');
-      for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 120);
-      await page.waitForTimeout(850);
-      assert.equal(await page.locator('.rail-word').textContent(), 'GALLERY', 'momentum does not skip a chapter');
-      await page.waitForTimeout(350);
       await page.mouse.wheel(0, 120);
-      await page.waitForFunction(() => document.querySelector('.story-flight') !== null);
-      assert.equal(await page.locator('.story-flight img').count(), 2, 'Gallery to Studio carries and blends the photo');
       await page.waitForFunction(() => Math.abs(scrollY - document.getElementById('studio').offsetTop) < 2);
-      await page.waitForFunction(() => document.querySelector('.story-flight') === null);
       assert.equal(await page.locator('.rail-word').textContent(), 'STUDIO', 'second wheel advances one chapter');
+      assert.notEqual(await page.locator('.studio-frame').evaluate(el => el.style.transform), '', 'studio motion follows scroll');
       await page.evaluate(() => glideTo(8, false));
       await page.waitForFunction(() => document.querySelector('.rail-word').textContent === 'FEATURES');
       const directory = page.locator('.feature-directory');
@@ -73,28 +70,36 @@ try {
       await page.mouse.wheel(0, 200);
       await page.waitForFunction(() => document.querySelector('.feature-directory').scrollTop > 0);
       assert.equal(await page.locator('.rail-word').textContent(), 'FEATURES', 'directory scroll stays in chapter');
+      await page.waitForFunction(() => !gliding);
     }
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     assert.ok(overflow <= 1, name + ': horizontal overflow of ' + overflow + 'px');
-    const sizing = await page.locator('.chapter').evaluateAll(sections => sections.map(section => {
-      const inner = section.querySelector('.chapter-inner');
-      const top = section.getBoundingClientRect().top;
-      const boxes = [...section.querySelectorAll('h1,h2,.display-shot,.story-frame,.red-panel,.ba-stage,.phone-frame,.portrait-placeholder,.download-details,.btn-row,.hero-note,.mini-list,.privacy-line,blockquote,.site-credit,.feature-directory,.next-list')]
-        .map(element => element.getBoundingClientRect());
-      return { id: section.id, height: Math.round(section.getBoundingClientRect().height),
-        inner: Math.round(inner.getBoundingClientRect().height), content: inner.scrollHeight,
-        first: Math.round(Math.min(...boxes.map(box => box.top - top))),
-        last: Math.round(Math.max(...boxes.map(box => box.bottom - top))) };
-    }));
+    const sizing = [];
+    for (const chapter of await page.locator('.chapter').all()) {
+      await chapter.evaluate(section => section.scrollIntoView({ block: 'start', behavior: 'instant' }));
+      await page.waitForTimeout(40);
+      sizing.push(await chapter.evaluate(section => {
+        const inner = section.querySelector('.chapter-inner');
+        const top = section.getBoundingClientRect().top;
+        const boxes = [...section.querySelectorAll('h1,h2,.display-shot,.story-frame,.red-panel,.ba-stage,.phone-frame,.portrait-placeholder,.download-details,.btn-row,.hero-note,.mini-list,.privacy-line,blockquote,.site-credit,.feature-directory,.next-list')]
+          .map(element => element.getBoundingClientRect());
+        return { id: section.id, height: Math.round(section.getBoundingClientRect().height),
+          inner: Math.round(inner.getBoundingClientRect().height), content: inner.scrollHeight,
+          first: Math.round(Math.min(...boxes.map(box => box.top - top))),
+          last: Math.round(Math.max(...boxes.map(box => box.bottom - top))) };
+      }));
+    }
     if (process.argv.includes('--layout')) console.log(name, JSON.stringify(sizing));
     for (const section of sizing) {
       assert.ok(Math.abs(section.height - viewport.height) <= 1, `${name}: ${section.id} should fill one viewport`);
       assert.ok(section.first >= 0 && section.last <= viewport.height, `${name}: ${section.id} content should fit the viewport`);
     }
     for (const image of await page.locator('img').all()) {
-      await image.scrollIntoViewIfNeeded();
-      await image.evaluate(img => img.decode().catch(() => {}));
+      await image.evaluate(async img => {
+        img.loading = 'eager';
+        await img.decode().catch(() => {});
+      });
     }
     const missing = await page.locator('img').evaluateAll(images =>
       images.filter(img => !img.complete || img.naturalWidth === 0).map(img => img.src));

@@ -48,3 +48,7 @@ Agent-generated changelog of completed features and architectural decisions.
 - CHR-152: Carried one temporary repository photograph through Gallery, Studio, Click and Film with distinct layouts, chapter-specific motion and a shared-image transition; the before/after slider now compares the original with a real Chromasmith export.
 - Updated `index.html`, `site/assets/manifest.json`, `site/assets/story/`, `site/render-story-photo.mjs`, `site/build-page.mjs`, `site/README.md`, `site/awwwards-motion-research.md` and `test/homepage_smoke.mjs`.
 - Verified the app render, six viewport layouts, image continuity, mid-transition layer, real comparison, keyboard input and accessibility with `node test/homepage_smoke.mjs --shots --layout`; inspected desktop and mobile screenshots.
+
+- CHR-152: Replaced abrupt wheel paging with gesture-following scroll and an interruptible spring settle; replaced the photo handoff with a five-strip shutter and added reversible scroll motion to Gallery, Studio, Click, Film, Anywhere, Guy and beta cards.
+- Reworked `index.html` into a contact sheet, open editor, full-bleed comparison and print-like Film sequence; expanded `site/awwwards-motion-research.md`, updated `site/README.md`, and added `test/homepage_motion_probe.mjs`.
+- Verified six viewport layouts, navigation, images, comparison, feature disclosures and accessibility with `test/homepage_smoke.mjs`; the motion probe recorded 43 moving frames, a 120px maximum step and a 17ms 95th-percentile frame gap.

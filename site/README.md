@@ -6,13 +6,14 @@ itself follows). The page is a ten-chapter scrolling story with a fixed brand ra
 section index. It uses the bundled Gramatika family throughout. The index shows only the
 current chapter and its neighbors, plus a return-to-top arrow.
 
-On wheel input, one gesture eases to the next chapter and stops. Touch devices use native
-mandatory section snapping. Each chapter is sized to one viewport; very short browser windows
-use natural scrolling so content remains reachable. Reduced-motion visitors get a still,
-ordinary-scroll version. The opening photo, product frames, panels and chapter titles have
-short, separate arrival animations. A shared image layer carries one frame between Gallery,
-Studio, Click and Film; those chapters also have distinct reveal, interface and photo-development
-motion. See `awwwards-motion-research.md` for visual references and implementation choices.
+Desktop wheel input moves the page directly. When the gesture stops, a spring settles at the
+next chapter; another gesture can interrupt it. Touch devices use native mandatory section
+snapping. Each chapter is sized to one viewport; very short browser windows use natural
+scrolling so content remains reachable. Reduced-motion visitors get a still, ordinary-scroll
+version. Scroll progress drives a contact-sheet spread, an open editor scene, a full-screen
+comparison, a developing film print, a moving phone and staggered beta cards. Five image strips
+create a transition between chapters. See `awwwards-motion-research.md` for references and
+the motion decisions.
 
 The Coming Soon chapter labels video editing, astro stacking and the current two-photo
 panorama as beta. The Features chapter holds 100 short, expandable descriptions in an
@@ -25,7 +26,7 @@ versions were rendered through Chromasmith, and the original/export comparison i
 Run `node site/render-story-photo.mjs` to reproduce them. The CHRO-MA-GUY portrait and copy are
 explicitly temporary. Replace the sample photo and founder material when originals arrive.
 
-Three scripts feed it. All of them are optional: the page renders without any of them.
+Four scripts feed it. All of them are optional: the page renders without any of them.
 
 ```bash
 node site/shoot-screenshots.mjs   # re-capture the UI screenshots from the REAL app
