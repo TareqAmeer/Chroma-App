@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hero Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600;900&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0b0a;--fg:#f2efe8;--dim:#8b877e;--acc:#ff5a1f}
+*{box-sizing:border-box;margin:0}
+html,body{background:var(--bg);color:var(--fg);font-family:"Inter Tight",system-ui,sans-serif}
+body{overflow-x:clip}
+.mono{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.v{display:none}.v.on{display:block}
+.spacer{height:100vh;display:grid;place-items:center}
+/* switcher */
+#sw{position:fixed;z-index:99;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:4px;padding:4px;background:rgba(20,20,18,.85);backdrop-filter:blur(10px);border:1px solid #2a2925;border-radius:999px}
+#sw a{color:var(--dim);text-decoration:none;font:600 12px "Inter Tight";padding:8px 14px;border-radius:999px;white-space:nowrap}
+#sw a.on{background:var(--fg);color:var(--bg)}
+@media(max-width:560px){#sw a{padding:8px 9px}#sw a span{display:none}}
+.grain{position:absolute;inset:-50%;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");mix-blend-mode:overlay;animation:gr .4s steps(4) infinite}
+@keyframes gr{0%{transform:translate(0,0)}25%{transform:translate(-3%,2%)}50%{transform:translate(2%,-3%)}75%{transform:translate(-1%,3%)}}
+
+/* A — develop */
+#A .pin{height:100vh;position:relative;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;align-items:center;padding:0 5vw;gap:4vw}
+#A .ph{position:relative;height:82vh;aspect-ratio:844/1125;justify-self:center;overflow:hidden;border-radius:2px}
+#A .ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#A .film{clip-path:inset(100% 0 0 0)}
+#A .glow{filter:blur(18px) saturate(2) brightness(1.4);mix-blend-mode:screen;opacity:0}
+#A .ph .grain{opacity:0}
+#A h1{font-size:clamp(48px,8vw,128px);line-height:.88;font-weight:900;letter-spacing:-.04em}
+#A .steps{margin-top:32px;display:grid;gap:10px}
+#A .steps div{opacity:.25;transition:opacity .3s}
+#A .steps div.on{opacity:1;color:var(--fg)}
+@media(max-width:760px){#A .pin{grid-template-columns:1fr;padding-top:10vh}#A .ph{height:56vh}#A h1{font-size:44px}}
+
+/* B — wipe */
+#B .stage{height:100vh;position:relative;overflow:hidden;cursor:none}
+#B img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#B .top{clip-path:inset(0 0 0 50%)}
+#B .line{position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--fg);mix-blend-mode:difference}
+#B .tag{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--fg);color:var(--bg);font:600 12px "Inter Tight";padding:8px 12px;border-radius:999px;white-space:nowrap}
+#B h1{position:absolute;left:5vw;bottom:10vh;font-size:clamp(44px,9vw,150px);font-weight:900;letter-spacing:-.045em;line-height:.85;mix-blend-mode:difference;pointer-events:none}
+#B .lbl{position:absolute;top:24px}#B .l1{left:24px}#B .l2{right:24px}
+
+/* C — shader */
+#C .stage{height:100vh;position:relative;overflow:hidden}
+#C canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#C h1{position:absolute;left:5vw;top:12vh;font-size:clamp(44px,8vw,128px);font-weight:900;letter-spacing:-.04em;line-height:.88;pointer-events:none}
+#C .hint{position:absolute;right:5vw;bottom:10vh}
+#C .looks{position:absolute;left:5vw;bottom:10vh;display:flex;gap:6px;flex-wrap:wrap}
+#C .looks button{background:none;border:1px solid #3a3833;color:var(--fg);font:600 12px "Inter Tight";padding:8px 12px;border-radius:999px;cursor:pointer}
+#C .looks button.on{background:var(--fg);color:var(--bg)}
+
+/* D — masked type */
+#D .pin{height:100vh;position:relative;overflow:hidden;display:grid;place-items:center}
+#D .word{font-size:34vw;font-weight:900;letter-spacing:-.06em;line-height:.8;background:url(../assets/story/film.webp) center 35%/cover;-webkit-background-clip:text;background-clip:text;color:transparent;white-space:nowrap;will-change:transform}
+#D .full{position:absolute;inset:0;background:url(../assets/story/film.webp) center 35%/cover;opacity:0}
+#D .cap{position:absolute;left:5vw;bottom:10vh;max-width:420px;font-size:20px;line-height:1.3;opacity:0}
+
+/* E — strip */
+#E .pin{height:100vh;overflow:hidden;position:relative;display:flex;align-items:center}
+#E .track{display:flex;gap:2vw;padding:0 8vw;will-change:transform}
+#E .fr{flex:none;height:64vh;position:relative;background:#16150f;padding:28px 10px;border-radius:3px}
+#E .fr img{height:100%;display:block;border-radius:1px}
+#E .fr .mono{position:absolute;left:10px;top:8px;color:#e8a33a}
+#E .fr::before,#E .fr::after{content:"";position:absolute;left:0;right:0;height:10px;background:repeating-linear-gradient(90deg,transparent 0 10px,#0b0b0a 10px 20px)}
+#E .fr::before{top:4px}#E .fr::after{bottom:4px}
+#E h1{position:absolute;left:5vw;top:8vh;font-size:clamp(40px,6vw,96px);font-weight:900;letter-spacing:-.04em;line-height:.9;z-index:2}
+#E .bar{position:absolute;left:5vw;right:5vw;bottom:10vh;height:1px;background:#2a2925}
+#E .bar i{display:block;height:100%;background:var(--acc);transform-origin:left;transform:scaleX(0)}
+
+@media (prefers-reduced-motion:reduce){.grain{animation:none}}
+</style>
+</head>
+<body>
+
+<nav id="sw">
+  <a href="?v=A">A <span>Develop</span></a>
+  <a href="?v=B">B <span>Wipe</span></a>
+  <a href="?v=C">C <span>Shader</span></a>
+  <a href="?v=D">D <span>Type</span></a>
+  <a href="?v=E">E <span>Strip</span></a>
+</nav>
+
+<!-- A: scroll develops one photo: original → graded → grain → halation -->
+<section class="v" id="A">
+  <div class="pin">
+    <div>
+      <p class="mono">Scroll to develop</p>
+      <h1>Every frame,<br>developed.</h1>
+      <div class="steps mono"><div>01 Raw</div><div>02 Film look</div><div>03 Grain</div><div>04 Halation</div></div>
+    </div>
+    <div class="ph">
+      <img src="../assets/story/original.webp" alt="">
+      <img class="film" src="../assets/story/film.webp" alt="">
+      <img class="film glow" src="../assets/story/film.webp" alt="">
+      <div class="grain"></div>
+    </div>
+  </div>
+  <div class="spacer mono">Next section</div>
+</section>
+
+<!-- B: cursor-following before/after -->
+<section class="v" id="B">
+  <div class="stage">
+    <img src="../assets/story/original.webp" alt="">
+    <img class="top" src="../assets/story/film.webp" alt="">
+    <div class="line"></div><div class="tag">← Original · Chromasmith →</div>
+    <span class="mono lbl l1">Original</span><span class="mono lbl l2">Portra look</span>
+    <h1>Move to<br>see it.</h1>
+  </div>
+  <div class="spacer mono">Next section</div>
+</section>
+
+<!-- C: live WebGL look under the cursor -->
+<section class="v" id="C">
+  <div class="stage">
+    <canvas></canvas>
+    <h1>Light, but<br>on film.</h1>
+    <div class="looks"><button class="on" data-l="0">Chromasmith</button><button data-l="1">Warm print</button><button data-l="2">Cross-process</button></div>
+    <p class="mono hint">Move the lens</p>
+  </div>
+  <div class="spacer mono">Next section</div>
+</section>
+
+<!-- D: giant type filled with the photo, zooms until it IS the photo -->
+<section class="v" id="D">
+  <div class="pin">
+    <div class="full"></div>
+    <div class="word">CHROMA</div>
+    <p class="cap">A darkroom that lives in your browser. Film looks, grain and halation, all offline.</p>
+  </div>
+  <div class="spacer mono">Next section</div>
+</section>
+
+<!-- E: horizontal film strip scrubbed by vertical scroll -->
+<section class="v" id="E">
+  <div class="pin">
+    <h1>The whole roll.</h1>
+    <div class="track">
+      <div class="fr"><span class="mono">01A</span><img src="../assets/story/original.webp" alt=""></div>
+      <div class="fr"><span class="mono">02A</span><img src="../assets/ui/library.webp" alt=""></div>
+      <div class="fr"><span class="mono">03A</span><img src="../assets/story/film.webp" alt=""></div>
+      <div class="fr"><span class="mono">04A</span><img src="../assets/ui/looks.webp" alt=""></div>
+      <div class="fr"><span class="mono">05A</span><img src="../assets/story/studio.webp" alt=""></div>
+      <div class="fr"><span class="mono">06A</span><img src="../assets/ui/color.webp" alt=""></div>
+      <div class="fr"><span class="mono">07A</span><img src="../assets/ui/mobile.webp" alt=""></div>
+    </div>
+    <div class="bar"><i></i></div>
+  </div>
+  <div class="spacer mono">Next section</div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.3.4/dist/lenis.min.js"></script>
+<script>
+const v=(new URLSearchParams(location.search).get('v')||'A').toUpperCase();
+document.getElementById(v)?.classList.add('on');
+document.querySelectorAll('#sw a').forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='?v='+v));
+gsap.registerPlugin(ScrollTrigger);
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+if(!reduce){const lenis=new Lenis({lerp:.09});lenis.on('scroll',ScrollTrigger.update);gsap.ticker.add(t=>lenis.raf(t*1000));gsap.ticker.lagSmoothing(0);}
+
+const V={
+A(){
+  const s=document.querySelectorAll('#A .steps div');
+  const tl=gsap.timeline({scrollTrigger:{trigger:'#A .pin',pin:true,start:'top top',end:'+=300%',scrub:1,
+    onUpdate:self=>{const i=Math.min(3,Math.floor(self.progress*4));s.forEach((d,j)=>d.classList.toggle('on',j<=i))}}});
+  tl.from('#A .ph',{scale:.9,duration:.5})
+    .to('#A .film:not(.glow)',{clipPath:'inset(0% 0 0 0)',ease:'none',duration:1},0.2)
+    .to('#A .grain',{opacity:.55,duration:.6})
+    .to('#A .glow',{opacity:.55,clipPath:'inset(0% 0 0 0)',duration:.8})
+    .to('#A .ph',{scale:1.04,duration:.4});
+},
+B(){
+  const st=document.querySelector('#B .stage'),top=st.querySelector('.top'),ln=st.querySelector('.line'),tag=st.querySelector('.tag');
+  let x=.5,tx=.5,y=.5,ty=.5;
+  const set=e=>{const r=st.getBoundingClientRect(),p=e.touches?e.touches[0]:e;tx=(p.clientX-r.left)/r.width;ty=(p.clientY-r.top)/r.height};
+  st.addEventListener('pointermove',set);st.addEventListener('touchmove',set,{passive:true});
+  gsap.ticker.add(()=>{x+=(tx-x)*.12;y+=(ty-y)*.12;top.style.clipPath=`inset(0 0 0 ${x*100}%)`;ln.style.left=tag.style.left=x*100+'%';tag.style.top=y*100+'%'});
+  gsap.from('#B h1',{yPercent:60,opacity:0,duration:1.2,ease:'expo.out',delay:.2});
+},
+C(){
+  const cv=document.querySelector('#C canvas'),gl=cv.getContext('webgl');
+  const vs='attribute vec2 p;varying vec2 u;void main(){u=p*.5+.5;gl_Position=vec4(p,0,1);}';
+  const fs=`precision highp float;varying vec2 u;uniform sampler2D o,f;uniform vec2 m,res,img;uniform float t,look,r;
+  float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233))+t)*43758.5453);}
+  vec2 cover(vec2 uv){float ra=res.x/res.y,ri=img.x/img.y;vec2 s=ra>ri?vec2(1.,ri/ra):vec2(ra/ri,1.);return (uv-.5)*s+.5;}
+  vec3 grade(vec3 c){if(look<.5)return c;if(look<1.5)return pow(c,vec3(.9,1.,1.15))*vec3(1.08,1.,.88);
+    return vec3(smoothstep(.05,.95,c.r),pow(c.g,.85),c.b*.7+.12);}
+  void main(){vec2 uv=cover(vec2(u.x,1.-u.y));vec2 d=(u-m)*vec2(res.x/res.y,1.);float L=length(d);
+    float k=1.-smoothstep(r*.92,r,L);
+    vec2 lens=uv-(d*.06*k)*vec2(res.y/res.x,1.);
+    vec3 a=texture2D(o,uv).rgb;
+    vec3 b=vec3(texture2D(f,lens+vec2(.002,0)).r,texture2D(f,lens).g,texture2D(f,lens-vec2(.002,0)).b);
+    vec3 hal=vec3(0);for(int i=0;i<8;i++){float an=float(i)*.785;vec3 s=texture2D(f,lens+vec2(cos(an),sin(an))*.012).rgb;hal+=max(s-.7,0.)*vec3(1.,.3,.1);}
+    b=grade(b+hal*.35);b+=(h(u*res)-.5)*.09;
+    vec3 c=mix(a*.55,b,k);c+=vec3(1.,.4,.2)*.6*smoothstep(r*.9,r,L)*(1.-smoothstep(r,r*1.02,L));
+    gl_FragColor=vec4(c,1.);}`;
+  const sh=(t,s)=>{const x=gl.createShader(t);gl.shaderSource(x,s);gl.compileShader(x);if(!gl.getShaderParameter(x,gl.COMPILE_STATUS))console.error(gl.getShaderInfoLog(x));return x};
+  const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,vs));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(pr);gl.useProgram(pr);
+  gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+  const lp=gl.getAttribLocation(pr,'p');gl.enableVertexAttribArray(lp);gl.vertexAttribPointer(lp,2,gl.FLOAT,false,0,0);
+  const U=n=>gl.getUniformLocation(pr,n);
+  const tex=(src,unit)=>new Promise(res=>{const i=new Image();i.onload=()=>{const tx=gl.createTexture();gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,tx);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,i);res(i)};i.src=src});
+  let look=0,m=[.6,.5],tm=[.6,.5],rad=0;
+  document.querySelectorAll('#C .looks button').forEach(b=>b.onclick=()=>{look=+b.dataset.l;document.querySelectorAll('#C .looks button').forEach(x=>x.classList.toggle('on',x===b))});
+  cv.parentElement.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();tm=[(e.clientX-r.left)/r.width,1-(e.clientY-r.top)/r.height]});
+  Promise.all([tex('../assets/story/original.webp',0),tex('../assets/story/film.webp',1)]).then(([im])=>{
+    gl.uniform1i(U('o'),0);gl.uniform1i(U('f'),1);gl.uniform2f(U('img'),im.width,im.height);
+    gsap.to({},{duration:1.4,ease:'expo.out',onUpdate(){rad=.28*this.progress()}});
+    gsap.ticker.add(t=>{const dpr=Math.min(devicePixelRatio,2),w=cv.clientWidth*dpr,h=cv.clientHeight*dpr;if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;gl.viewport(0,0,w,h)}
+      m[0]+=(tm[0]-m[0])*.1;m[1]+=(tm[1]-m[1])*.1;
+      gl.uniform2f(U('m'),m[0],m[1]);gl.uniform2f(U('res'),w,h);gl.uniform1f(U('t'),t%10);gl.uniform1f(U('look'),look);gl.uniform1f(U('r'),rad);
+      gl.drawArrays(gl.TRIANGLE_STRIP,0,4)});
+  });
+},
+D(){
+  gsap.timeline({scrollTrigger:{trigger:'#D .pin',pin:true,start:'top top',end:'+=250%',scrub:1}})
+    .from('#D .word',{yPercent:30,opacity:0,duration:.3})
+    .to('#D .word',{scale:14,xPercent:6,ease:'power2.in',duration:1})
+    .to('#D .full',{opacity:1,duration:.15},'-=.2')
+    .to('#D .cap',{opacity:1,y:-20,duration:.3});
+},
+E(){
+  const tr=document.querySelector('#E .track');
+  const dist=()=>tr.scrollWidth-innerWidth;
+  gsap.timeline({scrollTrigger:{trigger:'#E .pin',pin:true,start:'top top',end:()=>'+='+dist()*1.2,scrub:1,invalidateOnRefresh:true}})
+    .to(tr,{x:()=>-dist(),ease:'none'},0)
+    .to('#E .bar i',{scaleX:1,ease:'none'},0);
+}
+};
+(V[v]||V.A)();
+</script>
+</body>
+</html>
