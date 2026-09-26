@@ -826,6 +826,24 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    // GPS position + offline reverse-geocoded place name ("London, Greater London, England,
+    // United Kingdom"), so the Library search finds photos by where they were taken. Keyed on the
+    // column's presence rather than a user_version bump so it can't collide with a concurrent
+    // schema bump; the first launch that adds it clears meta_mtime so metadata_run re-reads EXIF
+    // once, in the background, to fill it.
+    {
+        let has_col = |name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare("SELECT 1 FROM pragma_table_info('photos') WHERE name = ?1")?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("place")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN gps_lat REAL", [])?;
+            conn.execute("ALTER TABLE photos ADD COLUMN gps_lon REAL", [])?;
+            conn.execute("ALTER TABLE photos ADD COLUMN place TEXT", [])?;
+            conn.execute("UPDATE photos SET meta_mtime = NULL WHERE kind != 'video'", [])?;
+        }
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -2194,14 +2212,14 @@ pub fn metadata_run(
                     shutter = ?6, shutter_sec = ?7, aperture = ?8, aperture_f = ?9,
                     focal = ?10, focal_mm = ?11,
                     captured = ?12, cap_y = ?13, cap_m = ?14, cap_d = ?15,
-                    meta_mtime = ?16
+                    meta_mtime = ?16, gps_lat = ?18, gps_lon = ?19, place = ?20
                  WHERE id = ?17",
                 params![
                     meta.camera, meta.make, meta.model, meta.lens, meta.iso,
                     meta.shutter, shutter_sec, meta.aperture, aperture_f,
                     meta.focal_len, focal_mm,
                     captured, cap_y, cap_m, cap_d,
-                    mtime, id,
+                    mtime, id, meta.lat, meta.lon, meta.place,
                 ],
             )
             .map_err(|e| e.to_string())?;
@@ -2406,14 +2424,14 @@ pub fn metadata_run_scoped(state: &CatalogState, progress: &mut dyn FnMut(ScanPr
                         shutter = ?6, shutter_sec = ?7, aperture = ?8, aperture_f = ?9,
                         focal = ?10, focal_mm = ?11,
                         captured = ?12, cap_y = ?13, cap_m = ?14, cap_d = ?15,
-                        meta_mtime = ?16
+                        meta_mtime = ?16, gps_lat = ?18, gps_lon = ?19, place = ?20
                      WHERE id = ?17",
                     params![
                         meta.camera, meta.make, meta.model, meta.lens, meta.iso,
                         meta.shutter, shutter_sec, meta.aperture, aperture_f,
                         meta.focal_len, focal_mm,
                         captured, cap_y, cap_m, cap_d,
-                        mtime, id,
+                        mtime, id, meta.lat, meta.lon, meta.place,
                     ]
                 )
                 .map_err(|e| e.to_string())?;
@@ -5051,6 +5069,28 @@ pub async fn catalog_clip_search(app: tauri::AppHandle, text: String, limit: Opt
 }
 
 #[derive(Serialize, Clone)]
+pub struct PlaceCount {
+    pub place: String,
+    pub count: i64,
+}
+
+/// Every distinct place name in the catalog with its photo count, most photos first — feeds the
+/// Library search's suggestion list and the Info panel's location keyword suggestion.
+#[tauri::command]
+pub fn catalog_places(state: tauri::State<CatalogState>) -> Result<Vec<PlaceCount>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT place, COUNT(*) FROM photos WHERE present = 1 AND place IS NOT NULL AND place != '' GROUP BY place ORDER BY COUNT(*) DESC LIMIT 2000")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| Ok(PlaceCount { place: r.get(0)?, count: r.get(1)? }))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string());
+    rows
+}
+
+#[derive(Serialize, Clone)]
 pub struct ClipTagHit {
     pub term: String,
     pub score: f32,
@@ -5399,6 +5439,8 @@ pub struct CatalogEntry {
     /// which is what opening the card and every mutation (rating, delete, ...) acts on. Showing
     /// the finished look while still editing the RAW is the plan's own explicit design call.
     pub thumb_path: Option<String>,
+    /// Reverse-geocoded place name from the photo's GPS, when it has one.
+    pub place: Option<String>,
 }
 
 #[derive(Serialize, Default)]
@@ -5618,7 +5660,12 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
         }
         if let Some(t) = &q.text {
             if !t.is_empty() {
-                where_parts.push(format!("p.name_lc LIKE ?{}", values.len() + 1));
+                // Filename, place ("london" -> every photo whose GPS resolves inside London) or
+                // any keyword path segment. One bound value reused three times.
+                let n = values.len() + 1;
+                where_parts.push(format!(
+                    "(p.name_lc LIKE ?{n} OR lower(p.place) LIKE ?{n} OR EXISTS (SELECT 1 FROM photo_keywords pk JOIN keywords k ON k.id = pk.keyword_id WHERE pk.photo_id = p.id AND lower(k.path) LIKE ?{n}))"
+                ));
                 values.push(Box::new(format!("%{}%", t.to_lowercase())));
             }
         }
@@ -5753,7 +5800,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 (SELECT COUNT(*) FROM photos p3 WHERE p3.stack_id = p.id AND p3.present = 1),
                 (SELECT p2.rel_path FROM photos p2 WHERE p2.stack_id = p.id AND p2.present = 1 AND p2.id != p.id
                  ORDER BY p2.mtime DESC LIMIT 1),
-                p.stack_id, p.faces_scanned_at
+                p.stack_id, p.faces_scanned_at, p.place
          FROM photos p JOIN volumes v ON v.id = p.volume_id
          WHERE {where_clause}
          {order_by}
@@ -5789,6 +5836,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             let newest_deriv_rel: Option<String> = r.get(13)?;
             let stack_id: Option<i64> = r.get(14)?;
             let faces_scanned_at: Option<i64> = r.get(15)?;
+            let place: Option<String> = r.get(16)?;
             let is_photo = kind != "video";
             let online = is_local != 0 || {
                 let mut cache = online_cache.borrow_mut();
@@ -5817,6 +5865,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 // (no badge, no thumbnail substitution — it's just a regular row here).
                 stack_n: if expanding && stack_id != Some(id) { 0 } else { stack_n as u32 },
                 thumb_path: if expanding { None } else { newest_deriv_rel.map(|rel| abs_path(&last_path, is_local != 0, &rel)) },
+                place,
             })
         })
         .map_err(|e| e.to_string())?

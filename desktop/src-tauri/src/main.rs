@@ -70,6 +70,7 @@ mod winvideothumb;
 mod subject;
 mod ingest;
 mod catalog;
+mod geocode;
 mod dcp_store;
 mod diag;
 mod merge;
@@ -2770,6 +2771,7 @@ fn main() {
             catalog::catalog_clip_embed,
             catalog::catalog_clip_search,
             catalog::catalog_clip_tags,
+            catalog::catalog_places,
             catalog::catalog_rebuild,
             catalog::catalog_thumbnails,
             catalog::catalog_hq_offline,

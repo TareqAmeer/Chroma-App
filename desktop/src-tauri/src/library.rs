@@ -298,7 +298,7 @@ fn fnv1a(parts: &[&str]) -> u64 {
 // rendering change also silently invalidated every cached EXIF read and every perceptual hash —
 // at 100k photos, a multi-minute metadata re-read to fix something that only touched pixels.
 const THUMB_RENDER_VER: &str = "thumb-v4"; // v4: RAW thumbs prefer the embedded preview (CHR-143: Sony 160x120 thumb is 4:3, not the real 3:2). Earlier: bumped: key is now STABLE (path-only) — see cache_key
-const META_READER_VER: &str = "meta-v5";   // bumped when the RW2-lens EXIF garbage-value fix landed
+const META_READER_VER: &str = "meta-v6";   // v6: GPS lat/lon + offline place name (v5: RW2-lens EXIF garbage-value fix)
 /// Videos get their OWN meta-cache version so adding duration/dimensions to PhotoMeta did not
 /// invalidate every photo's cached EXIF read. See meta_cache_path.
 const VIDEO_META_VER: &str = "vmeta-v1";
@@ -1298,6 +1298,14 @@ pub struct PhotoMeta {
     pub width: Option<u32>,
     #[serde(default)]
     pub height: Option<u32>,
+    /// GPS position (decimal degrees) and its offline reverse-geocoded place name
+    /// ("London, Greater London, England, United Kingdom") — see geocode.rs.
+    #[serde(default)]
+    pub lat: Option<f64>,
+    #[serde(default)]
+    pub lon: Option<f64>,
+    #[serde(default)]
+    pub place: Option<String>,
 }
 
 /// Formats a rawler Rational exposure time the way the app's own EXIF reader does
@@ -1328,6 +1336,16 @@ fn meta_cache_path(path: &str, mtime: u64, size: u64) -> PathBuf {
     cache_dir().join(format!("{:016x}.meta.json", fnv1a(&[path, &mtime_s, &size_s, ver])))
 }
 
+/// dur/width/height stay video-only; this fills lat/lon/place from a GPS fix when there is one.
+fn with_gps(mut m: PhotoMeta, gps: Option<(f64, f64)>) -> PhotoMeta {
+    if let Some((la, lo)) = gps {
+        m.lat = Some(la);
+        m.lon = Some(lo);
+        m.place = crate::geocode::place_for(la, lo);
+    }
+    m
+}
+
 fn read_meta(path: &str) -> PhotoMeta {
     let ext = ext_lower(Path::new(path));
     if is_raw_ext(&ext) {
@@ -1352,7 +1370,12 @@ fn read_meta(path: &str) -> PhotoMeta {
             shutter: md.exif.exposure_time.as_ref().map(|r| fmt_shutter(ratio(r))),
             aperture: md.exif.fnumber.as_ref().map(|r| format!("f/{:.1}", ratio(r))),
             focal_len: md.exif.focal_length.as_ref().map(|r| format!("{:.0}mm", ratio(r))),
-            ..PhotoMeta::default() // dur/width/height are video-only
+            ..with_gps(PhotoMeta::default(), md.exif.gps.as_ref().and_then(|g| {
+                let dms = |v: &[rawler::formats::tiff::Rational; 3]| [ratio(&v[0]), ratio(&v[1]), ratio(&v[2])];
+                let la = crate::geocode::dms_to_deg(dms(g.gps_latitude.as_ref()?), g.gps_latitude_ref.as_deref().map_or(false, |r| r.contains('S')));
+                let lo = crate::geocode::dms_to_deg(dms(g.gps_longitude.as_ref()?), g.gps_longitude_ref.as_deref().map_or(false, |r| r.contains('W')));
+                if la == 0.0 && lo == 0.0 { None } else { Some((la, lo)) }
+            }))
         }
     } else if matches!(ext.as_str(), "jpg" | "jpeg" | "tif" | "tiff" | "heic" | "heif") {
         let Ok(file) = std::fs::File::open(path) else { return PhotoMeta::default() };
@@ -1382,7 +1405,7 @@ fn read_meta(path: &str) -> PhotoMeta {
             shutter: s(exif::Tag::ExposureTime),
             aperture: s(exif::Tag::FNumber).map(|v| format!("f/{v}")),
             focal_len: s(exif::Tag::FocalLength),
-            ..PhotoMeta::default() // dur/width/height are video-only
+            ..with_gps(PhotoMeta::default(), crate::geocode::gps_from_exif(&exif))
         }
     } else if is_video_ext(&ext) {
         // Container header only — one bounded `moov` read, never a decode and never a whole-file

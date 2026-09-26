@@ -98,3 +98,7 @@ attribution text already covers for `spektra_*.bin`. The same attribution applie
 
 The film/print pairing for each `_shoulder.bin` is identical to its `.bin` counterpart in the
 table above (same key, same stock, same print).
+
+## Bundled data: GeoNames cities
+
+`desktop/src-tauri/src/cities.tsv` is derived from GeoNames `cities15000` (https://www.geonames.org), licensed CC BY 4.0. Used offline for reverse-geocoding photo GPS to place names.
