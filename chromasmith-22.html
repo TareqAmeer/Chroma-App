@@ -1807,8 +1807,8 @@ body.deskx #lib-overlay .lib-side-tabs{display:none}
    <html data-k-menu> by Kinetic.syncTheme). Opening wipes down; a row hover wipes an accent-A
    slab in from the left, shifted by --k-menu-slab-shift-x/y, over --k-menu-wipe. The settings
    drill-down (categories -> page) is the submenu. */
-:root{--k-menu-bg:var(--k-color-ink);--k-menu-fg:var(--k-color-bg);--k-menu-line:color-mix(in srgb,var(--k-color-bg) 22%,transparent)}
-[data-k-menu=surface]{--k-menu-bg:var(--k-color-bg);--k-menu-fg:var(--k-color-ink);--k-menu-line:var(--bdr)}
+body{--k-menu-bg:var(--k-color-ink);--k-menu-fg:var(--k-color-bg);--k-menu-line:color-mix(in srgb,var(--k-color-bg) 22%,transparent)}
+[data-k-menu=surface] body{--k-menu-bg:var(--k-color-bg);--k-menu-fg:var(--k-color-ink);--k-menu-line:var(--bdr)}
 #lib-overlay .lib-menu,#fx-settings-menu,.fx-bgmenu{background:var(--k-menu-bg)!important;color:var(--k-menu-fg);border:1px solid var(--k-menu-line);border-radius:0!important;box-shadow:none!important;
   -webkit-backdrop-filter:none;backdrop-filter:none}
 #lib-overlay .lib-menu.open,#fx-settings-menu.open,.fx-bgmenu.open,#fx-settings-menu.on,.fx-bgmenu{animation:k-menu-wipe var(--k-motion-duration) var(--k-motion-easing)}
@@ -1968,7 +1968,8 @@ body.deskx #lib-overlay:not(.full) #lib-overlay .lib-card:not(:hover):not(.sel):
    0px corners everywhere except the on-photo tools the inventory marks restyle-neutral (crop,
    guides, masks, brush cursor, split knob, histogram), which keep their shapes. Soft drop
    shadows were stripped at source; only hard 0-blur blocks remain. */
-:where(*,*::before,*::after):not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *,:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *::before,:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *::after){border-radius:0!important}
+*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *){border-radius:0!important}
+*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *)::before,*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *)::after{border-radius:0!important}
 ::selection{background:var(--k-color-accent-a);color:#fff}
 ::-webkit-scrollbar-thumb{border-radius:0}
 :hover::-webkit-scrollbar-thumb,.fx-scrolling::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--k-color-ink) 28%,transparent)}
@@ -5555,7 +5556,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926T';
+const BUILD='1.0926U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
