@@ -2274,7 +2274,10 @@ window.hideBootSplash=function(){
 // Only the REAL Tauri shell (desktop-native.js, gated on window.__TAURI__) takes over hiding
 // this — including the "?deskx=1" plain-browser testing mode, which never loads that script and
 // would otherwise leave the splash on screen forever.
-if(!window.__TAURI__)window.hideBootSplash();
+// ⚠️ Removed synchronously, not via hideBootSplash(): its two-rAF fade never runs while the tab
+// is hidden (rAF is paused), so a web page opened or reloaded in the background kept the desktop
+// splash on top of the working app. The web/iOS builds have no multi-stage boot to cover.
+if(!window.__TAURI__){const s=document.getElementById('boot-splash');if(s)s.remove();window.hideBootSplash();}
 // Safety net, now a RESETTABLE watchdog rather than one flat deadline. A flat timeout defeats
 // the whole point of showing indexing progress: a real first-time scan of a large library can
 // legitimately take longer than any single fixed number picked in advance, so a flat deadline
@@ -5651,7 +5654,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926W';
+const BUILD='1.0926X';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
