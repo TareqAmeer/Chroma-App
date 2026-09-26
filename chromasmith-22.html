@@ -5612,7 +5612,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926H';
+const BUILD='1.0926I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17452,6 +17452,23 @@ async function fxRenderKeywordsPanel(){
     catch(e2){if(typeof toast==='function')toast('Could not add that keyword','err');}
   };
 }
+// CHR-164: ONE definition of "the photo's full size" — the full-resolution decode when the item
+// carries one (RAW opens on a display proxy first), else the loaded image itself.
+function fxFullDimsText(it){
+  const f=(it&&(it.fullImg||it.img))||null;
+  const w=f&&(f.naturalWidth||f.width),h=f&&(f.naturalHeight||f.height);
+  return w&&h?`${w}×${h}`:'';
+}
+// Header shows what's loaded right now (proxy until the full decode is in, then the full size);
+// the table's Dimensions row is always the full size. Both are re-synced on every preview render
+// so a background full-quality promotion updates them instead of leaving stale numbers behind.
+function fxRefreshDims(){
+  const it=fxImages[fxCurIdx]||fxImages[0];if(!it||it.kind==='video')return;
+  const s=document.getElementById('db-title-status');
+  if(s&&!s.classList.contains('spin')){const t=fxDimsFmt(it.name,it.img,it.ext);if(t&&s.textContent!==t)s.textContent=t;}
+  const d=document.getElementById('fx-exif-dims');
+  if(d){const t=fxFullDimsText(it);if(t&&d.textContent!==t)d.textContent=t;}
+}
 function showExif(exif){
   const el=document.getElementById('fx-exif');if(!el)return;
   if(typeof fxRenderPeoplePanel==='function')fxRenderPeoplePanel();
@@ -17519,23 +17536,6 @@ async function fxSetIcoFrame(v){
 // made INDEPENDENT per photo (adjScopeToggle) — everything else (LUT, curves, HSL, grain,
 // halation, bloom, etc.) still applies to the whole batch automatically. `adjValsOverride`, when
 // given, is a raw-slider-value object (see domAdjustVals) sourced from that photo's own
-// CHR-164: ONE definition of "the photo's full size" — the full-resolution decode when the item
-// carries one (RAW opens on a display proxy first), else the loaded image itself.
-function fxFullDimsText(it){
-  const f=(it&&(it.fullImg||it.img))||null;
-  const w=f&&(f.naturalWidth||f.width),h=f&&(f.naturalHeight||f.height);
-  return w&&h?`${w}×${h}`:'';
-}
-// Header shows what's loaded right now (proxy until the full decode is in, then the full size);
-// the table's Dimensions row is always the full size. Both are re-synced on every preview render
-// so a background full-quality promotion updates them instead of leaving stale numbers behind.
-function fxRefreshDims(){
-  const it=fxImages[fxCurIdx]||fxImages[0];if(!it||it.kind==='video')return;
-  const s=document.getElementById('db-title-status');
-  if(s&&!s.classList.contains('spin')){const t=fxDimsFmt(it.name,it.img,it.ext);if(t&&s.textContent!==t)s.textContent=t;}
-  const d=document.getElementById('fx-exif-dims');
-  if(d){const t=fxFullDimsText(it);if(t&&d.textContent!==t)d.textContent=t;}
-}
 // it.adjustOverride instead of the live DOM — used by exportFX so each photo renders with ITS
 // own Adjust values instead of whichever photo happens to be previewed at export time.
 // ══ MATCH SERIES TO A REFERENCE ═══════════════════════════════════════════════════════════
@@ -22074,8 +22074,22 @@ function viewMenuBuild(){
   h+='<div class="fx-ovf-grp-label">Appearance</div>';
   h+=`<button class="fx-ovf-item${!curLight?' on':''}" onclick="fxSetTheme('dark')"><span>Dark</span>${chk}</button>`;
   h+=`<button class="fx-ovf-item${curLight?' on':''}" onclick="fxSetTheme('light')"><span>Light</span>${chk}</button>`;
+  // User accent colours: primary = accent A, secondary = accent B. Inline on body so they beat
+  // both the :root and body.light token blocks; stored per-user, cleared by Reset.
+  const acc=fxAccentGet();
+  h+=`<label class="fx-ovf-item" style="cursor:pointer"><span>Primary colour</span><input type="color" data-accent="a" value="${acc.a}" oninput="fxAccentSet('a',this.value)" style="width:28px;height:18px;padding:0;border:0;background:none;cursor:pointer"></label>`;
+  h+=`<label class="fx-ovf-item" style="cursor:pointer"><span>Secondary colour</span><input type="color" data-accent="b" value="${acc.b}" oninput="fxAccentSet('b',this.value)" style="width:28px;height:18px;padding:0;border:0;background:none;cursor:pointer"></label>`;
+  h+=`<button class="fx-ovf-item" onclick="fxAccentReset()"><span>Reset colours</span></button>`;
   m.innerHTML=h;
 }
+const FX_ACCENT_DEF={a:'#e0500c',b:'#1414a0'};
+function fxAccentGet(){let o={};try{o=JSON.parse(localStorage.getItem('csAccent')||'{}')||{};}catch(e){}return{a:o.a||FX_ACCENT_DEF.a,b:o.b||FX_ACCENT_DEF.b};}
+function fxAccentApply(){const o=fxAccentGet(),st=document.body&&document.body.style;if(!st)return;
+  ['a','b'].forEach(k=>{if(o[k]!==FX_ACCENT_DEF[k])st.setProperty('--k-color-accent-'+k,o[k]);else st.removeProperty('--k-color-accent-'+k);});}
+function fxAccentSet(k,v){const o=fxAccentGet();o[k]=v;try{localStorage.setItem('csAccent',JSON.stringify(o));}catch(e){}fxAccentApply();}
+function fxAccentReset(){try{localStorage.removeItem('csAccent');}catch(e){}fxAccentApply();
+  document.querySelectorAll('input[type=color][data-accent]').forEach(i=>{i.value=FX_ACCENT_DEF[i.dataset.accent];});}
+if(document.body)fxAccentApply();else document.addEventListener('DOMContentLoaded',fxAccentApply);
 try{window.chromasmithPhotoTransitions=localStorage.getItem('chromasmithPhotoTransitions')!=='0';}catch(e){window.chromasmithPhotoTransitions=true;}
 function photoTransitionsToggle(){
   window.chromasmithPhotoTransitions=!window.chromasmithPhotoTransitions;

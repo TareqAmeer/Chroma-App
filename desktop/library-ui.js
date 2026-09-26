@@ -2168,6 +2168,9 @@
           <div class="grp-label">Appearance</div>
           <div class="opt" data-theme="dark"><span>Dark</span>${LIB_CHECK_SVG}</div>
           <div class="opt" data-theme="light"><span>Light</span>${LIB_CHECK_SVG}</div>
+          <label class="opt" style="cursor:pointer"><span>Primary colour</span><input type="color" data-accent="a" oninput="window.fxAccentSet&&fxAccentSet('a',this.value)" onpointerdown="if(window.fxAccentGet)this.value=fxAccentGet().a" style="width:28px;height:18px;padding:0;border:0;background:none;cursor:pointer"></label>
+          <label class="opt" style="cursor:pointer"><span>Secondary colour</span><input type="color" data-accent="b" oninput="window.fxAccentSet&&fxAccentSet('b',this.value)" onpointerdown="if(window.fxAccentGet)this.value=fxAccentGet().b" style="width:28px;height:18px;padding:0;border:0;background:none;cursor:pointer"></label>
+          <div class="opt" onclick="window.fxAccentReset&&fxAccentReset()"><span>Reset colours</span></div>
         </div>
       </div>
       </div>
