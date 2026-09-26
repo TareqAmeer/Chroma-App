@@ -1852,8 +1852,22 @@ body.deskx #lib-overlay .lib-side-tabs{display:none}
 .fx-info-i:hover,.fx-info-i:focus-visible{background:var(--k-color-accent-b);border-color:var(--k-color-accent-b);color:#fff}
 /* ── Swiss Kinetic: control row (prototype .k-row) ──
    Muted label, ink value readout in tabular figures; a modified row's label goes ink. */
-.fx-row>label{color:var(--k-color-muted)}
-.fx-row.fx-mod>label{color:var(--k-color-ink)}
+.fx-row>.fx-label,.fx-row>label{color:var(--k-color-muted)}
+.fx-row.fx-mod>.fx-label,.fx-row.fx-mod>label{color:var(--k-color-ink)}
+/* Rolling value readout (approved variant valueReadout "roll"). Kinetic.attachRoll() lays an
+   aria-hidden strip of EMPTY elements over each .fx-val; every digit is a 0-9 column drawn with
+   CSS content and slid to its value, so the element's own text (which the app writes and parses,
+   and which click-to-type edits) is untouched — it just renders transparent underneath. */
+.fx-val.k-roll{position:relative;color:transparent!important}
+.fx-val.k-roll>.k-roll-strip{position:absolute;inset:0;display:flex;justify-content:flex-end;align-items:center;overflow:hidden;pointer-events:none;color:var(--k-color-ink);line-height:1.2em}
+.fx-row.fx-mod>.fx-val.k-roll>.k-roll-strip{color:var(--k-color-accent-a)}
+.k-roll-strip>i{display:block;font-style:normal;height:1.2em;overflow:hidden}
+.k-roll-strip>i::before{content:attr(data-c);display:block;white-space:pre}
+.k-roll-strip>i.k-num::before{content:"0\A 1\A 2\A 3\A 4\A 5\A 6\A 7\A 8\A 9";transform:translateY(calc(var(--k-d,0) * -1.2em));
+  transition:transform var(--k-motion-duration) var(--k-motion-easing)}
+.fx-val.k-roll:focus{color:var(--k-color-ink)!important}
+.fx-val.k-roll:focus>.k-roll-strip{display:none}
+@media (prefers-reduced-motion:reduce){.k-roll-strip>i.k-num::before{transition:none}}
 .fx-val{color:var(--k-color-ink);font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){#lib-overlay .lib-search-wrap::before,#lib-overlay .lib-search-wrap svg,.fx-ctrl-chev,.fx-ctrl-title{transition:none}}
 </style>
@@ -5402,7 +5416,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926N';
+const BUILD='1.0926O';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23844,12 +23858,34 @@ if(/[?&]catalog=1/.test(location.search)){
     requestAnimationFrame(()=>{render();requestAnimationFrame(render);});
     return(el._kSwitch={render,snapTo:()=>{p=Math.max(0,idx);render();}});
   }
+  // Rolling digits for a value readout: see the .k-roll CSS. Only ever adds empty <i> elements,
+  // so el.textContent — what the app writes, reads back and lets you type into — never changes.
+  function attachRoll(el){
+    if(el._kRoll||tok('--k-variants-value-readout')!=='roll')return;
+    const strip=document.createElement('span');strip.className='k-roll-strip';strip.setAttribute('aria-hidden','true');
+    el._kRoll=strip;el.classList.add('k-roll');
+    const sync=()=>{
+      if(document.activeElement===el)return;
+      if(strip.parentNode!==el){el.appendChild(strip);return;}   // re-append fires the observer again
+      const t=el.textContent;if(strip._t===t)return;strip._t=t;
+      const cs=[...t];
+      while(strip.children.length>cs.length)strip.firstElementChild.remove();
+      while(strip.children.length<cs.length)strip.prepend(document.createElement('i'));
+      // Right-aligned: digit columns keep their place as the number of characters changes.
+      cs.forEach((c,i)=>{const d=strip.children[i];
+        if(/[0-9]/.test(c)){if(!d.classList.contains('k-num')){d.className='k-num';d.removeAttribute('data-c');}d.style.setProperty('--k-d',c);}
+        else{d.className='';d.style.removeProperty('--k-d');d.setAttribute('data-c',c);}});
+    };
+    new MutationObserver(sync).observe(el,{childList:true,characterData:true,subtree:true});
+    el.addEventListener('focusout',()=>setTimeout(sync,0));
+    sync();
+  }
   const SEL='.seg,#lib-overlay .lib-seg';
-  function scan(n){if(!n||n.nodeType!==1)return;if(n.matches(SEL))attachSwitch(n);n.querySelectorAll&&n.querySelectorAll(SEL).forEach(attachSwitch);}
+  function scan(n){if(!n||n.nodeType!==1||n.classList.contains('k-roll-strip'))return;if(n.matches(SEL))attachSwitch(n);if(n.matches('.fx-val'))attachRoll(n);n.querySelectorAll(SEL).forEach(attachSwitch);n.querySelectorAll('.fx-val').forEach(attachRoll);}
   function boot(){syncTheme();scan(document.body);
     new MutationObserver((ms)=>{for(const m of ms)m.addedNodes.forEach(scan);}).observe(document.body,{childList:true,subtree:true});
     new MutationObserver(syncTheme).observe(document.body,{attributes:true,attributeFilter:['class']});}
-  window.Kinetic={snap,bezier,attachSwitch,syncTheme};
+  window.Kinetic={snap,bezier,attachSwitch,attachRoll,syncTheme};
   if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot);
 })();
 </script>
