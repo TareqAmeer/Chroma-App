@@ -1868,12 +1868,43 @@ body.deskx #lib-overlay .lib-side-tabs{display:none}
 .fx-val.k-roll:focus{color:var(--k-color-ink)!important}
 .fx-val.k-roll:focus>.k-roll-strip{display:none}
 @media (prefers-reduced-motion:reduce){.k-roll-strip>i.k-num::before{transition:none}}
+/* ── Swiss Kinetic: top bar (prototype .topbar/.brand, approved twoToneSlab/windowSquares) ──
+   Wordmark in bold uppercase; gallery|studio is the big two-tone slab switch (accent A in front
+   of an accent-B slab, each offset per approved twoToneSlab.a/b and leaning away from the
+   divider: --k-sgn is written by Kinetic.attachSwitch). macOS gets the tinted window squares
+   (#cs-win) in place of the hidden native traffic lights, so the brand sits at the left edge. */
+body.mac-titlebar-overlay #cs-brand{left:12px}
+body.deskx{--cs-brand-w:350px}
+@media(max-width:1000px){body.deskx{--cs-brand-w:190px}}
+#cs-brand{gap:18px}
+#cs-win{display:flex;gap:6px;-webkit-app-region:no-drag}
+#cs-win[hidden]{display:none}
+#cs-win>button{width:13px;height:13px;padding:0;border:1px solid var(--c);background:transparent;border-radius:0;cursor:pointer;transition:background var(--k-motion-hover)}
+#cs-win>button:hover,#cs-win>button:focus-visible{background:var(--c)}
+#cs-win-close{--c:#c0392b}#cs-win-min{--c:#d68910}#cs-win-full{--c:#27ae60}
+#cs-brand-name{font-family:var(--sans);font-weight:700;font-size:22px;line-height:1;letter-spacing:-.02em;text-transform:uppercase;color:var(--k-color-ink)}
+#cs-brand-tog{position:relative;isolation:isolate;display:flex;align-items:baseline;border:0;border-radius:0;overflow:visible;margin-left:-6px;touch-action:none;cursor:grab}
+#cs-brand-tog button{position:relative;z-index:2;height:auto;min-width:0;padding:0 6px;background:transparent!important;border:0!important;
+  font-family:var(--sans);font-weight:700;font-size:26px;line-height:1;letter-spacing:-.03em;text-transform:none;color:var(--k-color-muted);
+  transition:color var(--k-motion-hover),transform var(--k-motion-hover) var(--k-motion-easing);transform-origin:50% 80%}
+#cs-brand-tog button:not(.on):hover{transform:scale(1.07);color:var(--k-color-ink)}
+#cs-brand-tog button.on{color:#fff}
+#cs-brand-tog button+button{margin-left:9px}
+#cs-brand-tog button+button::before{content:'';position:absolute;left:-7px;top:4px;bottom:4px;width:2px;background:var(--k-color-muted)}
+#cs-brand-tog::before,#cs-brand-tog::after{content:'';display:block;position:absolute;left:0;pointer-events:none}
+#cs-brand-tog::before{z-index:1;background:var(--k-color-accent-a);top:var(--k-two-tone-slab-a-top);bottom:calc(var(--k-two-tone-slab-a-bottom)*-1);
+  width:calc(var(--k-sw,0px) + var(--k-two-tone-slab-a-extra-width));transform:translateX(calc(var(--k-sx,0px) + var(--k-two-tone-slab-a-x) * var(--k-sgn,1) - var(--k-two-tone-slab-a-extra-width) / 2))}
+#cs-brand-tog::after{z-index:0;background:var(--k-color-accent-b);top:var(--k-two-tone-slab-b-top);bottom:calc(var(--k-two-tone-slab-b-bottom)*-1);
+  width:calc(var(--k-sw,0px) + var(--k-two-tone-slab-b-extra-width));transform:translateX(calc(var(--k-sx,0px) + var(--k-two-tone-slab-b-x) * var(--k-sgn,1) - var(--k-two-tone-slab-b-extra-width) / 2))}
+[data-k-slab-front=b] #cs-brand-tog::after{z-index:1}[data-k-slab-front=b] #cs-brand-tog::before{z-index:0}
+#cs-brand-tog:not([data-k-on])::before,#cs-brand-tog:not([data-k-on])::after{display:none}
+@media (prefers-reduced-motion:reduce){#cs-brand-tog button{transition:none}#cs-brand-tog button:not(.on):hover{transform:none}}
 .fx-val{color:var(--k-color-ink);font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){#lib-overlay .lib-search-wrap::before,#lib-overlay .lib-search-wrap svg,.fx-ctrl-chev,.fx-ctrl-title{transition:none}}
 </style>
 </head>
 <body>
-<div id="cs-brand"><span id="cs-brand-name">CHRO-MA-SMITH</span><div id="cs-brand-tog" role="group" aria-label="View"><button id="cs-tog-lib" type="button">Library</button><button id="cs-tog-studio" type="button" class="on">Studio</button></div></div>
+<div id="cs-brand"><div id="cs-win" hidden><button id="cs-win-close" type="button" title="Close" aria-label="Close window"></button><button id="cs-win-min" type="button" title="Minimise" aria-label="Minimise window"></button><button id="cs-win-full" type="button" title="Full screen" aria-label="Toggle full screen"></button></div><span id="cs-brand-name">CHRO-MA-SMITH</span><div id="cs-brand-tog" role="group" aria-label="View"><button id="cs-tog-lib" type="button" aria-label="Library">gallery</button><button id="cs-tog-studio" type="button" class="on" aria-label="Studio">studio</button></div></div>
 <script>(function(){var b=document.body,L=document.getElementById('cs-tog-lib'),S=document.getElementById('cs-tog-studio');
 function sync(){var f=b.classList.contains('lib-full');L.classList.toggle('on',f);S.classList.toggle('on',!f);L.setAttribute('aria-pressed',f);S.setAttribute('aria-pressed',!f)}
 new MutationObserver(sync).observe(b,{attributes:true,attributeFilter:['class']});sync();
@@ -5416,7 +5447,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926O';
+const BUILD='1.0926P';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23816,7 +23847,7 @@ if(/[?&]catalog=1/.test(location.search)){
     return(x)=>{if(x<=0)return 0;if(x>=1)return 1;let t=x;for(let i=0;i<8;i++){const s=slope(t,x1,x2);if(Math.abs(s)<1e-6)break;t-=(calc(t,x1,x2)-x)/s;}return calc(t,y1,y2);};
   }
   const ease=()=>{const m=/cubic-bezier\(([^)]*)\)/.exec(tok('--k-motion-easing'));return bezier(...(m?m[1]:'.16,1,.3,1').split(',').map(Number));};
-  function syncTheme(){root.dataset.kMenu=tok('--k-menu-colour')||'ink';root.dataset.kSeg=tok('--k-segmented-style')||'cell';root.dataset.kSegdiv=tok('--k-segmented-dividers')||'none';}
+  function syncTheme(){root.dataset.kSlabFront=tok('--k-two-tone-slab-in-front')||'a';root.dataset.kMenu=tok('--k-menu-colour')||'ink';root.dataset.kSeg=tok('--k-segmented-style')||'cell';root.dataset.kSegdiv=tok('--k-segmented-dividers')||'none';}
   function attachSwitch(el){
     if(el._kSwitch)return el._kSwitch;
     const opts=()=>[...el.children].filter(c=>c.tagName==='BUTTON'&&c.offsetParent!==null);
@@ -23828,6 +23859,7 @@ if(/[?&]catalog=1/.test(location.search)){
       const a=o[i0],b=o[i1];let x=a.offsetLeft+(b.offsetLeft-a.offsetLeft)*f,w=a.offsetWidth+(b.offsetWidth-a.offsetWidth)*f;
       if(p<0)x+=p*a.offsetWidth;if(p>n)x+=(p-n)*b.offsetWidth;
       el.style.setProperty('--k-sx',x+'px');el.style.setProperty('--k-sw',w+'px');el.setAttribute('data-k-on','');
+      if(el.id==='cs-brand-tog')el.style.setProperty('--k-sgn',(-1+2*(c/(n||1))).toFixed(3));
     }
     function tweenTo(t){cancelAnimationFrame(raf);const from=p,dur=num(tok('--k-motion-duration')),e=ease();let t0=0;
       if(reduced()||dur<=0||from===t){p=t;render();return;}
@@ -23839,7 +23871,7 @@ if(/[?&]catalog=1/.test(location.search)){
         render();if(Math.abs(p-t)>0.0008||Math.abs(v)>0.002)raf=requestAnimationFrame(step);else{p=t;raf=0;render();}};raf=requestAnimationFrame(step);}
     // Follow the app's own .on changes (click handlers, programmatic state restores).
     const mo=new MutationObserver(()=>{const i=cur();if(i===idx){if(!raf)render();return;}const was=idx;idx=i;
-      if(i<0){render();return;}if(was<0){p=i;render();return;}if(el._kSpring){el._kSpring=false;return;}if(dragged)return;tweenTo(i);snap();});
+      if(i<0){render();return;}if(was<0){p=i;render();return;}if(el._kSpring){el._kSpring=false;return;}if(dragged)return;tweenTo(i);snap();el.dispatchEvent(new CustomEvent('k-switch',{detail:i}));});
     mo.observe(el,{subtree:true,attributes:true,attributeFilter:['class'],childList:true});
     el.addEventListener('pointerdown',(e)=>{if(e.button||idx<0)return;start={x:e.clientX,p,hist:[],id:e.pointerId};dragged=false;});
     el.addEventListener('pointermove',(e)=>{if(!start)return;const d=e.clientX-start.x;
@@ -23850,7 +23882,7 @@ if(/[?&]catalog=1/.test(location.search)){
     const end=()=>{if(!start)return;el.classList.remove('k-dragging');const s=start;start=null;if(!dragged)return;
       const h=s.hist,v=h.length>1?(h[h.length-1][1]-h[0][1])/Math.max(0.016,(h[h.length-1][0]-h[0][0])/1000):0;
       const o=opts(),t=Math.max(0,Math.min(o.length-1,Math.round(p+v*num(tok('--k-motion-throw'))))),changed=t!==idx;
-      springTo(t,v);if(changed){el._kSpring=true;idx=t;snap();o[t].click();}
+      springTo(t,v);if(changed){el._kSpring=true;idx=t;snap();o[t].click();el.dispatchEvent(new CustomEvent('k-switch',{detail:t}));}
       // Swallow the click the browser fires at the end of a drag so it doesn't select the start cell.
       el.addEventListener('click',(ev)=>{ev.stopPropagation();ev.preventDefault();},{capture:true,once:true});setTimeout(()=>{dragged=false;},0);};
     window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',end,true);
@@ -23880,9 +23912,18 @@ if(/[?&]catalog=1/.test(location.search)){
     el.addEventListener('focusout',()=>setTimeout(sync,0));
     sync();
   }
-  const SEL='.seg,#lib-overlay .lib-seg';
+  // Bar swap (approved barSwap "slide"): when gallery|studio changes, the incoming top bar's
+  // tools slide in from the side of the word that was picked.
+  function slideBar(i){
+    if(reduced())return;
+    const bar=i?document.getElementById('fx-deskbar'):document.querySelector('#lib-overlay #lib-top');if(!bar)return;
+    const dir=i?1:-1,d=num(tok('--k-motion-duration'))||500,easing=tok('--k-motion-easing')||'ease';
+    [...bar.children].filter(x=>x.offsetParent!==null).forEach(x=>x.animate([{transform:`translateX(${-dir*56}px)`,opacity:0},{transform:'none',opacity:1}],{duration:d,easing}));
+  }
+  const SEL='.seg,#lib-overlay .lib-seg,#cs-brand-tog';
   function scan(n){if(!n||n.nodeType!==1||n.classList.contains('k-roll-strip'))return;if(n.matches(SEL))attachSwitch(n);if(n.matches('.fx-val'))attachRoll(n);n.querySelectorAll(SEL).forEach(attachSwitch);n.querySelectorAll('.fx-val').forEach(attachRoll);}
   function boot(){syncTheme();scan(document.body);
+    const bt=document.getElementById('cs-brand-tog');if(bt)bt.addEventListener('k-switch',(e)=>requestAnimationFrame(()=>slideBar(e.detail)));
     new MutationObserver((ms)=>{for(const m of ms)m.addedNodes.forEach(scan);}).observe(document.body,{childList:true,subtree:true});
     new MutationObserver(syncTheme).observe(document.body,{attributes:true,attributeFilter:['class']});}
   window.Kinetic={snap,bezier,attachSwitch,attachRoll,syncTheme};

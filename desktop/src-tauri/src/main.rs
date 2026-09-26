@@ -1345,6 +1345,28 @@ fn open_url_native(url: String) -> Result<(), String> {
 // runtime (not guaranteed to be the main thread), so this dispatches via run_on_main_thread
 // (the same pattern Tauri's own macOS window code uses internally, per app.rs) rather than
 // calling NSHapticFeedbackManager directly from whatever thread invoked this command.
+/// Swiss Kinetic redesign: the frontend draws its own close/minimise/full-screen squares
+/// (chromasmith-22.html #cs-win, wired in desktop-native.js), so the native traffic lights are
+/// hidden. The Overlay title bar itself stays (drag region, rounded corners, resizing). AppKit
+/// re-shows the standard buttons after some transitions (leaving full screen), so this is also
+/// re-run on resize/focus. Windows keeps its native frame, so this is macOS-only.
+#[cfg(target_os = "macos")]
+fn hide_traffic_lights(window: &tauri::WebviewWindow) {
+    let w = window.clone();
+    let _ = window.run_on_main_thread(move || {
+        use objc2_app_kit::{NSWindow, NSWindowButton};
+        let Ok(ptr) = w.ns_window() else { return };
+        let ns: &NSWindow = unsafe { &*(ptr as *const NSWindow) };
+        for b in [NSWindowButton::CloseButton, NSWindowButton::MiniaturizeButton, NSWindowButton::ZoomButton] {
+            if let Some(btn) = ns.standardWindowButton(b) {
+                btn.setHidden(true);
+            }
+        }
+    });
+}
+#[cfg(not(target_os = "macos"))]
+fn hide_traffic_lights(_window: &tauri::WebviewWindow) {}
+
 #[cfg(target_os = "macos")]
 #[tauri::command]
 fn haptic_feedback(app: tauri::AppHandle) {
@@ -2799,7 +2821,12 @@ fn main() {
             // once the user picks "cancel and quit."
             if let Some(window) = app.get_webview_window("main") {
                 let handle_for_close = handle.clone();
+                hide_traffic_lights(&window);
+                let window_for_lights = window.clone();
                 window.on_window_event(move |event| {
+                    if matches!(event, tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(true)) {
+                        hide_traffic_lights(&window_for_lights);
+                    }
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         use tauri::{Emitter, Manager};
                         let state = handle_for_close.state::<catalog::CatalogState>();

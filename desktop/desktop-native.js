@@ -540,6 +540,16 @@
     document.body.classList.add('mac-titlebar-overlay');
     const deskbar = document.getElementById('fx-deskbar');
     if (deskbar) deskbar.setAttribute('data-tauri-drag-region', '');
+    // Swiss Kinetic window squares replace the native traffic lights (hidden by main.rs
+    // hide_traffic_lights). Windows keeps its native frame, so this stays macOS-only.
+    const winApi = window.__TAURI__.window && window.__TAURI__.window.getCurrentWindow && window.__TAURI__.window.getCurrentWindow();
+    const sq = document.getElementById('cs-win');
+    if (sq && winApi) {
+      sq.hidden = false;
+      document.getElementById('cs-win-close').addEventListener('click', () => winApi.close());
+      document.getElementById('cs-win-min').addEventListener('click', () => winApi.minimize());
+      document.getElementById('cs-win-full').addEventListener('click', async () => winApi.setFullscreen(!(await winApi.isFullscreen())));
+    }
   }
   if (typeof applyFxLayout === 'function') applyFxLayout(); // re-fit now that deskx changed the geometry
 
