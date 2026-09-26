@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Editor Concept</title>
+<link rel="stylesheet" href="gramatika.css">
+<style>
+/* Editor concept — Müller-Brockmann grid, lab.-style colour slab, one square shape language.
+   Palettes: A signal orange + ink blue, B vermilion + black, C yellow + cobalt. */
+:root{
+  --u:8px;
+  --bg:#141414; --sur:#1b1b1b; --line:#2c2c2c; --ink:#f2f0ea; --mute:#7c7a74; --dim:#4a4946;
+  --act:#ff5a1f; --str:#2b44ff; --onact:#fff;
+  --font:'Gramatika','Helvetica Neue',Helvetica,Arial,sans-serif;
+}
+body[data-pal=b]{--act:#ff3b1f;--str:#f2f0ea}
+body[data-pal=c]{--act:#ffd400;--str:#1f3dff;--onact:#111}
+body[data-theme=light]{--bg:#f2f0ea;--sur:#eae7df;--line:#d6d2c8;--ink:#111;--mute:#6c6a64;--dim:#b3b0a8}
+body[data-theme=light][data-pal=b]{--str:#111}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:12px;overflow:hidden;
+  display:grid;grid-template-columns:184px 312px 1fr;grid-template-rows:56px 1fr 88px;
+  transition:background .2s,color .2s}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.mono{font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.cap{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+
+/* ── top bar ── */
+header{grid-column:1/-1;display:grid;grid-template-columns:184px 312px 1fr auto;align-items:center;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;padding-left:24px;height:100%}
+.mark{width:14px;height:14px;background:var(--act);box-shadow:4px 4px 0 var(--str)}
+.brand b{font-size:15px;font-weight:500;letter-spacing:-.01em}
+.views{display:flex;gap:24px;padding-left:24px;font-size:13px}
+.views button{color:var(--mute);padding:4px 0}
+.views button.on{color:var(--ink);box-shadow:inset 0 -2px 0 var(--act)}
+.file{display:flex;gap:24px;align-items:baseline;padding-left:32px}
+.file b{font-weight:500;font-size:13px}
+.tools{display:flex;align-items:center;height:100%}
+.tools button{width:56px;height:100%;border-left:1px solid var(--line);color:var(--mute);font-size:16px}
+.tools button:hover{color:var(--ink);background:var(--sur)}
+.export{width:136px!important;background:var(--act)!important;color:var(--onact)!important;font-size:13px!important;font-weight:500;text-align:left;padding:0 20px;display:flex;justify-content:space-between;align-items:center;border:0!important}
+
+/* ── tool list: words on the grid, not an icon rail ── */
+nav{border-right:1px solid var(--line);padding:24px 0;display:flex;flex-direction:column}
+nav button{display:grid;grid-template-columns:24px 1fr;align-items:center;text-align:left;padding:7px 24px;font-size:17px;letter-spacing:-.01em;color:var(--mute);position:relative}
+nav button i{font-style:normal;font-size:10px;color:var(--dim)}
+nav button:hover{color:var(--ink)}
+nav button.on{color:var(--ink)}
+nav button.on::before{content:"";position:absolute;left:0;top:50%;width:12px;height:12px;margin-top:-6px;background:var(--act)}
+nav hr{border:0;border-top:1px solid var(--line);margin:12px 24px}
+nav .foot{margin-top:auto;padding:0 24px}
+
+/* ── panel ── */
+aside{border-right:1px solid var(--line);overflow:auto;position:relative;padding:24px 24px 48px 24px}
+.ptitle{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px}
+.ptitle h2{font-size:40px;font-weight:400;letter-spacing:-.04em;line-height:.9}
+.ptitle .n{font-size:10px;color:var(--mute);writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.14em;text-transform:uppercase}
+.sec{margin-bottom:28px}
+.sec>.cap{display:flex;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.row{display:grid;grid-template-columns:92px 1fr 36px;align-items:center;height:30px;gap:12px}
+.row label{color:var(--mute);font-size:12px}
+.row.set label{color:var(--ink)}
+.row .v{text-align:right;color:var(--mute)}
+.row.set .v{color:var(--act)}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:16px;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:1px;background:linear-gradient(var(--dim),var(--dim)) center/1px 7px no-repeat,var(--line)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;margin-top:-4.5px;background:var(--ink)}
+.row.set input::-webkit-slider-thumb{background:var(--act)}
+
+/* segmented control */
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--line);margin-bottom:12px}
+.seg button{height:28px;color:var(--mute);font-size:11px}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--ink);color:var(--bg)}
+
+/* looks grid */
+.fam{display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.fam button{color:var(--mute);font-size:12px;padding:2px 0}
+.fam button.on{color:var(--ink);box-shadow:inset 0 -1px 0 var(--ink)}
+.looks{display:grid;grid-template-columns:1fr 1fr;gap:16px 12px}
+.look{text-align:left}
+.look .t{aspect-ratio:4/5;background:center/cover;position:relative}
+.look span{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--mute)}
+.look.on .t{outline:2px solid var(--act);outline-offset:3px}
+.look.on .t::after{content:"";position:absolute;right:-8px;bottom:-8px;width:14px;height:14px;background:var(--act)}
+.look.on span{color:var(--ink)}
+.amount{position:sticky;bottom:-48px;background:var(--bg);margin:16px -24px -48px;padding:16px 24px;border-top:1px solid var(--line)}
+
+/* ── canvas ── */
+main{position:relative;overflow:hidden;display:grid;place-items:center}
+.stage{position:relative;height:calc(100% - 96px);aspect-ratio:3/4}
+.slab{position:absolute;left:-20%;right:-38%;top:34%;height:38%;background:var(--str);opacity:.92;transition:background .2s}
+body[data-slab=act] .slab{background:var(--act)}
+body[data-slab=off] .slab{display:none}
+.photo{position:absolute;inset:0;background:url(photos/canal.webp) center/cover}
+.photo.graded{filter:contrast(1.08) saturate(.82) sepia(.14) brightness(1.02)}
+.split{position:absolute;top:-12px;bottom:-12px;width:2px;background:var(--act);left:50%;cursor:ew-resize}
+.split::after{content:"";position:absolute;left:-6px;top:50%;width:14px;height:14px;background:var(--act)}
+.orig{position:absolute;inset:0;background:url(photos/canal.webp) center/cover;clip-path:inset(0 50% 0 0)}
+.label{position:absolute;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.label.l{left:-28px;bottom:0;writing-mode:vertical-rl;transform:rotate(180deg)}
+.label.r{right:-28px;top:0;writing-mode:vertical-rl}
+.tag{position:absolute;top:12px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:4px 6px;background:var(--bg)}
+.zoom{position:absolute;left:24px;bottom:20px;display:flex;gap:16px;align-items:baseline}
+.zoom b{font-size:28px;font-weight:400;letter-spacing:-.03em}
+.hist{position:absolute;right:24px;top:20px;width:120px;height:44px;display:flex;align-items:flex-end;gap:1px}
+.hist i{flex:1;background:var(--dim)}
+
+/* ── filmstrip ── */
+footer{grid-column:1/-1;border-top:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 24px}
+footer .cap{margin-right:12px;width:136px}
+.thumb{height:60px;aspect-ratio:3/4;background:center/cover;opacity:.5;position:relative}
+.thumb.wide{aspect-ratio:4/3}
+.thumb.on{opacity:1}
+.thumb.on::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:3px;background:var(--act)}
+footer .count{margin-left:auto;font-size:28px;letter-spacing:-.03em}
+footer .count small{font-size:12px;color:var(--mute)}
+
+/* ── concept switcher (not part of the design) ── */
+.dev{position:fixed;right:16px;bottom:104px;background:var(--sur);border:1px solid var(--line);padding:12px;display:grid;gap:8px;font-size:11px;z-index:9;width:220px}
+.dev .seg{margin:0}
+</style>
+</head>
+<body data-pal="a" data-theme="dark" data-slab="str">
+
+<header>
+  <div class="brand"><span class="mark"></span><b>Chro-ma-smith</b></div>
+  <div class="views"><button>Library</button><button class="on">Editor</button><button>Match</button><button>Collage</button></div>
+  <div class="file"><b>canal_0412.rw2</b><span class="cap mono">6000 × 4000 · Lumix S9 · f/2.8 · 1/250</span></div>
+  <div class="tools">
+    <button title="Undo">↶</button><button title="Redo">↷</button><button title="Compare (\)">◧</button><button title="All effects on/off">◎</button>
+    <button class="export">Export <span>→</span></button>
+  </div>
+</header>
+
+<nav id="nav"></nav>
+
+<aside id="panel"></aside>
+
+<main>
+  <div class="hist" id="hist"></div>
+  <div class="stage">
+    <div class="slab"></div>
+    <div class="photo graded"></div>
+    <div class="orig" id="orig"></div>
+    <div class="split" id="split"></div>
+    <span class="tag" style="left:12px">Before</span>
+    <span class="tag" style="right:12px">Kodak Portra 400</span>
+    <span class="label l">Birmingham — 12.04.2026 — 19:42</span>
+    <span class="label r mono">001 / 248</span>
+  </div>
+  <div class="zoom"><b class="mono">Fit</b><span class="cap">1:1 · 2:1 · Z</span></div>
+</main>
+
+<footer>
+  <span class="cap">Spring walk<br>248 photos</span>
+  <div class="thumb on" style="background-image:url(photos/canal.webp)"></div>
+  <div class="thumb" style="background-image:url(photos/dog-sitting.webp)"></div>
+  <div class="thumb wide" style="background-image:url(photos/dog-lying.webp)"></div>
+  <div class="thumb" style="background-image:url(photos/selfie.webp)"></div>
+  <div class="thumb wide" style="background-image:url(photos/dog-lying.webp);filter:grayscale(1)"></div>
+  <div class="thumb" style="background-image:url(photos/selfie.webp);filter:grayscale(1)"></div>
+  <div class="thumb" style="background-image:url(photos/dog-sitting.webp);filter:grayscale(1)"></div>
+  <span class="count mono">001<small> / 248</small></span>
+</footer>
+
+<div class="dev">
+  <span class="cap">Concept controls</span>
+  <div class="seg" id="pal"><button data-v="a" class="on">Orange/Blue</button><button data-v="b">Vermilion</button><button data-v="c">Yellow/Cobalt</button></div>
+  <div class="seg" id="theme"><button data-v="dark" class="on">Dark</button><button data-v="light">Light</button></div>
+  <div class="seg" id="slab"><button data-v="str" class="on">Slab 2nd</button><button data-v="act">Slab 1st</button><button data-v="off">No slab</button></div>
+</div>
+
+<script>
+const TOOLS=[['Looks','L'],['Adjust','A'],['Colour','C'],['Detail','D'],['Retouch','R'],['Crop','K'],['Mask','M'],['Film','F'],['Frame','B']];
+const EXTRA=[['Export','E'],['Info','I']];
+let cur='Looks';
+const nav=document.getElementById('nav');
+function drawNav(){
+  const b=([t,k],i)=>`<button class="${t===cur?'on':''}" data-t="${t}"><i class="mono">${String(i+1).padStart(2,'0')}</i>${t}</button>`;
+  nav.innerHTML=TOOLS.map(b).join('')+'<hr>'+EXTRA.map((x,i)=>b(x,i+TOOLS.length)).join('')+
+    `<div class="foot cap">Press 1–9<br>to jump</div>`;
+}
+nav.onclick=e=>{const t=e.target.closest('button');if(!t)return;cur=t.dataset.t;drawNav();drawPanel();};
+
+const slider=(l,v,min=-100,max=100)=>`<div class="row ${v?'set':''}"><label>${l}</label><input type="range" min="${min}" max="${max}" value="${v}"><span class="v mono">${v>0?'+'+v:v}</span></div>`;
+const sec=(n,body,extra='')=>`<div class="sec"><div class="cap"><span>${n}</span><span>${extra}</span></div>${body}</div>`;
+const idx=()=>String([...TOOLS,...EXTRA].findIndex(t=>t[0]===cur)+1).padStart(2,'0');
+const title=sub=>`<div class="ptitle"><h2>${cur}</h2><span class="n">${idx()} — ${sub}</span></div>`;
+
+const PANELS={
+  Looks:()=>title('113 film looks')+
+    `<div class="seg"><button class="on">sRGB</button><button>V-Log</button><button>Film</button></div>
+     <div class="fam"><button class="on">All</button><button>Kodak</button><button>Fuji</button><button>Cinema</button><button>B&amp;W</button><button>Mine</button></div>
+     <div class="looks">`+
+     [['Portra 400','K1',''],['Ektar 100','K2','saturate(1.4) contrast(1.1)'],['Pro 400H','F1','hue-rotate(-8deg) saturate(.8) brightness(1.05)'],['Classic Neg','F2','sepia(.25) contrast(1.15) saturate(.9)'],['Tri-X 400','B1','grayscale(1) contrast(1.3)'],['Vision3 500T','C1','hue-rotate(12deg) saturate(.7) brightness(.95)']]
+     .map(([n,c,f],i)=>`<button class="look ${i===0?'on':''}"><div class="t" style="background-image:url(photos/canal.webp);filter:${f||'contrast(1.08) saturate(.82) sepia(.14)'}"></div><span>${n}<b class="mono">${c}</b></span></button>`).join('')+
+     `</div><div class="amount">${slider('Strength',80,0,100)}</div>`,
+  Adjust:()=>title('Light & tone')+
+    sec('Light',slider('Exposure',12)+slider('Contrast',8)+slider('Highlights',-24)+slider('Shadows',16)+slider('Whites',0)+slider('Blacks',0),'Auto')+
+    sec('White balance',slider('Temp',6)+slider('Tint',0),'As shot')+
+    sec('Presence',slider('Vibrance',0)+slider('Saturation',-10)),
+  Film:()=>title('Grain, halation, bloom')+
+    sec('Grain',slider('Amount',34,0,100)+slider('Size',22,0,100)+slider('Roughness',50,0,100),'35mm')+
+    sec('Halation',slider('Amount',18,0,100)+slider('Radius',40,0,100))+
+    sec('Bloom',slider('Amount',0,0,100)+slider('Threshold',0,0,100)),
+};
+const panel=document.getElementById('panel');
+function drawPanel(){panel.innerHTML=(PANELS[cur]||(()=>title('Concept pending')+sec('Controls',slider('Amount',0)+slider('Radius',0))))();}
+panel.oninput=e=>{if(e.target.type!=='range')return;const r=e.target.closest('.row'),v=+e.target.value;r.querySelector('.v').textContent=v>0?'+'+v:v;r.classList.toggle('set',v!==0);};
+panel.ondblclick=e=>{if(e.target.type!=='range')return;e.target.value=e.target.min<0?0:e.target.value;e.target.dispatchEvent(new Event('input',{bubbles:true}));};
+
+// before/after split drag
+const split=document.getElementById('split'),orig=document.getElementById('orig');
+split.onpointerdown=e=>{split.setPointerCapture(e.pointerId);split.onpointermove=m=>{const r=split.parentElement.getBoundingClientRect();const p=Math.min(100,Math.max(0,(m.clientX-r.left)/r.width*100));split.style.left=p+'%';orig.style.clipPath=`inset(0 ${100-p}% 0 0)`;};};
+split.onpointerup=()=>split.onpointermove=null;
+
+document.getElementById('hist').innerHTML=Array.from({length:40},(_,i)=>`<i style="height:${8+Math.abs(Math.sin(i*.37)*30+Math.sin(i*1.3)*8)}px"></i>`).join('');
+
+for(const id of ['pal','theme','slab'])document.getElementById(id).onclick=e=>{const b=e.target.closest('button');if(!b)return;
+  [...b.parentElement.children].forEach(x=>x.classList.toggle('on',x===b));document.body.dataset[id]=b.dataset.v;};
+addEventListener('keydown',e=>{const n=+e.key;const all=[...TOOLS,...EXTRA];if(n>=1&&n<=9&&document.activeElement.type!=='range'){cur=all[n-1][0];drawNav();drawPanel();}});
+drawNav();drawPanel();
+</script>
+</body>
+</html>
