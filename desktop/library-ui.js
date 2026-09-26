@@ -2070,7 +2070,7 @@
         </div>
       </div>
       <div id="lib-filters-btn-wrap">
-        <button class="lib-btn lib-pill" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2" fill="var(--bg)"/><circle cx="15" cy="12" r="2" fill="var(--bg)"/><circle cx="9" cy="18" r="2" fill="var(--bg)"/></svg><span class="lbl">Filters</span><span id="lib-filters-badge"></span></button>
+        <button class="lib-btn lib-pill" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 6h16M4 12h16M4 18h16M8 4l2 2-2 2-2-2ZM16 10l2 2-2 2-2-2ZM11 16l2 2-2 2-2-2Z"/></svg><span class="lbl">Filters</span><span id="lib-filters-badge"></span></button>
       </div>
       <!-- Grid/List only, matching Library View.html's 2-button toggle — Compare moved into the
            gear's View menu (below) per explicit decision: it's a real feature but not common
@@ -2129,7 +2129,7 @@
            padding-left/border-left divider as the Editor's own #fx-settings, instead of just the
            row's flat 8px gap — see the #lib-settings CSS rule below, copied from #fx-settings. -->
       <div style="position:relative" id="lib-settings">
-        <button class="lib-btn lib-btn-icon" id="lib-view-menu-btn" title="View settings"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <button class="lib-btn lib-btn-icon" id="lib-view-menu-btn" title="View settings"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" stroke-linejoin="miter"><path d="M9 3h6l6 6v6l-6 6H9l-6-6V9Z"/><circle cx="12" cy="12" r="3"/></svg></button>
         <!-- CHR-147 fix: reverted to a flat single-list menu. The 2026-09-11 two-column
              category drill-down (matching the Editor's #fx-settings-menu) hid every option
              outside the default "Library" pane behind a tab click with no strong visual cue,
@@ -2192,7 +2192,7 @@
         <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="green" title="Picked">${ic('flagGreen', 14)}</button>
         <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="red" title="Rejected">${ic('close', 14)}</button>
         <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="favorite" title="Favorited">${ic('heart', 14)}</button>
-        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="none" title="Unflagged"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="6" y1="18" x2="18" y2="6"/></svg></button>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="none" title="Unflagged"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" stroke-linejoin="miter"><circle cx="12" cy="12" r="9"/><path d="M6 18 18 6"/></svg></button>
         <div class="lib-filterdiv"></div>
         <button class="lib-chip" id="lib-more-filters" title="Camera, lens, ISO, duplicates, sync and rating filters">More…</button>
       </div>
