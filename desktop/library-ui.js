@@ -422,6 +422,14 @@
           face_ids: Array.from({ length: Math.min(p.face_count, 16) }, (_, i) => p.id * 100 + i),
         })));
       }
+      case 'catalog_person_suggestions': {
+        return Promise.resolve(Array.from({ length: 6 }, (_, i) => ({ face_id: 9000 + i, photo_id: 9000 + i, similarity: 0.8 - i * 0.05 })));
+      }
+      case 'catalog_resolve_suggestions': {
+        const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
+        if (p) p.face_count += (args.accept || []).length;
+        return Promise.resolve();
+      }
       case 'catalog_confirm_person': {
         const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
         if (p) p.auto = false;
@@ -9041,7 +9049,9 @@
   // One unnamed cluster at a time, full-viewport, keyboard-driven — the answer to CLAUDE.md
   // failures #2/#3/#6/#7: unclustered/unnamed faces were computed then thrown away, there was no
   // confirm/reject step, and naming was one person at a time through a right-click modal.
-  const reviewState = { clusters: [], idx: 0, deselected: new Set() };
+  // `suggest` = "Find more of <person>" mode: the same grid, but each page is a batch of
+  // look-alike faces for one named person — keep = add to them, deselect = "not them" (remembered).
+  const reviewState = { clusters: [], idx: 0, deselected: new Set(), suggest: null };
   function reviewEl() {
     let el = document.getElementById('lib-review');
     if (el) return el;
@@ -9090,10 +9100,28 @@
     if (!clusters || !clusters.length) { toast('No unnamed faces to review'); return; }
     reviewState.clusters = clusters;
     reviewState.idx = 0;
+    reviewState.suggest = null;
     const el = reviewEl();
     el.classList.add('on');
     const datalist = el.querySelector('#lib-review-names');
     datalist.innerHTML = peopleList.filter((p) => !p.auto).map((p) => `<option value="${esc(p.name)}">`).join('');
+    reviewRenderCurrent();
+  }
+  async function openFindMore(person) {
+    let sugg;
+    try { sugg = await invoke('catalog_person_suggestions', { personId: person.id, minSimilarity: null, limit: null }); }
+    catch (err) { toast(humanizeErr('find more photos', err), 'err'); return; }
+    if (!sugg || !sugg.length) { toast(`No more likely photos of "${person.name}" right now`); return; }
+    const PAGE = 40;
+    const pages = [];
+    for (let i = 0; i < sugg.length; i += PAGE) {
+      const ids = sugg.slice(i, i + PAGE).map((x) => x.face_id);
+      pages.push({ person_id: person.id, cover_face_id: ids[0], face_ids: ids, face_count: ids.length });
+    }
+    reviewState.clusters = pages;
+    reviewState.idx = 0;
+    reviewState.suggest = { person, total: sugg.length, added: 0 };
+    reviewEl().classList.add('on');
     reviewRenderCurrent();
   }
   function closeReviewFaces() {
@@ -9102,7 +9130,12 @@
     reviewState.clusters = [];
   }
   function reviewGoTo(idx) {
-    if (idx >= reviewState.clusters.length) { closeReviewFaces(); refreshPeople(); toast('All caught up — no more faces to review', true); return; }
+    if (idx >= reviewState.clusters.length) {
+      const sg = reviewState.suggest;
+      closeReviewFaces(); refreshPeople();
+      toast(sg ? `Added ${sg.added} photo${sg.added === 1 ? '' : 's'} to "${sg.person.name}"` : 'All caught up — no more faces to review', true);
+      return;
+    }
     reviewState.idx = idx;
     reviewRenderCurrent();
   }
@@ -9110,11 +9143,24 @@
     const c = reviewState.clusters[reviewState.idx];
     if (!c) { reviewGoTo(reviewState.idx + 1); return; }
     reviewState.deselected = new Set();
-    const speciesHint = c.species ? ` · ${c.species[0].toUpperCase()}${c.species.slice(1)} detected` : '';
-    document.getElementById('lib-review-pos').textContent = `· cluster ${reviewState.idx + 1} of ${reviewState.clusters.length} · ${c.face_count} face${c.face_count === 1 ? '' : 's'}${speciesHint}`;
+    const sg = reviewState.suggest;
     const nameInput = document.getElementById('lib-review-name');
-    nameInput.value = '';
-    setTimeout(() => nameInput.focus(), 0);
+    const confirmBtn = document.getElementById('lib-review-confirm');
+    document.getElementById('lib-review-ignore').style.display = sg ? 'none' : '';
+    nameInput.readOnly = !!sg;
+    if (sg) {
+      document.getElementById('lib-review-pos').textContent = `· Is this ${sg.person.name}? · page ${reviewState.idx + 1} of ${reviewState.clusters.length} · click a face that isn't them`;
+      nameInput.value = sg.person.name;
+      confirmBtn.innerHTML = 'Add &amp; next';
+    } else {
+      const speciesHint = c.species ? ` · ${c.species[0].toUpperCase()}${c.species.slice(1)} detected` : '';
+      const lookHint = c.suggested_name ? ` · looks like ${c.suggested_name} (${Math.round((c.suggested_similarity || 0) * 100)}%)` : '';
+      document.getElementById('lib-review-pos').textContent = `· cluster ${reviewState.idx + 1} of ${reviewState.clusters.length} · ${c.face_count} face${c.face_count === 1 ? '' : 's'}${speciesHint}${lookHint}`;
+      // Pre-filled with the look-alike's name: Enter merges this group into them.
+      nameInput.value = c.suggested_name || '';
+      confirmBtn.innerHTML = 'Name &amp; next';
+    }
+    setTimeout(() => { nameInput.focus(); nameInput.select(); }, 0);
     const grid = document.getElementById('lib-review-grid');
     grid.innerHTML = c.face_ids.map((fid) => `<div class="lib-review-face sel" data-face-id="${fid}"><img alt=""></div>`).join('');
     grid.querySelectorAll('.lib-review-face').forEach((cell) => {
@@ -9131,6 +9177,17 @@
   async function reviewConfirmCurrent() {
     const c = reviewState.clusters[reviewState.idx];
     if (!c) return;
+    const sg = reviewState.suggest;
+    if (sg) {
+      const accept = c.face_ids.filter((id) => !reviewState.deselected.has(id));
+      const reject = c.face_ids.filter((id) => reviewState.deselected.has(id));
+      try {
+        await invoke('catalog_resolve_suggestions', { personId: sg.person.id, accept, reject });
+        sg.added += accept.length;
+        reviewGoTo(reviewState.idx + 1);
+      } catch (err) { toast(humanizeErr('add these photos', err), 'err'); }
+      return;
+    }
     const name = document.getElementById('lib-review-name').value.trim();
     if (!name) { toast('Type a name first'); return; }
     const selectedIds = c.face_ids.filter((id) => !reviewState.deselected.has(id));
@@ -9153,7 +9210,7 @@
   }
   async function reviewIgnoreCurrent() {
     const c = reviewState.clusters[reviewState.idx];
-    if (!c) return;
+    if (!c || reviewState.suggest) return;
     try {
       await invoke('catalog_set_person_ignored', { personId: c.person_id, ignored: true });
       await refreshPeople();
@@ -9209,6 +9266,7 @@
     const p = peopleList.find((x) => x.id === id);
     if (!p) return;
     const items = [
+      ...(!p.auto && p.kind !== 'pet' ? [[`Find more photos of ${p.name}…`, () => openFindMore(p)]] : []),
       ['Rename…', async () => {
         const name = await window.askTextModal('Rename person', '', p.name);
         if (!name) return;

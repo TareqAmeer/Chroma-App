@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 18;
+const SCHEMA_VERSION: i64 = 19;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -812,6 +812,18 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
                 }
             }
         }
+    }
+
+    // v18 -> v19: "not this person" memory for face suggestions (`catalog_person_suggestions`).
+    // A face the user rejected for a person is never suggested for that person again.
+    if version < 19 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS face_rejections (
+                face_id   INTEGER NOT NULL REFERENCES photo_faces(id) ON DELETE CASCADE,
+                person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+                PRIMARY KEY (face_id, person_id)
+            );",
+        )?;
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -4188,6 +4200,11 @@ pub struct UnnamedCluster {
     /// user has named the cluster ("Dog", screen P's own "Dog · 91%" chip). Always None for a
     /// human face cluster.
     pub species: Option<String>,
+    /// The named person this cluster most resembles, when close enough to be worth offering
+    /// ("Looks like Sofia · 71%") — review mode pre-fills the name so Enter merges it in.
+    pub suggested_person_id: Option<i64>,
+    pub suggested_name: Option<String>,
+    pub suggested_similarity: Option<f32>,
 }
 
 #[tauri::command]
@@ -4222,9 +4239,264 @@ fn catalog_unnamed_clusters_run(conn: &Connection) -> Result<Vec<UnnamedCluster>
         }
         let species = rows.iter().find_map(|(_, s)| s.clone());
         let face_ids: Vec<i64> = rows.into_iter().map(|(id, _)| id).collect();
-        out.push(UnnamedCluster { person_id: pid, cover_face_id: cover, face_count: face_ids.len() as i64, face_ids, species });
+        out.push(UnnamedCluster {
+            person_id: pid,
+            cover_face_id: cover,
+            face_count: face_ids.len() as i64,
+            face_ids,
+            species,
+            suggested_person_id: None,
+            suggested_name: None,
+            suggested_similarity: None,
+        });
+    }
+    if out.is_empty() {
+        return Ok(out);
+    }
+    let profiles = person_profiles(conn)?;
+    if profiles.is_empty() {
+        return Ok(out);
+    }
+    for c in out.iter_mut() {
+        if c.species.is_some() {
+            continue;
+        }
+        let embs = face_embeddings(conn, &c.face_ids)?;
+        if embs.is_empty() {
+            continue;
+        }
+        let centroid = unit_mean(embs.iter().map(|(_, e)| e.as_slice()));
+        if let Some((pid, sim)) = best_profile_match(&centroid, &profiles, None) {
+            if sim >= CLUSTER_SUGGEST_SIM {
+                c.suggested_person_id = Some(pid);
+                c.suggested_name = profiles.iter().find(|p| p.id == pid).map(|p| p.name.clone());
+                c.suggested_similarity = Some(sim);
+            }
+        }
     }
     Ok(out)
+}
+
+// ── "Find more of this person" suggestions ─────────────────────────────────────────────────────
+//
+// Clustering is deliberately strict (eps=0.6 ≈ cosine 0.82) so auto-groups rarely mix two
+// people — but that leaves every harder photo of someone (profile angle, harsh light, years
+// apart, glasses) either alone in the unclustered pile or in its own "Person N". Confirmed faces
+// are also excluded from clustering, so naming someone never pulled more of their photos in.
+// This is the second, looser tier: each named person gets a profile from their confirmed faces,
+// and every other unconfirmed face is scored against it. Nothing is assigned without the user's
+// yes; a "no" is remembered in `face_rejections`.
+
+/// Cosine similarity at/above which an unconfirmed face is offered as "is this X?". ArcFace
+/// same-identity pairs typically score above ~0.4; different people rarely exceed ~0.3.
+const FACE_SUGGEST_SIM: f32 = 0.42;
+/// Cluster-centroid bar for "Person N looks like X" in review mode — centroids are less noisy
+/// than single faces, so a slightly higher bar keeps the pre-fill trustworthy.
+const CLUSTER_SUGGEST_SIM: f32 = 0.5;
+/// A face must beat the next-best named person by this much, so a face that looks equally like
+/// two siblings is not confidently offered to either.
+const FACE_SUGGEST_MARGIN: f32 = 0.05;
+
+struct PersonProfile {
+    id: i64,
+    name: String,
+    centroid: Vec<f32>,
+    exemplars: Vec<Vec<f32>>,
+}
+
+fn dot(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(x, y)| x * y).sum()
+}
+
+fn unit_mean<'a>(vs: impl Iterator<Item = &'a [f32]>) -> Vec<f32> {
+    let mut acc: Vec<f32> = Vec::new();
+    for v in vs {
+        if acc.is_empty() {
+            acc = vec![0.0; v.len()];
+        }
+        for (a, x) in acc.iter_mut().zip(v) {
+            *a += x;
+        }
+    }
+    let n = acc.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if n > 0.0 {
+        acc.iter_mut().for_each(|x| *x /= n);
+    }
+    acc
+}
+
+/// Similarity of a face to a profile: the better of (centroid match) and (mean of its 3 closest
+/// confirmed faces). The centroid captures "typical you"; the nearest-exemplar term is what finds
+/// the unusual photos — a side profile matches your other side profiles, not your average face.
+fn profile_sim(emb: &[f32], p: &PersonProfile) -> f32 {
+    let c = dot(emb, &p.centroid);
+    let mut sims: Vec<f32> = p.exemplars.iter().map(|e| dot(emb, e)).collect();
+    sims.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+    let k = sims.len().min(3);
+    let near = if k == 0 { c } else { sims[..k].iter().sum::<f32>() / k as f32 };
+    c.max(near)
+}
+
+/// Best-matching profile and its similarity, requiring a `FACE_SUGGEST_MARGIN` lead over the
+/// runner-up. `only` restricts the winner to one person (the runner-up still counts).
+fn best_profile_match(emb: &[f32], profiles: &[PersonProfile], only: Option<i64>) -> Option<(i64, f32)> {
+    let mut scored: Vec<(i64, f32)> = profiles.iter().map(|p| (p.id, profile_sim(emb, p))).collect();
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let (best_id, best) = *scored.first()?;
+    if let Some(want) = only {
+        if best_id != want {
+            return None;
+        }
+    }
+    let runner = scored.get(1).map(|x| x.1).unwrap_or(-1.0);
+    (best - runner >= FACE_SUGGEST_MARGIN).then_some((best_id, best))
+}
+
+fn face_embeddings(conn: &Connection, ids: &[i64]) -> Result<Vec<(i64, Vec<f32>)>, String> {
+    let mut stmt = conn.prepare("SELECT embedding FROM photo_faces WHERE id = ?1 AND embedding IS NOT NULL").map_err(|e| e.to_string())?;
+    let mut out = Vec::with_capacity(ids.len());
+    for id in ids {
+        if let Some(b) = stmt.query_row(params![id], |r| r.get::<_, Vec<u8>>(0)).optional().map_err(|e| e.to_string())? {
+            out.push((*id, blob_to_f32_vec(&b)));
+        }
+    }
+    Ok(out)
+}
+
+/// Profiles for every named (non-auto), non-ignored human person. Built from confirmed faces;
+/// a named person with none confirmed yet falls back to all their assigned faces.
+fn person_profiles(conn: &Connection) -> Result<Vec<PersonProfile>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.name, f.embedding, f.confirmed FROM people p
+             JOIN photo_faces f ON f.person_id = p.id
+             WHERE p.auto = 0 AND p.ignored = 0 AND p.kind = 'person' AND f.embedding IS NOT NULL",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(i64, String, Vec<u8>, i64)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let mut by: std::collections::BTreeMap<i64, (String, Vec<Vec<f32>>, Vec<Vec<f32>>)> = Default::default();
+    for (pid, name, blob, confirmed) in rows {
+        let e = by.entry(pid).or_insert_with(|| (name, Vec::new(), Vec::new()));
+        if confirmed != 0 { e.1.push(blob_to_f32_vec(&blob)) } else { e.2.push(blob_to_f32_vec(&blob)) }
+    }
+    Ok(by
+        .into_iter()
+        .map(|(id, (name, conf, rest))| {
+            let exemplars = if conf.is_empty() { rest } else { conf };
+            let centroid = unit_mean(exemplars.iter().map(|v| v.as_slice()));
+            PersonProfile { id, name, centroid, exemplars }
+        })
+        .filter(|p| !p.exemplars.is_empty())
+        .collect())
+}
+
+#[derive(Serialize, Clone)]
+pub struct FaceSuggestion {
+    pub face_id: i64,
+    pub photo_id: i64,
+    pub similarity: f32,
+}
+
+#[tauri::command]
+pub fn catalog_person_suggestions(
+    state: tauri::State<CatalogState>,
+    person_id: i64,
+    min_similarity: Option<f32>,
+    limit: Option<usize>,
+) -> Result<Vec<FaceSuggestion>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    person_suggestions_run(&conn, person_id, min_similarity.unwrap_or(FACE_SUGGEST_SIM), limit.unwrap_or(300))
+}
+
+fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: f32, limit: usize) -> Result<Vec<FaceSuggestion>, String> {
+    let profiles = person_profiles(conn)?;
+    if !profiles.iter().any(|p| p.id == person_id) {
+        return Ok(Vec::new());
+    }
+    // Candidates: any unconfirmed face not already this person's, not in an ignored group, and
+    // not previously rejected for this person. Faces in other auto "Person N" groups and the
+    // unclustered pile are exactly what this is meant to reach.
+    let mut stmt = conn
+        .prepare(
+            "SELECT f.id, f.photo_id, f.embedding FROM photo_faces f
+             LEFT JOIN people o ON o.id = f.person_id
+             WHERE f.embedding IS NOT NULL AND f.confirmed = 0
+               AND (f.person_id IS NULL OR (f.person_id != ?1 AND o.ignored = 0))
+               AND NOT EXISTS (SELECT 1 FROM face_rejections r WHERE r.face_id = f.id AND r.person_id = ?1)",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(i64, i64, Vec<u8>)> = stmt
+        .query_map(params![person_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let mut out: Vec<FaceSuggestion> = rows
+        .into_iter()
+        .filter_map(|(face_id, photo_id, blob)| {
+            let emb = blob_to_f32_vec(&blob);
+            let (_, sim) = best_profile_match(&emb, &profiles, Some(person_id))?;
+            (sim >= min_sim).then_some(FaceSuggestion { face_id, photo_id, similarity: sim })
+        })
+        .collect();
+    // Unassigned pending faces too: the person's OWN unconfirmed faces (from a cluster that
+    // majority-voted into them) are also worth a yes/no, ranked in with the rest.
+    let mut own = conn
+        .prepare("SELECT id, photo_id FROM photo_faces WHERE person_id = ?1 AND confirmed = 0 AND embedding IS NOT NULL")
+        .map_err(|e| e.to_string())?;
+    let own_rows: Vec<(i64, i64)> = own
+        .query_map(params![person_id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let target = profiles.iter().find(|p| p.id == person_id).unwrap();
+    for (fid, pid) in own_rows {
+        if let Some((_, e)) = face_embeddings(conn, &[fid])?.into_iter().next() {
+            out.push(FaceSuggestion { face_id: fid, photo_id: pid, similarity: profile_sim(&e, target) });
+        }
+    }
+    out.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal));
+    // One face per photo is enough to tag the photo — keep the strongest.
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|s| seen.insert(s.photo_id));
+    out.truncate(limit);
+    Ok(out)
+}
+
+/// Resolves a batch of suggestions in one go: `accept` faces move to the person as confirmed,
+/// `reject` faces are remembered as "not this person" and never offered to them again.
+#[tauri::command]
+pub fn catalog_resolve_suggestions(
+    state: tauri::State<CatalogState>,
+    person_id: i64,
+    accept: Vec<i64>,
+    reject: Vec<i64>,
+) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    resolve_suggestions_run(&conn, person_id, &accept, &reject)
+}
+
+fn resolve_suggestions_run(conn: &Connection, person_id: i64, accept: &[i64], reject: &[i64]) -> Result<(), String> {
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    for fid in accept {
+        tx.execute("UPDATE photo_faces SET person_id = ?1, confirmed = 1 WHERE id = ?2", params![person_id, fid])
+            .map_err(|e| e.to_string())?;
+    }
+    for fid in reject {
+        tx.execute("INSERT OR IGNORE INTO face_rejections (face_id, person_id) VALUES (?1, ?2)", params![fid, person_id])
+            .map_err(|e| e.to_string())?;
+        // A rejected face that was pending under this person goes back to Unnamed.
+        tx.execute("UPDATE photo_faces SET person_id = NULL WHERE id = ?1 AND person_id = ?2 AND confirmed = 0", params![fid, person_id])
+            .map_err(|e| e.to_string())?;
+    }
+    if !accept.is_empty() {
+        tx.execute("UPDATE people SET auto = 0 WHERE id = ?1", params![person_id]).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // ── Portable People & Pets sidecar (people-pets wireframes screen K) ───────────────────────────
@@ -8899,6 +9171,56 @@ mod tests {
         let (id2, name2): (i64, String) = conn.query_row("SELECT id, name FROM people LIMIT 1", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
         assert_eq!(id2, person_id, "the same person row must be reused, not recreated");
         assert_eq!(name2, "Alice", "the rename must survive a re-cluster");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn person_suggestions_find_look_alikes_and_remember_rejections() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("person_suggest");
+        for f in ["a.jpg", "b.jpg", "c.jpg", "d.jpg"] {
+            std::fs::write(dir.join(f), f.as_bytes()).unwrap();
+        }
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let photo = |name: &str| -> i64 {
+            conn.query_row("SELECT id FROM photos WHERE rel_path LIKE ?1", params![format!("%{name}")], |r| r.get(0)).unwrap()
+        };
+        let emb = |a: f32, b: f32, c: f32| -> Vec<u8> {
+            let mut v = vec![0f32; 512];
+            v[0] = a;
+            v[1] = b;
+            v[2] = c;
+            let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+            f32_vec_to_blob(&v.iter().map(|x| x / n).collect::<Vec<_>>())
+        };
+        conn.execute("INSERT INTO people (name, created, auto) VALUES ('Me', 0, 0)", []).unwrap();
+        let me = conn.last_insert_rowid();
+        let face = |photo_id: i64, e: Vec<u8>, person: Option<i64>, confirmed: i64| -> i64 {
+            conn.execute(
+                "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, embedding, person_id, confirmed)
+                 VALUES (?1,0,0,1,1,0.9,'[]',?2,?3,?4)",
+                params![photo_id, e, person, confirmed],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+        face(photo("a.jpg"), emb(1.0, 0.0, 0.0), Some(me), 1);
+        let similar = face(photo("b.jpg"), emb(0.8, 0.6, 0.0), None, 0); // cos 0.8, unclustered
+        let stranger = face(photo("c.jpg"), emb(0.0, 0.0, 1.0), None, 0);
+        let other_group = face(photo("d.jpg"), emb(0.7, 0.0, 0.7), None, 0); // cos ~0.71
+        let _ = stranger;
+
+        let got: Vec<i64> = person_suggestions_run(&conn, me, FACE_SUGGEST_SIM, 100).unwrap().iter().map(|s| s.face_id).collect();
+        assert_eq!(got, vec![similar, other_group], "look-alikes ranked, stranger excluded");
+
+        resolve_suggestions_run(&conn, me, &[similar], &[other_group]).unwrap();
+        let (pid, conf): (i64, i64) =
+            conn.query_row("SELECT person_id, confirmed FROM photo_faces WHERE id = ?1", params![similar], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!((pid, conf), (me, 1));
+        assert!(person_suggestions_run(&conn, me, FACE_SUGGEST_SIM, 100).unwrap().is_empty(), "a rejected face is never re-offered");
 
         std::fs::remove_dir_all(&dir).ok();
     }

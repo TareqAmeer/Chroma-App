@@ -2729,6 +2729,8 @@ fn main() {
             catalog::catalog_set_person_ignored,
             catalog::catalog_set_person_kind,
             catalog::catalog_unnamed_clusters,
+            catalog::catalog_person_suggestions,
+            catalog::catalog_resolve_suggestions,
             catalog::catalog_detect_portable_people,
             catalog::catalog_export_portable_people,
             catalog::catalog_import_portable_people,
