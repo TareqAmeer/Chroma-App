@@ -3343,7 +3343,7 @@
     const el = document.getElementById('lib-thumb-progress');
     if (!el) return;
     if (_thumbDoneCount >= _thumbTotalCount || _thumbTotalCount < 8) { el.textContent = ''; return; }
-    el.textContent = `Loading photos… ${_thumbDoneCount}/${_thumbTotalCount}`;
+    el.textContent = `Loading photos… ${fmtN(_thumbDoneCount)}/${fmtN(_thumbTotalCount)}`;
   }
   const PHOTO_STAGE_LABELS = { faces: 'Finding faces…', pets: 'Finding pets…', embed: 'Analyzing faces…', clip: 'Indexing for search…' };
   function setPhotoWorkBadge(card, label, kind = 'analysis') {
@@ -6873,8 +6873,8 @@
       if (openBtn) openBtn.onclick = () => { const b = document.getElementById('lib-pick'); if (b) b.click(); };
     }
     document.getElementById('lib-count').textContent = state.selected.size
-      ? `${state.selected.size} selected — ${shown.length} of ${state.entries.length} photo(s)`
-      : `${shown.length} of ${state.entries.length} photo(s)`;
+      ? `${fmtN(state.selected.size)} selected — ${fmtN(shown.length)} of ${fmtN(state.entries.length)} photo(s)`
+      : `${fmtN(shown.length)} of ${fmtN(state.entries.length)} photo(s)`;
     if (typeof syncFilterUI === 'function') syncFilterUI();
   }
 
@@ -8415,7 +8415,7 @@
   // not a CSS display:none toggle) so a collapsed section costs nothing to keep in the DOM.
   function sidebarSection(key, label, bodyHtml, opts = {}) {
     const open = sidebarSecOpen.has(key);
-    const count = opts.count != null && opts.count !== '' ? `<span class="lib-coll-count">${opts.count}</span>` : '';
+    const count = opts.count != null && opts.count !== '' ? `<span class="lib-coll-count">${fmtN(opts.count)}</span>` : '';
     return `<div class="lib-coll-heading lib-sec-h" data-sec-toggle="${key}"${opts.extraHeaderAttrs || ''} role="button" tabindex="0" aria-expanded="${open}">
         <span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span><span class="lib-sec-label">${label}</span>${opts.trail ? `<span class="lib-sec-trail">${opts.trail}</span>` : ''}${count}
       </div>${open ? bodyHtml : ''}`;
@@ -8740,7 +8740,7 @@
     const row = (scope, toggleKey, label, count, hasChildren, open, lvl) => `
       <div class="lib-tree-row lib-tree-row-${lvl}${state.catalogScope === scope ? ' on' : ''}" data-date-scope="${scope}" data-date-toggle="${hasChildren ? toggleKey : ''}">
         ${hasChildren ? chev(open) : leafChevSlot}
-        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut);flex:none">${count}</span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut);flex:none">${fmtN(count)}</span>
       </div>`;
     let html = '';
     for (const y of sortedYears) {
@@ -8814,7 +8814,7 @@
         const scope = `kw:${n.path}`;
         return `<div class="lib-tree-row${state.catalogScope === scope ? ' on' : ''}" data-kw-scope="${scope}" data-kw-id="${n.id}" data-kw-toggle="${hasChildren ? n.id : ''}" data-kw-path="${esc(n.path)}">
             ${hasChildren ? chev(open) : leafChevSlot}
-            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.leaf)}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut);flex:none">${n.n || ''}</span>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.leaf)}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut);flex:none">${fmtN(n.n) || ''}</span>
           </div>${hasChildren && open ? `<div class="lib-tree-children">${renderLevel(n.id)}</div>` : ''}`;
       }).join('');
     };
@@ -8867,7 +8867,7 @@
       const scope = `person:${p.id}`;
       return `<div class="lib-coll-row${state.catalogScope === scope && state.source === 'catalog' ? ' on' : ''}" data-person="${p.id}">
         ${faceAvaHtml(p)}<span class="lib-coll-lb">${esc(p.name)}</span>
-        <span class="lib-coll-count">${p.face_count ?? ''}</span>
+        <span class="lib-coll-count">${fmtN(p.face_count ?? '')}</span>
       </div>`;
     };
     const namedRows = named.length
@@ -8875,7 +8875,7 @@
       : `<div class="lib-coll-row" style="opacity:.5;cursor:default">Review faces to name people</div>`;
     const unnamedRow = `<div class="lib-coll-row${state.catalogScope === 'person:unnamed' ? ' on' : ''}" data-people-review="1">
         <span class="lib-face-ava unnamed"></span><span class="lib-coll-lb">Unnamed</span>
-        <span class="lib-coll-count">${unnamedCount ?? ''}</span>
+        <span class="lib-coll-count">${fmtN(unnamedCount ?? '')}</span>
       </div>`;
     return '<div class="lib-coll-sep"></div>' + sidebarSection('people', 'People &amp; Pets', namedRows + unnamedRow, { trail: scanGlyph });
   }
@@ -9051,7 +9051,7 @@
       sorted.forEach((c) => {
         const row = document.createElement('div');
         row.className = 'lib-coll-row';
-        row.innerHTML = `${faceAvaHtml(c)}<span class="lib-coll-lb">${esc(c.name)}</span><span class="lib-coll-count">${c.face_count ?? ''}</span>`;
+        row.innerHTML = `${faceAvaHtml(c)}<span class="lib-coll-lb">${esc(c.name)}</span><span class="lib-coll-count">${fmtN(c.face_count ?? '')}</span>`;
         row.onclick = () => { wrap.remove(); resolve(c); };
         rows.appendChild(row);
         const ava = row.querySelector('.lib-face-ava[data-face-id]');
@@ -9135,7 +9135,7 @@
     return catalogCounts.blurry ? `
       <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'blurry' ? ' on' : ''}" data-catalog="blurry" role="button" tabindex="0" title="Photos flagged as possibly out of focus — review, never auto-deleted">
         <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Needs Review</span>
-        <span class="lib-coll-count">${catalogCounts.blurry}</span>
+        <span class="lib-coll-count">${fmtN(catalogCounts.blurry)}</span>
       </div>` : '';
   }
   // Same "only appears once it's actually true of something" rule as reviewRowHtml above — an
@@ -9146,14 +9146,14 @@
     return catalogCounts.faces_pending ? `
       <div class="lib-coll-row${state.source === 'catalog' && state.facesFilter === 'pending' ? ' on' : ''}" data-faces-pending="1" title="Photos not yet scanned for faces">
         <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Not Face-Scanned</span>
-        <span class="lib-coll-count">${catalogCounts.faces_pending}</span>
+        <span class="lib-coll-count">${fmtN(catalogCounts.faces_pending)}</span>
       </div>` : '';
   }
 
   function catalogSectionHtml() {
     return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'all' ? ' on' : ''}" data-catalog="all" role="button" tabindex="0">
         <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
-        <span class="lib-coll-count">${catalogCounts.all ?? ''}</span>
+        <span class="lib-coll-count">${fmtN(catalogCounts.all ?? '')}</span>
       </div>`;
     // Note: Drives used to render immediately here. It's now placed by renderCollections()'s own
     // assembly order (see the sidebar reorder comment there) rather than baked into this
@@ -9175,12 +9175,12 @@
     const raw = `
       <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'raw' ? ' on' : ''}" data-type-shortcut="raw" title="All RAW files">
         <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">Raw</span>
-        <span class="lib-coll-count">${catalogCounts.raw ?? ''}</span>
+        <span class="lib-coll-count">${fmtN(catalogCounts.raw ?? '')}</span>
       </div>`;
     const video = `
       <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'video' ? ' on' : ''}" data-type-shortcut="video" title="All video clips">
         <span class="lib-coll-ic">${ic('video', 14)}</span><span class="lib-coll-lb">Videos</span>
-        <span class="lib-coll-count">${catalogCounts.video ?? ''}</span>
+        <span class="lib-coll-count">${fmtN(catalogCounts.video ?? '')}</span>
       </div>`;
     return raw + video;
   }
@@ -10110,6 +10110,8 @@
   const CARD_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5V3h7l3 3"/><circle cx="12" cy="13" r="2.5"/></svg>';
   const cardState = { volumes: [], scanning: false };
 
+  // Thousands separator for every photo count shown in the UI (CHR-153): 1234 → "1,234".
+  function fmtN(n) { return typeof n === 'number' && isFinite(n) ? n.toLocaleString('en-US') : n; }
   function fmtBytes(n) {
     if (!n) return '';
     const u = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -10688,7 +10690,7 @@
     const assets = lrState.assets || [];
     const albumName = (lrState.albums || []).find((a) => a.id === lrState.album)?.name || '';
     const count = document.getElementById('lib-count');
-    if (count) count.textContent = `${assets.length} cloud photo(s)${albumName ? ' — ' + albumName : ''} · connected to Adobe Lightroom`;
+    if (count) count.textContent = `${fmtN(assets.length)} cloud photo(s)${albumName ? ' — ' + albumName : ''} · connected to Adobe Lightroom`;
     // "on disk" badge: compare against what's already in ~/Documents/Lightroom Download.
     const onDisk = new Set();
     try {
