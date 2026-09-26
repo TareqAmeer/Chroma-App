@@ -1795,6 +1795,36 @@ body.deskx #lib-overlay .lib-side-tabs{display:none}
 .seg:not([data-k-on])::before,.seg:not([data-k-on])::after,#lib-overlay .lib-seg:not([data-k-on])::before,#lib-overlay .lib-seg:not([data-k-on])::after{display:none}
 [data-k-segdiv=bar] .seg>button+button::before,[data-k-segdiv=bar] #lib-overlay .lib-seg>button+button::before{content:'';position:absolute;left:-1px;top:28%;bottom:28%;width:2px;background:var(--k-color-muted)}
 .seg.k-dragging,#lib-overlay .lib-seg.k-dragging{cursor:grabbing}
+/* ── Swiss Kinetic: select (prototype .k-sel button) ──
+   The closed control is a square page-colour box with a 1.5px line border that goes ink on
+   hover/focus; the chevron is the app's own background-image. Native option lists stay native. */
+.fx-select,#lib-overlay select{border-radius:0!important;background-color:var(--k-color-bg);border:var(--bw-1) solid var(--bdr);color:var(--k-color-ink);font-family:var(--sans);
+  transition:border-color var(--k-motion-hover)}
+.fx-select:hover,.fx-select:focus-visible,#lib-overlay select:hover,#lib-overlay select:focus-visible{background-color:var(--k-color-bg);border-color:var(--k-color-ink);outline:none}
+/* ── Swiss Kinetic: menu + submenu (prototype .k-menu, hover "slab", approved menu.*) ──
+   Dark theme menus are ink panels with page-colour text; light theme menus are page-colour
+   panels with ink text and a line border (approved menuColour ink/surface, mirrored onto
+   <html data-k-menu> by Kinetic.syncTheme). Opening wipes down; a row hover wipes an accent-A
+   slab in from the left, shifted by --k-menu-slab-shift-x/y, over --k-menu-wipe. The settings
+   drill-down (categories -> page) is the submenu. */
+:root{--k-menu-bg:var(--k-color-ink);--k-menu-fg:var(--k-color-bg);--k-menu-line:color-mix(in srgb,var(--k-color-bg) 22%,transparent)}
+[data-k-menu=surface]{--k-menu-bg:var(--k-color-bg);--k-menu-fg:var(--k-color-ink);--k-menu-line:var(--bdr)}
+#lib-overlay .lib-menu,#fx-settings-menu,.fx-bgmenu{background:var(--k-menu-bg)!important;color:var(--k-menu-fg);border:1px solid var(--k-menu-line);border-radius:0!important;box-shadow:none!important;
+  -webkit-backdrop-filter:none;backdrop-filter:none}
+#lib-overlay .lib-menu.open,#fx-settings-menu.open,.fx-bgmenu.open,#fx-settings-menu.on,.fx-bgmenu{animation:k-menu-wipe var(--k-motion-duration) var(--k-motion-easing)}
+@keyframes k-menu-wipe{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 -20px -20px 0)}}
+#lib-overlay .lib-menu .opt,#lib-overlay .lib-menu button.opt-action,.fx-settings-cat,.fx-ovf-item{position:relative;isolation:isolate;border-radius:0!important;background:none!important;color:var(--k-menu-fg);font-family:var(--sans)}
+#lib-overlay .lib-menu .opt::before,#lib-overlay .lib-menu button.opt-action::before,.fx-settings-cat::before,.fx-ovf-item::before{content:'';display:block;position:absolute;inset:var(--k-menu-slab-shift-y) calc(var(--k-menu-slab-shift-x)*-1) calc(var(--k-menu-slab-shift-y)*-1) var(--k-menu-slab-shift-x);
+  background:var(--k-color-accent-a);z-index:-1;transform:scaleX(0);transform-origin:left;transition:transform var(--k-menu-wipe) var(--k-motion-easing);pointer-events:none}
+#lib-overlay .lib-menu .opt:hover,#lib-overlay .lib-menu button.opt-action:hover,.fx-settings-cat:hover,.fx-ovf-item:hover,.fx-settings-cat.active{color:#fff!important}
+#lib-overlay .lib-menu .opt:hover::before,#lib-overlay .lib-menu button.opt-action:hover::before,.fx-settings-cat:hover::before,.fx-ovf-item:hover::before,.fx-settings-cat.active::before{transform:scaleX(1)}
+.fx-ovf-item.dim{color:var(--k-color-muted)}.fx-ovf-item.dim:hover{color:var(--k-color-muted)!important}.fx-ovf-item.dim::before{display:none}
+#lib-overlay .lib-menu .grp-label,.fx-ovf-grp-label{color:color-mix(in srgb,var(--k-menu-fg) 55%,transparent);font-weight:700;letter-spacing:.16em}
+#lib-overlay .lib-menu hr,.fx-ovf-sep{border-top-color:var(--k-menu-line);background:var(--k-menu-line)}
+#fx-settings-cats,.fx-settings-cats{border-right-color:var(--k-menu-line)}
+#lib-overlay .lib-menu .opt .check,#lib-overlay .lib-menu button.opt-toggle .check,.fx-ovf-item .fx-ovf-check{stroke:var(--k-color-accent-a);color:var(--k-color-accent-a)}
+#lib-overlay .lib-menu .opt:hover .check,#lib-overlay .lib-menu button.opt-action:hover .check,.fx-settings-cat:hover .check,.fx-ovf-item:hover .check,.fx-ovf-item:hover .fx-ovf-check{stroke:#fff;color:#fff}
+@media (prefers-reduced-motion:reduce){#lib-overlay .lib-menu.open,#fx-settings-menu.open,.fx-bgmenu.open,#fx-settings-menu.on,.fx-bgmenu{animation:none}#lib-overlay .lib-menu .opt::before,#lib-overlay .lib-menu button.opt-action::before,.fx-settings-cat::before,.fx-ovf-item::before{transition:none}}
 </style>
 </head>
 <body>
@@ -5341,7 +5371,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926K';
+const BUILD='1.0926L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23741,7 +23771,7 @@ if(/[?&]catalog=1/.test(location.search)){
     return(x)=>{if(x<=0)return 0;if(x>=1)return 1;let t=x;for(let i=0;i<8;i++){const s=slope(t,x1,x2);if(Math.abs(s)<1e-6)break;t-=(calc(t,x1,x2)-x)/s;}return calc(t,y1,y2);};
   }
   const ease=()=>{const m=/cubic-bezier\(([^)]*)\)/.exec(tok('--k-motion-easing'));return bezier(...(m?m[1]:'.16,1,.3,1').split(',').map(Number));};
-  function syncTheme(){root.dataset.kSeg=tok('--k-segmented-style')||'cell';root.dataset.kSegdiv=tok('--k-segmented-dividers')||'none';}
+  function syncTheme(){root.dataset.kMenu=tok('--k-menu-colour')||'ink';root.dataset.kSeg=tok('--k-segmented-style')||'cell';root.dataset.kSegdiv=tok('--k-segmented-dividers')||'none';}
   function attachSwitch(el){
     if(el._kSwitch)return el._kSwitch;
     const opts=()=>[...el.children].filter(c=>c.tagName==='BUTTON'&&c.offsetParent!==null);
