@@ -1939,18 +1939,38 @@ body.deskx #cs-brand{gap:18px}
   transition:transform var(--k-motion-duration) var(--k-motion-easing),opacity var(--k-motion-hover)}
 #lib-overlay .lib-card::after{content:'';display:block;position:absolute;inset:0;border:2px solid var(--k-color-muted);opacity:0;pointer-events:none;z-index:2;
   transition:transform var(--k-motion-duration) var(--k-motion-easing),opacity var(--k-motion-hover)}
-#lib-overlay .lib-card:hover:not(.sel):not(.multi)::after{opacity:.5;border-color:var(--k-color-ink)}
+/* CHR-160: approved photo hover "offset" — the ink frame kicks up-right (playground data-thhv=offset). */
+#lib-overlay .lib-card:hover:not(.sel):not(.multi)::after{opacity:.85;border-color:var(--k-color-ink);transform:translate(calc(var(--k-offset-x)*1.2),calc(var(--k-offset-y)*-1.2))}
 [data-k-psel=slab] #lib-overlay .lib-card:is(.sel,.multi)::before{opacity:1;transform:none}
 [data-k-psel=slab] #lib-overlay .lib-card:is(.sel,.multi)::after{opacity:.8;transform:translate(calc(var(--k-offset-x)*2.4),calc(var(--k-offset-y)*-2.4)) scale(1.06)}
 [data-k-psel=outline] #lib-overlay .lib-card:is(.sel,.multi)::after{opacity:1;border-color:var(--k-flag);transform:translate(calc(var(--k-offset-x)*.8),calc(var(--k-offset-y)*-.8))}
 #lib-overlay .lib-card.lbl-red{--k-flag:var(--k-color-muted)}
 #lib-overlay .lib-card.lbl-green{--k-flag:var(--k-color-accent-a)}
 #lib-overlay .lib-card.lbl-favorite,#lib-overlay .lib-card.lbl-fav{--k-flag:var(--k-color-accent-b)}
-#lib-overlay .lib-card:is(.lbl-red,.lbl-green,.lbl-favorite,.lbl-fav) .lib-thumb-wrap{box-shadow:0 0 0 2px var(--k-flag)!important}
+/* CHR-159: flags are the playground's corner chips (top-left, flag colour, bold tracked label),
+   not a frame ring round the photo. Unset flags still appear on hover as page-colour chips so
+   they stay clickable; once one is set the others hide (existing .lib-flags:has(.on) rule). */
+#lib-overlay #lib-grid:not(.list-view) .lib-flags{top:6px;left:6px;bottom:auto;right:auto;gap:4px;background:none;border-radius:0;padding:0}
+#lib-overlay #lib-grid:not(.list-view) .lib-flag{width:auto;height:auto;opacity:1;filter:none;display:inline-flex;align-items:center;gap:4px;
+  padding:3px 5px 3px 4px;font:700 9px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;background:var(--k-color-bg);color:var(--k-color-ink);border-radius:0}
+#lib-overlay #lib-grid:not(.list-view) .lib-flag svg{width:9px;height:9px}
+#lib-overlay #lib-grid:not(.list-view) .lib-flag svg *{stroke:currentColor}
+#lib-overlay #lib-grid:not(.list-view) .lib-flag:is([data-flag=Green],[data-flag=Favorite]) svg path[fill],#lib-overlay #lib-grid:not(.list-view) .lib-flag[data-flag=Favorite] svg path{fill:currentColor}
+#lib-overlay #lib-grid:not(.list-view) .lib-flag[data-flag=Red]::after{content:'REJ'}
+#lib-overlay #lib-grid:not(.list-view) .lib-flag[data-flag=Green]::after{content:'PICK'}
+#lib-overlay #lib-grid:not(.list-view) .lib-flag[data-flag=Favorite]::after{content:'FAV'}
+#lib-overlay #lib-grid:not(.list-view) .lib-flag[data-flag=Red].on{background:var(--k-color-muted);color:#fff}
+#lib-overlay #lib-grid:not(.list-view) .lib-flag[data-flag=Green].on{background:var(--k-color-accent-a);color:#fff}
+#lib-overlay #lib-grid:not(.list-view) .lib-flag[data-flag=Favorite].on{background:var(--k-color-accent-b);color:#fff}
+#lib-overlay #lib-grid:not(.list-view) .lib-flag:not(.on):hover{background:var(--k-color-ink);color:var(--k-color-bg)}
+#lib-overlay #lib-grid:not(.list-view) .lib-flags:has(.lib-flag.on) .lib-flag:not(.on){display:none}
+/* The type badges share the top-left corner: drop them below the chip row while it shows. */
+#lib-overlay #lib-grid:not(.list-view) .lib-card:is(:hover,:has(.lib-flag.on)) :is(.lib-raw-badge,.lib-video-badge){top:24px}
+#lib-overlay #lib-grid:not(.list-view) :is(.lib-raw-badge,.lib-video-badge){transition:top var(--k-motion-hover) var(--k-motion-easing)}
 #lib-overlay .lib-card.lbl-red .lib-thumb-wrap::after{display:none}
 #lib-overlay .lib-card .lib-name{overflow:hidden;text-overflow:ellipsis}
-body.deskx #lib-overlay:not(.full) #lib-overlay .lib-card img{transition:filter var(--k-motion-duration) var(--k-motion-easing)}
-body.deskx #lib-overlay:not(.full) #lib-overlay .lib-card:not(:hover):not(.sel):not(.multi) img{filter:grayscale(1) contrast(1.1)}
+body.deskx #lib-overlay:not(.full) .lib-card img{transition:filter var(--k-motion-duration) var(--k-motion-easing)}
+body.deskx #lib-overlay:not(.full) .lib-card:not(:hover):not(.sel):not(.multi) img{filter:grayscale(1) contrast(1.1)}
 /* Flag buttons + filter chips: reject grey, pick accent A, favourite accent B (their slab). */
 #lib-overlay [id$=flag-reject],#lib-overlay .lib-iconchip[data-fval=red]{--k-flag:var(--k-color-muted)}
 #lib-overlay [id$=flag-pick],#lib-overlay .lib-iconchip[data-fval=green]{--k-flag:var(--k-color-accent-a)}
@@ -5572,7 +5592,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926B';
+const BUILD='1.0926C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
