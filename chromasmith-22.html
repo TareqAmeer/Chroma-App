@@ -2084,6 +2084,12 @@ L.onclick=function(){go(true)};S.onclick=function(){go(false)};})();</script>
   #boot-splash .boot-readout{display:flex;align-items:flex-end;justify-content:center;gap:10px;max-width:100%;font-family:'Gramatika',sans-serif;font-weight:700;font-style:italic;line-height:.78;color:#fff;white-space:nowrap}
   #boot-splash .boot-loading{font-size:clamp(42px,7.2vh,76px);letter-spacing:-3px}
   #boot-splash .boot-percent{font-size:clamp(36px,6.4vh,68px);letter-spacing:-3px;transform:translateY(12px)}
+  /* Swiss Kinetic splash (prototype .splash, approved splash.orange/blue): the orange card sits
+     on a larger accent-B block kicked up-right (hard edges, no shadow); the photo is a white-
+     matted black-and-white print. */
+  html.cs-boot-tauri #boot-splash>.boot-card{background:var(--k-splash-orange,#e0500c)!important;box-shadow:none!important;position:relative;isolation:isolate;overflow:visible!important}
+  html.cs-boot-tauri #boot-splash>.boot-card::before{content:'';position:absolute;z-index:-1;left:12%;top:-6%;right:-4%;bottom:14%;background:var(--k-splash-blue,#1414a0)}
+  #boot-splash .boot-art img{background:#fff!important;padding:7px!important;box-sizing:border-box!important;filter:grayscale(1) contrast(1.1)!important}
   @media(max-width:640px){html.cs-boot-tauri #boot-splash>.boot-card{width:94vw!important;grid-template-columns:95px minmax(0,1fr)!important;padding:16px!important;gap:10px!important;grid-template-rows:minmax(0,1fr) 80px!important}}
 </style>
 <script>
@@ -5549,7 +5555,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926S';
+const BUILD='1.0926T';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
