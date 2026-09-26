@@ -1899,6 +1899,16 @@ body.deskx{--cs-brand-w:350px}
 [data-k-slab-front=b] #cs-brand-tog::after{z-index:1}[data-k-slab-front=b] #cs-brand-tog::before{z-index:0}
 #cs-brand-tog:not([data-k-on])::before,#cs-brand-tog:not([data-k-on])::after{display:none}
 @media (prefers-reduced-motion:reduce){#cs-brand-tog button{transition:none}#cs-brand-tog button:not(.on):hover{transform:none}}
+/* ── Swiss Kinetic: filter row + sort/view menu squares (prototype .frow, .lib-menu .sq) ──
+   Filter row: hairline-ruled strip, bold tracked uppercase labels, 2px muted bar dividers.
+   Menus mark the chosen sort/view option with an 8px accent-A square (white on the hover slab)
+   instead of a tick — the existing .check element is drawn as the square, visibility unchanged. */
+#lib-overlay #lib-filter-row{border-bottom:1px solid var(--bdr);background:var(--k-color-bg)}
+#lib-overlay .lib-flabel{font-family:var(--sans);font-weight:700;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);margin-right:4px}
+#lib-overlay .lib-filterdiv{width:2px;height:16px;background:var(--k-color-muted);margin:0 10px}
+#lib-overlay .lib-menu .opt .check,#lib-overlay .lib-menu button.opt-toggle .check{width:8px;height:8px;background:var(--k-color-accent-a);stroke:none;margin-left:10px}
+#lib-overlay .lib-menu .opt .check *,#lib-overlay .lib-menu button.opt-toggle .check *{display:none}
+#lib-overlay .lib-menu .opt:hover .check,#lib-overlay .lib-menu button.opt-toggle:hover .check{background:#fff}
 .fx-val{color:var(--k-color-ink);font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){#lib-overlay .lib-search-wrap::before,#lib-overlay .lib-search-wrap svg,.fx-ctrl-chev,.fx-ctrl-title{transition:none}}
 </style>
@@ -5447,7 +5457,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926P';
+const BUILD='1.0926Q';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
