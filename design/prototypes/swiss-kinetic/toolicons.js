@@ -101,6 +101,58 @@ window.ICON_FAMILIES = {
     export: '<path d="M3 9h10M3 9v12h12V11"/><path class="t" d="M9 17 19 3l2 2Z"/><path d="M14 3h7v7"/>',
     info: '<path class="t" d="M10 10h3v11h-3Z" transform="rotate(-8 12 15)"/><rect x="10" y="3.5" width="3.2" height="3.2" transform="rotate(20 11.6 5.1)"/><path d="M4 21h16"/>' }) },
 
+  construct2: { name: 'E2 · Constructivist wedge', note: 'Heavier Lissitzky: a grey wedge or bar is the main shape, a single hairline cuts across it.', icons: () => ({
+    looks: '<path class="t" d="M3 21 21 3v6L9 21Z"/><path d="M3 15 15 3M3 21 21 3"/>',
+    adjust: '<path class="t" d="M3 5h12l-3 4H3ZM9 15h12v4H6Z"/><path d="M3 12h18"/>',
+    color: '<path class="t" d="M12 3a9 9 0 0 1 0 18Z"/><circle cx="12" cy="12" r="9"/><path d="M3 21 21 3"/>',
+    detail: '<path class="t" d="M3 21 21 3 12 21Z"/><path d="M3 21 21 3M3 21h18"/>',
+    retouch: '<path class="t" d="M3 17 17 3l4 4L7 21Z"/><path d="M3 21l18-18"/><circle cx="17" cy="17" r="3"/>',
+    crop: '<path class="t" d="M6 6h12v12Z"/><path d="M6 3v15h15M3 6h15v15"/>',
+    masks: '<circle class="t" cx="12" cy="12" r="7"/><path d="M3 21 21 3M3 12 12 3M12 21l9-9"/>',
+    film: '<path class="t" d="M3 13 13 3h4L3 17Z"/><path d="M7 21 21 7M9 13l2 2M12 10l2 2M15 7l2 2"/>',
+    frame: '<path class="t" fill-rule="evenodd" d="M3 3h18v18H3ZM12 6l6 6-6 6-6-6Z"/><path d="M12 6l6 6-6 6-6-6Z"/>',
+    export: '<path class="t" d="M3 21V11l10 10Z"/><path d="M3 21 21 3M14 3h7v7"/>',
+    info: '<path class="t" d="M10 9h4v12h-4Z"/><path d="M4 21 20 5"/><rect x="10" y="3" width="4" height="3"/>' }) },
+
+  construct3: { name: 'E3 · Constructivist hatched', note: 'Hybrid of E and B: constructivist diagonals and wedges, but every plane is filled with hairline hatching instead of grey.', icons: (u) => ({
+    looks: _hatch(u + 'a', 'path d="M5 15 15 5l2 2L7 17Z"', 45, 1.4) + '<path d="M3 13 13 3M11 21 21 11"/>',
+    adjust: '<path d="M3 7h18M3 17h18"/>' + _hatch(u + 'a', 'path d="M9 4h4l-2 6H7Z"', 0, 1.3) + '<path d="M15 14h3l-2 6h-3Z"/>',
+    color: '<circle cx="11" cy="13" r="7"/>' + _hatch(u + 'a', 'path d="M3 21 21 3v5L8 21Z"', 45, 1.5),
+    detail: _hatch(u + 'a', 'path d="M3 21 21 3 12 21Z"', 0, 1.5) + '<path d="M3 21 21 3M3 21l9-18"/>',
+    retouch: '<circle cx="14" cy="10" r="6"/>' + _hatch(u + 'a', 'path d="M3 19 15 7l2 2L5 21Z"', 0, 1.3) + '<path d="M3 19 15 7l2 2L5 21Z"/>',
+    crop: _hatch(u + 'a', 'path d="M6 6h12v12Z"', 90, 1.6) + '<path d="M6 3v15h15M3 6h15v15"/>',
+    masks: '<circle cx="14" cy="10" r="7"/>' + _hatch(u + 'a', 'path d="M3 21 13 8l3 3Z"', 90, 1.4),
+    film: '<path d="M3 15 15 3M9 21 21 9"/>' + _hatch(u + 'a', 'path d="M3 15 15 3 21 9 9 21Z"', 45, 2),
+    frame: '<rect x="3" y="3" width="18" height="18"/>' + _hatch(u + 'a', 'path d="M12 5l7 7-7 7-7-7Z"', 0, 1.5),
+    export: '<path d="M3 9h10M3 9v12h12V11M14 3h7v7"/>' + _hatch(u + 'a', 'path d="M9 17 19 3l2 2Z"', 0, 1.2),
+    info: _hatch(u + 'a', 'path d="M10 10h3v11h-3Z"', 45, 1.2) + '<rect x="10" y="3.5" width="3.2" height="3.2" transform="rotate(20 11.6 5.1)"/><path d="M4 21h16"/>' }) },
+
+  construct4: { name: 'E4 · Constructivist lines', note: 'Constructivist geometry with the grey removed: hairlines only, the diagonal does all the work.', icons: () => ({
+    looks: '<path d="M3 13 13 3M7 17 17 7M11 21 21 11M5 15l2 2"/>',
+    adjust: '<path d="M3 7h18M3 17h18M9 4l4 0-2 6H7ZM15 14h3l-2 6h-3Z"/>',
+    color: '<circle cx="11" cy="13" r="7"/><path d="M3 21 21 3M8 21 21 8"/>',
+    detail: '<path d="M3 21 21 3M3 21l18-9M3 21l9-18M3 21h18"/>',
+    retouch: '<circle cx="14" cy="10" r="6"/><path d="M3 19 15 7l2 2L5 21Z"/>',
+    crop: '<path d="M6 3v15h15M3 6h15v15M3 21 21 3"/>',
+    masks: '<circle cx="14" cy="10" r="7"/><path d="M3 21 13 8l3 3Z"/>',
+    film: '<path d="M3 15 15 3M9 21 21 9M6 16l2 2M9 13l2 2M12 10l2 2M15 7l2 2"/>',
+    frame: '<rect x="3" y="3" width="18" height="18"/><path d="M12 5l7 7-7 7-7-7Z"/>',
+    export: '<path d="M3 9h10M3 9v12h12V11M9 15 21 3M14 3h7v7"/>',
+    info: '<path d="M11 10v11M4 21h16"/><rect x="10" y="3.5" width="3.2" height="3.2" transform="rotate(20 11.6 5.1)"/>' }) },
+
+  hatch2: { name: 'B2 · Line fields diagonal', note: 'Line fields tilted to 45°, finer spacing, so they sit closer to the constructivist family.', icons: (u) => ({
+    looks: _hatch(u + 'a', 'rect x="3" y="3" width="12" height="12"', 45, 1.6) + _hatch(u + 'b', 'rect x="9" y="9" width="12" height="12"', -45, 1.6),
+    adjust: _hatch(u + 'a', 'rect x="3" y="5" width="18" height="4"', 45, 1.4) + _hatch(u + 'b', 'rect x="3" y="15" width="11" height="4"', 45, 1.4) + '<path d="M13 3v8M14 13v8"/>',
+    color: _hatch(u + 'a', 'circle cx="9" cy="12" r="6"', 45, 1.6) + _hatch(u + 'b', 'circle cx="15" cy="12" r="6"', -45, 1.6),
+    detail: _hatch(u + 'a', 'path d="M3 21 21 3v18Z"', 45, 1.1) + '<path d="M3 21 21 3"/>',
+    retouch: _hatch(u + 'a', 'path d="M12 3a9 9 0 1 0 .01 0ZM12 8a4 4 0 1 1-.01 0Z" fill-rule="evenodd" clip-rule="evenodd"', -45, 1.6) + '<circle cx="12" cy="12" r="4"/>',
+    crop: _hatch(u + 'a', 'rect x="7" y="7" width="10" height="10"', -45, 1.5) + '<path d="M7 3v14h14M3 7h14v14"/>',
+    masks: _hatch(u + 'a', 'path d="M3 3h18v18H3ZM12 6.5a5.5 5.5 0 1 0 .01 0Z" fill-rule="evenodd" clip-rule="evenodd"', 45, 1.8) + '<circle cx="12" cy="12" r="5.5"/>',
+    film: '<path d="M3 5h18M3 19h18"/>' + _hatch(u + 'a', 'rect x="3" y="7.5" width="18" height="9"', 45, 1.4),
+    frame: _hatch(u + 'a', 'path d="M3 3h18v18H3ZM7 7v10h10V7Z" fill-rule="evenodd" clip-rule="evenodd"', -45, 1.4) + '<rect x="7" y="7" width="10" height="10"/>',
+    export: _hatch(u + 'a', 'path d="M3 21V9h12v12Z"', 45, 1.6) + '<path d="M11 13 21 3M15 3h6v6"/>',
+    info: _hatch(u + 'a', 'rect x="10" y="10" width="4" height="11"', 45, 1) + '<rect x="10" y="3" width="4" height="4"/>' }) },
+
   line: { name: 'F · Single line', note: 'Continuous-line drawing (Aicher-thin): each tool is one unbroken stroke, no fills at all.', icons: () => ({
     looks: '<path d="M3 21V11h6V5h6V3h6v10h-6v6H9v2Z"/>',
     adjust: '<path d="M3 7h7a2 2 0 1 0 4 0h7M21 17h-7a2 2 0 1 0-4 0H3"/>',

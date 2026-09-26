@@ -509,6 +509,45 @@ body[data-railsel=outline] .rail .opt.on{color:var(--ink)}
 .fams .row.on .fn{color:var(--ink)}.fams .row.on .cell{color:var(--ink);background:color-mix(in srgb,var(--ink) 6%,transparent)}
 .fams .row.on .fn::before{content:'';display:inline-block;width:7px;height:7px;background:var(--ca);margin-right:7px}
 .famnote{max-width:52ch;min-height:3em}
+body[data-railcase=lower] .rail .lb{text-transform:lowercase}body[data-railcase=title] .rail .lb{text-transform:capitalize;letter-spacing:.02em}
+.rail .opt{position:relative}
+body[data-raillb=numbered] .rail{counter-reset:rn}
+body[data-raillb=numbered] .rail .opt,body[data-raillb=vertical] .rail .opt{flex-direction:row;gap:12px;font-size:10px;padding:8px 18px 8px 14px}
+body[data-raillb=numbered] .rail .opt .lb::before{counter-increment:rn;content:counter(rn,decimal-leading-zero) '  ';opacity:.5;font-variant-numeric:tabular-nums}
+body[data-raillb=vertical] .rail .opt{padding:10px 10px}
+body[data-raillb=vertical] .rail .opt .lb{writing-mode:vertical-rl;transform:rotate(180deg);font-size:8px}
+body[data-raillb=abbr] .rail .opt .lb{font-size:0}body[data-raillb=abbr] .rail .opt .lb::after{content:attr(data-ab);font-size:9px;letter-spacing:.14em}
+body[data-raillb=selected] .rail .opt:not(.on) .lb{display:none}
+body[data-raillb=hover] .rail .opt .lb{position:absolute;left:calc(100% + 8px);top:50%;transform:translate(-6px,-50%);white-space:nowrap;background:var(--ink);color:var(--bg);padding:6px 8px;opacity:0;pointer-events:none;transition:opacity var(--dur-fast),transform var(--dur-fast) var(--ease);z-index:5}
+body[data-raillb=hover] .rail .opt:hover .lb{opacity:1;transform:translate(0,-50%)}
+/* hover */
+.rail .ic{display:grid;position:relative;transition:transform var(--dur) var(--ease)}
+.rail .opt::before{content:'';position:absolute;z-index:-1;inset:3px 6px;pointer-events:none;transition:transform var(--dur-fast) var(--ease),opacity var(--dur-fast),box-shadow var(--dur-fast)}
+body[data-railhv=none] .rail .opt:not(.on):hover{color:var(--mut)}
+body[data-railhv=nudge] .rail .opt:not(.on):hover{transform:translateX(5px)}
+body[data-railhv=peek] .rail .opt::before{background:var(--ca);inset:auto auto 6px 0;width:100%;height:3px;transform:scaleX(0);transform-origin:left}
+body[data-railhv=peek] .rail .opt:not(.on):hover::before{transform:scaleX(.35)}
+body[data-railhv=tilt] .rail .opt:not(.on):hover .ic{transform:rotate(-45deg)}
+body[data-railhv=lift] .rail .opt:not(.on):hover{transform:translate(calc(var(--ox)*-.4),calc(var(--oy)*-.4))}
+body[data-railhv=lift] .rail .opt:not(.on):hover::before{box-shadow:var(--ox) var(--oy) 0 var(--ca);outline:1px solid var(--ink);outline-offset:-1px}
+body[data-railhv=outline] .rail .opt:not(.on):hover::before{outline:1px solid var(--ink);outline-offset:-1px}
+body[data-railhv=strike] .rail .lb{background:linear-gradient(currentColor,currentColor) 0 100%/0 1px no-repeat;padding-bottom:3px;transition:background-size var(--dur-fast) var(--ease)}
+body[data-railhv=strike] .rail .opt:not(.on):hover .lb{background-size:100% 1px}
+/* current */
+body[data-railsel=lowslab] .rail .slab{width:calc(100% - 12px)!important;left:6px!important;background:linear-gradient(transparent 52%,var(--ca) 52%)}
+body[data-railsel=lowslab] .rail .opt.on{color:var(--ink)}
+body[data-railsel=tone] .rail .slab{width:100%!important;background:color-mix(in srgb,var(--ink) 12%,transparent)}
+body[data-railsel=tone] .rail .opt.on{color:var(--ink)}
+body[data-railsel=invert] .rail .slab{width:100%!important;background:var(--ink)}
+body[data-railsel=invert] .rail .opt.on{color:var(--bg)}
+/* toggled on (the tool is doing something to the photo) */
+.rail .opt.tg::after{content:'';position:absolute;pointer-events:none;z-index:3}
+body[data-railtg=dot] .rail .opt.tg::after{width:5px;height:5px;background:var(--cb);top:7px;right:8px}
+body[data-railtg=corner] .rail .opt.tg::after{width:9px;height:9px;background:var(--cb);top:0;right:0;clip-path:polygon(0 0,100% 0,100% 100%)}
+body[data-railtg=edge] .rail .opt.tg::after{width:2px;top:6px;bottom:6px;right:0;background:var(--cb)}
+body[data-railtg=tint] .rail .opt.tg svg.ti .t,body[data-railtg=tint] .rail .opt.tg svg.ti .t2{fill:var(--cb);fill-opacity:1}
+body[data-railtg=tint] .rail .opt.tg svg.ti g[clip-path]{stroke:var(--cb)}
+body[data-railtg=under] .rail .opt.tg .ic::after{content:'';position:absolute;left:3px;right:3px;bottom:-4px;height:1px;background:var(--cb)}
 </style>
 </head>
 <body data-dim="off" data-slab="stepped" data-sel="slab" data-side="fill" data-menu="slab" data-italic="primary" data-bw="on" data-win="tint" data-tg="flip" data-icb="none" data-icsel="slab" data-thhv="offset" data-dot="moved">
@@ -615,9 +654,12 @@ body[data-railsel=outline] .rail .opt.on{color:var(--ink)}
   </fieldset>
 
   <fieldset><legend>Tool rail</legend>
-    <div class="dr full"><label>Icon family</label><select data-attr="iconset"><option value="current">Current (app)</option><option value="bauhaus">A · Primitives</option><option value="hatch">B · Line fields</option><option value="dots">C · Dot matrix</option><option value="arcs">D · Arcs</option><option value="construct">E · Constructivist</option><option value="line">F · Single line</option><option value="orbit">G · Orbits</option><option value="planes">H · Two-tone planes</option></select></div>
-    <div class="dr full"><label>Labels</label><select data-attr="raillb"><option value="below">Below icon</option><option value="beside">Beside icon</option><option value="none">Icons only</option></select></div>
-    <div class="dr full"><label>Selected tool</label><select data-attr="railsel"><option value="offset">Offset slab</option><option value="fill">Full fill</option><option value="bar">Edge bar</option><option value="outline">Outline</option></select></div>
+    <div class="dr full"><label>Icon family</label><select data-attr="iconset"><option value="current">Current (app)</option><option value="bauhaus">A · Primitives</option><option value="hatch">B · Line fields</option><option value="hatch2">B2 · Line fields diagonal</option><option value="dots">C · Dot matrix</option><option value="arcs">D · Arcs</option><option value="construct">E · Constructivist</option><option value="construct2">E2 · Constructivist wedge</option><option value="construct3">E3 · Constructivist hatched</option><option value="construct4">E4 · Constructivist lines</option><option value="line">F · Single line</option><option value="orbit">G · Orbits</option><option value="planes">H · Two-tone planes</option></select></div>
+    <div class="dr full"><label>Labels</label><select data-attr="raillb"><option value="below">Below icon</option><option value="beside">Beside icon</option><option value="numbered">Beside, numbered 01–11</option><option value="abbr">Short codes (LK, ADJ…)</option><option value="selected">Only on the current tool</option><option value="hover">Flag on hover (icons only)</option><option value="vertical">Vertical, beside icon</option><option value="none">Icons only</option></select></div>
+    <div class="dr full"><label>Label case</label><select data-attr="railcase"><option value="upper">UPPERCASE</option><option value="lower">lowercase</option><option value="title">Title case</option></select></div>
+    <div class="dr full"><label>Hover</label><select data-attr="railhv"><option value="ink">Brighten only</option><option value="nudge">Nudge right</option><option value="peek">Slab peeks in</option><option value="tilt">Icon tilts 45°</option><option value="lift">Offset lift + shadow</option><option value="outline">Hairline box</option><option value="strike">Line under label</option><option value="none">Nothing</option></select></div>
+    <div class="dr full"><label>Current tool</label><select data-attr="railsel"><option value="offset">Offset slab</option><option value="fill">Full fill</option><option value="lowslab">Low slab</option><option value="bar">Edge bar</option><option value="outline">Outline</option><option value="tone">Grey tone</option><option value="invert">Inverted ink</option></select></div>
+    <div class="dr full"><label>Toggled on</label><select data-attr="railtg"><option value="dot">Square, colour B</option><option value="corner">Corner wedge</option><option value="edge">Right edge bar</option><option value="tint">Icon greys turn colour B</option><option value="under">Line under icon</option><option value="none">Not shown</option></select></div>
     <div class="dr"><label>Line weight</label><input type="range" min="0.5" max="2" step="0.25" data-var="--ti-sw" data-unit="px"><output></output></div>
     <div class="dr"><label>Grey tone</label><input type="range" min="0" max="0.7" step="0.05" data-var="--ti-tone"><output></output></div>
   </fieldset>
@@ -739,8 +781,8 @@ body[data-railsel=outline] .rail .opt.on{color:var(--ink)}
 <section class="sec zone">
   <div class="eyebrow"><b>08</b> Tool rail · the Editor's 11 tools, grouped as in the app</div>
   <h2>Tool rail &amp; icon families</h2>
-  <p class="note">The rail on the left is live: click or drag the slab, and switch family, labels, selection, line weight and grey tone in the panel under Tool rail. Click any row on the right to put that family in the rail.</p>
-  <div class="row" style="gap:48px">
+  <p class="note">The rail on the left is live: click or drag the slab to change the current tool, double-click a tool to toggle it on or off (Looks, Film and Frame start on), and switch family, labels, selection, line weight and grey tone in the panel under Tool rail. Click any row on the right to put that family in the rail.</p>
+  <div class="row" style="gap:96px">
     <div class="sw vert rail zone" id="rail" data-idx="0"><span class="slab"></span></div>
     <div class="spec"><small>Families · click a row to try it</small><div class="fams" id="fams"></div><p class="note famnote" id="famnote"></p></div>
   </div>
@@ -765,7 +807,7 @@ const DEFAULTS = { vars: { '--a': '#e0500c', '--b': '#1414a0', '--bg': '#1b1b1b'
     '--bw-btn': '0.5px', '--bw-ic': '1px', '--menu-dur': '900ms', '--msx': '10px', '--msy': '5px', '--tb-sl': '62px',
     '--sa-x': '6px', '--sa-top': '9px', '--sa-bot': '6px', '--sa-w': '0px', '--sb-x': '12px', '--sb-top': '21px', '--sb-bot': '13px', '--sb-w': '0px',
     '--sg-fs': '11px', '--sg-pad': '11px', '--sg-top': '34%', '--sg-bot': '3px', '--sg-x': '3px', '--sg-x2': '6px', '--sg-y2': '6px', '--sl-bw': '1px', '--splash-a': '#e0500c', '--splash-b': '#1414a0', '--ti-sw': '1px', '--ti-tone': '0.35' },
-  attrs: { front: 'a', sgcase: 'upper', sgsep: 'bar', sgbase: 'off', sgon: 'white', menubg: 'ink', dim: 'off', slab: 'single', sel: 'slab', side: 'offset', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved', iconset: 'current', raillb: 'below', railsel: 'offset' },
+  attrs: { front: 'a', sgcase: 'upper', sgsep: 'bar', sgbase: 'off', sgon: 'white', menubg: 'ink', dim: 'off', slab: 'single', sel: 'slab', side: 'offset', menu: 'slab', italic: 'primary', bw: 'on', win: 'tint', tg: 'flip', icb: 'none', icsel: 'slab', thhv: 'offset', dot: 'moved', iconset: 'construct', raillb: 'below', railsel: 'offset', railcase: 'upper', railhv: 'nudge', railtg: 'dot' },
   cond: 'hide', ease: '.16,1,.3,1', bounce: 0.3, throw: 0.18, rubber: 0.35, rm: 'system', snd: 'thud', hvBtn: 'jump', hvIc: 'slabturn', roll: 'roll', segv: 'cell', swap: 'slide' };
 // Dark and light are separate setting sets (and separate notes). Light starts as a copy of dark with light colours.
 // Defaults = the approved 2026-09-25 export (approved.json). Light: black ink, stepped slab laid out like the gallery|studio sketch.
@@ -841,7 +883,7 @@ const exportTheme = (S, th) => {
     dim: { mode: S.attrs.dim, level: { $type: 'number', $value: +S.vars['--dim'] }, fade: t(S.vars['--dim-dur']) },
     motion: { duration: t(S.vars['--dur']), hover: t(S.vars['--dur-fast']), easing: { $type: 'cubicBezier', $value: S.ease.split(',').map(Number) }, dragBounce: S.bounce, throw: S.throw, edgeStretch: S.rubber, reduceMotion: S.rm, snapSound: S.snd },
     variants: { buttonHover: S.hvBtn, iconHover: S.hvIc, menuHover: S.attrs.menu, photoSelection: S.attrs.sel, sideMenu: S.attrs.side, toggle: S.attrs.tg, italics: S.attrs.italic, thumbnails: S.attrs.bw, windowSquares: S.attrs.win, valueReadout: S.roll, topBarStateOnlyControls: S.cond, iconSelected: S.attrs.icsel, segmented: S.segv, photoHover: S.attrs.thhv, sliderResetDot: S.attrs.dot, barSwap: S.swap, topBarSliderWidth: S.vars['--tb-sl'] },
-    toolRail: { iconFamily: S.attrs.iconset, labels: S.attrs.raillb, selected: S.attrs.railsel, lineWeight: d(S.vars['--ti-sw']), greyTone: { $type: 'number', $value: +S.vars['--ti-tone'] } },
+    toolRail: { iconFamily: S.attrs.iconset, labels: S.attrs.raillb, labelCase: S.attrs.railcase, hover: S.attrs.railhv, current: S.attrs.railsel, toggledOn: S.attrs.railtg, lineWeight: d(S.vars['--ti-sw']), greyTone: { $type: 'number', $value: +S.vars['--ti-tone'] } },
     notes: tn.map((x) => ({ n: x.n, where: x.where, note: x.note })), generalNotes: tg.trim() };
 };
 $('#copy').onclick = async () => {
@@ -1140,10 +1182,11 @@ addEventListener('resize', placePins); document.fonts.ready.then(() => setTimeou
 // ── tool rail + icon families (08) ──
 let _tiU = 0;
 const tiSvg = (fam, key) => `<svg class="ti" viewBox="0 0 24 24">${ICON_FAMILIES[fam].icons('ti' + (++_tiU))[key]}</svg>`;
-$('#rail').insertAdjacentHTML('beforeend', TOOL_RAIL.map(([k, lb, br], i) => `${br ? '<i class="rsep"></i>' : ''}<span class="opt" data-k="${k}"><span class="ic"></span><span class="lb">${lb}</span></span>`).join(''));
+$('#rail').insertAdjacentHTML('beforeend', TOOL_RAIL.map(([k, lb, br], i) => `${br ? '<i class="rsep"></i>' : ''}<span class="opt${['looks', 'film', 'frame'].includes(k) ? ' tg' : ''}" data-k="${k}" title="Double-click: toggle on/off"><span class="ic"></span><span class="lb" data-ab="${{looks:'LK',adjust:'ADJ',color:'COL',detail:'DET',retouch:'RET',crop:'CRP',masks:'MSK',film:'FLM',frame:'FRM',export:'EXP',info:'INF'}[k]}">${lb}</span></span>`).join(''));
 $('#fams').innerHTML = '<span></span>' + TOOL_RAIL.map(([, lb]) => `<span class="hd">${lb}</span>`).join('') +
   Object.entries(ICON_FAMILIES).map(([f, d]) => `<div class="row" data-f="${f}"><span class="fn">${d.name}</span>${TOOL_RAIL.map(([k]) => `<span class="cell" title="${d.name} · ${k}">${tiSvg(f, k)}</span>`).join('')}</div>`).join('');
 $('#fams').addEventListener('click', (e) => { const r = e.target.closest('.row'); if (!r) return; S.attrs.iconset = r.dataset.f; $('#dock [data-attr=iconset]').value = r.dataset.f; apply(); save(); snap(); });
+$('#rail').addEventListener('dblclick', (e) => { const o = e.target.closest('.opt'); if (o) { o.classList.toggle('tg'); snap(); } });
 function paintRail() {
   const f = ICON_FAMILIES[S.attrs.iconset] ? S.attrs.iconset : 'current';
   $$('#rail .opt').forEach((o) => { $('.ic', o).innerHTML = tiSvg(f, o.dataset.k); });
