@@ -1380,6 +1380,162 @@ fn apply_orientation(src: Vec<u16>, w: usize, h: usize, orientation: u16) -> (Ve
     }
 }
 
+/// CHR-162: DNG 1.6 ProfileGainTableMap (tag 52525) — the spatially varying local tone map iPhone
+/// ProRAW (and other DNG 1.6+ writers) carry. ProRAW stores scene-linear data several stops under
+/// the intended render and relies on this map (measured gains of ~0.7x in highlights up to ~11x in
+/// shadows on a real iPhone 14 Pro file) — ignoring it rendered those DNGs ~40 L* too dark. It's
+/// spatial, so it can't be baked into the 3D DCP LUT; it's applied to the linear camera RGB first.
+/// Mirrors chromasmith-22.html's parseDngGainTableMap/applyDngGainMap exactly — keep them identical.
+#[derive(Debug, Clone)]
+pub struct DngGainMap {
+    pub pv: usize,
+    pub ph: usize,
+    pub sv: f64,
+    pub sh: f64,
+    pub ov: f64,
+    pub oh: f64,
+    pub n: usize,
+    pub wt: [f32; 5],
+    pub gamma: f32,
+    pub table: Vec<f32>,
+    /// IFD0 Orientation — the decode is already rotated by it; the map is in unrotated coords.
+    pub orient: u16,
+}
+
+fn parse_gain_table_bytes(b: &[u8], orient: u16) -> Option<DngGainMap> {
+    if b.len() < 64 {
+        return None;
+    }
+    let u32be = |o: usize| u32::from_be_bytes(b[o..o + 4].try_into().unwrap());
+    let f64be = |o: usize| f64::from_be_bytes(b[o..o + 8].try_into().unwrap());
+    let f32be = |o: usize| f32::from_be_bytes(b[o..o + 4].try_into().unwrap());
+    let (pv, ph) = (u32be(0) as usize, u32be(4) as usize);
+    let (sv, sh, ov, oh) = (f64be(8), f64be(16), f64be(24), f64be(32));
+    let n = u32be(40) as usize;
+    let wt = [f32be(44), f32be(48), f32be(52), f32be(56), f32be(60)];
+    let cells = pv.checked_mul(ph)?.checked_mul(n)?;
+    if pv == 0 || ph == 0 || n == 0 || cells > 8_000_000 {
+        return None;
+    }
+    let (off, mut gamma) = if b.len() == 68 + 4 * cells {
+        (68, f32be(64))
+    } else if b.len() == 64 + 4 * cells {
+        (64, 1.0)
+    } else {
+        return None;
+    };
+    if !(gamma > 0.0) || ![sv, sh, ov, oh].iter().all(|v| v.is_finite()) {
+        gamma = 1.0;
+    }
+    let table = (0..cells).map(|i| f32be(off + 4 * i)).collect();
+    Some(DngGainMap { pv, ph, sv, sh, ov, oh, n, wt, gamma, table, orient })
+}
+
+/// Finds ProfileGainTableMap (52525) and IFD0 Orientation (274) in a DNG's TIFF structure
+/// (IFD chain + SubIFDs). None for anything that isn't a DNG carrying one.
+pub fn parse_dng_gain_map(bytes: &[u8]) -> Option<DngGainMap> {
+    if bytes.len() < 8 {
+        return None;
+    }
+    let le = match &bytes[0..2] {
+        b"II" => true,
+        b"MM" => false,
+        _ => return None,
+    };
+    let u16at = |o: usize| -> Option<u16> {
+        let a: [u8; 2] = bytes.get(o..o + 2)?.try_into().ok()?;
+        Some(if le { u16::from_le_bytes(a) } else { u16::from_be_bytes(a) })
+    };
+    let u32at = |o: usize| -> Option<u32> {
+        let a: [u8; 4] = bytes.get(o..o + 4)?.try_into().ok()?;
+        Some(if le { u32::from_le_bytes(a) } else { u32::from_be_bytes(a) })
+    };
+    if u16at(2)? != 42 {
+        return None;
+    }
+    let mut orient: Option<u16> = None;
+    let mut gain: Option<&[u8]> = None;
+    let mut stack = vec![u32at(4)? as usize];
+    let mut seen = std::collections::HashSet::new();
+    while let Some(off) = stack.pop() {
+        if off == 0 || !seen.insert(off) || seen.len() > 64 {
+            continue;
+        }
+        let Some(cnt) = u16at(off) else { continue };
+        for i in 0..cnt as usize {
+            let e = off + 2 + 12 * i;
+            let (Some(tag), Some(typ), Some(count)) = (u16at(e), u16at(e + 2), u32at(e + 4)) else { break };
+            let count = count as usize;
+            match tag {
+                274 if orient.is_none() => orient = u16at(e + 8),
+                330 => {
+                    let ptr = if count > 1 { u32at(e + 8).unwrap_or(0) as usize } else { e + 8 };
+                    for k in 0..count.min(8) {
+                        if let Some(v) = u32at(ptr + 4 * k) {
+                            stack.push(v as usize);
+                        }
+                    }
+                }
+                52525 if typ == 7 && gain.is_none() && count > 4 => {
+                    let ptr = u32at(e + 8).unwrap_or(0) as usize;
+                    gain = bytes.get(ptr..ptr.checked_add(count)?);
+                }
+                _ => {}
+            }
+        }
+        if let Some(next) = u32at(off + 2 + 12 * cnt as usize) {
+            stack.push(next as usize);
+        }
+    }
+    parse_gain_table_bytes(gain?, orient.unwrap_or(1))
+}
+
+/// Applies the gain map to an ORIENTED interleaved linear u16 RGB buffer. `m` maps camera RGB
+/// (0..1) to linear ProPhoto at the profile's exposure — the space the map's input weights are
+/// defined in (JS computes it with the same fm/exposure it bakes the LUT from: dngGainInputMatrix).
+pub fn apply_dng_gain_map(rgb16: &[u16], w: usize, h: usize, gm: &DngGainMap, m: &[f32; 9]) -> Vec<u16> {
+    let mut out = vec![0u16; rgb16.len()];
+    let nm = (gm.n - 1) as f32;
+    out.par_chunks_mut(w * 3).zip(rgb16.par_chunks(w * 3)).enumerate().for_each(|(y, (dst, src))| {
+        for x in 0..w {
+            let (xx, yy) = ((x as f64 + 0.5) / w as f64, (y as f64 + 0.5) / h as f64);
+            let (u, v) = match gm.orient {
+                3 => (1.0 - xx, 1.0 - yy),
+                6 => (yy, 1.0 - xx),
+                8 => (1.0 - yy, xx),
+                _ => (xx, yy),
+            };
+            let i = 3 * x;
+            let (r, g, b) = (src[i] as f32 / 65535.0, src[i + 1] as f32 / 65535.0, src[i + 2] as f32 / 65535.0);
+            let pr = m[0] * r + m[1] * g + m[2] * b;
+            let pg = m[3] * r + m[4] * g + m[5] * b;
+            let pb = m[6] * r + m[7] * g + m[8] * b;
+            let mut t = gm.wt[0] * pr + gm.wt[1] * pg + gm.wt[2] * pb + gm.wt[3] * pr.min(pg).min(pb) + gm.wt[4] * pr.max(pg).max(pb);
+            t = t.clamp(0.0, 1.0);
+            if gm.gamma != 1.0 {
+                t = t.powf(gm.gamma);
+            }
+            let fv = (((v - gm.ov) / gm.sv) as f32).clamp(0.0, (gm.pv - 1) as f32);
+            let fh = (((u - gm.oh) / gm.sh) as f32).clamp(0.0, (gm.ph - 1) as f32);
+            let fnn = t * nm;
+            let v0 = (fv as usize).min(gm.pv.saturating_sub(2));
+            let h0 = (fh as usize).min(gm.ph.saturating_sub(2));
+            let n0 = (fnn as usize).min(gm.n.saturating_sub(2));
+            let (v1, h1, n1) = ((v0 + 1).min(gm.pv - 1), (h0 + 1).min(gm.ph - 1), (n0 + 1).min(gm.n - 1));
+            let (av, ah, an) = (fv - v0 as f32, fh - h0 as f32, fnn - n0 as f32);
+            let q = |vv: usize, hh: usize| {
+                let o = (vv * gm.ph + hh) * gm.n;
+                gm.table[o + n0] * (1.0 - an) + gm.table[o + n1] * an
+            };
+            let gain = (q(v0, h0) * (1.0 - ah) + q(v0, h1) * ah) * (1.0 - av) + (q(v1, h0) * (1.0 - ah) + q(v1, h1) * ah) * av;
+            for c in 0..3 {
+                dst[i + c] = (src[i + c] as f32 * gain + 0.5).min(65535.0) as u16;
+            }
+        }
+    });
+    out
+}
+
 /// Apply a baked N^3 DCP LUT (the same Float32 data bakeDcpLUT produces in JS, values are
 /// sRGB-encoded 0..1) to linear u16 RGB with trilinear interpolation, producing RGBA8 ready
 /// for ImageData/putImageData. Mirrors chromasmith-22.html's applyDcpLUT indexing exactly —
@@ -1694,5 +1850,43 @@ mod apply_lut_rgba_ext_tests {
     fn ext_rejects_a_mismatched_lut_size_same_as_the_normal_path() {
         let bad_lut = vec![0f32; 10]; // not a valid N^3*3
         assert!(apply_lut_rgba_ext(&[0, 0, 0], &bad_lut, 2).is_err());
+    }
+}
+
+#[cfg(test)]
+mod dng_gain_map_tests {
+    use super::*;
+
+    /// Minimal big-endian DNG-shaped TIFF: IFD0 with Orientation=6 and a ProfileGainTableMap whose
+    /// gain is 2.0 at input 0 and 1.0 at input 1 everywhere (2x2 spatial points, 2 levels).
+    fn synth_dng() -> Vec<u8> {
+        let mut gm = Vec::new();
+        for v in [2u32, 2] { gm.extend_from_slice(&v.to_be_bytes()); }
+        for v in [1.0f64, 1.0, 0.0, 0.0] { gm.extend_from_slice(&v.to_be_bytes()); }
+        gm.extend_from_slice(&2u32.to_be_bytes());
+        for v in [0.0f32, 1.0, 0.0, 0.0, 0.0] { gm.extend_from_slice(&v.to_be_bytes()); } // input = G
+        for _ in 0..4 { for v in [2.0f32, 1.0] { gm.extend_from_slice(&v.to_be_bytes()); } }
+        let mut b = b"MM\0\x2a\0\0\0\x08".to_vec();
+        let data_off = 8 + 2 + 2 * 12 + 4;
+        b.extend_from_slice(&2u16.to_be_bytes());
+        b.extend_from_slice(&274u16.to_be_bytes()); b.extend_from_slice(&3u16.to_be_bytes());
+        b.extend_from_slice(&1u32.to_be_bytes()); b.extend_from_slice(&6u16.to_be_bytes()); b.extend_from_slice(&[0, 0]);
+        b.extend_from_slice(&52525u16.to_be_bytes()); b.extend_from_slice(&7u16.to_be_bytes());
+        b.extend_from_slice(&(gm.len() as u32).to_be_bytes()); b.extend_from_slice(&(data_off as u32).to_be_bytes());
+        b.extend_from_slice(&0u32.to_be_bytes());
+        b.extend_from_slice(&gm);
+        b
+    }
+
+    #[test]
+    fn parses_and_applies_profile_gain_table_map() {
+        let gm = parse_dng_gain_map(&synth_dng()).expect("gain map parsed");
+        assert_eq!((gm.pv, gm.ph, gm.n, gm.orient), (2, 2, 2, 6));
+        let ident = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+        // Black-ish pixel: input ~0 -> gain ~2. Full-green pixel: input 1 -> gain 1.
+        let out = apply_dng_gain_map(&[1000, 1000, 1000, 0, 65535, 0], 2, 1, &gm, &ident);
+        assert!((out[0] as i32 - 1970).abs() < 40, "dark pixel should be ~doubled, got {}", out[0]);
+        assert_eq!(out[4], 65535);
+        assert!(parse_dng_gain_map(b"MM\0\x2a\0\0\0\x08\0\0\0\0\0\0").is_none(), "no tag -> None");
     }
 }

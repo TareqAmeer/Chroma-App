@@ -145,6 +145,21 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
 static DCP_LUTS: Mutex<Option<HashMap<String, std::sync::Arc<Vec<f32>>>>> = Mutex::new(None);
+// CHR-162: LUT keys registered for a DNG's OWN embedded profile (`dcp:<make model>:dng-<hash>`)
+// whose file carries a ProfileGainTableMap -> the camera-RGB -> ProPhoto(exposed) matrix that
+// map's input weights need. Presence means "apply the file's gain map before this LUT".
+static DNG_GAIN_M: Mutex<Option<HashMap<String, [f32; 9]>>> = Mutex::new(None);
+
+/// The RGB16 a LUT should be applied to: the decode itself, or — for an embedded-DNG-profile key
+/// registered with a gain matrix — the decode with the file's ProfileGainTableMap applied.
+fn lut_input_rgb16<'a>(lut_key: &str, file: &[u8], decoded: &'a raw_decode::DecodedRaw) -> std::borrow::Cow<'a, [u16]> {
+    let m = DNG_GAIN_M.lock().ok().and_then(|g| g.as_ref().and_then(|h| h.get(lut_key).copied()));
+    match m.and_then(|m| raw_decode::parse_dng_gain_map(file).map(|gm| (m, gm))) {
+        Some((m, gm)) => std::borrow::Cow::Owned(raw_decode::apply_dng_gain_map(
+            &decoded.rgb16, decoded.width as usize, decoded.height as usize, &gm, &m)),
+        None => std::borrow::Cow::Borrowed(&decoded.rgb16),
+    }
+}
 
 // Single-slot cache for the EXPENSIVE half of decode_raw_v2 (demosaic — the multi-second cost;
 // see raw_decode.rs's own header comment) keyed by a hash of the raw bytes + every parameter that
@@ -293,6 +308,15 @@ fn store_dcp_lut(request: tauri::ipc::Request) -> Result<(), String> {
     if let Some(make) = json["make"].as_str() {
         if !make.trim().is_empty() {
             catalog::record_dcp_lut_for_make(make, &key);
+        }
+    }
+    if let Some(arr) = json["dngGain"].as_array().filter(|a| a.len() == 9) {
+        let mut m = [0f32; 9];
+        for (i, v) in arr.iter().enumerate() {
+            m[i] = v.as_f64().unwrap_or(0.0) as f32;
+        }
+        if let Ok(mut g) = DNG_GAIN_M.lock() {
+            g.get_or_insert_with(HashMap::new).insert(key.clone(), m);
         }
     }
     let mut guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
@@ -953,12 +977,13 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
             };
             let n = (lut.len() / 3) as f64;
             let n = n.cbrt().round() as usize;
+            let src = on_interactive_pool(|| lut_input_rgb16(key, payload, &decoded));
             if want_ext {
-                let (rgba, e) = on_interactive_pool(|| raw_decode::apply_lut_rgba_ext(&decoded.rgb16, &lut, n))?;
+                let (rgba, e) = on_interactive_pool(|| raw_decode::apply_lut_rgba_ext(&src, &lut, n))?;
                 ext = Some(e);
                 rgba
             } else {
-                on_interactive_pool(|| raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n))?
+                on_interactive_pool(|| raw_decode::apply_lut_rgba(&src, &lut, n))?
             }
         }
         "srgb" => raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam),
@@ -1074,7 +1099,8 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
         let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
         let lut = guard.as_ref().and_then(|m| m.get(&lut_key).cloned()).ok_or_else(|| format!("LUT '{lut_key}' not registered"))?;
         let n = ((lut.len() / 3) as f64).cbrt().round() as usize;
-        raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
+        drop(guard);
+        raw_decode::apply_lut_rgba(&lut_input_rgb16(&lut_key, &bytes, &decoded), &lut, n)?
     } else { raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam) };
     diag::stage("cache", &file_name, "colour_convert", &mut stage_t);
     let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba).ok_or("decoded RGBA dimensions do not match")?;
@@ -1268,12 +1294,13 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
             };
             let n = (lut.len() / 3) as f64;
             let n = n.cbrt().round() as usize;
+            let src = lut_input_rgb16(key, payload, &decoded);
             if want_ext {
-                let (rgba, e) = raw_decode::apply_lut_rgba_ext(&decoded.rgb16, &lut, n)?;
+                let (rgba, e) = raw_decode::apply_lut_rgba_ext(&src, &lut, n)?;
                 ext = Some(e);
                 rgba
             } else {
-                raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n)?
+                raw_decode::apply_lut_rgba(&src, &lut, n)?
             }
         }
         "srgb" => raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam),

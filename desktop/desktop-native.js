@@ -95,6 +95,74 @@
     return invoke(cmd, framed);
   };
   const _rustLuts = {}; // lutKey -> true once registered with the Rust side this session
+  // CHR-162: one resolver for every native RAW develop (open, refine, High NR, export cleanup,
+  // Library cache warm) so they can't disagree about a photo's colour. Order: bundled/Adobe-on-disk
+  // DCP for the camera (unchanged), else the profile EMBEDDED in a DNG (iPhone/Pixel/Samsung/
+  // converted files — ColorMatrix/ForwardMatrix + ProfileToneCurve + Look table, plus iPhone
+  // ProRAW's ProfileGainTableMap local tone map, which Rust applies before the LUT). Before this,
+  // desktop DNGs went linear16: 290MB of u16 over IPC, a second 75MB read of the whole file, and
+  // two 48MP JS loops on the main thread — and the export/High-NR/cache paths rendered them with
+  // no profile at all. Returns { mode: 'lut'|'linear16', lutKey }.
+  // `src`: { path } (Rust reads it; only the first 16MB — where DNG metadata lives — crosses IPC
+  // unless the tags turn out to sit past it) or { bytes }.
+  const _dngLutByFile = new Map(); // path|size -> lutKey ('' = no usable embedded profile)
+  const _hashNums = (h, arr) => { for (let i = 0; i < arr.length; i++) { h = Math.imul(h ^ Math.round(arr[i] * 1e6), 16777619) >>> 0; } return h; };
+  async function resolveRawLut(ident, profile, src) {
+    ident = ident || {};
+    const dcpSource = (typeof resolveDcpSource === 'function') ? await resolveDcpSource(ident.make || '', ident.model || '') : null;
+    const camPrefix = dcpSource ? dcpSource.prefix : null;
+    if (camPrefix) {
+      const lutKey = 'dcp:' + camPrefix + ':' + profile;
+      if (!_rustLuts[lutKey]) {
+        const lut = await getDcpLUT(camPrefix, profile, 200, dcpSource.source); // iso arg vestigial (constants ISO-independent)
+        // `make` (the raw EXIF camera make this LUT was resolved for) lets the offline
+        // full-res background job (catalog::hq_offline_run) find the right persisted LUT by
+        // the SAME `decoded.make` its own full decode already returns for free.
+        await framedInvoke('store_dcp_lut', { key: lutKey, make: ident.make || '' },
+          new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
+        _rustLuts[lutKey] = true;
+      }
+      return { mode: 'lut', lutKey, kind: 'dcp' };
+    }
+    const make = (ident.make || '').trim();
+    if (!make || typeof parseDngEmbeddedProfile !== 'function') return { mode: 'linear16', lutKey: '' };
+    const fileId = src && src.path ? src.path : ''; // in-memory bytes aren't cached (parsing them is cheap; no stable id)
+    let lutKey = fileId && _dngLutByFile.has(fileId) ? _dngLutByFile.get(fileId) : null;
+    if (lutKey === null) {
+      lutKey = '';
+      try {
+        let dcp = null;
+        if (src && src.path) {
+          const headBuf = await invoke('read_file_head', { path: src.path, len: 16 << 20 });
+          dcp = parseDngEmbeddedProfile(new Uint8Array(headBuf, 8));
+          if (dcp && dcp.truncated) dcp = parseDngEmbeddedProfile(new Uint8Array(await invoke('read_file_bytes', { path: src.path })));
+        } else if (src && src.bytes && src.bytes.byteLength) {
+          dcp = parseDngEmbeddedProfile(src.bytes);
+        }
+        if (dcp) {
+          const fit = dcpFit(0, null);
+          let h = 2166136261;
+          h = _hashNums(h, dcp.fm); h = _hashNums(h, dcp.tone); h = _hashNums(h, dcp.dims); h = _hashNums(h, dcp.look);
+          h = _hashNums(h, [dcp.enc, dcp.baseOff, dcp.gainMap ? 1 : 0]);
+          // Key MUST start with "dcp:<make>" — main.rs's effective_dcp_mode only honours a LUT whose
+          // prefix matches the file's own decoded make (the "wrong camera's profile" backstop).
+          lutKey = 'dcp:' + make + ' ' + (ident.model || '').trim() + ':dng-' + h.toString(16);
+          if (!_rustLuts[lutKey]) {
+            const lut = await _cpuRun('bakeDcpLUT', [{ ...dcp, gainMap: undefined }, fit]);
+            // No `make` here: this LUT belongs to THIS file's embedded profile, not to every photo
+            // from the camera maker (hq_offline_run maps make -> LUT via that manifest).
+            const req = { key: lutKey };
+            if (dcp.gainMap) req.dngGain = dngGainInputMatrix(dcp, fit);
+            await framedInvoke('store_dcp_lut', req, new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
+            _rustLuts[lutKey] = true;
+          }
+        }
+      } catch (e) { console.error('embedded DNG profile', e); lutKey = ''; }
+      if (fileId) _dngLutByFile.set(fileId, lutKey);
+    }
+    return lutKey ? { mode: 'lut', lutKey, kind: 'dng' } : { mode: 'linear16', lutKey: '' };
+  }
+  window.chromasmithResolveRawLut = resolveRawLut;
   class NativeLibRawShim {
     async open(bytes, settings) {
       // Clear the PREVIOUS photo's ground-truth lens-applied flag immediately. Deliberately NOT
@@ -137,26 +205,14 @@
         // real profile for this camera already installed on disk. `dcpSource.source` threads
         // through to getDcpLUT so it knows whether to fetch() the bundled file or invoke() the
         // disk one.
-        const dcpSource = (typeof resolveDcpSource === 'function') ? await resolveDcpSource(this._ident.make, this._ident.model) : null;
-        const camPrefix = dcpSource ? dcpSource.prefix : null;
-        if (profile && camPrefix) {
-          mode = 'lut'; lutKey = 'dcp:' + camPrefix + ':' + profile;
-          if (!_rustLuts[lutKey]) {
-            const lut = await getDcpLUT(camPrefix, profile, 200, dcpSource.source); // iso arg vestigial (constants ISO-independent)
-            _lap('DCP LUT baked (JS) at');
-            // `make` (the raw EXIF camera make this LUT was resolved for) lets the offline
-            // full-res background job (catalog::hq_offline_run) find the right persisted LUT by
-            // the SAME `decoded.make` its own full decode already returns for free — without a
-            // manifest entry it would have no way to map a photo's camera back to a lutKey, since
-            // camPrefix (the disk/bundled DCP resolution) is JS-only logic.
-            await framedInvoke('store_dcp_lut', { key: lutKey, make: this._ident.make || '' },
-              new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
-            _rustLuts[lutKey] = true;
-            _lap('DCP LUT registered with Rust at');
-          }
+        const res = profile ? await resolveRawLut(this._ident, profile, sourcePath ? { path: sourcePath } : { bytes }) : { mode: 'linear16', lutKey: '' };
+        _lap('RAW colour profile resolved (' + (res.kind || 'none') + ') at');
+        if (res.mode === 'lut') {
+          mode = 'lut'; lutKey = res.lutKey;
+          if (res.kind === 'dng' && typeof log === 'function') log(`No camera profile installed for ${this._ident.make || ''} ${this._ident.model || ''} — using the colour profile embedded in the DNG`, 'info');
         } else {
           mode = 'linear16';
-          if (profile && !camPrefix && typeof log === 'function') {
+          if (profile && typeof log === 'function') {
             log('No colour profile found for this camera (checked the bundled set and any Adobe Camera Raw / DNG Converter install) — RAW Noise Reduction and geometry still apply, but you\'ll need Basic Adjustments (White Balance/Exposure/etc.) to grade instead of a RAW profile.', 'warn');
           }
         }
@@ -343,19 +399,7 @@
     let mode = 'srgb', lutKey = '';
     if (profile) {
       // ROADMAP.md's F1 — same bundled-then-disk resolution as open() above.
-      const dcpSource = (typeof resolveDcpSource === 'function') ? await resolveDcpSource(ident.make || '', ident.model || '') : null;
-      const camPrefix = dcpSource ? dcpSource.prefix : null;
-      if (camPrefix) {
-        mode = 'lut'; lutKey = 'dcp:' + camPrefix + ':' + profile;
-        if (!_rustLuts[lutKey]) {
-          const lut = await getDcpLUT(camPrefix, profile, 200, dcpSource.source); // iso arg vestigial — see open()'s identical call
-          await framedInvoke('store_dcp_lut', { key: lutKey, make: ident.make || '' },
-            new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
-          _rustLuts[lutKey] = true;
-        }
-      } else {
-        mode = 'linear16';
-      }
+      ({ mode, lutKey } = await resolveRawLut(ident, profile, it.rawFile.__csSourcePath ? { path: it.rawFile.__csSourcePath } : { bytes })); // CHR-162: same resolver as open()
     }
     const autoLens = !!window.chromasmithAutoLens;
     const demosaicAlgo = window.chromasmithDemosaicAlgo || '';
@@ -451,19 +495,7 @@
     const ident = it.exif || {};
     let mode = 'srgb', lutKey = '';
     if (profile) {
-      const dcpSource = (typeof resolveDcpSource === 'function') ? await resolveDcpSource(ident.make || '', ident.model || '') : null;
-      const camPrefix = dcpSource ? dcpSource.prefix : null;
-      if (camPrefix) {
-        mode = 'lut'; lutKey = 'dcp:' + camPrefix + ':' + profile;
-        if (!_rustLuts[lutKey]) {
-          const lut = await getDcpLUT(camPrefix, profile, 200, dcpSource.source);
-          await framedInvoke('store_dcp_lut', { key: lutKey, make: ident.make || '' },
-            new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
-          _rustLuts[lutKey] = true;
-        }
-      } else {
-        mode = 'linear16';
-      }
+      ({ mode, lutKey } = await resolveRawLut(ident, profile, byPath ? { path: byPath } : { bytes })); // CHR-162: same resolver as open()
     }
     const req = {
       mode, autoLens: !!window.chromasmithAutoLens, rawNr: 'fast', fast: false,

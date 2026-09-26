@@ -68,6 +68,15 @@ fn main() {
         t0.elapsed().as_secs_f32()
     );
     let (w, h) = (d.width as usize, d.height as usize);
+    // CS_DNG_GAIN="m0,..,m8" (CHR-162): apply the DNG's ProfileGainTableMap with this camera->ProPhoto
+    // matrix (JS dngGainInputMatrix) exactly as decode_raw_v2 does — for Rust/JS parity checks
+    // with test/probe_dng_color.mjs (run that with NOGAIN=1 on the resulting dump).
+    let mut d = d;
+    if let Some(m) = std::env::var("CS_DNG_GAIN").ok().map(|v| v.split(',').map(|x| x.trim().parse::<f32>().expect("CS_DNG_GAIN float")).collect::<Vec<_>>()) {
+        let m: [f32; 9] = m.try_into().expect("CS_DNG_GAIN needs 9 floats");
+        let gm = raw_decode::parse_dng_gain_map(&bytes).expect("no ProfileGainTableMap in this file");
+        d.rgb16 = raw_decode::apply_dng_gain_map(&d.rgb16, w, h, &gm, &m);
+    }
     let (ow, oh) = (w / ds, h / ds);
     let mut out16 = vec![0u16; ow * oh * 3];
     for oy in 0..oh {

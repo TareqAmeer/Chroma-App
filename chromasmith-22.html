@@ -5612,7 +5612,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926G';
+const BUILD='1.0926H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10631,7 +10631,7 @@ function parseDngEmbeddedProfile(bytes){
     if(!le&&d.getUint16(0,false)!==0x4D4D)return null;
     if(d.getUint16(2,le)!==42)return null;
     const TS={1:1,2:1,3:2,4:4,5:8,6:1,7:1,8:2,9:4,10:8,11:4,12:8,13:4,16:8};
-    const tags={},seen=new Set();
+    const tags={},seen=new Set();let orient=null,gainBytes=null,truncated=false;
     const walk=off=>{
       if(!off||seen.has(off)||off+2>d.byteLength)return;
       seen.add(off);
@@ -10641,7 +10641,10 @@ function parseDngEmbeddedProfile(bytes){
         const tag=d.getUint16(e,le),typ=d.getUint16(e+2,le),cnt=d.getUint32(e+4,le);
         const sz=(TS[typ]||1)*cnt,ptr=sz>4?d.getUint32(e+8,le):e+8;
         if(tag===330){for(let k=0;k<cnt&&k<8;k++)walk(d.getUint32((cnt>1?ptr:e+8)+4*k,le));continue;}
-        if(!(tag>=50721&&tag<=51109)||ptr+sz>d.byteLength||cnt>2000000)continue;
+        if(tag===274&&orient==null){orient=d.getUint16(e+8,le);continue;} // IFD0 Orientation (the decoders rotate by it; the gain map is in unrotated coords)
+        if(tag===52525&&typ===7&&!gainBytes){if(ptr+sz<=d.byteLength)gainBytes=new Uint8Array(bytes.buffer,bytes.byteOffset+ptr,cnt);else truncated=true;continue;} // ProfileGainTableMap (DNG 1.6)
+        if(!(tag>=50721&&tag<=51109)||cnt>2000000)continue;
+        if(ptr+sz>d.byteLength){truncated=true;continue;} // caller passed only the file's head — see desktop-native.js's chromasmithResolveRawLut
         let v;
         if(typ===10){v=new Float64Array(cnt);for(let j=0;j<cnt;j++){const a=d.getInt32(ptr+8*j,le),b=d.getInt32(ptr+8*j+4,le);v[j]=b?a/b:0;}}
         else if(typ===5){v=new Float64Array(cnt);for(let j=0;j<cnt;j++){const a=d.getUint32(ptr+8*j,le),b=d.getUint32(ptr+8*j+4,le);v[j]=b?a/b:0;}}
@@ -10677,8 +10680,64 @@ function parseDngEmbeddedProfile(bytes){
       dims=[tags[50937][0],tags[50937][1],Math.max(1,tags[50937][2])];look=tags[50939]||tags[50938];enc=tags[51107]?tags[51107][0]:0;
     }else{dims=[1,2,2];look=new Float64Array([0,1,1,0,1,1,0,1,1,0,1,1]);} // identity: 0° hue, ×1 sat, ×1 val
     const tone=tags[50940]&&tags[50940].length>=4&&tags[50940].length%2===0?tags[50940]:new Float64Array([0,0,1,1]);
-    return{fm,tone,dims,look,enc,baseOff:(tags[50730]?tags[50730][0]:0)+(tags[51109]?tags[51109][0]:0)}; // DNG BaselineExposure (+ profile offset)
+    const out={fm,tone,dims,look,enc,baseOff:(tags[50730]?tags[50730][0]:0)+(tags[51109]?tags[51109][0]:0)}; // DNG BaselineExposure (+ profile offset)
+    // CHR-162: iPhone ProRAW (and other DNG 1.6+ writers) store scene-linear data several stops
+    // under the intended render and carry a ProfileGainTableMap — a spatially varying local
+    // tone map (gains up to ~10x in shadows on a real iPhone 14 Pro file). Ignoring it rendered
+    // those files ~40 L* too dark and muddy. It's per-pixel/spatial so it can't live in the 3D
+    // LUT; applyDngGainMap applies it to the linear camera RGB before the LUT.
+    const gm=gainBytes&&parseDngGainTableMap(gainBytes);
+    if(gm){gm.orient=orient||1;out.gainMap=gm;}
+    if(truncated)out.truncated=true;
+    return out;
   }catch(e){return null;}
+}
+// DNG 1.6 ProfileGainTableMap, always big-endian: MapPointsV/H (u32), MapSpacingV/H,
+// MapOriginV/H (f64, in 0..1 image-relative units), MapPointsN (u32), MapInputWeights[5] (f32:
+// R,G,B,min,max), optional Gamma (f32, DNG 1.7 version 2), then f32 gains [V][H][N].
+function parseDngGainTableMap(b){
+  if(!b||b.length<60)return null;
+  const d=new DataView(b.buffer,b.byteOffset,b.byteLength);
+  const pv=d.getUint32(0,false),ph=d.getUint32(4,false),sv=d.getFloat64(8,false),sh=d.getFloat64(16,false),
+        ov=d.getFloat64(24,false),oh=d.getFloat64(32,false),n=d.getUint32(40,false);
+  const wt=[0,1,2,3,4].map(i=>d.getFloat32(44+4*i,false));
+  const cells=pv*ph*n;if(!pv||!ph||!n||cells>8e6)return null;
+  let off=64,gamma=1;
+  if(b.length===68+4*cells){gamma=d.getFloat32(64,false);off=68;}
+  else if(b.length!==64+4*cells)return null;
+  if(!(gamma>0)||![sv,sh,ov,oh].every(isFinite))gamma=1;
+  const table=new Float32Array(cells);
+  for(let i=0;i<cells;i++)table[i]=d.getFloat32(off+4*i,false);
+  return{pv,ph,sv,sh,ov,oh,n,wt,gamma,table};
+}
+// Camera RGB (white-balanced, 0..1) -> linear ProPhoto at the profile's exposure: the space the
+// gain map's input weights are defined in (same fm/XYZ2PP/exposure bakeDcpLUT uses).
+function dngGainInputMatrix(dcp,fit){
+  const e=Math.pow(2,(fit?fit.ev:0)+dcp.baseOff),f=dcp.fm,sc=[fit?fit.gr:1,1,fit?fit.gb:1],M=new Array(9);
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++)M[3*i+j]=e*sc[j]*(XYZ2PP[3*i]*f[j]+XYZ2PP[3*i+1]*f[3+j]+XYZ2PP[3*i+2]*f[6+j]);
+  return M;
+}
+// In place: multiply each pixel of an ORIENTED interleaved linear u16 RGB buffer by the gain
+// map's gain for its (unrotated) position and weighted input level. Mirrored in Rust by
+// raw_decode.rs's apply_dng_gain_map — keep the two identical.
+function applyDngGainMap(u16,w,h,gm,M){
+  const{pv,ph,sv,sh,ov,oh,n,wt,gamma,table,orient}=gm,NM=n-1,k=1/65535;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const X=(x+0.5)/w,Y=(y+0.5)/h;let u,v; // u: horizontal, v: vertical, in the stored (unrotated) image
+    if(orient===3){u=1-X;v=1-Y;}else if(orient===6){u=Y;v=1-X;}else if(orient===8){u=1-Y;v=X;}else{u=X;v=Y;}
+    const i=3*(y*w+x),r=u16[i]*k,g=u16[i+1]*k,b=u16[i+2]*k;
+    const R=M[0]*r+M[1]*g+M[2]*b,G=M[3]*r+M[4]*g+M[5]*b,B=M[6]*r+M[7]*g+M[8]*b;
+    let t=wt[0]*R+wt[1]*G+wt[2]*B+wt[3]*Math.min(R,G,B)+wt[4]*Math.max(R,G,B);
+    t=Math.min(Math.max(t,0),1);if(gamma!==1)t=Math.pow(t,gamma);
+    const fv=Math.min(Math.max((v-ov)/sv,0),pv-1),fh=Math.min(Math.max((u-oh)/sh,0),ph-1),fn=t*NM;
+    const v0=Math.min(fv|0,Math.max(pv-2,0)),h0=Math.min(fh|0,Math.max(ph-2,0)),n0=Math.min(fn|0,Math.max(NM-1,0));
+    const v1=Math.min(v0+1,pv-1),h1=Math.min(h0+1,ph-1),n1=Math.min(n0+1,NM);
+    const av=fv-v0,ah=fh-h0,an=fn-n0;
+    const q=(vv,hh)=>{const o=(vv*ph+hh)*n;return table[o+n0]*(1-an)+table[o+n1]*an;};
+    const gain=(q(v0,h0)*(1-ah)+q(v0,h1)*ah)*(1-av)+(q(v1,h0)*(1-ah)+q(v1,h1)*ah)*av;
+    for(let c=0;c<3;c++){const o=u16[i+c]*gain;u16[i+c]=o>65535?65535:o+0.5;}
+  }
+  return u16;
 }
 async function loadRw2(file){
   window.__pm&&window.__pm('loadRw2-enter');
@@ -10715,8 +10774,12 @@ async function loadRw2(file){
   // the DCP branch below against that linear16 buffer and threw on the missing camPrefix —
   // so desktop iPhone/DNG opens failed even though the native shim itself handled it gracefully.
   let embDcp=null;
-  if(profile&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(await fullBytes());
-  if(profile&&!embDcp&&!cameraDcpPrefix(m.make,m.model)){
+  // CHR-162: skipped when the native shell already developed the pixels (img.rgba — a bundled,
+  // Adobe-on-disk or embedded-DNG profile LUT applied in Rust): parsing needs the whole file
+  // (75MB for an iPhone ProRAW, over IPC), and the sRGB fallback below would then throw that
+  // develop away and decode the RAW a second time.
+  if(profile&&!img.rgba&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(await fullBytes());
+  if(profile&&!img.rgba&&!embDcp&&!cameraDcpPrefix(m.make,m.model)){
     profile=null;
     const raw2=new LibRaw();
     try{
@@ -10794,7 +10857,11 @@ async function loadRw2(file){
       let lut;
       if(!camPrefix&&embDcp){
         log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the profile embedded in the DNG`,'info');
-        lut=await _cpuRun('bakeDcpLUT',[embDcp,dcpFit(m.iso_speed,null)]);
+        const fit=dcpFit(m.iso_speed,null);
+        lut=await _cpuRun('bakeDcpLUT',[{...embDcp,gainMap:undefined},fit]);
+        // CHR-162: the file's own local tone map (iPhone ProRAW) — spatial, so applied to the
+        // linear pixels (in place — this decode's own buffer) before the LUT rather than baked into it.
+        if(embDcp.gainMap)applyDngGainMap(rgb,w,h,embDcp.gainMap,dngGainInputMatrix(embDcp,fit));
       }else
       if(!camPrefix)throw new Error(`No bundled colour profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile, or open this photo in the Chromasmith desktop app, which can also use camera profiles you've installed with Adobe Camera Raw.`);
       if(!lut)lut=await getDcpLUT(camPrefix,profile,m.iso_speed);

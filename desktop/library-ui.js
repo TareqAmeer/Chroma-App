@@ -2413,7 +2413,7 @@
   // (see get_decode_cache/save_decode_cache in library.rs) is keyed on this alongside
   // path+mtime+size, so switching RAW profile / native NR / demosaic algo / auto-lens can never
   // serve a stale cached decode.
-  function rawRecipeKey(forceFull) {
+  function rawRecipeKey(forceFull, path) {
     const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
     // Must include every setting that changes the NATIVE decode's pixels (see decode_raw_v2's
     // params in main.rs) — a manual lens pick (window.chromasmithLensOverride/Focal) changes the
@@ -2426,7 +2426,8 @@
     return [profile, window.chromasmithRawNr !== 'off' ? 1 : 0,
       window.chromasmithDemosaicAlgo || '', window.chromasmithAutoLens ? 1 : 0,
       window.chromasmithLensOverride || '', window.chromasmithLensOverrideFocal || 0,
-      (forceFull || window.chromasmithRawFullCleanup) ? 'full' : 'chroma2'].join('|'); // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
+      (forceFull || window.chromasmithRawFullCleanup) ? 'full' : 'chroma2'].join('|') // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
+      + (/\.dng$/i.test(path || '') ? '|dngp1' : ''); // CHR-162: DNGs now develop with their embedded profile — never serve a pre-fix cached decode // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
   }
   async function showDisplayProvisional(path, recipeKey) {
     const myToken = ++provisionalToken;
@@ -2543,9 +2544,8 @@
     // already in flight (or done) via the real open path, and competing with it recreates the
     // exact cold-reopen stall this cache is meant to remove. Batch caching remains responsible
     // for the full selected set.
-    const recipeKey = rawRecipeKey();
     const pinnedPath = state.openedPath || paths[0] || '';
-    displayPinnedKey = displayCacheKey(pinnedPath, recipeKey);
+    displayPinnedKey = displayCacheKey(pinnedPath, rawRecipeKey(false, pinnedPath));
     // CHR-120 (c): window around the current position, not just forward from the start of
     // `paths` — culling moves both directions (arrow-key back-and-forth), and `paths` here is
     // the grid's own sort order so the opened photo's index tells us where "around" actually is.
@@ -2558,12 +2558,12 @@
       // `slice(1, …)` skipped it as though its open request were already in flight, making a
       // freshly launched Library pay the JPEG proxy decode on that exact first selection.
       : paths.slice(0, DISPLAY_PREFETCH_FORWARD);
-    const queue = around.filter((p) => RAW_EXT_RE.test(p) && !displayCacheHas(p, recipeKey));
+    const queue = around.filter((p) => RAW_EXT_RE.test(p) && !displayCacheHas(p, rawRecipeKey(false, p)));
     let cursor = 0;
     const worker = async () => {
       while (cursor < queue.length) {
         const p = queue[cursor++];
-        const job = displayAssetImage(p, recipeKey, false).catch(() => null);
+        const job = displayAssetImage(p, rawRecipeKey(false, p), false).catch(() => null);
         await job;
       }
     };
@@ -4070,16 +4070,16 @@
     // fresh app launch), check the native in-process cache first. This is the cache populated by
     // the explicit batch action, so it returns lossless pixels without another RAW decode or a
     // PNG decode. The persistent PNG cache remains the fallback after relaunch.
-    let recipeKey = isRaw ? rawRecipeKey() : '';
+    let recipeKey = isRaw ? rawRecipeKey(false, path) : '';
     if (!window.__chromasmithFullCleanupPaths) window.__chromasmithFullCleanupPaths = new Set();
     window.__chromasmithFullCleanupPaths.delete(path);
     if (isRaw && !window.chromasmithRawFullCleanup) {
       // A batch-cache entry is always the complete cleanup — a superset of what the interactive
       // chroma-only tier shows — so use it when present instead of re-decoding.
-      const fullKey = rawRecipeKey(true);
+      const fullKey = rawRecipeKey(true, path);
       try { await invoke('get_decode_cache_path', { path, recipeKey: fullKey }); recipeKey = fullKey; } catch (_) {}
     }
-    if (isRaw && recipeKey === rawRecipeKey(true)) window.__chromasmithFullCleanupPaths.add(path);
+    if (isRaw && recipeKey === rawRecipeKey(true, path)) window.__chromasmithFullCleanupPaths.add(path);
     if (isRaw && !hdrPreview) displayPinnedKey = displayCacheKey(path, recipeKey);
     if (isRaw && !hdrPreview) {
       displayOverlayPromise = showDisplayProvisional(path, recipeKey);
@@ -5764,23 +5764,16 @@
     const _prevRawNr = window.chromasmithRawNr, _prevDemosaic = window.chromasmithDemosaicAlgo;
     window.chromasmithRawNr = rawNr;
     window.chromasmithDemosaicAlgo = demosaicAlgo;
-    const recipeKey = rawRecipeKey(tier !== 'interactive');
+    const recipeKey = rawRecipeKey(tier !== 'interactive', path);
     window.chromasmithRawNr = _prevRawNr;
     window.chromasmithDemosaicAlgo = _prevDemosaic;
     const identT0 = performance.now(); const ident = await invoke('peek_raw_camera_path', { path }); rawPerf('cache-identify', path, { ms: performance.now() - identT0 });
     let mode = 'srgb', lutKey = '';
-    if (profile && typeof resolveDcpSource === 'function') {
-      const source = await resolveDcpSource(ident.make || '', ident.model || '');
-      if (source) {
-        mode = 'lut'; lutKey = `dcp:${source.prefix}:${profile}`;
-        if (!window.__chromasmithRustLuts) window.__chromasmithRustLuts = {};
-        if (!window.__chromasmithRustLuts[lutKey]) {
-          const lut = await getDcpLUT(source.prefix, profile, 200, source.source);
-          await framedInvoke('store_dcp_lut', { key: lutKey, make: ident.make || '' },
-            new Uint8Array(lut.data.buffer, lut.data.byteOffset, lut.data.byteLength));
-          window.__chromasmithRustLuts[lutKey] = true;
-        }
-      }
+    if (profile && typeof window.chromasmithResolveRawLut === 'function') {
+      // CHR-162: the editor's own resolver (desktop-native.js) — bundled/Adobe DCP, else a DNG's
+      // embedded profile — so a warmed cache entry renders exactly like an interactive open.
+      const res = await window.chromasmithResolveRawLut(ident, profile, { path });
+      if (res.mode === 'lut') { mode = 'lut'; lutKey = res.lutKey; }
     }
     const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { path, recipeKey, mode, lutKey, rawNr: cacheNr,
       autoLens, demosaicAlgo, lensOverride, lensOverrideFocal });
@@ -5807,7 +5800,7 @@
     if (!target || !RAW_EXT_RE.test(target)) return;
     setTimeout(async () => {
       if (token !== _warmToken || state.openedPath !== path || _warmInflight) return;
-      for (const k of [rawRecipeKey(), rawRecipeKey(true)]) {
+      for (const k of [rawRecipeKey(false, target), rawRecipeKey(true, target)]) {
         try { await invoke('get_decode_cache_path', { path: target, recipeKey: k }); return; } catch (_) {}
       }
       const t0 = performance.now();
