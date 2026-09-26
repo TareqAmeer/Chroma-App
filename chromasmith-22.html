@@ -1725,6 +1725,25 @@ body.deskx #lib-overlay .lib-side-tabs{display:none}
 .btn:disabled,#lib-overlay .lib-btn:disabled{opacity:.35;transform:none;box-shadow:0 0 0 transparent}
 .btn:focus-visible,#lib-overlay .lib-btn:focus-visible{outline:var(--k-border-button) solid var(--k-color-accent-a);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.btn,#lib-overlay .lib-btn{transition:none}.btn:hover:not(:disabled),#lib-overlay .lib-btn:hover:not(:disabled){transform:none}}
+/* ── Swiss Kinetic: icon-button (prototype .k-ic, hover "slabturn", selected "slab", no border) ──
+   An accent-A slab wipes in behind the glyph from --k-offset-slab-top down past the bottom-right
+   corner; the glyph turns 90deg and goes white. Selected keeps the slab. Icon buttons never
+   jump, so the button family's lift/shadow is cancelled here. */
+.btn-icon,#lib-overlay .lib-btn-icon,#lib-overlay .lib-iconchip{position:relative;isolation:isolate;border-color:transparent!important;background:transparent;
+  box-shadow:none!important;transform:none!important;border-radius:0!important;transition:color var(--k-motion-hover) var(--k-motion-easing)}
+.btn-icon::after,#lib-overlay .lib-btn-icon::after,#lib-overlay .lib-iconchip::after{content:'';display:block;position:absolute;z-index:-1;left:calc(var(--k-offset-x)*.5);right:calc(var(--k-offset-x)*-.5);
+  top:var(--k-offset-slab-top);bottom:calc(var(--k-offset-y)*-.5);background:var(--k-color-accent-a);transform:scaleX(0);transform-origin:left;
+  transition:transform var(--k-motion-hover) var(--k-motion-easing)}
+.btn-icon svg,#lib-overlay .lib-btn-icon svg,#lib-overlay .lib-iconchip svg{transition:transform var(--k-motion-duration) var(--k-motion-easing)}
+.btn-icon:hover:not(:disabled)::after,#lib-overlay .lib-btn-icon:hover:not(:disabled)::after,#lib-overlay .lib-iconchip:hover::after,
+.btn-icon.on::after,.btn-icon.active::after,.btn-icon[aria-pressed="true"]::after,#lib-overlay .lib-btn-icon.on::after,#lib-overlay .lib-btn-icon.active::after,
+#lib-overlay .lib-btn-icon[aria-pressed="true"]::after,#lib-overlay .lib-iconchip.lib-sel::after{transform:scaleX(1)}
+.btn-icon:hover:not(:disabled),#lib-overlay .lib-btn-icon:hover:not(:disabled),#lib-overlay .lib-iconchip:hover,.btn-icon.on,.btn-icon.active,.btn-icon[aria-pressed="true"],
+#lib-overlay .lib-btn-icon.on,#lib-overlay .lib-btn-icon.active,#lib-overlay .lib-btn-icon[aria-pressed="true"],#lib-overlay .lib-iconchip.lib-sel{color:#fff;background:transparent}
+.btn-icon:hover:not(:disabled) svg,#lib-overlay .lib-btn-icon:hover:not(:disabled) svg,#lib-overlay .lib-iconchip:hover svg{transform:rotate(90deg)}
+#lib-overlay .lib-iconchip.lib-sel{box-shadow:none!important}
+@media (prefers-reduced-motion:reduce){.btn-icon::after,#lib-overlay .lib-btn-icon::after,#lib-overlay .lib-iconchip::after,.btn-icon svg,#lib-overlay .lib-btn-icon svg,#lib-overlay .lib-iconchip svg{transition:none}
+  .btn-icon:hover svg,#lib-overlay .lib-btn-icon:hover svg,#lib-overlay .lib-iconchip:hover svg{transform:none}}
 </style>
 </head>
 <body>
@@ -5271,7 +5290,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926F';
+const BUILD='1.0926G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
