@@ -84,7 +84,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   --sans:'Gramatika',system-ui,-apple-system,'system-ui',sans-serif;
   --display:'Gramatika',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
   --serif:var(--display);
-  --mono:"SF Pro Text",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+  --mono:"Gramatika",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
   /* Type scale. Base UI moves 11px -> 12/13px: at desktop viewing distance 11px sans was the
      single loudest "cheap" signal in the editor. */
   --fs-0:12px;--fs-1:12px;--fs-2:12px;--fs-3:14px;--fs-4:17px;--fs-6:21px;--fs-7:24px;
@@ -114,7 +114,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   /* Mist-blue accent tint ramp (T-tint): same discipline as the scrim scale above, but keyed
      to --acc's mist-blue RGB for active/selected/hover states instead of neutral black/white. */
   --tint-1:rgba(97,160,175,.08);--tint-2:rgba(97,160,175,.12);--tint-3:rgba(97,160,175,.18);--tint-4:rgba(97,160,175,.25);--tint-5:rgba(97,160,175,.35);--tint-6:rgba(97,160,175,.45);--err-border:rgba(135,15,19,.45);
-  /* Line-height + font-weight scale (T-lh/T-fw): validated against Apple HIG (SF Pro text-style
+  /* Line-height + font-weight scale (T-lh/T-fw): validated against Apple HIG (system text-style
      ratios cluster ~1.2-1.3x) and Adobe Spectrum (its own line-height-100 token is 1.3x) — see
      design/tokens.json typography.lineHeight for the full validation note. */
   --lh-tight:1.2;--lh-base:1.3;--fw-regular:400;--fw-medium:500;--fw-semibold:600;--fw-bold:700;
@@ -5253,7 +5253,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926B';
+const BUILD='1.0926C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11612,7 +11612,7 @@ function _csModal(title,bodyHtml){
   ov.style.cssText='position:fixed;inset:0;z-index:var(--z-modal);background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   const panel=document.createElement('div');
-  panel.style.cssText='max-width:560px;width:100%;max-height:80vh;overflow-y:auto;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;padding:20px;color:var(--txt);font-family:-apple-system,sans-serif;box-shadow:var(--lift-2)';
+  panel.style.cssText='max-width:560px;width:100%;max-height:80vh;overflow-y:auto;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;padding:20px;color:var(--txt);font-family:var(--sans);box-shadow:var(--lift-2)';
   panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:16px">${title}</h2><button id="cs-modal-x" aria-label="Close" style="background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center;margin:-6px -8px -6px 0">×</button></div>${bodyHtml}`;
   ov.appendChild(panel);document.body.appendChild(ov);
   panel.querySelector('#cs-modal-x').onclick=()=>ov.remove();

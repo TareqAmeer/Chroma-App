@@ -784,13 +784,13 @@
   // takeover mode still uses position:fixed below — that's a deliberate full-screen
   // replacement of the editor, not a coexistence case, so overlap can't apply there either.
   const DOCK_W = 356;
-  // Design-system tokens + SF Pro faces, transplanted from chromasmith-design/project/_ds/
+  // Design-system tokens + Gramatika faces, transplanted from chromasmith-design/project/_ds/
   // (vendor/ds/ is the runtime copy — see build-desktop.sh, which already `cp -R vendor`).
   // Declared as custom properties scoped to #lib-overlay itself (not :root) so they become
   // this app's own properties rather than a separate stylesheet dependency, matching
   // chromasmith-22.html's own single-file @font-face convention (CLAUDE.md §3b) — except these
   // are loaded from relative vendor/ files, not base64, because desktop/dist/ is a real
-  // multi-file bundle (unlike the offline single-file web app) and 8 SF Pro weights would add
+  // multi-file bundle (unlike the offline single-file web app) and the font weights would add
   // ~17MB of base64 text to a JS file re-parsed on every launch. Only the four non-italic
   // weights the wireframe actually sets (300/400/600/700) are vendored — no italic anywhere
   // in Library View.html.
@@ -813,8 +813,8 @@
       --primary-on-dark:var(--blue-mist);--accent:var(--blue-mist);--on-primary:#ffffff;--on-dark:#ffffff;
       --surface-alt:var(--canvas-parchment);--surface-ghost:var(--surface-pearl);--surface-inverse:var(--surface-tile-1);
       --state-danger:var(--red-oxide);--state-success:var(--green-pine);--state-warning:var(--orange-ember);
-      --font-display:"SF Pro Display",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
-      --font-text:"SF Pro Text",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+      --font-display:"Gramatika",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+      --font-text:"Gramatika",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
       --weight-light:300;--weight-regular:400;--weight-semibold:600;--weight-bold:700;
       --radius-xs:5px;--radius-sm:8px;--radius-pill:9999px;
       --shadow-product:rgba(0,0,0,.22) 3px 5px 30px 0;
@@ -885,7 +885,7 @@
     #lib-overlay.on{display:grid}
     /* Buttons/inputs/selects don't inherit font-family by default in browsers (UA stylesheets
        give them their own system font) — without this every .lib-btn/input/select silently fell
-       back to Arial instead of the SF Pro Text just declared on #lib-overlay above. */
+       back to Arial instead of the Gramatika face just declared on #lib-overlay above. */
     #lib-overlay button,#lib-overlay input,#lib-overlay select,#lib-overlay textarea{font-family:inherit}
     /* 6 children = 6 tracks (top, filters, viewbar, side, main, bottom) — and each child is
        PINNED to its row so a future DOM insertion can never silently shift everything again

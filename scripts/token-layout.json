@@ -362,7 +362,7 @@
     },
     {
       "var": "--lh-tight",
-      "pre": "\n  /* Line-height + font-weight scale (T-lh/T-fw): validated against Apple HIG (SF Pro text-style\n     ratios cluster ~1.2-1.3x) and Adobe Spectrum (its own line-height-100 token is 1.3x) — see\n     design/tokens.json typography.lineHeight for the full validation note. */\n  ",
+      "pre": "\n  /* Line-height + font-weight scale (T-lh/T-fw): validated against Apple HIG (system text-style\n     ratios cluster ~1.2-1.3x) and Adobe Spectrum (its own line-height-100 token is 1.3x) — see\n     design/tokens.json typography.lineHeight for the full validation note. */\n  ",
       "hadSemi": true
     },
     {
