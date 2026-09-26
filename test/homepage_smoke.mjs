@@ -31,6 +31,13 @@ try {
     assert.equal(await page.locator('.chapter-num').count(), 0, name + ': chapter labels removed');
     assert.ok(await page.locator('.feature-directory details').count() >= 80, name + ': full feature directory');
     assert.equal(await page.locator('h1').count(), 1, name + ': one primary heading');
+    assert.deepEqual(await page.locator('#gallery [data-story-photo],#studio [data-story-photo],#click [data-story-photo],#film [data-story-photo]').evaluateAll(elements =>
+      elements.map(el => el.dataset.storyPhoto)), [
+      'site/assets/story/original.webp', 'site/assets/story/studio.webp',
+      'site/assets/story/film.webp', 'site/assets/story/film.webp'], name + ': one photo follows the chapter story');
+    assert.equal(await page.locator('.ba-stage[data-real-pair]').count(), 1, name + ': genuine exported comparison');
+    assert.notEqual(await page.locator('.ba-stage[data-real-pair] img').first().getAttribute('src'),
+      await page.locator('.ba-stage[data-real-pair] img').last().getAttribute('src'), name + ': comparison has distinct images');
     assert.equal(await page.locator('.brand-rail .rail-word').textContent(), 'SMITH');
     await page.evaluate(() => document.fonts.ready);
     assert.deepEqual(await page.locator('body,h1,.brand-rail a,.top-actions a').evaluateAll(elements =>
@@ -53,7 +60,10 @@ try {
       assert.equal(await page.locator('.rail-word').textContent(), 'GALLERY', 'momentum does not skip a chapter');
       await page.waitForTimeout(350);
       await page.mouse.wheel(0, 120);
+      await page.waitForFunction(() => document.querySelector('.story-flight') !== null);
+      assert.equal(await page.locator('.story-flight img').count(), 2, 'Gallery to Studio carries and blends the photo');
       await page.waitForFunction(() => Math.abs(scrollY - document.getElementById('studio').offsetTop) < 2);
+      await page.waitForFunction(() => document.querySelector('.story-flight') === null);
       assert.equal(await page.locator('.rail-word').textContent(), 'STUDIO', 'second wheel advances one chapter');
       await page.evaluate(() => glideTo(8, false));
       await page.waitForFunction(() => document.querySelector('.rail-word').textContent === 'FEATURES');
@@ -70,7 +80,7 @@ try {
     const sizing = await page.locator('.chapter').evaluateAll(sections => sections.map(section => {
       const inner = section.querySelector('.chapter-inner');
       const top = section.getBoundingClientRect().top;
-      const boxes = [...section.querySelectorAll('h1,h2,.display-shot,.red-panel,.ba-stage,.phone-frame,.portrait-placeholder,.download-details,.btn-row,.hero-note,.mini-list,.privacy-line,blockquote,.site-credit,.feature-directory,.next-list')]
+      const boxes = [...section.querySelectorAll('h1,h2,.display-shot,.story-frame,.red-panel,.ba-stage,.phone-frame,.portrait-placeholder,.download-details,.btn-row,.hero-note,.mini-list,.privacy-line,blockquote,.site-credit,.feature-directory,.next-list')]
         .map(element => element.getBoundingClientRect());
       return { id: section.id, height: Math.round(section.getBoundingClientRect().height),
         inner: Math.round(inner.getBoundingClientRect().height), content: inner.scrollHeight,
@@ -124,7 +134,7 @@ try {
       await page.emulateMedia({ reducedMotion });
       await mkdir(path.join(root, 'drafts'), { recursive: true });
       await page.goto(url);
-      for (const id of (name === 'desktop' ? ['smith', 'gallery', 'click', 'guy', 'next', 'features', 'yours'] : name === 'mobile' ? ['smith', 'gallery', 'anywhere', 'next', 'features', 'yours'] : ['smith'])) {
+      for (const id of (name === 'desktop' ? ['smith', 'gallery', 'studio', 'click', 'film', 'guy', 'next', 'features', 'yours'] : name === 'mobile' ? ['smith', 'gallery', 'studio', 'click', 'film', 'anywhere', 'next', 'features', 'yours'] : ['smith'])) {
         await page.evaluate(id => document.getElementById(id).scrollIntoView({ block: 'start', behavior: 'instant' }), id);
         await page.waitForTimeout(850);
         await page.screenshot({ path: path.join(root, 'drafts', `chr-152-${name}-${id}.png`) });

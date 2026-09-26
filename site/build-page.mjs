@@ -29,10 +29,10 @@ function gallery(pairs) {
   return `\n${pairs.map((p, i) => {
     const cap = p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : '';
     return `      <figure class="ba">
-        <div class="ba-stage" data-real-pair style="--x:50%">
+        <div class="ba-stage" data-real-pair data-story-photo="${p.after.src}" style="--x:50%">
           <img src="${p.after.src}" alt="After: the same photo graded in Chromasmith" loading="lazy" width="${p.after.w}" height="${p.after.h}">
           <img class="b" src="${p.before.src}" alt="Before: the original camera file" loading="lazy" width="${p.before.w}" height="${p.before.h}">
-          <span class="ba-handle"></span>
+          <span class="ba-handle" aria-hidden="true"></span>
           <span class="ba-tag l">Before</span><span class="ba-tag r">After</span>
           <input type="range" min="0" max="100" value="50" aria-label="Reveal the edited version of sample photo ${i + 1}">
         </div>${cap}

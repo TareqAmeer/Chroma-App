@@ -387,6 +387,74 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
   *,*::before,*::after{animation:none!important;transition:none!important}
   html.motion-ready .reveal:not(.is-visible){opacity:1;transform:none}
 }
+/* The one-photo story changes composition at each stop. */
+.story-frame{position:relative;margin:0;overflow:hidden;background:#191919;box-shadow:0 32px 85px #0008}
+.story-main{width:100%;height:100%;object-fit:cover}
+.story-ui{position:absolute;z-index:2;object-fit:cover;object-position:top center;border:1px solid #ffffff70;box-shadow:0 20px 42px #000a}
+.story-frame figcaption{position:absolute;z-index:3;left:16px;bottom:15px;padding:7px 10px;background:#050505bb;color:#fff;font-size:11px;letter-spacing:.06em}
+.gallery .chapter-inner{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);grid-template-rows:1fr;align-items:center;gap:clamp(30px,4vw,74px)}
+.gallery-frame{width:100%;height:min(72svh,730px);border-radius:150px 5px 5px 5px}
+.gallery-frame .story-main{object-position:center 62%}
+.gallery-ui{right:-1px;bottom:8%;width:55%;height:31%}
+.gallery .split-copy{display:flex;flex-direction:column;align-items:flex-start;gap:clamp(18px,4svh,38px)}
+.gallery .split-copy h2{font-size:clamp(48px,min(5.5vw,8svh),90px)}
+.gallery .red-panel{max-width:420px}
+.studio .chapter-inner{grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:clamp(35px,7vw,115px)}
+.studio-frame{width:min(100%,680px);height:min(72svh,740px);justify-self:end;transform:rotate(1deg)}
+.studio-frame .story-main{object-position:center 58%}
+.studio-ui{right:0;bottom:5%;width:60%;height:30%}
+.studio-frame figcaption{top:14px;bottom:auto}
+.click .chapter-inner{grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr)}
+.click .compare-wrap{max-width:560px;width:100%;margin:0}
+.click .ba-stage{height:min(70svh,680px);aspect-ratio:auto;border:0}
+.click .ba figcaption{max-width:52ch}
+.film{background:radial-gradient(circle at 70% 40%,#542c25,#130b09 66%)}
+.film .chapter-inner{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:clamp(25px,5vw,80px)}
+.film-frame{height:min(78svh,790px);width:100%;max-width:700px;justify-self:end;border:14px solid #e8ddd0;box-shadow:0 35px 90px #000b}
+.film-frame .story-main{object-position:center 55%}
+.film-frame figcaption{left:auto;right:8px;bottom:7px}
+.story-flight{position:fixed;z-index:45;overflow:hidden;pointer-events:none;transform-origin:top left;box-shadow:0 24px 55px #0007}
+.story-flight img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.story-flight .story-flight-to{opacity:0}
+.story-flight-source .story-main,.story-flight-target .story-main,.story-flight-source.ba-stage>img,.story-flight-target.ba-stage>img{visibility:hidden}
+@media(prefers-reduced-motion:no-preference){
+  .gallery.is-active .gallery-frame{animation:gallery-open .95s var(--ease) both}
+  .gallery.is-active .gallery-ui{animation:ui-slide .9s .18s var(--ease) both}
+  .studio.is-active .studio-ui{animation:ui-slide .8s .22s var(--ease) both}
+  .film.is-active .film-frame{animation:film-arrive 1s var(--ease) both}
+  .film.is-active .film-frame::after{content:"";position:absolute;inset:0;background:url("site/assets/story/original.webp") center 55%/cover no-repeat;animation:develop 1.4s .25s ease-out both;pointer-events:none}
+}
+@keyframes gallery-open{from{clip-path:inset(0 100% 0 0);transform:scale(1.04)}to{clip-path:inset(0 0 0 0);transform:none}}
+@keyframes ui-slide{from{opacity:0;transform:translateY(45px) rotate(-3deg)}to{opacity:1;transform:none}}
+@keyframes film-arrive{from{opacity:.4;transform:translateX(45px) rotate(3deg)}to{opacity:1;transform:none}}
+@keyframes develop{from{opacity:1}to{opacity:0}}
+@media(max-width:1050px){
+  .gallery .chapter-inner{gap:24px}
+  .gallery-frame{height:min(62svh,620px)}
+  .studio .chapter-inner,.film .chapter-inner{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr)}
+  .studio-frame,.film-frame{height:min(60svh,600px)}
+  .studio-ui{width:65%;height:25%}
+}
+@media(max-width:720px){
+  .gallery .chapter-inner,.studio .chapter-inner,.film .chapter-inner{display:flex;flex-direction:column;justify-content:center;align-items:stretch;gap:clamp(12px,2svh,24px)}
+  .gallery-frame{width:100%;height:min(38svh,340px);border-radius:80px 4px 4px 4px}
+  .gallery-ui{width:54%;height:34%}
+  .gallery .split-copy{gap:12px}
+  .gallery .split-copy h2{font-size:clamp(34px,min(8vw,6svh),58px)}
+  .gallery .red-panel{font-size:clamp(13px,3.5vw,17px)}
+  .studio-frame{order:-1;align-self:center;width:100%;height:min(32svh,300px);transform:none}
+  .studio-ui{width:53%;height:32%}
+  .studio-frame figcaption{font-size:9px}
+  .studio .mini-list{margin-top:8px}
+  .studio .mini-list li{padding-top:3px}
+  .click .ba-stage{height:min(38svh,360px)}
+  .film-frame{order:-1;align-self:center;width:100%;height:min(39svh,340px);border-width:7px}
+  .film h2{font-size:clamp(36px,min(9vw,6svh),58px)}
+  .film-tags{margin-top:10px}
+}
+@media(max-height:560px){
+  .gallery-frame,.studio-frame,.film-frame{height:50svh}
+}
 </style>
 </head>
 <body>
@@ -429,8 +497,10 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
 
   <section class="chapter gallery" id="gallery" data-rail="GALLERY" aria-labelledby="gallery-title">
     <div class="chapter-inner">
-      <figure class="display-shot reveal delay-1">
-        <img src="site/assets/ui/library.webp" alt="Chromasmith desktop library with photo thumbnails, collections, and search" width="1600" height="1000" loading="lazy">
+      <figure class="story-frame gallery-frame reveal delay-1" data-story-photo="site/assets/story/original.webp">
+        <img class="story-main" src="site/assets/story/original.webp" alt="Temporary sample photograph of a dog beside a canal at sunset" width="844" height="1125" loading="lazy">
+        <img class="story-ui gallery-ui" src="site/assets/ui/library.webp" alt="Chromasmith library showing photo thumbnails" width="1600" height="1000" loading="lazy">
+        <figcaption>One photo, from the archive to the finished frame.</figcaption>
       </figure>
       <div class="split-copy">
         <h2 id="gallery-title" class="reveal">Your whole photo library. In reach.</h2>
@@ -451,7 +521,11 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
           <li>Full-resolution exports</li>
         </ul>
       </div>
-      <figure class="display-shot reveal delay-1"><img src="site/assets/ui/color.webp" alt="Chromasmith editing controls with tone curve and colour mixer" width="1600" height="1000" loading="lazy"></figure>
+      <figure class="story-frame studio-frame reveal delay-1" data-story-photo="site/assets/story/studio.webp">
+        <img class="story-main" src="site/assets/story/studio.webp" alt="The same canal photo after applying a Classic Neg look in Chromasmith" width="844" height="1125" loading="lazy">
+        <img class="story-ui studio-ui" src="site/assets/ui/color.webp" alt="Chromasmith tone curve and colour controls" width="1600" height="1000" loading="lazy">
+        <figcaption>Same frame. A different feeling.</figcaption>
+      </figure>
     </div>
   </section>
 
@@ -459,17 +533,18 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
     <div class="chapter-inner">
       <div class="compare-wrap reveal">
         <!-- GALLERY:START -->
-        <figure class="ba" data-placeholder-comparison>
-          <div class="ba-stage" style="--x:50%">
-            <img src="site/assets/hero-placeholder.webp" alt="Temporary sample photograph" width="1800" height="1234" loading="lazy">
-            <img class="b" src="site/assets/hero-placeholder.webp" alt="Temporary warm-toned layout treatment" width="1800" height="1234" loading="lazy">
-            <span class="ba-handle" aria-hidden="true"></span>
-            <span class="ba-tag l">Layout A</span><span class="ba-tag r">Layout B</span>
-            <input type="range" min="0" max="100" value="50" aria-label="Reveal the temporary comparison layout">
-          </div>
-          <figcaption>Layout preview. The final comparison will use your original photo and Chromasmith export.</figcaption>
-        </figure>
-        <!-- GALLERY:END -->
+    <div class="ba-grid">
+      <figure class="ba">
+        <div class="ba-stage" data-real-pair data-story-photo="site/assets/story/film.webp" style="--x:50%">
+          <img src="site/assets/story/film.webp" alt="After: the same photo graded in Chromasmith" loading="lazy" width="844" height="1125">
+          <img class="b" src="site/assets/story/original.webp" alt="Before: the original camera file" loading="lazy" width="844" height="1125">
+          <span class="ba-handle" aria-hidden="true"></span>
+          <span class="ba-tag l">Before</span><span class="ba-tag r">After</span>
+          <input type="range" min="0" max="100" value="50" aria-label="Reveal the edited version of sample photo 1">
+        </div><figcaption>Temporary sample photo from this repository. The edit was exported through Chromasmith using Classic Neg, subtle grain and halation.</figcaption>
+      </figure>
+    </div>
+    <!-- GALLERY:END -->
       </div>
       <div class="click-copy">
         <h2 id="click-title" class="reveal delay-1">One click is all it takes.</h2>
@@ -487,7 +562,10 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
         <p class="lede reveal delay-2">Grain in the shadows. A warm halo at the edge of the light. Film texture with room to make it subtle or unmistakable.</p>
         <div class="film-tags reveal delay-2"><span>Grain</span><span>Halation</span><span>Bloom</span><span>Frames</span></div>
       </div>
-      <figure class="display-shot reveal delay-1"><img src="site/assets/ui/film.webp" alt="Chromasmith Film panel with grain and halation controls" width="1600" height="1000" loading="lazy"></figure>
+      <figure class="story-frame film-frame reveal delay-1" data-story-photo="site/assets/story/film.webp">
+        <img class="story-main" src="site/assets/story/film.webp" alt="The finished canal photo exported with Classic Neg, grain and halation" width="844" height="1125" loading="lazy">
+        <figcaption>Made in Chromasmith · Sample photograph</figcaption>
+      </figure>
     </div>
   </section>
 
@@ -744,6 +822,51 @@ var gliding = false;
 var wheelSum = 0;
 var lastWheel = 0;
 var wheelLockedUntil = 0;
+var finishFlight = null;
+function makeStoryFlight(fromIndex, toIndex, scrollDistance) {
+  if (Math.abs(fromIndex - toIndex) !== 1 || fromIndex < 1 || toIndex < 1 || fromIndex > 4 || toIndex > 4) return null;
+  var from = sections[fromIndex].querySelector("[data-story-photo]");
+  var to = sections[toIndex].querySelector("[data-story-photo]");
+  if (!from || !to) return null;
+  var a = from.getBoundingClientRect();
+  var b = to.getBoundingClientRect();
+  if (!a.width || !a.height || !b.width || !b.height) return null;
+  var flight = document.createElement("div");
+  flight.className = "story-flight";
+  flight.setAttribute("aria-hidden", "true");
+  flight.style.left = a.left + "px";
+  flight.style.top = a.top + "px";
+  flight.style.width = a.width + "px";
+  flight.style.height = a.height + "px";
+  var first = document.createElement("img");
+  first.src = from.dataset.storyPhoto;
+  first.alt = "";
+  var second = document.createElement("img");
+  second.src = to.dataset.storyPhoto;
+  second.alt = "";
+  second.className = "story-flight-to";
+  flight.append(first, second);
+  document.body.appendChild(flight);
+  from.classList.add("story-flight-source");
+  to.classList.add("story-flight-target");
+  var dy = b.top - scrollDistance - a.top;
+  var dx = b.left - a.left;
+  var sx = b.width / a.width;
+  var sy = b.height / a.height;
+  var cleanup = function () {
+    flight.remove();
+    from.classList.remove("story-flight-source");
+    to.classList.remove("story-flight-target");
+  };
+  return {
+    paint: function (progress) {
+      flight.style.transform = "translate3d(" + (dx * progress) + "px," + (dy * progress) + "px,0) scale(" + (1 + (sx - 1) * progress) + "," + (1 + (sy - 1) * progress) + ")";
+      second.style.opacity = Math.max(0, Math.min(1, (progress - .25) / .5));
+      first.style.opacity = 1 - Math.max(0, Math.min(1, (progress - .25) / .5));
+    },
+    cleanup: cleanup
+  };
+}
 function pageMode() {
   return !reducedMotion.matches && innerHeight > 560 && !root.classList.contains("details-open");
 }
@@ -757,10 +880,14 @@ function glideTo(index, updateHash) {
     return;
   }
   cancelAnimationFrame(scrollFrame);
+  if (finishFlight) { finishFlight(); finishFlight = null; }
   var start = scrollY;
   var end = section.offsetTop;
   var distance = end - start;
   if (Math.abs(distance) < 2) { setActive(section); return; }
+  var fromIndex = sections.findIndex(function (item) { return item.id === activeId; });
+  var flight = makeStoryFlight(fromIndex, index, distance);
+  if (flight) finishFlight = flight.cleanup;
   var started = performance.now();
   var duration = 650;
   gliding = true;
@@ -769,9 +896,11 @@ function glideTo(index, updateHash) {
     var t = Math.min(1, (now - started) / duration);
     var eased = t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     scrollTo(0, start + distance * eased);
+    if (flight) flight.paint(eased);
     if (t < 1) scrollFrame = requestAnimationFrame(tick);
     else {
       scrollTo(0, end);
+      if (finishFlight) { finishFlight(); finishFlight = null; }
       root.classList.remove("is-gliding");
       gliding = false;
       wheelLockedUntil = performance.now() + 280;

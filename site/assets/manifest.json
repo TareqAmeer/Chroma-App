@@ -1,4 +1,8 @@
 {
   "hero": null,
-  "pairs": []
+  "pairs": [{
+    "before": { "src": "site/assets/story/original.webp", "w": 844, "h": 1125 },
+    "after": { "src": "site/assets/story/film.webp", "w": 844, "h": 1125 },
+    "caption": "Temporary sample photo from this repository. The edit was exported through Chromasmith using Classic Neg, subtle grain and halation."
+  }]
 }
