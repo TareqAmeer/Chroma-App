@@ -1876,7 +1876,7 @@ body{--k-menu-bg:var(--k-color-ink);--k-menu-fg:var(--k-color-bg);--k-menu-line:
 body.mac-titlebar-overlay #cs-brand{left:12px}
 body.deskx{--cs-brand-w:350px}
 @media(max-width:1000px){body.deskx{--cs-brand-w:190px}}
-#cs-brand{gap:18px}
+body.deskx #cs-brand{gap:18px}
 #cs-win{display:flex;gap:6px;-webkit-app-region:no-drag}
 #cs-win[hidden]{display:none}
 #cs-win>button{width:13px;height:13px;padding:0;border:1px solid var(--c);background:transparent;border-radius:0;cursor:pointer;transition:background var(--k-motion-hover)}
@@ -1897,6 +1897,8 @@ body.deskx{--cs-brand-w:350px}
 #cs-brand-tog::after{z-index:0;background:var(--k-color-accent-b);top:var(--k-two-tone-slab-b-top);bottom:calc(var(--k-two-tone-slab-b-bottom)*-1);
   width:calc(var(--k-sw,0px) + var(--k-two-tone-slab-b-extra-width));transform:translateX(calc(var(--k-sx,0px) + var(--k-two-tone-slab-b-x) * var(--k-sgn,1) - var(--k-two-tone-slab-b-extra-width) / 2))}
 [data-k-slab-front=b] #cs-brand-tog::after{z-index:1}[data-k-slab-front=b] #cs-brand-tog::before{z-index:0}
+/* CHR-155: approved offset.slabStyle — dark is "single" (accent A only, no B slab behind), light "stepped". */
+[data-k-slab=single] #cs-brand-tog::after,[data-k-slab=single] .seg::after,[data-k-slab=single] #lib-overlay .lib-seg::after{display:none}
 #cs-brand-tog:not([data-k-on])::before,#cs-brand-tog:not([data-k-on])::after{display:none}
 @media (prefers-reduced-motion:reduce){#cs-brand-tog button{transition:none}#cs-brand-tog button:not(.on):hover{transform:none}}
 /* ── Swiss Kinetic: filter row + sort/view menu squares (prototype .frow, .lib-menu .sq) ──
@@ -5556,7 +5558,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0926W';
+const BUILD='1.0926X';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23956,7 +23958,7 @@ if(/[?&]catalog=1/.test(location.search)){
     return(x)=>{if(x<=0)return 0;if(x>=1)return 1;let t=x;for(let i=0;i<8;i++){const s=slope(t,x1,x2);if(Math.abs(s)<1e-6)break;t-=(calc(t,x1,x2)-x)/s;}return calc(t,y1,y2);};
   }
   const ease=()=>{const m=/cubic-bezier\(([^)]*)\)/.exec(tok('--k-motion-easing'));return bezier(...(m?m[1]:'.16,1,.3,1').split(',').map(Number));};
-  function syncTheme(){root.dataset.kPsel=tok('--k-variants-photo-selection')||'slab';root.dataset.kSlabFront=tok('--k-two-tone-slab-in-front')||'a';root.dataset.kMenu=tok('--k-menu-colour')||'ink';root.dataset.kSeg=tok('--k-segmented-style')||'cell';root.dataset.kSegdiv=tok('--k-segmented-dividers')||'none';}
+  function syncTheme(){root.dataset.kPsel=tok('--k-variants-photo-selection')||'slab';root.dataset.kSlabFront=tok('--k-two-tone-slab-in-front')||'a';root.dataset.kSlab=tok('--k-offset-slab-style')||'stepped';root.dataset.kMenu=tok('--k-menu-colour')||'ink';root.dataset.kSeg=tok('--k-segmented-style')||'cell';root.dataset.kSegdiv=tok('--k-segmented-dividers')||'none';}
   function attachSwitch(el){
     if(el._kSwitch)return el._kSwitch;
     const opts=()=>[...el.children].filter(c=>c.tagName==='BUTTON'&&c.offsetParent!==null);

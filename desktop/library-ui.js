@@ -1859,11 +1859,11 @@
        on purpose: it's the one column meant to shrink below its content's natural size (the
        search box), via its own minmax(0,280px) track below. */
     body.deskx #lib-overlay #lib-top-left{grid-column:1;justify-self:start;display:flex;
-      align-items:center;gap:12px;min-width:0;max-width:100%;overflow:visible}
+      align-items:center;gap:8px;min-width:0;max-width:100%;overflow:visible}
     body.deskx #lib-overlay #lib-top-center{grid-column:2;justify-self:center;display:flex;
       width:100%;min-width:0}
     body.deskx #lib-overlay #lib-top-right{grid-column:3;justify-self:end;display:flex;
-      align-items:center;gap:12px;min-width:0;max-width:100%;overflow:visible}
+      align-items:center;gap:8px;min-width:0;max-width:100%;overflow:visible}
     /* The side tracks are allowed to shrink, but their controls must never paint into the
        centre search track.  The live overflow classes below progressively remove optional
        labels/zoom affordances before the track gets tight enough to clip a button. */
@@ -1896,8 +1896,8 @@
        zoom row and flag row are ONE group here too now (see the HTML comment on
        #lib-zoomflag-cluster), so the divider below sits on the group's outer edge, not
        between its two halves. */
-    body.deskx #lib-overlay #lib-zoomflag-cluster{display:flex;align-items:center;gap:1px;
-      margin-left:var(--sp-3);padding-left:var(--sp-3);border-left:1px solid var(--bdr)}
+    /* CHR-155: Swiss Kinetic playground (.rbar rules) — one 8px rhythm, no divider rules. */
+    body.deskx #lib-overlay #lib-zoomflag-cluster{display:flex;align-items:center;gap:8px}
     /* Thumbnail-size zoom row: fixed, compact width matching the Editor's own zoom slider —
        no longer needs to grow into empty row space now that it's a #lib-top-right cluster. */
     body.deskx #lib-overlay .lib-zoomrow{flex:none;min-width:0;gap:4px}
@@ -1906,11 +1906,11 @@
        first flag offset 4px from the zoom controls it now shares a cluster with — both numbers
        copied from body.deskx .fx-zoom-ctrl .flag-btn / #btn-flag-red's inline margin-left,
        not the old 30x30/28x28 sizes this used to run at. */
-    body.deskx #lib-overlay .lib-flagrow{border-left:none;border-right:none;padding:0;gap:1px}
+    body.deskx #lib-overlay .lib-flagrow{border-left:none;border-right:none;padding:0;gap:8px}
     body.deskx #lib-overlay .lib-flagrow .lib-btn-icon{width:32px!important;height:32px!important;
       border-radius:8px}
     body.deskx #lib-overlay .lib-flagrow .lib-btn-icon svg{width:18px;height:18px}
-    body.deskx #lib-overlay .lib-flagrow #lib-flag-reject{margin-left:4px}
+    body.deskx #lib-overlay .lib-flagrow #lib-flag-reject{margin-left:0}
     /* Sort/Filters pills and All FX drop to the Editor's 28px control height (was 30px) so the
        whole right-hand cluster is one consistent height, matching #fx-deskbar-right. */
     body.deskx #lib-overlay #lib-top-left .lib-pill,body.deskx #lib-overlay #lib-top-right .lib-pill{
@@ -1926,8 +1926,7 @@
     /* Gear divider == the Editor's #fx-settings under body.deskx (chromasmith-22.html): sp-2
        (8px), not sp-3 — the two dividers in this bar are deliberately different sizes because
        the Editor's are, so copying only one of them here would have been a new mismatch. */
-    body.deskx #lib-overlay #lib-settings{margin-left:var(--sp-2);padding-left:var(--sp-2);
-      border-left:1px solid var(--bdr)}
+    body.deskx #lib-overlay #lib-settings{margin-left:0;padding-left:0;border-left:0}
     /* The tree toggle only means anything in full mode (the filmstrip already force-hides
        #lib-side's tree children via .lib-fullview-only above) — its text label doesn't fit the
        120px filmstrip's icon-only top bar. */
