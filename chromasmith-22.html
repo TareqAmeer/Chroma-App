@@ -2170,7 +2170,7 @@ body.sk2 .fx-toggle::after{top:-1px;left:-1px}
 /* Stage header + sticky sub-tabs + sticky card titles. The panel loses its top padding so nothing
    can show above a stuck title; each stuck layer is opaque. */
 body.sk2.deskx .fx-panel{padding-top:0!important}
-body.sk2 #sk2-stage-h{font-size:30px;font-weight:400;letter-spacing:-.035em;line-height:1;margin:0;padding:22px 0 14px;color:var(--k-color-ink)}
+body.sk2 #sk2-stage-h{font-size:46px;font-weight:400;letter-spacing:-.045em;line-height:.95;margin:0;padding:30px 0 22px;color:var(--k-color-ink)}
 body.sk2 #sk2-sub{position:sticky;top:0;z-index:8;display:flex;flex-wrap:wrap;gap:4px 14px;padding:8px 0 9px;margin-bottom:6px;background:var(--k-color-bg);box-shadow:0 1px 0 var(--bdr)}
 body.sk2 #sk2-sub[hidden]{display:none}
 body.sk2 #sk2-sub button{background:none;border:0;padding:2px 0;font:inherit;font-size:12px;color:var(--k-color-muted);cursor:pointer;position:relative}
@@ -2193,6 +2193,26 @@ body.sk2 .look-cell.kbd-focus{outline:1px solid var(--k-color-muted);outline-off
 body.sk2 .look-cat-hdr{grid-column:1/-1;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);padding:14px 0 0;border:0;background:none}
 body.sk2 #row-lut-mix{position:sticky;bottom:0;z-index:7;background:var(--k-color-bg);margin:14px 0 0!important;padding:12px 0 14px;box-shadow:0 -1px 0 var(--bdr)}
 body.sk2 .fx-preset-head{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);margin:18px 0 8px!important}
+/* Export sheet: slides over the tool panel from the right; one big vermilion button. */
+body.sk2 #sk2-export{position:fixed;top:var(--deskx-topbar-h,56px);right:0;bottom:0;width:min(380px,100vw);z-index:calc(var(--z-overlay) + 4);background:var(--k-color-bg);box-shadow:-1px 0 0 var(--bdr);display:flex;flex-direction:column;transform:translateX(100%);visibility:hidden;transition:transform .22s var(--k-motion-easing),visibility 0s .22s}
+body.sk2.sk2-exp-open #sk2-export{transform:none;visibility:visible;transition:transform .22s var(--k-motion-easing)}
+body.sk2 .sk2x-hd{display:flex;align-items:baseline;justify-content:space-between;padding:30px 24px 12px}
+body.sk2 .sk2x-hd h2{font-size:46px;font-weight:400;letter-spacing:-.045em;line-height:.95;margin:0;color:var(--k-color-ink)}
+body.sk2 .sk2x-close{background:none;border:0;color:var(--k-color-muted);font-size:22px;cursor:pointer;line-height:1}
+body.sk2 .sk2x-close:hover{color:var(--k-color-ink)}
+body.sk2 .sk2x-body{flex:1;overflow-y:auto;padding:0 24px 24px}
+body.sk2 .sk2x-cap{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);margin:22px 0 8px}
+body.sk2 .sk2x-opts{display:flex}
+body.sk2 .sk2x-scope{margin-top:18px}
+body.sk2 .sk2x-more{margin-top:26px}
+body.sk2 #sk2-export .fx-ctrl{display:block!important;margin-top:18px}
+body.sk2 #sk2-export .fx-ctrl-title{position:static;font-size:17px;box-shadow:none;padding:6px 0}
+body.sk2 #sk2-export #btn-fx-export{display:none}
+body.sk2 .sk2x-go{padding:0}
+body.sk2 .sk2x-btn{width:100%;height:64px;border:0;background:var(--k-color-accent-a);color:#fff;font:inherit;font-size:16px;font-weight:500;display:flex;align-items:center;justify-content:space-between;padding:0 24px;cursor:pointer}
+body.sk2 .sk2x-btn:hover{filter:brightness(1.08)}
+body.sk2 .sk2x-btn:focus-visible{outline:2px solid var(--k-color-ink);outline-offset:-4px}
+body.sk2.fx-exporting .sk2x-btn{opacity:.6;pointer-events:none}
 /* Looks: the chosen look is marked by the square, not a kicked-out frame. */
 body.sk2 .look-cell:hover{transform:none;box-shadow:none}
 body.sk2 .look-cell.sel{border-color:transparent;box-shadow:none;position:relative}
@@ -2271,6 +2291,48 @@ function sk2Spy(){
   if(!cur){const f=nav.querySelector('button');cur=f&&f.dataset.k;}
   if(panel.scrollTop+panel.clientHeight>=panel.scrollHeight-2){const l=nav.querySelector('button:last-child');if(l)cur=l.dataset.k;}
   nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===cur));
+}
+</script>
+<script>/* Swiss v2 — Export as a slide-over sheet (desktop layout): size + format presets and one big
+   button up front; the full Output / Watermark / Presets / Styles / Sharing cards live under
+   "More" inside the sheet (moved, not copied — every control and id is the original). */
+function sk2ExportBuild(){
+  let sh=document.getElementById('sk2-export');if(sh)return sh;
+  sh=document.createElement('aside');sh.id='sk2-export';sh.setAttribute('aria-label','Export');sh.setAttribute('aria-hidden','true');
+  sh.innerHTML=`<div class="sk2x-hd"><h2>Export</h2><button type="button" class="sk2x-close" aria-label="Close export" title="Close (Esc)">×</button></div>
+    <div class="sk2x-body"><div class="sk2x-cap">Size</div><div class="sk2x-opts chip-tap" data-sel="sel-exp-size"></div>
+    <div class="sk2x-cap">Format</div><div class="sk2x-opts chip-tap" data-sel="sel-exp-fmt"></div>
+    <div class="sk2x-scope"></div>
+    <details class="sk2-more sk2x-more"><summary>More</summary><div class="sk2x-cards"></div></details></div>
+    <div class="sk2x-go"><button type="button" class="sk2x-btn">Export <span>→</span></button></div>`;
+  document.body.appendChild(sh);
+  const lbl={'0':'Full size','4096':'4096','2560':'2560','2048':'2048','1600':'1600','1080':'1080 social','auto':'Match source','jpg':'JPG','png':'PNG','webp':'WebP'};
+  sh.querySelectorAll('.sk2x-opts').forEach(box=>{const sel=document.getElementById(box.dataset.sel);if(!sel)return;
+    const draw=()=>{box.innerHTML=[...sel.options].filter(o=>!o.hidden&&!o.disabled).map(o=>`<button type="button" class="btn bgh${o.value===sel.value?' on':''}" data-v="${o.value}">${lbl[o.value]||o.textContent}</button>`).join('');};
+    draw();sel.addEventListener('change',draw);box._draw=draw;
+    box.addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(!b)return;sel.value=b.dataset.v;sel.dispatchEvent(new Event('change',{bubbles:true}));draw();});});
+  const cards=sh.querySelector('.sk2x-cards');
+  ['export','wm','exppreset','style','share'].forEach(k=>{const c=document.querySelector(`.fx-ctrl[data-fxsec="${k}"]`);if(c)cards.appendChild(c);});
+  sh.querySelector('.sk2x-close').onclick=sk2ExportClose;
+  sh.querySelector('.sk2x-btn').onclick=()=>{const b=document.getElementById('btn-fx-export');if(b&&b.disabled&&!fxImages.length)return;exportFX();};
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('sk2-exp-open')){e.stopPropagation();sk2ExportClose();}},true);
+  return sh;
+}
+function sk2ExportOpen(){
+  const sh=sk2ExportBuild();sh.querySelectorAll('.sk2x-opts').forEach(b=>b._draw&&b._draw());
+  const n=(typeof fxImages!=='undefined'&&fxImages.length)||0,scope=document.getElementById('fx-export-scope-row');
+  sh.querySelector('.sk2x-btn').firstChild.textContent=n>1&&(typeof fxExportScope==='undefined'||fxExportScope!=='current')?`Export ${n} photos `:'Export ';
+  const sc=sh.querySelector('.sk2x-scope');if(scope&&sc&&scope.parentElement!==sc)sc.appendChild(scope);
+  document.body.classList.add('sk2-exp-open');sh.setAttribute('aria-hidden','false');
+  setTimeout(()=>sh.querySelector('.sk2x-btn').focus(),50);
+}
+function sk2ExportClose(){const sh=document.getElementById('sk2-export');document.body.classList.remove('sk2-exp-open');if(sh)sh.setAttribute('aria-hidden','true');}
+function sk2ExportWire(){
+  if(!document.body.classList.contains('deskx'))return;
+  sk2ExportBuild();
+  const b=document.getElementById('btn-export-db');if(b&&!b._sk2){b._sk2=1;b.removeAttribute('onclick');b.addEventListener('click',()=>document.body.classList.contains('sk2-exp-open')?sk2ExportClose():sk2ExportOpen());b.title='Export…';}
+  FX_GROUPS.output.members=['crop','borders','canvas'];
+  if(typeof buildToolRail==='function')buildToolRail();
 }
 </script>
 <script>/* Swiss v2 — behaviour half (logo, hover/arrow-key look preview, "More" fold, "?" shortcuts). */
@@ -5810,7 +5872,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928C';
+const BUILD='1.0928D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23271,6 +23333,7 @@ function applyFxLayout(){
   if(!mob)document.body.classList.remove('tools-open');
   if(mob){buildSecNav();if(!_activeSec())fxSection(window.__TAURI__?'looks':'image',true);}
   else if(desk){buildToolRail();if(!_activeSec())fxSection(window.__TAURI__?'looks':'image',true);}
+  if(desk&&typeof sk2ExportWire==='function')sk2ExportWire();
   // Idempotent: the handles are static markup, so this only ever (re)binds them once per element.
   if(desk&&!fxInitEdges._done){fxInitEdges._done=true;fxInitEdges();}
   relocatePreviewTools(mob,desk);
