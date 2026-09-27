@@ -5678,7 +5678,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0927K';
+const BUILD='1.0927L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10326,8 +10326,11 @@ async function reloadRawProfileForCurrentPhoto(v){
     }
     if(!it.rawFile){log('RAW profile: '+label+' — applies to the next RAW load','info');return}
     log('RAW profile: '+label+' — reloading…','info');
-    const r=await loadRw2(it.rawFile);
-    it.img=r.canvas;
+    const half=!!it._rawHalf; // keep a proxy a proxy; supersede any in-flight promotion
+    if(half){it._rawGen=(it._rawGen||0)+1;delete it._rawFullP;}
+    const r=await loadRw2(it.rawFile,{half});
+    it.img=half?(fxDisplayTierCanvas(r.canvas)||r.canvas):r.canvas;
+    if(it===curItem())fxImg=it.img;
     if(typeof updateWork==='function')updateWork();
     if(typeof renderPreview==='function')renderPreview();
     log('RAW profile applied: '+label,'ok');
@@ -10808,7 +10811,11 @@ function applyDngGainMap(u16,w,h,gm,M){
   }
   return u16;
 }
-async function loadRw2(file){
+async function loadRw2(file,opts){
+  // opts.half (browser only): LibRaw half-size decode — each 2×2 Bayer block becomes one pixel, so
+  // no demosaic and a quarter of the pixels through every JS pass below. Used for the on-screen
+  // proxy; fxPromoteWebRaw decodes the full frame when zoom/loupe/export actually need it.
+  const half=!!(opts&&opts.half)&&!window.__TAURI__;
   window.__pm&&window.__pm('loadRw2-enter');
   if(!self.crossOriginIsolated)throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
   let profile=rawProfile();
@@ -10823,8 +10830,8 @@ async function loadRw2(file){
   const t0=performance.now();
   const raw=new LibRaw();
   let m,img;
-  const dcpSettings={useCameraWb:true,outputColor:0,outputBps:16,gamm:[1,1],noAutoBright:true,userQual:3,userFlip:-1}; // linear 16-bit camera RGB (DCP input space)
-  const sdrSettings={useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1};                               // sRGB, 8-bit, AHD, camera WB
+  const dcpSettings={halfSize:half,useCameraWb:true,outputColor:0,outputBps:16,gamm:[1,1],noAutoBright:true,userQual:3,userFlip:-1}; // linear 16-bit camera RGB (DCP input space)
+  const sdrSettings={halfSize:half,useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1};                               // sRGB, 8-bit, AHD, camera WB
   try{
     await withRawDecodeTimeout(raw,async()=>{
       await raw.open(bytes,srcPath?{...(profile?dcpSettings:sdrSettings),sourcePath:srcPath}:(profile?dcpSettings:sdrSettings));
@@ -11209,7 +11216,10 @@ async function loadFXImages(fileList){
         continue;
       }
       if(isRw2File(file)&&!sniffedKind){
-        const{canvas,dpi,meta}=await loadRw2(file);
+        // Not DNG: ProRAW/linear DNGs are already demosaiced, so halfSize saves nothing — measured slower
+        // on a 48MP iPhone DNG, and it came back at a wrong 1920px size.
+        const webHalf=!window.__TAURI__&&!file.__csSourcePath&&!/\.dng$/i.test(file.name);
+        const{canvas,dpi,meta}=await loadRw2(file,{half:webHalf});
         // Attach lens/camera/iso at decode time (native shell) so the metadata panel shows them
         // on EVERY open path — library-ui's get_meta refines this later on library opens.
         const exif=meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):''}:undefined;
@@ -11217,6 +11227,8 @@ async function loadFXImages(fileList){
         // rendering the 24MP canvas cost ~1.2-1.6s per open — and keep the full frame as
         // `fullImg` for on-demand promotion (library-ui.js's chromasmithEnsureFullQuality).
         const work=file.__csSourcePath?fxDisplayTierCanvas(canvas):null;
+        // Browser: `canvas` is already the half-size proxy. _rawHalf marks it for fxPromoteWebRaw before zoom/loupe/export.
+        if(webHalf){entries.push({img:fxDisplayTierCanvas(canvas)||canvas,_rawHalf:true,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif:meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):''}:undefined,fileSize:file.size});continue;}
         entries.push({img:work||canvas,fullImg:work?canvas:undefined,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif,fileSize:file.size}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
         continue;
       }
@@ -16274,7 +16286,7 @@ function snapDiffLabel(prevSnap,nextSnap){
 // slider-only session therefore keeps ONE raster shared across all 20 entries.
 function fxHistoryPush(){
   if(_fxHistLocked)return;
-  fxEnsureFullQuality(); // first real edit → full-resolution source (see fxEnsureFullQuality)
+  fxEnsureFullQuality('edit'); // first real edit → full-resolution source (see fxEnsureFullQuality)
   const snap=getUISnapshot({skipRaster:true});
   const j=JSON.stringify(snap);
   const rasters=fxState.masks.map(m=>(m.px&&m.px.length)?m.px:null);
@@ -16801,7 +16813,30 @@ function _resetZoom(smooth){fxZoom=FX_FIT;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
 // Desktop Library RAW opens edit on the 2560px display tier until full resolution is actually
 // needed (library-ui.js's chromasmithEnsureFullQuality): zoom past fit, loupe, first edit, crop,
 // export. No-op everywhere else (browser, non-RAW, already promoted).
-function fxEnsureFullQuality(){return (typeof window.chromasmithEnsureFullQuality==='function')?window.chromasmithEnsureFullQuality():Promise.resolve();}
+function fxEnsureFullQuality(why){
+  // Browser RAW proxy: a full decode is ~20-40s, so only the things that SHOW the extra pixels
+  // (zoom past fit, loupe, export) wait for it — edits and crop work fine on the proxy.
+  const it=curItem();
+  if(it&&it._rawHalf&&why!=='edit'&&why!=='crop')return fxPromoteWebRaw(it).catch(()=>{});
+  return (typeof window.chromasmithEnsureFullQuality==='function')?window.chromasmithEnsureFullQuality():Promise.resolve();
+}
+// Replaces a browser RAW entry's half-size proxy with the full-resolution decode. One in-flight
+// decode per entry; _rawGen lets a RAW-profile reload supersede a promotion already running.
+function fxPromoteWebRaw(it){
+  if(!it||!it._rawHalf||!it.rawFile)return Promise.resolve();
+  if(it._rawFullP)return it._rawFullP;
+  const gen=it._rawGen=(it._rawGen||0)+1;
+  if(it===curItem()&&typeof toast==='function')toast('Loading full-resolution RAW…');
+  log(`${it.name}: decoding full resolution…`,'info');
+  return it._rawFullP=loadRw2(it.rawFile).then(r=>{
+    if(it._rawGen!==gen)return;
+    it.img=r.canvas;delete it._rawHalf;
+    if(it===curItem()){fxImg=it.img;try{autoDetectBW(it.img)}catch(_){}updateWork();renderPreview();}
+  }).catch(e=>{
+    log(`${it.name}: full-resolution decode failed — ${errStr(e)}`,'err');
+    throw e;
+  }).finally(()=>{if(it._rawGen===gen)delete it._rawFullP;});
+}
 function _updateZoomReadout(){
   const pct=document.getElementById('fx-zoom-pct');if(!pct)return;
   pct.textContent=fxLoupe?'1:1':Math.round(fxZoom/FX_FIT*100)+'%';
@@ -19490,7 +19525,7 @@ function cropDefaultForAR(){
 }
 function cropEnter(){
   const it=curItem();if(!it){log('Load an image first','warn');return;}
-  fxEnsureFullQuality();
+  fxEnsureFullQuality('crop');
   cropMode=true;
   const g=it.geom||(it.geom=defGeom()),saved=g.crop;
   g.crop=null;cropBase=geomCanvas(it);g.crop=saved; // base = geometry WITHOUT user crop
@@ -20073,6 +20108,11 @@ async function _exportFXRun(){
       if(fxExportCancel){log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
       const it=items[idx];
       try{
+        if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
+          setExportPhotoStatus(idx,'rendering','decoding…');
+          setProg(idx,`Decoding RAW ${idx+1}/${N}: ${it.name}…`);
+          await fxPromoteWebRaw(it);
+        }
         // Deferred RAW cleanup (shadow NR + false-colour suppression + hue defringe): the editor
         // only ran the chroma-wavelet tier unless "Full cleanup while editing" is on, so complete
         // the pass on THIS photo's pixels before the render reads them. Skipped when High-tier NR
