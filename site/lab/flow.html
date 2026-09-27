@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flow Draft</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600;900&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0b0a;--fg:#f2efe8;--dim:#8b877e;--acc:#ff5a1f}
+*{box-sizing:border-box;margin:0}
+html,body{background:var(--bg);color:var(--fg);font-family:"Inter Tight",system-ui,sans-serif}
+body{overflow-x:clip}
+.mono{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.grain{position:absolute;inset:-50%;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");mix-blend-mode:overlay;animation:gr .4s steps(4) infinite}
+@keyframes gr{0%{transform:translate(0,0)}25%{transform:translate(-3%,2%)}50%{transform:translate(2%,-3%)}75%{transform:translate(-1%,3%)}}
+
+/* one pinned stage: develop (G) → grow → slides sideways into chapters (H) */
+.pin{height:100vh;overflow:hidden;position:relative}
+.track{display:flex;height:100%;will-change:transform}
+.panel{flex:none;height:100%;position:relative;display:grid;align-content:center;padding:0 5vw}
+.p0{width:100vw;place-items:center;padding:0}
+.ph{position:relative;width:30vw;aspect-ratio:844/1125;overflow:hidden}
+.ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ph .film{opacity:0}.ph .grain{opacity:0}
+.ph .glow{filter:blur(20px) saturate(2) brightness(1.5);mix-blend-mode:screen;opacity:0}
+.hero-t{position:absolute;inset:auto 0 9vh;text-align:center;font-size:clamp(40px,7vw,120px);font-weight:900;letter-spacing:-.045em;line-height:.9;mix-blend-mode:difference;pointer-events:none}
+.lb{position:absolute;top:50%;font-size:12px}.lb.l{left:5vw}.lb.r{right:5vw;text-align:right}
+.cap0{position:absolute;left:5vw;bottom:9vh;opacity:0;font-size:clamp(40px,6vw,96px);font-weight:900;letter-spacing:-.045em;line-height:.9}
+
+.k{font-size:clamp(40px,6vw,96px);font-weight:900;letter-spacing:-.045em;line-height:.9}
+.t{max-width:380px;font-size:18px;line-height:1.35;color:#c9c5bb;margin-top:20px}
+.p1{width:62vw;border-left:1px solid #1f1e1b}
+.p2{width:95vw;grid-template-columns:1fr 1.5fr;gap:4vw;align-items:center}
+.p3{width:75vw}
+.img{overflow:hidden;border-radius:3px}
+.img img{display:block;width:115%;margin-left:-7.5%}
+.p3 .img{margin-top:28px;width:46vw}
+.big{font-size:22vw;font-weight:900;letter-spacing:-.06em;line-height:.8;color:transparent;-webkit-text-stroke:1px #4a4740}
+.p4{width:60vw}
+
+.prog{position:absolute;left:5vw;right:5vw;bottom:5vh;display:flex;gap:6px;opacity:0}
+.prog b{flex:1;height:2px;background:#2a2925;position:relative;overflow:hidden}
+.prog b i{position:absolute;inset:0;background:var(--fg);transform-origin:left;transform:scaleX(0)}
+
+.outro{min-height:100vh;display:grid;place-items:center;text-align:center;padding:10vh 5vw}
+.outro .k{font-size:clamp(48px,10vw,170px)}
+.cta{display:inline-block;margin-top:40px;background:var(--fg);color:var(--bg);font-weight:600;padding:16px 28px;border-radius:999px;text-decoration:none}
+@media(max-width:760px){.ph{width:62vw}.p2{grid-template-columns:1fr}.panel:not(.p0){width:100vw!important}.p3 .img{width:88vw}}
+@media (prefers-reduced-motion:reduce){.grain{animation:none}}
+</style>
+</head>
+<body>
+<section class="pin">
+  <div class="track">
+    <div class="panel p0">
+      <span class="mono lb l">Raw file<br>f/2 · 1/250</span><span class="mono lb r">Chromasmith<br>Portra · grain · halation</span>
+      <div class="ph">
+        <img src="../assets/story/original.webp" alt="">
+        <img class="film" src="../assets/story/film.webp" alt="">
+        <img class="film glow" src="../assets/story/film.webp" alt="">
+        <div class="grain"></div>
+      </div>
+      <div class="hero-t">Develop it.</div>
+      <div class="cap0">Every frame,<br>developed.</div>
+    </div>
+    <div class="panel p1"><p class="mono">01 / Library</p><div class="k">Find the<br>frame.</div><p class="t">Thousands of photos, indexed on your machine. Nothing uploaded.</p></div>
+    <div class="panel p2"><div><p class="mono">02 / Studio</p><div class="k">A studio for<br>every frame.</div></div><div class="img"><img src="../assets/ui/color.webp" alt=""></div></div>
+    <div class="panel p3"><div class="big">113</div><div class="k" style="margin-top:-4vw">film looks.</div><div class="img"><img src="../assets/ui/looks.webp" alt=""></div></div>
+    <div class="panel p4"><p class="mono">04 / Anywhere</p><div class="k">Desktop, browser,<br>phone.</div><p class="t">Same engine everywhere, fully offline.</p></div>
+  </div>
+  <div class="prog"><b><i></i></b><b><i></i></b><b><i></i></b><b><i></i></b></div>
+</section>
+<section class="outro"><div><div class="k">Now make<br>it yours.</div><a class="cta" href="../../chromasmith-22.html">Open Chromasmith</a></div></section>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.3.4/dist/lenis.min.js"></script>
+<script>
+gsap.registerPlugin(ScrollTrigger);
+if(!matchMedia('(prefers-reduced-motion: reduce)').matches){const l=new Lenis({lerp:.09});l.on('scroll',ScrollTrigger.update);gsap.ticker.add(t=>l.raf(t*1000));gsap.ticker.lagSmoothing(0);}
+const tr=document.querySelector('.track'),bars=document.querySelectorAll('.prog i');
+const dist=()=>tr.scrollWidth-innerWidth;
+// develop takes 1.6 units, grow 1, then sideways travel scaled to its pixel length
+const tl=gsap.timeline({scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*2.6+dist()),scrub:1,invalidateOnRefresh:true}});
+tl.to('.ph .film:not(.glow)',{opacity:1,duration:.7})
+  .to('.ph .grain',{opacity:.5,duration:.4})
+  .to('.ph .glow',{opacity:.5,duration:.5})
+  .to('.lb,.hero-t',{opacity:0,duration:.25})
+  .to('.ph',{width:'100vw',height:'100vh',aspectRatio:'auto',ease:'power2.inOut',duration:1})
+  .to('.cap0',{opacity:1,y:-16,duration:.3})
+  .to('.prog',{opacity:1,duration:.2},'<')
+  .addLabel('slide')
+  .to(tr,{x:()=>-dist(),ease:'none',duration:()=>dist()/innerHeight,
+    onUpdate(){const f=this.progress()*bars.length;bars.forEach((b,i)=>b.style.transform=`scaleX(${Math.max(0,Math.min(1,f-i))})`)}});
+// depth: text drifts a little against the track; screenshots pan inside their frame
+const slideStart=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scrollTrigger.end-tl.scrollTrigger.start);
+document.querySelectorAll('.panel:not(.p0)').forEach(p=>{
+  const off=()=>p.offsetLeft-innerWidth, st=()=>slideStart()+Math.max(0,off()), en=()=>st()+innerWidth+p.offsetWidth;
+  gsap.fromTo(p.querySelectorAll('.k,.t,.mono,.big'),{x:50},{x:-30,ease:'none',scrollTrigger:{start:st,end:en,scrub:true,invalidateOnRefresh:true}});
+  gsap.fromTo(p.querySelectorAll('.img img'),{xPercent:4},{xPercent:-4,ease:'none',scrollTrigger:{start:st,end:en,scrub:true,invalidateOnRefresh:true}});
+});
+</script>
+</body>
+</html>
