@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><g id="s">
+  <rect x="0" y="0" width="34" height="2"/>
+  <rect x="0" y="7.5" width="34" height="3"/>
+  <rect x="0" y="16" width="34" height="4"/>
+  <rect x="0" y="25.5" width="34" height="5"/>
+  <rect x="0" y="36" width="34" height="6"/>
+  <rect x="0" y="47.5" width="34" height="7"/>
+  <rect x="0" y="60" width="34" height="8"/>
+</g></defs><use href="#s" transform="translate(16,16) scale(1,0.5)" fill="#ff3b1f"/><use href="#s" transform="matrix(0,1,0.5,0,50,16)" fill="#111111"/><use href="#s" transform="matrix(0,1,-0.5,0,50,50)" fill="#111111"/><use href="#s" transform="translate(50,84) scale(1,-0.5)" fill="#ff3b1f"/></svg>

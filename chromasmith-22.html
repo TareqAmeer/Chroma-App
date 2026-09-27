@@ -782,6 +782,12 @@ body.diag-on .diag-only{display:flex}
 #fx-face-box{position:fixed;display:none;pointer-events:none;z-index:100000;border:2px solid var(--acc);
   box-shadow:0 0 0 1px rgba(0,0,0,.5),inset 0 0 0 1px rgba(0,0,0,.5)}
 .fx-people-pending{padding:8px 0;font-size:var(--fs-2);color:var(--mut);border-top:1px solid var(--bdr)}
+.fx-autotag-chip{display:inline-flex;align-items:center;gap:4px;padding:3px var(--sp-2);border-radius:var(--r-pill);font-size:11px;cursor:pointer;
+  background:color-mix(in srgb,var(--txt) 10%,transparent);color:var(--txt);border:1px solid transparent}
+.fx-autotag-chip:hover{border-color:var(--acc2)}
+.fx-autotag-hint{color:var(--mut);font-size:11px;line-height:1.4}
+.fx-autotag-btn{margin-top:6px;background:none;border:none;padding:0;color:var(--acc2);cursor:pointer;font:inherit;font-size:11px}
+.fx-autotag-btn:disabled{opacity:.5;cursor:default}
 .fx-kw-chip{display:inline-flex;align-items:center;gap:4px;padding:3px var(--sp-2);border-radius:var(--r-pill);
   background:var(--sur2);border:1px solid var(--bdr);font-size:var(--fs-2);color:var(--txt)}
 .fx-kw-chip-x{cursor:pointer;color:var(--mut)}
@@ -2151,6 +2157,34 @@ body.sk2 #fx-add-btn{box-shadow:none}
 body.sk2 #fx-add-btn:hover{transform:none;box-shadow:none}
 body.sk2 #fx-toast{box-shadow:none}
 /* The switch back. */
+/* Logo trial: the Burst mark (design/logo/logo-study.html) replaces the square beside the wordmark. */
+body.sk2 #cs-brand-name.sk2-has-mark::before{display:none}
+body.sk2 .sk2-mark{width:22px;height:22px;flex:none;display:block}
+/* Sticky section titles while a panel scrolls; panels fade in when switched. */
+body.sk2 .fx-ctrl-title{position:sticky;top:0;z-index:6;background:var(--k-color-bg);padding-top:6px;padding-bottom:6px}
+@keyframes sk2In{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+body.sk2 .fx-ctrl{animation:sk2In .14s ease-out}
+/* Looks as bigger prints: the grid gets the panel's full height instead of a 368px box. */
+body.sk2.fx-deskb .looks-grid{max-height:none;gap:16px 10px}
+body.sk2 .look-cell{border:0;padding:0}
+body.sk2 .look-nm{font-size:11px;text-transform:none;letter-spacing:0;padding:5px 0 0;background:none!important;color:var(--k-color-muted)}
+body.sk2 .look-cell.sel .look-nm{color:var(--k-color-ink)}
+body.sk2 .look-cell.sk2-peek{outline:1px solid var(--k-color-ink);outline-offset:2px}
+/* Secondary actions folded into one quiet "More" line. */
+body.sk2 details.sk2-more{margin-top:12px;border-top:1px solid var(--bdr);padding-top:8px}
+body.sk2 details.sk2-more>summary{cursor:pointer;color:var(--k-color-muted);font-size:12px;list-style:none;display:flex;justify-content:space-between}
+body.sk2 details.sk2-more>summary::-webkit-details-marker{display:none}
+body.sk2 details.sk2-more>summary::after{content:'+'}
+body.sk2 details.sk2-more[open]>summary::after{content:'–'}
+body.sk2 details.sk2-more>summary:hover{color:var(--k-color-ink)}
+/* Empty state: one big, calm drop target. */
+body.sk2 #fx-no-img{gap:14px}
+body.sk2 #fx-add-btn{width:72px;height:72px}
+body.sk2 .ni-add-lb{font-size:28px;font-weight:400;letter-spacing:-.03em;color:var(--k-color-ink);text-transform:none}
+body.sk2 .ni-hint{font-size:12px;color:var(--k-color-muted)}
+/* Section on/off switch: a flat square toggle instead of a white block. */
+body.sk2 .fx-toggle{background:transparent;border:1px solid var(--k-color-muted)}
+body.sk2 .fx-toggle.on{background:var(--k-color-accent-a);border-color:var(--k-color-accent-a)}
 #sk2-toggle{display:none}
 body:not(.deskx) #sk2-toggle{display:none!important}
 body.deskx #sk2-toggle{display:block;position:fixed;left:16px;bottom:10px;z-index:50;background:var(--k-color-bg);border:1px solid var(--bdr);color:var(--k-color-muted);font:400 11px var(--sans);cursor:pointer;padding:4px 8px}
@@ -2174,6 +2208,35 @@ var t=document.createElement('button');t.id='sk2-toggle';t.type='button';t.textC
 t.title='Switch between the new Swiss look (trial) and the current design';
 t.onclick=function(){localStorage.setItem(K,on?'0':'1');location.reload()};
 document.body.appendChild(t);var n=document.getElementById('cs-brand-name');if(on&&n)n.textContent='Chro-ma-smith';}catch(e){}})();</script>
+<script>/* Swiss v2 web trial — behaviour half (hover-preview looks, "More" fold, "?" shortcuts, logo). */
+(function(){if(window.__TAURI__)return;
+function ready(f){if(document.readyState!=='loading')f();else document.addEventListener('DOMContentLoaded',f)}
+ready(function(){if(!document.body.classList.contains('sk2'))return;
+  // Logo mark
+  var n=document.getElementById('cs-brand-name');
+  if(n&&!n.querySelector('.sk2-mark')){n.classList.add('sk2-has-mark');
+    n.insertAdjacentHTML('afterbegin','<svg class="sk2-mark" viewBox="0 0 100 100" aria-hidden="true"><defs><g id="sk2q"><rect x="21.3" y="21.3" width="3" height="3"/><rect x="20.65" y="34.25" width="4.3" height="4.3"/><rect x="20" y="47.2" width="5.6" height="5.6"/><rect x="19.35" y="60.15" width="6.9" height="6.9"/><rect x="18.7" y="73.1" width="8.2" height="8.2"/><rect x="34.25" y="20.65" width="4.3" height="4.3"/><rect x="33.6" y="33.6" width="5.6" height="5.6"/><rect x="32.95" y="46.55" width="6.9" height="6.9"/><rect x="32.3" y="59.5" width="8.2" height="8.2"/><rect x="31.65" y="72.45" width="9.5" height="9.5"/><rect x="47.2" y="20" width="5.6" height="5.6"/><rect x="46.55" y="32.95" width="6.9" height="6.9"/><rect x="45.9" y="45.9" width="8.2" height="8.2"/><rect x="45.25" y="58.85" width="9.5" height="9.5"/><rect x="44.6" y="71.8" width="10.8" height="10.8"/><rect x="60.15" y="19.35" width="6.9" height="6.9"/><rect x="59.5" y="32.3" width="8.2" height="8.2"/><rect x="58.85" y="45.25" width="9.5" height="9.5"/><rect x="58.2" y="58.2" width="10.8" height="10.8"/><rect x="57.55" y="71.15" width="12.1" height="12.1"/><rect x="73.1" y="18.7" width="8.2" height="8.2"/><rect x="72.45" y="31.65" width="9.5" height="9.5"/><rect x="71.8" y="44.6" width="10.8" height="10.8"/><rect x="71.15" y="57.55" width="12.1" height="12.1"/><rect x="70.5" y="70.5" width="13.4" height="13.4"/></g></defs><use href="#sk2q" transform="translate(8,8) scale(0.5)" fill="#ff3b1f"/><use href="#sk2q" transform="translate(92,8) scale(-0.5,0.5)" fill="currentColor"/><use href="#sk2q" transform="translate(8,92) scale(0.5,-0.5)" fill="currentColor"/><use href="#sk2q" transform="translate(92,92) scale(-0.5,-0.5)" fill="#ff3b1f"/></svg>');}
+  // "More": fold the Image card's secondary button rows (Google Photos, library save/delete, LUT chart/.cube)
+  var ids=['btn-gp-import','btn-lut-save','btn-lut-dl'],rows=[];
+  ids.forEach(function(id){var b=document.getElementById(id),r=b&&b.closest('.btn-row');if(r&&rows.indexOf(r)<0)rows.push(r)});
+  if(rows.length){var d=document.createElement('details');d.className='sk2-more';d.innerHTML='<summary title="Google Photos, saved LUTs, LUT chart">More</summary>';
+    rows[0].parentNode.insertBefore(d,rows[0]);rows.forEach(function(r){d.appendChild(r)});}
+  // "?" opens the keyboard shortcuts sheet
+  document.addEventListener('keydown',function(e){if(e.key!=='?'||e.metaKey||e.ctrlKey)return;var t=e.target;
+    if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))return;
+    if(window.chromasmithShowShortcuts){e.preventDefault();window.chromasmithShowShortcuts();}});
+  // Hover a look for ~250ms to preview it on the photo; leaving restores the chosen one. Only the
+  // renderer's LUT is swapped (FX.setLUT + fxState.lut) — no history entry, no film defaults.
+  var host=document.getElementById('fx-looks');if(!host)return;
+  var timer=0,peek=null,saved;
+  function restore(){clearTimeout(timer);if(!peek)return;peek.classList.remove('sk2-peek');peek=null;
+    try{fxState.lut=saved;FX.setLUT(saved);renderPreview();}catch(e){}}
+  host.addEventListener('pointerover',function(e){var c=e.target.closest&&e.target.closest('.look-cell');if(!c||c===peek||c.classList.contains('sel'))return;
+    restore();clearTimeout(timer);timer=setTimeout(async function(){var v=c._lookJob&&c._lookJob.val;if(!v||!v.startsWith('p:')||typeof presetLut!=='function')return;
+      try{var lut=await presetLut(v.slice(2));if(!c.matches(':hover'))return;saved=fxState.lut;peek=c;c.classList.add('sk2-peek');fxState.lut=lut;FX.setLUT(lut);renderPreview();}catch(e){}},250);});
+  host.addEventListener('pointerleave',restore);
+  host.addEventListener('click',function(){clearTimeout(timer);if(peek){peek.classList.remove('sk2-peek');peek=null;}},true);
+});})();</script>
 <!-- Boot splash — the Swiss Kinetic playground splash (design/prototypes/swiss-kinetic/index.html
      section 07, .splash), transplanted 1:1: every box keeps the prototype's 720x560 px geometry,
      scaled to the window by one unit (--u). Static markup + inline styles so the FIRST paint is
@@ -5678,7 +5741,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0927L';
+const BUILD='1.0927M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17567,8 +17630,10 @@ async function fxRenderKeywordsPanel(){
   el.innerHTML=`<div class="fx-people-row"><div style="width:100%">`
     +`<div class="fx-label" style="width:auto;margin-bottom:6px">Keywords</div>`
     +`<div id="fx-kw-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${chips}</div>`
-    +`<input id="fx-kw-add" placeholder="Add keyword…" class="fx-select" style="width:100%">`
+    +`<input id="fx-kw-add" placeholder="Add keyword…" class="fx-select" style="width:100%;background-image:none">`
+    +`<div id="fx-autotags" style="margin-top:12px"></div>`
     +`</div></div>`;
+  fxRenderAutoTags(path,keywords);
   el.querySelectorAll('[data-kw-remove]').forEach(x=>{
     x.onclick=async(e)=>{
       e.stopPropagation();
@@ -17589,6 +17654,49 @@ async function fxRenderKeywordsPanel(){
     catch(e2){if(typeof toast==='function')toast('Could not add that keyword','err');}
   };
 }
+// Auto tags ("In this photo": dog, beach, park…) + where it was taken, from the catalog's AI
+// index (catalog_photo_tag_info). Click a tag to save it as a keyword; "Analyze now" indexes this
+// one photo when the background pass hasn't reached it yet. Always renders a real state.
+async function fxRenderAutoTags(path,keywords){
+  const el=document.getElementById('fx-autotags');if(!el||!window.__TAURI__)return;
+  const inv=window.__TAURI__.core.invoke;
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  el.innerHTML=`<div class="fx-label" style="width:auto;margin-bottom:6px">In this photo</div><div class="fx-autotag-hint">Checking…</div>`;
+  let info;
+  try{info=await inv('catalog_photo_tag_info',{path});}catch(e){info=null;}
+  if(_fxKeywordsPathToken!==path||!document.body.contains(el))return;
+  const have=new Set((keywords||[]).map(k=>k.split('|').pop().toLowerCase()));
+  const tags=((info&&info.tags)||[]).filter(t=>!have.has(t.term.toLowerCase()));
+  const place=info&&info.place;
+  const placeBits=place?[place.split(', ')[0],place.split(', ').pop()].filter((v,i,a)=>a.indexOf(v)===i&&!have.has(v.toLowerCase())):[];
+  let body;
+  if(!info||info.photo_id==null)body=`<div class="fx-autotag-hint">Add this folder to the Library to auto-tag it.</div>`;
+  else if(!info.analyzed)body=`<div class="fx-autotag-hint">Not analyzed yet — the Library tags photos in the background.</div>`
+    +`<button class="fx-autotag-btn" id="fx-autotag-analyze">Analyze now</button>`;
+  else if(!tags.length&&!placeBits.length)body=`<div class="fx-autotag-hint">${(info.tags||[]).length?'All detected tags are saved as keywords.':'Nothing recognised with confidence.'}</div>`;
+  else body=`<div style="display:flex;flex-wrap:wrap;gap:4px">`
+    +placeBits.map(p=>`<span class="fx-autotag-chip" data-add="${esc(p)}" title="Taken in ${esc(place)} — click to save as a keyword">⌖ ${esc(p)} +</span>`).join('')
+    +tags.map(t=>`<span class="fx-autotag-chip" data-add="${esc(t.term)}" title="Detected automatically (${Math.round(t.score*100)}%) — click to save as a keyword">${esc(t.term)} +</span>`).join('')
+    +`</div>`+(tags.length+placeBits.length>1?`<button class="fx-autotag-btn" id="fx-autotag-all">Add all</button>`:'');
+  el.innerHTML=`<div class="fx-label" style="width:auto;margin-bottom:6px">In this photo</div>`+body;
+  const save=async(add)=>{
+    const sc=await inv('get_sidecar',{path});
+    const cur=sc.keywords||[];
+    const next=[...cur,...add.filter(a=>!cur.includes(a))];
+    await inv('set_keywords',{path,keywords:next});
+    _fxKeywordsPathToken='';fxRenderKeywordsPanel();
+  };
+  el.querySelectorAll('[data-add]').forEach(c=>{c.onclick=()=>save([c.dataset.add]).catch(()=>{if(typeof toast==='function')toast('Could not add that keyword','err');});});
+  const all=document.getElementById('fx-autotag-all');
+  if(all)all.onclick=()=>save([...placeBits,...tags.map(t=>t.term)]).catch(()=>{});
+  const an=document.getElementById('fx-autotag-analyze');
+  if(an)an.onclick=async()=>{
+    an.disabled=true;an.textContent='Analyzing…';
+    try{await inv('catalog_clip_embed',{photoIds:[info.photo_id]});}catch(e){if(typeof toast==='function')toast('Could not analyze this photo','err');}
+    _fxKeywordsPathToken='';fxRenderKeywordsPanel();
+  };
+}
+window.fxRefreshAutoTags=()=>{_fxKeywordsPathToken='';if(typeof fxRenderKeywordsPanel==='function')fxRenderKeywordsPanel();};
 // CHR-164: ONE definition of "the photo's full size" — the full-resolution decode when the item
 // carries one (RAW opens on a display proxy first), else the loaded image itself.
 function fxFullDimsText(it){
