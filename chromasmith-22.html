@@ -2178,6 +2178,21 @@ body.sk2 #sk2-sub button:hover,body.sk2 #sk2-sub button.on{color:var(--k-color-i
 body.sk2 #sk2-sub button.on{box-shadow:inset 0 -1px 0 var(--k-color-ink)}
 body.sk2 .fx-ctrl-title{position:sticky;top:var(--sk2-sub-h,0px);z-index:6;background:var(--k-color-bg);padding-top:14px;padding-bottom:10px;margin-bottom:10px;box-shadow:0 1px 0 var(--bdr)}
 body.sk2 .fx-ctrl{margin-top:0!important;padding-top:0!important}
+/* Chip rows (Input, Print, look families…) read as a plain word list: muted words, the chosen one ink + underlined. */
+body.sk2 .chip-tap{gap:4px 16px!important;flex-wrap:wrap}
+body.sk2 .chip-tap>.btn.bgh{box-shadow:none!important;padding:3px 0!important;min-height:0!important;height:auto!important;width:auto!important;flex:0 0 auto!important;color:var(--k-color-muted)!important;background:transparent!important;font-size:13px}
+body.sk2 .chip-tap>.btn.bgh:not(:disabled):hover{color:var(--k-color-ink)!important;box-shadow:none!important}
+body.sk2 .chip-tap>.btn.bgh.on,body.sk2 .chip-tap>.btn.bgh[aria-pressed=true]{background:transparent!important;color:var(--k-color-ink)!important;box-shadow:inset 0 -1px 0 var(--k-color-ink)!important}
+/* Looks: prints in two columns, name underneath, family words above, Strength pinned to the bottom. */
+body.sk2 #fx-looks-cats{font-size:15px}
+body.sk2 #fx-looks-cats>.btn.bgh{font-size:15px}
+body.sk2 #fx-looks-search{background:transparent;border:0;border-bottom:1px solid var(--bdr);border-radius:0;padding:6px 0;color:var(--k-color-ink)}
+body.sk2 #fx-looks-search:focus{border-bottom-color:var(--k-color-ink);outline:none}
+body.sk2 .look-cell canvas{display:block;width:100%;height:auto}
+body.sk2 .look-cell.kbd-focus{outline:1px solid var(--k-color-muted);outline-offset:2px}
+body.sk2 .look-cat-hdr{grid-column:1/-1;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);padding:14px 0 0;border:0;background:none}
+body.sk2 #row-lut-mix{position:sticky;bottom:0;z-index:7;background:var(--k-color-bg);margin:14px 0 0!important;padding:12px 0 14px;box-shadow:0 -1px 0 var(--bdr)}
+body.sk2 .fx-preset-head{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);margin:18px 0 8px!important}
 /* Looks: the chosen look is marked by the square, not a kicked-out frame. */
 body.sk2 .look-cell:hover{transform:none;box-shadow:none}
 body.sk2 .look-cell.sel{border-color:transparent;box-shadow:none;position:relative}
@@ -2238,6 +2253,8 @@ function sk2SubTabs(g,jump){
   nav.hidden=cards.length<2;
   nav.innerHTML=cards.map(c=>`<button type="button" data-k="${c.dataset.fxsec}">${SK2_SUB[c.dataset.fxsec]||c.dataset.fxsec}</button>`).join('');
   document.body.style.setProperty('--sk2-sub-h',(nav.hidden?0:nav.offsetHeight)+'px');
+  // Strength rides at the bottom of the look grid (sticky), whatever layout the row started in.
+  if(g==='look'){const mix=document.getElementById('row-lut-mix'),lc=document.getElementById('fx-looks-ctrl');if(mix&&lc&&mix.parentElement!==lc)lc.appendChild(mix);}
   if(jump)requestAnimationFrame(()=>sk2Jump(jump,false));else sk2Spy();
 }
 function sk2Jump(k,smooth){
@@ -2269,17 +2286,25 @@ ready(function(){
   document.addEventListener('keydown',function(e){if(e.key!=='?'||e.metaKey||e.ctrlKey)return;var t=e.target;
     if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))return;
     if(window.chromasmithShowShortcuts){e.preventDefault();window.chromasmithShowShortcuts();}});
-  // Hover a look for ~250ms to preview it on the photo; leaving restores the chosen one. Only the
-  // renderer's LUT is swapped (FX.setLUT + fxState.lut) — no history entry, no film defaults.
+  // Hover a look (~200ms) or arrow-key onto it to preview it on the photo; leaving / Escape
+  // restores the chosen one, a click or Enter commits. Only the renderer's LUT is swapped
+  // (FX.setLUT + fxState.lut) — no history entry, no film defaults, nothing saved.
   var host=document.getElementById('fx-looks');if(!host)return;
-  var timer=0,peek=null,saved;
-  function restore(){clearTimeout(timer);if(!peek)return;peek.classList.remove('sk2-peek');peek=null;
-    try{fxState.lut=saved;FX.setLUT(saved);renderPreview();}catch(e){}}
-  host.addEventListener('pointerover',function(e){var c=e.target.closest&&e.target.closest('.look-cell');if(!c||c===peek||c.classList.contains('sel'))return;
-    restore();clearTimeout(timer);timer=setTimeout(async function(){var v=c._lookJob&&c._lookJob.val;if(!v||!v.startsWith('p:')||typeof presetLut!=='function')return;
-      try{var lut=await presetLut(v.slice(2));if(!c.matches(':hover'))return;saved=fxState.lut;peek=c;c.classList.add('sk2-peek');fxState.lut=lut;FX.setLUT(lut);renderPreview();}catch(e){}},250);});
-  host.addEventListener('pointerleave',restore);
-  host.addEventListener('click',function(){clearTimeout(timer);if(peek){peek.classList.remove('sk2-peek');peek=null;}},true);
+  var timer=0,peek=null,saved,seq=0;
+  function end(commit){clearTimeout(timer);seq++;if(!peek)return;peek.classList.remove('sk2-peek');peek=null;
+    if(commit)return;try{fxState.lut=saved;FX.setLUT(saved);renderPreview();}catch(e){}}
+  async function show(c){var v=c._lookJob&&c._lookJob.val;if(c.classList.contains('sel')){end();return;}
+    var my=++seq,lut=null;
+    try{if(v&&v.startsWith('p:')&&typeof presetLut==='function')lut=await presetLut(v.slice(2));else if(v!=='')return;}catch(e){return}
+    if(my!==seq)return;if(!peek)saved=fxState.lut;else peek.classList.remove('sk2-peek');
+    peek=c;c.classList.add('sk2-peek');try{fxState.lut=lut;FX.setLUT(lut);renderPreview();}catch(e){}}
+  window.sk2PeekLook=function(c){clearTimeout(timer);show(c)};
+  window.sk2PeekEnd=end;
+  host.addEventListener('pointerover',function(e){var c=e.target.closest&&e.target.closest('.look-cell');if(!c||c===peek)return;
+    clearTimeout(timer);timer=setTimeout(function(){if(c.matches(':hover'))show(c)},200);});
+  host.addEventListener('pointerleave',function(){end()});
+  host.addEventListener('keydown',function(e){if(e.key==='Escape'&&peek){e.stopPropagation();end();}},true);
+  host.addEventListener('click',function(){end(true)},true);
 });})();</script>
 <!-- Boot splash — the Swiss Kinetic playground splash (design/prototypes/swiss-kinetic/index.html
      section 07, .splash), transplanted 1:1: every box keeps the prototype's 720x560 px geometry,
@@ -5785,7 +5810,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928B';
+const BUILD='1.0928C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20024,7 +20049,7 @@ function initLookGalleryKeyNav(){
     const cells=[...host.querySelectorAll('.look-cell')];if(!cells.length)return;
     let idx=cells.findIndex(c=>c.classList.contains('kbd-focus'));
     if(idx<0)idx=Math.max(0,cells.findIndex(c=>c.classList.contains('sel')));
-    if(e.key==='Enter'||e.key===' '){e.preventDefault();const c=cells[idx];if(c)fxPickLookCell(c,c._lookJob?c._lookJob.val:'');return;}
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();const c=cells[idx];if(window.sk2PeekEnd)window.sk2PeekEnd(true);if(c)fxPickLookCell(c,c._lookJob?c._lookJob.val:'');return;}
     e.preventDefault();
     const cols=liveCols();
     let next=idx;
@@ -20036,9 +20061,11 @@ function initLookGalleryKeyNav(){
     cells.forEach(c=>c.classList.remove('kbd-focus'));
     cells[next].classList.add('kbd-focus');
     cells[next].scrollIntoView({block:'nearest'});
-    fxPickLookCell(cells[next],cells[next]._lookJob?cells[next]._lookJob.val:'');
+    // Swiss v2: arrow keys preview (scrub) a look; Enter/Space or a click commits it.
+    if(typeof window.sk2PeekLook==='function')window.sk2PeekLook(cells[next]);
+    else fxPickLookCell(cells[next],cells[next]._lookJob?cells[next]._lookJob.val:'');
   });
-  host.addEventListener('focusout',()=>{host.querySelectorAll('.look-cell.kbd-focus').forEach(c=>c.classList.remove('kbd-focus'));});
+  host.addEventListener('focusout',()=>{host.querySelectorAll('.look-cell.kbd-focus').forEach(c=>c.classList.remove('kbd-focus'));if(window.sk2PeekEnd)window.sk2PeekEnd();});
 }
 
 // ── "hold to compare" before/after ──
