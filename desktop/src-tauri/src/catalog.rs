@@ -5720,6 +5720,41 @@ pub fn catalog_auto_tag_counts(state: tauri::State<CatalogState>) -> Result<Vec<
     rows
 }
 
+#[derive(Serialize, Default)]
+pub struct PhotoTagInfo {
+    pub photo_id: Option<i64>,
+    /// True once the photo has a CLIP embedding (it has been analyzed).
+    pub analyzed: bool,
+    pub tags: Vec<ClipTagHit>,
+    pub place: Option<String>,
+}
+
+/// Everything the Editor's Info panel needs for auto tags, keyed by file path (the Editor only
+/// knows the path). Self-healing: an analyzed photo whose tags were never stored (indexed before
+/// auto-tagging existed) is tagged right here instead of waiting for the background backfill.
+#[tauri::command]
+pub fn catalog_photo_tag_info(state: tauri::State<CatalogState>, path: String) -> Result<PhotoTagInfo, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let Some(id) = find_photo_by_abs_path(&conn, &path) else { return Ok(PhotoTagInfo::default()) };
+    let (emb, scanned, tagged, place): (Option<Vec<u8>>, Option<i64>, Option<i64>, Option<String>) = conn
+        .query_row("SELECT clip_embedding, clip_scanned_at, auto_tagged_at, place FROM photos WHERE id = ?1", params![id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        })
+        .map_err(|e| e.to_string())?;
+    if let Some(blob) = &emb {
+        if tagged.is_none() || tagged != scanned {
+            store_auto_tags(&conn, id, scanned.unwrap_or(0), &blob_to_f32_vec(blob))?;
+        }
+    }
+    let mut stmt = conn.prepare("SELECT term, score FROM photo_auto_tags WHERE photo_id = ?1 ORDER BY score DESC").map_err(|e| e.to_string())?;
+    let tags = stmt
+        .query_map(params![id], |r| Ok(ClipTagHit { term: r.get(0)?, score: r.get(1)? }))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(PhotoTagInfo { photo_id: Some(id), analyzed: emb.is_some(), tags, place })
+}
+
 /// One photo's stored auto tags, best first.
 #[tauri::command]
 pub fn catalog_photo_auto_tags(state: tauri::State<CatalogState>, photo_id: i64) -> Result<Vec<ClipTagHit>, String> {

@@ -470,6 +470,8 @@
       case 'catalog_auto_tag': return Promise.resolve(0);
       case 'catalog_auto_tag_counts': return Promise.resolve(/[?&]libcat=1/.test(location.search) ? [{ term: 'dog', count: 4 }, { term: 'beach', count: 2 }] : []);
       case 'catalog_photo_auto_tags': return Promise.resolve([]);
+      case 'catalog_photo_tag_info': return Promise.resolve(A.path && /2\./.test(A.path) ? { photo_id: 2, analyzed: false, tags: [], place: null }
+        : { photo_id: 1, analyzed: true, place: 'London, Greater London, England, United Kingdom', tags: [{ term: 'dog', score: 0.3 }, { term: 'blanket', score: 0.26 }] });
       case 'catalog_places': return Promise.resolve(/[?&]libcat=1/.test(location.search) ? [{ place: 'London, Greater London, England, United Kingdom', count: 3 }] : []);
       case 'catalog_clip_tags': {
         // R10: fixed fake suggestions so the Info panel's "Suggested" section is exercisable
@@ -6873,8 +6875,8 @@
       if (!state.clipTags.has(entry.id)) {
         clipState = 'loading';
         state.clipTags.set(entry.id, null); // placeholder so we don't refetch while the real request is in flight
-        invoke('catalog_photo_auto_tags', { photoId: entry.id })
-          .then((stored) => (stored && stored.length ? stored : invoke('catalog_clip_tags', { photoId: entry.id })))
+        invoke('catalog_photo_tag_info', { path })
+          .then((info) => (info && info.analyzed ? info.tags : []))
           .then((hits) => { state.clipTags.set(entry.id, hits || []); if (state.showInfo) renderInfoPanel(); })
           .catch(() => { state.clipTags.set(entry.id, []); });
       } else {
@@ -8834,6 +8836,11 @@
       // Teach/Find loop rather than a replacement for it).
       const rp = await invoke('catalog_pets_scan', { photoIds }).catch(() => ({ pets_found: 0 }));
       await invoke('catalog_clip_embed', { photoIds });
+      // Tag photos that were already indexed before auto-tagging existed (clip_embed skips them).
+      await invoke('catalog_auto_tag').catch(() => {});
+      refreshAutoTags(); state.clipTags.clear();
+      if (state.showInfo) renderInfoPanel();
+      if (typeof window.fxRefreshAutoTags === 'function') window.fxRefreshAutoTags();
       await refreshPeople();
       activityUpdate('catalog', { stage: 'done', done: photoIds ? photoIds.length : 0, total: photoIds ? photoIds.length : 0 });
       const parts = [];

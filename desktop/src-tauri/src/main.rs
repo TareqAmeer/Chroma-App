@@ -2778,6 +2778,7 @@ fn main() {
             catalog::catalog_auto_tag,
             catalog::catalog_auto_tag_counts,
             catalog::catalog_photo_auto_tags,
+            catalog::catalog_photo_tag_info,
             catalog::catalog_rebuild,
             catalog::catalog_thumbnails,
             catalog::catalog_hq_offline,
