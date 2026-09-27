@@ -2277,6 +2277,9 @@ body.sk2 #lib-overlay .lib-btn.on,body.sk2 #lib-overlay .lib-btn[aria-pressed=tr
 body.sk2 #fx-deskbar-title.sk2-cap{position:absolute;z-index:3;display:flex;flex-direction:row;align-items:baseline;gap:12px;transform:none;margin:0;pointer-events:none;white-space:nowrap;overflow:hidden}
 body.sk2 #fx-deskbar-title.sk2-cap #db-title-name{font-size:12px;color:var(--k-color-ink);font-weight:400;overflow:hidden;text-overflow:ellipsis}
 body.sk2 #fx-deskbar-title.sk2-cap #db-title-status{font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
+body.sk2 #ff-borders .sk2-layers{margin:2px 0 12px}
+body.sk2 #ff-borders .fx-row[hidden]{display:none!important}
+body.sk2 #ff-borders[data-sk2-layer=b1] [data-layer=b2],body.sk2 #ff-borders[data-sk2-layer=b2] [data-layer=b1]{display:none!important}
 /* Looks: the chosen look is marked by the square, not a kicked-out frame. */
 body.sk2 .look-cell:hover{transform:none;box-shadow:none}
 body.sk2 .look-cell.sel{border-color:transparent;box-shadow:none;position:relative}
@@ -2445,6 +2448,21 @@ ready(function(){
   ids.forEach(function(id){var b=document.getElementById(id),r=b&&b.closest('.btn-row');if(r&&rows.indexOf(r)<0)rows.push(r)});
   if(rows.length){var d=document.createElement('details');d.className='sk2-more';d.innerHTML='<summary title="Google Photos, saved LUTs, LUT chart">More</summary>';
     rows[0].parentNode.insertBefore(d,rows[0]);rows.forEach(function(r){d.appendChild(r)});}
+  // Border ("frames") tool: one layer at a time — Inner | Outer word tabs over the same rows;
+  // Film variation + Overlay fold under "More". Rows are only hidden/shown, never rebuilt.
+  (function(){var ff=document.getElementById('ff-borders');if(!ff||ff.querySelector('.sk2-layers'))return;
+    var rows=[].slice.call(ff.querySelectorAll(':scope>.fx-row'));
+    rows.forEach(function(r){var id=(r.querySelector('[id]')||{}).id||'',fr=r.getAttribute('data-film-row');
+      var L=fr||(/(^|-)b1(-|$)/.test(id)?'b1':/(^|-)b2(-|$)/.test(id)?'b2':'');if(L)r.setAttribute('data-layer',L);
+      var lb=r.querySelector('.fx-label');if(L&&lb&&lb.firstChild&&lb.firstChild.nodeType===3)lb.firstChild.textContent=lb.firstChild.textContent.replace(/^(Inner|Outer) /,'').replace(/^./,function(c){return c.toUpperCase()});});
+    var tabs=document.createElement('div');tabs.className='btn-row chip-tap sk2-layers';tabs.setAttribute('role','tablist');
+    tabs.innerHTML='<button type="button" class="btn bgh on" data-l="b1">Inner</button><button type="button" class="btn bgh" data-l="b2">Outer</button>';
+    ff.insertBefore(tabs,ff.firstChild);ff.setAttribute('data-sk2-layer','b1');
+    tabs.onclick=function(e){var b=e.target.closest('button[data-l]');if(!b)return;ff.setAttribute('data-sk2-layer',b.dataset.l);
+      tabs.querySelectorAll('button').forEach(function(x){x.classList.toggle('on',x===b)});};
+    var more=document.createElement('details');more.className='sk2-more';more.innerHTML='<summary>More</summary>';
+    rows.filter(function(r){return !r.hasAttribute('data-layer')}).forEach(function(r){more.appendChild(r)});
+    ff.appendChild(more);})();
   // "?" opens the keyboard shortcuts sheet
   document.addEventListener('keydown',function(e){if(e.key!=='?'||e.metaKey||e.ctrlKey)return;var t=e.target;
     if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))return;
@@ -5973,7 +5991,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928G';
+const BUILD='1.0928H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
