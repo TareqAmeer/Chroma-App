@@ -5741,7 +5741,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0927Q';
+const BUILD='1.0927R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17665,6 +17665,8 @@ async function fxRenderAutoTags(path,keywords){
   let info;
   try{info=await inv('catalog_photo_tag_info',{path});}catch(e){info=null;}
   if(_fxKeywordsPathToken!==path||!document.body.contains(el))return;
+  // Detected tags were just saved as real keywords — redraw the keyword chips from the sidecar.
+  if(info&&info.keywords_added){_fxKeywordsPathToken='';fxRenderKeywordsPanel();return;}
   const have=new Set((keywords||[]).map(k=>k.split('|').pop().toLowerCase()));
   const tags=((info&&info.tags)||[]).filter(t=>!have.has(t.term.toLowerCase()));
   const place=info&&info.place;

@@ -6926,7 +6926,12 @@
         clipState = 'loading';
         state.clipTags.set(entry.id, null); // placeholder so we don't refetch while the real request is in flight
         invoke('catalog_photo_tag_info', { path })
-          .then((info) => (info && info.analyzed ? info.tags : []))
+          .then(async (info) => {
+            // Detected tags were just written as real keywords — reload this photo's sidecar
+            // so the Keywords chips (and the sidebar's keyword counts) show them.
+            if (info && info.keywords_added) { state.sidecars.delete(path); await getSidecar(path).catch(() => {}); refreshCatalogCounts(); }
+            return info && info.analyzed ? info.tags : [];
+          })
           .then((hits) => { state.clipTags.set(entry.id, hits || []); if (state.showInfo) renderInfoPanel(); })
           .catch(() => { state.clipTags.set(entry.id, []); });
       } else {
@@ -8888,7 +8893,9 @@
       await invoke('catalog_clip_embed', { photoIds });
       // Tag photos that were already indexed before auto-tagging existed (clip_embed skips them).
       await invoke('catalog_auto_tag').catch(() => {});
-      refreshAutoTags(); state.clipTags.clear();
+      refreshAutoTags(); state.clipTags.clear(); refreshCatalogCounts();
+      if (photoIds) { const scanned = new Set(photoIds); for (const e of state.entries || []) if (scanned.has(e.id)) state.sidecars.delete(e.path); }
+      if (photoIds) await getSidecarsBatch((state.entries || []).filter((e) => photoIds.includes(e.id)).map((e) => e.path)).catch(() => {});
       if (state.showInfo) renderInfoPanel();
       if (typeof window.fxRefreshAutoTags === 'function') window.fxRefreshAutoTags();
       await refreshPeople();

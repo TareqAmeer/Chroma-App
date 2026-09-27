@@ -851,7 +851,14 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
                 score    REAL NOT NULL,
                 PRIMARY KEY (photo_id, term)
             );
-            CREATE INDEX IF NOT EXISTS ix_auto_tags_term ON photo_auto_tags(term, photo_id);",
+            CREATE INDEX IF NOT EXISTS ix_auto_tags_term ON photo_auto_tags(term, photo_id);
+            -- Which detected tags were already written as real keywords, so a keyword the user
+            -- deletes is never silently re-added on the next pass.
+            CREATE TABLE IF NOT EXISTS auto_keyword_applied (
+                photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+                term     TEXT NOT NULL,
+                PRIMARY KEY (photo_id, term)
+            );",
         )?;
         if !has_col("auto_tagged_at")? {
             conn.execute("ALTER TABLE photos ADD COLUMN auto_tagged_at INTEGER", [])?;
@@ -5702,6 +5709,69 @@ fn store_auto_tags(conn: &Connection, id: i64, mtime: i64, emb: &[f32]) -> Resul
             .map_err(|e| e.to_string())?;
     }
     conn.execute("UPDATE photos SET auto_tagged_at = ?1 WHERE id = ?2", params![mtime, id]).map_err(|e| e.to_string())?;
+    apply_auto_keywords(conn, id)?;
+    Ok(())
+}
+
+/// Writes a photo's detected tags into its real keywords (the .xmp sidecar + the catalog's
+/// keyword index), so "dog" photos land under the Keywords sidebar on their own. Each term is
+/// applied once per photo (auto_keyword_applied): removing it afterwards sticks. A tag reuses an
+/// existing keyword whose name matches it or its plural ("dog" -> an existing "Animals|Dogs").
+/// Offline photos are skipped and retried on a later pass (their terms stay unapplied).
+fn apply_auto_keywords(conn: &Connection, id: i64) -> Result<(), String> {
+    let terms: Vec<String> = {
+        let mut stmt = conn
+            .prepare("SELECT term FROM photo_auto_tags WHERE photo_id = ?1 AND term NOT IN (SELECT term FROM auto_keyword_applied WHERE photo_id = ?1)")
+            .map_err(|e| e.to_string())?;
+        let r = stmt.query_map(params![id], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+        r
+    };
+    if terms.is_empty() { return Ok(()); }
+    let row: Option<(String, String, i64)> = conn
+        .query_row(
+            "SELECT p.rel_path, v.last_path, v.is_local FROM photos p JOIN volumes v ON v.id = p.volume_id WHERE p.id = ?1 AND p.present = 1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    let Some((rel, last_path, is_local)) = row else { return Ok(()) };
+    if is_local == 0 && !Path::new(&last_path).is_dir() { return Ok(()); }
+    let abs = abs_path(&last_path, is_local != 0, &rel);
+    if !Path::new(&abs).is_file() { return Ok(()); }
+
+    let mut sc = crate::library::get_sidecar(abs.clone());
+    let have: std::collections::HashSet<String> = sc.keywords.iter().map(|k| k.rsplit('|').next().unwrap_or(k).to_lowercase()).collect();
+    let mut added = Vec::new();
+    for term in &terms {
+        let plural = format!("{term}s");
+        let existing: Option<String> = conn
+            .query_row(
+                "SELECT path FROM keywords WHERE lower(leaf) = ?1 OR lower(leaf) = ?2 ORDER BY length(path) LIMIT 1",
+                params![term.to_lowercase(), plural.to_lowercase()],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        let kw = existing.unwrap_or_else(|| term.clone());
+        let leaf = kw.rsplit('|').next().unwrap_or(&kw).to_lowercase();
+        if !have.contains(&leaf) && !have.contains(&term.to_lowercase()) && !sc.keywords.contains(&kw) {
+            sc.keywords.push(kw.clone());
+            added.push(kw);
+        }
+    }
+    if !added.is_empty() {
+        crate::library::set_keywords(abs, sc.keywords.clone())?;
+        for kw in &added {
+            let kw_id = upsert_keyword_path(conn, kw)?;
+            conn.execute("INSERT OR IGNORE INTO photo_keywords (photo_id, keyword_id) VALUES (?1, ?2)", params![id, kw_id])
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    for term in &terms {
+        conn.execute("INSERT OR IGNORE INTO auto_keyword_applied (photo_id, term) VALUES (?1, ?2)", params![id, term])
+            .map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
@@ -5709,13 +5779,18 @@ fn store_auto_tags(conn: &Connection, id: i64, mtime: i64, emb: &[f32]) -> Resul
 /// indexed before auto-tagging existed). Pure math on stored vectors — no image decode.
 pub fn auto_tag_run(conn: &Connection, cancel: &AtomicBool) -> Result<usize, String> {
     let mut done = 0;
+    // An offline photo keeps unapplied terms and would be re-selected forever — stop once a
+    // batch holds nothing this run hasn't already handled.
+    let mut seen = std::collections::HashSet::new();
     loop {
         if cancel.load(Ordering::Relaxed) { break; }
         let rows: Vec<(i64, i64, Vec<u8>)> = {
             let mut stmt = conn
                 .prepare(
                     "SELECT id, clip_scanned_at, clip_embedding FROM photos
-                     WHERE clip_embedding IS NOT NULL AND (auto_tagged_at IS NULL OR auto_tagged_at != clip_scanned_at)
+                     WHERE clip_embedding IS NOT NULL AND present = 1 AND (auto_tagged_at IS NULL OR auto_tagged_at != clip_scanned_at
+                       OR EXISTS (SELECT 1 FROM photo_auto_tags t WHERE t.photo_id = photos.id
+                                  AND t.term NOT IN (SELECT term FROM auto_keyword_applied a WHERE a.photo_id = photos.id)))
                      LIMIT 500",
                 )
                 .map_err(|e| e.to_string())?;
@@ -5726,6 +5801,7 @@ pub fn auto_tag_run(conn: &Connection, cancel: &AtomicBool) -> Result<usize, Str
                 .map_err(|e| e.to_string())?;
             r
         };
+        let rows: Vec<_> = rows.into_iter().filter(|(id, _, _)| seen.insert(*id)).collect();
         if rows.is_empty() { break; }
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
         for (id, at, blob) in &rows {
@@ -5777,6 +5853,8 @@ pub struct PhotoTagInfo {
     pub analyzed: bool,
     pub tags: Vec<ClipTagHit>,
     pub place: Option<String>,
+    /// True when opening the panel just wrote detected tags into the photo's keywords.
+    pub keywords_added: bool,
 }
 
 /// Everything the Editor's Info panel needs for auto tags, keyed by file path (the Editor only
@@ -5791,18 +5869,22 @@ pub fn catalog_photo_tag_info(state: tauri::State<CatalogState>, path: String) -
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
         })
         .map_err(|e| e.to_string())?;
+    let before: i64 = conn.query_row("SELECT COUNT(*) FROM photo_keywords WHERE photo_id = ?1", params![id], |r| r.get(0)).unwrap_or(0);
     if let Some(blob) = &emb {
         if tagged.is_none() || tagged != scanned {
             store_auto_tags(&conn, id, scanned.unwrap_or(0), &blob_to_f32_vec(blob))?;
+        } else {
+            apply_auto_keywords(&conn, id)?;
         }
     }
+    let after: i64 = conn.query_row("SELECT COUNT(*) FROM photo_keywords WHERE photo_id = ?1", params![id], |r| r.get(0)).unwrap_or(0);
     let mut stmt = conn.prepare("SELECT term, score FROM photo_auto_tags WHERE photo_id = ?1 ORDER BY score DESC").map_err(|e| e.to_string())?;
     let tags = stmt
         .query_map(params![id], |r| Ok(ClipTagHit { term: r.get(0)?, score: r.get(1)? }))
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
-    Ok(PhotoTagInfo { photo_id: Some(id), analyzed: emb.is_some(), tags, place })
+    Ok(PhotoTagInfo { photo_id: Some(id), analyzed: emb.is_some(), tags, place, keywords_added: after > before })
 }
 
 /// One photo's stored auto tags, best first.
