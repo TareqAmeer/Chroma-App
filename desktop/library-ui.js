@@ -6125,6 +6125,7 @@
     closeContextMenu();
     const n = paths.length;
     ctxMenu = document.createElement('div');
+    ctxMenu.className = 'cs-ctx'; // Swiss v2 menu look lives in chromasmith-22.html (body.sk2 .cs-ctx)
     ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);' +
       'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:180px;box-shadow:var(--lift-2)';
     // mkItem is the base row builder, targeting whatever container is passed (the top-level
@@ -6132,6 +6133,7 @@
     // shortcut hint, same flex layout the wireframe review settled on.
     const mkItem = (container, label, fn, shortcut) => {
       const el = document.createElement('div');
+      el.className = 'cs-ctx-it';
       el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:14px';
       el.innerHTML = `<span>${label}</span>` + (shortcut ? `<span style="font-family:var(--mono);font-size:10px;color:var(--mut);white-space:nowrap">${shortcut}</span>` : '');
       el.onmouseenter = () => { el.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
@@ -6141,16 +6143,18 @@
       return el;
     };
     const item = (label, fn, shortcut) => mkItem(ctxMenu, label, fn, shortcut);
-    const sep = (container = ctxMenu) => { const s = document.createElement('div'); s.style.cssText = 'height:1px;background:var(--bdr);margin:4px 0'; container.appendChild(s); };
+    const sep = (container = ctxMenu) => { const s = document.createElement('div'); s.className = 'cs-ctx-sep'; s.style.cssText = 'height:1px;background:var(--bdr);margin:4px 0'; container.appendChild(s); };
     // Nested submenu (grouping pass, wireframe item 27): related actions collapse behind one
     // hover-revealed row instead of ~20 flat entries. Opens to the right on hover, with a small
     // close delay so crossing the gap between the row and its popout doesn't dismiss it, and
     // flips to the left if it would run off the right edge of the screen.
     const submenu = (label) => {
       const row = document.createElement('div');
+      row.className = 'cs-ctx-it cs-ctx-sub';
       row.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:default;display:flex;justify-content:space-between;align-items:center;gap:14px;position:relative';
       row.innerHTML = `<span>${label}</span><span style="color:var(--mut);font-size:10px">▸</span>`;
       const pop = document.createElement('div');
+      pop.className = 'cs-ctx cs-ctx-pop';
       pop.style.cssText = 'position:absolute;left:100%;top:-5px;margin-left:4px;display:none;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:8px;padding:4px;min-width:190px;box-shadow:var(--lift-2);z-index:1';
       row.appendChild(pop);
       let closeT;
@@ -8360,6 +8364,7 @@
       // already runs in reverse — otherwise choosing a theme from the LIBRARY's own menu would
       // leave the freshly-fixed sync one-way instead of two-way.
       document.body.classList.toggle('light', opt.dataset.theme === 'light');
+      if (window.sk2SaveViewTheme) window.sk2SaveViewTheme(opt.dataset.theme);
       if (typeof syncThemeBtns === 'function') syncThemeBtns();
       syncLibThemeFromShared();
     };

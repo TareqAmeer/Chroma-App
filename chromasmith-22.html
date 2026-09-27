@@ -2213,6 +2213,22 @@ body.sk2 .sk2x-btn{width:100%;height:64px;border:0;background:var(--k-color-acce
 body.sk2 .sk2x-btn:hover{filter:brightness(1.08)}
 body.sk2 .sk2x-btn:focus-visible{outline:2px solid var(--k-color-ink);outline-offset:-4px}
 body.sk2.fx-exporting .sk2x-btn{opacity:.6;pointer-events:none}
+/* Menus + submenus (settings, overflow, library menus, right-click menus): flat surface, hairline,
+   sentence-case rows, muted→ink on hover with the small square marker instead of the orange wipe. */
+body.sk2{--k-menu-bg:var(--k-color-bg);--k-menu-fg:var(--k-color-ink);--k-menu-line:var(--bdr)}
+body.sk2 #lib-overlay .lib-menu,body.sk2 #fx-settings-menu,body.sk2 .fx-bgmenu,body.sk2 .cs-ctx{background:var(--k-color-bg)!important;border:1px solid var(--bdr)!important;border-radius:0!important;box-shadow:0 12px 32px rgba(0,0,0,.28)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;padding:6px 0!important;font-size:13px!important}
+body.sk2 #lib-overlay .lib-menu .opt::before,body.sk2 #lib-overlay .lib-menu button.opt-action::before,body.sk2 .fx-settings-cat::before,body.sk2 .fx-ovf-item::before{inset:50% auto auto 8px!important;width:6px!important;height:6px!important;margin-top:-3px;transform:scale(0)!important;transition:transform .12s ease!important}
+body.sk2 #lib-overlay .lib-menu .opt:hover::before,body.sk2 #lib-overlay .lib-menu button.opt-action:hover::before,body.sk2 .fx-settings-cat:hover::before,body.sk2 .fx-ovf-item:hover::before,body.sk2 .fx-settings-cat.active::before{transform:scale(1)!important}
+body.sk2 #lib-overlay .lib-menu .opt,body.sk2 #lib-overlay .lib-menu button.opt-action,body.sk2 .fx-settings-cat,body.sk2 .fx-ovf-item{color:var(--k-color-muted)!important;padding-left:22px!important}
+body.sk2 #lib-overlay .lib-menu .opt:hover,body.sk2 #lib-overlay .lib-menu button.opt-action:hover,body.sk2 .fx-settings-cat:hover,body.sk2 .fx-ovf-item:hover,body.sk2 .fx-settings-cat.active,body.sk2 #lib-overlay .lib-menu .opt.sel{color:var(--k-color-ink)!important;background:none!important}
+body.sk2 #lib-overlay .lib-menu .grp-label,body.sk2 .fx-ovf-grp-label{font-size:10px;font-weight:400;letter-spacing:.14em;color:var(--k-color-muted)}
+body.sk2 .cs-ctx-it{border-radius:0!important;color:var(--k-color-muted);padding:6px 14px 6px 22px!important;position:relative;background:none!important}
+body.sk2 .cs-ctx-it:hover{color:var(--k-color-ink)}
+body.sk2 .cs-ctx-it:hover::before{content:'';position:absolute;left:8px;top:50%;width:6px;height:6px;margin-top:-3px;background:var(--k-color-accent-a)}
+body.sk2 .cs-ctx-it:hover>.cs-ctx-pop .cs-ctx-it::before{content:none}
+body.sk2 .cs-ctx-it:hover>.cs-ctx-pop .cs-ctx-it:hover::before{content:''}
+body.sk2 .cs-ctx-sep{background:var(--bdr)!important;margin:6px 0!important}
+body.sk2 .cs-ctx-pop{margin-left:0!important;top:-7px!important}
 /* Looks: the chosen look is marked by the square, not a kicked-out frame. */
 body.sk2 .look-cell:hover{transform:none;box-shadow:none}
 body.sk2 .look-cell.sel{border-color:transparent;box-shadow:none;position:relative}
@@ -2254,7 +2270,17 @@ L.onclick=function(){go(true)};S.onclick=function(){go(false)};})();</script>
 var br=document.getElementById('cs-brand'),w=document.getElementById('cs-win');
 document.addEventListener('pointermove',function(e){if(!br||!w||w.hidden)return;var r=w.getBoundingClientRect(),on=e.clientY<r.bottom+14&&e.clientX<r.right+18;
   if(on!==br.classList.contains('sk2-corner'))br.classList.toggle('sk2-corner',on)},{passive:true});
-document.documentElement.addEventListener('pointerleave',function(){br&&br.classList.remove('sk2-corner')});})();</script>
+document.documentElement.addEventListener('pointerleave',function(){br&&br.classList.remove('sk2-corner')});
+// Per-view theme: the gallery defaults to light, the editor to dark; each remembers its own choice
+// (View menu → Appearance applies to the view you're in). csTheme still mirrors the live theme.
+var K={g:'csThemeGallery',e:'csThemeEditor'},wasLib=null;
+function isLib(){return b.classList.contains('lib-full')}
+window.sk2SaveViewTheme=function(m){try{localStorage.setItem(isLib()?K.g:K.e,m)}catch(e){}};
+function apply(){var lib=isLib();if(lib===wasLib)return;wasLib=lib;var t=null;try{t=localStorage.getItem(lib?K.g:K.e)}catch(e){}
+  var light=(t||(lib?'light':'dark'))==='light';if(b.classList.contains('light')===light)return;
+  b.classList.toggle('light',light);try{localStorage.setItem('csTheme',light?'light':'dark')}catch(e){}
+  if(typeof syncThemeBtns==='function')syncThemeBtns();if(typeof window.chromasmithSyncLibTheme==='function')window.chromasmithSyncLibTheme();}
+new MutationObserver(apply).observe(b,{attributes:true,attributeFilter:['class']});apply();})();</script>
 <script>/* Swiss v2 — stage header for the tool panel: a big stage title, then a sticky sub-tab row that
    jumps between the stage's stacked cards and follows the scroll. Called by fxSection (deskx). */
 const SK2_SUB={image:'Image',looks:'Looks',adjust:'Basic',curves:'Curves',hal:'Halation',bloom:'Bloom',hsl:'Mixer',wheels:'Wheels',
@@ -5872,7 +5898,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928D';
+const BUILD='1.0928E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22464,7 +22490,7 @@ function viewMenuBuild(){
   h+='<div class="fx-ovf-sep"></div>';
   h+=`<button class="fx-ovf-item${fxGamutWarn?' on':''}" onclick="viewMenuClose();toggleGamutWarn()"><span>Show gamut warning</span>${chk}</button>`;
   h+='<div class="fx-ovf-sep"></div>';
-  h+='<div class="fx-ovf-grp-label">Appearance</div>';
+  h+='<div class="fx-ovf-grp-label">Appearance — '+(document.body.classList.contains('lib-full')?'gallery':'editor')+'</div>';
   h+=`<button class="fx-ovf-item${!curLight?' on':''}" onclick="fxSetTheme('dark')"><span>Dark</span>${chk}</button>`;
   h+=`<button class="fx-ovf-item${curLight?' on':''}" onclick="fxSetTheme('light')"><span>Light</span>${chk}</button>`;
   // User accent colours: primary = accent A, secondary = accent B. Inline on body so they beat
@@ -23203,6 +23229,7 @@ function syncSectionEnabled(){
 function toggleTheme(){
   const light=document.body.classList.toggle('light');
   try{localStorage.setItem('csTheme',light?'light':'dark');}catch(e){}
+  if(window.sk2SaveViewTheme)sk2SaveViewTheme(light?'light':'dark');
   syncThemeBtns();
   // The docked Library filmstrip (#lib-overlay) keeps its OWN theme class (.lib-light) rather
   // than reading body.light directly — see the fix comment on library-ui.js's
@@ -23230,6 +23257,7 @@ function fxSetTheme(mode){
   const light=mode==='light';
   document.body.classList.toggle('light',light);
   try{localStorage.setItem('csTheme',light?'light':'dark');}catch(e){}
+  if(window.sk2SaveViewTheme)sk2SaveViewTheme(mode);
   syncThemeBtns();
   if(typeof window.chromasmithSyncLibTheme==='function')window.chromasmithSyncLibTheme(); // see toggleTheme()'s comment — E6
   // Appearance moved from #fx-overflow-menu into #fx-view-menu (viewMenuBuild) when Tools/View/⋯
