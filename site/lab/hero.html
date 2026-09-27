@@ -71,6 +71,54 @@ body{overflow-x:clip}
 #E .bar{position:absolute;left:5vw;right:5vw;bottom:10vh;height:1px;background:#2a2925}
 #E .bar i{display:block;height:100%;background:var(--acc);transform-origin:left;transform:scaleX(0)}
 
+
+/* F — full-bleed develop */
+#F .pin{height:100vh;position:relative;overflow:hidden}
+#F img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#F .film{clip-path:inset(0 100% 0 0)}
+#F .glow{filter:blur(24px) saturate(2) brightness(1.5);mix-blend-mode:screen;opacity:0;clip-path:none}
+#F .grain{opacity:0}
+#F .shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.65),transparent 55%)}
+#F h1{position:absolute;left:5vw;top:14vh;font-size:clamp(48px,9vw,150px);font-weight:900;letter-spacing:-.045em;line-height:.86}
+#F .ctr{position:absolute;left:5vw;bottom:10vh;display:flex;align-items:baseline;gap:18px}
+#F .num{font-size:clamp(64px,10vw,160px);font-weight:900;letter-spacing:-.05em;line-height:.8;font-variant-numeric:tabular-nums}
+#F .edge{position:absolute;top:0;bottom:0;width:1px;background:var(--fg);left:0;opacity:0}
+/* G — photo grows from card to full-bleed while developing */
+#G .pin{height:100vh;position:relative;overflow:hidden;display:grid;place-items:center}
+#G .ph{position:relative;width:30vw;aspect-ratio:844/1125;overflow:hidden;will-change:width,height}
+#G .ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#G .film{opacity:0}#G .grain{opacity:0}
+#G .glow{filter:blur(20px) saturate(2) brightness(1.5);mix-blend-mode:screen;opacity:0}
+#G h1{position:absolute;inset:auto 0 8vh;text-align:center;font-size:clamp(40px,7vw,120px);font-weight:900;letter-spacing:-.045em;line-height:.9;z-index:2;mix-blend-mode:difference}
+#G .lb{position:absolute;top:50%;font-size:13px;z-index:2}#G .lb.l{left:5vw}#G .lb.r{right:5vw;text-align:right}
+@media(max-width:760px){#G .ph{width:60vw}}
+/* H / I — horizontal chapters */
+.hz .pin{height:100vh;overflow:hidden;position:relative}
+.hz .track{display:flex;height:100%;will-change:transform}
+.hz .panel{flex:none;height:100%;position:relative;display:grid;align-content:center;padding:0 5vw;border-right:1px solid #1f1e1b}
+.hz .prog{position:absolute;left:5vw;right:5vw;bottom:7vh;display:flex;gap:6px;z-index:3}
+.hz .prog b{flex:1;height:2px;background:#2a2925;position:relative;overflow:hidden}
+.hz .prog b i{position:absolute;inset:0;background:var(--fg);transform-origin:left;transform:scaleX(0)}
+.hz .k{font-size:clamp(40px,6vw,96px);font-weight:900;letter-spacing:-.045em;line-height:.9}
+.hz p.t{max-width:380px;font-size:18px;line-height:1.35;color:#c9c5bb;margin-top:20px}
+#H .p1{width:60vw}#H .p2{width:90vw;grid-template-columns:1fr 1.4fr;gap:4vw;align-items:center}
+#H .p3{width:70vw}#H .p4{width:100vw;padding:0}
+#H .p2 .img,#H .p3 .img{overflow:hidden;border-radius:3px}
+#H .img img{display:block;width:120%;margin-left:-10%;height:auto}
+#H .p3 .img{margin-top:32px;width:44vw}
+#H .p4 img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#H .p4 .k{position:absolute;left:5vw;bottom:14vh}
+#H .big{font-size:22vw;font-weight:900;letter-spacing:-.06em;line-height:.8;color:transparent;-webkit-text-stroke:1px #4a4740}
+#I .panel{width:100vw;grid-template-columns:1fr 1.3fr;gap:4vw;align-items:center}
+#I .shot{border-radius:4px;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,.5)}
+#I .shot img{display:block;width:100%}
+#I .lensbox{position:relative;height:78vh;border-radius:4px;overflow:hidden}
+#I .lensbox canvas{position:absolute;inset:0;width:100%;height:100%}
+#I .looks{margin-top:24px;display:flex;gap:6px;flex-wrap:wrap}
+#I .looks button{background:none;border:1px solid #3a3833;color:var(--fg);font:600 12px "Inter Tight";padding:8px 12px;border-radius:999px;cursor:pointer}
+#I .looks button.on{background:var(--fg);color:var(--bg)}
+@media(max-width:760px){#I .panel,#H .p2{grid-template-columns:1fr;align-content:center}#H .panel{width:100vw!important}#I .lensbox{height:50vh}}
+
 @media (prefers-reduced-motion:reduce){.grain{animation:none}}
 </style>
 </head>
@@ -82,6 +130,11 @@ body{overflow-x:clip}
   <a href="?v=C">C <span>Shader</span></a>
   <a href="?v=D">D <span>Type</span></a>
   <a href="?v=E">E <span>Strip</span></a>
+  <i style="width:1px;background:#3a3833;margin:6px 2px"></i>
+  <a href="?v=F">F <span>Full develop</span></a>
+  <a href="?v=G">G <span>Grow develop</span></a>
+  <a href="?v=H">H <span>Chapters</span></a>
+  <a href="?v=I">I <span>Tools + lens</span></a>
 </nav>
 
 <!-- A: scroll develops one photo: original → graded → grain → halation -->
@@ -153,6 +206,63 @@ body{overflow-x:clip}
   <div class="spacer mono">Next section</div>
 </section>
 
+
+<!-- F: A, but full-bleed — a develop line sweeps the whole screen -->
+<section class="v" id="F">
+  <div class="pin">
+    <img src="../assets/story/original.webp" alt="">
+    <img class="film" src="../assets/story/film.webp" alt="">
+    <img class="film glow" src="../assets/story/film.webp" alt="">
+    <div class="grain"></div><div class="shade"></div><div class="edge"></div>
+    <h1>Every frame,<br>developed.</h1>
+    <div class="ctr"><span class="num">01</span><span class="mono step">Raw</span></div>
+  </div>
+  <div class="spacer mono">Next section</div>
+</section>
+
+<!-- G: A, but the print grows from a small card to the full screen as it develops -->
+<section class="v" id="G">
+  <div class="pin">
+    <span class="mono lb l">Raw file<br>f/2 · 1/250</span><span class="mono lb r">Chromasmith<br>Portra · grain · halation</span>
+    <div class="ph">
+      <img src="../assets/story/original.webp" alt="">
+      <img class="film" src="../assets/story/film.webp" alt="">
+      <img class="film glow" src="../assets/story/film.webp" alt="">
+      <div class="grain"></div>
+    </div>
+    <h1>Develop it.</h1>
+  </div>
+  <div class="spacer mono">Next section</div>
+</section>
+
+<!-- H: vertical scroll drives editorial chapters sideways (E's motion, no film strip) -->
+<section class="v hz" id="H">
+  <div class="pin">
+    <div class="track">
+      <div class="panel p1"><p class="mono">01 / Library</p><div class="k">Find the<br>frame.</div><p class="t">Thousands of photos, indexed on your machine. Nothing uploaded.</p></div>
+      <div class="panel p2"><div><p class="mono">02 / Studio</p><div class="k">A studio for<br>every frame.</div></div><div class="img"><img src="../assets/ui/color.webp" alt=""></div></div>
+      <div class="panel p3"><div class="big">113</div><div class="k" style="margin-top:-4vw">film looks.</div><div class="img"><img src="../assets/ui/looks.webp" alt=""></div></div>
+      <div class="panel p4"><img src="../assets/story/film.webp" alt=""><div class="k">Let the<br>light bleed.</div></div>
+    </div>
+    <div class="prog"><b><i></i></b><b><i></i></b><b><i></i></b><b><i></i></b></div>
+  </div>
+  <div class="spacer mono">Next section</div>
+</section>
+
+<!-- I: same horizontal motion, one tool per screen; C's lens reused as the Looks demo -->
+<section class="v hz" id="I">
+  <div class="pin">
+    <div class="track">
+      <div class="panel"><div><p class="mono">01 / Library</p><div class="k">Find the frame.</div><p class="t">Your whole archive, fast and local.</p></div><div class="shot"><img src="../assets/ui/library.webp" alt=""></div></div>
+      <div class="panel"><div><p class="mono">02 / Colour</p><div class="k">Shape every tone.</div><p class="t">Curves, colour mixer and masks built for photographers.</p></div><div class="shot"><img src="../assets/ui/color.webp" alt=""></div></div>
+      <div class="panel" id="Ilens"><div><p class="mono">03 / Looks — try it</p><div class="k">Look through<br>the film.</div><p class="t">Move over the photo. That is the real render.</p><div class="looks"><button class="on" data-l="0">Chromasmith</button><button data-l="1">Warm print</button><button data-l="2">Cross-process</button></div></div><div class="lensbox"><canvas></canvas></div></div>
+      <div class="panel"><div><p class="mono">04 / Anywhere</p><div class="k">Desktop, browser,<br>phone.</div><p class="t">Same engine everywhere, fully offline.</p></div><div class="shot" style="width:22vw;justify-self:center"><img src="../assets/ui/mobile.webp" alt=""></div></div>
+    </div>
+    <div class="prog"><b><i></i></b><b><i></i></b><b><i></i></b><b><i></i></b></div>
+  </div>
+  <div class="spacer mono">Next section</div>
+</section>
+
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lenis@1.3.4/dist/lenis.min.js"></script>
@@ -183,8 +293,42 @@ B(){
   gsap.ticker.add(()=>{x+=(tx-x)*.12;y+=(ty-y)*.12;top.style.clipPath=`inset(0 0 0 ${x*100}%)`;ln.style.left=tag.style.left=x*100+'%';tag.style.top=y*100+'%'});
   gsap.from('#B h1',{yPercent:60,opacity:0,duration:1.2,ease:'expo.out',delay:.2});
 },
-C(){
-  const cv=document.querySelector('#C canvas'),gl=cv.getContext('webgl');
+C(){V.lens('#C')},
+F(){
+  const n=document.querySelector('#F .num'),st=document.querySelector('#F .step'),L=['Raw','Film look','Grain','Halation'];
+  gsap.timeline({scrollTrigger:{trigger:'#F .pin',pin:true,start:'top top',end:'+=320%',scrub:1,
+    onUpdate:s=>{const i=Math.min(3,Math.floor(s.progress*4));n.textContent='0'+(i+1);st.textContent=L[i]}}})
+    .to('#F .edge',{opacity:1,duration:.05})
+    .to('#F .film:not(.glow)',{clipPath:'inset(0 0% 0 0)',ease:'none',duration:1},'<')
+    .to('#F .edge',{left:'100%',ease:'none',duration:1},'<')
+    .to('#F .edge',{opacity:0,duration:.05})
+    .to('#F .grain',{opacity:.55,duration:.6})
+    .to('#F .glow',{opacity:.5,duration:.8})
+    .fromTo('#F img',{scale:1},{scale:1.06,duration:1},0);
+},
+G(){
+  gsap.timeline({scrollTrigger:{trigger:'#G .pin',pin:true,start:'top top',end:'+=320%',scrub:1}})
+    .to('#G .film:not(.glow)',{opacity:1,duration:.6})
+    .to('#G .grain',{opacity:.5,duration:.4})
+    .to('#G .glow',{opacity:.5,duration:.4})
+    .to('#G .lb',{opacity:0,duration:.2})
+    .to('#G .ph',{width:'100vw',height:'100vh',aspectRatio:'auto',ease:'power2.inOut',duration:1});
+},
+hz(R){
+  const tr=document.querySelector(R+' .track'),bars=document.querySelectorAll(R+' .prog i'),ps=document.querySelectorAll(R+' .panel');
+  const dist=()=>tr.scrollWidth-innerWidth;
+  const tw=gsap.to(tr,{x:()=>-dist(),ease:'none',scrollTrigger:{trigger:R+' .pin',pin:true,start:'top top',end:()=>'+='+dist(),scrub:1,invalidateOnRefresh:true,
+    onUpdate:s=>{const f=s.progress*ps.length;bars.forEach((b,i)=>b.style.transform=`scaleX(${Math.max(0,Math.min(1,f-i))})`)}}});
+  // content inside each panel drifts slightly slower than the track = depth
+  ps.forEach(p=>gsap.fromTo(p.querySelectorAll('.k,.t,.mono,.img img,.shot'),{x:120},{x:-60,ease:'none',
+    scrollTrigger:{trigger:p,containerAnimation:tw,start:'left right',end:'right left',scrub:true}}));
+  return tw;
+},
+H(){V.hz('#H')},
+I(){V.hz('#I');V.lens('#Ilens')},
+
+lens(R){
+  const cv=document.querySelector(R+' canvas'),gl=cv.getContext('webgl');
   const vs='attribute vec2 p;varying vec2 u;void main(){u=p*.5+.5;gl_Position=vec4(p,0,1);}';
   const fs=`precision highp float;varying vec2 u;uniform sampler2D o,f;uniform vec2 m,res,img;uniform float t,look,r;
   float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233))+t)*43758.5453);}
@@ -209,7 +353,7 @@ C(){
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,i);res(i)};i.src=src});
   let look=0,m=[.6,.5],tm=[.6,.5],rad=0;
-  document.querySelectorAll('#C .looks button').forEach(b=>b.onclick=()=>{look=+b.dataset.l;document.querySelectorAll('#C .looks button').forEach(x=>x.classList.toggle('on',x===b))});
+  document.querySelectorAll(R+' .looks button').forEach(b=>b.onclick=()=>{look=+b.dataset.l;document.querySelectorAll(R+' .looks button').forEach(x=>x.classList.toggle('on',x===b))});
   cv.parentElement.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();tm=[(e.clientX-r.left)/r.width,1-(e.clientY-r.top)/r.height]});
   Promise.all([tex('../assets/story/original.webp',0),tex('../assets/story/film.webp',1)]).then(([im])=>{
     gl.uniform1i(U('o'),0);gl.uniform1i(U('f'),1);gl.uniform2f(U('img'),im.width,im.height);
@@ -235,7 +379,7 @@ E(){
     .to('#E .bar i',{scaleX:1,ease:'none'},0);
 }
 };
-(V[v]||V.A)();
+window.lens=V.lens;(V[v]||V.A)();
 </script>
 </body>
 </html>
