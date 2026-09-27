@@ -5678,7 +5678,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0927I';
+const BUILD='1.0927J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9579,7 +9579,7 @@ let _LibRaw=null;
 async function getLibRaw(){if(!_LibRaw)_LibRaw=(await import('./vendor/libraw/index.js')).default;return _LibRaw;}
 // A failed libraw worker can leave open()/imageData() pending forever without posting an error.
 // Terminating the worker is essential: Promise.race alone leaves its wasm memory alive.
-async function withRawDecodeTimeout(raw, decode, ms=45000){
+async function withRawDecodeTimeout(raw, decode, ms=180000){ // generous: a real 48MP DNG decode takes 30s+ on a loaded Intel Mac; this only exists to catch a dead worker
   if(window.__TAURI__)return decode(); // native decoding has its own lifecycle
   let timer;
   try{
@@ -10830,6 +10830,8 @@ async function loadRw2(file){
       await raw.open(bytes,srcPath?{...(profile?dcpSettings:sdrSettings),sourcePath:srcPath}:(profile?dcpSettings:sdrSettings));
       window.__pm&&window.__pm('loadRw2-opened');
       m=await raw.metadata();
+      // libraw-wasm names these camera_make/camera_model; everything below (and the desktop shim) reads make/model. Without this the web build found no bundled profile for ANY camera and decoded every RAW a second time.
+      if(m){if(m.make==null)m.make=m.camera_make;if(m.model==null)m.model=m.camera_model;}
       img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
       window.__pm&&window.__pm('loadRw2-imagedata');
     });
@@ -10915,8 +10917,11 @@ async function loadRw2(file){
       // shell's NativeLibRawShim already returns true-linear data — skip there.
       if(!window.__TAURI__){
         const GAIN=[1.219,1.215,1.193],PW=1/0.634;
-        const lin=new Uint16Array(rgb.length);
-        for(let i=0;i<rgb.length;i++)lin[i]=Math.min(Math.pow((rgb[i]/65535)/GAIN[i%3],PW)*65535,65535);
+        // Per-channel 65536-entry tables: identical output to the per-sample Math.pow (Uint16Array
+        // store truncates the same value), but ~72M pow calls on a 24MP frame become 196K.
+        const T=GAIN.map(g=>{const t=new Uint16Array(65536);for(let v=0;v<65536;v++)t[v]=Math.min(Math.pow((v/65535)/g,PW)*65535,65535);return t;});
+        const lin=new Uint16Array(rgb.length),T0=T[0],T1=T[1],T2=T[2];
+        for(let i=0;i<rgb.length;i+=3){lin[i]=T0[rgb[i]];lin[i+1]=T1[rgb[i+1]];lin[i+2]=T2[rgb[i+2]];}
         rgb=lin;
       }
       const camPrefix=cameraDcpPrefix(m.make,m.model);
