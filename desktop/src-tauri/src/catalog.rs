@@ -842,6 +842,20 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             conn.execute("ALTER TABLE photos ADD COLUMN place TEXT", [])?;
             conn.execute("UPDATE photos SET meta_mtime = NULL WHERE kind != 'video'", [])?;
         }
+        // Automatic content tags (dog, beach, park, food...) from the CLIP embedding — see
+        // auto_tag_run. Separate from user keywords: never written to the .xmp, regenerable.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS photo_auto_tags (
+                photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+                term     TEXT NOT NULL,
+                score    REAL NOT NULL,
+                PRIMARY KEY (photo_id, term)
+            );
+            CREATE INDEX IF NOT EXISTS ix_auto_tags_term ON photo_auto_tags(term, photo_id);",
+        )?;
+        if !has_col("auto_tagged_at")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN auto_tagged_at INTEGER", [])?;
+        }
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -5625,6 +5639,102 @@ pub struct ClipEmbedResult {
     pub embedded: usize,
 }
 
+/// Auto-tagging keeps a stricter bar than the Info panel's one-click suggestions: these are
+/// applied without the user looking, so a wrong "dog" costs more than a missing one.
+const AUTO_TAG_THRESHOLD: f32 = 0.235;
+const AUTO_TAG_TOP_K: usize = 6;
+
+fn store_auto_tags(conn: &Connection, id: i64, mtime: i64, emb: &[f32]) -> Result<(), String> {
+    let tags = crate::clip::suggest_tags(emb, AUTO_TAG_TOP_K, AUTO_TAG_THRESHOLD)?;
+    conn.execute("DELETE FROM photo_auto_tags WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
+    for (term, score) in tags {
+        conn.execute("INSERT OR REPLACE INTO photo_auto_tags (photo_id, term, score) VALUES (?1, ?2, ?3)", params![id, term, score])
+            .map_err(|e| e.to_string())?;
+    }
+    conn.execute("UPDATE photos SET auto_tagged_at = ?1 WHERE id = ?2", params![mtime, id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Backfill: tags every photo that already has a CLIP embedding but no tags for it yet (libraries
+/// indexed before auto-tagging existed). Pure math on stored vectors — no image decode.
+pub fn auto_tag_run(conn: &Connection, cancel: &AtomicBool) -> Result<usize, String> {
+    let mut done = 0;
+    loop {
+        if cancel.load(Ordering::Relaxed) { break; }
+        let rows: Vec<(i64, i64, Vec<u8>)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, clip_scanned_at, clip_embedding FROM photos
+                     WHERE clip_embedding IS NOT NULL AND (auto_tagged_at IS NULL OR auto_tagged_at != clip_scanned_at)
+                     LIMIT 500",
+                )
+                .map_err(|e| e.to_string())?;
+            let r = stmt
+                .query_map([], |r| Ok((r.get(0)?, r.get::<_, Option<i64>>(1)?.unwrap_or(0), r.get(2)?)))
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            r
+        };
+        if rows.is_empty() { break; }
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, at, blob) in &rows {
+            store_auto_tags(&tx, *id, *at, &blob_to_f32_vec(blob))?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        done += rows.len();
+    }
+    Ok(done)
+}
+
+#[tauri::command]
+pub async fn catalog_auto_tag(app: tauri::AppHandle) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        auto_tag_run(&conn, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_auto_tag task panicked: {e}"))?
+}
+
+#[derive(Serialize, Clone)]
+pub struct TagCount {
+    pub term: String,
+    pub count: i64,
+}
+
+/// Every auto tag in the library with its photo count — the search box's "Things" suggestions.
+#[tauri::command]
+pub fn catalog_auto_tag_counts(state: tauri::State<CatalogState>) -> Result<Vec<TagCount>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT t.term, COUNT(*) FROM photo_auto_tags t JOIN photos p ON p.id = t.photo_id WHERE p.present = 1 GROUP BY t.term ORDER BY COUNT(*) DESC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| Ok(TagCount { term: r.get(0)?, count: r.get(1)? }))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string());
+    rows
+}
+
+/// One photo's stored auto tags, best first.
+#[tauri::command]
+pub fn catalog_photo_auto_tags(state: tauri::State<CatalogState>, photo_id: i64) -> Result<Vec<ClipTagHit>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT term, score FROM photo_auto_tags WHERE photo_id = ?1 ORDER BY score DESC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![photo_id], |r| Ok(ClipTagHit { term: r.get(0)?, score: r.get(1)? }))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string());
+    rows
+}
+
 pub fn clip_embed_run(
     conn: &Connection,
     photo_ids: Option<&[i64]>,
@@ -5732,6 +5842,7 @@ pub fn clip_embed_run(
             let blob = f32_vec_to_blob(emb);
             tx.execute("UPDATE photos SET clip_embedding = ?1, clip_scanned_at = ?2 WHERE id = ?3", params![blob, mtime, id])
                 .map_err(|e| e.to_string())?;
+            store_auto_tags(&tx, *id, *mtime, emb)?;
         }
         tx.commit().map_err(|e| e.to_string())?;
         result.embedded += embedded.iter().filter(|(_, _, e)| e.is_some()).count();
@@ -6423,9 +6534,15 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 // any keyword path segment. One bound value reused three times.
                 let n = values.len() + 1;
                 where_parts.push(format!(
-                    "(p.name_lc LIKE ?{n} OR lower(p.place) LIKE ?{n} OR EXISTS (SELECT 1 FROM photo_keywords pk JOIN keywords k ON k.id = pk.keyword_id WHERE pk.photo_id = p.id AND lower(k.path) LIKE ?{n}))"
+                    "(p.name_lc LIKE ?{n} OR lower(p.place) LIKE ?{n} OR EXISTS (SELECT 1 FROM photo_keywords pk JOIN keywords k ON k.id = pk.keyword_id WHERE pk.photo_id = p.id AND lower(k.path) LIKE ?{n}) OR EXISTS (SELECT 1 FROM photo_auto_tags at WHERE at.photo_id = p.id AND (' ' || at.term || ' ') LIKE ?{m}))",
+                    m = n + 1
                 ));
                 values.push(Box::new(format!("%{}%", t.to_lowercase())));
+                // Auto tags match on whole words ("cat" must not pull in "cathedral"); a trailing
+                // plural is dropped so "dogs"/"trees" still find "dog"/"tree".
+                let w = t.trim().to_lowercase();
+                let w = if w.len() > 3 && w.ends_with('s') && !w.ends_with("ss") { w[..w.len() - 1].to_string() } else { w };
+                values.push(Box::new(format!("% {w} %")));
             }
         }
         if let Some(c) = &q.camera {

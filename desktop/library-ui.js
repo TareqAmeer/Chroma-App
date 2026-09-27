@@ -467,6 +467,9 @@
         return Promise.resolve();
       }
       case 'catalog_clip_embed': return Promise.resolve({ embedded: 0 });
+      case 'catalog_auto_tag': return Promise.resolve(0);
+      case 'catalog_auto_tag_counts': return Promise.resolve(/[?&]libcat=1/.test(location.search) ? [{ term: 'dog', count: 4 }, { term: 'beach', count: 2 }] : []);
+      case 'catalog_photo_auto_tags': return Promise.resolve([]);
       case 'catalog_places': return Promise.resolve(/[?&]libcat=1/.test(location.search) ? [{ place: 'London, Greater London, England, United Kingdom', count: 3 }] : []);
       case 'catalog_clip_tags': {
         // R10: fixed fake suggestions so the Info panel's "Suggested" section is exercisable
@@ -1387,6 +1390,10 @@
       background:transparent;border:1px dashed var(--bdr);font-size:10px;color:var(--mut);cursor:pointer}
     .lib-kw-suggest-chip:hover{color:var(--txt);border-color:var(--acc2)}
     .lib-kw-suggest-chip-add{opacity:.7;font-size:11px;line-height:1}
+    /* Auto tags ("In this photo"): solid tinted chips — detected, not yet saved as keywords. */
+    .lib-kw-ai-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:9px;font-size:11px;
+      cursor:pointer;background:color-mix(in srgb,var(--txt) 10%,transparent);color:var(--txt);border:1px solid transparent}
+    .lib-kw-ai-chip:hover{border-color:var(--acc2)}
     /* Search suggestions (renderSearchSuggest): places with counts, keywords, then the AI "looks like" row. */
     .lib-search-wrap{position:relative}
     #lib-search-suggest{position:absolute;top:calc(100% + 6px);left:0;right:0;min-width:240px;z-index:60;padding:4px;
@@ -6861,17 +6868,19 @@
       if (parts.length > 1) pushSugg(parts[parts.length - 1], `Taken in ${place}`, 'place');
     }
     let clipState = 'none'; // 'loading' | 'ready' | 'none' (not analyzed / no id)
+    let aiTags = []; // [{term, score}] — what the AI sees in the photo, shown as its own section
     if (entry.id != null) {
       if (!state.clipTags.has(entry.id)) {
         clipState = 'loading';
         state.clipTags.set(entry.id, null); // placeholder so we don't refetch while the real request is in flight
-        invoke('catalog_clip_tags', { photoId: entry.id })
+        invoke('catalog_photo_auto_tags', { photoId: entry.id })
+          .then((stored) => (stored && stored.length ? stored : invoke('catalog_clip_tags', { photoId: entry.id })))
           .then((hits) => { state.clipTags.set(entry.id, hits || []); if (state.showInfo) renderInfoPanel(); })
           .catch(() => { state.clipTags.set(entry.id, []); });
       } else {
         const hits = state.clipTags.get(entry.id);
         if (hits === null) clipState = 'loading';
-        else if (hits.length) { clipState = 'ready'; hits.forEach((h) => pushSugg(h.term, `${Math.round(h.score * 100)}% match`, 'ai')); }
+        else if (hits.length) { clipState = 'ready'; aiTags = hits; }
       }
     }
     // Library keywords this photo's neighbours in the current view already carry — the usual
@@ -6886,8 +6895,23 @@
         .forEach(([k, n]) => { if (!kwLeaves.has(k.split('|').pop().toLowerCase())) pushSugg(k, `Used on ${n} photo${n > 1 ? 's' : ''} in this view`, 'kw'); });
     }
     const suggIcon = (kind) => kind === 'place' ? ic('pin', 11) : '';
-    const suggestChips = `<div class="lib-info-sec"><div class="lib-info-sec-h"><span>Suggested</span>`
-      + (clipState === 'none' && entry.id != null ? `<button class="lib-info-link" id="lib-info-analyze" title="Let the AI look at this photo and suggest keywords">Analyze photo</button>` : '')
+    // "In this photo": the auto tags (dog, beach, park…). Always a visible section with a real
+    // state — tags, indexing, or an Analyze button — never silently absent.
+    const aiShown = aiTags.filter((h) => !kwLeaves.has(h.term.toLowerCase()));
+    const aiChips = `<div class="lib-info-sec"><div class="lib-info-sec-h"><span>In this photo</span>`
+      + (clipState === 'none' && entry.id != null ? `<button class="lib-info-link" id="lib-info-analyze" title="Let the AI look at this photo now">Analyze now</button>` : '')
+      + (aiShown.length > 1 ? `<button class="lib-info-link" id="lib-info-ai-all" title="Save every detected tag as a keyword">Add all</button>` : '')
+      + `</div>`
+      + (aiShown.length
+        ? `<div style="display:flex;flex-wrap:wrap;gap:4px">`
+          + aiShown.map((h) => `<span class="lib-kw-ai-chip" data-suggest="${esc(h.term)}" title="Detected automatically (${Math.round(h.score * 100)}%) — click to save as a keyword">${esc(h.term)}<span class="lib-kw-suggest-chip-add">+</span></span>`).join('')
+          + `</div>`
+        : `<div class="lib-info-hint">${clipState === 'loading' ? 'Checking…'
+          : clipState === 'ready' ? 'All detected tags are saved as keywords.'
+          : entry.id == null ? 'Add this folder to the library to auto-tag it.'
+          : 'Not tagged yet — photos are tagged automatically in the background.'}</div>`)
+      + `</div>`;
+    const suggestChips = aiChips + (!sugg.length ? '' : `<div class="lib-info-sec"><div class="lib-info-sec-h"><span>Suggested</span>`
       + `</div>`
       + (sugg.length
         ? `<div id="lib-info-suggest-chips" style="display:flex;flex-wrap:wrap;gap:4px">`
@@ -6897,7 +6921,7 @@
         : `<div class="lib-info-hint">${clipState === 'loading' ? 'Looking for suggestions…'
           : entry.id == null ? 'Add this folder to the library to get suggestions.'
           : 'No suggestions yet — analyze the photo to get some.'}</div>`)
-      + `</div>`;
+      + `</div>`);
     // Autocomplete against every keyword path already known to the catalog — best-effort
     // (keywordTree only refreshes on the same cadence as the rest of the catalog, i.e. on
     // scan/folder-open, matching how ratings/labels already lag one scan behind a foreign
@@ -6924,6 +6948,8 @@
     el.querySelectorAll('[data-suggest]').forEach((x) => {
       x.onclick = (e) => { e.stopPropagation(); addKeywordToPhoto(path, x.dataset.suggest); };
     });
+    const addAll = document.getElementById('lib-info-ai-all');
+    if (addAll) addAll.onclick = async (e) => { e.stopPropagation(); for (const h of aiShown) await addKeywordToPhoto(path, h.term); };
     const an = document.getElementById('lib-info-analyze');
     if (an) an.onclick = async (e) => {
       e.stopPropagation();
@@ -8836,7 +8862,9 @@
   }
 
   let placeList = []; // [{place, count}] from catalog_places — refreshed with the keyword tree
-  function refreshPlaces() { invoke('catalog_places').then((p) => { placeList = p || []; }).catch(() => {}); }
+  function refreshPlaces() { invoke('catalog_places').then((p) => { placeList = p || []; }).catch(() => {}); refreshAutoTags(); }
+  let autoTagList = []; // [{term, count}] from catalog_auto_tag_counts
+  function refreshAutoTags() { invoke('catalog_auto_tag_counts').then((t) => { autoTagList = t || []; }).catch(() => {}); }
 
   /// Suggestions under the search box: places (with photo counts) and keywords whose name
   /// contains the typed text. Picking one runs the full search for it.
@@ -8861,10 +8889,13 @@
       .map(([label, v]) => ({ kind: 'place', label, term: v.term, count: v.count }));
     const kwRows = keywordTree.filter((n) => n.leaf && n.leaf.toLowerCase().includes(q)).slice(0, 5)
       .map((n) => ({ kind: 'kw', label: n.path.split('|').join(' › '), term: n.leaf }));
-    const rows = [...placeRows, ...kwRows];
+    const qs = q.length > 3 && q.endsWith('s') && !q.endsWith('ss') ? q.slice(0, -1) : q;
+    const thingRows = autoTagList.filter((t) => t.term.split(' ').some((w) => w.startsWith(qs))).slice(0, 5)
+      .map((t) => ({ kind: 'thing', label: t.term, term: t.term, count: t.count }));
+    const rows = [...thingRows, ...placeRows, ...kwRows];
     const all = { kind: 'ai', label: `Photos that look like “${q}”`, term: q };
     box.innerHTML = [...rows, all].map((r, i) => `<div class="lib-ss-row" data-ss="${i}" data-kind="${r.kind}">`
-      + `<span class="lib-ss-ic">${r.kind === 'place' ? ic('pin', 13) : r.kind === 'kw' ? ic('tag', 13) : ic('search', 13)}</span>`
+      + `<span class="lib-ss-ic">${r.kind === 'place' ? ic('pin', 13) : r.kind === 'kw' ? ic('tag', 13) : r.kind === 'thing' ? ic('image', 13) : ic('search', 13)}</span>`
       + `<span class="lib-ss-label">${esc(r.label)}</span>`
       + (r.count ? `<span class="lib-ss-n">${r.count}</span>` : '') + `</div>`).join('');
     box.hidden = false;
@@ -9872,6 +9903,12 @@
       // ALREADY-hashed file (detecting drift) is unbounded and stays a manual "Verify library"
       // action (showVerifyMenu) — see the plan's own logged decision on this split.
       .then(() => step('hash', () => invoke('catalog_hash')))
+      // Auto-tagging: index every photo for AI search (dog, beach, park, food…) in the
+      // background, then tag it — previously this only ran when the user found and clicked
+      // "Analyze photos", so most libraries had no tags at all. Backfill tags photos that were
+      // indexed before auto-tagging existed.
+      .then(() => step('clip', () => invoke('catalog_clip_embed', {})))
+      .then(() => step('autotag', () => invoke('catalog_auto_tag').then(() => { refreshAutoTags(); if (state.showInfo) { state.clipTags.clear(); renderInfoPanel(); } })))
       .catch((e) => console.error('catalog background phases', e))
       .finally(() => { _catalogBgRunning = false; refreshCatalogCounts(); });
   }

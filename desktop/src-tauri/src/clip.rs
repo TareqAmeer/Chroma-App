@@ -213,6 +213,10 @@ pub const TAG_VOCABULARY: &[&str] = &[
     "flat lay", "top down view", "close-up detail",
     // weather / season
     "rain", "raindrops", "autumn", "spring", "summer", "winter", "sunny day", "cloudy sky",
+    // everyday search words
+    "sky", "clouds", "water", "sand", "grass", "person", "people", "selfie", "pet", "puppy",
+    "kitten", "restaurant", "cake", "coffee", "pizza", "sushi", "dessert", "house", "home",
+    "road", "tower", "museum", "shop", "christmas", "birthday", "graduation",
 ];
 
 /// The vocabulary embedded once via `embed_text`, cached behind a `OnceLock` — same lazy pattern
