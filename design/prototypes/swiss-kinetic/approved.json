@@ -227,7 +227,7 @@
       },
       "muted": {
         "$type": "color",
-        "$value": "#77746c"
+        "$value": "#6b685f"
       },
       "toggleB": {
         "$type": "color",

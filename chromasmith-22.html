@@ -1571,7 +1571,7 @@ body.light{
   --k-color-toggle-b:#1414a0;
   --k-color-bg:#f4f2ec;
   --k-color-ink:#111111;
-  --k-color-muted:#77746c;
+  --k-color-muted:#6b685f;
   --k-offset-x:0px;
   --k-offset-y:0px;
   --k-offset-slab-top:10%;
@@ -2123,7 +2123,7 @@ body.sk2 .sk2-mark{width:26px;height:26px;flex:none;display:block}
 body.sk2 #cs-brand-tog{margin-left:22px}
 body.sk2 #cs-brand-tog::after{background:var(--k-color-toggle-b)}
 body.sk2.deskx{--cs-brand-w:430px}
-@media(max-width:1000px){body.sk2.deskx{--cs-brand-w:200px}}
+@media(max-width:1000px){body.sk2.deskx{--cs-brand-w:190px}}
 /* Window buttons: invisible until the pointer is in the top-left corner; colour only on the
    button itself. The space stays reserved, so nothing shifts when they appear. */
 body.sk2 #cs-win{opacity:0;transition:opacity var(--k-motion-hover)}
@@ -2150,7 +2150,7 @@ body.sk2 .bgh:not(:disabled):hover{box-shadow:inset 0 -1px 0 var(--k-color-ink)!
 /* Pressed/selected: ink text + ink underline, never a white slab (the dark-mode "white button" bug). */
 body.sk2 .bgh.on,body.sk2 .bgh[aria-pressed=true]{background:transparent!important;color:var(--k-color-ink)!important;box-shadow:inset 0 -2px 0 var(--k-color-ink)!important}
 /* Switched-off sections stay readable (were 40% opacity on already-muted labels = invisible). */
-body.sk2 .fx-fields.ff-off{opacity:.62}
+body.sk2 .fx-fields.ff-off{opacity:.78}
 body.sk2 .fx-row.fx-mod>.fx-val.k-roll>.k-roll-strip{color:var(--k-color-ink)}
 body.sk2 .dz-fn{color:var(--k-color-muted)!important}
 body.sk2 .fx-db{background:transparent!important;border-color:transparent!important;color:var(--k-color-muted)!important}
@@ -2180,14 +2180,14 @@ body.sk2.deskx .fx-panel{padding-top:0!important}
 body.sk2 #sk2-stage-h{font-size:46px;font-weight:400;letter-spacing:-.045em;line-height:.95;margin:0;padding:30px 0 22px;color:var(--k-color-ink)}
 body.sk2 #sk2-sub{position:sticky;top:0;z-index:8;display:flex;flex-wrap:wrap;gap:4px 14px;padding:8px 0 9px;margin-bottom:6px;background:var(--k-color-bg);box-shadow:0 1px 0 var(--bdr)}
 body.sk2 #sk2-sub[hidden]{display:none}
-body.sk2 #sk2-sub button{background:none;border:0;padding:2px 0;font:inherit;font-size:12px;color:var(--k-color-muted);cursor:pointer;position:relative}
+body.sk2 #sk2-sub button{background:none;border:0;padding:2px 0;min-height:28px;font:inherit;font-size:12px;color:var(--k-color-muted);cursor:pointer;position:relative}
 body.sk2 #sk2-sub button:hover,body.sk2 #sk2-sub button.on{color:var(--k-color-ink)}
 body.sk2 #sk2-sub button.on{box-shadow:inset 0 -1px 0 var(--k-color-ink)}
 body.sk2 .fx-ctrl-title{position:sticky;top:var(--sk2-sub-h,0px);z-index:6;background:var(--k-color-bg);padding-top:14px;padding-bottom:10px;margin-bottom:10px;box-shadow:0 1px 0 var(--bdr)}
 body.sk2 .fx-ctrl{margin-top:0!important;padding-top:0!important}
 /* Chip rows (Input, Print, look families…) read as a plain word list: muted words, the chosen one ink + underlined. */
 body.sk2 .chip-tap{gap:4px 16px!important;flex-wrap:wrap}
-body.sk2 .chip-tap>.btn.bgh{box-shadow:none!important;padding:3px 0!important;min-height:0!important;height:auto!important;width:auto!important;flex:0 0 auto!important;color:var(--k-color-muted)!important;background:transparent!important;font-size:13px}
+body.sk2 .chip-tap>.btn.bgh{box-shadow:none!important;padding:3px 0!important;min-height:28px!important;height:auto!important;width:auto!important;flex:0 0 auto!important;color:var(--k-color-muted)!important;background:transparent!important;font-size:13px}
 body.sk2 .chip-tap>.btn.bgh:not(:disabled):hover{color:var(--k-color-ink)!important;box-shadow:none!important}
 body.sk2 .chip-tap>.btn.bgh.on,body.sk2 .chip-tap>.btn.bgh[aria-pressed=true]{background:transparent!important;color:var(--k-color-ink)!important;box-shadow:inset 0 -1px 0 var(--k-color-ink)!important}
 /* Looks: prints in two columns, name underneath, family words above, Strength pinned to the bottom. */
@@ -2199,7 +2199,7 @@ body.sk2 .look-cell canvas{display:block;width:100%;height:auto}
 body.sk2 .look-cell.kbd-focus{outline:1px solid var(--k-color-muted);outline-offset:2px}
 body.sk2 .look-cat-hdr{grid-column:1/-1;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);padding:14px 0 0;border:0;background:none}
 body.sk2 #row-lut-mix{position:sticky;bottom:0;z-index:7;background:var(--k-color-bg);margin:14px 0 0!important;padding:12px 0 14px;box-shadow:0 -1px 0 var(--bdr)}
-body.sk2 .fx-preset-head{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);margin:18px 0 8px!important}
+body.sk2 .fx-preset-head{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);margin:18px 0 8px!important}
 /* Export sheet: slides over the tool panel from the right; one big vermilion button. */
 body.sk2 #sk2-export{position:fixed;top:var(--deskx-topbar-h,56px);right:0;bottom:0;width:min(380px,100vw);z-index:calc(var(--z-overlay) + 4);background:var(--k-color-bg);box-shadow:-1px 0 0 var(--bdr);display:flex;flex-direction:column;transform:translateX(100%);visibility:hidden;transition:transform .22s var(--k-motion-easing),visibility 0s .22s}
 body.sk2.sk2-exp-open #sk2-export{transform:none;visibility:visible;transition:transform .22s var(--k-motion-easing)}
@@ -5991,7 +5991,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928I';
+const BUILD='1.0928J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -12199,6 +12199,21 @@ function _fxEnsureNormalRender(){
 // applyPreviewBorders publishes the offset of the photo WITHIN the composited canvas here, so
 // this resolves against whichever canvas is actually on screen and subtracts the frame.
 let _fxDisplayMap=null;   // {el, offX, offY, w, h} — all in COMPOSITED-canvas pixels
+// Canvas tool listeners (mask brush, AI scribble, retouch) must be on BOTH canvases: with
+// Borders/Canvas matte on, #fx-canvas is display:none and only #fx-canvas-bd receives pointer
+// events — listeners bound to #fx-canvas alone silently stopped working ("adding a border breaks
+// tools"). applyPreviewBorders replays this list onto #fx-canvas-bd when it creates it.
+const _fxCvListeners=[];
+function fxCanvasOn(type,fn,opts){
+  _fxCvListeners.push([type,fn,opts]);
+  const cv=document.getElementById('fx-canvas');if(cv)cv.addEventListener(type,fn,opts);
+  const bd=document.getElementById('fx-canvas-bd');if(bd)bd.addEventListener(type,fn,opts);
+}
+// The canvas actually on screen (the composited border/matte canvas when that is showing).
+function fxVisibleCanvas(){
+  const bd=document.getElementById('fx-canvas-bd');
+  return (bd&&bd.style.display!=='none'&&bd.width)?bd:FX.cv;
+}
 function fxPointerToCanvasPx(e){
   const bd=document.getElementById('fx-canvas-bd');
   const usingBd=_fxDisplayMap&&bd&&bd.style.display!=='none'&&_fxDisplayMap.el===bd;
@@ -14695,32 +14710,34 @@ function mskPaintAt(m,nx,ny){
     // using the wrong container here would offset the ring by that centering gap whenever the
     // photo's aspect ratio doesn't exactly fill fx-wrap.
     const wrap=document.getElementById('fx-wrap');if(!wrap)return;
-    const wr=wrap.getBoundingClientRect(),cr=cv.getBoundingClientRect();
-    const diam=(mskBrushSize/100)*0.5*Math.max(cr.width,cr.height);
+    const wr=wrap.getBoundingClientRect(),cr=cv.getBoundingClientRect(),vr=fxVisibleCanvas().getBoundingClientRect();
+    // photo box on screen: the hidden #fx-canvas has a zero rect when a border is showing
+    const pr=(cr.width&&cr.height)?cr:(_fxDisplayMap?{width:vr.width*_fxDisplayMap.w/fxVisibleCanvas().width,height:vr.height*_fxDisplayMap.h/fxVisibleCanvas().height}:vr);
+    const diam=(mskBrushSize/100)*0.5*Math.max(pr.width,pr.height);
     cursorEl.style.width=diam+'px';cursorEl.style.height=diam+'px';
     cursorEl.style.left=(e.clientX-wr.left)+'px';cursorEl.style.top=(e.clientY-wr.top)+'px';
     cursorEl.classList.toggle('erase',!!mskPaintErase);
     cursorEl.classList.add('on');
   }
-  cv.addEventListener('pointermove',updateBrushCursor);
-  cv.addEventListener('pointerleave',()=>{if(cursorEl)cursorEl.classList.remove('on');});
-  cv.addEventListener('pointerdown',e=>{
+  fxCanvasOn('pointermove',updateBrushCursor);
+  fxCanvasOn('pointerleave',()=>{if(cursorEl)cursorEl.classList.remove('on');});
+  fxCanvasOn('pointerdown',e=>{
     if(!mskPaintMode)return;
     const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;
     e.preventDefault();e.stopPropagation();
-    try{cv.setPointerCapture(e.pointerId)}catch(_){}
+    try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
     _mskStroke=m;
     const p=_mskPointToUV(e);if(p)mskPaintAt(m,p.nx,p.ny);
     queueRender();
   });
-  cv.addEventListener('pointermove',e=>{
+  fxCanvasOn('pointermove',e=>{
     if(!mskPaintMode||!_mskStroke)return;
     e.preventDefault();e.stopPropagation();
     const p=_mskPointToUV(e);if(p)mskPaintAt(_mskStroke,p.nx,p.ny);
     queueRender();
   });
   const end=e=>{if(!_mskStroke)return;_mskStroke=null;renderPreview();fxHistoryPush();};
-  cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
+  fxCanvasOn('pointerup',end);fxCanvasOn('pointercancel',end);
   // AI brush-select (desktop only — see main.rs's sam_encode/sam_points, backed by EdgeSAM).
   // Lightroom-style: drag a rough scribble over the object; points are sampled along the stroke
   // path (min spacing so a slow drag doesn't spam thousands of near-duplicate points) and
@@ -14743,11 +14760,11 @@ function mskPaintAt(m,nx,ny){
     const pts=m.aiPoints||[];
     svg.innerHTML=pts.map(p=>`<circle class="msk-scribble-dot" cx="${p.nx}" cy="${p.ny}" r="0.006" fill="${p.positive?'#ff5a3c':'#3ca0ff'}" stroke="#fff" stroke-width="0.0015" vector-effect="non-scaling-stroke"/>`).join('');
   }
-  cv.addEventListener('pointerdown',e=>{
+  fxCanvasOn('pointerdown',e=>{
     if(!mskAiTapMode)return;
     const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
     e.preventDefault();e.stopPropagation();
-    try{cv.setPointerCapture(e.pointerId)}catch(_){}
+    try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
     _aiStroke=m;_aiStrokeLast=null;_aiStrokeAdded=false;_aiStrokeStartLen=(m.aiPoints||[]).length;
     const p=_mskPointToUV(e);
     if(p){
@@ -14757,7 +14774,7 @@ function mskPaintAt(m,nx,ny){
       _aiRenderLiveStroke(m);
     }
   });
-  cv.addEventListener('pointermove',e=>{
+  fxCanvasOn('pointermove',e=>{
     if(!mskAiTapMode||!_aiStroke)return;
     const m=_aiStroke;
     e.preventDefault();e.stopPropagation();
@@ -14774,11 +14791,11 @@ function mskPaintAt(m,nx,ny){
     if(_aiStrokeAdded)samRunPoints(m);
     _aiStrokeLast=null;_aiStrokeAdded=false;
   };
-  cv.addEventListener('pointerup',aiEnd);cv.addEventListener('pointercancel',aiEnd);
+  fxCanvasOn('pointerup',aiEnd);fxCanvasOn('pointercancel',aiEnd);
   // lostpointercapture matters: if capture is lost mid-drag (pointer leaves the window, another
   // element grabs it) neither pointerup nor pointercancel necessarily fires on this element, and
   // _aiStroke would stay set so every subsequent move kept appending points to the mask.
-  cv.addEventListener('lostpointercapture',aiEnd);
+  fxCanvasOn('lostpointercapture',aiEnd);
   // Called from the pinch-zoom touchmove handler (initZoomPan) the moment a second finger
   // lands: a touch pinch's FIRST finger fires pointerdown before the second finger arrives, so
   // it briefly starts a paint/scribble stroke — this discards whatever that partial stroke
@@ -16183,6 +16200,14 @@ function mskOverlayBox(){
   // "zooming moves the mask" bug). The canvas's own CSS size (set in renderPreview) is the box.
   const cv=document.getElementById('fx-canvas');
   if(!cv||!cv.width||!cv.height)return null;
+  // Borders/Canvas matte on: the photo sits INSET inside #fx-canvas-bd, so the box is the
+  // photo's rect within that composited canvas, not #fx-canvas's own (hidden) size at 0,0.
+  const bd=document.getElementById('fx-canvas-bd');
+  if(_fxDisplayMap&&bd&&bd.style.display!=='none'&&bd.width){
+    const bw=parseFloat(bd.style.width)||bd.clientWidth;if(!bw)return null;
+    const s=bw/bd.width;
+    return{left:_fxDisplayMap.offX*s,top:_fxDisplayMap.offY*s,width:_fxDisplayMap.w*s,height:_fxDisplayMap.h*s};
+  }
   const w=parseFloat(cv.style.width)||cv.clientWidth,h=parseFloat(cv.style.height)||cv.clientHeight;
   if(!w||!h)return null;
   return{left:0,top:0,width:w,height:h};
@@ -19182,7 +19207,7 @@ function applyPreviewBorders(P,pw,ph){
   const frameOn=P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none';
   const bAny=bordersAny(P,b1t,b2t);
   if(!bAny&&!cvOn&&!frameOn){if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;return;}
-  if(!bd){bd=document.createElement('canvas');bd.id='fx-canvas-bd';bd.style.cssText='display:block;max-width:100%;height:auto';wrap.appendChild(bd);}
+  if(!bd){bd=document.createElement('canvas');bd.id='fx-canvas-bd';bd.style.cssText='display:block;max-width:100%;height:auto';wrap.appendChild(bd);_fxCvListeners.forEach(([t,f,o])=>bd.addEventListener(t,f,o));}
   // stage 1: bordered image (or the bare render when borders are off)
   let stage=FX.cv;
   if(bAny){
@@ -19531,8 +19556,18 @@ function fxSyncDcpProfileUI(){
   sel.disabled=!isRaw;
   sel.title=isRaw?'':'RAW profile only applies to RAW files';
 }
-function geomRotate(d){const g=curGeom();if(!g)return;g.rot=(((g.rot+d)%360)+360)%360;g.crop=null;if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
-function geomFlip(ax){const g=curGeom();if(!g)return;if(ax==='h')g.flipH=!g.flipH;else g.flipV=!g.flipV;g.crop=null;if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
+// Rotate/flip carry the crop with the image instead of clearing it. g.crop is normalised in
+// the post-rotate/flip/straighten frame; straighten (centred rotation) commutes with a 90° turn,
+// so remapping the rect is exact for rotate and exact for flip when angle is 0.
+function _cropRot90(c,d){if(!c)return c;return d>0?{x:1-(c.y+c.h),y:c.x,w:c.h,h:c.w}:{x:c.y,y:1-(c.x+c.w),w:c.h,h:c.w};}
+function geomRotate(d){const g=curGeom();if(!g)return;g.rot=(((g.rot+d)%360)+360)%360;
+  {const n=((d%360)+360)%360/90;for(let i=0;i<n;i++){if(g.crop)g.crop=_cropRot90(g.crop,1);if(typeof mskRemapForGeom==='function')mskRemapForGeom('cw');}}
+  if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
+function geomFlip(ax){const g=curGeom();if(!g)return;if(ax==='h')g.flipH=!g.flipH;else g.flipV=!g.flipV;
+  // flip is applied in SOURCE space before the rotation, so at 90/270 it mirrors the other axis on screen
+  if(g.crop){const c=g.crop,sw=(g.rot===90||g.rot===270),horiz=(ax==='h')!==sw;
+    g.crop=horiz?{x:1-(c.x+c.w),y:c.y,w:c.w,h:c.h}:{x:c.x,y:1-(c.y+c.h),w:c.w,h:c.h};}
+  if(typeof mskRemapForGeom==='function'){const sw=(g.rot===90||g.rot===270);mskRemapForGeom(((ax==='h')!==sw)?'mx':'my');}if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
 // ══ AUTO HORIZON ══════════════════════════════════════════════════════════════════════════
 // Finds the dominant near-horizontal (or near-vertical) line in the photo and returns the angle
 // that would level it. A Hough transform, which is the standard answer and the reason this was
@@ -19782,7 +19817,7 @@ function _ahRoiFrac(e){
     if(!tooSmall)toast('Region set — Auto level will search only inside it',true);
   });
 })();
-function geomStraighten(v){const g=curGeom();if(!g)return;g.angle=parseFloat(v)||0;document.getElementById('vl-straighten').textContent=(g.angle).toFixed(1)+'°';g.crop=null;broadcastGeom();updateWork();clearTimeout(fxTimer);fxTimer=setTimeout(()=>{renderPreview();fxHistoryPush();},120);}
+function geomStraighten(v){const g=curGeom();if(!g)return;g.angle=parseFloat(v)||0;document.getElementById('vl-straighten').textContent=(g.angle).toFixed(1)+'°';broadcastGeom(); /* crop kept: it is normalised to the same-aspect inscribed frame, so it stays valid */updateWork();clearTimeout(fxTimer);fxTimer=setTimeout(()=>{renderPreview();fxHistoryPush();},120);}
 function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeof hapt==='function')hapt();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset','info');}
 
 // ── retouch interaction ───────────────────────────────────────────────────────────────────
@@ -19861,7 +19896,7 @@ function _healPointToSource(e){
 }
 (function initHeal(){
   const cv=document.getElementById('fx-canvas');if(!cv)return;
-  cv.addEventListener('pointerdown',e=>{
+  fxCanvasOn('pointerdown',e=>{
     if(!healMode)return;
     e.preventDefault();e.stopPropagation();
     const p=_healPointToSource(e);if(!p)return;
@@ -20009,6 +20044,21 @@ function cropCustomChanged(){cropAR=_cropCustomAR();if(cropMode){cropN=cropDefau
 // moved to follow the new frame. Remap them by the same crop rect used to rebuild fxWork.
 // (Raster brush/sky/AI masks are tied to their own working-resolution buffer and aren't
 // remapped here — following a crop would need a full resample, left as a known follow-up.)
+// Rotate/flip move the photo under the analytic (radial/linear) masks, whose coords are in the
+// displayed frame like the crop — so carry them with the image. f maps a displayed point.
+// Radial: a 90° turn swaps the ellipse axes (rx is width-normalised, ry height-normalised); a
+// mirror negates its rotation. Brush/AI rasters are not remapped here.
+function mskRemapForGeom(kind){
+  const f=kind==='cw'?(x,y)=>[1-y,x]:kind==='ccw'?(x,y)=>[y,1-x]:kind==='mx'?(x,y)=>[1-x,y]:(x,y)=>[x,1-y];
+  (fxState.masks||[]).forEach(m=>{
+    if(m.type==='radial'){
+      [m.cx,m.cy]=f(m.cx,m.cy);
+      if(kind==='cw'||kind==='ccw'){const t=m.rx;m.rx=m.ry;m.ry=t;}else if(m.rot)m.rot=-m.rot;
+    }else if(m.type==='linear'){
+      [m.x0,m.y0]=f(m.x0,m.y0);[m.x1,m.y1]=f(m.x1,m.y1);
+    }
+  });
+}
 function mskRemapForCrop(crop){
   if(!crop)return;
   const{x,y,w,h}=crop;
