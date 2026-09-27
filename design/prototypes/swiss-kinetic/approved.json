@@ -1,36 +1,40 @@
 {
-  "$description": "APPROVED Swiss Kinetic spec (2026-09-25 review). Source of truth for implementing the redesign in the app. Dark and light are separate.",
+  "$description": "APPROVED Swiss Kinetic spec (2026-09-25 review). Source of truth for implementing the redesign in the app. Dark and light are separate. Swiss v2 (2026-09-28): single vermilion accent, neutral charcoal/paper, no offsets; toggleB keeps the gallery/studio switch two-tone.",
   "dark": {
     "color": {
       "accentA": {
         "$type": "color",
-        "$value": "#e0500c"
+        "$value": "#ff3b1f"
       },
       "accentB": {
         "$type": "color",
-        "$value": "#1414a0"
+        "$value": "#ff3b1f"
       },
       "bg": {
         "$type": "color",
-        "$value": "#1b1b1b"
+        "$value": "#141414"
       },
       "ink": {
         "$type": "color",
-        "$value": "#f2f2f0"
+        "$value": "#f2f0ea"
       },
       "muted": {
         "$type": "color",
-        "$value": "#7c7c78"
+        "$value": "#8d8b85"
+      },
+      "toggleB": {
+        "$type": "color",
+        "$value": "#1414a0"
       }
     },
     "offset": {
       "x": {
         "$type": "dimension",
-        "$value": "4px"
+        "$value": "0px"
       },
       "y": {
         "$type": "dimension",
-        "$value": "4px"
+        "$value": "0px"
       },
       "slabTop": {
         "$type": "dimension",
@@ -207,33 +211,37 @@
     "color": {
       "accentA": {
         "$type": "color",
-        "$value": "#e0500c"
+        "$value": "#ff3b1f"
       },
       "accentB": {
         "$type": "color",
-        "$value": "#1414a0"
+        "$value": "#ff3b1f"
       },
       "bg": {
         "$type": "color",
-        "$value": "#f2f2ee"
+        "$value": "#f4f2ec"
       },
       "ink": {
         "$type": "color",
-        "$value": "#000000"
+        "$value": "#111111"
       },
       "muted": {
         "$type": "color",
-        "$value": "#77776f"
+        "$value": "#77746c"
+      },
+      "toggleB": {
+        "$type": "color",
+        "$value": "#1414a0"
       }
     },
     "offset": {
       "x": {
         "$type": "dimension",
-        "$value": "6px"
+        "$value": "0px"
       },
       "y": {
         "$type": "dimension",
-        "$value": "6px"
+        "$value": "0px"
       },
       "slabTop": {
         "$type": "dimension",
