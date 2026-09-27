@@ -2122,6 +2122,8 @@ body.sk2 #cs-brand-name{display:inline-flex;align-items:center;gap:10px}
 body.sk2 .sk2-mark{width:26px;height:26px;flex:none;display:block}
 body.sk2 #cs-brand-tog{margin-left:22px}
 body.sk2 #cs-brand-tog::after{background:var(--k-color-toggle-b)}
+body.sk2.deskx{--cs-brand-w:430px}
+@media(max-width:1000px){body.sk2.deskx{--cs-brand-w:200px}}
 /* Window buttons: invisible until the pointer is in the top-left corner; colour only on the
    button itself. The space stays reserved, so nothing shifts when they appear. */
 body.sk2 #cs-win{opacity:0;transition:opacity var(--k-motion-hover)}
@@ -2229,6 +2231,47 @@ body.sk2 .cs-ctx-it:hover>.cs-ctx-pop .cs-ctx-it::before{content:none}
 body.sk2 .cs-ctx-it:hover>.cs-ctx-pop .cs-ctx-it:hover::before{content:''}
 body.sk2 .cs-ctx-sep{background:var(--bdr)!important;margin:6px 0!important}
 body.sk2 .cs-ctx-pop{margin-left:0!important;top:-7px!important}
+/* ── Gallery (Library) — concept view: word-list sidebar with the square marker, big title with
+   counts on the right, matted prints, square selection marker, no status bar. */
+body.sk2 #lib-overlay #lib-bottom{display:none!important}
+body.sk2 #lib-overlay #lib-grid-title{flex-direction:row!important;align-items:flex-end;justify-content:space-between;gap:24px;padding:28px 24px 22px;margin-bottom:24px}
+body.sk2 #lib-overlay #lib-grid-title .lgt-l{display:flex;flex-direction:column;gap:6px;min-width:0}
+body.sk2 #lib-overlay #lib-grid-title .lgt-h{font-size:64px;letter-spacing:-.045em;line-height:.88;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.sk2 #lib-overlay .lgt-m{display:flex;align-items:baseline;gap:18px;font-size:13px;color:var(--k-color-muted);white-space:nowrap;padding-bottom:4px;font-variant-numeric:tabular-nums}
+body.sk2 #lib-overlay .lgt-m>span{font-size:13px!important;color:var(--k-color-muted)!important}
+body.sk2 #lib-overlay .lgt-m #lib-count{color:var(--k-color-ink)!important}
+body.sk2 #lib-overlay #sk2-act{display:none;align-items:center;gap:8px;background:none;border:0;color:var(--k-color-muted);font:inherit;font-size:12px;cursor:pointer;padding:0 10px;height:28px;max-width:360px}
+body.sk2 #lib-overlay #sk2-act.busy{display:inline-flex}
+body.sk2 #lib-overlay .sk2-act-dot{width:8px;height:8px;background:var(--k-color-accent-a);flex:none;animation:sk2Pulse 1.4s ease-in-out infinite}
+@keyframes sk2Pulse{50%{opacity:.25}}
+body.sk2 #lib-overlay .sk2-act-body{display:none;align-items:center;gap:10px;overflow:hidden;white-space:nowrap}
+body.sk2 #lib-overlay #sk2-act.open .sk2-act-body,body.sk2 #lib-overlay #sk2-act:hover .sk2-act-body{display:inline-flex}
+@media (prefers-reduced-motion:reduce){body.sk2 #lib-overlay .sk2-act-dot{animation:none}}
+/* Sidebar */
+body.sk2 #lib-overlay .lib-coll-heading{font-size:10px!important;font-weight:400!important;letter-spacing:.14em!important;color:var(--k-color-muted)!important;margin-top:22px}
+body.sk2 #lib-overlay .lib-coll-sep{display:none}
+body.sk2 #lib-overlay .lib-coll-row,body.sk2 #lib-overlay .lib-tree-row{position:relative;background:none!important;box-shadow:none!important;color:var(--k-color-muted);font-size:14px;border-radius:0!important}
+body.sk2 #lib-overlay .lib-coll-row::before,body.sk2 #lib-overlay .lib-tree-row::before{content:none!important}
+body.sk2 #lib-overlay .lib-coll-row:hover,body.sk2 #lib-overlay .lib-tree-row:hover,body.sk2 #lib-overlay .lib-coll-row.on,body.sk2 #lib-overlay .lib-tree-row.on{color:var(--k-color-ink)!important}
+body.sk2 #lib-overlay .lib-coll-row.on::after,body.sk2 #lib-overlay .lib-tree-row.on::after{content:'';position:absolute;left:-2px;top:50%;width:8px;height:8px;margin-top:-4px;background:var(--k-color-accent-a)}
+body.sk2 #lib-overlay .lib-coll-row .lib-coll-ic{display:none}
+body.sk2 #lib-overlay .lib-coll-row .lib-coll-lb{padding-left:12px}
+body.sk2 #lib-overlay .lib-coll-count{font-size:11px;color:var(--k-color-muted);opacity:.7;font-variant-numeric:tabular-nums}
+/* Prints: matted on a quiet surface; the selected one gets the square in its corner. */
+body.sk2 #lib-overlay #lib-grid.lib-mat:not(.list-view):not(.aspect-view) .lib-thumb-wrap{background:color-mix(in srgb,var(--k-color-ink) 5%,var(--k-color-bg))!important}
+body.sk2 #lib-overlay .lib-card:is(.sel,.multi){box-shadow:none!important;outline:0!important}
+body.sk2 #lib-overlay .lib-card:is(.sel,.multi)::before,body.sk2 #lib-overlay .lib-card:is(.sel,.multi)::after{opacity:0!important}
+body.sk2 #lib-overlay .lib-card:is(.sel,.multi) .lib-thumb-wrap::after{content:'';position:absolute;right:0;bottom:0;width:16px;height:16px;background:var(--k-color-accent-a);z-index:4}
+body.sk2 #lib-overlay:not(.full) .lib-card:is(.sel,.multi) .lib-thumb-wrap::after{width:10px;height:10px}
+body.sk2 #lib-overlay .lib-card:hover:not(.sel):not(.multi)::after{border-width:1px;opacity:.5}
+/* Library buttons: sentence case, hairline underline instead of boxes. */
+body.sk2 #lib-overlay .lib-btn{text-transform:none!important;letter-spacing:0!important;font-weight:400!important;border-color:transparent!important;box-shadow:none!important;background:transparent!important;border-radius:0!important;color:var(--k-color-ink)}
+body.sk2 #lib-overlay .lib-btn:hover{color:var(--k-color-ink);box-shadow:inset 0 -1px 0 var(--k-color-ink)!important}
+body.sk2 #lib-overlay .lib-btn.on,body.sk2 #lib-overlay .lib-btn[aria-pressed=true]{background:var(--k-color-ink)!important;color:var(--k-color-bg)!important}
+/* Photo caption (gallery-wall label) under the photo. */
+body.sk2 #fx-deskbar-title.sk2-cap{position:absolute;z-index:3;display:flex;flex-direction:row;align-items:baseline;gap:12px;transform:none;margin:0;pointer-events:none;white-space:nowrap;overflow:hidden}
+body.sk2 #fx-deskbar-title.sk2-cap #db-title-name{font-size:12px;color:var(--k-color-ink);font-weight:400;overflow:hidden;text-overflow:ellipsis}
+body.sk2 #fx-deskbar-title.sk2-cap #db-title-status{font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
 /* Looks: the chosen look is marked by the square, not a kicked-out frame. */
 body.sk2 .look-cell:hover{transform:none;box-shadow:none}
 body.sk2 .look-cell.sel{border-color:transparent;box-shadow:none;position:relative}
@@ -2361,6 +2404,33 @@ function sk2ExportWire(){
   if(typeof buildToolRail==='function')buildToolRail();
 }
 </script>
+<script>/* Swiss v2 — gallery-wall label: the photo's name + size sit in a small caption under the photo
+   when there is room below it; when the photo fills the view (or the caption is switched off in
+   View), the same element goes back to the top bar. Moved, never duplicated (keeps its ids/status). */
+(function(){
+  const K='cs_sk2_caption';
+  window.sk2CaptionOn=()=>{try{return localStorage.getItem(K)!=='0'}catch(e){return true}};
+  window.sk2CaptionToggle=()=>{try{localStorage.setItem(K,sk2CaptionOn()?'0':'1')}catch(e){}sk2Caption();};
+  let home=null,raf=0;
+  window.sk2Caption=function(){cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{
+    const t=document.getElementById('fx-deskbar-title'),wrap=document.getElementById('fx-wrap');if(!t||!wrap)return;
+    if(!home)home={p:t.parentNode,n:t.nextSibling};
+    const bd=document.getElementById('fx-canvas-bd'),cv=(bd&&bd.style.display!=='none'&&bd.width)?bd:document.getElementById('fx-canvas');
+    const deskx=document.body.classList.contains('deskx');
+    const r=cv&&cv.getBoundingClientRect(),w=wrap.getBoundingClientRect();
+    const room=r&&r.height>0&&(w.bottom-r.bottom)>=34;
+    if(deskx&&sk2CaptionOn()&&room){
+      if(t.parentNode!==wrap){wrap.appendChild(t);t.classList.add('sk2-cap');}
+      t.style.left=(r.left-w.left)+'px';t.style.top=(r.bottom-w.top+10)+'px';t.style.maxWidth=Math.max(160,r.width)+'px';
+    }else if(t.parentNode===wrap){t.classList.remove('sk2-cap');t.style.left=t.style.top=t.style.maxWidth='';home.p.insertBefore(t,home.n&&home.n.parentNode===home.p?home.n:null);}
+  });};
+  function wire(){const cv=document.getElementById('fx-canvas'),wrap=document.getElementById('fx-wrap');if(!cv||!wrap)return;
+    const ro=new ResizeObserver(()=>sk2Caption());ro.observe(cv);ro.observe(wrap);
+    const bd=document.getElementById('fx-canvas-bd');if(bd)ro.observe(bd);
+    new MutationObserver(()=>sk2Caption()).observe(cv,{attributes:true,attributeFilter:['style','width','height']});
+    window.addEventListener('resize',()=>sk2Caption());sk2Caption();}
+  if(document.readyState!=='loading')wire();else document.addEventListener('DOMContentLoaded',wire);
+})();</script>
 <script>/* Swiss v2 — behaviour half (logo, hover/arrow-key look preview, "More" fold, "?" shortcuts). */
 (function(){
 function ready(f){if(document.readyState!=='loading')f();else document.addEventListener('DOMContentLoaded',f)}
@@ -5898,7 +5968,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928E';
+const BUILD='1.0928F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22486,6 +22556,7 @@ function viewMenuBuild(){
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)"><span>Editor background…</span></button>`;
   h+=`<button class="fx-ovf-item${fxHistOn?' on':''}" onclick="viewMenuClose();toggleHist()"><span>Scope overlay</span>${chk}</button>`;
   h+=`<button class="fx-ovf-item${window.chromasmithPhotoTransitions!==false?' on':''}" onclick="photoTransitionsToggle()"><span>Photo transitions</span>${chk}</button>`;
+  if(window.sk2CaptionOn)h+=`<button class="fx-ovf-item${sk2CaptionOn()?' on':''}" onclick="sk2CaptionToggle();this.classList.toggle('on',sk2CaptionOn())"><span>Caption under photo</span>${chk}</button>`;
   if(typeof window.chromasmithRevealLab==='function')h+=`<button class="fx-ovf-item" onclick="viewMenuClose();window.chromasmithRevealLab()"><span>Reveal lab…</span></button>`;
   h+='<div class="fx-ovf-sep"></div>';
   h+=`<button class="fx-ovf-item${fxGamutWarn?' on':''}" onclick="viewMenuClose();toggleGamutWarn()"><span>Show gamut warning</span>${chk}</button>`;

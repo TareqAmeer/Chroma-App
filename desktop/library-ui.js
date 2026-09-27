@@ -780,7 +780,7 @@
     gridAspect: localStorage.getItem('chromasmith_lib_gridaspect') === '1', // item 31: real aspect ratio vs square-crop thumbnails
     hideIcons: localStorage.getItem('chromasmith_lib_hideicons') === '1', // View menu: hide flag/badge icons drawn over photos
     zeroGap: localStorage.getItem('chromasmith_lib_zerogap') === '1',
-    gridMat: localStorage.getItem('chromasmith_lib_mat') === '1',         // View menu: white border (mat) around each photo     // View menu: Lightroom-style zero-gap grid
+    gridMat: localStorage.getItem('chromasmith_lib_mat') !== '0', // Swiss v2: on by default         // View menu: white border (mat) around each photo     // View menu: Lightroom-style zero-gap grid
     // Matches Lightroom's "Include Photos from Subfolders" — list_dir is deliberately one level
     // only (see its own doc comment), so a folder tree built by date (2026/08/22, 2026/08/23...)
     // showed nothing when the PARENT folder was selected, only when a leaf was. Real reported
@@ -2437,6 +2437,29 @@
       <span style="font-size:11px;color:var(--mut)" id="lib-count"></span>
     </div>
   `;
+  // Swiss v2: no status bar in the gallery. The photo count and flag tallies sit at the right of the
+  // big grid title; indexing / thumbnail progress becomes a small indicator in the top bar that
+  // expands on click. Same elements (same ids, same updaters) — only their place changes.
+  (function sk2LibRelocate() {
+    const title = overlay.querySelector('#lib-grid-title'), top = overlay.querySelector('#lib-top-right');
+    if (title && !title.querySelector('.lgt-m')) {
+      const left = document.createElement('div'); left.className = 'lgt-l';
+      while (title.firstChild) left.appendChild(title.firstChild);
+      const meta = document.createElement('div'); meta.className = 'lgt-m';
+      ['lib-status-sel', 'lib-status-labels', 'lib-count'].forEach((id) => { const e = overlay.querySelector('#' + id); if (e) meta.appendChild(e); });
+      title.append(left, meta);
+    }
+    if (top && !overlay.querySelector('#sk2-act')) {
+      const w = document.createElement('button'); w.type = 'button'; w.id = 'sk2-act'; w.title = 'Background work — click for details';
+      w.innerHTML = '<span class="sk2-act-dot" aria-hidden="true"></span><span class="sk2-act-body"></span>';
+      const body = w.querySelector('.sk2-act-body');
+      ['lib-activity', 'lib-thumb-progress'].forEach((id) => { const e = overlay.querySelector('#' + id); if (e) body.appendChild(e); });
+      w.onclick = (ev) => { if (ev.target.closest('button:not(#sk2-act)')) return; w.classList.toggle('open'); };
+      top.prepend(w);
+      const sync = () => w.classList.toggle('busy', !!body.textContent.trim());
+      new MutationObserver(sync).observe(body, { childList: true, subtree: true, characterData: true }); sync();
+    }
+  })();
   // Make the dock a real grid-column sibling of the preview/panel/rail row instead of a
   // body-level overlay — see the big comment above the style block. .fx-layout already exists
   // in the DOM by the time this script runs (injected just before </body>, after the app's own
