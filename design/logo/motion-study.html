@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chromasmith Motion Study</title>
+<style>
+:root{
+  --ease:cubic-bezier(.2,.7,.1,1);
+  --paper:#f2efe8; --black:#141414;
+  --ui:#555; --ui-dark:#9a978f;
+}
+*{box-sizing:border-box;margin:0}
+body{background:#e6e2d9;color:#222;font:13px/1.45 "Helvetica Neue",Helvetica,Arial,sans-serif;padding:32px 16px}
+header{max-width:1100px;margin:0 auto 24px;display:flex;justify-content:space-between;align-items:end;gap:16px;flex-wrap:wrap}
+h1{font-size:15px;font-weight:600;letter-spacing:.02em}
+header p{color:var(--ui);max-width:60ch}
+button{font:inherit;font-weight:600;background:#141414;color:#f2efe8;border:0;padding:9px 16px;cursor:pointer;letter-spacing:.04em;text-transform:uppercase;font-size:11px}
+button:focus-visible{outline:2px solid #ff3b1f;outline-offset:2px}
+.grid{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1px;background:#cfcabf;border:1px solid #cfcabf}
+.cell{aspect-ratio:1;display:flex;flex-direction:column;justify-content:space-between;padding:14px}
+.cell.paper{background:var(--paper);color:var(--ui)}
+.cell.black{background:var(--black);color:var(--ui-dark)}
+.cell .lab{font-size:10px;letter-spacing:.08em;text-transform:uppercase;display:flex;justify-content:space-between}
+.cell svg{width:52%;margin:auto;display:block;overflow:visible}
+
+/* ---------- shared: plates are flat, light is masked inside overlap ---------- */
+.mark .ink,.mark .ver{transform-box:view-box}
+.mark .expo{transform-box:view-box;transform-origin:69px 32px}
+.mark .seam{stroke-dasharray:46.67;stroke-dashoffset:0}
+
+/* ---------- SPLASH (2.2s total) ----------
+   0.00–0.70  ink plate slides 8u in from the left, into register
+   0.35–1.05  vermilion plate slides 8u up from below, onto ink
+   1.05       overlap exists → light switches on at the top-right corner
+   1.05–1.95  exposure spreads from the corner down the diagonal
+   1.15–1.75  seam draws corner → bottom-left
+*/
+.splash .ink{animation:inkIn .7s var(--ease) both}
+.splash .ver{animation:verIn .7s var(--ease) .35s both}
+.splash .expo{animation:expose .9s var(--ease) 1.05s both}
+.splash .seam{animation:seam .6s var(--ease) 1.15s both}
+@keyframes inkIn{from{transform:translateX(-8px);opacity:0}to{transform:none;opacity:1}}
+@keyframes verIn{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+@keyframes expose{from{transform:scale(0)}to{transform:scale(1)}}
+@keyframes seam{from{stroke-dashoffset:46.67;opacity:0}20%{opacity:.8}to{stroke-dashoffset:0;opacity:.8}}
+
+/* ---------- LOOP (2.4s, rendering/exporting) ----------
+   Plates stay in register. Each cycle is one exposure:
+   0–45%  light spreads from the corner (same curve)
+   45–70% hold, fully exposed
+   70–100% light withdraws into the corner, the overlap returns to flat vermilion
+*/
+.loop .expo{animation:loopExpo 2.4s var(--ease) infinite}
+.loop .seam{animation:loopSeam 2.4s var(--ease) infinite}
+@keyframes loopExpo{0%{transform:scale(0)}45%,70%{transform:scale(1)}100%{transform:scale(0)}}
+@keyframes loopSeam{0%{stroke-dashoffset:46.67;opacity:.8}45%,70%{stroke-dashoffset:0;opacity:.8}100%{stroke-dashoffset:-46.67;opacity:.8}}
+
+@media (prefers-reduced-motion:reduce){
+  .mark *{animation:none!important}
+  .loop .expo{opacity:.85}
+}
+footer{max-width:1100px;margin:20px auto 0;color:var(--ui);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Chromasmith — motion study: light arriving</h1>
+    <p>Splash 2.2s: ink into register, vermilion onto it, then the overlap is exposed from its top-right corner along the diagonal. Loop 2.4s: repeated exposure / withdrawal, plates still. One curve throughout: cubic-bezier(.2,.7,.1,1). Reduced motion shows the finished mark.</p>
+  </div>
+  <button id="replay" type="button">Replay</button>
+</header>
+<main class="grid" id="grid"></main>
+<footer>Light is clipped to the 33×33 overlap and masked by a scaling disc from (69,32); nothing renders outside the plates.</footer>
+
+<script>
+const INK={paper:'#111111',black:'#f2f0ea'};
+let n=0;
+function mark(kind,bg){
+  const id='m'+(n++);
+  return `<svg class="mark ${kind}" viewBox="0 0 100 100" role="img" aria-label="Chromasmith logo">
+<defs>
+ <clipPath id="${id}c"><rect x="36" y="32" width="33" height="33"/></clipPath>
+ <radialGradient id="${id}a" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient>
+ <radialGradient id="${id}b" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient>
+ <radialGradient id="${id}f" cx="69" cy="32" r="48" gradientUnits="userSpaceOnUse"><stop offset=".82" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient>
+ <mask id="${id}m" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><circle class="expo" cx="69" cy="32" r="48" fill="url(#${id}f)"/></mask>
+</defs>
+<rect class="ink" x="21" y="21" width="48" height="44" fill="${INK[bg]}"/>
+<rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/>
+<g clip-path="url(#${id}c)">
+ <g mask="url(#${id}m)">
+  <polygon points="36,32 69,32 36,65" fill="url(#${id}a)"/>
+  <polygon points="69,32 69,65 36,65" fill="url(#${id}b)"/>
+ </g>
+ <line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8"/>
+</g></svg>`;
+}
+function build(){
+  n=0;
+  const cells=[['splash','paper','Splash · 2.2s'],['splash','black','Splash · 2.2s'],['loop','paper','Loop · rendering'],['loop','black','Loop · rendering']];
+  document.getElementById('grid').innerHTML=cells.map(([k,bg,l])=>
+    `<section class="cell ${bg}"><div class="lab"><span>${l}</span><span>${bg==='paper'?'#f2efe8':'#141414'}</span></div>${mark(k,bg)}<div class="lab"><span></span></div></section>`).join('');
+}
+build();
+document.getElementById('replay').onclick=build;
+</script>
+</body>
+</html>
