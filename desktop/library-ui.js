@@ -439,6 +439,9 @@
         if (p) p.face_count += (args.accept || []).length;
         return Promise.resolve();
       }
+      case 'catalog_auto_assign': return Promise.resolve({ assigned: 0, people: 0 });
+      case 'catalog_undo_auto_assign': return Promise.resolve(0);
+      case 'catalog_import_google_takeout': return Promise.resolve({ sidecars_with_people: 0, photos_matched: 0, photos_not_in_library: 0, faces_tagged: 0, people_created: 0, auto_assigned: 0 });
       case 'catalog_confirm_person': {
         const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
         if (p) p.auto = false;
@@ -1327,11 +1330,13 @@
     .lib-review-top{display:flex;align-items:center;gap:10px;padding:12px 18px;
       border-bottom:1px solid var(--bdr);font-size:12px;color:var(--mut)}
     .lib-review-body{flex:1;overflow:auto;padding:18px;max-width:900px;margin:0 auto;width:100%}
-    .lib-review-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-bottom:16px}
+    .lib-review-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px}
     .lib-review-face{position:relative;border-radius:8px;overflow:hidden;background:var(--sur2);
       border:2px solid transparent;aspect-ratio:1;cursor:pointer}
     .lib-review-face.sel{border-color:var(--acc2)}
     .lib-review-face.desel{opacity:.35}
+    .lib-review-face .lib-review-n{position:absolute;right:4px;bottom:4px;padding:1px 6px;border-radius:9px;
+      background:rgba(0,0,0,.65);color:#fff;font-size:11px;line-height:16px}
     .lib-review-face img{width:100%;height:100%;object-fit:cover;visibility:hidden}
     .lib-review-face img.loaded{visibility:visible}
     .lib-review-foot{display:flex;align-items:center;gap:10px;padding:14px 18px;border-top:1px solid var(--bdr)}
@@ -8807,6 +8812,7 @@
       activityUpdate('catalog', { stage: 'done', done: photoIds ? photoIds.length : 0, total: photoIds ? photoIds.length : 0 });
       const parts = [];
       if (r.people) parts.push(`${r.people} ${r.people === 1 ? 'person' : 'people'}`);
+      if (r.auto_assigned) parts.push(`${r.auto_assigned} photos tagged automatically`);
       if (rp.pets_found) parts.push(`${rp.pets_found} ${rp.pets_found === 1 ? 'pet' : 'pets'}`);
       toast(parts.length ? `Found ${parts.join(' and ')}` : 'Photos analyzed — try searching by description', true);
     } catch (e) {
@@ -9263,10 +9269,11 @@
   /// a cluster is what promotes it into the named list above.
   function peopleSectionHtml() {
     const scanLabel = 'Analyze photos — find faces and enable AI search';
+    const takeoutRow = `<div class="lib-coll-row" data-people-takeout="1" style="opacity:.7" title="Use the people Google Photos already recognised — choose an unzipped Google Takeout folder">Import names from Google Photos…</div>`;
     const scanGlyph = `<span id="lib-people-scan" title="${scanLabel}" style="cursor:pointer;padding:0 4px">${ic('search', 13)}</span>`;
     if (!peopleList.length) {
       return '<div class="lib-coll-sep"></div>' + sidebarSection('people', 'People &amp; Pets',
-        `<div class="lib-coll-row" style="opacity:.5;cursor:default">No people found yet</div>`, { trail: scanGlyph });
+        `<div class="lib-coll-row" style="opacity:.5;cursor:default">No people found yet</div>` + takeoutRow, { trail: scanGlyph });
     }
     const named = peopleList.filter((p) => !p.auto).sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
     const unnamedCount = peopleList.filter((p) => p.auto).reduce((n, p) => n + (p.face_count || 0), 0);
@@ -9284,7 +9291,7 @@
         <span class="lib-face-ava unnamed"></span><span class="lib-coll-lb">Unnamed</span>
         <span class="lib-coll-count">${fmtN(unnamedCount ?? '')}</span>
       </div>`;
-    return '<div class="lib-coll-sep"></div>' + sidebarSection('people', 'People &amp; Pets', namedRows + unnamedRow, { trail: scanGlyph });
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('people', 'People &amp; Pets', namedRows + unnamedRow + takeoutRow, { trail: scanGlyph });
   }
   function wirePeopleRows(host) {
     const scanBtn = host.querySelector('#lib-people-scan');
@@ -9301,6 +9308,24 @@
     });
     const reviewRow = host.querySelector('[data-people-review]');
     if (reviewRow) reviewRow.onclick = () => openReviewFaces();
+    const takeout = host.querySelector('[data-people-takeout]');
+    if (takeout) takeout.onclick = () => importGoogleTakeout();
+  }
+  /// Google Takeout writes a JSON file next to every photo listing who Google Photos recognised in
+  /// it. Importing matches those files to this library by name + date and names our own faces.
+  async function importGoogleTakeout() {
+    let dir;
+    try { dir = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Choose your unzipped Google Takeout folder' } }); }
+    catch (e) { return; }
+    if (!dir) return;
+    toast('Reading Google Photos names…');
+    try {
+      const r = await invoke('catalog_import_google_takeout', { dir });
+      await refreshPeople();
+      if (!r.sidecars_with_people) { toast('No people found in that folder — choose the unzipped "Takeout" folder from a Google Photos export', 'err'); return; }
+      const extra = r.photos_not_in_library ? ` · ${r.photos_not_in_library} of their photos aren't in this library` : '';
+      toast(`Tagged ${r.faces_tagged} faces from Google Photos (${r.people_created} new people)${r.auto_assigned ? ` + ${r.auto_assigned} more automatically` : ''}${extra}`, true);
+    } catch (err) { toast(humanizeErr('import from Google Photos', err), 'err'); }
   }
 
   // ── Review mode (people-pets wireframes screen C) ──────────────────────────────────────────
@@ -9373,8 +9398,11 @@
     const PAGE = 40;
     const pages = [];
     for (let i = 0; i < sugg.length; i += PAGE) {
-      const ids = sugg.slice(i, i + PAGE).map((x) => x.face_id);
-      pages.push({ person_id: person.id, cover_face_id: ids[0], face_ids: ids, face_count: ids.length });
+      const chunk = sugg.slice(i, i + PAGE);
+      // One tile per moment: `also` = same-moment faces the answer applies to.
+      const moments = chunk.map((x) => [x.face_id, ...(x.also || [])]);
+      const ids = moments.flat();
+      pages.push({ person_id: person.id, cover_face_id: ids[0], face_ids: ids, face_count: ids.length, moments });
     }
     reviewState.clusters = pages;
     reviewState.idx = 0;
@@ -9421,7 +9449,9 @@
     }
     setTimeout(() => { nameInput.focus(); nameInput.select(); }, 0);
     const grid = document.getElementById('lib-review-grid');
-    grid.innerHTML = c.face_ids.map((fid) => `<div class="lib-review-face sel" data-face-id="${fid}"><img alt=""></div>`).join('');
+    // One tile per moment (photos seconds apart): its answer applies to the whole moment.
+    const moments = (c.moments && c.moments.length) ? c.moments : c.face_ids.map((id) => [id]);
+    grid.innerHTML = moments.map((m) => `<div class="lib-review-face sel" data-face-id="${m[0]}"><img alt="">${m.length > 1 ? `<span class="lib-review-n" title="${m.length} photos from the same moment">×${m.length}</span>` : ''}</div>`).join('');
     grid.querySelectorAll('.lib-review-face').forEach((cell) => {
       const fid = parseInt(cell.dataset.faceId, 10);
       loadFaceCrop(fid, cell.querySelector('img'));
@@ -9433,13 +9463,19 @@
       };
     });
   }
+  /// Every face excluded by the user — a deselected tile excludes its whole moment.
+  function reviewExcluded(c) {
+    const moments = (c.moments && c.moments.length) ? c.moments : c.face_ids.map((id) => [id]);
+    return new Set(moments.filter((m) => reviewState.deselected.has(m[0])).flat());
+  }
   async function reviewConfirmCurrent() {
     const c = reviewState.clusters[reviewState.idx];
     if (!c) return;
     const sg = reviewState.suggest;
     if (sg) {
-      const accept = c.face_ids.filter((id) => !reviewState.deselected.has(id));
-      const reject = c.face_ids.filter((id) => reviewState.deselected.has(id));
+      const ex = reviewExcluded(c);
+      const accept = c.face_ids.filter((id) => !ex.has(id));
+      const reject = c.face_ids.filter((id) => ex.has(id));
       try {
         await invoke('catalog_resolve_suggestions', { personId: sg.person.id, accept, reject });
         sg.added += accept.length;
@@ -9449,8 +9485,9 @@
     }
     const name = document.getElementById('lib-review-name').value.trim();
     if (!name) { toast('Type a name first'); return; }
-    const selectedIds = c.face_ids.filter((id) => !reviewState.deselected.has(id));
-    const excludedIds = c.face_ids.filter((id) => reviewState.deselected.has(id));
+    const ex = reviewExcluded(c);
+    const selectedIds = c.face_ids.filter((id) => !ex.has(id));
+    const excludedIds = c.face_ids.filter((id) => ex.has(id));
     if (c.tentative) {
       // A loose "maybe" group belongs to nobody yet: only the kept faces move; excluded ones
       // simply stay unassigned.
@@ -9458,8 +9495,10 @@
       try {
         const existing = peopleList.find((p) => !p.auto && p.name.toLowerCase() === name.toLowerCase());
         await invoke('catalog_split_faces', { faceIds: selectedIds, intoId: existing ? existing.id : null, intoName: existing ? null : name });
+        const aa = await invoke('catalog_auto_assign').catch(() => ({ assigned: 0 }));
         await refreshPeople();
-        toast(`Named ${selectedIds.length} face${selectedIds.length === 1 ? '' : 's'} "${name}"`, true);
+        toast(`Named ${selectedIds.length} face${selectedIds.length === 1 ? '' : 's'} "${name}"${aa.assigned ? ` · ${aa.assigned} more photos tagged automatically` : ''}`, true);
+        if (aa.assigned) await reloadReviewQueue();
         reviewGoTo(reviewState.idx + 1);
       } catch (err) { toast(humanizeErr('confirm this person', err), 'err'); }
       return;
@@ -9475,10 +9514,22 @@
         await invoke('catalog_rename_person', { personId: c.person_id, name });
         await invoke('catalog_confirm_person', { personId: c.person_id, faceIds: selectedIds.length ? selectedIds : null });
       }
+      const aa = await invoke('catalog_auto_assign').catch(() => ({ assigned: 0 }));
       await refreshPeople();
-      toast(`Named ${selectedIds.length} face${selectedIds.length === 1 ? '' : 's'} "${name}"`, true);
+      toast(`Named ${selectedIds.length} face${selectedIds.length === 1 ? '' : 's'} "${name}"${aa.assigned ? ` · ${aa.assigned} more photos tagged automatically` : ''}`, true);
+      if (aa.assigned) await reloadReviewQueue();
       reviewGoTo(reviewState.idx + 1);
     } catch (err) { toast(humanizeErr('confirm this person', err), 'err'); }
+  }
+  /// Auto-tagging can empty or shrink clusters later in the queue — refetch everything after the
+  /// current position so the user is never asked about faces that were just tagged.
+  async function reloadReviewQueue() {
+    if (reviewState.suggest) return;
+    const fresh = await invoke('catalog_unnamed_clusters').catch(() => null);
+    if (!fresh) return;
+    const done = new Set(reviewState.clusters.slice(0, reviewState.idx + 1).map((c) => c.tentative ? `t${c.face_ids[0]}` : c.person_id));
+    reviewState.clusters = reviewState.clusters.slice(0, reviewState.idx + 1)
+      .concat(fresh.filter((c) => !done.has(c.tentative ? `t${c.face_ids[0]}` : c.person_id)));
   }
   async function reviewIgnoreCurrent() {
     const c = reviewState.clusters[reviewState.idx];
@@ -9540,6 +9591,15 @@
     if (!p) return;
     const items = [
       ...(!p.auto ? [[`Find more photos of ${p.name}…`, () => openFindMore(p)]] : []),
+      ...(!p.auto && p.kind !== 'pet' ? [['Undo automatic tags', async () => {
+        if (!await window.confirmModal(`Remove every photo that was tagged "${p.name}" automatically?\n\nPhotos you confirmed yourself stay. The removed ones won't be auto-tagged as ${p.name} again.`, 'Remove')) return;
+        try {
+          const n = await invoke('catalog_undo_auto_assign', { personId: id });
+          if (state.catalogScope === `person:${id}`) await openCatalogView(`person:${id}`);
+          await refreshPeople();
+          toast(`Removed ${n} automatic tag${n === 1 ? '' : 's'} from "${p.name}"`, true);
+        } catch (err) { toast(humanizeErr('undo automatic tags', err), 'err'); }
+      }]] : []),
       ['Rename…', async () => {
         const name = await window.askTextModal('Rename person', '', p.name);
         if (!name) return;
