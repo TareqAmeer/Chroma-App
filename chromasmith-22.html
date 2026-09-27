@@ -2147,7 +2147,12 @@ body.sk2 .btn,body.sk2 .fx-db{text-transform:none!important;letter-spacing:0!imp
 body.sk2 .bgh{background:transparent!important;border-color:transparent!important;color:var(--k-color-ink)!important;box-shadow:inset 0 -1px 0 var(--bdr)!important}
 body.sk2 .bgh:disabled{color:var(--k-color-muted)!important;opacity:.55}
 body.sk2 .bgh:not(:disabled):hover{box-shadow:inset 0 -1px 0 var(--k-color-ink)!important}
-body.sk2 .bgh.on,body.sk2 .bgh[aria-pressed=true]{background:var(--k-color-ink)!important;color:var(--k-color-bg)!important;box-shadow:none!important}
+/* Pressed/selected: ink text + ink underline, never a white slab (the dark-mode "white button" bug). */
+body.sk2 .bgh.on,body.sk2 .bgh[aria-pressed=true]{background:transparent!important;color:var(--k-color-ink)!important;box-shadow:inset 0 -2px 0 var(--k-color-ink)!important}
+/* Switched-off sections stay readable (were 40% opacity on already-muted labels = invisible). */
+body.sk2 .fx-fields.ff-off{opacity:.62}
+body.sk2 .fx-row.fx-mod>.fx-val.k-roll>.k-roll-strip{color:var(--k-color-ink)}
+body.sk2 .dz-fn{color:var(--k-color-muted)!important}
 body.sk2 .fx-db{background:transparent!important;border-color:transparent!important;color:var(--k-color-muted)!important}
 body.sk2 .fx-db:not(:disabled):hover{color:var(--k-color-ink)!important}
 body.sk2 .fx-undogrp{border:0!important;background:none!important}
@@ -2267,7 +2272,7 @@ body.sk2 #lib-overlay .lib-card:hover:not(.sel):not(.multi)::after{border-width:
 /* Library buttons: sentence case, hairline underline instead of boxes. */
 body.sk2 #lib-overlay .lib-btn{text-transform:none!important;letter-spacing:0!important;font-weight:400!important;border-color:transparent!important;box-shadow:none!important;background:transparent!important;border-radius:0!important;color:var(--k-color-ink)}
 body.sk2 #lib-overlay .lib-btn:hover{color:var(--k-color-ink);box-shadow:inset 0 -1px 0 var(--k-color-ink)!important}
-body.sk2 #lib-overlay .lib-btn.on,body.sk2 #lib-overlay .lib-btn[aria-pressed=true]{background:var(--k-color-ink)!important;color:var(--k-color-bg)!important}
+body.sk2 #lib-overlay .lib-btn.on,body.sk2 #lib-overlay .lib-btn[aria-pressed=true]{background:transparent!important;color:var(--k-color-ink)!important;box-shadow:inset 0 -2px 0 var(--k-color-ink)!important}
 /* Photo caption (gallery-wall label) under the photo. */
 body.sk2 #fx-deskbar-title.sk2-cap{position:absolute;z-index:3;display:flex;flex-direction:row;align-items:baseline;gap:12px;transform:none;margin:0;pointer-events:none;white-space:nowrap;overflow:hidden}
 body.sk2 #fx-deskbar-title.sk2-cap #db-title-name{font-size:12px;color:var(--k-color-ink);font-weight:400;overflow:hidden;text-overflow:ellipsis}
@@ -5968,7 +5973,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928F';
+const BUILD='1.0928G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
