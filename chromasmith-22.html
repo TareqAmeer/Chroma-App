@@ -2167,6 +2167,17 @@ body.sk2 .fx-val{font-variant-numeric:tabular-nums}
 /* Toggles keep their square-in-track design, just smaller (token) and vermilion when on. */
 body.sk2 .fx-toggle.on{background:var(--k-color-accent-a);border-color:var(--k-color-accent-a)}
 body.sk2 .fx-toggle::after{top:-1px;left:-1px}
+/* Stage header + sticky sub-tabs + sticky card titles. The panel loses its top padding so nothing
+   can show above a stuck title; each stuck layer is opaque. */
+body.sk2.deskx .fx-panel{padding-top:0!important}
+body.sk2 #sk2-stage-h{font-size:30px;font-weight:400;letter-spacing:-.035em;line-height:1;margin:0;padding:22px 0 14px;color:var(--k-color-ink)}
+body.sk2 #sk2-sub{position:sticky;top:0;z-index:8;display:flex;flex-wrap:wrap;gap:4px 14px;padding:8px 0 9px;margin-bottom:6px;background:var(--k-color-bg);box-shadow:0 1px 0 var(--bdr)}
+body.sk2 #sk2-sub[hidden]{display:none}
+body.sk2 #sk2-sub button{background:none;border:0;padding:2px 0;font:inherit;font-size:12px;color:var(--k-color-muted);cursor:pointer;position:relative}
+body.sk2 #sk2-sub button:hover,body.sk2 #sk2-sub button.on{color:var(--k-color-ink)}
+body.sk2 #sk2-sub button.on{box-shadow:inset 0 -1px 0 var(--k-color-ink)}
+body.sk2 .fx-ctrl-title{position:sticky;top:var(--sk2-sub-h,0px);z-index:6;background:var(--k-color-bg);padding-top:14px;padding-bottom:10px;margin-bottom:10px;box-shadow:0 1px 0 var(--bdr)}
+body.sk2 .fx-ctrl{margin-top:0!important;padding-top:0!important}
 /* Looks: the chosen look is marked by the square, not a kicked-out frame. */
 body.sk2 .look-cell:hover{transform:none;box-shadow:none}
 body.sk2 .look-cell.sel{border-color:transparent;box-shadow:none;position:relative}
@@ -2209,6 +2220,42 @@ var br=document.getElementById('cs-brand'),w=document.getElementById('cs-win');
 document.addEventListener('pointermove',function(e){if(!br||!w||w.hidden)return;var r=w.getBoundingClientRect(),on=e.clientY<r.bottom+14&&e.clientX<r.right+18;
   if(on!==br.classList.contains('sk2-corner'))br.classList.toggle('sk2-corner',on)},{passive:true});
 document.documentElement.addEventListener('pointerleave',function(){br&&br.classList.remove('sk2-corner')});})();</script>
+<script>/* Swiss v2 — stage header for the tool panel: a big stage title, then a sticky sub-tab row that
+   jumps between the stage's stacked cards and follows the scroll. Called by fxSection (deskx). */
+const SK2_SUB={image:'Image',looks:'Looks',adjust:'Basic',curves:'Curves',hal:'Halation',bloom:'Bloom',hsl:'Mixer',wheels:'Wheels',
+  pointcolor:'Point colour',grain:'Grain',nr:'Noise',deconv:'Sharpen',lens:'Lens',art:'Artifacts',vig:'Effects',retouch:'Retouch',
+  local:'Masks',crop:'Crop',borders:'Border',canvas:'Canvas',export:'Output',wm:'Watermark',exppreset:'Presets',style:'Styles',share:'Sharing'};
+function sk2SubTabs(g,jump){
+  const panel=document.querySelector('.fx-panel');if(!panel)return;
+  let h=document.getElementById('sk2-stage-h'),nav=document.getElementById('sk2-sub');
+  if(!h){h=document.createElement('h2');h.id='sk2-stage-h';nav=document.createElement('nav');nav.id='sk2-sub';nav.setAttribute('aria-label','Tools in this stage');
+    panel.prepend(h,nav);
+    nav.addEventListener('click',e=>{const b=e.target.closest('button[data-k]');if(b)sk2Jump(b.dataset.k,true);});
+    panel.addEventListener('scroll',sk2Spy,{passive:true});}
+  const G=FX_GROUPS[g];
+  h.textContent=G?G.label:(FX_SECTIONS.find(x=>x[0]===g)||[,''])[1];
+  const cards=G?[...panel.querySelectorAll('.fx-ctrl.sec-active')].filter(c=>c.style.display!=='none'&&!c.hidden):[];
+  nav.hidden=cards.length<2;
+  nav.innerHTML=cards.map(c=>`<button type="button" data-k="${c.dataset.fxsec}">${SK2_SUB[c.dataset.fxsec]||c.dataset.fxsec}</button>`).join('');
+  document.body.style.setProperty('--sk2-sub-h',(nav.hidden?0:nav.offsetHeight)+'px');
+  if(jump)requestAnimationFrame(()=>sk2Jump(jump,false));else sk2Spy();
+}
+function sk2Jump(k,smooth){
+  const panel=document.querySelector('.fx-panel'),c=panel&&panel.querySelector(`.fx-ctrl.sec-active[data-fxsec="${k}"]`);if(!c)return;
+  if(c.classList.contains('fx-sec-collapsed'))c.querySelector('.fx-ctrl-title')?.click();
+  const nav=document.getElementById('sk2-sub'),off=nav&&!nav.hidden?nav.offsetHeight:0;
+  const top=c.getBoundingClientRect().top-panel.getBoundingClientRect().top+panel.scrollTop-off;
+  panel.scrollTo({top:Math.max(0,top),behavior:smooth?'smooth':'auto'});
+}
+function sk2Spy(){
+  const panel=document.querySelector('.fx-panel'),nav=document.getElementById('sk2-sub');if(!panel||!nav||nav.hidden)return;
+  const line=panel.getBoundingClientRect().top+nav.offsetHeight+8;let cur=null;
+  panel.querySelectorAll('.fx-ctrl.sec-active').forEach(c=>{if(c.style.display!=='none'&&c.getBoundingClientRect().top<=line)cur=c.dataset.fxsec;});
+  if(!cur){const f=nav.querySelector('button');cur=f&&f.dataset.k;}
+  if(panel.scrollTop+panel.clientHeight>=panel.scrollHeight-2){const l=nav.querySelector('button:last-child');if(l)cur=l.dataset.k;}
+  nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===cur));
+}
+</script>
 <script>/* Swiss v2 — behaviour half (logo, hover/arrow-key look preview, "More" fold, "?" shortcuts). */
 (function(){
 function ready(f){if(document.readyState!=='loading')f();else document.addEventListener('DOMContentLoaded',f)}
@@ -5738,7 +5785,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928A';
+const BUILD='1.0928B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22638,17 +22685,15 @@ function _eachSection(cb){
 // the rail button and the tool. Members are listed in FX_SECTIONS order for readability; the
 // button is emitted at whichever member buildToolRail reaches first, and the cards stack in
 // DOM order regardless of this array.
-const FX_GROUPS={color:{label:'Color',icon:'curves',members:['curves','hsl','pointcolor','wheels']},
-  detail:{label:'Detail',icon:'lens',members:['nr','deconv','lens']},
-  film:{label:'Film',icon:'grain',members:['grain','hal','bloom','art','vig']},
-  frame:{label:'Frame',icon:'borders',members:['borders','canvas']},
-  // The old single "export" card (Output/Watermark/Export Presets/Styles/Sharing all run
-  // together with no real separation) split into five titled cards — same one-rail-icon,
-  // several-stacked-cards pattern as the groups above, still reached through the same "Export"
-  // rail button (label/icon unchanged; 'export' itself stays a real member — the Output card —
-  // same as every other group's members, just also lending the group its name here since this
-  // rail icon was already called Export before any of this existed).
-  exportgrp:{label:'Export',icon:'export',members:['export','wm','exppreset','style','share']}};
+// Swiss v2 (2026-09-28): the rail is five stages. Each stage stacks its member cards in one
+// scrolling panel with sticky titles, and a sub-tab row (sk2SubTabs) jumps between them.
+// Crop / Masks / Retouch sit inside stages now; they are still button-driven, so stacking them
+// does not switch any tool on by itself. Old nine-group layout: git tag pre-swiss-v2.
+const FX_GROUPS={look:{label:'Look',icon:'looks',members:['image','looks']},
+  light:{label:'Light',icon:'adjust',members:['adjust','curves','hal','bloom']},
+  colour:{label:'Colour',icon:'hsl',members:['hsl','wheels','pointcolor']},
+  texture:{label:'Texture',icon:'grain',members:['grain','nr','deconv','lens','art','vig','retouch','local']},
+  output:{label:'Output',icon:'export',members:['crop','borders','canvas','export','wm','exppreset','style','share']}};
 const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEach(k=>FX_GROUP_OF[k]=g));
 // deskx rail: draw a hairline BEFORE each of these, so the rail reads as bands rather than one
 // undifferentiated list. With the FX_SECTIONS order above that yields:
@@ -22659,7 +22704,7 @@ const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEac
 // ⚠️ A key that is neither is silently never matched, so a stale entry here does not throw —
 // it just DROPS a hairline. After reordering FX_SECTIONS, count the separators in the live
 // rail rather than assuming this set still lines up.
-const RAIL_GROUP_BREAK=new Set(['adjust','color','detail','film','frame','local','crop','exportgrp']);
+const RAIL_GROUP_BREAK=new Set(['light','colour','texture','output','info']);
 function _activeSec(){
   const c=document.querySelector('.fx-ctrl.sec-active');if(!c)return null;
   const key=c.dataset.fxsec;
@@ -22853,6 +22898,9 @@ function fxInitEdges(){
 function fxSection(name,noSheet){
   if(document.body.classList.contains('tools-open'))fxToolsClose();
   const dx=document.body.classList.contains('deskx');
+  // A member key (e.g. fxSection('local') from the command palette) opens its stage and scrolls to it.
+  let jumpTo=null;
+  if(dx&&!FX_GROUPS[name]&&FX_GROUP_OF[name]){jumpTo=name;name=FX_GROUP_OF[name];noSheet=true;}
   const members=(dx&&FX_GROUPS[name])?FX_GROUPS[name].members:[name];
   const cards=members.map(_fxSectionCard).filter(Boolean);
   if(!cards.length)return;
@@ -22897,6 +22945,7 @@ function fxSection(name,noSheet){
   // display:none. Re-seed once they do. (setTimeout 0, not immediate — sec-active was only just
   // applied and the cells have not been laid out yet at this point in the frame.)
   if(members.includes('looks')&&typeof buildLookGallery._reseed==='function')setTimeout(buildLookGallery._reseed,0);
+  if(dx&&typeof sk2SubTabs==='function')sk2SubTabs(name,jumpTo);
 }
 function fxSheetClose(){
   document.body.classList.remove('sheet-open');
