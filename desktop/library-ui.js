@@ -440,6 +440,11 @@
         return Promise.resolve();
       }
       case 'catalog_auto_assign': return Promise.resolve({ assigned: 0, people: 0 });
+      case 'catalog_untag_faces': return Promise.resolve((args.faceIds || []).length);
+      case 'catalog_faces_for_path': return Promise.resolve([
+        { face_id: 301, x0: .2, y0: .2, x1: .3, y1: .35, person_id: 3, name: 'Tareq', kind: 'person', confirmed: true, auto_tagged: true, person_auto: false },
+        { face_id: 302, x0: .5, y0: .2, x1: .6, y1: .35, person_id: null, name: null, kind: null, confirmed: false, auto_tagged: false, person_auto: false },
+      ]);
       case 'catalog_undo_auto_assign': return Promise.resolve(0);
       case 'catalog_import_google_takeout': return Promise.resolve({ sidecars_with_people: 0, photos_matched: 0, photos_not_in_library: 0, faces_tagged: 0, people_created: 0, auto_assigned: 0 });
       case 'catalog_confirm_person': {
@@ -1340,6 +1345,31 @@
       border:2px solid transparent;aspect-ratio:1;cursor:pointer}
     .lib-review-face.sel{border-color:var(--acc2)}
     .lib-review-face.desel{opacity:.35}
+    #lib-people-edit .lib-pe-card{background:var(--sur2);border:1px solid var(--bdr);border-radius:10px;padding:16px;
+      width:min(760px,92vw);max-height:80vh;overflow:auto}
+    .lib-pe-top{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;margin-bottom:12px}
+    .lib-pe-group{margin-bottom:14px}
+    .lib-pe-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px}
+    .lib-pe-name{font-weight:600}
+    .lib-pe-head .lib-btn{margin-left:auto}
+    .lib-pe-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+    .lib-pe-face{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--sur);cursor:pointer}
+    .lib-pe-face img{width:100%;height:100%;object-fit:cover;visibility:hidden}
+    .lib-pe-face img.loaded{visibility:visible}
+    .lib-pe-auto{position:absolute;left:4px;top:4px;padding:1px 6px;border-radius:9px;background:rgba(0,0,0,.65);color:#fff;font-size:10px}
+    #lib-people-grid{display:none;position:absolute;left:0;right:0;z-index:30;background:var(--bg);overflow:auto;padding:20px 24px}
+    #lib-people-grid.on{display:block}
+    .lib-pg-top{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+    .lib-pg-title{font-size:20px;font-weight:600;margin-right:auto}
+    .lib-pg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px}
+    .lib-pg-tile{position:relative;aspect-ratio:1;overflow:hidden;background:var(--sur2);cursor:pointer}
+    .lib-pg-tile img{width:100%;height:100%;object-fit:cover;visibility:hidden}
+    .lib-pg-tile img.loaded{visibility:visible}
+    .lib-pg-tile::after{content:'';position:absolute;inset:0;background:linear-gradient(transparent 60%,rgba(0,0,0,.6))}
+    .lib-pg-name{position:absolute;left:0;right:0;bottom:10px;text-align:center;color:#fff;font-size:14px;font-weight:600;z-index:1}
+    .lib-pg-n{position:absolute;right:8px;top:8px;color:#fff;font-size:11px;background:rgba(0,0,0,.5);padding:1px 6px;border-radius:9px;z-index:1}
+    .lib-sec-h[data-sec-toggle="people"] .lib-sec-label{cursor:pointer}
+    .lib-sec-h[data-sec-toggle="people"] .lib-sec-label:hover{text-decoration:underline}
     .lib-review-face .lib-review-n{position:absolute;right:4px;bottom:4px;padding:1px 6px;border-radius:9px;
       background:rgba(0,0,0,.65);color:#fff;font-size:11px;line-height:16px}
     .lib-review-face img{width:100%;height:100%;object-fit:cover;visibility:hidden}
@@ -6148,6 +6178,26 @@
       });
       sep();
     }
+    item(`People${n > 1 ? ` in ${n} photos` : ''}…`, () => openPhotoPeopleEditor(paths));
+    const scopedPerson = /^person:(\d+)$/.exec(state.catalogScope || '');
+    if (state.source === 'catalog' && scopedPerson) {
+      const pid = parseInt(scopedPerson[1], 10);
+      const who = (peopleList.find((x) => x.id === pid) || {}).name || 'this person';
+      item(`Not ${esc(who)}${n > 1 ? ` (${n})` : ''}`, async () => {
+        const ids = [];
+        for (const path of paths) {
+          const faces = await invoke('catalog_faces_for_path', { path }).catch(() => []);
+          (faces || []).filter((f) => f.person_id === pid).forEach((f) => ids.push(f.face_id));
+        }
+        if (!ids.length) return;
+        try {
+          await invoke('catalog_untag_faces', { faceIds: ids });
+          await refreshPeople(); refreshView();
+          toast(`Removed "${who}" from ${n} photo${n === 1 ? '' : 's'}`, true);
+        } catch (err) { toast(humanizeErr('remove this tag', err), 'err'); }
+      });
+    }
+    sep();
     // Persistent RAW caching must be reachable from the same right-click selection workflow
     // as the rest of the batch actions. The floating selection bar is easy to miss in a large
     // grid or when it is covered by the cursor/context menu.
@@ -9366,6 +9416,143 @@
     } catch (err) { toast(humanizeErr('import from Google Photos', err), 'err'); }
   }
 
+  // ── People editor for selected photos (grid right-click ▸ People…) ────────────────────────
+  // Every face in the selection, grouped by person: rename a face, remove a wrong tag (remembered,
+  // so auto-tagging never re-adds it), or remove one person from all selected photos at once.
+  async function openPhotoPeopleEditor(paths) {
+    const MAX = 200;
+    const faces = [];
+    for (const path of paths.slice(0, MAX)) {
+      const fs = await invoke('catalog_faces_for_path', { path }).catch(() => []);
+      (fs || []).forEach((f) => faces.push(f));
+    }
+    const wrap = document.createElement('div');
+    wrap.id = 'lib-people-edit';
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(10,10,10,.6);display:flex;align-items:center;justify-content:center';
+    const render = () => {
+      const groups = new Map();
+      faces.forEach((f) => {
+        const key = f.person_id && !f.person_auto ? `p${f.person_id}` : 'unnamed';
+        if (!groups.has(key)) groups.set(key, { name: key === 'unnamed' ? 'Unnamed' : f.name, pid: key === 'unnamed' ? null : f.person_id, faces: [] });
+        groups.get(key).faces.push(f);
+      });
+      const tile = (f) => `<div class="lib-pe-face" data-face-id="${f.face_id}" title="Click to rename or remove">
+          <img alt="">${f.auto_tagged ? '<span class="lib-pe-auto">Auto</span>' : ''}</div>`;
+      const sections = [...groups.values()].sort((a, b) => (a.pid == null) - (b.pid == null) || b.faces.length - a.faces.length).map((g) => `
+        <div class="lib-pe-group">
+          <div class="lib-pe-head"><span class="lib-pe-name">${esc(g.name)}</span><span class="mut">${g.faces.length} face${g.faces.length === 1 ? '' : 's'}</span>
+            ${g.pid ? `<span class="lib-btn" data-remove-person="${g.pid}">Remove ${esc(g.name)} from ${paths.length > 1 ? 'these photos' : 'this photo'}</span>` : ''}</div>
+          <div class="lib-pe-grid">${g.faces.map(tile).join('')}</div>
+        </div>`).join('');
+      wrap.innerHTML = `<div class="lib-pe-card">
+          <div class="lib-pe-top"><span>People in ${paths.length > 1 ? `${paths.length} photos` : 'this photo'}</span><span class="lib-btn" data-close>Done</span></div>
+          ${faces.length ? sections : '<div class="mut" style="padding:20px 0">No faces found in the selected photos.</div>'}
+          ${paths.length > MAX ? `<div class="mut" style="font-size:11px">Showing the first ${MAX} photos.</div>` : ''}
+        </div>`;
+      wrap.querySelectorAll('.lib-pe-face').forEach((el) => {
+        loadFaceCrop(parseInt(el.dataset.faceId, 10), el.querySelector('img'));
+        el.onclick = (ev) => faceMenu(ev, faces.find((f) => f.face_id === parseInt(el.dataset.faceId, 10)));
+      });
+      wrap.querySelectorAll('[data-remove-person]').forEach((b) => {
+        b.onclick = async () => {
+          const pid = parseInt(b.dataset.removePerson, 10);
+          const ids = faces.filter((f) => f.person_id === pid).map((f) => f.face_id);
+          await untag(ids);
+        };
+      });
+      wrap.querySelector('[data-close]').onclick = close;
+    };
+    const close = () => { wrap.remove(); refreshPeople(); refreshView(); };
+    const untag = async (ids) => {
+      try {
+        await invoke('catalog_untag_faces', { faceIds: ids });
+        faces.forEach((f) => { if (ids.includes(f.face_id)) { f.person_id = null; f.name = null; f.auto_tagged = false; f.person_auto = false; } });
+        render();
+      } catch (err) { toast(humanizeErr('remove this tag', err), 'err'); }
+    };
+    const faceMenu = (ev, f) => {
+      ev.stopPropagation();
+      document.querySelectorAll('.lib-pe-menu').forEach((m) => m.remove());
+      const m = document.createElement('div');
+      m.className = 'lib-pe-menu';
+      m.style.cssText = `position:fixed;left:${ev.clientX}px;top:${ev.clientY}px;z-index:10000;background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;padding:4px;min-width:170px;font-size:12px`;
+      const add = (label, fn) => {
+        const it = document.createElement('div');
+        it.textContent = label;
+        it.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
+        it.onmouseenter = () => { it.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
+        it.onmouseleave = () => { it.style.background = ''; };
+        it.onclick = () => { m.remove(); fn(); };
+        m.appendChild(it);
+      };
+      add(f.person_id && !f.person_auto ? 'Change name…' : 'Name this face…', async () => {
+        const name = await window.askTextModal('Who is this?', '', f.person_auto ? '' : (f.name || ''));
+        if (!name) return;
+        const existing = peopleList.find((p) => !p.auto && p.name.toLowerCase() === name.toLowerCase());
+        try {
+          const id = await invoke('catalog_split_faces', { faceIds: [f.face_id], intoId: existing ? existing.id : null, intoName: existing ? null : name });
+          Object.assign(f, { person_id: existing ? existing.id : id, name: existing ? existing.name : name, auto_tagged: false, person_auto: false });
+          if (!existing) await refreshPeople();
+          render();
+        } catch (err) { toast(humanizeErr('name this face', err), 'err'); }
+      });
+      if (f.person_id) add(`Not ${f.person_auto ? 'this group' : f.name} — remove tag`, () => untag([f.face_id]));
+      if (f.auto_tagged) add('Confirm — yes, this is them', async () => {
+        await invoke('catalog_confirm_person', { personId: f.person_id, faceIds: [f.face_id] }).catch(() => {});
+        f.auto_tagged = false; render();
+      });
+      document.body.appendChild(m);
+      setTimeout(() => document.addEventListener('mousedown', function h(e2) { if (!m.contains(e2.target)) { m.remove(); document.removeEventListener('mousedown', h); } }), 0);
+    };
+    wrap.onclick = (e) => { if (e.target === wrap) close(); };
+    render();
+    document.body.appendChild(wrap);
+  }
+
+  // ── People & Pets grid (click the sidebar section's title) ─────────────────────────────────
+  // Google Photos-style: every named person and pet as a large tile over the grid area; click a
+  // tile to open their photos, right-click for the same menu as the sidebar row.
+  function openPeopleGrid() {
+    const main = document.getElementById('lib-main');
+    if (!main) return;
+    let el = document.getElementById('lib-people-grid');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'lib-people-grid';
+      main.appendChild(el);
+    }
+    const named = peopleList.filter((p) => !p.auto && !p.ignored).sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
+    const unnamed = peopleList.filter((p) => p.auto && !p.ignored).reduce((n, p) => n + (p.face_count || 0), 0);
+    el.innerHTML = `<div class="lib-pg-top"><span class="lib-pg-title">People &amp; Pets</span>
+        ${unnamed ? `<span class="lib-btn" data-pg-review>Review ${fmtN(unnamed)} unnamed faces</span>` : ''}
+        <span class="lib-btn" data-pg-close>Close</span></div>
+      <div class="lib-pg-grid">${named.map((p) => `<div class="lib-pg-tile" data-person="${p.id}">
+          <img alt=""><span class="lib-pg-name">${esc(p.name)}</span><span class="lib-pg-n">${fmtN(p.face_count || 0)}</span></div>`).join('')
+        || '<div class="mut" style="grid-column:1/-1">No one named yet — review unnamed faces to start.</div>'}</div>`;
+    // #lib-main is itself the grid's scroller: pin the overlay to its visible window and stop it
+    // scrolling underneath while open.
+    el.style.top = main.scrollTop + 'px';
+    el.style.height = main.clientHeight + 'px';
+    main.style.overflow = 'hidden';
+    el.classList.add('on');
+    el.querySelectorAll('.lib-pg-tile').forEach((t) => {
+      const p = peopleList.find((x) => x.id === parseInt(t.dataset.person, 10));
+      if (p && p.cover_face_id != null) loadFaceCrop(p.cover_face_id, t.querySelector('img'));
+      t.onclick = () => { closePeopleGrid(); openCatalogView(`person:${p.id}`); };
+      t.oncontextmenu = (e) => { e.preventDefault(); showPersonMenu(e, p.id); };
+    });
+    el.querySelector('[data-pg-close]').onclick = closePeopleGrid;
+    const rv = el.querySelector('[data-pg-review]');
+    if (rv) rv.onclick = () => openReviewFaces();
+  }
+  function closePeopleGrid() {
+    const el = document.getElementById('lib-people-grid');
+    if (!el || !el.classList.contains('on')) return;
+    el.classList.remove('on');
+    const main = document.getElementById('lib-main');
+    if (main) main.style.overflow = '';
+  }
+
   // ── Review mode (people-pets wireframes screen C) ──────────────────────────────────────────
   // One unnamed cluster at a time, full-viewport, keyboard-driven — the answer to CLAUDE.md
   // failures #2/#3/#6/#7: unclustered/unnamed faces were computed then thrown away, there was no
@@ -9629,7 +9816,7 @@
     if (!p) return;
     const items = [
       ...(!p.auto ? [[`Find more photos of ${p.name}…`, () => openFindMore(p)]] : []),
-      ...(!p.auto && p.kind !== 'pet' ? [['Undo automatic tags', async () => {
+      ...(!p.auto ? [['Undo automatic tags', async () => {
         if (!await window.confirmModal(`Remove every photo that was tagged "${p.name}" automatically?\n\nPhotos you confirmed yourself stay. The removed ones won't be auto-tagged as ${p.name} again.`, 'Remove')) return;
         try {
           const n = await invoke('catalog_undo_auto_assign', { personId: id });
@@ -10564,6 +10751,7 @@
   })();
 
   async function openCatalogView(scope) {
+    closePeopleGrid();
     state.source = 'catalog';
     state.catalogScope = scope || 'all';
     state.selected.clear();
@@ -11674,9 +11862,13 @@
     // immediately before it (rewritten every render — it's just a chevron+label, cheap) and
     // #lib-collections-post immediately after it (holds only Cloud, the one section that must
     // render after the tree). #lib-collections itself now holds everything BEFORE Folders.
+    // Inner scrollers (the People list) are recreated by the rewrite below and would snap back to
+    // the top on every background refresh — keep their scroll positions.
+    const keepScroll = [...host.querySelectorAll('.lib-people-scroll')].map((el) => el.scrollTop);
     host.innerHTML = catalogSectionHtml() + (dateHtml ? '<div class="lib-coll-sep"></div>' + dateHtml : '')
       + '<div class="lib-coll-sep"></div>' + sidebarSection('collections', 'Collections', collectionsBody)
       + keywordsSectionHtml() + peopleSectionHtml() + albumsSectionHtml() + drivesSectionHtml() + devicesSectionHtml();
+    host.querySelectorAll('.lib-people-scroll').forEach((el, i) => { if (keepScroll[i]) el.scrollTop = keepScroll[i]; });
     const foldersHeaderEl = document.getElementById('lib-folders-header');
     if (foldersHeaderEl) foldersHeaderEl.innerHTML = '<div class="lib-coll-sep"></div>' + sidebarSection('folders', 'Folders', '');
     const treeEl = document.getElementById('lib-tree');
@@ -11692,6 +11884,7 @@
       row.onclick = (e) => {
         e.stopPropagation();
         const key = row.dataset.secToggle;
+        if (key === 'people' && e.target.closest('.lib-sec-label')) { openPeopleGrid(); return; }
         if (sidebarSecOpen.has(key)) sidebarSecOpen.delete(key); else sidebarSecOpen.add(key);
         saveSidebarSecOpen();
         renderCollections();

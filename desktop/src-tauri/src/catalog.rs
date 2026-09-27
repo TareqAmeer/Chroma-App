@@ -3716,6 +3716,10 @@ pub struct PhotoFaceInfo {
     pub name: Option<String>,
     pub kind: Option<String>,
     pub confirmed: bool,
+    /// Tagged by `auto_assign_run`, not by the user — the UI marks these so they can be removed.
+    pub auto_tagged: bool,
+    /// The person is still a machine "Person N" group, not someone the user named.
+    pub person_auto: bool,
 }
 
 /// The editor has only a file PATH (it's not always looking at a catalogued photo — a bare
@@ -3733,7 +3737,7 @@ fn faces_for_path_run(conn: &Connection, path: &str) -> Result<Vec<PhotoFaceInfo
     let Some(photo_id) = find_photo_by_abs_path(conn, path) else { return Ok(Vec::new()) };
     let mut stmt = conn
         .prepare(
-            "SELECT f.id, f.x0, f.y0, f.x1, f.y1, f.person_id, p.name, p.kind, f.confirmed
+            "SELECT f.id, f.x0, f.y0, f.x1, f.y1, f.person_id, p.name, p.kind, f.confirmed, COALESCE(p.auto, 0)
              FROM photo_faces f LEFT JOIN people p ON p.id = f.person_id
              WHERE f.photo_id = ?1 ORDER BY f.score DESC",
         )
@@ -3751,6 +3755,8 @@ fn faces_for_path_run(conn: &Connection, path: &str) -> Result<Vec<PhotoFaceInfo
                 name: r.get(6)?,
                 kind: r.get(7)?,
                 confirmed: confirmed != 0,
+                auto_tagged: confirmed == 2,
+                person_auto: r.get::<_, i64>(9)? != 0,
             })
         })
         .map_err(|e| e.to_string())?
@@ -4730,17 +4736,39 @@ pub struct AutoAssignResult {
 /// like a confirmed face, is shown as that person's photo, never trains the profile, and is
 /// undoable per person (`catalog_undo_auto_assign`). Rejected pairs are never auto-assigned.
 pub fn auto_assign_run(conn: &Connection) -> Result<AutoAssignResult, String> {
-    let profiles = person_profiles(conn, "person")?;
     let mut res = AutoAssignResult::default();
+    let mut touched = std::collections::HashSet::new();
+    // Face-detector rows (people, and the dog/cat faces SCRFD finds) and CLIP animal crops are
+    // two separate embedding spaces with their own bars.
+    for (space, bar_sim, margin, burst_sim) in [
+        ("person", AUTO_ASSIGN_SIM, AUTO_ASSIGN_MARGIN, BURST_ASSIGN_SIM),
+        ("pet", PET_AUTO_JOIN_SIM, PET_SUGGEST_MARGIN, PET_SUGGEST_SIM),
+    ] {
+        res.assigned += auto_assign_space(conn, space, bar_sim, margin, burst_sim, &mut touched)?;
+    }
+    res.people = touched.len();
+    Ok(res)
+}
+
+fn auto_assign_space(
+    conn: &Connection,
+    space: &str,
+    bar_sim: f32,
+    margin: f32,
+    burst_sim: f32,
+    touched: &mut std::collections::HashSet<i64>,
+) -> Result<usize, String> {
+    let profiles = person_profiles(conn, space)?;
+    let mut assigned = 0usize;
     if profiles.is_empty() {
-        return Ok(res);
+        return Ok(0);
     }
     // Moments that already contain a tagged face of each person: (person, captured).
     let mut tstmt = conn
         .prepare(
             "SELECT f.person_id, p.captured FROM photo_faces f JOIN photos p ON p.id = f.photo_id
              JOIN people pp ON pp.id = f.person_id
-             WHERE f.confirmed IN (1, 2) AND pp.auto = 0 AND pp.kind = 'person' AND p.captured IS NOT NULL",
+             WHERE f.confirmed IN (1, 2) AND pp.auto = 0 AND p.captured IS NOT NULL",
         )
         .map_err(|e| e.to_string())?;
     let mut tagged_times: std::collections::HashMap<i64, Vec<i64>> = Default::default();
@@ -4762,12 +4790,12 @@ pub fn auto_assign_run(conn: &Connection) -> Result<AutoAssignResult, String> {
             "SELECT f.id, f.photo_id, f.embedding, ph.captured FROM photo_faces f
              JOIN photos ph ON ph.id = f.photo_id
              LEFT JOIN people o ON o.id = f.person_id
-             WHERE f.confirmed = 0 AND f.species IS NULL AND length(f.embedding) > 0
+             WHERE f.confirmed = 0 AND length(f.embedding) > 0 AND ((?1 = 'pet') = (f.species IS NOT NULL))
                AND (f.person_id IS NULL OR o.auto = 1) AND COALESCE(o.ignored, 0) = 0",
         )
         .map_err(|e| e.to_string())?;
     let rows: Vec<(i64, i64, Vec<u8>, Option<i64>)> = stmt
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .query_map(params![space], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
@@ -4785,10 +4813,10 @@ pub fn auto_assign_run(conn: &Connection) -> Result<AutoAssignResult, String> {
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         let Some(&(pid, sim)) = scored.first() else { continue };
         let runner = scored.get(1).map_or(-1.0, |x| x.1);
-        if rejected.contains(&(fid, pid)) || sim - runner < AUTO_ASSIGN_MARGIN {
+        if rejected.contains(&(fid, pid)) || sim - runner < margin {
             continue;
         }
-        let bar = if near_tagged(pid, t) { BURST_ASSIGN_SIM } else { AUTO_ASSIGN_SIM };
+        let bar = if near_tagged(pid, t) { burst_sim } else { bar_sim };
         if sim < bar {
             continue;
         }
@@ -4802,19 +4830,17 @@ pub fn auto_assign_run(conn: &Connection) -> Result<AutoAssignResult, String> {
         .prepare("SELECT 1 FROM photo_faces WHERE photo_id = ?1 AND person_id = ?2 AND confirmed IN (1, 2)")
         .map_err(|e| e.to_string())?;
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-    let mut touched = std::collections::HashSet::new();
     for ((photo_id, pid), (fid, _)) in best {
         if has.exists(params![photo_id, pid]).map_err(|e| e.to_string())? {
             continue;
         }
         tx.execute("UPDATE photo_faces SET person_id = ?1, confirmed = 2 WHERE id = ?2", params![pid, fid]).map_err(|e| e.to_string())?;
-        res.assigned += 1;
+        assigned += 1;
         touched.insert(pid);
     }
     drop(has);
     tx.commit().map_err(|e| e.to_string())?;
-    res.people = touched.len();
-    Ok(res)
+    Ok(assigned)
 }
 
 #[tauri::command]
@@ -4829,6 +4855,25 @@ pub async fn catalog_auto_assign(app: tauri::AppHandle) -> Result<AutoAssignResu
     .map_err(|e| format!("catalog_auto_assign task panicked: {e}"))?
 }
 
+/// "Not this person" for specific faces (the photo right-click People editor): each face leaves
+/// its person and is remembered as rejected for them, so auto-tagging never puts it back.
+#[tauri::command]
+pub fn catalog_untag_faces(state: tauri::State<CatalogState>, face_ids: Vec<i64>) -> Result<usize, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let mut n = 0;
+    for fid in &face_ids {
+        tx.execute(
+            "INSERT OR IGNORE INTO face_rejections (face_id, person_id) SELECT id, person_id FROM photo_faces WHERE id = ?1 AND person_id IS NOT NULL",
+            params![fid],
+        )
+        .map_err(|e| e.to_string())?;
+        n += tx.execute("UPDATE photo_faces SET person_id = NULL, confirmed = 0 WHERE id = ?1", params![fid]).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(n)
+}
+
 /// Undo for auto-tagging: every face auto-assigned to this person goes back to Unnamed, and is
 /// remembered as "not them" so it isn't auto-assigned again.
 #[tauri::command]
@@ -4836,12 +4881,12 @@ pub fn catalog_undo_auto_assign(state: tauri::State<CatalogState>, person_id: i6
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     tx.execute(
-        "INSERT OR IGNORE INTO face_rejections (face_id, person_id) SELECT id, person_id FROM photo_faces WHERE person_id = ?1 AND confirmed = 2",
+        "INSERT OR IGNORE INTO face_rejections (face_id, person_id) SELECT id, person_id FROM photo_faces WHERE person_id = ?1 AND confirmed IN (0, 2)",
         params![person_id],
     )
     .map_err(|e| e.to_string())?;
     let n = tx
-        .execute("UPDATE photo_faces SET person_id = NULL, confirmed = 0 WHERE person_id = ?1 AND confirmed = 2", params![person_id])
+        .execute("UPDATE photo_faces SET person_id = NULL, confirmed = 0 WHERE person_id = ?1 AND confirmed IN (0, 2)", params![person_id])
         .map_err(|e| e.to_string())?;
     tx.commit().map_err(|e| e.to_string())?;
     Ok(n)
@@ -5098,15 +5143,17 @@ fn face_embeddings(conn: &Connection, ids: &[i64]) -> Result<Vec<(i64, Vec<f32>)
     Ok(out)
 }
 
-/// Profiles for every named (non-auto), non-ignored person of `kind` ('person' | 'pet'). Built
-/// from confirmed faces; a named one with none confirmed yet falls back to all assigned faces.
-/// Human profiles use ArcFace rows only, pet profiles CLIP rows only (`species IS NULL` or not).
+/// Profiles for every named (non-auto), non-ignored person or pet, in one embedding SPACE:
+/// "person" = ArcFace face rows (`species IS NULL`), "pet" = CLIP animal-crop rows. Space, not
+/// `people.kind`: a pet can own face-detector rows (SCRFD happily finds dog faces — that's how
+/// most of a named dog's photos got tagged), and must be matchable through those too. Built from
+/// confirmed faces; a named one with none confirmed yet falls back to all assigned faces.
 fn person_profiles(conn: &Connection, kind: &str) -> Result<Vec<PersonProfile>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT p.id, p.name, f.embedding, f.confirmed FROM people p
              JOIN photo_faces f ON f.person_id = p.id
-             WHERE p.auto = 0 AND p.ignored = 0 AND p.kind = ?1 AND length(f.embedding) > 0
+             WHERE p.auto = 0 AND p.ignored = 0 AND length(f.embedding) > 0
                AND ((?1 = 'pet') = (f.species IS NOT NULL))",
         )
         .map_err(|e| e.to_string())?;
@@ -5165,12 +5212,7 @@ fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: Option<f32
         Some(k) => k,
         None => return Ok(Vec::new()),
     };
-    let pet = is_pet_kind(&kind);
-    let min_sim = min_sim.unwrap_or(if pet { PET_SUGGEST_SIM } else { FACE_SUGGEST_SIM });
-    let profiles = person_profiles(conn, &kind)?;
-    if !profiles.iter().any(|p| p.id == person_id) {
-        return Ok(Vec::new());
-    }
+    let _ = kind;
     // Days (y, m, d) this person already has a confirmed photo from — see SAME_DAY_BOOST.
     let mut dstmt = conn
         .prepare(
@@ -5184,6 +5226,14 @@ fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: Option<f32
         .collect::<Result<_, _>>()
         .map_err(|e| e.to_string())?;
     drop(dstmt);
+    let mut out: Vec<FaceSuggestion> = Vec::new();
+    for space in ["person", "pet"] {
+    let pet = space == "pet";
+    let profiles = person_profiles(conn, space)?;
+    if !profiles.iter().any(|p| p.id == person_id) {
+        continue;
+    }
+    let min_sim = if pet { PET_SUGGEST_SIM } else { min_sim.unwrap_or(FACE_SUGGEST_SIM) };
     // Candidates: any unconfirmed face not already this person's, not in an ignored group, and
     // not previously rejected for this person. Faces in other auto "Person N" groups and the
     // unclustered pile are exactly what this is meant to reach.
@@ -5204,7 +5254,7 @@ fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: Option<f32
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
-    let mut out: Vec<FaceSuggestion> = rows
+    out.extend(rows
         .into_iter()
         .filter_map(|(face_id, photo_id, blob, y, m, d)| {
             let emb = blob_to_f32_vec(&blob);
@@ -5212,15 +5262,14 @@ fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: Option<f32
             let same_day = matches!((y, m, d), (Some(y), Some(m), Some(d)) if days.contains(&(y, m, d)));
             let sim = if same_day { sim + SAME_DAY_BOOST } else { sim };
             (sim >= min_sim).then_some(FaceSuggestion { face_id, photo_id, similarity: sim.min(1.0), also: Vec::new() })
-        })
-        .collect();
+        }));
     // Unassigned pending faces too: the person's OWN unconfirmed faces (from a cluster that
     // majority-voted into them) are also worth a yes/no, ranked in with the rest.
     let mut own = conn
-        .prepare("SELECT id, photo_id FROM photo_faces WHERE person_id = ?1 AND confirmed = 0 AND length(embedding) > 0")
+        .prepare("SELECT id, photo_id FROM photo_faces WHERE person_id = ?1 AND confirmed = 0 AND length(embedding) > 0 AND ((?2 = 1) = (species IS NOT NULL))")
         .map_err(|e| e.to_string())?;
     let own_rows: Vec<(i64, i64)> = own
-        .query_map(params![person_id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .query_map(params![person_id, pet as i64], |r| Ok((r.get(0)?, r.get(1)?)))
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
@@ -5229,6 +5278,7 @@ fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: Option<f32
         if let Some((_, e)) = face_embeddings(conn, &[fid])?.into_iter().next() {
             out.push(FaceSuggestion { face_id: fid, photo_id: pid, similarity: profile_sim(&e, target), also: Vec::new() });
         }
+    }
     }
     out.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal));
     // One face per photo is enough to tag the photo — keep the strongest.
@@ -10151,6 +10201,15 @@ mod tests {
     #[ignore]
     fn real_catalog_auto_assign() {
         let conn = Connection::open(std::env::var("CHROMA_DB").unwrap()).unwrap();
+        let named: Vec<(i64, String)> = conn
+            .prepare("SELECT id, name FROM people WHERE auto = 0 ORDER BY id").unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().collect::<Result<_, _>>().unwrap();
+        for (id, name) in &named {
+            let n = person_suggestions_run(&conn, *id, None, 100000).unwrap();
+            if !n.is_empty() {
+                eprintln!("{name}: {} suggestion moments ({} faces)", n.len(), n.iter().map(|s| 1 + s.also.len()).sum::<usize>());
+            }
+        }
         let r = auto_assign_run(&conn).unwrap();
         eprintln!("auto-assigned {} faces across {} people", r.assigned, r.people);
     }

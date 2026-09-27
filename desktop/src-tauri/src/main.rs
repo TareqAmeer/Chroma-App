@@ -2767,6 +2767,7 @@ fn main() {
             catalog::catalog_resolve_suggestions,
             catalog::catalog_auto_assign,
             catalog::catalog_undo_auto_assign,
+            catalog::catalog_untag_faces,
             catalog::catalog_import_google_takeout,
             catalog::catalog_detect_portable_people,
             catalog::catalog_export_portable_people,
