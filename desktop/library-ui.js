@@ -1522,8 +1522,9 @@
     #lib-filters-panel{grid-row:5;justify-self:end;align-self:stretch;position:relative;
       width:280px;max-width:82vw;background:var(--bg);border-left:1px solid var(--bdr);z-index:15;
       overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;
-      box-shadow:none;transform:translateX(105%);transition:transform .18s ease}
-    #lib-filters-panel.open{transform:translateX(0)}
+      box-shadow:none;transform:translateX(105%);transition:transform .18s ease,visibility 0s linear .18s;visibility:hidden}
+    /* visibility:hidden while closed so Tab can't walk into the off-screen dropdowns. */
+    #lib-filters-panel.open{transform:translateX(0);visibility:visible;transition:transform .18s ease}
     #lib-overlay.full #lib-filters-panel{grid-row:4;grid-column:2}
     #lib-filters-panel select,#lib-filters-panel input[type=range]{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:7px;padding:5px 7px;font-size:11px;width:100%}
@@ -1559,7 +1560,7 @@
     #lib-grid.lib-zero-gap{gap:0}
     /* Border around photos: the photo sits inset on its mount (real aspect, uncropped) like a
        matted print. Square grid only — list/aspect views size the image themselves. */
-    #lib-grid.lib-mat:not(.list-view):not(.aspect-view) .lib-thumb-wrap>img{inset:9%;width:82%;height:82%;object-fit:contain}
+    #lib-grid.lib-mat:not(.list-view):not(.aspect-view) .lib-thumb-wrap>img{inset:5%;width:90%;height:90%;object-fit:contain} /* 5% mat: a light mount; 9% left photos filling ~60% of the tile */
     /* !important: chromasmith-22.html clears a loaded tile's plate (:has(img.loaded) → transparent!important). */
     #lib-overlay #lib-grid.lib-mat:not(.list-view):not(.aspect-view) .lib-thumb-wrap{background:#efece5!important}
     #lib-grid-title{position:sticky;top:-16px;z-index:21;margin:-16px -16px 16px;padding:18px 16px 14px;
@@ -1875,8 +1876,8 @@
     body.deskx #lib-overlay:not(.full) #lib-main{grid-row:2}
     /* CHR-130: docked filmstrip thumbnails sit desaturated so they don't compete with the photo;
        colour returns on hover/focus, or while .fs-active (set by scroll/click, cleared after a pause). */
-    body.deskx #lib-overlay:not(.full) #lib-main{filter:saturate(0);transition:filter .2s}
-    body.deskx #lib-overlay:not(.full):hover #lib-main,body.deskx #lib-overlay:not(.full):focus-within #lib-main,body.deskx #lib-overlay:not(.full) #lib-main.fs-active{filter:none}
+    /* No strip-wide desaturate: it greyed the CURRENT photo too, hiding which one is open. The
+       per-card rule in chromasmith-22.html greys every card except the selected/current one. */
     .lib-dock-resizer{display:none;position:absolute;top:0;right:0;width:11px;height:100%;cursor:col-resize;z-index:10}
     body.deskx #lib-overlay:not(.full) .lib-dock-resizer{display:block}
     /* Same "glow line" removal as .lib-side-resizer above — no hover/drag background wash. */
@@ -2240,8 +2241,10 @@
         <div id="lib-view-menu" hidden>
           <div class="fx-settings-pane lib-settings-pane" id="lib-pane-library">          
           <button class="fx-ovf-item opt-action" id="lib-pick" title="Choose root folder">${ic('library',15)}<span>Choose folder…</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-quickstart" title="Replay the quick-start tour: open, edit, export">${ic('info',15)}<span>Quick start tour</span></button>
           <button class="fx-ovf-item opt-action" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',15)}<span>Import from Google Photos…</span></button>
           <button class="fx-ovf-item opt-action" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">${ic('history',15)}<span>Recent folders…</span></button>
+          <button class="fx-ovf-item" id="lib-takeout-names" title="Use the people Google Photos already recognised — choose an unzipped Google Takeout folder">${ic('cloud',15)}<span>Import names from Google Photos…</span></button>
           <button class="fx-ovf-item opt-action" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',15)}<span>Get Info</span></button>
           <button class="fx-ovf-item opt-action" id="lib-expand" title="Full-window view — G">${ic('fit',15)}<span>Full-window view</span></button>
           <button class="fx-ovf-item opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C">${ic('compare',15)}<span>Compare view</span></button>
@@ -2453,13 +2456,8 @@
       first.parentNode.insertBefore(b, first);
     };
     new MutationObserver(mg).observe(overlay, { childList: true, subtree: true }); mg();
-    // 20: photo count at the foot of the docked filmstrip, mirrored from #lib-count.
-    const cnt = overlay.querySelector('#lib-count'), grid = overlay.querySelector('#lib-main');
-    if (cnt && grid && !overlay.querySelector('#sk2-strip-n')) {
-      const n = document.createElement('div'); n.id = 'sk2-strip-n'; grid.appendChild(n);
-      const syncN = () => { const m = /([\d,]+) of ([\d,]+)/.exec(cnt.textContent); n.textContent = m ? `${m[1]} / ${m[2]}` : ''; };
-      new MutationObserver(syncN).observe(cnt, { childList: true, characterData: true, subtree: true }); syncN();
-    }
+    // (The docked filmstrip's photo counter was removed — it repeated the total and never said
+    // which photo was open.)
     if (top && !overlay.querySelector('#sk2-act')) {
       const w = document.createElement('button'); w.type = 'button'; w.id = 'sk2-act'; w.title = 'Background work — click for details';
       w.innerHTML = '<span class="sk2-act-dot" aria-hidden="true"></span><span class="sk2-act-body"></span>';
@@ -2852,16 +2850,20 @@
       return el && el.closest ? el.closest('.dz, #lib-grid') : null;
     };
     window.__TAURI__.event.listen('tauri://drag-over', (e) => {
+      if (window.csDropOverlay) window.csDropOverlay.show();
       clearOver();
       const dz = dzAt(e.payload);
       if (dz) { dz.classList.add(dz.id === 'lib-grid' ? 'lib-dragover' : 'over'); overEl = dz; }
     });
-    window.__TAURI__.event.listen('tauri://drag-leave', clearOver);
+    window.__TAURI__.event.listen('tauri://drag-leave', () => { clearOver(); if (window.csDropOverlay) window.csDropOverlay.hide(); });
     window.__TAURI__.event.listen('tauri://drag-drop', async (e) => {
       const dz = dzAt(e.payload);
       clearOver();
+      if (window.csDropOverlay) window.csDropOverlay.hide();
       const paths = (e.payload && e.payload.paths) || [];
-      if (!dz || !paths.length) return;
+      if (!paths.length) return;
+      // Dropped outside any drop zone: treat it like a drop on the Library instead of ignoring it.
+      if (!dz) { await handleLibraryDrop(paths); return; }
       if (dz.id === 'lib-grid') { await handleLibraryDrop(paths); return; }
       const files = await readPathsAsFiles(paths);
       if (!files.length) return;
@@ -3655,10 +3657,10 @@
     // Library (what this tab is for); "Add photos" only feeds loose files straight to the
     // Editor, so it — and Google Photos — read as subordinate alternatives underneath.
     grid.innerHTML = `<div id="lib-empty" style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;padding:60px 20px;min-height:50vh">
-      <div style="font-weight:600;font-size:14px;color:var(--txt)">Nothing in your Library yet</div>
-      <div style="font-size:11px;color:var(--mut);max-width:280px">Add a folder to build a browsable, always-in-sync Library — or drop a photo anywhere to start editing right away.</div>
-      <button class="lib-btn" id="lib-empty-addfolder" style="background:var(--acc);color:#000;border-color:var(--acc);font-weight:600;padding:7px 16px">Add a folder</button>
-      <div style="font-size:11px;color:var(--mut)"><a id="lib-empty-addphotos" style="color:var(--acc);cursor:pointer;text-decoration:underline">Add photos</a> instead · <a id="lib-empty-gphotos" style="color:var(--acc);cursor:pointer;text-decoration:underline">Google Photos…</a></div>
+      <div style="font-weight:600;font-size:16px;color:var(--txt)">Welcome. Let's find your photos.</div>
+      <div style="font-size:12px;color:var(--mut);max-width:340px;line-height:1.5">Choose the folder where your photos live. Chromasmith reads it in the background, so you can start editing right away while it indexes. Your original files are never changed, and nothing is uploaded.</div>
+      <button class="lib-btn" id="lib-empty-addfolder" style="background:var(--acc);color:#000;border-color:var(--acc);font-weight:600;padding:9px 20px;font-size:13px">Choose your photo folder</button>
+      <div style="font-size:11px;color:var(--mut)">Or drop a folder or photos anywhere on this window · <a id="lib-empty-addphotos" style="color:var(--acc);cursor:pointer;text-decoration:underline">Open a single photo</a> · <a id="lib-empty-gphotos" style="color:var(--acc);cursor:pointer;text-decoration:underline">Google Photos…</a></div>
     </div>`;
     const addPhotos = document.getElementById('lib-empty-addphotos');
     if (addPhotos) addPhotos.onclick = () => { if (typeof window.fxPickPhotos === 'function') window.fxPickPhotos(); };
@@ -6725,7 +6727,9 @@
     if (state.source === 'folder' && state.currentFolder) return String(state.currentFolder).split(/[\\/]/).filter(Boolean).pop() || 'Library';
     const row = document.querySelector('#lib-side .lib-tree-row.on, #lib-side .lib-coll-row.on');
     const t = row ? row.textContent.replace(/[\d,.\s]+$/, '').trim() : '';
-    return t || 'Library';
+    // Title names what's shown — the unscoped catalog view is "All Photos" (the sidebar's own
+    // label for it), not a generic "Library".
+    return t || (state.source === 'catalog' && !state.catalogScope ? 'All Photos' : 'Library');
   }
   function fmtGridDate(d, unit) {
     if (unit === 'month') return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
@@ -6792,7 +6796,7 @@
       // redundant, and there is no other free corner (Edited/Dupe/Synced already own the rest).
       const isExpandedStackForRaw = entry.stack_n > 1 && state._expandedStacks.has(entry.id);
       const rawBadge = entry.stack_n > 1
-        ? `<div class="lib-raw-badge lib-stack-badge" data-stack-toggle="${entry.id}" title="${entry.stack_n} in this stack — click to ${isExpandedStackForRaw ? 'collapse' : 'expand'}">${isExpandedStackForRaw ? '⌃' : '+' + (entry.stack_n - 1)}</div>`
+        ? `<div class="lib-raw-badge lib-stack-badge" data-stack-toggle="${entry.id}" title="Stack of ${entry.stack_n} (e.g. RAW + JPEG of the same shot) — click to ${isExpandedStackForRaw ? 'collapse' : 'expand'}">${isExpandedStackForRaw ? '⌃' : `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-1px;margin-right:3px"><rect x="7" y="7" width="13" height="13"/><path d="M4 16V4h12"/></svg>${entry.stack_n}`}</div>`
         : entry.kind === 'raw' ? `<div class="lib-raw-badge" title="RAW file">R</div>` : '';
       // The duration comes from state.meta (read_meta's container parse in Rust), NOT from
       // decoding the clip — so the badge is right even for one AVFoundation can't produce a
@@ -7241,12 +7245,15 @@
       else if (sc.label === 'Green') picked++;
       if (sc.favorite) favorited++;
     }
-    const chip = (n, cnt) => `<span style="display:inline-flex;align-items:center;gap:3px"><span style="display:inline-flex;color:var(--mut)">${ic(n, 12)}</span>${cnt}</span>`;
+    // Labelled and clickable: a bare "⚑ 209" didn't say what it counted, and it's the obvious
+    // shortcut to filtering by that flag (it clicks the matching Flags filter chip).
+    const chip = (n, cnt, word, fval) => `<button type="button" class="lib-status-chip" data-fval="${fval}" title="Show only ${word}" style="display:inline-flex;align-items:center;gap:3px;background:none;border:0;padding:0;color:inherit;font:inherit;cursor:pointer"><span style="display:inline-flex">${ic(n, 12)}</span>${fmtN(cnt)} ${word}</button>`;
     lblEl.innerHTML = [
-      rejected ? chip('close', rejected) : '',
-      picked ? chip('flagGreen', picked) : '',
-      favorited ? chip('heart', favorited) : '',
+      rejected ? chip('close', rejected, 'rejected', 'red') : '',
+      picked ? chip('flagGreen', picked, 'picked', 'green') : '',
+      favorited ? chip('heart', favorited, 'favourites', 'favorite') : '',
     ].filter(Boolean).join('');
+    lblEl.querySelectorAll('.lib-status-chip').forEach((b) => { b.onclick = () => { const f = document.querySelector(`#lib-filter-row [data-fgrp="flag"][data-fval="${b.dataset.fval}"]`); if (f) f.click(); }; });
     syncSelCount();
   }
   function syncSelCount() {
@@ -7287,7 +7294,12 @@
       if (openBtn) openBtn.onclick = () => { const b = document.getElementById('lib-pick'); if (b) b.click(); };
     }
     // The selection count lives once, in #lib-status-sel (kept live by syncSelCount) — not repeated here.
-    document.getElementById('lib-count').textContent = `${fmtN(shown.length)} of ${fmtN(state.entries.length)} ${state.entries.length === 1 ? 'photo' : 'photos'}`;
+    // Paged catalog views load 4,000 at a time and filter server-side, so the loaded page size
+    // is not the real count ("4,000 of 4,000" while the library holds 50,071) — use the total.
+    const pagedTotal = state._catalogPaged && state._catalogTotal != null ? state._catalogTotal : null;
+    document.getElementById('lib-count').textContent = pagedTotal != null
+      ? `${fmtN(pagedTotal)} ${pagedTotal === 1 ? 'photo' : 'photos'}`
+      : `${fmtN(shown.length)} of ${fmtN(state.entries.length)} ${state.entries.length === 1 ? 'photo' : 'photos'}`;
     if (typeof syncFilterUI === 'function') syncFilterUI();
   }
 
@@ -7661,6 +7673,7 @@
     syncTreeToggle();
   };
   overlay.querySelector('#lib-pick').onclick = pickFolder;
+  { const qs = overlay.querySelector('#lib-quickstart'); if (qs) qs.onclick = () => { if (typeof window.chromasmithShowTour === 'function') window.chromasmithShowTour(); }; }
   wireGridFileDrop();
   wireNativeFileDrop();
   wireScrollPersist();
@@ -7689,7 +7702,9 @@
     // scope yet at this point in the file (both are consts declared further down, resolved by
     // closure only once this function is actually CALLED, well after setup finishes).
     if (goingFull !== state.expanded_view) {
-      const fxLayoutEl = document.querySelector('.fx-layout');
+      // --dock-w-user lives on <body>: chromasmith-22.html resolves --dock-w on body, so a value
+      // set on .fx-layout never reached the grid track (strip 188px wide, track 120px).
+      const fxLayoutEl = document.body;
       if (goingFull) {
         const dockW = fxLayoutEl ? parseInt(getComputedStyle(fxLayoutEl).getPropertyValue('--dock-w-user'), 10) : NaN;
         if (dockW) {
@@ -8418,6 +8433,8 @@
   const viewMenu = overlay.querySelector('#lib-view-menu');
   // One settings menu (CHR: gallery + Studio were two drifting copies): the gallery panes live in
   // the Studio's #fx-settings-menu, so the gear here just opens that same menu.
+  const takeoutOpt = viewMenu.querySelector('#lib-takeout-names');
+  if (takeoutOpt) takeoutOpt.onclick = () => { if (window.settingsClose) settingsClose(); importGoogleTakeout(); };
   if (window.libSettingsAdopt) window.libSettingsAdopt(viewMenu);
   viewMenu.querySelectorAll('.fx-ovf-item[data-viewval]').forEach((opt) => {
     opt.onclick = () => { const b = viewSeg.querySelector(`[data-v="${opt.dataset.viewval}"]`); if (b && !b.disabled) b.onclick(); syncViewMenuChecks(); };
@@ -8642,7 +8659,7 @@
   // now plain unconditional CSS rules (above), not something this resize handler decides.
   const LIB_DOCK_MIN = 90, LIB_DOCK_MAX = 420;
   const dockResizer = overlay.querySelector('#lib-dock-resizer');
-  const fxLayout = document.querySelector('.fx-layout'); // chromasmith-22.html's grid, not this file's own markup
+  const fxLayout = document.body; // --dock-w-user must sit where --dock-w is resolved (body), see above
   const savedDockW = parseInt(localStorage.getItem('chromasmith_lib_dock_w'), 10);
   if (fxLayout && savedDockW >= LIB_DOCK_MIN && savedDockW <= LIB_DOCK_MAX) fxLayout.style.setProperty('--dock-w-user', savedDockW + 'px');
 
@@ -9490,7 +9507,7 @@
   /// a cluster is what promotes it into the named list above.
   function peopleSectionHtml() {
     const scanLabel = 'Analyze photos — find faces and enable AI search';
-    const takeoutRow = `<div class="lib-coll-row" data-people-takeout="1" style="opacity:.7" title="Use the people Google Photos already recognised — choose an unzipped Google Takeout folder">Import names from Google Photos…</div>`;
+    const takeoutRow = ''; // "Import names from Google Photos…" lives in Settings › Library now
     const scanGlyph = `<span id="lib-people-scan" title="${scanLabel}" style="cursor:pointer;padding:0 4px">${ic('search', 13)}</span>`;
     if (!peopleList.length) {
       return '<div class="lib-coll-sep"></div>' + sidebarSection('people', 'People &amp; Pets',
@@ -10503,7 +10520,7 @@
           return `<div class="lib-act-stage"><span style="width:12px;display:inline-block;text-align:center">›</span><span>${esc(qLabel)}</span><span class="lib-act-stage-n">${qPct != null ? `${q.done} of ${q.total}` : ''}</span></div>`;
         }).join('') + `</div>`
       : '';
-    let html = `<span class="lib-act-pill" id="lib-act-pill" style="position:relative${_activityStalled ? ';color:var(--red,#e5484d)' : ''}">
+    let html = `<span class="lib-act-pill" id="lib-act-pill" title="Working in the background. You can keep editing. Click for details." style="position:relative${_activityStalled ? ';color:var(--red,#e5484d)' : ''}">
       <span class="lib-act-ring" style="--p:${pct}%"></span><span>${esc(label)}${!_activityStalled && activity.stage !== 'done' && activity.total ? ` · ${pct}%` : ''}</span>${queuedBadge}${collapsedBar}`;
     if (activity.expanded && isGenericJob) {
       const bar = activity.stage !== 'done' && activity.total
@@ -10537,6 +10554,7 @@
           return `<div class="lib-act-stage ${cls}"><span style="width:12px;display:inline-block;text-align:center">${icon}</span><span>${STAGE_LABELS[s]}</span><span class="lib-act-stage-n">${n}</span></div>${bar}`;
         }).join('')
         + `</div>`
+        + (activity.stage !== 'done' && !_activityStalled ? `<div style="padding:7px 11px;font-size:11px;color:var(--mut);border-top:1px solid var(--bdr);line-height:1.4">Indexing runs in the background. You can keep browsing and editing while it works.</div>` : '')
         // Pause background indexing — the persistent escape hatch. There was previously NO way
         // to reclaim the machine from background work short of quitting the app.
         + `<div style="padding:7px 11px;border-top:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;gap:8px">

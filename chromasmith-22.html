@@ -326,7 +326,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-ctrl.fx-sec-collapsed .fx-ctrl-chev{transform:rotate(-90deg)}
 .fx-ctrl.fx-sec-collapsed>.fx-ctrl-title{margin-bottom:0;padding-bottom:var(--sp-2)}
 .fx-ctrl.fx-sec-collapsed>:not(.fx-ctrl-title){display:none}
-#fx-looks-ctrl.fx-preset-sec{margin-top:14px!important;padding-top:12px;border-top:1px solid var(--bdr)}
+#fx-looks-ctrl.fx-preset-sec{margin-top:14px!important}
 .fx-toggle{width:var(--ctl-toggle-w);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--bdr);position:relative;cursor:pointer;transition:background var(--k-motion-hover);flex-shrink:0;box-shadow:none;border:1px solid transparent}
 /* T45 (editor_ux_spec.json): under forced-colors (Windows High Contrast) mode, the browser can
    strip a custom `background` entirely — .fx-toggle has no text/icon and no real border, so with
@@ -1017,6 +1017,13 @@ body.mobile-fx .tabs{display:none}
 body.mobile-fx .ni-hint{display:none}
 #fx-add-btn{display:flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:50%;background:var(--acc);color:#000;font-size:var(--fs-7);line-height:1;border:none;cursor:pointer;margin:var(--sp-4) auto 6px;box-shadow:none}
 #fx-add-btn:active{transform:scale(.94)}
+/* First-timer aids: hidden advanced tabs, window-wide drop overlay, plain-language card subtitles. */
+body.cs-adv-hidden .tab.cs-adv-tab{display:none}
+#cs-drop-ov{position:fixed;inset:0;z-index:calc(var(--z-modal,1000) + 5);background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;pointer-events:none;outline:3px dashed var(--acc);outline-offset:-16px}
+#cs-drop-ov div{display:flex;flex-direction:column;gap:6px;text-align:center;color:#fff;font-family:var(--sans)}
+#cs-drop-ov b{font-size:24px;font-weight:500}
+#cs-drop-ov span{font-size:13px;opacity:.75}
+.cs-sub{font-family:var(--sans);font-size:11px;line-height:1.4;color:var(--mut);margin:-2px 0 8px}
 .ni-add-lb{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;color:var(--acc);letter-spacing:0}
 #fx-more-menu{position:fixed;inset:0;background:var(--scrim-b4);z-index:var(--z-overlay);display:flex;align-items:flex-end}
 #fx-more-menu .mm-sheet{background:var(--sur);width:100%;border-radius:14px 14px 0 0;padding:14px 14px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
@@ -2152,7 +2159,9 @@ body.sk2 .fx-rail-btn::before,body.sk2.deskx .fx-rail-btn.on::before{outline:0!i
 body.sk2 .fx-rail-btn{color:var(--k-color-muted)}
 body.sk2 .fx-rail-btn:hover,body.sk2 .fx-rail-btn.on{color:var(--k-color-ink)}
 body.sk2 .fx-rail-btn.on::after{content:'';position:absolute;left:2px;top:8px;width:8px;height:8px;background:var(--k-color-accent-a)}
-body.sk2 .fx-rail-btn.enabled,body.sk2 .fx-rail-btn.enabled .fx-rail-ic{color:var(--k-color-ink)}
+/* "Has effects switched on" is a small dot after the label — NOT full ink colour, which made an
+   inactive stage look like the open one. */
+body.sk2 .fx-rail-btn.enabled:not(.on) .fx-rail-lb::after{content:'';display:inline-block;width:4px;height:4px;margin-left:4px;vertical-align:middle;background:var(--k-color-accent-a)}
 body.sk2 .fx-rail-btn:hover:not(.on) svg{transform:none}
 /* Buttons: sentence case, hairline or no border; Export is the one solid block of colour. */
 body.sk2 .btn,body.sk2 .fx-db{text-transform:none!important;letter-spacing:0!important;font-weight:400!important;border-radius:0!important;box-shadow:none!important}
@@ -2186,6 +2195,11 @@ body.sk2 .fx-val{font-variant-numeric:tabular-nums}
 /* Toggles keep their square-in-track design, just smaller (token) and vermilion when on. */
 body.sk2 .fx-toggle.on{background:var(--k-color-accent-a);border-color:var(--k-color-accent-a)}
 body.sk2 .fx-toggle::after{top:-1px;left:-1px}
+/* Reads as a switch, not a colour swatch: an outlined track, and the square slides across when on
+   (it used to rotate in place, so on/off looked like two different swatches). */
+body.sk2 .fx-toggle:not(.on){background:transparent;box-shadow:inset 0 0 0 1px var(--k-color-muted)}
+body.sk2 .fx-toggle::after{transition:transform .14s var(--k-motion-easing)}
+body.sk2 .fx-toggle.on::after{transform:translateX(calc(var(--ctl-toggle-w) - var(--ctl-toggle-h)))}
 /* Stage header + sticky sub-tabs + sticky card titles. The panel loses its top padding so nothing
    can show above a stuck title; each stuck layer is opaque. */
 body.sk2.deskx .fx-panel{padding-top:0!important}
@@ -2361,7 +2375,10 @@ body.sk2 .sk2-bb-more[hidden]{display:none}
 body.sk2 #lib-overlay .lib-thumb-wrap:not(:has(img.loaded)){background:color-mix(in srgb,var(--k-color-ink) 4%,var(--k-color-bg))!important;box-shadow:inset 0 0 0 1px var(--bdr)}
 body.sk2 #lib-overlay .lib-thumb-wrap>img:not(.loaded){opacity:0}
 /* 15 · In a stage with sub-tabs, the card title's words are the sub-tab's; the row keeps chevron, toggle, reset. */
-body.sk2 .sk2-dup-title>.fx-ctrl-title{font-size:0!important;min-height:36px;padding-top:6px!important;padding-bottom:6px!important}
+body.sk2 .sk2-dup-title>.fx-ctrl-title>.sk2-long{display:none}
+/* Sidebar counts are information, not decoration: one size (11px) and >=4.5:1 contrast. */
+body.sk2 #lib-overlay :is(.lib-coll-count,.coll-count){font-size:11px!important;color:color-mix(in srgb,var(--k-color-ink) 72%,var(--k-color-bg))!important}
+body.sk2 .sk2-dup-title>.fx-ctrl-title{min-height:36px;padding-top:6px!important;padding-bottom:6px!important}
 body.sk2 .sk2-dup-title>.fx-ctrl-title::before{content:attr(data-sk2-name);font-size:var(--sk-t4);color:var(--k-color-muted);order:1;margin-right:auto}
 body.sk2 .sk2-dup-title>.fx-ctrl-title>*{font-size:var(--sk-t4)}
 body.sk2 .sk2-dup-title>.fx-ctrl-title>.fx-ctrl-chev{order:0}
@@ -2389,8 +2406,6 @@ body.sk2.deskx #lib-overlay:not(.full) .lib-card{opacity:.45;transition:opacity 
 body.sk2.deskx #lib-overlay:not(.full) .lib-card:hover,body.sk2.deskx #lib-overlay:not(.full) .lib-card:is(.sel,.multi,.cur,.current,.editing){opacity:1}
 body.sk2.deskx #lib-overlay:not(.full) .lib-strip-info,body.sk2.deskx #lib-overlay:not(.full) .lib-name{display:none!important}
 body.sk2.deskx #lib-overlay:not(.full) .lib-raw-badge{display:none!important}
-body.sk2 #sk2-strip-n{display:none}
-body.sk2.deskx #lib-overlay:not(.full) #sk2-strip-n{display:block;position:sticky;bottom:0;padding:8px 0 10px;background:var(--k-color-bg);font-size:var(--sk-t5);color:var(--k-color-muted);text-align:center;font-variant-numeric:tabular-nums;z-index:5}
 /* Looks: the chosen look is marked by the square, not a kicked-out frame. */
 body.sk2 .look-cell:hover{transform:none;box-shadow:none}
 body.sk2 .look-cell.sel{border-color:transparent;box-shadow:none;position:relative}
@@ -2411,6 +2426,10 @@ body.sk2 details.sk2-more>summary{cursor:pointer;color:var(--k-color-muted);font
 body.sk2 details.sk2-more>summary::-webkit-details-marker{display:none}
 body.sk2 details.sk2-more>summary::after{content:'+'}
 body.sk2 details.sk2-more[open]>summary::after{content:'–'}
+/* The histogram row opens a view, it doesn't add anything: chevron like every other collapsible
+   section, not the "+" that read as "add a histogram". */
+body.sk2 details.sk2-hist>summary::after{content:'';width:6px;height:6px;border-right:1px solid currentColor;border-bottom:1px solid currentColor;transform:rotate(-45deg);transition:transform .14s}
+body.sk2 details.sk2-hist[open]>summary::after{content:'';transform:rotate(45deg)}
 body.sk2 details.sk2-more>summary:hover{color:var(--k-color-ink)}
 /* Empty state: one big, calm drop target. */
 body.sk2 #fx-no-img{gap:14px}
@@ -2426,7 +2445,6 @@ body.sk2.deskx #lib-overlay:not(.full) .lib-card{opacity:1!important}
 body.sk2.deskx #lib-overlay:not(.full) .lib-card:not(:is(.sel,.multi,.cur,.current,.editing)) img{filter:grayscale(1) brightness(.62)!important}
 body.sk2.deskx #lib-overlay:not(.full) .lib-card img{transition:filter .2s var(--k-motion-easing)!important}
 body.sk2.deskx #lib-overlay:not(.full):hover .lib-card img{filter:none!important}
-body.sk2.deskx #lib-overlay:not(.full) #sk2-strip-n{background:var(--bg,var(--k-color-bg))!important;box-shadow:0 -1px 0 var(--bdr)}
 /* Gallery title: room for descenders (y, g, p) — it clipped at line-height .88 + overflow:hidden. */
 body.sk2 #lib-overlay #lib-grid-title .lgt-h{line-height:1.02!important;padding-bottom:.2em;margin-bottom:-.14em;padding-right:.08em}
 /* The title block keeps one height while scrolling: the small line above the title always holds its space. */
@@ -2574,6 +2592,8 @@ body.sk2 .sk2-hist canvas{touch-action:none}
 body.sk2 .sk2-hist .sk2h-box{position:relative;margin-top:8px}
 body.sk2 .sk2-hist canvas{display:block;width:100%;height:80px;cursor:crosshair}
 body.sk2 .sk2h-clip{position:absolute;top:0;width:0;height:0;padding:0;border:6px solid transparent;background:none;cursor:pointer;opacity:.35}
+/* 12px triangles are fiddly on a trackpad: a 24px invisible hit area around each. */
+body.sk2 .sk2h-clip::before{content:'';position:absolute;inset:-12px}
 body.sk2 .sk2h-clip.lo{left:0;border-top-color:var(--k-color-muted);border-left-color:var(--k-color-muted)}
 body.sk2 .sk2h-clip.hi{right:0;border-top-color:var(--k-color-muted);border-right-color:var(--k-color-muted)}
 body.sk2 .sk2h-clip.on{opacity:1}body.sk2 .sk2h-clip.lo.on{border-top-color:#58f;border-left-color:#58f}body.sk2 .sk2h-clip.hi.on{border-top-color:#ff3b1f;border-right-color:#ff3b1f}
@@ -2639,7 +2659,9 @@ function sk2SubTabs(g,jump){
   const cards=G?[...panel.querySelectorAll('.fx-ctrl.sec-active')].filter(c=>getComputedStyle(c).display!=='none'&&!c.hidden):[];
   nav.hidden=cards.length<2;
   panel.querySelectorAll('.sk2-dup-title').forEach(c=>c.classList.remove('sk2-dup-title'));
-  if(cards.length>1)cards.forEach(c=>{const t=c.querySelector(':scope>.fx-ctrl-title');if(t){c.classList.add('sk2-dup-title');t.setAttribute('data-sk2-name',SK2_SUB[c.dataset.fxsec]||'');}});
+  if(cards.length>1)cards.forEach(c=>{const t=c.querySelector(':scope>.fx-ctrl-title');if(t){c.classList.add('sk2-dup-title');t.setAttribute('data-sk2-name',SK2_SUB[c.dataset.fxsec]||'');
+    // Hide the long name properly (display:none) instead of a 0px font that screen readers still read.
+    [...t.childNodes].forEach(n=>{if(n.nodeType===3&&n.textContent.trim()){const sp=document.createElement('span');sp.className='sk2-long';n.replaceWith(sp);sp.appendChild(n);}});}});
   if(G&&G.members.includes('wheels')&&typeof drawWheel==='function')setTimeout(()=>['lift','gamma','gain'].forEach(drawWheel),30);
   nav.innerHTML=cards.map(c=>`<button type="button" data-k="${c.dataset.fxsec}">${SK2_SUB[c.dataset.fxsec]||c.dataset.fxsec}</button>`).join('');
   document.body.style.setProperty('--sk2-sub-h',(nav.hidden?0:nav.offsetHeight)+'px');
@@ -2731,8 +2753,9 @@ function sk2ExportWire(){
   window.sk2Caption=function(){
     const t=document.getElementById('fx-deskbar-title'),cv=document.getElementById('fx-canvas');
     const r=cv&&cv.getBoundingClientRect(),key=r?[r.left|0,r.top|0,r.width|0,r.height|0].join():'';
-    if(t&&key!==lastKey&&lastKey){t.classList.add('sk2-cap-hide');clearTimeout(settle);settle=setTimeout(()=>{place();requestAnimationFrame(()=>t.classList.remove('sk2-cap-hide'));},260);lastKey=key;return;}
-    lastKey=key;if(!t||!t.classList.contains('sk2-cap-hide'))place();};
+    // The caption has one fixed home (bottom of the preview), so there is nothing to hide while
+    // the photo pans/zooms — the old hide-then-replace made it flicker on every drag.
+    lastKey=key;place();};
   function place(){cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{
     const t=document.getElementById('fx-deskbar-title'),wrap=document.getElementById('fx-wrap');if(!t||!wrap)return;
     if(!home)home={p:t.parentNode,n:t.nextSibling};
@@ -2742,11 +2765,12 @@ function sk2ExportWire(){
     const r=cv&&cv.getBoundingClientRect(),w=wrap.getBoundingClientRect();
     const zoomed=typeof fxZoom!=="undefined"&&(Math.abs(fxZoom-FX_FIT)>1e-3||fxPanX||fxPanY);
     const fits=!zoomed&&r&&r.left>=w.left-1&&r.right<=w.right+1&&r.top>=w.top-1;
-    const room=fits&&r.height>0&&(w.bottom-r.bottom)>=34;
-    if(deskx&&sk2CaptionOn()&&room){
+    // One home: pinned to the preview's bottom edge, centred on the preview — never moved into the
+    // top bar (where it collided with zoom/All FX) and never re-glued to the photo mid-drag.
+    if(deskx&&sk2CaptionOn()){
       if(t.parentNode!==wrap){wrap.appendChild(t);t.classList.add('sk2-cap');}
-      const cw=Math.min(w.width-32,Math.max(620,r.width)),cl=Math.min(Math.max(16,r.left-w.left+r.width/2-cw/2),w.width-16-cw); // centred on the photo, never narrower than its contents
-      t.style.left=cl+'px';t.style.top=(r.bottom-w.top+10)+'px';t.style.width=cw+'px';t.style.maxWidth='';
+      const cw=Math.min(w.width-32,Math.max(620,r&&!zoomed?r.width:0)),cl=(w.width-cw)/2;
+      t.style.left=cl+'px';t.style.top=(w.height-34)+'px';t.style.width=cw+'px';t.style.maxWidth='';
     }else if(t.parentNode===wrap){t.classList.remove('sk2-cap');t.style.left=t.style.top=t.style.maxWidth=t.style.width='';home.p.insertBefore(t,home.n&&home.n.parentNode===home.p?home.n:null);}
   });};
   function wire(){const cv=document.getElementById('fx-canvas'),wrap=document.getElementById('fx-wrap');if(!cv||!wrap)return;
@@ -3158,6 +3182,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
        into About (csAbout), which is where a build ID and a diagnostics entry point belong; the
        theme toggle stays because it is the one control here a photographer actually reaches for. -->
   <div class="hdr-right">
+    <button class="hdr-btn" id="hdr-help" onclick="chromasmithShowTour()" title="Quick start: how to open, edit and export a photo" aria-label="Quick start"><span class="hdr-ic" style="font-weight:600;font-size:15px;line-height:1">?</span></button>
     <button class="hdr-btn" onclick="toggleTheme()" title="Switch light / dark theme"><span class="theme-ic hdr-ic"></span></button>
     <button class="hdr-btn" id="hdr-about" onclick="csAbout()" title="About Chromasmith"><span class="hdr-ic" id="hdr-info"></span></button>
   </div>
@@ -3165,11 +3190,11 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
 <!-- role/tabindex/aria-selected and arrow-key nav are applied by a11yEnhanceTabs() at boot,
      rather than hand-written on all 5 — one place to get the roving-tabindex pattern right. -->
 <div class="tabs" role="tablist">
-  <div class="tab active" onclick="switchTab('fx')">Effects &amp; Export</div>
-  <div class="tab" onclick="switchTab('match')">Match &amp; Refine</div>
-  <div class="tab" onclick="switchTab('copy')">Color Copy</div>
-  <div class="tab" onclick="switchTab('collage')">Collage</div>
-  <div class="tab" onclick="switchTab('guide')">Guide</div>
+  <div class="tab active" onclick="switchTab('fx')" title="Edit a photo: pick a film look, adjust it, export">Effects &amp; Export</div>
+  <div class="tab cs-adv-tab" onclick="switchTab('match')" title="Advanced: build a LUT from a before/after pair of photos">Match &amp; Refine</div>
+  <div class="tab cs-adv-tab" onclick="switchTab('copy')" title="Advanced: copy the colour of one photo onto another">Color Copy</div>
+  <div class="tab cs-adv-tab" onclick="switchTab('collage')" title="Advanced: combine several photos into one layout">Collage</div>
+  <div class="tab" onclick="switchTab('guide')" title="Help: what every tool does, plus the quick-start tour">Help</div>
 </div>
 <main>
 <!-- MATCH & REFINE -->
@@ -3329,10 +3354,10 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
            gets in. The wrapper div (id="fx-image-movable") is what gets relocated; #dz-fx-img
            itself (and its file input, used by fxPickPhotos/"+") always stays put right here. -->
       <div class="fx-ctrl" data-fxsec="image">
-        <div class="ctitle" style="margin-bottom:10px">Image Input</div>
+        <div class="ctitle" style="margin-bottom:10px">Open a photo</div>
         <div class="dz" id="dz-fx-img" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-img')">
           <input type="file" id="in-fx-img" accept="image/*" multiple onchange="fi(event,'fx-img')">
-          <div class="dz-ic" data-ic="image"></div><div class="dz-lb">Drop image</div><div class="dz-fn" id="fn-fx-img"></div>
+          <div class="dz-ic" data-ic="image"></div><div class="dz-lb">Drop a photo here, or click to browse</div><div class="dz-fn" id="fn-fx-img"></div>
         </div>
         <div id="fx-image-movable">
         <div class="fx-row" style="margin-top:8px"><div class="fx-label">RAW profile</div>
@@ -4044,8 +4069,8 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
                the third line a first-time user read. It is in About now. `＋` was U+FF0B FULLWIDTH
                PLUS, a CJK-width glyph standing in for an icon while ICONS.plus already existed. -->
           <button id="fx-add-btn" onclick="fxPickPhotos()" title="Add photos" aria-label="Add photos"></button>
-          <div class="ni-add-lb">Add photos</div>
-          <div class="ni-hint">Drop an image to start · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none" title="Pick photos from your Google Photos library">Google Photos…</a></div>
+          <div class="ni-add-lb">Open a photo</div>
+          <div class="ni-hint">Click the button, or drag a photo anywhere onto this window. Your original is never changed · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none" title="Pick photos from your Google Photos library">Google Photos…</a></div>
         </div>
         <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
           <!-- Mask overlays live INSIDE fx-zoom-wrap (not fx-wrap) so they ride the exact same
@@ -6444,7 +6469,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929A';
+const BUILD='1.0929B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9234,7 +9259,10 @@ let _fxPristineDefault=null; // captured once at boot, before loadSession() — 
 // File-extension → short format label for the deskbar status (e.g. "RW2", "HEIC", "JPG").
 function fxFormatLabel(name){const m=/\.([a-z0-9]+)$/i.exec(name||'');return m?m[1].toUpperCase():''}
 function fxDimsFmt(name,img,ext){
-  const dims=img?`${img.width} × ${img.height}`:'';
+  // While the full-resolution photo is still loading, the preview tier's size (e.g. 2560 × 1707)
+  // isn't the photo's real size — show only the format until the real one lands.
+  const promoting=document.getElementById('fx-zoom-wrap')?.classList.contains('lib-full-loading');
+  const dims=img&&!promoting?`${img.width} × ${img.height}`:'';
   // `name` has its extension stripped by the time entries are built (installFXImages/
   // fxSelectImage), so deriving the format from it here always came back empty — the
   // format only ever appeared during the pre-load spinner title (which shows the raw
@@ -12973,22 +13001,77 @@ function shortcutsHtml(){
 const _TOUR_KEY='chromasmith-tour-seen-v1';
 function tourHtml(){
   const step=(n,title,body)=>`<div class="cs-tour-step" data-n="${n}" style="margin-bottom:14px"><div class="cs-tour-k" style="font-family:var(--mono);font-size:11px;color:var(--acc);text-transform:uppercase;letter-spacing:var(--ls-2);margin-bottom:2px">Step ${n}</div><div style="font-size:14px;font-weight:600;margin-bottom:2px">${title}</div><div style="font-size:13px;color:var(--mut)">${body}</div></div>`;
-  return step(1,'Load a photo','Drag a photo (or RW2/RAW) onto the window, or use the ＋ button.')
-    +step(2,'Pick a look','Open <b>Presets & Looks</b> and tap a film look — everything else (grain, halation, curves, masks…) is optional refinement on top of it.')
-    +step(3,'Export','When it looks right, hit <b>Export</b> at full resolution. Nothing ever uploads — it all runs on this device.')
-    +'<div style="font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:10px">The <b>Guide</b> tab has the full reference, and ⌘K opens a searchable command palette over every tool.</div>'
+  const desk=!!window.__TAURI__;
+  return (desk
+      ?step(1,'Choose your photo folder','Click <b>Choose folder…</b> (or drop a folder onto the window). Chromasmith reads it in the background, so you can start editing straight away while it indexes. Your original files are never changed.')
+      :step(1,'Open a photo','Drag a photo (or RAW) anywhere onto the window, or click <b>Open a photo</b>. Your original is never changed.'))
+    +step(2,'Pick a look',(desk?'Double-click any photo to open it. ':'')+'Open <b>Look</b> and tap a film look. Everything else (grain, glow, curves, masks…) is optional fine-tuning on top of it. Use the before/after button to compare.')
+    +step(3,'Export','When it looks right, hit <b>Export</b> for a full-resolution file. Edits save automatically and nothing ever uploads.')
+    +'<div style="font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:10px">The <b>Help</b> tab lists what every tool does. ⌘K searches every tool. Advanced tabs (Match &amp; Refine, Color Copy, Collage) appear after your first export, or <a href="#" onclick="csShowAdvancedTabs(true);document.getElementById(\'cs-modal-ov\').remove();return false" style="color:var(--acc)">show them now</a>.</div>'
     +'<div class="btn-row" style="margin-top:14px"><button class="btn bpri" onclick="document.getElementById(\'cs-modal-ov\').remove()">Got it</button></div>';
 }
 function tourMaybeShow(){
   try{
     if(localStorage.getItem(_TOUR_KEY))return;
     if(typeof fxImages!=='undefined'&&fxImages&&fxImages.length)return; // already mid-session, not a new user
-    localStorage.setItem(_TOUR_KEY,'1');
+    localStorage.setItem(_TOUR_KEY,'1');localStorage.setItem('chromasmith-newuser-v2','1');
+    document.body.classList.add('cs-adv-hidden');
   }catch(e){return;}
   _csModal('Welcome to Chromasmith',tourHtml());
 }
 window.chromasmithShowTour=function(){_csModal('Welcome to Chromasmith',tourHtml());}; // manual replay (Help menu / palette) — bypasses the once-only flag
 window.chromasmithShowShortcuts=function(){_csModal('Keyboard Shortcuts',shortcutsHtml());};
+// ── First-timer aids ─────────────────────────────────────────────────────────────────────
+// (1) Advanced tabs (Match & Refine / Color Copy / Collage) stay hidden for a brand-new user until
+// their first export, or until they ask (tour link / Help). Returning users — anyone whose tour flag
+// is already set — keep everything visible. Hidden with a class, not removed: switchTab indexes the
+// tab row by position, so the DOM order must not change.
+const _ADV_KEY='chromasmith-adv-tabs-v1';
+function csShowAdvancedTabs(on){
+  try{if(on)localStorage.setItem(_ADV_KEY,'1');}catch(e){}
+  document.body.classList.toggle('cs-adv-hidden',!on&&!_csAdvUnlocked());
+}
+// A returning user (tour flag set before this feature existed) keeps every tab; a new user (marked by tourMaybeShow) waits.
+function _csAdvUnlocked(){try{return !!localStorage.getItem(_ADV_KEY)||(!!localStorage.getItem(_TOUR_KEY)&&!localStorage.getItem('chromasmith-newuser-v2'));}catch(e){return true;}}
+window.csShowAdvancedTabs=csShowAdvancedTabs;
+(function(){
+  const init=()=>{document.body.classList.toggle('cs-adv-hidden',!_csAdvUnlocked());};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+// (2) Drop a photo ANYWHERE on the window. The drop zones only worked when the pointer was
+// exactly over one; anywhere else the drop silently did nothing (or the browser navigated to the
+// file). The overlay says what will happen; the fallback opens the photos in the editor.
+(function(){
+  let depth=0,ov=null;
+  const hasFiles=e=>e.dataTransfer&&Array.prototype.indexOf.call(e.dataTransfer.types||[],'Files')>=0;
+  const show=()=>{if(ov)return;ov=document.createElement('div');ov.id='cs-drop-ov';ov.setAttribute('aria-hidden','true');ov.innerHTML='<div><b>Drop photos to open them</b><span>Your originals are never changed</span></div>';document.body.appendChild(ov);};
+  const hide=()=>{depth=0;if(ov){ov.remove();ov=null;}};
+  window.csDropOverlay={show,hide};
+  document.addEventListener('dragenter',e=>{if(!hasFiles(e))return;depth++;show();});
+  document.addEventListener('dragleave',e=>{if(!hasFiles(e))return;depth=Math.max(0,depth-1);if(!depth)hide();});
+  document.addEventListener('dragover',e=>{if(hasFiles(e))e.preventDefault();});
+  document.addEventListener('drop',e=>{
+    if(!hasFiles(e))return;
+    hide();
+    if(e.defaultPrevented)return; // a real drop zone already took it
+    e.preventDefault();
+    if(e.target&&e.target.closest&&e.target.closest('input,textarea'))return;
+    if(typeof loadFXImages==='function'&&e.dataTransfer.files.length){try{switchTab('fx');}catch(_){}loadFXImages(e.dataTransfer.files);}
+  });
+  window.addEventListener('blur',hide);
+})();
+// (3) Plain-language one-liners under the jargon-named cards.
+(function(){
+  const SUB={hal:'Warm red glow around bright highlights, like real film.',bloom:'Soft glow that spreads from bright areas.',
+    pointcolor:'Change one specific colour without touching the rest.',curves:'Fine control over brightness and contrast.',
+    hsl:'Shift, brighten or mute each colour separately.',wheels:'Tint shadows, midtones and highlights.',
+    grain:'Film-style texture over the whole photo.',nr:'Smooth out speckle from high ISO.',deconv:'Sharpen soft or blurry detail.',
+    art:'Film imperfections: dust, scratches, light leaks.',vig:'Darken the corners to draw the eye in.',
+    local:'Apply an edit to only part of the photo.',retouch:'Remove spots and blemishes.',lens:'Fix lens distortion and straighten the horizon.'};
+  const init=()=>{Object.keys(SUB).forEach(k=>{const c=document.querySelector('.fx-ctrl[data-fxsec="'+k+'"]');if(!c||c.querySelector('.cs-sub'))return;
+    const t=c.querySelector('.fx-ctrl-title');if(!t)return;const d=document.createElement('div');d.className='cs-sub';d.textContent=SUB[k];t.insertAdjacentElement('afterend',d);});};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
 document.addEventListener('keydown',e=>{
   if(e.key!=='?'&&!(e.key==='/'&&(e.metaKey||e.ctrlKey)))return;
   const t=e.target;if(t&&t.closest&&t.closest('input,textarea,[contenteditable]'))return;
@@ -20941,6 +21024,7 @@ async function exportFX(...a){
 }
 async function _exportFXRun(){
   if(!fxImages.length){log('No image loaded','warn');return}
+  try{csShowAdvancedTabs(true);}catch(e){}
   await fxEnsureFullQuality(); // never export the display-tier stand-in
   if(window.chromasmithFullQualityReady===false){toast('Full-resolution photo could not be loaded — export cancelled. Reopen the photo and try again.',false);return}
   const scope=fxImages.length>1?fxExportScope:'all';
