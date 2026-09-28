@@ -6438,7 +6438,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928F';
+const BUILD='1.0928G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -12921,9 +12921,12 @@ function _fxInfoTapInit(){
   let hideTimer=null;
   const hide=()=>{pop.hidden=true;clearTimeout(hideTimer);};
   document.addEventListener('click',e=>{
-    const btn=e.target.closest&&e.target.closest('.fx-info-i');
-    if(!btn||btn.style.pointerEvents==='none'){hide();return;}
-    const text=btn.getAttribute('title');
+    // "How this works" <details> hints open the same bubble instead of expanding inline, so
+    // every info affordance behaves as one popup pattern.
+    const hint=e.target.closest&&e.target.closest('.fx-hint-x>summary');
+    const btn=hint?(hint.querySelector('.fx-info-i')||hint):(e.target.closest&&e.target.closest('.fx-info-i'));
+    if(!btn||(!hint&&btn.style.pointerEvents==='none')){hide();return;}
+    const text=hint?(hint.parentElement.querySelector('p')||{}).textContent:btn.getAttribute('title');
     if(!text){hide();return;}
     e.preventDefault();e.stopPropagation();
     pop.textContent=text;pop.hidden=false;
