@@ -123,11 +123,37 @@ a{color:inherit}
 .group summary:hover{padding-left:10px;color:var(--acc)}
 .group details p{color:var(--mid);padding:0 0 18px;max-width:560px;line-height:1.45}
 
+/* FAQ */
+.faq{padding:16vh 5vw;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 2fr;gap:5vw}
+.faq .mono{color:var(--acc)}
+.qa details{border-bottom:1px solid var(--line)}
+.qa details:first-child{border-top:2px solid var(--acc)}
+.qa summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;gap:20px;padding:24px 0;font-size:clamp(19px,1.8vw,26px);font-weight:600;transition:color .25s,padding .25s}
+.qa summary::-webkit-details-marker{display:none}
+.qa summary::after{content:"+";color:var(--acc);font-weight:400;transition:transform .3s}
+.qa details[open] summary::after{transform:rotate(45deg)}
+.qa summary:hover{color:var(--acc);padding-left:10px}
+.qa p{color:var(--mid);font-size:17px;line-height:1.5;max-width:640px;padding-bottom:24px}
+@media(max-width:760px){.faq{grid-template-columns:1fr}}
 /* 5. outro */
 .outro{min-height:100vh;padding:16vh 5vw 6vh;background:var(--acc);color:#0b0b0a;display:grid;grid-template-rows:1fr auto}
 .outro .k{font-size:clamp(56px,13vw,230px);line-height:.84}
 .outro .k span{display:block;overflow:hidden}.outro .k span i{display:block;font-style:normal}
 .outro .cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:48px}
+.full{font-size:clamp(18px,1.6vw,22px);max-width:620px;margin-top:28px;line-height:1.4;font-weight:500}
+.plats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:6vh}
+.plat{display:flex;flex-direction:column;gap:8px;padding:22px;border:1.5px solid #0b0b0a;border-radius:4px;text-decoration:none;min-height:230px;transition:background .25s,color .25s,transform .35s var(--ease)}
+.plat svg{width:40px;height:40px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;margin-bottom:auto}
+.plat b{font-size:28px;font-weight:700;margin-top:24px}
+.plat span{font-size:14px;line-height:1.35;opacity:.8}
+.plat em{font-style:normal;font-weight:600;font-size:14px;margin-top:6px}
+.plat:hover{background:#0b0b0a;color:var(--acc);transform:translateY(-4px)}
+.aux{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.aux button{font:inherit;font-weight:600;font-size:15px;background:none;cursor:pointer;color:#0b0b0a}
+.howto{display:grid;grid-template-columns:repeat(3,1fr) auto;gap:3vw;align-items:end;margin-top:28px;padding:24px;background:#0b0b0a;color:var(--fg);border-radius:4px}
+.howto[hidden]{display:none}.howto h4{margin-bottom:6px}.howto p{color:var(--mid);line-height:1.45;font-size:15px}
+.howto .btn.solid{background:var(--acc);color:#0b0b0a}
+@media(max-width:900px){.plats{grid-template-columns:1fr 1fr}.howto{grid-template-columns:1fr}}
 .which{display:grid;grid-template-columns:1fr 1fr;gap:5vw;margin-top:10vh;max-width:900px}
 .which h4{font-size:18px;margin-bottom:8px}.which p{line-height:1.45}
 .outro .t{color:#0b0b0a}.outro .mono{color:#0b0b0a}.outro .btn{border-color:#0b0b0a}.outro .btn.solid{background:#0b0b0a;color:var(--fg)}.outro .btn:hover{background:var(--fg);border-color:var(--fg);color:#0b0b0a}
@@ -158,7 +184,7 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 
 <header class="top">
   <a class="word" href="#"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="hdc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="hda" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#hdc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#hda)"/><polygon points="69,32 69,65 36,65" fill="url(#hdb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg>CHRO-MA-SMITH</a>
-  <nav><a href="#maker">Story</a><a href="#beta">Beta</a><a href="#index">Features</a><a href="../../chromasmith-22.html">Launch app ↗</a></nav>
+  <nav><a href="#index">Features</a><a href="#faq">FAQ</a><a href="https://github.com/TareqAmeer/Chroma-App">GitHub ↗</a><a href="#yours">Download</a><a href="../../chromasmith-22.html">Launch app ↗</a></nav>
 </header>
 
 <section class="pin" aria-label="Chromasmith tour">
@@ -349,14 +375,31 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 </div>
 </section>
 
+<section class="faq" id="faq">
+  <div><p class="mono">FAQ</p><h2 class="k" style="margin-top:18px">Questions,<br>answered.</h2></div>
+  <div class="qa"><details><summary>Is Chromasmith really free?</summary><p>Yes. It's free, open-source software under the GPL-3.0 licence. There's no account, subscription or paywall.</p></details><details><summary>Do my photos get uploaded anywhere?</summary><p>No. Everything runs on your device, in the browser or the desktop app. Your photos never leave your machine.</p></details><details><summary>What's the difference between the web app and the desktop app?</summary><p>The web app has the full editor: looks, film effects, colour tools, masks and export. The desktop app adds the photo library, card import, on-device search, face tagging and the desktop-only tools such as HDR and focus stacking.</p></details><details><summary>Does it work offline?</summary><p>Yes. After the first load the web app keeps working without a connection, and the desktop app never needs one.</p></details><details><summary>Which RAW files can it open?</summary><p>Camera RAW files are decoded locally, with camera colour profiles for Panasonic Lumix bodies. JPEG, PNG and TIFF open everywhere.</p></details><details><summary>Can I use my own LUTs?</summary><p>Yes. Load any .cube LUT as a starting look, or build your own .cube from a before/after pair or a reference photo.</p></details><details><summary>How do I install it on iPhone?</summary><p>Chromasmith isn't on the App Store yet. Download the .ipa and install it with a third-party signing service such as Flarestore. Or add the web app to your home screen, which needs no signing.</p></details><details><summary>Is there a Windows version?</summary><p>Yes. A Windows installer is published alongside the Mac release.</p></details></div>
+</section>
+
 <section class="outro" id="yours">
   <div>
     <h2 class="k"><span><i>Now make</i></span><span><i>it yours.</i></span></h2>
     <p class="t" style="font-size:20px">Your photos. Your taste. Your machine. Free and open source, ready when you are.</p>
-    <div class="cta"><a class="btn solid" href="../../chromasmith-22.html">Launch app ↗</a><a class="btn" href="https://github.com/TareqAmeer/Chroma-App/releases/latest">Download for Mac ↗</a><a class="btn" href="https://github.com/TareqAmeer/Chroma-App">View on GitHub ↗</a></div>
-    <div class="which">
-      <div><h4>Browser and phone</h4><p>Open the app in a modern browser. On a phone, add it to your home screen for quick access and offline use.</p></div>
-      <div><h4>Mac desktop</h4><p>Get the latest Mac release for the local library, card import and on-device search.</p></div>
+    <p class="full">For the full experience, download the desktop app: the local library, card import, on-device search and face tagging all live there.</p>
+    <div class="plats">
+      <a class="plat" href="https://github.com/TareqAmeer/Chroma-App/releases/latest"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="12" rx="1.5"/><path d="M1.5 19.5h21"/></svg><b>Mac</b><span>Full desktop app · .dmg</span><em>Download ↗</em></a>
+      <a class="plat" href="https://github.com/TareqAmeer/Chroma-App/releases/latest"><svg viewBox="0 0 24 24"><rect x="3" y="3.5" width="18" height="13" rx="1.5"/><path d="M12 3.5v13M3 10h18M8 20.5h8"/></svg><b>Windows</b><span>Full desktop app · installer</span><em>Download ↗</em></a>
+      <a class="plat" href="../../chromasmith-22.html"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c3 3.2 3 15.8 0 19M12 2.5c-3 3.2-3 15.8 0 19"/></svg><b>Web</b><span>Any modern browser · nothing to install</span><em>Launch app ↗</em></a>
+      <a class="plat" href="https://github.com/TareqAmeer/Chroma-App/releases/latest"><svg viewBox="0 0 24 24"><rect x="6.5" y="2" width="11" height="20" rx="2.5"/><path d="M10.5 18.5h3"/></svg><b>iPhone</b><span>Install the .ipa with a third-party signing service (e.g. Flarestore)</span><em>Get the .ipa ↗</em></a>
+    </div>
+    <div class="aux">
+      <button class="btn" id="homebtn" type="button">Add the web app to your home screen</button>
+      <a class="btn" href="https://github.com/TareqAmeer/Chroma-App">View on GitHub ↗</a>
+    </div>
+    <div class="howto" id="howto" hidden>
+      <div><h4>iPhone / iPad (Safari)</h4><p>Open the web app, tap Share, then “Add to Home Screen”. It opens full-screen and keeps working offline.</p></div>
+      <div><h4>Android (Chrome)</h4><p>Open the web app, tap the ⋮ menu, then “Add to Home screen” or “Install app”.</p></div>
+      <div><h4>Desktop browser</h4><p>Open the web app and use the install icon in the address bar, or bookmark it (⌘D / Ctrl+D).</p></div>
+      <a class="btn solid" href="../../chromasmith-22.html">Open the web app ↗</a>
     </div>
   </div>
   <footer class="mono"><span>Free software under GPL-3.0 · Built by Tareq Ameer</span><a href="https://github.com/TareqAmeer/Chroma-App">Source code</a></footer>
@@ -453,6 +496,9 @@ const nav=document.querySelectorAll('.idx aside a');
 document.querySelectorAll('.group').forEach((g,i)=>ScrollTrigger.create({trigger:g,start:'top 50%',end:'bottom 50%',onToggle:s=>s.isActive&&nav.forEach((a,j)=>a.classList.toggle('on',i===j))}));
 document.querySelectorAll('.group details').forEach(d=>d.addEventListener('toggle',()=>ScrollTrigger.refresh()));
 
+document.getElementById('homebtn').addEventListener('click',()=>{const h=document.getElementById('howto');h.hidden=!h.hidden;ScrollTrigger.refresh()});
+document.querySelectorAll('.qa details').forEach(d=>d.addEventListener('toggle',()=>ScrollTrigger.refresh()));
+gsap.from('.plat',{y:50,opacity:0,stagger:.08,duration:1,ease:'expo.out',scrollTrigger:{trigger:'.plats',start:'top 90%'}});
 /* 5. outro lines rise */
 gsap.from('.outro .k i',{yPercent:105,stagger:.12,duration:1.2,ease:'expo.out',scrollTrigger:{trigger:'.outro',start:'top 65%'}});
 </script>
