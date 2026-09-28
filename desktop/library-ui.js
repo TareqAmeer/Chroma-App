@@ -2218,7 +2218,7 @@
         <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-fav" title="Favorite selected photos">${ic('heart',18)}</button>
       </div>
       </div>
-      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply your All FX effects to every selected photo (right-click to choose what it applies)">${ic('looks',14)}<span class="lbl">All FX</span></button>
+      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply your All FX effects to every selected photo (right-click to choose what it applies)">${ic('enableAll',14)}<span class="lbl">All FX</span></button>
       <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ${kbd([], 'E')}">${ic('export',14)}<span class="lbl">Export</span></button>
       <!-- id (not just a bare positioning div) so body.deskx can give it the SAME margin-left/
            padding-left/border-left divider as the Editor's own #fx-settings, instead of just the

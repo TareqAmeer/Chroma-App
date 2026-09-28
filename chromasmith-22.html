@@ -2525,12 +2525,8 @@ body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{font-size:11px;col
    paper in the gallery, white on charcoal in the studio. */
 body.sk2 #cs-brand-tog::after{background:var(--k-color-ink)!important}
 /* Gallery header: Export as a word button (it has the room), a wider search with quiet text. */
-@media (min-width:1600px){body.sk2 #lib-overlay #lib-export-btn .lbl{display:inline!important}}
 body.sk2 #lib-overlay #lib-export-btn{background:var(--k-color-accent-a)!important;color:#111!important;box-shadow:none!important}
-@media (min-width:1600px){body.sk2 #lib-overlay #lib-export-btn{width:auto!important;padding:0 10px!important;gap:6px}}
 body.sk2 #lib-overlay #lib-export-btn svg,body.sk2 #lib-overlay #lib-export-btn svg *{stroke:#111!important}
-@media (min-width:1500px){body.sk2 #lib-overlay.full #lib-top-center{flex:0 1 360px;min-width:0}
-body.sk2 #lib-overlay.full #lib-top-center .lib-search-wrap{width:100%!important;max-width:none!important}}
 body.sk2 #lib-overlay #lib-search{color:var(--k-color-muted)!important}
 body.sk2 #lib-overlay #lib-search:focus{color:var(--k-color-ink)!important}
 body.sk2 #lib-overlay #lib-search::placeholder{color:var(--k-color-muted)!important;opacity:.8}
@@ -2561,6 +2557,16 @@ body.sk2.deskx #lib-overlay:not(.full) #lib-grid:not(.list-view) :is(.lib-raw-ba
 body.sk2 .sk2-hist{display:none;margin:4px 0 10px}
 body.sk2 .fx-panel:has(.fx-ctrl.sec-active[data-fxsec="adjust"]) .sk2-hist{display:block}
 body.sk2 .sk2-hist canvas{display:block;width:100%;height:80px;margin-top:8px;image-rendering:auto}
+/* Gallery top bar: the search column grows with the window (280-560px) while leaving each side
+   ~460px, so Export and All FX keep their words; the search fills its column with 24px either side. */
+body.sk2.deskx #lib-overlay.full #lib-top:not(.lib-top-overflow3){grid-template-columns:minmax(0,1fr) minmax(0,min(560px,max(280px,100vw - 920px))) minmax(0,1fr)!important}
+body.sk2.deskx #lib-overlay.full #lib-top-center{justify-self:stretch;width:auto!important;max-width:none!important;padding:0 24px;box-sizing:border-box}
+body.sk2.deskx #lib-overlay.full #lib-top-center .lib-search-wrap{width:100%!important;max-width:none!important}
+body.sk2 #lib-overlay #lib-top:not(.lib-top-compact):not(.lib-top-overflow2) :is(#lib-export-btn,#lib-allfx-btn){width:auto!important;padding:0 10px!important;gap:6px}
+/* Gallery/studio switch = the logo: an ink square set up-left behind a vermilion square that
+   carries the light edge. Ink is black on paper (gallery), white on charcoal (studio). */
+body.sk2 #cs-brand-tog::before{background:linear-gradient(225deg,#ff8a5c 0%,#ff3b1f 42%,#e02d14 100%)!important;transform:translateX(calc(var(--k-sx,0px) + 3px))!important;top:6px!important;bottom:-3px!important}
+body.sk2 #cs-brand-tog::after{display:block!important;z-index:0!important;background:var(--k-color-ink)!important;transform:translateX(calc(var(--k-sx,0px) - 4px))!important;top:1px!important;bottom:3px!important}
 /* Splash: dark behind the card, no white window frame. */
 html.cs-boot-tauri,html.cs-boot-tauri body{background:#141414}
 </style>
@@ -2608,7 +2614,7 @@ function sk2SubTabs(g,jump){
   if(rail){let mk=document.getElementById('sk2-rail-mk');if(!mk){mk=document.createElement('i');mk.id='sk2-rail-mk';mk.setAttribute('aria-hidden','true');}
     if(mk.parentNode!==rail)rail.appendChild(mk);rail.classList.add('sk2-mk');
     mk.style.opacity=on?1:0;if(on)mk.style.transform=`translateY(${on.offsetTop+8}px)`;}
-  const cards=G?[...panel.querySelectorAll('.fx-ctrl.sec-active')].filter(c=>c.style.display!=='none'&&!c.hidden):[];
+  const cards=G?[...panel.querySelectorAll('.fx-ctrl.sec-active')].filter(c=>getComputedStyle(c).display!=='none'&&!c.hidden):[];
   nav.hidden=cards.length<2;
   panel.querySelectorAll('.sk2-dup-title').forEach(c=>c.classList.remove('sk2-dup-title'));
   if(cards.length>1)cards.forEach(c=>{const t=c.querySelector(':scope>.fx-ctrl-title');if(t){c.classList.add('sk2-dup-title');t.setAttribute('data-sk2-name',SK2_SUB[c.dataset.fxsec]||'');}});
@@ -6368,7 +6374,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928Z';
+const BUILD='1.0928A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
