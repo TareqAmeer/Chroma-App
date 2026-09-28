@@ -2462,7 +2462,7 @@
     const cnt = overlay.querySelector('#lib-count'), grid = overlay.querySelector('#lib-main');
     if (cnt && grid && !overlay.querySelector('#sk2-strip-n')) {
       const n = document.createElement('div'); n.id = 'sk2-strip-n'; grid.appendChild(n);
-      const syncN = () => { n.textContent = cnt.textContent.replace(/ photos?$/, '').replace(' of ', ' / '); };
+      const syncN = () => { const m = /([\d,]+) of ([\d,]+)/.exec(cnt.textContent); n.textContent = m ? `${m[1]} / ${m[2]}` : ''; };
       new MutationObserver(syncN).observe(cnt, { childList: true, characterData: true, subtree: true }); syncN();
     }
     if (top && !overlay.querySelector('#sk2-act')) {
