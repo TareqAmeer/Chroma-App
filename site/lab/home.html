@@ -15,7 +15,7 @@ html,body{background:var(--bg);color:var(--fg);font-family:Gramatika,system-ui,s
 body{overflow-x:clip}
 a{color:inherit}
 .mono{font-family:Gramatika,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
-.k{font-size:clamp(40px,6vw,96px);font-weight:900;letter-spacing:-.045em;line-height:.9}
+.k{font-size:clamp(40px,6vw,96px);font-weight:900;letter-spacing:-.01em;line-height:.9}
 .t{max-width:400px;font-size:18px;line-height:1.4;color:var(--mid);margin-top:20px}
 .btn{display:inline-flex;gap:8px;align-items:center;font-weight:600;font-size:15px;padding:14px 22px;border-radius:999px;text-decoration:none;border:1px solid var(--fg);transition:background .2s,color .2s,border-color .2s}
 .btn.solid{background:var(--acc);border-color:var(--acc);color:#0b0b0a}
@@ -42,7 +42,7 @@ a{color:inherit}
 .ph .film{opacity:0}.ph .grain{opacity:0}
 .ph .glow{filter:blur(20px) saturate(2) brightness(1.5);mix-blend-mode:screen;opacity:0}
 .ph .shade{position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.65),transparent 55%);opacity:0}
-.hero-t{position:absolute;left:0;right:0;top:12vh;text-align:center;font-size:clamp(44px,8.5vw,150px);font-weight:900;letter-spacing:-.05em;line-height:.86;pointer-events:none;z-index:2;mix-blend-mode:difference}
+.hero-t{position:absolute;left:0;right:0;top:12vh;text-align:center;font-size:clamp(44px,8.5vw,150px);font-weight:900;letter-spacing:-.01em;line-height:.86;pointer-events:none;z-index:2;mix-blend-mode:difference}
 .hero-t sup{color:var(--acc);font-size:.35em;vertical-align:top;position:relative;top:.2em}
 .lb{position:absolute;top:58%;font-size:11px}.lb.l{left:5vw}.lb.r{right:5vw;text-align:right}
 .scrollcue{position:absolute;bottom:5vh;left:50%;transform:translateX(-50%)}
@@ -63,7 +63,7 @@ a{color:inherit}
 .tags span::before{content:"";display:inline-block;width:6px;height:6px;background:var(--acc);margin-right:8px;vertical-align:1px}
 .tags span{border:1px solid #33312c;border-radius:999px;padding:7px 12px;font-size:13px;color:var(--mid)}
 .p3{width:100vw;grid-template-columns:1fr 1.25fr;gap:4vw;align-items:center}
-.big{font-size:20vw;font-weight:900;letter-spacing:-.06em;line-height:.78;color:transparent;-webkit-text-stroke:1.5px var(--acc)}
+.big{font-size:20vw;font-weight:900;letter-spacing:-.01em;line-height:.78;color:transparent;-webkit-text-stroke:1.5px var(--acc)}
 .lensbox{position:relative;height:76vh;border-radius:3px;overflow:hidden;cursor:crosshair}
 .lensbox canvas{position:absolute;inset:0;width:100%;height:100%}
 .lensbox .mono{position:absolute;right:14px;bottom:12px;color:var(--fg);mix-blend-mode:difference}
@@ -77,7 +77,7 @@ a{color:inherit}
 .p4 .in{position:relative;padding:0 5vw}
 .p4 .terms{display:flex;gap:28px;margin-top:28px;flex-wrap:wrap}
 .p4 .terms span:hover{color:var(--acc)}
-.p4 .terms span{font-size:clamp(20px,2.4vw,36px);font-weight:600;letter-spacing:-.02em}
+.p4 .terms span{font-size:clamp(20px,2.4vw,36px);font-weight:600;letter-spacing:0}
 .p5{width:90vw;grid-template-columns:1.2fr 1fr;gap:4vw;align-items:center}
 .p5 .phone{height:74vh;justify-self:center;border-radius:28px;overflow:hidden;border:1px solid #2a2925;box-shadow:0 40px 80px rgba(0,0,0,.5)}
 .p5 .phone img{height:100%;display:block}
@@ -90,7 +90,7 @@ a{color:inherit}
 .maker{padding:22vh 5vw;display:grid;grid-template-columns:1fr 2fr;gap:5vw;border-top:1px solid var(--line)}
 .maker .por{aspect-ratio:1;background:var(--bg2);border:1px solid var(--line);overflow:hidden;align-self:start}
 .maker .por img{width:100%;height:100%;object-fit:cover;display:block}
-.quote{font-size:clamp(28px,3.6vw,56px);font-weight:500;letter-spacing:-.03em;line-height:1.1}
+.quote{font-size:clamp(28px,3.6vw,56px);font-weight:500;letter-spacing:-.01em;line-height:1.1}
 .quote .w{opacity:.12;transition:color .6s}
 .quote .w.hot{color:var(--acc)}
 .maker .who{margin-top:32px}
@@ -100,8 +100,8 @@ a{color:inherit}
 .beta .head{display:flex;justify-content:space-between;align-items:end;gap:24px;flex-wrap:wrap;margin-bottom:8vh}
 .rows{border-top:1px solid var(--line)}
 .row{display:grid;grid-template-columns:120px 1fr 1.2fr auto;gap:3vw;align-items:baseline;padding:4vh 0;border-bottom:1px solid var(--line);position:relative;isolation:isolate}
-.row .n{font-size:clamp(40px,5vw,80px);font-weight:900;letter-spacing:-.05em;line-height:.8;color:var(--acc);transition:color .3s}
-.row h3{font-size:clamp(28px,3.4vw,52px);font-weight:900;letter-spacing:-.04em}
+.row .n{font-size:clamp(40px,5vw,80px);font-weight:900;letter-spacing:-.01em;line-height:.8;color:var(--acc);transition:color .3s}
+.row h3{font-size:clamp(28px,3.4vw,52px);font-weight:900;letter-spacing:-.01em}
 .row p{color:var(--mid);font-size:17px;line-height:1.4}
 .row::before{content:"";position:absolute;inset:0 -5vw;background:var(--bg2);transform:scaleY(0);transform-origin:bottom;transition:transform .45s cubic-bezier(.2,.8,.2,1);z-index:-1}
 .row::before{background:var(--acc)!important}.row:hover::before{transform:scaleY(1)}.row:hover *{color:#0b0b0a!important}
@@ -114,7 +114,7 @@ a{color:inherit}
 .idx aside a small{font:11px Gramatika;width:22px}
 .idx aside a.on small{color:var(--acc)}.idx aside a.on{color:var(--fg);transform:translateX(10px)}
 .group{padding-bottom:10vh}
-.group h3{font-size:clamp(28px,3vw,44px);font-weight:900;letter-spacing:-.04em;padding-bottom:18px;border-bottom:2px solid var(--acc)}
+.group h3{font-size:clamp(28px,3vw,44px);font-weight:900;letter-spacing:-.01em;padding-bottom:18px;border-bottom:2px solid var(--acc)}
 .group details{border-bottom:1px solid var(--line)}
 .group summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:16px 0;font-size:19px;font-weight:500;transition:padding .25s,color .25s}
 .group summary::-webkit-details-marker{display:none}
@@ -141,21 +141,20 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
   .row{grid-template-columns:1fr}.maker,.idx,.which{grid-template-columns:1fr}.idx aside{position:static}
 }
 /* intro: logo splash, then the name, then the curtain lifts */
-.intro{position:fixed;inset:0;z-index:100;background:var(--bg);display:grid;place-items:center}
+.intro{position:relative;height:100vh;overflow:hidden;background:var(--bg);display:grid;place-items:center;z-index:5}
 .intro .in{display:flex;flex-direction:column;align-items:center;gap:22px}
 .intro svg{width:min(34vw,220px);height:auto;overflow:visible}
-.intro .name{font-size:clamp(40px,9vw,160px);font-weight:800;letter-spacing:-.04em;line-height:.85;display:flex;overflow:hidden;padding-bottom:.06em}
-.intro .name span{display:block}
+.intro .name{font-size:clamp(40px,9vw,160px);font-weight:700;letter-spacing:.01em;line-height:.85;display:flex;overflow:hidden;padding-bottom:.06em}
+.intro .name span{display:block;white-space:pre}
 .intro .tag{color:var(--acc)}
 .intro .cue{position:absolute;bottom:6vh;left:0;right:0;text-align:center;opacity:0;animation:bob 2s ease-in-out infinite}
 @keyframes bob{50%{transform:translateY(6px)}}
-.intro .curtain{position:absolute;inset:0;background:var(--acc);transform:scaleY(0);transform-origin:bottom}
-body.lock{overflow:hidden}
+.intro .curtain{position:absolute;inset:0;background:var(--acc);transform:scaleY(0);transform-origin:bottom;z-index:2}
 @media (prefers-reduced-motion:reduce){.grain{animation:none}}
 </style>
 </head>
-<body class="lock">
-<div class="intro" aria-hidden="true"><div class="in"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="inc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="ina" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="inb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#inc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#ina)"/><polygon points="69,32 69,65 36,65" fill="url(#inb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg><div class="name"><span>C</span><span>H</span><span>R</span><span>O</span><span>-</span><span>M</span><span>A</span><span>-</span><span>S</span><span>M</span><span>I</span><span>T</span><span>H</span></div><p class="mono tag">A darkroom that lives anywhere</p></div><p class="mono cue">Scroll to enter ↓</p><div class="curtain"></div></div>
+<body>
+<section class="intro" aria-label="Chromasmith"><div class="in"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="inc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="ina" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="inb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#inc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#ina)"/><polygon points="69,32 69,65 36,65" fill="url(#inb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg><div class="name"><span>C</span><span>H</span><span>R</span><span>O</span><span>-</span><span>M</span><span>A</span><span>-</span><span>S</span><span>M</span><span>I</span><span>T</span><span>H</span></div><p class="mono tag">A darkroom that lives anywhere</p></div><p class="mono cue">Scroll to enter ↓</p><div class="curtain"></div></section>
 
 <header class="top">
   <a class="word" href="#"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="hdc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="hda" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#hdc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#hda)"/><polygon points="69,32 69,65 36,65" fill="url(#hdb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg>CHRO-MA-SMITH</a>
@@ -377,64 +376,26 @@ document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',
 const tr=document.querySelector('.track'),bars=document.querySelectorAll('.prog i'),plab=document.querySelector('.plab'),
   pans=[...document.querySelectorAll('.panel[data-lab]')];
 const dist=()=>tr.scrollWidth-innerWidth;
-const heroIn=()=>{gsap.from('.hero-t',{yPercent:40,opacity:0,duration:1.4,ease:'expo.out'});gsap.from('.ph',{scale:.85,opacity:0,duration:1.4,ease:'expo.out',delay:.15});
-  gsap.from('.top',{yPercent:-100,opacity:0,duration:1,ease:'expo.out',delay:.3})};
-const intro=document.querySelector('.intro');
-if(matchMedia('(prefers-reduced-motion: reduce)').matches){gsap.to(intro,{opacity:0,delay:1.2,duration:.5,onComplete(){intro.remove();document.body.classList.remove('lock')}})}
-else{
-  scrollTo(0,0);lenis&&(lenis.scrollTo(0,{immediate:true,force:true}),lenis.stop());
-  gsap.set('.intro .name span',{yPercent:110});gsap.set('.intro .tag',{opacity:0});
-  const done=()=>{intro.remove();document.body.classList.remove('lock');lenis&&lenis.start()};
-  // part 1 plays on load, then holds on the name until the visitor scrolls
-  gsap.timeline({defaults:{ease:'expo.out'},onComplete:armExit})
-    .from('.intro .ink',{x:-10,opacity:0,duration:.7})                       // ink plate slides into register
-    .from('.intro .ver',{y:10,opacity:0,duration:.7},.3)                      // vermilion plate lands on it
-    .from('.intro .expo',{scale:0,duration:.9},1)                             // light exposes the overlap
-    .from('.intro .seam',{attr:{'stroke-dashoffset':46.67},duration:.6},1.1)
-    .to('.intro .name span',{yPercent:0,stagger:.035,duration:.9},1.2)        // then the name
-    .to('.intro .tag',{opacity:1,duration:.6},1.7)
-    .to('.intro .cue',{opacity:1,duration:.6},2.2);
-  // part 2: the first scroll, swipe or key lifts the vermilion curtain
-  function armExit(){
-    const evs=['wheel','touchmove','keydown','pointerdown'];
-    const go=e=>{if(e.type==='keydown'&&!['ArrowDown','PageDown',' ','Enter','Spacebar'].includes(e.key))return;
-      evs.forEach(t=>removeEventListener(t,go));
-      gsap.timeline({onComplete:done})
-        .to('.intro .curtain',{scaleY:1,duration:.7,ease:'expo.inOut'})
-        .set('.intro .in,.intro .cue',{opacity:0})
-        .add(()=>{scrollTo(0,0);lenis&&lenis.scrollTo(0,{immediate:true,force:true});ScrollTrigger.refresh()})
-        .to('.intro .curtain',{scaleY:0,transformOrigin:'top',duration:.7,ease:'expo.inOut'})
-        .set('.intro',{background:'transparent'},'<')
-        .add(heroIn,'<.1');
-    };
-    evs.forEach(t=>addEventListener(t,go,{passive:true}));
-  }
+const heroIn=()=>{gsap.from('.hero-t',{yPercent:40,opacity:0,duration:1.4,ease:'expo.out'});gsap.from('.ph',{scale:.85,opacity:0,duration:1.4,ease:'expo.out',delay:.15});};
+/* intro: plays on load, holds (the light keeps breathing), scroll drives the vermilion curtain over it; scrolling back up returns to it */
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+if(!reduce){
+  gsap.set('.intro .name span',{yPercent:115});gsap.set('.intro .tag,.intro .cue',{opacity:0});gsap.set('.intro .expo',{svgOrigin:'69 32'});
+  gsap.timeline({defaults:{ease:'expo.out'},delay:.2})
+    .from('.intro .ink',{x:-60,opacity:0,duration:1.1})                          // ink plate slides into register
+    .from('.intro .ver',{y:60,opacity:0,duration:1.1},.35)                        // vermilion plate lands on it
+    .from('.intro .expo',{scale:0,duration:1.2,ease:'power2.out'},1.1)            // light exposes the overlap from the corner
+    .from('.intro .seam',{attr:{'stroke-dashoffset':46.67},duration:.8},1.2)
+    .to('.intro .name span',{yPercent:0,stagger:.045,duration:1.1},1.3)         // name rises letter by letter
+    .to('.intro .tag',{opacity:1,duration:.8},2.1)
+    .to('.intro .cue',{opacity:1,duration:.8},2.6)
+    .add(()=>gsap.to('.intro .expo',{scale:.75,duration:1.8,ease:'sine.inOut',yoyo:true,repeat:-1}));  // idle: light breathes
+  gsap.timeline({scrollTrigger:{trigger:'.intro',start:'top top',end:'+=120%',pin:true,scrub:1}})
+    .to('.intro .cue',{opacity:0,duration:.1})
+    .to('.intro .in',{scale:.85,y:-60,opacity:0,duration:.5,ease:'power2.in'},0)
+    .to('.intro .curtain',{scaleY:1,duration:.7,ease:'power2.inOut'},.2);
+  ScrollTrigger.create({trigger:'.pin',start:'top 60%',once:true,onEnter:heroIn});
 }
-const tl=gsap.timeline({scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*3+dist()),scrub:1,invalidateOnRefresh:true}});
-tl.to('.scrollcue',{opacity:0,duration:.1})
-  .to('.ph .film:not(.glow)',{opacity:1,duration:.7},'<')
-  .to('.ph .grain',{opacity:.5,duration:.4})
-  .to('.ph .glow',{opacity:.5,duration:.5})
-  .to('.lb,.hero-t',{opacity:0,y:-30,duration:.3})
-  .to('.ph',{width:'100vw',height:'100vh',aspectRatio:'auto',ease:'power2.inOut',duration:1})
-  .to('.ph .shade',{opacity:1,duration:.3},'-=.3')
-  .to('.cap0',{opacity:1,y:-16,duration:.3})
-  .to({},{duration:.4})
-  .to('.prog,.plab',{opacity:1,duration:.2})
-  .addLabel('slide')
-  .to(tr,{x:()=>-dist(),ease:'none',duration:()=>dist()/innerHeight,onUpdate(){
-    const f=this.progress()*bars.length;bars.forEach((b,i)=>b.style.transform=`scaleX(${Math.max(0,Math.min(1,f-i))})`);
-    plab.textContent=pans[Math.min(pans.length-1,Math.floor(f))].dataset.lab}});
-const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scrollTrigger.end-tl.scrollTrigger.start);
-pans.forEach(p=>{
-  const st=()=>sPos()+Math.max(0,p.offsetLeft-innerWidth),en=()=>st()+innerWidth+p.offsetWidth;
-  const o=()=>({scrub:true,invalidateOnRefresh:true,start:st,end:en});
-  gsap.fromTo(p.querySelectorAll('.k,.t,.mono,.tags,.looks,.terms'),{x:60},{x:-30,ease:'none',scrollTrigger:o()});
-  gsap.fromTo(p.querySelectorAll('.img img,.p4>img'),{xPercent:3},{xPercent:-3,ease:'none',scrollTrigger:o()});
-  gsap.fromTo(p.querySelectorAll('.stack img'),{y:i=>40+i*30},{y:i=>-20-i*20,ease:'none',scrollTrigger:o()});
-  gsap.fromTo(p.querySelectorAll('.big'),{x:160},{x:-80,ease:'none',scrollTrigger:o()});
-});
-
 /* live look lens (same shader as the hero lab's C) */
 const V={
 lens(R){
