@@ -2449,6 +2449,22 @@
       ['lib-status-sel', 'lib-status-labels', 'lib-count'].forEach((id) => { const e = overlay.querySelector('#' + id); if (e) meta.appendChild(e); });
       title.append(left, meta);
     }
+    // 12: housekeeping rows (Library folders…, Free up space…, …) fold behind one "Manage" row.
+    const mg = () => {
+      const first = overlay.querySelector('.sk2-manage');
+      if (!first || first.parentNode.querySelector('.sk2-manage-btn')) return;
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'sk2-manage-btn'; b.textContent = 'Manage';
+      b.onclick = () => first.parentNode.classList.toggle('sk2-manage-open');
+      first.parentNode.insertBefore(b, first);
+    };
+    new MutationObserver(mg).observe(overlay, { childList: true, subtree: true }); mg();
+    // 20: photo count at the foot of the docked filmstrip, mirrored from #lib-count.
+    const cnt = overlay.querySelector('#lib-count'), grid = overlay.querySelector('#lib-main');
+    if (cnt && grid && !overlay.querySelector('#sk2-strip-n')) {
+      const n = document.createElement('div'); n.id = 'sk2-strip-n'; grid.appendChild(n);
+      const syncN = () => { n.textContent = cnt.textContent.replace(/ photos?$/, '').replace(' of ', ' / '); };
+      new MutationObserver(syncN).observe(cnt, { childList: true, characterData: true, subtree: true }); syncN();
+    }
     if (top && !overlay.querySelector('#sk2-act')) {
       const w = document.createElement('button'); w.type = 'button'; w.id = 'sk2-act'; w.title = 'Background work — click for details';
       w.innerHTML = '<span class="sk2-act-dot" aria-hidden="true"></span><span class="sk2-act-body"></span>';
@@ -6673,7 +6689,7 @@
       k.textContent = _gt.unit === 'hour' ? `${src} · ${d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}` : src;
     } else {
       h.textContent = src;
-      k.textContent = _gt.n ? `${_gt.n.toLocaleString()} ${_gt.n === 1 ? 'item' : 'items'}` : '';
+      k.textContent = ''; // Swiss v2: the count lives at the right of the title (.lgt-m), not repeated above it
     }
   }
 
@@ -7120,14 +7136,16 @@
       (document.getElementById('lib-main') || document.body).appendChild(bar);
     }
     const paths = () => Array.from(state.selected);
-    bar.innerHTML = `<span style="font-size:11px;color:var(--mut);white-space:nowrap;flex:none">${n} selected</span>`
-      + `<span style="width:1px;height:16px;background:var(--bdr);flex:none"></span>`
-      + `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="cache-raw" title="Build exact full-quality editor caches for the selected RAW photos">Cache selected RAWs</button>`
-      + `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="reject">Reject</button>`
-      + `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="pick">Pick</button>`
-      + `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="clear-label">Clear flag</button>`
-      + `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="fav">Favorite</button>`
-      + `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="deselect">Deselect</button>`;
+    // Swiss v2: the count in large type, three everyday actions, the rest behind "More".
+    const B = (act, lb, t) => `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="${act}"${t ? ` title="${t}"` : ''}>${lb}</button>`;
+    bar.innerHTML = `<span class="sk2-bb-n" style="white-space:nowrap;flex:none">${n}<small> selected</small></span>`
+      + B('pick', 'Pick') + B('reject', 'Reject') + B('fav', 'Favorite')
+      + `<button class="lib-btn sk2-bb-more-btn" style="white-space:nowrap;flex:none" aria-expanded="false">More</button>`
+      + `<span class="sk2-bb-more" hidden>`
+      + B('cache-raw', 'Cache selected RAWs', 'Build exact full-quality editor caches for the selected RAW photos')
+      + B('clear-label', 'Clear flag') + B('deselect', 'Deselect') + `</span>`;
+    const mb = bar.querySelector('.sk2-bb-more-btn'), mo = bar.querySelector('.sk2-bb-more');
+    mb.onclick = () => { mo.hidden = !mo.hidden; mb.setAttribute('aria-expanded', String(!mo.hidden)); };
     bar.querySelector('[data-act="cache-raw"]').onclick = () => cacheSelectedRaws(paths());
     bar.querySelector('[data-act="reject"]').onclick = () => paths().forEach((p) => setLabel(p, 'Red'));
     bar.querySelector('[data-act="pick"]').onclick = () => paths().forEach((p) => setLabel(p, 'Green'));
@@ -9128,19 +9146,19 @@
       <div style="padding:0 10px 6px"><div style="height:3px;border-radius:2px;background:var(--sur2);overflow:hidden">
         <div style="height:100%;width:${pct}%;background:${nearFull ? 'var(--err,#e05454)' : 'var(--acc)'}"></div>
       </div></div>
-      <div class="lib-coll-row" data-lib-roots="1" style="cursor:pointer" title="Every folder the library is indexing — remove any of them (files are never deleted)">
+      <div class="lib-coll-row sk2-manage" data-lib-roots="1" style="cursor:pointer" title="Every folder the library is indexing — remove any of them (files are never deleted)">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Library folders…</span>
       </div>
-      <div class="lib-coll-row" data-cache-free="1" style="cursor:pointer">
+      <div class="lib-coll-row sk2-manage" data-cache-free="1" style="cursor:pointer">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Free up space…</span>
       </div>
-      <div class="lib-coll-row" data-verify-library="1" style="cursor:pointer" title="Re-checks every already-hashed photo against its stored hash — flags any that changed WITHOUT its file date moving, which is what silent corruption looks like. New/never-hashed photos are already covered automatically in the background.">
+      <div class="lib-coll-row sk2-manage" data-verify-library="1" style="cursor:pointer" title="Re-checks every already-hashed photo against its stored hash — flags any that changed WITHOUT its file date moving, which is what silent corruption looks like. New/never-hashed photos are already covered automatically in the background.">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Verify library…</span>
       </div>
-      <div class="lib-coll-row" data-find-duplicates="1" style="cursor:pointer" title="Perceptual-hash duplicate detection for the CURRENT folder — deliberately manual, same as digiKam's own Find Duplicates tool, rather than an automatic pass on every folder open.">
+      <div class="lib-coll-row sk2-manage" data-find-duplicates="1" style="cursor:pointer" title="Perceptual-hash duplicate detection for the CURRENT folder — deliberately manual, same as digiKam's own Find Duplicates tool, rather than an automatic pass on every folder open.">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Find duplicates…</span>
       </div>
-      <div class="lib-coll-row" data-rescan-flags="1" style="cursor:pointer" title="The Flagged/Favorites/Edited/Rejected smart collections only see .xmp sidecars in folders you've opened or that are in Recents — a sidecar changed elsewhere (by this app in a subfolder you've never browsed, or by an external tool) can be invisible to them even though a plain folder browse shows it correctly. This walks the WHOLE library once to catch up.">
+      <div class="lib-coll-row sk2-manage" data-rescan-flags="1" style="cursor:pointer" title="The Flagged/Favorites/Edited/Rejected smart collections only see .xmp sidecars in folders you've opened or that are in Recents — a sidecar changed elsewhere (by this app in a subfolder you've never browsed, or by an external tool) can be invisible to them even though a plain folder browse shows it correctly. This walks the WHOLE library once to catch up.">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Rescan flags…</span>
       </div>`;
   }

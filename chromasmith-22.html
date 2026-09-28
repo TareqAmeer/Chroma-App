@@ -2280,6 +2280,103 @@ body.sk2 #fx-deskbar-title.sk2-cap #db-title-status{font-size:11px;color:var(--k
 body.sk2 #ff-borders .sk2-layers{margin:2px 0 12px}
 body.sk2 #ff-borders .fx-row[hidden]{display:none!important}
 body.sk2 #ff-borders[data-sk2-layer=b1] [data-layer=b2],body.sk2 #ff-borders[data-sk2-layer=b2] [data-layer=b1]{display:none!important}
+/* ── Swiss v2 refinement pass (20-point review, 2026-09-28) ─────────────────────────────── */
+/* 1 · One type scale: display 64 / stage 46 / section 21 / body 13 / caption 11. */
+body.sk2{--sk-t1:64px;--sk-t2:46px;--sk-t3:21px;--sk-t4:13px;--sk-t5:11px;--sk-g:8px}
+body.sk2 .fx-label,body.sk2 .fx-val,body.sk2 .fx-sub,body.sk2 .btn,body.sk2 .fx-select,body.sk2 .vinput{font-size:var(--sk-t4)!important}
+body.sk2 .fx-sub{text-transform:none!important;letter-spacing:0!important;color:var(--k-color-muted)!important;font-weight:400!important;border:0!important;margin:calc(var(--sk-g)*3) 0 var(--sk-g)!important;padding:0!important}
+body.sk2 .look-cat-hdr,body.sk2 .sk2x-cap,body.sk2 .fx-preset-head,body.sk2 #lib-overlay .lib-coll-heading{font-size:var(--sk-t5)!important}
+/* 2 · One left edge: panel content, sub-tabs, titles and rows all start at the same x; no inner card padding. */
+body.sk2.deskx .fx-panel{padding-left:calc(var(--sk-g)*3)!important;padding-right:calc(var(--sk-g)*3)!important}
+body.sk2 .fx-ctrl,body.sk2 .fx-fields{padding-left:0!important;padding-right:0!important;margin-left:0!important;margin-right:0!important}
+body.sk2 .fx-ctrl-title{padding-left:0!important;padding-right:0!important}
+/* 3 · Numbers: tabular, one colour, one right edge. */
+body.sk2 .fx-val,body.sk2 #lib-overlay .lib-coll-count,body.sk2 #lib-overlay .lgt-m,body.sk2 .sk2-bb-n{font-variant-numeric:tabular-nums;text-align:right}
+body.sk2 .fx-val{min-width:3.2em}
+/* 4 · Vermilion only for position, the main action and danger. */
+body.sk2 .cs-tour-k{color:var(--k-color-muted)!important}
+body.sk2 .cs-ctx-it[style*="--err"],body.sk2 .cs-ctx-it:last-child span:first-child{color:inherit}
+/* 5 · Motion that means something. */
+@keyframes sk2Slide{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+body.sk2 #sk2-stage-h.sk2-in{animation:sk2Slide .18s var(--k-motion-easing)}
+body.sk2 #sk2-rail-mk{position:absolute;left:2px;top:0;width:8px;height:8px;background:var(--k-color-accent-a);transition:transform .18s var(--k-motion-easing),opacity .12s;pointer-events:none;z-index:3}
+body.sk2 #fx-toolrail{position:relative}
+body.sk2 #fx-toolrail.sk2-mk .fx-rail-btn.on::after{content:none!important}
+@media (prefers-reduced-motion:reduce){body.sk2 #sk2-stage-h.sk2-in{animation:none}body.sk2 #sk2-rail-mk{transition:none}}
+/* 6 · Pop-ups: flat panel, big title, numbered margin. */
+body.sk2 .cs-modal{background:var(--k-color-bg)!important;border:1px solid var(--bdr)!important;border-radius:0!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;padding:32px 32px 28px!important;box-shadow:0 24px 64px rgba(0,0,0,.35)!important}
+body.sk2 .cs-modal h2{font-size:var(--sk-t2)!important;font-weight:400;letter-spacing:-.045em;line-height:.95}
+body.sk2 .cs-tour-step{position:relative;padding-left:48px;margin-bottom:22px!important}
+body.sk2 .cs-tour-step::before{content:attr(data-n);position:absolute;left:0;top:-4px;font-size:30px;letter-spacing:-.04em;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
+body.sk2 .cs-tour-k{display:none}
+body.sk2 .cs-tour-step>div:nth-child(2){font-size:15px!important;font-weight:500!important}
+/* 7 · Photo controls (zoom, reject, pick, favourite) travel with the caption under the photo. */
+body.sk2 #fx-deskbar-title.sk2-cap{width:auto;justify-content:flex-start}
+body.sk2 #fx-deskbar-title.sk2-cap #fx-zoom-ctrl{margin-left:auto;pointer-events:auto;gap:6px}
+body.sk2 #fx-deskbar-title.sk2-cap{pointer-events:none}
+body.sk2 #fx-deskbar-title.sk2-cap>*{pointer-events:auto}
+/* 8 · Gallery/studio slab no taller than the words. */
+body.sk2 #cs-brand-tog{--k-two-tone-slab-a-top:4px;--k-two-tone-slab-a-bottom:0px;--k-two-tone-slab-b-top:9px;--k-two-tone-slab-b-bottom:3px}
+/* 9 · Search: sentence case, underline only. */
+body.sk2 #lib-overlay .lib-search-wrap{background:transparent!important;border:0!important;border-bottom:1px solid var(--bdr)!important;border-radius:0!important;box-shadow:none!important}
+body.sk2 #lib-overlay .lib-search-wrap:focus-within{border-bottom-color:var(--k-color-ink)!important}
+body.sk2 #lib-overlay #lib-search{text-transform:none!important;letter-spacing:0!important;font-size:var(--sk-t4)!important;background:transparent!important}
+body.sk2 #lib-overlay #lib-search::placeholder{text-transform:none;letter-spacing:0;color:var(--k-color-muted)}
+/* 10 · Title sits higher (no duplicate count above it). */
+body.sk2 #lib-overlay #lib-grid-title{padding-top:20px!important;margin-bottom:16px!important}
+body.sk2 #lib-overlay #lib-grid-title .lgt-k:empty{display:none}
+/* 11 · Tile badges become a caption line under the print. */
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-card{padding-bottom:22px}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-raw-badge,body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-video-badge{top:auto!important;bottom:-20px!important;left:0!important;background:none!important;color:var(--k-color-muted)!important;border:0!important;box-shadow:none!important;width:auto!important;height:auto!important;font-size:var(--sk-t5)!important;font-weight:400!important;padding:0!important;border-radius:0!important}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-raw-badge::after{content:'AW';letter-spacing:.02em}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-video-badge{left:auto!important;right:0!important}
+/* 12 · Sidebar lists places; housekeeping collapses into "Manage". */
+body.sk2 #lib-overlay .sk2-manage{display:none!important}
+body.sk2 #lib-overlay .sk2-manage-open .sk2-manage{display:flex!important}
+body.sk2 #lib-overlay .sk2-manage-btn{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:0;padding:6px 20px 6px 32px;box-sizing:border-box;font:inherit;font-size:var(--sk-t4);color:var(--k-color-muted);cursor:pointer}
+body.sk2 #lib-overlay .sk2-manage-btn:hover{color:var(--k-color-ink)}
+body.sk2 #lib-overlay .sk2-manage-btn::after{content:'+'}
+body.sk2 #lib-overlay .sk2-manage-open .sk2-manage-btn::after{content:'–'}
+/* 13 · Selection bar: big count, three words, More. */
+body.sk2 #lib-batchbar{background:var(--k-color-bg)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;border:1px solid var(--bdr)!important;border-radius:0!important;box-shadow:0 12px 32px rgba(0,0,0,.22)!important;gap:18px!important;padding:6px 18px 6px 14px!important}
+body.sk2 .sk2-bb-n{font-size:30px;letter-spacing:-.04em;line-height:1;color:var(--k-color-ink)}
+body.sk2 .sk2-bb-n small{font-size:var(--sk-t5);letter-spacing:0;color:var(--k-color-muted);margin-left:4px}
+body.sk2 .sk2-bb-more{display:inline-flex;gap:18px}
+body.sk2 .sk2-bb-more[hidden]{display:none}
+/* 14 · Tiles still developing: paper tone with a hairline, not black. */
+body.sk2 #lib-overlay .lib-thumb-wrap:not(:has(img.loaded)){background:color-mix(in srgb,var(--k-color-ink) 4%,var(--k-color-bg))!important;box-shadow:inset 0 0 0 1px var(--bdr)}
+body.sk2 #lib-overlay .lib-thumb-wrap>img:not(.loaded){opacity:0}
+/* 15 · In a stage with sub-tabs, the card title's words are the sub-tab's; the row keeps chevron, toggle, reset. */
+body.sk2 .sk2-dup-title>.fx-ctrl-title{font-size:0!important;min-height:36px;padding-top:6px!important;padding-bottom:6px!important}
+body.sk2 .sk2-dup-title>.fx-ctrl-title::before{content:attr(data-sk2-name);font-size:var(--sk-t4);color:var(--k-color-muted);order:1;margin-right:auto}
+body.sk2 .sk2-dup-title>.fx-ctrl-title>*{font-size:var(--sk-t4)}
+body.sk2 .sk2-dup-title>.fx-ctrl-title>.fx-ctrl-chev{order:0}
+body.sk2 .sk2-dup-title>.fx-ctrl-title>:not(.fx-ctrl-chev){order:2}
+/* 16 · Titles left, Reset beside them; ratios on a two-column grid. */
+body.sk2 .fx-ctrl-title{justify-content:flex-start!important;text-align:left!important}
+body.sk2 .fx-ctrl-title>.fx-title-right,body.sk2 .fx-ctrl-title>.fx-toggle{margin-left:auto}
+body.sk2 #crop-ar-chips{display:grid!important;grid-template-columns:1fr 1fr;gap:2px 16px!important}
+body.sk2 #crop-ar-chips>.btn{text-align:left;justify-self:start}
+/* 17 · Mixer bands as filled squares, the chosen one marked underneath. */
+body.sk2 .hsl-chip{background:var(--band-col)!important;border:0!important;border-radius:0!important;box-shadow:none!important;outline:0!important;height:22px!important;position:relative;opacity:.55}
+body.sk2 .hsl-chip.on,body.sk2 .hsl-chip.edited{opacity:1}
+body.sk2 .hsl-chip.on::after{content:'';position:absolute;left:50%;bottom:-10px;width:6px;height:6px;margin-left:-3px;background:var(--k-color-ink)}
+body.sk2 #hsl-chips{margin-bottom:14px!important}
+/* 18 · Wheels as large as the panel allows, one amount slider under each. */
+body.sk2 #ff-wheels canvas[id^=cv-wheel-]{max-width:none!important}
+/* 19 · Last boxed controls: word buttons with a hairline; Crop is the one filled action in its card. */
+body.sk2 .btn.bsec,body.sk2 #btn-ah-roi,body.sk2 .fx-hint-x>summary{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:inset 0 -1px 0 var(--bdr)!important;color:var(--k-color-ink)!important;text-transform:none!important;letter-spacing:0!important}
+body.sk2 .fx-hint-x{border:0!important;background:none!important}
+body.sk2 .fx-select{background-color:transparent!important;border:0!important;border-bottom:1px solid var(--bdr)!important;border-radius:0!important;box-shadow:none!important}
+body.sk2 .fx-select:focus{border-bottom-color:var(--k-color-ink)!important;outline:none}
+body.sk2 #btn-crop{background:var(--k-color-accent-a)!important;color:#fff!important;box-shadow:none!important;padding:0 18px!important}
+/* 20 · Filmstrip: smaller, quiet, the open photo marked, count at the foot. */
+body.sk2.deskx #lib-overlay:not(.full) .lib-card{opacity:.45;transition:opacity .12s}
+body.sk2.deskx #lib-overlay:not(.full) .lib-card:hover,body.sk2.deskx #lib-overlay:not(.full) .lib-card:is(.sel,.multi,.cur,.current,.editing){opacity:1}
+body.sk2.deskx #lib-overlay:not(.full) .lib-strip-info,body.sk2.deskx #lib-overlay:not(.full) .lib-name{display:none!important}
+body.sk2.deskx #lib-overlay:not(.full) .lib-raw-badge{display:none!important}
+body.sk2 #sk2-strip-n{display:none}
+body.sk2.deskx #lib-overlay:not(.full) #sk2-strip-n{display:block;position:sticky;bottom:0;padding:8px 0 10px;background:var(--k-color-bg);font-size:var(--sk-t5);color:var(--k-color-muted);text-align:center;font-variant-numeric:tabular-nums;z-index:5}
 /* Looks: the chosen look is marked by the square, not a kicked-out frame. */
 body.sk2 .look-cell:hover{transform:none;box-shadow:none}
 body.sk2 .look-cell.sel{border-color:transparent;box-shadow:none;position:relative}
@@ -2345,9 +2442,17 @@ function sk2SubTabs(g,jump){
     nav.addEventListener('click',e=>{const b=e.target.closest('button[data-k]');if(b)sk2Jump(b.dataset.k,true);});
     panel.addEventListener('scroll',sk2Spy,{passive:true});}
   const G=FX_GROUPS[g];
-  h.textContent=G?G.label:(FX_SECTIONS.find(x=>x[0]===g)||[,''])[1];
+  const nt=G?G.label:(FX_SECTIONS.find(x=>x[0]===g)||[,''])[1];
+  if(h.textContent!==nt){h.textContent=nt;h.classList.remove('sk2-in');void h.offsetWidth;h.classList.add('sk2-in');}
+  const rail=document.getElementById('fx-toolrail'),on=rail&&rail.querySelector('.fx-rail-btn.on');
+  if(rail){let mk=document.getElementById('sk2-rail-mk');if(!mk){mk=document.createElement('i');mk.id='sk2-rail-mk';mk.setAttribute('aria-hidden','true');}
+    if(mk.parentNode!==rail)rail.appendChild(mk);rail.classList.add('sk2-mk');
+    mk.style.opacity=on?1:0;if(on)mk.style.transform=`translateY(${on.offsetTop+8}px)`;}
   const cards=G?[...panel.querySelectorAll('.fx-ctrl.sec-active')].filter(c=>c.style.display!=='none'&&!c.hidden):[];
   nav.hidden=cards.length<2;
+  panel.querySelectorAll('.sk2-dup-title').forEach(c=>c.classList.remove('sk2-dup-title'));
+  if(cards.length>1)cards.forEach(c=>{const t=c.querySelector(':scope>.fx-ctrl-title');if(t){c.classList.add('sk2-dup-title');t.setAttribute('data-sk2-name',SK2_SUB[c.dataset.fxsec]||'');}});
+  if(G&&G.members.includes('wheels')&&typeof drawWheel==='function')setTimeout(()=>['lift','gamma','gain'].forEach(drawWheel),30);
   nav.innerHTML=cards.map(c=>`<button type="button" data-k="${c.dataset.fxsec}">${SK2_SUB[c.dataset.fxsec]||c.dataset.fxsec}</button>`).join('');
   document.body.style.setProperty('--sk2-sub-h',(nav.hidden?0:nav.offsetHeight)+'px');
   // Strength rides at the bottom of the look grid (sticky), whatever layout the row started in.
@@ -2423,14 +2528,15 @@ function sk2ExportWire(){
   window.sk2Caption=function(){cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{
     const t=document.getElementById('fx-deskbar-title'),wrap=document.getElementById('fx-wrap');if(!t||!wrap)return;
     if(!home)home={p:t.parentNode,n:t.nextSibling};
+    const zc=document.getElementById('fx-zoom-ctrl');if(zc&&zc.parentNode!==t&&document.body.classList.contains('deskx'))t.appendChild(zc); // 7: photo controls ride with the caption
     const bd=document.getElementById('fx-canvas-bd'),cv=(bd&&bd.style.display!=='none'&&bd.width)?bd:document.getElementById('fx-canvas');
     const deskx=document.body.classList.contains('deskx');
     const r=cv&&cv.getBoundingClientRect(),w=wrap.getBoundingClientRect();
     const room=r&&r.height>0&&(w.bottom-r.bottom)>=34;
     if(deskx&&sk2CaptionOn()&&room){
       if(t.parentNode!==wrap){wrap.appendChild(t);t.classList.add('sk2-cap');}
-      t.style.left=(r.left-w.left)+'px';t.style.top=(r.bottom-w.top+10)+'px';t.style.maxWidth=Math.max(160,r.width)+'px';
-    }else if(t.parentNode===wrap){t.classList.remove('sk2-cap');t.style.left=t.style.top=t.style.maxWidth='';home.p.insertBefore(t,home.n&&home.n.parentNode===home.p?home.n:null);}
+      t.style.left=(r.left-w.left)+'px';t.style.top=(r.bottom-w.top+10)+'px';t.style.width=Math.max(260,r.width)+'px';t.style.maxWidth='';
+    }else if(t.parentNode===wrap){t.classList.remove('sk2-cap');t.style.left=t.style.top=t.style.maxWidth=t.style.width='';home.p.insertBefore(t,home.n&&home.n.parentNode===home.p?home.n:null);}
   });};
   function wire(){const cv=document.getElementById('fx-canvas'),wrap=document.getElementById('fx-wrap');if(!cv||!wrap)return;
     const ro=new ResizeObserver(()=>sk2Caption());ro.observe(cv);ro.observe(wrap);
@@ -5991,7 +6097,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928K';
+const BUILD='1.0928L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='v. '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -12451,7 +12557,7 @@ function _csModal(title,bodyHtml){
   const ov=document.createElement('div');ov.id='cs-modal-ov';
   ov.style.cssText='position:fixed;inset:0;z-index:var(--z-modal);background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
-  const panel=document.createElement('div');
+  const panel=document.createElement('div');panel.className='cs-modal';
   panel.style.cssText='max-width:560px;width:100%;max-height:80vh;overflow-y:auto;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;padding:20px;color:var(--txt);font-family:var(--sans);box-shadow:var(--lift-2)';
   panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:16px">${title}</h2><button id="cs-modal-x" aria-label="Close" style="background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center;margin:-6px -8px -6px 0">×</button></div>${bodyHtml}`;
   ov.appendChild(panel);document.body.appendChild(ov);
@@ -12510,7 +12616,7 @@ function shortcutsHtml(){
 // session, or a returning tab reload, none of which should re-greet a new user).
 const _TOUR_KEY='chromasmith-tour-seen-v1';
 function tourHtml(){
-  const step=(n,title,body)=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--acc);text-transform:uppercase;letter-spacing:var(--ls-2);margin-bottom:2px">Step ${n}</div><div style="font-size:14px;font-weight:600;margin-bottom:2px">${title}</div><div style="font-size:13px;color:var(--mut)">${body}</div></div>`;
+  const step=(n,title,body)=>`<div class="cs-tour-step" data-n="${n}" style="margin-bottom:14px"><div class="cs-tour-k" style="font-family:var(--mono);font-size:11px;color:var(--acc);text-transform:uppercase;letter-spacing:var(--ls-2);margin-bottom:2px">Step ${n}</div><div style="font-size:14px;font-weight:600;margin-bottom:2px">${title}</div><div style="font-size:13px;color:var(--mut)">${body}</div></div>`;
   return step(1,'Load a photo','Drag a photo (or RW2/RAW) onto the window, or use the ＋ button.')
     +step(2,'Pick a look','Open <b>Presets & Looks</b> and tap a film look — everything else (grain, halation, curves, masks…) is optional refinement on top of it.')
     +step(3,'Export','When it looks right, hit <b>Export</b> at full resolution. Nothing ever uploads — it all runs on this device.')
