@@ -2413,10 +2413,9 @@ body.sk2.deskx #lib-overlay:not(.full) .lib-card{opacity:.6;transition:opacity .
 body.sk2.deskx #lib-overlay:not(.full) .lib-card img{transition:filter .2s var(--k-motion-easing)!important}
 body.sk2.deskx #lib-overlay:not(.full):hover .lib-card{opacity:1}
 body.sk2.deskx #lib-overlay:not(.full):hover .lib-card img{filter:none!important}
-body.sk2.deskx #lib-overlay:not(.full) #sk2-strip-n{background:inherit;box-shadow:0 -1px 0 var(--bdr);background-color:rgb(28,28,28)}
-body.sk2.deskx.light #lib-overlay:not(.full) #sk2-strip-n{background-color:var(--k-color-bg)}
+body.sk2.deskx #lib-overlay:not(.full) #sk2-strip-n{background:var(--bg,var(--k-color-bg))!important;box-shadow:0 -1px 0 var(--bdr)}
 /* Gallery title: room for descenders (y, g, p) — it clipped at line-height .88 + overflow:hidden. */
-body.sk2 #lib-overlay #lib-grid-title .lgt-h{line-height:1.02!important;padding-bottom:.06em}
+body.sk2 #lib-overlay #lib-grid-title .lgt-h{line-height:1.02!important;padding-bottom:.2em;margin-bottom:-.14em}
 body.sk2 #lib-overlay .lgt-m #lib-count,body.sk2 #lib-overlay .lgt-m>span{color:var(--k-color-muted)!important}
 /* Tile flags on hover: icon only; a word appears only on the flag that is set. */
 body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag:not(.on)::after{content:none}
@@ -6300,7 +6299,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928S';
+const BUILD='1.0928T';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
