@@ -3896,7 +3896,18 @@ fn record_pet_sighting_run(
 /// that photo once. Cropped+resized result is cached again under its own key so repeat renders
 /// (the same person's row in three different views) don't even re-touch the source thumbnail.
 #[tauri::command]
-pub fn catalog_face_crop(state: tauri::State<CatalogState>, face_id: i64) -> Result<tauri::ipc::Response, String> {
+pub async fn catalog_face_crop(app: tauri::AppHandle, face_id: i64) -> Result<tauri::ipc::Response, String> {
+    // Off the main thread: a cache miss decodes a 1600px preview, and the People sidebar asks
+    // for every person's crop on each refresh — sync, that froze the app after every face edit.
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        face_crop_run(&app.state::<CatalogState>(), face_id)
+    })
+    .await
+    .map_err(|e| format!("catalog_face_crop task panicked: {e}"))?
+}
+
+fn face_crop_run(state: &CatalogState, face_id: i64) -> Result<tauri::ipc::Response, String> {
     let (photo_id, x0, y0, x1, y1): (i64, f32, f32, f32, f32) = {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         conn.query_row(
@@ -4575,9 +4586,15 @@ fn loose_clusters(conn: &Connection) -> Result<Vec<UnnamedCluster>, String> {
 }
 
 #[tauri::command]
-pub fn catalog_unnamed_clusters(state: tauri::State<CatalogState>) -> Result<Vec<UnnamedCluster>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    catalog_unnamed_clusters_run(&conn)
+pub async fn catalog_unnamed_clusters(app: tauri::AppHandle) -> Result<Vec<UnnamedCluster>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        catalog_unnamed_clusters_run(&conn)
+    })
+    .await
+    .map_err(|e| format!("catalog_unnamed_clusters task panicked: {e}"))?
 }
 
 fn catalog_unnamed_clusters_run(conn: &Connection) -> Result<Vec<UnnamedCluster>, String> {
@@ -5204,14 +5221,20 @@ pub struct FaceSuggestion {
 }
 
 #[tauri::command]
-pub fn catalog_person_suggestions(
-    state: tauri::State<CatalogState>,
+pub async fn catalog_person_suggestions(
+    app: tauri::AppHandle,
     person_id: i64,
     min_similarity: Option<f32>,
     limit: Option<usize>,
 ) -> Result<Vec<FaceSuggestion>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    person_suggestions_run(&conn, person_id, min_similarity, limit.unwrap_or(300))
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        person_suggestions_run(&conn, person_id, min_similarity, limit.unwrap_or(300))
+    })
+    .await
+    .map_err(|e| format!("catalog_person_suggestions task panicked: {e}"))?
 }
 
 fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: Option<f32>, limit: usize) -> Result<Vec<FaceSuggestion>, String> {
@@ -6619,10 +6642,19 @@ impl Default for CatalogQuery {
 const QUERY_LIMIT_CAP: u32 = 50_000;
 
 #[tauri::command]
-pub fn catalog_query(q: CatalogQuery, state: tauri::State<CatalogState>) -> Result<CatalogPage, String> {
+pub async fn catalog_query(q: CatalogQuery, app: tauri::AppHandle) -> Result<CatalogPage, String> {
     // Read-only — the dedicated read connection, so this never waits behind a running scan.
-    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
-    query_run(&conn, q)
+    // ⚠️ async + spawn_blocking: a sync command runs on the macOS MAIN thread, so any slow query
+    // (or a wait on read_conn behind another one) froze the whole app — see
+    // person_query_is_fast_and_stack_aware.
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+        query_run(&conn, q)
+    })
+    .await
+    .map_err(|e| format!("catalog_query task panicked: {e}"))?
 }
 
 pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, String> {
@@ -6787,9 +6819,13 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             // through EITHER the leader itself or any of its stacked derivatives, same reasoning
             // the keyword filter doesn't need (keywords are read from the leader's own XMP,
             // faces are detected per concrete file).
+            // ⚠️ An uncorrelated IN-list, not `EXISTS (... fp.id = p.id OR fp.stack_id = p.id)`:
+            // that OR defeated every index and re-walked the person's faces once per library
+            // photo (3m52s for one person on a 57k catalog, hanging the app). SQLite builds this
+            // set once. Test: person_query_is_fast_and_stack_aware.
             where_parts.push(format!(
-                "EXISTS (SELECT 1 FROM photo_faces f JOIN photos fp ON fp.id = f.photo_id \
-                 WHERE f.person_id = ?{a} AND (fp.id = p.id OR fp.stack_id = p.id))",
+                "p.id IN (SELECT COALESCE(fp.stack_id, fp.id) FROM photo_faces f JOIN photos fp ON fp.id = f.photo_id \
+                 WHERE f.person_id = ?{a} UNION SELECT f.photo_id FROM photo_faces f WHERE f.person_id = ?{a})",
                 a = values.len() + 1,
             ));
             values.push(Box::new(person_id));
@@ -8710,6 +8746,51 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("cs_catalog_{}_{}", std::process::id(), gen_id()));
         std::fs::create_dir_all(&dir).unwrap();
         open_and_migrate(&dir.join("catalog.db")).expect("open_and_migrate")
+    }
+
+    /// Regression: the person filter used to be a correlated `EXISTS (... fp.id = p.id OR
+    /// fp.stack_id = p.id)` — the OR defeats every index, so it re-walked the person's whole face
+    /// list for every photo in the library (measured 3m52s for a 1,826-face person on the real
+    /// 57k-photo catalog, run on the main thread via the sync catalog_query command: the app hung
+    /// on opening/refreshing any person view). Must stay correct for stacks (a face on a stack
+    /// member shows the leader) and fast at library scale.
+    #[test]
+    fn person_query_is_fast_and_stack_aware() {
+        let conn = temp_db();
+        conn.execute("INSERT INTO volumes (id, uuid, label, last_path, is_local, last_seen) VALUES (1, 'u', 'L', '/', 1, 0)", []).unwrap();
+        conn.execute("INSERT INTO people (id, name, created, auto) VALUES (7, 'Alice', 0, 0)", []).unwrap();
+        let tx = conn.unchecked_transaction().unwrap();
+        const N: i64 = 20_000;
+        for id in 1..=N {
+            // Every 10th photo is a stack member of the photo before it (its leader).
+            let stack: Option<i64> = if id % 10 == 0 { Some(id - 1) } else if id % 10 == 9 { Some(id) } else { None };
+            tx.execute(
+                "INSERT INTO photos (id, volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, captured, stack_id)
+                 VALUES (?1, 1, ?2, 'd', ?3, ?3, 'jpg', 'photo', 1, ?1, 0, 1, ?1, ?4)",
+                params![id, format!("d/{id}.jpg"), format!("{id}.jpg"), stack],
+            ).unwrap();
+        }
+        // Alice: a face on every 20th photo (all stack members, id % 20 == 0 -> leader id-1),
+        // plus every 20th+3 photo directly (unstacked).
+        for id in 1..=N {
+            if id % 20 == 0 || id % 20 == 3 {
+                tx.execute("INSERT INTO photo_faces (photo_id, person_id, x0, y0, x1, y1, score, kps) VALUES (?1, 7, 0,0,1,1, 0.9, '[]')", params![id]).unwrap();
+            }
+        }
+        tx.commit().unwrap();
+        let q: CatalogQuery = serde_json::from_value(serde_json::json!({ "personId": 7, "includeOffline": true, "limit": 50000 })).unwrap();
+        let t0 = std::time::Instant::now();
+        let page = query_run(&conn, q).unwrap();
+        let ms = t0.elapsed().as_millis();
+        // Grouped view: stack members are hidden behind their leader, so each id%20==0 face
+        // surfaces as its leader (id-1), each id%20==3 face as itself.
+        let mut ids: Vec<i64> = page.entries.iter().map(|e| e.id).collect();
+        ids.sort();
+        let mut want: Vec<i64> = (1..=N).filter(|i| i % 20 == 19 || i % 20 == 3).collect();
+        want.sort();
+        assert_eq!(page.total as usize, want.len(), "total");
+        assert_eq!(ids, want, "person view must show direct photos and the leaders of stacks containing them");
+        assert!(ms < 1500, "person query took {ms} ms for {N} photos — the per-row correlated scan is back");
     }
 
     fn scratch_photos_dir(tag: &str) -> PathBuf {
