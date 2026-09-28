@@ -81,7 +81,8 @@ a{color:inherit}
 
 /* 2. maker */
 .maker{padding:22vh 5vw;display:grid;grid-template-columns:1fr 2fr;gap:5vw;border-top:1px solid var(--line)}
-.maker .por{aspect-ratio:4/5;background:var(--bg2);border:1px solid var(--line);display:grid;place-items:center;font-size:64px;font-weight:900;color:#3a3833;letter-spacing:-.04em}
+.maker .por{aspect-ratio:4/5;background:var(--bg2);border:1px solid var(--line);overflow:hidden;align-self:start}
+.maker .por img{width:100%;height:100%;object-fit:cover;display:block}
 .quote{font-size:clamp(28px,3.6vw,56px);font-weight:500;letter-spacing:-.03em;line-height:1.1}
 .quote .w{opacity:.12}
 .maker .who{margin-top:32px}
@@ -204,12 +205,12 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 </section>
 
 <section class="maker" id="maker">
-  <div class="por">TA</div>
+  <div class="por"><img src="../assets/story/maker.webp" alt="Tareq Ameer at the Pyramids of Giza"></div>
   <div>
     <p class="mono">The maker</p>
     <h2 class="k" style="margin:18px 0 6vh">One person,<br>a whole darkroom.</h2>
     <p class="quote">“I built Chromasmith because I wanted powerful photo tools that felt immediate, stayed on my device, and left me free to make the image my own.”</p>
-    <p class="mono who">Tareq Ameer · portrait coming soon</p>
+    <p class="mono who">Tareq Ameer · Maker of Chromasmith</p>
   </div>
 </section>
 
