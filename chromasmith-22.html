@@ -2493,7 +2493,7 @@ body.sk2 #btn-export-db svg,body.sk2 #btn-export-db svg *{stroke:#111!important}
 /* Tap targets: at least 28px for the small photo controls and toggles. */
 body.sk2 #fx-zoom-ctrl button,body.sk2 #fx-deskbar-title button,body.sk2 .fx-db{min-width:28px;min-height:28px}
 body.sk2 .fx-toggle{position:relative}
-body.sk2 .fx-toggle::before{content:'';position:absolute;inset:-7px -4px}
+body.sk2 .fx-toggle::before{content:'';position:absolute;inset:-7px 0 -7px -4px} /* no right bleed: the toggle sits on the panel edge and a -4px right inset widened .fx-panel's scroll area */
 /* Loading: while a photo opens the empty-state prompt steps aside. */
 body.sk2.sk2-opening #fx-no-img>:not(.sk2-open){visibility:hidden}
 body.sk2 .sk2-open{display:none}
@@ -6368,7 +6368,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928Y';
+const BUILD='1.0928Z';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as

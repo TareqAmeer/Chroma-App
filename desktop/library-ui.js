@@ -1968,6 +1968,10 @@
     body.deskx #lib-overlay #lib-top.lib-top-overflow2 .lib-btn-export{padding-left:0;padding-right:0;width:30px}
     body.deskx #lib-overlay #lib-top.lib-top-overflow3 #lib-sort-btn,
     body.deskx #lib-overlay #lib-top.lib-top-overflow3 #lib-filters-btn{display:none}
+    /* Last fold: the right cluster (zoom/All FX/Export/gear) cannot shrink below its content, so
+       size its track to that content and let the search column give way, instead of keeping the
+       280px centre and pushing the gear (and the view menu anchored to it) past the window edge. */
+    body.deskx #lib-overlay.full #lib-top.lib-top-overflow3{grid-template-columns:minmax(0,1fr) minmax(0,280px) max-content;min-width:0}
     /* Search moves into the centre column, same slot the Editor uses for its filename/status
        title — sized off its minmax(0,280px) grid track (see #lib-top's grid-template-columns
        and .lib-search-wrap's width:100% further down) instead of the non-deskx flex-grow
@@ -8530,10 +8534,13 @@
   // window-width breakpoint, since #lib-top's available width also depends on the sidebar's
   // (user-resizable) column. */
   const libTop = overlay.querySelector('#lib-top');
+  // Compact and the deskx overflow1-3 passes below are ONE staged fold: each measurement must
+  // start from the fully-unfolded bar. Run separately, one pass measured with the other's stale
+  // classes still applied, and a window widened from 700px to 1400px kept .lib-top-compact and
+  // re-added .lib-top-overflow1 (hiding the flags) even though the unfolded bar fits.
   function syncTopCompact() {
     if (!overlay.classList.contains('full')) return; // :not(.full) covers itself via CSS
-    libTop.classList.remove('lib-top-compact');
-    if (libTop.scrollWidth > libTop.clientWidth + 1) libTop.classList.add('lib-top-compact');
+    syncTopOverflow();
   }
   new ResizeObserver(syncTopCompact).observe(libTop);
   window.addEventListener('resize', syncTopCompact);
@@ -8566,9 +8573,14 @@
   function syncTopOverflow() {
     if (!document.body.classList.contains('deskx') || !overlay.classList.contains('full')) {
       libTop.classList.remove('lib-top-overflow1','lib-top-overflow2','lib-top-overflow3');
+      if (overlay.classList.contains('full')) {
+        libTop.classList.remove('lib-top-compact');
+        if (libTop.scrollWidth > libTop.clientWidth + 1) libTop.classList.add('lib-top-compact');
+      }
       return;
     }
-    libTop.classList.remove('lib-top-overflow1','lib-top-overflow2','lib-top-overflow3');
+    libTop.classList.remove('lib-top-compact','lib-top-overflow1','lib-top-overflow2','lib-top-overflow3');
+    if (libTop.scrollWidth > libTop.clientWidth + 1) libTop.classList.add('lib-top-compact');
     const left=libTop.querySelector('#lib-top-left'), right=libTop.querySelector('#lib-top-right');
     if (!left || !right) return;
     const over=()=>left.scrollWidth>left.clientWidth+1 || right.scrollWidth>right.clientWidth+1;
@@ -8578,6 +8590,8 @@
   }
   new ResizeObserver(()=>requestAnimationFrame(syncTopOverflow)).observe(libTop);
   window.addEventListener('resize', syncTopOverflow);
+  // Webfonts swap in after first layout and change button widths — re-measure once they land.
+  document.fonts?.ready?.then(()=>requestAnimationFrame(syncTopOverflow));
 
   // ── Docked filmstrip Library/Develop tabs: icon-only once the dock is dragged too narrow for
   // the label text — same overflow-measurement approach as syncTopCompact() above, applied to

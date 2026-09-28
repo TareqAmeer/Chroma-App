@@ -471,6 +471,17 @@ function seedFn() {
   if (typeof mskRebuild === 'function') mskRebuild();
 }
 
+
+// libPage shares the browser with the Editor page and is often not the frontmost tab, so a
+// resize is not guaranteed to have produced a frame after a fixed sleep: innerWidth already
+// reads the new size while 100vw/ResizeObserver-driven layout (#lib-overlay, the #lib-top fold
+// classes) still reflect the previous width. Bring it forward and wait two real frames so the
+// fold observers have run before measuring.
+async function settleFrames(pg) {
+  await pg.bringToFront().catch(() => {});
+  await pg.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+}
+
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
 
@@ -582,6 +593,7 @@ async function main() {
       for (const w of NARROW_WIDTHS) {
         await libPage.setViewportSize({ width: w, height: 820 });
         await libPage.waitForTimeout(150);
+        await settleFrames(libPage);
         const res = await libPage.evaluate(auditInPage,
           { minTap: MIN_TAP, minTapInline: MIN_TAP_INLINE, inlineSel: INLINE_TARGET_SEL, edgeSel: EDGE_TARGET_SEL,
             minFont: MIN_FONT, minContrast: MIN_CONTRAST });
@@ -604,6 +616,7 @@ async function main() {
       await page.waitForTimeout(150);
       await libPage.setViewportSize({ width: 1400, height: 900 });
       await libPage.waitForTimeout(150);
+      await settleFrames(libPage);
       const PARITY_TOL = 1.5; // px — antialiasing/font-metric slop, not a real mismatch
       const [edParity, libParity] = await Promise.all([
         page.evaluate(() => {
