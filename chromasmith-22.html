@@ -326,6 +326,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-ctrl.fx-sec-collapsed .fx-ctrl-chev{transform:rotate(-90deg)}
 .fx-ctrl.fx-sec-collapsed>.fx-ctrl-title{margin-bottom:0;padding-bottom:var(--sp-2)}
 .fx-ctrl.fx-sec-collapsed>:not(.fx-ctrl-title){display:none}
+#fx-looks-ctrl.fx-preset-sec{margin-top:14px!important;padding-top:12px;border-top:1px solid var(--bdr)}
 .fx-toggle{width:var(--ctl-toggle-w);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--bdr);position:relative;cursor:pointer;transition:background var(--k-motion-hover);flex-shrink:0;box-shadow:none;border:1px solid transparent}
 /* T45 (editor_ux_spec.json): under forced-colors (Windows High Contrast) mode, the browser can
    strip a custom `background` entirely — .fx-toggle has no text/icon and no real border, so with
@@ -6437,7 +6438,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928E';
+const BUILD='1.0928F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24062,7 +24063,6 @@ function fxDesktopReorderLooksPanel(looksCard,title){
   [lutDz,saveDelRow,chartDlRow].forEach(el=>{if(el)applyLutWrap.appendChild(el);});
   let anchor=title;
   const place=(el)=>{if(el&&el!==anchor){anchor.insertAdjacentElement('afterend',el);anchor=el;}};
-  place(looksCtrl); // Swiss v2 review: the Look stage opens on the presets
   place(rawRow);
   place(inputLabel);place(inputSel);place(inputChips);
   place(clipInfo);
@@ -24070,6 +24070,9 @@ function fxDesktopReorderLooksPanel(looksCard,title){
   place(hrLabel);place(hrSel);place(hrChips);
   place(applyLutWrap);
   place(testchartBtn);
+  // Preset is its own section: it sits after the Looks controls (so the Looks chevron visibly
+  // governs only what's directly under it) and survives the Looks card collapse (CSS below).
+  if(looksCtrl){looksCtrl.classList.add('fx-preset-sec');looksCard.appendChild(looksCtrl);}
 }
 // ── responsive layout switch: mobile pinned editor vs desktop tool-rail editor ──
 let _mqMobile=window.matchMedia('(max-width:700px)');
