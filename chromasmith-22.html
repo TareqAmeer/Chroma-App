@@ -2414,10 +2414,11 @@ body.sk2 .ni-hint{font-size:12px;color:var(--k-color-muted)}
 /* ── Swiss v2 review pass 2 (desktop review, 2026-09-28) ─────────────────────────────────── */
 /* Filmstrip: its own opaque column with a hairline edge; greyscale until the pointer is anywhere
    on the strip, then the whole strip comes up in colour. The open photo is always in colour. */
-body.sk2.deskx #lib-overlay:not(.full){box-shadow:1px 0 0 var(--bdr);isolation:isolate}
-body.sk2.deskx #lib-overlay:not(.full) .lib-card{opacity:.6;transition:opacity .2s var(--k-motion-easing)}
+body.sk2.deskx #lib-overlay:not(.full){box-shadow:1px 0 0 var(--bdr);isolation:isolate;position:relative;z-index:6!important;background:var(--bg,var(--k-color-bg))!important}
+body.sk2.deskx #lib-overlay:not(.full) #lib-grid{background:var(--bg,var(--k-color-bg))}
+body.sk2.deskx #lib-overlay:not(.full) .lib-card{opacity:1!important}
+body.sk2.deskx #lib-overlay:not(.full) .lib-card:not(:is(.sel,.multi,.cur,.current,.editing)) img{filter:grayscale(1) brightness(.62)!important}
 body.sk2.deskx #lib-overlay:not(.full) .lib-card img{transition:filter .2s var(--k-motion-easing)!important}
-body.sk2.deskx #lib-overlay:not(.full):hover .lib-card{opacity:1}
 body.sk2.deskx #lib-overlay:not(.full):hover .lib-card img{filter:none!important}
 body.sk2.deskx #lib-overlay:not(.full) #sk2-strip-n{background:var(--bg,var(--k-color-bg))!important;box-shadow:0 -1px 0 var(--bdr)}
 /* Gallery title: room for descenders (y, g, p) — it clipped at line-height .88 + overflow:hidden. */
@@ -2514,11 +2515,16 @@ body.sk2 #fx-looks.sk2-loading::after{content:'';grid-column:1/-1;height:220px;b
 body.sk2 #lib-overlay .lib-menu .opt,body.sk2 #lib-overlay .lib-menu button.opt-action,body.sk2 .fx-ovf-item,body.sk2 .cs-ctx-it{min-height:30px;display:flex;align-items:center;font-size:var(--sk-t4)!important}
 /* Desktop app: photos come from the gallery, so no "Drop image" card; the Look stage opens on presets. */
 body.sk2.sk2-native .fx-ctrl[data-fxsec="image"]{display:none!important}
+body.sk2.sk2-native #sk2-sub button[data-k="image"]{display:none!important}
+body.sk2.sk2-native #sk2-sub:has(button[data-k="image"]):not(:has(button:nth-child(3))){display:none!important}
 /* Photo caption: fades out the moment the photo moves, fades back in once it settles —
    under the photo when there is room, otherwise as one line in the top bar. */
 body.sk2 #fx-deskbar-title{transition:opacity .16s var(--k-motion-easing)}
 body.sk2 #fx-deskbar-title.sk2-cap-hide{opacity:0!important;transition:none}
-body.sk2.deskx #fx-deskbar #fx-deskbar-title{align-items:baseline;gap:12px}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center;gap:14px;max-width:none!important;overflow:visible!important;white-space:nowrap}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title>*{flex:none}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title #fx-zoom-ctrl{display:flex!important;flex-wrap:nowrap;align-items:center;gap:6px;margin-left:10px}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{display:inline!important}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{font-size:12px;color:var(--k-color-ink)}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
 /* Gallery/studio switch in the logo's colours: vermilion front slab, ink behind it — black on
@@ -2556,7 +2562,14 @@ body.sk2.deskx #lib-overlay:not(.full) #lib-grid:not(.list-view) :is(.lib-raw-ba
 /* Light-stage histogram: folded by default, full panel width. */
 body.sk2 .sk2-hist{display:none;margin:4px 0 10px}
 body.sk2 .fx-panel:has(.fx-ctrl.sec-active[data-fxsec="adjust"]) .sk2-hist{display:block}
-body.sk2 .sk2-hist canvas{display:block;width:100%;height:80px;margin-top:8px;image-rendering:auto}
+body.sk2 .sk2-hist .sk2h-box{position:relative;margin-top:8px}
+body.sk2 .sk2-hist canvas{display:block;width:100%;height:80px;cursor:crosshair}
+body.sk2 .sk2h-clip{position:absolute;top:0;width:0;height:0;padding:0;border:6px solid transparent;background:none;cursor:pointer;opacity:.35}
+body.sk2 .sk2h-clip.lo{left:0;border-top-color:var(--k-color-muted);border-left-color:var(--k-color-muted)}
+body.sk2 .sk2h-clip.hi{right:0;border-top-color:var(--k-color-muted);border-right-color:var(--k-color-muted)}
+body.sk2 .sk2h-clip.on{opacity:1}body.sk2 .sk2h-clip.lo.on{border-top-color:#58f;border-left-color:#58f}body.sk2 .sk2h-clip.hi.on{border-top-color:#ff3b1f;border-right-color:#ff3b1f}
+body.sk2 .sk2h-clip.act{outline:1px solid var(--k-color-ink);outline-offset:2px}
+body.sk2 .sk2h-read{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
 /* Gallery top bar: the search column grows with the window (280-560px) while leaving each side
    ~460px, so Export and All FX keep their words; the search fills its column with 24px either side. */
 body.sk2.deskx #lib-overlay.full #lib-top:not(.lib-top-overflow3){grid-template-columns:minmax(0,1fr) minmax(0,min(560px,max(280px,100vw - 920px))) minmax(0,1fr)!important}
@@ -2718,7 +2731,8 @@ function sk2ExportWire(){
     const bd=document.getElementById('fx-canvas-bd'),cv=(bd&&bd.style.display!=='none'&&bd.width)?bd:document.getElementById('fx-canvas');
     const deskx=document.body.classList.contains('deskx');
     const r=cv&&cv.getBoundingClientRect(),w=wrap.getBoundingClientRect();
-    const fits=r&&r.left>=w.left-1&&r.right<=w.right+1&&r.top>=w.top-1;
+    const zoomed=typeof fxZoom!=="undefined"&&(Math.abs(fxZoom-FX_FIT)>1e-3||fxPanX||fxPanY);
+    const fits=!zoomed&&r&&r.left>=w.left-1&&r.right<=w.right+1&&r.top>=w.top-1;
     const room=fits&&r.height>0&&(w.bottom-r.bottom)>=34;
     if(deskx&&sk2CaptionOn()&&room){
       if(t.parentNode!==wrap){wrap.appendChild(t);t.classList.add('sk2-cap');}
@@ -2798,14 +2812,37 @@ ready(function(){
     new MutationObserver(sync).observe(seg,{subtree:true,attributes:true,attributeFilter:['class','aria-pressed']});
     seg.insertAdjacentElement('afterend',sel);seg.classList.add('sk2-has-sel');seg._sk2sel=sel;sync();}
   document.querySelectorAll('.fx-panel .seg').forEach(mirror);
+  // Zoom/pan: re-place the photo caption (fades out, lands in the top bar while zoomed).
+  var az=window._applyZoom;if(typeof az==='function'&&window.sk2Caption){window._applyZoom=function(){var r=az.apply(this,arguments);sk2Caption();return r};}
   // Light stage: a folded histogram above Basic; drawn only while it is open.
   var adj=document.querySelector('.fx-ctrl[data-fxsec="adjust"]');
   if(adj&&!document.getElementById('sk2-hist')){var d=document.createElement('details');d.id='sk2-hist';d.className='sk2-more sk2-hist';
-    d.innerHTML='<summary>Histogram</summary><canvas width="180" height="80" aria-label="Histogram of the edited photo"></canvas>';
-    adj.parentNode.insertBefore(d,adj);var cv=d.querySelector('canvas'),q=0;
-    var draw=function(){q=0;if(!d.open)return;var src=document.getElementById('fx-canvas');if(!src||!src.width||typeof drawScopeHistogram!=='function')return;
-      var t=draw._t||(draw._t=document.createElement('canvas'));var k=Math.min(1,200/src.width);t.width=Math.max(1,src.width*k|0);t.height=Math.max(1,src.height*k|0);
-      var x=t.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,t.width,t.height);drawScopeHistogram(cv,x.getImageData(0,0,t.width,t.height).data);};
+    d.innerHTML='<summary>Histogram</summary><div class="sk2h-box"><canvas aria-label="Histogram of the edited photo"></canvas><button class="sk2h-clip lo" title="Shadow clipping — click to show clipped areas on the photo"></button><button class="sk2h-clip hi" title="Highlight clipping — click to show clipped areas on the photo"></button></div><div class="sk2h-read"><span class="sk2h-zone">&nbsp;</span><span class="sk2h-val"></span></div>';
+    adj.parentNode.insertBefore(d,adj);var cv=d.querySelector('canvas'),q=0,H=null,box=d.querySelector('.sk2h-box'),rz=d.querySelector('.sk2h-zone'),rv=d.querySelector('.sk2h-val'),cLo=d.querySelector('.lo'),cHi=d.querySelector('.hi');
+    var ZN=[[0,13,'Blacks'],[13,64,'Shadows'],[64,166,'Midtones'],[166,230,'Highlights'],[230,256,'Whites']];
+    var idle=function(){if(!H){rz.innerHTML='&nbsp;';rv.textContent='';return}var f=function(v){return v<0.05?'0%':v<1?v.toFixed(1)+'%':Math.round(v)+'%'};rz.textContent='Clipped  '+f(H.lo)+' shadows · '+f(H.hi)+' highlights';rv.textContent=''};
+    var paint=function(){var w=Math.max(60,box.clientWidth|0),h=80,dp=window.devicePixelRatio||1;cv.width=w*dp;cv.height=h*dp;var c=cv.getContext('2d');c.setTransform(dp,0,0,dp,0,0);c.clearRect(0,0,w,h);
+      var g=getComputedStyle(d).getPropertyValue('--bdr')||'#444';c.strokeStyle=g;c.globalAlpha=.5;c.lineWidth=1;for(var k=1;k<4;k++){var gx=Math.round(w*k/4)+.5;c.beginPath();c.moveTo(gx,0);c.lineTo(gx,h);c.stroke()}c.globalAlpha=1;
+      if(!H)return;var ch=[[H.r,'rgba(255,70,70,.55)'],[H.g,'rgba(70,230,90,.55)'],[H.b,'rgba(80,130,255,.6)']];
+      c.globalCompositeOperation='lighter';ch.forEach(function(e){var a=e[0];c.beginPath();c.moveTo(0,h);for(var i=0;i<256;i++){var x=i/255*w;c.lineTo(x,h-Math.min(1,a[i]/H.pk)*(h-3))}c.lineTo(w,h);c.closePath();c.fillStyle=e[1];c.fill()});
+      c.globalCompositeOperation='source-over';c.beginPath();for(var i=0;i<256;i++){var x=i/255*w,y=h-Math.min(1,H.l[i]/H.pk)*(h-3);i?c.lineTo(x,y):c.moveTo(x,y)}c.strokeStyle='rgba(235,235,235,.8)';c.lineWidth=1;c.stroke();
+      if(H.z){var z=ZN[H.z-1];c.fillStyle='rgba(255,255,255,.07)';c.fillRect(z[0]/256*w,0,(z[1]-z[0])/256*w,h)}};
+    var draw=function(){q=0;if(!d.open)return;var src=document.getElementById('fx-canvas');if(!src||!src.width)return;
+      var t=draw._t||(draw._t=document.createElement('canvas'));var k=Math.min(1,480/Math.max(src.width,src.height));t.width=Math.max(1,src.width*k|0);t.height=Math.max(1,src.height*k|0);
+      var x=t.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,t.width,t.height);var px=x.getImageData(0,0,t.width,t.height).data;
+      var r=new Float32Array(256),gg=new Float32Array(256),bb=new Float32Array(256),l=new Float32Array(256),lo=0,hi=0,n=px.length/4;
+      for(var i=0;i<px.length;i+=4){var R=px[i],G=px[i+1],B=px[i+2];r[R]++;gg[G]++;bb[B]++;l[(R*.2126+G*.7152+B*.0722+.5)|0]++;if(R<=1&&G<=1&&B<=1)lo++;if(R>=254||G>=254||B>=254)hi++}
+      // Peak ignores the two end bins so a clipped spike does not flatten the rest; sqrt keeps thin tones visible.
+      var pk=1;[r,gg,bb,l].forEach(function(a){for(var i=0;i<256;i++)a[i]=Math.sqrt(a[i]);for(i=2;i<254;i++)if(a[i]>pk)pk=a[i]});
+      H={r:r,g:gg,b:bb,l:l,pk:pk*1.05,n:n,raw:l,lo:lo/n*100,hi:hi/n*100,z:H&&H.z};
+      cLo.classList.toggle('on',H.lo>0.1);cHi.classList.toggle('on',H.hi>0.1);var gw=typeof fxGamutWarn!=='undefined'&&fxGamutWarn;cLo.classList.toggle('act',gw);cHi.classList.toggle('act',gw);
+      paint();if(!H.z)idle()};
+    [cLo,cHi].forEach(function(bt){bt.addEventListener('click',function(e){e.stopPropagation();if(typeof toggleGamutWarn==='function'){toggleGamutWarn();draw()}})});
+    cv.addEventListener('mousemove',function(e){if(!H)return;var rc=cv.getBoundingClientRect(),v=Math.max(0,Math.min(255,Math.round((e.clientX-rc.left)/rc.width*255)));
+      var zi=0;ZN.forEach(function(z,j){if(v>=z[0]&&v<z[1])zi=j+1});var z=ZN[zi-1],cnt=0;for(var i=z[0];i<z[1];i++)cnt+=H.l[i]*H.l[i];
+      H.z=zi;rz.textContent=z[2];rv.textContent=Math.round(v/2.55)+'%  ·  '+Math.round(cnt/H.n*100)+'% of photo';paint()});
+    cv.addEventListener('mouseleave',function(){if(H){H.z=0;paint();idle()}});
+    if(window.ResizeObserver)new ResizeObserver(function(){if(d.open)paint()}).observe(box);
     d.addEventListener('toggle',draw);
     var rp=window.renderPreview;if(typeof rp==='function'){window.renderPreview=function(){var r=rp.apply(this,arguments);if(d.open&&!q)q=requestAnimationFrame(draw);return r};}}
   // Rail: no tooltip that just repeats the word already under the icon.
@@ -6374,7 +6411,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928A';
+const BUILD='1.0928B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
