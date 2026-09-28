@@ -6150,7 +6150,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928Q';
+const BUILD='1.0928R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16614,7 +16614,8 @@ const PASTE_CATEGORIES=[
 function pasteEditSelectiveApply(base,src,checkedKeys){
   PASTE_CATEGORIES.filter(c=>checkedKeys.includes(c.key)).forEach(c=>{
     c.sliders.forEach(id=>{if(src.sliders&&src.sliders[id]!==undefined){base.sliders=base.sliders||{};base.sliders[id]=src.sliders[id];}});
-    c.toggles.forEach(id=>{if(src.toggles&&src.toggles[id]!==undefined){base.toggles=base.toggles||{};base.toggles[id]=src.toggles[id];}});
+    // Categories list DOM ids ("tg-grain"); snapshots key toggles without the prefix ("grain").
+    c.toggles.forEach(tid=>{const id=tid.replace(/^tg-/,'');if(src.toggles&&src.toggles[id]!==undefined){base.toggles=base.toggles||{};base.toggles[id]=src.toggles[id];}});
     (c.selects||[]).forEach(id=>{if(src.selects&&src.selects[id]!==undefined){base.selects=base.selects||{};base.selects[id]=src.selects[id];}});
     (c.colors||[]).forEach(id=>{if(src.colors&&src.colors[id]!==undefined){base.colors=base.colors||{};base.colors[id]=src.colors[id];}});
     (c.extra||[]).forEach(k=>{if(src[k]!==undefined)base[k]=JSON.parse(JSON.stringify(src[k]));});
@@ -22839,6 +22840,8 @@ function toolsBuild(){
   h+=`<button class="fx-ovf-item" onclick="toolsClose();window.chromasmithMenuCopyEdit&&window.chromasmithMenuCopyEdit()">${icon('copy',16)}<span>Copy edit settings</span></button>`;
   h+=`<button class="fx-ovf-item" onclick="toolsClose();window.chromasmithMenuPasteEdit&&window.chromasmithMenuPasteEdit()">${icon('paste',16)}<span>Paste edit settings</span></button>`;
   h+=`<button class="fx-ovf-item" onclick="toolsClose();fxResetAll()">${icon('reset',16)}<span>Reset photo</span></button>`;
+  h+='<div class="fx-ovf-sep"></div>';
+  h+=`<button class="fx-ovf-item" onclick="toolsClose();allFxSettings()">${icon('looks',16)}<span>All FX settings…</span></button>`;
   m.innerHTML=h;
 }
 function toolsClose(){settingsClose();}

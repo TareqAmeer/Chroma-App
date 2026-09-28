@@ -2214,7 +2214,7 @@
         <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-fav" title="Favorite selected photos">${ic('heart',18)}</button>
       </div>
       </div>
-      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo">${ic('looks',14)}<span class="lbl">All FX</span></button>
+      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply your All FX effects to every selected photo (right-click to choose what it applies)">${ic('looks',14)}<span class="lbl">All FX</span></button>
       <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ${kbd([], 'E')}">${ic('export',14)}<span class="lbl">Export</span></button>
       <!-- id (not just a bare positioning div) so body.deskx can give it the SAME margin-left/
            padding-left/border-left divider as the Editor's own #fx-settings, instead of just the
@@ -8425,7 +8425,25 @@
   // visual-match pass (see the plan's Phase 4) — the button is real and placed correctly, but
   // gives honest feedback rather than silently doing nothing.
   const allFxBtn = overlay.querySelector('#lib-allfx-btn');
-  if (allFxBtn) allFxBtn.onclick = () => { if (typeof toast === 'function') toast('Batch "All FX" apply is coming soon'); };
+  // Applies the user's All FX recipe (chosen in the Editor's All FX ▾ / right-click settings)
+  // to every selected photo: merged over each photo's own saved edit, or over factory defaults.
+  if (allFxBtn) allFxBtn.onclick = async () => {
+    const paths = cmKbTargets();
+    if (!paths.length) { toast('Select photos to apply All FX to'); return; }
+    if (typeof window.chromasmithAllFxApplyTo !== 'function') return;
+    await Promise.all(paths.map(async (p) => {
+      const cur = await getSidecar(p);
+      let base = null;
+      try { if (cur.recipe) base = snapshotFromB64(cur.recipe); } catch (e) {}
+      const recipe = snapshotToB64(window.chromasmithAllFxApplyTo(base));
+      const updated = { ...cur, edited: true, recipe };
+      state.sidecars.set(p, updated);
+      await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe }).catch((e) => sidecarWriteFailed(p, cur, e));
+      markCardEdited(p);
+      if (p === state.openedPath) { try { applyUISnapshot(snapshotFromB64(recipe)); fxUpdate(); if (typeof syncAllFxBtn === 'function') syncAllFxBtn(); } catch (e) { console.error('all fx', e); } }
+    }));
+    toast(`All FX applied to ${paths.length} photo${paths.length === 1 ? '' : 's'}`, true);
+  };
   const exportBtn = overlay.querySelector('#lib-export-btn');
   if (exportBtn) exportBtn.onclick = () => libExportPaths(cmKbTargets());
 
