@@ -56,7 +56,7 @@ a{color:inherit}
 .lbar{position:absolute;left:0;right:0;top:0;height:36px;display:flex;gap:16px;align-items:center;border-bottom:1px solid var(--line);font-weight:600;opacity:0}
 .lbar i{flex:1}.lbar::after{content:"";width:120px;height:22px;border:1px solid #33312c;border-radius:999px}
 .tile{position:absolute;will-change:transform}
-.tile .f{width:100%;height:100%;animation:float 5s ease-in-out infinite;animation-delay:var(--d)}
+.tile .f{width:100%;height:100%}
 .tile img{width:100%;height:100%;object-fit:cover;display:block;border-radius:2px;box-shadow:0 24px 50px rgba(0,0,0,.55)}
 .tile .cap{position:absolute;left:0;right:0;bottom:-17px;font-size:10px;display:flex;justify-content:space-between;opacity:0}
 @keyframes float{50%{transform:translate3d(0,calc(var(--fl,1)*-14px),0) rotate(calc(var(--fl,1)*1.5deg))}}
@@ -166,7 +166,7 @@ a{color:inherit}
 .idx[hidden]{display:none}
 @media(max-width:760px){.space{height:220vh}.shead{position:relative;left:auto;top:auto;padding:14vh 5vw 0}}
 /* 5. outro */
-.outro{min-height:100vh;padding:16vh 5vw 6vh;background:var(--acc);color:#0b0b0a;display:grid;grid-template-rows:1fr auto}
+.outro{overflow:hidden;min-height:100vh;padding:16vh 5vw 6vh;background:var(--acc);color:#0b0b0a;display:grid;grid-template-rows:1fr auto}
 .outro .k{font-size:clamp(56px,13vw,230px);line-height:.84}
 .outro .k span{display:block;overflow:hidden}.outro .k span i{display:block;font-style:normal}
 .outro .cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:48px}
@@ -177,7 +177,7 @@ a{color:inherit}
 .plat b{font-size:28px;font-weight:700;margin-top:24px}
 .plat span{font-size:14px;line-height:1.35;opacity:.8}
 .plat em{font-style:normal;font-weight:600;font-size:14px;margin-top:6px}
-.plat:hover{background:#0b0b0a;color:var(--acc);transform:translateY(-4px)}
+.plat:hover{background:#0b0b0a;color:var(--acc)}
 .aux{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
 .aux button{font:inherit;font-weight:600;font-size:15px;background:none;cursor:pointer;color:#0b0b0a}
 .howto{display:grid;grid-template-columns:repeat(3,1fr) auto;gap:3vw;align-items:end;margin-top:28px;padding:24px;background:#0b0b0a;color:var(--fg);border-radius:4px}
@@ -207,17 +207,138 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 @keyframes bob{50%{transform:translateY(6px)}}
 .intro .curtain{position:absolute;inset:0;background:var(--acc);transform:scaleY(0);transform-origin:bottom;z-index:2}
 @media (prefers-reduced-motion:reduce){.grain{animation:none}}
+
+/* ═════ Swiss layer ═════ */
+:root{--paper:#f2efe8;--ink:#0b0b0a;--col:calc((100vw - 10vw - 11*16px)/12)}
+/* 1 visible 12-col grid */
+.gridlines{position:fixed;inset:0 5vw;z-index:40;pointer-events:none;display:grid;grid-template-columns:repeat(12,1fr);column-gap:16px}
+.gridlines i{border-left:1px solid rgba(242,239,232,.045);border-right:1px solid rgba(242,239,232,.045);transform-origin:top}
+.onpaper .top{color:var(--ink);background:linear-gradient(rgba(242,239,232,.85),transparent)}.onpaper .top .ink{fill:var(--ink)}.onpaper .strip b{color:var(--ink)}
+.onpaper .gridlines i{border-color:rgba(11,11,10,.06)}
+/* 2 three type sizes, flush left */
+.hero-t{left:5vw;right:auto;text-align:left;top:14vh}
+.k{font-weight:700;letter-spacing:-.005em}
+.row h3,.group h3{font-size:clamp(24px,2.2vw,34px);font-weight:700}
+.quote{font-size:clamp(24px,2.6vw,40px)}
+/* 3 section numbers */
+.sn{position:absolute;right:5vw;top:88px;z-index:6;color:var(--dim)}
+.intro .sn,.pin .sn{position:absolute}
+section{position:relative}
+/* 5 vermilion only for what is live */
+.tags span::before{display:none}
+.row .n{color:var(--dim)}.row:hover .n{color:#0b0b0a}
+.panel>div>.mono:first-child,.panel>.in>.mono:first-child,.p1txt>.mono{color:var(--dim)}
+.plab{color:var(--acc)}
+.group h3{border-bottom-color:var(--fg)}
+/* 6 paper sections */
+.paper{background:var(--paper)!important;color:var(--ink)}
+.paper .t,.paper .quote,.paper .qa p,.paper .mono{color:#55524b}
+.paper .k,.paper .qa summary{color:var(--ink)}
+.paper .qa details,.paper{border-color:#d9d5cc!important}
+.paper .qa details:first-child{border-top-color:var(--ink)}
+.paper .qa summary:hover{color:var(--acc)}
+.paper.maker .por{border-color:#d9d5cc}
+.paper .sn{color:#8b877e}
+/* 7 captions as data */
+.dcap{display:grid;grid-template-columns:auto auto;gap:2px 14px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-top:10px}
+.dcap b{font-weight:400;color:var(--fg)}.paper .dcap b{color:var(--ink)}
+.ph .dcap{position:absolute;left:12px;bottom:10px;z-index:3;margin:0;opacity:.9}
+.p4 .dcap{position:absolute;right:5vw;bottom:12vh;z-index:3}
+/* 8 constellation on a grid */
+.colhead{position:absolute;top:-6vh;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);border-top:1px solid #3a3833;padding-top:8px;width:calc(100%/8 - 16px);white-space:normal;cursor:pointer}
+.colhead:hover,.colhead.on{color:var(--acc);border-color:var(--acc)}
+.feat{transform:translate(0,-50%);text-align:left;white-space:normal;max-width:calc(100vw/8.6);line-height:1.05}
+.feat::before{left:-9px}
+/* 9 contact sheet intro */
+.intro{place-items:end start;padding:0 5vw 14vh}
+.intro .in{align-items:flex-start;gap:18px;position:relative;z-index:1}
+.intro svg{width:min(18vw,120px)}
+.sheet{position:absolute;right:5vw;top:13vh;width:min(46vw,640px);display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.sheet div{aspect-ratio:3/2;background:#16150f center/cover;position:relative;opacity:0}
+.sheet div span{position:absolute;left:3px;bottom:2px;font-size:8px;color:#e8a33a;letter-spacing:.1em}
+.sheet .pick{outline:2px solid var(--acc);outline-offset:3px}
+.sheet .ring{position:absolute;inset:-9px;border:2px solid var(--acc);border-radius:50%;transform:rotate(-4deg);pointer-events:none;clip-path:inset(0 100% 0 0)}
+.intro .tag{color:var(--acc)}
+.intro .cue{animation:none;left:5vw;right:auto;text-align:left;bottom:6vh}
+@media(max-width:760px){.sheet{left:5vw;width:auto}}
+/* 10 loupe */
+.loupe{position:fixed;z-index:70;width:170px;height:170px;border:1px solid var(--fg);pointer-events:none;background-repeat:no-repeat;opacity:0;transform:translate(-50%,-50%);transition:opacity .2s;box-shadow:0 20px 40px rgba(0,0,0,.5)}
+.loupe::after{content:"100%";position:absolute;left:6px;bottom:4px;font-size:9px;letter-spacing:.12em;color:#fff;mix-blend-mode:difference}
+[data-loupe]{cursor:none}
+/* 11 look ticker */
+.ticker{padding:14vh 0 12vh;border-top:1px solid var(--line);overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr);gap:6vh}
+.ticker .hd{display:grid;grid-template-columns:repeat(12,1fr);column-gap:16px;padding:0 5vw;align-items:end}
+.ticker .hd>div{grid-column:1/7}.ticker figure{grid-column:9/13;position:relative}
+.ticker figure img{width:100%;aspect-ratio:3/2;object-fit:cover;display:block;transition:filter .5s}
+.ticker figcaption{margin-top:10px}
+.tape{width:max-content;display:flex;gap:4vw;white-space:nowrap;will-change:transform}
+.tape button{background:none;border:0;color:#3a3833;font:700 clamp(40px,6vw,96px)/1 Gramatika;text-transform:capitalize;cursor:pointer;transition:color .2s;letter-spacing:-.005em}
+.tape button:hover,.tape button.on{color:var(--acc)}
+/* 12 split scroll */
+.split{height:100vh;overflow:hidden;border-top:1px solid var(--line)}
+.split .fr{position:absolute;inset:0}
+.split img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.split .af{clip-path:inset(0 0 0 50%)}
+.split .bar{position:absolute;top:0;bottom:0;width:2px;background:var(--acc);left:50%}
+.split .lab{position:absolute;top:92px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#fff;mix-blend-mode:difference}
+.split .lab.l{left:5vw}.split .lab.r{right:5vw}
+.split .k{position:absolute;left:5vw;bottom:10vh;color:#fff;mix-blend-mode:difference}
+/* 13 frame counter */
+.counter{position:fixed;right:14px;top:50%;z-index:45;transform:translateY(-50%);writing-mode:vertical-rl;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);mix-blend-mode:difference}
+.counter b{color:var(--acc);font-weight:400}
+/* 14 draggable while floating */
+.tile .f{touch-action:none;cursor:grab}.tile .f:active{cursor:grabbing}
+/* 15 numbers */
+.nums{padding:16vh 5vw;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(12,1fr);column-gap:16px;row-gap:8vh}
+.nums .cell{grid-column:span 3;border-top:1px solid var(--fg);padding-top:14px}
+.nums .v{font-size:clamp(56px,8vw,140px);font-weight:700;line-height:.9;font-variant-numeric:tabular-nums}
+.nums .v small{font-size:.4em;margin-left:4px}
+.nums .demo{grid-column:1/13;display:grid;grid-template-columns:repeat(12,1fr);column-gap:16px;align-items:center}
+.nums .demo figure{grid-column:7/13;position:relative;overflow:hidden}
+.nums .demo figure img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}
+.nums .demo .grain{opacity:0}
+.nums .ctl{grid-column:1/6;display:grid;gap:26px}
+.nums label{display:grid;grid-template-columns:110px 1fr 44px;gap:14px;align-items:center;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.nums input[type=range]{-webkit-appearance:none;appearance:none;height:1px;background:var(--fg)}
+.nums input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--acc);border:0}
+.nums input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--acc);border:0;border-radius:0}
+.nums output{color:var(--fg);text-align:right}
+@media(max-width:760px){.nums .cell{grid-column:span 6}.nums .demo figure,.nums .ctl{grid-column:1/13}.ticker figure,.ticker .hd>div{grid-column:1/13}}
+/* 16 colour index */
+.swatches{position:absolute;right:0;top:6px;display:flex;gap:6px;z-index:2}
+.swatches button{width:22px;height:22px;border:1px solid #3a3833;cursor:pointer;padding:0}
+.swatches button.on{outline:2px solid var(--acc);outline-offset:2px}
+.board.filt .tile:not(.hit){opacity:.12}
+.tile{transition:opacity .35s}
+.lbar::after{display:none}
+/* 17 kinetic wordmark */
+.bigword{display:flex;justify-content:space-between;font-size:12.4vw;font-weight:700;line-height:.8;letter-spacing:-.01em;margin:10vh 0 0;color:#0b0b0a;white-space:nowrap}
+/* 18 launch transition */
+.cells{position:fixed;inset:0;z-index:200;display:grid;grid-template-columns:repeat(12,1fr);grid-template-rows:repeat(8,1fr);pointer-events:none}
+.cells i{background:var(--acc);transform:scale(0)}
+/* 19 status strip + 20 motion toggle */
+.strip{display:flex;gap:18px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.strip b{font-weight:400;color:var(--fg)}
+.strip .dot{display:inline-block;width:6px;height:6px;background:var(--acc);margin-right:6px}
+.motion{background:none;border:1px solid #3a3833;color:var(--dim);font:10px Gramatika;letter-spacing:.12em;text-transform:uppercase;padding:5px 9px;cursor:pointer}
+.motion:hover{color:var(--acc);border-color:var(--acc)}
+.still *,.still *::before,.still *::after{animation:none!important;transition:none!important}
+@media(max-width:1100px){.strip{display:none}}
 </style>
 </head>
 <body>
-<section class="intro" aria-label="Chromasmith"><div class="in"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="inc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="ina" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="inb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#inc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#ina)"/><polygon points="69,32 69,65 36,65" fill="url(#inb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg><div class="name"><span>C</span><span>H</span><span>R</span><span>O</span><span>-</span><span>M</span><span>A</span><span>-</span><span>S</span><span>M</span><span>I</span><span>T</span><span>H</span></div><p class="mono tag">A darkroom that lives anywhere</p></div><p class="mono cue">Scroll to enter ↓</p><div class="curtain"></div></section>
+<div class="gridlines" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+<div class="counter mono" aria-hidden="true">Frame <b>01</b> / 36</div>
+<div class="loupe" aria-hidden="true"></div>
+<section class="intro" aria-label="Chromasmith"><div class="in"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="inc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="ina" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="inb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#inc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#ina)"/><polygon points="69,32 69,65 36,65" fill="url(#inb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg><div class="name"><span>C</span><span>H</span><span>R</span><span>O</span><span>-</span><span>M</span><span>A</span><span>-</span><span>S</span><span>M</span><span>I</span><span>T</span><span>H</span></div><p class="mono tag">A darkroom that lives anywhere</p></div><p class="mono cue">Scroll to enter ↓</p><span class="sn mono">00.0 — Index</span><div class="sheet" aria-hidden="true"></div><div class="curtain"></div></section>
 
 <header class="top">
   <a class="word" href="#"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="hdc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="hda" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#hdc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#hda)"/><polygon points="69,32 69,65 36,65" fill="url(#hdb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg>CHRO-MA-SMITH</a>
+  <div class="strip"><span><span class="dot"></span>Offline ready</span><span>Local <b id="clock">--:--</b></span><span>GPL-3.0</span><button class="motion" type="button" id="motion">Motion: on</button></div>
   <nav><a href="#features">Features</a><a href="#faq">FAQ</a><a href="https://github.com/TareqAmeer/Chroma-App">GitHub ↗</a><a href="#yours">Download</a><a href="../../chromasmith-22.html">Launch app ↗</a></nav>
 </header>
 
-<section class="pin" aria-label="Chromasmith tour">
+<section class="pin" aria-label="Chromasmith tour"><span class="sn mono">01.0 — Tour</span>
   <div class="track">
     <div class="panel p0">
       <h1 class="hero-t">The app that<br>does it all<sup>*</sup></h1>
@@ -228,6 +349,7 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
         <img class="film" src="../assets/story/film.webp" alt="">
         <img class="film glow" src="../assets/story/film.webp" alt="">
         <div class="grain"></div><div class="shade"></div>
+        <div class="dcap"><span>Lens</span><b>28 mm · f/2</b><span>Shutter</span><b>1/250 s</b><span>Look</span><b>Classic Neg</b></div>
       </div>
       <span class="mono scrollcue">Scroll to develop</span>
       <div class="cap0">
@@ -238,21 +360,21 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
     </div>
 
     <div class="panel p1" data-lab="Library">
-      <div class="p1txt"><p class="mono">01 / Library</p>
+      <div class="p1txt"><p class="mono">01.1 Library</p>
       <div class="k">Find the frame.<br>Keep the feeling.</div>
       <p class="t">A library for every shoot, every face, every almost-forgotten moment. All yours. All on your machine.</p></div>
-      <div class="board"><div class="lbar"><span>Library</span><span class="mono">18 photos · by date</span><i></i></div></div>
+      <div class="board"><div class="lbar"><span>Library</span><span class="mono">18 photos · by date</span><i></i><div class="swatches" aria-label="Filter by colour"></div></div></div>
     </div>
 
     <div class="panel p2" data-lab="Studio">
-      <div><p class="mono">02 / Studio</p><div class="k">A studio for every frame.</div>
+      <div><p class="mono">01.2 Studio</p><div class="k">A studio for every frame.</div>
         <p class="t">Start with a look. Then shape the light, colour and composition until the photo feels exactly right.</p>
         <div class="tags"><span>Curves &amp; colour mixer</span><span>Local masks</span><span>Spot repair</span><span>Full-res export</span></div></div>
       <div class="img"><img src="../assets/ui/color.webp" alt="Chromasmith colour tools"></div>
     </div>
 
     <div class="panel p3" id="lens" data-lab="Looks">
-      <div><div class="big">113</div><div class="k" style="margin-top:-3vw">film looks.<br>One click.</div>
+      <div><p class="mono">01.3 Looks</p><div class="big">113</div><div class="k" style="margin-top:-3vw">film looks.<br>One click.</div>
         <p class="t">Find your starting point, then make it yours. Move over the photo to look through the film.</p>
         <div class="looks"><button class="on" data-l="0">Classic Neg</button><button data-l="1">Warm print</button><button data-l="2">Cross-process</button></div></div>
       <div class="lensbox"><canvas></canvas><span class="mono">Try a look</span></div>
@@ -260,13 +382,14 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 
     <div class="panel p4" data-lab="Film">
       <img src="../assets/story/film.webp" alt="Photo finished with grain and halation"><div class="grain"></div><div class="shade"></div>
-      <div class="in"><p class="mono">04 / Film</p><div class="k">Let the light<br>linger.</div>
+      <div class="in"><p class="mono">01.4 Film</p><div class="k">Let the light<br>linger.</div>
         <p class="t">Grain in the shadows. A warm halo at the edge of the light. Subtle or unmistakable.</p>
         <div class="terms"><span>Grain</span><span>Halation</span><span>Bloom</span><span>Frames</span></div></div>
+      <div class="dcap"><span>Grain</span><b>35 mm · 0.42</b><span>Halation</span><b>0.30 · warm</b><span>Bloom</span><b>0.15</b><span>Print</span><b>Kodak 2383</b></div>
     </div>
 
     <div class="panel p5" data-lab="Anywhere">
-      <div><p class="mono">05 / Anywhere</p><div class="k">Make it wherever you are.</div>
+      <div><p class="mono">01.5 Anywhere</p><div class="k">Make it wherever you are.</div>
         <p class="t">Open it in your browser. Keep it on your phone. Take your photos somewhere with no signal. The tools still come with you.</p>
         <div class="tags"><span>No account</span><span>No upload</span><span>Works offline</span></div></div>
       <div class="phone"><img src="../assets/ui/mobile.webp" alt="Chromasmith on a phone"></div>
@@ -276,17 +399,44 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
   <div class="prog"><b><i></i></b><b><i></i></b><b><i></i></b><b><i></i></b><b><i></i></b></div>
 </section>
 
-<section class="maker" id="maker">
+<section class="split" aria-label="Before and after"><span class="sn mono" style="color:#fff">01.6 — Compare</span>
+  <div class="fr"><img src="../assets/story/original.webp" alt="Original"><img class="af" src="../assets/story/film.webp" alt="Edited in Chromasmith"></div>
+  <div class="bar"></div><span class="lab l">Original</span><span class="lab r">Chromasmith</span>
+  <h2 class="k">Same frame.<br>A different feeling.</h2>
+</section>
+
+<section class="ticker" aria-label="Film looks"><span class="sn mono">02.0 — Looks</span>
+  <div class="hd"><div><p class="mono" style="color:var(--acc)">132 film looks</p><h2 class="k" style="margin-top:18px">Hover a name.<br>Change the print.</h2></div>
+    <figure><img id="tkimg" src="../assets/story/film.webp" alt="Sample photo previewing a look"><figcaption class="dcap"><span>Look</span><b id="tkname">Classic Neg</b></figcaption></figure></div>
+  <div class="tape"><button type="button" data-i="0">astia</button><button type="button" data-i="1">classic chrome</button><button type="button" data-i="2">classic neg</button><button type="button" data-i="3">eterna bleach bypass</button><button type="button" data-i="4">eterna cinema</button><button type="button" data-i="5">nostalgic neg</button><button type="button" data-i="6">pro neg std</button><button type="button" data-i="7">provia</button><button type="button" data-i="8">reala ace</button><button type="button" data-i="9">velvia</button><button type="button" data-i="10">portra 160 endura premier</button><button type="button" data-i="11">portra 400 endura premier</button><button type="button" data-i="12">portra 800 endura premier</button><button type="button" data-i="13">portra 400 supra endura</button><button type="button" data-i="14">portra 400 portra endura</button><button type="button" data-i="15">ektar 100 endura premier</button><button type="button" data-i="16">gold 200 endura premier</button><button type="button" data-i="17">ultramax 500 endura premier</button><button type="button" data-i="18">vericolor iii endura premier</button><button type="button" data-i="19">fuji pro 400h ca maxima</button><button type="button" data-i="20">fuji pro 160c ca maxima</button><button type="button" data-i="21">fuji pro 160s ca dpii</button><button type="button" data-i="22">fuji c200 ca dpii</button><button type="button" data-i="23">fuji superia reala ca pro pdii</button><button type="button" data-i="24">fuji superia xtra 400 ca dpii</button><button type="button" data-i="25">fuji natura 1600 ca dpii</button><button type="button" data-i="26">vision3 50d 2383</button><button type="button" data-i="27">vision3 200t 2383</button><button type="button" data-i="28">vision3 250d 2383</button><button type="button" data-i="29">vision3 250d 2393</button><button type="button" data-i="30">vision3 500t 2383</button><button type="button" data-i="31">vision3 500t 2393</button><button type="button" data-i="32">velvia 50 ilfochrome m</button><button type="button" data-i="33">provia 100f ilfochrome m</button><button type="button" data-i="34">ektachrome 100d radiance iii</button><button type="button" data-i="35">kodachrome 64 radiance iii</button><button type="button" data-i="36">fp100c fujiflex new</button><button type="button" data-i="37">instax color fujiflex new</button><button type="button" data-i="38">aerocolor endura premier</button><button type="button" data-i="39">aerocolor high endura premier</button><button type="button" data-i="40">agfa vista 100 ca dpii</button><button type="button" data-i="41">trix 400 polymax grade 2</button><button type="button" data-i="42">trix 400 polymax grade 3</button><button type="button" data-i="43">kodak 5222 polymax grade 2</button><button type="button" data-i="44">kodak 5222 2302 dev 5</button><button type="button" data-i="45">adox color implosion 100</button><button type="button" data-i="46">agfa agfacolor 100</button><button type="button" data-i="47">agfa agfacolor portrait xps 160</button><button type="button" data-i="0">astia</button><button type="button" data-i="1">classic chrome</button><button type="button" data-i="2">classic neg</button><button type="button" data-i="3">eterna bleach bypass</button><button type="button" data-i="4">eterna cinema</button><button type="button" data-i="5">nostalgic neg</button><button type="button" data-i="6">pro neg std</button><button type="button" data-i="7">provia</button><button type="button" data-i="8">reala ace</button><button type="button" data-i="9">velvia</button><button type="button" data-i="10">portra 160 endura premier</button><button type="button" data-i="11">portra 400 endura premier</button><button type="button" data-i="12">portra 800 endura premier</button><button type="button" data-i="13">portra 400 supra endura</button><button type="button" data-i="14">portra 400 portra endura</button><button type="button" data-i="15">ektar 100 endura premier</button><button type="button" data-i="16">gold 200 endura premier</button><button type="button" data-i="17">ultramax 500 endura premier</button><button type="button" data-i="18">vericolor iii endura premier</button><button type="button" data-i="19">fuji pro 400h ca maxima</button><button type="button" data-i="20">fuji pro 160c ca maxima</button><button type="button" data-i="21">fuji pro 160s ca dpii</button><button type="button" data-i="22">fuji c200 ca dpii</button><button type="button" data-i="23">fuji superia reala ca pro pdii</button><button type="button" data-i="24">fuji superia xtra 400 ca dpii</button><button type="button" data-i="25">fuji natura 1600 ca dpii</button><button type="button" data-i="26">vision3 50d 2383</button><button type="button" data-i="27">vision3 200t 2383</button><button type="button" data-i="28">vision3 250d 2383</button><button type="button" data-i="29">vision3 250d 2393</button><button type="button" data-i="30">vision3 500t 2383</button><button type="button" data-i="31">vision3 500t 2393</button><button type="button" data-i="32">velvia 50 ilfochrome m</button><button type="button" data-i="33">provia 100f ilfochrome m</button><button type="button" data-i="34">ektachrome 100d radiance iii</button><button type="button" data-i="35">kodachrome 64 radiance iii</button><button type="button" data-i="36">fp100c fujiflex new</button><button type="button" data-i="37">instax color fujiflex new</button><button type="button" data-i="38">aerocolor endura premier</button><button type="button" data-i="39">aerocolor high endura premier</button><button type="button" data-i="40">agfa vista 100 ca dpii</button><button type="button" data-i="41">trix 400 polymax grade 2</button><button type="button" data-i="42">trix 400 polymax grade 3</button><button type="button" data-i="43">kodak 5222 polymax grade 2</button><button type="button" data-i="44">kodak 5222 2302 dev 5</button><button type="button" data-i="45">adox color implosion 100</button><button type="button" data-i="46">agfa agfacolor 100</button><button type="button" data-i="47">agfa agfacolor portrait xps 160</button></div>
+</section>
+
+<section class="nums" aria-label="By the numbers"><span class="sn mono">03.0 — Numbers</span>
+  <div class="cell"><p class="mono">Film looks</p><div class="v" data-n="132">0</div></div>
+  <div class="cell"><p class="mono">Tools</p><div class="v" data-n="100">0</div></div>
+  <div class="cell"><p class="mono">Uploads</p><div class="v" data-n="0">0</div></div>
+  <div class="cell"><p class="mono">Offline</p><div class="v" data-n="100">0<small>%</small></div></div>
+  <div class="demo">
+    <div class="ctl"><p class="mono" style="color:var(--acc)">Try it</p>
+      <label>Grain<input type="range" id="sgrain" min="0" max="100" value="35"><output>35</output></label>
+      <label>Warmth<input type="range" id="swarm" min="-50" max="50" value="10"><output>10</output></label>
+      <label>Exposure<input type="range" id="sexpo" min="-50" max="50" value="0"><output>0</output></label></div>
+    <figure><img id="simg" src="../assets/story/film.webp" alt="Sample photo responding to the sliders"><div class="grain"></div></figure>
+  </div>
+</section>
+
+<section class="maker paper" id="maker"><span class="sn mono">04.0 — Maker</span>
   <div class="por"><img src="../assets/story/maker.webp" alt="Tareq Ameer at the Pyramids of Giza"></div>
   <div>
     <p class="mono">The maker</p>
     <h2 class="k" style="margin:18px 0 6vh">One person,<br>a whole darkroom.</h2>
     <p class="quote">“I built Chromasmith because I wanted powerful photo tools that felt immediate, stayed on my device, and left me free to make the image my own.”</p>
     <p class="mono who">Tareq Ameer · Maker of Chromasmith</p>
+    <div class="dcap"><span>Place</span><b>Giza, Egypt</b><span>Edit</span><b>Chromasmith · selective colour</b></div>
   </div>
 </section>
 
-<section class="beta" id="beta">
+<section class="beta" id="beta"><span class="sn mono">05.0 — Beta</span>
   <div class="head"><div><p class="mono">In beta now</p><h2 class="k" style="margin-top:18px">The darkroom<br>keeps growing.</h2></div>
     <a class="btn" href="../../chromasmith-22.html">Try the beta tools ↗</a></div>
   <div class="rows">
@@ -296,7 +446,7 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
   </div>
 </section>
 
-<section class="space" id="features">
+<section class="space" id="features"><span class="sn mono">06.0 — Tools</span>
   <div class="shead"><p class="mono">Every tool</p><h2 class="k">The whole<br>darkroom.</h2>
     <p class="t">Hover to light a tool. Click to see what it does.</p>
     <a class="btn" href="#index" data-open-index>View as a list</a></div>
@@ -410,12 +560,12 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 </div>
 </section>
 
-<section class="faq" id="faq">
+<section class="faq paper" id="faq"><span class="sn mono">07.0 — FAQ</span>
   <div><p class="mono">FAQ</p><h2 class="k" style="margin-top:18px">Questions,<br>answered.</h2></div>
   <div class="qa"><details><summary>Is Chromasmith really free?</summary><p>Yes. It's free, open-source software under the GPL-3.0 licence. There's no account, subscription or paywall.</p></details><details><summary>Do my photos get uploaded anywhere?</summary><p>No. Everything runs on your device, in the browser or the desktop app. Your photos never leave your machine.</p></details><details><summary>What's the difference between the web app and the desktop app?</summary><p>The web app has the full editor: looks, film effects, colour tools, masks and export. The desktop app adds the photo library, card import, on-device search, face tagging and the desktop-only tools such as HDR and focus stacking.</p></details><details><summary>Does it work offline?</summary><p>Yes. After the first load the web app keeps working without a connection, and the desktop app never needs one.</p></details><details><summary>Which RAW files can it open?</summary><p>Camera RAW files are decoded locally, with camera colour profiles for Panasonic Lumix bodies. JPEG, PNG and TIFF open everywhere.</p></details><details><summary>Can I use my own LUTs?</summary><p>Yes. Load any .cube LUT as a starting look, or build your own .cube from a before/after pair or a reference photo.</p></details><details><summary>How do I install it on iPhone?</summary><p>Chromasmith isn't on the App Store yet. Download the .ipa and install it with a third-party signing service such as Flarestore. Or add the web app to your home screen, which needs no signing.</p></details><details><summary>Where can I see every feature in a list?</summary><p>Open the <a href="#index" data-open-index>full feature list</a>. Every tool, grouped by what it does, with a one-line description.</p></details><details><summary>Is there a Windows version?</summary><p>Yes. A Windows installer is published alongside the Mac release.</p></details></div>
 </section>
 
-<section class="outro" id="yours">
+<section class="outro" id="yours"><span class="sn mono" style="color:#0b0b0a">08.0 — Download</span>
   <div>
     <h2 class="k"><span><i>Now make</i></span><span><i>it yours.</i></span></h2>
     <p class="t" style="font-size:20px">Your photos. Your taste. Your machine. Free and open source, ready when you are.</p>
@@ -437,6 +587,7 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
       <a class="btn solid" href="../../chromasmith-22.html">Open the web app ↗</a>
     </div>
   </div>
+  <div class="bigword" aria-hidden="true"><span>CHRO-</span><span>MA-</span><span>SMITH</span></div>
   <footer class="mono"><span>Free software under GPL-3.0 · Built by Tareq Ameer</span><a href="https://github.com/TareqAmeer/Chroma-App">Source code</a></footer>
 </section>
 
@@ -445,9 +596,11 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 <script src="https://cdn.jsdelivr.net/npm/lenis@1.3.4/dist/lenis.min.js"></script>
 <script>
 gsap.registerPlugin(ScrollTrigger);
+let still=false;try{still=localStorage.getItem('cs-motion')==='off'}catch(e){}
+if(still)document.documentElement.classList.add('still');
 if(!location.hash){history.scrollRestoration='manual';scrollTo(0,0);addEventListener('load',()=>{scrollTo(0,0);lenis&&lenis.scrollTo(0,{immediate:true,force:true})})}
 let lenis;
-if(!matchMedia('(prefers-reduced-motion: reduce)').matches){lenis=new Lenis({lerp:.09});lenis.on('scroll',ScrollTrigger.update);gsap.ticker.add(t=>lenis.raf(t*1000));gsap.ticker.lagSmoothing(0);}
+if(!still&&!matchMedia('(prefers-reduced-motion: reduce)').matches){lenis=new Lenis({lerp:.09});lenis.on('scroll',ScrollTrigger.update);gsap.ticker.add(t=>lenis.raf(t*1000));gsap.ticker.lagSmoothing(0);}
 document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{const h=a.getAttribute('href');e.preventDefault();const tgt=h.length<2?0:h;lenis?lenis.scrollTo(tgt,{offset:-40}):(tgt?document.querySelector(tgt).scrollIntoView():scrollTo(0,0))}));
 
 /* 1. stage */
@@ -456,7 +609,7 @@ const tr=document.querySelector('.track'),bars=document.querySelectorAll('.prog 
 const dist=()=>tr.scrollWidth-innerWidth;
 const heroIn=()=>{gsap.from('.hero-t',{yPercent:40,opacity:0,duration:1.4,ease:'expo.out'});gsap.from('.ph',{scale:.85,opacity:0,duration:1.4,ease:'expo.out',delay:.15});};
 /* intro: plays on load, holds (the light keeps breathing), scroll drives the vermilion curtain over it; scrolling back up returns to it */
-const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const reduce=still||matchMedia('(prefers-reduced-motion: reduce)').matches;
 if(!reduce){
   gsap.set('.intro .name span',{yPercent:115});gsap.set('.intro .tag,.intro .cue',{opacity:0});gsap.set('.intro .expo',{svgOrigin:'69 32'});
   gsap.timeline({defaults:{ease:'expo.out'},delay:.2})
@@ -467,7 +620,7 @@ if(!reduce){
     .to('.intro .name span',{yPercent:0,stagger:.045,duration:1.1},1.3)         // name rises letter by letter
     .to('.intro .tag',{opacity:1,duration:.8},2.1)
     .to('.intro .cue',{opacity:1,duration:.8},2.6)
-    .add(()=>gsap.to('.intro .expo',{scale:.75,duration:1.8,ease:'sine.inOut',yoyo:true,repeat:-1}));  // idle: light breathes
+
   gsap.timeline({scrollTrigger:{trigger:'.intro',start:'top top',end:'+=120%',pin:true,scrub:1}})
     .to('.intro .cue',{opacity:0,duration:.1})
     .to('.intro .in',{scale:.85,y:-60,opacity:0,duration:.5,ease:'power2.in'},0)
@@ -488,7 +641,7 @@ tl.to('.scrollcue',{opacity:0,duration:.1})
   .addLabel('slide')
   .to(tr,{x:()=>-dist(),ease:'none',duration:()=>dist()/innerHeight,onUpdate(){
     const f=this.progress()*bars.length;bars.forEach((b,i)=>b.style.transform=`scaleX(${Math.max(0,Math.min(1,f-i))})`);
-    plab.textContent=pans[Math.min(pans.length-1,Math.floor(f))].dataset.lab}});
+    const pp=pans[Math.max(0,Math.min(pans.length-1,Math.floor(f)||0))];if(pp)plab.textContent=pp.dataset.lab}});
 const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scrollTrigger.end-tl.scrollTrigger.start);
 pans.forEach(p=>{
   const st=()=>sPos()+Math.max(0,p.offsetLeft-innerWidth),en=()=>st()+innerWidth+p.offsetWidth;
@@ -515,8 +668,8 @@ pans.forEach(p=>{
   layout();addEventListener('resize',()=>{layout();ScrollTrigger.refresh()});
   const org=gsap.timeline({scrollTrigger:{start:()=>sPos()+panel.offsetLeft-innerWidth*1.05,end:()=>sPos()+panel.offsetLeft+innerWidth*.15,scrub:1,invalidateOnRefresh:true}});
   tiles.forEach((t,i)=>org.fromTo(t,
-    {x:()=>(rnd(i,1)-.65)*innerWidth*1.1,y:()=>(rnd(i,2)-.5)*innerHeight*.9,rotation:(rnd(i,3)-.5)*40,scale:.5+rnd(i,4)*.9,zIndex:Math.round(rnd(i,4)*20),'--fl':1},
-    {x:0,y:0,rotation:0,scale:1,'--fl':0,ease:'power3.inOut',duration:1},rnd(i,5)*.35));
+    {x:()=>(rnd(i,1)-.65)*innerWidth*1.1,y:()=>(rnd(i,2)-.5)*innerHeight*.9,rotation:0,scale:.5+rnd(i,4)*.9,zIndex:Math.round(rnd(i,4)*20),'--fl':1},
+    {x:0,y:0,rotation:0,scale:1,ease:'expo.inOut',duration:1},rnd(i,5)*.35));
   org.to('.lbar,.tile .cap',{opacity:1,duration:.25},'>-.15');
 }
 
@@ -587,27 +740,98 @@ gsap.from('.plat',{y:50,opacity:0,stagger:.08,duration:1,ease:'expo.out',scrollT
   const rnd=(i,k)=>{const x=Math.sin(i*91.7+k*47.3)*15731.743;return x-Math.floor(x)};
   const groups=[...document.querySelectorAll('.idx .group')];
   let n=0;const all=[];groups.forEach((g,gi)=>g.querySelectorAll('details').forEach(d=>all.push({g:g.querySelector('h3').textContent,gi,name:d.querySelector('summary').textContent,desc:d.querySelector('p').textContent})));
-  const cols=5,rows=Math.ceil(all.length/cols);
+  const per=[];all.forEach(f=>(per[f.gi]=per[f.gi]||[]).push(f));
+  groups.forEach((g,gi)=>{const h=document.createElement('button');h.type='button';h.className='colhead';h.textContent=g.querySelector('h3').textContent;h.style.left=(gi/groups.length*100)+'%';
+    h.onmouseenter=()=>{field.classList.add('dim');feats.forEach(f=>f.el.classList.toggle('g-on',+f.el.dataset.g===gi))};h.onmouseleave=()=>field.classList.remove('dim');field.appendChild(h)});
   all.forEach((f,i)=>{
     const z=rnd(i,1),b=document.createElement('button');b.type='button';b.className='feat';b.textContent=f.name;b.dataset.g=f.gi;
-    const cx=(i%cols+.15+rnd(i,2)*.7)/cols,cy=(Math.floor(i/cols)+.2+rnd(i,3)*.6)/rows;
-    Object.assign(b.style,{left:(13+cx*72)+'%',top:(cy*100)+'%',fontSize:(12+z*z*24)+'px',fontWeight:z>.6?600:400,opacity:.18+z*.5,filter:z<.3?'blur(1.2px)':'none'});
+    const k=per[f.gi].indexOf(f),n=per[f.gi].length;
+    Object.assign(b.style,{left:'calc('+(f.gi/groups.length*100)+'% + '+(rnd(i,2)*14)+'px)',top:((k+.5)/n*100)+'%',fontSize:(12+z*z*16)+'px',fontWeight:z>.6?600:400,opacity:.25+z*.5,filter:z<.25?'blur(1px)':'none'});
     b.onclick=()=>{pop.querySelector('.g').textContent=f.g;pop.querySelector('h3').textContent=f.name;pop.querySelector('.d').textContent=f.desc;pop.hidden=false;lenis&&lenis.stop();pop.querySelector('.x').focus()};
     field.appendChild(b);feats.push({el:b,z});
   });
-  groups.forEach((g,gi)=>{const b=document.createElement('button');b.textContent=g.querySelector('h3').textContent;
-    b.onmouseenter=()=>{field.classList.add('dim');feats.forEach(f=>f.el.classList.toggle('g-on',+f.el.dataset.g===gi))};
-    b.onmouseleave=()=>field.classList.remove('dim');legend.appendChild(b)});
   const close=()=>{pop.hidden=true;lenis&&lenis.start()};
   pop.onclick=e=>{if(e.target===pop||e.target.classList.contains('x'))close()};addEventListener('keydown',e=>e.key==='Escape'&&!pop.hidden&&close());
   // depth: near words drift more with scroll and with the pointer
-  feats.forEach(f=>gsap.fromTo(f.el,{y:(f.z-.4)*160},{y:-(f.z-.4)*160,ease:'none',scrollTrigger:{trigger:'.space',start:'top bottom',end:'bottom top',scrub:true}}));
-  const mx=gsap.utils.toArray('.feat').map(el=>gsap.quickTo(el,'x',{duration:1.2,ease:'power3'}));
-  document.querySelector('.space').addEventListener('pointermove',e=>{const dx=(e.clientX/innerWidth-.5);feats.forEach((f,i)=>mx[i](-dx*f.z*70))});
+  feats.forEach(f=>gsap.fromTo(f.el,{y:(f.z-.4)*90},{y:-(f.z-.4)*90,ease:'none',scrollTrigger:{trigger:'.space',start:'top bottom',end:'bottom top',scrub:true}}));
   gsap.from('.feat',{opacity:0,scale:.6,duration:1.4,stagger:{each:.008,from:'random'},ease:'expo.out',scrollTrigger:{trigger:'.space',start:'top 70%'}});
 }
 /* full list lives behind a button; FAQ + "View as a list" open it */
 document.querySelectorAll('[data-open-index]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const ix=document.getElementById('index');ix.hidden=false;ScrollTrigger.refresh();lenis?lenis.scrollTo(ix,{offset:-40}):ix.scrollIntoView()},true));
+
+/* ═════ Swiss layer ═════ */
+const P='../assets/story/',DP='../../design/prototypes/swiss-kinetic/photos/';
+const PH=[P+'original.webp',DP+'dog-sitting.webp',P+'film.webp',P+'maker.webp',DP+'dog-lying.webp',P+'studio.webp','../assets/hero-placeholder.webp'];
+const FX=['none','grayscale(1) contrast(1.15)','sepia(.45) saturate(1.3)','saturate(1.4) hue-rotate(-12deg)','contrast(1.2) brightness(.9)','sepia(.2) hue-rotate(160deg) saturate(.8)'];
+/* 1 grid lines draw in first */
+if(!reduce)gsap.from('.gridlines i',{scaleY:0,duration:1.1,stagger:.04,ease:'expo.inOut'});
+ScrollTrigger.create({trigger:'.paper',start:'top 50%',end:'bottom 50%',onToggle:s=>document.body.classList.toggle('onpaper',s.isActive)});
+document.querySelectorAll('.paper').forEach(pp=>ScrollTrigger.create({trigger:pp,start:'top 50%',end:'bottom 50%',onToggle:s=>document.body.classList.toggle('onpaper',s.isActive)}));
+/* 9 contact sheet: frames flick on, one gets circled */
+{
+  const sh=document.querySelector('.sheet');
+  for(let i=0;i<24;i++){const d=document.createElement('div');d.style.backgroundImage=`url(${PH[(i*5)%PH.length]})`;d.style.filter=FX[(i*7)%FX.length];d.innerHTML=`<span>${String(i+1).padStart(2,'0')}A</span>`;if(i===9){d.className='pick';d.style.backgroundImage=`url(${P}original.webp)`;d.style.filter='none';d.innerHTML+='<i class="ring"></i>'}sh.appendChild(d)}
+  if(reduce)gsap.set('.sheet div',{opacity:1}),gsap.set('.sheet .ring',{clipPath:'inset(0 0% 0 0)'});
+  else gsap.timeline({delay:.6}).to('.sheet div',{opacity:1,duration:.05,stagger:{each:.06,from:'random'}}).to('.sheet div:not(.pick)',{opacity:.35,duration:.4},'+=.3').to('.sheet .ring',{clipPath:'inset(0 0% 0 0)',duration:.6,ease:'power2.inOut'},'<');
+  if(!reduce)gsap.to('.sheet',{yPercent:-12,opacity:0,ease:'none',scrollTrigger:{trigger:'.intro',start:'top top',end:'+=80%',scrub:true}});
+}
+/* 10 loupe: 100% view under the cursor */
+{
+  const L=document.querySelector('.loupe');
+  document.querySelectorAll('.ph img:not(.glow),.p4>img,.split .af,#simg,#tkimg').forEach(im=>{const host=im.closest('.ph,.p4,.split,figure');host.dataset.loupe='';
+    host.addEventListener('pointermove',e=>{const top=[...host.querySelectorAll('img')].filter(i=>!i.classList.contains('glow')&&getComputedStyle(i).opacity>.5).pop()||im;const r=top.getBoundingClientRect();
+      const nx=(e.clientX-r.left)/r.width,ny=(e.clientY-r.top)/r.height,W=top.naturalWidth||1600,H=top.naturalHeight||1000,sc=Math.max(r.width/W,r.height/H)*3;
+      Object.assign(L.style,{left:e.clientX+'px',top:e.clientY+'px',opacity:1,backgroundImage:`url(${top.currentSrc||top.src})`,backgroundSize:`${r.width*3}px ${r.height*3}px`,backgroundPosition:`${-nx*r.width*3+85}px ${-ny*r.height*3+85}px`,filter:getComputedStyle(top).filter})});
+    host.addEventListener('pointerleave',()=>L.style.opacity=0)});
+}
+/* 11 look ticker: hover a name to re-grade the print */
+{
+  const tape=document.querySelector('.tape'),img=document.getElementById('tkimg'),nm=document.getElementById('tkname');
+  const fx=i=>['none','sepia(.35) saturate(1.2)','grayscale(1) contrast(1.2)','saturate(1.5) contrast(1.1)','hue-rotate(-15deg) saturate(1.2)','sepia(.2) hue-rotate(170deg) saturate(.7)','contrast(1.3) brightness(.9) saturate(.8)','brightness(1.08) saturate(.7) sepia(.15)'][i%8];
+  tape.querySelectorAll('button').forEach(b=>b.addEventListener('pointerenter',()=>{img.style.filter=fx(+b.dataset.i);nm.textContent=b.textContent;tape.querySelectorAll('.on').forEach(x=>x.classList.remove('on'));b.classList.add('on')}));
+  if(!reduce){const tw=gsap.to(tape,{xPercent:-50,ease:'none',duration:80,repeat:-1});tape.addEventListener('pointerenter',()=>gsap.to(tw,{timeScale:.1,duration:.6}));tape.addEventListener('pointerleave',()=>gsap.to(tw,{timeScale:1,duration:.6}))}
+}
+/* 12 split: scroll walks the divider across the 12 columns, snapping to each */
+{
+  const st={p:0},set=()=>{const c=Math.round(st.p*12)/12,x=5+c*90;document.querySelector('.split .af').style.clipPath=`inset(0 0 0 ${x}%)`;document.querySelector('.split .bar').style.left=x+'%'};
+  gsap.to(st,{p:1,ease:'none',onUpdate:set,scrollTrigger:{trigger:'.split',start:'top top',end:'+=150%',pin:true,scrub:true}});set();
+}
+/* 13 frame counter */
+{
+  const b=document.querySelector('.counter b');
+  ScrollTrigger.create({start:0,end:'max',onUpdate:s=>b.textContent=String(Math.max(1,Math.ceil(s.progress*36))).padStart(2,'0')});
+}
+/* 14 pick a floating photo up and throw it back */
+document.querySelectorAll('.tile .f').forEach(f=>{let sx,sy,on=false;
+  f.addEventListener('pointerdown',e=>{on=true;sx=e.clientX-(gsap.getProperty(f,'x')||0);sy=e.clientY-(gsap.getProperty(f,'y')||0);f.setPointerCapture(e.pointerId);gsap.killTweensOf(f);f.parentElement.style.zIndex=99});
+  f.addEventListener('pointermove',e=>{if(on)gsap.set(f,{x:e.clientX-sx,y:e.clientY-sy})});
+  f.addEventListener('pointerup',()=>{on=false;gsap.to(f,{x:0,y:0,duration:.7,ease:'expo.out'})})});
+/* 15 numbers count up; sliders drive the print */
+document.querySelectorAll('.nums .v').forEach(v=>{const n=+v.dataset.n,sm=v.querySelector('small');const o={v:0};
+  gsap.to(o,{v:n,duration:reduce?0:1.6,ease:'expo.out',snap:{v:1},onUpdate:()=>{v.firstChild.nodeValue=o.v},scrollTrigger:{trigger:v,start:'top 85%'}})});
+{
+  const im=document.getElementById('simg'),gr=document.querySelector('.nums .grain');
+  const upd=()=>{const g=+sgrain.value,w=+swarm.value,x=+sexpo.value;gr.style.opacity=g/100*.9;
+    im.style.filter=`brightness(${1+x/100}) sepia(${Math.max(0,w)/100*.6}) hue-rotate(${w<0?w*.8:0}deg) saturate(${1+Math.abs(w)/150})`;
+    document.querySelectorAll('.nums label').forEach(l=>l.querySelector('output').textContent=l.querySelector('input').value)};
+  document.querySelectorAll('.nums input').forEach(i=>i.addEventListener('input',upd));upd();
+}
+/* 16 colour index on the library */
+{
+  const sw=document.querySelector('.swatches'),board=document.querySelector('.board'),tiles=[...document.querySelectorAll('.tile')];
+  [['#b88a5a',2],['#8f8f8f',1],['#c9793c',3],['#4d6a78',5],['#2d2b28',4]].forEach(([c,fi])=>{const b=document.createElement('button');b.type='button';b.style.background=c;b.title='Filter by colour';
+    b.onclick=()=>{const on=!b.classList.contains('on');sw.querySelectorAll('button').forEach(x=>x.classList.remove('on'));board.classList.toggle('filt',on);if(on){b.classList.add('on');tiles.forEach((t,i)=>t.classList.toggle('hit',(i*5)%6===fi))}};sw.appendChild(b)});
+}
+/* 17 wordmark parts slide apart on the grid */
+if(!reduce)gsap.fromTo('.bigword span',{x:i=>(1-i)*-120},{x:0,ease:'none',scrollTrigger:{trigger:'.bigword',start:'top bottom',end:'bottom 70%',scrub:true}});
+/* 18 launch: vermilion cells fill the grid, then the app opens */
+document.querySelectorAll('a[href$="chromasmith-22.html"]').forEach(a=>a.addEventListener('click',e=>{if(reduce||e.metaKey||e.ctrlKey)return;e.preventDefault();
+  const c=document.createElement('div');c.className='cells';c.innerHTML='<i></i>'.repeat(96);document.body.appendChild(c);
+  gsap.to(c.children,{scale:1,duration:.35,ease:'power2.out',stagger:{each:.006,grid:[8,12],from:'start'},onComplete:()=>location.href=a.href})}));
+/* 19 clock */
+{const c=document.getElementById('clock'),t=()=>c.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});t();setInterval(t,15000)}
+/* 20 motion toggle */
+{const m=document.getElementById('motion');m.textContent='Motion: '+(still?'off':'on');m.onclick=()=>{try{localStorage.setItem('cs-motion',still?'on':'off')}catch(e){}location.reload()}}
 /* 5. outro lines rise */
 gsap.from('.outro .k i',{yPercent:105,stagger:.12,duration:1.2,ease:'expo.out',scrollTrigger:{trigger:'.outro',start:'top 65%'}});
 </script>
