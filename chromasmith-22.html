@@ -4040,7 +4040,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <div class="ni-add-lb">Add photos</div>
           <div class="ni-hint">Drop an image to start · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none" title="Pick photos from your Google Photos library">Google Photos…</a></div>
         </div>
-        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas" onclick="fxCanvasClick(event)"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
+        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
           <!-- Mask overlays live INSIDE fx-zoom-wrap (not fx-wrap) so they ride the exact same
                CSS transform as the canvas — glued to it by the compositor during zoom/pan with
                no per-event JS repositioning, instead of chasing getBoundingClientRect() a frame
@@ -6437,7 +6437,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928D';
+const BUILD='1.0928E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17744,7 +17744,7 @@ function initZoomPan(){
   // Drag-to-pan (CSS zoom) OR drag-to-move the loupe crop
   let pd=null;
   zw.addEventListener('pointerdown',e=>{
-    if(_wbEyedropperActive||mskPaintMode)return;
+    if(_fxEyeArmed()||mskPaintMode)return;
     e.preventDefault();pd={x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
     _fxPreviewInteracting=true;  // E1: drag-pan never set this — see the wheel handler above
@@ -17845,7 +17845,7 @@ function _fxEyeDraw(){
   _fxEyeRaf=0;const ev=_fxEyeEv;if(!ev||!_fxEyeArmed()){_fxEyeHide();return;}
   const el=ev.el,r=el.getBoundingClientRect();if(!r.width||!r.height||!el.width)return;
   const px=Math.floor((ev.x-r.left)*el.width/r.width),py=Math.floor((ev.y-r.top)*el.height/r.height);
-  if(px<0||py<0||px>=el.width||py>=el.height){_fxEyeHide();return;}
+  if(px<0||py<0||px>=el.width||py>=el.height||!fxPointerToCanvasPx({clientX:ev.x,clientY:ev.y})){_fxEyeHide();return;}  // off-photo / on the frame
   let d;try{_fxEyeCtx.clearRect(0,0,1,1);_fxEyeCtx.drawImage(el,px,py,1,1,0,0,1,1);d=_fxEyeCtx.getImageData(0,0,1,1).data;}catch(err){return;}
   if(!_fxEyeEl){
     _fxEyeEl=document.createElement('div');
@@ -17860,6 +17860,9 @@ function _fxEyeDraw(){
   _fxEyeEl.style.left=(flip?ev.x-18-w:ev.x+18)+'px';_fxEyeEl.style.top=(ev.y-34)+'px';
 }
 function _fxEyeLeave(e){_fxEyeHide();if(_fxEyeArmed())e.currentTarget.style.cursor='';}
+// Registered through fxCanvasOn (not an inline onclick on #fx-canvas) so picks also land when a
+// frame/matte is on and #fx-canvas-bd is the canvas on screen.
+fxCanvasOn('click',fxCanvasClick);
 fxCanvasOn('pointermove',_fxEyeMove);
 fxCanvasOn('pointerleave',_fxEyeLeave);
 // hide the loupe as soon as the pick lands (the mode disarms on click)
