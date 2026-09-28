@@ -2122,6 +2122,12 @@ body.sk2{--mut:var(--k-color-muted);--acc:var(--k-color-accent-a);--acc2:var(--k
 /* Brand: all-caps wordmark + logo, then the switch with more air before it. */
 body.sk2 #cs-brand-name{display:inline-flex;align-items:center;gap:10px}
 body.sk2 .sk2-mark{width:26px;height:26px;flex:none;display:block}
+/* Logo hover: the vermilion square lifts off the ink one and the light edge flashes. */
+body.sk2 .sk2-mark .sk2-mk-f{transition:transform .22s var(--k-motion-easing)}
+body.sk2 .sk2-mark .sk2-mk-l{transition:opacity .22s,stroke-width .22s}
+body.sk2 #cs-brand-name:hover .sk2-mk-f{transform:translate(2.5px,2.5px)}
+body.sk2 #cs-brand-name:hover .sk2-mk-l{opacity:1;stroke-width:1}
+@media (prefers-reduced-motion:reduce){body.sk2 .sk2-mark .sk2-mk-f{transition:none}}
 body.sk2 #cs-brand-tog{margin-left:22px}
 body.sk2 #cs-brand-tog::after{background:var(--k-color-toggle-b)}
 body.sk2.deskx{--cs-brand-w:430px}
@@ -2415,7 +2421,9 @@ body.sk2.deskx #lib-overlay:not(.full):hover .lib-card{opacity:1}
 body.sk2.deskx #lib-overlay:not(.full):hover .lib-card img{filter:none!important}
 body.sk2.deskx #lib-overlay:not(.full) #sk2-strip-n{background:var(--bg,var(--k-color-bg))!important;box-shadow:0 -1px 0 var(--bdr)}
 /* Gallery title: room for descenders (y, g, p) — it clipped at line-height .88 + overflow:hidden. */
-body.sk2 #lib-overlay #lib-grid-title .lgt-h{line-height:1.02!important;padding-bottom:.2em;margin-bottom:-.14em}
+body.sk2 #lib-overlay #lib-grid-title .lgt-h{line-height:1.02!important;padding-bottom:.2em;margin-bottom:-.14em;padding-right:.08em}
+/* The title block keeps one height while scrolling: the small line above the title always holds its space. */
+body.sk2 #lib-overlay #lib-grid-title .lgt-k,body.sk2 #lib-overlay #lib-grid-title .lgt-k:empty{display:block!important;min-height:14px;line-height:14px}
 body.sk2 #lib-overlay .lgt-m #lib-count,body.sk2 #lib-overlay .lgt-m>span{color:var(--k-color-muted)!important}
 /* Tile flags on hover: icon only; a word appears only on the flag that is set. */
 body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag:not(.on)::after{content:none}
@@ -2511,12 +2519,37 @@ body.sk2 #fx-deskbar-title.sk2-cap-hide{opacity:0!important;transition:none}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title{align-items:baseline;gap:12px}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{font-size:12px;color:var(--k-color-ink)}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
+/* Gallery/studio switch in the logo's colours: vermilion front slab, ink behind it — black on
+   paper in the gallery, white on charcoal in the studio. */
+body.sk2 #cs-brand-tog::after{background:var(--k-color-ink)!important}
+/* Gallery header: Export as a word button (it has the room), a wider search with quiet text. */
+body.sk2 #lib-overlay #lib-export-btn .lbl{display:inline!important}
+body.sk2 #lib-overlay #lib-export-btn{width:auto!important;padding:0 12px!important;gap:6px;background:var(--k-color-accent-a)!important;color:#111!important;box-shadow:none!important;height:30px}
+body.sk2 #lib-overlay #lib-export-btn svg,body.sk2 #lib-overlay #lib-export-btn svg *{stroke:#111!important}
+body.sk2 #lib-overlay #lib-top-center{flex:1 1 auto;max-width:460px;min-width:220px}
+body.sk2 #lib-overlay #lib-top-center .lib-search-wrap{width:100%!important;max-width:none!important}
+body.sk2 #lib-overlay #lib-search{color:var(--k-color-muted)!important}
+body.sk2 #lib-overlay #lib-search:focus{color:var(--k-color-ink)!important}
+body.sk2 #lib-overlay #lib-search::placeholder{color:var(--k-color-muted)!important;opacity:.8}
+/* Tiles: hover shows only the three flag icons in one quiet strip — no box round the card.
+   One caption line under the print: file name left, RAW / +n / video length right. */
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-card:hover::after{opacity:0!important}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flags{gap:0!important;background:color-mix(in srgb,var(--k-color-bg) 88%,transparent)}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag:not(.on){width:24px;height:24px;background:transparent!important;color:var(--k-color-ink)}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag:not(.on):hover{background:var(--k-color-ink)!important;color:var(--k-color-bg)}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag svg *{stroke:currentColor!important}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag svg path[fill]:not([fill=none]){fill:currentColor!important}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag.lib-fav svg{fill:currentColor!important}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-card{position:relative}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-strip-info{position:absolute!important;left:0!important;right:44px!important;bottom:0!important;height:20px;margin:0!important;padding:0!important;display:flex!important;align-items:center;background:none!important}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-strip-name{font-size:var(--sk-t5)!important;color:var(--k-color-muted)!important;padding:0!important;margin:0!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) :is(.lib-raw-badge,.lib-video-badge){top:auto!important;bottom:0!important;left:auto!important;right:0!important;height:20px!important;display:flex!important;align-items:center}
 /* Splash: dark behind the card, no white window frame. */
 html.cs-boot-tauri,html.cs-boot-tauri body{background:#141414}
 </style>
 </head>
 <body>
-<div id="cs-brand"><div id="cs-win" hidden><button id="cs-win-close" type="button" title="Close" aria-label="Close window"></button><button id="cs-win-min" type="button" title="Minimise" aria-label="Minimise window"></button><button id="cs-win-full" type="button" title="Full screen" aria-label="Toggle full screen"></button></div><span id="cs-brand-name"><svg class="sk2-mark" viewBox="18 18 64 62" aria-hidden="true"><rect x="21" y="21" width="48" height="44" fill="currentColor"/><rect x="36" y="32" width="43" height="45" fill="#ff3b1f"/><polygon points="36,32 69,32 36,65" fill="#b0200e"/><polygon points="69,32 69,65 36,65" fill="#ff7a4c"/></svg>CHRO-MA-SMITH</span><div id="cs-brand-tog" role="group" aria-label="View"><button id="cs-tog-lib" type="button" aria-label="Library">gallery</button><button id="cs-tog-studio" type="button" class="on" aria-label="Studio">studio</button></div></div>
+<div id="cs-brand"><div id="cs-win" hidden><button id="cs-win-close" type="button" title="Close" aria-label="Close window"></button><button id="cs-win-min" type="button" title="Minimise" aria-label="Minimise window"></button><button id="cs-win-full" type="button" title="Full screen" aria-label="Toggle full screen"></button></div><span id="cs-brand-name"><svg class="sk2-mark" viewBox="18 18 64 62" aria-hidden="true"><rect class="sk2-mk-b" x="21" y="21" width="48" height="44" fill="currentColor"/><g class="sk2-mk-f"><rect x="36" y="32" width="43" height="45" fill="#ff3b1f"/><clipPath id="hdm-c"><rect x="36" y="32" width="33" height="33"/></clipPath><g clip-path="url(#hdm-c)"><defs><radialGradient id="hdm-a" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdm-b" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><polygon points="36,32 69,32 36,65" fill="url(#hdm-a)"/><polygon points="69,32 69,65 36,65" fill="url(#hdm-b)"/><line class="sk2-mk-l" x1="36" y1="65" x2="69" y2="32" stroke="#fff1e0" stroke-width=".35" opacity=".8"/></g></g></svg>CHRO-MA-SMITH</span><div id="cs-brand-tog" role="group" aria-label="View"><button id="cs-tog-lib" type="button" aria-label="Library">gallery</button><button id="cs-tog-studio" type="button" class="on" aria-label="Studio">studio</button></div></div>
 <script>(function(){var b=document.body,L=document.getElementById('cs-tog-lib'),S=document.getElementById('cs-tog-studio');
 function sync(){var f=b.classList.contains('lib-full');L.classList.toggle('on',f);S.classList.toggle('on',!f);L.setAttribute('aria-pressed',f);S.setAttribute('aria-pressed',!f)}
 new MutationObserver(sync).observe(b,{attributes:true,attributeFilter:['class']});sync();
@@ -2737,6 +2770,10 @@ ready(function(){
     new MutationObserver(sync).observe(seg,{subtree:true,attributes:true,attributeFilter:['class','aria-pressed']});
     seg.insertAdjacentElement('afterend',sel);seg.classList.add('sk2-has-sel');seg._sk2sel=sel;sync();}
   document.querySelectorAll('.fx-panel .seg').forEach(mirror);
+  // Rail: no tooltip that just repeats the word already under the icon.
+  var rail=document.getElementById('fx-toolrail');
+  function untitle(){if(!rail)return;rail.querySelectorAll('.fx-rail-btn[title]').forEach(function(x){var lb=x.querySelector('.fx-rail-lb');if(lb&&x.title.trim().toLowerCase()===lb.textContent.trim().toLowerCase()){x.setAttribute('aria-label',x.title);x.removeAttribute('title')}})}
+  if(rail){untitle();new MutationObserver(untitle).observe(rail,{childList:true,subtree:true})}
   // Opening a photo: a thin progress line replaces the "Add photos" prompt instead of overlapping it.
   var ni=document.getElementById('fx-no-img');
   if(ni){var o=document.createElement('div');o.className='sk2-open';o.innerHTML='<span></span><i></i>';ni.appendChild(o);
@@ -3138,7 +3175,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
            inner div below is still built/owned by its original function (toolsBuild/viewMenuBuild/
            ovfBuild) — only the trigger button and outer dropdown are new; see settingsBuild(). -->
       <div id="fx-settings">
-        <button class="fx-db fx-db-icon" onclick="settingsToggle(event)" title="Settings — transform, edit settings, view, appearance"><span class="fx-db-ic" id="db-settings"></span></button>
+        <button class="fx-db fx-db-icon" onclick="settingsToggle(event)" title="Settings" aria-label="Settings — transform, edit settings, view, appearance"><span class="fx-db-ic" id="db-settings"></span></button>
         <!-- 2026-09-10: two-column drill-down (the approved design) — #fx-settings-cats lists
              the categories, #fx-settings-page holds all five content panes stacked but only the
              ACTIVE one visible (settingsShowCat()). Each pane is still filled by its own
@@ -6299,7 +6336,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928U';
+const BUILD='1.0928V';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
