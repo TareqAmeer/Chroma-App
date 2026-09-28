@@ -5,15 +5,16 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Chromasmith</title>
 <meta name="description" content="A whole photo studio, wherever inspiration finds you. Film looks, grain and halation — free, open source and fully offline.">
-<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;900&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
+@font-face{font-family:Gramatika;font-weight:300 500;src:url(../../vendor/fonts/gramatika/GramatikaRegular.otf) format("opentype");font-display:swap}
+@font-face{font-family:Gramatika;font-weight:600 900;src:url(../../vendor/fonts/gramatika/GramatikaBold.otf) format("opentype");font-display:swap}
 :root{--bg:#0b0b0a;--bg2:#121210;--fg:#f2efe8;--mid:#c9c5bb;--dim:#8b877e;--line:#24231f;--acc:#ff3b1f;--ease:cubic-bezier(.2,.8,.2,1)}
 ::selection{background:var(--acc);color:#0b0b0a}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--bg);color:var(--fg);font-family:"Inter Tight",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+html,body{background:var(--bg);color:var(--fg);font-family:Gramatika,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 body{overflow-x:clip}
 a{color:inherit}
-.mono{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.mono{font-family:Gramatika,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
 .k{font-size:clamp(40px,6vw,96px);font-weight:900;letter-spacing:-.045em;line-height:.9}
 .t{max-width:400px;font-size:18px;line-height:1.4;color:var(--mid);margin-top:20px}
 .btn{display:inline-flex;gap:8px;align-items:center;font-weight:600;font-size:15px;padding:14px 22px;border-radius:999px;text-decoration:none;border:1px solid var(--fg);transition:background .2s,color .2s,border-color .2s}
@@ -23,7 +24,7 @@ a{color:inherit}
 @keyframes gr{0%{transform:translate(0,0)}25%{transform:translate(-3%,2%)}50%{transform:translate(2%,-3%)}75%{transform:translate(-1%,3%)}}
 
 .top{position:fixed;z-index:50;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:14px 5vw;background:linear-gradient(rgba(11,11,10,.7),transparent)}
-.word{display:flex;align-items:center;gap:8px;font-weight:900;letter-spacing:-.03em;font-size:18px;text-decoration:none}
+.word{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.02em;font-size:15px;text-decoration:none}
 .word svg{width:34px;height:34px;transition:transform .4s var(--ease)}.word:hover svg{transform:translate(-2px,-2px)}
 .top nav a:last-child{color:var(--acc);opacity:1}
 .top nav{display:flex;gap:22px;font-size:14px;font-weight:500}
@@ -67,7 +68,7 @@ a{color:inherit}
 .lensbox canvas{position:absolute;inset:0;width:100%;height:100%}
 .lensbox .mono{position:absolute;right:14px;bottom:12px;color:var(--fg);mix-blend-mode:difference}
 .looks{display:flex;gap:6px;flex-wrap:wrap;margin-top:24px}
-.looks button{background:none;border:1px solid #3a3833;color:var(--fg);font:600 13px "Inter Tight";padding:9px 14px;border-radius:999px;cursor:pointer}
+.looks button{background:none;border:1px solid #3a3833;color:var(--fg);font:600 13px Gramatika;padding:9px 14px;border-radius:999px;cursor:pointer}
 .looks button.on{background:var(--acc);border-color:var(--acc);color:#0b0b0a}
 .p4{width:100vw;padding:0;overflow:hidden}
 .p4>img{position:absolute;inset:0;width:108%;height:100%;object-fit:cover;left:-4%}
@@ -110,7 +111,7 @@ a{color:inherit}
 .idx aside{position:sticky;top:12vh;align-self:start}
 .idx aside ol{list-style:none;margin-top:6vh;display:grid;gap:6px}
 .idx aside a{text-decoration:none;display:flex;gap:12px;align-items:baseline;font-size:clamp(17px,1.6vw,23px);font-weight:600;color:#4a4740;transition:color .25s,transform .25s}
-.idx aside a small{font:11px "JetBrains Mono";width:22px}
+.idx aside a small{font:11px Gramatika;width:22px}
 .idx aside a.on small{color:var(--acc)}.idx aside a.on{color:var(--fg);transform:translateX(10px)}
 .group{padding-bottom:10vh}
 .group h3{font-size:clamp(28px,3vw,44px);font-weight:900;letter-spacing:-.04em;padding-bottom:18px;border-bottom:2px solid var(--acc)}
@@ -143,19 +144,21 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 .intro{position:fixed;inset:0;z-index:100;background:var(--bg);display:grid;place-items:center}
 .intro .in{display:flex;flex-direction:column;align-items:center;gap:22px}
 .intro svg{width:min(34vw,220px);height:auto;overflow:visible}
-.intro .name{font-size:clamp(48px,11vw,190px);font-weight:900;letter-spacing:-.055em;line-height:.85;display:flex;overflow:hidden;padding-bottom:.06em}
+.intro .name{font-size:clamp(40px,9vw,160px);font-weight:800;letter-spacing:-.04em;line-height:.85;display:flex;overflow:hidden;padding-bottom:.06em}
 .intro .name span{display:block}
 .intro .tag{color:var(--acc)}
+.intro .cue{position:absolute;bottom:6vh;left:0;right:0;text-align:center;opacity:0;animation:bob 2s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(6px)}}
 .intro .curtain{position:absolute;inset:0;background:var(--acc);transform:scaleY(0);transform-origin:bottom}
 body.lock{overflow:hidden}
-@media (prefers-reduced-motion:reduce){.grain{animation:none}.intro{display:none}}
+@media (prefers-reduced-motion:reduce){.grain{animation:none}}
 </style>
 </head>
 <body class="lock">
-<div class="intro" aria-hidden="true"><div class="in"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="inc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="ina" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="inb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#inc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#ina)"/><polygon points="69,32 69,65 36,65" fill="url(#inb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg><div class="name"><span>C</span><span>h</span><span>r</span><span>o</span><span>m</span><span>a</span><span>s</span><span>m</span><span>i</span><span>t</span><span>h</span></div><p class="mono tag">A darkroom that lives anywhere</p></div><div class="curtain"></div></div>
+<div class="intro" aria-hidden="true"><div class="in"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="inc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="ina" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="inb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#inc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#ina)"/><polygon points="69,32 69,65 36,65" fill="url(#inb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg><div class="name"><span>C</span><span>H</span><span>R</span><span>O</span><span>-</span><span>M</span><span>A</span><span>-</span><span>S</span><span>M</span><span>I</span><span>T</span><span>H</span></div><p class="mono tag">A darkroom that lives anywhere</p></div><p class="mono cue">Scroll to enter ↓</p><div class="curtain"></div></div>
 
 <header class="top">
-  <a class="word" href="#"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="hdc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="hda" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#hdc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#hda)"/><polygon points="69,32 69,65 36,65" fill="url(#hdb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg>Chromasmith</a>
+  <a class="word" href="#"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="hdc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="hda" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#hdc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#hda)"/><polygon points="69,32 69,65 36,65" fill="url(#hdb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg>CHRO-MA-SMITH</a>
   <nav><a href="#maker">Story</a><a href="#beta">Beta</a><a href="#index">Features</a><a href="../../chromasmith-22.html">Launch app ↗</a></nav>
 </header>
 
@@ -377,24 +380,35 @@ const dist=()=>tr.scrollWidth-innerWidth;
 const heroIn=()=>{gsap.from('.hero-t',{yPercent:40,opacity:0,duration:1.4,ease:'expo.out'});gsap.from('.ph',{scale:.85,opacity:0,duration:1.4,ease:'expo.out',delay:.15});
   gsap.from('.top',{yPercent:-100,opacity:0,duration:1,ease:'expo.out',delay:.3})};
 const intro=document.querySelector('.intro');
-if(matchMedia('(prefers-reduced-motion: reduce)').matches||sessionStorage.getItem('cs-intro')){intro.remove();document.body.classList.remove('lock');heroIn()}
+if(matchMedia('(prefers-reduced-motion: reduce)').matches){gsap.to(intro,{opacity:0,delay:1.2,duration:.5,onComplete(){intro.remove();document.body.classList.remove('lock')}})}
 else{
-  try{sessionStorage.setItem('cs-intro','1')}catch(e){}
   scrollTo(0,0);lenis&&(lenis.scrollTo(0,{immediate:true,force:true}),lenis.stop());
   gsap.set('.intro .name span',{yPercent:110});gsap.set('.intro .tag',{opacity:0});
-  gsap.timeline({defaults:{ease:'expo.out'},onComplete(){intro.remove();document.body.classList.remove('lock');lenis&&lenis.start()}})
+  const done=()=>{intro.remove();document.body.classList.remove('lock');lenis&&lenis.start()};
+  // part 1 plays on load, then holds on the name until the visitor scrolls
+  gsap.timeline({defaults:{ease:'expo.out'},onComplete:armExit})
     .from('.intro .ink',{x:-10,opacity:0,duration:.7})                       // ink plate slides into register
     .from('.intro .ver',{y:10,opacity:0,duration:.7},.3)                      // vermilion plate lands on it
     .from('.intro .expo',{scale:0,duration:.9},1)                             // light exposes the overlap
     .from('.intro .seam',{attr:{'stroke-dashoffset':46.67},duration:.6},1.1)
     .to('.intro .name span',{yPercent:0,stagger:.035,duration:.9},1.2)        // then the name
     .to('.intro .tag',{opacity:1,duration:.6},1.7)
-    .to('.intro .curtain',{scaleY:1,duration:.7,ease:'expo.inOut'},2.6)       // vermilion curtain rises
-    .set('.intro .in',{opacity:0})
-    .add(()=>{scrollTo(0,0);lenis&&lenis.scrollTo(0,{immediate:true,force:true});ScrollTrigger.refresh()})   // hidden behind the curtain
-    .to('.intro .curtain',{scaleY:0,transformOrigin:'top',duration:.7,ease:'expo.inOut'})
-    .set('.intro',{background:'transparent'},'<')
-    .add(heroIn,'<.1');
+    .to('.intro .cue',{opacity:1,duration:.6},2.2);
+  // part 2: the first scroll, swipe or key lifts the vermilion curtain
+  function armExit(){
+    const evs=['wheel','touchmove','keydown','pointerdown'];
+    const go=e=>{if(e.type==='keydown'&&!['ArrowDown','PageDown',' ','Enter','Spacebar'].includes(e.key))return;
+      evs.forEach(t=>removeEventListener(t,go));
+      gsap.timeline({onComplete:done})
+        .to('.intro .curtain',{scaleY:1,duration:.7,ease:'expo.inOut'})
+        .set('.intro .in,.intro .cue',{opacity:0})
+        .add(()=>{scrollTo(0,0);lenis&&lenis.scrollTo(0,{immediate:true,force:true});ScrollTrigger.refresh()})
+        .to('.intro .curtain',{scaleY:0,transformOrigin:'top',duration:.7,ease:'expo.inOut'})
+        .set('.intro',{background:'transparent'},'<')
+        .add(heroIn,'<.1');
+    };
+    evs.forEach(t=>addEventListener(t,go,{passive:true}));
+  }
 }
 const tl=gsap.timeline({scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*3+dist()),scrub:1,invalidateOnRefresh:true}});
 tl.to('.scrollcue',{opacity:0,duration:.1})
