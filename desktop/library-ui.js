@@ -4682,6 +4682,7 @@
       const url = URL.createObjectURL(blob);
       thumbBlobUrls.set(path, url);
       img.src = url;
+      img.dataset.canvasThumb = '1'; img.style.transform = '';
       if (prev) URL.revokeObjectURL(prev);
       // Drop the loader's cached copy too, or the next time this card is re-mounted by a scroll
       // the cache would paint the PRE-edit thumbnail straight back over this one.
@@ -5635,6 +5636,7 @@
   let selectAnchor = -1;
   function updateCardSelClasses() {
     grid.querySelectorAll('.lib-card').forEach((c) => c.classList.toggle('multi', state.selected.has(c.dataset.path)));
+    if (typeof syncSelCount === 'function') syncSelCount();
     // Real bug found while capturing lib-batchbar (S6d chunk C): this ran on every click-driven
     // selection change but never called renderBatchBar(), which only fired from a full
     // renderGridTail(). So ⌘/shift-clicking to build a multi-selection never showed the batch
@@ -6037,6 +6039,84 @@
       if (p === state.openedPath) { try { applyUISnapshot(snapshotFromB64(recipe)); fxUpdate(); } catch (e) { console.error('paste edit', e); } }
     }));
   }
+  // ── Rotate/flip on stored recipes (unopened photos). Pure mirror of chromasmith-22.html's
+  // geomRotate/geomFlip + _cropRot90 + mskRemapForGeom, applied to a snapshot instead of the
+  // live editor item. Keep the two in step if either changes.
+  function geomOpOnSnap(snap, op) {
+    const g = snap.geom ? { ...snap.geom } : { rot: 0, flipH: false, flipV: false, angle: 0, crop: null };
+    const remap = (kind) => {
+      const f = kind === 'cw' ? (x, y) => [1 - y, x] : kind === 'ccw' ? (x, y) => [y, 1 - x] : kind === 'mx' ? (x, y) => [1 - x, y] : (x, y) => [x, 1 - y];
+      (snap.masks || []).forEach((m) => {
+        if (m.type === 'radial') {
+          [m.cx, m.cy] = f(m.cx, m.cy);
+          if (kind === 'cw' || kind === 'ccw') { const t = m.rx; m.rx = m.ry; m.ry = t; } else if (m.rot) m.rot = -m.rot;
+        } else if (m.type === 'linear') {
+          [m.x0, m.y0] = f(m.x0, m.y0); [m.x1, m.y1] = f(m.x1, m.y1);
+        }
+      });
+    };
+    if (op.rot) {
+      g.rot = ((((g.rot || 0) + op.rot) % 360) + 360) % 360;
+      const n = (((op.rot % 360) + 360) % 360) / 90;
+      for (let i = 0; i < n; i++) {
+        const c = g.crop;
+        if (c) g.crop = { x: 1 - (c.y + c.h), y: c.x, w: c.h, h: c.w };
+        remap('cw');
+      }
+    } else if (op.flip) {
+      const ax = op.flip;
+      if (ax === 'h') g.flipH = !g.flipH; else g.flipV = !g.flipV;
+      const sw = g.rot === 90 || g.rot === 270;
+      const horiz = (ax === 'h') !== sw;
+      if (g.crop) { const c = g.crop; g.crop = horiz ? { x: 1 - (c.x + c.w), y: c.y, w: c.w, h: c.h } : { x: c.x, y: 1 - (c.y + c.h), w: c.w, h: c.h }; }
+      remap(horiz ? 'mx' : 'my');
+    }
+    snap.geom = g;
+    return snap;
+  }
+  async function libGeomOp(paths, op) {
+    if (!paths.length) return;
+    await Promise.all(paths.map(async (p) => {
+      if (p === state.openedPath && typeof window.geomRotate === 'function') {
+        if (op.rot) window.geomRotate(op.rot); else window.geomFlip(op.flip);
+        return;
+      }
+      const cur = await getSidecar(p);
+      let snap;
+      try {
+        snap = cur.recipe ? snapshotFromB64(cur.recipe)
+          : (typeof _fxPristineDefault !== 'undefined' && _fxPristineDefault) ? JSON.parse(JSON.stringify(_fxPristineDefault)) : {};
+      } catch (e) { toast(`Couldn't read the edit for ${baseName(p)}`, 'err'); return; }
+      const recipe = snapshotToB64(geomOpOnSnap(snap, op));
+      const updated = { ...cur, edited: true, recipe };
+      state.sidecars.set(p, updated);
+      await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe }).catch((e) => sidecarWriteFailed(p, cur, e));
+      markCardEdited(p);
+      const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(p)}"]`);
+      const img = card && card.querySelector('.lib-thumb-wrap img');
+      if (img) { delete img.dataset.canvasThumb; applyThumbGeom(img, p); }
+    }));
+  }
+  // Disk thumbnails are the unedited camera image, so a stored rotation/flip is shown with a CSS
+  // transform (flip in source space, then rotate — same order as the editor). Canvas-refreshed
+  // thumbs (refreshCardThumbFromCanvas) are already oriented and get no transform.
+  const thumbGeomCache = new Map(); // recipe b64 -> transform string
+  function thumbGeomTransform(recipe) {
+    if (!recipe) return '';
+    if (thumbGeomCache.has(recipe)) return thumbGeomCache.get(recipe);
+    let t = '';
+    try {
+      const g = snapshotFromB64(recipe).geom;
+      if (g && (g.rot || g.flipH || g.flipV)) t = `rotate(${g.rot || 0}deg) scale(${g.flipH ? -1 : 1},${g.flipV ? -1 : 1})`;
+    } catch (e) {}
+    if (thumbGeomCache.size > 2000) thumbGeomCache.clear();
+    thumbGeomCache.set(recipe, t);
+    return t;
+  }
+  function applyThumbGeom(img, path) {
+    if (!img || img.dataset.canvasThumb) return;
+    img.style.transform = thumbGeomTransform((state.sidecars.get(path) || {}).recipe);
+  }
   async function libResetEdit(paths) {
     if (!paths.length) return;
     const n = paths.length;
@@ -6280,22 +6360,16 @@
     rateMenu.subItem(allFavorited ? '♥ Remove from favorites' : '♡ Add to favorites',
       () => Promise.all(paths.map((p) => setFavorite(p, !allFavorited))));
 
-    // ── Rotate & flip ▸ — reuses the SAME geomRotate/geomFlip (chromasmith-22.html) the Tools
-    // menu and crop panel already call; geometry is per-photo, LIVE editor state (curItem().geom),
-    // not something a closed photo's sidecar can carry on its own without first being opened and
-    // given a full recipe snapshot. Scoped to exactly one CURRENTLY OPEN photo for that reason —
-    // dimmed rather than hidden otherwise, same "don't hide, dim" convention as the merge/paste
-    // rows below (§10.13: a permanently hidden control is a permanently unaudited one).
+    // ── Rotate & flip ▸ — the OPEN photo goes through the editor's own geomRotate/geomFlip
+    // (chromasmith-22.html: history, crop/mask remap, autosave); every other selected photo gets
+    // the same transform applied to its stored recipe's `geom` via libGeomOp (same per-path
+    // sidecar write loop as libPasteEdit), so opening it later restores the rotation through
+    // applyUISnapshot like any other saved edit. Works on a multi-selection.
     const rotFlipMenu = submenu('Rotate &amp; flip');
-    const rotFlipUsable = n === 1 && paths[0] === state.openedPath && typeof window.geomRotate === 'function';
-    const rotCwItem = rotFlipMenu.subItem('Rotate 90° CW', () => window.geomRotate(90));
-    const rotCcwItem = rotFlipMenu.subItem('Rotate 90° CCW', () => window.geomRotate(-90));
-    const flipHItem = rotFlipMenu.subItem('Flip horizontal', () => window.geomFlip('h'));
-    const flipVItem = rotFlipMenu.subItem('Flip vertical', () => window.geomFlip('v'));
-    if (!rotFlipUsable) {
-      [rotCwItem, rotCcwItem, flipHItem, flipVItem].forEach((el) => { el.style.opacity = '.4'; el.style.pointerEvents = 'none'; });
-      rotFlipMenu.row.title = 'Open this photo in the editor first — rotation is live editor state, not yet stored per unopened photo.';
-    }
+    rotFlipMenu.subItem('Rotate 90° CW', () => libGeomOp(paths, { rot: 90 }));
+    rotFlipMenu.subItem('Rotate 90° CCW', () => libGeomOp(paths, { rot: -90 }));
+    rotFlipMenu.subItem('Flip horizontal', () => libGeomOp(paths, { flip: 'h' }));
+    rotFlipMenu.subItem('Flip vertical', () => libGeomOp(paths, { flip: 'v' }));
 
     // ── Versions & edit ▸ — copy/paste/virtual copies/reset, everything about the RECIPE
     // rather than the file itself.
@@ -6789,6 +6863,7 @@
       // stay the RAW leader — the plan's explicit split between "what you look at" and "what
       // opening/editing/rating acts on".
       loadThumb(entry.thumb_path || entry.path, img, entry.is_video, entry.mtime);
+      if (!entry.thumb_path || entry.thumb_path === entry.path) applyThumbGeom(img, entry.path);
       const _tw = card.querySelector('.lib-thumb-wrap');
       _tw.onclick = (e) => handleCardClick(e, entry, idx, shown);
       card.querySelector('.lib-thumb-wrap').ondblclick = (e) => { e.stopPropagation(); handleCardDblClick(e, entry); };
@@ -7176,9 +7251,11 @@
       picked ? chip('flagGreen', picked) : '',
       favorited ? chip('heart', favorited) : '',
     ].filter(Boolean).join('');
-    if (state.selected.size) {
-      selEl.textContent = `${state.selected.size} selected`;
-    } else selEl.textContent = '';
+    syncSelCount();
+  }
+  function syncSelCount() {
+    const selEl = document.getElementById('lib-status-sel');
+    if (selEl) selEl.textContent = state.selected.size ? `${fmtN(state.selected.size)} selected` : '';
   }
 
   /// Everything renderGrid did AFTER the cards: empty states, counts, selection chrome.
@@ -7213,9 +7290,8 @@
       const openBtn = document.getElementById('lib-empty-open');
       if (openBtn) openBtn.onclick = () => { const b = document.getElementById('lib-pick'); if (b) b.click(); };
     }
-    document.getElementById('lib-count').textContent = state.selected.size
-      ? `${fmtN(state.selected.size)} selected — ${fmtN(shown.length)} of ${fmtN(state.entries.length)} ${state.entries.length === 1 ? 'photo' : 'photos'}`
-      : `${fmtN(shown.length)} of ${fmtN(state.entries.length)} ${state.entries.length === 1 ? 'photo' : 'photos'}`;
+    // The selection count lives once, in #lib-status-sel (kept live by syncSelCount) — not repeated here.
+    document.getElementById('lib-count').textContent = `${fmtN(shown.length)} of ${fmtN(state.entries.length)} ${state.entries.length === 1 ? 'photo' : 'photos'}`;
     if (typeof syncFilterUI === 'function') syncFilterUI();
   }
 
@@ -12223,6 +12299,7 @@
         if (hit) set.add(key); else if (!add) set.delete(key);
         c.classList.toggle('multi', set.has(key));
       });
+      if (typeof syncSelCount === 'function') syncSelCount();
     });
     document.addEventListener('pointerup', () => {
       // A plain click (no drag) that started on empty grid background clears the selection —
