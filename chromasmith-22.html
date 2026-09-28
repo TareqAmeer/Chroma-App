@@ -2562,6 +2562,9 @@ body.sk2.deskx #lib-overlay:not(.full) #lib-grid:not(.list-view) :is(.lib-raw-ba
 /* Light-stage histogram: folded by default, full panel width. */
 body.sk2 .sk2-hist{display:none;margin:4px 0 10px}
 body.sk2 .fx-panel:has(.fx-ctrl.sec-active[data-fxsec="adjust"]) .sk2-hist{display:block}
+body.sk2.sk2-hist-pin .fx-panel>.sk2-hist{display:block!important;position:sticky;top:0;z-index:5;background:var(--bg,#111);margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--bdr)}
+body.sk2.sk2-hist-pin .sk2-hist>summary{cursor:default}body.sk2.sk2-hist-pin .sk2-hist>summary::after{content:''}
+body.sk2 .sk2-hist canvas{touch-action:none}
 body.sk2 .sk2-hist .sk2h-box{position:relative;margin-top:8px}
 body.sk2 .sk2-hist canvas{display:block;width:100%;height:80px;cursor:crosshair}
 body.sk2 .sk2h-clip{position:absolute;top:0;width:0;height:0;padding:0;border:6px solid transparent;background:none;cursor:pointer;opacity:.35}
@@ -2831,18 +2834,37 @@ ready(function(){
       var t=draw._t||(draw._t=document.createElement('canvas'));var k=Math.min(1,480/Math.max(src.width,src.height));t.width=Math.max(1,src.width*k|0);t.height=Math.max(1,src.height*k|0);
       var x=t.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,t.width,t.height);var px=x.getImageData(0,0,t.width,t.height).data;
       var r=new Float32Array(256),gg=new Float32Array(256),bb=new Float32Array(256),l=new Float32Array(256),lo=0,hi=0,n=px.length/4;
-      for(var i=0;i<px.length;i+=4){var R=px[i],G=px[i+1],B=px[i+2];r[R]++;gg[G]++;bb[B]++;l[(R*.2126+G*.7152+B*.0722+.5)|0]++;if(R<=1&&G<=1&&B<=1)lo++;if(R>=254||G>=254||B>=254)hi++}
+      var ov=fxClipCode()>0&&fxClipCode()<4;for(var i=0;i<px.length;i+=4){var R=px[i],G=px[i+1],B=px[i+2];
+        // The clipping overlay paints flat blue/red over the photo; read those back as clipped black/white.
+        if(ov){if(B>=250&&G>=105&&G<=125&&R>=55&&R<=75)R=G=B=0;else if(R>=250&&G>=50&&G<=68&&B>=24&&B<=40)R=G=B=255}r[R]++;gg[G]++;bb[B]++;l[(R*.2126+G*.7152+B*.0722+.5)|0]++;if(R<=1&&G<=1&&B<=1)lo++;if(R>=254||G>=254||B>=254)hi++}
       // Peak ignores the two end bins so a clipped spike does not flatten the rest; sqrt keeps thin tones visible.
       var pk=1;[r,gg,bb,l].forEach(function(a){for(var i=0;i<256;i++)a[i]=Math.sqrt(a[i]);for(i=2;i<254;i++)if(a[i]>pk)pk=a[i]});
       H={r:r,g:gg,b:bb,l:l,pk:pk*1.05,n:n,raw:l,lo:lo/n*100,hi:hi/n*100,z:H&&H.z};
-      cLo.classList.toggle('on',H.lo>0.1);cHi.classList.toggle('on',H.hi>0.1);var gw=typeof fxGamutWarn!=='undefined'&&fxGamutWarn;cLo.classList.toggle('act',gw);cHi.classList.toggle('act',gw);
+      cLo.classList.toggle('on',H.lo>0.1);cHi.classList.toggle('on',H.hi>0.1);var gw=typeof fxGamutWarn!=='undefined'&&fxGamutWarn;cLo.classList.toggle('act',gw||fxClipLo);cHi.classList.toggle('act',gw||fxClipHi);
       paint();if(!H.z)idle()};
-    [cLo,cHi].forEach(function(bt){bt.addEventListener('click',function(e){e.stopPropagation();if(typeof toggleGamutWarn==='function'){toggleGamutWarn();draw()}})});
-    cv.addEventListener('mousemove',function(e){if(!H)return;var rc=cv.getBoundingClientRect(),v=Math.max(0,Math.min(255,Math.round((e.clientX-rc.left)/rc.width*255)));
+    cLo.addEventListener('click',function(e){e.stopPropagation();fxClipLo=!fxClipLo;renderPreview();draw()});
+    cHi.addEventListener('click',function(e){e.stopPropagation();fxClipHi=!fxClipHi;renderPreview();draw()});
+    // Drag a zone left/right to move its Basic slider (Lightroom-style); midtones = Exposure.
+    var SL=['sl-adj-bl','sl-adj-sh','sl-adj-exp','sl-adj-hi','sl-adj-wh'],drag=null;
+    cv.addEventListener('pointerdown',function(e){if(!H||!H.z)return;var el=document.getElementById(SL[H.z-1]);if(!el)return;drag={el:el,x:e.clientX,v:+el.value,z:H.z};cv.setPointerCapture(e.pointerId);e.preventDefault()});
+    cv.addEventListener('pointermove',function(e){if(!drag)return;var w=cv.getBoundingClientRect().width||200,nv=Math.max(-100,Math.min(100,Math.round(drag.v+(e.clientX-drag.x)/w*200)));
+      if(nv!=drag.el.value){drag.el.value=nv;drag.el.dispatchEvent(new Event('input',{bubbles:true}))}rv.textContent=ZN[drag.z-1][2].replace('Midtones','Exposure')+'  '+(nv>0?'+':'')+nv});
+    var end=function(){if(!drag)return;drag.el.dispatchEvent(new Event('change',{bubbles:true}));drag=null};cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
+    cv.addEventListener('mousemove',function(e){if(!H||drag)return;var rc=cv.getBoundingClientRect(),v=Math.max(0,Math.min(255,Math.round((e.clientX-rc.left)/rc.width*255)));
       var zi=0;ZN.forEach(function(z,j){if(v>=z[0]&&v<z[1])zi=j+1});var z=ZN[zi-1],cnt=0;for(var i=z[0];i<z[1];i++)cnt+=H.l[i]*H.l[i];
       H.z=zi;rz.textContent=z[2];rv.textContent=Math.round(v/2.55)+'%  ·  '+Math.round(cnt/H.n*100)+'% of photo';paint()});
-    cv.addEventListener('mouseleave',function(){if(H){H.z=0;paint();idle()}});
+    cv.addEventListener('mouseleave',function(){if(H&&!drag){H.z=0;paint();idle()}});
     if(window.ResizeObserver)new ResizeObserver(function(){if(d.open)paint()}).observe(box);
+    // Settings > View > "Pin histogram": its own always-open section at the top of every stage.
+    var home=adj,PK='cs.histPin';
+    window.sk2HistPinned=function(){try{return localStorage.getItem(PK)==='1'}catch(e){return false}};
+    var pinApply=function(){var on=sk2HistPinned(),pn=adj.closest('.fx-panel');b.classList.toggle('sk2-hist-pin',on);
+      if(on&&pn){var hd=pn.querySelector(':scope>.sk2-in'),nv=hd&&hd.nextElementSibling&&hd.nextElementSibling.tagName==='NAV'?hd.nextElementSibling:null,af=nv||hd;
+        pn.insertBefore(d,af?af.nextSibling:pn.firstChild);d.style.top=((af?(parseFloat(getComputedStyle(af).top)||0)+af.offsetHeight:0)|0)+'px';d.open=true}
+      else{d.style.top='';home.parentNode.insertBefore(d,home);}draw()};
+    window.sk2HistPinToggle=function(){try{localStorage.setItem(PK,sk2HistPinned()?'0':'1')}catch(e){}pinApply()};
+    d.querySelector('summary').addEventListener('click',function(e){if(sk2HistPinned())e.preventDefault()});
+    if(sk2HistPinned())pinApply();
     d.addEventListener('toggle',draw);
     var rp=window.renderPreview;if(typeof rp==='function'){window.renderPreview=function(){var r=rp.apply(this,arguments);if(d.open&&!q)q=requestAnimationFrame(draw);return r};}}
   // Rail: no tooltip that just repeats the word already under the icon.
@@ -6411,7 +6433,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928B';
+const BUILD='1.0928C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8323,7 +8345,13 @@ void main(){
   // site), so the "lut" FBO is RGBA16F while this toggle is on and basicAdjust/curves/masks
   // clipping is caught here too, not just clipping introduced after the lut pass. Falls back to
   // the old 8-bit-only scope silently on hardware without EXT_color_buffer_float (_hdrSupported()).
-  if(gamutWarn>0.5&&(any(lessThan(res,vec3(0.0)))||any(greaterThan(res,vec3(1.0))))){
+  if(gamutWarn>0.5&&gamutWarn<3.5){
+    bool cHi=gamutWarn>1.5&&any(greaterThanEqual(res,vec3(0.998)));
+    bool cLo=(gamutWarn<1.5||gamutWarn>2.5)&&all(lessThanEqual(res,vec3(0.004)));
+    if(cHi){o=vec4(1.0,0.23,0.12,1.0);return;}
+    if(cLo){o=vec4(0.25,0.45,1.0,1.0);return;}
+  }
+  if(gamutWarn>3.5&&(any(lessThan(res,vec3(0.0)))||any(greaterThan(res,vec3(1.0))))){
     float stripe=mod(floor((gl_FragCoord.x+gl_FragCoord.y)/4.0),2.0);
     o=vec4(vec3(stripe),1.0);return;
   }
@@ -9032,7 +9060,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     gl.uniform1f(ul('seed'),seedForFrame);
     gl.uniform1f(ul('debug'),P.debug||0);
     gl.uniform1f(ul('vigAmt'),P.vignette||0);
-    gl.uniform1f(ul('gamutWarn'),(opts&&opts.gamutWarn)?1:0);
+    gl.uniform1f(ul('gamutWarn'),(opts&&opts.gamutWarn)?(opts.gamutWarn===true?4:+opts.gamutWarn):0);
     // TPDF dither at final quantization — masks 8-bit banding from a hard S-curve/LUT on
     // low-bit-depth (4:2:0 video) source. Off by default (useDither=0 → the shader adds
     // nothing) so every still golden is untouched; keyed on the SAME per-frame seed as grain
@@ -17399,6 +17427,10 @@ function fxScopeModeChanged(v){fxScopeMode=v;drawHistogram();}
 // appear in an exported file by construction). Scoped small on purpose: a per-pixel "this would
 // clip on any channel" zebra overlay, not a full ICC soft-proof simulation.
 let fxGamutWarn=false;
+// Histogram clipping overlay: blue = crushed shadows, red = blown highlights, toggled separately
+// from the histogram's corner triangles. Shares the gamutWarn uniform: 1 lo, 2 hi, 3 both, 4 zebra.
+let fxClipLo=false,fxClipHi=false;
+function fxClipCode(){return fxGamutWarn?4:(fxClipLo?1:0)+(fxClipHi?2:0)}
 function toggleGamutWarn(){
   fxGamutWarn=!fxGamutWarn;
   const btn=document.getElementById('btn-gamut-warn');
@@ -17786,6 +17818,48 @@ function fxCanvasClick(e){
   if(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive){pcEyedropperClick(e);return;}
   if(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive){mskCrEyedropperClick(e);return;}
 }
+// ── Eyedropper hover: pipette cursor + live colour loupe ─────────────────────────────────────
+// While any pick mode is armed, the cursor becomes a pipette (hotspot at its tip) and a small
+// swatch follows it showing the colour under the tip (read from the canvas actually on screen,
+// i.e. what the user sees) with its hex — the way Photoshop/Lightroom/Figma pickers behave.
+function _fxEyeArmed(){
+  return !!(_wbEyedropperActive||(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive)
+    ||(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive));
+}
+const _FX_EYE_CURSOR='url("data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linejoin="round" stroke-linecap="round"><path d="M4 20l1-4 9-9 3 3-9 9Z M13 4l7 7M17 3l4 4-3 3-4-4Z" stroke="#fff" stroke-width="3.5"/><path d="M4 20l1-4 9-9 3 3-9 9Z M13 4l7 7M17 3l4 4-3 3-4-4Z" stroke="#000" stroke-width="1.6"/></svg>')+'") 3 21, crosshair';
+let _fxEyeEl=null,_fxEyeRaf=0,_fxEyeEv=null;
+const _fxEyeTc=document.createElement('canvas');_fxEyeTc.width=_fxEyeTc.height=1;
+const _fxEyeCtx=_fxEyeTc.getContext('2d',{willReadFrequently:true});
+function _fxEyeHide(){if(_fxEyeEl)_fxEyeEl.style.display='none';}
+function _fxEyeMove(e){
+  if(!_fxEyeArmed()){_fxEyeHide();if(e.currentTarget.style.cursor===_FX_EYE_CURSOR)e.currentTarget.style.cursor='';return;}
+  e.currentTarget.style.cursor=_FX_EYE_CURSOR;
+  _fxEyeEv={x:e.clientX,y:e.clientY,el:e.currentTarget};
+  if(!_fxEyeRaf)_fxEyeRaf=requestAnimationFrame(_fxEyeDraw);
+}
+function _fxEyeDraw(){
+  _fxEyeRaf=0;const ev=_fxEyeEv;if(!ev||!_fxEyeArmed()){_fxEyeHide();return;}
+  const el=ev.el,r=el.getBoundingClientRect();if(!r.width||!r.height||!el.width)return;
+  const px=Math.floor((ev.x-r.left)*el.width/r.width),py=Math.floor((ev.y-r.top)*el.height/r.height);
+  if(px<0||py<0||px>=el.width||py>=el.height){_fxEyeHide();return;}
+  let d;try{_fxEyeCtx.clearRect(0,0,1,1);_fxEyeCtx.drawImage(el,px,py,1,1,0,0,1,1);d=_fxEyeCtx.getImageData(0,0,1,1).data;}catch(err){return;}
+  if(!_fxEyeEl){
+    _fxEyeEl=document.createElement('div');
+    _fxEyeEl.style.cssText='position:fixed;z-index:9999;pointer-events:none;display:none;align-items:center;gap:6px;padding:3px 7px 3px 3px;border-radius:14px;background:rgba(20,20,20,.88);color:#fff;font:11px/1 ui-monospace,Menlo,monospace;box-shadow:0 2px 8px rgba(0,0,0,.4)';
+    _fxEyeEl.innerHTML='<span style="width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.5)"></span><span></span>';
+    document.body.appendChild(_fxEyeEl);
+  }
+  const hex='#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+  _fxEyeEl.firstChild.style.background=hex;_fxEyeEl.lastChild.textContent=hex;
+  _fxEyeEl.style.display='flex';
+  const w=_fxEyeEl.offsetWidth,flip=ev.x+18+w>innerWidth;
+  _fxEyeEl.style.left=(flip?ev.x-18-w:ev.x+18)+'px';_fxEyeEl.style.top=(ev.y-34)+'px';
+}
+function _fxEyeLeave(e){_fxEyeHide();if(_fxEyeArmed())e.currentTarget.style.cursor='';}
+fxCanvasOn('pointermove',_fxEyeMove);
+fxCanvasOn('pointerleave',_fxEyeLeave);
+// hide the loupe as soon as the pick lands (the mode disarms on click)
+fxCanvasOn('click',()=>setTimeout(()=>{if(!_fxEyeArmed()){_fxEyeHide();const bd=document.getElementById('fx-canvas-bd');if(bd&&bd.style.cursor===_FX_EYE_CURSOR)bd.style.cursor='';}},0));
 let _wbEyedropperActive=false;
 function wbEyedropper(){
   _wbEyedropperActive=!_wbEyedropperActive;
@@ -18742,7 +18816,7 @@ function renderLoupe(){
     bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
   const REF=FXR.CAL.refWidth;
   FX.setImage(crop);
-  FX.render(P,outW,outH,{glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxGamutWarn,
+  FX.render(P,outW,outH,{glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]}); // export-scale grain & glow
   FX.setImage(fxWork);                                              // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
@@ -18857,7 +18931,7 @@ function renderFullResCrop(P,iw,ih,cw,ch){
   crop.getContext('2d').drawImage(src,cropX,cropY,cropW,cropH,0,0,cropW,cropH);
   const REF=FXR.CAL.refWidth;
   FX.setImage(crop);
-  FX.render(P,outW,outH,{glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxGamutWarn,
+  FX.render(P,outW,outH,{glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),
     uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]});
   FX.setImage(fxWork);
   // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region
@@ -19030,7 +19104,7 @@ function renderPreview(){
   // "before" snapshot, so the processed frame has to be drawn again afterwards. Rendering it
   // here as well meant split view paid for the graded frame TWICE on every single preview
   // update. Only render it up front when we are not about to throw it away.
-  if(!fxSplit)FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxGamutWarn,...seedOpt});
+  if(!fxSplit)FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),...seedOpt});
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   document.getElementById('fx-no-img').style.display='none';
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
@@ -19038,7 +19112,7 @@ function renderPreview(){
     const origCv=document.getElementById('fx-canvas-orig');
     renderSnapshotTo(origCv,resolveSplitSnapshot(fxSplitSrc),pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
-    FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxGamutWarn,...seedOpt});      // re-render processed into FX.cv
+    FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),...seedOpt});      // re-render processed into FX.cv
     _applySplitPos();
   } else {
     const orig=document.getElementById('fx-canvas-orig');
@@ -23128,6 +23202,7 @@ function viewMenuBuild(){
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)"><span>Editor background…</span></button>`;
   h+=`<button class="fx-ovf-item${fxHistOn?' on':''}" onclick="viewMenuClose();toggleHist()"><span>Scope overlay</span>${chk}</button>`;
   h+=`<button class="fx-ovf-item${window.chromasmithPhotoTransitions!==false?' on':''}" onclick="photoTransitionsToggle()"><span>Photo transitions</span>${chk}</button>`;
+  if(window.sk2HistPinned)h+=`<button class="fx-ovf-item${sk2HistPinned()?' on':''}" onclick="sk2HistPinToggle();this.classList.toggle('on',sk2HistPinned())"><span>Pin histogram</span>${chk}</button>`;
   if(window.sk2CaptionOn)h+=`<button class="fx-ovf-item${sk2CaptionOn()?' on':''}" onclick="sk2CaptionToggle();this.classList.toggle('on',sk2CaptionOn())"><span>Caption under photo</span>${chk}</button>`;
   if(typeof window.chromasmithRevealLab==='function')h+=`<button class="fx-ovf-item" onclick="viewMenuClose();window.chromasmithRevealLab()"><span>Reveal lab…</span></button>`;
   h+='<div class="fx-ovf-sep"></div>';
