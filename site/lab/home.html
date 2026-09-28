@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chromasmith</title>
+<meta name="description" content="A whole photo studio, wherever inspiration finds you. Film looks, grain and halation — free, open source and fully offline.">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;900&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0b0a;--bg2:#121210;--fg:#f2efe8;--mid:#c9c5bb;--dim:#8b877e;--line:#24231f;--acc:#ff5a1f}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--fg);font-family:"Inter Tight",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+body{overflow-x:clip}
+a{color:inherit}
+.mono{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.k{font-size:clamp(40px,6vw,96px);font-weight:900;letter-spacing:-.045em;line-height:.9}
+.t{max-width:400px;font-size:18px;line-height:1.4;color:var(--mid);margin-top:20px}
+.btn{display:inline-flex;gap:8px;align-items:center;font-weight:600;font-size:15px;padding:14px 22px;border-radius:999px;text-decoration:none;border:1px solid var(--fg);transition:background .2s,color .2s,border-color .2s}
+.btn.solid{background:var(--fg);color:var(--bg)}
+.btn:hover{background:var(--acc);border-color:var(--acc);color:var(--bg)}
+.grain{position:absolute;inset:-50%;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");mix-blend-mode:overlay;animation:gr .4s steps(4) infinite}
+@keyframes gr{0%{transform:translate(0,0)}25%{transform:translate(-3%,2%)}50%{transform:translate(2%,-3%)}75%{transform:translate(-1%,3%)}}
+
+.top{position:fixed;z-index:50;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:18px 5vw;mix-blend-mode:difference}
+.word{font-weight:900;letter-spacing:-.03em;font-size:18px;text-decoration:none}
+.top nav{display:flex;gap:22px;font-size:14px;font-weight:500}
+.top nav a{text-decoration:none;opacity:.8}.top nav a:hover{opacity:1}
+@media(max-width:700px){.top nav a:not(:last-child){display:none}}
+
+/* 1. pinned stage: develop, grow, then sideways chapters */
+.pin{height:100vh;overflow:hidden;position:relative}
+.track{display:flex;height:100%;will-change:transform}
+.panel{flex:none;height:100%;position:relative;display:grid;align-content:center;padding:0 5vw}
+.p0{width:100vw;place-items:center;padding:0}
+.ph{position:relative;width:28vw;aspect-ratio:844/1125;overflow:hidden}
+.ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ph .film{opacity:0}.ph .grain{opacity:0}
+.ph .glow{filter:blur(20px) saturate(2) brightness(1.5);mix-blend-mode:screen;opacity:0}
+.ph .shade{position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.65),transparent 55%);opacity:0}
+.hero-t{position:absolute;left:0;right:0;top:12vh;text-align:center;font-size:clamp(44px,8.5vw,150px);font-weight:900;letter-spacing:-.05em;line-height:.86;pointer-events:none;z-index:2;mix-blend-mode:difference}
+.hero-t sup{font-size:.35em;vertical-align:top;position:relative;top:.2em}
+.lb{position:absolute;top:58%;font-size:11px}.lb.l{left:5vw}.lb.r{right:5vw;text-align:right}
+.scrollcue{position:absolute;bottom:5vh;left:50%;transform:translateX(-50%)}
+.cap0{position:absolute;left:5vw;right:5vw;bottom:10vh;opacity:0;display:flex;justify-content:space-between;align-items:end;gap:24px;flex-wrap:wrap}
+.cap0 .k{max-width:14ch}
+.cap0 .foot{margin-top:14px;color:var(--mid)}
+
+.p1{width:100vw;border-left:1px solid var(--line);grid-template-columns:1fr 1fr;gap:4vw;align-items:center}
+.p1 .stack{position:relative;width:100%;max-width:560px;aspect-ratio:1;justify-self:center}
+.p1 .stack img{position:absolute;width:58%;border-radius:2px;box-shadow:0 30px 60px rgba(0,0,0,.5)}
+.p1 .stack img:nth-child(1){left:0;top:4%;rotate:-6deg}
+.p1 .stack img:nth-child(2){right:0;top:0;rotate:5deg}
+.p1 .stack img:nth-child(3){left:10%;top:38%;width:80%}
+.p2{width:100vw;grid-template-columns:1fr 1.6fr;gap:4vw;align-items:center}
+.img{overflow:hidden;border-radius:3px}
+.img img{display:block;width:112%;margin-left:-6%}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:24px}
+.tags span{border:1px solid #33312c;border-radius:999px;padding:7px 12px;font-size:13px;color:var(--mid)}
+.p3{width:100vw;grid-template-columns:1fr 1.25fr;gap:4vw;align-items:center}
+.big{font-size:20vw;font-weight:900;letter-spacing:-.06em;line-height:.78;color:transparent;-webkit-text-stroke:1px #4a4740}
+.lensbox{position:relative;height:76vh;border-radius:3px;overflow:hidden;cursor:crosshair}
+.lensbox canvas{position:absolute;inset:0;width:100%;height:100%}
+.lensbox .mono{position:absolute;right:14px;bottom:12px;color:var(--fg);mix-blend-mode:difference}
+.looks{display:flex;gap:6px;flex-wrap:wrap;margin-top:24px}
+.looks button{background:none;border:1px solid #3a3833;color:var(--fg);font:600 13px "Inter Tight";padding:9px 14px;border-radius:999px;cursor:pointer}
+.looks button.on{background:var(--fg);color:var(--bg)}
+.p4{width:100vw;padding:0;overflow:hidden}
+.p4>img{position:absolute;inset:0;width:108%;height:100%;object-fit:cover;left:-4%}
+.p4 .grain{opacity:.35}
+.p4 .shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.75),transparent 60%)}
+.p4 .in{position:relative;padding:0 5vw}
+.p4 .terms{display:flex;gap:28px;margin-top:28px;flex-wrap:wrap}
+.p4 .terms span{font-size:clamp(20px,2.4vw,36px);font-weight:600;letter-spacing:-.02em}
+.p5{width:90vw;grid-template-columns:1.2fr 1fr;gap:4vw;align-items:center}
+.p5 .phone{height:74vh;justify-self:center;border-radius:28px;overflow:hidden;border:1px solid #2a2925;box-shadow:0 40px 80px rgba(0,0,0,.5)}
+.p5 .phone img{height:100%;display:block}
+.prog{position:absolute;left:5vw;right:5vw;bottom:4vh;display:flex;gap:6px;opacity:0;z-index:3}
+.prog b{flex:1;height:2px;background:#2a2925;position:relative;overflow:hidden}
+.prog b i{position:absolute;inset:0;background:var(--fg);transform-origin:left;transform:scaleX(0)}
+.plab{position:absolute;left:5vw;bottom:calc(4vh + 12px);opacity:0;z-index:3}
+
+/* 2. maker */
+.maker{padding:22vh 5vw;display:grid;grid-template-columns:1fr 2fr;gap:5vw;border-top:1px solid var(--line)}
+.maker .por{aspect-ratio:4/5;background:var(--bg2);border:1px solid var(--line);display:grid;place-items:center;font-size:64px;font-weight:900;color:#3a3833;letter-spacing:-.04em}
+.quote{font-size:clamp(28px,3.6vw,56px);font-weight:500;letter-spacing:-.03em;line-height:1.1}
+.quote .w{opacity:.12}
+.maker .who{margin-top:32px}
+
+/* 3. beta */
+.beta{padding:16vh 5vw;border-top:1px solid var(--line)}
+.beta .head{display:flex;justify-content:space-between;align-items:end;gap:24px;flex-wrap:wrap;margin-bottom:8vh}
+.rows{border-top:1px solid var(--line)}
+.row{display:grid;grid-template-columns:120px 1fr 1.2fr auto;gap:3vw;align-items:baseline;padding:4vh 0;border-bottom:1px solid var(--line);position:relative;isolation:isolate}
+.row .n{font-size:clamp(40px,5vw,80px);font-weight:900;letter-spacing:-.05em;line-height:.8;color:#3a3833;transition:color .3s}
+.row h3{font-size:clamp(28px,3.4vw,52px);font-weight:900;letter-spacing:-.04em}
+.row p{color:var(--mid);font-size:17px;line-height:1.4}
+.row::before{content:"";position:absolute;inset:0 -5vw;background:var(--bg2);transform:scaleY(0);transform-origin:bottom;transition:transform .45s cubic-bezier(.2,.8,.2,1);z-index:-1}
+.row:hover::before{transform:scaleY(1)}.row:hover .n{color:var(--acc)}
+
+/* 4. feature index */
+.idx{padding:16vh 5vw;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 2fr;gap:5vw}
+.idx aside{position:sticky;top:12vh;align-self:start}
+.idx aside ol{list-style:none;margin-top:6vh;display:grid;gap:6px}
+.idx aside a{text-decoration:none;display:flex;gap:12px;align-items:baseline;font-size:clamp(17px,1.6vw,23px);font-weight:600;color:#4a4740;transition:color .25s,transform .25s}
+.idx aside a small{font:11px "JetBrains Mono";width:22px}
+.idx aside a.on{color:var(--fg);transform:translateX(10px)}
+.group{padding-bottom:10vh}
+.group h3{font-size:clamp(28px,3vw,44px);font-weight:900;letter-spacing:-.04em;padding-bottom:18px;border-bottom:1px solid var(--fg)}
+.group details{border-bottom:1px solid var(--line)}
+.group summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:16px 0;font-size:19px;font-weight:500;transition:padding .25s,color .25s}
+.group summary::-webkit-details-marker{display:none}
+.group summary::after{content:"+";font-weight:400;color:var(--dim);transition:transform .3s}
+.group details[open] summary::after{transform:rotate(45deg)}
+.group summary:hover{padding-left:10px;color:var(--acc)}
+.group details p{color:var(--mid);padding:0 0 18px;max-width:560px;line-height:1.45}
+
+/* 5. outro */
+.outro{min-height:100vh;padding:16vh 5vw 6vh;border-top:1px solid var(--line);display:grid;grid-template-rows:1fr auto}
+.outro .k{font-size:clamp(56px,13vw,230px);line-height:.84}
+.outro .k span{display:block;overflow:hidden}.outro .k span i{display:block;font-style:normal}
+.outro .cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:48px}
+.which{display:grid;grid-template-columns:1fr 1fr;gap:5vw;margin-top:10vh;max-width:900px}
+.which h4{font-size:18px;margin-bottom:8px}.which p{color:var(--mid);line-height:1.45}
+footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;padding-top:10vh}
+
+@media(max-width:760px){
+  .ph{width:62vw}.hero-t{top:14vh}
+  .panel:not(.p0):not(.p4){width:100vw!important;grid-template-columns:1fr!important;align-content:center;gap:4vh}
+  .p1 .stack{width:70vw}
+  .lensbox{height:42vh}.big{font-size:32vw}.p5 .phone{height:44vh}
+  .row{grid-template-columns:1fr}.maker,.idx,.which{grid-template-columns:1fr}.idx aside{position:static}
+}
+@media (prefers-reduced-motion:reduce){.grain{animation:none}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a class="word" href="#">Chromasmith</a>
+  <nav><a href="#maker">Story</a><a href="#beta">Beta</a><a href="#index">Features</a><a href="../../chromasmith-22.html">Launch app ↗</a></nav>
+</header>
+
+<section class="pin" aria-label="Chromasmith tour">
+  <div class="track">
+    <div class="panel p0">
+      <h1 class="hero-t">The app that<br>does it all<sup>*</sup></h1>
+      <span class="mono lb l">Raw file<br>f/2 · 1/250</span>
+      <span class="mono lb r">Classic Neg<br>grain · halation</span>
+      <div class="ph">
+        <img src="../assets/story/original.webp" alt="Unedited photo of a dog by a canal">
+        <img class="film" src="../assets/story/film.webp" alt="">
+        <img class="film glow" src="../assets/story/film.webp" alt="">
+        <div class="grain"></div><div class="shade"></div>
+      </div>
+      <span class="mono scrollcue">Scroll to develop</span>
+      <div class="cap0">
+        <div><div class="k">A whole photo studio, wherever inspiration finds you.</div>
+          <p class="mono foot">*Almost everything. Your ideas are still yours.</p></div>
+        <a class="btn solid" href="../../chromasmith-22.html">Launch the app ↗</a>
+      </div>
+    </div>
+
+    <div class="panel p1" data-lab="Library">
+      <div><p class="mono">01 / Library</p>
+      <div class="k">Find the frame.<br>Keep the feeling.</div>
+      <p class="t">A library for every shoot, every face, every almost-forgotten moment. All yours. All on your machine.</p></div>
+      <div class="stack">
+        <img src="../../design/prototypes/swiss-kinetic/photos/dog-sitting.webp" alt="">
+        <img src="../../design/prototypes/swiss-kinetic/photos/dog-lying.webp" alt="">
+        <img src="../assets/ui/library.webp" alt="Chromasmith library">
+      </div>
+    </div>
+
+    <div class="panel p2" data-lab="Studio">
+      <div><p class="mono">02 / Studio</p><div class="k">A studio for every frame.</div>
+        <p class="t">Start with a look. Then shape the light, colour and composition until the photo feels exactly right.</p>
+        <div class="tags"><span>Curves &amp; colour mixer</span><span>Local masks</span><span>Spot repair</span><span>Full-res export</span></div></div>
+      <div class="img"><img src="../assets/ui/color.webp" alt="Chromasmith colour tools"></div>
+    </div>
+
+    <div class="panel p3" id="lens" data-lab="Looks">
+      <div><div class="big">113</div><div class="k" style="margin-top:-3vw">film looks.<br>One click.</div>
+        <p class="t">Find your starting point, then make it yours. Move over the photo to look through the film.</p>
+        <div class="looks"><button class="on" data-l="0">Classic Neg</button><button data-l="1">Warm print</button><button data-l="2">Cross-process</button></div></div>
+      <div class="lensbox"><canvas></canvas><span class="mono">Try a look</span></div>
+    </div>
+
+    <div class="panel p4" data-lab="Film">
+      <img src="../assets/story/film.webp" alt="Photo finished with grain and halation"><div class="grain"></div><div class="shade"></div>
+      <div class="in"><p class="mono">04 / Film</p><div class="k">Let the light<br>linger.</div>
+        <p class="t">Grain in the shadows. A warm halo at the edge of the light. Subtle or unmistakable.</p>
+        <div class="terms"><span>Grain</span><span>Halation</span><span>Bloom</span><span>Frames</span></div></div>
+    </div>
+
+    <div class="panel p5" data-lab="Anywhere">
+      <div><p class="mono">05 / Anywhere</p><div class="k">Make it wherever you are.</div>
+        <p class="t">Open it in your browser. Keep it on your phone. Take your photos somewhere with no signal. The tools still come with you.</p>
+        <div class="tags"><span>No account</span><span>No upload</span><span>Works offline</span></div></div>
+      <div class="phone"><img src="../assets/ui/mobile.webp" alt="Chromasmith on a phone"></div>
+    </div>
+  </div>
+  <span class="mono plab">Library</span>
+  <div class="prog"><b><i></i></b><b><i></i></b><b><i></i></b><b><i></i></b><b><i></i></b></div>
+</section>
+
+<section class="maker" id="maker">
+  <div class="por">TA</div>
+  <div>
+    <p class="mono">The maker</p>
+    <h2 class="k" style="margin:18px 0 6vh">One person,<br>a whole darkroom.</h2>
+    <p class="quote">“I built Chromasmith because I wanted powerful photo tools that felt immediate, stayed on my device, and left me free to make the image my own.”</p>
+    <p class="mono who">Tareq Ameer · portrait coming soon</p>
+  </div>
+</section>
+
+<section class="beta" id="beta">
+  <div class="head"><div><p class="mono">In beta now</p><h2 class="k" style="margin-top:18px">The darkroom<br>keeps growing.</h2></div>
+    <a class="btn" href="../../chromasmith-22.html">Try the beta tools ↗</a></div>
+  <div class="rows">
+    <div class="row"><span class="n">01</span><h3>Video</h3><p>Grade and trim a clip with the still-photo look stack, then export it with its audio intact.</p><span class="mono">Beta</span></div>
+    <div class="row"><span class="n">02</span><h3>Astro stacking</h3><p>Combine night-sky frames into a cleaner image from the desktop library.</p><span class="mono">Beta</span></div>
+    <div class="row"><span class="n">03</span><h3>Panorama</h3><p>Stitch two photos into a wider view. Larger sets are still planned.</p><span class="mono">Beta</span></div>
+  </div>
+</section>
+
+<section class="idx" id="index">
+  <aside><p class="mono">Feature index</p><h2 class="k" style="margin-top:18px">The whole<br>darkroom.</h2><ol><li><a href="#g0" class="on"><small>01</small>Looks and film</a></li><li><a href="#g1"><small>02</small>Light and colour</a></li><li><a href="#g2"><small>03</small>Masks and retouching</a></li><li><a href="#g3"><small>04</small>Composition and multi-image</a></li><li><a href="#g4"><small>05</small>Desktop photo library</a></li><li><a href="#g5"><small>06</small>Input, export and workflow</a></li><li><a href="#g6"><small>07</small>Video — beta</a></li><li><a href="#g7"><small>08</small>Access and privacy</a></li></ol></aside>
+  <div><div class="group" id="g0"><h3>Looks and film</h3><details><summary>113 film looks</summary><p>Start with calibrated colour, cinema, instant, reversal or black-and-white looks.</p></details>
+          <details><summary>One-tap Looks gallery</summary><p>Preview a look on your photo and apply it with one click.</p></details>
+          <details><summary>Custom .cube LUTs</summary><p>Load a LUT you already own and use it as the starting look.</p></details>
+          <details><summary>Kodak and Fuji print profiles</summary><p>Add a print-film response after the base look.</p></details>
+          <details><summary>Film grain</summary><p>Add grain shaped for formats from 8mm to 65mm.</p></details>
+          <details><summary>Halation</summary><p>Let bright edges glow into neighbouring dark areas.</p></details>
+          <details><summary>No-remjet halation</summary><p>Push halation toward a stronger, stylised glow.</p></details>
+          <details><summary>Bloom</summary><p>Give bright areas a softer spread of light.</p></details>
+          <details><summary>Film dust and scratches</summary><p>Layer procedurally placed dust, hairs and scratches onto the image.</p></details>
+          <details><summary>Light leaks</summary><p>Add warm film-like light intrusions and reshuffle their placement.</p></details>
+          <details><summary>Film frames</summary><p>Finish with sprockets, rebates and edge printing.</p></details>
+          <details><summary>Vignette</summary><p>Draw attention inward by shaping the edge brightness.</p></details>
+          <details><summary>Reusable Styles</summary><p>Save a finished editing recipe and apply it again later.</p></details></div>
+<div class="group" id="g1"><h3>Light and colour</h3><details><summary>Exposure</summary><p>Brighten or darken the image without changing the chosen look.</p></details>
+          <details><summary>Contrast</summary><p>Shape the separation between lighter and darker tones.</p></details>
+          <details><summary>White balance</summary><p>Adjust temperature and tint to make the colour feel right.</p></details>
+          <details><summary>White-balance eyedropper</summary><p>Click a neutral area to correct the colour cast.</p></details>
+          <details><summary>Auto-enhance</summary><p>Set a quick starting point for levels and white balance.</p></details>
+          <details><summary>Master tone curve</summary><p>Draw the overall tonal response directly.</p></details>
+          <details><summary>RGB channel curves</summary><p>Shape the red, green and blue channels independently.</p></details>
+          <details><summary>Parametric curves</summary><p>Adjust shadows, darks, lights and highlights with four controls.</p></details>
+          <details><summary>Eight-band colour mixer</summary><p>Tune hue, saturation and luminance by colour band.</p></details>
+          <details><summary>Lift, gamma and gain wheels</summary><p>Tint shadows, midtones and highlights separately.</p></details>
+          <details><summary>Dehaze</summary><p>Recover clarity in flat or hazy scenes.</p></details>
+          <details><summary>Noise reduction</summary><p>Quiet unwanted image noise while keeping useful detail.</p></details>
+          <details><summary>Sharpening</summary><p>Restore crispness at the level the image needs.</p></details>
+          <details><summary>Deconvolution sharpening</summary><p>Recover detail softened by lens or sensor blur.</p></details>
+          <details><summary>Highlight roll-off</summary><p>Keep bright regions gentler with filmic tone-mapping options.</p></details></div>
+<div class="group" id="g2"><h3>Masks and retouching</h3><details><summary>Radial masks</summary><p>Make a soft oval adjustment around a subject or light source.</p></details>
+          <details><summary>Linear masks</summary><p>Grade one side of the frame with a graduated transition.</p></details>
+          <details><summary>Brush masks</summary><p>Paint an adjustment exactly where it belongs.</p></details>
+          <details><summary>Sky masks</summary><p>Separate the sky for its own grade.</p></details>
+          <details><summary>AI subject masks</summary><p>Select a subject from the photo for local editing.</p></details>
+          <details><summary>Colour-range masks</summary><p>Target pixels by colour rather than by location.</p></details>
+          <details><summary>Luminance-range masks</summary><p>Target an adjustment to a chosen brightness range.</p></details>
+          <details><summary>Depth masks</summary><p>Use estimated scene depth to separate near and far areas on desktop.</p></details>
+          <details><summary>Mask edge refinement</summary><p>Snap rough mask edges toward real image boundaries.</p></details>
+          <details><summary>Skin-tone tools</summary><p>Even out patchy skin colour while keeping the image's character.</p></details>
+          <details><summary>Face-feature exclusion</summary><p>Keep eyes, lips and other facial details out of a skin adjustment.</p></details>
+          <details><summary>Named-subject masks</summary><p>Teach a subject from examples and find it again in other photos.</p></details>
+          <details><summary>Heal</summary><p>Blend away a spot before the film look and grain are applied.</p></details>
+          <details><summary>Clone</summary><p>Copy a source area precisely to repair the frame.</p></details></div>
+<div class="group" id="g3"><h3>Composition and multi-image</h3><details><summary>Crop and aspect ratio</summary><p>Reframe the photo for its final destination.</p></details>
+          <details><summary>Rotate and flip</summary><p>Change image orientation without leaving the editor.</p></details>
+          <details><summary>Straighten and auto-level</summary><p>Level the horizon manually or let the app find a dominant line.</p></details>
+          <details><summary>Perspective correction</summary><p>Bring leaning lines back into shape.</p></details>
+          <details><summary>Borders and canvas mattes</summary><p>Place the image inside a chosen border, aspect and background.</p></details>
+          <details><summary>Collage layouts</summary><p>Place multiple images in adjustable rows, columns and grids.</p></details>
+          <details><summary>HDR merge</summary><p>Blend bracketed exposures into one image on desktop.</p></details>
+          <details><summary>Focus stacking</summary><p>Combine frames focused at different distances on desktop.</p></details>
+          <details><summary>Astro stacking — beta</summary><p>Stack night-sky captures from the desktop library.</p></details>
+          <details><summary>Two-photo panorama — beta</summary><p>Stitch a pair of photos into one wider image.</p></details></div>
+<div class="group" id="g4"><h3>Desktop photo library</h3><details><summary>Local library</summary><p>Browse your archive on your machine without uploading it.</p></details>
+          <details><summary>Folder and collection browsing</summary><p>Move through folders, dates and curated groups of images.</p></details>
+          <details><summary>SD-card import</summary><p>Copy a shoot by capture date and make a verified second copy.</p></details>
+          <details><summary>Keywords</summary><p>Add searchable words to describe and group photos.</p></details>
+          <details><summary>Duplicate detection</summary><p>Find repeated files while reviewing the library.</p></details>
+          <details><summary>Culling</summary><p>Pick the keepers from a shoot before editing.</p></details>
+          <details><summary>People recognition</summary><p>Find and name faces with processing on your device.</p></details>
+          <details><summary>Natural-language search</summary><p>Describe a photo in words and search locally for it.</p></details>
+          <details><summary>Suggested tags</summary><p>Get on-device tag suggestions for a selected photo.</p></details>
+          <details><summary>Virtual copies</summary><p>Keep more than one edit version of the same photo.</p></details>
+          <details><summary>Offline edits</summary><p>Work from a cached preview and apply the edit when the source returns.</p></details>
+          <details><summary>Lightroom round-trip</summary><p>Open a Lightroom photo in Chromasmith and return the result.</p></details>
+          <details><summary>Lightroom cloud browser</summary><p>Browse connected Lightroom cloud photos from the desktop app.</p></details></div>
+<div class="group" id="g5"><h3>Input, export and workflow</h3><details><summary>RAW decoding</summary><p>Open camera RAW files and develop them locally.</p></details>
+          <details><summary>DCP camera profiles</summary><p>Use camera colour profiles for more faithful RAW starting colour.</p></details>
+          <details><summary>V-Log input</summary><p>Convert Lumix V-Log material before grading it.</p></details>
+          <details><summary>Multi-photo filmstrip</summary><p>Load several images and switch between their previews.</p></details>
+          <details><summary>Shared and per-photo edits</summary><p>Apply a look to the batch, then adjust an individual frame.</p></details>
+          <details><summary>Match a series</summary><p>Align exposure and white balance across a shoot to one reference photo.</p></details>
+          <details><summary>Before-and-after comparison</summary><p>Check your grade against the original image.</p></details>
+          <details><summary>Live histogram</summary><p>Watch tonal distribution while you edit.</p></details>
+          <details><summary>1:1 loupe</summary><p>Inspect the full rendering pipeline at native image scale.</p></details>
+          <details><summary>Undo and redo</summary><p>Move safely backward and forward through editing decisions.</p></details>
+          <details><summary>Session save and restore</summary><p>Keep slider settings locally and return to them later.</p></details>
+          <details><summary>Full-resolution export</summary><p>Render the finished image at its original resolution.</p></details>
+          <details><summary>JPEG, PNG, WebP and TIFF</summary><p>Choose the output format that suits the job.</p></details>
+          <details><summary>HDR gain-map HEIC</summary><p>Export extended-range highlights from a RAW source.</p></details>
+          <details><summary>XMP sidecars</summary><p>Keep an edit record alongside the source file.</p></details>
+          <details><summary>Export presets</summary><p>Save quality, format, resize and sharpening settings as a preset.</p></details>
+          <details><summary>LUT from a before/after pair</summary><p>Build a reusable .cube look from two versions of one image.</p></details>
+          <details><summary>Colour Copy</summary><p>Match a reference image's colour into a .cube LUT or XMP preset.</p></details>
+          <details><summary>Lumix Lab LUT export</summary><p>Tag a .cube file for a look you can take back to a Lumix camera.</p></details></div>
+<div class="group" id="g6"><h3>Video — beta</h3><details><summary>Clip grading</summary><p>Use the still-photo look stack on a video clip.</p></details>
+          <details><summary>Trim in and out</summary><p>Choose the segment of a clip to export.</p></details>
+          <details><summary>Audio passthrough</summary><p>Keep the source audio without re-encoding it.</p></details>
+          <details><summary>Scopes</summary><p>Read the clip's signal as you grade.</p></details>
+          <details><summary>Safe-area guides</summary><p>Check framing with overlay guides.</p></details>
+          <details><summary>Fades</summary><p>Ease the picture in or out of a clip.</p></details>
+          <details><summary>Gate weave and film breath</summary><p>Add restrained analogue motion to a graded clip.</p></details>
+          <details><summary>Frame capture</summary><p>Export the current video frame as a still image.</p></details></div>
+<div class="group" id="g7"><h3>Access and privacy</h3><details><summary>Browser editor</summary><p>Open the app without installing a desktop package.</p></details>
+          <details><summary>Phone layout</summary><p>Edit with a touch-first tool sheet on a smaller screen.</p></details>
+          <details><summary>Offline web use</summary><p>Keep editing after the first load when the connection goes away.</p></details>
+          <details><summary>Home-screen install</summary><p>Add the web app to your phone's home screen.</p></details>
+          <details><summary>Swipe between photos</summary><p>Move through a loaded batch with a touch gesture.</p></details>
+          <details><summary>Hold to compare</summary><p>Press and hold on mobile to check the original.</p></details>
+          <details><summary>On-device processing</summary><p>Keep your photos on the device where you edit them.</p></details>
+          <details><summary>No account or subscription</summary><p>Open the free, open-source app without signing in.</p></details></div>
+</div>
+</section>
+
+<section class="outro" id="yours">
+  <div>
+    <h2 class="k"><span><i>Now make</i></span><span><i>it yours.</i></span></h2>
+    <p class="t" style="font-size:20px">Your photos. Your taste. Your machine. Free and open source, ready when you are.</p>
+    <div class="cta"><a class="btn solid" href="../../chromasmith-22.html">Launch app ↗</a><a class="btn" href="https://github.com/TareqAmeer/Chroma-App/releases/latest">Download for Mac ↗</a><a class="btn" href="https://github.com/TareqAmeer/Chroma-App">View on GitHub ↗</a></div>
+    <div class="which">
+      <div><h4>Browser and phone</h4><p>Open the app in a modern browser. On a phone, add it to your home screen for quick access and offline use.</p></div>
+      <div><h4>Mac desktop</h4><p>Get the latest Mac release for the local library, card import and on-device search.</p></div>
+    </div>
+  </div>
+  <footer class="mono"><span>Free software under GPL-3.0 · Built by Tareq Ameer</span><a href="https://github.com/TareqAmeer/Chroma-App">Source code</a></footer>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.3.4/dist/lenis.min.js"></script>
+<script>
+gsap.registerPlugin(ScrollTrigger);
+let lenis;
+if(!matchMedia('(prefers-reduced-motion: reduce)').matches){lenis=new Lenis({lerp:.09});lenis.on('scroll',ScrollTrigger.update);gsap.ticker.add(t=>lenis.raf(t*1000));gsap.ticker.lagSmoothing(0);}
+document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{const h=a.getAttribute('href');e.preventDefault();const tgt=h.length<2?0:h;lenis?lenis.scrollTo(tgt,{offset:-40}):(tgt?document.querySelector(tgt).scrollIntoView():scrollTo(0,0))}));
+
+/* 1. stage */
+const tr=document.querySelector('.track'),bars=document.querySelectorAll('.prog i'),plab=document.querySelector('.plab'),
+  pans=[...document.querySelectorAll('.panel[data-lab]')];
+const dist=()=>tr.scrollWidth-innerWidth;
+gsap.from('.hero-t',{yPercent:40,opacity:0,duration:1.4,ease:'expo.out'});
+gsap.from('.ph',{scale:.85,opacity:0,duration:1.4,ease:'expo.out',delay:.15});
+const tl=gsap.timeline({scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*3+dist()),scrub:1,invalidateOnRefresh:true}});
+tl.to('.scrollcue',{opacity:0,duration:.1})
+  .to('.ph .film:not(.glow)',{opacity:1,duration:.7},'<')
+  .to('.ph .grain',{opacity:.5,duration:.4})
+  .to('.ph .glow',{opacity:.5,duration:.5})
+  .to('.lb,.hero-t',{opacity:0,y:-30,duration:.3})
+  .to('.ph',{width:'100vw',height:'100vh',aspectRatio:'auto',ease:'power2.inOut',duration:1})
+  .to('.ph .shade',{opacity:1,duration:.3},'-=.3')
+  .to('.cap0',{opacity:1,y:-16,duration:.3})
+  .to({},{duration:.4})
+  .to('.prog,.plab',{opacity:1,duration:.2})
+  .addLabel('slide')
+  .to(tr,{x:()=>-dist(),ease:'none',duration:()=>dist()/innerHeight,onUpdate(){
+    const f=this.progress()*bars.length;bars.forEach((b,i)=>b.style.transform=`scaleX(${Math.max(0,Math.min(1,f-i))})`);
+    plab.textContent=pans[Math.min(pans.length-1,Math.floor(f))].dataset.lab}});
+const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scrollTrigger.end-tl.scrollTrigger.start);
+pans.forEach(p=>{
+  const st=()=>sPos()+Math.max(0,p.offsetLeft-innerWidth),en=()=>st()+innerWidth+p.offsetWidth;
+  const o=()=>({scrub:true,invalidateOnRefresh:true,start:st,end:en});
+  gsap.fromTo(p.querySelectorAll('.k,.t,.mono,.tags,.looks,.terms'),{x:60},{x:-30,ease:'none',scrollTrigger:o()});
+  gsap.fromTo(p.querySelectorAll('.img img,.p4>img'),{xPercent:3},{xPercent:-3,ease:'none',scrollTrigger:o()});
+  gsap.fromTo(p.querySelectorAll('.stack img'),{y:i=>40+i*30},{y:i=>-20-i*20,ease:'none',scrollTrigger:o()});
+  gsap.fromTo(p.querySelectorAll('.big'),{x:160},{x:-80,ease:'none',scrollTrigger:o()});
+});
+
+/* live look lens (same shader as the hero lab's C) */
+const V={
+lens(R){
+  const cv=document.querySelector(R+' canvas'),gl=cv.getContext('webgl');
+  const vs='attribute vec2 p;varying vec2 u;void main(){u=p*.5+.5;gl_Position=vec4(p,0,1);}';
+  const fs=`precision highp float;varying vec2 u;uniform sampler2D o,f;uniform vec2 m,res,img;uniform float t,look,r;
+  float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233))+t)*43758.5453);}
+  vec2 cover(vec2 uv){float ra=res.x/res.y,ri=img.x/img.y;vec2 s=ra>ri?vec2(1.,ri/ra):vec2(ra/ri,1.);return (uv-.5)*s+.5;}
+  vec3 grade(vec3 c){if(look<.5)return c;if(look<1.5)return pow(c,vec3(.9,1.,1.15))*vec3(1.08,1.,.88);
+    return vec3(smoothstep(.05,.95,c.r),pow(c.g,.85),c.b*.7+.12);}
+  void main(){vec2 uv=cover(vec2(u.x,1.-u.y));vec2 d=(u-m)*vec2(res.x/res.y,1.);float L=length(d);
+    float k=1.-smoothstep(r*.92,r,L);
+    vec2 lens=uv-(d*.06*k)*vec2(res.y/res.x,1.);
+    vec3 a=texture2D(o,uv).rgb;
+    vec3 b=vec3(texture2D(f,lens+vec2(.002,0)).r,texture2D(f,lens).g,texture2D(f,lens-vec2(.002,0)).b);
+    vec3 hal=vec3(0);for(int i=0;i<8;i++){float an=float(i)*.785;vec3 s=texture2D(f,lens+vec2(cos(an),sin(an))*.012).rgb;hal+=max(s-.7,0.)*vec3(1.,.3,.1);}
+    b=grade(b+hal*.35);b+=(h(u*res)-.5)*.09;
+    vec3 c=mix(a*.55,b,k);c+=vec3(1.,.4,.2)*.6*smoothstep(r*.9,r,L)*(1.-smoothstep(r,r*1.02,L));
+    gl_FragColor=vec4(c,1.);}`;
+  const sh=(t,s)=>{const x=gl.createShader(t);gl.shaderSource(x,s);gl.compileShader(x);if(!gl.getShaderParameter(x,gl.COMPILE_STATUS))console.error(gl.getShaderInfoLog(x));return x};
+  const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,vs));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(pr);gl.useProgram(pr);
+  gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+  const lp=gl.getAttribLocation(pr,'p');gl.enableVertexAttribArray(lp);gl.vertexAttribPointer(lp,2,gl.FLOAT,false,0,0);
+  const U=n=>gl.getUniformLocation(pr,n);
+  const tex=(src,unit)=>new Promise(res=>{const i=new Image();i.onload=()=>{const tx=gl.createTexture();gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,tx);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,i);res(i)};i.src=src});
+  let look=0,m=[.6,.5],tm=[.6,.5],rad=0;
+  document.querySelectorAll(R+' .looks button').forEach(b=>b.onclick=()=>{look=+b.dataset.l;document.querySelectorAll(R+' .looks button').forEach(x=>x.classList.toggle('on',x===b))});
+  cv.parentElement.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();tm=[(e.clientX-r.left)/r.width,1-(e.clientY-r.top)/r.height]});
+  Promise.all([tex('../assets/story/original.webp',0),tex('../assets/story/film.webp',1)]).then(([im])=>{
+    gl.uniform1i(U('o'),0);gl.uniform1i(U('f'),1);gl.uniform2f(U('img'),im.width,im.height);
+    gsap.to({},{duration:1.4,ease:'expo.out',onUpdate(){rad=.28*this.progress()}});
+    gsap.ticker.add(t=>{const dpr=Math.min(devicePixelRatio,2),w=cv.clientWidth*dpr,h=cv.clientHeight*dpr;if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;gl.viewport(0,0,w,h)}
+      m[0]+=(tm[0]-m[0])*.1;m[1]+=(tm[1]-m[1])*.1;
+      gl.uniform2f(U('m'),m[0],m[1]);gl.uniform2f(U('res'),w,h);gl.uniform1f(U('t'),t%10);gl.uniform1f(U('look'),look);gl.uniform1f(U('r'),rad);
+      gl.drawArrays(gl.TRIANGLE_STRIP,0,4)});
+  });
+},
+
+};
+V.lens('#lens');
+
+/* 2. quote lights up word by word */
+const q=document.querySelector('.quote');q.innerHTML=q.textContent.split(' ').map(w=>`<span class="w">${w}</span>`).join(' ');
+gsap.to('.quote .w',{opacity:1,stagger:.1,ease:'none',scrollTrigger:{trigger:'.quote',start:'top 80%',end:'bottom 45%',scrub:true}});
+gsap.from('.maker .por',{clipPath:'inset(100% 0 0 0)',duration:1.2,ease:'expo.out',scrollTrigger:{trigger:'.maker',start:'top 70%'}});
+
+/* 3. beta rows */
+gsap.utils.toArray('.row').forEach(r=>gsap.from(r,{y:60,opacity:0,duration:1,ease:'expo.out',scrollTrigger:{trigger:r,start:'top 92%'}}));
+
+/* 4. index: highlight the group in view */
+const nav=document.querySelectorAll('.idx aside a');
+document.querySelectorAll('.group').forEach((g,i)=>ScrollTrigger.create({trigger:g,start:'top 50%',end:'bottom 50%',onToggle:s=>s.isActive&&nav.forEach((a,j)=>a.classList.toggle('on',i===j))}));
+document.querySelectorAll('.group details').forEach(d=>d.addEventListener('toggle',()=>ScrollTrigger.refresh()));
+
+/* 5. outro lines rise */
+gsap.from('.outro .k i',{yPercent:105,stagger:.12,duration:1.2,ease:'expo.out',scrollTrigger:{trigger:'.outro',start:'top 65%'}});
+</script>
+</body>
+</html>
