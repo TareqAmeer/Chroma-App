@@ -1407,7 +1407,7 @@
     .lib-btn.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
     .lib-btn.on.disabled-note{background:var(--sur2);color:var(--mut);border-color:var(--bdr)}
     .lib-btn:disabled{opacity:.4;cursor:default;pointer-events:none}
-    #lib-aspect-toggle{padding:5px 8px;margin-left:6px}
+    #lib-overlay #lib-aspect-toggle{padding:5px 8px;margin-left:6px}
     /* Info panel keyword chips (renderInfoPanel) — the leaf name only, full path in the tooltip
        (a photo tagged "Travel|Iceland|Reykjavik" would otherwise overflow a 232px panel). */
     .lib-kw-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:9px;
@@ -2235,49 +2235,40 @@
         <!-- Same drill-down as the Studio's #fx-settings-menu (categories left, page right),
              sharing its .fx-settings-* classes. The first category opens by default and hovering
              a category switches to it, so nothing is hidden behind an unexplained click (CHR-147). -->
-        <div class="lib-menu lib-settings-drill" id="lib-view-menu">
-          <div class="fx-settings-cats" id="lib-settings-cats"><button type="button" class="fx-settings-cat" data-libcat="library">Library</button><button type="button" class="fx-settings-cat" data-libcat="thumbnails">Thumbnails</button><button type="button" class="fx-settings-cat" data-libcat="metadata-overlay">Metadata overlay</button><button type="button" class="fx-settings-cat" data-libcat="panels">Panels</button><button type="button" class="fx-settings-cat" data-libcat="appearance">Appearance</button></div>
-          <div class="fx-settings-page" id="lib-settings-page">
-          <div class="fx-settings-pane lib-settings-pane" data-libpane="library">          
-          <button class="lib-btn opt-action" id="lib-pick" title="Choose root folder">${ic('library',15)}<span>Choose folder…</span></button>
-          <button class="lib-btn opt-action" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',15)}<span>Import from Google Photos…</span></button>
-          <button class="lib-btn opt-action" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">${ic('history',15)}<span>Recent folders…</span></button>
-          <button class="lib-btn opt-action" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',15)}<span>Get Info</span></button>
-          <button class="lib-btn opt-action" id="lib-expand" title="Full-window view — G">${ic('fit',15)}<span>Full-window view</span></button>
-          <button class="lib-btn opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C">${ic('compare',15)}<span>Compare view</span></button>
+        <!-- One settings menu for gallery and Studio: these panes are moved into the Studio's
+             #fx-settings-menu at init (libSettingsAdopt) and shown as its gallery categories. -->
+        <div id="lib-view-menu" hidden>
+          <div class="fx-settings-pane lib-settings-pane" id="lib-pane-library">          
+          <button class="fx-ovf-item opt-action" id="lib-pick" title="Choose root folder">${ic('library',15)}<span>Choose folder…</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',15)}<span>Import from Google Photos…</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">${ic('history',15)}<span>Recent folders…</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',15)}<span>Get Info</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-expand" title="Full-window view — G">${ic('fit',15)}<span>Full-window view</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C">${ic('compare',15)}<span>Compare view</span></button>
           </div>
-          <div class="fx-settings-pane lib-settings-pane" data-libpane="thumbnails">
-          <div class="grp-label">Layout</div>
-          <div class="opt" data-viewval="grid"><span>Grid</span>${LIB_CHECK_SVG}</div>
-          <div class="opt" data-viewval="list" id="lib-listview-opt"><span>List</span>${LIB_CHECK_SVG}</div>
-          <hr>          
-          <div class="opt" id="lib-hideicons"><span>Hide flag &amp; type icons</span>${LIB_CHECK_SVG}</div>
-          <div class="opt" id="lib-zerogap"><span>No spacing between photos</span>${LIB_CHECK_SVG}</div>
-          <div class="opt" id="lib-mat"><span>Border around photos</span>${LIB_CHECK_SVG}</div>
-          <div class="opt" id="lib-showtitle"><span>Show title</span>${LIB_CHECK_SVG}</div>
-          <button class="lib-btn opt-action opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to)."><span>Real aspect ratio</span>${LIB_CHECK_SVG}</button>
-          </div>
-          <div class="fx-settings-pane lib-settings-pane" data-libpane="metadata-overlay">          
+          <div class="fx-settings-pane lib-settings-pane" id="lib-pane-thumbnails">
+          <div class="fx-ovf-grp-label">Layout</div>
+          <div class="fx-ovf-item" data-viewval="grid"><span>Grid</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" data-viewval="list" id="lib-listview-opt"><span>List</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-sep"></div>          
+          <div class="fx-ovf-item" id="lib-hideicons"><span>Hide flag &amp; type icons</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" id="lib-zerogap"><span>No spacing between photos</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" id="lib-mat"><span>Border around photos</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" id="lib-showtitle"><span>Show title</span>${LIB_CHECK_SVG}</div>
+          <button class="fx-ovf-item opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to)."><span>Real aspect ratio</span>${LIB_CHECK_SVG}</button>
+          <div class="fx-ovf-sep"></div>
+          <div class="fx-ovf-grp-label">Metadata overlay</div>
           <select id="lib-metadisp" style="display:none">
             <option value="off">Off</option>
             <option value="hover">On hover</option>
             <option value="always">Always on</option>
           </select>
-          <div class="opt" data-metaval="off"><span>Off</span>${LIB_CHECK_SVG}</div>
-          <div class="opt" data-metaval="always"><span>Always on</span>${LIB_CHECK_SVG}</div>
-          <div class="opt" data-metaval="hover"><span>On hover</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" data-metaval="off"><span>Off</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" data-metaval="always"><span>Always on</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" data-metaval="hover"><span>On hover</span>${LIB_CHECK_SVG}</div>
           </div>
-          <div class="fx-settings-pane lib-settings-pane" data-libpane="panels">          
-          <button class="lib-btn opt-action opt-toggle" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)"><span>Show sidebar</span>${LIB_CHECK_SVG}</button>
-          </div>
-          <div class="fx-settings-pane lib-settings-pane" data-libpane="appearance">          
-          <div class="opt" data-theme="dark"><span>Dark</span>${LIB_CHECK_SVG}</div>
-          <div class="opt" data-theme="light"><span>Light</span>${LIB_CHECK_SVG}</div>
-          <label class="opt" style="cursor:pointer"><span>Primary colour</span><input type="color" data-accent="a" oninput="window.fxAccentSet&&fxAccentSet('a',this.value)" onpointerdown="if(window.fxAccentGet)this.value=fxAccentGet().a" style="width:28px;height:18px;padding:0;border:0;background:none;cursor:pointer"></label>
-          <label class="opt" style="cursor:pointer"><span>Secondary colour</span><input type="color" data-accent="b" oninput="window.fxAccentSet&&fxAccentSet('b',this.value)" onpointerdown="if(window.fxAccentGet)this.value=fxAccentGet().b" style="width:28px;height:18px;padding:0;border:0;background:none;cursor:pointer"></label>
-          <div class="opt" onclick="window.fxAccentReset&&fxAccentReset()"><span>Reset colours</span></div>
-
-          </div>
+          <div class="fx-settings-pane lib-settings-pane" id="lib-pane-panels">          
+          <button class="fx-ovf-item opt-toggle" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)"><span>Show sidebar</span>${LIB_CHECK_SVG}</button>
           </div>
         </div>
       </div>
@@ -6835,10 +6826,12 @@
         const stripFlag = sc.label === 'Red' ? `<span class="lib-strip-flag" style="background:#e05252"></span>`
           : sc.label === 'Green' ? `<span class="lib-strip-flag" style="background:#5cb85c"></span>` : '';
         const escName = String(entry.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        // One title per card: "Show title" governs this strip name (a separate .lib-name line used
+        // to print the same filename a second time above it).
         // The photo currently open in the Editor shows no name here — it's the one photo whose
         // filename the user already knows (it's the one on screen), and surfacing it in the
         // Library grid too just duplicated chrome.
-        const stripInfo = `<div class="lib-strip-info">${entry.path === state.openedPath ? '' : `<span class="lib-strip-name">${escName}</span>`}${stripFlag}</div>`;
+        const stripInfo = `<div class="lib-strip-info">${entry.path === state.openedPath || !state.showTitle ? '' : `<span class="lib-strip-name">${escName}${entry.missing ? ' (missing)' : ''}</span>`}${stripFlag}</div>`;
         card.innerHTML = `<div class="lib-thumb-wrap${entry.is_video ? ' lib-thumb-video' : ''}"><img loading="lazy" alt="">${metaStripHtml(entry)}
             <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>${starsHtml(sc.rating)}
           </div>
@@ -6848,7 +6841,6 @@
           ${dupeBadge}
           ${syncedBadge}
           ${offlineBadge}
-          ${state.showTitle && entry.path !== state.openedPath ? `<div class="lib-name">${entry.name}${entry.missing ? ' (missing)' : ''}</div>` : ''}
           ${stripInfo}`;
       }
       frag.appendChild(card);
@@ -8358,7 +8350,7 @@
     sortMenu.querySelectorAll('.opt[data-sortdir]').forEach((o) => o.classList.toggle('sel', o.dataset.sortdir === (state.sortDir === 'asc' ? 'asc' : 'desc')));
   }
   syncSortMenuSel();
-  sortBtn.onclick = (e) => { sortMenu.classList.toggle('open'); overlay.querySelector('#lib-view-menu')?.classList.remove('open'); e.stopPropagation(); };
+  sortBtn.onclick = (e) => { sortMenu.classList.toggle('open'); window.settingsClose && settingsClose(); e.stopPropagation(); };
   sortMenu.querySelectorAll('.opt[data-sortval]').forEach((opt) => {
     opt.onclick = () => { sortSel.value = opt.dataset.sortval; sortSel.onchange({ target: sortSel }); syncSortLabel(); syncSortMenuSel(); sortMenu.classList.remove('open'); };
   });
@@ -8380,29 +8372,29 @@
   // #12: these three rows now use the same checkmark-glyph .sel idiom as every other row in
   // this menu (sort-field, metadata, theme, aspect-ratio) instead of a native checkbox.
   const showTitleOpt = overlay.querySelector('#lib-showtitle');
-  showTitleOpt.classList.toggle('sel', !!state.showTitle);
+  showTitleOpt.classList.toggle('on', !!state.showTitle);
   showTitleOpt.onclick = () => {
     state.showTitle = !state.showTitle;
     localStorage.setItem('chromasmith_lib_showtitle', state.showTitle ? '1' : '0');
-    showTitleOpt.classList.toggle('sel', state.showTitle);
+    showTitleOpt.classList.toggle('on', state.showTitle);
     renderGrid();
   };
   const hideIconsOpt = overlay.querySelector('#lib-hideicons');
-  hideIconsOpt.classList.toggle('sel', !!state.hideIcons);
+  hideIconsOpt.classList.toggle('on', !!state.hideIcons);
   overlay.classList.toggle('lib-hide-icons', state.hideIcons);
   hideIconsOpt.onclick = () => {
     state.hideIcons = !state.hideIcons;
     localStorage.setItem('chromasmith_lib_hideicons', state.hideIcons ? '1' : '0');
-    hideIconsOpt.classList.toggle('sel', state.hideIcons);
+    hideIconsOpt.classList.toggle('on', state.hideIcons);
     overlay.classList.toggle('lib-hide-icons', state.hideIcons);
   };
   const matOpt = overlay.querySelector('#lib-mat');
-  matOpt.classList.toggle('sel', !!state.gridMat);
+  matOpt.classList.toggle('on', !!state.gridMat);
   if (grid) grid.classList.toggle('lib-mat', state.gridMat);
   matOpt.onclick = () => {
     state.gridMat = !state.gridMat;
     localStorage.setItem('chromasmith_lib_mat', state.gridMat ? '1' : '0');
-    matOpt.classList.toggle('sel', state.gridMat);
+    matOpt.classList.toggle('on', state.gridMat);
     const g = document.getElementById('lib-grid');
     if (g) g.classList.toggle('lib-mat', state.gridMat);
   };
@@ -8412,40 +8404,31 @@
     if (lm) lm.addEventListener('scroll', () => { if (q) return; q = true; requestAnimationFrame(() => { q = false; gridTitleUpdate(); }); }, { passive: true });
   }
   const zeroGapOpt = overlay.querySelector('#lib-zerogap');
-  zeroGapOpt.classList.toggle('sel', !!state.zeroGap);
+  zeroGapOpt.classList.toggle('on', !!state.zeroGap);
   if (grid) grid.classList.toggle('lib-zero-gap', state.zeroGap);
   zeroGapOpt.onclick = () => {
     state.zeroGap = !state.zeroGap;
     localStorage.setItem('chromasmith_lib_zerogap', state.zeroGap ? '1' : '0');
-    zeroGapOpt.classList.toggle('sel', state.zeroGap);
+    zeroGapOpt.classList.toggle('on', state.zeroGap);
     if (grid) grid.classList.toggle('lib-zero-gap', state.zeroGap);
   };
 
   // ── Gear / View menu popover (design transplant: Library View.html's #btn-view-menu) ──
   const viewMenuBtn = overlay.querySelector('#lib-view-menu-btn');
   const viewMenu = overlay.querySelector('#lib-view-menu');
-  let libSettingsCat = 'library';
-  function libShowCat(key) {
-    libSettingsCat = key;
-    viewMenu.querySelectorAll('[data-libcat]').forEach((b) => b.classList.toggle('active', b.dataset.libcat === key));
-    viewMenu.querySelectorAll('[data-libpane]').forEach((p) => p.classList.toggle('active', p.dataset.libpane === key));
-  }
-  viewMenu.querySelectorAll('[data-libcat]').forEach((b) => {
-    b.onclick = (e) => { e.stopPropagation(); libShowCat(b.dataset.libcat); };
-    b.onmouseenter = () => libShowCat(b.dataset.libcat);
-  });
-  viewMenu.querySelectorAll('.opt[data-viewval]').forEach((opt) => {
+  // One settings menu (CHR: gallery + Studio were two drifting copies): the gallery panes live in
+  // the Studio's #fx-settings-menu, so the gear here just opens that same menu.
+  if (window.libSettingsAdopt) window.libSettingsAdopt(viewMenu);
+  viewMenu.querySelectorAll('.fx-ovf-item[data-viewval]').forEach((opt) => {
     opt.onclick = () => { const b = viewSeg.querySelector(`[data-v="${opt.dataset.viewval}"]`); if (b && !b.disabled) b.onclick(); syncViewMenuChecks(); };
   });
-  viewMenuBtn.onclick = (e) => { viewMenu.classList.toggle('open'); if (viewMenu.classList.contains('open')) { libShowCat(libSettingsCat); syncViewMenuChecks(); } sortMenu.classList.remove('open'); e.stopPropagation(); };
-  document.addEventListener('click', (e) => { if (!viewMenu.contains(e.target) && e.target !== viewMenuBtn) viewMenu.classList.remove('open'); });
+  viewMenuBtn.onclick = (e) => { sortMenu.classList.remove('open'); if (window.settingsToggle) settingsToggle(e); syncViewMenuChecks(); };
   function syncViewMenuChecks() {
-    viewMenu.querySelectorAll('.opt[data-metaval]').forEach((o) => o.classList.toggle('sel', o.dataset.metaval === state.metaDisplay));
-    viewMenu.querySelectorAll('.opt[data-theme]').forEach((o) => o.classList.toggle('sel', o.dataset.theme === (state.libTheme || 'dark')));
-    viewMenu.querySelectorAll('.opt[data-viewval]').forEach((o) => o.classList.toggle('sel', o.dataset.viewval === state.viewMode));
-    const lv = viewMenu.querySelector('#lib-listview-opt'); if (lv) lv.classList.toggle('dis', !!viewSeg.querySelector('[data-v="list"]')?.disabled);
+    document.querySelectorAll('.fx-ovf-item[data-metaval]').forEach((o) => o.classList.toggle('on', o.dataset.metaval === state.metaDisplay));
+    document.querySelectorAll('.fx-ovf-item[data-viewval]').forEach((o) => o.classList.toggle('on', o.dataset.viewval === state.viewMode));
+    const lv = document.getElementById('lib-listview-opt'); if (lv) lv.classList.toggle('dis', !!viewSeg.querySelector('[data-v="list"]')?.disabled);
   }
-  viewMenu.querySelectorAll('.opt[data-metaval]').forEach((opt) => {
+  document.querySelectorAll('.fx-ovf-item[data-metaval]').forEach((opt) => {
     opt.onclick = () => { metaSel.value = opt.dataset.metaval; metaSel.onchange({ target: metaSel }); syncViewMenuChecks(); };
   });
   // Theme: dark is the default (Library View.html's own default state + Tareq's call), .lib-light
@@ -8478,18 +8461,6 @@
   }
   window.chromasmithSyncLibTheme = syncLibThemeFromShared;
   syncLibThemeFromShared();
-  viewMenu.querySelectorAll('.opt[data-theme]').forEach((opt) => {
-    opt.onclick = () => {
-      localStorage.setItem('csTheme', opt.dataset.theme);
-      // Keep body.light (the Editor's own class) in lockstep too, the same direction this sync
-      // already runs in reverse — otherwise choosing a theme from the LIBRARY's own menu would
-      // leave the freshly-fixed sync one-way instead of two-way.
-      document.body.classList.toggle('light', opt.dataset.theme === 'light');
-      if (window.sk2SaveViewTheme) window.sk2SaveViewTheme(opt.dataset.theme);
-      if (typeof syncThemeBtns === 'function') syncThemeBtns();
-      syncLibThemeFromShared();
-    };
-  });
   syncViewMenuChecks();
   // Action rows (Choose folder…, Get Info, Full-window view, etc.) close the popover after
   // firing their own (unrelated, ID-attached) click handler — checkboxes/theme opts stay open
@@ -8498,7 +8469,7 @@
   // `opt-toggle` (they're persistent toggles by role, not one-shot actions), and this selector
   // used to catch them too, wrongly closing the menu on every "Show sidebar"/"Real aspect
   // ratio" click. `:not(.opt-toggle)` exempts them, same split the checkboxes above already get.
-  viewMenu.querySelectorAll('.opt-action:not(.opt-toggle)').forEach((btn) => btn.addEventListener('click', () => viewMenu.classList.remove('open')));
+  document.querySelectorAll('#fx-settings-menu .opt-action').forEach((btn) => btn.addEventListener('click', () => window.settingsClose && settingsClose()));
 
   // ── All FX / Export (design transplant: Library View.html's #btn-allfx/.btn-export) ──
   // All FX (batch look-apply across a selection) is net-new functionality out of scope for this

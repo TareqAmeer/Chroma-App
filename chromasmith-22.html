@@ -1504,11 +1504,10 @@ body.deskx #fx-settings{display:inline-flex}
 #fx-settings-page,.fx-settings-page{width:260px;flex:0 0 auto;padding:var(--sp-1);overflow-y:auto;max-height:70vh}
 .fx-settings-pane{display:none}
 .fx-settings-pane.active{display:block}
-/* Library gear menu uses the same drill-down shell as #fx-settings-menu. */
-#lib-overlay .lib-menu.lib-settings-drill{width:auto;padding:0}
-#lib-overlay .lib-menu.lib-settings-drill.open{display:flex;align-items:stretch}
-#lib-overlay .lib-settings-drill .fx-settings-cat{color:var(--k-menu-fg)}
-#lib-overlay .lib-settings-drill .opt.dis{opacity:.4;pointer-events:none}
+/* Gallery rows adopted into this menu (library-ui.js panes) — same rows, one ruleset. */
+.fx-ovf-item.dis{opacity:.4;pointer-events:none}
+#fx-settings-menu .fx-ovf-item .check{margin-left:auto;visibility:hidden;color:var(--acc);stroke:var(--k-color-accent-a)}
+#fx-settings-menu .fx-ovf-item.on .check{visibility:visible}
 .fx-ovf-item{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;border-radius:6px;
   color:var(--txt);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);letter-spacing:0;
   padding:var(--sp-2) var(--sp-2);text-align:left}
@@ -3297,6 +3296,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
             <div id="fx-tools-menu" class="fx-settings-pane"></div>
             <div id="fx-view-menu" class="fx-settings-pane"></div>
             <div id="fx-performance-menu" class="fx-settings-pane"></div>
+            <div id="fx-appearance-menu" class="fx-settings-pane"></div>
             <!-- Split-view and edit history used to be a topbar icon each, opening a floating
                  popover anchored to that specific button (#fx-split-popover/#fx-timeline-popover,
                  still there for web/mobile mode — see the body.deskx hide rules near
@@ -6444,7 +6444,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928N';
+const BUILD='1.0928O';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23225,7 +23225,13 @@ function viewMenuBuild(){
   h+='<div class="fx-ovf-sep"></div>';
   h+=`<button class="fx-ovf-item${fxGamutWarn?' on':''}" onclick="viewMenuClose();toggleGamutWarn()"><span>Show gamut warning</span>${chk}</button>`;
   h+='<div class="fx-ovf-sep"></div>';
-  h+='<div class="fx-ovf-grp-label">Appearance — '+(document.body.classList.contains('lib-full')?'gallery':'editor')+'</div>';
+  m.innerHTML=h;
+}
+// Appearance: its own category so the gallery (which hides the Studio-only View pane) shows it too.
+function appearanceBuild(){
+  const m=document.getElementById('fx-appearance-menu');if(!m)return;
+  const curLight=document.body.classList.contains('light');
+  let h='';
   h+=`<button class="fx-ovf-item" onclick="fxSetTheme(document.body.classList.contains('light')?'dark':'light')"><span>Theme</span><span class="theme-sw${curLight?' is-light':''}" role="switch" aria-checked="${curLight}" aria-label="Light theme"><span class="theme-sw-ic">${icon('moon',12)}</span><span class="theme-sw-ic">${icon('sun',12)}</span><span class="theme-sw-knob"></span></span></button>`;
   // User accent colours: primary = accent A, secondary = accent B. Inline on body so they beat
   // both the :root and body.light token blocks; stored per-user, cleared by Reset.
@@ -23294,20 +23300,36 @@ function gpuPreferenceSet(value){
 // persists across opens (a plain module var, not reset in settingsBuild()) so reopening the
 // menu lands back where you left it instead of always snapping to Transform.
 const SETTINGS_CATS=[
-  // Same order as the gallery's gear menu: this view's tools first, then display, then app-wide.
-  {key:'tools',label:'Transform'},
-  {key:'split',label:'Compare'},
-  {key:'history',label:'History'},
+  // ONE settings menu for gallery and Studio. `studio` categories only show in the Studio; the
+  // rest show in both, so a change to a shared pane lands in both views at once.
+  {key:'tools',label:'Transform',studio:1},
+  {key:'split',label:'Compare',studio:1},
+  {key:'history',label:'History',studio:1},
+  {key:'library',label:'Library'},
+  {key:'thumbnails',label:'Thumbnails'},
+  {key:'panels',label:'Panels'},
+  {key:'view',label:'View',studio:1},
+  {key:'appearance',label:'Appearance'},
   {key:'performance',label:'Performance'},
-  {key:'view',label:'View'},
-  {key:'overflow',label:'More'},
+  {key:'overflow',label:'More',studio:1},
 ];
 const SETTINGS_PANE_ID={tools:'fx-tools-menu',view:'fx-view-menu',split:'fx-settings-split-list',
-  performance:'fx-performance-menu',history:'fx-settings-history-list',overflow:'fx-overflow-menu'};
+  performance:'fx-performance-menu',history:'fx-settings-history-list',overflow:'fx-overflow-menu',
+  appearance:'fx-appearance-menu',library:'lib-pane-library',thumbnails:'lib-pane-thumbnails',
+  panels:'lib-pane-panels'};
+const _settingsGallery=()=>document.body.classList.contains('lib-full');
+const _settingsCatsNow=()=>SETTINGS_CATS.filter(c=>document.getElementById(SETTINGS_PANE_ID[c.key])&&!(c.studio&&_settingsGallery()));
+// library-ui.js hands over its panes once they're wired; they become this menu's gallery categories.
+function libSettingsAdopt(holder){
+  const page=document.getElementById('fx-settings-page');if(!page||!holder)return;
+  holder.querySelectorAll('.fx-settings-pane').forEach(p=>page.appendChild(p));
+  // The menu must open from the gallery too, where the Studio deskbar (#fx-settings) is hidden.
+  const m=document.getElementById('fx-settings-menu');if(m&&m.parentElement!==document.body)document.body.appendChild(m);
+}
 let _settingsCat='tools';
 function settingsCatsBuild(){
   const host=document.getElementById('fx-settings-cats');if(!host)return;
-  host.innerHTML=SETTINGS_CATS.map(c=>
+  host.innerHTML=_settingsCatsNow().map(c=>
     `<button type="button" class="fx-settings-cat" data-cat="${c.key}" onclick="settingsShowCat('${c.key}')">${c.label}</button>`
   ).join('');
 }
@@ -23326,8 +23348,9 @@ function settingsShowCat(key){
   document.querySelectorAll('.fx-settings-pane').forEach(p=>p.classList.toggle('active',p.id===SETTINGS_PANE_ID[key]));
 }
 function settingsBuild(){
-  toolsBuild();viewMenuBuild();performanceBuild();ovfBuild();settingsSplitBuild();settingsHistoryBuild();
-  settingsCatsBuild();settingsShowCat(_settingsCat);
+  toolsBuild();viewMenuBuild();appearanceBuild();performanceBuild();ovfBuild();settingsSplitBuild();settingsHistoryBuild();
+  settingsCatsBuild();
+  const cats=_settingsCatsNow();settingsShowCat(cats.some(c=>c.key===_settingsCat)?_settingsCat:cats[0].key);
 }
 function settingsClose(){const m=document.getElementById('fx-settings-menu');if(m)m.classList.remove('on');}
 function settingsToggle(e){
@@ -23336,7 +23359,7 @@ function settingsToggle(e){
   if(m.classList.contains('on')){settingsClose();return;}
   settingsBuild();m.classList.add('on');
 }
-document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#fx-settings'))settingsClose();});
+document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#fx-settings,#fx-settings-menu,#lib-view-menu-btn'))settingsClose();});
 // Inline SVG icons (the app is fully offline — no icon webfont/CDN allowed).
 const _SVG=(p,sz)=>`<svg viewBox="0 0 24 24" width="${sz||20}" height="${sz||20}" fill="none" stroke="currentColor" stroke-width="${(24/(sz||20)).toFixed(3)}" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">${p}</svg>`; // E4 constructivist set: a 1px hairline at any size
 const ICONS={
