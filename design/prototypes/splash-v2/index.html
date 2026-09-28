@@ -1,159 +1,52 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Splash Concepts</title>
+<title>Splash Concept</title>
 <link rel="stylesheet" href="gramatika.css">
 <style>
-:root{--bg:#141414;--ink:#f2f0ea;--mut:#8d8b85;--acc:#ff3b1f;--acc-d:#b0200e;--acc-l:#ff7a4c;--paper:#f4f2ec;--pink:#111;--hair:color-mix(in srgb,var(--ink) 13%,transparent)}
+:root{--bg:#141414;--ink:#f2f0ea;--mut:#8d8b85;--acc:#ff3b1f}
 *{box-sizing:border-box;margin:0}
-body{background:#0b0b0b;color:var(--ink);font-family:Gramatika,system-ui,sans-serif;padding:40px 16px 80px}
-header{max-width:1520px;margin:0 auto 32px;display:flex;justify-content:space-between;align-items:end;gap:24px;flex-wrap:wrap}
-h1{font-size:28px;font-weight:700;letter-spacing:-.02em;text-transform:uppercase}
-header p{color:var(--mut);font-size:13px;max-width:520px;line-height:1.5}
-button.rp{font:inherit;font-size:13px;background:none;color:var(--ink);border:0;border-bottom:1px solid var(--acc);padding:4px 0;cursor:pointer}
-.grid{max-width:1520px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,720px),1fr));gap:48px 32px}
-figure{display:flex;flex-direction:column;gap:14px}
-figcaption{display:flex;gap:14px;font-size:13px;line-height:1.45;color:var(--mut)}
-figcaption b{color:var(--ink);font-weight:700;white-space:nowrap}
-figcaption b i{color:var(--acc);font-style:normal;margin-right:8px;font-variant-numeric:tabular-nums}
-.stage{container-type:inline-size;width:100%;aspect-ratio:720/560;position:relative;overflow:hidden;background:var(--bg)}
-.stage *{position:absolute}
+body{background:#0b0b0b;color:var(--ink);font-family:Gramatika,system-ui,sans-serif;padding:40px 16px;min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:20px}
+.stage{container-type:inline-size;width:min(100%,960px);aspect-ratio:720/560;position:relative;overflow:hidden;background:var(--bg)}
+.stage>*{position:absolute}
 .num{font-variant-numeric:tabular-nums}
-.mark{display:block}
-
-/* A — Prism */
-.A .mk{left:50%;top:38%;width:13cqw;translate:-50% -50%}
-.A .mk rect,.A .mk polygon{opacity:0;animation:in .5s cubic-bezier(.2,.7,.2,1) forwards}
-.A .mk .r1{animation-delay:.05s;transform-origin:center;transform:translate(-8px,-8px)}
-.A .mk .r2{animation-delay:.3s;transform:translate(8px,8px)}
-.A .mk .p1{animation-delay:.55s}.A .mk .p2{animation-delay:.7s}
-.A .wm{left:0;right:0;top:57%;text-align:center;font-weight:700;font-size:5.4cqw;letter-spacing:.02em}
-.A .rule{left:22%;right:22%;top:72%;height:1px;background:var(--hair)}
-.A .fill{left:22%;top:72%;height:1px;background:var(--acc);width:0}
-.A .sq{top:calc(72% - .55cqw);width:1.1cqw;height:1.1cqw;background:var(--acc);left:22%;translate:-50% 0}
-.A .lb{left:22%;top:75%;font-size:1.8cqw;color:var(--mut)}
-.A .pc{right:22%;top:75%;font-size:1.8cqw}
-.A .ft{left:0;right:0;bottom:4%;text-align:center;font-size:1.5cqw;color:var(--mut)}
-
-/* B — Poster */
-.B{background:var(--paper);color:#111}
-.B .col{top:0;bottom:0;width:1px;background:rgba(0,0,0,.08)}
-.B .wm{left:6%;top:7%;font-weight:800;font-size:14.5cqw;line-height:.86;letter-spacing:-.045em;text-transform:uppercase}
-.B .wm span{position:static;display:block}
-.B .wm span:nth-child(2){color:var(--acc)}
-.B .ph{right:6%;top:7%;width:31%;height:47%;background:#111}
-.B .ph img{position:static;width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.1)}
-.B .cap{right:6%;top:56%;width:31%;font-size:1.5cqw;color:#6b685f;font-style:italic}
-.B .rule{left:6%;right:6%;bottom:14%;height:2px;background:#111}
-.B .sq{bottom:calc(14% + 2px);width:2.4cqw;height:2.4cqw;background:var(--acc);left:6%}
-.B .pc{left:6%;bottom:3%;font-size:6.4cqw;font-weight:800;letter-spacing:-.04em;line-height:1}
-.B .lb{right:6%;bottom:4.2%;font-size:1.8cqw;text-align:right}
-.B .ver{right:6%;bottom:8.5%;font-size:1.5cqw;color:#6b685f}
-
-/* C — Step wedge */
-.C .hd{left:7%;top:8%;display:flex;align-items:center;gap:1.6cqw;font-weight:700;font-size:3cqw;letter-spacing:.02em}
-.C .hd *{position:static}
-.C .hd svg{width:4.4cqw}
-.C .ver{right:7%;top:9.6%;font-size:1.6cqw;color:var(--mut)}
-.C .wedge{left:7%;right:7%;top:30%;height:38%;display:grid;grid-template-columns:repeat(11,1fr);gap:0}
-.C .wedge i{position:static;display:block;border-right:1px solid var(--bg);transition:background .35s,transform .35s}
-.C .wedge i.on{transform:none}
-.C .ix{left:7%;right:7%;top:70%;display:grid;grid-template-columns:repeat(11,1fr);font-size:1.3cqw;color:var(--mut)}
-.C .ix span{position:static}
-.C .lb{left:7%;bottom:9%;font-size:1.8cqw}
-.C .pc{right:7%;bottom:7%;font-size:8cqw;font-weight:800;letter-spacing:-.04em;line-height:1}
-.C .dot{left:7%;top:calc(70% + 3.4cqw);width:1cqw;height:1cqw;background:var(--acc)}
-
-/* D — Film edge */
-.D{background:#0e0e0e}
-.D .strip{left:0;right:0;height:9%;display:flex;gap:2.4cqw;padding:0 2cqw;align-items:center;background:#181818}
-.D .strip i{position:static;flex:none;width:2.2cqw;height:3.2cqw;background:#0e0e0e;border-radius:.3cqw}
-.D .t{top:0}.D .b{bottom:0}
-.D .edge{left:3%;top:11.5%;font-size:1.5cqw;color:var(--acc);letter-spacing:.14em;white-space:nowrap}
-.D .edge2{right:3%;bottom:11.5%;font-size:1.5cqw;color:var(--acc);letter-spacing:.14em;white-space:nowrap}
-.D .fr{left:50%;top:50%;translate:-50% -50%;width:56%;aspect-ratio:3/2;background:#000;border:1px solid var(--hair);overflow:hidden}
-.D .fr img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.15) brightness(.2);transition:filter .3s}
-.D .fr .veil{inset:0;background:var(--acc);mix-blend-mode:multiply;opacity:.0}
-.D .wm{left:22%;top:18%;font-weight:700;font-size:2.4cqw;letter-spacing:.02em}
-.D .pc{right:22%;top:18%;font-size:2.4cqw}
-.D .lb{left:22%;bottom:17%;font-size:1.6cqw;color:var(--mut)}
-.D .cr{right:22%;bottom:17%;font-size:1.4cqw;color:var(--mut);font-style:italic}
-
-@keyframes in{to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.A .mk *{animation:none;opacity:1;transform:none}}
-</style></head>
-<body>
-<header>
-  <div><h1>Splash — Swiss v2 concepts</h1><p>Four loading screens in the v2 language: charcoal/paper, one vermilion accent, the small square as the progress marker, hairlines, the Gramatika all-caps wordmark. Each runs the real boot phases (walk → paint) on a simulated clock.</p></div>
-  <button class="rp" id="rp">Replay all</button>
-</header>
-<div class="grid">
-
-<figure><div class="stage A" data-k="A">
-  <svg class="mk mark" viewBox="18 18 64 62"><rect class="r1" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="r2" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><polygon class="p1" points="36,32 69,32 36,65" fill="#b0200e"/><polygon class="p2" points="69,32 69,65 36,65" fill="#ff7a4c"/></svg>
-  <div class="wm">CHRO-MA-SMITH</div>
-  <div class="rule"></div><div class="fill"></div><div class="sq"></div>
+.ph{left:50%;top:9%;width:44%;aspect-ratio:3/2;translate:-50% 0;background:#000;overflow:hidden}
+.ph img{width:100%;height:100%;object-fit:cover;object-position:center 40%;filter:grayscale(1) contrast(1.1);display:block}
+.cr{right:28%;top:calc(9% + 29.3cqw + 1cqw);font-size:1.3cqw;color:var(--mut);font-style:italic}
+.brand{left:0;right:0;top:57%;display:flex;justify-content:center;align-items:center;gap:1.8cqw;font-weight:700;font-size:5.4cqw;letter-spacing:.02em;line-height:1}
+.brand svg{width:6.2cqw;height:6.2cqw;flex:none;margin:-.6cqw}
+.wedge{left:22%;right:22%;top:71%;height:2.6cqw;display:grid;grid-template-columns:repeat(11,1fr)}
+.wedge i{background:#1d1d1d;border-right:1px solid var(--bg);transition:background .35s}
+.lb{left:22%;top:76%;font-size:1.8cqw;color:var(--mut)}
+.pc{right:22%;top:76%;font-size:1.8cqw}
+.ft{left:0;right:0;bottom:4%;text-align:center;font-size:1.5cqw;color:var(--mut)}
+button{font:inherit;font-size:13px;background:none;color:var(--ink);border:0;border-bottom:1px solid var(--acc);padding:4px 0;cursor:pointer}
+</style></head><body>
+<div class="stage">
+  <div class="ph"><img alt="" src="dog-sitting.webp"></div>
+  <div class="cr">Cover photo by Tareq Ameer</div>
+  <div class="brand">
+    <svg viewBox="18 18 64 62" aria-hidden="true"><rect x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect x="36" y="32" width="43" height="45" fill="#ff3b1f"/><clipPath id="p2c"><rect x="36" y="32" width="33" height="33"/></clipPath><g clip-path="url(#p2c)"><defs><radialGradient id="p2a" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="p2b" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><polygon points="36,32 69,32 36,65" fill="url(#p2a)"/><polygon points="69,32 69,65 36,65" fill="url(#p2b)"/><line x1="36" y1="65" x2="69" y2="32" stroke="#fff1e0" stroke-width=".35" opacity=".8"/></g></svg>
+    <span>CHRO-MA-SMITH</span>
+  </div>
+  <div class="wedge"></div>
   <div class="lb">Checking your library</div><div class="pc num">0%</div>
   <div class="ft num">Build 22</div>
-</div><figcaption><b><i>01</i>Prism</b><span>The app icon assembles itself, square by square, then the wordmark. A single hairline carries the vermilion square across as progress. Quietest option — closest to the app chrome.</span></figcaption></figure>
-
-<figure><div class="stage B" data-k="B">
-  <div class="col" style="left:6%"></div><div class="col" style="left:34.7%"></div><div class="col" style="left:63%"></div><div class="col" style="right:6%"></div>
-  <div class="wm"><span>Chro</span><span>ma</span><span>smith</span></div>
-  <div class="ph"><img alt="" src="dog-sitting.webp"></div>
-  <div class="cap">Cover photo by Tareq Ameer</div>
-  <div class="ver num">Build 22</div>
-  <div class="rule"></div><div class="sq"></div>
-  <div class="pc num">0%</div><div class="lb">Checking your library</div>
-</div><figcaption><b><i>02</i>Poster</b><span>International-style poster on paper: stacked syllables on a visible 3-column grid, vermilion only on the middle syllable and the square riding the rule. Keeps the cover photo from today's splash.</span></figcaption></figure>
-
-<figure><div class="stage C" data-k="C">
-  <div class="hd"><svg viewBox="18 18 64 62"><rect x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect x="36" y="32" width="43" height="45" fill="#ff3b1f"/><polygon points="36,32 69,32 36,65" fill="#b0200e"/><polygon points="69,32 69,65 36,65" fill="#ff7a4c"/></svg><span>CHRO-MA-SMITH</span></div>
-  <div class="ver num">Build 22</div>
-  <div class="wedge"></div>
-  <div class="ix num"></div><div class="dot"></div>
-  <div class="lb">Checking your library</div><div class="pc num">0%</div>
-</div><figcaption><b><i>03</i>Step wedge</b><span>A calibration step wedge — the film tool behind the app — exposes zone by zone as the library loads. The square marks the current zone. Most "photographic" of the four without needing a photo.</span></figcaption></figure>
-
-<figure><div class="stage D" data-k="D">
-  <div class="strip t"></div><div class="strip b"></div>
-  <div class="edge">CHROMASMITH 22 ▸ 1A &nbsp;&nbsp; SK2 &nbsp;&nbsp; 36</div>
-  <div class="edge2">▸ 2A &nbsp;&nbsp; SAFETY FILM &nbsp;&nbsp; 22</div>
-  <div class="wm">CHRO-MA-SMITH</div><div class="pc num">0%</div>
-  <div class="fr"><img alt="" src="dog-sitting.webp"><div class="veil"></div></div>
-  <div class="lb">Checking your library</div><div class="cr">Cover photo by Tareq Ameer</div>
-</div><figcaption><b><i>04</i>Develop</b><span>A 35mm frame between sprocket strips, with vermilion edge markings. The cover photo develops from black to full tone as progress rises — the loading bar is the image itself.</span></figcaption></figure>
-
 </div>
+<button id="rp">Replay</button>
 <script>
-const PH=[['walk',12,'Checking your library'],['subfolders',18,'Finding folders'],['metadata',35,'Reading metadata'],['sidecar',45,'Reading edits'],['cache',70,'Warming the cache'],['paint',100,'Drawing thumbnails']];
-const Z=11,shade=i=>{const v=Math.round(242-(i/(Z-1))*222);return `rgb(${v},${v-2},${v-8})`};
-document.querySelector('.C .wedge').innerHTML=Array.from({length:Z},()=>'<i></i>').join('');
-document.querySelector('.C .ix').innerHTML=Array.from({length:Z},(_,i)=>`<span>${String(i).padStart(2,'0')}</span>`).join('');
-['t','b'].forEach(c=>document.querySelector('.D .'+c).innerHTML='<i></i>'.repeat(30));
-function label(p){return (PH.find(x=>p<=x[1])||PH[5])[2]}
+const PH=[[12,'Checking your library'],[18,'Finding folders'],[35,'Reading metadata'],[45,'Reading edits'],[70,'Warming the cache'],[100,'Drawing thumbnails']];
+const Z=11,W=document.querySelector('.wedge');W.innerHTML='<i></i>'.repeat(Z);
+const shade=i=>{if(i===Z-1)return 'var(--acc)';const v=Math.round(242-(i/(Z-2))*200);return `rgb(${v},${v-2},${v-8})`};
 function paint(p){
-  const t=Math.round(p)+'%',L=label(p);
-  document.querySelectorAll('.stage').forEach(s=>{s.querySelector('.pc').textContent=t;s.querySelector('.lb').textContent=L});
-  // A
-  document.querySelector('.A .fill').style.width=(56*p/100)+'%';
-  document.querySelector('.A .sq').style.left=(22+56*p/100)+'%';
-  // B
-  document.querySelector('.B .sq').style.left=`calc(6% + (88% - 2.4cqw) * ${p/100})`;
-  // C
-  const n=Math.min(Z,Math.floor(p/100*Z+.0001)),cur=Math.min(Z-1,Math.floor(p/100*Z));
-  document.querySelectorAll('.C .wedge i').forEach((e,i)=>e.style.background=i<n?shade(i):'#1c1c1c');
-  document.querySelector('.C .dot').style.left=`calc(7% + 86% * ${cur/Z})`;
-  // D
-  const img=document.querySelector('.D .fr img');img.style.filter=`grayscale(1) contrast(1.15) brightness(${.08+.92*p/100})`;
-  document.querySelector('.D .veil').style.opacity=(p<100?.35*(1-p/100):0);
+  document.querySelector('.pc').textContent=Math.round(p)+'%';
+  document.querySelector('.lb').textContent=(PH.find(x=>p<=x[0])||PH[5])[1];
+  const n=Math.floor(p/100*Z+1e-4);
+  W.querySelectorAll('i').forEach((e,i)=>e.style.background=i<n?shade(i):'');
 }
-let raf,t0;
-function run(){
-  cancelAnimationFrame(raf);t0=performance.now();
-  document.querySelectorAll('.A .mk *').forEach(e=>{e.style.animation='none';e.offsetWidth;e.style.animation=''});
-  const D=7000,step=t=>{const k=Math.min(1,(t-t0)/D);paint(100*(1-Math.pow(1-k,1.6)));if(k<1)raf=requestAnimationFrame(step);else setTimeout(run,1800)};
-  raf=requestAnimationFrame(step);
-}
+let raf;
+function run(){cancelAnimationFrame(raf);const t0=performance.now(),D=7000;
+  const step=t=>{const k=Math.min(1,(t-t0)/D);paint(100*(1-Math.pow(1-k,1.6)));if(k<1)raf=requestAnimationFrame(step);else setTimeout(run,1800)};
+  raf=requestAnimationFrame(step)}
 document.getElementById('rp').onclick=run;paint(0);run();
 </script>
 </body></html>
