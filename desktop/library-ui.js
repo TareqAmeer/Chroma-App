@@ -8530,9 +8530,7 @@
       libTop.classList.remove('lib-top-tight1', 'lib-top-tight2');
       return;
     }
-    const w = libTop.getBoundingClientRect().width;
-    libTop.classList.toggle('lib-top-tight1', w < 900);
-    libTop.classList.toggle('lib-top-tight2', w < 820);
+    syncTopOverflow(); // one staged, collision-driven fold (see syncTopOverflow)
   }
   new ResizeObserver(syncTopTight).observe(libTop);
   window.addEventListener('resize', syncTopTight);
@@ -8550,14 +8548,17 @@
       }
       return;
     }
-    libTop.classList.remove('lib-top-compact','lib-top-overflow1','lib-top-overflow2','lib-top-overflow3');
-    if (libTop.scrollWidth > libTop.clientWidth + 1) libTop.classList.add('lib-top-compact');
-    const left=libTop.querySelector('#lib-top-left'), right=libTop.querySelector('#lib-top-right');
-    if (!left || !right) return;
-    const over=()=>left.scrollWidth>left.clientWidth+1 || right.scrollWidth>right.clientWidth+1;
-    if (over()) libTop.classList.add('lib-top-overflow1');
-    if (over()) libTop.classList.add('lib-top-overflow2');
-    if (over()) libTop.classList.add('lib-top-overflow3');
+    const STAGES = ['lib-top-tight1', 'lib-top-tight2', 'lib-top-compact', 'lib-top-overflow1', 'lib-top-overflow2', 'lib-top-overflow3'];
+    libTop.classList.remove(...STAGES);
+    // Fold in stages only while visible controls genuinely collide or leave the window. The bar's
+    // own width/scrollWidth is useless under sk2 (its box is narrower than the controls it lays
+    // out), which folded All FX/Export to icons even with hundreds of spare pixels.
+    const collide = () => {
+      const rs = [...libTop.querySelectorAll('button,.lib-search-wrap')].filter((el) => el.getClientRects().length && !el.closest('.lib-menu,#lib-view-menu') && !el.parentElement.closest('.lib-search-wrap'))
+        .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0).sort((a, b) => a.left - b.left);
+      return rs.some((r, i) => r.right > document.documentElement.clientWidth + 1 || (i && r.left < rs[i - 1].right - 1 && r.top < rs[i - 1].bottom && r.bottom > rs[i - 1].top));
+    };
+    for (const c of STAGES) { if (!collide()) break; libTop.classList.add(c); }
   }
   new ResizeObserver(()=>requestAnimationFrame(syncTopOverflow)).observe(libTop);
   window.addEventListener('resize', syncTopOverflow);
