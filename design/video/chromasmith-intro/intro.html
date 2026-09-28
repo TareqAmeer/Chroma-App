@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chromasmith cinematic ident</title>
+<style>
+@font-face{font-family:Gramatika;src:url('../../../vendor/fonts/gramatika/GramatikaBold.otf') format('opentype');font-weight:700}
+@font-face{font-family:Gramatika;src:url('../../../vendor/fonts/gramatika/GramatikaRegular.otf') format('opentype');font-weight:400}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
+body{font-family:Gramatika,Arial,sans-serif}
+#stage{position:relative;width:1280px;height:720px;overflow:hidden;background:#000;isolation:isolate}
+#sky{position:absolute;inset:-35px;background:radial-gradient(ellipse 540px 380px at 57% 30%,#233e5b 0%,#132941 31%,#071624 65%,#01050c 100%);overflow:hidden}
+#sky::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 360px 130px at 28% 48%,rgba(110,164,199,.16),transparent 75%),radial-gradient(ellipse 580px 120px at 74% 62%,rgba(67,115,163,.19),transparent 75%),radial-gradient(ellipse 420px 115px at 68% 15%,rgba(182,217,244,.08),transparent 75%);filter:blur(19px);transform:rotate(-9deg)}
+#sky::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 70% 80% at 50% 41%,transparent 22%,rgba(0,0,0,.34) 78%,rgba(0,0,0,.76) 100%)}
+#stars{position:absolute;inset:0}.star{position:absolute;width:1px;height:1px;border-radius:50%;background:#c2dcf3;box-shadow:0 0 6px #7eb8ed}
+#lightfield{position:absolute;inset:0;mix-blend-mode:screen;pointer-events:none}
+#lightfield .aura{position:absolute;left:480px;top:-35px;width:550px;height:490px;border-radius:50%;background:radial-gradient(circle at center,rgba(240,251,255,.98) 0%,rgba(196,230,255,.91) 2%,rgba(111,188,235,.48) 11%,rgba(77,154,214,.23) 27%,rgba(61,119,179,.08) 52%,transparent 72%);filter:blur(3px)}
+#lightfield .core{position:absolute;left:747px;top:193px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 0 11px 6px #f1faff,0 0 40px 23px rgba(191,228,255,.86),0 0 110px 51px rgba(118,181,235,.47)}
+#lightfield .streak{position:absolute;left:65px;top:199px;width:1190px;height:2px;background:linear-gradient(90deg,transparent,rgba(120,185,231,.1) 23%,rgba(230,248,255,.78) 56%,rgba(146,204,240,.15) 78%,transparent);box-shadow:0 0 16px 4px rgba(116,183,231,.36)}
+#lightfield .vertical{position:absolute;left:753px;top:36px;width:1px;height:407px;background:linear-gradient(transparent,rgba(225,248,255,.46),transparent);box-shadow:0 0 9px #d7f3ff}
+#lightfield .ghost{position:absolute;border:1px solid rgba(149,213,248,.23);border-radius:50%;box-shadow:0 0 10px rgba(114,187,232,.14)}
+#lightfield .ghost.one{left:691px;top:128px;width:126px;height:126px}
+#lightfield .ghost.two{left:568px;top:10px;width:370px;height:370px;opacity:.5}
+#grain{position:absolute;inset:0;opacity:.095;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(153,199,230,.16) 3px 4px);pointer-events:none}
+#motion-rays{position:absolute;inset:0;opacity:0;pointer-events:none;background:linear-gradient(15deg,transparent 47.8%,rgba(170,220,249,.12) 49%,transparent 50%),linear-gradient(-18deg,transparent 47.9%,rgba(170,220,249,.09) 49%,transparent 50%)}
+#space{position:absolute;inset:0;perspective:960px;perspective-origin:50% 39%;transform-style:preserve-3d}
+.card{position:absolute;transform-style:preserve-3d;will-change:transform,opacity;backface-visibility:visible}
+.face{position:absolute;inset:0;overflow:hidden;backface-visibility:visible;box-shadow:0 0 1px 1px rgba(255,255,255,.32),0 0 28px rgba(152,213,255,.17)}
+.face::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 56% 39% at var(--gx,72%) var(--gy,25%),rgba(255,255,255,.54),rgba(255,255,255,.19) 20%,transparent 65%),linear-gradient(115deg,transparent 31%,rgba(255,255,255,.25) 46%,transparent 57%);mix-blend-mode:screen;opacity:.62}
+.back{transform:translateZ(2px)}
+#white-card,#white-trail{left:550px;top:165px;width:149px;height:136px}
+#white-card .front,#white-trail .front{background:linear-gradient(130deg,#f8f7f1 3%,#d2dadd 29%,#fffefa 49%,#cbd4d7 71%,#fcfaf3 100%)}
+#white-card .back,#white-trail .back{background:linear-gradient(127deg,#090f16 5%,#2d3b46 35%,#05080d 63%,#3b4b55 100%)}
+#white-card .back::after,#white-trail .back::after{opacity:.35}
+#orange-card,#orange-trail{left:597px;top:199px;width:133px;height:140px}
+#orange-card .front,#orange-trail .front{background:linear-gradient(137deg,#ff9568 0%,#ff3b1f 27%,#d52711 65%,#ff6139 81%,#ba1e0f 100%)}
+#orange-card .back,#orange-trail .back{background:linear-gradient(137deg,#8d1c0d,#e73a1b 53%,#79200e)}
+#orange-card .face::after,#orange-trail .face::after{opacity:.44}
+.trail{filter:blur(17px);mix-blend-mode:screen;pointer-events:none}
+#final-mark{position:absolute;left:485px;top:100px;width:310px;height:310px;opacity:0;filter:drop-shadow(0 0 12px rgba(166,210,238,.27));pointer-events:none}
+#final-mark svg{width:100%;height:100%}
+#forge{position:absolute;left:700px;top:199px;width:14px;height:14px;border-radius:50%;background:#fff7e9;box-shadow:0 0 9px 5px #ffedce,0 0 37px 21px rgba(255,147,94,.9),0 0 125px 71px rgba(255,85,38,.58);opacity:0;pointer-events:none;mix-blend-mode:screen}
+#forge::before{content:"";position:absolute;left:-245px;top:6px;width:500px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,228,188,.9),transparent);box-shadow:0 0 11px #ff9d6f}
+#title-space{position:absolute;inset:0;perspective:960px;perspective-origin:50% 50%;pointer-events:none}
+.title{position:absolute;top:451px;left:0;width:1280px;text-align:center;white-space:nowrap;color:#f1f3f1;font-size:73px;font-weight:700;line-height:1;letter-spacing:.051em;text-shadow:0 0 16px rgba(211,237,255,.68),0 0 49px rgba(100,174,230,.35);transform-style:preserve-3d;transform-origin:center center;will-change:transform,opacity}
+#title-trail{filter:blur(18px);mix-blend-mode:screen;opacity:0}
+#title{opacity:0}
+#credit-line{position:absolute;left:318px;top:530px;width:644px;height:1px;background:linear-gradient(90deg,transparent,#a9c9da 18%,#f3d4bf 50%,#a9c9da 82%,transparent);box-shadow:0 0 12px rgba(188,220,239,.76);opacity:0}
+#credit{position:absolute;top:552px;left:0;width:1280px;text-align:center;color:#dce0df;font-size:19px;font-weight:400;letter-spacing:.31em;text-indent:.31em;text-shadow:0 0 11px rgba(202,224,241,.39);opacity:0}
+</style>
+</head>
+<body><main id="stage" aria-label="Chromasmith studio ident">
+ <div id="sky"><div id="stars"></div><div id="lightfield"><div class="aura"></div><div class="ghost two"></div><div class="ghost one"></div><div class="streak"></div><div class="vertical"></div><div class="core"></div></div><div id="motion-rays"></div><div id="grain"></div></div>
+ <div id="space">
+  <div id="white-trail" class="card trail"><div class="face front"></div><div class="face back"></div></div>
+  <div id="orange-trail" class="card trail"><div class="face front"></div><div class="face back"></div></div>
+  <div id="white-card" class="card"><div class="face front"></div><div class="face back"></div></div>
+  <div id="orange-card" class="card"><div class="face front"></div><div class="face back"></div></div>
+ </div>
+ <div id="final-mark"><svg viewBox="0 0 100 100" aria-label="Chromasmith mark"><defs>
+  <clipPath id="overlap"><rect x="36" y="32" width="33" height="33"/></clipPath>
+  <radialGradient id="g1" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient>
+  <radialGradient id="g2" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient>
+ </defs><rect x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect x="36" y="32" width="43" height="45" fill="#ff3b1f"/>
+ <g clip-path="url(#overlap)"><polygon points="36,32 69,32 36,65" fill="url(#g1)"/><polygon points="69,32 69,65 36,65" fill="url(#g2)"/><line x1="36" y1="65" x2="69" y2="32" stroke="#fff1e0" stroke-width=".35" opacity=".8"/></g>
+ </svg></div>
+ <div id="forge"></div>
+ <div id="title-space"><div id="title-trail" class="title">CHRO-MA-SMITH</div><div id="title" class="title">CHRO-MA-SMITH</div></div>
+ <div id="credit-line"></div><div id="credit">A MAD MACHINE PRODUCTION</div>
+</main>
+<script>
+const $=id=>document.getElementById(id),clamp=x=>Math.max(0,Math.min(1,x));
+const smooth=(a,b,t)=>{const x=clamp((t-a)/(b-a));return x*x*(3-2*x)};
+const bell=(c,w,t)=>Math.max(0,1-Math.abs((t-c)/w));
+const stars=[];for(let i=0;i<85;i++){const s=document.createElement('i');s.className='star';s.style.left=(34+i*433%1210)+'px';s.style.top=(24+i*191%660)+'px';s.style.width=s.style.height=(i%13===0?2:1)+'px';$('stars').appendChild(s);stars.push(s)}
+function keyPose(keys,t){
+ if(t<=keys[0].t)return {...keys[0]};
+ if(t>=keys[keys.length-1].t)return {...keys[keys.length-1]};
+ let i=0;while(t>keys[i+1].t)i++;
+ const a=keys[i],b=keys[i+1],u=smooth(a.t,b.t,t),pose={};
+ for(const k of ['x','y','z','rx','ry','rz'])pose[k]=a[k]+(b[k]-a[k])*u;
+ return pose;
+}
+function whitePose(t){return keyPose([
+ {t:0,x:-60,y:-15,z:890,rx:-22,ry:178,rz:-18},
+ {t:1.06,x:-38,y:-10,z:760,rx:-17,ry:128,rz:-11},
+ {t:1.86,x:-10,y:0,z:420,rx:6,ry:46,rz:6},
+ {t:2.92,x:0,y:0,z:0,rx:0,ry:0,rz:0}
+],t)}
+function orangePose(t){return keyPose([
+ {t:1.40,x:65,y:-20,z:880,rx:28,ry:-178,rz:22},
+ {t:2.22,x:52,y:-13,z:850,rx:20,ry:-126,rz:15},
+ {t:2.86,x:23,y:2,z:700,rx:-9,ry:-32,rz:-7},
+ {t:3.48,x:0,y:0,z:0,rx:0,ry:0,rz:0}
+],t)}
+function place(id,pose,opacity,glint){const e=$(id);e.style.opacity=clamp(opacity).toFixed(3);e.style.transform=`translate3d(${pose.x.toFixed(2)}px,${pose.y.toFixed(2)}px,${pose.z.toFixed(2)}px) rotateZ(${pose.rz.toFixed(2)}deg) rotateY(${pose.ry.toFixed(2)}deg) rotateX(${pose.rx.toFixed(2)}deg)`;e.style.setProperty('--gx',glint+'%')}
+function faceMix(id,front){const e=$(id);e.querySelector('.front').style.opacity=front.toFixed(3);e.querySelector('.back').style.opacity=(1-front).toFixed(3)}
+window.renderAt=function(t){
+ const w=whitePose(t),o=orangePose(t),wa=smooth(0,.29,t)*(1-smooth(3.31,3.69,t)),oa=smooth(1.36,1.56,t)*(1-smooth(3.39,3.72,t));
+ place('white-card',w,wa,70-32*smooth(.3,2.9,t));place('orange-card',o,oa,78-31*smooth(1.1,3.5,t));
+ const wt=whitePose(Math.max(0,t-.07)),ot=orangePose(Math.max(1.40,t-.07));
+ place('white-trail',wt,wa*.21*(1-smooth(2.55,3.02,t)),74);place('orange-trail',ot,oa*.23*(1-smooth(3.07,3.53,t)),74);
+ for(const id of ['white-card','white-trail'])faceMix(id,smooth(1.10,1.93,t));
+ for(const id of ['orange-card','orange-trail'])faceMix(id,smooth(2.04,2.76,t));
+ const arrived=smooth(3.42,3.76,t);$('final-mark').style.opacity=arrived.toFixed(3);
+ const flash=bell(3.57,.55,t);$('forge').style.opacity=(flash*.9).toFixed(3);
+ const skyFade=1-smooth(6.02,7.18,t);$('sky').style.opacity=skyFade.toFixed(3);
+ $('lightfield').style.opacity=(.73+.26*bell(3.35,.9,t)).toFixed(3);
+ $('motion-rays').style.opacity=(.43*bell(1.35,1.2,t)+.44*bell(2.48,.98,t)).toFixed(3);
+ $('sky').style.transform=`scale(${(1+.014*t).toFixed(4)})`;
+ stars.forEach((s,i)=>{s.style.opacity=(.08+(.22+.23*Math.sin(t*(1+i%4*.12)+i*1.7))*skyFade).toFixed(3)});
+ const p=smooth(4.16,5.61,t),q=1-p,tw=clamp(smooth(4.11,4.32,t));
+ const wordTransform=`translate3d(${(155*q).toFixed(2)}px,${(139*q).toFixed(2)}px,${(745*Math.pow(q,1.16)).toFixed(2)}px) rotateY(${(-14*q).toFixed(2)}deg) rotateX(${(11*q).toFixed(2)}deg) rotateZ(${(3*q).toFixed(2)}deg)`;
+ $('title').style.transform=wordTransform;$('title').style.opacity=tw.toFixed(3);$('title').style.filter=`blur(${(5*q).toFixed(2)}px)`;
+ $('title-trail').style.transform=`translate3d(${(190*q).toFixed(2)}px,${(160*q).toFixed(2)}px,${(770*Math.pow(q,1.12)).toFixed(2)}px) rotateY(${(-15*q).toFixed(2)}deg) rotateX(${(12*q).toFixed(2)}deg)`;
+ $('title-trail').style.opacity=(tw*.24*q).toFixed(3);
+ const credit=smooth(5.65,6.28,t);$('credit-line').style.opacity=credit.toFixed(3);$('credit').style.opacity=credit.toFixed(3);
+};window.renderAt(0);
+</script></body></html>

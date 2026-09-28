@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1840 780" role="img" aria-label="Six-frame storyboard for the Chromasmith studio intro">
+<defs>
+ <radialGradient id="sky"><stop stop-color="#1b344e"/><stop offset=".52" stop-color="#091725"/><stop offset="1" stop-color="#02060d"/></radialGradient>
+ <radialGradient id="light"><stop stop-color="#fffdf4" stop-opacity="1"/><stop offset=".09" stop-color="#eaf5ff" stop-opacity=".98"/><stop offset=".28" stop-color="#91c8ee" stop-opacity=".48"/><stop offset=".63" stop-color="#376084" stop-opacity=".14"/><stop offset="1" stop-color="#376084" stop-opacity="0"/></radialGradient>
+ <linearGradient id="white" x2="1" y2="1"><stop stop-color="#faf9f5"/><stop offset=".48" stop-color="#d2dce0"/><stop offset=".58" stop-color="#fff"/><stop offset="1" stop-color="#9fb1ba"/></linearGradient>
+ <linearGradient id="black" x2="1" y2="1"><stop stop-color="#35424b"/><stop offset=".33" stop-color="#080e13"/><stop offset=".72" stop-color="#111a22"/><stop offset="1" stop-color="#51616c"/></linearGradient>
+ <linearGradient id="orange" x2="1" y2="1"><stop stop-color="#ffb48b"/><stop offset=".19" stop-color="#ff5933"/><stop offset=".54" stop-color="#d82d14"/><stop offset=".66" stop-color="#ff7949"/><stop offset="1" stop-color="#8f190e"/></linearGradient>
+ <radialGradient id="overlap" cx="1" cy="0"><stop stop-color="#fff1df"/><stop offset=".26" stop-color="#ff9968"/><stop offset=".7" stop-color="#b82c16"/><stop offset="1" stop-color="#76120b"/></radialGradient>
+ <filter id="glow"><feGaussianBlur stdDeviation="8"/></filter>
+ <filter id="blur"><feGaussianBlur stdDeviation="3"/></filter>
+ <clipPath id="c1"><rect x="0" y="0" width="560" height="244"/></clipPath>
+ <clipPath id="c2"><rect x="0" y="0" width="560" height="244"/></clipPath>
+ <clipPath id="c3"><rect x="0" y="0" width="560" height="244"/></clipPath>
+ <clipPath id="c4"><rect x="0" y="0" width="560" height="244"/></clipPath>
+ <clipPath id="c5"><rect x="0" y="0" width="560" height="244"/></clipPath>
+ <clipPath id="c6"><rect x="0" y="0" width="560" height="244"/></clipPath>
+ <style>
+  @font-face{font-family:Gramatika;src:url('../../../vendor/fonts/gramatika/GramatikaBold.otf') format('opentype');font-weight:700}
+  @font-face{font-family:Gramatika;src:url('../../../vendor/fonts/gramatika/GramatikaRegular.otf') format('opentype');font-weight:400}
+  text{font-family:Gramatika,Arial,sans-serif}
+  .heading{fill:#f2f1e9;font-size:31px;font-weight:700;letter-spacing:2px}
+  .time{fill:#ff7652;font-size:17px;font-weight:700;letter-spacing:2px}
+  .cap{fill:#bbc7cb;font-size:17px;letter-spacing:.35px}
+  .panel{fill:url(#sky);stroke:#52616b;stroke-width:1.5}
+  .ray{stroke:#b5e3ff;stroke-width:1.2;opacity:.42}
+  .motion{fill:none;stroke:#a4c8df;stroke-width:2;stroke-dasharray:6 7;opacity:.75}
+ </style>
+</defs>
+<rect width="1840" height="780" fill="#070b10"/>
+<text x="40" y="48" class="heading">CHRO-MA-SMITH  /  STUDIO IDENT STORYBOARD</text>
+<text x="1790" y="47" text-anchor="end" fill="#aab8c0" font-size="17" letter-spacing="2">8.8 SEC · VISUAL DIRECTION ONLY</text>
+
+<!-- 1: square crosses camera plane while light points toward the lens -->
+<g transform="translate(40 78)">
+ <rect class="panel" width="560" height="300" rx="4"/>
+ <g clip-path="url(#c1)">
+  <circle cx="419" cy="95" r="220" fill="url(#light)"/>
+  <path class="ray" d="M419 95 0 70M419 95 560 24M419 95 560 180M419 95 150 244"/>
+  <polygon points="-115,-72 365,-36 328,290 -118,290" fill="url(#black)" stroke="#9eaeb5" stroke-width="2"/>
+  <polygon points="365,-36 404,-17 367,284 328,290" fill="url(#white)" stroke="#e6eef0" stroke-width="2"/>
+  <path d="M325 250 365-36" stroke="#f8fbf6" stroke-width="11" opacity=".31" filter="url(#blur)"/>
+  <circle cx="419" cy="95" r="18" fill="#f8ffff" filter="url(#glow)"/>
+  <circle cx="419" cy="95" r="5" fill="#fff"/>
+ </g>
+ <text x="17" y="267" class="time">0.0–1.1 s</text>
+ <text x="17" y="290" class="cap">Black face fills the lens; the distant light aims at camera.</text>
+</g>
+
+<!-- 2: the white/black square flips and recedes -->
+<g transform="translate(640 78)">
+ <rect class="panel" width="560" height="300" rx="4"/>
+ <g clip-path="url(#c2)">
+  <circle cx="286" cy="107" r="150" fill="url(#light)" opacity=".8"/>
+  <path class="motion" d="M-25 270 C65 155 158 134 226 116"/>
+  <path class="motion" d="M570 -38 C480 60 429 83 370 100"/>
+  <polygon points="163,40 368,48 347,213 151,222" fill="url(#black)" stroke="#92a6b0" stroke-width="2"/>
+  <polygon points="368,48 402,69 379,198 347,213" fill="url(#white)" stroke="#fff" stroke-width="2"/>
+  <path d="M382 67 359 197" stroke="#fff" stroke-width="7" opacity=".57" filter="url(#blur)"/>
+  <path d="M408 75 C429 103 423 139 397 161" fill="none" stroke="#f7f8f1" stroke-width="2.3" opacity=".8"/>
+  <path d="m398 156-2 13 13-3" fill="none" stroke="#f7f8f1" stroke-width="2.3"/>
+  <text x="20" y="33" fill="#dce9ed" font-size="14" letter-spacing="2">BLACK ↔ WHITE</text>
+ </g>
+ <text x="17" y="267" class="time">1.1–2.3 s</text>
+ <text x="17" y="290" class="cap">Square flies away, shrinks, and flips to its white face.</text>
+</g>
+
+<!-- 3: orange square follows in foreground, reflective rim -->
+<g transform="translate(1240 78)">
+ <rect class="panel" width="560" height="300" rx="4"/>
+ <g clip-path="url(#c3)">
+  <circle cx="288" cy="90" r="170" fill="url(#light)"/>
+  <polygon points="188,58 337,48 320,169 184,177" fill="url(#white)" opacity=".82"/>
+  <path class="motion" d="M625 278 C515 201 437 172 353 139"/>
+  <polygon points="383,-62 642,53 498,311 276,166" fill="url(#orange)" stroke="#ffb187" stroke-width="3"/>
+  <polygon points="383,-62 413,-78 673,33 642,53" fill="#8b2015" stroke="#ffc5a5" stroke-width="1"/>
+  <path d="M362-36 585 77 454 252" fill="none" stroke="#fff7ed" stroke-width="12" opacity=".30" filter="url(#blur)"/>
+  <path d="M375-45 593 72" stroke="#ffe7cc" stroke-width="2" opacity=".73"/>
+  <circle cx="288" cy="90" r="6" fill="#fff"/>
+ </g>
+ <text x="17" y="267" class="time">2.3–3.3 s</text>
+ <text x="17" y="290" class="cap">Orange plate passes close, tumbles, then recedes too.</text>
+</g>
+
+<!-- 4: the original mark is assembled in the distance and flare blooms -->
+<g transform="translate(40 408)">
+ <rect class="panel" width="560" height="300" rx="4"/>
+ <g clip-path="url(#c4)">
+  <circle cx="293" cy="117" r="172" fill="url(#light)"/>
+  <rect x="209" y="46" width="118" height="108" fill="url(#white)"/>
+  <rect x="247" y="73" width="106" height="109" fill="url(#orange)"/>
+  <path d="M247 73h80l-80 81z" fill="url(#overlap)"/>
+  <path d="M327 73v81h-80z" fill="#ff683d" opacity=".68"/>
+  <path d="M247 154 327 73" stroke="#fff5e4" stroke-width="1.5"/>
+  <circle cx="327" cy="73" r="28" fill="#fff7e7" filter="url(#glow)"/>
+  <circle cx="327" cy="73" r="7" fill="#fff"/>
+  <path d="M60 73H500" stroke="#d3eaff" opacity=".45"/>
+  <path d="M327-12v193" stroke="#d3eaff" opacity=".42"/>
+  <ellipse cx="327" cy="73" rx="190" ry="49" fill="none" stroke="#d5efff" opacity=".25"/>
+ </g>
+ <text x="17" y="267" class="time">3.3–4.3 s</text>
+ <text x="17" y="290" class="cap">Both plates register; reflections peak in a lens flare.</text>
+</g>
+
+<!-- 5: one solid wordmark comes from camera and settles -->
+<g transform="translate(640 408)">
+ <rect class="panel" width="560" height="300" rx="4"/>
+ <g clip-path="url(#c5)">
+  <circle cx="280" cy="70" r="140" fill="url(#light)" opacity=".65"/>
+  <rect x="248" y="27" width="56" height="52" fill="url(#white)"/>
+  <rect x="268" y="43" width="50" height="50" fill="url(#orange)"/>
+  <text x="280" y="169" text-anchor="middle" fill="#c9e7f4" opacity=".35" font-size="75" font-weight="700" letter-spacing="3">CHRO-MA-SMITH</text>
+  <text x="280" y="171" text-anchor="middle" fill="#f3f4f0" font-size="37" font-weight="700" letter-spacing="1.8">CHRO-MA-SMITH</text>
+  <path class="motion" d="M15 207 165 165M545 207 395 165"/>
+  <path d="M10 202 31 196 27 216M550 202 529 196 533 216" fill="none" stroke="#a4c8df" stroke-width="2"/>
+ </g>
+ <text x="17" y="267" class="time">4.3–5.5 s</text>
+ <text x="17" y="290" class="cap">Whole wordmark flies in as one rigid object and settles.</text>
+</g>
+
+<!-- 6: line and subtitle only fade, then hold -->
+<g transform="translate(1240 408)">
+ <rect class="panel" width="560" height="300" rx="4"/>
+ <g clip-path="url(#c6)">
+  <circle cx="280" cy="92" r="148" fill="url(#light)" opacity=".44"/>
+  <rect x="247" y="28" width="59" height="55" fill="url(#white)"/>
+  <rect x="265" y="44" width="55" height="55" fill="url(#orange)"/>
+  <path d="M265 44h41l-41 39z" fill="url(#overlap)"/>
+  <text x="280" y="156" text-anchor="middle" fill="#f5f5f1" font-size="37" font-weight="700" letter-spacing="1.8">CHRO-MA-SMITH</text>
+  <path d="M102 177h356" stroke="#dbeaf0" opacity=".72"/>
+  <text x="280" y="207" text-anchor="middle" fill="#e3e5e2" font-size="14" letter-spacing="3">A MAD MACHINE PRODUCTION</text>
+ </g>
+ <text x="17" y="267" class="time">5.5–8.8 s</text>
+ <text x="17" y="290" class="cap">Line and credit fade in only; hold, then fade to black.</text>
+</g>
+<text x="40" y="755" fill="#93a5ae" font-size="17">CAMERA RULE: foreground objects start larger than frame; rotation and distance reveal their faces. Lighting and reflections stay linked to the camera-facing source.</text>
+</svg>
