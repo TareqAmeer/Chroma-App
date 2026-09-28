@@ -2447,7 +2447,8 @@ body.sk2 #lib-batchbar{box-shadow:none!important;border-width:1px 0 0!important}
 body.sk2.deskx #fx-toolrail{justify-content:center!important;align-items:center!important;padding-top:0!important}
 body.sk2.deskx #fx-toolrail .fx-rail-btn{width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;margin:0!important}
 body.sk2.deskx #fx-toolrail .fx-rail-lb{text-align:center}
-body.sk2 .fx-rail-btn{color:color-mix(in srgb,var(--k-color-muted) 70%,var(--k-color-ink))}
+body.sk2 .fx-rail-btn{color:var(--k-color-muted)}
+body.sk2 .fx-rail-btn .fx-rail-ic{color:var(--k-color-ink)}
 /* Panel header: the stage title, sub-tabs and the current card title stay locked as one opaque
    block; nothing scrolls visibly above or behind them. */
 body.sk2 #sk2-stage-h{position:sticky;top:0;z-index:30;background:var(--k-color-bg);padding:26px 0 16px!important}
@@ -2456,7 +2457,7 @@ body.sk2 .fx-ctrl-title{top:calc(var(--sk2-h-h,0px) + var(--sk2-sub-h,0px))!impo
 body.sk2 #sk2-tail{display:block}
 body.sk2.deskx #sk2-stage-h,body.sk2.deskx #sk2-sub{margin-left:calc(var(--sk-g)*-3)!important;margin-right:calc(var(--sk-g)*-3)!important;padding-left:calc(var(--sk-g)*3)!important;padding-right:calc(var(--sk-g)*3)!important}
 /* Tool hierarchy: section headings strongest, labels ink, values quieter; moved values full ink. */
-body.sk2 .fx-row .fx-label{color:color-mix(in srgb,var(--k-color-ink) 82%,var(--k-color-bg))}
+body.sk2 .fx-row .fx-label{color:var(--k-color-ink)}
 body.sk2 .fx-row:not(.fx-mod) .fx-val{color:var(--k-color-muted)}
 body.sk2 .fx-row.fx-mod .fx-label,body.sk2 .fx-row.fx-mod .fx-val{color:var(--k-color-ink)!important}
 body.sk2 .fx-sub,body.sk2 .fx-fields>.fx-label:not(.fx-row .fx-label){color:var(--k-color-ink)!important;font-weight:500!important}
@@ -2496,6 +2497,7 @@ body.sk2 .fx-toggle::before{content:'';position:absolute;inset:-7px -4px}
 /* Loading: while a photo opens the empty-state prompt steps aside. */
 body.sk2.sk2-opening #fx-no-img>:not(.sk2-open){visibility:hidden}
 body.sk2 .sk2-open{display:none}
+body.sk2 #fx-deskbar-title.sk2-cap #db-title-name,body.sk2 #fx-deskbar-title.sk2-cap #db-title-status{flex:none;max-width:none;overflow:visible}
 body.sk2.sk2-opening #fx-photo-work-status{display:none!important}
 body.sk2.sk2-opening .sk2-open{display:flex;flex-direction:column;align-items:center;gap:10px;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:var(--sk-t4);color:var(--k-color-muted);visibility:visible}
 body.sk2 .sk2-open i{display:block;width:160px;height:1px;background:var(--bdr);position:relative;overflow:hidden}
@@ -2523,18 +2525,20 @@ body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{font-size:11px;col
    paper in the gallery, white on charcoal in the studio. */
 body.sk2 #cs-brand-tog::after{background:var(--k-color-ink)!important}
 /* Gallery header: Export as a word button (it has the room), a wider search with quiet text. */
-body.sk2 #lib-overlay #lib-export-btn .lbl{display:inline!important}
-body.sk2 #lib-overlay #lib-export-btn{width:auto!important;padding:0 12px!important;gap:6px;background:var(--k-color-accent-a)!important;color:#111!important;box-shadow:none!important;height:30px}
+@media (min-width:1600px){body.sk2 #lib-overlay #lib-export-btn .lbl{display:inline!important}}
+body.sk2 #lib-overlay #lib-view-menu{left:auto!important;right:0!important}
+body.sk2 #lib-overlay #lib-export-btn{background:var(--k-color-accent-a)!important;color:#111!important;box-shadow:none!important}
+@media (min-width:1600px){body.sk2 #lib-overlay #lib-export-btn{width:auto!important;padding:0 10px!important;gap:6px}}
 body.sk2 #lib-overlay #lib-export-btn svg,body.sk2 #lib-overlay #lib-export-btn svg *{stroke:#111!important}
-body.sk2 #lib-overlay #lib-top-center{flex:1 1 auto;max-width:460px;min-width:220px}
-body.sk2 #lib-overlay #lib-top-center .lib-search-wrap{width:100%!important;max-width:none!important}
+@media (min-width:1500px){body.sk2 #lib-overlay.full #lib-top-center{flex:0 1 360px;min-width:0}
+body.sk2 #lib-overlay.full #lib-top-center .lib-search-wrap{width:100%!important;max-width:none!important}}
 body.sk2 #lib-overlay #lib-search{color:var(--k-color-muted)!important}
 body.sk2 #lib-overlay #lib-search:focus{color:var(--k-color-ink)!important}
 body.sk2 #lib-overlay #lib-search::placeholder{color:var(--k-color-muted)!important;opacity:.8}
 /* Tiles: hover shows only the three flag icons in one quiet strip — no box round the card.
    One caption line under the print: file name left, RAW / +n / video length right. */
 body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-card:hover::after{opacity:0!important}
-body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flags{gap:0!important;background:color-mix(in srgb,var(--k-color-bg) 88%,transparent)}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flags{gap:0!important;background:var(--k-color-bg)}
 body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag:not(.on){width:24px;height:24px;background:transparent!important;color:var(--k-color-ink)}
 body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag:not(.on):hover{background:var(--k-color-ink)!important;color:var(--k-color-bg)}
 body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag svg *{stroke:currentColor!important}
@@ -2544,6 +2548,20 @@ body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-card{position:relative}
 body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-strip-info{position:absolute!important;left:0!important;right:44px!important;bottom:0!important;height:20px;margin:0!important;padding:0!important;display:flex!important;align-items:center;background:none!important}
 body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-strip-name{font-size:var(--sk-t5)!important;color:var(--k-color-muted)!important;padding:0!important;margin:0!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 body.sk2 #lib-overlay #lib-grid:not(.list-view) :is(.lib-raw-badge,.lib-video-badge){top:auto!important;bottom:0!important;left:auto!important;right:0!important;height:20px!important;display:flex!important;align-items:center}
+/* Switch words keep a 28px tap height. */
+body.sk2 #cs-brand-tog button{min-height:28px}
+body.sk2 .chip-tap>.btn.bgh,body.sk2 .fx-panel .seg>button,body.sk2 #sk2-sub button{min-width:28px!important;text-align:center}
+/* Filters panel slides over everything in the grid, including the sticky title; underline fields. */
+body.sk2 #lib-overlay #lib-filters-panel{z-index:40!important;padding:16px 20px!important;gap:4px!important}
+body.sk2 #lib-overlay #lib-filters-panel .lib-filter-field>select{border:0!important;border-bottom:1px solid var(--bdr)!important;box-shadow:none!important;background-color:transparent!important;height:34px}
+body.sk2 #lib-overlay #lib-filters-panel .lib-filter-field>select.k-set{border-bottom-color:var(--k-color-accent-a)!important;box-shadow:none!important}
+body.sk2 #lib-overlay #lib-filters-panel .lib-filter-field>label{padding-left:0!important}
+/* Filmstrip stays pictures only — no captions or badges. */
+body.sk2.deskx #lib-overlay:not(.full) #lib-grid:not(.list-view) :is(.lib-raw-badge,.lib-video-badge,.lib-strip-info){display:none!important}
+/* Light-stage histogram: folded by default, full panel width. */
+body.sk2 .sk2-hist{display:none;margin:4px 0 10px}
+body.sk2 .fx-panel:has(.fx-ctrl.sec-active[data-fxsec="adjust"]) .sk2-hist{display:block}
+body.sk2 .sk2-hist canvas{display:block;width:100%;height:80px;margin-top:8px;image-rendering:auto}
 /* Splash: dark behind the card, no white window frame. */
 html.cs-boot-tauri,html.cs-boot-tauri body{background:#141414}
 </style>
@@ -2611,18 +2629,23 @@ function sk2Jump(k,smooth){
   if(c.classList.contains('fx-sec-collapsed'))c.querySelector('.fx-ctrl-title')?.click();
   const nav=document.getElementById('sk2-sub'),hd=document.getElementById('sk2-stage-h'),off=(nav&&!nav.hidden?nav.offsetHeight:0)+(hd?hd.offsetHeight:0);
   const top=c.getBoundingClientRect().top-panel.getBoundingClientRect().top+panel.scrollTop-off;
+  sk2Jump.k=k;sk2Jump.top=Math.max(0,top);sk2Jump.t=Date.now();
   const tail=document.getElementById('sk2-tail');
   if(tail){const cur=tail.offsetHeight,need=top+panel.clientHeight-(panel.scrollHeight-cur);tail.style.height=Math.max(0,Math.ceil(need))+'px';}
   panel.scrollTo({top:Math.max(0,top),behavior:smooth?'smooth':'auto'});
   // Cards can still be settling (stage switch, fold opening) — re-land once they have.
-  if(smooth){clearTimeout(sk2Jump._t);sk2Jump._t=setTimeout(()=>{const d=c.getBoundingClientRect().top-panel.getBoundingClientRect().top-off;if(Math.abs(d)>2)sk2Jump(k,false);},450);}
+  if(smooth){clearTimeout(sk2Jump._t);sk2Jump._t=setTimeout(()=>{const d=c.getBoundingClientRect().top-panel.getBoundingClientRect().top-off;if(Math.abs(d)>2)sk2Jump(k,false);sk2Spy();},450);}
+  if(nav)nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
 }
 function sk2Spy(){
   const panel=document.querySelector('.fx-panel'),nav=document.getElementById('sk2-sub');if(!panel||!nav||nav.hidden)return;
-  const line=panel.getBoundingClientRect().top+nav.offsetHeight+8;let cur=null;
+  const hd=document.getElementById('sk2-stage-h'),line=panel.getBoundingClientRect().top+(hd?hd.offsetHeight:0)+nav.offsetHeight+8;let cur=null;
   panel.querySelectorAll('.fx-ctrl.sec-active').forEach(c=>{if(c.style.display!=='none'&&c.getBoundingClientRect().top<=line)cur=c.dataset.fxsec;});
   if(!cur){const f=nav.querySelector('button');cur=f&&f.dataset.k;}
-  if(panel.scrollTop+panel.clientHeight>=panel.scrollHeight-2){const l=nav.querySelector('button:last-child');if(l)cur=l.dataset.k;}
+  const tail=document.getElementById('sk2-tail'),padded=tail&&tail.offsetHeight>0;
+  if(!padded&&panel.scrollTop+panel.clientHeight>=panel.scrollHeight-2){const l=nav.querySelector('button:last-child');if(l)cur=l.dataset.k;}
+  // The tab you clicked stays underlined while the panel sits where that click put it.
+  if(sk2Jump.k&&(Date.now()-sk2Jump.t<900||Math.abs(panel.scrollTop-sk2Jump.top)<6))cur=sk2Jump.k;else sk2Jump.k=null;
   nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===cur));
 }
 </script>
@@ -2694,7 +2717,7 @@ function sk2ExportWire(){
     const room=fits&&r.height>0&&(w.bottom-r.bottom)>=34;
     if(deskx&&sk2CaptionOn()&&room){
       if(t.parentNode!==wrap){wrap.appendChild(t);t.classList.add('sk2-cap');}
-      const cw=Math.min(w.width-32,Math.max(260,r.width)),cl=Math.min(Math.max(16,r.left-w.left),w.width-16-cw);
+      const cw=Math.min(w.width-32,Math.max(620,r.width)),cl=Math.min(Math.max(16,r.left-w.left+r.width/2-cw/2),w.width-16-cw); // centred on the photo, never narrower than its contents
       t.style.left=cl+'px';t.style.top=(r.bottom-w.top+10)+'px';t.style.width=cw+'px';t.style.maxWidth='';
     }else if(t.parentNode===wrap){t.classList.remove('sk2-cap');t.style.left=t.style.top=t.style.maxWidth=t.style.width='';home.p.insertBefore(t,home.n&&home.n.parentNode===home.p?home.n:null);}
   });};
@@ -2770,6 +2793,16 @@ ready(function(){
     new MutationObserver(sync).observe(seg,{subtree:true,attributes:true,attributeFilter:['class','aria-pressed']});
     seg.insertAdjacentElement('afterend',sel);seg.classList.add('sk2-has-sel');seg._sk2sel=sel;sync();}
   document.querySelectorAll('.fx-panel .seg').forEach(mirror);
+  // Light stage: a folded histogram above Basic; drawn only while it is open.
+  var adj=document.querySelector('.fx-ctrl[data-fxsec="adjust"]');
+  if(adj&&!document.getElementById('sk2-hist')){var d=document.createElement('details');d.id='sk2-hist';d.className='sk2-more sk2-hist';
+    d.innerHTML='<summary>Histogram</summary><canvas width="180" height="80" aria-label="Histogram of the edited photo"></canvas>';
+    adj.parentNode.insertBefore(d,adj);var cv=d.querySelector('canvas'),q=0;
+    var draw=function(){q=0;if(!d.open)return;var src=document.getElementById('fx-canvas');if(!src||!src.width||typeof drawScopeHistogram!=='function')return;
+      var t=draw._t||(draw._t=document.createElement('canvas'));var k=Math.min(1,200/src.width);t.width=Math.max(1,src.width*k|0);t.height=Math.max(1,src.height*k|0);
+      var x=t.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,t.width,t.height);drawScopeHistogram(cv,x.getImageData(0,0,t.width,t.height).data);};
+    d.addEventListener('toggle',draw);
+    var rp=window.renderPreview;if(typeof rp==='function'){window.renderPreview=function(){var r=rp.apply(this,arguments);if(d.open&&!q)q=requestAnimationFrame(draw);return r};}}
   // Rail: no tooltip that just repeats the word already under the icon.
   var rail=document.getElementById('fx-toolrail');
   function untitle(){if(!rail)return;rail.querySelectorAll('.fx-rail-btn[title]').forEach(function(x){var lb=x.querySelector('.fx-rail-lb');if(lb&&x.title.trim().toLowerCase()===lb.textContent.trim().toLowerCase()){x.setAttribute('aria-label',x.title);x.removeAttribute('title')}})}
@@ -6336,7 +6369,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928V';
+const BUILD='1.0928W';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11742,7 +11775,7 @@ function installFXImages(entries,loadKey,opts){
   if(isNewPhoto){
     _ALLFX.forEach(name=>{
       const tg=document.getElementById(`tg-${name}`);if(tg)tg.classList.remove('on');
-      const ff=document.getElementById(`ff-${name}`);if(ff)ff.style.display='none';
+      const ff=document.getElementById(`ff-${name}`);if(ff){ff.style.display='';ff.classList.add('ff-off');} // off = shown dimmed, never hidden
     });
     if(typeof syncAllFxBtn==='function')syncAllFxBtn();
   }
