@@ -105,7 +105,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   --lift-1:none;
   --lift-2:none;
   --glass-bg:var(--k-color-bg);
-  --ctl-toggle-w:32px;--ctl-toggle-h:16px;--ctl-slider-thumb:11px;--ctl-slider-roll:0;--ctl-slider-track:1px;--ctl-square-radius:0px;
+  --ctl-toggle-w:32px;--ctl-toggle-h:16px;--ctl-slider-thumb:11px;--ctl-slider-roll:6;--ctl-slider-track:1px;--ctl-square-radius:0px;
   /* Neutral scrim/overlay ramp (T-scrim): a short fixed alpha scale for shadows, dimming
      scrims and translucent chrome, same idea as Material Design elevation levels or Carbon's
      layer/overlay tokens — components snap to the nearest step instead of inventing their own
@@ -2405,6 +2405,115 @@ body.sk2 #fx-no-img{gap:14px}
 body.sk2 #fx-add-btn{width:72px;height:72px}
 body.sk2 .ni-add-lb{font-size:28px;font-weight:400;letter-spacing:-.03em;color:var(--k-color-ink);text-transform:none}
 body.sk2 .ni-hint{font-size:12px;color:var(--k-color-muted)}
+/* ── Swiss v2 review pass 2 (desktop review, 2026-09-28) ─────────────────────────────────── */
+/* Filmstrip: its own opaque column with a hairline edge; greyscale until the pointer is anywhere
+   on the strip, then the whole strip comes up in colour. The open photo is always in colour. */
+body.sk2.deskx #lib-overlay:not(.full){box-shadow:1px 0 0 var(--bdr);isolation:isolate}
+body.sk2.deskx #lib-overlay:not(.full) .lib-card{opacity:.6;transition:opacity .2s var(--k-motion-easing)}
+body.sk2.deskx #lib-overlay:not(.full) .lib-card img{transition:filter .2s var(--k-motion-easing)!important}
+body.sk2.deskx #lib-overlay:not(.full):hover .lib-card{opacity:1}
+body.sk2.deskx #lib-overlay:not(.full):hover .lib-card img{filter:none!important}
+body.sk2.deskx #lib-overlay:not(.full) #sk2-strip-n{background:inherit;box-shadow:0 -1px 0 var(--bdr);background-color:rgb(28,28,28)}
+body.sk2.deskx.light #lib-overlay:not(.full) #sk2-strip-n{background-color:var(--k-color-bg)}
+/* Gallery title: room for descenders (y, g, p) — it clipped at line-height .88 + overflow:hidden. */
+body.sk2 #lib-overlay #lib-grid-title .lgt-h{line-height:1.02!important;padding-bottom:.06em}
+body.sk2 #lib-overlay .lgt-m #lib-count,body.sk2 #lib-overlay .lgt-m>span{color:var(--k-color-muted)!important}
+/* Tile flags on hover: icon only; a word appears only on the flag that is set. */
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag:not(.on)::after{content:none}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag:not(.on){width:26px;height:26px;padding:0;justify-content:center}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag:not(.on) svg{width:12px;height:12px}
+/* Tile caption: "RAW" for a raw file, "+n" for a stack — never run together as "+1AW". */
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-raw-badge.lib-stack-badge::after{content:none}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-raw-badge.lib-stack-badge{cursor:pointer;letter-spacing:.02em}
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-video-badge{display:inline-flex!important;gap:4px;align-items:center}
+/* Selected person/place in the sidebar: dark text + the square, never white on paper. */
+body.sk2 #lib-overlay .lib-coll-row.on,body.sk2 #lib-overlay .lib-coll-row.on .lib-coll-lb{color:var(--k-color-ink)!important;font-weight:500;transform:none}
+body.sk2 #lib-overlay .lib-coll-row.on :is(.lib-coll-ic,.lib-coll-count){color:var(--k-color-muted)!important}
+body.sk2 #lib-overlay .lib-coll-row::before{display:none!important}
+body.sk2 #lib-overlay .lib-people-scroll .lib-coll-row{min-height:30px}
+/* Selected print: hairline vermilion outline as well as the corner square. */
+body.sk2 #lib-overlay .lib-card:is(.sel,.multi) .lib-thumb-wrap{outline:2px solid var(--k-color-accent-a);outline-offset:2px}
+body.sk2.deskx #lib-overlay:not(.full) .lib-card:is(.sel,.multi) .lib-thumb-wrap{outline-width:1px;outline-offset:-1px}
+/* Selection bar docked as a flat strip along the bottom of the grid. */
+body.sk2 #lib-batchbar{box-shadow:none!important;border-width:1px 0 0!important}
+/* Tool rail: icon + word centred in the rail, the group centred in the window height. */
+body.sk2.deskx #fx-toolrail{justify-content:center!important;align-items:center!important;padding-top:0!important}
+body.sk2.deskx #fx-toolrail .fx-rail-btn{width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;margin:0!important}
+body.sk2.deskx #fx-toolrail .fx-rail-lb{text-align:center}
+body.sk2 .fx-rail-btn{color:color-mix(in srgb,var(--k-color-muted) 70%,var(--k-color-ink))}
+/* Panel header: the stage title, sub-tabs and the current card title stay locked as one opaque
+   block; nothing scrolls visibly above or behind them. */
+body.sk2 #sk2-stage-h{position:sticky;top:0;z-index:30;background:var(--k-color-bg);padding:26px 0 16px!important}
+body.sk2 #sk2-sub{top:var(--sk2-h-h,0px)!important;z-index:29!important}
+body.sk2 .fx-ctrl-title{top:calc(var(--sk2-h-h,0px) + var(--sk2-sub-h,0px))!important}
+body.sk2 #sk2-tail{display:block}
+body.sk2.deskx #sk2-stage-h,body.sk2.deskx #sk2-sub{margin-left:calc(var(--sk-g)*-3)!important;margin-right:calc(var(--sk-g)*-3)!important;padding-left:calc(var(--sk-g)*3)!important;padding-right:calc(var(--sk-g)*3)!important}
+/* Tool hierarchy: section headings strongest, labels ink, values quieter; moved values full ink. */
+body.sk2 .fx-row .fx-label{color:color-mix(in srgb,var(--k-color-ink) 82%,var(--k-color-bg))}
+body.sk2 .fx-row:not(.fx-mod) .fx-val{color:var(--k-color-muted)}
+body.sk2 .fx-row.fx-mod .fx-label,body.sk2 .fx-row.fx-mod .fx-val{color:var(--k-color-ink)!important}
+body.sk2 .fx-sub,body.sk2 .fx-fields>.fx-label:not(.fx-row .fx-label){color:var(--k-color-ink)!important;font-weight:500!important}
+body.sk2 .fx-ctrl-title{font-weight:500}
+body.sk2 .fx-slider::-webkit-slider-runnable-track{background:linear-gradient(to right,color-mix(in srgb,var(--k-color-ink) 22%,transparent) 0 var(--fillA,0%),var(--k-color-accent-a) var(--fillA,0%) var(--fillB,0%),color-mix(in srgb,var(--k-color-ink) 22%,transparent) var(--fillB,0%) 100%)!important}
+body.sk2 .fx-slider::-webkit-slider-thumb{background:color-mix(in srgb,var(--k-color-muted) 60%,var(--k-color-ink))}
+/* Colour wheels: one size for all three, sized from the panel width. */
+body.sk2 #ff-wheels .sk2-wheels{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px!important}
+body.sk2 #ff-wheels .sk2-wheels>div{min-width:0!important}
+body.sk2 #ff-wheels canvas[id^=cv-wheel-]{width:100%!important;max-width:120px!important}
+/* Colour mixer: split swatches — left half the original band colour, right half what it became. */
+body.sk2 .hsl-chip{opacity:1;background:var(--band-col)!important}
+body.sk2 .hsl-chip.edited{background:linear-gradient(90deg,var(--band-before,var(--band-col)) 0 50%,var(--band-after,var(--band-col)) 50% 100%)!important}
+/* Option rows (segmented controls): plain words, the chosen one ink with a vermilion underline;
+   they wrap instead of clipping, and turn into one dropdown in a very narrow panel. */
+body.sk2 .fx-panel{container-type:inline-size;container-name:sk2panel}
+body.sk2 .fx-panel .seg,body.sk2 .fx-panel .msk-prevmode-seg{display:flex!important;flex-wrap:wrap;gap:2px 16px;width:auto!important;background:none!important;border:0!important;box-shadow:none!important;overflow:visible!important;padding:0!important;height:auto!important}
+body.sk2 .fx-panel .seg::before,body.sk2 .fx-panel .seg::after{display:none!important}
+body.sk2 .fx-panel .seg>button{flex:0 0 auto!important;min-width:0;width:auto!important;overflow:visible!important;text-overflow:clip!important;text-transform:none!important;letter-spacing:0!important;font-weight:400!important;font-size:var(--sk-t4)!important;color:var(--k-color-muted)!important;background:none!important;box-shadow:none!important;border:0!important;padding:3px 0!important;min-height:28px;height:auto!important}
+body.sk2 .fx-panel .seg>button:hover{color:var(--k-color-ink)!important}
+body.sk2 .fx-panel .seg>button.on{color:var(--k-color-ink)!important;box-shadow:inset 0 -2px 0 var(--k-color-accent-a)!important}
+body.sk2 .sk2-seg-sel{display:none;width:100%}
+@container sk2panel (max-width:250px){body.sk2 .fx-panel .seg.sk2-has-sel{display:none!important}body.sk2 .sk2-seg-sel{display:block}}
+body.sk2 .chip-tap>.btn.bgh.on,body.sk2 .chip-tap>.btn.bgh[aria-pressed=true]{box-shadow:inset 0 -2px 0 var(--k-color-accent-a)!important}
+/* Settings menu: two independent lists — the left one never re-flows when the right one grows. */
+body.sk2 #fx-settings-menu.on,body.sk2 .fx-settings-cats{align-items:flex-start}
+body.sk2 .fx-settings-cat{height:32px!important;padding:0 12px 0 22px!important;display:flex!important;align-items:center;font-weight:400!important;font-size:var(--sk-t4)!important;border-radius:0!important}
+body.sk2 .fx-settings-cat.active{font-weight:500!important}
+body.sk2 #fx-settings-cats,body.sk2 .fx-settings-cats{gap:0!important;align-self:stretch}
+/* Export: vermilion stays, text goes near-black for contrast (white on #ff3b1f was 3.6:1). */
+body.sk2 #btn-export-db,body.sk2 .fx-db-pri,body.sk2 .bpri,body.sk2 .sk2x-btn,body.sk2 #btn-crop{color:#111!important}
+body.sk2 #btn-export-db svg,body.sk2 #btn-export-db svg *{stroke:#111!important}
+/* Tap targets: at least 28px for the small photo controls and toggles. */
+body.sk2 #fx-zoom-ctrl button,body.sk2 #fx-deskbar-title button,body.sk2 .fx-db{min-width:28px;min-height:28px}
+body.sk2 .fx-toggle{position:relative}
+body.sk2 .fx-toggle::before{content:'';position:absolute;inset:-7px -4px}
+/* Loading: while a photo opens the empty-state prompt steps aside. */
+body.sk2.sk2-opening #fx-no-img>:not(.sk2-open){visibility:hidden}
+body.sk2 .sk2-open{display:none}
+body.sk2.sk2-opening #fx-photo-work-status{display:none!important}
+body.sk2.sk2-opening .sk2-open{display:flex;flex-direction:column;align-items:center;gap:10px;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:var(--sk-t4);color:var(--k-color-muted);visibility:visible}
+body.sk2 .sk2-open i{display:block;width:160px;height:1px;background:var(--bdr);position:relative;overflow:hidden}
+body.sk2 .sk2-open i::after{content:'';position:absolute;inset:0;width:40%;background:var(--k-color-ink);animation:sk2Load 1.1s ease-in-out infinite}
+@keyframes sk2Load{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+/* Apply LUT: one line with a "+", like "More", not a dashed box. */
+body.sk2 #dz-fx-lut{border:0!important;border-top:1px solid var(--bdr)!important;background:none!important;min-height:0!important;padding:10px 0!important;flex-direction:row!important;justify-content:space-between!important;text-align:left!important;border-radius:0!important}
+body.sk2 #dz-fx-lut .dz-ic{display:none}
+body.sk2 #dz-fx-lut::after{content:'+';color:var(--k-color-muted)}
+body.sk2 #dz-fx-lut .dz-lb{font-size:var(--sk-t4)!important;color:var(--k-color-muted)!important;text-transform:none!important;letter-spacing:0!important}
+/* Presets still loading: quiet placeholder tiles instead of a lone "Original". */
+body.sk2 #fx-looks.sk2-loading::after{content:'';grid-column:1/-1;height:220px;background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--k-color-ink) 5%,transparent) 0 calc(50% - 6px),transparent calc(50% - 6px) 50%);background-size:100% 100px}
+/* Menus: one row height, one size. */
+body.sk2 #lib-overlay .lib-menu .opt,body.sk2 #lib-overlay .lib-menu button.opt-action,body.sk2 .fx-ovf-item,body.sk2 .cs-ctx-it{min-height:30px;display:flex;align-items:center;font-size:var(--sk-t4)!important}
+/* Desktop app: photos come from the gallery, so no "Drop image" card; the Look stage opens on presets. */
+body.sk2.sk2-native .fx-ctrl[data-fxsec="image"]{display:none!important}
+/* Photo caption: fades out the moment the photo moves, fades back in once it settles —
+   under the photo when there is room, otherwise as one line in the top bar. */
+body.sk2 #fx-deskbar-title{transition:opacity .16s var(--k-motion-easing)}
+body.sk2 #fx-deskbar-title.sk2-cap-hide{opacity:0!important;transition:none}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title{align-items:baseline;gap:12px}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{font-size:12px;color:var(--k-color-ink)}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
+/* Splash: dark behind the card, no white window frame. */
+html.cs-boot-tauri,html.cs-boot-tauri body{background:#141414}
 </style>
 </head>
 <body>
@@ -2457,6 +2566,10 @@ function sk2SubTabs(g,jump){
   if(G&&G.members.includes('wheels')&&typeof drawWheel==='function')setTimeout(()=>['lift','gamma','gain'].forEach(drawWheel),30);
   nav.innerHTML=cards.map(c=>`<button type="button" data-k="${c.dataset.fxsec}">${SK2_SUB[c.dataset.fxsec]||c.dataset.fxsec}</button>`).join('');
   document.body.style.setProperty('--sk2-sub-h',(nav.hidden?0:nav.offsetHeight)+'px');
+  document.body.style.setProperty('--sk2-h-h',h.offsetHeight+'px');
+  // Tail spacer: lets the last card of a stage scroll right up under the header when its tab is picked.
+  let tail=document.getElementById('sk2-tail');if(!tail){tail=document.createElement('div');tail.id='sk2-tail';tail.setAttribute('aria-hidden','true');}
+  panel.appendChild(tail);tail.style.height='0px';
   // Strength rides at the bottom of the look grid (sticky), whatever layout the row started in.
   if(g==='look'){const mix=document.getElementById('row-lut-mix'),lc=document.getElementById('fx-looks-ctrl');if(mix&&lc&&mix.parentElement!==lc)lc.appendChild(mix);}
   if(jump)requestAnimationFrame(()=>sk2Jump(jump,false));else sk2Spy();
@@ -2464,9 +2577,13 @@ function sk2SubTabs(g,jump){
 function sk2Jump(k,smooth){
   const panel=document.querySelector('.fx-panel'),c=panel&&panel.querySelector(`.fx-ctrl.sec-active[data-fxsec="${k}"]`);if(!c)return;
   if(c.classList.contains('fx-sec-collapsed'))c.querySelector('.fx-ctrl-title')?.click();
-  const nav=document.getElementById('sk2-sub'),off=nav&&!nav.hidden?nav.offsetHeight:0;
+  const nav=document.getElementById('sk2-sub'),hd=document.getElementById('sk2-stage-h'),off=(nav&&!nav.hidden?nav.offsetHeight:0)+(hd?hd.offsetHeight:0);
   const top=c.getBoundingClientRect().top-panel.getBoundingClientRect().top+panel.scrollTop-off;
+  const tail=document.getElementById('sk2-tail');
+  if(tail){const cur=tail.offsetHeight,need=top+panel.clientHeight-(panel.scrollHeight-cur);tail.style.height=Math.max(0,Math.ceil(need))+'px';}
   panel.scrollTo({top:Math.max(0,top),behavior:smooth?'smooth':'auto'});
+  // Cards can still be settling (stage switch, fold opening) — re-land once they have.
+  if(smooth){clearTimeout(sk2Jump._t);sk2Jump._t=setTimeout(()=>{const d=c.getBoundingClientRect().top-panel.getBoundingClientRect().top-off;if(Math.abs(d)>2)sk2Jump(k,false);},450);}
 }
 function sk2Spy(){
   const panel=document.querySelector('.fx-panel'),nav=document.getElementById('sk2-sub');if(!panel||!nav||nav.hidden)return;
@@ -2526,18 +2643,27 @@ function sk2ExportWire(){
   const K='cs_sk2_caption';
   window.sk2CaptionOn=()=>{try{return localStorage.getItem(K)!=='0'}catch(e){return true}};
   window.sk2CaptionToggle=()=>{try{localStorage.setItem(K,sk2CaptionOn()?'0':'1')}catch(e){}sk2Caption();};
-  let home=null,raf=0;
-  window.sk2Caption=function(){cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{
+  let home=null,raf=0,settle=0,lastKey='';
+  // The caption hides the instant the photo moves (zoom/pan/resize) and comes back, faded in, once
+  // it has been still for a moment — so it never slides across the photo or jumps visibly.
+  window.sk2Caption=function(){
+    const t=document.getElementById('fx-deskbar-title'),cv=document.getElementById('fx-canvas');
+    const r=cv&&cv.getBoundingClientRect(),key=r?[r.left|0,r.top|0,r.width|0,r.height|0].join():'';
+    if(t&&key!==lastKey&&lastKey){t.classList.add('sk2-cap-hide');clearTimeout(settle);settle=setTimeout(()=>{place();requestAnimationFrame(()=>t.classList.remove('sk2-cap-hide'));},260);lastKey=key;return;}
+    lastKey=key;if(!t||!t.classList.contains('sk2-cap-hide'))place();};
+  function place(){cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{
     const t=document.getElementById('fx-deskbar-title'),wrap=document.getElementById('fx-wrap');if(!t||!wrap)return;
     if(!home)home={p:t.parentNode,n:t.nextSibling};
     const zc=document.getElementById('fx-zoom-ctrl');if(zc&&zc.parentNode!==t&&document.body.classList.contains('deskx'))t.appendChild(zc); // 7: photo controls ride with the caption
     const bd=document.getElementById('fx-canvas-bd'),cv=(bd&&bd.style.display!=='none'&&bd.width)?bd:document.getElementById('fx-canvas');
     const deskx=document.body.classList.contains('deskx');
     const r=cv&&cv.getBoundingClientRect(),w=wrap.getBoundingClientRect();
-    const room=r&&r.height>0&&(w.bottom-r.bottom)>=34;
+    const fits=r&&r.left>=w.left-1&&r.right<=w.right+1&&r.top>=w.top-1;
+    const room=fits&&r.height>0&&(w.bottom-r.bottom)>=34;
     if(deskx&&sk2CaptionOn()&&room){
       if(t.parentNode!==wrap){wrap.appendChild(t);t.classList.add('sk2-cap');}
-      t.style.left=(r.left-w.left)+'px';t.style.top=(r.bottom-w.top+10)+'px';t.style.width=Math.max(260,r.width)+'px';t.style.maxWidth='';
+      const cw=Math.min(w.width-32,Math.max(260,r.width)),cl=Math.min(Math.max(16,r.left-w.left),w.width-16-cw);
+      t.style.left=cl+'px';t.style.top=(r.bottom-w.top+10)+'px';t.style.width=cw+'px';t.style.maxWidth='';
     }else if(t.parentNode===wrap){t.classList.remove('sk2-cap');t.style.left=t.style.top=t.style.maxWidth=t.style.width='';home.p.insertBefore(t,home.n&&home.n.parentNode===home.p?home.n:null);}
   });};
   function wire(){const cv=document.getElementById('fx-canvas'),wrap=document.getElementById('fx-wrap');if(!cv||!wrap)return;
@@ -2594,6 +2720,30 @@ ready(function(){
   host.addEventListener('pointerleave',function(){end()});
   host.addEventListener('keydown',function(e){if(e.key==='Escape'&&peek){e.stopPropagation();end();}},true);
   host.addEventListener('click',function(){end(true)},true);
+});})();</script>
+<script>/* Swiss v2 review pass 2 — desktop flag, wheels grid, option-row dropdown, opening state. */
+(function(){
+function ready(f){if(document.readyState!=='loading')f();else document.addEventListener('DOMContentLoaded',f)}
+ready(function(){
+  var b=document.body;if(window.__TAURI__)b.classList.add('sk2-native');
+  // Wheels: tag their row so all three share one grid track size.
+  var lift=document.getElementById('cv-wheel-lift'),row=lift&&lift.parentElement&&lift.parentElement.parentElement;if(row)row.classList.add('sk2-wheels');
+  // Option rows: each segmented control gets a mirror <select> shown only in a very narrow panel.
+  function mirror(seg){if(seg._sk2sel)return;var btns=[].slice.call(seg.querySelectorAll(':scope>button'));if(btns.length<2)return;
+    var sel=document.createElement('select');sel.className='fx-select sk2-seg-sel';
+    var lb=seg.closest('.fx-row')&&seg.closest('.fx-row').querySelector('.fx-label');if(lb)sel.setAttribute('aria-label',lb.textContent.trim());
+    btns.forEach(function(x,i){var o=document.createElement('option');o.value=i;o.textContent=x.textContent.trim();sel.appendChild(o)});
+    var sync=function(){var i=btns.findIndex(function(x){return x.classList.contains('on')||x.getAttribute('aria-pressed')==='true'});if(i>=0)sel.value=i};
+    sel.onchange=function(){btns[+sel.value].click();sync()};
+    new MutationObserver(sync).observe(seg,{subtree:true,attributes:true,attributeFilter:['class','aria-pressed']});
+    seg.insertAdjacentElement('afterend',sel);seg.classList.add('sk2-has-sel');seg._sk2sel=sel;sync();}
+  document.querySelectorAll('.fx-panel .seg').forEach(mirror);
+  // Opening a photo: a thin progress line replaces the "Add photos" prompt instead of overlapping it.
+  var ni=document.getElementById('fx-no-img');
+  if(ni){var o=document.createElement('div');o.className='sk2-open';o.innerHTML='<span></span><i></i>';ni.appendChild(o);
+    var orig=window.fxDeskbarTitle;if(typeof orig==='function'){window.fxDeskbarTitle=function(name,st,spin){
+      var opening=!!spin&&/^Opening/.test(st||'');b.classList.toggle('sk2-opening',opening);if(opening)o.firstChild.textContent=name||'';
+      return orig.apply(this,arguments)};}}
 });})();</script>
 <!-- Boot splash — Swiss v2 (design/prototypes/splash-v2/index.html): cover photo on a white mat,
      glow prism mark beside the wordmark, and an 11-step wedge as the progress bar (last step
@@ -6150,7 +6300,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928R';
+const BUILD='1.0928S';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20268,7 +20418,7 @@ async function presetLut(key){
 // Category filter for the gallery/grid — 113 built-in looks need grouping to stay scannable.
 // 'All' shows every category with section-header dividers; picking a chip narrows to just that
 // category (Original stays visible either way so you can always get back to no-LUT).
-let fxLookCatFilter='All',fxLookSearch='';
+let fxLookCatFilter=window.__TAURI__?'User Looks':'All',fxLookSearch=''; // desktop opens on your own looks
 // Free-text filter beside the chips. At 113 looks the categories alone stopped being enough —
 // finding "portra 800" meant knowing it lives under C41 Still and then reading the whole group.
 // Subsequence match on the pretty name, same forgiving rule the ⌘K palette uses.
@@ -20285,6 +20435,7 @@ function _lookMatches(key){
 function buildLookCatChips(){
   const host=document.getElementById('fx-looks-cats');if(!host)return;
   const cats=['All',...groupedLutKeys().map(([c])=>c)];
+  if(!cats.includes(fxLookCatFilter))fxLookCatFilter='All';
   host.innerHTML='';
   cats.forEach(c=>{
     const b=document.createElement('button');b.className='btn bgh'+(c===fxLookCatFilter?' on':'');
@@ -22941,11 +23092,12 @@ function gpuPreferenceSet(value){
 // persists across opens (a plain module var, not reset in settingsBuild()) so reopening the
 // menu lands back where you left it instead of always snapping to Transform.
 const SETTINGS_CATS=[
+  // Same order as the gallery's gear menu: this view's tools first, then display, then app-wide.
   {key:'tools',label:'Transform'},
-  {key:'view',label:'View'},
-  {key:'performance',label:'Performance'},
   {key:'split',label:'Compare'},
   {key:'history',label:'History'},
+  {key:'performance',label:'Performance'},
+  {key:'view',label:'View'},
   {key:'overflow',label:'More'},
 ];
 const SETTINGS_PANE_ID={tools:'fx-tools-menu',view:'fx-view-menu',split:'fx-settings-split-list',
@@ -23717,10 +23869,10 @@ function fxDesktopReorderLooksPanel(looksCard,title){
   [lutDz,saveDelRow,chartDlRow].forEach(el=>{if(el)applyLutWrap.appendChild(el);});
   let anchor=title;
   const place=(el)=>{if(el&&el!==anchor){anchor.insertAdjacentElement('afterend',el);anchor=el;}};
+  place(looksCtrl); // Swiss v2 review: the Look stage opens on the presets
   place(rawRow);
   place(inputLabel);place(inputSel);place(inputChips);
   place(clipInfo);
-  place(looksCtrl);
   place(printLabel);place(printSel);place(printChips);place(legacyLutSel);
   place(hrLabel);place(hrSel);place(hrChips);
   place(applyLutWrap);
