@@ -2241,6 +2241,8 @@ body.sk2 #lib-overlay .lib-menu .opt::before,body.sk2 #lib-overlay .lib-menu but
 body.sk2 #lib-overlay .lib-menu .opt:hover::before,body.sk2 #lib-overlay .lib-menu button.opt-action:hover::before,body.sk2 .fx-settings-cat:hover::before,body.sk2 .fx-ovf-item:hover::before,body.sk2 .fx-settings-cat.active::before{transform:scale(1)!important}
 body.sk2 #lib-overlay .lib-menu .opt,body.sk2 #lib-overlay .lib-menu button.opt-action,body.sk2 .fx-settings-cat,body.sk2 .fx-ovf-item{color:var(--k-color-muted)!important;padding-left:22px!important}
 body.sk2 #lib-overlay .lib-menu .opt:hover,body.sk2 #lib-overlay .lib-menu button.opt-action:hover,body.sk2 .fx-settings-cat:hover,body.sk2 .fx-ovf-item:hover,body.sk2 .fx-settings-cat.active,body.sk2 #lib-overlay .lib-menu .opt.sel{color:var(--k-color-ink)!important;background:none!important}
+/* Hover no longer fills the row, so a selected item's accent check must keep its colour on hover. */
+body.sk2 #lib-overlay .lib-menu .opt:hover .check,body.sk2 #lib-overlay .lib-menu button.opt-action:hover .check,body.sk2 .fx-settings-cat:hover .check,body.sk2 .fx-ovf-item:hover .check,body.sk2 .fx-ovf-item:hover .fx-ovf-check{stroke:var(--k-color-accent-a);color:var(--k-color-accent-a)}
 body.sk2 #lib-overlay .lib-menu .grp-label,body.sk2 .fx-ovf-grp-label{font-size:10px;font-weight:400;letter-spacing:.14em;color:var(--k-color-muted)}
 body.sk2 .cs-ctx-it{border-radius:0!important;color:var(--k-color-muted);padding:6px 14px 6px 22px!important;position:relative;background:none!important}
 body.sk2 .cs-ctx-it:hover{color:var(--k-color-ink)}
@@ -6442,7 +6444,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928H';
+const BUILD='1.0928I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
