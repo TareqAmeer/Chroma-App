@@ -1114,6 +1114,8 @@ body.fx-deskb #fx-deskbar{display:flex;align-items:center;gap:8px;margin-bottom:
 /* Editor (Developer) View.dc.html:44's .pillbtn (#btn-allfx) — pill radius, transparent fill
    (outline only), 28px height, regular weight — distinct from the filled-tile treatment shared
    .fx-db gives every other deskbar button. */
+.fx-db.js-allfx-cfg{background:transparent;border-radius:9999px;height:28px;width:22px;padding:0;margin-left:-4px;border-color:var(--bdr-pill)}
+body.deskx.fx-deskbar-tight1 .js-allfx-cfg{display:none}
 .fx-db.js-allfx{background:transparent;border-radius:9999px;height:28px;font-weight:400;border-color:var(--bdr-pill)}
 /* Editor (Developer) View.dc.html:37's .ibtn (#btn-tools) — 30x30 square icon button, radius-sm
    (8px), not the shared .fx-db's 6px. */
@@ -2618,6 +2620,7 @@ ready(function(){
   #boot-splash .lb{left:calc(158*var(--u));color:#8d8b85}
   #boot-splash .pc{right:calc(158*var(--u));font-variant-numeric:tabular-nums}
   #boot-splash .ver{left:0;right:0;top:calc(440*var(--u));text-align:center;font-size:calc(10.5*var(--u));color:#8d8b85;font-variant-numeric:tabular-nums}
+  #boot-splash .bs{pointer-events:auto}
   #boot-splash-progress{display:none}
   /* Splash → app: the app fades up from the desktop while the card eases out (hideBootSplash). */
   html.cs-reveal-hold body>*:not(#boot-splash){opacity:0!important}
@@ -2642,7 +2645,29 @@ ready(function(){
 // Desktop: let clicks around the splash fall through to the desktop while it's up (the window is
 // transparent and full-size, so otherwise it silently swallows every click). hideBootSplash()
 // turns this off again before the app is revealed.
-try{if(window.__TAURI__&&window.__TAURI__.window)window.__TAURI__.window.getCurrentWindow().setIgnoreCursorEvents(true).catch(()=>{});}catch(e){}
+// Tauri has no per-region click-through, so poll the cursor: ignore the mouse only while it's
+// OUTSIDE the card, so clicks on the card itself are swallowed (never reach the desktop or the app).
+// Every call is guarded; any failure stops polling and leaves the window NOT click-through.
+(function(){
+  const T=window.__TAURI__;if(!T||!T.window||typeof T.window.cursorPosition!=='function')return;
+  let win;try{win=T.window.getCurrentWindow();}catch(e){return;}
+  const card=document.querySelector('#boot-splash .bs');
+  if(card)['pointerdown','pointerup','mousedown','mouseup','click','dblclick','contextmenu','wheel'].forEach(t=>card.addEventListener(t,e=>{e.preventDefault();e.stopPropagation();},{capture:true,passive:false}));
+  let ignoring=null,busy=false;
+  const set=v=>{if(ignoring===v)return;ignoring=v;win.setIgnoreCursorEvents(v).catch(()=>window._bootCursorStop&&window._bootCursorStop());};
+  window._bootCursorStop=function(){if(window._bootCursorTimer){clearInterval(window._bootCursorTimer);window._bootCursorTimer=null;}ignoring=null;try{win.setIgnoreCursorEvents(false).catch(()=>{});}catch(e){}};
+  window._bootCursorTimer=setInterval(async()=>{
+    if(busy||!window._bootCursorTimer)return;busy=true;
+    try{
+      const [c,o,sf]=await Promise.all([T.window.cursorPosition(),win.innerPosition(),win.scaleFactor()]);
+      if(!window._bootCursorTimer)return;
+      const el=document.querySelector('#boot-splash .bs');if(!el){window._bootCursorStop();return;}
+      const r=el.getBoundingClientRect(),x=(c.x-o.x)/sf,y=(c.y-o.y)/sf;
+      set(!(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom));
+    }catch(e){window._bootCursorStop&&window._bootCursorStop();}
+    finally{busy=false;}
+  },40);
+})();
 </script>
 <script>
 // ONE bar for the whole boot sequence, not a series of per-phase bars that each restart from 0 —
@@ -2710,6 +2735,7 @@ window.bootProgressSet('walk',0,0); // matches the static label above ("Checking
 // hideBootSplash() itself once deskx has actually settled; if that file never runs (i.e. this
 // ISN'T the Tauri shell), this inline fallback is what removes the splash.
 window.hideBootSplash=function(){
+  if(window._bootCursorStop)window._bootCursorStop();
   try{if(window.__TAURI__&&window.__TAURI__.window)window.__TAURI__.window.getCurrentWindow().setIgnoreCursorEvents(false).catch(()=>{});}catch(e){}
   document.documentElement.classList.remove('cs-boot-tauri');
   const s=document.getElementById('boot-splash');
@@ -2726,13 +2752,20 @@ window.hideBootSplash=function(){
   // completed — invisibly, since the splash is still fully opaque on top — before the fade (and
   // therefore any visibility of what's underneath) begins.
   const html=document.documentElement;
+  // ⚠️ Never depend on rAF alone: WKWebView can pause rAF for this transparent window (it stayed
+  // stuck on the splash with the app held at opacity:0 after bf22824). A timer reveals regardless.
   html.classList.add('cs-reveal-hold');
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+  let revealed=false;
+  const reveal=(via)=>{
+    if(revealed)return;revealed=true;
+    console.log('[boot] splash reveal via '+via);
     html.classList.add('cs-reveal-go');
     html.classList.remove('cs-reveal-hold');
     s.classList.add('out');
     setTimeout(()=>{s.remove();html.classList.remove('cs-reveal-go');},600);
-  }));
+  };
+  requestAnimationFrame(()=>requestAnimationFrame(()=>reveal('raf')));
+  setTimeout(()=>reveal('timeout'),150);
 };
 // Only the REAL Tauri shell (desktop-native.js, gated on window.__TAURI__) takes over hiding
 // this — including the "?deskx=1" plain-browser testing mode, which never loads that script and
@@ -2945,7 +2978,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
     <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status" role="status" aria-live="polite" aria-atomic="true"></span></div>
     <div id="fx-deskbar-right">
       <div id="fx-deskbar-tools"></div>
-      <button class="fx-db js-allfx" onclick="enableAll()" title="Toggle grain, halation, bloom &amp; borders all at once"><span class="fx-db-ic" id="db-allfx"></span><span class="fx-db-lb">All FX</span></button>
+      <button class="fx-db js-allfx" onclick="enableAll()" title="Apply your All FX effects (right-click or ▾ to choose which effects, strengths and look)"><span class="fx-db-ic" id="db-allfx"></span><span class="fx-db-lb">All FX</span></button><button class="fx-db js-allfx-cfg" onclick="allFxSettings()" title="Choose what All FX applies — effects, strengths and look" aria-label="All FX settings">▾</button>
       <!-- Shown only for a Lightroom "Edit In" handoff session (library-ui.js sets
            window.chromasmithEditInPath and un-hides this) — writes the render straight back over
            the file Lightroom handed us instead of the normal share-sheet save. -->
@@ -3983,7 +4016,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
 
     <h3>Quick Actions &amp; One-tap Looks</h3>
     <ul>
-      <li><b>Enable All FX</b> — turns on grain, halation, bloom and borders at once.</li>
+      <li><b>All FX</b> — applies your chosen effects in one click (default: grain, halation, bloom and borders). Use the ▾ beside it, or right-click, to pick which effects, their strengths and the look it applies.</li>
       <li><b>One-tap Looks</b> — live thumbnails of every preset; click one to apply it.</li>
     </ul>
 
@@ -6117,7 +6150,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928P';
+const BUILD='1.0928Q';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21263,25 +21296,100 @@ async function fxVideoExportSmall(it){
 // QUICK ACTIONS
 // ═══════════════════════════
 const _ALLFX=['grain','hal','bloom','borders'];
-function enableAll(){          // toggle: on if any are off, otherwise turn them all off
-  const allOn=_ALLFX.every(n=>document.getElementById(`tg-${n}`).classList.contains('on'));
-  const target=!allOn;
+// ── All FX recipe: the user chooses WHICH parts All FX applies (grain, halation, look, …) and
+// at what settings. Stored per machine as {keys:[PASTE_CATEGORIES key], snap:partial snapshot}.
+// No saved recipe = the original behaviour (flip grain/halation/bloom/borders at current values).
+const _ALLFX_LS='chromasmith.allfx.v1';
+const _ALLFX_DEFAULT_KEYS=['grain','halation','bloom','canvas'];
+function allFxCats(){return PASTE_CATEGORIES.filter(c=>c.key!=='masks');}
+function allFxRecipe(){try{const r=JSON.parse(localStorage.getItem(_ALLFX_LS)||'null');return r&&Array.isArray(r.keys)&&r.snap?r:null;}catch(e){return null;}}
+function allFxOnToggles(r){ // the toggle ids a recipe switches ON — what "All FX is active" means
+  const out=[];allFxCats().filter(c=>r.keys.includes(c.key)).forEach(c=>c.toggles.forEach(id=>{const k=id.slice(3);if(r.snap.toggles&&r.snap.toggles[k])out.push(k);}));return out;
+}
+function allFxIsOn(){
+  const r=allFxRecipe(),tgOn=n=>{const t=document.getElementById(`tg-${n}`);return !!(t&&t.classList.contains('on'));};
+  if(!r)return _ALLFX.every(tgOn);
+  const tg=allFxOnToggles(r);
+  const lutOk=!r.keys.includes('lut')||((document.getElementById('sel-lut')||{}).value||'')===((r.snap.selects||{})['sel-lut']||'');
+  return lutOk&&(tg.length?tg.every(tgOn):r.keys.includes('lut'));
+}
+// Merged snapshot = base (a photo's own recipe, or factory defaults) + only the recipe's categories.
+window.chromasmithAllFxApplyTo=function(baseSnap){
+  const r=allFxRecipe();
+  let base=baseSnap?JSON.parse(JSON.stringify(baseSnap)):JSON.parse(JSON.stringify(_fxPristineDefault||getUISnapshot()));
+  if(!baseSnap){['geom','heal','adjustIndependent','rawNr','rawNrHighStrength','nativeNr','demosaicAlgo'].forEach(k=>delete base[k]);base.masks=[];}
+  base.sliders=base.sliders||{};base.toggles=base.toggles||{};base.selects=base.selects||{};
+  if(r)return pasteEditSelectiveApply(base,r.snap,r.keys);
+  _ALLFX.forEach(n=>{base.toggles[n]=true;});return base;
+};
+function enableAll(){          // toggle: apply the All FX recipe if it isn't fully on, otherwise turn it off
+  const r=allFxRecipe(),target=!allFxIsOn();
   if(typeof hapt==='function')hapt();
-  _ALLFX.forEach(name=>{
-    const tg=document.getElementById(`tg-${name}`);
-    tg.classList.toggle('on',target);
-    const ff=document.getElementById(`ff-${name}`);
-    if(ff){ff.style.display='';ff.classList.toggle('ff-off',!target);}
-  });
+  if(!r){
+    _ALLFX.forEach(name=>{
+      const tg=document.getElementById(`tg-${name}`);
+      tg.classList.toggle('on',target);
+      const ff=document.getElementById(`ff-${name}`);
+      if(ff){ff.style.display='';ff.classList.toggle('ff-off',!target);}
+    });
+  }else if(target){
+    applyUISnapshot(pasteEditSelectiveApply(getUISnapshot(),r.snap,r.keys));
+  }else{
+    allFxOnToggles(r).forEach(name=>{
+      const tg=document.getElementById(`tg-${name}`);if(!tg)return;tg.classList.remove('on');
+      const ff=document.getElementById(`ff-${name}`);if(ff){ff.style.display='';ff.classList.add('ff-off');}
+    });
+    if(r.keys.includes('lut')){const sl=document.getElementById('sel-lut');if(sl&&sl.value){sl.value='';sl._chipsRender&&sl._chipsRender();selectLUT('',true);}}
+  }
   fxUpdate();
   if(typeof syncSectionEnabled==='function')syncSectionEnabled();
   syncAllFxBtn();
-  log(target?'Grain, Halation, Bloom and Borders enabled':'All FX turned off',target?'ok':'info');
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
+  log(target?(r?'All FX applied':'Grain, Halation, Bloom and Borders enabled'):'All FX turned off',target?'ok':'info');
 }
 function syncAllFxBtn(){       // highlight the All-FX buttons when every effect is on
-  const allOn=_ALLFX.every(n=>{const t=document.getElementById(`tg-${n}`);return t&&t.classList.contains('on');});
+  const allOn=allFxIsOn();
   document.querySelectorAll('.js-allfx').forEach(b=>b.classList.toggle('allon',allOn));
 }
+function allFxSummary(r){      // one readable line of what a saved recipe does
+  if(!r)return 'Default: turns on Grain, Halation, Bloom and Borders at whatever their sliders are set to.';
+  const s=r.snap,sl=s.sliders||{},parts=[];
+  if(r.keys.includes('lut')){const v=(s.selects||{})['sel-lut']||'';parts.push('Look: '+(v?v.slice(2):'none')+(sl['lut-mix']!==undefined&&v?` (${sl['lut-mix']}%)`:''));}
+  const amt=(key,label,id,tg)=>{if(r.keys.includes(key))parts.push(label+' '+((s.toggles||{})[tg]?(sl[id]!==undefined?sl[id]:'on'):'off'));};
+  amt('grain','Grain','grain-a','grain');amt('halation','Halation','hal-a','hal');amt('bloom','Bloom','bloom-a','bloom');
+  allFxCats().filter(c=>r.keys.includes(c.key)&&!['lut','grain','halation','bloom'].includes(c.key)).forEach(c=>parts.push(c.label));
+  return parts.join(' · ')||'Nothing selected';
+}
+function allFxSettings(){
+  const r=allFxRecipe(),keys=r?r.keys:_ALLFX_DEFAULT_KEYS;
+  const rows=allFxCats().map(c=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="allfx-cat-cb" value="${c.key}"${keys.includes(c.key)?' checked':''}>${c.label}</label>`).join('');
+  _csModal('All FX — what it applies',
+    `<p style="margin:0 0 10px;font-size:12px;opacity:.75">Tick what All FX should apply, set those panels (strengths, look, borders…) the way you want in the editor, then save. All FX in the Editor and the Library will use exactly these settings.</p>`
+    +`<div style="font-size:12px;margin-bottom:10px"><b>Now:</b> <span id="allfx-sum">${allFxSummary(r)}</span></div>`
+    +`<div>${rows}</div>`
+    +`<label style="display:flex;align-items:center;gap:8px;padding:8px 0 0;font-size:12px;cursor:pointer"><input type="checkbox" id="allfx-cur" checked>Take strengths &amp; look from the editor's current settings${r?' (untick to keep the saved ones)':''}</label>`
+    +`<div class="btn-row" style="margin-top:14px;justify-content:flex-end;gap:8px">`
+    +`<button class="btn bgh" id="allfx-reset"${r?'':' disabled'}>Back to default</button>`
+    +`<button class="btn bgh" id="allfx-cancel">Cancel</button>`
+    +`<button class="btn bpri" id="allfx-save">Save</button></div>`);
+  const ov=document.getElementById('cs-modal-ov');
+  ov.querySelector('#allfx-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#allfx-reset').onclick=()=>{try{localStorage.removeItem(_ALLFX_LS);}catch(e){}ov.remove();syncAllFxBtn();log('All FX back to default','info');};
+  ov.querySelector('#allfx-save').onclick=()=>{
+    const checked=[...ov.querySelectorAll('.allfx-cat-cb:checked')].map(cb=>cb.value);
+    if(!checked.length){log('Tick at least one thing for All FX to apply','err');return;}
+    const useCur=ov.querySelector('#allfx-cur').checked,cur=getUISnapshot({skipRaster:true});
+    const snap={sliders:{},toggles:{},selects:{},colors:{}};
+    // Categories newly ticked always come from the editor; previously-saved ones keep their saved
+    // values unless "take from current" is ticked.
+    checked.forEach(k=>pasteEditSelectiveApply(snap,(!useCur&&r&&r.keys.includes(k))?r.snap:cur,[k]));
+    try{localStorage.setItem(_ALLFX_LS,JSON.stringify({keys:checked,snap}));}catch(e){log('Could not save All FX settings','err');return;}
+    ov.remove();syncAllFxBtn();log('All FX saved — '+allFxSummary({keys:checked,snap}),'ok');
+  };
+}
+window.chromasmithAllFxSettings=allFxSettings;
+window.chromasmithAllFxSummary=()=>allFxSummary(allFxRecipe());
+document.addEventListener('contextmenu',e=>{const b=e.target.closest&&e.target.closest('.js-allfx,#lib-allfx-btn');if(!b)return;e.preventDefault();allFxSettings();});
 
 function generateTestPhoto(){
   const W=1400,H=1050;

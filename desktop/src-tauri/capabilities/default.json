@@ -1,8 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Chromasmith desktop — personal-use app, broad local-file access by design (open any photo, export anywhere).",
-  "windows": ["main"],
+  "description": "Chromasmith desktop \u2014 personal-use app, broad local-file access by design (open any photo, export anywhere).",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:event:default",
@@ -11,6 +13,9 @@
     "core:window:allow-minimize",
     "core:window:allow-set-fullscreen",
     "core:window:allow-set-ignore-cursor-events",
+    "core:window:allow-cursor-position",
+    "core:window:allow-inner-position",
+    "core:window:allow-scale-factor",
     "core:window:allow-is-fullscreen",
     "core:menu:default",
     "dialog:default",
@@ -20,7 +25,11 @@
     "fs:allow-write-file",
     {
       "identifier": "fs:scope",
-      "allow": [{ "path": "$HOME/**" }]
+      "allow": [
+        {
+          "path": "$HOME/**"
+        }
+      ]
     }
   ]
 }
