@@ -50,7 +50,16 @@ a{color:inherit}
 .cap0 .k{max-width:14ch}
 .cap0 .foot{margin-top:14px;color:var(--mid)}
 
-.p1{width:100vw;border-left:1px solid var(--line);grid-template-columns:1fr 1fr;gap:4vw;align-items:center}
+.p1{width:135vw;border-left:1px solid var(--line);grid-template-columns:1fr 1fr;gap:4vw;align-items:center}
+.p1txt{position:relative;z-index:5;max-width:34vw}
+.board{position:absolute;z-index:1;left:42vw;right:5vw;top:15vh;bottom:13vh}
+.lbar{position:absolute;left:0;right:0;top:0;height:36px;display:flex;gap:16px;align-items:center;border-bottom:1px solid var(--line);font-weight:600;opacity:0}
+.lbar i{flex:1}.lbar::after{content:"";width:120px;height:22px;border:1px solid #33312c;border-radius:999px}
+.tile{position:absolute;will-change:transform}
+.tile .f{width:100%;height:100%;animation:float 5s ease-in-out infinite;animation-delay:var(--d)}
+.tile img{width:100%;height:100%;object-fit:cover;display:block;border-radius:2px;box-shadow:0 24px 50px rgba(0,0,0,.55)}
+.tile .cap{position:absolute;left:0;right:0;bottom:-17px;font-size:10px;display:flex;justify-content:space-between;opacity:0}
+@keyframes float{50%{transform:translate3d(0,calc(var(--fl,1)*-14px),0) rotate(calc(var(--fl,1)*1.5deg))}}
 .p1 .stack{position:relative;width:100%;max-width:560px;aspect-ratio:1;justify-self:center}
 .p1 .stack img{position:absolute;width:58%;border-radius:2px;box-shadow:0 30px 60px rgba(0,0,0,.5)}
 .p1 .stack img:nth-child(1){left:0;top:4%;rotate:-6deg}
@@ -135,6 +144,27 @@ a{color:inherit}
 .qa summary:hover{color:var(--acc);padding-left:10px}
 .qa p{color:var(--mid);font-size:17px;line-height:1.5;max-width:640px;padding-bottom:24px}
 @media(max-width:760px){.faq{grid-template-columns:1fr}}
+/* feature space */
+.space{position:relative;height:300vh;border-top:1px solid var(--line);overflow:hidden;background:radial-gradient(ellipse at 50% 60%,#16140f 0,var(--bg) 70%)}
+.shead{position:absolute;left:5vw;top:14vh;z-index:5;max-width:380px}
+.shead .mono{color:var(--acc)}.shead .k{margin:16px 0 8px}.shead .btn{margin-top:24px}
+.field{position:absolute;left:0;right:0;top:48vh;bottom:14vh}
+.feat{position:absolute;white-space:nowrap;background:none;border:0;color:var(--fg);font-family:Gramatika;cursor:pointer;padding:4px 6px;transform:translate(-50%,-50%);transition:opacity .35s,color .35s,text-shadow .35s,filter .35s;will-change:transform}
+.feat:hover,.feat:focus-visible{opacity:1!important;filter:none!important;color:#fff;text-shadow:0 0 12px var(--acc),0 0 34px var(--acc),0 0 70px rgba(255,59,31,.6);outline:none;z-index:10}
+.feat::before{content:"";position:absolute;left:-10px;top:50%;width:5px;height:5px;margin-top:-2.5px;background:var(--acc);opacity:0;transition:opacity .3s}
+.feat:hover::before{opacity:1}
+.field.dim .feat:not(.g-on){opacity:.06!important}
+.legend{position:absolute;left:5vw;right:5vw;bottom:6vh;display:flex;flex-wrap:wrap;gap:8px 18px;z-index:5}
+.legend button{background:none;border:0;font:inherit;color:var(--dim);cursor:pointer;text-transform:uppercase;letter-spacing:.12em}
+.legend button:hover{color:var(--acc)}
+.pop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:rgba(5,5,4,.6);backdrop-filter:blur(6px)}
+.pop[hidden]{display:none}
+.pop .card{position:relative;width:min(520px,90vw);background:var(--bg2);border:1px solid #2a2925;border-top:3px solid var(--acc);padding:36px;border-radius:4px}
+.pop .g{color:var(--acc)}.pop h3{font-size:clamp(28px,3vw,42px);font-weight:700;margin:14px 0 12px;line-height:1}
+.pop .d{color:var(--mid);font-size:18px;line-height:1.5}
+.pop .x{position:absolute;right:14px;top:10px;background:none;border:0;color:var(--dim);font-size:28px;cursor:pointer}.pop .x:hover{color:var(--acc)}
+.idx[hidden]{display:none}
+@media(max-width:760px){.space{height:220vh}.shead{position:relative;left:auto;top:auto;padding:14vh 5vw 0}}
 /* 5. outro */
 .outro{min-height:100vh;padding:16vh 5vw 6vh;background:var(--acc);color:#0b0b0a;display:grid;grid-template-rows:1fr auto}
 .outro .k{font-size:clamp(56px,13vw,230px);line-height:.84}
@@ -184,7 +214,7 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 
 <header class="top">
   <a class="word" href="#"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="hdc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="hda" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#hdc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#hda)"/><polygon points="69,32 69,65 36,65" fill="url(#hdb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg>CHRO-MA-SMITH</a>
-  <nav><a href="#index">Features</a><a href="#faq">FAQ</a><a href="https://github.com/TareqAmeer/Chroma-App">GitHub ↗</a><a href="#yours">Download</a><a href="../../chromasmith-22.html">Launch app ↗</a></nav>
+  <nav><a href="#features">Features</a><a href="#faq">FAQ</a><a href="https://github.com/TareqAmeer/Chroma-App">GitHub ↗</a><a href="#yours">Download</a><a href="../../chromasmith-22.html">Launch app ↗</a></nav>
 </header>
 
 <section class="pin" aria-label="Chromasmith tour">
@@ -208,14 +238,10 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
     </div>
 
     <div class="panel p1" data-lab="Library">
-      <div><p class="mono">01 / Library</p>
+      <div class="p1txt"><p class="mono">01 / Library</p>
       <div class="k">Find the frame.<br>Keep the feeling.</div>
       <p class="t">A library for every shoot, every face, every almost-forgotten moment. All yours. All on your machine.</p></div>
-      <div class="stack">
-        <img src="../../design/prototypes/swiss-kinetic/photos/dog-sitting.webp" alt="">
-        <img src="../../design/prototypes/swiss-kinetic/photos/dog-lying.webp" alt="">
-        <img src="../assets/ui/library.webp" alt="Chromasmith library">
-      </div>
+      <div class="board"><div class="lbar"><span>Library</span><span class="mono">18 photos · by date</span><i></i></div></div>
     </div>
 
     <div class="panel p2" data-lab="Studio">
@@ -270,7 +296,16 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
   </div>
 </section>
 
-<section class="idx" id="index">
+<section class="space" id="features">
+  <div class="shead"><p class="mono">Every tool</p><h2 class="k">The whole<br>darkroom.</h2>
+    <p class="t">Hover to light a tool. Click to see what it does.</p>
+    <a class="btn" href="#index" data-open-index>View as a list</a></div>
+  <div class="field" aria-label="All features"></div>
+  <div class="legend mono"></div>
+</section>
+<div class="pop" id="pop" hidden><div class="card"><button class="x" type="button" aria-label="Close">×</button><p class="mono g"></p><h3></h3><p class="d"></p></div></div>
+
+<section class="idx" id="index" hidden>
   <aside><p class="mono">Feature index</p><h2 class="k" style="margin-top:18px">The whole<br>darkroom.</h2><ol><li><a href="#g0" class="on"><small>01</small>Looks and film</a></li><li><a href="#g1"><small>02</small>Light and colour</a></li><li><a href="#g2"><small>03</small>Masks and retouching</a></li><li><a href="#g3"><small>04</small>Composition and multi-image</a></li><li><a href="#g4"><small>05</small>Desktop photo library</a></li><li><a href="#g5"><small>06</small>Input, export and workflow</a></li><li><a href="#g6"><small>07</small>Video — beta</a></li><li><a href="#g7"><small>08</small>Access and privacy</a></li></ol></aside>
   <div><div class="group" id="g0"><h3>Looks and film</h3><details><summary>113 film looks</summary><p>Start with calibrated colour, cinema, instant, reversal or black-and-white looks.</p></details>
           <details><summary>One-tap Looks gallery</summary><p>Preview a look on your photo and apply it with one click.</p></details>
@@ -377,7 +412,7 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 
 <section class="faq" id="faq">
   <div><p class="mono">FAQ</p><h2 class="k" style="margin-top:18px">Questions,<br>answered.</h2></div>
-  <div class="qa"><details><summary>Is Chromasmith really free?</summary><p>Yes. It's free, open-source software under the GPL-3.0 licence. There's no account, subscription or paywall.</p></details><details><summary>Do my photos get uploaded anywhere?</summary><p>No. Everything runs on your device, in the browser or the desktop app. Your photos never leave your machine.</p></details><details><summary>What's the difference between the web app and the desktop app?</summary><p>The web app has the full editor: looks, film effects, colour tools, masks and export. The desktop app adds the photo library, card import, on-device search, face tagging and the desktop-only tools such as HDR and focus stacking.</p></details><details><summary>Does it work offline?</summary><p>Yes. After the first load the web app keeps working without a connection, and the desktop app never needs one.</p></details><details><summary>Which RAW files can it open?</summary><p>Camera RAW files are decoded locally, with camera colour profiles for Panasonic Lumix bodies. JPEG, PNG and TIFF open everywhere.</p></details><details><summary>Can I use my own LUTs?</summary><p>Yes. Load any .cube LUT as a starting look, or build your own .cube from a before/after pair or a reference photo.</p></details><details><summary>How do I install it on iPhone?</summary><p>Chromasmith isn't on the App Store yet. Download the .ipa and install it with a third-party signing service such as Flarestore. Or add the web app to your home screen, which needs no signing.</p></details><details><summary>Is there a Windows version?</summary><p>Yes. A Windows installer is published alongside the Mac release.</p></details></div>
+  <div class="qa"><details><summary>Is Chromasmith really free?</summary><p>Yes. It's free, open-source software under the GPL-3.0 licence. There's no account, subscription or paywall.</p></details><details><summary>Do my photos get uploaded anywhere?</summary><p>No. Everything runs on your device, in the browser or the desktop app. Your photos never leave your machine.</p></details><details><summary>What's the difference between the web app and the desktop app?</summary><p>The web app has the full editor: looks, film effects, colour tools, masks and export. The desktop app adds the photo library, card import, on-device search, face tagging and the desktop-only tools such as HDR and focus stacking.</p></details><details><summary>Does it work offline?</summary><p>Yes. After the first load the web app keeps working without a connection, and the desktop app never needs one.</p></details><details><summary>Which RAW files can it open?</summary><p>Camera RAW files are decoded locally, with camera colour profiles for Panasonic Lumix bodies. JPEG, PNG and TIFF open everywhere.</p></details><details><summary>Can I use my own LUTs?</summary><p>Yes. Load any .cube LUT as a starting look, or build your own .cube from a before/after pair or a reference photo.</p></details><details><summary>How do I install it on iPhone?</summary><p>Chromasmith isn't on the App Store yet. Download the .ipa and install it with a third-party signing service such as Flarestore. Or add the web app to your home screen, which needs no signing.</p></details><details><summary>Where can I see every feature in a list?</summary><p>Open the <a href="#index" data-open-index>full feature list</a>. Every tool, grouped by what it does, with a one-line description.</p></details><details><summary>Is there a Windows version?</summary><p>Yes. A Windows installer is published alongside the Mac release.</p></details></div>
 </section>
 
 <section class="outro" id="yours">
@@ -439,6 +474,52 @@ if(!reduce){
     .to('.intro .curtain',{scaleY:1,duration:.7,ease:'power2.inOut'},.2);
   ScrollTrigger.create({trigger:'.pin',start:'top 60%',once:true,onEnter:heroIn});
 }
+const tl=gsap.timeline({scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*3+dist()),scrub:1,invalidateOnRefresh:true}});
+tl.to('.scrollcue',{opacity:0,duration:.1})
+  .to('.ph .film:not(.glow)',{opacity:1,duration:.7},'<')
+  .to('.ph .grain',{opacity:.5,duration:.4})
+  .to('.ph .glow',{opacity:.5,duration:.5})
+  .to('.lb,.hero-t',{opacity:0,y:-30,duration:.3})
+  .to('.ph',{width:'100vw',height:'100vh',aspectRatio:'auto',ease:'power2.inOut',duration:1})
+  .to('.ph .shade',{opacity:1,duration:.3},'-=.3')
+  .to('.cap0',{opacity:1,y:-16,duration:.3})
+  .to({},{duration:.4})
+  .to('.prog,.plab',{opacity:1,duration:.2})
+  .addLabel('slide')
+  .to(tr,{x:()=>-dist(),ease:'none',duration:()=>dist()/innerHeight,onUpdate(){
+    const f=this.progress()*bars.length;bars.forEach((b,i)=>b.style.transform=`scaleX(${Math.max(0,Math.min(1,f-i))})`);
+    plab.textContent=pans[Math.min(pans.length-1,Math.floor(f))].dataset.lab}});
+const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scrollTrigger.end-tl.scrollTrigger.start);
+pans.forEach(p=>{
+  const st=()=>sPos()+Math.max(0,p.offsetLeft-innerWidth),en=()=>st()+innerWidth+p.offsetWidth;
+  const o=()=>({scrub:true,invalidateOnRefresh:true,start:st,end:en});
+  gsap.fromTo(p.querySelectorAll('.k,.t,.p1txt .mono,.panel>div>.mono,.in>.mono,.tags,.looks,.terms'),{x:60},{x:-30,ease:'none',scrollTrigger:o()});
+  gsap.fromTo(p.querySelectorAll('.img img,.p4>img'),{xPercent:3},{xPercent:-3,ease:'none',scrollTrigger:o()});
+  gsap.fromTo(p.querySelectorAll('.big'),{x:160},{x:-80,ease:'none',scrollTrigger:o()});
+});
+
+/* library: photos float in the air, then settle into the library grid as the chapter arrives */
+{
+  const P='../assets/story/',D='../../design/prototypes/swiss-kinetic/photos/';
+  const src=[P+'film.webp',D+'dog-sitting.webp',P+'maker.webp',P+'original.webp',D+'dog-lying.webp',P+'studio.webp','../assets/hero-placeholder.webp'];
+  const looks=['none','grayscale(1) contrast(1.15)','sepia(.45) saturate(1.3)','saturate(1.4) hue-rotate(-12deg)','contrast(1.2) brightness(.9)','sepia(.2) hue-rotate(160deg) saturate(.8)'];
+  const board=document.querySelector('.board'),N=18,C=6,RW=3,panel=document.querySelector('.p1'),tiles=[];
+  for(let i=0;i<N;i++){
+    const t=document.createElement('div');t.className='tile';t.style.setProperty('--d',(-i*.37)+'s');
+    t.innerHTML=`<div class="f"><img src="${src[i%src.length]}" alt="" loading="lazy" style="filter:${looks[(i*5)%looks.length]}"><span class="cap mono"><span>IMG_${4100+i*7}</span><span>★${1+i%5}</span></span></div>`;
+    board.appendChild(t);tiles.push(t);
+  }
+  const rnd=(i,k)=>{const x=Math.sin(i*127.1+k*311.7)*43758.5453;return x-Math.floor(x)};
+  const layout=()=>{const W=board.clientWidth,H=board.clientHeight-52,g=12,w=(W-g*(C-1))/C,h=(H-g*(RW-1)-RW*18)/RW;
+    tiles.forEach((t,i)=>Object.assign(t.style,{width:w+'px',height:h+'px',left:(i%C)*(w+g)+'px',top:52+Math.floor(i/C)*(h+g+18)+'px'}))};
+  layout();addEventListener('resize',()=>{layout();ScrollTrigger.refresh()});
+  const org=gsap.timeline({scrollTrigger:{start:()=>sPos()+panel.offsetLeft-innerWidth*1.05,end:()=>sPos()+panel.offsetLeft+innerWidth*.15,scrub:1,invalidateOnRefresh:true}});
+  tiles.forEach((t,i)=>org.fromTo(t,
+    {x:()=>(rnd(i,1)-.65)*innerWidth*1.1,y:()=>(rnd(i,2)-.5)*innerHeight*.9,rotation:(rnd(i,3)-.5)*40,scale:.5+rnd(i,4)*.9,zIndex:Math.round(rnd(i,4)*20),'--fl':1},
+    {x:0,y:0,rotation:0,scale:1,'--fl':0,ease:'power3.inOut',duration:1},rnd(i,5)*.35));
+  org.to('.lbar,.tile .cap',{opacity:1,duration:.25},'>-.15');
+}
+
 /* live look lens (same shader as the hero lab's C) */
 const V={
 lens(R){
@@ -499,6 +580,34 @@ document.querySelectorAll('.group details').forEach(d=>d.addEventListener('toggl
 document.getElementById('homebtn').addEventListener('click',()=>{const h=document.getElementById('howto');h.hidden=!h.hidden;ScrollTrigger.refresh()});
 document.querySelectorAll('.qa details').forEach(d=>d.addEventListener('toggle',()=>ScrollTrigger.refresh()));
 gsap.from('.plat',{y:50,opacity:0,stagger:.08,duration:1,ease:'expo.out',scrollTrigger:{trigger:'.plats',start:'top 90%'}});
+
+/* feature space: every feature floats at its own depth; hover glows, click opens the detail */
+{
+  const field=document.querySelector('.field'),legend=document.querySelector('.legend'),pop=document.getElementById('pop'),feats=[];
+  const rnd=(i,k)=>{const x=Math.sin(i*91.7+k*47.3)*15731.743;return x-Math.floor(x)};
+  const groups=[...document.querySelectorAll('.idx .group')];
+  let n=0;const all=[];groups.forEach((g,gi)=>g.querySelectorAll('details').forEach(d=>all.push({g:g.querySelector('h3').textContent,gi,name:d.querySelector('summary').textContent,desc:d.querySelector('p').textContent})));
+  const cols=5,rows=Math.ceil(all.length/cols);
+  all.forEach((f,i)=>{
+    const z=rnd(i,1),b=document.createElement('button');b.type='button';b.className='feat';b.textContent=f.name;b.dataset.g=f.gi;
+    const cx=(i%cols+.15+rnd(i,2)*.7)/cols,cy=(Math.floor(i/cols)+.2+rnd(i,3)*.6)/rows;
+    Object.assign(b.style,{left:(13+cx*72)+'%',top:(cy*100)+'%',fontSize:(12+z*z*24)+'px',fontWeight:z>.6?600:400,opacity:.18+z*.5,filter:z<.3?'blur(1.2px)':'none'});
+    b.onclick=()=>{pop.querySelector('.g').textContent=f.g;pop.querySelector('h3').textContent=f.name;pop.querySelector('.d').textContent=f.desc;pop.hidden=false;lenis&&lenis.stop();pop.querySelector('.x').focus()};
+    field.appendChild(b);feats.push({el:b,z});
+  });
+  groups.forEach((g,gi)=>{const b=document.createElement('button');b.textContent=g.querySelector('h3').textContent;
+    b.onmouseenter=()=>{field.classList.add('dim');feats.forEach(f=>f.el.classList.toggle('g-on',+f.el.dataset.g===gi))};
+    b.onmouseleave=()=>field.classList.remove('dim');legend.appendChild(b)});
+  const close=()=>{pop.hidden=true;lenis&&lenis.start()};
+  pop.onclick=e=>{if(e.target===pop||e.target.classList.contains('x'))close()};addEventListener('keydown',e=>e.key==='Escape'&&!pop.hidden&&close());
+  // depth: near words drift more with scroll and with the pointer
+  feats.forEach(f=>gsap.fromTo(f.el,{y:(f.z-.4)*160},{y:-(f.z-.4)*160,ease:'none',scrollTrigger:{trigger:'.space',start:'top bottom',end:'bottom top',scrub:true}}));
+  const mx=gsap.utils.toArray('.feat').map(el=>gsap.quickTo(el,'x',{duration:1.2,ease:'power3'}));
+  document.querySelector('.space').addEventListener('pointermove',e=>{const dx=(e.clientX/innerWidth-.5);feats.forEach((f,i)=>mx[i](-dx*f.z*70))});
+  gsap.from('.feat',{opacity:0,scale:.6,duration:1.4,stagger:{each:.008,from:'random'},ease:'expo.out',scrollTrigger:{trigger:'.space',start:'top 70%'}});
+}
+/* full list lives behind a button; FAQ + "View as a list" open it */
+document.querySelectorAll('[data-open-index]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const ix=document.getElementById('index');ix.hidden=false;ScrollTrigger.refresh();lenis?lenis.scrollTo(ix,{offset:-40}):ix.scrollIntoView()},true));
 /* 5. outro lines rise */
 gsap.from('.outro .k i',{yPercent:105,stagger:.12,duration:1.2,ease:'expo.out',scrollTrigger:{trigger:'.outro',start:'top 65%'}});
 </script>
