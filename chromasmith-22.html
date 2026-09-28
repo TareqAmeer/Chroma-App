@@ -2830,6 +2830,7 @@ ready(function(){
       c.globalCompositeOperation='lighter';ch.forEach(function(e){var a=e[0];c.beginPath();c.moveTo(0,h);for(var i=0;i<256;i++){var x=i/255*w;c.lineTo(x,h-Math.min(1,a[i]/H.pk)*(h-3))}c.lineTo(w,h);c.closePath();c.fillStyle=e[1];c.fill()});
       c.globalCompositeOperation='source-over';c.beginPath();for(var i=0;i<256;i++){var x=i/255*w,y=h-Math.min(1,H.l[i]/H.pk)*(h-3);i?c.lineTo(x,y):c.moveTo(x,y)}c.strokeStyle='rgba(235,235,235,.8)';c.lineWidth=1;c.stroke();
       if(H.z){var z=ZN[H.z-1];c.fillStyle='rgba(255,255,255,.07)';c.fillRect(z[0]/256*w,0,(z[1]-z[0])/256*w,h)}};
+    var redraw=function(){if(d.open&&typeof renderPreview==='function')renderPreview()};
     var draw=function(){q=0;if(!d.open)return;var src=document.getElementById('fx-canvas');if(!src||!src.width)return;
       var t=draw._t||(draw._t=document.createElement('canvas'));var k=Math.min(1,480/Math.max(src.width,src.height));t.width=Math.max(1,src.width*k|0);t.height=Math.max(1,src.height*k|0);
       var x=t.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,t.width,t.height);var px=x.getImageData(0,0,t.width,t.height).data;
@@ -2842,8 +2843,8 @@ ready(function(){
       H={r:r,g:gg,b:bb,l:l,pk:pk*1.05,n:n,raw:l,lo:lo/n*100,hi:hi/n*100,z:H&&H.z};
       cLo.classList.toggle('on',H.lo>0.1);cHi.classList.toggle('on',H.hi>0.1);var gw=typeof fxGamutWarn!=='undefined'&&fxGamutWarn;cLo.classList.toggle('act',gw||fxClipLo);cHi.classList.toggle('act',gw||fxClipHi);
       paint();if(!H.z)idle()};
-    cLo.addEventListener('click',function(e){e.stopPropagation();fxClipLo=!fxClipLo;renderPreview();draw()});
-    cHi.addEventListener('click',function(e){e.stopPropagation();fxClipHi=!fxClipHi;renderPreview();draw()});
+    cLo.addEventListener('click',function(e){e.stopPropagation();fxClipLo=!fxClipLo;renderPreview()});
+    cHi.addEventListener('click',function(e){e.stopPropagation();fxClipHi=!fxClipHi;renderPreview()});
     // Drag a zone left/right to move its Basic slider (Lightroom-style); midtones = Exposure.
     var SL=['sl-adj-bl','sl-adj-sh','sl-adj-exp','sl-adj-hi','sl-adj-wh'],drag=null;
     cv.addEventListener('pointerdown',function(e){if(!H||!H.z)return;var el=document.getElementById(SL[H.z-1]);if(!el)return;drag={el:el,x:e.clientX,v:+el.value,z:H.z};cv.setPointerCapture(e.pointerId);e.preventDefault()});
@@ -2861,12 +2862,15 @@ ready(function(){
     var pinApply=function(){var on=sk2HistPinned(),pn=adj.closest('.fx-panel');b.classList.toggle('sk2-hist-pin',on);
       if(on&&pn){var hd=pn.querySelector(':scope>.sk2-in'),nv=hd&&hd.nextElementSibling&&hd.nextElementSibling.tagName==='NAV'?hd.nextElementSibling:null,af=nv||hd;
         pn.insertBefore(d,af?af.nextSibling:pn.firstChild);d.style.top=((af?(parseFloat(getComputedStyle(af).top)||0)+af.offsetHeight:0)|0)+'px';d.open=true}
-      else{d.style.top='';home.parentNode.insertBefore(d,home);}draw()};
+      else{d.style.top='';home.parentNode.insertBefore(d,home);}redraw()};
     window.sk2HistPinToggle=function(){try{localStorage.setItem(PK,sk2HistPinned()?'0':'1')}catch(e){}pinApply()};
     d.querySelector('summary').addEventListener('click',function(e){if(sk2HistPinned())e.preventDefault()});
     if(sk2HistPinned())pinApply();
-    d.addEventListener('toggle',draw);
-    var rp=window.renderPreview;if(typeof rp==='function'){window.renderPreview=function(){var r=rp.apply(this,arguments);if(d.open&&!q)q=requestAnimationFrame(draw);return r};}}
+    d.addEventListener('toggle',redraw);
+    // Sample right after each preview render, in the same task: once the frame is composited the
+    // WebGL canvas reads back blank (no preserveDrawingBuffer). Throttled, with a trailing re-render.
+    if(typeof FX!=='undefined'&&FX.render){var fr=FX.render,last=0,tr=0;FX.render=function(P,w,h,op){var r=fr.apply(this,arguments);
+      if(d.open&&op&&('gamutWarn' in op)){var now=performance.now();clearTimeout(tr);if(now-last>70){last=now;draw()}else tr=setTimeout(function(){if(typeof renderPreview==='function')renderPreview()},90)}return r};}}
   // Rail: no tooltip that just repeats the word already under the icon.
   var rail=document.getElementById('fx-toolrail');
   function untitle(){if(!rail)return;rail.querySelectorAll('.fx-rail-btn[title]').forEach(function(x){var lb=x.querySelector('.fx-rail-lb');if(lb&&x.title.trim().toLowerCase()===lb.textContent.trim().toLowerCase()){x.setAttribute('aria-label',x.title);x.removeAttribute('title')}})}
@@ -6433,7 +6437,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0928C';
+const BUILD='1.0928D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
