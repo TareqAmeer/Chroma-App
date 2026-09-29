@@ -38,7 +38,17 @@ a{color:inherit}
 .panel{flex:none;height:100%;position:relative;display:grid;align-content:center;padding:0 5vw}
 .panel>div>.mono:first-child,.panel>.in>.mono:first-child,.idx aside>.mono,.beta .head .mono,.maker .mono:first-child{color:var(--acc)}
 .p0{width:100vw;place-items:center;padding:0}
-.ph{position:relative;width:28vw;aspect-ratio:844/1125;overflow:hidden}
+.ph{position:absolute;left:50%;top:50%;width:28vw;aspect-ratio:844/1125;overflow:hidden;z-index:0;box-shadow:0 0 0 0 rgba(11,11,10,0),0 0 0 0 rgba(242,239,232,0),0 0 0 0 rgba(11,11,10,0),0 0 0 0 rgba(242,239,232,0)}
+.track{position:relative;z-index:1}
+.stagew{position:absolute;left:5vw;top:34vh;display:grid;z-index:3;pointer-events:none}
+.stagew span{grid-area:1/1;font-size:clamp(34px,5.6vw,96px);font-weight:800;letter-spacing:-.01em;line-height:.95;display:flex;overflow:hidden;padding-bottom:.08em;white-space:pre}
+.stagew span i{font-style:normal;display:block}
+.favs{position:absolute;right:5vw;top:15vh;display:flex;align-items:center;gap:18px;z-index:4;opacity:0}
+.favs .heart{width:44px;height:44px;fill:#e5484d;transform:scale(0);filter:drop-shadow(0 4px 14px rgba(0,0,0,.5))}
+.favs .ring{position:absolute;left:0;top:50%;width:44px;height:44px;margin-top:-22px;border:2px solid #e5484d;border-radius:50%;opacity:0}
+.favs .stars{display:flex;gap:4px}
+.favs .stars svg{width:26px;height:26px;fill:none;stroke:rgba(242,239,232,.55);stroke-width:1.5;transform:scale(.6);opacity:0}
+.favs .stars svg.on{fill:#f2efe8;stroke:#f2efe8}
 .ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .ph .film{opacity:0}.ph .grain{opacity:0}
 .ph .glow{filter:blur(20px) saturate(2) brightness(1.5);mix-blend-mode:screen;opacity:0}
@@ -367,7 +377,7 @@ section{position:relative}
   .sn{top:70px;right:16px}
   .intro{padding:0 16px 12vh}.sheet{left:16px;right:16px;top:17vh;width:auto;gap:4px}
   .hero-t{left:16px;top:12vh;font-size:13vw}
-  .ph{width:74vw}
+  .ph{width:74vw}.stagew{top:14vh}.favs{top:12vh}
   .panel{padding:0 16px}
   .p1{overflow:hidden;align-content:start;padding-top:13vh}
   .p1txt{max-width:100%}.p1txt .t{font-size:16px}
@@ -418,17 +428,19 @@ section{position:relative}
   <p class="mono foot">*Almost everything. Your ideas are still yours.</p></section>
 
 <section class="pin" aria-label="Chromasmith tour"><span class="sn mono">01.0 — Tour</span>
+  <div class="ph">
+    <img src="../assets/story/original.webp" alt="Unedited photo of a dog by a canal">
+    <img class="film" src="../assets/story/film.webp" alt="">
+    <img class="film glow" src="../assets/story/film.webp" alt="">
+    <div class="grain"></div><div class="shade"></div>
+    <div class="favs" aria-hidden="true"><svg class="heart" viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"/></svg><span class="ring"></span><span class="stars"><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg></span></div>
+    <div class="dcap"><span>Lens</span><b>28 mm · f/2</b><span>Shutter</span><b>1/250 s</b><span>Look</span><b>Classic Neg</b></div>
+  </div>
   <div class="track">
     <div class="panel p0">
       <span class="mono lb l">Raw file<br>f/2 · 1/250</span>
       <span class="mono lb r">Classic Neg<br>grain · halation</span>
-      <div class="ph">
-        <img src="../assets/story/original.webp" alt="Unedited photo of a dog by a canal">
-        <img class="film" src="../assets/story/film.webp" alt="">
-        <img class="film glow" src="../assets/story/film.webp" alt="">
-        <div class="grain"></div><div class="shade"></div>
-        <div class="dcap"><span>Lens</span><b>28 mm · f/2</b><span>Shutter</span><b>1/250 s</b><span>Look</span><b>Classic Neg</b></div>
-      </div>
+      <div class="stagew" aria-hidden="true"><span>Colour it</span><span>Grain it</span><span>Film it</span><span>Double-frame it</span><span>Perfect it</span></div>
       <span class="mono scrollcue">Scroll to develop</span>
       <div class="cap0">
         <div><div class="k">A whole photo studio, wherever inspiration finds you.</div></div>
@@ -741,21 +753,52 @@ if(!reduce){
     .to('.intro .curtain',{scaleY:1,duration:.7,ease:'power2.inOut'},.2);
   ScrollTrigger.create({trigger:'.pin',start:'top 60%',once:true,onEnter:heroIn});
 }
-const tl=gsap.timeline({scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*3+dist()),scrub:1,invalidateOnRefresh:true}});
-tl.to('.scrollcue',{opacity:0,duration:.1})
-  .to('.ph .film:not(.glow)',{opacity:1,duration:.7},'<')
-  .to('.ph .grain',{opacity:.5,duration:.4})
-  .to('.ph .glow',{opacity:.5,duration:.5})
-  .to('.lb',{opacity:0,y:-30,duration:.3})
-  .to('.ph',{width:'100vw',height:'100vh',aspectRatio:'auto',ease:'power2.inOut',duration:1})
-  .to('.ph .shade',{opacity:1,duration:.3},'-=.3')
-  .to('.cap0',{opacity:1,y:-16,duration:.3})
-  .to({},{duration:.4})
-  .to('.prog,.plab',{opacity:1,duration:.2})
-  .addLabel('slide')
+/* tour: each stage word rises letter by letter beside the photo as its effect lands; then the frame goes full-screen, gets a heart and stars, and shrinks into the library grid */
+document.querySelectorAll('.stagew span').forEach(w=>{w.innerHTML=[...w.textContent].map(c=>'<i>'+c+'</i>').join('')});
+gsap.set('.stagew span i',{yPercent:115});gsap.set('.ph',{xPercent:-50,yPercent:-50});
+/* the photo flies to its slot in the library grid and becomes that tile */
+const ph=document.querySelector('.ph');let mid=null;
+const handoff=X=>{const t0=window.__tile0;if(!t0)return;
+  const a=panel0().offsetLeft-innerWidth*.6,b=panel0().offsetLeft+innerWidth*.15,q=Math.max(0,Math.min(1,(X-a)/(b-a))),e=q*q*(3-2*q);
+  const done=q>=1;t0.style.visibility=done?'visible':'hidden';ph.style.visibility=done?'hidden':'visible';
+  if(q<=0)ph.style.left=ph.style.top='';if(done||q<=0)return;
+  const pr=ph.parentElement.getBoundingClientRect(),r=t0.querySelector('img').getBoundingClientRect();
+  const w0=innerWidth*.2,h0=w0*1125/844,cx0=pr.width/2,cy0=pr.height/2,cx1=r.left-pr.left+r.width/2,cy1=r.top-pr.top+r.height/2;
+  ph.style.left=(cx0+(cx1-cx0)*e)+'px';ph.style.top=(cy0+(cy1-cy0)*e)+'px';ph.style.width=(w0+(r.width-w0)*e)+'px';ph.style.height=(h0+(r.height-h0)*e)+'px'};
+const panel0=()=>document.querySelector('.p1');
+let PRE=6;
+const tl=gsap.timeline({scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*PRE+dist()),scrub:1,invalidateOnRefresh:true}});
+const W_=document.querySelectorAll('.stagew span'),wIn=(k,at)=>tl.to(W_[k].querySelectorAll('i'),{yPercent:0,stagger:.03,duration:.3,ease:'power3.out'},at),wOut=(k,at)=>tl.to(W_[k].querySelectorAll('i'),{yPercent:-115,stagger:.02,duration:.25,ease:'power3.in'},at);
+const FR=()=>'rgb(11,11,10) 0px 0px 0px 6px,rgb(242,239,232) 0px 0px 0px 7px,rgb(11,11,10) 0px 0px 0px 15px,rgb(242,239,232) 0px 0px 0px 16px',NOFR='rgba(11,11,10,0) 0px 0px 0px 0px,rgba(242,239,232,0) 0px 0px 0px 0px,rgba(11,11,10,0) 0px 0px 0px 0px,rgba(242,239,232,0) 0px 0px 0px 0px';
+gsap.set('.ph',{boxShadow:NOFR});
+tl.to('.scrollcue',{opacity:0,duration:.1},0)
+  .to('.ph .film:not(.glow)',{opacity:1,duration:.7},0);wIn(0,0);wOut(0,.62)
+tl.to('.ph .grain',{opacity:.5,duration:.4},.7);wIn(1,.7);wOut(1,1.02)
+tl.to('.ph .glow',{opacity:.5,duration:.5},1.1);wIn(2,1.1);wOut(2,1.52)
+tl.to('.ph',{boxShadow:FR(),duration:.5,ease:'power2.out'},1.6);wIn(3,1.6);wOut(3,2.02)
+tl.to('.lb',{opacity:0,y:-30,duration:.3},2.1);wIn(4,2.1);wOut(4,2.92)
+tl.to('.ph',{boxShadow:NOFR,duration:.3},2.1)
+  .to('.ph',{width:'100vw',height:'100vh',aspectRatio:'auto',ease:'power2.inOut',duration:1},2.1)
+  .to('.ph .shade',{opacity:1,duration:.3},2.8)
+  .to('.cap0',{opacity:1,y:-16,duration:.3},3.1)
+  // heart + stars, the way a card shows them in the library
+  .to('.favs',{opacity:1,duration:.15},3.3)
+  .to('.favs .heart',{scale:1.35,duration:.2,ease:'power2.out'},3.35)
+  .to('.favs .ring',{opacity:.9,scale:1,duration:.01},3.35)
+  .to('.favs .ring',{scale:2.6,opacity:0,duration:.45,ease:'power2.out'},3.36)
+  .to('.favs .heart',{scale:1,duration:.25,ease:'back.out(3)'},3.55)
+  .to('.favs .stars svg',{opacity:1,scale:1,stagger:.06,duration:.2},3.7)
+  .to('.favs .stars svg:nth-child(-n+4)',{fill:'#f2efe8',stroke:'#f2efe8',stagger:.12,duration:.15},3.95)
+  .to({},{duration:.5},4.3)
+  // zoom back out
+  .to('.favs,.cap0,.ph .shade',{opacity:0,duration:.25},4.8)
+  .to('.ph',{width:()=>innerWidth*.2,height:()=>innerWidth*.2*1125/844,ease:'power2.inOut',duration:.9},4.8)
+  .to('.prog,.plab',{opacity:1,duration:.2},5.6)
+  .addLabel('slide',PRE-0)
   .to(tr,{x:()=>-dist(),ease:'none',duration:()=>dist()/innerHeight,onUpdate(){
     const f=this.progress()*bars.length;bars.forEach((b,i)=>b.style.transform=`scaleX(${Math.max(0,Math.min(1,f-i))})`);
-    const pp=pans[Math.max(0,Math.min(pans.length-1,Math.floor(f)||0))];if(pp)plab.textContent=pp.dataset.lab}});
+    const pp=pans[Math.max(0,Math.min(pans.length-1,Math.floor(f)||0))];if(pp)plab.textContent=pp.dataset.lab;
+    handoff(this.progress()*dist())}},'slide');
 const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scrollTrigger.end-tl.scrollTrigger.start);
 pans.forEach(p=>{
   const st=()=>sPos()+Math.max(0,p.offsetLeft-innerWidth),en=()=>st()+innerWidth+p.offsetWidth;
@@ -776,6 +819,7 @@ pans.forEach(p=>{
     t.innerHTML=`<div class="f"><img src="${src[i%src.length]}" alt="" loading="lazy" style="filter:${looks[(i*5)%looks.length]}"><span class="cap mono"><span>IMG_${4100+i*7}</span><span>★${1+i%5}</span></span></div>`;
     board.appendChild(t);tiles.push(t);
   }
+  window.__tile0=tiles[0];tiles[0].style.visibility='hidden';
   const rnd=(i,k)=>{const x=Math.sin(i*127.1+k*311.7)*43758.5453;return x-Math.floor(x)};
   const layout=()=>{const W=board.clientWidth,H=board.clientHeight-52,g=12,w=(W-g*(C-1))/C,h=(H-g*(RW-1)-RW*18)/RW;
     tiles.forEach((t,i)=>Object.assign(t.style,{width:w+'px',height:h+'px',left:(i%C)*(w+g)+'px',top:52+Math.floor(i/C)*(h+g+18)+'px'}))};
