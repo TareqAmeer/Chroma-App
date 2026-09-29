@@ -2,20 +2,20 @@
 build side-by-side (ours | Dehancer) strips for a glance comparison —
 the halation session's "render and look FIRST" discipline, applied to grain.
 
-Usage: python calib/render_grain_cmp.py
+Usage: python tools/calib/render_grain_cmp.py
 """
 import os, json
 import numpy as np
 from PIL import Image
 
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import sys; sys.path.insert(0, 'calib')
+import sys; sys.path.insert(0, 'tools/calib')
 from grainmodel import apply_grain_v3
 
-P = json.load(open('calib/grain_params.json'))
+P = json.load(open('tools/calib/grain_params.json'))
 AMOUNTS = [10, 30, 60, 100]
 
-# crop bands taken straight from calib/grain_chart_geo.txt (actual chart geometry)
+# crop bands taken straight from tools/calib/grain_chart_geo.txt (actual chart geometry)
 BANDS = [
     ('matrix_top',     100, 110,  4290, 770),    # matrix rows R,G,B,C (luma cols 0-1)
     ('profile_blocks', 100, 1950, 4700, 2200),   # Shadow10..PureB flat blocks
@@ -45,6 +45,6 @@ for name, x0, y0, x1, y1 in BANDS:
         ours = apply_grain_v3(src.copy(), a / 100.0, P, seed=7.0)
         deh = load_crop(f'dehancer-{a} grain.JPG', x0, y0, x1, y1)
         img = side_by_side(ours, deh)
-        out = f'calib/cmp_grain_{name}_a{a}.png'
+        out = f'tools/calib/cmp_grain_{name}_a{a}.png'
         img.save(out)
         print(f'wrote {out}  ({img.width}x{img.height})')

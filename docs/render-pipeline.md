@@ -28,7 +28,7 @@ Everything is in one file. Key pieces:
      once referenced `s2lp` above its definition and blacked the whole pipeline.
   2. **emit pass** — computes the halation/bloom *emission* map from the graded image.
   3. **blur passes** — per-channel Gaussian blur of the emission (σ_R ≫ σ_G ≫ σ_B).
-  4. **comp pass** — screen-blends bloom+halation, then **grain** (value-noise, see calib/CLAUDE.md’s grain model section), then
+  4. **comp pass** — screen-blends bloom+halation, then **grain** (value-noise, see tools/calib/CLAUDE.md’s grain model section), then
      **film artifacts** (procedural dust/hairs + wobbling vertical scratches + warm light leak;
      image-relative coords + a stable seed `fxState.artSeed`/Reshuffle so preview==export, and
      tile renders are byte-identical), then (if a Print profile is selected) a 2nd 3D LUT
@@ -40,7 +40,7 @@ Everything is in one file. Key pieces:
      - ⚠️ **Saturation/vibrance run AFTER print** on purpose: pulling saturation to 0 must
        collapse the PRINTED pixel to its luma (neutral), not re-tint an already-grey pixel. If
        they ran before print (the old order), a print profile re-tinted neutrals and
-       0-saturation no longer matched Dehancer (`calib/*lut print 0 sat*.png`: DH grey→neutral).
+       0-saturation no longer matched Dehancer (`tools/calib/*lut print 0 sat*.png`: DH grey→neutral).
 - **`render(P,w,h,opts)`** — `opts.glowScale` downsamples the blur buffers (cheap preview);
   `opts.scOverride` forces the sigma-scale (= fullWidth/REF) so a tile/crop blurs with the
   *whole image's* radius; `opts.uvOff/uvScale/seed` keep grain continuous across tiles.

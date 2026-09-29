@@ -1,7 +1,7 @@
 """
 Chroma-space, variance-adaptive denoise prototype (Step B) — replaces the earlier
 per-RGB-channel GAT approach, which was found to DECORRELATE the channels and increase
-chroma noise in highlights rather than reduce it (see calib/nr_vst_compare.py's __TM8159
+chroma noise in highlights rather than reduce it (see tools/calib/nr_vst_compare.py's __TM8159
 results and the plan file's Step 3/Step B writeup for the full diagnosis).
 
 Pipeline:
@@ -38,9 +38,9 @@ rather than uniformly off, suspect this first (see the plan's suggested empirica
 factor fix).
 
 Usage:
-    python3 calib/vst_denoise.py <input.RW2> [strength] [out_prefix]
+    python3 tools/calib/vst_denoise.py <input.RW2> [strength] [out_prefix]
 Requires: the native `dump_cfa` example built (desktop/src-tauri/examples/dump_cfa.rs) and
-calib/noise_profile.json (from calib/noise_fit.py).
+tools/calib/noise_profile.json (from tools/calib/noise_fit.py).
 """
 import json
 import subprocess
@@ -51,7 +51,7 @@ import numpy as np
 from PIL import Image
 from scipy.ndimage import uniform_filter, median_filter
 
-REPO = Path(__file__).parent.parent
+REPO = Path(__file__).parent.parent.parent
 PROFILE_PATH = Path(__file__).parent / 'noise_profile.json'
 DUMP_CFA_BIN = REPO / 'desktop/src-tauri/target/release/examples/dump_cfa'
 
@@ -353,8 +353,8 @@ def main():
     preview_dn = wb_gamma_preview(rgb_final)
     preview_noisy = wb_gamma_preview(rgb_noisy)
 
-    out_dn = Path(f'calib/{out_prefix}_vst_denoised.png')
-    out_noisy = Path(f'calib/{out_prefix}_vst_noisy.png')
+    out_dn = Path(f'tools/calib/{out_prefix}_vst_denoised.png')
+    out_noisy = Path(f'tools/calib/{out_prefix}_vst_noisy.png')
     Image.fromarray((preview_dn * 255).astype(np.uint8)).save(out_dn)
     Image.fromarray((preview_noisy * 255).astype(np.uint8)).save(out_noisy)
     print(f'wrote {out_noisy}\nwrote {out_dn}')

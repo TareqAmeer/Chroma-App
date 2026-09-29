@@ -1,16 +1,16 @@
 // Shared mapping between design/components.json family names and:
 //   1. chromasmith-22.html's buildCatalogPage() COMPONENTS keys (the ?catalog=1&live=1&only=<key>
-//      live embeds scripts/token-report.mjs uses — see docs/ui-workflow/component-visuals-plan.md)
+//      live embeds tools/scripts/token-report.mjs uses — see docs/ui-workflow/component-visuals-plan.md)
 //   2. design/asbuilt/ (the S6c static-capture pass) via a same-selector-set match, so the report
 //      can show "also seen in production at <surface>" without a second screenshot pass.
-// Single source of truth for both scripts/token-report.mjs (renders it) and
-// scripts/component-visuals-check.mjs (gates it) — duplicating this object between the two would
+// Single source of truth for both tools/scripts/token-report.mjs (renders it) and
+// tools/scripts/component-visuals-check.mjs (gates it) — duplicating this object between the two would
 // let them silently drift, which is exactly the failure mode the gate exists to catch.
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
 // null = no chromasmith-22.html COMPONENTS entry exists (icon is real SVG glyphs rendered
-// separately in scripts/token-report.mjs's iconSections(), never a DOM clone).
+// separately in tools/scripts/token-report.mjs's iconSections(), never a DOM clone).
 export const FAMILY_TO_CATALOG_KEY = {
   'section-card': 'fx-ctrl',
   'control-row': 'fx-row',

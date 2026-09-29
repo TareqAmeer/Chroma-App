@@ -847,7 +847,7 @@
         <div class="fx-row nr-gated gate-off" id="row-nr-hldesat"><div class="fx-label">Highlight Desaturation <button class="fx-info-i" title="Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes. Since real highlight color is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real color in bright areas too at high amounts. Per-photo only, so it never touches other images.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" aria-label="Highlight Desaturation" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="vl-nr-hldesat" contenteditable="true" spellcheck="false" inputmode="text" title="Tap to type a value" style="">0</div></div>
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="nr-gate-hint">Detail &amp; Highlight Desaturation are inactive — raise Luminance or Color to enable noise reduction.</div>
       </div>
-      <!-- DECONVOLUTION SHARPENING (ROADMAP.md R6) — models the lens/sensor blur as a small
+      <!-- DECONVOLUTION SHARPENING (docs/ROADMAP.md R6) — models the lens/sensor blur as a small
            Gaussian PSF and inverts it with a few iterations of damped Richardson-Lucy, unlike
            the unsharp-mask Sharpen above which only boosts existing edge contrast. Driven by
            Amount>0, same pattern as the Lens/NR cards (no enable toggle). -->

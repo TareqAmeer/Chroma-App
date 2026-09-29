@@ -5,7 +5,7 @@
 (function () {
   if (!window.__TAURI__) return;
   // Cheap wall-clock marks into window.__rawPerfLog (same array library-ui.js's rawPerf fills) so
-  // the cold-open timeline can be read precisely from the live app (diagnostics/app_control.py eval).
+  // the cold-open timeline can be read precisely from the live app (tools/diagnostics/app_control.py eval).
   window.__pm = (e) => { (window.__rawPerfLog || (window.__rawPerfLog = [])).push({ event: e, t: performance.now(), wall: Date.now() }); };
   // Keep this dynamic: the diagnostics bridge wraps core.invoke after the page script loads.
   const invoke = (...args) => window.__TAURI__.core.invoke(...args);
@@ -200,7 +200,7 @@
       try { this._ident = sourcePath ? await invoke('peek_raw_camera_path', { path: sourcePath }) : await invoke('peek_raw_camera', bytes); } catch (e) { console.error('peek_raw_camera', e); }
       _lap('peek_raw_camera done at');
       if (settings && settings.outputBps === 16) {
-        // ROADMAP.md's F1: bundled (Panasonic DC-S9 / Sony DSC-RX100M5) always wins when it
+        // docs/ROADMAP.md's F1: bundled (Panasonic DC-S9 / Sony DSC-RX100M5) always wins when it
         // matches; otherwise ask dcp_store.rs whether Adobe Camera Raw / DNG Converter has a
         // real profile for this camera already installed on disk. `dcpSource.source` threads
         // through to getDcpLUT so it knows whether to fetch() the bundled file or invoke() the
@@ -254,7 +254,7 @@
       const single = rawNr === 'chroma' && !window.chromasmithTwoPhase;
       this._single = single;
       this._needsRefine = rawNr !== 'off' && !single; // full quality still gets applied — just not before first paint
-      // wantExt (ROADMAP.md R1): only meaningful when mode is 'lut' — asks Rust for the
+      // wantExt (docs/ROADMAP.md R1): only meaningful when mode is 'lut' — asks Rust for the
       // unquantized companion buffer alongside the normal RGBA8 body, so a real blown
       // highlight's headroom survives instead of being clamped away before this IPC round trip.
       const wantHdrPreview = !!window.chromasmithHdrPreview;
@@ -279,7 +279,7 @@
       // 5th header word: whether auto lens-profile correction was ACTUALLY applied on this
       // decode (ground truth, not a separate DB probe) — surfaced to the lens-auto status UI
       // via window.chromasmithLensApplied so it can show what really happened.
-      // 6th header word (ROADMAP.md R1): whether the extended-range companion buffer follows
+      // 6th header word (docs/ROADMAP.md R1): whether the extended-range companion buffer follows
       // the RGBA8 body — see main.rs's decode_raw_v2 for the exact wire layout.
       const head = new Uint32Array(buf, 0, 6);
       this._w = head[0]; this._h = head[1]; this._iso = head[2];
@@ -298,7 +298,7 @@
     // least camera+lens, which get_meta-only paths previously missed.
     async metadata() {
       const id = this._ident || {};
-      // photoStyle: Panasonic PhotoStyle tag (ROADMAP.md F2), 17 = V-Log — undefined for every
+      // photoStyle: Panasonic PhotoStyle tag (docs/ROADMAP.md F2), 17 = V-Log — undefined for every
       // other make/camera, chromasmith-22.html's loadRw2 uses it to auto-enable the V-Log input
       // transform so footage shot in V-Log doesn't render flat/green until the user notices.
       return { iso_speed: this._iso, make: id.make || '', model: id.model || '', lens: id.lens || '', photoStyle: id.photoStyle };
@@ -308,7 +308,7 @@
         return { width: this._w, height: this._h, colors: 3, bits: 16, data: new Uint16Array(this._buf, 24) };
       }
       // rgba:true tells loadRw2 the pixels are final RGBA8 — no JS-side LUT/gamma pass needed.
-      // sceneLinear (ROADMAP.md R1): the unquantized companion buffer, immediately after the
+      // sceneLinear (docs/ROADMAP.md R1): the unquantized companion buffer, immediately after the
       // RGBA8 body (main.rs's decode_raw_v2 wire layout) — undefined when Rust didn't send one
       // (has_ext=0), which loadRw2 treats as "no real headroom to preserve", same as today.
       const bodyLen = this._w * this._h * 4;
@@ -350,7 +350,7 @@
   // RUST_ONLY_RE-matched file — see that file's FORMAT REGISTRY comment. Only defined here
   // (native shell), so web/iOS correctly falls through to unsupportedFormatMessage() instead.
   window.chromasmithDecodeStill = async function (bytes, ext, frame) {
-    // ROADMAP.md F6: `frame` (0-based) picks a specific ICO/CUR directory entry — undefined/null
+    // docs/ROADMAP.md F6: `frame` (0-based) picks a specific ICO/CUR directory entry — undefined/null
     // reproduces today's exact "largest entry" behaviour (see still_decode::open_any_bytes_at).
     const req = (typeof frame === 'number') ? { ext, frame } : { ext };
     const buf = await framedInvoke('decode_image_v1', req, bytes);
@@ -362,7 +362,7 @@
     const c = document.createElement('canvas');
     c.width = hdr.w; c.height = hdr.h;
     c.getContext('2d').putImageData(new ImageData(rgba, hdr.w, hdr.h), 0, 0);
-    // ROADMAP.md F4: an EXR/HDR source that genuinely clipped carries a real-headroom companion
+    // docs/ROADMAP.md F4: an EXR/HDR source that genuinely clipped carries a real-headroom companion
     // buffer (still_decode::hdr_to_srgb8) — same w*h*3 f32 LE shape as the RAW path's `ext`, so
     // this reuses the EXACT `_sceneLinear`/`_sceneLinearPresent` stash FX.setImage already checks
     // (chromasmith-22.html's setImage) for an RGBA16F float-texture upload — no shader change.
@@ -398,7 +398,7 @@
     const ident = it.exif || {};
     let mode = 'srgb', lutKey = '';
     if (profile) {
-      // ROADMAP.md's F1 — same bundled-then-disk resolution as open() above.
+      // docs/ROADMAP.md's F1 — same bundled-then-disk resolution as open() above.
       ({ mode, lutKey } = await resolveRawLut(ident, profile, it.rawFile.__csSourcePath ? { path: it.rawFile.__csSourcePath } : { bytes })); // CHR-162: same resolver as open()
     }
     const autoLens = !!window.chromasmithAutoLens;
@@ -450,7 +450,7 @@
     } else {
       const bodyLen2 = w * h * 4;
       rgba2 = new Uint8ClampedArray(buf, 24, bodyLen2);
-      // ROADMAP.md R1: thread the same extended companion buffer through the high-tier NR
+      // docs/ROADMAP.md R1: thread the same extended companion buffer through the high-tier NR
       // path so "Denoise Now" doesn't quietly regress a photo back to clamped highlights.
       if (hasExt) sceneLinear2 = new Float32Array(buf, 24 + bodyLen2, w * h * 3);
     }

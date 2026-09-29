@@ -1,19 +1,19 @@
 ---
 name: chromasmith-diagnostics
-description: Attach diagnostics/cli.py to the currently-running Chromasmith desktop app to watch for freezes, memory growth, native+JS errors, IPC durations, and retry loops — instead of manual ps/sample/sqlite3 polling or restarting the app to check state. Use whenever investigating a live desktop-app symptom, or when the chromasmith-debugger subagent isn't the right fit (e.g. just watching, not fixing a specific reported bug).
+description: Attach tools/diagnostics/cli.py to the currently-running Chromasmith desktop app to watch for freezes, memory growth, native+JS errors, IPC durations, and retry loops — instead of manual ps/sample/sqlite3 polling or restarting the app to check state. Use whenever investigating a live desktop-app symptom, or when the chromasmith-debugger subagent isn't the right fit (e.g. just watching, not fixing a specific reported bug).
 ---
 
 # Chromasmith live diagnostics
 
-`diagnostics/cli.py` watches the real, already-running app and writes `report.md` /
-`for_claude.md` / `incidents/*.md`. Full usage in `diagnostics/README.md`. Prefer this over
+`tools/diagnostics/cli.py` watches the real, already-running app and writes `report.md` /
+`for_claude.md` / `incidents/*.md`. Full usage in `tools/diagnostics/README.md`. Prefer this over
 manually killing/relaunching the app, ad hoc `ps`/`sample`/`top`, or looping raw `sqlite3`
 queries against `catalog.db`.
 
 ## Start it
 
 ```bash
-python3 diagnostics/cli.py start --duration 20m
+python3 tools/diagnostics/cli.py start --duration 20m
 ```
 
 **Attach to the app that's ALREADY running — don't restart it first.** Restarting defeats the

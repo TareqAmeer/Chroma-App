@@ -1,7 +1,7 @@
 """
 Generate calibration chart at 2x scale (4800x6400) from measured structure of IMG_5774.PNG.
 Reproduces all 8 zones with clean geometry for higher-quality Dehancer export.
-Run: python3 calib/gen_chart.py
+Run: python3 tools/calib/gen_chart.py
 """
 import numpy as np
 from PIL import Image, ImageDraw

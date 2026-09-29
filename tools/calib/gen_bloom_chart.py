@@ -13,12 +13,12 @@ Two rows:
           threshold means only bright-enough sources should glow at all).
 Plus one saturated-colour disc row to check bloom keeps or desaturates highlight colour.
 
-Zone geometry is logged to calib/bloom_chart_geo.txt (mirrors gen_grain_chart.py's
+Zone geometry is logged to tools/calib/bloom_chart_geo.txt (mirrors gen_grain_chart.py's
 own geo log) so measurement code has one source of truth instead of hardcoded
 constants that can drift out of sync with the generator (the exact bug just found
 in grainmodel.py's B_Y0).
 
-Run: python calib/gen_bloom_chart.py
+Run: python tools/calib/gen_bloom_chart.py
 """
 import os
 import numpy as np

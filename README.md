@@ -175,9 +175,9 @@ vendor/                    LibRaw wasm, DCP camera profiles, mediabunny, 102 loo
 desktop/                   Tauri macOS shell: native RAW, the photo library, on-device AI
 ios/                       Capacitor iOS shell
 test/                      Export/UI/perf/mask/library/video regression gates
-calib/                     Python calibration + analysis tooling (not needed to run the app)
+tools/calib/                     Python calibration + analysis tooling (not needed to run the app)
 CLAUDE.md                  Developer handoff: architecture, calibration science, hard-won lessons
-ROADMAP.md                 Feature roadmap with measured notes
+docs/ROADMAP.md                 Feature roadmap with measured notes
 ```
 
 ## Third-party components

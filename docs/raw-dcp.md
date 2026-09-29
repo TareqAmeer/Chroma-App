@@ -20,11 +20,11 @@ Deep-dive on RAW decoding and the DCP colour pipeline. Load this when touching `
   `DefaultBlackRender=None` (renderer black subtraction is spec-forbidden) and the
   ProfileToneCurve has its own shadow toe.
 - Correction constants are near-identity and **not ISO-dependent**: `dcpFit` returns
-  `{ev:0.0, gr:0.9860, gb:0.9783}` — fitted in `calib/dcp_native_fit.py` against 5 LR
+  `{ev:0.0, gr:0.9860, gb:0.9783}` — fitted in `tools/calib/dcp_native_fit.py` against 5 LR
   reference TIFFs on the NATIVE (rawler) decode, with shadow-skin patches in the loss/gate.
 - A final **hue/sat/value-gated residual lift** closes the last LR gap (bright saturated COOL
   regions — blue sky — rendered ~7/255 darker; skin/water/shadows sit outside the gates and
-  are untouched). Fitted in `calib/dcp_residual_tone.py` → `calib/dcp_sky_gate.json`, baked
+  are untouched). Fitted in `tools/calib/dcp_residual_tone.py` → `tools/calib/dcp_sky_gate.json`, baked
   as constants at the end of `bakeDcpLUT` in final sRGB-gamma space (the measurement space).
   ⚠️ A 1D tone curve CANNOT express this residual — sky and water share hue AND luma; only
   saturation separates them (0.30 vs 0.13). Don't refit it as a tone/exposure tweak.

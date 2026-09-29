@@ -1,4 +1,4 @@
-// Headless CLI export (ROADMAP.md R15, part 2) — an argv path into the native RAW pipeline,
+// Headless CLI export (docs/ROADMAP.md R15, part 2) — an argv path into the native RAW pipeline,
 // following dump_rw2.rs's exact pattern (no Tauri/GUI bootstrap).
 //
 //   cargo run --release --example cli_export -- input.RW2 output.png [--dcp path/to/profile.dcp]

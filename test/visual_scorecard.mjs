@@ -4,7 +4,7 @@
 // test/baselines/visual/*.png using pixelmatch — the SAME diff algorithm Playwright's own
 // `toHaveScreenshot()` uses internally (verified before building this: it's the field-standard
 // approach precisely because naive per-pixel diffing false-positives on anti-aliasing noise
-// between identical-looking renders). Diffing lives in JS, not calib/export_scorecard.py's
+// between identical-looking renders). Diffing lives in JS, not tools/calib/export_scorecard.py's
 // Python+numpy pattern, because pixelmatch's anti-aliasing detection has no equivalent-quality
 // Python counterpart worth reimplementing — the render/diff split elsewhere in this repo is a
 // convention, not a rule that outranks using the right tool for this specific job.

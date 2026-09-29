@@ -17,7 +17,7 @@ Two model variants are supported and printed side by side:
   BASELINE = symmetric warmth + screen glow  (the committed model the user saw)
   NEW      = asymmetric warmth + high-pass glow  (the proposed fix)
 
-Run:  python calib/scorecard.py
+Run:  python tools/calib/scorecard.py
 """
 import os
 import numpy as np

@@ -90,7 +90,7 @@ missing). Phases V0 ("play it") → V4 ("trim + audio"), V5 opportunistic polish
   ⚠️ The shader chain is the ITU standard, not a hand-rolled curve: HLG inverse OETF → OOTF with
   system gamma from the **BT.2408** formula `1.2 + 0.42·log10(L_W/1000)` → normalise by the
   **BT.2408 reference white of 203 cd/m²** (which is exactly `eotf_BT2100_HLG(0.75)`) → BT.2020→709
-  matrix → sRGB encode. `calib/hlg_to_709.py` derives and validates it, cross-checked against the
+  matrix → sRGB encode. `tools/calib/hlg_to_709.py` derives and validates it, cross-checked against the
   **colour-science** reference library (inverse OETF to 2.6e-9, full EOTF to 3.1e-6 cd/m²).
   `L_W` defaults to **400 nits**, the documented nominal for HLG-mastered material.
   ⚠️ **colour-science requires numpy≥2 and will break `.calibvenv`'s scipy pin** — keep it in a

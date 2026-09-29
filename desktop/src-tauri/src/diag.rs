@@ -1,6 +1,6 @@
 //! Native-side diagnostics support.
 //!
-//! `log stream --predicate 'process == "chromasmith"'` (what diagnostics/log_capture.py
+//! `log stream --predicate 'process == "chromasmith"'` (what tools/diagnostics/log_capture.py
 //! originally relied on for native stderr) was confirmed live to capture only os_log/NSLog
 //! traffic from system frameworks (AppleJPEG, CarbonCore, ...) attributed to this process
 //! — never our own `eprintln!`/`log::` text. Plain stdio writes from a GUI-launched app
@@ -9,7 +9,7 @@
 //! The real fix is `tauri-plugin-log` (see main.rs's `.plugin(tauri_plugin_log::Builder...)`
 //! and its `LogDir` target) — it writes a genuine file to disk
 //! (`~/Library/Logs/com.tareq.chromasmith/chromasmith.log`) that `tail`/`cat` (or
-//! diagnostics/log_capture.py) can read directly, and `attachConsole()` on the JS side
+//! tools/diagnostics/log_capture.py) can read directly, and `attachConsole()` on the JS side
 //! (chromasmith-22.html) forwards the frontend's own console.log/error into the same
 //! pipeline — so log capture for BOTH sides is now "read a file", not a ring buffer this
 //! module used to maintain and a Tauri command to poll it. `log()` below is a thin
@@ -29,7 +29,7 @@ use std::time::{Instant, UNIX_EPOCH};
 /// (Stdout + LogDir + Webview, see main.rs) persist to a real file automatically.
 /// A panic is tagged with a literal "PANIC:" prefix — it's logged at ERROR level like
 /// any other error (PanicHookInfo's own Display text doesn't otherwise say "panic"),
-/// and diagnostics/known_bugs.py's native-panic match depends on that exact string.
+/// and tools/diagnostics/known_bugs.py's native-panic match depends on that exact string.
 pub fn log(level: &str, msg: impl AsRef<str>) {
     let msg = msg.as_ref();
     match level {
@@ -98,7 +98,7 @@ pub struct DiagNativeState {
 }
 
 /// Where the native diagnostics bridge (chromasmith-22.html's `writeDiag()`) writes its
-/// periodic JSON snapshot, and where `diagnostics/native_bridge.py`/`find_process.py` poll it
+/// periodic JSON snapshot, and where `tools/diagnostics/native_bridge.py`/`find_process.py` poll it
 /// from. Used to hardcode a literal `/tmp/chromasmith_diag_state.json` — silently broken on
 /// Windows: `std::fs::write` there resolves a leading `/` to the root of the CURRENT DRIVE (not
 /// a real temp dir), so it wrote to a `C:\tmp\` that doesn't exist and `write_file_bytes` failed
@@ -146,7 +146,7 @@ pub fn stage_timing_enabled() -> bool {
 /// One `RAW_DIAG stage=<name> op=<op> path=<file> duration_ms=<ms>` line, matching the shape
 /// raw_decode.rs's local `stage` closure already emits (log_file.py's `_raw_diag_event`
 /// parses `key=value` tokens after the ` RAW_DIAG ` marker) — `op`/`path` let a consumer
-/// (diagnostics/raw_bench.py) separate an interactive open's stages from a batch-cache run's
+/// (tools/diagnostics/raw_bench.py) separate an interactive open's stages from a batch-cache run's
 /// on the same photo, run concurrently or back to back. Resets `started` to now either way,
 /// so call sites read as a flat sequence of `stage(...)` calls between real work.
 pub fn stage(op: &str, file: &str, name: &str, started: &mut Instant) {

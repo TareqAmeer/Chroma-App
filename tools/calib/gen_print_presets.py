@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Generate the PRINT_PRESETS={...} JS block from calib/PRINT PROFILES/*.cube.
+"""Generate the PRINT_PRESETS={...} JS block from tools/calib/PRINT PROFILES/*.cube.
 
 Print profiles (Kodak/Fuji print) are a SEPARATE stage from the 11 film looks: they are
 applied AFTER the film LUT + halation in chromasmith-22.html's comp pass. Same quantize+
 base64 method as gen_lut_presets.py (R-fastest cube file order -> Uint8 -> base64), read
 back by lutFromBytes() into the li(r,g,b) layout.
 
-Usage: python calib/gen_print_presets.py > /tmp/print_presets.js
+Usage: python tools/calib/gen_print_presets.py > /tmp/print_presets.js
 """
 import base64, glob, os, sys
 

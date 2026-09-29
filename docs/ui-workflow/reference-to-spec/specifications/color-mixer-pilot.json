@@ -33,7 +33,7 @@
     "variantCoverage":{"shown":[{"id":"shown-dark","state":"Dark presentation is visible in the current reference.","sourceClass":"reference","sourceRef":"current-full"}],"missing":[{"id":"missing-narrow","state":"No narrow viewport is visible in the current reference.","sourceClass":"reference","sourceRef":"current-full"}]}
   },
   "authored": {
-    "applicableDesignRules":[{"id":"rule-stable-footprint","rule":"Selected states must preserve their footprint so grids never reflow.","sourceClass":"repository_evidence","sourceRef":"chromasmith-design/project/design.md, Hover & press"}],
+    "applicableDesignRules":[{"id":"rule-stable-footprint","rule":"Selected states must preserve their footprint so grids never reflow.","sourceClass":"repository_evidence","sourceRef":"design/wireframes/project/design.md, Hover & press"}],
     "proposedInterpretations":[{"id":"proposal-prototype-scope","statement":"The isolated prototype will demonstrate the requested behavior without asserting a production design decision.","sourceClass":"proposal","sourceRef":"User request, 2026-09-13","basedOn":["repo-current-controls","repo-current-state"]}],
     "userDecisions":[
       {"id":"decision-reference-scope","decision":"Use only the Darkroom slider styling, thinner histogram bars, and circle design.","decidedBy":"user","decidedAt":"2026-09-13","sourceClass":"user_decision","sourceRef":"User response 1"},

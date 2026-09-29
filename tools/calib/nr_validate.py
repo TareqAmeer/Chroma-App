@@ -25,7 +25,7 @@ Three things measured per app, per luma bucket (shadow/mid/highlight):
     LR's is ~1, CS is draining real color = the "muted/bland" complaint.
 
 PASS/FAIL gates (see thresholds below) on all three, per set. Run:
-  python calib/nr_validate.py
+  python tools/calib/nr_validate.py
 
 ── HIGH TIER (RawNIND neural denoiser) vs Lightroom AI Denoise ─────────────────────────────
 The classical FAST-tier comparison above (CS Manual-equivalent shadow+chroma-wavelet passes

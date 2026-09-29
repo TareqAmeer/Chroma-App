@@ -88,7 +88,7 @@ mod bgwork;
 // Used identically by decode_raw_v2 and denoise_raw_high — one definition, not two that can
 // silently drift apart.
 //
-// ⚠️ ROADMAP.md's F1 (Adobe on-disk DCP resolver): a fixed 2-brand allowlist (`["panasonic",
+// ⚠️ docs/ROADMAP.md's F1 (Adobe on-disk DCP resolver): a fixed 2-brand allowlist (`["panasonic",
 // "sony"]`) can't scale to the 393 cameras `dcp_store.rs` can now resolve profiles for. Replaced
 // with a POSITIVE assertion instead: `lut_key` (the `dcp:<prefix>:<style>` cache key JS is
 // requesting) must itself start with a case-insensitive match of the file's OWN decoded make —
@@ -745,7 +745,7 @@ fn merge_output_path(first_source: &str, suffix: &str) -> String {
 /// real i-of-n count since it's naturally one unit of work per source photo. These commands still
 /// have no cancel token (unlike the catalog scans) — merge.rs's tight loops have no natural
 /// cancellation point without that same invasive threading, so this is not wired to N3.3's
-/// fallback either; see ROADMAP.md's N3 writeup for why that's a deliberate, documented gap.
+/// fallback either; see docs/ROADMAP.md's N3 writeup for why that's a deliberate, documented gap.
 fn emit_job(app: &tauri::AppHandle, job: &str, label: &str, phase: &str, done: usize, total: usize) {
     let _ = app.emit(
         "job-progress",
@@ -960,7 +960,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     // parse the right one. See effective_dcp_mode's doc comment for the "why a backstop" reasoning.
     let lut_key = json["lutKey"].as_str();
     let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make, lut_key);
-    // ROADMAP.md R1 (scene-referred), desktop path: JS asks for the extended-range companion
+    // docs/ROADMAP.md R1 (scene-referred), desktop path: JS asks for the extended-range companion
     // buffer only when it's actually going to use it (a real DCP LUT apply, not srgb/linear16 —
     // see desktop-native.js's open()). Kept fully opt-in so every existing caller/response shape
     // is untouched when absent — `ext` is None unless want_ext AND the lut branch is taken.
@@ -1062,7 +1062,7 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
             // call regardless, so calling "Cache RAWs" twice on the same already-cached photo in
             // one session (or an interactive reopen right after a batch cache, which takes this
             // same shortcut) re-read and re-decoded a PNG it had JUST put in memory moments
-            // earlier. Confirmed live via diagnostics/raw_bench.py's "cached" scenario.
+            // earlier. Confirmed live via tools/diagnostics/raw_bench.py's "cached" scenario.
             let already_in_process = RAW_EDITOR_CACHE.lock().ok()
                 .map(|g| g.iter().any(|e| e.path == path && e.recipe_key == recipe_key
                     && e.mtime == mtime && e.size == meta.len()))
@@ -1159,13 +1159,13 @@ fn get_cached_raw_decode(path: String, recipe_key: String) -> Result<tauri::ipc:
 fn decode_image_v1(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
     let ext = json["ext"].as_str().unwrap_or("").to_lowercase();
-    // ROADMAP.md F6: optional 0-based frame index for a multi-frame ICO/CUR — absent (the
+    // docs/ROADMAP.md F6: optional 0-based frame index for a multi-frame ICO/CUR — absent (the
     // overwhelming majority of calls) reproduces today's exact "largest entry" behaviour via
     // still_decode::open_any_bytes_at's own None-is-open_any_bytes contract.
     let frame = json["frame"].as_u64().map(|v| v as usize);
     let decoded = still_decode::open_any_bytes_at(payload, &ext, frame)?;
     let frame_count = still_decode::frame_count(payload, &ext);
-    // ROADMAP.md F4: an EXR/HDR source that actually clipped carries a real-headroom companion
+    // docs/ROADMAP.md F4: an EXR/HDR source that actually clipped carries a real-headroom companion
     // buffer (see still_decode::hdr_to_srgb8's doc comment) — surfaced via a `hasExt` header
     // flag + a trailing w*h*3 f32 LE segment, same shape as decode_raw_v2's `has_ext`/ext body,
     // so desktop-native.js's chromasmithDecodeStill can build the SAME `_sceneLinear`/
@@ -1278,7 +1278,7 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
 
     let lut_key = json["lutKey"].as_str();
     let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make, lut_key);
-    // ROADMAP.md R1 — same opt-in extended-range companion as decode_raw_v2, same reasoning:
+    // docs/ROADMAP.md R1 — same opt-in extended-range companion as decode_raw_v2, same reasoning:
     // this IS the path a user actually views once NR finishes, so it matters at least as much
     // here.
     let want_ext = json["wantExt"].as_bool().unwrap_or(false);
@@ -1523,7 +1523,7 @@ struct CameraIdent {
     // decode shim can populate the metadata panel's lens on EVERY open path, not only the single
     // library-card path that separately calls get_meta.
     lens: String,
-    // Panasonic PhotoStyle (ROADMAP.md's F2), value 17 = V-Log — lets JS auto-enable the V-Log
+    // Panasonic PhotoStyle (docs/ROADMAP.md's F2), value 17 = V-Log — lets JS auto-enable the V-Log
     // input transform on load instead of the user having to notice flat/green footage and find
     // the toggle themselves. None on every non-Panasonic file and instantly-cheap to compute
     // (kamadak-exif already parsed for the lens fallback above), so no separate command needed.
@@ -2634,7 +2634,7 @@ fn main() {
         // ⚠️ `file_name` below is NOT respected — verified live against a real running
         // instance: the file is always named after the product name regardless of this
         // setting (~/Library/Logs/com.tareq.chromasmith/Chromasmith.log, capital C). Left
-        // set (harmless) in case a future plugin version honors it; diagnostics/log_file.py
+        // set (harmless) in case a future plugin version honors it; tools/diagnostics/log_file.py
         // points at the real observed path, not this one.
         // ⚠️ `attachConsole()` (chromasmith-22.html) forwarding JS console.* calls into this same
         // pipeline works independently of these targets — it's the plugin's `log` command on the
@@ -2644,7 +2644,7 @@ fn main() {
         // ⚠️ This logger is process-global — every dependency crate's own `log::` output lands
         // here too. Verified live: `rawler` (the RAW decoder) alone produced 1383 WARN lines
         // ("No lens data available") in one 45s session, drowning out anything else. Quieted
-        // at the source via level_for; diagnostics/log_file.py is ALSO target-aware for any
+        // at the source via level_for; tools/diagnostics/log_file.py is ALSO target-aware for any
         // other dependency that turns out to be equally chatty in the future.
         ;
     let builder = with_log_plugin(builder);
@@ -3424,7 +3424,7 @@ mod effective_dcp_mode_tests {
 
     #[test]
     fn any_brand_now_scales_not_just_the_old_2_entry_allowlist() {
-        // ROADMAP.md's F1: a Canon file requesting a Canon-prefixed key must be honored — the
+        // docs/ROADMAP.md's F1: a Canon file requesting a Canon-prefixed key must be honored — the
         // old fixed ["panasonic","sony"] allowlist would have downgraded this unconditionally.
         let (mode, used) = effective_dcp_mode("lut", "Canon", Some("dcp:Canon EOS 5D Mark IV:Standard"));
         assert_eq!(mode, "lut");

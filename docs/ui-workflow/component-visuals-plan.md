@@ -1,7 +1,7 @@
 # Component visuals in the token report — plan
 
-Scope: the token report's Components tab (`scripts/token-report.mjs` → `componentSections()`,
-rendered into `scripts/token-report.html`) currently lists each family as a text row (name,
+Scope: the token report's Components tab (`tools/scripts/token-report.mjs` → `componentSections()`,
+rendered into `tools/scripts/token-report.html`) currently lists each family as a text row (name,
 selectors, instance count). This plan covers replacing that with real rendered visuals
 (actual sizing/color/state), what that takes, what Apple/Adobe/Material do for cross-app
 consistency, what AI-assisted ("vibe coding") teams recommend for avoiding component sprawl,
@@ -39,13 +39,13 @@ took ~5s to all reach `readyState:'complete'` on a fast local server, and produc
 should confirm this stays acceptable before adding more embeds or enabling this by default
 outside local dev review.
 
-**§0 and §4 done (2026-09-14).** `scripts/component-catalog-map.mjs` is now the single shared
+**§0 and §4 done (2026-09-14).** `tools/scripts/component-catalog-map.mjs` is now the single shared
 source for the family→catalog-key mapping (previously inline in `token-report.mjs`) plus a
 `buildAsbuiltIndex()` helper that walks every `design/asbuilt/<id>/spec.json` element tree and
 matches each family's real selectors against it — no new screenshots, purely indexing the S6c
 pass's existing captures. The report now shows up to 3 "also seen in production" thumbnails per
 family card, sourced straight from `design/asbuilt/`; 12 of 13 families got at least one hit (only
-`icon` has none, expected — it's not a DOM-clonable selector). `scripts/component-visuals-check.mjs`
+`icon` has none, expected — it's not a DOM-clonable selector). `tools/scripts/component-visuals-check.mjs`
 gates the mapping itself: every `design/components.json` family must have an entry in
 `FAMILY_TO_CATALOG_KEY` (even if explicitly `null`), and every non-null catalog key must still
 exist in `chromasmith-22.html`'s `COMPONENTS` array — verified this actually catches drift by

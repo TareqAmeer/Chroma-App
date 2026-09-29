@@ -2,17 +2,17 @@
 """Read-only probe of Dehancer Desktop's local, unencrypted metadata.
 
 Extracts (no automation, no exports, no app running needed):
-  - calib/dehancer/films.json           the 63 film profiles' metadata (id, caption,
+  - tools/calib/dehancer/films.json           the 63 film profiles' metadata (id, caption,
                                          ISO_index, expand_impact/mode, film_type,
                                          color_type, tags, license_matrix, .mlut hash)
-  - calib/dehancer/effect_profiles.json  every halation/bloom/grain/damage variant from
+  - tools/calib/dehancer/effect_profiles.json  every halation/bloom/grain/damage variant from
                                          the app bundle, keyed by format (and ISO for grain)
 
 Nothing here touches the encrypted .mlut CLUT payloads or exports any pixels — this is
-pure JSON/SQLite/MessagePack parsing. See calib/dehancer_defaults_probe.py for the
+pure JSON/SQLite/MessagePack parsing. See tools/calib/dehancer_defaults_probe.py for the
 empirical "is halation per-film?" probe, and CLAUDE.md / the plan for context.
 
-Run from repo root (venv active):  python calib/dehancer_probe.py
+Run from repo root (venv active):  python tools/calib/dehancer_probe.py
 """
 import json
 import os

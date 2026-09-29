@@ -17,14 +17,14 @@ MEAN, NOT a high-pass blur: a high-pass blur removes the COARSE grain and halves
     (σ ratio to 35mm) → scale.  65mm = finest & weakest (0.52×), 35mm strongest.
 The value-noise unit std (≈0.179, 2 octaves) is folded into k. Prints the FXR.CAL.grain block.
 
-Run from repo root (venv active):  python calib/calibrate_grain_formats.py
+Run from repo root (venv active):  python tools/calib/calibrate_grain_formats.py
 """
 import os, sys
 import numpy as np
 from scipy.ndimage import uniform_filter1d
 from scipy.optimize import least_squares
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, 'calib')
+sys.path.insert(0, 'tools/calib')
 from grainmodel import load
 
 FORMATS = ['8mm', '16mm', '35mm', '65mm']

@@ -17,7 +17,7 @@ pub struct DecodedStill {
     pub dpi: u32,
     pub dpi_known: bool,
     pub note: Option<String>,
-    /// ROADMAP.md F4 — real per-channel headroom for a genuinely-HDR source (EXR/HDR), mirroring
+    /// docs/ROADMAP.md F4 — real per-channel headroom for a genuinely-HDR source (EXR/HDR), mirroring
     /// the RAW path's `apply_lut_rgba_ext`: `rgba` stays the clamped 8-bit body every existing
     /// caller expects unchanged, and this carries the UNCLAMPED sRGB-encoded value per channel
     /// (w*h*3 f32, same layout `apply_lut_rgba_ext`'s `ext`/chromasmith-22.html's `_sceneLinear`
@@ -39,7 +39,7 @@ fn srgb_oetf(x: f32) -> f32 {
 }
 
 /// Float (HDR/EXR) DynamicImage -> 8-bit sRGB RGBA, by clamping to [0,1] and applying the sRGB
-/// OETF, PLUS (ROADMAP.md F4) the real unclamped sRGB-encoded value per channel whenever any
+/// OETF, PLUS (docs/ROADMAP.md F4) the real unclamped sRGB-encoded value per channel whenever any
 /// pixel actually exceeded 1.0 — the exact companion `apply_lut_rgba_ext` already produces for
 /// the RAW/DCP path, so this reaches chromasmith-22.html's existing `_sceneLinear`/
 /// `_sceneLinearPresent` float-texture upload (FX.setImage) with zero JS/shader change. The u8
@@ -99,7 +99,7 @@ pub fn open_any_bytes(bytes: &[u8], ext_hint: &str) -> Result<DecodedStill, Stri
     open_any_bytes_at(bytes, ext_hint, None)
 }
 
-/// ROADMAP.md F6: same as `open_any_bytes`, plus an optional 0-based `frame` selecting a specific
+/// docs/ROADMAP.md F6: same as `open_any_bytes`, plus an optional 0-based `frame` selecting a specific
 /// entry out of a multi-frame ICO/CUR (see the `ico_frames` module). `frame: None` is IDENTICAL
 /// to calling `open_any_bytes` — every existing caller (Library thumbnailer, the default
 /// decode_image_v1 request with no `frame` field) is completely unaffected.
@@ -146,7 +146,7 @@ fn dds_mipmap_count(bytes: &[u8]) -> Option<u32> {
     Some(u32::from_le_bytes([bytes[28], bytes[29], bytes[30], bytes[31]]))
 }
 
-/// ROADMAP.md F6: how many selectable frames a still carries, for a caller deciding whether a
+/// docs/ROADMAP.md F6: how many selectable frames a still carries, for a caller deciding whether a
 /// frame-picker UI is worth showing at all. `None` for every format with no such concept
 /// (including DDS — see open_any_bytes_at's doc comment on why mip levels aren't counted here).
 pub fn frame_count(bytes: &[u8], ext: &str) -> Option<usize> {
@@ -231,7 +231,7 @@ fn finish_decode(img: DynamicImage, is_float_hdr: bool) -> DecodedStill {
     DecodedStill { w, h, rgba, dpi: 72, dpi_known: false, note, ext }
 }
 
-/// ROADMAP.md F6 — ICO/CUR frame picker. `image` 0.25's own `IcoDecoder` only exposes
+/// docs/ROADMAP.md F6 — ICO/CUR frame picker. `image` 0.25's own `IcoDecoder` only exposes
 /// `best_entry()` (largest by area/bit-depth) with no public API to select a different
 /// directory entry, so this parses the ICO/CUR directory ourselves (a 6-byte header + N×16-byte
 /// entries — the same layout `image`'s own decoder reads, see its `read_entries`/`DirEntry`) and
@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn exr_headroom_ext_buffer_present_and_unclamped() {
-        // ROADMAP.md F4: a >1.0 EXR value must produce BOTH the clamped u8 body (unchanged
+        // docs/ROADMAP.md F4: a >1.0 EXR value must produce BOTH the clamped u8 body (unchanged
         // behaviour) AND a real-headroom `ext` companion carrying the true unclamped sRGB-
         // encoded value, so it can reach chromasmith-22.html's `_sceneLinear` float upload.
         let mut buf = Vec::new();
@@ -482,7 +482,7 @@ mod tests {
 
     #[test]
     fn ico_frame_count_and_default_picks_largest() {
-        // ROADMAP.md F6. Entry 0 is smaller (16x16 red), entry 1 is larger (32x32 blue) — the
+        // docs/ROADMAP.md F6. Entry 0 is smaller (16x16 red), entry 1 is larger (32x32 blue) — the
         // default (frame:None) must still pick the LARGEST, exactly like `image`'s own
         // IcoDecoder did before this feature existed (zero behaviour change for every existing
         // caller that never asks for a specific frame).

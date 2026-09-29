@@ -4,13 +4,13 @@
 
 ```bash
 python3 -m venv .calibvenv && source .calibvenv/bin/activate
-pip install -r calib/requirements.txt
-python calib/scorecard.py        # FAST halation PASS/FAIL table (run first/always)
-python calib/render_chart.py     # render a model + side-by-side vs the Dehancer reference
-python calib/optimize_hal.py     # autonomous dense-loss optimizer (background-able)
+pip install -r tools/calib/requirements.txt
+python tools/calib/scorecard.py        # FAST halation PASS/FAIL table (run first/always)
+python tools/calib/render_chart.py     # render a model + side-by-side vs the Dehancer reference
+python tools/calib/optimize_hal.py     # autonomous dense-loss optimizer (background-able)
 ```
 
-Deep-dive reference for `calib/` work — halation calibration science, calibration tooling, the grain model, Fujify preset recreation, and chart zone geometry. Not needed to run the app; load this when tuning FXR.CAL constants.
+Deep-dive reference for `tools/calib/` work — halation calibration science, calibration tooling, the grain model, Fujify preset recreation, and chart zone geometry. Not needed to run the app; load this when tuning FXR.CAL constants.
 
 ## 5. Halation calibration — the core science
 
@@ -36,7 +36,7 @@ halation:{thr:0.10,knee:0.141,power:1.0,bluesupp:0.9691,
 The emission is **two channels** (the `src` shader writes `o.rg`), blurred independently by
 `blur_hal` (σ_R for red, σ_G for green) — so a bright edge reads white→**yellow**→orange→red
 (σ_R≫σ_G: near the edge R+G overlap = yellow, deeper only R = red). This yellow band appears in
-BOTH standard and no-remjet (calib/optimize_hal_twochannel.py):
+BOTH standard and no-remjet (tools/calib/optimize_hal_twochannel.py):
 ```
 sat    = max(R,G,B) − min(R,G,B)
 white  = lum ^ powL                                            // steep brightness-toward-white
@@ -100,7 +100,7 @@ things differ from standard, each from a separate piece of evidence in `dehancer
 
 ⚠️ **Fit the white-EDGE, not the whole chart.** A global RGB chart loss pushes green DOWN (the
 green that yellows a white edge over-greens coloured edges) — the trap that produced the weak
-reddish-orange v1. Use `calib/optimize_hal_twochannel.py` (white-edge erfc + grey-row powL +
+reddish-orange v1. Use `tools/calib/optimize_hal_twochannel.py` (white-edge erfc + grey-row powL +
 rainbow-column hue-gate check).
 
 ⚠️ **`gainG` must be DOT-SAFE (the 2D over-peak trap).** Green has a narrower σ than red, so on a
@@ -146,13 +146,13 @@ a dedicated inner-glow term optimized to ~zero gain, so none is needed.
 
 ---
 
-## 6. Calibration tooling (`calib/`)
+## 6. Calibration tooling (`tools/calib/`)
 
 - **`scorecard.py`** — THE fast validation gate. One human-legible PASS/FAIL table covering
   every requirement (per-colour gap halo + interior flood, grey/warm/cool/white bars,
   thin-line R&G, halo softness) on three small crops in seconds, BASELINE vs NEW. **Run it
   before and after every change.** Reads `IMG_5774_2x.PNG` + `dehancer halation x2.png` from
-  `calib/`.
+  `tools/calib/`.
 - **`halmodel.py`** — shared model module: `s2l/l2s/smoothstep/screen/gauss_blur`,
   `emit_rule`, `apply_halation` (high-pass glow), `render_rule`.
 - **`render_chart.py`** — renders a model vs `IMG_5774_2x.PNG`, writes side-by-side strips
@@ -195,7 +195,7 @@ invisible at any size. Key points:
   `noremjet_params.json` the no-remjet halation boost).
 - **Print profiles:** `extract_print_luts.py` recovers exact 33³ `.cube`s from the two
   5640×3840 print-applied LUT charts (`dehancer kodak/fuji lut print x2.png`) via the same
-  patch-mean algorithm as the app's `chartToLUT` → `calib/PRINT PROFILES/*.cube` (kept OUT
+  patch-mean algorithm as the app's `chartToLUT` → `tools/calib/PRINT PROFILES/*.cube` (kept OUT
   of `LUT LIBRARY/` so the film-look list stays clean). `gen_print_presets.py` then bakes
   them into the embedded `PRINT_PRESETS` blob. Validated: applying each cube to
   `dehancer base x2.PNG` matches the `dehancer kodak/fujifilm print x2.png` calib renders to
@@ -203,7 +203,7 @@ invisible at any size. Key points:
 
 ---
 
-## 9. Fujify Fujifilm-look recreation (`calib/fujify/`)
+## 9. Fujify Fujifilm-look recreation (`tools/calib/fujify/`)
 
 Recreates Lightroom presets for 7 Fujifilm looks as `.cube` profiles.
 - **Composition** (`build_composed.py` → composed cubes): derive a look-independent transform
@@ -212,8 +212,8 @@ Recreates Lightroom presets for 7 Fujifilm looks as `.cube` profiles.
 - **Montage** (`build_montage.py`): degree-3 polynomial fit from screenshot comparison
   panels. Only option for Pro Neg Hi (no repo V-Log source).
 - ⚠️ The montage **input screenshots** (`Fujify Luts and XMP/`) are not bundled — supply them
-  to re-run. The composed outputs already live in `calib/LUT LIBRARY/*_composed.cube`.
-- See `calib/fujify/README.md` and `INSTALL_in_Lightroom.md` for the full method (and the
+  to re-run. The composed outputs already live in `tools/calib/LUT LIBRARY/*_composed.cube`.
+- See `tools/calib/fujify/README.md` and `INSTALL_in_Lightroom.md` for the full method (and the
   blocked proprietary XMP-table codec notes — base-85 + non-standard compression, uncracked).
 
 ---

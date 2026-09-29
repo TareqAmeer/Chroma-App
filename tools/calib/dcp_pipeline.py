@@ -13,8 +13,8 @@ One global exposure scalar (Adobe BaselineExposure is private) is fitted
 numerically against the reference.
 
 Usage:
-  python calib/dcp_pipeline.py            # render + diff + side-by-side strip
-  python calib/dcp_pipeline.py --fit      # also fit the exposure scalar first
+  python tools/calib/dcp_pipeline.py            # render + diff + side-by-side strip
+  python tools/calib/dcp_pipeline.py --fit      # also fit the exposure scalar first
 """
 import struct, sys, os, json
 import numpy as np
@@ -163,7 +163,7 @@ def apply_tone(pp, dcp):
 # BaselineExposure + flare subtraction; gr/gb absorb the difference between LR's
 # as-shot WB interpretation and libraw's camera-WB multipliers.
 # These are ISO-DEPENDENT (dual-gain sensor; Adobe normalizes per gain mode) — fitted
-# jointly on 4 references at ISO 200/250/2000/3200 (calib/dcp_fit_iso.json):
+# jointly on 4 references at ISO 200/250/2000/3200 (tools/calib/dcp_fit_iso.json):
 #   x = log2(ISO/100)
 #   ev=-0.819-0.1732x  gb=1.0714-0.0214x  gr=0.9709  black=max(0, 0.0397-0.00714x)
 def iso_fit(iso):
@@ -263,7 +263,7 @@ def main():
         print(f"  {lab:14s} ours {o8[y, x]} vs LR {r8[y, x]}")
     strip = np.concatenate([o8[::6, ::6], r8[::6, ::6]], axis=1)
     Image.fromarray(strip).save(os.path.join(CAL, "cmp_dcp_full.png"))
-    print("wrote calib/cmp_dcp_full.png (left=ours, right=Lightroom)")
+    print("wrote tools/calib/cmp_dcp_full.png (left=ours, right=Lightroom)")
 
 if __name__ == "__main__":
     main()

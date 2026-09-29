@@ -18,8 +18,8 @@ Cost: ONE chart upload total (free-tier upload quota is per-upload, not per-expo
 one TIFF export+download per film (~120MB each, ~65 films -> ~8GB, several seconds render +
 download time per film).
 
-Run:  python calib/dehancer_extract_luts.py                              # all films
-      python calib/dehancer_extract_luts.py "Fujichrome Velvia 50"       # subset (base names)
+Run:  python tools/calib/dehancer_extract_luts.py                              # all films
+      python tools/calib/dehancer_extract_luts.py "Fujichrome Velvia 50"       # subset (base names)
 """
 import json
 import os

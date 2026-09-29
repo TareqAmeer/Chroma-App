@@ -12,7 +12,7 @@ When a later approved implementation has same-size PNG evidence, run `npm run re
 
 ## Repository evidence
 
-Query the registry narrowly with `node scripts/query-components.mjs --family <family>` to identify affected production families and declarations. Do not read complete registry JSON or production HTML. Read only the contract files for affected families, using `docs/ui-workflow/component-contracts/README.md` for routing. Map observations to roles and tokens in `chromasmith-design/project/design.md` before proposing values. Identify repeated registered elements so one spec governs all occurrences.
+Query the registry narrowly with `node tools/scripts/query-components.mjs --family <family>` to identify affected production families and declarations. Do not read complete registry JSON or production HTML. Read only the contract files for affected families, using `docs/ui-workflow/component-contracts/README.md` for routing. Map observations to roles and tokens in `design/wireframes/project/design.md` before proposing values. Identify repeated registered elements so one spec governs all occurrences.
 
 Compare against `docs/ui-workflow/reference-to-spec/README.md`, `schema.json`, and `template.json`. Start the draft from the template and save it as `docs/ui-workflow/reference-to-spec/specifications/<name>.json`. A reference conflict with `design.md`, or conflicting references, is an unresolved user decision—not a correction or redesign.
 

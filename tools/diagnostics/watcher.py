@@ -3,7 +3,7 @@ Main capture-session loop.
 
 Finds the running Chromasmith process, starts the log/JS/freeze detectors,
 polls process metrics, writes every event to events.jsonl, and prints a
-live one-line status readout. See diagnostics/README.md for usage.
+live one-line status readout. See tools/diagnostics/README.md for usage.
 """
 import json
 import os
@@ -115,7 +115,7 @@ class Session:
         print(PASTE_SNIPPET)
         print()
         print("Tag a moment during this session from another terminal with:")
-        print('  python3 diagnostics/cli.py mark "clicked Export"')
+        print('  python3 tools/diagnostics/cli.py mark "clicked Export"')
         print()
 
         relay = JsRelay(self._write_event)

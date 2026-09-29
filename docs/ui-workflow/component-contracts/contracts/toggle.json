@@ -4,10 +4,10 @@
   "purpose": "Record the current, source-backed toggle family and the decisions required before any family-wide redesign.",
   "status": "proposed",
   "observations": {
-    "generatedBy": "scripts/validate-component-contracts.mjs --refresh-observations",
+    "generatedBy": "tools/scripts/validate-component-contracts.mjs --refresh-observations",
     "generatedAt": "2026-09-13T03:50:52.449Z",
     "registry": {
-      "query": "node scripts/query-components.mjs --family toggle",
+      "query": "node tools/scripts/query-components.mjs --family toggle",
       "expectedCount": 23,
       "locations": [
         {
@@ -520,7 +520,7 @@
         "Library persistent menu toggle (.opt-toggle)"
       ],
       "designSystemComponent": null,
-      "designSystemEvidence": "chromasmith-design/project/design.md contains no Toggle component; component registry maps toggle to null."
+      "designSystemEvidence": "design/wireframes/project/design.md contains no Toggle component; component registry maps toggle to null."
     },
     "semantics": {
       "editor": "A div enhanced after boot to role=switch, tabindex=0, and aria-checked; the .on class is the state source.",
@@ -628,7 +628,7 @@
     },
     "references": [
       "docs/ui-workflow/component-registry.md",
-      "chromasmith-design/project/design.md",
+      "design/wireframes/project/design.md",
       "chromasmith-22.html:222",
       "chromasmith-22.html:10114",
       "chromasmith-22.html:21717",
@@ -643,11 +643,11 @@
   },
   "validation": {
     "commands": [
-      "node scripts/build-component-registry.mjs --check",
-      "node scripts/query-components.mjs --family toggle",
-      "node scripts/validate-component-contracts.mjs --all",
-      "node scripts/validate-component-contracts.mjs --family toggle",
-      "node --check scripts/validate-component-contracts.mjs"
+      "node tools/scripts/build-component-registry.mjs --check",
+      "node tools/scripts/query-components.mjs --family toggle",
+      "node tools/scripts/validate-component-contracts.mjs --all",
+      "node tools/scripts/validate-component-contracts.mjs --family toggle",
+      "node --check tools/scripts/validate-component-contracts.mjs"
     ],
     "scope": "Offline contract/registry validation only; not an application gate."
   },

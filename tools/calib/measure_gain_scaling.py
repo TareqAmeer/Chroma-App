@@ -13,11 +13,11 @@ fixed-radius synthetic dot/line and found glow amplitude DECREASING at low sc, t
 the reported symptom, because a proper photo's fine detail shrinks proportionally with the image
 the way LANCZOS resampling shrinks it -- not staying pinned at a fixed pixel size).
 
-Method, using the real calibration chart (calib/IMG_5774_2x.PNG, 4800x6400, matches
-calib/scorecard.py's own P constants for FXR.CAL.halation):
+Method, using the real calibration chart (tools/calib/IMG_5774_2x.PNG, 4800x6400, matches
+tools/calib/scorecard.py's own P constants for FXR.CAL.halation):
 
   A) "reference" -- render halation at the native calibrated resolution (4800px, sc=2.0,
-     exactly what calib/scorecard.py already validates against Dehancer), then LANCZOS-downscale
+     exactly what tools/calib/scorecard.py already validates against Dehancer), then LANCZOS-downscale
      the GRADED result to each target width. This is "what it should look like" if the photo had
      been captured/processed at full resolution and merely displayed/exported smaller.
   B) "current app behavior" -- LANCZOS-downscale the SOURCE chart to each target width first
@@ -25,13 +25,13 @@ calib/scorecard.py's own P constants for FXR.CAL.halation):
      render halation directly at that width with sigma*sc and gain UNCHANGED -- exactly what
      FXR.render() does today for a real low-resolution photo.
 
-Compare A vs B at matching target widths: same known zone crops (calib/scorecard.py's
+Compare A vs B at matching target widths: same known zone crops (tools/calib/scorecard.py's
 zone2/zone5/zone7 pixel coordinates, rescaled by target_width/4800) for halo strength. If B is
 measurably hotter than A, derive gainComp(sc) = (A's halo strength) / (B's halo strength) at
 each width, fit a closed form, and require gainComp(sc)=1 for sc>=1 (the calibrated point,
 where A and B are the same rendering by construction).
 
-Run: python calib/measure_gain_scaling.py   (inside .calibvenv)
+Run: python tools/calib/measure_gain_scaling.py   (inside .calibvenv)
 """
 import os
 import numpy as np

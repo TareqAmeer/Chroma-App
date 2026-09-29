@@ -1,18 +1,18 @@
 // Gate for the visual side of the Component Registry (component-visuals-plan.md §4): fails when
-// a design/components.json family has drifted away from what scripts/token-report.mjs can
-// actually show as a live embed. Complements scripts/build-component-registry.mjs --check, which
+// a design/components.json family has drifted away from what tools/scripts/token-report.mjs can
+// actually show as a live embed. Complements tools/scripts/build-component-registry.mjs --check, which
 // only verifies the family/selector/instance data — this checks the PRESENTATION layer stays
 // truthful, since a silently-stale mapping there would just show a text placeholder forever
 // without anyone noticing (the exact failure mode "text means nothing to me" was reported
 // against in the first place).
 //
-// Usage: node scripts/component-visuals-check.mjs
+// Usage: node tools/scripts/component-visuals-check.mjs
 import { readFile } from 'node:fs/promises';
 import { FAMILY_TO_CATALOG_KEY, LIBRARY_ONLY_CATALOG_KEYS, buildAsbuiltIndex } from './component-catalog-map.mjs';
 
 const ROOT = process.cwd();
-const componentsDoc = JSON.parse(await readFile(new URL('../design/components.json', import.meta.url), 'utf8'));
-const html = await readFile(new URL('../chromasmith-22.html', import.meta.url), 'utf8');
+const componentsDoc = JSON.parse(await readFile(new URL('../../design/components.json', import.meta.url), 'utf8'));
+const html = await readFile(new URL('../../chromasmith-22.html', import.meta.url), 'utf8');
 
 const families = Object.entries(componentsDoc.families).map(([name, def]) => ({ name, ...def }));
 const findings = [];
@@ -22,7 +22,7 @@ const findings = [];
 // entry here would otherwise silently render nothing in the report with no one the wiser.
 for (const f of families) {
   if (!(f.name in FAMILY_TO_CATALOG_KEY)) {
-    findings.push(`"${f.name}" is in design/components.json but has no entry in scripts/component-catalog-map.mjs's FAMILY_TO_CATALOG_KEY (add one, or map it to null with a comment explaining why it can't be shown).`);
+    findings.push(`"${f.name}" is in design/components.json but has no entry in tools/scripts/component-catalog-map.mjs's FAMILY_TO_CATALOG_KEY (add one, or map it to null with a comment explaining why it can't be shown).`);
   }
 }
 
@@ -66,7 +66,7 @@ if (findings.length) {
   for (const f of findings) console.log(`  - ${f}`);
   process.exit(1);
 }
-console.log(`OK — every design/components.json family (${families.length}) has a valid scripts/token-report.mjs mapping.`);
+console.log(`OK — every design/components.json family (${families.length}) has a valid tools/scripts/token-report.mjs mapping.`);
 if (noAsbuiltEvidence.length) {
   console.log(`Informational: no design/asbuilt/ cross-reference for: ${noAsbuiltEvidence.join(', ')} (not a failure — see component-visuals-plan.md §0).`);
 }

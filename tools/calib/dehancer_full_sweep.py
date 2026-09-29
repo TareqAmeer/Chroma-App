@@ -14,8 +14,8 @@ free-tier-limited quantity per the JS bundle's maxUploadCountDaily) and re-rende
 film via image/export -- 15 export calls per film (3 effects x 5 amounts), ~15-20s per
 film. All N films: ~15N export calls, no re-uploads.
 
-Run:  python calib/dehancer_full_sweep.py                    # all films in online_presets_raw.json
-      python calib/dehancer_full_sweep.py "Fujichrome Velvia 50" "Kodak Ektar 100"  # subset
+Run:  python tools/calib/dehancer_full_sweep.py                    # all films in online_presets_raw.json
+      python tools/calib/dehancer_full_sweep.py "Fujichrome Velvia 50" "Kodak Ektar 100"  # subset
 """
 import json
 import os
@@ -39,7 +39,7 @@ os.makedirs(OUT_DIR, exist_ok=True)
 AMOUNTS = [0, 25, 50, 75, 100]
 
 # Charts + measurement geometry (all verified against generator geometry logs -- see
-# calib/grain_chart_geo.txt / calib/bloom_chart_geo.txt; halation reuses scorecard.py's
+# tools/calib/grain_chart_geo.txt / tools/calib/bloom_chart_geo.txt; halation reuses scorecard.py's
 # own zone2 geometry, which was never affected by the grainmodel.py coordinate bug).
 GRAIN_CHART = os.path.join(ROOT, "grain-test-2x.png")
 HALATION_CHART = os.path.join(ROOT, "IMG_5774_2x.PNG")

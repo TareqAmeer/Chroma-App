@@ -31,7 +31,7 @@ if (check && refresh) fail('--check and --refresh-observations cannot be combine
 if (wanted && !/^[a-z0-9-]+$/.test(wanted)) fail(`invalid family name: ${wanted}`);
 
 const sha = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const query = (queryArgs) => JSON.parse(execFileSync(process.execPath, ['scripts/query-components.mjs', ...queryArgs], {
+const query = (queryArgs) => JSON.parse(execFileSync(process.execPath, ['tools/scripts/query-components.mjs', ...queryArgs], {
   cwd: ROOT,
   encoding: 'utf8',
 }));
@@ -101,10 +101,10 @@ function makeContract(family, registry, runtime, overlapMap, timestamp) {
     purpose: 'Unreviewed; purpose requires human review.',
     status: 'draft',
     observations: {
-      generatedBy: 'scripts/scaffold-component-contracts.mjs',
+      generatedBy: 'tools/scripts/scaffold-component-contracts.mjs',
       generatedAt: timestamp,
       registry: {
-        query: `node scripts/query-components.mjs --family ${family}`,
+        query: `node tools/scripts/query-components.mjs --family ${family}`,
         sourceRegistrationCount: registry.count,
         expectedCount: registry.count,
         locations: matches,
@@ -134,8 +134,8 @@ function makeContract(family, registry, runtime, overlapMap, timestamp) {
     authored,
     validation: {
       commands: [
-        `node scripts/query-components.mjs --family ${family}`,
-        `node scripts/validate-component-contracts.mjs --family ${family}`,
+        `node tools/scripts/query-components.mjs --family ${family}`,
+        `node tools/scripts/validate-component-contracts.mjs --family ${family}`,
       ],
       scope: 'Unreviewed generated draft; observations only, not a design or production gate.',
     },

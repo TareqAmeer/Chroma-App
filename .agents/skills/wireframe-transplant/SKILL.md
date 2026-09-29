@@ -1,6 +1,6 @@
 ---
 name: wireframe-transplant
-description: Use whenever implementing or fixing a Chromasmith UI surface (Library, Editor, any panel) against one of the Codex Design wireframes in chromasmith-design/project/*.html. Enforces copying literal values from the wireframe instead of re-deriving them from memory, and requires a side-by-side visual check before declaring anything done. Triggers on "match the wireframe", "implement this design", "the UI doesn't match", or any request referencing Library View.html / Editor (Developer) View.dc.html.
+description: Use whenever implementing or fixing a Chromasmith UI surface (Library, Editor, any panel) against one of the Codex Design wireframes in design/wireframes/project/*.html. Enforces copying literal values from the wireframe instead of re-deriving them from memory, and requires a side-by-side visual check before declaring anything done. Triggers on "match the wireframe", "implement this design", "the UI doesn't match", or any request referencing Library View.html / Editor (Developer) View.dc.html.
 ---
 
 # Wireframe transplant workflow
@@ -16,7 +16,7 @@ specific things happened.
 ## Step 0 — read the actual wireframe file, not a memory of it
 
 Before writing any CSS or markup, open the real file in
-`chromasmith-design/project/` and its `_ds/` token set. Do not proceed from
+`design/wireframes/project/` and its `_ds/` token set. Do not proceed from
 a summary or a previous read earlier in the conversation — re-read it. For
 every value you're about to write (a color, an icon, a spacing number, a
 section's position in the DOM), find the literal line in the wireframe that
@@ -53,7 +53,7 @@ happens to have.
 
 ## Step 3 — the only two acceptable verification steps, in this order
 
-`wireframe_diff.mjs`/`calib/wireframe_diff.py` are RETIRED (13 hand-picked
+`wireframe_diff.mjs`/`tools/calib/wireframe_diff.py` are RETIRED (13 hand-picked
 element pairs — structurally blind to anything not on that list). Current
 tools, both current as of 2026-09-08:
 
@@ -109,7 +109,7 @@ See docs/process-lessons.md #18 for the bug that made this a rule.
 
 Follow the canonical evidence and implementation process in
 `docs/editor-redesign-plan.md` §1 with any coding assistant. In order: query the exact family and
-affected declarations with `node scripts/query-components.mjs`; run `npm run components:check`
+affected declarations with `node tools/scripts/query-components.mjs`; run `npm run components:check`
 before editing; read only the relevant family contract; create and approve a reference
 specification before implementing when a visual reference is involved; record the active panel;
 read only its approved panel/reference specification and the grep-located production section;

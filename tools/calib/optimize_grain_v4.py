@@ -1,6 +1,6 @@
 """v4 fit: v3 two-component model + per-channel highlight-rolloff gate
 gate_c = 1 - smoothstep(hiLo, hiHi, value_c). Analytic, zero render cost.
-Run: python calib/optimize_grain_v4.py
+Run: python tools/calib/optimize_grain_v4.py
 """
 import os, json
 import numpy as np
@@ -101,4 +101,4 @@ params = {'kR': kR, 'kG': kG, 'kB': kB, 'powG': powG, 'powL': powL,
                    'grSz carried over from v3 fit (h21 hash limitation, see CLAUDE.md).'}
 with open('grain_params_v4.json', 'w') as f:
     json.dump(params, f, indent=1)
-print('\nWrote calib/grain_params_v4.json')
+print('\nWrote tools/calib/grain_params_v4.json')

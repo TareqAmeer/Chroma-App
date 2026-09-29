@@ -1,7 +1,7 @@
 // Prints the CGWindowID of the largest on-screen window owned by the given app name,
 // for use with `screencapture -l <id>` — a composited, off-screen-buffer capture that
 // works regardless of focus/occlusion, unlike `-R <region>` which grabs whatever's
-// visible at those screen coordinates. Verified empirically (diagnostics/README.md):
+// visible at those screen coordinates. Verified empirically (tools/diagnostics/README.md):
 // a captured Finder window at 920x492 points came back 1840x984px, exactly matching
 // its real bounds at 2x retina scale — this is NOT a full-screen capture in disguise.
 //

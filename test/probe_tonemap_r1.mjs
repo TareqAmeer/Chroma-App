@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One-off visual/numeric demo for ROADMAP.md's R1 (scene-referred highlight roll-off) — NOT
+// One-off visual/numeric demo for docs/ROADMAP.md's R1 (scene-referred highlight roll-off) — NOT
 // part of npm test, same role as the other test/probe_*.mjs diagnostics. Renders a synthetic
 // radial gradient (bright centre fading to mid-grey — none of the 3 export-harness fixtures
 // have a smooth luminance ramp reaching white, so there's nothing for a shoulder curve to act

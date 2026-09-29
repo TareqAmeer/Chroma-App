@@ -15,14 +15,14 @@ without the 4/3 base64 tax. `vendor/` is already copied wholesale by build-ios.s
 build-desktop.sh, so no build change is needed; the app fetches + caches them (see presetBytes
 in chromasmith-22.html).
 
-The bytes are taken from the HTML's own base64, NOT re-derived from calib/LUT LIBRARY/*.cube —
+The bytes are taken from the HTML's own base64, NOT re-derived from tools/calib/LUT LIBRARY/*.cube —
 so the split is provably byte-identical to what ships today. (Every key does have a .cube
 source in the repo, so this is reversible either way.)
 
 USAGE
 -----
-    python3 calib/split_lut_presets.py            # split (idempotent — safe to re-run)
-    python3 calib/split_lut_presets.py --check    # verify only, write nothing, exit 1 on drift
+    python3 tools/calib/split_lut_presets.py            # split (idempotent — safe to re-run)
+    python3 tools/calib/split_lut_presets.py --check    # verify only, write nothing, exit 1 on drift
 
 Storage format is unchanged from the base64 it replaces: Uint8, 3 bytes/entry, .cube FILE
 ORDER (R fastest) — exactly what lutFromBytes() reads.
@@ -46,7 +46,7 @@ INLINE_CATEGORY = "User Looks"
 HEADER = (
     "// Core looks ONLY — inline as base64, quantized to Uint8 in .cube file order (R fastest).\n"
     "// The other {n_ext} presets live in vendor/luts/<key>.bin as the SAME raw bytes without the\n"
-    "// base64 tax, fetched and cached on demand (presetBytes) — see calib/split_lut_presets.py.\n"
+    "// base64 tax, fetched and cached on demand (presetBytes) — see tools/calib/split_lut_presets.py.\n"
     "// LUT_META, not this object, is the authoritative list of every built-in preset key.\n"
 )
 

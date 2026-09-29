@@ -24,7 +24,7 @@ function tokenNames() {
   walk(root); return names;
 }
 function queryFamily(family) {
-  return JSON.parse(execFileSync(process.execPath, ['scripts/query-components.mjs', '--family', family], { cwd: ROOT, encoding: 'utf8' }));
+  return JSON.parse(execFileSync(process.execPath, ['tools/scripts/query-components.mjs', '--family', family], { cwd: ROOT, encoding: 'utf8' }));
 }
 function runtimeFamily(family) {
   const runtime = JSON.parse(readFileSync(path.join(ROOT, 'design/components-runtime.json'), 'utf8'));

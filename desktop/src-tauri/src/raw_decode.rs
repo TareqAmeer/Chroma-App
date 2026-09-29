@@ -13,7 +13,7 @@
 // so multiplying by min-normalized WB afterwards reproduces libraw's absolute levels with
 // no fudge factor. (The old WHITE_LEVEL_MATCH=2.334 eyeball constant is gone; any remaining
 // GLOBAL exposure offset vs Lightroom is a fitted constant in the JS dcpFit, refitted against
-// this decode — see calib/dcp_dual_fit.py.)
+// this decode — see tools/calib/dcp_dual_fit.py.)
 use rawler::decoders::RawDecodeParams;
 use rawler::imgop::sensor::bayer::ppg::PPGDemosaic;
 use rawler::imgop::sensor::bayer::Demosaic;
@@ -43,7 +43,7 @@ pub struct DecodedRaw {
     #[serde(skip)]
     pub rgb16: Vec<u16>,
     /// This shot's XYZ(D65)->camera-RGB matrix (see `DemosaicOut::xyz_to_cam`'s doc comment for
-    /// where it comes from) — carried through to here so `srgb_rgba` (ROADMAP.md's R8) can
+    /// where it comes from) — carried through to here so `srgb_rgba` (docs/ROADMAP.md's R8) can
     /// render un-DCP'd cameras in real per-camera colour instead of raw camera-native primaries.
     /// All-zero when unavailable, same sentinel the High-tier denoiser already checks for.
     #[serde(skip)]
@@ -232,7 +232,7 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
         r.d.w > 0 && r.d.h > 0 && r.p.x + r.d.w <= w && r.p.y + r.d.h <= h && (r.p.x, r.p.y, r.d.w, r.d.h) != (0, 0, w, h)
     });
 
-    // ROADMAP.md F5: branch on the file's real photometric interpretation instead of assuming
+    // docs/ROADMAP.md F5: branch on the file's real photometric interpretation instead of assuming
     // every RAW is a Bayer mosaic. `RawPhotometricInterpretation::LinearRaw` (rawler's real enum
     // variant — verified in the vendored rawler-0.7.2 source, not guessed) is what DNG's own
     // PhotometricInterpretation=34892 decodes to: iPhone ProRAW, a Foveon→DNG conversion, and
@@ -607,7 +607,7 @@ pub fn decode_rw2_bytes_ex(
     // CONTRAST is also high (the geometric condition under which PPG actually produces false
     // color — a bright pixel immediately next to a dark one). The thresholds
     // (contrast=0.5, deviation=0.003, 8 passes) were swept against a synthetic safety battery
-    // (calib/false_color_gate.py) — isolated dots from dim to pure-saturated-on-black, a 2x2
+    // (tools/calib/false_color_gate.py) — isolated dots from dim to pure-saturated-on-black, a 2x2
     // real color cluster — all preserved untouched, while the reproduced false-color-at-edge
     // case is correctly cleaned. Known residual limitation: a solid 3x3 saturated cluster
     // (bigger than the tested 2x2) does still get smoothed — accepted as a real, documented
@@ -630,7 +630,7 @@ pub fn decode_rw2_bytes_ex(
     // specific false-color SIGNATURE (neon-green hue) regardless of how spatially isolated it
     // is, still gated to local hard-contrast regions so ordinary saturated real content
     // (grass, foliage — which sits in flat, low-contrast areas) is structurally left alone.
-    // Prototyped in calib/false_color_gate.py / calib/highlight_rolloff.py; validated
+    // Prototyped in tools/calib/false_color_gate.py / tools/calib/highlight_rolloff.py; validated
     // 2026-07-13: full nr_validate suite PASSES all 7 LR-referenced ISO sets (gold-tag gate
     // unchanged at 0.86) and a synthetic grass patch is correctly untouched. Measured on
     // __TM8159's worst sparkle hotspot: green-dot fraction 6.2%->0.9-1.7%.
@@ -791,7 +791,7 @@ fn denoise_shadows_rgb16(rgb: &mut [u16], w: usize, h: usize) {
             }
             // CHROMA-ONLY blend, luma preserved. Blending RGB toward the local average (the old
             // behaviour) smeared LUMA detail — measured against a real Lightroom reference
-            // (calib/nr_validate.py): in ISO-12800 shadows CS kept only 48% of the luma noise
+            // (tools/calib/nr_validate.py): in ISO-12800 shadows CS kept only 48% of the luma noise
             // where Lightroom keeps 98%, i.e. we destroyed the fine dark-fur texture the user
             // saw as "waxy". Lightroom removes shadow COLOR blotches while keeping luminance
             // grain. So: convert the pixel and the neighbourhood-average to Y/Cb/Cr, blend only
@@ -891,8 +891,8 @@ fn denoise_chroma_wavelet_rgb16_ex(rgb: &mut [u16], w: usize, h: usize, iso: u32
         return;
     }
     // Diagnostic escape hatch (same spirit as CS_NO_CHROMA_NR above) for A/B validating
-    // calib/derive_iso_table.py's physically-derived (levels, strength) against the hardcoded
-    // per-ISO-bracket table below, via dump_rw2 + calib/nr_validate.py. Not a user-facing
+    // tools/calib/derive_iso_table.py's physically-derived (levels, strength) against the hardcoded
+    // per-ISO-bracket table below, via dump_rw2 + tools/calib/nr_validate.py. Not a user-facing
     // setting — unset in all normal use, so default behavior is completely unchanged.
     let override_ls = (|| {
         let s: f32 = std::env::var("CS_NR_STRENGTH").ok()?.parse().ok()?;
@@ -924,7 +924,7 @@ fn denoise_chroma_wavelet_rgb16_ex(rgb: &mut [u16], w: usize, h: usize, iso: u32
         // at levels=10) but muddies flat highlight saturation on the SAME photo. Fixing the
         // sparkle case without this regression needs a texture-aware (not global-constant)
         // mechanism — a median-filter hybrid was prototyped for this in
-        // calib/vst_denoise.py/hybrid_wiener_median but isn't production-ready. Left at the
+        // tools/calib/vst_denoise.py/hybrid_wiener_median but isn't production-ready. Left at the
         // proven, safe 5/0.70.
         3200..=6399 => (5, 0.70),
         // `keep = 1 - strength*(1 - lvl/levels*0.12)` is steeply nonlinear near strength=1: at
@@ -1200,7 +1200,7 @@ fn local_contrast_5x5(yv: &mut [f32], w: usize, h: usize) -> Vec<f32> {
 /// Edge-gated false-color suppression — see the call site's doc comment in
 /// decode_rw2_bytes for the full rationale and validation history. Operates on interleaved
 /// u16 RGB (post-demosaic, pre-orientation). `contrast_thresh`/`dev_thresh` are in normalized
-/// 0..1 units (matching calib/false_color_gate.py's Python prototype exactly, so thresholds
+/// 0..1 units (matching tools/calib/false_color_gate.py's Python prototype exactly, so thresholds
 /// swept there carry over directly); `steps` is the number of gated-median passes.
 fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f32, dev_thresh: f32, steps: usize) {
     let npx = w * h;
@@ -1294,7 +1294,7 @@ fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f3
 }
 
 /// Diagnostic-only contrast-gated hue-targeted defringe — see the call site's doc comment.
-/// Ports calib/false_color_gate.py's `hue_defringe_gated` prototype exactly (hue band, sat
+/// Ports tools/calib/false_color_gate.py's `hue_defringe_gated` prototype exactly (hue band, sat
 /// threshold, desaturation amount are the values measured there): only desaturate pixels
 /// whose hue falls in the neon-green/magenta band AND sit at a local hard luma edge.
 fn hue_defringe_gated(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f32) {
@@ -1591,7 +1591,7 @@ pub fn apply_lut_rgba(rgb16: &[u16], lut: &[f32], n: usize) -> Result<Vec<u8>, S
     Ok(rgba)
 }
 
-/// ROADMAP.md R1 (scene-referred), desktop path — mirrors `apply_lut_rgba` exactly (same
+/// docs/ROADMAP.md R1 (scene-referred), desktop path — mirrors `apply_lut_rgba` exactly (same
 /// trilinear sample, same LUT — `bakeDcpLUT`'s own upper clamp was already removed, so `lut`
 /// itself already carries real values above 1.0 for a genuinely blown highlight) but ALSO
 /// returns the unquantized `v` per channel, instead of only the `v.clamp(0,1)*255` u8 the
@@ -1655,7 +1655,7 @@ pub fn apply_lut_rgba_ext(rgb16: &[u16], lut: &[f32], n: usize) -> Result<(Vec<u
 /// (dcraw's rgb_cam, darktable's "standard color matrix", RawTherapee's camconst fallback):
 /// white-balance (already applied earlier in this pipeline) -> demosaic (already done) ->
 /// camera RGB -> XYZ -> sRGB -> gamma. It is not chromatically adapted to the shot's own
-/// illuminant (real converters' "enhanced"/fitted tiers do that) — see ROADMAP.md's R8.
+/// illuminant (real converters' "enhanced"/fitted tiers do that) — see docs/ROADMAP.md's R8.
 const XYZ_TO_SRGB_D65: rawdenoise::Mat3 =
     [[3.2404542, -1.5371385, -0.4985314], [-0.9692660, 1.8760108, 0.0415560], [0.0556434, -0.2040259, 1.0572252]];
 
@@ -1664,7 +1664,7 @@ const XYZ_TO_SRGB_D65: rawdenoise::Mat3 =
 ///
 /// `xyz_to_cam`: this shot's XYZ(D65)->camera-native-RGB matrix (same field DecodedRaw already
 /// carries for the High-tier denoiser — see raw_decode.rs's own doc comment on where it comes
-/// from). ROADMAP.md's R8: every un-DCP'd camera used to render in raw camera-native primaries
+/// from). docs/ROADMAP.md's R8: every un-DCP'd camera used to render in raw camera-native primaries
 /// with only a gamma curve applied — genuinely wrong colour, not merely "less accurate" (a
 /// camera's red/green/blue filters don't remotely match sRGB's primaries). The all-zero
 /// sentinel (no usable matrix — camera not in rawler's table, or main.rs's zero-determinant
@@ -1732,7 +1732,7 @@ pub fn srgb_rgba(rgb16: &[u16], xyz_to_cam: rawdenoise::Mat3) -> Vec<u8> {
 mod srgb_rgba_tests {
     use super::*;
 
-    /// ROADMAP.md's R8, regression safety: the all-zero sentinel (no camera matrix available)
+    /// docs/ROADMAP.md's R8, regression safety: the all-zero sentinel (no camera matrix available)
     /// MUST reproduce the exact old gamma-only behaviour byte-for-byte — this is the path every
     /// existing caller took before this session's change, so it has to stay a true no-op.
     #[test]

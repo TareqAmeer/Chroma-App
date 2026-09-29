@@ -72,7 +72,7 @@ def emit_rule(lin, powL, kW, kC, aG, bB, bP=0.0, thr=0.10, knee=0.141):
        (red/orange/yellow/green have B=0; cyan/blue have R=0), so it only
        activates where R and B are both present together. Validated: bP=2.10
        moves ONLY the purple gap (0.187->0.327) with every other color's gap-R
-       and interior-flood value bit-identical (calib/scorecard.py: 1 FAIL->0).
+       and interior-flood value bit-identical (tools/calib/scorecard.py: 1 FAIL->0).
     """
     lum = lin @ LUM
     bright = smoothstep(thr, thr+knee, lum)

@@ -1,6 +1,6 @@
 // Builds review-page assets for design/asbuilt/: a splash screenshot (no live DOM route,
 // so rendered from the wireframe file) and a per-surface contact sheet of every non-hero state.
-// Run: node scripts/build_review_assets.mjs
+// Run: node tools/scripts/build_review_assets.mjs
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
@@ -14,7 +14,7 @@ async function main() {
 
   // 1. Splash: screenshot the wireframe file at the app's desktop viewport (1400x900).
   const splashDir = path.join(ASBUILT, 'splash');
-  const splashHtml = path.join(ROOT, 'chromasmith-design/project/Splash Screen.html');
+  const splashHtml = path.join(ROOT, 'design/wireframes/project/Splash Screen.html');
   if (fs.existsSync(splashHtml)) {
     const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
     await page.goto('file://' + splashHtml);

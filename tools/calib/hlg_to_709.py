@@ -18,7 +18,7 @@ did not — see fxNeedsHlgTransform() in chromasmith-22.html.
 This script fits/validates the one free parameter (the OOTF system gamma) against Apple's own
 ColorSync output, so the shader constants are measured rather than assumed.
 
-Run:  .calibvenv/bin/python3 calib/hlg_to_709.py
+Run:  .calibvenv/bin/python3 tools/calib/hlg_to_709.py
 """
 import subprocess
 import sys
@@ -142,7 +142,7 @@ def validate_against_reference():
     """Cross-check the pieces above against colour-science, if it is available.
 
     ⚠️ colour-science requires numpy>=2, which is INCOMPATIBLE with the scipy pin in
-    calib/requirements.txt — installing it into .calibvenv breaks every other calibration
+    tools/calib/requirements.txt — installing it into .calibvenv breaks every other calibration
     script. Keep it in its own venv:  python3 -m venv /tmp/colourvenv &&
     /tmp/colourvenv/bin/pip install colour-science
     """

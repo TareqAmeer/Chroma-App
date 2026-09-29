@@ -5,7 +5,7 @@ isolation — "3 freezes this run vs 0 in the last 5" is a signal; "3
 freezes" alone is not.
 
 Follows test/baselines/*.json's own convention of a plain JSON file
-committed to nothing — this one lives under diagnostics/ (gitignored
+committed to nothing — this one lives under tools/diagnostics/ (gitignored
 alongside reports/, since it's local run history, not a CI gate).
 """
 import json

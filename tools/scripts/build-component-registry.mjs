@@ -132,7 +132,7 @@ const heartInstances = instances.filter((x) => x.family === 'icon' && x.icon ===
 const registry = {
   schemaVersion: 1,
   generatedFrom: SOURCES,
-  designRules: 'chromasmith-design/project/design.md',
+  designRules: 'design/wireframes/project/design.md',
   purpose: 'App-wide source map for global component and semantic-icon changes.',
   families: Object.fromEntries(Object.entries(FAMILY_DEFS).map(([key, value]) => [key, { ...value, instanceCount: counts[key] }])),
   semanticQueries: { favouriteIcon: { icon: 'heart', instances: heartInstances } },

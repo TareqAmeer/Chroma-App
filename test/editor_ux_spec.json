@@ -600,11 +600,11 @@
     "T22": {
       "category": "tooling-gap",
       "status": "fixed",
-      "source": "[audit of the testing tools, 2026-09-10] test/panel_compare_build.mjs's generated comparison pages (chromasmith-design/project/panels/*.compare.html) have not been regenerated since the Retouch/Detail/Film/Frame/Crop/Color proposals were corrected and then implemented this session \u2014 they still show the ORIGINAL (some since-fixed-for-fabrication) proposal content, not what actually shipped",
+      "source": "[audit of the testing tools, 2026-09-10] test/panel_compare_build.mjs's generated comparison pages (design/wireframes/project/panels/*.compare.html) have not been regenerated since the Retouch/Detail/Film/Frame/Crop/Color proposals were corrected and then implemented this session \u2014 they still show the ORIGINAL (some since-fixed-for-fabrication) proposal content, not what actually shipped",
       "wireframeRef": null,
       "check": null,
       "panel": null,
-      "note": "Not a test gate exactly, but a documentation-drift risk with the same shape as every other item here: a reviewer opening a .compare.html page today sees stale content and could waste time reviewing something already superseded, or worse, use the stale version as a reference while implementing Export/Info/Masks. Regenerating (or at least stamping each page with 'implemented \u2014 see chromasmith-22.html' once its panel ships) would prevent that. CLOSED 2026-09-11: regenerated every chromasmith-design/project/panels/*.compare.html via `node test/panel_compare_build.mjs --force`, so they reflect the actually-shipped Retouch/Detail/Film/Frame/Crop/Color/Masks/Export/Info implementations instead of stale pre-correction proposal content."
+      "note": "Not a test gate exactly, but a documentation-drift risk with the same shape as every other item here: a reviewer opening a .compare.html page today sees stale content and could waste time reviewing something already superseded, or worse, use the stale version as a reference while implementing Export/Info/Masks. Regenerating (or at least stamping each page with 'implemented \u2014 see chromasmith-22.html' once its panel ships) would prevent that. CLOSED 2026-09-11: regenerated every design/wireframes/project/panels/*.compare.html via `node test/panel_compare_build.mjs --force`, so they reflect the actually-shipped Retouch/Detail/Film/Frame/Crop/Color/Masks/Export/Info implementations instead of stale pre-correction proposal content."
     },
     "T23": {
       "category": "tooling-gap",
@@ -1074,7 +1074,7 @@
     "T55": {
       "category": "ui-fix",
       "status": "backlog",
-      "wireframeRef": "chromasmith-design/project/Editor (Developer) View.dc.html",
+      "wireframeRef": "design/wireframes/project/Editor (Developer) View.dc.html",
       "panel": null,
       "source": "User decision 2026-09-11: tool rail width = 64px (wireframe), not the app's 72px. Allowlist audit found the mismatch only in the LIGHT-theme states \u2014 check whether dark already computes 64px and light differs because of a theme-only rule (border/scrollbar) before changing the width token.",
       "check": "test/editor_wireframe_diff.mjs \u2014 'tool rail: width' (remove its editor_wireframe_accepted.json entry once fixed)",
@@ -1083,7 +1083,7 @@
     "T56": {
       "category": "ui-fix",
       "status": "backlog",
-      "wireframeRef": "chromasmith-design/project/Editor (Developer) View.dc.html",
+      "wireframeRef": "design/wireframes/project/Editor (Developer) View.dc.html",
       "panel": null,
       "source": "User decision 2026-09-11: tool panel width = 300px (wireframe), not the app's 320px. Same light-theme-only pattern as T55 \u2014 likely the same root cause; fix together.",
       "check": "test/editor_wireframe_diff.mjs \u2014 'tool panel: width' (remove its accepted entry once fixed)",
@@ -1093,7 +1093,7 @@
       "category": "app-bug",
       "status": "backlog",
       "source": "User decision 2026-09-11: Library thumbnails must offer 'Square crops' / 'Original dimensions' as the wireframe shows (Library View.html gear menu). User reports it 'disappeared when switching to the submenu layout'. Found 2026-09-11: it still exists as ONE toggle, 'Real aspect ratio' (#lib-aspect-toggle, desktop/library-ui.js ~1934), now hidden inside Gear \u2192 Thumbnails (the menu opens on the Library tab) \u2014 AND it silently does nothing in folders of 400+ photos (virtualised grid assumes uniform cells; the only signal is a tooltip, ~5155). On the user's real library that reads as 'gone'.",
-      "wireframeRef": "chromasmith-design/project/Library View.html",
+      "wireframeRef": "design/wireframes/project/Library View.html",
       "check": "test/wireframe_inventory.mjs \u2014 MISSING 'Square crops' / 'Original dimensions' (remove the two wireframe_accepted.json entries once fixed)",
       "panel": null,
       "note": "Two parts: (1) UI \u2014 present it as the wireframe's two-option choice in the Thumbnails pane; (2) behaviour \u2014 make original-aspect work for virtualised (400+) folders, or at minimum show a visible in-grid note instead of tooltip-only. (2) needs a design for variable-height virtualised rows; research prior art (justified/masonry virtual grids) before building."

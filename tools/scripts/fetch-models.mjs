@@ -16,7 +16,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const vendor = join(repoRoot, 'desktop', 'src-tauri', 'vendor');
 const forceWinOrt = process.argv.includes('--windows-ort');
 

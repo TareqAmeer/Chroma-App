@@ -2,9 +2,9 @@
 LMMSE demosaic prototype — replaces PPG's directional pattern-grouping (which fails on the
 extreme-contrast micro-edges of water sparkle, producing false-color green/magenta dots) with
 a statistically-optimal reconstruction that can distinguish real chrominance detail from
-interpolation noise using the calibrated sensor noise model (calib/noise_profile.json).
+interpolation noise using the calibrated sensor noise model (tools/calib/noise_profile.json).
 
-Why this is different from the post-demosaic median approach (calib/false_color_gate.py),
+Why this is different from the post-demosaic median approach (tools/calib/false_color_gate.py),
 which was measured to fail: that approach operates on the FINAL RGB image, where a real bright
 colored point and a demosaic false-color artifact are indistinguishable (both are local
 chroma+luma outliers). LMMSE operates on the RAW BAYER DATA, using the actual same-channel
@@ -40,7 +40,7 @@ from scipy.ndimage import uniform_filter, label
 sys.path.insert(0, str(Path(__file__).parent))
 from vst_denoise import interp_ab, load_profile, var_model  # noqa: E402
 
-REPO = Path(__file__).parent.parent
+REPO = Path(__file__).parent.parent.parent
 DUMP_CFA_BIN = REPO / 'desktop/src-tauri/target/release/examples/dump_cfa'
 
 

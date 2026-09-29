@@ -6,7 +6,7 @@ family. They are deliberately separate from the generated component registry:
 - `schema.json` documents the common shape.
 - `contracts/<family>.json` holds a reviewable contract. `observations` are generated facts;
   `authored` holds proposals, decisions, questions, and approval metadata.
-- `scripts/validate-component-contracts.mjs` validates every contract or one requested family.
+- `tools/scripts/validate-component-contracts.mjs` validates every contract or one requested family.
   Its optional `--refresh-observations` mode may refresh only registry locations and runtime
   observations. It refuses to alter authored targets or approval data.
 
@@ -19,14 +19,14 @@ approval, and no status is promoted automatically.
 Commands:
 
 ```bash
-node scripts/validate-component-contracts.mjs --all
-node scripts/validate-component-contracts.mjs --family toggle
-node scripts/validate-component-contracts.mjs --family toggle --refresh-observations
+node tools/scripts/validate-component-contracts.mjs --all
+node tools/scripts/validate-component-contracts.mjs --family toggle
+node tools/scripts/validate-component-contracts.mjs --family toggle --refresh-observations
 npm run components:contracts:scaffold
 npm run components:contracts:check
 npm run components:contracts:scaffold -- --family slider
 npm run components:contracts:scaffold -- --check --family slider
-node scripts/scaffold-component-contracts.mjs --refresh-observations
+node tools/scripts/scaffold-component-contracts.mjs --refresh-observations
 ```
 
 The validator resolves the registry query itself, compares its count with the contract, validates

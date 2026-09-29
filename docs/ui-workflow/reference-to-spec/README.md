@@ -24,7 +24,7 @@ specification.
    registry locations into this format.
 3. Record only directly visible observations. Mark each shown and missing state and variant explicitly; do not
    infer unseen states or turn uncertain visual readings into facts.
-4. Compare observations with `chromasmith-design/project/design.md` and the one relevant family
+4. Compare observations with `design/wireframes/project/design.md` and the one relevant family
    contract. Record applicable rules with exact source references and repository findings in their
    separate sections.
 5. Write proposed interpretations and explicit questions for uncertainties, conflicts, and choices
@@ -66,7 +66,7 @@ production source or modify files.
 ```text
 Analyze the supplied reference for a reviewable component specification only. Do not implement,
 edit, or propose production UI changes. Use docs/ui-workflow/reference-to-spec/README.md,
-schema.json, and template.json; read only chromasmith-design/project/design.md, the Phase 2 entries
+schema.json, and template.json; read only design/wireframes/project/design.md, the Phase 2 entries
 of docs/ui-workflow/STATE.md, component-contracts/README.md, component-contracts/schema.json, and
 the single relevant family contract. Read targeted registry evidence only if required to identify
 the family. Do not read unrelated contracts or production source. Use no more than [N] percentage

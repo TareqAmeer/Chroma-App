@@ -1,4 +1,4 @@
-// Adobe camera-profile resolver (ROADMAP.md's F1) — reads locally-installed Adobe .dcp camera
+// Adobe camera-profile resolver (docs/ROADMAP.md's F1) — reads locally-installed Adobe .dcp camera
 // profiles IN PLACE from the system's real Adobe Camera Raw / DNG Converter install, never
 // copying them (Adobe's own CameraProfiles tree runs to ~855MB and redistributing it isn't ours
 // to do). Verified on this machine before writing this: 393 real camera folders exist under

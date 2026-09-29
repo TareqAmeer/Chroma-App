@@ -29,12 +29,12 @@ EXE_NAME = 'chromasmith.exe' if IS_WINDOWS else 'chromasmith'
 # 2026-09-14: no installed copy is made — the app runs from the release build output in place.
 if IS_WINDOWS:
     EXE_PATH = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         'desktop', 'src-tauri', 'target', 'release', 'chromasmith.exe',
     )
 else:
     EXE_PATH = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         'desktop', 'src-tauri', 'target', 'release', 'bundle', 'macos', 'Chromasmith.app',
         'Contents', 'MacOS', 'chromasmith',
     )

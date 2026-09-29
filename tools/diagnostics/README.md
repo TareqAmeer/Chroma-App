@@ -15,9 +15,9 @@ stack sampling — all verified live, not just compiled). Needs `pip install
 psutil` (already a `requirements.txt` dependency on every platform, but Windows
 has no `ps`/`lsof` fallback at all without it, unlike macOS). Everything below
 is written from the macOS side of the tool; where Windows differs, the module
-itself documents it inline (search each `diagnostics/*.py` for "Windows").
+itself documents it inline (search each `tools/diagnostics/*.py` for "Windows").
 
-This is the complement to `npm test` / `calib/*.py`, not a replacement. Those are
+This is the complement to `npm test` / `tools/calib/*.py`, not a replacement. Those are
 deterministic, headless, CI-gated checks against fixtures and golden images. This
 tool is for what those structurally can't see: real WKWebView timing, the real
 catalog on real hardware, a bug that only shows up 20 minutes into actual
@@ -33,11 +33,11 @@ For the deep-dive moment that used to mean reaching straight for `ps`/
 no session required:
 
 ```bash
-python3 diagnostics/cli.py inspect              # live CPU/RSS/threads/FDs, main + every child
-python3 diagnostics/cli.py sample [--pid PID]   # stack sample right now, symbolicated
-python3 diagnostics/cli.py db pending-thumbs    # exact catalog.db row state, read-only
-python3 diagnostics/cli.py db --list            # see all canned db queries
-python3 diagnostics/cli.py db --sql "SELECT ..." # raw read-only escape hatch
+python3 tools/diagnostics/cli.py inspect              # live CPU/RSS/threads/FDs, main + every child
+python3 tools/diagnostics/cli.py sample [--pid PID]   # stack sample right now, symbolicated
+python3 tools/diagnostics/cli.py db pending-thumbs    # exact catalog.db row state, read-only
+python3 tools/diagnostics/cli.py db --list            # see all canned db queries
+python3 tools/diagnostics/cli.py db --sql "SELECT ..." # raw read-only escape hatch
 ```
 
 If a `start` session is active, each of these also logs into that run's
@@ -59,7 +59,7 @@ a single deep-dive number.
 
 ```bash
 python3 -m venv .diagvenv && source .diagvenv/bin/activate   # or reuse .calibvenv
-pip install -r diagnostics/requirements.txt
+pip install -r tools/diagnostics/requirements.txt
 ```
 
 ## Usage
@@ -67,7 +67,7 @@ pip install -r diagnostics/requirements.txt
 1. Launch `desktop/src-tauri/target/release/bundle/macos/Chromasmith.app` normally (Dock, Finder, or `open`).
 2. Start a capture session:
    ```bash
-   python3 diagnostics/cli.py start --duration 15m
+   python3 tools/diagnostics/cli.py start --duration 15m
    ```
    (`--duration` accepts `90s`, `15m`, `2h`; Ctrl-C ends the session early.)
 3. **Nothing else to do for a native session** — binaries built with
@@ -83,7 +83,7 @@ pip install -r diagnostics/requirements.txt
    tag any moment worth remembering — this also captures a real screenshot of
    the app's own window (not a synthetic test-harness render):
    ```bash
-   python3 diagnostics/cli.py mark "clicked Export"
+   python3 tools/diagnostics/cli.py mark "clicked Export"
    ```
 5. Session ends (duration elapsed or Ctrl-C) and a report is generated
    automatically: `report.md` (human-readable), `for_claude.md` (condensed
@@ -91,9 +91,9 @@ pip install -r diagnostics/requirements.txt
    file per correlated freeze/error, see below).
 6. Re-render a report from a past run any time:
    ```bash
-   python3 diagnostics/cli.py report                    # latest run
-   python3 diagnostics/cli.py report --run 20260902-143000
-   python3 diagnostics/cli.py report --for-claude        # also print the digest
+   python3 tools/diagnostics/cli.py report                    # latest run
+   python3 tools/diagnostics/cli.py report --run 20260902-143000
+   python3 tools/diagnostics/cli.py report --for-claude        # also print the digest
    ```
 
 ### Auto-started sessions (Claude Code hook)
@@ -154,7 +154,7 @@ picking a default — not just implemented and then rationalized:
   within 30s, the shape of the "hq_offline retried a permanently-stuck camera
   forever" class of bug, where no single line looks wrong but the repetition is
   the tell.
-- **Run-over-run baseline** (`diagnostics/baseline.json`, gitignored) — each
+- **Run-over-run baseline** (`tools/diagnostics/baseline.json`, gitignored) — each
   report is compared against the average of the last 9 runs, so "3 freezes"
   reads as "3 freezes vs 0 normally" instead of a number with no context.
 - **`for_claude.md`** — a condensed digest (repo/BUILD stamp, binary staleness,
@@ -181,17 +181,17 @@ picking a default — not just implemented and then rationalized:
 ## Output layout
 
 ```
-diagnostics/reports/<run-timestamp>/
+tools/diagnostics/reports/<run-timestamp>/
   events.jsonl          # one JSON object per line: {ts, category, ...}
   meta.json             # git commit/branch/dirty files + BUILD stamp at run start
   report.md             # human-readable summary, incl. Top suspects + baseline comparison
   for_claude.md          # condensed digest sized for pasting into a conversation
   samples/*.sample.txt  # raw stack samples from detected freezes
   incidents/incident_N.md  # one self-contained bundle per correlated freeze/error
-diagnostics/baseline.json  # rolling run-over-run history (freeze/error counts, mem slope)
+tools/diagnostics/baseline.json  # rolling run-over-run history (freeze/error counts, mem slope)
 ```
 
-`diagnostics/reports/` and `diagnostics/baseline.json` are gitignored — all of
+`tools/diagnostics/reports/` and `tools/diagnostics/baseline.json` are gitignored — all of
 this is local-only.
 
 ## Known limitations

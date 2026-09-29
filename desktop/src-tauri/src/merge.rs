@@ -279,7 +279,7 @@ pub mod align {
     /// similarity/affine/projective warp (Baker & Matthews 2004, "Lucas-Kanade 20 Years On").
     /// It is NOT full projective homography and it is NOT feature-matching (SIFT/ORB) — those
     /// are what a real wide-baseline panorama stitcher needs and this scope does not attempt
-    /// them (see merge.rs's module doc / ROADMAP.md R13 for why). This is offered honestly as
+    /// them (see merge.rs's module doc / docs/ROADMAP.md R13 for why). This is offered honestly as
     /// "handles a modest rotation/scale/translation between two overlapping crops", validated in
     /// `tests::similarity_registration_recovers_known_transform` against a KNOWN synthetic
     /// transform — not assumed to generalize further than that measurement shows.

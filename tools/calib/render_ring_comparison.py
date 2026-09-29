@@ -1,7 +1,7 @@
 """
 Renders side-by-side comparison strips (ours-Gaussian | ours-Ring | Dehancer) for
 zone2 (gap bars) and zone5 (colour blocks), plus a scorecard-style table for both
-models, using the fitted ring params from calib/ring_halation_fit.json.
+models, using the fitted ring params from tools/calib/ring_halation_fit.json.
 
 Run AFTER optimize_ring_halation.py has produced ring_halation_fit.json.
 """
@@ -91,4 +91,4 @@ if __name__ == '__main__':
         gR = r5[g, sx, 0]
         print(f"  {nm:7s}  gauss {gG:.3f}  ring {gR:.3f}  dehancer {dG:.3f}")
 
-    print(f"\nWrote comparison strips to calib/ring_comparison/")
+    print(f"\nWrote comparison strips to tools/calib/ring_comparison/")

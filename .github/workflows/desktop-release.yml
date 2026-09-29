@@ -53,7 +53,7 @@ jobs:
           workspaces: desktop/src-tauri
 
       # The two model sets that are NOT in git (too large even for the LFS budget to be worth it).
-      # scripts/fetch-models.mjs is the one script both OS jobs call (docs/windows-port.md ground
+      # tools/scripts/fetch-models.mjs is the one script both OS jobs call (docs/windows-port.md ground
       # rule 4) — skips the win-x64 ONNX Runtime DLL automatically on macOS.
       - name: Cache fetched models
         id: models
@@ -67,7 +67,7 @@ jobs:
             desktop/src-tauri/vendor/rawdenoise/model_bayer.onnx
 
       - name: Fetch models
-        run: node scripts/fetch-models.mjs
+        run: node tools/scripts/fetch-models.mjs
 
       # Must run before the resource-verify step below: tauri.conf.json's bundle.resources
       # includes "../dist" (desktop/dist), which doesn't exist until this staging step creates
@@ -76,7 +76,7 @@ jobs:
       # step still ran before it) — it just never surfaced because that job had never had a
       # confirmed real run. Caught live by this job's first actual CI run.
       - name: Stage the web app into desktop/dist
-        run: node scripts/build-desktop.mjs
+        run: node tools/scripts/build-desktop.mjs
 
       - name: Verify every bundled resource is present
         # tauri.conf.json's bundle.resources lists these by path; a missing one fails the bundle
@@ -194,12 +194,12 @@ jobs:
             desktop/src-tauri/vendor/onnxruntime/win-x64/onnxruntime.dll
 
       - name: Fetch models
-        run: node scripts/fetch-models.mjs
+        run: node tools/scripts/fetch-models.mjs
         shell: bash
 
       # Same ordering requirement as the dmg job above: "../dist" doesn't exist until this runs.
       - name: Stage the web app into desktop/dist
-        run: node scripts/build-desktop.mjs
+        run: node tools/scripts/build-desktop.mjs
         shell: bash
 
       - name: Verify every bundled resource is present

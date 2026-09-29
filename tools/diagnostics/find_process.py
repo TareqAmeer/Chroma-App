@@ -22,7 +22,7 @@ IS_WINDOWS = sys.platform == 'win32'
 
 EXE_NAME = 'chromasmith.exe' if IS_WINDOWS else 'chromasmith'
 
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 if IS_WINDOWS:
     REAL_APP_PATH = os.path.join(

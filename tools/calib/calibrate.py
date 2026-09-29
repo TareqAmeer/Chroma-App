@@ -9,10 +9,10 @@ Fixes the two methodology bugs that made v18 fail:
   3. PEAK-normalized model (effect.py v2) so thin lines/small dots actually
      glow and transplant 1:1 to the GLSL raw-sum blur.
 
-Run:  python3 calib/calibrate.py
+Run:  python3 tools/calib/calibrate.py
 Outputs:
-  calib/params.json
-  calib/val_halation.png, val_bloom.png   (base | our render | dehancer)
+  tools/calib/params.json
+  tools/calib/val_halation.png, val_bloom.png   (base | our render | dehancer)
     stacked crops of W100 dot, zone-2 bar edge, zone-7 warm line.
 """
 import json, os, sys

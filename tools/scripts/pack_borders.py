@@ -4,15 +4,15 @@
 Reads "_local/local-borders/_out/" (report.json + votes/rejects/adjust from the review pages)
 and writes vendor/frames/film/<n>-s<side>.webp + manifest.json. Scans are renumbered
 1..N; the number -> source-file map stays local in "_local/local-borders/_out/pack_map.json".
-Run: .calibvenv/bin/python scripts/pack_borders.py
+Run: .calibvenv/bin/python tools/scripts/pack_borders.py
 """
 import json, os, shutil
 import numpy as np
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, '..', '_local', 'local-borders', '_out')
-DST = os.path.join(HERE, '..', 'vendor', 'frames', 'film')
+OUT = os.path.join(HERE, '..', '..', '_local', 'local-borders', '_out')
+DST = os.path.join(HERE, '..', '..', 'vendor', 'frames', 'film')
 MAXW = 2000
 DROP_SMUDGED = False   # owner kept these after review; set True to drop strips with photo past the edge
 
@@ -69,7 +69,7 @@ for r in sorted(reps, key=lambda r: r['file']):
 json.dump(dict(version=1, scans=manifest), open(os.path.join(DST, 'manifest.json'), 'w'), separators=(',', ':'))
 json.dump(pmap, open(os.path.join(OUT, 'pack_map.json'), 'w'), indent=1)
 import re
-app = os.path.join(HERE, '..', 'chromasmith-22.html')
+app = os.path.join(HERE, '..', '..', 'chromasmith-22.html')
 html = open(app).read()
 html2 = re.sub(r'const FILM_EDGE_SCANS=\d+;', f'const FILM_EDGE_SCANS={len(manifest)};', html, count=1)
 if html2 != html: open(app, 'w').write(html2)

@@ -10,7 +10,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const WF_PATH = 'chromasmith-design/project/Editor (Developer) View.dc.html';
+const WF_PATH = 'design/wireframes/project/Editor (Developer) View.dc.html';
 const INV_PATH = 'test/output/panel_inventory.json';
 
 const server = createServer(async (req, res) => {

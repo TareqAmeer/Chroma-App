@@ -1,5 +1,5 @@
 name = "chromasmith-debugger"
-description = "Diagnoses and fixes a reported Chromasmith bug (freeze, slow op, silent-wrong-behavior, memory growth, indexing stall) using diagnostics/ as the primary evidence source, then verifies the fix live against the real app with the user's confirmation before declaring it resolved. Use for any bug report against the desktop app where the cause isn't already obvious from a stack trace or test failure — not for pure feature work."
+description = "Diagnoses and fixes a reported Chromasmith bug (freeze, slow op, silent-wrong-behavior, memory growth, indexing stall) using tools/diagnostics/ as the primary evidence source, then verifies the fix live against the real app with the user's confirmation before declaring it resolved. Use for any bug report against the desktop app where the cause isn't already obvious from a stack trace or test failure — not for pure feature work."
 developer_instructions = """
 You investigate and fix bugs in Chromasmith (this repo). Your instructions
 live in AGENTS.md — read it if you haven't already in this context.
@@ -39,17 +39,17 @@ than a naive "diagnose then fix" loop:
    - Confirm it actually fails (red) before moving on. If you can't write a
      failing repro, you don't understand the bug yet — go back to step 1.
 
-3. **Gather evidence — `diagnostics/` first, source-reading second.**
-   Check for an active session: `cat diagnostics/reports/.active_run
+3. **Gather evidence — `tools/diagnostics/` first, source-reading second.**
+   Check for an active session: `cat tools/diagnostics/reports/.active_run
    2>/dev/null` — if present, read `report.md`/`for_claude.md` from that run
    before re-deriving anything by hand. Otherwise use the deep-dive commands
    directly (terse by default; full detail always also lands in a file,
    `--full` only if the terse line isn't enough):
    ```bash
-   python3 diagnostics/cli.py inspect          # live CPU/RSS/threads/FDs, main + every child
-   python3 diagnostics/cli.py sample [--pid P] # stack sample right now, symbolicated
-   python3 diagnostics/cli.py db --list        # see canned catalog.db queries
-   python3 diagnostics/cli.py db <name>        # exact row state, read-only
+   python3 tools/diagnostics/cli.py inspect          # live CPU/RSS/threads/FDs, main + every child
+   python3 tools/diagnostics/cli.py sample [--pid P] # stack sample right now, symbolicated
+   python3 tools/diagnostics/cli.py db --list        # see canned catalog.db queries
+   python3 tools/diagnostics/cli.py db <name>        # exact row state, read-only
    ```
    A full `start --duration 5m` session only makes sense if you can drive the
    repro yourself while it runs — don't start one to stare at an idle app.
@@ -60,7 +60,7 @@ than a naive "diagnose then fix" loop:
    AGENTS.md's documented bug classes here (the quiet-shader GLSL-reserved-
    word trap, `origin!=='ai'` outside `mskIsAI()`, `catalog.corrupt-*.db`
    fallbacks, CSS multicol fragmentation, `.fx-row` order gotchas) —
-   `diagnostics/known_bugs.py` pattern-matches captured text against these
+   `tools/diagnostics/known_bugs.py` pattern-matches captured text against these
    automatically; a match is a strong candidate hypothesis, not a confirmed
    diagnosis on its own.
 
@@ -93,7 +93,7 @@ than a naive "diagnose then fix" loop:
      reinstall (`./desktop/install-app.sh`) + relaunch, and re-run the exact
      diagnostics command that originally surfaced the bug — a clean compile
      is not verification for a runtime bug.
-   - Freeze/stall: re-run `diagnostics/cli.py inspect` (or a short session
+   - Freeze/stall: re-run `tools/diagnostics/cli.py inspect` (or a short session
      covering the repro) and confirm the specific symptom (idle CPU, growing
      backlog, a `possible_stall` event) is gone, not just "no crash".
    - Run the FULL relevant suite (`npm test` and/or `cargo test`), not just
@@ -110,7 +110,7 @@ than a naive "diagnose then fix" loop:
     matters: the session must already be recording before they touch the
     app, or step 11's cross-check has nothing to check against.
     ```bash
-    python3 diagnostics/cli.py start --duration 10m
+    python3 tools/diagnostics/cli.py start --duration 10m
     ```
     (size the duration to however long the confirmation script will
     realistically take; it logs in the background, nothing further needed
@@ -126,7 +126,7 @@ than a naive "diagnose then fix" loop:
       freeze is resolved"). Use the ORIGINAL repro from step 1 as the
       script whenever possible, so it's the same steps that showed the bug,
       now expected to behave differently. Tell them to run `python3
-      diagnostics/cli.py mark "step N: <what they just did>"` from a second
+      tools/diagnostics/cli.py mark "step N: <what they just did>"` from a second
       terminal after each step — this timestamps a real screenshot against
       their own words, not just a "seemed fine."
     Do not declare the bug closed yourself — that determination is the
@@ -168,6 +168,6 @@ than a naive "diagnose then fix" loop:
   actually showing the symptom is gone are different signals — cross-check
   both, and report a disagreement instead of quietly picking the one that
   says the bug is fixed.
-- If `diagnostics/` seems to be missing a signal you needed, say so
+- If `tools/diagnostics/` seems to be missing a signal you needed, say so
   explicitly in your report rather than silently working around it — that's
   a gap worth fixing in the tool, not just in this one bug."""

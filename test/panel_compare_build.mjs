@@ -1,8 +1,8 @@
 // Stage 2 of the Editor panel redesign (docs/editor-redesign-plan.md). Reads
 // test/output/panel_inventory.json (Stage 1's live-app extraction) and generates, per undesigned
-// panel, chromasmith-design/project/panels/<panel>.compare.html — CURRENT (app markup, verbatim
+// panel, design/wireframes/project/panels/<panel>.compare.html — CURRENT (app markup, verbatim
 // from the extraction) next to PROPOSED (identical content, translated into the wireframe's own
-// component vocabulary from chromasmith-design/project/panels/_components.compare.html).
+// component vocabulary from design/wireframes/project/panels/_components.compare.html).
 //
 // WHAT THIS TOOL DOES NOT DO: it does not design anything. PROPOSED starts as a faithful,
 // mechanical re-expression of CURRENT — same controls, same order, same defaults — because the
@@ -28,7 +28,7 @@ import path from 'node:path';
 import { PROPOSALS, PROPOSAL_CSS } from './panel_proposals.mjs';
 
 const ROOT = process.cwd();
-const OUT_DIR = path.join(ROOT, 'chromasmith-design/project/panels');
+const OUT_DIR = path.join(ROOT, 'design/wireframes/project/panels');
 const argv = process.argv.slice(2);
 const FORCE = argv.includes('--force');
 const ONLY_PANEL = (argv.find((a) => a.startsWith('--panel=')) || '').split('=')[1] || null;
@@ -75,7 +75,7 @@ body{background:#1a1a1c;color:var(--ink-on-dark);font-family:var(--font-text);pa
 .cmp>h2{font-family:var(--font-display);font-size:var(--type-tagline-size);font-weight:var(--weight-semibold);margin-bottom:4px}
 .cmp>.where{font-size:var(--type-fine-print-size);color:var(--ink-on-dark-muted);margin-bottom:18px}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
-/* chromasmith-design/project/CLAUDE.md: no UI elements may ever visually overlap at any
+/* design/wireframes/project/CLAUDE.md: no UI elements may ever visually overlap at any
    viewport width — collapse instead. Same reasoning as _components.compare.html. */
 @media (max-width:700px){.cols{grid-template-columns:1fr}.changes li{padding-left:0}.changes li b{position:static;display:inline-block;margin-right:6px}}
 .col>.tag{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-on-dark-muted);margin-bottom:8px;display:block}

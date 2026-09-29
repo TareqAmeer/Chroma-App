@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Bake the 67 Dehancer-extracted LUTs (calib/dehancer/cubes/*.cube) + their calibrated
-Grain/Halation/Bloom Amount defaults (calib/dehancer/film_fx_defaults.json) into
+"""Bake the 67 Dehancer-extracted LUTs (tools/calib/dehancer/cubes/*.cube) + their calibrated
+Grain/Halation/Bloom Amount defaults (tools/calib/dehancer/film_fx_defaults.json) into
 chromasmith-22.html: extends LUT_PRESETS, LUT_META, LUT_CATEGORY_ORDER, adds a new
 LUT_FX_DEFAULTS const, and patches selectLUT() to apply those FX defaults whenever a
 preset with an entry in LUT_FX_DEFAULTS is picked (grain/halation/bloom enabled + Amount
@@ -8,10 +8,10 @@ set; format and every other sub-parameter are left as whatever the user currentl
 the sliders remain freely adjustable afterward -- this only sets a starting point).
 
 Ships publicly by design (user-confirmed) -- these are Dehancer Online screen-scraped/
-API-derived looks, distinct from the calib/dehancer/ note in CLAUDE.md which was about
+API-derived looks, distinct from the tools/calib/dehancer/ note in CLAUDE.md which was about
 *not* shipping them; that decision was revisited and the user explicitly opted to ship.
 
-Run: python calib/bake_dehancer_presets.py
+Run: python tools/calib/bake_dehancer_presets.py
 """
 import base64
 import glob
@@ -158,7 +158,7 @@ def main():
     else{const rec=await lutLibGet(v.slice(2));if(!rec){log('LUT not found in library','err');return}lut=lutFromBytes(rec.data)}
     FX.setLUT(lut);fxState.lut=lut;
     // Dehancer-derived looks carry a calibrated Grain/Halation/Bloom starting point (per-film
-    // measured against Dehancer Online, see calib/dehancer/ONE_FILM_GATE.md) -- apply it as a
+    // measured against Dehancer Online, see tools/calib/dehancer/ONE_FILM_GATE.md) -- apply it as a
     // default every time this look is picked. Sliders stay freely adjustable afterward; this
     // never touches format or any other sub-parameter, and looks without an entry here (the
     // original 46 built-ins) are completely unaffected.

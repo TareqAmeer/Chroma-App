@@ -1,7 +1,7 @@
 #!/bin/bash
 # Stage the web app into www/ for the Capacitor iOS shell.
 # www/ is generated — never edit it, never point webDir at the repo root
-# (calib/ and the Python tooling must not ship inside the .ipa).
+# (tools/calib/ and the Python tooling must not ship inside the .ipa).
 set -euo pipefail
 cd "$(dirname "$0")"
 

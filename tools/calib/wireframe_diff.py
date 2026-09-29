@@ -6,8 +6,8 @@ fixable CSS mismatches; this catches structural drift a style table can't — a 
 a shifted layout region, a wrong colour band — the same "render and look" gate scorecard.py uses
 for halation (CLAUDE.md 6.1/6.2), applied to a UI screenshot instead of a calibration chart.
 
-Usage: python3 calib/wireframe_diff.py [--theme dark|light|both]
-Requires: numpy, Pillow (already in calib/requirements.txt).
+Usage: python3 tools/calib/wireframe_diff.py [--theme dark|light|both]
+Requires: numpy, Pillow (already in tools/calib/requirements.txt).
 """
 import sys
 import argparse
@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 OUT = ROOT / "test" / "output"
 
 # Named regions as (label, x0, y0, x1, y1) fractions of the shared 1440x900 viewport

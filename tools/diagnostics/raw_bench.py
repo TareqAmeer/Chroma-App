@@ -15,16 +15,16 @@ under test actually changed (`--rebuild`); otherwise this attaches to whatever's
 starts the packaged app once and leaves it running for next time.
 
 Reuses the existing automation plumbing rather than re-inventing it:
-  - diagnostics/app_control.py's start/stop/run_automation (shared temp-file protocol)
+  - tools/diagnostics/app_control.py's start/stop/run_automation (shared temp-file protocol)
   - window.__rawPerfLog (library-ui.js rawPerf/__pm) for the JS-side stage timeline
   - the RAW_DIAG stage=... lines in ~/Library/Logs/com.tareq.chromasmith/Chromasmith.log
     (raw_decode.rs's `stage` closure + diag::stage in main.rs/library.rs, gated by
     CS_DIAG_RAW_STAGES=1 — set automatically by this tool)
 
 Usage:
-    python3 diagnostics/raw_bench.py all --repeats 3 --ext RW2 --label baseline
-    python3 diagnostics/raw_bench.py cached --repeats 3 --compare latest
-    python3 diagnostics/raw_bench.py --rebuild all --repeats 3   # rebuild first, then measure
+    python3 tools/diagnostics/raw_bench.py all --repeats 3 --ext RW2 --label baseline
+    python3 tools/diagnostics/raw_bench.py cached --repeats 3 --compare latest
+    python3 tools/diagnostics/raw_bench.py --rebuild all --repeats 3   # rebuild first, then measure
 
 A run that looks suspicious (huge repeat spread, a stage blowing past its previous median, an
 unexpected/missing stage, or a busy machine) is flagged SUSPICIOUS in the table and EXCLUDED from
@@ -46,8 +46,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import find_process  # noqa: E402
 import log_file  # noqa: E402
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REPORTS_DIR = os.path.join(REPO_ROOT, 'diagnostics', 'reports', 'raw-bench')
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+REPORTS_DIR = os.path.join(REPO_ROOT, 'tools', 'diagnostics', 'reports', 'raw-bench')
 DESKTOP_DIR = os.path.join(REPO_ROOT, 'desktop')
 
 # A real folder in the user's own library with plenty of RW2s never opened by hand — see

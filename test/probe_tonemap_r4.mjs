@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One-off visual/numeric demo for ROADMAP.md's R4 (native film-stock highlight shoulder) —
+// One-off visual/numeric demo for docs/ROADMAP.md's R4 (native film-stock highlight shoulder) —
 // NOT part of npm test, same role as test/probe_tonemap_r1.mjs. Loads the
 // spektra_kodak_portra_400_endura look, pushes a blown ramp +3 stops with useTonemap on, and
 // renders it once with tonemapStyle='' (BT.2390) and once with tonemapStyle='native', printing
@@ -57,7 +57,7 @@ async function main() {
       const c = document.createElement('canvas'); c.width = w; c.height = h;
       const ctx = c.getContext('2d');
       ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, w, h); // dummy 8-bit backing, unused once _sceneLinear is set
-      // ROADMAP.md R1's real headroom path: setImage() uploads img._sceneLinear (RGB float,
+      // docs/ROADMAP.md R1's real headroom path: setImage() uploads img._sceneLinear (RGB float,
       // values may exceed 1.0) as an RGBA16F texture instead of clamping the 8-bit canvas --
       // this is the ONLY way to get real >1.0 values INTO the lut pass (an exposure slider
       // runs in basicAdjust, which is AFTER the look LUT -- it can't create headroom the LUT

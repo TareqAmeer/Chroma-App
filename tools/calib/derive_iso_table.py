@@ -1,7 +1,7 @@
 """
 Step A (low-risk incremental swap): replace `denoise_chroma_wavelet_rgb16`'s hand-picked
 per-ISO-bracket (levels, strength) table (raw_decode.rs:281-302) with values computed from
-the calibrated Poisson-Gaussian noise model (calib/noise_profile.json), WITHOUT touching the
+the calibrated Poisson-Gaussian noise model (tools/calib/noise_profile.json), WITHOUT touching the
 wavelet algorithm itself.
 
 Method: evaluate the fitted `var(S) = a*S + b` at a fixed reference signal level (mid-grey,
@@ -23,7 +23,7 @@ step function of the same sigma-ratio metric, at the same relative breakpoints t
 table uses. This is a known limitation, documented rather than hidden (see CLAUDE.md's process
 lessons on transparent validation).
 
-Usage: python3 calib/derive_iso_table.py
+Usage: python3 tools/calib/derive_iso_table.py
 Prints the derived (levels, strength) per ISO next to the current hardcoded table for
 comparison, plus the full ISO sweep from the calibration (100-25600) to show it's now a
 continuous curve rather than 5 brackets.
@@ -45,7 +45,7 @@ CURRENT_TABLE = {
 
 def sigma_at(iso, channel='G'):
     """sqrt(var) of the calibrated model at REF_SIGNAL, log-interpolating between calibrated
-    ISOs (same interpolation calib/vst_denoise.py's interp_ab uses)."""
+    ISOs (same interpolation tools/calib/vst_denoise.py's interp_ab uses)."""
     import numpy as np
     isos = sorted(int(k) for k in PROFILE.keys())
     if iso <= isos[0]:

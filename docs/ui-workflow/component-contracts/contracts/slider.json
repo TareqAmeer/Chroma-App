@@ -4,10 +4,10 @@
   "purpose": "Provide direct, continuous adjustment for tonal and colour parameters in the Color workflow, with a visible current value and immediate image feedback.",
   "status": "proposed",
   "observations": {
-    "generatedBy": "scripts/scaffold-component-contracts.mjs",
+    "generatedBy": "tools/scripts/scaffold-component-contracts.mjs",
     "generatedAt": "2026-09-13T04:14:41.378Z",
     "registry": {
-      "query": "node scripts/query-components.mjs --family slider",
+      "query": "node tools/scripts/query-components.mjs --family slider",
       "sourceRegistrationCount": 91,
       "expectedCount": 91,
       "locations": [
@@ -3090,12 +3090,12 @@
       }
     ],
     "references": [
-      "chromasmith-design/project/design.md",
+      "design/wireframes/project/design.md",
       "docs/ui-workflow/component-contracts/README.md",
       "docs/ui-workflow/component-contracts/schema.json",
       "docs/ui-workflow/component-contracts/contracts/slider.json",
       "docs/ui-workflow/component-contracts/contracts/toggle.json",
-      "scripts/query-components.mjs",
+      "tools/scripts/query-components.mjs",
       "chromasmith-22.html:1991-1994",
       "chromasmith-22.html:2009-2023",
       "chromasmith-22.html:2041-2045",
@@ -3113,8 +3113,8 @@
   },
   "validation": {
     "commands": [
-      "node scripts/query-components.mjs --family slider",
-      "node scripts/validate-component-contracts.mjs --family slider"
+      "node tools/scripts/query-components.mjs --family slider",
+      "node tools/scripts/validate-component-contracts.mjs --family slider"
     ],
     "scope": "Registry and saved-surface evidence reviewed for a proposed Color-workflow contract; incomplete runtime coverage, not a production gate."
   },

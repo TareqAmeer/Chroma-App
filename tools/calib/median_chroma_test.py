@@ -9,7 +9,7 @@ Not a per-ISO-calibrated technique — no noise model needed here, deliberately,
 whether the ARTIFACT SHAPE itself (sparse outlier vs. diffuse noise) is the reason wavelet
 shrinkage under-cleans it, independent of any strength/variance tuning question.
 
-Usage: python3 calib/median_chroma_test.py <input.RW2> [out_prefix] [size]
+Usage: python3 tools/calib/median_chroma_test.py <input.RW2> [out_prefix] [size]
 """
 import sys
 from pathlib import Path
@@ -57,8 +57,8 @@ def main():
     preview_dn = wb_gamma_preview(rgb_final)
     preview_noisy = wb_gamma_preview(rgb_noisy)
 
-    out_dn = Path(f'calib/{out_prefix}_vst_denoised.png')
-    out_noisy = Path(f'calib/{out_prefix}_vst_noisy.png')
+    out_dn = Path(f'tools/calib/{out_prefix}_vst_denoised.png')
+    out_noisy = Path(f'tools/calib/{out_prefix}_vst_noisy.png')
     Image.fromarray((preview_dn * 255).astype(np.uint8)).save(out_dn)
     Image.fromarray((preview_noisy * 255).astype(np.uint8)).save(out_noisy)
     print(f'wrote {out_noisy}\nwrote {out_dn}')

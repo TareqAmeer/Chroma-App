@@ -13,13 +13,13 @@ signal.
 ## Halation scorecard
 
 Run before AND after touching `FXR.CAL.halation`, the emission/blur shader math, or anything
-in `calib/`:
+in `tools/calib/`:
 
 ```bash
-python3 calib/scorecard.py
+python3 tools/calib/scorecard.py
 ```
 
-Requires `calib/IMG_5774_2x.PNG` and `calib/dehancer halation x2.png` (gitignored — supply if
+Requires `tools/calib/IMG_5774_2x.PNG` and `tools/calib/dehancer halation x2.png` (gitignored — supply if
 missing) and the `.calibvenv` from AGENTS.md §2. Reads as a PASS/FAIL table per requirement
 (gap halo per colour, interior flood, bar softness) — a FAIL pinpoints exactly which
 requirement regressed, no visual diffing needed.
@@ -50,7 +50,7 @@ coverage, the snap-list cross-check (T2), and HTML validity (T4) in one call:
 npm run editor:gates
 ```
 
-This is also what `githooks/pre-commit` runs for any commit touching `chromasmith-22.html`, and
+This is also what `tools/githooks/pre-commit` runs for any commit touching `chromasmith-22.html`, and
 what CI (`.github/workflows/editor-gates.yml`) runs on every push/PR. For a broader run that also
 covers the Library's own wireframe/responsive gates and (with `--full`) the Playwright
 click-through behaviour suite, use `python3 test/verify.py --editor [--full]` instead — see that

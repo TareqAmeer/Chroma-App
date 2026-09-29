@@ -1,6 +1,6 @@
 ---
 name: chromasmith-calib
-description: Procedure for tuning the halation/bloom emission model (FXR.CAL.halation) or any calib/ constant against the Dehancer reference. Enforces the order lessons in CLAUDE.md §6 — render-and-look before point-samples, a fast all-requirements gate before any long optimization run. Use whenever asked to adjust halation, bloom, grain, or DCP calibration constants, or when a scorecard/optimizer result needs interpreting.
+description: Procedure for tuning the halation/bloom emission model (FXR.CAL.halation) or any tools/calib/ constant against the Dehancer reference. Enforces the order lessons in CLAUDE.md §6 — render-and-look before point-samples, a fast all-requirements gate before any long optimization run. Use whenever asked to adjust halation, bloom, grain, or DCP calibration constants, or when a scorecard/optimizer result needs interpreting.
 effort: low
 ---
 
@@ -14,16 +14,16 @@ this project.
 
 ```bash
 python3 -m venv .calibvenv && source .calibvenv/bin/activate   # first time only
-pip install -r calib/requirements.txt                          # first time only
+pip install -r tools/calib/requirements.txt                          # first time only
 ```
 
-Needs `calib/IMG_5774_2x.PNG` and `calib/dehancer halation x2.png` (gitignored — ask the user
+Needs `tools/calib/IMG_5774_2x.PNG` and `tools/calib/dehancer halation x2.png` (gitignored — ask the user
 to supply if missing).
 
 ## 1. Baseline the scorecard FIRST, always
 
 ```bash
-python calib/scorecard.py
+python tools/calib/scorecard.py
 ```
 
 This is the fast, all-requirements PASS/FAIL gate (gap halo per colour, interior flood,
@@ -33,7 +33,7 @@ constant, so you have a baseline to diff against.
 ## 2. Render and LOOK before trusting any number
 
 ```bash
-python calib/render_chart.py
+python tools/calib/render_chart.py
 ```
 
 Point-sample metrics (`validate_v22.py`) structurally cannot see interior flooding — the most
@@ -51,7 +51,7 @@ unchanged) in seconds before any code changed.
 ## 4. Only THEN run the optimizer, and never on a loss missing a requirement
 
 ```bash
-python calib/optimize_hal.py     # or calib/optimize_hal_twochannel.py for the two-channel model
+python tools/calib/optimize_hal.py     # or tools/calib/optimize_hal_twochannel.py for the two-channel model
 ```
 
 ⚠️ **The optimizer trades away anything not encoded in its loss function.** A prior long
@@ -63,7 +63,7 @@ checks — if it doesn't, fix the loss before running it, not after.
 ## 5. Re-run the scorecard after any constant change
 
 ```bash
-python calib/scorecard.py
+python tools/calib/scorecard.py
 ```
 
 Compare BASELINE vs NEW in the table. A constant change that isn't validated against the full

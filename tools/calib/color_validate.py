@@ -16,7 +16,7 @@ Then DCP-grade them with:
   node scratchpad/dcp_apply.js <out.bin> "vendor/dcp/Panasonic DC-S9 Camera Standard.dcp" <graded.bin>
 This script consumes the resulting *_dcp_graded.bin files (RGBA8, header w,h + raw bytes).
 
-Run: python calib/color_validate.py
+Run: python tools/calib/color_validate.py
 """
 import os
 import numpy as np

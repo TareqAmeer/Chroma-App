@@ -700,7 +700,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     // library finished, `faces_run`'s unscoped LIMIT-32 batch query (no ORDER BY, no exclusion of
     // known-bad rows) kept re-selecting exactly the same doomed photos on every single pass,
     // spinning the AI stack's onnx inference forever with zero DB progress — confirmed live via
-    // diagnostics/cli.py (238-394% CPU, faces_scanned_at count unchanged across 80s) after a user
+    // tools/diagnostics/cli.py (238-394% CPU, faces_scanned_at count unchanged across 80s) after a user
     // report of the app "getting completely stuck" during a face scan. `face_scan_fail_count`
     // lets faces_run give up on a photo after a few failed attempts (mark it scanned with zero
     // faces) instead of retrying it every pass forever.

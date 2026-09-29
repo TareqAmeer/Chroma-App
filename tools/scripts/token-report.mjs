@@ -3,8 +3,8 @@
 // font-weight / line-height literals that don't byte-match any :root token — the font-side
 // counterpart to test/editor_token_check.mjs (which covers colour/spacing/radius only).
 //
-// Usage: node scripts/token-report.mjs
-// Output: scripts/token-report.html (open directly in a browser; not published anywhere)
+// Usage: node tools/scripts/token-report.mjs
+// Output: tools/scripts/token-report.html (open directly in a browser; not published anywhere)
 //
 // Strictness: same rule as editor_token_check.mjs — a value is "matched" only if it is
 // byte-identical (after whitespace/case normalization) to a :root custom-property value. A
@@ -588,7 +588,7 @@ function borderWidthRows() {
 }
 
 // FAMILY_TO_CATALOG_KEY / LIBRARY_ONLY_CATALOG_KEYS / CATALOG_KEYS_WITH_SHIM live in
-// scripts/component-catalog-map.mjs — shared with scripts/component-visuals-check.mjs so the
+// tools/scripts/component-catalog-map.mjs — shared with tools/scripts/component-visuals-check.mjs so the
 // report and its gate can never silently drift apart on which family maps to which catalogue key.
 const asbuiltIndex = await buildAsbuiltIndex(process.cwd(), componentFamilies);
 
@@ -597,8 +597,8 @@ function componentSections() {
   const familyCards = families.map((f) => {
     const catalogKey = FAMILY_TO_CATALOG_KEY[f.name];
     const embedBase = LIBRARY_ONLY_CATALOG_KEYS.has(catalogKey)
-      ? '../desktop/dist/index.html?catalog=1&live=1&libtest=1&only='
-      : '../chromasmith-22.html?catalog=1&live=1&only=';
+      ? '../../desktop/dist/index.html?catalog=1&live=1&libtest=1&only='
+      : '../../chromasmith-22.html?catalog=1&live=1&only=';
     // States exposed here mirror STATES in chromasmith-22.html's buildCatalogPage() (rest/hover/
     // disabled/modified/longlabel) — a state picker per card instead of one static "rest" embed,
     // plus &theme= kept in sync with the report's own light/dark toggle (wired in the <script>
@@ -620,7 +620,7 @@ function componentSections() {
       ? `<div class="comp-asbuilt-row">
            <div class="comp-asbuilt-label">Also seen in ${asbuiltIndex.get(f.name).length} production surface${asbuiltIndex.get(f.name).length === 1 ? '' : 's'}:</div>
            <div class="comp-asbuilt-thumbs">
-             ${asbuiltHits.slice(0, 3).map((h) => `<a href="../design/asbuilt/${esc(h.surfaceId)}/${esc(h.screenshot)}" target="_blank" title="${esc(h.surfaceId)} (${h.matchCount} match${h.matchCount === 1 ? '' : 'es'})"><img class="comp-asbuilt-thumb" loading="lazy" src="../design/asbuilt/${esc(h.surfaceId)}/${esc(h.screenshot)}" alt="${esc(h.surfaceId)}"></a>`).join('')}
+             ${asbuiltHits.slice(0, 3).map((h) => `<a href="../../design/asbuilt/${esc(h.surfaceId)}/${esc(h.screenshot)}" target="_blank" title="${esc(h.surfaceId)} (${h.matchCount} match${h.matchCount === 1 ? '' : 'es'})"><img class="comp-asbuilt-thumb" loading="lazy" src="../design/asbuilt/${esc(h.surfaceId)}/${esc(h.screenshot)}" alt="${esc(h.surfaceId)}"></a>`).join('')}
            </div>
          </div>`
       : '';
@@ -818,7 +818,7 @@ const out = `<!doctype html>
 <header>
   <div>
     <h1>Chromasmith Token Report</h1>
-    <div class="meta">Generated ${generatedAt} from design/tokens.json + chromasmith-22.html — re-run <code>node scripts/token-report.mjs</code> to refresh.</div>
+    <div class="meta">Generated ${generatedAt} from design/tokens.json + chromasmith-22.html — re-run <code>node tools/scripts/token-report.mjs</code> to refresh.</div>
   </div>
   <button id="theme-toggle" onclick="toggleReportTheme()">Toggle theme</button>
 </header>
@@ -908,8 +908,8 @@ document.querySelectorAll('nav button').forEach((b) => {
 </script>
 </body></html>`;
 
-writeFileSync('scripts/token-report.html', out);
-console.log(`Wrote scripts/token-report.html — ${catalogue.color.length} colors, ${catalogue.fontFamily.length} font families, ${catalogue.fontSize.length} font sizes, ${catalogue.fontWeight.length} font weights, ${colorFindings.length} color + ${spacingFindings.length} spacing + ${findings.length} font violation(s).`);
+writeFileSync('tools/scripts/token-report.html', out);
+console.log(`Wrote tools/scripts/token-report.html — ${catalogue.color.length} colors, ${catalogue.fontFamily.length} font families, ${catalogue.fontSize.length} font sizes, ${catalogue.fontWeight.length} font weights, ${colorFindings.length} color + ${spacingFindings.length} spacing + ${findings.length} font violation(s).`);
 if (colorFindings.length) {
   console.log('\nColor literals not matching any :root/body.light/tokens.json value:');
   for (const f of colorFindings.slice(0, 50)) console.log(`  [${CATEGORY_LABEL[f.category]}] ${f.selector} { ${f.prop}: ${f.value} }`);

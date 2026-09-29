@@ -2,9 +2,9 @@
 Poisson-Gaussian sensor noise calibration for the Panasonic DC-S9, fit via the two-frame
 difference method (no grey card / uniform illumination needed — see CLAUDE.md's noise-model
 plan). For each ISO, two back-to-back identical RAW frames were captured
-(calib/noise_captures/*.RW2) of a static, defocused scene with a brightness ramp, and dumped
+(tools/calib/noise_captures/*.RW2) of a static, defocused scene with a brightness ramp, and dumped
 to raw (pre-white-balance, pre-demosaic) CFA planes via the native `dump_cfa` example
-(desktop/src-tauri/examples/dump_cfa.rs) into calib/cfa_dump/*.bin (+ .bin.json sidecar).
+(desktop/src-tauri/examples/dump_cfa.rs) into tools/calib/cfa_dump/*.bin (+ .bin.json sidecar).
 
 Method: pixel-wise diff of the two frames cancels the (static) scene and any fixed-pattern
 non-uniformity, leaving pure temporal noise: var(diff) = 2*var(true noise). The scene's own
@@ -21,10 +21,10 @@ apply_scaling() for exactly this reason (raw_decode.rs's decode goes further: WB
 NR — none of that is safe to fit a physical noise model on).
 
 Usage:
-    python3 calib/noise_fit.py
+    python3 tools/calib/noise_fit.py
 Outputs:
-    calib/noise_profile.json   — {iso: {R:{a,b,r2}, G:{a,b,r2}, B:{a,b,r2}}}
-    calib/noise_fit_check.png  — QC scatter + fitted line per channel/ISO (go/no-go visual)
+    tools/calib/noise_profile.json   — {iso: {R:{a,b,r2}, G:{a,b,r2}, B:{a,b,r2}}}
+    tools/calib/noise_fit_check.png  — QC scatter + fitted line per channel/ISO (go/no-go visual)
 """
 import json
 import re
@@ -62,7 +62,7 @@ def channel_masks(pattern, h, w):
 
 
 def find_pairs():
-    """Group calib/noise_captures stems by ISO (read from the dump_cfa sidecar), pairing the
+    """Group tools/calib/noise_captures stems by ISO (read from the dump_cfa sidecar), pairing the
     two frames captured at each ISO."""
     by_iso = defaultdict(list)
     for j in sorted(DUMP_DIR.glob('*.bin.json')):

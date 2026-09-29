@@ -50,7 +50,7 @@ silently leaving them unexplained:
 
 Defined so wireframe/as-built values map to a named token (S8 specs), but deliberately not emitted
 into `:root` and not used at any call site yet — zero visual change. Each carries
-`status: "proposed-unwired"`. Wiring = add the var to `scripts/token-layout.json`, regenerate, then
+`status: "proposed-unwired"`. Wiring = add the var to `tools/scripts/token-layout.json`, regenerate, then
 replace literals at call sites (UI work, check visually).
 
 | Family | Tokens | Why these values |

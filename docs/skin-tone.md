@@ -69,7 +69,7 @@ Three per-mask pieces, all reusing the existing mask machinery:
 **`mskShowSel` / the "Selection" preview mode** renders a mask's *effective* weight (shape × lum
 gate × colour gate) as a red overlay. `mskOverlaySync` draws only the SHAPE in JS/SVG, so it never
 showed the lum gate either; a colour range is untunable blind. Only the two `renderPreview` calls
-pass `showSel` — exports never do. It does not yet reach the 1:1 loupe (see `ROADMAP.md`).
+pass `showSel` — exports never do. It does not yet reach the 1:1 loupe (see `docs/ROADMAP.md`).
 
 ### ⚠️ SEGMENT FIRST, then refine by colour — do not repeat this mistake
 `+ Skin` is **desktop-only and segmentation-first**: scribble over the subject, EdgeSAM/SAM2

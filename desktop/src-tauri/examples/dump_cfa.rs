@@ -1,7 +1,7 @@
 // Calibration helper (not part of the app): decode an RW2 through rawler up to
 // apply_scaling() ONLY — i.e. per-CFA black/white-level normalized Bayer data, BEFORE
 // white-balance multipliers and BEFORE demosaic — and dump the raw single-channel plane to
-// disk for calib/noise_fit.py's Poisson-Gaussian noise calibration.
+// disk for tools/calib/noise_fit.py's Poisson-Gaussian noise calibration.
 //
 // This deliberately stops short of raw_decode.rs's full pipeline: the noise model must be
 // fit on un-white-balanced data (WB is a per-channel gain that would distort the fitted

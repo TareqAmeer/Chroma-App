@@ -1,7 +1,7 @@
 """Plain-HTTP client for online.dehancer.com's upload -> render/export API.
 
 Reverse-engineered by reading assets/index-*.js (string search only) and then confirmed
-empirically against the live API -- see calib/dehancer/ONE_FILM_GATE.md and the plan notes
+empirically against the live API -- see tools/calib/dehancer/ONE_FILM_GATE.md and the plan notes
 for the walkthrough. No browser, no vision, no computer-use needed once this works:
 everything is `requests` calls.
 

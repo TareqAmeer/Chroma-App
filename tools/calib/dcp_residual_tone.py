@@ -12,9 +12,9 @@ The fitted knots get baked into chromasmith-22.html (DCP_RESID) and applied
 hue-preservingly (RGBTone) right after the DCP ToneCurve inside bakeDcpLUT.
 
 Usage
-  python calib/dcp_residual_tone.py measure   # per-scene + pooled residual-by-tone table
-  python calib/dcp_residual_tone.py fit       # fit knots -> calib/dcp_residual_tone.json
-  python calib/dcp_residual_tone.py report    # before/after patch table + MAD, gate check
+  python tools/calib/dcp_residual_tone.py measure   # per-scene + pooled residual-by-tone table
+  python tools/calib/dcp_residual_tone.py fit       # fit knots -> tools/calib/dcp_residual_tone.json
+  python tools/calib/dcp_residual_tone.py report    # before/after patch table + MAD, gate check
 """
 import os, sys, json, struct
 import numpy as np

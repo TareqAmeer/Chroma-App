@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # One isolated worktree + branch per Linear ticket, so parallel chats never touch each other's files.
-#   scripts/task.sh start CHR-12 thumbnail-line   create worktree, print the prompt to paste into a new chat
-#   scripts/task.sh list                          show active task worktrees
-#   scripts/task.sh done CHR-12                   remove the worktree (after the branch is merged)
+#   tools/scripts/task.sh start CHR-12 thumbnail-line   create worktree, print the prompt to paste into a new chat
+#   tools/scripts/task.sh list                          show active task worktrees
+#   tools/scripts/task.sh done CHR-12                   remove the worktree (after the branch is merged)
 set -euo pipefail
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 BASE="$(dirname "$ROOT")/Chroma-App-tasks"

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Stage the web app into desktop/dist/ for the Tauri desktop shell (macOS + Windows).
 // desktop/dist/ is generated — never edit it, never point frontendDist at the repo root
-// (calib/ and the Python tooling must not ship inside the app bundle).
+// (tools/calib/ and the Python tooling must not ship inside the app bundle).
 //
 // Replaces the old build-desktop.sh's rsync/python3 pipeline (docs/windows-port.md G14):
 // rsync isn't installed on Windows, and the `python3` found on a stock Windows PATH is often the
@@ -21,7 +21,7 @@ import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const cd = (...p) => join(repoRoot, ...p);
 
 function sha256(path) {

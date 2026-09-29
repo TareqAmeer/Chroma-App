@@ -21,12 +21,12 @@ npm run components:check
 Use focused queries instead of reading the 10,000-line JSON file:
 
 ```bash
-node scripts/query-components.mjs --summary
-node scripts/query-components.mjs --family toggle
-node scripts/query-components.mjs --icon heart
-node scripts/query-components.mjs --text favourite
-node scripts/query-components.mjs --runtime
-node scripts/query-components.mjs --state editor:masks-dynamic
+node tools/scripts/query-components.mjs --summary
+node tools/scripts/query-components.mjs --family toggle
+node tools/scripts/query-components.mjs --icon heart
+node tools/scripts/query-components.mjs --text favourite
+node tools/scripts/query-components.mjs --runtime
+node tools/scripts/query-components.mjs --state editor:masks-dynamic
 ```
 
 Each instance has a source file and line. It also has a stable CSS selector when the production
@@ -42,7 +42,7 @@ selector/source mapping remain explicit in `unresolved` and require inspection r
 counted as covered.
 
 The `appleComponent` field maps a family to the closest component defined by
-`chromasmith-design/project/design.md`. `null` means the Apple-derived file does not define that
+`design/wireframes/project/design.md`. `null` means the Apple-derived file does not define that
 app-specific component. Create and approve a component contract for it before redesigning it.
 
 ## Component contracts
@@ -52,7 +52,7 @@ Contracts keep generated observations (including registry locations) separate fr
 targets and approval metadata. For the current toggle review, use:
 
 ```bash
-node scripts/validate-component-contracts.mjs --family toggle
+node tools/scripts/validate-component-contracts.mjs --family toggle
 ```
 
 This is documentation validation, not an application gate. It neither creates an approval nor

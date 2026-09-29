@@ -209,7 +209,7 @@ class ChildProcessWatcher:
         if dtrace_confirmed is True:
             msg += " — dtrace CONFIRMED it is currently inside write()"
         elif looks_like_pipe_block:
-            msg += " — looks like a blocked pipe write (see diagnostics/README.md)"
+            msg += " — looks like a blocked pipe write (see tools/diagnostics/README.md)"
 
         self.on_event({
             'ts': now, 'category': 'child_process', 'kind': 'possible_stall',

@@ -4,7 +4,7 @@
 
 `ios/` wraps the SAME single file in a WKWebView (Capacitor 8, CocoaPods). Pieces:
 - `build-ios.sh` stages `chromasmith-22.html → www/index.html` + `vendor/` (never point webDir
-  at the repo root — calib/ would ship). `www/`, `node_modules/` are gitignored; `ios/` is
+  at the repo root — tools/calib/ would ship). `www/`, `node_modules/` are gitignored; `ios/` is
   committed (its own .gitignore covers Pods/build/public).
 - `.github/workflows/ios-ipa.yml` builds an **unsigned `Chromasmith.ipa`** on a macOS runner on
   every push touching the app (this Mac has no Xcode — CI is the only build path). The user

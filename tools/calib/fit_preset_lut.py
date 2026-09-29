@@ -3,15 +3,15 @@
 pairs — jointly across all pairs so the LUT generalizes across photos (the user's
 per-photo match-and-refine LUTs only covered each photo's own gamut).
 
-Input pairs: calib/BEACH LUT/<name>.tif (LR export, NO preset)
-             calib/BEACH LUT/<name>.jpg (LR export, WITH preset)
-Output:      calib/LUT LIBRARY/a beach preset v5.7.cube  (+ cmp_beach_*.png strips)
+Input pairs: tools/calib/BEACH LUT/<name>.tif (LR export, NO preset)
+             tools/calib/BEACH LUT/<name>.jpg (LR export, WITH preset)
+Output:      tools/calib/LUT LIBRARY/a beach preset v5.7.cube  (+ cmp_beach_*.png strips)
 
 Method: box-downsample 4x (kills grain/sharpen/NR texture), trilinearly SPLAT each
 observed (in -> out) sample into the 33^3 grid over input RGB, weighted-average,
 then Laplacian-diffuse into unobserved nodes (smooth extrapolation).
 
-python calib/fit_preset_lut.py
+python tools/calib/fit_preset_lut.py
 """
 import os, sys
 import numpy as np

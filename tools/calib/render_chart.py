@@ -3,7 +3,7 @@ Render the halation model on the real chart and build side-by-side comparison
 strips against the Dehancer reference.  Left = our render, Right = Dehancer.
 
 Usage:
-  python calib/render_chart.py            # current committed model
+  python tools/calib/render_chart.py            # current committed model
   (optimize_hal.py imports render_band for the rule-based model)
 """
 import os

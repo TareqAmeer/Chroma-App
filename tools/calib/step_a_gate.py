@@ -1,14 +1,14 @@
 """
-Step A gate: applies calib/nr_validate.py's EXACT PASS/FAIL gate logic (same thresholds,
+Step A gate: applies tools/calib/nr_validate.py's EXACT PASS/FAIL gate logic (same thresholds,
 same fail categories: waxy-luma / noisy-chroma / muted) to compare the CURRENT hand-tuned
-per-ISO table against the physically-derived table from calib/derive_iso_table.py, across
+per-ISO table against the physically-derived table from tools/calib/derive_iso_table.py, across
 every already-available Lightroom-referenced ISO set.
 
 Requires per set: /tmp/cs_dump/set{N}_cs_off.bin, _cs_on.bin (current table, from plain
 dump_rw2), _cs_new.bin (derived table, via CS_NR_STRENGTH/CS_NR_LEVELS env override — see
 raw_decode.rs's denoise_chroma_wavelet_rgb16 diagnostic escape hatch).
 
-Usage: python3 calib/step_a_gate.py
+Usage: python3 tools/calib/step_a_gate.py
 """
 import os
 import sys
@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
-os.chdir(Path(__file__).parent.parent)
+os.chdir(Path(__file__).parent.parent.parent)
 
 from nr_validate import (  # noqa: E402
     CHROMA_REMOVE_MAX, NR_MIN_ISO, SAT_RETAIN_MIN, SETS, Y_RETAIN_MIN,

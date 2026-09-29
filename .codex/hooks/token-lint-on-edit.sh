@@ -74,7 +74,7 @@ for (const [lit, n] of Object.entries(newCounts)) {
 }
 if (added.length) {
   console.error(`token-lint: ${file.replace(process.cwd()+"/","")} — new literal(s) not using a design/tokens.json token: ${added.join(", ")}`);
-  console.error("  If this value already exists as a token, reference it (or var(--x) / a CSS var); otherwise add it to design/tokens.json and regenerate via scripts/build-tokens.mjs.");
+  console.error("  If this value already exists as a token, reference it (or var(--x) / a CSS var); otherwise add it to design/tokens.json and regenerate via tools/scripts/build-tokens.mjs.");
 }
 ' "$kind" "$file" "$old" "$new"
 

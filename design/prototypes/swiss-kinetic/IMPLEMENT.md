@@ -10,7 +10,7 @@ Hard rules:
 - Look-only: every existing control, function, id and behaviour stays (memory: redesign-look-only). Only components, colours, type and motion change.
 - Fonts: Gramatika Regular/Bold (+ italic where the spec says) everywhere; remove SF Pro (chromasmith-22.html, desktop/library-ui.js, tokens face.mono/font_display/font_text). Done when grep -c 'SF Pro' = 0.
 - 0px corners, no soft shadows (box-shadow only as a hard 0-blur offset block), no hover underlines. Honour Reduce Motion.
-- Token values go in design/tokens.json and are regenerated with node scripts/build-tokens.mjs — never hand-edit inside the TOKENS markers. Light values go to body.light.
+- Token values go in design/tokens.json and are regenerated with node tools/scripts/build-tokens.mjs — never hand-edit inside the TOKENS markers. Light values go to body.light.
 - Port by computed-style diff against the playground in the edited states (memory: draft-to-app-computed-diff), not by eye.
 - Never read chromasmith-22.html in full: grep, then read with offset.
 - One component family per commit, commit + push each (another session works this repo: pull --rebase before push).

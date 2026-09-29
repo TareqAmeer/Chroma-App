@@ -7,14 +7,14 @@ Output: "_local/local-borders/_out/<name>.png"  RGBA, RGB = grey edge texture (b
         sprocket holes and edge text are removed.
         "_local/local-borders/_out/report.json" per-file sides/thickness/flags
         "_local/local-borders/_out/_sheet.jpg"  one review sheet on magenta
-Run   : .calibvenv/bin/python scripts/extract_borders.py [name-substring ...]
+Run   : .calibvenv/bin/python tools/scripts/extract_borders.py [name-substring ...]
 """
 import glob, json, os, sys
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage as ndi
 
-ROOT = os.path.join(os.path.dirname(__file__), '..', '_local', 'local-borders')
+ROOT = os.path.join(os.path.dirname(__file__), '..', '..', '_local', 'local-borders')
 OUT = os.path.join(ROOT, '_out')
 LONG = 2400                      # working resolution (long side)
 SKIP = ('Pack-Cover', 'KODAK-GOLD', 'KODAK-PORTRA-400---', 'KODAK-PORTRA-800---', 'rawpixel-id-13960581')

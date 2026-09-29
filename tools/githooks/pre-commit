@@ -1,6 +1,6 @@
 #!/bin/sh
 # Wireframe-fidelity gate: blocks a commit touching the Library/Editor UI against
-# chromasmith-design/project/*.html unless the structural inventory check passes (or every
+# design/wireframes/project/*.html unless the structural inventory check passes (or every
 # remaining finding is explicitly allowlisted in test/wireframe_accepted.json).
 #
 # This REPLACES an earlier stamp-file version (`touch .git/.wireframe_diff_ok`) that only proved
@@ -32,12 +32,12 @@ if [ -z "$DISABLE_WIREFRAME_GATES" ] && needs_check "desktop/library-ui.js"; the
   fi
 fi
 
-if [ -z "$DISABLE_WIREFRAME_GATES" ] && (needs_check "chromasmith-22.html" || needs_check "desktop/library-ui.js" || needs_check "design/tokens.json" || needs_check "scripts/build-tokens.mjs" || needs_check "scripts/token-layout.json"); then
-  # Token generator drift gate: design/tokens.json + scripts/build-tokens.mjs generate the
+if [ -z "$DISABLE_WIREFRAME_GATES" ] && (needs_check "chromasmith-22.html" || needs_check "desktop/library-ui.js" || needs_check "design/tokens.json" || needs_check "tools/scripts/build-tokens.mjs" || needs_check "tools/scripts/token-layout.json"); then
+  # Token generator drift gate: design/tokens.json + tools/scripts/build-tokens.mjs generate the
   # :root/body.light blocks in chromasmith-22.html and the DS block in desktop/library-ui.js
   # (docs/ui-workflow/STATE.md S4). Both scripts existed but nothing ran them — a direct edit to
   # a colour/spacing literal in either generated block would sit unnoticed until the next
-  # `node scripts/build-tokens.mjs` run silently overwrote it back to tokens.json's value. This
+  # `node tools/scripts/build-tokens.mjs` run silently overwrote it back to tokens.json's value. This
   # blocks that: --check fails if regenerating from tokens.json would change either file (i.e.
   # someone edited the generated block by hand, or tokens.json/token-layout.json drifted from
   # it), and verify_tokens.py fails if any declared app var is neither a token nor a documented
@@ -47,7 +47,7 @@ if [ -z "$DISABLE_WIREFRAME_GATES" ] && (needs_check "chromasmith-22.html" || ne
     echo ""
     echo "BLOCKED: chromasmith-22.html or desktop/library-ui.js has drifted from design/tokens.json."
     echo "If you edited a colour/spacing value directly in the generated block, move that edit to"
-    echo "design/tokens.json instead and run \`node scripts/build-tokens.mjs\` to regenerate."
+    echo "design/tokens.json instead and run \`node tools/scripts/build-tokens.mjs\` to regenerate."
     exit 1
   fi
   if ! npm run tokens:verify --silent; then
@@ -84,10 +84,10 @@ elif needs_check "chromasmith-22.html"; then
   fi
 fi
 
-# Version stamp: BUILD = 1.MMDDx, letter bumps per commit (scripts/bump-build.py).
+# Version stamp: BUILD = 1.MMDDx, letter bumps per commit (tools/scripts/bump-build.py).
 # Runs on EVERY commit (not only ones staging chromasmith-22.html): bump-build.py patches the
 # index blob directly, so the stamp advances even when the commit touches only other files
 # (CHR-124: library-ui.js-only commits left the splash stuck on the same letter).
-python3 scripts/bump-build.py || python scripts/bump-build.py || true
+python3 tools/scripts/bump-build.py || python tools/scripts/bump-build.py || true
 
 exit 0

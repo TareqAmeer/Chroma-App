@@ -5,7 +5,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 ## Prompts
 **S1: Spike** (Opus 5, high effort)
 > Read docs/ui-workflow/STATE.md and follow its rules. Task: a throwaway feasibility spike, with scripts in the scratchpad only and no app edits. Test 4 assumptions and record the numbers:
-> (a) Can the computed styles of the Retouch and Export panels in `chromasmith-design/project/Editor (Developer) View.dc.html` be mapped onto the app's `:root` tokens (`chromasmith-22.html` lines 50–98)? Report counts of exact matches, ambiguous matches and no match. Note that the wireframe uses `_ds` token names (`_ds/.../_ds_manifest.json`).
+> (a) Can the computed styles of the Retouch and Export panels in `design/wireframes/project/Editor (Developer) View.dc.html` be mapped onto the app's `:root` tokens (`chromasmith-22.html` lines 50–98)? Report counts of exact matches, ambiguous matches and no match. Note that the wireframe uses `_ds` token names (`_ds/.../_ds_manifest.json`).
 > (b) Can the `PAIRS` entries in `test/editor_wireframe_diff.mjs` for Retouch be generated from the wireframe DOM? Diff the generated entries against the hand-written ones.
 > (c) How long does a token-only lint (raw hex, px and ms values not in a `var()`) take on just the changed lines of `chromasmith-22.html`'s `<style>`?
 > (d) Do `.fx-row`, `.fx-ctrl`, `.fx-toggle` and the segmented control (`selectToSeg`) render correctly in a bare page, or does isolating them need a refactor?
@@ -23,7 +23,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 
 **S3: Token mapping** (Opus 5)
 > Read docs/ui-workflow/STATE.md and follow its rules, including the S1 result (a). Task: create `design/tokens.json` in W3C DTCG format as the single token source.
-> Seed values from `chromasmith-design/project/_ds/.../_ds_manifest.json`. Give every token a `$extensions.chromasmith.appVar` (the app's CSS variable, e.g. `--acc`) and a `role` (e.g. `action.primary`, `surface.panel`, `text.muted`).
+> Seed values from `design/wireframes/project/_ds/.../_ds_manifest.json`. Give every token a `$extensions.chromasmith.appVar` (the app's CSS variable, e.g. `--acc`) and a `role` (e.g. `action.primary`, `surface.panel`, `text.muted`).
 > Cover every variable in the app's `:root` (lines 50–98), the `body.light` override (about line 1263), and the token block in `desktop/library-ui.js` (about lines 695–745).
 > Where the design system and the app disagree, don't decide; list each conflict in `design/token-conflicts.md` for the user.
 > Per S1 (a): match by computed value AND property role (font-size→`--fs-*`, padding/gap→`--sp-*`, radius→`--r*`) — value-only matching is ambiguous (8px = `--r`/`--sp-2`, 12px = `--fs-2`/`--sp-3`). Don't infer roles from `_ds` var names (under 10% of wireframe decls use them). Families the app has no tokens for — control heights, font weights, pill radius, on-primary text, danger-subtle, 0.15s — go in the conflicts file as "proposed new token" entries.
@@ -31,7 +31,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 
 **S4: Token generator + lint hook** (Sonnet 5)
 > Read docs/ui-workflow/STATE.md and follow its rules. `design/tokens.json` exists (from S3). Task:
-> (1) `scripts/build-tokens.mjs` generates the `:root` / `body.light` block in `chromasmith-22.html` and the token block in `desktop/library-ui.js` between marker comments. Reuse the marker-injection pattern in `site/build-page.mjs`.
+> (1) `tools/scripts/build-tokens.mjs` generates the `:root` / `body.light` block in `chromasmith-22.html` and the token block in `desktop/library-ui.js` between marker comments. Reuse the marker-injection pattern in `site/build-page.mjs`.
 > (2) Extend `test/editor_token_check.mjs` to flag a token used in the wrong role (for example a legacy `.bpri` colour on a primary button).
 > (3) Add a PostToolUse hook, `.claude/hooks/token-lint-on-edit.sh`, registered in `.claude/settings.json`. It lints only the literals the Edit ADDS (new_string minus old_string — `<style>` already has 940 raw literals, so whole-line linting reports old debt), skips `--x:` token definitions and comments, allows `1px`, confirms the edit is inside `<style>` with a string search (not a git diff; S1 (c): 0.12–0.26s vs 0.3–0.4s), and prints only violations.
 > Run the gates and export harness via a Haiku subagent that reports failures only.
@@ -54,7 +54,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > |---|---|
 > | A: editor-sections | the `#panel-fx` page plus all 23 `fxsec` sections |
 > | B: editor-overlays | the 6 menus, the 2 modal/confirm dialogs, the toast |
-> | C: other-pages | `#panel-match`, `#panel-copy`, `#panel-collage`, `#panel-guide`, and splash — splash can't be opened in the running app (no live DOM route); use `chromasmith-design/project/Splash Screen.html` as its wireframe/as-built stand-in instead of capturing it |
+> | C: other-pages | `#panel-match`, `#panel-copy`, `#panel-collage`, `#panel-guide`, and splash — splash can't be opened in the running app (no live DOM route); use `design/wireframes/project/Splash Screen.html` as its wireframe/as-built stand-in instead of capturing it |
 > | D: mobile | the mobile sheet, in all its states |
 > | E: library | Library, via `?libtest=1` |
 >
@@ -163,7 +163,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 
 **S7b: Baseline + token gates** (Sonnet 5; after S6b, before S8, on a quiet machine)
 > Read docs/ui-workflow/STATE.md and follow its rules. Task:
-> (1) Add `node scripts/build-tokens.mjs --check` and `python3 design/verify_tokens.py` to `test/editor_gates.mjs` as blocking gates, and to `githooks/pre-commit`.
+> (1) Add `node tools/scripts/build-tokens.mjs --check` and `python3 design/verify_tokens.py` to `test/editor_gates.mjs` as blocking gates, and to `tools/githooks/pre-commit`.
 > (2) Apply `docs/ui-workflow/allowlist-audit.md`: do §1 (delete; re-record the Library icon-shape baseline first), then §2 one entry at a time (remove, re-run its gate, restore it only if it still fires). Leave §3 in place but make sure each is a backlog item in `test/editor_ux_spec.json`. Don't touch §4. Record the before/after counts in STATE.md. §5's checker fixes are out of scope here.
 > (3) Run `npm run editor:gates` and `npm run ui:test` via a Haiku subagent. Record every still-failing gate or check as the known baseline in STATE.md (name and a one-line reason). From then on, "gates pass" means "no failures beyond this baseline".
 > Log it in STATE.md, then commit and push.
@@ -173,7 +173,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 **S8: Wireframe → spec → generated gate wiring** (Opus 5)
 > Read docs/ui-workflow/STATE.md and follow its rules (the S1 (b) result and the S7b baseline).
 > Facts verified 2026-09-11, so don't re-derive them:
-> - The Editor wireframe (`chromasmith-design/project/Editor (Developer) View.dc.html`) has 11 `.tp-panel[data-panel]` blocks: adjust, color, crop, detail, export, film, frame, info, looks, masks, retouch.
+> - The Editor wireframe (`design/wireframes/project/Editor (Developer) View.dc.html`) has 11 `.tp-panel[data-panel]` blocks: adjust, color, crop, detail, export, film, frame, info, looks, masks, retouch.
 > - 17 of its `.grp` elements carry a `data-fxsec`. Two of those, `info-meta` and `info-people`, are NOT app sections.
 > - Wireframe `masks` = app `local`.
 > - `PAIRS` is a hand-written object near the top of `test/editor_wireframe_diff.mjs` (grep `const PAIRS`).
@@ -247,7 +247,7 @@ Paste ONE prompt into a NEW chat. Set the model in the app BEFORE the first mess
 > Use a new chat for this documentation task. Read only the requested ranges in `docs/ui-workflow/STATE.md`, `docs/ui-workflow/sessions.md`, `docs/editor-redesign-plan.md`, `.claude/skills/wireframe-transplant/SKILL.md`, `CLAUDE.md`, the component registry/contract/reference workflow READMEs, and package scripts. Update the canonical per-component/per-panel process and this S12/S13 guidance. Keep the workflow vendor-neutral, preserve Step 3b's every-width rule, change the upcoming pilot to Color, and retain Masks as historical evidence. Verify all paths and commands that the changed process names; run the focused documentation checks. Use no more than 5 percentage points of the five-hour usage allowance; check usage before work and before optional work. Stop if a documented process conflicts with an executable command; report the conflict instead of inventing a replacement.
 
 **S13: Per-panel implementation, repeat per panel; pilot = Color**
-> Use a new chat for this Color implementation. Every component-contract review, reference analysis, implementation, and independent review also gets its own new chat. Read `docs/ui-workflow/STATE.md` and follow its current process; earlier Masks work remains historical workflow evidence and does not change this pilot. Identify the Color component family and every affected declaration with `scripts/query-components.mjs`, then run `npm run components:check` before editing. Read only the relevant family contract. If a visual reference is involved, create its reference specification, resolve open questions, and obtain approval before implementation. Record the active panel in this task's prompt or notes. Read only the approved panel/reference spec and the grep-located production section. Implement with existing markup and shared components. Run the focused typed diff and panel checks, capture the panel pair, and request review in a separate fresh chat with no implementation context beyond the approved spec, affected files, and validation evidence. Rerun the registry and focused validations; record rounds, review findings, closed backlog items, and spec corrections in STATE.md. Commit implementation and validation evidence separately when appropriate. Use no more than 5 percentage points of the five-hour usage allowance; check usage before work and before optional work. Do not run unrelated gates or broaden the panel scope.
+> Use a new chat for this Color implementation. Every component-contract review, reference analysis, implementation, and independent review also gets its own new chat. Read `docs/ui-workflow/STATE.md` and follow its current process; earlier Masks work remains historical workflow evidence and does not change this pilot. Identify the Color component family and every affected declaration with `tools/scripts/query-components.mjs`, then run `npm run components:check` before editing. Read only the relevant family contract. If a visual reference is involved, create its reference specification, resolve open questions, and obtain approval before implementation. Record the active panel in this task's prompt or notes. Read only the approved panel/reference spec and the grep-located production section. Implement with existing markup and shared components. Run the focused typed diff and panel checks, capture the panel pair, and request review in a separate fresh chat with no implementation context beyond the approved spec, affected files, and validation evidence. Rerun the registry and focused validations; record rounds, review findings, closed backlog items, and spec corrections in STATE.md. Commit implementation and validation evidence separately when appropriate. Use no more than 5 percentage points of the five-hour usage allowance; check usage before work and before optional work. Do not run unrelated gates or broaden the panel scope.
 
 **S13-chrome: App frame fixes** (Sonnet 5; one run, after S9)
 > Same loop as S13, for the items that aren't a panel: T55 (tool rail 64px; the mismatch appears in light mode only, so find out why first), T56 (tool panel 300px, probably the same cause), T58 (photo preview cut off at a 700px window), T59 (Library thumbnails cut off at 640px with a 420px sidebar) and T57 (square / original-size thumbnails; read its note first). `editor_responsive_qa.mjs` and `library_responsive_qa.mjs` must stay clean, and each item's allowlist entry is removed when it's fixed.

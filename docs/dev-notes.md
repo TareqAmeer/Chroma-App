@@ -8,7 +8,7 @@
 - ⚠️ **Watch the payload.** "Single-file" is about the app CODE, not about inlining bulk data.
   The preset library grew 11 → 113 as base64 string literals and took the file to **17.7 MB
   (10.2 MB gzipped)** — parsed in full on every web cold load, every iOS launch and every
-  desktop `dist/` read. `calib/split_lut_presets.py` moved the 102 non-core presets into
+  desktop `dist/` read. `tools/calib/split_lut_presets.py` moved the 102 non-core presets into
   `vendor/luts/<key>.bin` as raw bytes (**3.02 MB / 1.76 MB gzipped**, a 5.8× cut in transfer).
   Before inlining any new bulk asset, check what it does to `gzip -9 -c chromasmith-22.html | wc -c`.
   - Load order in `presetBytes()`: inline `LUT_PRESETS` → IndexedDB `lutcache` → `fetch`.

@@ -17,7 +17,7 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
    anything that changes later sessions), then commit + push.
 
 ## Facts verified during planning (2026-09-11)
-- `_ds_manifest.json` (chromasmith-design/project/_ds/.../) lists ~150 design-system tokens; nothing reads it.
+- `_ds_manifest.json` (design/wireframes/project/_ds/.../) lists ~150 design-system tokens; nothing reads it.
 - Three token vocabularies, no bridge: `_ds` CSS tokens; app `:root` (chromasmith-22.html ~50–98,
   `body.light` override ~1263); hand-copied set in `desktop/library-ui.js` (~695–745).
 - `editor:token-check` only checks a value is a legal app token, not the right one for the role.
@@ -73,13 +73,13 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
   (fx-info-i tap target) is unrelated by diffing against pre-edit tree. Pushed (68f194f).
 
 **S4 — 2026-09-11 — done**
-- `scripts/build-tokens.mjs` writes chromasmith-22.html's `:root`/`body.light` and
+- `tools/scripts/build-tokens.mjs` writes chromasmith-22.html's `:root`/`body.light` and
   desktop/library-ui.js's DS block between new `/* TOKENS:*:START/END */` markers (marker
   pattern reused from site/build-page.mjs), from design/tokens.json values +
   `$extensions.chromasmith.emit.<block>.commentBefore` (hand-written rationale comments, copied
   verbatim including markers/indentation — user chose this over moving comments out of the
   blocks). Mechanical layout (declaration order, inter-decl whitespace) lives in
-  `scripts/token-layout.json`, captured once from the file as it existed pre-generator — NOT
+  `tools/scripts/token-layout.json`, captured once from the file as it existed pre-generator — NOT
   re-derived from tokens.json, so tokens.json only needs to change when a value/comment changes.
   First run was byte-identical to the prior source (`--check` flag added for CI use). Surfaced
   and fixed a real S3 data bug: tokens.json's `blue_mist_soft` held the DARK-REMAP override value
@@ -126,7 +126,7 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
 - Added a `group` field (A–E) to every `design/surfaces.json` entry, via a `GROUPS` map added to
   `test/surface_inventory.mjs` (re-run to regenerate); 0/41 ungrouped. Filled `docs/ui-workflow/
   sessions.md`'s S6 `{GROUP}` placeholder with the A–E table (user-specified), plus a note that
-  splash has no live DOM route — use `chromasmith-design/project/Splash Screen.html` as its
+  splash has no live DOM route — use `design/wireframes/project/Splash Screen.html` as its
   as-built stand-in when group C runs, not a capture.
 - `test/surface_capture.mjs` (new): for each of group A's 24 surfaces (`panel-fx` + 23 `fxsec-*`),
   captures `noPhoto.webp` (before any photo loads — user flagged only 4/41 surfaces.json entries
@@ -138,7 +138,7 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
   nearest-ancestor `data-fxsec` per node — the only hooks S1 found the wireframe can be matched
   against later — and computed values for color/typography/spacing/radius/motion/elevation props,
   each matched to a `design/tokens.json` token by VALUE + property-role family, S1(a)'s approach,
-  not `_ds` var() names) and `block.dc.html` (the surface's real outerHTML, scripts/on* attrs
+  not `_ds` var() names) and `block.dc.html` (the surface's real outerHTML, tools/scripts/on* attrs
   stripped, wrapped in a `.tp-panel[data-panel]` shell matching `Editor (Developer) View.dc.html`'s
   structure — generated from the live DOM, nothing hand-drawn).
 - Result: 24/24 surfaces, 0 missing states, 24/24 noPhoto captures. 32,531 unmapped style decls
@@ -162,7 +162,7 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
   whichever section happens to be pre-selected closes something instead of opening the sheet. Now
   picks a section key that ISN'T the currently-active one before opening. `splash` has no live DOM
   route (confirmed in S5) — per user instruction, its capture is skipped entirely and
-  `chromasmith-design/project/Splash Screen.html` is copied verbatim into
+  `design/wireframes/project/Splash Screen.html` is copied verbatim into
   `design/asbuilt/splash/block.dc.html` as its as-built stand-in, with a `spec.json` note
   explaining why (no screenshots, no computed-value mapping — nothing to map from a static
   wireframe file).
@@ -181,7 +181,7 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
 - First pass (e27afba): moved §3b→docs/design-tokens.md, §4→docs/app-tabs.md, §6→docs/process-lessons.md;
   fixed fonts (SF Pro) + wireframe-transplant skill. T43–T53 deferral reverted (16e9f69) — they were already done.
 - Review pass: CLAUDE.md 320→233 lines. Moved iOS shell → docs/ios-shell.md, render pipeline → docs/render-pipeline.md,
-  calib venv commands → calib/CLAUDE.md; condensed the repo tree (kept every ⚠️ gotcha). Each move has a "load before
+  calib venv commands → tools/calib/CLAUDE.md; condensed the repo tree (kept every ⚠️ gotcha). Each move has a "load before
   touching X" pointer so it still gets read at the right time.
 - Deleted-too-far line: §6 had become a bare pointer "read before tuning", so UI/test/flaky-bug lessons (#5,#8–17) would
   never load for UI work. Restored as 10 one-liners + contract rule 7. Rule of thumb used: keep in CLAUDE.md anything that
@@ -191,13 +191,13 @@ accurate and uses less Claude context. Session prompts live in `sessions.md` (re
 - Collage page now documented in docs/app-tabs.md (2026-09-11). Found: collage export has no iOS share-sheet path (unverified).
 
 **Token generator gates — 2026-09-11 — done**
-- `scripts/build-tokens.mjs --check` and `design/verify_tokens.py` (S3/S4) existed but nothing
+- `tools/scripts/build-tokens.mjs --check` and `design/verify_tokens.py` (S3/S4) existed but nothing
   ran them — a direct edit to a colour/spacing literal in `chromasmith-22.html`'s `:root`/
   `body.light` or `desktop/library-ui.js`'s DS block would sit unnoticed until the next
   `build-tokens` run silently overwrote it back to `design/tokens.json`'s value. Added
   `npm run tokens:check`/`tokens:verify`/`tokens:gates`; wired into `npm test`/`test:ui`,
-  `githooks/pre-commit` (fires on `chromasmith-22.html`/`desktop/library-ui.js`/
-  `design/tokens.json`/`scripts/build-tokens.mjs`/`scripts/token-layout.json`, blocking), and
+  `tools/githooks/pre-commit` (fires on `chromasmith-22.html`/`desktop/library-ui.js`/
+  `design/tokens.json`/`tools/scripts/build-tokens.mjs`/`tools/scripts/token-layout.json`, blocking), and
   `.github/workflows/editor-gates.yml` (new trigger paths + a dedicated step). Verified the
   pre-commit gate actually blocks: edited `--bg` directly in the generated `:root` block, staged
   it, hook failed with the drift message; reverted, re-ran clean.
@@ -215,7 +215,7 @@ and are unrelated to it (S3 already noted the `ui:test` one; confirmed unchanged
   `button.fx-info-i "i"` 14×14 < the 28px minimum, FONT same element 9px < 11px minimum. This is
   the tap-target gap S3 already flagged and confirmed unrelated to its own edits; still present,
   still not this session's.
-Neither of these two commands is run by `githooks/pre-commit` on every commit today (only when
+Neither of these two commands is run by `tools/githooks/pre-commit` on every commit today (only when
 `chromasmith-22.html`/`desktop/library-ui.js` is staged, via `editor:gates --advisory` — which
 is why the advisory 7 don't block locally either); `npm test`/CI run them non-advisory/strict via
 `editor:gates` and `ui:test` respectively — `editor:gates` still exits 0 since the 7 are advisory,
@@ -411,9 +411,9 @@ call `ui:test`) will currently fail on that until it's fixed.
   part of what this session was asked to fix; left for whoever next touches `lib-grid`.
 
 **Token gates in editor:gates + allowlist audit (§1/§2) + gate baseline — 2026-09-12 — done**
-- Added `editor:tokens-check` (`node scripts/build-tokens.mjs --check`) and `editor:tokens-verify`
+- Added `editor:tokens-check` (`node tools/scripts/build-tokens.mjs --check`) and `editor:tokens-verify`
   (`design/verify_tokens.py`) as blocking entries in `test/editor_gates.mjs`'s `GATES` array (not
-  in `ADVISORY_GATES`). `githooks/pre-commit` already ran both blocking (unconditionally, whenever
+  in `ADVISORY_GATES`). `tools/githooks/pre-commit` already ran both blocking (unconditionally, whenever
   `chromasmith-22.html`/`desktop/library-ui.js`/`design/tokens.json`/the two build scripts change —
   from the earlier "Token generator gates" session) — no hook change needed, just confirmed.
 - Allowlist audit (`docs/ui-workflow/allowlist-audit.md`) §1 (delete/re-baseline, confident):
@@ -507,7 +507,7 @@ call `ui:test`) will currently fail on that until it's fixed.
   meant corruption.
 - splash has no live DOM route (unchanged since S5) and S6c's own pass dropped even the S6-era
   wireframe screenshot stand-in it used to have; regenerated it fresh (Playwright screenshot of
-  `chromasmith-design/project/Splash Screen.html` at the app's 1400×900 desktop viewport) rather
+  `design/wireframes/project/Splash Screen.html` at the app's 1400×900 desktop viewport) rather
   than leaving splash uncapturable on the review page.
 
 
@@ -838,10 +838,10 @@ call `ui:test`) will currently fail on that until it's fixed.
 
 **Component registry — 2026-09-12 — done**
 - Confirmed no registry existed: the catalogue covered 8 visual examples; surface, panel-control and icon inventories were disconnected.
-- `scripts/build-component-registry.mjs` generates `design/components.json` from both production UI sources: 765 source-locatable family registrations across 13 families, including 23 toggles and 90 semantic icon calls.
+- `tools/scripts/build-component-registry.mjs` generates `design/components.json` from both production UI sources: 765 source-locatable family registrations across 13 families, including 23 toggles and 90 semantic icon calls.
 - `heart` resolves to 3 exact declarations in `desktop/library-ui.js`; all instances include source+line and a stable selector where production markup supplies one.
 - Coverage debt is explicit: 22 dynamic declarations and 124 registrations without a stable selector remain source-locatable and cannot silently count as selector-covered.
-- `scripts/query-components.mjs` gives small offline `--summary`, `--family`, `--icon`, or `--text` results so agents do not read the 10,000-line registry.
+- `tools/scripts/query-components.mjs` gives small offline `--summary`, `--family`, `--icon`, or `--text` results so agents do not read the 10,000-line registry.
 - `editor:components-check` is blocking in `editor:gates`; `components:build`/`components:check` are npm commands. S12/S13 prompts now require registry queries for shared-component work.
 
 **Phase 1 trust repairs — 2026-09-12 — in progress, waiting on baseline/capture decisions**
@@ -906,7 +906,7 @@ call `ui:test`) will currently fail on that until it's fixed.
 - Added the vendor-neutral contract system at
   `docs/ui-workflow/component-contracts/`: `schema.json` records the common machine-readable
   shape; `contracts/toggle.json` is the sole real-family contract; and
-  `scripts/validate-component-contracts.mjs` runs it offline. Generated observations and registry
+  `tools/scripts/validate-component-contracts.mjs` runs it offline. Generated observations and registry
   locations are separate from authored decisions/targets/questions/approval. Refresh mode updates
   observations only and checks the authored digest; neither it nor validation can approve a
   contract or write a baseline. `component-registry.md` documents the location and command.
@@ -918,9 +918,9 @@ call `ui:test`) will currently fail on that until it's fixed.
   the two presentations, real `.on` state/keyboard pointer behavior, dark/light token behavior,
   forced-colors/reduced-motion handling, raw geometry/motion literals, catalogue-only synthetic
   states, and the 32×18 desktop switch versus 44px target-rule exception.
-- Focused checks passed: `node scripts/build-component-registry.mjs --check` (765 instances),
-  `node scripts/query-components.mjs --family toggle` (23), `node --check
-  scripts/validate-component-contracts.mjs`, contract validation for `--all` and `--family
+- Focused checks passed: `node tools/scripts/build-component-registry.mjs --check` (765 instances),
+  `node tools/scripts/query-components.mjs --family toggle` (23), `node --check
+  tools/scripts/validate-component-contracts.mjs`, contract validation for `--all` and `--family
   toggle` (23 registry / 13 runtime), changed-JSON parsing, and `git diff --check`. No production
   toggle, other component, application gate, commit, or push was changed.
 - **User decisions — 2026-09-13:** keep `.opt-toggle` within the toggle family; make 44px the

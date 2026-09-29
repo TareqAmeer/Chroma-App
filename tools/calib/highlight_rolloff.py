@@ -7,7 +7,7 @@ Physics argument for why this is safe (verified against real data, not just theo
 Y = .299R + .587G + .114B in LINEAR space. A genuinely saturated color cannot have linear
 Y > 0.9 — pure red (R=1,G=B=0) only gives Y=0.299; reaching Y>0.9 requires ALL three channels
 already high, i.e. the pixel is already near-neutral. Measured on the real gold-tag reference
-(calib/nr_validate.py's TAG_BOX, __TM8304): linear luma max = 0.089, nowhere near this zone.
+(tools/calib/nr_validate.py's TAG_BOX, __TM8304): linear luma max = 0.089, nowhere near this zone.
 Measured on __TM8159's sparkle patch: 25% of pixels sit above linear luma 0.90 — exactly the
 zone the existing edge-gated median (contrast-only trigger) misses, because the CENTER of a
 blown highlight is locally flat (no contrast), so the gate correctly (but wrongly, for this
@@ -16,7 +16,7 @@ purpose) stays off there.
 This is a separate, additive fix to suppress_false_color, not a replacement.
 
 Usage: run directly for validation (green-dot metric on the real TM8159 decode + gold-tag
-linear-luma safety check, reusing calib/false_color_gate.py's synthetic safety battery).
+linear-luma safety check, reusing tools/calib/false_color_gate.py's synthetic safety battery).
 """
 import sys
 from pathlib import Path
@@ -65,7 +65,7 @@ def load_bin_lin(p):
 
 if __name__ == '__main__':
     from dcp_pipeline import parse_dcp, render
-    dcp = parse_dcp('calib/DCP Camera Profiles/Panasonic DC-S9 Camera Standard.dcp')
+    dcp = parse_dcp('tools/calib/DCP Camera Profiles/Panasonic DC-S9 Camera Standard.dcp')
     FIT = {"ev": 0.0, "gr": 0.9860, "gb": 0.9783, "black": 0.0}
 
     print("=== Fix A: highlight chroma roll-off, real TM8159 sparkle patch ===")

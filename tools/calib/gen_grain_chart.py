@@ -8,9 +8,9 @@ interference (the halation lesson: measure flat interiors, not edges).
 Upload grain-test-2x.png to Dehancer, export at grain Amount 30 / 60 / 100, and
 save the three outputs in the repo root as:
     grain-deh-30.png  grain-deh-60.png  grain-deh-100.png
-calib/grainmodel.py samples zones by the coordinates printed below.
+tools/calib/grainmodel.py samples zones by the coordinates printed below.
 
-Run: python calib/gen_grain_chart.py
+Run: python tools/calib/gen_grain_chart.py
 """
 import os
 import numpy as np

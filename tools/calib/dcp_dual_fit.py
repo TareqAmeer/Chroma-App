@@ -13,9 +13,9 @@ Inputs
   repo *_chroma.png / *_lr.tif             the 6 validated scene pairs
 
 Usage
-  python calib/dcp_dual_fit.py match    # auto-match dumps to the 6 scene pairs
-  python calib/dcp_dual_fit.py fit      # fit constants (writes calib/dcp_dual_fit.json)
-  python calib/dcp_dual_fit.py report   # before/after table + skin/water patches
+  python tools/calib/dcp_dual_fit.py match    # auto-match dumps to the 6 scene pairs
+  python tools/calib/dcp_dual_fit.py fit      # fit constants (writes tools/calib/dcp_dual_fit.json)
+  python tools/calib/dcp_dual_fit.py report   # before/after table + skin/water patches
 """
 import os, sys, json, struct
 import numpy as np

@@ -102,4 +102,4 @@ if __name__ == '__main__':
     import json
     with open(os.path.join(ROOT, 'ring_halation_fit.json'), 'w') as f:
         json.dump(dict(r_c=r_c, d=d, L=L, a=a, gain_mult=gain_mult, loss=res.fun), f, indent=2)
-    print("saved calib/ring_halation_fit.json")
+    print("saved tools/calib/ring_halation_fit.json")

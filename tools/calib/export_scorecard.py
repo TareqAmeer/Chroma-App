@@ -3,14 +3,14 @@ Export-gate SCORECARD — the CI validation gate for test/export_harness.mjs.
 
 Diffs every PNG in test/output/ against its matching golden in test/golden/
 (same basename: "<fixture>__<recipe>.png") and prints one human-legible
-PASS/FAIL table, styled like calib/scorecard.py.
+PASS/FAIL table, styled like tools/calib/scorecard.py.
 
 PASS threshold: max per-pixel abs channel diff <= MAX_DIFF_TOL (default 2/255).
 This is deliberately tight — the harness pins WebGL backend (SwiftShader) and
 grain/artifact seed (fxState.artSeed=7.7) specifically so exports are
 byte-reproducible; a real regression should show as a large, not marginal, diff.
 
-Run:  python calib/export_scorecard.py
+Run:  python tools/calib/export_scorecard.py
 Exit code: 0 if every pair PASSes, 1 otherwise (for CI).
 """
 import os

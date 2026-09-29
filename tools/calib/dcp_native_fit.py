@@ -17,12 +17,12 @@ Fit parameters: ev_a, ev_b (ev = ev_a + ev_b*log2(ISO/100)), gr, gb. Nothing els
 
 Inputs
   /tmp/chroma-dumps-native/<name>.bin   12-byte header (w,h,iso u32 LE) + u16 RGB, 752x502
-  calib/dcp_scene_match.json            scene -> wasm dump name (reused for the RW2 name)
+  tools/calib/dcp_scene_match.json            scene -> wasm dump name (reused for the RW2 name)
   repo *_lr.tif                         the Lightroom sRGB reference exports
 
 Usage
-  python calib/dcp_native_fit.py fit      # fit + write calib/dcp_native_fit.json
-  python calib/dcp_native_fit.py report   # per-scene MAD + patch table (incl. SHADOW patches)
+  python tools/calib/dcp_native_fit.py fit      # fit + write tools/calib/dcp_native_fit.json
+  python tools/calib/dcp_native_fit.py report   # per-scene MAD + patch table (incl. SHADOW patches)
 """
 import os, sys, json, struct
 import numpy as np

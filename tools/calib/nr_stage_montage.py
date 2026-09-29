@@ -18,13 +18,13 @@ Inputs (produce with desktop/src-tauri/examples/dump_rw2 + env toggles):
   /tmp/cs_dump/tm8159_both_off.bin       (CS_NO_CHROMA_NR=1 — dump_rw2 maps it to native_nr=false)
   /tmp/cs_dump/tm8159_wavelet_only.bin   (CS_NO_SHADOW_NR=1)
   /tmp/cs_dump/tm8159_shadow_only.bin    (CS_NR_LEVELS=0 CS_NR_STRENGTH=0 — wavelet no-op)
-  calib/nr_dump/set2_cs_high.bin         (CS_NR_TIER=high — set 2 is __TM8159, same source photo)
+  tools/calib/nr_dump/set2_cs_high.bin         (CS_NR_TIER=high — set 2 is __TM8159, same source photo)
   LR-noNR2.tif / LR-defaultNR2.tif       (repo root)
   LR-denoise2.tif                        (repo root — LR AI Denoise checkbox export, optional)
 
-Output: calib/nr_stage_montage.png (small — patch crops only, safe to keep)
+Output: tools/calib/nr_stage_montage.png (small — patch crops only, safe to keep)
 
-Usage: python3 calib/nr_stage_montage.py
+Usage: python3 tools/calib/nr_stage_montage.py
 """
 import os
 import sys
@@ -34,7 +34,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).parent))
-os.chdir(Path(__file__).parent.parent)
+os.chdir(Path(__file__).parent.parent.parent)
 
 from nr_validate import load_bin_srgb, load_tif, ycbcr  # noqa: E402
 
@@ -48,7 +48,7 @@ VARIANTS = [
     ('shadow only', '/tmp/cs_dump/tm8159_shadow_only.bin', 'bin'),
     ('wavelet only', '/tmp/cs_dump/tm8159_wavelet_only.bin', 'bin'),
     ('both ON (Fast, shipped)', '/tmp/cs_dump/tm8159_both_on.bin', 'bin'),
-    ('High (neural)', 'calib/nr_dump/set2_cs_high.bin', 'bin'),
+    ('High (neural)', 'tools/calib/nr_dump/set2_cs_high.bin', 'bin'),
     ('LR no NR', 'LR-noNR2.tif', 'tif'),
     ('LR default NR', 'LR-defaultNR2.tif', 'tif'),
     ('LR Denoise', 'LR-denoise2.tif', 'tif'),
@@ -105,7 +105,7 @@ def main():
         draw.text((x + 2, 6), label, fill=(255, 255, 160))
         draw.text((x + 2, header + tile_px + pad + 4), f'{label} (8x chroma)', fill=(160, 220, 255))
 
-    out = 'calib/nr_stage_montage.png'
+    out = 'tools/calib/nr_stage_montage.png'
     canvas.save(out)
     print(f'wrote {out} ({W}x{H})')
 

@@ -2,7 +2,7 @@
 chartToLUT() exactly (const CHART, const SZ). Used by extract_print_luts.py and the
 Dehancer film-LUT extraction tooling so there's one copy of the geometry.
 
-Run standalone to (re)generate the source chart PNG:  python calib/chartlut.py
+Run standalone to (re)generate the source chart PNG:  python tools/calib/chartlut.py
 """
 import os
 

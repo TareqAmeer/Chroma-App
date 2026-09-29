@@ -1,4 +1,4 @@
-// ROADMAP.md R6 — deconvolution sharpening: perf + visual sanity probe.
+// docs/ROADMAP.md R6 — deconvolution sharpening: perf + visual sanity probe.
 // Times FX.render() with the new deconv pass off vs on, and does a pixel-level sanity check
 // on a real fixture (test/fixtures/portrait.png) that Amount>0 measurably sharpens an edge
 // without pathological change at moderate settings, while a pushed Amount starts to show

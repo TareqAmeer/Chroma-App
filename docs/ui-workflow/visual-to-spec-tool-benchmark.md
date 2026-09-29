@@ -16,7 +16,7 @@ npm run components:contracts:check
 npm run reference:spec:validate:all
 npm run reference:measure -- test/baselines/visual/color.png /tmp/... 0,0 100,100 500,400
 python3 /tmp/chroma-screenshot-to-design-system/scripts/sample_colors.py --image test/baselines/visual/color.png --points 0,0 100,100 500,400
-node scripts/measure-ui-reference.mjs --compare <baseline.png> <candidate.png> /tmp/...
+node tools/scripts/measure-ui-reference.mjs --compare <baseline.png> <candidate.png> /tmp/...
 ```
 
 The initial Chroma measurement took 5.60s through npm and emitted 604 bytes for dimensions plus three RGBA samples. It had no hash, named crop, region statistic, or comparison record; every supplied sample had method provenance, but the asset identity and crop provenance were incomplete. The audited external sampler could not run because Pillow was absent. A temporary `/tmp` virtual environment was attempted after permission to install it; Pillow 10.4.0 failed during its Python 3.8 build-backend setup and Pillow 9.5.0 had no compatible binary. No project dependency was added.

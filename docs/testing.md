@@ -4,7 +4,7 @@ Moved out of CLAUDE.md (2026-09-10) to keep the root file a thin index — this 
 when working on the test suite itself, not on every turn. See CLAUDE.md §2 for the run commands;
 this is the "why does each gate exist and what does it actually check" detail.
 
-`npm run editor:gates` (also `npm test`'s `editor:gates` step, `githooks/pre-commit` for any
+`npm run editor:gates` (also `npm test`'s `editor:gates` step, `tools/githooks/pre-commit` for any
 commit touching `chromasmith-22.html`, and `.github/workflows/editor-gates.yml` on every push/PR)
 rebuilds `desktop/dist/` first — every gate underneath loads that staged copy, and this script
 used to skip the rebuild, so a run could quietly pass or fail against a previous session's stale

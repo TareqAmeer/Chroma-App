@@ -2,19 +2,19 @@
 """
 Entrypoint for Chromasmith's live diagnostic tool.
 
-  python3 diagnostics/cli.py start [--duration 15m] [--relaunch] [--use-spindump]
-  python3 diagnostics/cli.py report [--run <timestamp>] [--for-claude]
-  python3 diagnostics/cli.py mark "clicked Export"
-  python3 diagnostics/cli.py inspect                    # exact live process-tree snapshot
-  python3 diagnostics/cli.py sample [--pid PID]          # stack sample right now
-  python3 diagnostics/cli.py db pending-thumbs           # exact catalog.db row state
-  python3 diagnostics/cli.py db --sql "SELECT ..."       # or --list for canned queries
+  python3 tools/diagnostics/cli.py start [--duration 15m] [--relaunch] [--use-spindump]
+  python3 tools/diagnostics/cli.py report [--run <timestamp>] [--for-claude]
+  python3 tools/diagnostics/cli.py mark "clicked Export"
+  python3 tools/diagnostics/cli.py inspect                    # exact live process-tree snapshot
+  python3 tools/diagnostics/cli.py sample [--pid PID]          # stack sample right now
+  python3 tools/diagnostics/cli.py db pending-thumbs           # exact catalog.db row state
+  python3 tools/diagnostics/cli.py db --sql "SELECT ..."       # or --list for canned queries
 
 inspect/sample/db work standalone (no `start` session needed) for the "give me
 exact numbers now" deep-dive — `start`'s report.md is the aggregate-summary
 triage layer on top of the same underlying data.
 
-See diagnostics/README.md for the full walkthrough.
+See tools/diagnostics/README.md for the full walkthrough.
 """
 import argparse
 import json
@@ -83,7 +83,7 @@ def cmd_report(args):
 def cmd_mark(args):
     if not os.path.exists(ACTIVE_RUN_FILE):
         print("No active diagnostic session — start one with "
-              "`python3 diagnostics/cli.py start` first.", file=sys.stderr)
+              "`python3 tools/diagnostics/cli.py start` first.", file=sys.stderr)
         return 1
     with open(ACTIVE_RUN_FILE) as f:
         run_dir = f.read().strip()
@@ -288,7 +288,7 @@ def main():
     p_start.set_defaults(func=cmd_start)
 
     p_report = sub.add_parser('report', help='Re-render a report from a saved run')
-    p_report.add_argument('--run', help='Run timestamp under diagnostics/reports/ (default: latest)')
+    p_report.add_argument('--run', help='Run timestamp under tools/diagnostics/reports/ (default: latest)')
     p_report.add_argument('--for-claude', action='store_true',
                            help='Print the condensed Claude-ready digest to stdout')
     p_report.set_defaults(func=cmd_report)

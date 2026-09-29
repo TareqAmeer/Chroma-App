@@ -81,7 +81,7 @@
     "zone": "topbar",
     "match": "topbar: borderColor",
     "exact": false,
-    "reason": "Token drift, not a per-element bug: app's --bdr is rgba(255,255,255,.12) doing triple duty as panel/control/pill border; wireframe uses three distinct roles (.1 panel edges, .12 control outlines, .14 pills \u2014 chromasmith-design/project/Editor (Developer) View.dc.html lines 31,71,99,102,108,157 vs 41,43 vs 44,56,76,116,123). Fixed by introducing --bdr-panel/--bdr-ctrl/--bdr-pill in plan Phase D, one edit for all borderColor findings below."
+    "reason": "Token drift, not a per-element bug: app's --bdr is rgba(255,255,255,.12) doing triple duty as panel/control/pill border; wireframe uses three distinct roles (.1 panel edges, .12 control outlines, .14 pills \u2014 design/wireframes/project/Editor (Developer) View.dc.html lines 31,71,99,102,108,157 vs 41,43 vs 44,56,76,116,123). Fixed by introducing --bdr-panel/--bdr-ctrl/--bdr-pill in plan Phase D, one edit for all borderColor findings below."
   },
   {
     "zone": "topbar",

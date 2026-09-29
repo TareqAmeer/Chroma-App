@@ -1,7 +1,7 @@
 """
-Scores the VST/Poisson-Gaussian denoise prototype (calib/vst_denoise.py) against both the
+Scores the VST/Poisson-Gaussian denoise prototype (tools/calib/vst_denoise.py) against both the
 existing hand-tuned per-ISO wavelet NR (raw_decode.rs) and Lightroom's default NR, reusing
-the tone-robust on/off-ratio methodology from calib/nr_validate.py (see that file's docstring
+the tone-robust on/off-ratio methodology from tools/calib/nr_validate.py (see that file's docstring
 for the full rationale — measure each app/version against its OWN no-NR baseline, since
 absolute pixels aren't comparable across different color pipelines).
 
@@ -10,18 +10,18 @@ water with a dog silhouette) — the current "Highlight Desaturation" slider at 
 leaves visible chroma speckle on the water highlights. This script checks whether the VST
 prototype does better there, not just on synthetic ramp-chart metrics.
 
-Inputs (must already exist — see the header comments in calib/vst_denoise.py and
-calib/noise_fit.py for how to produce them):
+Inputs (must already exist — see the header comments in tools/calib/vst_denoise.py and
+tools/calib/noise_fit.py for how to produce them):
   /tmp/cs_dump/set2_cs_off.bin, set2_cs_on.bin   — dump_rw2 output, CS_NO_CHROMA_NR=1 / unset
   LR-noNR2.tif, LR-defaultNR2.tif                — Lightroom references (repo root)
-  calib/tm8159_vst_noisy.png, tm8159_vst_denoised.png — vst_denoise.py output
+  tools/calib/tm8159_vst_noisy.png, tm8159_vst_denoised.png — vst_denoise.py output
 
 ⚠️ Caveat: the VST preview PNGs use a quick gray-world WB + sRGB gamma for visualization
 (see vst_denoise.py docstring) — NOT the same color pipeline as CS's DCP bake or Lightroom's
 render. This comparison is therefore about RELATIVE noise reduction (on/off ratios), same
 tone-robust philosophy as nr_validate.py, not absolute color match.
 
-Usage: python3 calib/nr_vst_compare.py
+Usage: python3 tools/calib/nr_vst_compare.py
 """
 import os
 import sys
@@ -31,7 +31,7 @@ import numpy as np
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent))
-os.chdir(Path(__file__).parent.parent)
+os.chdir(Path(__file__).parent.parent.parent)
 
 from nr_validate import load_bin_srgb, load_tif, measure, srgb  # noqa: E402
 
@@ -51,8 +51,8 @@ def main():
     lr_on = load_tif("LR-defaultNR2.tif")
     cs_off = load_bin_srgb(f"{CS_DUMP_DIR}/set2_cs_off.bin")
     cs_on = load_bin_srgb(f"{CS_DUMP_DIR}/set2_cs_on.bin")
-    vst_off = load_png_rgb("calib/tm8159_vst_noisy.png")
-    vst_on = load_png_rgb("calib/tm8159_vst_denoised.png")
+    vst_off = load_png_rgb("tools/calib/tm8159_vst_noisy.png")
+    vst_on = load_png_rgb("tools/calib/tm8159_vst_denoised.png")
 
     lr = measure(lr_off, lr_on)
     cs = measure(cs_off, cs_on)

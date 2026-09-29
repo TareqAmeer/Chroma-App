@@ -19,14 +19,14 @@ and the hard-won lessons from building it.
 3. For any live-app bug report (freeze, slow op, silent-wrong-behavior, memory growth, indexing
    stall) where the cause isn't already obvious from a stack trace or failing test, use the
    `chromasmith-debugger` subagent — don't investigate inline in the main thread. It's built
-   around `diagnostics/` as primary evidence and verifies the fix live before declaring it done;
+   around `tools/diagnostics/` as primary evidence and verifies the fix live before declaring it done;
    several past sessions burned multiple rounds investigating inline what this now exists to do.
 4. Commit and push after every real edit (`auto-commit` memory) — the user checks the live GitHub
    Pages build, so unpushed work isn't testable.
 5. Bump `BUILD` in `chromasmith-22.html` — automatic via a hook, nothing to do here.
 6. **Design-token values live in `design/tokens.json`**, not in the `:root`/`body.light` blocks —
    those (and library-ui.js's DS block) are generated between `/* TOKENS:*:START/END */` markers by
-   `node scripts/build-tokens.mjs`. Edit tokens.json, regenerate; a hand edit inside the markers is lost.
+   `node tools/scripts/build-tokens.mjs`. Edit tokens.json, regenerate; a hand edit inside the markers is lost.
 7. **Read [docs/process-lessons.md](docs/process-lessons.md) before any UI/layout, test, or flaky-bug
    work** — 18 lessons that each cost real time. The one-line versions are in §6 below.
 9. **Linear ticket workflow.** When starting work on a Linear ticket, move it to "In Progress". When
@@ -56,7 +56,7 @@ ios/, build-ios.sh, patches/   Capacitor iOS shell — docs/ios-shell.md
 .github/workflows/      ios-ipa.yml; desktop-release.yml (dmg + Windows NSIS installer) on `v*`
                         tag. ⚠️ macos-13 (x86_64) required by the Intel-only libonnxruntime.dylib;
                         dmg via hdiutil, tauri.macos.conf.json targets:["app"]
-calib/                  Calibration tooling (Python) — calib/CLAUDE.md. Not needed to run the app.
+tools/calib/                  Calibration tooling (Python) — tools/calib/CLAUDE.md. Not needed to run the app.
                         LUT LIBRARY/ (46) + dehancer/cubes/ (67) = source of every preset
 ```
 
@@ -64,7 +64,7 @@ calib/                  Calibration tooling (Python) — calib/CLAUDE.md. Not ne
 and the proof/validation PNGs the scripts emit. The app ships **113** look presets: the 11
 `User Looks` are embedded as base64 inside `chromasmith-22.html` (`LUT_PRESETS`), the other 102
 live in `vendor/luts/`. `LUT_META` — not `LUT_PRESETS` — is the authoritative key list. Either
-way the app is self-contained without `calib/`.
+way the app is self-contained without `tools/calib/`.
 
 ---
 
@@ -90,7 +90,7 @@ Deploy the folder as-is to GitHub Pages or any static host.
 See [docs/ios-shell.md](docs/ios-shell.md) — load before touching `ios/`, `build-ios.sh`, `patches/` or `capNative()`.
 
 ### Calibration tooling
-Setup + commands in [calib/CLAUDE.md](calib/CLAUDE.md) (auto-loads inside `calib/`); skill `chromasmith-calib`.
+Setup + commands in [tools/calib/CLAUDE.md](tools/calib/CLAUDE.md) (auto-loads inside `tools/calib/`); skill `chromasmith-calib`.
 
 ### Export regression gate (`test/`) — the fast way to verify a shader edit
 
@@ -110,7 +110,7 @@ virtualisation/hashing fixes, `mask_raster`, `export_harness`'s determinism rule
 gates known to be flaky on this machine (`export_harness` blank-render / `video_harness` still-
 frame mismatch) and how to tell a real regression from that noise. Load it before touching any
 test file, not before running the tests. In short: `npm run editor:gates` (also `npm test`'s
-`editor:gates` step, `githooks/pre-commit`, and CI) always rebuilds `desktop/dist/` first so no
+`editor:gates` step, `tools/githooks/pre-commit`, and CI) always rebuilds `desktop/dist/` first so no
 gate can pass or fail against stale code; `python3 test/verify.py --editor [--full]` runs the
 Library gates and the Playwright suite too. None of this closes the desktop-engine gap — every
 check here drives Chromium, not the WKWebView the real Tauri desktop app renders with. A green
@@ -166,9 +166,9 @@ carrying it in every turn:
   phased plan, ground rules for changes that reach both platforms, and the Windows-vs-macOS
   tools/feature comparison. Load before any `desktop/src-tauri` or `.claude/hooks` work touching
   Windows, or before continuing the port.
-- **[calib/CLAUDE.md](calib/CLAUDE.md)** — halation/bloom emission model science, `calib/`
+- **[tools/calib/CLAUDE.md](tools/calib/CLAUDE.md)** — halation/bloom emission model science, `tools/calib/`
   tooling, the grain model, Fujify Fujifilm-look recreation, chart zone geometry. Auto-loads
-  when working inside `calib/`; load before tuning any `FXR.CAL.*` constant. See also skill
+  when working inside `tools/calib/`; load before tuning any `FXR.CAL.*` constant. See also skill
   `chromasmith-calib`.
 - **[docs/skin-tone.md](docs/skin-tone.md)** — the Skin Tone mask: Oklab-based contractive
   colour operator, segmentation-first design, panel layout, auto-seeded samples, named
@@ -198,5 +198,5 @@ Headlines: render-and-look before optimising; `overflow-x:hidden` kills sticky (
 
 ## 7. Zone geometry & full calibration walkthrough
 
-See [calib/CLAUDE.md](calib/CLAUDE.md) for chart zone pixel coordinates and the
+See [tools/calib/CLAUDE.md](tools/calib/CLAUDE.md) for chart zone pixel coordinates and the
 full halation/grain/Fujify calibration method.

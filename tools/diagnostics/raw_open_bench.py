@@ -9,11 +9,11 @@ packaged desktop app and real photos:
   ipc       how long a trivial IPC (get_meta) takes while a decode is running — a sync command on
             the main thread shows up here as seconds instead of milliseconds
 
-Complements diagnostics/raw_bench.py (which direct-invokes the native commands and so never sees
+Complements tools/diagnostics/raw_bench.py (which direct-invokes the native commands and so never sees
 the JS open path, the reveal or the cache-hit promotion). Reuses its app/automation plumbing.
 
 Usage:
-    python3 diagnostics/raw_open_bench.py --folder /Volumes/Crucial/PHOTOS/2026/2026-09-12 --n 3 --label baseline
+    python3 tools/diagnostics/raw_open_bench.py --folder /Volumes/Crucial/PHOTOS/2026/2026-09-12 --n 3 --label baseline
 """
 import argparse
 import glob
@@ -27,7 +27,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import raw_bench as rb  # noqa: E402
 
-REPORTS_DIR = os.path.join(rb.REPO_ROOT, 'diagnostics', 'reports', 'raw-open-bench')
+REPORTS_DIR = os.path.join(rb.REPO_ROOT, 'tools', 'diagnostics', 'reports', 'raw-open-bench')
 
 OPEN_JS = """
 (async () => {{

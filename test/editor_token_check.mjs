@@ -19,7 +19,7 @@
 //   black, `transparent`, `currentColor`, `#fff`/`#000` used as absolute white/black rather than a
 //   themed colour). Triage findings against ALLOWLIST below rather than assuming every hit is a bug.
 //
-// Role-mismatch pass (added alongside scripts/build-tokens.mjs): the checks above only catch a
+// Role-mismatch pass (added alongside tools/scripts/build-tokens.mjs): the checks above only catch a
 // literal that isn't ANY token. They miss a token used for the WRONG role — e.g. a legacy .bpri
 // primary-button rule painted with --err (state.danger) instead of --acc (action.primary). This
 // second pass reads design/tokens.json's $extensions.chromasmith.role per appVar and flags a

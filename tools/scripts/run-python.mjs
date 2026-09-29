@@ -4,7 +4,7 @@
 // not bash). That inline shell conditional worked fine in a real bash/zsh, but npm on Windows
 // runs package.json scripts through cmd.exe by default, where `[ -x ... ]` is a syntax error
 // ("-x was unexpected at this time"), blocking `npm run tokens:verify`/`npm run scorecard`
-// (and, via githooks/pre-commit, every commit touching chromasmith-22.html/library-ui.js) on
+// (and, via tools/githooks/pre-commit, every commit touching chromasmith-22.html/library-ui.js) on
 // Windows regardless of which shell invoked `npm run`.
 //
 // The venv path and the system-Python fallback command are both OS-specific, not just the

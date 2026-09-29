@@ -4,7 +4,7 @@
 //!   cargo run --release --example subject_eval
 //!
 //! Why an example and not a #[test]: this is calibration-style measurement (a table you read and
-//! judge), the same split the repo already uses for dump_rw2.rs and the Python calib/ scripts. The
+//! judge), the same split the repo already uses for dump_rw2.rs and the Python tools/calib/ scripts. The
 //! standing regression assertions live in subject.rs's own test module and are far cheaper.
 //!
 //! Two datasets, both gitignored user captures — this skips whatever isn't in the checkout:

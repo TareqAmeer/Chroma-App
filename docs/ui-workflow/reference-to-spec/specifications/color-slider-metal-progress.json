@@ -65,10 +65,10 @@
   },
   "authored": {
     "applicableDesignRules": [
-      { "id": "rule-color", "rule": "Use existing Chroma colour roles and preserve functional gradients.", "sourceClass": "repository_evidence", "sourceRef": "chromasmith-design/project/design.md Visual foundations" },
-      { "id": "rule-type", "rule": "Preserve Chroma typography rather than copying unknown raster font metrics.", "sourceClass": "repository_evidence", "sourceRef": "chromasmith-design/project/design.md Typography" },
-      { "id": "rule-motion", "rule": "Reduced-motion mode removes lag, wave evolution, pulsing, and settle animation.", "sourceClass": "repository_evidence", "sourceRef": "chromasmith-design/project/design.md Animation" },
-      { "id": "rule-focus", "rule": "The semantic native input and visible focus treatment remain intact.", "sourceClass": "repository_evidence", "sourceRef": "chromasmith-design/project/design.md Accessibility" }
+      { "id": "rule-color", "rule": "Use existing Chroma colour roles and preserve functional gradients.", "sourceClass": "repository_evidence", "sourceRef": "design/wireframes/project/design.md Visual foundations" },
+      { "id": "rule-type", "rule": "Preserve Chroma typography rather than copying unknown raster font metrics.", "sourceClass": "repository_evidence", "sourceRef": "design/wireframes/project/design.md Typography" },
+      { "id": "rule-motion", "rule": "Reduced-motion mode removes lag, wave evolution, pulsing, and settle animation.", "sourceClass": "repository_evidence", "sourceRef": "design/wireframes/project/design.md Animation" },
+      { "id": "rule-focus", "rule": "The semantic native input and visible focus treatment remain intact.", "sourceClass": "repository_evidence", "sourceRef": "design/wireframes/project/design.md Accessibility" }
     ],
     "proposedInterpretations": [
       { "id": "proposal-layering", "statement": "Keep labels, values, focus, and the native range in HTML/CSS; render only the filled region, attached haze, and deforming front in a shared Canvas 2D layer.", "sourceClass": "proposal", "sourceRef": "motion", "basedOn": ["obs-copy", "obs-front", "repo-contract"] },

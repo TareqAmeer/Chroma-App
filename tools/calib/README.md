@@ -29,9 +29,9 @@ dehancer h 70 b 40.JPG    combined validation target
 ## Run (token-free)
 ```
 pip install numpy pillow scipy
-python3 calib/calibrate.py
+python3 tools/calib/calibrate.py
 ```
-Outputs `calib/params.json` and `preview_*.png` side-by-side
+Outputs `tools/calib/params.json` and `preview_*.png` side-by-side
 `[source | our render | dehancer]` strips. Re-run anytime; it self-iterates.
 
 ## Transplant to the app

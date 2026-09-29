@@ -1,5 +1,5 @@
 """
-FAST offline tuning harness for the Wiener<->median hybrid gate (calib/vst_denoise.py's
+FAST offline tuning harness for the Wiener<->median hybrid gate (tools/calib/vst_denoise.py's
 hybrid_wiener_median). Avoids the two expensive parts of the normal validation loop:
 
   1. Runs the pipeline on a small CROP (~1/17th the pixel count of the full 6016x4016 frame)
@@ -13,11 +13,11 @@ The Lightroom/CS reference ratios are computed ONCE on a matching crop and reuse
 comparison target for the whole parameter sweep — they don't need to be recomputed per combo.
 
 Only after a promising (k_min, y_lo, y_hi) combo is found here should the full, slow
-calib/nr_vst_compare.py (or the multi-set calib/step_a_gate.py-style loop) be run to confirm
+tools/calib/nr_vst_compare.py (or the multi-set tools/calib/step_a_gate.py-style loop) be run to confirm
 on the full image and then across other ISO sets — this script exists to avoid burning that
 cost on every tuning iteration.
 
-Usage: python3 calib/tune_hybrid_fast.py
+Usage: python3 tools/calib/tune_hybrid_fast.py
 """
 import sys
 import time

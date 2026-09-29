@@ -23,8 +23,8 @@ Learned the hard/expensive way:
    descendants (it makes the body a scroll-clipping context). Use `overflow-x:clip`.
 6. When the user reports a RAW colour mismatch, **first ask what's rendering the comparison**
    (Preview shows the embedded JPEG, not the RAW).
-7. The app preset list must mirror its `.cube` sources — `calib/LUT LIBRARY/` (46) plus
-   `calib/dehancer/cubes/` (67) = the 113 keys in `LUT_META`; a LUT with a real
+7. The app preset list must mirror its `.cube` sources — `tools/calib/LUT LIBRARY/` (46) plus
+   `tools/calib/dehancer/cubes/` (67) = the 113 keys in `LUT_META`; a LUT with a real
    non-`_composed` source (astia/classic_neg/velvia) beats its composed recreation.
    ⚠️ Adding presets is not free any more — see CLAUDE.md §2's payload note. A new look belongs in
    `vendor/luts/`, not inline, and `LUT_META` is what makes it appear.

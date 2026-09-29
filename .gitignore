@@ -1,4 +1,4 @@
-# Python calibration environment (recreate from calib/requirements.txt)
+# Python calibration environment (recreate from tools/calib/requirements.txt)
 .calibvenv/
 __pycache__/
 *.pyc
@@ -37,12 +37,12 @@ __pycache__/
 *.JPG
 *.jpg
 *.jpeg
-calib/fujify/_*.png
-calib/cmp_*.png
-calib/val_*.png
+tools/calib/fujify/_*.png
+tools/calib/cmp_*.png
+tools/calib/val_*.png
 
 # Grain calibration source renders (large; regenerate the chart with gen_grain_chart.py and
-# re-render through Dehancer per calib/calibrate_grain_formats.py). Not bundled.
+# re-render through Dehancer per tools/calib/calibrate_grain_formats.py). Not bundled.
 grain-test-2x.png
 dehancer-*mm-*.png
 dehancer-baseline-*.png
@@ -51,12 +51,12 @@ dehancer-baseline-*.png
 Fujify Luts and XMP/
 
 # Dehancer extraction working files (local reference only, not redistributed —
-# see calib/dehancer_probe.py / dehancer_extract_films.py)
-calib/dehancer/
+# see tools/calib/dehancer_probe.py / dehancer_extract_films.py)
+tools/calib/dehancer/
 
 # nr_validate.py's dump_rw2 output cache (CS_DUMP_DIR default) — regenerate with dump_rw2, not
 # meant to be committed.
-calib/nr_dump/
+tools/calib/nr_dump/
 
 # iOS shell (Capacitor): www/ is staged by build-ios.sh; node_modules restored by npm ci.
 # The ios/ project IS committed (ios/.gitignore covers its build products/Pods/public).
@@ -80,7 +80,7 @@ desktop/src-tauri/vendor/rawdenoise/*.onnx
 # for why). Re-fetch after a fresh clone with vendor/onnxruntime/win-x64/README.md's commands.
 desktop/src-tauri/vendor/onnxruntime/win-x64/*.dll
 test/output/
-scripts/token-report.html
+tools/scripts/token-report.html
 
 # Personal photo-editing sidecars from using Chromasmith on your own photos with the repo as
 # cwd — not app source, not meant for the public repo. (Doesn't untrack the handful of .xmp/
@@ -95,7 +95,7 @@ IMG_5774_2x.PNG
 IMG_7522.jxl
 bloom-test-2x.png
 Firefly_remove\ background*
-calib/bloom_chart_geo.txt
+tools/calib/bloom_chart_geo.txt
 *.PRE-FIX.bak
 Chromasmith\ copy.app
 
@@ -112,8 +112,8 @@ site/photos-src/
 !site/assets/**/*.jpg
 !site/assets/manifest.json
 
-diagnostics/reports/
-diagnostics/baseline.json
+tools/diagnostics/reports/
+tools/diagnostics/baseline.json
 .diagvenv/
 
 # @playwright/test artifacts (behaviour suite) — traces/screenshots from failing runs
@@ -124,7 +124,7 @@ playwright-report/
 # render identically share a file), but the matrix is thousands of images per surface group.
 # Only the generated contact-sheet grids + spec.json (design/asbuilt/) are committed.
 design/asbuilt-full/
-diagnostics/tools/
+tools/diagnostics/tools/
 
 # Local archive of non-essential files (kept on disk, untracked)
 Archive/

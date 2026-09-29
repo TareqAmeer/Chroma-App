@@ -5,7 +5,7 @@
 // WHY A GAIN MAP RATHER THAN AN HDR PIPELINE
 // A gain map IS an SDR image plus a per-pixel ratio to its HDR rendition. That matters here because
 // a 3D LUT is defined on [0,1]^3 — every film look, print profile and calibration constant in
-// calib/ assumes SDR. Making the whole render chain extended-range would invalidate all of it.
+// tools/calib/ assumes SDR. Making the whole render chain extended-range would invalidate all of it.
 // Instead the SDR path stays EXACTLY as it is (so the preview stays truthful and the export goldens
 // are untouched by construction), and the HDR rendition is reconstructed here at write time.
 //

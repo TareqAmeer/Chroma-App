@@ -3,14 +3,14 @@ Measure Dehancer's grain response from the 5 reference renders
 (dehancer-{0,10,30,60,100} grain.JPG, grain Amount slider values) against the
 clean grain-test-2x.png chart.
 
-Produces calib/grain_targets.json — the ground-truth dataset optimize_grain.py
+Produces tools/calib/grain_targets.json — the ground-truth dataset optimize_grain.py
 fits against — and prints a compact summary table.
 
 Statistical only (grain is stochastic, never pixel-diff): per-zone, per-channel
 high-pass residual stddev ("grain strength") + autocorrelation half-width
 ("grain size"), at each Dehancer amount. Samples flat interiors only.
 
-Run: python calib/measure_grain.py
+Run: python tools/calib/measure_grain.py
 """
 import json
 import numpy as np
@@ -92,9 +92,9 @@ def main():
     target['size']['Gray50'] = sizes
     print(f"{'halfwidth':<10}" + ''.join(f'{hw:10.2f}' for hw in sizes))
 
-    with open('calib/grain_targets.json', 'w') as f:
+    with open('tools/calib/grain_targets.json', 'w') as f:
         json.dump(target, f, indent=1)
-    print("\nWrote calib/grain_targets.json")
+    print("\nWrote tools/calib/grain_targets.json")
 
 
 if __name__ == '__main__':

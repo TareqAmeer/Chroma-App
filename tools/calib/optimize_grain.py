@@ -1,6 +1,6 @@
 """
 Fit the v2 per-channel signal-dependent grain model
-(sigma_c = k_c * amount_norm^powA * value_c^powG) to calib/grain_targets.json
+(sigma_c = k_c * amount_norm^powA * value_c^powG) to tools/calib/grain_targets.json
 (measure_grain.py output) — entirely analytic, zero render cost per eval
 (mirrors the halation optimizer's "zero Claude-token cost" discipline).
 
@@ -11,14 +11,14 @@ the full 0-100 amount range is captured, not just one point.
 grSz (grain size) is fit separately/afterward against the measured ~2px
 autocorrelation half-width (size is amount/value independent).
 
-Run: python calib/optimize_grain.py   (seconds — analytic, no images rendered)
+Run: python tools/calib/optimize_grain.py   (seconds — analytic, no images rendered)
 """
 import json
 import numpy as np
 from scipy.optimize import minimize
 from grainmodel import predict_sigma_v3, PROF, HUES, LUMA_STEPS
 
-T = json.load(open('calib/grain_targets.json'))
+T = json.load(open('tools/calib/grain_targets.json'))
 AMOUNTS = T['amounts']
 
 # ── build (value, amount_norm, observed_sigma) sample list ───────────────────
@@ -120,6 +120,6 @@ params = {'kR': kR, 'kG': kG, 'kB': kB, 'powG': powG, 'powL': powL,
           '_note': 'v3 two-component grain: sigma_c = k_c * amount_norm^powA * '
                    '(wL*lum^powL + (1-wL)*clamp(res,0,1)_c^powG); '
                    'grSz fit to ~2px autocorr half-width on Gray50 @ amount=60'}
-with open('calib/grain_params.json', 'w') as f:
+with open('tools/calib/grain_params.json', 'w') as f:
     json.dump(params, f, indent=1)
-print('\nWrote calib/grain_params.json')
+print('\nWrote tools/calib/grain_params.json')

@@ -9,7 +9,7 @@ not fully representative of a real photo's green-channel behavior.
 Measures whole-frame glow energy (not fixed zone crops, since real photos have no known
 coordinates) so it generalizes to arbitrary content.
 
-Run: python calib/probe_real_photo_scaling.py /tmp/heic_test/IMG_2851.png [more paths...]
+Run: python tools/calib/probe_real_photo_scaling.py /tmp/heic_test/IMG_2851.png [more paths...]
 """
 import sys
 import os
@@ -102,7 +102,7 @@ def probe(path):
 if __name__ == '__main__':
     paths = sys.argv[1:]
     if not paths:
-        print("usage: python calib/probe_real_photo_scaling.py <photo.png> [more...]")
+        print("usage: python tools/calib/probe_real_photo_scaling.py <photo.png> [more...]")
         sys.exit(1)
     for p in paths:
         probe(p)

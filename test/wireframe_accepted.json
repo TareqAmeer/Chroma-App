@@ -2,7 +2,7 @@
   {
     "match": "MISSING 1x  input:\"Search name, keyword, or filter\"",
     "zone": "topbar",
-    "reason": "2026-09-15 (backlog item 12): deliberate copy change, not a regression. \"Search name, keyword, or filter\" truncated at the app's own documented narrow-width floor (test/library_responsive_qa.mjs's 820x700 squeeze-floor viewport) and overclaimed the box's behavior (\"filter\" named no real feature; the live-typing path only matches filenames, not keyword tags). Placeholder is now \"Search\", with the full detail moved to a title attribute. The reference wireframe (chromasmith-design/project) still has the old string and was not updated."
+    "reason": "2026-09-15 (backlog item 12): deliberate copy change, not a regression. \"Search name, keyword, or filter\" truncated at the app's own documented narrow-width floor (test/library_responsive_qa.mjs's 820x700 squeeze-floor viewport) and overclaimed the box's behavior (\"filter\" named no real feature; the live-typing path only matches filenames, not keyword tags). Placeholder is now \"Search\", with the full detail moved to a title attribute. The reference wireframe (design/wireframes/project) still has the old string and was not updated."
   },
   {
     "match": "EXTRA   1x  input:\"Search\"",

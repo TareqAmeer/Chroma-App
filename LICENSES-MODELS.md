@@ -38,7 +38,7 @@ srgb --resolution 33 --topology 1lut`, paired with a real-world print/paper stoc
 `info.target_print` from the profile JSON; the 4 reversal stocks — no negative-native print target
 — paired with the brand-matching paper, following the same default the project's own
 `compare_simulation_revisions.py` script uses for reversal-vs-print comparisons). This is tier (a)
-of ROADMAP.md's R3: baked to **display space** (colour response only, hard-clipped at 1.0) — not
+of docs/ROADMAP.md's R3: baked to **display space** (colour response only, hard-clipped at 1.0) — not
 the real scene-referred roll-off, which is the separate, much larger R4.
 
 The **profiles and LUTs themselves** (not the CLI code) are licensed **CC BY-SA 4.0** under
@@ -78,8 +78,8 @@ format is a modification under that licence, so the required attribution is the 
 
 ### R4 addendum — native film-stock highlight shoulders (`vendor/luts/spektra_*_shoulder.bin`)
 
-ROADMAP.md's R4 extracts, for the 16 colour-negative stocks above (the 4 reversal stocks are
-out of scope — see ROADMAP.md), a real per-channel highlight roll-off shape from spektrafilm's
+docs/ROADMAP.md's R4 extracts, for the 16 colour-negative stocks above (the 4 reversal stocks are
+out of scope — see docs/ROADMAP.md), a real per-channel highlight roll-off shape from spektrafilm's
 own density-curve model (not a curve fit or an invented shoulder): each stock's real
 film+print pipeline (`spektrafilm.runtime.pipeline.SimulationPipeline`, the same code path
 `spektrafilm-lut` itself drives) is run at synthetic exposures from -1 to +4.5 stops above the

@@ -4,7 +4,7 @@
 // Usage: node test/check_change_scope.mjs desktop/library-ui.js [more files...]
 //
 // Exits non-zero if anything changed outside the given file list, so it can gate a commit the
-// same way githooks/pre-commit gates a missing wireframe_diff run.
+// same way tools/githooks/pre-commit gates a missing wireframe_diff run.
 import { reportChangeScope, printChangeScope } from './wireframe_diff_lib.mjs';
 
 const expected = process.argv.slice(2);

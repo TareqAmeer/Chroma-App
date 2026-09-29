@@ -70,7 +70,7 @@ pub fn exif_lens_model_fallback(bytes: &[u8]) -> Option<String> {
     lens_model_from_exif(&read_patched_rw2_exif(bytes)?)
 }
 
-/// Panasonic PhotoStyle (ROADMAP.md's F2) — reads makernote tag 0x0089 and returns its raw
+/// Panasonic PhotoStyle (docs/ROADMAP.md's F2) — reads makernote tag 0x0089 and returns its raw
 /// value, so `main.rs::peek_raw_camera` can offer it to JS for auto-enabling the V-Log input
 /// transform (value 17). Mapping verified against real files with ExifTool + Lightroom (see
 /// CLAUDE.md's Format widening backlog): 1=Standard (covers "Custom" too), 3=Natural, 17=VLog,
@@ -666,7 +666,7 @@ mod tests {
         assert!(refined.lens_applied, "expected lens correction to apply on __TM6917.RW2 with auto_lens=true (refine pass)");
     }
 
-    /// Real-world coverage across all four documented PhotoStyle values (ROADMAP.md's F2),
+    /// Real-world coverage across all four documented PhotoStyle values (docs/ROADMAP.md's F2),
     /// each independently confirmed against the same files with `exiftool -PhotoStyle` before
     /// writing this assertion: 1=Standard, 3=Natural, 17=V-Log, 22=Leica Monochrome (ExifTool's
     /// own table doesn't name 22, reporting "Unknown (22)" — CLAUDE.md's mapping was verified

@@ -1,6 +1,6 @@
 // Visual-fidelity check for the Library view against its Claude Design source, per the plan at
 // .claude/plans/use-the-claude-design-mcp-memoized-abelson.md. Loads the literal wireframe
-// (chromasmith-design/project/Library View.html) and the real app (?libtest=1) side by side at
+// (design/wireframes/project/Library View.html) and the real app (?libtest=1) side by side at
 // the same viewport, in both themes, and reports:
 //   - a computed-style mismatch table per named element pair (font/color/border/radius/box)
 //   - full-page screenshots of both, for the human side-by-side check
@@ -8,7 +8,7 @@
 // This is a CHECK, not a search: the app's CSS was transplanted from the wireframe's own values
 // (not re-derived by eye), so the expected result is a clean pass on the first run. A mismatch
 // here names the exact property + expected/actual value, so it points straight at its own fix —
-// no pixel-diff heatmap loop needed for this half; see calib/wireframe_diff.py for the pixel-level
+// no pixel-diff heatmap loop needed for this half; see tools/calib/wireframe_diff.py for the pixel-level
 // half that catches structural drift computed styles can't (missing/misplaced elements).
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
@@ -118,7 +118,7 @@ let missing = [];
 
 for (const theme of ['dark', 'light']) {
   const wf = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
-  await wf.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Library%20View.html`, { waitUntil: 'load' });
+  await wf.goto(`http://127.0.0.1:${port}/design/wireframes/project/Library%20View.html`, { waitUntil: 'load' });
   if (theme === 'dark') await wf.evaluate(() => document.getElementById('app').classList.add('dark'));
   await settleForCapture(wf);
   const wfSelMap = Object.fromEntries(Object.keys(PAIRS).map((k) => [k, k]));

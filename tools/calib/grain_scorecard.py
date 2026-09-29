@@ -1,5 +1,5 @@
 """
-Fast PASS/FAIL gate for the fitted grain model vs Dehancer (calib/grain_targets.json).
+Fast PASS/FAIL gate for the fitted grain model vs Dehancer (tools/calib/grain_targets.json).
 Mirrors halation's scorecard.py discipline: one human-legible table, computed in
 seconds, run BEFORE committing any shader change.
 
@@ -8,7 +8,7 @@ for statistics — grain only depends on local value + amount + noise field, not
 surrounding context) at each Dehancer amount, measures with the identical
 noise_std() used on the references, and compares.
 
-Run: python calib/grain_scorecard.py
+Run: python tools/calib/grain_scorecard.py
 """
 import json
 import os

@@ -4,10 +4,10 @@
   "purpose": "Unreviewed; purpose requires human review.",
   "status": "draft",
   "observations": {
-    "generatedBy": "scripts/scaffold-component-contracts.mjs",
+    "generatedBy": "tools/scripts/scaffold-component-contracts.mjs",
     "generatedAt": "2026-09-13T04:14:41.378Z",
     "registry": {
-      "query": "node scripts/query-components.mjs --family chip",
+      "query": "node tools/scripts/query-components.mjs --family chip",
       "sourceRegistrationCount": 13,
       "expectedCount": 13,
       "locations": [
@@ -446,8 +446,8 @@
   },
   "validation": {
     "commands": [
-      "node scripts/query-components.mjs --family chip",
-      "node scripts/validate-component-contracts.mjs --family chip"
+      "node tools/scripts/query-components.mjs --family chip",
+      "node tools/scripts/validate-component-contracts.mjs --family chip"
     ],
     "scope": "Unreviewed generated draft; observations only, not a design or production gate."
   },

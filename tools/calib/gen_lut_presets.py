@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the LUT_PRESETS={...} JS block from calib/LUT LIBRARY/*.cube.
+"""Generate the LUT_PRESETS={...} JS block from tools/calib/LUT LIBRARY/*.cube.
 
 Each .cube is a 33^3 3D LUT in file order (R-fastest). We quantize every RGB
 triple to Uint8 (round(v*255)) and concat in that exact order, then base64.
@@ -8,7 +8,7 @@ in a for-b,for-g,for-r loop (== cube file order) into the li(r,g,b) layout.
 Prior session verified a preset built this way renders pixel-identical to
 uploading the original .cube.
 
-Usage: python calib/gen_lut_presets.py > /tmp/lut_presets.js
+Usage: python tools/calib/gen_lut_presets.py > /tmp/lut_presets.js
 """
 import base64, glob, os, sys
 

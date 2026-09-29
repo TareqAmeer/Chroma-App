@@ -32,7 +32,7 @@
 // real signal worth reading, not something to retry away.
 //
 // ⚠️ STALE-BUILD GUARD (added 2026-09-10, found while auditing the test tooling itself): every
-// gate below loads desktop/dist/index.html, a STAGED COPY that scripts/build-desktop.mjs generates from
+// gate below loads desktop/dist/index.html, a STAGED COPY that tools/scripts/build-desktop.mjs generates from
 // chromasmith-22.html + desktop/library-ui.js. This script used to run every gate straight
 // against whatever was already in desktop/dist/ — so `npm test` (which calls this) could report
 // PASS or FAIL against code from a previous session's build, silently ignoring every edit made
@@ -45,7 +45,7 @@ import { spawnSync, spawn } from 'node:child_process';
 // Do not route this through build-desktop.sh: the wrapper is for interactive Unix shells, while
 // the underlying Node script is the canonical cross-platform staging path and works on Windows
 // without Bash installed.
-const build = spawnSync(process.execPath, ['scripts/build-desktop.mjs'], { encoding: 'utf8' });
+const build = spawnSync(process.execPath, ['tools/scripts/build-desktop.mjs'], { encoding: 'utf8' });
 if (build.status !== 0) {
   console.log('BLOCKED: desktop staging failed — cannot verify against stale desktop/dist/.');
   console.log((build.stdout || '') + (build.stderr || ''));
@@ -72,7 +72,7 @@ const FLAKE_RETRIES = 2; // reduced from 6 now that E7's real cause is fixed —
 // it. Making pre-commit block on that immediately turns "did I break the Editor" into "please
 // first triage 253 old findings", which is real work but not this commit's — and would have
 // blocked commits to chromasmith-22.html outright until someone did it. Per explicit user
-// decision (not a default this script picked): pass `--advisory` (githooks/pre-commit does) to
+// decision (not a default this script picked): pass `--advisory` (tools/githooks/pre-commit does) to
 // print these three gates' output without making a FAIL here count toward the exit code — a
 // human still sees the noise every commit, just isn't blocked writing code by SOMEONE ELSE's
 // unfinished redesign work. `npm test`/CI never pass this flag, so they stay fully strict —
@@ -213,13 +213,13 @@ const GATES = [
   // --check fails if regenerating from tokens.json would change either file (hand-edit or
   // tokens.json/token-layout.json drift). Blocking — a drifted token silently reverts on the
   // next build-tokens run otherwise.
-  { name: 'editor:tokens-check', cmd: ['node', 'scripts/build-tokens.mjs', '--check'] },
+  { name: 'editor:tokens-check', cmd: ['node', 'tools/scripts/build-tokens.mjs', '--check'] },
   // Generated app-wide map from component families and semantic icons to their production
   // declarations. Keeps requests such as "change every toggle" from relying on a hand list.
-  { name: 'editor:components-check', cmd: ['node', 'scripts/build-component-registry.mjs', '--check'] },
+  { name: 'editor:components-check', cmd: ['node', 'tools/scripts/build-component-registry.mjs', '--check'] },
   // verify_tokens.py re-parses all three source blocks and asserts every declared CSS var is
   // either in design/tokens.json or documented in design/token-conflicts.md. Blocking.
-  { name: 'editor:tokens-verify', cmd: ['node', 'scripts/run-python.mjs', 'design/verify_tokens.py'] },
+  { name: 'editor:tokens-verify', cmd: ['node', 'tools/scripts/run-python.mjs', 'design/verify_tokens.py'] },
   // ?catalog=1 component catalogue (docs/ui-workflow/STATE.md S1(d)): one toHaveScreenshot() per
   // shared component class x state (test/catalog_visual.mjs). Blocking — baselines are committed
   // and a pixel-level regression in any shared component should fail the same way any other

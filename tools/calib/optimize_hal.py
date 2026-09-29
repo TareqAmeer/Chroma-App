@@ -9,8 +9,8 @@ Dehancer halation reference, summed over representative zone bands (neutrals, co
 thin lines).  Everything runs in one process with scipy — no Claude tokens per eval.
 
 Run:
-  python calib/optimize_hal.py            # full optimize, writes cmp_rule_*.png + best params
-  python calib/optimize_hal.py --eval     # just evaluate the current best guess + render
+  python tools/calib/optimize_hal.py            # full optimize, writes cmp_rule_*.png + best params
+  python tools/calib/optimize_hal.py --eval     # just evaluate the current best guess + render
 """
 import os, sys, json, time
 import numpy as np

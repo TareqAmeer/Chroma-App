@@ -18,7 +18,7 @@ the committed model — only the green channel is added — so the existing red-
 requirements stay byte-identical. We fit: standard green (gainG, sigmaG), no-remjet per-channel
 gains + sigma scales, and no-remjet powL/powLg.
 
-Run from repo root (venv active):  python calib/optimize_hal_twochannel.py
+Run from repo root (venv active):  python tools/calib/optimize_hal_twochannel.py
 """
 import os
 import numpy as np

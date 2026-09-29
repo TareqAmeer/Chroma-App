@@ -3,7 +3,7 @@
 (moved from CLAUDE.md §3b, 2026-09-11)
 
 Values live in `design/tokens.json` (W3C DTCG); the `:root`/`body.light` blocks are GENERATED from it by
-`node scripts/build-tokens.mjs` (`--check` to verify). Rationale comments are stored verbatim in
+`node tools/scripts/build-tokens.mjs` (`--check` to verify). Rationale comments are stored verbatim in
 tokens.json (`$extensions.chromasmith.emit.<block>.commentBefore`). `.claude/hooks/token-lint-on-edit.sh`
 flags new raw literals on edit. **Use the tokens; don't reintroduce literals.**
 

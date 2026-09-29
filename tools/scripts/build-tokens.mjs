@@ -1,14 +1,14 @@
 // Generate the :root / body.light token blocks in chromasmith-22.html and the DS token block
 // in desktop/library-ui.js from design/tokens.json, writing between CSS-comment markers.
 //
-//   node scripts/build-tokens.mjs           # write
-//   node scripts/build-tokens.mjs --check   # exit 1 if regenerating would change either file
+//   node tools/scripts/build-tokens.mjs           # write
+//   node tools/scripts/build-tokens.mjs --check   # exit 1 if regenerating would change either file
 //
 // Marker-injection pattern reused from site/build-page.mjs (HTML-comment markers there,
 // CSS-comment markers here since these regions sit inside <style>/a JS template literal, not
 // raw HTML). Everything outside a marker pair is untouched.
 //
-// Each declaration's exact position/comment is driven by scripts/token-layout.json (the
+// Each declaration's exact position/comment is driven by tools/scripts/token-layout.json (the
 // mechanical order + inter-declaration whitespace, captured once from the file as it existed
 // when this generator was built) plus design/tokens.json's per-token value and, where the
 // source had a hand-written rationale comment immediately before it, its
@@ -19,7 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, '..');
+const ROOT = path.join(__dirname, '..', '..');
 const TOKENS_PATH = path.join(ROOT, 'design', 'tokens.json');
 const LAYOUT_PATH = path.join(__dirname, 'token-layout.json');
 const HTML_PATH = path.join(ROOT, 'chromasmith-22.html');
@@ -90,7 +90,7 @@ const libuiChanged = libui !== libui0;
 
 if (check) {
   if (htmlChanged || libuiChanged) {
-    console.error('build-tokens: OUT OF DATE —', [htmlChanged && 'chromasmith-22.html', libuiChanged && 'desktop/library-ui.js'].filter(Boolean).join(', '), 'would change. Run `node scripts/build-tokens.mjs`.');
+    console.error('build-tokens: OUT OF DATE —', [htmlChanged && 'chromasmith-22.html', libuiChanged && 'desktop/library-ui.js'].filter(Boolean).join(', '), 'would change. Run `node tools/scripts/build-tokens.mjs`.');
     process.exit(1);
   }
   console.log('build-tokens: up to date.');

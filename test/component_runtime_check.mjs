@@ -1,4 +1,4 @@
-// Runtime counterpart to scripts/build-component-registry.mjs. It exercises the major app
+// Runtime counterpart to tools/scripts/build-component-registry.mjs. It exercises the major app
 // pages/layouts plus dynamic Masks/catalog content, records component variants actually present
 // in Chromium, and maps each appearance to a source declaration where a stable selector permits.
 import { chromium } from 'playwright';

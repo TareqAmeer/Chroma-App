@@ -19,8 +19,8 @@ clean). We fit gainR, gainG, sigmaR, sigmaG to the measured left-edge profile of
 white bar in `dehancer no remjet x2.png`, then convert sigmas to the app's scale convention
 (sigmaScaleR multiplies base sigmaR; sigmaScaleG multiplies base sigmaG).
 
-Outputs calib/noremjet_params.json + a white-edge proof crop calib/cmp_noremjet.png.
-Run from repo root (venv active):  python calib/optimize_noremjet.py
+Outputs tools/calib/noremjet_params.json + a white-edge proof crop tools/calib/cmp_noremjet.png.
+Run from repo root (venv active):  python tools/calib/optimize_noremjet.py
 """
 import os, json
 import numpy as np

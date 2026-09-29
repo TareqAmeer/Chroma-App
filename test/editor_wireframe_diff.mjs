@@ -4,7 +4,7 @@
 // which had NO automated check at all before this — every "Editor matches the wireframe" claim
 // prior to this file was a code read, never a driven comparison.
 //
-// Loads the literal wireframe (chromasmith-design/project/Editor (Developer) View.dc.html) and
+// Loads the literal wireframe (design/wireframes/project/Editor (Developer) View.dc.html) and
 // the real app (desktop/dist/index.html?libtest=1&deskx=1) side by side at the same viewport, in
 // both themes, and reports a computed-style mismatch table + screenshots.
 import { chromium } from 'playwright';
@@ -49,7 +49,7 @@ const port = server.address().port;
 
 const VIEWPORT = { width: 1440, height: 900 };
 // wireframe selector -> { app: appSelector, label, zone }. Imported from the generated file
-// (scripts/generate_pairs.mjs) which follows S1(b) rule: one entry per .grp[data-fxsec], else
+// (tools/scripts/generate_pairs.mjs) which follows S1(b) rule: one entry per .grp[data-fxsec], else
 // whole panel -> .fx-ctrl[data-fxsec=<key>]. Labels are hand-written in the generator's LABELS map.
 const PAIRS = SECTION_PAIRS;
 // T9 (editor_ux_spec.json): 'width' added 2026-09-10 — a row could match on every OTHER
@@ -236,7 +236,7 @@ if (PANEL_ID) {
   const panelRootSel = `.tp-panel[data-panel="${PANEL_ID}"]`;
 
   const wf = await b1.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
-  await wf.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
+  await wf.goto(`http://127.0.0.1:${port}/design/wireframes/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
   await settleForCapture(wf);
   const wfSelMap = Object.fromEntries(pairs.map((p, i) => [String(i), p.wf]));
   const wfStyles = await extract(wf, wfSelMap, SCOPED_PROPS);
@@ -348,7 +348,7 @@ let notes = [];
 // and everything else should hold in BOTH states.
 for (const theme of ['dark', 'light']) {
   const wf = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
-  await wf.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
+  await wf.goto(`http://127.0.0.1:${port}/design/wireframes/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
   if (theme === 'light') await wf.evaluate(() => document.getElementById('app')?.classList.add('light'));
   await settleForCapture(wf);
   const wfSelMap = Object.fromEntries(Object.keys(PAIRS).map((k) => [k, k]));

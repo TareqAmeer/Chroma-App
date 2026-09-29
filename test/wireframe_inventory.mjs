@@ -253,7 +253,7 @@ const b = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
 const findings = [];
 
 const wf = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
-await wf.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Library%20View.html`, { waitUntil: 'load' });
+await wf.goto(`http://127.0.0.1:${port}/design/wireframes/project/Library%20View.html`, { waitUntil: 'load' });
 await wf.evaluate(() => document.getElementById('app').classList.add('dark'));
 await settleForCapture(wf);
 

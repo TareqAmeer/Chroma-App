@@ -21,7 +21,7 @@ try {
   await page.mouse.wheel(0, 120);
   if (process.argv.includes('--shots')) {
     await page.waitForTimeout(650);
-    await page.screenshot({ path: path.join(root, 'drafts/chr-152-motion-mid.png') });
+    await page.screenshot({ path: path.join(root, 'design/archive/drafts/chr-152-motion-mid.png') });
   }
   await page.waitForFunction(() => !gliding && Math.abs(scrollY - document.getElementById('gallery').offsetTop) < 2);
   const samples = await page.evaluate(() => window.__motionSamples);

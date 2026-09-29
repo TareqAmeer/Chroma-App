@@ -23,13 +23,13 @@ No PASS/FAIL gates — informational only, same reasoning as nr_validate.py's LR
 section: there's no prior data to say what tolerance is right for CS-High vs DxO PureRAW.
 Read the ratios, look at a real crop, then decide what "good enough" means.
 
-Inputs (produce with dump_rw2 / dump_dng — see calib/nr_dump/ generation), per set N (1-5):
-  calib/nr_dump/dxo{N}_cs_off.bin    (dump_rw2, CS_NO_CHROMA_NR=1)
-  calib/nr_dump/dxo{N}_cs_fast.bin   (dump_rw2, default = Fast tier)
-  calib/nr_dump/dxo{N}_cs_high.bin   (dump_rw2, CS_NR_TIER=high)
-  calib/nr_dump/dxo{N}_dxo.bin       (dump_dng, the DxO PureRAW DNG)
+Inputs (produce with dump_rw2 / dump_dng — see tools/calib/nr_dump/ generation), per set N (1-5):
+  tools/calib/nr_dump/dxo{N}_cs_off.bin    (dump_rw2, CS_NO_CHROMA_NR=1)
+  tools/calib/nr_dump/dxo{N}_cs_fast.bin   (dump_rw2, default = Fast tier)
+  tools/calib/nr_dump/dxo{N}_cs_high.bin   (dump_rw2, CS_NR_TIER=high)
+  tools/calib/nr_dump/dxo{N}_dxo.bin       (dump_dng, the DxO PureRAW DNG)
 
-Usage: python3 calib/nr_validate_dxo.py
+Usage: python3 tools/calib/nr_validate_dxo.py
 """
 import os
 import sys
@@ -38,11 +38,11 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
-os.chdir(Path(__file__).parent.parent)
+os.chdir(Path(__file__).parent.parent.parent)
 
 from nr_validate import load_bin_srgb, ycbcr, grad_energy  # noqa: E402
 
-DUMP_DIR = os.environ.get("CS_DUMP_DIR", "calib/nr_dump")
+DUMP_DIR = os.environ.get("CS_DUMP_DIR", "tools/calib/nr_dump")
 
 # Real-photo mapping (RW2 <-> matching DxO PureRAW DNG), all ISO 12800 — the user's actual
 # real-world use case for the denoiser (not a synthetic/staged test chart).

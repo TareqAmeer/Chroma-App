@@ -3,7 +3,7 @@
 // WHY THIS EXISTS
 // The Editor redesign is a REGROUPING, not a restyle: the app has 23 tool sections
 // (`data-fxsec`) which the deskx rail already folds into 12 rail buttons via FX_GROUPS, while
-// the wireframe (chromasmith-design/project/Editor (Developer) View.dc.html) proposes 10 rail
+// the wireframe (design/wireframes/project/Editor (Developer) View.dc.html) proposes 10 rail
 // tabs over 11 `.tp-panel`s — and 9 of those 11 panels are still literal placeholders reading
 // "<X> tools live here." So the honest state of the redesign is not "N findings to fix", it is
 // "9 panels have no design yet, and nothing tells you which".
@@ -31,7 +31,7 @@ import { SECTION_PAIRS } from './generated_pairs.mjs';
 
 const ROOT = process.cwd();
 const APP = path.join(ROOT, 'chromasmith-22.html');
-const WF = path.join(ROOT, 'chromasmith-design/project/Editor (Developer) View.dc.html');
+const WF = path.join(ROOT, 'design/wireframes/project/Editor (Developer) View.dc.html');
 const SPEC = path.join(ROOT, 'test/editor_ux_spec.json');
 const BEHAV = path.join(ROOT, 'test/editor_wireframe_behaviour.mjs');
 

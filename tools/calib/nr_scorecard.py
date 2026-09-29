@@ -31,7 +31,7 @@ Two checks, not one:
   2. CS-default-nr vs LR-default-nr -> does OUR correction land in the same range
                                 as Lightroom's actual default rendering?
 
-Run: python calib/nr_scorecard.py --lr-no-nr a.tif --lr-default-nr b.tif \
+Run: python tools/calib/nr_scorecard.py --lr-no-nr a.tif --lr-default-nr b.tif \
                                    --cs-no-nr c.tif --cs-default-nr d.tif
 
 Optional THIRD pair, --cs-high / --lr-denoise: validates the High tier (RawNIND neural

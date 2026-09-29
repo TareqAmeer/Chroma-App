@@ -91,7 +91,7 @@ const b = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
 
 // Discover states once, off a plain dark-theme wireframe load.
 const probe = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
-await probe.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
+await probe.goto(`http://127.0.0.1:${port}/design/wireframes/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
 const discovered = await discoverStates(probe);
 await probe.close();
 
@@ -110,7 +110,7 @@ const manifest = { panel: PANEL_ID, generatedAt: new Date().toISOString(), state
 
 for (const theme of ['dark', 'light']) {
   const wf = await b.newPage({ viewport: VIEWPORT, ...DETERMINISTIC_CONTEXT_OPTIONS });
-  await wf.goto(`http://127.0.0.1:${port}/chromasmith-design/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
+  await wf.goto(`http://127.0.0.1:${port}/design/wireframes/project/Editor%20(Developer)%20View.dc.html`, { waitUntil: 'load' });
   if (theme === 'light') await wf.evaluate(() => document.getElementById('app')?.classList.add('light'));
   // .tp-panel is display:none until .active — the tab switcher never gets driven here, so set it directly.
   await wf.evaluate((sel) => document.querySelector(sel)?.classList.add('active'), PANEL_ROOT_SEL);

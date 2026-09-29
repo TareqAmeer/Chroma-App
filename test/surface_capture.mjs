@@ -47,12 +47,12 @@ if (splashEntry) {
   const dir = path.join(ROOT, 'design/asbuilt/splash');
   await mkdir(dir, { recursive: true });
   try {
-    const html = await readFile(path.join(ROOT, 'chromasmith-design/project', wireframeName), 'utf8');
+    const html = await readFile(path.join(ROOT, 'design/wireframes/project', wireframeName), 'utf8');
     await writeFile(path.join(dir, 'block.dc.html'), html);
     await writeFile(path.join(dir, 'spec.json'), JSON.stringify({
       id: 'splash', group: splashEntry.group, generatedAt: new Date().toISOString(),
       note: `No live DOM route to capture — "${wireframeName}" used verbatim as its as-built stand-in. No screenshots, no computed-value spec.`,
-      wireframeSource: `chromasmith-design/project/${wireframeName}`,
+      wireframeSource: `design/wireframes/project/${wireframeName}`,
     }, null, 2));
     console.log('[splash] copied wireframe as stand-in (no live capture)');
   } catch (e) { console.log(`[splash] FAILED to copy stand-in: ${e.message}`); }

@@ -37,7 +37,7 @@ repository evidence are shared; no vendor-specific helper or subagent is require
 component or panel at a time:
 
 1. Identify the exact component family and affected declarations with
-   `node scripts/query-components.mjs --family <family>` (and `--icon <name>` for a semantic icon).
+   `node tools/scripts/query-components.mjs --family <family>` (and `--icon <name>` for a semantic icon).
    Record the source files, lines, and selectors that the query returns.
 2. Run `npm run components:check` before editing.
 3. Read only `docs/ui-workflow/component-contracts/contracts/<family>.json` for the family being
@@ -71,7 +71,7 @@ component or panel at a time:
 
 The query is authoritative for source-locatable shared declarations; dynamic declarations and
 instances without stable selectors remain visible coverage debt and must be considered. Component
-contract validation is `node scripts/validate-component-contracts.mjs --family <family>`. A
+contract validation is `node tools/scripts/validate-component-contracts.mjs --family <family>`. A
 reference specification is checked with `npm run reference:spec:validate -- <spec-path>`.
 
 A reference-to-spec's proposed rollout scope is provisional until the user approves it; approval
@@ -176,5 +176,5 @@ numbers directly — so a value you set in the wireframe is the value the check 
 app, with nothing in between to translate it wrongly.
 
 Claude Design's canvas is fine for *authoring* the artboards, as long as the output lands back
-in `chromasmith-design/project/*.html`. Anything that ends as an image or a React component
+in `design/wireframes/project/*.html`. Anything that ends as an image or a React component
 reintroduces the boundary.

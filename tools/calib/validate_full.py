@@ -1,5 +1,5 @@
 """Fast FULL-RES validation of hand-set params against measured points.
-Run: python3 calib/validate_full.py
+Run: python3 tools/calib/validate_full.py
 Lets us dial gain/sigma/power exactly at native resolution (the dot is only
 ~4px, so it must be evaluated full-res, not at the 1/3 optimization scale).
 """

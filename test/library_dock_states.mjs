@@ -4,7 +4,7 @@
 // navigation tree, because both live inside the same #lib-side wrapper and only the tabs were
 // checked for. See CLAUDE.md #6.15/#6.16.
 //
-// Per spec (chromasmith-design/project/Editor (Developer) View.dc.html's .filmstrip, lines
+// Per spec (design/wireframes/project/Editor (Developer) View.dc.html's .filmstrip, lines
 // 230-247): #filmstrip holds fs-tabs (Library/Develop, ALWAYS visible) + fs-head (a "Photos"
 // label + import button) + fs-list (thumbnails) — nothing else, at ANY width from 90 to 280px.
 // Resizing changes thumbnail size, never what chrome is shown. The app's own DOM splits this

@@ -12,8 +12,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const PANELS_DIR = path.join(ROOT, 'chromasmith-design/project/panels');
-const DS_DIR = path.join(ROOT, 'chromasmith-design/project/_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens');
+const PANELS_DIR = path.join(ROOT, 'design/wireframes/project/panels');
+const DS_DIR = path.join(ROOT, 'design/wireframes/project/_ds/chromasmith-design-system-b665ef58-b41a-450d-9234-1b4802ee28e1/tokens');
 
 const PAGES = [
   { file: '_components.compare.html', slug: 'components', label: 'Components' },

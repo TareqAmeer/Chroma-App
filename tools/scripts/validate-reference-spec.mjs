@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const workflowDir = path.join(repoRoot, 'docs/ui-workflow/reference-to-spec');
 const schemaPath = path.join(workflowDir, 'schema.json');
 const contractsDir = path.join(repoRoot, 'docs/ui-workflow/component-contracts/contracts');
@@ -179,7 +179,7 @@ if (args.length === 1 && args[0] === '--all') {
 } else if (args.length === 1 && !args[0].startsWith('-')) {
   files = [path.resolve(process.cwd(), args[0])];
 } else {
-  console.error('Usage: node scripts/validate-reference-spec.mjs <spec.json> | --all');
+  console.error('Usage: node tools/scripts/validate-reference-spec.mjs <spec.json> | --all');
   process.exit(2);
 }
 

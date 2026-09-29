@@ -1,6 +1,6 @@
 // Calibration helper (not part of the app): decode an RW2 through the EXACT same native
 // pipeline the desktop app uses (raw_decode.rs) and write the linear16 buffer to disk so
-// calib/dcp_dual_fit.py can fit/validate against Lightroom reference TIFFs offline.
+// tools/calib/dcp_dual_fit.py can fit/validate against Lightroom reference TIFFs offline.
 //
 //   cargo run --release --example dump_rw2 -- input.RW2 output.bin [downscale]
 //
