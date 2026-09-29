@@ -237,7 +237,7 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 .k{font-weight:700;letter-spacing:-.005em}
 .row h3,.group h3{font-size:clamp(24px,2.2vw,34px);font-weight:700}
 .quote{font-size:clamp(24px,2.6vw,40px)}
-.lead{position:relative;padding:22vh 5vw 10vh;background:var(--acc);color:#0b0b0a}.lead .hero-t sup{color:#0b0b0a}.lead .hero-t{position:relative;top:auto;left:auto;right:auto;pointer-events:auto;mix-blend-mode:normal}.lead .foot{margin-top:24px;color:#0b0b0a}
+.lead{position:relative;margin-top:-1px;padding:10vh 5vw 10vh;background:var(--acc);color:#0b0b0a}.lead .hero-t sup{color:#0b0b0a}.lead .hero-t{position:relative;top:auto;left:auto;right:auto;pointer-events:auto;mix-blend-mode:normal}.lead .foot{margin-top:24px;color:#0b0b0a}
 /* 3 section numbers */
 .sn{position:absolute;right:5vw;top:88px;z-index:6;color:var(--dim)}
 .intro .sn,.pin .sn{position:absolute}
@@ -725,7 +725,7 @@ if(!reduce){
   const measure=()=>{W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});const b=W.getBoundingClientRect(),a=ws.getBoundingClientRect(),c=wt.getBoundingClientRect();E={sx:a.left-b.left,sy:a.top-b.top,sw:a.width,tx:c.left-b.left,ty:c.top-b.top,tfs:parseFloat(getComputedStyle(wt).fontSize),th:c.height};WB={w:b.width,h:b.height};W.style.width=b.width+'px';W.style.height=b.height+'px';W.classList.add('fly');docked=false};
   measure();ScrollTrigger.addEventListener('refreshInit',measure);
   gsap.set('.word',{opacity:0});
-  gsap.timeline({onUpdate(){const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'})}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=120%',pin:true,scrub:1,invalidateOnRefresh:true}})
+  gsap.timeline({onUpdate(){const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'})}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=70%',pin:true,scrub:1,invalidateOnRefresh:true}})
     .to('.intro .cue',{opacity:0,duration:.1})
     .to('.intro .in',{opacity:0,duration:.02,ease:'none'},.01)
     .to('.word',{opacity:1,duration:.02,ease:'none'},.01)
