@@ -221,6 +221,7 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 .k{font-weight:700;letter-spacing:-.005em}
 .row h3,.group h3{font-size:clamp(24px,2.2vw,34px);font-weight:700}
 .quote{font-size:clamp(24px,2.6vw,40px)}
+.lead{position:relative;padding:22vh 5vw 8vh}.lead .hero-t{position:relative;top:auto;left:auto;right:auto;pointer-events:auto;mix-blend-mode:normal}.lead .foot{margin-top:24px;color:var(--mid)}
 /* 3 section numbers */
 .sn{position:absolute;right:5vw;top:88px;z-index:6;color:var(--dim)}
 .intro .sn,.pin .sn{position:absolute}
@@ -413,10 +414,12 @@ section{position:relative}
   <nav><a href="#features">Features</a><a href="#faq">FAQ</a><a href="https://github.com/TareqAmeer/Chroma-App">GitHub ↗</a><a href="#yours">Download</a><a href="../../chromasmith-22.html">Launch app ↗</a></nav>
 </header>
 
+<section class="lead" aria-label="Chromasmith"><h1 class="hero-t">The app that<br>does it all<sup>*</sup></h1>
+  <p class="mono foot">*Almost everything. Your ideas are still yours.</p></section>
+
 <section class="pin" aria-label="Chromasmith tour"><span class="sn mono">01.0 — Tour</span>
   <div class="track">
     <div class="panel p0">
-      <h1 class="hero-t">The app that<br>does it all<sup>*</sup></h1>
       <span class="mono lb l">Raw file<br>f/2 · 1/250</span>
       <span class="mono lb r">Classic Neg<br>grain · halation</span>
       <div class="ph">
@@ -428,8 +431,7 @@ section{position:relative}
       </div>
       <span class="mono scrollcue">Scroll to develop</span>
       <div class="cap0">
-        <div><div class="k">A whole photo studio, wherever inspiration finds you.</div>
-          <p class="mono foot">*Almost everything. Your ideas are still yours.</p></div>
+        <div><div class="k">A whole photo studio, wherever inspiration finds you.</div></div>
         <a class="btn solid" href="../../chromasmith-22.html">Launch the app ↗</a>
       </div>
     </div>
@@ -744,7 +746,7 @@ tl.to('.scrollcue',{opacity:0,duration:.1})
   .to('.ph .film:not(.glow)',{opacity:1,duration:.7},'<')
   .to('.ph .grain',{opacity:.5,duration:.4})
   .to('.ph .glow',{opacity:.5,duration:.5})
-  .to('.lb,.hero-t',{opacity:0,y:-30,duration:.3})
+  .to('.lb',{opacity:0,y:-30,duration:.3})
   .to('.ph',{width:'100vw',height:'100vh',aspectRatio:'auto',ease:'power2.inOut',duration:1})
   .to('.ph .shade',{opacity:1,duration:.3},'-=.3')
   .to('.cap0',{opacity:1,y:-16,duration:.3})
