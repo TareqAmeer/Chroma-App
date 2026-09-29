@@ -1232,6 +1232,8 @@ body.deskx.fx-deskbar-tight2 #btn-export-db .fx-db-lb{display:none}
 body.deskx.fx-deskbar-tight2 #btn-export-db{padding:0;width:28px}
 body.sk2.deskx.fx-deskbar-fold1 #fx-deskbar #fx-deskbar-title #db-title-status{display:none!important}
 #fx-page-title{display:none}
+/* Phones have no Gallery (desktop-only), so no gallery|studio switch. */
+body.mobile-fx #cs-brand-tog,html.mobile-fx #cs-brand-tog{display:none!important}
 body.deskx.cs-page-other #fx-page-title{display:flex;align-items:center;gap:16px;grid-column:2;grid-row:1;justify-self:center;white-space:nowrap;font-size:14px;color:var(--k-color-ink)}
 body.deskx.cs-page-other #fx-page-title .fx-page-back{background:none;border:0;color:var(--k-color-muted);font:inherit;font-size:12px;cursor:pointer;padding:4px 0}
 body.deskx.cs-page-other #fx-page-title .fx-page-back:hover{color:var(--k-color-ink)}
@@ -2509,9 +2511,10 @@ body.sk2.deskx #fx-toolrail .fx-rail-lb{text-align:center}
    the current tool keeps its accent marker. More air between tools. */
 body.sk2.deskx #fx-toolrail{gap:18px!important}
 body.sk2.deskx #fx-toolrail .fx-rail-btn{padding:8px 3px!important}
-body.sk2 #fx-toolrail .fx-rail-btn.enabled::before{display:block!important;background:none!important;border:1px solid var(--k-color-ink)!important;left:6px!important;right:6px!important;top:0!important;bottom:0!important}
+body.sk2 #fx-toolrail .fx-rail-btn.edited::before{display:block!important;background:none!important;border:1px solid var(--k-color-ink)!important;left:6px!important;right:6px!important;top:0!important;bottom:0!important}
 body.sk2 #fx-toolrail .fx-rail-btn.enabled:not(.on) .fx-rail-lb::after{content:none!important}
-body.sk2 #fx-toolrail .fx-rail-btn.enabled{color:var(--k-color-ink)}
+body.sk2 #fx-toolrail .fx-rail-btn.edited{color:var(--k-color-ink)}
+body.sk2 #fx-toolrail .fx-rail-btn.enabled:not(.edited)::before{border:0!important}
 body.sk2 .fx-rail-btn{color:var(--k-color-muted)}
 body.sk2 .fx-rail-btn .fx-rail-ic{color:var(--k-color-ink)}
 /* Panel header: the stage title, sub-tabs and the current card title stay locked as one opaque
@@ -6562,7 +6565,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929U';
+const BUILD='1.0929V';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -19431,6 +19434,7 @@ function fxMarkModifiedSliders(){
       row.classList.toggle('fx-mod',tg.classList.contains('on')!==!!baseT[id]);
     }
     fxPaintAllSliders();   // fill colour follows .fx-mod, so repaint once the flags settle
+    if(typeof syncSectionEnabled==='function')syncSectionEnabled(); // rail's edited squares follow slider edits too
   },120);
 }
 // ── Slider fill painting ─────────────────────────────────────────────────────────────────────
@@ -24245,11 +24249,28 @@ function _secIsEnabled(key){
   if(key==='crop'){const g=(typeof curGeom==='function')&&curGeom();return !!(g&&(g.rot||g.flipH||g.flipV||g.angle||g.crop));}
   return false;
 }
+// "Edited" (the rail's square) means changed from this photo's defaults — not merely switched on:
+// Noise and Sharpen ship switched on, so "on" alone marked Texture as edited on every fresh photo.
+const _SEC_DEFAULT_ON=new Set(['nr','deconv']);
+function _secIsEdited(key){
+  if(typeof FX_GROUPS!=='undefined'&&FX_GROUPS[key])return FX_GROUPS[key].members.some(_secIsEdited);
+  const tg=_SEC_TOGGLE[key];
+  if(tg){const e=document.getElementById(tg);const on=!!(e&&e.classList.contains('on'));
+    if(on!==_SEC_DEFAULT_ON.has(key))return true;
+    if(!on)return false;
+    const card=document.querySelector(`.fx-ctrl[data-fxsec="${key}"]`);
+    return !!(card&&[...card.querySelectorAll('input.fx-slider[type=range]')].some(sl=>Math.abs(parseFloat(sl.value)-parseFloat(sl.defaultValue))>1e-6));}
+  return _secIsEnabled(key);
+}
 function syncSectionEnabled(){
   document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>{
     b.classList.toggle('enabled',_secIsEnabled(b.dataset.sec));
+    b.classList.toggle('edited',_secIsEdited(b.dataset.sec));
   });
 }
+{let _secEdT=0;const q=()=>{clearTimeout(_secEdT);_secEdT=setTimeout(syncSectionEnabled,150);};
+  document.addEventListener('input',e=>{if(e.target&&e.target.closest&&e.target.closest('.fx-ctrl'))q();},true);
+  document.addEventListener('change',e=>{if(e.target&&e.target.closest&&e.target.closest('.fx-ctrl'))q();},true);}
 // ── light / dark theme ──
 function toggleTheme(){
   const light=document.body.classList.toggle('light');
