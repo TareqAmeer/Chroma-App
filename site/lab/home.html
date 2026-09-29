@@ -326,6 +326,35 @@ section{position:relative}
 @media(max-width:1100px){.strip{display:none}}
 
 .mob{display:none}
+
+/* old workflow vs now */
+.flow{height:100vh;overflow:hidden;border-top:1px solid var(--line)}
+.fin{position:absolute;inset:0;display:grid;grid-template-columns:repeat(12,1fr);column-gap:16px;padding:12vh 5vw 6vh;align-items:start}
+.fl{grid-column:1/7}.fr{grid-column:8/13;display:grid;gap:22px}
+.steps{list-style:none;margin-top:4vh;border-top:1px solid var(--line)}
+.steps li{display:grid;grid-template-columns:34px 110px 1fr auto;gap:12px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line);font-size:15px;color:#3a3833;transition:color .25s}
+.steps li .n,.steps li .app{font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+.steps li em{font-style:normal;font-size:10px;letter-spacing:.12em;text-transform:uppercase;border:1px solid currentColor;padding:2px 6px}
+.steps li.on{color:var(--fg)}.steps li.on .app{color:var(--dim)}.steps li.on em{color:var(--acc)}
+.steps li.cur{color:var(--acc)}
+.gen img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}
+.meters{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.m{border-top:1px solid var(--fg);padding-top:10px}
+.m .v{font-size:clamp(40px,4.4vw,72px);font-weight:700;line-height:.95;font-variant-numeric:tabular-nums;margin-top:6px}
+.m .v small{font-size:.38em;margin-left:4px}
+.m i{display:block;height:3px;background:#24231f;margin-top:10px}
+.m i b{display:block;height:100%;background:var(--acc);transform-origin:left;transform:scaleX(0)}
+.note{font-size:9px}
+.now{position:absolute;inset:0;background:var(--acc);color:#0b0b0a;display:grid;align-items:center;padding:12vh 5vw 6vh;clip-path:inset(100% 0 0 0);z-index:3}
+.now>div{max-width:900px}
+.now .mono,.now .t{color:#0b0b0a}.now .k{margin:14px 0 5vh}
+.now .m{border-color:#0b0b0a}.now .m .v{font-size:clamp(56px,7vw,120px)}
+@media(max-width:760px){
+  .fin{padding:10vh 16px 4vh;row-gap:14px}.fl,.fr{grid-column:1/13}
+  .fl .k{font-size:30px}.steps{margin-top:10px}.steps li{grid-template-columns:24px 78px 1fr auto;font-size:12px;padding:4px 0;gap:6px}
+  .gen{display:none}.m .v{font-size:34px}.note{display:none}
+  .now{padding:10vh 16px}
+}
 /* ═════ phone ═════ */
 @media(max-width:760px){
   .mob{display:inline}.dsk{display:none}
@@ -468,6 +497,30 @@ section{position:relative}
       <label>Exposure<input type="range" id="sexpo" min="-50" max="50" value="0"><output>0</output></label></div>
     <figure><img id="simg" src="../assets/story/film.webp" alt="Sample photo responding to the sliders"><div class="grain"></div></figure>
   </div>
+</section>
+
+<section class="flow" id="flow" aria-label="The old workflow"><span class="sn mono">03.5 — Workflow</span>
+  <div class="fin">
+    <div class="fl"><p class="mono" style="color:var(--acc)">How one photo used to get finished</p><h2 class="k">Three apps.<br>Four exports.</h2>
+      <ol class="steps"><li data-t="5" data-x="0" data-s="1"><span class="n">01</span><span class="app">Adobe Cloud</span><span class="what">Upload the shoot to the cloud</span></li><li data-t="1" data-x="0" data-s="1"><span class="n">02</span><span class="app">Lightroom</span><span class="what">Find and pick the photo</span></li><li data-t="4" data-x="0" data-s="1"><span class="n">03</span><span class="app">Lightroom</span><span class="what">Edit the colour</span></li><li data-t="1" data-x="1" data-s="1"><span class="n">04</span><span class="app">Lightroom</span><span class="what">Export</span><em>Export</em></li><li data-t="1" data-x="0" data-s="2"><span class="n">05</span><span class="app">Dehancer</span><span class="what">Import</span></li><li data-t="3" data-x="0" data-s="2"><span class="n">06</span><span class="app">Dehancer</span><span class="what">Add grain, bloom and halation</span></li><li data-t="1" data-x="1" data-s="2"><span class="n">07</span><span class="app">Dehancer</span><span class="what">Export again</span><em>Export</em></li><li data-t="1" data-x="0" data-s="3"><span class="n">08</span><span class="app">Darkroom</span><span class="what">Import</span></li><li data-t="1" data-x="0" data-s="3"><span class="n">09</span><span class="app">Darkroom</span><span class="what">Add the first border</span></li><li data-t="1" data-x="1" data-s="3"><span class="n">10</span><span class="app">Darkroom</span><span class="what">Export again</span><em>Export</em></li><li data-t="2" data-x="0" data-s="3"><span class="n">11</span><span class="app">Darkroom</span><span class="what">Import again, add the second border</span></li><li data-t="1" data-x="1" data-s="3"><span class="n">12</span><span class="app">Darkroom</span><span class="what">Export again</span><em>Export</em></li></ol></div>
+    <div class="fr">
+      <figure class="gen"><img src="../assets/story/film.webp" alt="The same photo losing quality with each export"><figcaption class="dcap"><span>Generation</span><b id="fgen">Original</b></figcaption></figure>
+      <div class="meters">
+        <div class="m"><p class="mono">Subscriptions</p><div class="v"><span id="fsub">0</span></div><i><b id="bsub"></b></i></div>
+        <div class="m"><p class="mono">Time</p><div class="v"><span id="ftime">0</span><small>min</small></div><i><b id="btime"></b></i></div>
+        <div class="m"><p class="mono">Quality</p><div class="v"><span id="fq">100</span><small>%</small></div><i><b id="bq" style="transform:scaleX(1)"></b></i></div>
+      </div>
+      <p class="mono note">Times and quality loss are illustrative: each export re-compresses the image.</p>
+    </div>
+  </div>
+  <div class="now"><div>
+    <p class="mono">With Chromasmith</p><h2 class="k">One app.<br>No subscriptions.<br>No re-exports.</h2>
+    <div class="meters">
+      <div class="m"><p class="mono">Subscriptions</p><div class="v">0</div></div>
+      <div class="m"><p class="mono">Extra exports</p><div class="v">0</div></div>
+      <div class="m"><p class="mono">Quality</p><div class="v">100<small>%</small></div></div>
+    </div>
+    <p class="t">Colour, film grain, bloom, halation and borders happen in one pass on the original file, then export once at full resolution.</p></div></div>
 </section>
 
 <section class="maker paper" id="maker"><span class="sn mono">04.0 — Maker</span>
@@ -877,6 +930,21 @@ document.querySelectorAll('a[href$="chromasmith-22.html"]').forEach(a=>a.addEven
 {const c=document.getElementById('clock'),t=()=>c.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});t();setInterval(t,15000)}
 /* 20 motion toggle */
 {const m=document.getElementById('motion');m.textContent='Motion: '+(still?'off':'on');m.onclick=()=>{try{localStorage.setItem('cs-motion',still?'on':'off')}catch(e){}location.reload()}}
+
+/* old workflow: each step lights up; subscriptions and time climb, quality drops at every export; then the vermilion "now" panel */
+{
+  const li=[...document.querySelectorAll('.steps li')],gen=document.querySelector('.gen img'),G=document.getElementById('fgen');
+  const S=document.getElementById('fsub'),T=document.getElementById('ftime'),Q=document.getElementById('fq'),bS=document.getElementById('bsub'),bT=document.getElementById('btime'),bQ=document.getElementById('bq');
+  const tot=li.reduce((a,l)=>a+ +l.dataset.t,0),names=['Original','2nd generation','3rd generation','4th generation','5th generation'];
+  const show=k=>{let t=0,x=0,sub=0;li.forEach((l,i)=>{const on=i<k;l.classList.toggle('on',on);l.classList.toggle('cur',i===k-1);if(on){t+=+l.dataset.t;x+=+l.dataset.x;sub=Math.max(sub,+l.dataset.s)}});
+    const q=100-x*3;S.textContent=sub;T.textContent=t;Q.textContent=q;G.textContent=names[x];
+    bS.style.transform=`scaleX(${sub/3})`;bT.style.transform=`scaleX(${t/tot})`;bQ.style.transform=`scaleX(${q/100})`;
+    gen.style.filter=`blur(${x*.45}px) contrast(${1-x*.04}) saturate(${1-x*.08})`};
+  show(0);
+  gsap.timeline({scrollTrigger:{trigger:'.flow',start:'top top',end:'+=400%',pin:true,scrub:true,
+    onUpdate:s=>show(Math.min(li.length,Math.floor(s.progress/.78*(li.length+.999))))}})
+    .to({},{duration:.78}).to('.now',{clipPath:'inset(0% 0 0 0)',ease:'power2.inOut',duration:.14}).to({},{duration:.08});
+}
 /* 5. outro lines rise */
 gsap.from('.outro .k i',{yPercent:105,stagger:.12,duration:1.2,ease:'expo.out',scrollTrigger:{trigger:'.outro',start:'top 65%'}});
 </script>
