@@ -3803,7 +3803,7 @@
   };
   const reveal = (() => {
     let host, snap, frame, lines;
-    let token = null, phase = 'idle', gen = 0, rect = null, target = null, ready = false;
+    let token = null, phase = 'idle', gen = 0, rect = null, target = null, ready = false, lastAspect = 0;
     let anims = [], morphAnim = null, morphFrom = null, pulseAnim = null, watchdog = 0, softRaf = 0;
     const perf = (event, path, extra = {}) => rawPerf(`reveal-${event}`, path || '', extra);
     const enabled = () => window.chromasmithPhotoTransitions !== false &&
@@ -3818,6 +3818,13 @@
       host.innerHTML = '<canvas class="fx-reveal-snap"></canvas><div class="fx-reveal-frame">' +
         '<i class="fx-reveal-line"></i><i class="fx-reveal-line"></i><i class="fx-reveal-line"></i><i class="fx-reveal-line"></i></div>';
       wrap.appendChild(host);
+      // The editor's box can still be settling when begin() predicts the frame (library docking,
+      // panels). Re-predict on every resize so the frame always matches where the photo will land.
+      if (window.ResizeObserver) new ResizeObserver(() => {
+        if (!lastAspect || (phase !== 'morphing' && phase !== 'waiting')) return;
+        const nt = fitRect(lastAspect); if (!nt || (target && same(nt, target))) return;
+        const cur = liveRect(); stopAnims(); if (cur) setFrame(cur); target = nt; morph();
+      }).observe(wrap);
       snap = host.querySelector('.fx-reveal-snap'); frame = host.querySelector('.fx-reveal-frame');
       lines = [...host.querySelectorAll('.fx-reveal-line')];
       return host;
@@ -3837,7 +3844,8 @@
       const inner = fxWrapInner(); if (inner.w < 2 || inner.h < 2) return null;
       const cs = getComputedStyle(wrap);
       const maxH = typeof fxPreviewMaxH === 'function' ? Math.min(inner.h, fxPreviewMaxH()) : inner.h;
-      const w = Math.min(inner.w, maxH * aspect), h = w / aspect;
+      const k = typeof FX_FIT === 'number' ? FX_FIT : 1; // a photo opens at fit zoom, which leaves a margin
+      const w = Math.min(inner.w, maxH * aspect) * k, h = w / aspect;
       return round({ x: (parseFloat(cs.paddingLeft) || 0) + (inner.w - w) / 2, y: (parseFloat(cs.paddingTop) || 0) + (inner.h - h) / 2, w, h });
     };
     // The frame is four 1px lines; each is scaled only ALONG its length, so the hairline stays
@@ -3999,6 +4007,7 @@
         clearZoomStyles();
         clearTimeout(watchdog);
         token = path; ready = false; phase = 'exiting';
+        lastAspect = opts.targetRect ? 0 : (aspect || 0);
         target = opts.targetRect || (aspect ? fitRect(aspect) : null);
         const cv = document.getElementById('fx-canvas'), zoomRect = relRect(zoomEl());
         const photoRect = opts.fromRect || zoomRect;

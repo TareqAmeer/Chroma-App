@@ -1470,6 +1470,8 @@ body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px var(--sp-2);
    "border" meant panel separation (library <-> editor), not framing the canvas. Back to
    edge-to-edge, matching DRK; only the library/editor divider (library-ui.js) is thicker now. */
 body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:var(--bg);border:none;border-radius:0;margin:0;padding:16px;box-sizing:border-box}
+/* Room under the photo for the caption strip, so a photo (and the reveal frame that predicts it) never touches it. */
+body.deskx.sk2 .fx-canvas-wrap{padding-bottom:48px}
 body.deskx #fx-canvas{max-height:none}
 body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:var(--z-float);
   background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:8px 12px}
@@ -6518,7 +6520,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929F';
+const BUILD='1.0929G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -19282,6 +19284,9 @@ function renderPreview(){
   // update. Only render it up front when we are not about to throw it away.
   if(!fxSplit)FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),...seedOpt});
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
+  // Below 100% the centring offset is derived from this footprint; a new photo's zoom was applied
+  // before its first render, so re-centre now that the real size is known.
+  if(fxZoom<1&&typeof _applyZoom==='function')_applyZoom();
   document.getElementById('fx-no-img').style.display='none';
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
   if(fxSplit){
