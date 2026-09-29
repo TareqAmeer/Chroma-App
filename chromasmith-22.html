@@ -327,6 +327,7 @@ main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .fx-ctrl.fx-sec-collapsed>.fx-ctrl-title{margin-bottom:0;padding-bottom:var(--sp-2)}
 .fx-ctrl.fx-sec-collapsed>:not(.fx-ctrl-title){display:none}
 #fx-looks-ctrl.fx-preset-sec{margin-top:14px!important}
+.fx-ctrl.fx-sec-collapsed>#fx-looks-empty:not([hidden]){display:block}
 .fx-toggle{width:var(--ctl-toggle-w);height:var(--ctl-toggle-h);border-radius:var(--ctl-square-radius);background:var(--bdr);position:relative;cursor:pointer;transition:background var(--k-motion-hover);flex-shrink:0;box-shadow:none;border:1px solid transparent}
 /* T45 (editor_ux_spec.json): under forced-colors (Windows High Contrast) mode, the browser can
    strip a custom `background` entirely — .fx-toggle has no text/icon and no real border, so with
@@ -1023,6 +1024,9 @@ body.cs-adv-hidden .tab.cs-adv-tab{display:none}
 #cs-drop-ov div{display:flex;flex-direction:column;gap:6px;text-align:center;color:#fff;font-family:var(--sans)}
 #cs-drop-ov b{font-size:24px;font-weight:500}
 #cs-drop-ov span{font-size:13px;opacity:.75}
+#cs-export-done{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:calc(var(--z-modal,1000) + 6);display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--glass-bg,#1c1c1c);border:1px solid var(--bdr);color:var(--txt,#fff);font:13px var(--sans);box-shadow:0 8px 30px rgba(0,0,0,.4)}
+#cs-export-done button{font:inherit;background:none;border:0;color:var(--acc);cursor:pointer;padding:2px 4px}
+#cs-export-done .cs-x{color:var(--mut);font-size:16px}
 .cs-sub{font-family:var(--sans);font-size:11px;line-height:1.4;color:var(--mut);margin:-2px 0 8px}
 .ni-add-lb{font-family:var(--sans);font-size:var(--fs-2);font-weight:500;color:var(--acc);letter-spacing:0}
 #fx-more-menu{position:fixed;inset:0;background:var(--scrim-b4);z-index:var(--z-overlay);display:flex;align-items:flex-end}
@@ -3297,7 +3301,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
     <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status" role="status" aria-live="polite" aria-atomic="true"></span></div>
     <div id="fx-deskbar-right">
       <div id="fx-deskbar-tools"></div>
-      <button class="fx-db js-allfx" onclick="enableAll()" title="Apply your All FX effects (right-click or ▾ to choose which effects, strengths and look)"><span class="fx-db-ic" id="db-allfx"></span><span class="fx-db-lb">All FX</span></button><button class="fx-db js-allfx-cfg" onclick="allFxSettings()" title="Choose what All FX applies — effects, strengths and look" aria-label="All FX settings">▾</button>
+      <button class="fx-db js-allfx" onclick="enableAll()" title="All FX: one click adds film grain, glow and borders. Use the ▾ to choose which effects and how strong."><span class="fx-db-ic" id="db-allfx"></span><span class="fx-db-lb">All FX</span></button><button class="fx-db js-allfx-cfg" onclick="allFxSettings()" title="Choose what All FX applies — effects, strengths and look" aria-label="All FX settings">▾</button>
       <!-- Shown only for a Lightroom "Edit In" handoff session (library-ui.js sets
            window.chromasmithEditInPath and un-hides this) — writes the render straight back over
            the file Lightroom handed us instead of the normal share-sheet save. -->
@@ -6470,7 +6474,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929E';
+const BUILD='1.0929F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -12884,6 +12888,21 @@ function toast(msg,kind){
   if(_toastQ.length>3)_toastQ.splice(0,_toastQ.length-3);
   if(!_toastBusy&&!_toastPinned)_toastPump();
 }
+// Export-finished pill with a "Show in Finder" action — says WHERE the file went, which a bare
+// "Exported ✓" never did. Desktop only (needs the real saved path); auto-dismisses after 9s.
+function csExportDone(n,path){
+  const old=document.getElementById('cs-export-done');if(old)old.remove();
+  const d=document.createElement('div');d.id='cs-export-done';d.setAttribute('role','status');
+  const dir=String(path).replace(/[\\/][^\\/]*$/,'');
+  const lbl=(window.CS_PLATFORM&&window.CS_PLATFORM.revealLabel)||'Finder';
+  d.innerHTML='<span></span><button type="button">Show in '+lbl+'</button><button type="button" aria-label="Dismiss" class="cs-x">×</button>';
+  d.firstChild.textContent='Exported '+n+' photo'+(n>1?'s':'')+' to '+(dir.split(/[\\/]/).pop()||dir);
+  d.title=dir;
+  const bs=d.querySelectorAll('button');
+  bs[0].onclick=()=>{try{window.__TAURI__.core.invoke('reveal_in_finder',{path});}catch(e){}d.remove();};
+  bs[1].onclick=()=>d.remove();
+  document.body.appendChild(d);setTimeout(()=>d.remove(),9000);
+}
 function _toastPump(){
   if(_toastPinned)return; // a live toastProgress() pill owns the element until it resolves
   const next=_toastQ.shift();
@@ -13444,10 +13463,12 @@ function cvBuildChips(){
       // invisible to the UI audit until off-sections started rendering dimmed instead of hidden.
       // It is an icon now, like every other affordance in the app.
       b.className='pc-chip';
-      b.style.cssText='width:28px;height:28px;border-radius:50%;border:var(--bw-2) solid '+(sel?'var(--acc)':'var(--bdr)')+';cursor:pointer;padding:0;flex-shrink:0;'
+      b.style.cssText='width:28px;height:28px;border-radius:0;border:var(--bw-2) solid '+(sel?'var(--acc)':'var(--bdr)')+';cursor:pointer;padding:0;flex-shrink:0;'
         +'display:inline-flex;align-items:center;justify-content:center;'
         +(isBlur?'background:linear-gradient(135deg,#8a8a8a,#333);color:#fff':'background:'+c);
       if(isBlur){b.innerHTML=icon('nr',14);b.title='Blurred photo as the background';}
+      else{const nm={'#000000':'Black','#ffffff':'White','#141414':'Charcoal','#f5f0e8':'Paper','#d4903a':'Amber','#4a5d73':'Slate blue','#7a3b3b':'Oxblood'}[String(c).toLowerCase()]||c;b.title=nm+' background';}
+      b.setAttribute('aria-label',b.title);b.setAttribute('aria-pressed',String(!!sel));
       b.onclick=()=>{if(isBlur){fxState.canvas.blur=!fxState.canvas.blur;}else{fxState.canvas.bg=c;fxState.canvas.blur=false;}cvBuildChips();fxUpdate();};
       sw.appendChild(b);
     });}
@@ -20734,6 +20755,10 @@ function buildLookGallery(){
   const host=document.getElementById('fx-looks'),ctrl=document.getElementById('fx-looks-ctrl');
   if(!host||!ctrl)return;
   const work=fxWork||fxImg;
+  // Empty state: with no photo the preset grid can't render, and the panel used to show nothing.
+  let empty=document.getElementById('fx-looks-empty');
+  if(!empty){empty=document.createElement('div');empty.id='fx-looks-empty';empty.textContent='Open a photo to pick a look.';empty.style.cssText='margin-top:14px;font-size:var(--fs-2);color:var(--mut)';ctrl.parentNode.insertBefore(empty,ctrl);}
+  empty.hidden=!!work;
   if(!work){ctrl.style.display='none';return;}
   ctrl.style.display='block';host.innerHTML='';
   buildLookCatChips();
@@ -21432,7 +21457,11 @@ async function _exportFXRun(){
     if(results.length)fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
     if(failed&&results.length)log(`Export finished: ${results.length} saved, ${failed} failed (see log above)`,'warn');
     if(failed&&results.length)toast(`Exported ${results.length}/${N} — ${failed} failed, see log`,false);
-    else if(results.length)toast(`Exported ${results.length} photo${results.length>1?'s':''} ✓`,true);
+    else if(results.length){
+      const _paths=(typeof sr!=='undefined'&&Array.isArray(sr))?sr.filter(x=>x&&x.ok&&x.path).map(x=>x.path):[];
+      if(_paths.length&&window.__TAURI__)csExportDone(results.length,_paths[0]);
+      else toast(`Exported ${results.length} photo${results.length>1?'s':''} ✓`,true);
+    }
     // Every photo failed (render OR native save) — say so. Without this the run ended silently,
     // since both branches above are guarded on results.length.
     else if(failed){log(`Export finished: 0 saved, ${failed} failed (see log above)`,'err');toast(`Export failed — ${failed} photo${failed>1?'s':''} not saved, see log`,false);}
