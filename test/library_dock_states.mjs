@@ -103,7 +103,7 @@ async function setDockWidth(page, px) {
 }
 
 const EXPECTED = `
-- button "Library"
+- button "Gallery"
 - button "Develop"
 `;
 

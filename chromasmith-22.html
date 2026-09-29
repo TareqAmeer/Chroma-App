@@ -2622,7 +2622,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:#141414}
 </style>
 </head>
 <body>
-<div id="cs-brand"><div id="cs-win" hidden><button id="cs-win-close" type="button" title="Close" aria-label="Close window"></button><button id="cs-win-min" type="button" title="Minimise" aria-label="Minimise window"></button><button id="cs-win-full" type="button" title="Full screen" aria-label="Toggle full screen"></button></div><span id="cs-brand-name"><svg class="sk2-mark" viewBox="18 18 64 62" aria-hidden="true"><rect class="sk2-mk-b" x="21" y="21" width="48" height="44" fill="currentColor"/><g class="sk2-mk-f"><rect x="36" y="32" width="43" height="45" fill="#ff3b1f"/><clipPath id="hdm-c"><rect x="36" y="32" width="33" height="33"/></clipPath><g clip-path="url(#hdm-c)"><defs><radialGradient id="hdm-a" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdm-b" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><polygon points="36,32 69,32 36,65" fill="url(#hdm-a)"/><polygon points="69,32 69,65 36,65" fill="url(#hdm-b)"/><line class="sk2-mk-l" x1="36" y1="65" x2="69" y2="32" stroke="#fff1e0" stroke-width=".35" opacity=".8"/></g></g></svg>CHRO-MA-SMITH</span><div id="cs-brand-tog" role="group" aria-label="View"><button id="cs-tog-lib" type="button" aria-label="Library">gallery</button><button id="cs-tog-studio" type="button" class="on" aria-label="Studio">studio</button></div></div>
+<div id="cs-brand"><div id="cs-win" hidden><button id="cs-win-close" type="button" title="Close" aria-label="Close window"></button><button id="cs-win-min" type="button" title="Minimise" aria-label="Minimise window"></button><button id="cs-win-full" type="button" title="Full screen" aria-label="Toggle full screen"></button></div><span id="cs-brand-name"><svg class="sk2-mark" viewBox="18 18 64 62" aria-hidden="true"><rect class="sk2-mk-b" x="21" y="21" width="48" height="44" fill="currentColor"/><g class="sk2-mk-f"><rect x="36" y="32" width="43" height="45" fill="#ff3b1f"/><clipPath id="hdm-c"><rect x="36" y="32" width="33" height="33"/></clipPath><g clip-path="url(#hdm-c)"><defs><radialGradient id="hdm-a" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdm-b" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><polygon points="36,32 69,32 36,65" fill="url(#hdm-a)"/><polygon points="69,32 69,65 36,65" fill="url(#hdm-b)"/><line class="sk2-mk-l" x1="36" y1="65" x2="69" y2="32" stroke="#fff1e0" stroke-width=".35" opacity=".8"/></g></g></svg>CHRO-MA-SMITH</span><div id="cs-brand-tog" role="group" aria-label="View"><button id="cs-tog-lib" type="button" aria-label="Gallery">gallery</button><button id="cs-tog-studio" type="button" class="on" aria-label="Studio">studio</button></div></div>
 <script>(function(){var b=document.body,L=document.getElementById('cs-tog-lib'),S=document.getElementById('cs-tog-studio');
 function sync(){var f=b.classList.contains('lib-full');L.classList.toggle('on',f);S.classList.toggle('on',!f);L.setAttribute('aria-pressed',f);S.setAttribute('aria-pressed',!f)}
 new MutationObserver(sync).observe(b,{attributes:true,attributeFilter:['class']});sync();
@@ -2966,10 +2966,10 @@ ready(function(){
     <div class="cr">cover photo by tareq ameer</div>
     <div class="br" id="boot-splash-name"><svg viewBox="18 18 64 62" aria-hidden="true"><rect x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect x="36" y="32" width="43" height="45" fill="#ff3b1f"/><clipPath id="bsg-c"><rect x="36" y="32" width="33" height="33"/></clipPath><g clip-path="url(#bsg-c)"><defs><radialGradient id="bsg-a" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="bsg-b" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><polygon points="36,32 69,32 36,65" fill="url(#bsg-a)"/><polygon points="69,32 69,65 36,65" fill="url(#bsg-b)"/><line x1="36" y1="65" x2="69" y2="32" stroke="#fff1e0" stroke-width=".35" opacity=".8"/></g></svg><span>CHRO-MA-SMITH</span></div>
     <div class="wg" id="boot-splash-wedge"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-    <div class="lb" id="boot-splash-stage">Checking your library</div>
+    <div class="lb" id="boot-splash-stage">Checking your gallery</div>
     <div class="pc" id="boot-splash-percent">0%</div>
     <div class="ver" id="boot-splash-version"></div>
-    <div id="boot-splash-progress"><div id="boot-splash-bar"></div><div id="boot-splash-label">Checking your library…</div></div>
+    <div id="boot-splash-progress"><div id="boot-splash-bar"></div><div id="boot-splash-label">Checking your gallery…</div></div>
   </div>
 </div>
 <script>
@@ -3156,7 +3156,7 @@ window.showBootStallBanner=function(phase,elapsedMs){
     document.body.appendChild(b);
   }
   const msg=document.createElement('span');
-  msg.textContent=`Still preparing ${label.toLowerCase()} — stalled ${secs}s. The library is open; this is still running in the background.`;
+  msg.textContent=`Still preparing ${label.toLowerCase()} — stalled ${secs}s. The gallery is open; this is still running in the background.`;
   const close=document.createElement('button');
   close.textContent='Dismiss';
   close.style.cssText='background:none;border:1px solid rgba(240,236,226,.35);color:inherit;'
@@ -3305,7 +3305,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
          narrow or unusual about the window. Grid columns can't overlap by construction, so this
          fixes the class of bug, not just today's specific collision. -->
     <div id="fx-deskbar-left">
-      <button class="fx-db fx-db-icon" id="db-lib-btn" style="display:none" onclick="window.chromasmithToggleLibrary&&window.chromasmithToggleLibrary()" title="Photo library (L)"><span class="fx-db-ic" id="db-lib-ic"></span></button>
+      <button class="fx-db fx-db-icon" id="db-lib-btn" style="display:none" onclick="window.chromasmithToggleLibrary&&window.chromasmithToggleLibrary()" title="Photo gallery (L)"><span class="fx-db-ic" id="db-lib-ic"></span></button>
       <!-- 3.1.1: undo/redo used to be two bare .fx-db buttons, reading as unaligned with the rest
            of the bar's filled-tile buttons — wrapped in a bordered pill matching the wireframe's
            own .undogrp (Editor (Developer) View.dc.html:41-43): one outer border, square inner
@@ -4169,12 +4169,12 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
                (where it stays inside .fx-zoom-ctrl, sized like its zoom-cluster siblings) is
                visually unchanged. -->
           <button id="btn-fx-fullres" class="zc-ic db-btn" onclick="fxFullResPreviewToggle()" title="Full resolution — renders the whole preview at full source resolution instead of the usual capped size. Costs more GPU time; drops to the capped size automatically while dragging a slider"><span class="fx-db-ic" id="ic-fullres"></span></button>
-          <button id="btn-flag-red" class="flag-btn flag-btn-red" onclick="fxToggleFlag('Red')" title="Reject (Library)" style="margin-left:4px;display:none"></button>
-          <button id="btn-flag-green" class="flag-btn flag-btn-green" onclick="fxToggleFlag('Green')" title="Green flag (Library)" style="display:none"></button>
-          <button id="btn-favorite" class="flag-btn flag-btn-fav" onclick="fxToggleFavorite()" title="Favorite (Library)" style="display:none"></button>
+          <button id="btn-flag-red" class="flag-btn flag-btn-red" onclick="fxToggleFlag('Red')" title="Reject (Gallery)" style="margin-left:4px;display:none"></button>
+          <button id="btn-flag-green" class="flag-btn flag-btn-green" onclick="fxToggleFlag('Green')" title="Green flag (Gallery)" style="display:none"></button>
+          <button id="btn-favorite" class="flag-btn flag-btn-fav" onclick="fxToggleFavorite()" title="Favorite (Gallery)" style="display:none"></button>
         </div>
         <div class="btn-row fx-mini-row" id="fx-preview-tools" style="justify-content:center;margin-top:8px;display:none">
-          <button class="db-btn" id="btn-editor-bg" onclick="const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)" title="Editor background colour (also right-click the empty area around the photo)" style="padding:0;min-width:28px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center"><span style="display:block;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#000 50%,#fff 50%);border:1px solid var(--bdr)"></span></button>
+          <button class="db-btn" id="btn-editor-bg" onclick="const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)" title="Studio background colour (also right-click the empty area around the photo)" style="padding:0;min-width:28px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center"><span style="display:block;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#000 50%,#fff 50%);border:1px solid var(--bdr)"></span></button>
           <button class="db-btn" id="btn-before" title="Press and hold to see the original"><span class="fx-db-ic" id="ic-before"></span></button>
           <button class="db-btn" id="btn-split" onclick="toggleSplit()" title="Split before/after view"><span class="fx-db-ic" id="ic-split"></span></button>
           <div style="position:relative;display:inline-flex">
@@ -4486,7 +4486,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <div class="faq-a">Desktop app only. <b>Lightroom Classic:</b> Preferences → External Editing → Additional External Editor → choose Chromasmith (16-bit TIFF, sRGB recommended — the pipeline is sRGB/Rec.709). Then right-click a photo → <b>Edit In → Chromasmith</b>. <b>Lightroom (cloud/CC):</b> right-click a photo → <b>Edit In</b> → pick Chromasmith the first time (same TIFF handoff). Either way, edit as normal — a new <b>Save to Lightroom</b> button appears next to the regular Export button while a handoff photo is open. Use it to write straight back over the file Lightroom gave you (Lightroom re-imports and syncs the result automatically); the normal Export button is still there too, unchanged, for a regular local export of the same photo.</div>
 
       <div class="faq-q">Can I browse my Lightroom cloud photos?</div>
-      <div class="faq-a">Desktop app only, and it needs your own Adobe API client (Adobe Developer Console → create a project → Add API → <b>Lightroom Services</b> → OAuth credential type <b>Native App</b>). Unlike Google Cloud Console's self-serve testing mode, Adobe's Lightroom Partner APIs have historically needed Adobe's own approval on top of just creating a project — it may not work immediately even with a real client ID. A Native App credential redirects through a custom URL scheme (not a plain localhost port like Google's), which is fixed per-project — if you create your own Adobe integration rather than using an existing one, the app's redirect URI constant needs updating to match yours. Once connected (Image Input → <b>Lightroom → Connect</b>), pick an album from the dropdown and click a thumbnail to pull that photo straight into the editor.</div>
+      <div class="faq-a">Desktop app only, and it needs your own Adobe API client (Adobe Developer Console → create a project → Add API → <b>Lightroom Services</b> → OAuth credential type <b>Native App</b>). Unlike Google Cloud Console's self-serve testing mode, Adobe's Lightroom Partner APIs have historically needed Adobe's own approval on top of just creating a project — it may not work immediately even with a real client ID. A Native App credential redirects through a custom URL scheme (not a plain localhost port like Google's), which is fixed per-project — if you create your own Adobe integration rather than using an existing one, the app's redirect URI constant needs updating to match yours. Once connected (Image Input → <b>Lightroom → Connect</b>), pick an album from the dropdown and click a thumbnail to pull that photo straight into the studio.</div>
 
       <div class="faq-q">My RW2 / RAW colors don't match Lightroom.</div>
       <div class="faq-a">First check what's showing your comparison — macOS Preview shows the camera's embedded JPEG (warmer/darker), not the real RAW render. Also pick the matching <b>RAW profile</b>. The remaining difference is usually just Lightroom's default noise reduction and sharpening, which a LUT can't carry.</div>
@@ -6502,7 +6502,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929B';
+const BUILD='1.0929C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -12859,7 +12859,7 @@ function editorBgOpenMenu(x,y){
   const menu=document.createElement('div');
   menu.className='fx-bgmenu';
   menu.style.cssText='position:fixed;z-index:var(--z-system);background:var(--glass-bg,#222);backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr,#444);border-radius:8px;padding:8px 10px;font-family:var(--sans);font-size:12px;color:var(--txt,#eee);box-shadow:var(--lift-2,0 8px 24px rgba(0,0,0,.4));display:flex;align-items:center;gap:8px';
-  menu.innerHTML=`<span>Editor background</span><input type="color" id="fx-bgmenu-color" style="width:28px;height:24px;padding:0;border:1px solid var(--bdr,#444);border-radius:4px;background:none;cursor:pointer">`
+  menu.innerHTML=`<span>Studio background</span><input type="color" id="fx-bgmenu-color" style="width:28px;height:24px;padding:0;border:1px solid var(--bdr,#444);border-radius:4px;background:none;cursor:pointer">`
     +`<button class="btn bgh" id="fx-bgmenu-reset" style="padding:4px 8px;font-size:11px">Reset</button>`;
   document.body.appendChild(menu);
   const {innerWidth:vw,innerHeight:vh}=window;
@@ -13038,10 +13038,10 @@ if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',_fxInf
 function shortcutsHtml(){
   const rows=(pairs)=>pairs.map(([k,d])=>`<div style="display:flex;justify-content:space-between;gap:16px;padding:3px 0;font-size:13px"><span>${d}</span><kbd style="font-family:var(--mono);font-size:11px;color:var(--mut);background:var(--bdr);border-radius:4px;padding:2px 6px;white-space:nowrap">${k}</kbd></div>`).join('');
   const group=(title,pairs)=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:var(--ls-2);margin-bottom:4px">${title}</div>${rows(pairs)}</div>`;
-  return group('File',[['⌘O','Open photo(s)'],['⌘L','Toggle Library'],['⌘E','Export']])
+  return group('File',[['⌘O','Open photo(s)'],['⌘L','Toggle Gallery'],['⌘E','Export']])
     +group('Edit',[['⌘Z','Undo'],['⇧⌘Z','Redo'],['⇧⌘C','Copy edit'],['⇧⌘V','Paste edit']])
     +group('Photo (Library grid)',[['X','Reject'],['P','Pick / flag'],['U','Clear flag'],['←/→','Move culling cursor'],['Enter','Open selected'],['⌘[ / ⌘]','Rotate left / right']])
-    +group('View',[['⌘+ / ⌘-','Zoom in / out'],['⌘0','Zoom to fit'],['⌘1','Zoom to 100%'],['⌘\\','Toggle before/after split'],['⌘H','Toggle histogram'],['G','Toggle full Library'],['Esc','Close full Library / dialogs']])
+    +group('View',[['⌘+ / ⌘-','Zoom in / out'],['⌘0','Zoom to fit'],['⌘1','Zoom to 100%'],['⌘\\','Toggle before/after split'],['⌘H','Toggle histogram'],['G','Toggle full Gallery'],['Esc','Close full Gallery / dialogs']])
     +group('Help',[['⌘/','This panel'],['⌘K','Command palette']]);
 }
 // First-run tour — a single short _csModal (not a per-element spotlight walkthrough: the app's
@@ -18606,8 +18606,8 @@ async function fxRenderAutoTags(path,keywords){
   const place=info&&info.place;
   const placeBits=place?[place.split(', ')[0],place.split(', ').pop()].filter((v,i,a)=>a.indexOf(v)===i&&!have.has(v.toLowerCase())):[];
   let body;
-  if(!info||info.photo_id==null)body=`<div class="fx-autotag-hint">Add this folder to the Library to auto-tag it.</div>`;
-  else if(!info.analyzed)body=`<div class="fx-autotag-hint">Not analyzed yet — the Library tags photos in the background.</div>`
+  if(!info||info.photo_id==null)body=`<div class="fx-autotag-hint">Add this folder to the Gallery to auto-tag it.</div>`;
+  else if(!info.analyzed)body=`<div class="fx-autotag-hint">Not analyzed yet — the Gallery tags photos in the background.</div>`
     +`<button class="fx-autotag-btn" id="fx-autotag-analyze">Analyze now</button>`;
   else if(!tags.length&&!placeBits.length)body=`<div class="fx-autotag-hint">${(info.tags||[]).length?'All detected tags are saved as keywords.':'Nothing recognised with confidence.'}</div>`;
   else body=`<div style="display:flex;flex-wrap:wrap;gap:4px">`
@@ -21874,7 +21874,7 @@ function allFxSettings(){
   const r=allFxRecipe(),keys=r?r.keys:_ALLFX_DEFAULT_KEYS;
   const rows=allFxCats().map(c=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="allfx-cat-cb" value="${c.key}"${keys.includes(c.key)?' checked':''}>${c.label}</label>`).join('');
   _csModal('All FX — what it applies',
-    `<p style="margin:0 0 10px;font-size:12px;opacity:.75">Tick what All FX should apply, set those panels (strengths, look, borders…) the way you want in the editor, then save. All FX in the Editor and the Library will use exactly these settings.</p>`
+    `<p style="margin:0 0 10px;font-size:12px;opacity:.75">Tick what All FX should apply, set those panels (strengths, look, borders…) the way you want in the studio, then save. All FX in the Studio and the Gallery will use exactly these settings.</p>`
     +`<div style="font-size:12px;margin-bottom:10px"><b>Now:</b> <span id="allfx-sum">${allFxSummary(r)}</span></div>`
     +`<div>${rows}</div>`
     +`<label style="display:flex;align-items:center;gap:8px;padding:8px 0 0;font-size:12px;cursor:pointer"><input type="checkbox" id="allfx-cur" checked>Take strengths &amp; look from the editor's current settings${r?' (untick to keep the saved ones)':''}</label>`
@@ -22420,7 +22420,7 @@ function showSaveButton(files,items){
   b.onclick=async()=>{try{await navigator.share({files,title:'Chromasmith export'});host.innerHTML='';log('Saved to Photos','ok');}
     catch(e){if(e&&e.name==='AbortError')return;items.forEach(it=>anchorDownload(it.content,it.fname,it.mime));host.innerHTML='';log('Saved via download','ok');}};
   host.appendChild(b);
-  log(`Tap "Save ${items.length} photo${items.length>1?'s':''}" to add to your library`,'info');
+  log(`Tap "Save ${items.length} photo${items.length>1?'s':''}" to add to your gallery`,'info');
 }
 function dl(content,fname,mime='application/octet-stream'){saveFile(content,fname,mime)}
 function dlItem(idx,t){const item=ST.history[idx];if(!item)return;const n=`${ST.baseName}_${item.ver}`;if(t==='lut'){dl(writeCube(item.lut,n),`${n}.cube`);log(`Downloaded ${n}.cube`,'ok')}else{dl(item.xmp,`${n}.xmp`,'text/xml');log(`Downloaded ${n}.xmp`,'ok')}}
@@ -23334,11 +23334,11 @@ function toggleLog(){document.body.classList.toggle('log-on');}
 function ovfBuild(){
   const m=document.getElementById('fx-overflow-menu');if(!m)return;
   const active=(document.querySelector('.panel.active')||{}).id||'panel-fx';
-  const tabs=[['fx','Editor'],['match','Match & Refine'],['copy','Color Copy'],['collage','Collage'],['guide','Guide']];
+  const tabs=[['fx','Studio'],['match','Match & Refine'],['copy','Color Copy'],['collage','Collage'],['guide','Guide']];
   let h='';
   tabs.forEach(([k,lb])=>{h+=`<button class="fx-ovf-item" onclick="ovfClose();switchTab('${k}')">${active==='panel-'+k?'✓ ':''}${lb}</button>`;});
   h+='<div class="fx-ovf-sep"></div>';
-  if(window.chromasmithToggleLibrary)h+='<button class="fx-ovf-item" onclick="ovfClose();chromasmithToggleLibrary()">Library (L)</button>';
+  if(window.chromasmithToggleLibrary)h+='<button class="fx-ovf-item" onclick="ovfClose();chromasmithToggleLibrary()">Gallery (L)</button>';
   h+='<div class="fx-ovf-sep"></div>';
   // Appearance moved to the View menu (viewMenuBuild, below) — single source now, not
   // duplicated between this menu and Tools.
@@ -23397,7 +23397,7 @@ function viewMenuBuild(){
   // control for the same action.
   h+='<div class="fx-ovf-grp-label">Preview</div>';
   h+=`<button class="fx-ovf-item${fxLoupe?' on':''}" onclick="viewMenuClose();toggleLoupe()"><span>True 1:1 view</span>${chk}</button>`;
-  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)"><span>Editor background…</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)"><span>Studio background…</span></button>`;
   h+=`<button class="fx-ovf-item${fxHistOn?' on':''}" onclick="viewMenuClose();toggleHist()"><span>Scope overlay</span>${chk}</button>`;
   h+=`<button class="fx-ovf-item${window.chromasmithPhotoTransitions!==false?' on':''}" onclick="photoTransitionsToggle()"><span>Photo transitions</span>${chk}</button>`;
   if(window.sk2HistPinned)h+=`<button class="fx-ovf-item${sk2HistPinned()?' on':''}" onclick="sk2HistPinToggle();this.classList.toggle('on',sk2HistPinned())"><span>Pin histogram</span>${chk}</button>`;
@@ -23486,7 +23486,7 @@ const SETTINGS_CATS=[
   {key:'tools',label:'Transform',studio:1},
   {key:'split',label:'Compare',studio:1},
   {key:'history',label:'History',studio:1},
-  {key:'library',label:'Library'},
+  {key:'library',label:'Gallery'},
   {key:'thumbnails',label:'Thumbnails'},
   {key:'panels',label:'Panels'},
   {key:'view',label:'View',studio:1},

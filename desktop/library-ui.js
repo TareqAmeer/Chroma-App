@@ -2397,7 +2397,7 @@
              hides the <span> at that point (see its own comment). aria-label is set explicitly
              to the plain tab name (not the title's "Switch to X" phrasing) so hiding the span
              doesn't change what a screen reader announces this button as. -->
-        <button class="lib-side-tab" id="lib-side-tab-library" title="Switch to Library" aria-label="Library">${ic('library',13)}<span>Library</span></button>
+        <button class="lib-side-tab" id="lib-side-tab-library" title="Switch to Gallery" aria-label="Gallery">${ic('library',13)}<span>Gallery</span></button>
         <!-- HANDOVER §3.4: "Develop — not yet available" contradicted the click, which already
              performs a real navigation (closes the Library, same as the header button / L key).
              The wiring is correct — Develop simply IS the editor you land back in — so the
@@ -3082,7 +3082,7 @@
       while (state._catalogCapped) {
         const ok = await loadMoreCatalogEntries();
         if (!ok) {
-          if (typeof toast === 'function') toast('Could not load the rest of the library — selection may be incomplete', false);
+          if (typeof toast === 'function') toast('Could not load the rest of the gallery — selection may be incomplete', false);
           break;
         }
       }
@@ -6182,7 +6182,7 @@
       if (state._catalogTotal != null) state._catalogTotal = Math.max(0, state._catalogTotal - trashed.length);
       renderGrid();
       try { await invoke('catalog_note_deleted', { paths: trashed }); } catch (e) { console.error('catalog_note_deleted', e); }
-      if (missing) toast(`Removed ${missing} missing photo${missing === 1 ? '' : 's'} from the Library — file${missing === 1 ? ' was' : 's were'} not found on this machine`, false);
+      if (missing) toast(`Removed ${missing} missing photo${missing === 1 ? '' : 's'} from the Gallery — file${missing === 1 ? ' was' : 's were'} not found on this machine`, false);
     }
   }
   async function libExportPaths(paths) {
@@ -6333,7 +6333,7 @@
       cacheRawItem.style.pointerEvents = 'none';
       cacheRawItem.title = 'The selected photos do not include a supported RAW file';
     } else {
-      cacheRawItem.title = 'Build exact full-quality editor caches for the selected RAW photos';
+      cacheRawItem.title = 'Build exact full-quality studio caches for the selected RAW photos';
     }
     sep();
     // Only offered while actually looking at Needs review — elsewhere it's a confusing no-op
@@ -6729,7 +6729,7 @@
     if (LIBTEST) window.__gridTitle = { gt: _gt, metaN: state.meta.size };
   }
   function gridSourceTitle() {
-    if (state.source === 'folder' && state.currentFolder) return String(state.currentFolder).split(/[\\/]/).filter(Boolean).pop() || 'Library';
+    if (state.source === 'folder' && state.currentFolder) return String(state.currentFolder).split(/[\\/]/).filter(Boolean).pop() || 'Gallery';
     const row = document.querySelector('#lib-side .lib-tree-row.on, #lib-side .lib-coll-row.on');
     const t = row ? row.textContent.replace(/[\d,.\s]+$/, '').trim() : '';
     if (!t && state.source === 'catalog') {
@@ -6751,7 +6751,7 @@
     }
     // Title names what's shown — the unscoped catalog view is "All Photos" (the sidebar's own
     // label for it), not a generic "Library".
-    return t || (state.source === 'catalog' && (!state.catalogScope || state.catalogScope === 'all') ? 'All Photos' : 'Library');
+    return t || (state.source === 'catalog' && (!state.catalogScope || state.catalogScope === 'all') ? 'All Photos' : 'Gallery');
   }
   function fmtGridDate(d, unit) {
     if (unit === 'month') return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
@@ -7109,7 +7109,7 @@
           + `</div>`
         : `<div class="lib-info-hint">${clipState === 'loading' ? 'Checking…'
           : clipState === 'ready' ? 'All detected tags are saved as keywords.'
-          : entry.id == null ? 'Add this folder to the library to auto-tag it.'
+          : entry.id == null ? 'Add this folder to the gallery to auto-tag it.'
           : 'Not tagged yet — photos are tagged automatically in the background.'}</div>`)
       + `</div>`;
     const suggestChips = aiChips + (!sugg.length ? '' : `<div class="lib-info-sec"><div class="lib-info-sec-h"><span>Suggested</span>`
@@ -7120,7 +7120,7 @@
             + `${suggIcon(h.kind)}${esc(h.term.split('|').pop())}<span class="lib-kw-suggest-chip-add">+</span></span>`).join('')
           + `</div>`
         : `<div class="lib-info-hint">${clipState === 'loading' ? 'Looking for suggestions…'
-          : entry.id == null ? 'Add this folder to the library to get suggestions.'
+          : entry.id == null ? 'Add this folder to the gallery to get suggestions.'
           : 'No suggestions yet — analyze the photo to get some.'}</div>`)
       + `</div>`);
     // Autocomplete against every keyword path already known to the catalog — best-effort
@@ -7243,7 +7243,7 @@
       + B('pick', 'Pick') + B('reject', 'Reject') + B('fav', 'Favorite')
       + `<button class="lib-btn sk2-bb-more-btn" style="white-space:nowrap;flex:none" aria-expanded="false">More</button>`
       + `<span class="sk2-bb-more" hidden>`
-      + B('cache-raw', 'Cache selected RAWs', 'Build exact full-quality editor caches for the selected RAW photos')
+      + B('cache-raw', 'Cache selected RAWs', 'Build exact full-quality studio caches for the selected RAW photos')
       + B('clear-label', 'Clear flag') + B('deselect', 'Deselect') + `</span>`;
     const mb = bar.querySelector('.sk2-bb-more-btn'), mo = bar.querySelector('.sk2-bb-more');
     mb.onclick = () => { mo.hidden = !mo.hidden; mb.setAttribute('aria-expanded', String(!mo.hidden)); };
@@ -8337,7 +8337,7 @@
   function syncListViewAvailability() {
     const docked = document.body.classList.contains('deskx') && !overlay.classList.contains('full');
     listViewBtn.disabled = docked;
-    listViewBtn.title = docked ? 'List view (unavailable while docked — expand the Library first)' : 'List view';
+    listViewBtn.title = docked ? 'List view (unavailable while docked — expand the Gallery first)' : 'List view';
   }
   function syncViewSeg() { viewSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === state.viewMode)); syncListViewAvailability(); try { syncViewMenuChecks(); } catch {} }
   viewSeg.querySelectorAll('button').forEach((b) => {
@@ -9286,14 +9286,14 @@
       <div style="padding:0 10px 6px"><div style="height:3px;border-radius:2px;background:var(--sur2);overflow:hidden">
         <div style="height:100%;width:${pct}%;background:${nearFull ? 'var(--err,#e05454)' : 'var(--acc)'}"></div>
       </div></div>
-      <div class="lib-coll-row sk2-manage" data-lib-roots="1" style="cursor:pointer" title="Every folder the library is indexing — remove any of them (files are never deleted)">
-        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Library folders…</span>
+      <div class="lib-coll-row sk2-manage" data-lib-roots="1" style="cursor:pointer" title="Every folder the gallery is indexing — remove any of them (files are never deleted)">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Gallery folders…</span>
       </div>
       <div class="lib-coll-row sk2-manage" data-cache-free="1" style="cursor:pointer">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Free up space…</span>
       </div>
       <div class="lib-coll-row sk2-manage" data-verify-library="1" style="cursor:pointer" title="Re-checks every already-hashed photo against its stored hash — flags any that changed WITHOUT its file date moving, which is what silent corruption looks like. New/never-hashed photos are already covered automatically in the background.">
-        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Verify library…</span>
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Verify gallery…</span>
       </div>
       <div class="lib-coll-row sk2-manage" data-find-duplicates="1" style="cursor:pointer" title="Perceptual-hash duplicate detection for the CURRENT folder — deliberately manual, same as digiKam's own Find Duplicates tool, rather than an automatic pass on every folder open.">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Find duplicates…</span>
@@ -9327,7 +9327,7 @@
   /// already auto-chained (catalogRunBackgroundPhases), but re-verifying every ALREADY-hashed
   /// photo is a full re-read of the whole archive, so it only runs when explicitly asked for.
   async function runVerifyLibrary() {
-    toast('Verifying library…');
+    toast('Verifying gallery…');
     let result;
     try { result = await invoke('catalog_verify'); }
     catch (e) { toast(humanizeErr('verify the library', e), 'err'); return; }
@@ -9358,11 +9358,11 @@
   /// and surfaces immediate errors (e.g. no folder open yet).
   async function runRescanFlags() {
     if (!state.root) {
-      toast('Open a library folder first');
+      toast('Open a gallery folder first');
       return;
     }
     activityUpdate('registry-rescan', {
-      label: 'Rescanning library flags…',
+      label: 'Rescanning gallery flags…',
       stage: 'scanning',
       done: 0,
       total: 0,
@@ -9604,7 +9604,7 @@
       const r = await invoke('catalog_import_google_takeout', { dir });
       await refreshPeople();
       if (!r.sidecars_with_people) { toast('No people found in that folder — choose the unzipped "Takeout" folder from a Google Photos export', 'err'); return; }
-      const extra = r.photos_not_in_library ? ` · ${r.photos_not_in_library} of their photos aren't in this library` : '';
+      const extra = r.photos_not_in_library ? ` · ${r.photos_not_in_library} of their photos aren't in this gallery` : '';
       toast(`Tagged ${r.faces_tagged} faces from Google Photos (${r.people_created} new people)${r.auto_assigned ? ` + ${r.auto_assigned} more automatically` : ''}${extra}`, true);
     } catch (err) { toast(humanizeErr('import from Google Photos', err), 'err'); }
   }
@@ -10799,7 +10799,7 @@
     const label = document.getElementById('boot-splash-label');
     if (!label) return;
     const shown = typeof window._bootShownPct === 'number' ? Math.round(window._bootShownPct) : 0;
-    label.textContent = shown > 0 ? `Preparing your library… ${shown}%` : 'Preparing your library…';
+    label.textContent = shown > 0 ? `Preparing your gallery… ${shown}%` : 'Preparing your gallery…';
   }
   // The pause choice lives in localStorage (JS) but is ENFORCED in Rust, so it has to be
   // re-asserted on every launch — otherwise a user who paused and quit would find indexing
@@ -10864,7 +10864,7 @@
     window.__TAURI__.event.listen('registry-rescan', (ev) => {
       const p = ev.payload || {};
       activityUpdate('registry-rescan', {
-        label: 'Rescanning library flags…',
+        label: 'Rescanning gallery flags…',
         stage: p.done ? 'done' : 'scanning',
         done: p.folders_scanned || 0,
         total: 0,
@@ -10999,7 +10999,7 @@
     }
     state.entries = entries;
     if (!entries.length) {
-      grid.innerHTML = '<div id="lib-empty">Nothing here — open a folder in the Library and it\'ll appear here.</div>';
+      grid.innerHTML = '<div id="lib-empty">Nothing here — open a folder in the Gallery and it\'ll appear here.</div>';
       rememberLibraryView({ kind: 'catalog', scope: state.catalogScope });
       renderCollections();
       return;
@@ -11584,7 +11584,7 @@
     } catch (e) {
       lrState.loading = false; renderCollections();
       console.error('lr connect', e);
-      showLrEmptyState('Connection failed — see the log in the editor view.');
+      showLrEmptyState('Connection failed — see the log in the studio view.');
     }
   }
   function lrSignOut() {
