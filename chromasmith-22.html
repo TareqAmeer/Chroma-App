@@ -6502,7 +6502,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929Z';
+const BUILD='1.0929A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -12111,6 +12111,7 @@ async function loadFXImages(fileList){
   window.__pm&&window.__pm('lfx-pre-install');
   installFXImages(entries,loadKey);
   window.__pm&&window.__pm('lfx-installed');
+  return entries[0]; // callers that must know THEIR photo (not a stale/other one) is what's installed compare against fxImages[0]
 }
 // Detect a black-and-white / monochrome photo (near-zero mean saturation) and default the
 // "White glow" halation switch accordingly. The user can still toggle it afterward.

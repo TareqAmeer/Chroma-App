@@ -4479,7 +4479,10 @@
         // the cache from the final decoded pixels, keyed by this path + recipe. Never for an
         // offline preview or an hq-offline copy — those bytes aren't the real file's.
         window.__chromasmithPersistTarget = (isRaw && !offlinePreview && !hqOfflineCacheExt) ? { path, recipeKey, size: byteLen } : null;
-        const decodeT0 = performance.now(); try { await loadFXImages([file]); } finally { window.__chromasmithPersistTarget = null; } rawPerf('open-decode', path, { ms: performance.now() - decodeT0, bytes: byteLen }); // bare identifier — see desktop-native.js's note on this
+        const decodeT0 = performance.now(); let installed = null; try { installed = await loadFXImages([file]); } finally { window.__chromasmithPersistTarget = null; }
+        // loadFXImages swallows decode failures (log + toast, no throw) and leaves the PREVIOUS photo in fxImages[0]; without this check that stale photo was stamped with this path, cached under it and got this photo's recipe ("opened one image, got a different one").
+        if (!installed || fxImages[0] !== installed) throw new Error('decode failed or was superseded');
+        rawPerf('open-decode', path, { ms: performance.now() - decodeT0, bytes: byteLen }); // bare identifier — see desktop-native.js's note on this
         if (fxImages[0]) {
           fxImages[0].fileSize = byteLen; // shown as the "Size" row in the metadata panel
           fxImages[0].offlinePreview = offlinePreview;
