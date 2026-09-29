@@ -146,10 +146,10 @@ a{color:inherit}
 .qa p{color:var(--mid);font-size:17px;line-height:1.5;max-width:640px;padding-bottom:24px}
 @media(max-width:760px){.faq{grid-template-columns:1fr}}
 /* feature space */
-.space{position:relative;height:300vh;border-top:1px solid var(--line);overflow:hidden;background:radial-gradient(ellipse at 50% 60%,#16140f 0,var(--bg) 70%)}
-.shead{position:absolute;left:5vw;top:14vh;z-index:5;max-width:380px}
+.space{position:relative;padding-bottom:12vh;border-top:1px solid var(--line);overflow:hidden;background:radial-gradient(ellipse at 50% 60%,#16140f 0,var(--bg) 70%)}
+.shead{position:relative;padding:14vh 5vw 0;z-index:5;max-width:none}.shead .t{max-width:460px}
 .shead .mono{color:var(--acc)}.shead .k{margin:16px 0 8px}.shead .btn{margin-top:24px}
-.field{position:absolute;left:0;right:0;top:48vh;bottom:14vh}
+.field{position:relative;margin:110px 5vw 0;height:200vh}
 .feat{position:absolute;white-space:nowrap;background:none;border:0;color:var(--fg);font-family:Gramatika;cursor:pointer;padding:4px 6px;transform:translate(-50%,-50%);transition:opacity .35s,color .35s,text-shadow .35s,filter .35s;will-change:transform}
 .feat:hover,.feat:focus-visible{opacity:1!important;filter:none!important;color:#fff;text-shadow:0 0 12px var(--acc),0 0 34px var(--acc),0 0 70px rgba(255,59,31,.6);outline:none;z-index:10}
 .feat::before{content:"";position:absolute;left:-10px;top:50%;width:5px;height:5px;margin-top:-2.5px;background:var(--acc);opacity:0;transition:opacity .3s}
@@ -165,7 +165,7 @@ a{color:inherit}
 .pop .d{color:var(--mid);font-size:18px;line-height:1.5}
 .pop .x{position:absolute;right:14px;top:10px;background:none;border:0;color:var(--dim);font-size:28px;cursor:pointer}.pop .x:hover{color:var(--acc)}
 .idx[hidden]{display:none}
-@media(max-width:760px){.space{height:220vh}.shead{position:relative;left:auto;top:auto;padding:14vh 5vw 0}}
+
 /* 5. outro */
 .outro{overflow:hidden;min-height:100vh;padding:16vh 5vw 6vh;background:var(--acc);color:#0b0b0a;display:grid;grid-template-rows:1fr auto}
 .outro .k{font-size:clamp(56px,13vw,230px);line-height:.84}
@@ -246,9 +246,9 @@ section{position:relative}
 .ph .dcap{position:absolute;left:12px;bottom:10px;z-index:3;margin:0;opacity:.9}
 .p4 .dcap{position:absolute;right:5vw;bottom:12vh;z-index:3}
 /* 8 constellation on a grid */
-.colhead{position:absolute;top:-6vh;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);border-top:1px solid #3a3833;padding-top:8px;width:calc(100%/8 - 16px);white-space:normal;cursor:pointer}
+.colhead{position:absolute;top:-56px;background:none;border-width:1px 0 0;border-style:solid;border-radius:0;margin:0;text-align:left;font-family:inherit;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);border-top:1px solid #3a3833;padding-top:8px;width:calc(100%/8 - 16px);white-space:normal;cursor:pointer}
 .colhead:hover,.colhead.on{color:var(--acc);border-color:var(--acc)}
-.feat{transform:translate(0,-50%);text-align:left;white-space:normal;max-width:calc(100vw/8.6);line-height:1.05}
+.feat{transform:translate(0,-50%);text-align:left;white-space:normal;max-width:calc(90vw/8.6);line-height:1.05}
 .feat::before{left:-9px}
 /* 9 contact sheet intro */
 .intro{place-items:end start;padding:0 5vw 14vh}
@@ -391,7 +391,7 @@ section{position:relative}
   .row{gap:8px;padding:3vh 0}.row::before{inset:0 -16px}
   .space{height:auto;padding:14vh 16px 10vh}
   .shead{position:relative;left:auto;top:auto;padding:0;margin-bottom:6vh}
-  .field{position:relative;top:auto;bottom:auto;display:grid;grid-template-columns:1fr 1fr;gap:26px 14px}
+  .field{position:relative;top:auto;bottom:auto;height:auto;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:26px 14px}
   .colhead{display:none}
   .feat{position:static;transform:none!important;max-width:none;font-size:15px!important;opacity:.85!important;filter:none!important;padding:0;text-align:left}
   .feat::before{display:none}
