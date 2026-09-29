@@ -17,7 +17,7 @@ await p.setContent(`<style>@font-face{font-family:G;src:url(${font})}body{margin
 .s{position:absolute;inset:0;background:linear-gradient(90deg,rgba(11,11,10,.92) 0,rgba(11,11,10,.6) 55%,rgba(11,11,10,.1))}
 .c{position:absolute;left:72px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center}
 h1{font-size:92px;line-height:.9;margin:28px 0 0;font-weight:900}p{font-size:28px;color:#c9c5bb;margin:22px 0 0;max-width:560px;line-height:1.3}</style>
-<div class="s"></div><div class="c">${svg.replace('<svg ','<svg width="120" height="120" ')}<h1>CHROMASMITH</h1><p>Film looks, grain &amp; halation. A whole photo studio: free, offline, open source.</p></div>`);
+<div class="s"></div><div class="c">${svg.replace('<svg ','<svg width="120" height="120" ')}<h1>CHROMASMITH</h1><p>Gallery. Studio. Film Lab.<br>your photos, your workflow, your app</p></div>`);
 await p.evaluate(()=>document.fonts.ready);
 await p.screenshot({path:root+'assets/brand/og-image.jpeg',type:'jpeg',quality:82});
 await b.close();
