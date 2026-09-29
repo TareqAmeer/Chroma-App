@@ -6502,7 +6502,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929Y';
+const BUILD='1.0929Z';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9690,6 +9690,8 @@ if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
   if(tg)tg.classList.toggle('on',window.chromasmithDemosaicAlgo==='ahd');
 });
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
+// Compare (show original) strips only the LOOK; borders/canvas matte/film frame stay so the photo's size and position never move.
+function fxCompareParams(){return{...getFXParams(),lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},bloom:{enabled:false},masks:[],debug:0};}
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
 let fxSplit=false, fxSplitPos=0.5;       // split before/after view
 // B3: what the split's "before" side renders. 'orig'|'pin'|{hist:N}|{style:name}|{export:v,recipe}
@@ -18973,8 +18975,7 @@ function renderLoupe(){
   const oy=Math.min(fh-cropH,Math.max(0,Math.round(loupeCY*fh-cropH/2)));
   const crop=document.createElement('canvas');crop.width=cropW;crop.height=cropH;
   crop.getContext('2d').drawImage(src,ox,oy,cropW,cropH,0,0,cropW,cropH);
-  const P=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
-    bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
+  const P=fxCompare?fxCompareParams():getFXParams();
   const REF=FXR.CAL.refWidth;
   FX.setImage(crop);
   FX.render(P,outW,outH,{glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),
@@ -19041,8 +19042,7 @@ function _fxEnsureFullResBase(iw,ih){
   // once and to 2D-scale per frame. Uses the SAME grading params as the crisp path.
   const cap=2560,sc=Math.min(1,cap/Math.max(iw,ih));
   const bw=Math.max(1,Math.round(iw*sc)),bh=Math.max(1,Math.round(ih*sc));
-  const P=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
-    bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
+  const P=fxCompare?fxCompareParams():getFXParams();
   FX.render(P,bw,bh,{glowScale:fxGlowScale()}); // whole frame, moderate res, one time
   let c=_fxFullBase.canvas;
   if(!c){c=document.createElement('canvas');_fxFullBase.canvas=c;}
@@ -19187,8 +19187,7 @@ function renderPreview(){
   // normal full-frame path for framed/matted images, whose composition must span the whole
   // image rather than be rebuilt from only the visible source tile.
   if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&!_previewComposition){
-    const Pc=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
-      bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
+    const Pc=fxCompare?fxCompareParams():getFXParams();
     _fxShowFullBase(iw,ih,cw,ch);                       // coarse underlay behind the crisp crop (smooth panning)
     if(renderFullResCrop(Pc,iw,ih,cw,ch)){
       const orig=document.getElementById('fx-canvas-orig');if(orig){orig.style.display='none';orig.style.clipPath='';}
@@ -19236,8 +19235,7 @@ function renderPreview(){
   // (fxZoom>1 full-res now renders a visible crop — see renderFullResCrop above; this path
   // only handles Fit and the split/interacting fallbacks.)
   // "hold to compare": render the untouched original (no LUT / adjust / FX, but with geometry)
-  const P=fxCompare?{lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},
-    bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}}:getFXParams();
+  const P=fxCompare?fxCompareParams():getFXParams();
   // Video only: a deterministic per-frame grain seed (see fxVideoFrameSeed) instead of the
   // photo default (Math.random() inside FX.render itself when opts.seed is omitted) — a photo
   // re-rolling grain on every renderPreview() call is harmless jitter between edits, but a video
