@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620">
+<rect width="1200" height="620" fill="#e8e9e4"/>
+<style>
+text{font-family:Arial,Helvetica,sans-serif;fill:#171a17}.eyebrow{font-size:11px;font-weight:bold;letter-spacing:2.3px}.title{font-size:39px;font-weight:bold;letter-spacing:-2px}.desc{font-size:14px;fill:#596159}.label{font-size:13px;font-weight:bold;letter-spacing:1.2px}.note{font-size:12px;fill:#687168}.card{fill:#fafbf7;stroke:#bec6bb;stroke-width:1}.line{fill:none;stroke:#111711;stroke-width:.82;stroke-linecap:square;stroke-linejoin:miter}.guide{fill:none;stroke:#c3cbc0;stroke-width:.4;stroke-dasharray:1 2}
+</style>
+<text class="eyebrow" x="50" y="46">CHROMASMITH / CHR—149 / THIRD PASS</text>
+<text class="title" x="49" y="97">Precision, interrupted.</text>
+<text class="desc" x="50" y="126">Direction A with one displaced fragment per icon. Monoline forms; the glitches are structural rather than decorative.</text>
+<line x1="50" y1="150" x2="1150" y2="150" stroke="#a8b1a7" stroke-width=".7"/>
+<g><rect class="card" x="50" y="180" width="260" height="320"/><rect class="card" x="330" y="180" width="260" height="320"/><rect class="card" x="610" y="180" width="260" height="320"/><rect class="card" x="890" y="180" width="260" height="320"/></g>
+<g class="label"><text x="70" y="211">01 / ARROW</text><text x="350" y="211">02 / FOLDER</text><text x="630" y="211">03 / EDIT</text><text x="910" y="211">04 / FLAG</text></g>
+
+<!-- arrow: detached top arm overshoots point -->
+<g class="line" transform="translate(111 255) scale(5)"><path d="M2 12H20"/><path d="M15 18L21 12"/><path d="M14 5L21.8 12.8"/><path d="M2 5H8"/></g>
+<!-- folder: tab cap floats off its supporting wall -->
+<g class="line" transform="translate(391 255) scale(5)"><path d="M2 19V8H10L13 11H22V19H2Z"/><path d="M1 4H9"/><path d="M11 4H15"/></g>
+<!-- edit: pencil tip and writing line overshoot -->
+<g class="line" transform="translate(671 255) scale(5)"><path d="M2 20H22"/><path d="M6 17L18 5L21 8L9 20"/><path d="M16.5 6.5L20.5 10.5"/><path d="M5 18L4 21"/></g>
+<!-- flag: the banner's top starts above the pole; deliberate offset at attachment -->
+<g class="line" transform="translate(951 255) scale(5)"><path d="M4 22V5"/><path d="M4 2H22L17 9L22 16H4"/></g>
+
+<g class="note"><text x="70" y="468">head overshoots the shaft</text><text x="350" y="468">tab rail slips left</text><text x="630" y="468">tip breaks past the baseline</text><text x="910" y="468">banner rises above the pole</text></g>
+<line x1="50" y1="535" x2="1150" y2="535" stroke="#a8b1a7" stroke-width=".7"/>
+<text class="eyebrow" x="50" y="565">SYSTEM NOTE</text><text class="desc" x="210" y="565">At actual UI size, keep the silhouette continuous enough to read instantly; reserve the displaced detail for the 24 px masters.</text>
+</svg>

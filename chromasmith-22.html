@@ -374,10 +374,9 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
 /* Centre detent on bipolar rows, so the neutral point is findable by eye. */
 .fx-slider-bi{background-image:radial-gradient(circle,var(--mut) 0 2px,transparent 3px);background-size:5px 5px;
   background-position:center 0;background-repeat:no-repeat}
-/* Guards a vertical drag on the thumb from being captured by the bottom sheet's own vertical
-   scroll if a slider ever ends up inside that scrollable area — horizontal-only touch handling,
-   consistent with touch-action:none already used on the zoom/mask/curve drag surfaces. */
-body.mobile-fx .fx-slider{touch-action:pan-x}
+/* Let a vertical gesture over a slider scroll the mobile tool sheet. Horizontal gestures
+   remain available for adjusting the range control. */
+body.mobile-fx .fx-slider{touch-action:pan-y}
 .fx-val{order:2;font-family:var(--sans);font-size:var(--fs-2);font-variant-numeric:tabular-nums;color:var(--mut);text-align:right;flex-shrink:0}
 /* Accent is now an INFORMATION channel, not decoration: a value goes amber only when it differs
    from its factory default (see .fx-row.fx-mod), so a panel of 14 sliders at rest reads calm
@@ -393,10 +392,8 @@ body.mobile-fx .fx-slider{touch-action:pan-x}
 .fx-val[contenteditable]{cursor:text;border-radius:3px;outline:none;padding:1px 2px}
 .fx-val[contenteditable]:hover{background:var(--sur2)}
 .fx-val[contenteditable]:focus{background:var(--sur2);box-shadow:0 0 0 1px var(--acc);color:var(--txt);text-align:center;min-width:40px}
-/* The tap-to-type numeric entry only hints itself via the :hover background above, which never
-   fires on a touchscreen — without this, mobile users have no way to discover it exists. */
-body.mobile-fx .fx-val[contenteditable]{border-bottom:1px dotted var(--mut)}
-body.mobile-fx .fx-val[contenteditable]:focus{border-bottom-style:solid}
+/* Numeric values stay visually plain on phones, where tap-to-type is disabled for coarse pointers. */
+body.mobile-fx .fx-val[contenteditable]{border-bottom:0}
 .fx-color{width:32px;height:22px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:1px}
 /* Color Mixer band swatches: plain circle + colored underline, no bordered chip box */
 .btn-icon{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
@@ -537,8 +534,8 @@ body.light .fx-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='htt
 body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 /* padding here (not a bigger margin on the canvas/photo itself) gives the fit-to-window photo
    breathing room on every edge, including toward the docked filmstrip below it — the JS sizing
-   (renderPreview/fxLiveFit) reads wrap.clientWidth/clientHeight, which already excludes padding,
-   so the "fit" computation shrinks to match with no separate change needed there. Zooming past
+   (renderPreview/fxLiveFit) reads fxWrapInner(), which excludes padding,
+   so the "fit" computation shrinks to match. Zooming past
    100% still legitimately fills/overflows this box (clipped by overflow:hidden below) — the
    margin is only about the DEFAULT fit-to-window state touching every edge. */
 .fx-canvas-wrap{background:#000;border-radius:var(--r);overflow:hidden;position:relative;min-height:300px;display:flex;align-items:center;justify-content:center;padding:var(--sp-6)}
@@ -10723,6 +10720,8 @@ function fxScheduleRender(){
 const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-skin'];
 function resetAdjust(){
   ADJ_RESET_FIELDS.forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
+  fxPaintAllSliders(document.querySelector('.fx-ctrl[data-fxsec="adjust"]'));
+  fxMarkModifiedSliders();
   fxUpdate();log('Adjustments reset','info');
 }
 // Disabled once every Basic Adjustments slider is already at its default (0) — clicking Reset
@@ -16278,7 +16277,7 @@ function initZoomPan(){
   // Drag-to-pan (CSS zoom) OR drag-to-move the loupe crop
   let pd=null;
   zw.addEventListener('pointerdown',e=>{
-    if(_wbEyedropperActive||mskPaintMode))return;
+    if(_wbEyedropperActive||mskPaintMode)return;
     e.preventDefault();pd={x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
     _fxPreviewInteracting=true;  // E1: drag-pan never set this — see the wheel handler above
@@ -17247,7 +17246,7 @@ function fxWrapInner(){ // content box of #fx-wrap (clientWidth/Height include t
 function fxPreviewMaxH(){
   if(window.innerWidth<=700){
     const wrap=document.getElementById('fx-wrap');
-    const h=wrap?wrap.clientHeight:0;
+    const h=wrap?fxWrapInner().h:0;
     // fallback derives from --app-h (the JS-owned true visible height) so CSS and JS agree
     const appH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--app-h'))||window.innerHeight;
     return Math.max(220,h||appH*0.42);
@@ -17419,7 +17418,7 @@ function renderPreview(){
   const deskx=document.body.classList.contains('deskx');
   // deskx: no 900px cap — the photo fills the whole preview cell (DRK-style). The GPU
   // cost is bounded by the BACKING-STORE cap below, not the CSS size.
-  const maxW=deskx?(fxWrapInner().w||900):Math.min(900,wrap.clientWidth||900);
+  const maxW=Math.min(deskx?Infinity:900,fxWrapInner().w||900);
   const maxH=fxPreviewMaxH();                           // cap height on phones (sticky preview)
   const sc=Math.min(1,maxW/iw,maxH/ih);
   const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
@@ -22071,7 +22070,7 @@ function fxLiveFit(ms){
   const nativeW=cv.width||w0,nativeH=cv.height||h0;
   if(!nativeW||!nativeH)return;
   const step=()=>{
-    const aw=wrap.clientWidth,ah=wrap.clientHeight;
+    const inner=fxWrapInner(),aw=inner.w,ah=inner.h;
     if(aw>0&&ah>0){
       // Use the CURRENT canvas intrinsic dimensions, not the previous photo's CSS dimensions.
       // A pasted edit can switch from portrait to landscape while this observer is still
@@ -22680,6 +22679,10 @@ document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title
     const override=_fxSectionResetOverride[fxsec];
     if(override&&typeof window[override]==='function')window[override]();
     else fxResetSection(title.parentElement);
+    // Programmatic value changes do not emit input events. Refresh the track fill, knob,
+    // and edited marker that normally follow those events.
+    fxPaintAllSliders(title.parentElement);
+    fxMarkModifiedSliders();
   };
   // Reset and the on/off toggle (if any) are wrapped together so both sit flush at the title's
   // right edge — appending reset as a bare third flex child would land it BETWEEN the title

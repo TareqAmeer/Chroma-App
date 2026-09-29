@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1030" viewBox="0 0 1280 1030">
+<rect width="1280" height="1030" fill="#e9eae6"/>
+<style>
+text{font-family:Arial,Helvetica,sans-serif;fill:#171b17}.k{font-size:11px;font-weight:bold;letter-spacing:2.2px}.h{font-size:39px;font-weight:bold;letter-spacing:-2px}.sub{font-size:14px;fill:#5c655d}.row{font-size:14px;font-weight:bold;letter-spacing:.8px}.cell{fill:#fafbf7;stroke:#c4cbc1;stroke-width:.8}.icon{fill:none;stroke:#101610;stroke-width:.82;stroke-linecap:square;stroke-linejoin:miter}.echo{fill:none;stroke:#7e8a7b;stroke-width:.55;stroke-linecap:square;stroke-linejoin:miter}.small{font-size:11px;fill:#6a756a}.dark{fill:#182018}.light{fill:#fafbf7}
+</style>
+<text class="k" x="50" y="44">CHR—149 / DESIGN EXPLORATION 04</text>
+<text class="h" x="49" y="91">Four ways to shift the line.</text>
+<text class="sub" x="50" y="120">All original SVGs, building on A. Read each row as a possible system; combine individual details if you prefer.</text>
+<line x1="50" y1="145" x2="1230" y2="145" stroke="#abb4a9" stroke-width=".7"/>
+<g class="k"><text x="276" y="171">ARROW</text><text x="520" y="171">FOLDER</text><text x="764" y="171">EDIT</text><text x="1008" y="171">FLAG</text></g>
+
+<!-- row labels and cards -->
+<g class="row"><text x="50" y="226">01</text><text x="50" y="245">LIFT</text><text x="50" y="438">02</text><text x="50" y="457">SLICE</text><text x="50" y="650">03</text><text x="50" y="669">ECHO</text><text x="50" y="862">04</text><text x="50" y="881">KICK</text></g>
+<g class="small"><text x="50" y="267">one detached edge</text><text x="50" y="479">one horizontal shift</text><text x="50" y="691">a quiet second trace</text><text x="50" y="903">harder asymmetry</text></g>
+<g><rect class="cell" x="252" y="187" width="224" height="185"/><rect class="cell" x="496" y="187" width="224" height="185"/><rect class="cell" x="740" y="187" width="224" height="185"/><rect class="cell" x="984" y="187" width="224" height="185"/><rect class="cell" x="252" y="399" width="224" height="185"/><rect class="cell" x="496" y="399" width="224" height="185"/><rect class="cell" x="740" y="399" width="224" height="185"/><rect class="cell" x="984" y="399" width="224" height="185"/><rect class="cell" x="252" y="611" width="224" height="185"/><rect class="cell" x="496" y="611" width="224" height="185"/><rect class="cell" x="740" y="611" width="224" height="185"/><rect class="cell" x="984" y="611" width="224" height="185"/><rect class="cell" x="252" y="823" width="224" height="185"/><rect class="cell" x="496" y="823" width="224" height="185"/><rect class="cell" x="740" y="823" width="224" height="185"/><rect class="cell" x="984" y="823" width="224" height="185"/></g>
+
+<!-- 01 LIFT: displaced top line and flag above pole -->
+<g class="icon" transform="translate(312 234) scale(4)"><path d="M2 12H20M15 18L21 12M14 5L21.8 12.8M2 4H10"/></g>
+<g class="icon" transform="translate(556 234) scale(4)"><path d="M2 19V8H10L13 11H22V19H2Z"/><path d="M1 4H10"/></g>
+<g class="icon" transform="translate(800 233) scale(4)"><path d="M2 20H22"/><path d="M6 17L18 5L21 8L9 20"/><path d="M5 18L4 21"/></g>
+<g class="icon" transform="translate(1044 232) scale(4)"><path d="M4 22V6"/><path d="M4 2H22L17 9L22 16H4"/></g>
+<g class="small"><text x="273" y="351">lifted speedline</text><text x="517" y="351">lifted tab</text><text x="761" y="351">lifted nib</text><text x="1005" y="351">banner above pole</text></g>
+
+<!-- 02 SLICE: a narrow displaced horizontal band -->
+<g class="icon" transform="translate(312 446) scale(4)"><path d="M2 12H10M12 11H20"/><path d="M15 6L21 12L15 18"/><path d="M2 5H7"/></g>
+<g class="icon" transform="translate(556 446) scale(4)"><path d="M2 19V8H10L13 11H22V13"/><path d="M21 14V19H2V13"/><path d="M2 4H9"/></g>
+<g class="icon" transform="translate(800 445) scale(4)"><path d="M2 20H22"/><path d="M6 17L12 11M13 10L18 5L21 8L9 20"/><path d="M16 7L19 10"/></g>
+<g class="icon" transform="translate(1044 444) scale(4)"><path d="M4 22V5"/><path d="M4 2H22L17 9"/><path d="M18 10L22 16H4"/></g>
+<g class="small"><text x="273" y="563">shifted shaft</text><text x="517" y="563">shifted lower wall</text><text x="761" y="563">cut pencil edge</text><text x="1005" y="563">cut banner fold</text></g>
+
+<!-- 03 ECHO: minimal secondary registration line -->
+<g class="icon" transform="translate(312 658) scale(4)"><path d="M2 12H20M15 6L21 12L15 18"/></g><g class="echo" transform="translate(312 658) scale(4)"><path d="M3 14H10M16 8L22 14"/></g>
+<g class="icon" transform="translate(556 658) scale(4)"><path d="M2 19V8H10L13 11H22V19H2Z"/></g><g class="echo" transform="translate(556 658) scale(4)"><path d="M3 5H10L13 8H17"/></g>
+<g class="icon" transform="translate(800 657) scale(4)"><path d="M2 20H22"/><path d="M6 17L18 5L21 8L9 20"/></g><g class="echo" transform="translate(800 657) scale(4)"><path d="M8 17L17 8"/></g>
+<g class="icon" transform="translate(1044 656) scale(4)"><path d="M4 22V5"/><path d="M4 2H22L17 9L22 16H4"/></g><g class="echo" transform="translate(1044 656) scale(4)"><path d="M7 5H19M7 18H15"/></g>
+<g class="small"><text x="273" y="775">offset afterimage</text><text x="517" y="775">tab afterimage</text><text x="761" y="775">inner trace</text><text x="1005" y="775">fabric trace</text></g>
+
+<!-- 04 KICK: asymmetrical displacement, more brutal -->
+<g class="icon" transform="translate(312 870) scale(4)"><path d="M2 14H20L14 8"/><path d="M20 14L14 20"/><path d="M2 3H11M14 3H19"/></g>
+<g class="icon" transform="translate(556 870) scale(4)"><path d="M2 20V9H10L13 12H22V20H2Z"/><path d="M1 4H9M11 4H17"/></g>
+<g class="icon" transform="translate(800 869) scale(4)"><path d="M1 21H22"/><path d="M5 18L19 4L22 7L8 21"/><path d="M16 7L20 11"/></g>
+<g class="icon" transform="translate(1044 868) scale(4)"><path d="M4 23V6"/><path d="M4 1H22L16 9L22 17H10"/><path d="M8 17H4"/></g>
+<g class="small"><text x="273" y="987">low arrow / high rail</text><text x="517" y="987">raised top rail</text><text x="761" y="987">overshot edit line</text><text x="1005" y="987">banner snaps upward</text></g>
+</svg>

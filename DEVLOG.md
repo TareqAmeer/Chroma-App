@@ -37,3 +37,7 @@ Agent-generated changelog of completed features and architectural decisions.
 - CHR-152: Rebuilt the home page as eight scrolling, benefit-led chapters with a changing CHRO-MA rail, numbered navigation, a comparison control, and reduced-motion behavior.
 - Updated `index.html`, `site/build-page.mjs`, site assets and documentation; recorded 28 animation and product-page research takeaways in `site/animation-research.md`.
 - Verified desktop and phone layouts, chapter navigation, images, comparison keyboard input, and accessibility with `test/homepage_smoke.mjs`; the original photographs and founder portrait/copy remain explicit placeholders.
+
+- CHR-113, CHR-115, CHR-116, CHR-117: Corrected mobile preview fit within canvas padding, removed phone value underlines, enabled vertical sheet scrolling over sliders, and refreshed slider visuals after section resets; also fixed an editor script syntax error that prevented the page from starting.
+- CHR-114: Confirmed the current phone tool sheet sits directly beneath the preview controls, replacing the spaced layout shown in the ticket.
+- Updated `chromasmith-22.html` and `test/editor_wireframe_behaviour.mjs`; all five focused phone checks and HTML validity passed. The broader UI audit and editor gates still report separate existing findings.

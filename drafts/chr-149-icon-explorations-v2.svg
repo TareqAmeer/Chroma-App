@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="810" viewBox="0 0 1200 810">
+<rect width="1200" height="810" fill="#e9e9e5"/>
+<style>
+text{font-family:Arial,Helvetica,sans-serif;fill:#171917}.eyebrow{font-size:11px;font-weight:bold;letter-spacing:2.4px}.title{font-size:38px;font-weight:bold;letter-spacing:-2px}.desc{font-size:14px;fill:#555b55}.name{font-size:14px;font-weight:bold;letter-spacing:.2px}.tiny{font-size:11px;fill:#687069}.card{fill:#f9f9f5;stroke:#bdc2ba;stroke-width:1}.rule{stroke:#858e85;stroke-width:.7}.a{fill:none;stroke:#171917;stroke-width:.8;stroke-linecap:square;stroke-linejoin:miter}.b{fill:none;stroke:#171917;stroke-width:.72;stroke-linecap:square;stroke-linejoin:miter}.c{fill:none;stroke:#171917;stroke-width:.62;stroke-linecap:square;stroke-linejoin:miter}
+</style>
+<text class="eyebrow" x="48" y="46">CHROMASMITH / CHR—149 / SECOND PASS</text>
+<text class="title" x="48" y="94">Signal, sharpened.</text>
+<text class="desc" x="49" y="123">Three degrees of edge, all with finer lines than the first sheet. Each study is drawn on a 24-unit grid.</text>
+<line class="rule" x1="48" x2="1152" y1="145" y2="145"/>
+<text class="eyebrow" x="50" y="178">A / CUT PRECISION</text><text class="desc" x="293" y="178">The most usable: surgical lines, squared terminals, one decisive cut per form.</text>
+<text class="eyebrow" x="50" y="389">B / ANGULAR TENSION</text><text class="desc" x="293" y="389">Diagonal interruption becomes a shared detail across the family.</text>
+<text class="eyebrow" x="50" y="600">C / HARD SIGNAL</text><text class="desc" x="293" y="600">The boldest composition, kept readable through familiar silhouettes.</text>
+
+<g><rect class="card" x="48" y="190" width="258" height="174"/><rect class="card" x="330" y="190" width="258" height="174"/><rect class="card" x="612" y="190" width="258" height="174"/><rect class="card" x="894" y="190" width="258" height="174"/><rect class="card" x="48" y="401" width="258" height="174"/><rect class="card" x="330" y="401" width="258" height="174"/><rect class="card" x="612" y="401" width="258" height="174"/><rect class="card" x="894" y="401" width="258" height="174"/><rect class="card" x="48" y="612" width="258" height="174"/><rect class="card" x="330" y="612" width="258" height="174"/><rect class="card" x="612" y="612" width="258" height="174"/><rect class="card" x="894" y="612" width="258" height="174"/></g>
+<g class="name"><text x="66" y="216">ARROWS</text><text x="348" y="216">FOLDER</text><text x="630" y="216">EDIT</text><text x="912" y="216">FLAG</text><text x="66" y="427">ARROWS</text><text x="348" y="427">FOLDER</text><text x="630" y="427">EDIT</text><text x="912" y="427">FLAG</text><text x="66" y="638">ARROWS</text><text x="348" y="638">FOLDER</text><text x="630" y="638">EDIT</text><text x="912" y="638">FLAG</text></g>
+
+<!-- A -->
+<g class="a" transform="translate(95 236) scale(3.2)"><path d="M2 12H21M15 6L21 12L15 18"/><path d="M2 5H8"/></g>
+<g class="a" transform="translate(379 236) scale(3.2)"><path d="M2 19V7H9L12 10H22V19H2Z"/><path d="M2 4H9"/></g>
+<g class="a" transform="translate(660 235) scale(3.2)"><path d="M3 20H21"/><path d="M6 17L18 5L21 8L9 20"/><path d="M17 6L20 9"/></g>
+<g class="a" transform="translate(945 234) scale(3.2)"><path d="M4 22V3"/><path d="M4 5H21L17 11L21 17H4"/></g>
+<g class="tiny"><text x="66" y="347">thin / clear / clipped</text><text x="348" y="347">offset tab rail</text><text x="630" y="347">drafting baseline</text><text x="912" y="347">knife-cut pennant</text></g>
+
+<!-- B -->
+<g class="b" transform="translate(95 447) scale(3.2)"><path d="M2 12H20"/><path d="M15 5L22 12L15 19"/><path d="M2 5H10"/><path d="M11 5L13 5"/></g>
+<g class="b" transform="translate(379 447) scale(3.2)"><path d="M2 19V7H9L12 10H22V19H2Z"/><path d="M2 4H8"/><path d="M10 4L12 6"/></g>
+<g class="b" transform="translate(660 446) scale(3.2)"><path d="M3 20H21"/><path d="M6 17L17 6"/><path d="M18 5L21 8L9 20"/><path d="M16 7L19 10"/></g>
+<g class="b" transform="translate(945 445) scale(3.2)"><path d="M4 22V3"/><path d="M4 5H21L17 11"/><path d="M18 12L21 17H4"/></g>
+<g class="tiny"><text x="66" y="558">split speedline</text><text x="348" y="558">detached upper cut</text><text x="630" y="558">broken bevel</text><text x="912" y="558">severed tail</text></g>
+
+<!-- C -->
+<g class="c" transform="translate(95 658) scale(3.2)"><path d="M2 16H21L14 9"/><path d="M21 16L14 23"/><path d="M2 4H12"/><path d="M14 4H18"/></g>
+<g class="c" transform="translate(379 658) scale(3.2)"><path d="M2 20V8H10L13 11H22V20H2Z"/><path d="M2 4H9"/><path d="M11 4H17"/></g>
+<g class="c" transform="translate(660 657) scale(3.2)"><path d="M2 21H22"/><path d="M5 18L19 4L22 7L8 21"/><path d="M15 8L18 11"/></g>
+<g class="c" transform="translate(945 656) scale(3.2)"><path d="M4 23V2"/><path d="M4 4H22L17 11L22 18H10"/><path d="M8 18H4"/></g>
+<g class="tiny"><text x="66" y="769">long lead</text><text x="348" y="769">split horizon</text><text x="630" y="769">extended incision</text><text x="912" y="769">fractured field</text></g>
+</svg>

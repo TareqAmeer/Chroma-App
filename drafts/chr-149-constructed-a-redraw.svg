@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="390" viewBox="0 0 1080 390">
+<rect width="1080" height="390" fill="#e7e8e3"/><style>text{font-family:Arial,Helvetica,sans-serif;fill:#171a17}.k{font-size:11px;font-weight:bold;letter-spacing:2px}.h{font-size:31px;font-weight:bold;letter-spacing:-1.2px}.n{font-size:15px;font-weight:bold}.d{font-size:12px;fill:#5c675e}.card{fill:#f8f9f5;stroke:#bfc7bc;stroke-width:1}.b{fill:#111611}.g{fill:#9da79d}</style>
+<text class="k" x="42" y="43">CHR—149 / CONSTRUCTED A / THREE REDRAWS</text><text class="h" x="42" y="83">Masks · Film · Export</text>
+<rect class="card" x="42" y="114" width="312" height="230"/><rect class="card" x="384" y="114" width="312" height="230"/><rect class="card" x="726" y="114" width="312" height="230"/>
+<text class="n" x="62" y="143">MASKS / occlusion gate</text><text class="n" x="404" y="143">FILM / offset exposures</text><text class="n" x="746" y="143">EXPORT / released negative</text>
+<g transform="translate(133 166) scale(5)"><path class="g" d="M3 4H20V20H3Z"/><path class="b" d="M3 4H12V20H3Z"/><path fill="#f8f9f5" d="M7 8H16V16H7Z"/><path class="b" d="M18 2H21V9H18Z"/></g>
+<g transform="translate(475 166) scale(5)"><path class="g" d="M3 6H14V19H3Z"/><path class="b" d="M7 3H18V16H7Z"/><path class="g" d="M11 7H22V20H11Z"/><path class="b" d="M14 10H19V17H14Z"/></g>
+<g transform="translate(817 166) scale(5)"><path class="g" d="M3 4H14V20H3Z"/><path fill="#f8f9f5" d="M6 7H11V17H6Z"/><path class="b" d="M15 8L22 12L15 16Z"/><path class="b" d="M12 11H18V13H12Z"/></g>
+<text class="d" x="62" y="324">A hard masked region with an offset selector</text><text class="d" x="404" y="324">Three staggered exposures, no film strip</text><text class="d" x="746" y="324">Negative passes through an exit point</text>
+</svg>

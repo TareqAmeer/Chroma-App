@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 820" width="1200" height="820">
+<rect width="1200" height="820" fill="#f5f4ef"/>
+<style>
+text{font-family:Arial,Helvetica,sans-serif;fill:#20231f} .k{font-size:12px;letter-spacing:2px;font-weight:bold} .h{font-size:35px;font-weight:600;letter-spacing:-1.5px} .s{font-size:14px;fill:#666b64} .n{font-size:18px;font-weight:bold} .line{stroke:#222720;fill:none;stroke-width:1.3;stroke-linecap:square;stroke-linejoin:miter} .hair{stroke:#222720;fill:none;stroke-width:1;stroke-linecap:square;stroke-linejoin:miter} .rule{stroke:#c9cec4;stroke-width:1} .cell{fill:#fbfaf7;stroke:#d7d9d1;stroke-width:1} .hint{font-size:12px;fill:#7b8077}
+</style>
+<text class="k" x="48" y="48">CHR—149 / ICON STUDIES / 25.09.2026</text>
+<text class="h" x="48" y="93">Razor-thin, with a clear silhouette.</text>
+<text class="s" x="49" y="122">Original SVG studies on a 24-unit drawing grid. Shown enlarged; 24 px previews at right of each cell.</text>
+<line class="rule" x1="48" y1="145" x2="1152" y2="145"/>
+<text class="k" x="49" y="177">01 / ORTHOGONAL</text><text class="s" x="260" y="177">Square ends · straight edges · controlled asymmetry</text>
+<text class="k" x="49" y="391">02 / CUT LINE</text><text class="s" x="260" y="391">Intentional gaps · light and architectural</text>
+<text class="k" x="49" y="605">03 / SIGNAL</text><text class="s" x="260" y="605">Extended gesture · more editorial presence</text>
+
+<!-- Row 1 cards -->
+<g><rect class="cell" x="48" y="190" width="258" height="180"/><rect class="cell" x="330" y="190" width="258" height="180"/><rect class="cell" x="612" y="190" width="258" height="180"/><rect class="cell" x="894" y="190" width="258" height="180"/></g>
+<text class="n" x="67" y="219">Arrows</text><text class="n" x="349" y="219">Folder</text><text class="n" x="631" y="219">Edit</text><text class="n" x="913" y="219">Flag</text>
+<g class="line" transform="translate(90 241) scale(3)"><path d="M2 12H21M15 6L21 12L15 18"/><path d="M9 3L3 9L9 15" opacity=".55"/></g>
+<g class="line" transform="translate(378 242) scale(3)"><path d="M2 19V5H9L12 8H22V19H2Z"/><path d="M2 8H12"/></g>
+<g class="line" transform="translate(665 240) scale(3)"><path d="M4 19H20"/><path d="M6 15L17 4L20 7L9 18H6V15Z"/><path d="M15 6L18 9"/></g>
+<g class="line" transform="translate(949 240) scale(3)"><path d="M4 21V3"/><path d="M4 4H20L16 10L20 16H4"/></g>
+<text class="hint" x="67" y="350">direction pair</text><text class="hint" x="349" y="350">stepped tab</text><text class="hint" x="631" y="350">pencil + baseline</text><text class="hint" x="913" y="350">double-cut banner</text>
+
+<!-- Row 2 cards -->
+<g><rect class="cell" x="48" y="404" width="258" height="180"/><rect class="cell" x="330" y="404" width="258" height="180"/><rect class="cell" x="612" y="404" width="258" height="180"/><rect class="cell" x="894" y="404" width="258" height="180"/></g>
+<text class="n" x="67" y="433">Arrows</text><text class="n" x="349" y="433">Folder</text><text class="n" x="631" y="433">Edit</text><text class="n" x="913" y="433">Flag</text>
+<g class="hair" transform="translate(94 455) scale(3)"><path d="M3 12H20"/><path d="M14 5L21 12L14 19"/><path d="M3 5L10 12L3 19"/></g>
+<g class="hair" transform="translate(380 457) scale(3)"><path d="M2 8V5H9L12 8H21"/><path d="M22 10V19H2V11"/></g>
+<g class="hair" transform="translate(666 454) scale(3)"><path d="M4 20H18"/><path d="M6 16L17 5L20 8L9 19"/><path d="M16 6L19 9"/></g>
+<g class="hair" transform="translate(948 454) scale(3)"><path d="M4 3V21"/><path d="M7 4H20L17 10"/><path d="M17 11L20 17H7"/></g>
+<text class="hint" x="67" y="564">open chevrons</text><text class="hint" x="349" y="564">broken shoulder</text><text class="hint" x="631" y="564">open pencil tip</text><text class="hint" x="913" y="564">floating swallowtail</text>
+
+<!-- Row 3 cards -->
+<g><rect class="cell" x="48" y="618" width="258" height="180"/><rect class="cell" x="330" y="618" width="258" height="180"/><rect class="cell" x="612" y="618" width="258" height="180"/><rect class="cell" x="894" y="618" width="258" height="180"/></g>
+<text class="n" x="67" y="647">Arrows</text><text class="n" x="349" y="647">Folder</text><text class="n" x="631" y="647">Edit</text><text class="n" x="913" y="647">Flag</text>
+<g class="line" transform="translate(90 668) scale(3)"><path d="M2 16H21L15 10"/><path d="M21 16L15 22"/><path d="M2 5H12"/></g>
+<g class="line" transform="translate(379 669) scale(3)"><path d="M2 19V7H10L13 10H22V19H2Z"/><path d="M2 4H10"/></g>
+<g class="line" transform="translate(666 669) scale(3)"><path d="M3 20H22"/><path d="M6 17L18 5L21 8L9 20"/><path d="M18 5L21 8"/></g>
+<g class="line" transform="translate(948 669) scale(3)"><path d="M4 22V3"/><path d="M4 5H21L17 11L21 17H9"/><path d="M9 17H4"/></g>
+<text class="hint" x="67" y="778">forward motion</text><text class="hint" x="349" y="778">raised tab rail</text><text class="hint" x="631" y="778">long drafting stroke</text><text class="hint" x="913" y="778">open field</text>
+</svg>
