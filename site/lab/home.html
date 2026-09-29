@@ -81,8 +81,8 @@ a{color:inherit}
 .p1 .stack img:nth-child(2){right:0;top:0;rotate:5deg}
 .p1 .stack img:nth-child(3){left:10%;top:38%;width:80%}
 .p2{width:100vw;grid-template-columns:1fr 1.6fr;gap:4vw;align-items:center}
-.img{overflow:hidden;border-radius:3px}
-.img img{display:block;width:112%;margin-left:-6%}
+.img{overflow:hidden}
+.img img{display:block;width:100%;height:auto}
 .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:24px}
 .tags span::before{content:"";display:inline-block;width:6px;height:6px;background:var(--acc);margin-right:8px;vertical-align:1px}
 .tags span{border:1px solid #33312c;border-radius:999px;padding:7px 12px;font-size:13px;color:var(--mid)}
@@ -793,8 +793,7 @@ pans.forEach(p=>{
   const st=()=>sPos()+Math.max(0,p.offsetLeft-innerWidth),en=()=>st()+innerWidth+p.offsetWidth;
   const o=()=>({scrub:true,invalidateOnRefresh:true,start:st,end:en});
   gsap.fromTo(p.querySelectorAll('.k,.t,.p1txt .mono,.panel>div>.mono,.in>.mono,.tags,.looks,.terms'),{x:60},{x:-30,ease:'none',scrollTrigger:o()});
-  gsap.fromTo(p.querySelectorAll('.img img,.p4>img'),{xPercent:3},{xPercent:-3,ease:'none',scrollTrigger:o()});
-  gsap.fromTo(p.querySelectorAll('.big'),{x:160},{x:-80,ease:'none',scrollTrigger:o()});
+    gsap.fromTo(p.querySelectorAll('.big'),{x:160},{x:-80,ease:'none',scrollTrigger:o()});
 });
 
 /* library: photos float in the air, then settle into the library grid as the chapter arrives */
