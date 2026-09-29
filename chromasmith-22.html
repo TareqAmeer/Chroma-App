@@ -1230,6 +1230,18 @@ body.deskx.fx-deskbar-tight1 .js-allfx .fx-db-lb{display:none}
 body.deskx.fx-deskbar-tight1 .js-allfx{padding:0;width:28px}
 body.deskx.fx-deskbar-tight2 #btn-export-db .fx-db-lb{display:none}
 body.deskx.fx-deskbar-tight2 #btn-export-db{padding:0;width:28px}
+body.sk2.deskx.fx-deskbar-fold1 #fx-deskbar #fx-deskbar-title #db-title-status{display:none!important}
+#fx-page-title{display:none}
+body.deskx.cs-page-other #fx-page-title{display:flex;align-items:center;gap:16px;grid-column:2;grid-row:1;justify-self:center;white-space:nowrap;font-size:14px;color:var(--k-color-ink)}
+body.deskx.cs-page-other #fx-page-title .fx-page-back{background:none;border:0;color:var(--k-color-muted);font:inherit;font-size:12px;cursor:pointer;padding:4px 0}
+body.deskx.cs-page-other #fx-page-title .fx-page-back:hover{color:var(--k-color-ink)}
+body.deskx.cs-page-other #fx-deskbar #fx-deskbar-left,body.sk2.deskx.cs-page-other #fx-deskbar #fx-deskbar-title,body.deskx.cs-page-other #fx-deskbar #fx-deskbar-right>:not(#fx-settings),body.deskx.cs-page-other #fx-deskbar #btn-fx-fullres,body.deskx.cs-page-other #fx-deskbar #btn-before{display:none!important}
+body.deskx.cs-page-other #cs-tog-studio.on{opacity:.55}
+/* Narrow windows: the wordmark text goes, the logo mark stays; the brand-width fit() re-measures it. */
+@media(max-width:1100px){body.sk2.deskx #cs-brand-name .cs-bn-t{display:none}}
+body.sk2.deskx.fx-deskbar-fold2 #fx-deskbar #fx-deskbar-title #db-title-name{display:none!important}
+body.sk2.deskx.fx-deskbar-fold3 #fx-deskbar #fx-deskbar-title #fx-zoom-slider{width:48px!important;flex-basis:48px!important}
+body.sk2.deskx.fx-deskbar-fold4 #fx-deskbar #fx-deskbar-title #fx-zoom-slider,body.sk2.deskx.fx-deskbar-fold4 #btn-fx-fullres{display:none!important}
 body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
 body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:sticky;top:calc(var(--deskbar-h, 58px) + 16px);align-self:start;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:6px}
 .fx-rail-btn{display:flex;align-items:center;gap:var(--sp-2);width:120px;background:none;border:none;border-radius:var(--r-sm);color:var(--mut);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:var(--sp-2) var(--sp-2);text-align:left;transition:color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
@@ -2578,7 +2590,6 @@ body.sk2.deskx #fx-deskbar #fx-deskbar-title>*{flex:none}
 /* The title now carries zoom + flags, so the bar's middle column must size to it (a fixed 240px
    track let it spill over All FX). When space runs short the dimensions go first. */
 body.sk2.deskx #fx-deskbar{grid-template-columns:minmax(max-content,1fr) auto minmax(max-content,1fr)!important}
-@media(max-width:1440px){body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{display:none!important}}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #fx-zoom-ctrl{display:flex!important;flex-wrap:nowrap;align-items:center;gap:6px;margin-left:10px}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{display:inline!important}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{font-size:12px;color:var(--k-color-ink)}
@@ -2646,12 +2657,12 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:#141414}
 </style>
 </head>
 <body>
-<div id="cs-brand"><div id="cs-win" hidden><button id="cs-win-close" type="button" title="Close" aria-label="Close window"></button><button id="cs-win-min" type="button" title="Minimise" aria-label="Minimise window"></button><button id="cs-win-full" type="button" title="Full screen" aria-label="Toggle full screen"></button></div><span id="cs-brand-name"><svg class="sk2-mark" viewBox="18 18 64 62" aria-hidden="true"><rect class="sk2-mk-b" x="21" y="21" width="48" height="44" fill="currentColor"/><g class="sk2-mk-f"><rect x="36" y="32" width="43" height="45" fill="#ff3b1f"/><clipPath id="hdm-c"><rect x="36" y="32" width="33" height="33"/></clipPath><g clip-path="url(#hdm-c)"><defs><radialGradient id="hdm-a" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdm-b" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><polygon points="36,32 69,32 36,65" fill="url(#hdm-a)"/><polygon points="69,32 69,65 36,65" fill="url(#hdm-b)"/><line class="sk2-mk-l" x1="36" y1="65" x2="69" y2="32" stroke="#fff1e0" stroke-width=".35" opacity=".8"/></g></g></svg>CHRO-MA-SMITH</span><div id="cs-brand-tog" role="group" aria-label="View"><button id="cs-tog-lib" type="button" aria-label="Gallery">gallery</button><button id="cs-tog-studio" type="button" class="on" aria-label="Studio">studio</button></div></div>
+<div id="cs-brand"><div id="cs-win" hidden><button id="cs-win-close" type="button" title="Close" aria-label="Close window"></button><button id="cs-win-min" type="button" title="Minimise" aria-label="Minimise window"></button><button id="cs-win-full" type="button" title="Full screen" aria-label="Toggle full screen"></button></div><span id="cs-brand-name"><svg class="sk2-mark" viewBox="18 18 64 62" aria-hidden="true"><rect class="sk2-mk-b" x="21" y="21" width="48" height="44" fill="currentColor"/><g class="sk2-mk-f"><rect x="36" y="32" width="43" height="45" fill="#ff3b1f"/><clipPath id="hdm-c"><rect x="36" y="32" width="33" height="33"/></clipPath><g clip-path="url(#hdm-c)"><defs><radialGradient id="hdm-a" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdm-b" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><polygon points="36,32 69,32 36,65" fill="url(#hdm-a)"/><polygon points="69,32 69,65 36,65" fill="url(#hdm-b)"/><line class="sk2-mk-l" x1="36" y1="65" x2="69" y2="32" stroke="#fff1e0" stroke-width=".35" opacity=".8"/></g></g></svg><span class="cs-bn-t">CHRO-MA-SMITH</span></span><div id="cs-brand-tog" role="group" aria-label="View"><button id="cs-tog-lib" type="button" aria-label="Gallery">gallery</button><button id="cs-tog-studio" type="button" class="on" aria-label="Studio">studio</button></div></div>
 <script>(function(){var b=document.body,L=document.getElementById('cs-tog-lib'),S=document.getElementById('cs-tog-studio');
 function sync(){var f=b.classList.contains('lib-full');L.classList.toggle('on',f);S.classList.toggle('on',!f);L.setAttribute('aria-pressed',f);S.setAttribute('aria-pressed',!f)}
 new MutationObserver(sync).observe(b,{attributes:true,attributeFilter:['class']});sync();
 function go(lib){if(b.classList.contains('lib-full')===lib)return;var t=document.getElementById(lib?'lib-side-tab-library':'lib-side-tab-develop');if(t)t.click();else if(window.chromasmithToggleLibrary)window.chromasmithToggleLibrary()}
-L.onclick=function(){go(true)};S.onclick=function(){go(false)};
+L.onclick=function(){go(true)};S.onclick=function(){if(b.classList.contains('cs-page-other')&&typeof switchTab==='function')switchTab('fx');go(false)};
 /* Both top bars pad themselves past the brand by --cs-brand-w. It used to be a hand-typed guess per breakpoint (four stacked overrides, all wrong at some width), so the search field slid under the gallery|studio switch. Measure the real brand instead. */
 var br=document.getElementById('cs-brand');
 function fit(){if(!br||!b.classList.contains('deskx'))return;var r=br.getBoundingClientRect();if(!r.width)return;var base=b.classList.contains('mac-titlebar-overlay')?84:12;b.style.setProperty('--cs-brand-w',Math.max(0,Math.ceil(r.right+16-base))+'px')}
@@ -6551,7 +6562,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929T';
+const BUILD='1.0929U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13373,12 +13384,21 @@ function appHSync(){
 (function(){
   const bar=document.getElementById('fx-deskbar');
   if(!bar)return;
+  // Fold by real fit, not a fixed width: the title now carries zoom + flags, so fold one step at a
+  // time (cheapest first) until the three clusters no longer touch.
+  const L=['fx-deskbar-fold1','fx-deskbar-tight1','fx-deskbar-fold2','fx-deskbar-tight2','fx-deskbar-fold3','fx-deskbar-fold4'];
+  const fits=()=>{const l=document.getElementById('fx-deskbar-left'),t=document.getElementById('fx-deskbar-title'),r=document.getElementById('fx-deskbar-right');
+    if(!l||!t||!r||!t.offsetParent)return true;const a=l.getBoundingClientRect(),b=t.getBoundingClientRect(),c=r.getBoundingClientRect();
+    return a.right+12<=b.left&&b.right+12<=c.left&&c.right<=bar.getBoundingClientRect().right+1;};
+  let busy=false;
   const sync=()=>{
-    const w=bar.offsetWidth;if(!w)return;
-    document.body.classList.toggle('fx-deskbar-tight1',w<900);
-    document.body.classList.toggle('fx-deskbar-tight2',w<820);
+    if(busy)return;const w=bar.offsetWidth;if(!w)return;busy=true;
+    const cl=document.body.classList;L.forEach(k=>cl.remove(k));
+    for(const k of L){if(fits())break;cl.add(k);}
+    busy=false;
   };
   new ResizeObserver(sync).observe(bar);
+  const tt=document.getElementById('db-title-name');if(tt)new MutationObserver(()=>requestAnimationFrame(sync)).observe(tt,{childList:true,characterData:true,subtree:true});
   window.addEventListener('resize',sync);
   sync();
 })();
@@ -23375,7 +23395,16 @@ function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>{
   // — a screen reader had no way to know which tab was current, and Tab-key users had to step
   // through all 5 to reach the panel instead of landing on the one that's actually open.
   t.setAttribute('aria-selected',String(on));t.tabIndex=on?0:-1;
-});document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();if(n==='collage'&&typeof clInit==='function')clInit();if(typeof applyClLayout==='function')applyClLayout();}
+});document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();if(n==='collage'&&typeof clInit==='function')clInit();if(typeof applyClLayout==='function')applyClLayout();
+  // Match/Copy/Collage/Guide are their own pages: the Studio's photo controls leave the top bar and
+  // the page name takes the middle, with a way back to the Studio.
+  document.body.classList.toggle('cs-page-other',n!=='fx');
+  let pt=document.getElementById('fx-page-title');const bar=document.getElementById('fx-deskbar');
+  if(bar&&!pt){pt=document.createElement('div');pt.id='fx-page-title';
+    pt.innerHTML='<button type="button" class="fx-page-back" title="Back to the Studio">← Studio</button><span></span>';
+    pt.querySelector('button').onclick=()=>switchTab('fx');bar.appendChild(pt);}
+  if(pt)pt.querySelector('span').textContent={match:'Match & Refine',copy:'Color Copy',collage:'Collage',guide:'Guide'}[n]||'';
+}
 
 // ── FX editor: section model, mobile strip + desktop tool rail ────────────────
 function toggleLog(){document.body.classList.toggle('log-on');}
