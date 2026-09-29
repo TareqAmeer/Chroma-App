@@ -965,7 +965,8 @@ document.querySelectorAll('.paper').forEach(pp=>ScrollTrigger.create({trigger:pp
 {
   const L=document.querySelector('.loupe');
   document.querySelectorAll('.ph img,#tkimg').forEach(im=>{const host=im.closest('.ph,figure');if(host.dataset.loupe!==undefined)return;host.dataset.loupe='';
-    host.addEventListener('pointermove',e=>{const top=[...host.querySelectorAll('img')].filter(i=>getComputedStyle(i).opacity>.5&&!/100%/.test(i.style.clipPath||'')).pop()||im;const r=top.getBoundingClientRect();
+    host.addEventListener('pointermove',e=>{if(host.classList.contains('ph')&&tl.time()>=4.2){L.style.opacity=0;return}  // no loupe once the tour photo goes full-screen
+      const top=[...host.querySelectorAll('img')].filter(i=>getComputedStyle(i).opacity>.5&&!/100%/.test(i.style.clipPath||'')).pop()||im;const r=top.getBoundingClientRect();
       const nx=(e.clientX-r.left)/r.width,ny=(e.clientY-r.top)/r.height,W=top.naturalWidth||1600,H=top.naturalHeight||1000,sc=Math.max(r.width/W,r.height/H)*3;
       Object.assign(L.style,{left:e.clientX+'px',top:e.clientY+'px',opacity:1,backgroundImage:`url(${top.currentSrc||top.src})`,backgroundSize:`${r.width*3}px ${r.height*3}px`,backgroundPosition:`${-nx*r.width*3+85}px ${-ny*r.height*3+85}px`,filter:getComputedStyle(top).filter})});
     host.addEventListener('pointerleave',()=>L.style.opacity=0)});
