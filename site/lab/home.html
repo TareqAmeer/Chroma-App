@@ -25,6 +25,7 @@ a{color:inherit}
 
 .top{position:fixed;z-index:50;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:14px 5vw;background:linear-gradient(rgba(11,11,10,.7),transparent)}
 .word{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.02em;font-size:15px;text-decoration:none}
+.word.fly{position:relative}.word.fly>*{position:absolute;margin:0;white-space:nowrap}
 .word svg{width:34px;height:34px;transition:transform .4s var(--ease)}.word:hover svg{transform:translate(-2px,-2px)}
 .top nav a:last-child{color:var(--acc);opacity:1}
 .top nav{display:flex;gap:22px;font-size:14px;font-weight:500}
@@ -408,7 +409,7 @@ section{position:relative}
 <section class="intro" aria-label="Chromasmith"><div class="in"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="inc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="ina" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="inb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#inc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#ina)"/><polygon points="69,32 69,65 36,65" fill="url(#inb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg><div class="name"><span>C</span><span>H</span><span>R</span><span>O</span><span>-</span><span>M</span><span>A</span><span>-</span><span>S</span><span>M</span><span>I</span><span>T</span><span>H</span></div><p class="mono tag">A darkroom that lives anywhere</p></div><p class="mono cue">Scroll to enter ↓</p><span class="sn mono">00.0 — Index</span><div class="sheet" aria-hidden="true"></div><div class="curtain"></div></section>
 
 <header class="top">
-  <a class="word" href="#"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="hdc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="hda" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#hdc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#hda)"/><polygon points="69,32 69,65 36,65" fill="url(#hdb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg>CHRO-MA-SMITH</a>
+  <a class="word" href="#"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="hdc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="hda" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#hdc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#hda)"/><polygon points="69,32 69,65 36,65" fill="url(#hdb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg><span class="t">CHRO-MA-SMITH</span></a>
   <nav><a href="#features">Features</a><a href="#faq">FAQ</a><a href="https://github.com/TareqAmeer/Chroma-App">GitHub ↗</a><a href="#yours">Download</a><a href="../../chromasmith-22.html">Launch app ↗</a></nav>
 </header>
 
@@ -721,16 +722,20 @@ if(!reduce){
     .to('.intro .tag',{opacity:1,duration:.8},2.1)
     .to('.intro .cue',{opacity:1,duration:.8},2.6)
 
+  const W=document.querySelector('.word'),ws=W.querySelector('svg'),wt=W.querySelector('.t');let E;
+  const wb=()=>{const r=W.getBoundingClientRect();return{l:r.left,t:r.top}};
+  const ir=()=>{const n=document.querySelector('.intro .name'),v=document.querySelector('.intro svg');return{n:n.getBoundingClientRect(),s:v.getBoundingClientRect(),fs:parseFloat(getComputedStyle(n).fontSize)}};
+  const measure=()=>{W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});const b=W.getBoundingClientRect(),a=ws.getBoundingClientRect(),c=wt.getBoundingClientRect();E={sx:a.left-b.left,sy:a.top-b.top,sw:a.width,tx:c.left-b.left,ty:c.top-b.top,tfs:parseFloat(getComputedStyle(wt).fontSize),th:c.height};W.style.width=b.width+'px';W.style.height=b.height+'px';W.classList.add('fly')};
+  measure();ScrollTrigger.addEventListener('refreshInit',measure);
   gsap.set('.word',{opacity:0});
   gsap.timeline({scrollTrigger:{trigger:'.intro',start:'top top',end:'+=120%',pin:true,scrub:1,invalidateOnRefresh:true}})
     .to('.intro .cue',{opacity:0,duration:.1})
     .to('.intro .in',{opacity:0,duration:.02,ease:'none'},.01)
     .to('.word',{opacity:1,duration:.02,ease:'none'},.01)
-    .fromTo('.word',{transformOrigin:'0% 100%',
-      x:()=>{const a=document.querySelector('.intro .name').getBoundingClientRect(),w=document.querySelector('.word');w.style.transform='none';return a.left-w.getBoundingClientRect().left},
-      y:()=>{const a=document.querySelector('.intro .name').getBoundingClientRect(),w=document.querySelector('.word').getBoundingClientRect();return a.bottom-w.bottom},
-      scale:()=>document.querySelector('.intro .name').getBoundingClientRect().width/document.querySelector('.word').offsetWidth},
-      {x:0,y:0,scale:1,duration:.8,ease:'power2.inOut',immediateRender:true},0)
+    .fromTo(ws,{left:()=>ir().s.left-wb().l,top:()=>ir().s.top-wb().t,width:()=>ir().s.width,height:()=>ir().s.width},
+      {left:()=>E.sx,top:()=>E.sy,width:()=>E.sw,height:()=>E.sw,duration:.6,ease:'power3.inOut',immediateRender:true},0)
+    .fromTo(wt,{left:()=>ir().n.left-wb().l,top:()=>ir().n.top-wb().t,fontSize:()=>ir().fs,lineHeight:()=>ir().n.height+'px',letterSpacing:'0.01em'},
+      {left:()=>E.tx,top:()=>E.ty,fontSize:()=>E.tfs,lineHeight:()=>E.th+'px',letterSpacing:'0.02em',duration:.8,ease:'power3.inOut',immediateRender:true},.2)
     .to('.intro .curtain',{scaleY:1,duration:.7,ease:'power2.inOut'},.2);
   ScrollTrigger.create({trigger:'.pin',start:'top 60%',once:true,onEnter:heroIn});
 }
