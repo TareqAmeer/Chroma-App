@@ -1888,9 +1888,9 @@ body{--k-menu-bg:#2c2c2a;--k-menu-fg:var(--k-color-ink);--k-menu-line:color-mix(
 #lib-overlay .lib-search-wrap:focus-within{border-color:var(--k-color-ink)}
 #lib-overlay .lib-search-wrap::before{content:'';display:block;position:absolute;z-index:-1;left:calc(10px + var(--k-offset-x)*.25);top:50%;width:14px;height:14px;margin-top:calc(-7px + var(--k-offset-y)*.25);
   background:var(--k-color-accent-a);transform:scale(0);transition:transform var(--k-motion-hover) var(--k-motion-easing)}
-#lib-overlay .lib-search-wrap:is(:hover,:focus-within)::before{transform:none}
+#lib-overlay .lib-search-wrap:focus-within::before{transform:none}
 #lib-overlay .lib-search-wrap svg{transition:transform var(--k-motion-hover) var(--k-motion-easing),stroke var(--k-motion-hover)}
-#lib-overlay .lib-search-wrap:is(:hover,:focus-within) svg{stroke:var(--k-color-ink);transform:translate(calc(var(--k-offset-x)*-.25),calc(var(--k-offset-y)*-.25))}
+#lib-overlay .lib-search-wrap:focus-within svg{stroke:var(--k-color-ink);transform:translate(calc(var(--k-offset-x)*-.25),calc(var(--k-offset-y)*-.25))}
 #lib-overlay .lib-search-wrap input{color:var(--k-color-ink)}
 #lib-overlay .lib-search-wrap input::placeholder{color:var(--k-color-muted);text-transform:uppercase;letter-spacing:.12em;font-size:10px;font-weight:700}
 /* ── Swiss Kinetic: info button (prototype .k-info) ──
@@ -2468,6 +2468,9 @@ body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-video-badge{display:inline-
 /* Selected person/place in the sidebar: dark text + the square, never white on paper. */
 body.sk2 #lib-overlay .lib-coll-row.on,body.sk2 #lib-overlay .lib-coll-row.on .lib-coll-lb{color:var(--k-color-ink)!important;font-weight:500;transform:none}
 body.sk2 #lib-overlay .lib-coll-row.on :is(.lib-coll-ic,.lib-coll-count){color:var(--k-color-muted)!important}
+/* Selected date/tree row: the base rule forces its spans to the (white) selection foreground, but Swiss v2 marks selection with the accent square, not a fill — keep the text ink. */
+body.sk2 #lib-overlay .lib-tree-row.on,body.sk2 #lib-overlay .lib-tree-row.on .coll-count,body.sk2 #lib-overlay .lib-tree-row.on .dayname,body.sk2 #lib-overlay .lib-tree-row.on span{color:var(--k-color-ink)!important;background-color:transparent}
+body.sk2 #lib-overlay .lib-tree-row.on .coll-count{color:var(--k-color-muted)!important}
 body.sk2 #lib-overlay .lib-coll-row::before{display:none!important}
 body.sk2 #lib-overlay .lib-people-scroll .lib-coll-row{min-height:30px}
 /* Selected print: hairline vermilion outline as well as the corner square. */
@@ -2608,7 +2611,7 @@ body.sk2 .sk2h-clip.act{outline:1px solid var(--k-color-ink);outline-offset:2px}
 body.sk2 .sk2h-read{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
 /* Gallery top bar: the search column grows with the window (280-560px) while leaving each side
    ~460px, so Export and All FX keep their words; the search fills its column with 24px either side. */
-body.sk2.deskx #lib-overlay.full #lib-top:not(.lib-top-overflow3){grid-template-columns:minmax(0,1fr) minmax(0,min(560px,max(280px,100vw - 920px))) minmax(0,1fr)!important}
+body.sk2.deskx #lib-overlay.full #lib-top:not(.lib-top-overflow3){grid-template-columns:max-content minmax(140px,min(560px,max(280px,100vw - 920px))) max-content!important;justify-content:space-between}
 body.sk2.deskx #lib-overlay.full #lib-top-center{justify-self:stretch;width:auto!important;max-width:none!important;padding:0 24px;box-sizing:border-box}
 body.sk2.deskx #lib-overlay.full #lib-top-center .lib-search-wrap{width:100%!important;max-width:none!important}
 body.sk2 #lib-overlay #lib-top:not(.lib-top-compact):not(.lib-top-overflow2) :is(#lib-export-btn,#lib-allfx-btn){width:auto!important;padding:0 10px!important;gap:6px}
@@ -2626,7 +2629,13 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:#141414}
 function sync(){var f=b.classList.contains('lib-full');L.classList.toggle('on',f);S.classList.toggle('on',!f);L.setAttribute('aria-pressed',f);S.setAttribute('aria-pressed',!f)}
 new MutationObserver(sync).observe(b,{attributes:true,attributeFilter:['class']});sync();
 function go(lib){if(b.classList.contains('lib-full')===lib)return;var t=document.getElementById(lib?'lib-side-tab-library':'lib-side-tab-develop');if(t)t.click();else if(window.chromasmithToggleLibrary)window.chromasmithToggleLibrary()}
-L.onclick=function(){go(true)};S.onclick=function(){go(false)};})();</script>
+L.onclick=function(){go(true)};S.onclick=function(){go(false)};
+/* Both top bars pad themselves past the brand by --cs-brand-w. It used to be a hand-typed guess per breakpoint (four stacked overrides, all wrong at some width), so the search field slid under the gallery|studio switch. Measure the real brand instead. */
+var br=document.getElementById('cs-brand');
+function fit(){if(!br||!b.classList.contains('deskx'))return;var r=br.getBoundingClientRect();if(!r.width)return;var base=b.classList.contains('mac-titlebar-overlay')?84:12;b.style.setProperty('--cs-brand-w',Math.max(0,Math.ceil(r.right+16-base))+'px')}
+if(window.ResizeObserver&&br)new ResizeObserver(fit).observe(br);
+new MutationObserver(fit).observe(b,{attributes:true,attributeFilter:['class']});addEventListener('resize',fit);if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fit);fit();
+})();</script>
 <script>/* Swiss v2 — always on (web + desktop). Scopes the body.sk2 CSS block; the old design lives at git tag pre-swiss-v2. */
 (function(){var b=document.body;b.classList.add('sk2');
 // Window buttons stay invisible until the pointer reaches the top-left corner (see #cs-win CSS).
@@ -2928,15 +2937,14 @@ ready(function(){
      styles so the FIRST paint is the final design. #boot-splash-bar/-progress stay (hidden) because
      the progress JS and library-ui.js write to them. -->
 <style id="boot-splash-style">
-  #boot-splash{position:fixed;inset:0;z-index:var(--z-splash);display:flex;align-items:center;justify-content:center;background:#141414;pointer-events:none; /* fills the window: no white flash, no half-built UI showing around the card */
+  #boot-splash{position:fixed;inset:0;z-index:var(--z-splash);display:flex;align-items:center;justify-content:center;background:transparent;pointer-events:none;
     --u:min(calc(54vw / 720),calc(60vh / 500));font-family:'Gramatika',system-ui,sans-serif;color:#f2f0ea}
   #boot-splash .bs{position:relative;width:calc(720*var(--u));height:calc(500*var(--u));overflow:hidden;background:#141414;transition:opacity .45s ease-out,transform .55s cubic-bezier(.2,.7,.2,1)}
   #boot-splash.out .bs{opacity:0;transform:scale(1.035)}
-  #boot-splash{transition:background-color .45s ease-out}#boot-splash.out{background:transparent}
   #boot-splash .bs>*{position:absolute}
   #boot-splash .ph{left:calc(194.5*var(--u));top:calc(42*var(--u));width:calc(331*var(--u));height:calc(225*var(--u));background:#fff;padding:calc(7*var(--u));box-sizing:border-box}
   #boot-splash .ph img{display:block;width:100%;height:100%;object-fit:cover;object-position:center 40%;filter:grayscale(1) contrast(1.1)}
-  #boot-splash .cr{display:none;right:calc(194.5*var(--u));top:calc(275*var(--u));font-size:calc(9.5*var(--u));font-style:italic;color:#8d8b85;white-space:nowrap}
+  #boot-splash .cr{right:calc(194.5*var(--u));top:calc(275*var(--u));font-size:calc(9.5*var(--u));font-style:italic;color:#8d8b85;white-space:nowrap}
   #boot-splash .br{left:0;right:0;top:calc(304*var(--u));display:flex;justify-content:center;align-items:center;gap:calc(13*var(--u));font-weight:700;font-size:calc(39*var(--u));line-height:1;letter-spacing:.02em;white-space:nowrap}
   #boot-splash .br svg{width:calc(45*var(--u));height:calc(45*var(--u));flex:none;margin:calc(-4*var(--u))}
   #boot-splash .wg{left:calc(158*var(--u));right:calc(158*var(--u));top:calc(378*var(--u));height:calc(19*var(--u));display:grid;grid-template-columns:repeat(11,1fr)}
@@ -3060,6 +3068,20 @@ window.bootProgressSet('walk',0,0); // matches the static label above ("Checking
 // hideBootSplash() itself once deskx has actually settled; if that file never runs (i.e. this
 // ISN'T the Tauri shell), this inline fallback is what removes the splash.
 window.hideBootSplash=function(){
+  // Boot often finishes from cache in one step, so the strip never got to fill: run it up to
+  // 100% (bounded ~0.7s) before the real hide, so the splash always ends full.
+  const s0=document.getElementById('boot-splash');
+  if(s0&&!window._bootFilling&&window._bootShownPct<100){
+    window._bootFilling=true;
+    if(typeof window.bootTrickleStop==='function')window.bootTrickleStop();
+    const from=window._bootShownPct,t0=performance.now(),dur=Math.max(250,700*(100-from)/100);
+    const st=document.getElementById('boot-splash-stage');if(st)st.textContent='Ready';
+    let done=false;const fin=()=>{if(done)return;done=true;_bootPaintPct(100);window._bootFilling=false;window._bootFilled=true;window.hideBootSplash();};
+    const tick=(t)=>{if(done)return;const k=Math.min(1,(t-t0)/dur);_bootPaintPct(from+(100-from)*k);if(k<1)requestAnimationFrame(tick);else setTimeout(fin,250);};
+    requestAnimationFrame(tick);setTimeout(fin,dur+600);
+    return;
+  }
+  if(window._bootFilling)return;
   if(window._bootCursorStop)window._bootCursorStop();
   try{if(window.__TAURI__&&window.__TAURI__.window)window.__TAURI__.window.getCurrentWindow().setIgnoreCursorEvents(false).catch(()=>{});}catch(e){}
   document.documentElement.classList.remove('cs-boot-tauri');
@@ -6482,7 +6504,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929T';
+const BUILD='1.0929U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as

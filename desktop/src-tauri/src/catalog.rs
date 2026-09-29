@@ -6994,16 +6994,18 @@ pub fn catalog_counts_run(conn: &Connection) -> Result<std::collections::HashMap
     m.insert("clip_scanned".to_string(), clip_scanned as u64);
     // Mirrors the exact predicate faces_run uses to build its work queue (see the
     // "faces_scanned_at IS NULL OR faces_scanned_at != mtime" clause above) so "not indexed" in
-    // the UI can never drift from what the backend actually considers pending. Videos are
+    // the UI can never drift from what the backend actually considers pending. Counted over top-level
+    // rows only (leaders / unstacked), exactly what the grid lists when this row is opened — the 7,106
+    // unscanned edited-copy derivatives used to inflate it while the grid showed nothing. Videos are
     // excluded from face scanning entirely (kind != 'video'), so they're excluded here too —
     // otherwise every video would show up as permanently "not indexed".
     let faces_pending: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND (faces_scanned_at IS NULL OR faces_scanned_at != mtime)",
+        "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND (stack_id IS NULL OR stack_id = id) AND (faces_scanned_at IS NULL OR faces_scanned_at != mtime)",
         [], |r| r.get(0)
     ).map_err(|e| e.to_string())?;
     m.insert("faces_pending".to_string(), faces_pending as u64);
     let faces_scanned: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND faces_scanned_at IS NOT NULL AND faces_scanned_at = mtime",
+        "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND (stack_id IS NULL OR stack_id = id) AND faces_scanned_at IS NOT NULL AND faces_scanned_at = mtime",
         [], |r| r.get(0)
     ).map_err(|e| e.to_string())?;
     m.insert("faces_scanned".to_string(), faces_scanned as u64);
