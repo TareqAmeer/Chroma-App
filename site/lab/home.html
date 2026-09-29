@@ -721,14 +721,16 @@ if(!reduce){
     .to('.intro .tag',{opacity:1,duration:.8},2.1)
     .to('.intro .cue',{opacity:1,duration:.8},2.6)
 
+  gsap.set('.word',{opacity:0});
   gsap.timeline({scrollTrigger:{trigger:'.intro',start:'top top',end:'+=120%',pin:true,scrub:1,invalidateOnRefresh:true}})
     .to('.intro .cue',{opacity:0,duration:.1})
-    .to('.intro .in',{opacity:0,duration:.25,ease:'none'},.12)
-    .fromTo('.word',{opacity:0,transformOrigin:'0% 100%',
+    .to('.intro .in',{opacity:0,duration:.02,ease:'none'},.01)
+    .to('.word',{opacity:1,duration:.02,ease:'none'},.01)
+    .fromTo('.word',{transformOrigin:'0% 100%',
       x:()=>{const a=document.querySelector('.intro .name').getBoundingClientRect(),w=document.querySelector('.word');w.style.transform='none';return a.left-w.getBoundingClientRect().left},
       y:()=>{const a=document.querySelector('.intro .name').getBoundingClientRect(),w=document.querySelector('.word').getBoundingClientRect();return a.bottom-w.bottom},
       scale:()=>document.querySelector('.intro .name').getBoundingClientRect().width/document.querySelector('.word').offsetWidth},
-      {opacity:1,x:0,y:0,scale:1,duration:.8,ease:'power2.inOut',immediateRender:true},0)
+      {x:0,y:0,scale:1,duration:.8,ease:'power2.inOut',immediateRender:true},0)
     .to('.intro .curtain',{scaleY:1,duration:.7,ease:'power2.inOut'},.2);
   ScrollTrigger.create({trigger:'.pin',start:'top 60%',once:true,onEnter:heroIn});
 }
