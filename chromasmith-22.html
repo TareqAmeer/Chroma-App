@@ -2142,7 +2142,10 @@ body.sk2 #cs-brand-name:hover .sk2-mk-l{opacity:1;stroke-width:1}
 body.sk2 #cs-brand-tog{margin-left:22px}
 body.sk2 #cs-brand-tog::after{background:var(--k-color-toggle-b)}
 body.sk2.deskx{--cs-brand-w:430px}
-@media(max-width:1000px){body.sk2.deskx{--cs-brand-w:190px}}
+/* Narrow window: keep the logo mark, drop the wordmark text (font-size:0 hides the text node but not the SVG),
+   and reserve logo(26) + toggle gap(22) + toggle(~170) so the toolbar icons never slide under the switch. The
+   plain max-width rule above hides #cs-brand-name entirely, but body.sk2's display:inline-flex outranks it. */
+@media(max-width:1000px){body.sk2 #cs-brand-name{font-size:0;gap:0}body.sk2.deskx{--cs-brand-w:240px}}
 /* Window buttons: invisible until the pointer is in the top-left corner; colour only on the
    button itself. The space stays reserved, so nothing shifts when they appear. */
 body.sk2 #cs-win{opacity:0;transition:opacity var(--k-motion-hover)}
@@ -12941,7 +12944,7 @@ function _csModal(title,bodyHtml){
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   const panel=document.createElement('div');panel.className='cs-modal';
   panel.style.cssText='max-width:560px;width:100%;max-height:80vh;overflow-y:auto;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;padding:20px;color:var(--txt);font-family:var(--sans);box-shadow:var(--lift-2)';
-  panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:16px">${title}</h2><button id="cs-modal-x" aria-label="Close" style="background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center;margin:-6px -8px -6px 0">×</button></div>${bodyHtml}`;
+  panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:16px">${title}</h2><button id="cs-modal-x" aria-label="Close" style="background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center;margin:-6px -8px -6px 0">×</button></div>${_kbdFix(bodyHtml)}`;
   ov.appendChild(panel);document.body.appendChild(ov);
   panel.querySelector('#cs-modal-x').onclick=()=>ov.remove();
   document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){ov.remove();document.removeEventListener('keydown',esc);}});
@@ -12984,14 +12987,33 @@ if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',_fxInf
 // already wired elsewhere (desktop-native.js's menu-* wiring, library-ui.js's grid keydown
 // handler, or an on-page oninput/onclick); this is purely a discoverability surface, not new
 // behavior. Grouped to match the new Photo/View menus.
+// Mac shortcut glyphs -> Windows/Linux wording ("⇧⌘Z" -> "Ctrl+Shift+Z"). Keydown handlers already accept
+// ctrlKey everywhere; only the LABELS were mac-only. Native desktop reports the real OS via CS_PLATFORM,
+// a plain browser falls back to navigator.platform.
+function _kbdFix(s){
+  const mac=(window.CS_PLATFORM?window.CS_PLATFORM.os==='macos':/Mac|iPhone|iPad/.test(navigator.platform||''));
+  if(mac||!s||s.indexOf('⌘')<0&&s.indexOf('⇧')<0&&s.indexOf('⌥')<0)return s;
+  return s.replace(/⇧⌘|⌘⇧/g,'Ctrl+Shift+').replace(/⌘/g,'Ctrl+').replace(/⇧/g,'Shift+').replace(/⌥/g,'Alt+');
+}
+function _kbdSweep(root){
+  root=root||document;
+  root.querySelectorAll('[title*="⌘"],[aria-label*="⌘"]').forEach(e=>{
+    ['title','aria-label'].forEach(a=>{const v=e.getAttribute(a);if(v)e.setAttribute(a,_kbdFix(v));});
+  });
+  root.querySelectorAll('kbd').forEach(e=>{if(e.textContent.indexOf('⌘')>=0)e.textContent=_kbdFix(e.textContent);});
+}
+if(typeof window!=='undefined'){
+  window.addEventListener('DOMContentLoaded',()=>_kbdSweep());
+  window.addEventListener('cs-platform-ready',()=>_kbdSweep());
+}
 function shortcutsHtml(){
   const rows=(pairs)=>pairs.map(([k,d])=>`<div style="display:flex;justify-content:space-between;gap:16px;padding:3px 0;font-size:13px"><span>${d}</span><kbd style="font-family:var(--mono);font-size:11px;color:var(--mut);background:var(--bdr);border-radius:4px;padding:2px 6px;white-space:nowrap">${k}</kbd></div>`).join('');
   const group=(title,pairs)=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:var(--ls-2);margin-bottom:4px">${title}</div>${rows(pairs)}</div>`;
-  return group('File',[['⌘O','Open photo(s)'],['⌘L','Toggle Library'],['⌘E','Export']])
+  return _kbdFix(group('File',[['⌘O','Open photo(s)'],['⌘L','Toggle Library'],['⌘E','Export']])
     +group('Edit',[['⌘Z','Undo'],['⇧⌘Z','Redo'],['⇧⌘C','Copy edit'],['⇧⌘V','Paste edit']])
     +group('Photo (Library grid)',[['X','Reject'],['P','Pick / flag'],['U','Clear flag'],['←/→','Move culling cursor'],['Enter','Open selected'],['⌘[ / ⌘]','Rotate left / right']])
     +group('View',[['⌘+ / ⌘-','Zoom in / out'],['⌘0','Zoom to fit'],['⌘1','Zoom to 100%'],['⌘\\','Toggle before/after split'],['⌘H','Toggle histogram'],['G','Toggle full Library'],['Esc','Close full Library / dialogs']])
-    +group('Help',[['⌘/','This panel'],['⌘K','Command palette']]);
+    +group('Help',[['⌘/','This panel'],['⌘K','Command palette']]));
 }
 // First-run tour — a single short _csModal (not a per-element spotlight walkthrough: the app's
 // layout differs enough between mobile bottom-sheet, desktop deskx rail and plain desktop that
@@ -22111,7 +22133,9 @@ async function fxSyncHdrOption(){
   row.style.display=has?'':'none';
   if(note){
     note.style.display=has?'':'none';
-    note.textContent=has?'This photo carries HDR highlight detail. Photos, Preview and iPhone show it; everything else sees the SDR version.':'';
+    const _uhdr=window.CS_PLATFORM&&window.CS_PLATFORM.hdrExport==='uhdr';
+    note.textContent=has?(_uhdr?'This photo carries HDR highlight detail. Chrome, Edge and Lightroom show it; everything else sees the SDR version.':'This photo carries HDR highlight detail. Photos, Preview and iPhone show it; everything else sees the SDR version.'):'';
+    if(_uhdr&&row)row.title='Writes an Ultra HDR JPEG whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.';
   }
   if(!has){const t=document.getElementById('tg-exp-hdr');if(t)t.checked=false;}
 }
@@ -24284,7 +24308,7 @@ window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+errStr(e.
 // running a stale Rust binary and no amount of in-app reloading will pick up the fix.
 if(window.__TAURI__){
   window.__TAURI__.core.invoke('native_build_tag').then(tag=>{
-    log(`Native (Rust) build: ${tag} — if a native fix seems missing, fully quit (⌘Q) and relaunch, not just reload`,'info');
+    log(`Native (Rust) build: ${tag} — if a native fix seems missing, fully quit and relaunch, not just reload`,'info');
   }).catch(()=>{});
 }
 // tauri-plugin-log's attachConsole() (see main.rs's `.plugin(tauri_plugin_log::Builder...)`)

@@ -7870,6 +7870,13 @@
       const gearMenuEl = document.getElementById('lib-view-menu');
       const filtersPanelEl = document.getElementById('lib-filters-panel');
       const filterRowEl = document.getElementById('lib-filter-row');
+      // The gear now opens the Studio's shared #fx-settings-menu (class "on"), not #lib-view-menu. The
+      // Studio's own Escape handler (chromasmith-22.html) runs first and closes it with preventDefault, so
+      // by the time we get here the menu already looks closed — bail on defaultPrevented, otherwise the
+      // same keypress also exits the full-window Library behind it.
+      if (e.defaultPrevented) return;
+      const settingsMenuEl = document.getElementById('fx-settings-menu');
+      if (settingsMenuEl && settingsMenuEl.classList.contains('on')) { if (window.settingsClose) window.settingsClose(); e.preventDefault(); return; }
       if (sortMenuEl && sortMenuEl.classList.contains('open')) { sortMenuEl.classList.remove('open'); e.preventDefault(); return; }
       if (gearMenuEl && gearMenuEl.classList.contains('open')) { gearMenuEl.classList.remove('open'); e.preventDefault(); return; }
       if (filtersPanelEl && filtersPanelEl.classList.contains('open')) {

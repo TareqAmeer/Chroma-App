@@ -39,7 +39,10 @@ pub fn poster_jpeg(path: &str, long_edge: u32, _duration_secs: f64) -> Option<Ve
 }
 
 unsafe fn poster_jpeg_inner(path: &str, long_edge: u32) -> Option<Vec<u8>> {
-    let wide = windows::core::HSTRING::from(path);
+    // SHCreateItemFromParsingName rejects a mixed-separator path (E_INVALIDARG, 0x80070057) — and the
+    // catalog builds `D:\PHOTOS/2026/...` by joining a `/`-separated rel_path onto a `\` mount point.
+    let native = path.replace('/', "\\");
+    let wide = windows::core::HSTRING::from(native.as_str());
     let factory: IShellItemImageFactory = match SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None) {
         Ok(f) => f,
         Err(_e) => {
