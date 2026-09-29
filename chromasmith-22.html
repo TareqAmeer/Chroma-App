@@ -2681,7 +2681,7 @@ function sk2SubTabs(g,jump){
   let h=document.getElementById('sk2-stage-h'),nav=document.getElementById('sk2-sub');
   if(!h){h=document.createElement('h2');h.id='sk2-stage-h';nav=document.createElement('nav');nav.id='sk2-sub';nav.setAttribute('aria-label','Tools in this stage');
     panel.prepend(h,nav);
-    nav.addEventListener('click',e=>{const b=e.target.closest('button[data-k]');if(b)sk2Jump(b.dataset.k,true);});
+    nav.addEventListener('click',e=>{const b=e.target.closest('button[data-k]');if(b){sk2Focus(b.dataset.k);sk2Jump(b.dataset.k,true);}});
     panel.addEventListener('scroll',sk2Spy,{passive:true});}
   const G=FX_GROUPS[g];
   const nt=G?G.label:(FX_SECTIONS.find(x=>x[0]===g)||[,''])[1];
@@ -2697,7 +2697,9 @@ function sk2SubTabs(g,jump){
     // Hide the long name properly (display:none) instead of a 0px font that screen readers still read.
     [...t.childNodes].forEach(n=>{if(n.nodeType===3&&n.textContent.trim()){const sp=document.createElement('span');sp.className='sk2-long';n.replaceWith(sp);sp.appendChild(n);}});}});
   if(G&&G.members.includes('wheels')&&typeof drawWheel==='function')setTimeout(()=>['lift','gamma','gain'].forEach(drawWheel),30);
-  nav.innerHTML=cards.map(c=>`<button type="button" data-k="${c.dataset.fxsec}">${SK2_SUB[c.dataset.fxsec]||c.dataset.fxsec}</button>`).join('');
+  // The Light stage's folded histogram sits above Basic, so it gets the first tab.
+  const hist=document.getElementById('sk2-hist'),histTab=g==='light'&&hist&&hist.offsetParent?'<button type="button" data-k="hist">Histogram</button>':'';
+  nav.innerHTML=histTab+cards.map(c=>`<button type="button" data-k="${c.dataset.fxsec}">${SK2_SUB[c.dataset.fxsec]||c.dataset.fxsec}</button>`).join('');
   document.body.style.setProperty('--sk2-sub-h',(nav.hidden?0:nav.offsetHeight)+'px');
   document.body.style.setProperty('--sk2-h-h',h.offsetHeight+'px');
   // Tail spacer: lets the last card of a stage scroll right up under the header when its tab is picked.
@@ -2707,8 +2709,16 @@ function sk2SubTabs(g,jump){
   if(g==='look'){const mix=document.getElementById('row-lut-mix'),lc=document.getElementById('fx-looks-ctrl');if(mix&&lc&&mix.parentElement!==lc)lc.appendChild(mix);}
   if(jump)requestAnimationFrame(()=>sk2Jump(jump,false));else sk2Spy();
 }
+// Picking a sub-tab by hand focuses that tool: every other tool in the stage folds, the picked one opens.
+function sk2Focus(k){
+  const panel=document.querySelector('.fx-panel');if(!panel)return;
+  panel.querySelectorAll('.fx-ctrl.sec-active[data-fxsec]').forEach(c=>{
+    const want=c.dataset.fxsec!==k;if(c.classList.contains('fx-sec-collapsed')!==want&&typeof fxSecToggle==='function')fxSecToggle(c);});
+  const h=document.getElementById('sk2-hist');if(h&&h.offsetParent)h.open=k==='hist';
+}
 function sk2Jump(k,smooth){
-  const panel=document.querySelector('.fx-panel'),c=panel&&panel.querySelector(`.fx-ctrl.sec-active[data-fxsec="${k}"]`);if(!c)return;
+  const panel=document.querySelector('.fx-panel'),c=panel&&(k==='hist'?document.getElementById('sk2-hist'):panel.querySelector(`.fx-ctrl.sec-active[data-fxsec="${k}"]`));if(!c)return;
+  if(k==='hist'&&!c.open)c.open=true;
   if(c.classList.contains('fx-sec-collapsed'))c.querySelector('.fx-ctrl-title')?.click();
   const nav=document.getElementById('sk2-sub'),hd=document.getElementById('sk2-stage-h'),off=(nav&&!nav.hidden?nav.offsetHeight:0)+(hd?hd.offsetHeight:0);
   const top=c.getBoundingClientRect().top-panel.getBoundingClientRect().top+panel.scrollTop-off;
@@ -2723,7 +2733,8 @@ function sk2Jump(k,smooth){
 function sk2Spy(){
   const panel=document.querySelector('.fx-panel'),nav=document.getElementById('sk2-sub');if(!panel||!nav||nav.hidden)return;
   const hd=document.getElementById('sk2-stage-h'),line=panel.getBoundingClientRect().top+(hd?hd.offsetHeight:0)+nav.offsetHeight+8;let cur=null;
-  panel.querySelectorAll('.fx-ctrl.sec-active').forEach(c=>{if(c.style.display!=='none'&&c.getBoundingClientRect().top<=line)cur=c.dataset.fxsec;});
+  const hasHist=!!nav.querySelector('button[data-k=hist]');
+  panel.querySelectorAll(hasHist?'.fx-ctrl.sec-active,#sk2-hist':'.fx-ctrl.sec-active').forEach(c=>{if(c.style.display!=='none'&&c.getBoundingClientRect().top<=line)cur=c.id==='sk2-hist'?'hist':c.dataset.fxsec;});
   if(!cur){const f=nav.querySelector('button');cur=f&&f.dataset.k;}
   const tail=document.getElementById('sk2-tail'),padded=tail&&tail.offsetHeight>0;
   if(!padded&&panel.scrollTop+panel.clientHeight>=panel.scrollHeight-2){const l=nav.querySelector('button:last-child');if(l)cur=l.dataset.k;}
@@ -6531,7 +6542,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929K';
+const BUILD='1.0929L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
