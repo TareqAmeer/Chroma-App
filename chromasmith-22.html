@@ -2380,6 +2380,9 @@ body.sk2 #lib-overlay .lib-thumb-wrap:not(:has(img.loaded)){background:color-mix
 body.sk2 #lib-overlay .lib-thumb-wrap>img:not(.loaded){opacity:0}
 /* 15 · In a stage with sub-tabs, the card title's words are the sub-tab's; the row keeps chevron, toggle, reset. */
 body.sk2 .sk2-dup-title>.fx-ctrl-title>.sk2-long{display:none}
+/* Small text actions ("Reset") keep their look but get a >=28px hit area. */
+.fx-toggle-lb{position:relative}.fx-toggle-lb::before{content:'';position:absolute;inset:-9px -6px}
+body.sk2 #btn-crop{min-height:28px}
 /* Sidebar counts are information, not decoration: one size (11px) and >=4.5:1 contrast. */
 body.sk2 #lib-overlay :is(.lib-coll-count,.coll-count){font-size:11px!important;color:color-mix(in srgb,var(--k-color-ink) 72%,var(--k-color-bg))!important}
 body.sk2 .sk2-dup-title>.fx-ctrl-title{min-height:36px;padding-top:6px!important;padding-bottom:6px!important}
@@ -4075,7 +4078,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
                PLUS, a CJK-width glyph standing in for an icon while ICONS.plus already existed. -->
           <button id="fx-add-btn" onclick="fxPickPhotos()" title="Add photos" aria-label="Add photos"></button>
           <div class="ni-add-lb">Open a photo</div>
-          <div class="ni-hint">Click the button, or drag a photo anywhere onto this window. Your original is never changed · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none" title="Pick photos from your Google Photos library">Google Photos…</a></div>
+          <div class="ni-hint">Click the button, or drag a photo anywhere onto this window. Your original is never changed · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none;cursor:pointer" title="Pick photos from your Google Photos library">Google Photos…</a></div>
         </div>
         <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
           <!-- Mask overlays live INSIDE fx-zoom-wrap (not fx-wrap) so they ride the exact same
@@ -6474,7 +6477,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929G';
+const BUILD='1.0929H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24642,6 +24645,11 @@ document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(card=>{
     if(e.target.closest('.fx-toggle,.fx-title-right,.fx-toggle-lb,button,input,select'))return;
     fxSecToggle(card);
   });
+  // Clickable for keyboard and screen-reader users too, not just the mouse.
+  title.setAttribute('role','button');title.tabIndex=0;
+  const syncExp=()=>title.setAttribute('aria-expanded',String(!card.classList.contains('fx-sec-collapsed')));syncExp();
+  new MutationObserver(syncExp).observe(card,{attributes:true,attributeFilter:['class']});
+  title.addEventListener('keydown',(e)=>{if(e.target!==title||(e.key!=='Enter'&&e.key!==' '))return;e.preventDefault();fxSecToggle(card);});
 });
 // 3.4.9: the Preset section's OWN collapse toggle, independent of the panel-level one above
 // (fxSecToggle collapses the whole "Presets & Looks" card, including RAW profile/Input/Print;

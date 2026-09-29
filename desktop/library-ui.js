@@ -1289,6 +1289,8 @@
        named exception to "no bold on non-selected rows". */
     .lib-coll-row[data-catalog="all"]{font-weight:var(--weight-semibold)}
     .lib-coll-count{font-family:var(--sans);font-size:11px;color:var(--mut)}
+    /* The open view is inside this collapsed year/month: mark the row so the sidebar always shows where you are. */
+    .lib-tree-row.on-within{color:var(--txt);font-weight:var(--weight-semibold)}
     /* HANDOVER §3.1: was height:1px + padding-top:6px with no box-sizing:border-box, so the
        painted box was 7px, not 1px — a real border avoids the box-model trap entirely. Also
        now uses the wireframe's own token (Library View.html:135 .sec+.sec) instead of --bdr. */
@@ -6727,6 +6729,23 @@
     if (state.source === 'folder' && state.currentFolder) return String(state.currentFolder).split(/[\\/]/).filter(Boolean).pop() || 'Library';
     const row = document.querySelector('#lib-side .lib-tree-row.on, #lib-side .lib-coll-row.on');
     const t = row ? row.textContent.replace(/[\d,.\s]+$/, '').trim() : '';
+    if (!t && state.source === 'catalog') {
+      // No highlighted row (e.g. a day inside a collapsed year): name the scope itself so the
+      // title always says what's on screen instead of a generic "Library".
+      const sc = String(state.catalogScope || 'all');
+      const [kind, ...rest] = sc.split(':');
+      if (kind === 'date') {
+        const [y, m, d] = rest.map(Number);
+        if (d) return new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+        if (m) return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+        return String(y);
+      }
+      if (kind === 'person') { const p = (typeof peopleList !== 'undefined' ? peopleList : []).find((x) => String(x.id) === rest[0]); return p ? p.name : (rest[0] === 'unnamed' ? 'Unnamed' : 'People'); }
+      if (kind === 'kw') return rest.join(':');
+      if (kind === 'search') return `“${rest.join(':')}”`;
+      if (kind === 'blurry') return 'Needs review';
+      if (kind === 'all') return state.typeFilter === 'raw' ? 'Raw' : state.typeFilter === 'video' ? 'Videos' : 'All Photos';
+    }
     // Title names what's shown — the unscoped catalog view is "All Photos" (the sidebar's own
     // label for it), not a generic "Library".
     return t || (state.source === 'catalog' && (!state.catalogScope || state.catalogScope === 'all') ? 'All Photos' : 'Library');
@@ -6789,6 +6808,10 @@
       card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '') + (state.selected.has(entry.path) ? ' multi' : '') +
         (sc.label ? ' lbl-' + sc.label.toLowerCase() : '') + (entry.missing ? ' lib-missing' : '') + (entry._stackOf != null ? ' lib-stack-member' : '');
       card.dataset.path = entry.path;
+      // Named and marked clickable for screen readers (keyboard moves the grid cursor already).
+      card.setAttribute('role', 'button');
+      card.setAttribute('aria-label', entry.name || '');
+      card.setAttribute('aria-pressed', String(entry.path === state.openedPath || state.selected.has(entry.path)));
       if (entry.thumb_path) card.dataset.thumbPath = entry.thumb_path;
       // Stack badge takes over the RAW badge's own top-left corner when this card represents
       // a stack (per the plan: "the grid draws a +2 badge in the existing .lib-raw-badge corner
@@ -9389,7 +9412,7 @@
     // .row.monthhead 12px, .row.sub/day 11px) — `lvl` picks the matching class so each level
     // gets its own font-size instead of silently inheriting the sidebar's 16px base font.
     const row = (scope, toggleKey, label, count, hasChildren, open, lvl) => `
-      <div class="lib-tree-row lib-tree-row-${lvl}${state.source === 'catalog' && state.catalogScope === scope ? ' on' : ''}" data-date-scope="${scope}" data-date-toggle="${hasChildren ? toggleKey : ''}">
+      <div class="lib-tree-row lib-tree-row-${lvl}${state.source === 'catalog' && state.catalogScope === scope ? ' on' : state.source === 'catalog' && String(state.catalogScope).startsWith(scope + ':') && !open ? ' on-within' : ''}" data-date-scope="${scope}" data-date-toggle="${hasChildren ? toggleKey : ''}">
         ${hasChildren ? chev(open) : leafChevSlot}
         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut);flex:none">${fmtN(count)}</span>
       </div>`;
