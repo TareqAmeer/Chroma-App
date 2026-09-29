@@ -26,6 +26,7 @@ a{color:inherit}
 .top{position:fixed;z-index:50;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:14px 5vw;background:linear-gradient(rgba(11,11,10,.7),transparent)}
 .word{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.02em;font-size:15px;text-decoration:none}
 .word.fly{position:relative}.word.fly>*{position:absolute;margin:0;white-space:nowrap}
+.word .t{margin:0;max-width:none}
 .word svg{width:34px;height:34px;transition:transform .4s var(--ease)}.word:hover svg{transform:translate(-2px,-2px)}
 .top nav a:last-child{color:var(--acc);opacity:1}
 .top nav{display:flex;gap:22px;font-size:14px;font-weight:500}
@@ -39,12 +40,13 @@ a{color:inherit}
 .panel>div>.mono:first-child,.panel>.in>.mono:first-child,.idx aside>.mono,.beta .head .mono,.maker .mono:first-child{color:var(--acc)}
 .p0{width:100vw;place-items:center;padding:0}
 .ph{position:absolute;left:50%;top:50%;width:28vw;aspect-ratio:844/1125;overflow:hidden;z-index:0;box-shadow:0 0 0 0 rgba(11,11,10,0),0 0 0 0 rgba(242,239,232,0),0 0 0 0 rgba(11,11,10,0),0 0 0 0 rgba(242,239,232,0)}
-.track{position:relative;z-index:1}
+.track{position:relative;z-index:1}.p0{pointer-events:none}.p0 .btn{pointer-events:auto}
 .stagew{position:absolute;left:5vw;top:34vh;display:grid;z-index:3;pointer-events:none}
 .stagew span{grid-area:1/1;font-size:clamp(34px,5.6vw,96px);font-weight:800;letter-spacing:-.01em;line-height:.95;display:flex;overflow:hidden;padding-bottom:.08em;white-space:pre}
 .stagew span i{font-style:normal;display:block}
 .favs{position:absolute;right:5vw;top:15vh;display:flex;align-items:center;gap:18px;z-index:4;opacity:0}
 .favs .heart{width:44px;height:44px;fill:#e5484d;transform:scale(0);filter:drop-shadow(0 4px 14px rgba(0,0,0,.5))}
+.favs .favt{position:absolute;left:0;top:58px;color:#f2efe8;opacity:0;letter-spacing:.14em;text-shadow:0 2px 12px rgba(0,0,0,.6)}
 .favs .ring{position:absolute;left:0;top:50%;width:44px;height:44px;margin-top:-22px;border:2px solid #e5484d;border-radius:50%;opacity:0}
 .favs .stars{display:flex;gap:4px}
 .favs .stars svg{width:26px;height:26px;fill:none;stroke:rgba(242,239,232,.55);stroke-width:1.5;transform:scale(.6);opacity:0}
@@ -107,7 +109,7 @@ a{color:inherit}
 .plab{position:absolute;left:5vw;bottom:calc(4vh + 12px);opacity:0;z-index:3}
 
 /* 2. maker */
-.maker{padding:22vh 5vw;display:grid;grid-template-columns:1fr 2fr;gap:5vw;border-top:1px solid var(--line)}
+.maker{min-height:100vh;align-content:center;padding:14vh 5vw;display:grid;grid-template-columns:1fr 2fr;gap:5vw;border-top:1px solid var(--line)}
 .maker .por{aspect-ratio:1;background:var(--bg2);border:1px solid var(--line);overflow:hidden;align-self:start}
 .maker .por img{width:100%;height:100%;object-fit:cover;display:block}
 .quote{font-size:clamp(28px,3.6vw,56px);font-weight:500;letter-spacing:-.01em;line-height:1.1}
@@ -231,7 +233,7 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 .k{font-weight:700;letter-spacing:-.005em}
 .row h3,.group h3{font-size:clamp(24px,2.2vw,34px);font-weight:700}
 .quote{font-size:clamp(24px,2.6vw,40px)}
-.lead{position:relative;padding:22vh 5vw 8vh}.lead .hero-t{position:relative;top:auto;left:auto;right:auto;pointer-events:auto;mix-blend-mode:normal}.lead .foot{margin-top:24px;color:var(--mid)}
+.lead{position:relative;padding:22vh 5vw 10vh;background:var(--acc);color:#0b0b0a}.lead .hero-t sup{color:#0b0b0a}.lead .hero-t{position:relative;top:auto;left:auto;right:auto;pointer-events:auto;mix-blend-mode:normal}.lead .foot{margin-top:24px;color:#0b0b0a}
 /* 3 section numbers */
 .sn{position:absolute;right:5vw;top:88px;z-index:6;color:var(--dim)}
 .intro .sn,.pin .sn{position:absolute}
@@ -433,7 +435,7 @@ section{position:relative}
     <img class="film" src="../assets/story/film.webp" alt="">
     <img class="film glow" src="../assets/story/film.webp" alt="">
     <div class="grain"></div><div class="shade"></div>
-    <div class="favs" aria-hidden="true"><svg class="heart" viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"/></svg><span class="ring"></span><span class="stars"><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg></span></div>
+    <div class="favs" aria-hidden="true"><svg class="heart" viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"/></svg><span class="ring"></span><span class="favt mono">Favourite</span><span class="stars"><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.7L12 17.5 6.1 20.8l1.3-6.7L2.5 9.5l6.6-.8z"/></svg></span></div>
     <div class="dcap"><span>Lens</span><b>28 mm · f/2</b><span>Shutter</span><b>1/250 s</b><span>Look</span><b>Classic Neg</b></div>
   </div>
   <div class="track">
@@ -462,30 +464,9 @@ section{position:relative}
       <div class="img"><img src="../assets/ui/color.webp" alt="Chromasmith colour tools"></div>
     </div>
 
-    <div class="panel p3" id="lens" data-lab="Looks">
-      <div><p class="mono">01.3 Looks</p><div class="big">113</div><div class="k" style="margin-top:-3vw">film looks.<br>One click.</div>
-        <p class="t">Find your starting point, then make it yours. Move over the photo to look through the film.</p>
-        <div class="looks"><button class="on" data-l="0">Classic Neg</button><button data-l="1">Warm print</button><button data-l="2">Cross-process</button></div></div>
-      <div class="lensbox"><canvas></canvas><span class="mono">Try a look</span></div>
-    </div>
-
-    <div class="panel p4" data-lab="Film">
-      <img src="../assets/story/film.webp" alt="Photo finished with grain and halation"><div class="grain"></div><div class="shade"></div>
-      <div class="in"><p class="mono">01.4 Film</p><div class="k">Let the light<br>linger.</div>
-        <p class="t">Grain in the shadows. A warm halo at the edge of the light. Subtle or unmistakable.</p>
-        <div class="terms"><span>Grain</span><span>Halation</span><span>Bloom</span><span>Frames</span></div></div>
-      <div class="dcap"><span>Grain</span><b>35 mm · 0.42</b><span>Halation</span><b>0.30 · warm</b><span>Bloom</span><b>0.15</b><span>Print</span><b>Kodak 2383</b></div>
-    </div>
-
-    <div class="panel p5" data-lab="Anywhere">
-      <div><p class="mono">01.5 Anywhere</p><div class="k">Make it wherever you are.</div>
-        <p class="t">Open it in your browser. Keep it on your phone. Take your photos somewhere with no signal. The tools still come with you.</p>
-        <div class="tags"><span>No account</span><span>No upload</span><span>Works offline</span></div></div>
-      <div class="phone"><img src="../assets/ui/mobile.webp" alt="Chromasmith on a phone"></div>
-    </div>
   </div>
   <span class="mono plab">Library</span>
-  <div class="prog"><b><i></i></b><b><i></i></b><b><i></i></b><b><i></i></b><b><i></i></b></div>
+  <div class="prog"><b><i></i></b><b><i></i></b></div>
 </section>
 
 <section class="split" aria-label="Before and after"><span class="sn mono" style="color:#fff">01.6 — Compare</span>
@@ -495,23 +476,16 @@ section{position:relative}
 </section>
 
 <section class="ticker" aria-label="Film looks"><span class="sn mono">02.0 — Looks</span>
-  <div class="hd"><div><p class="mono" style="color:var(--acc)">132 film looks</p><h2 class="k" style="margin-top:18px">Hover a name.<br>Change the print.</h2></div>
+  <div class="hd"><div><p class="mono" style="color:var(--acc)">113 film looks. One click.</p><h2 class="k" style="margin-top:18px">Hover a name.<br>Change the print.</h2><p class="t" style="margin-top:18px;max-width:34ch">Find your starting point, then make it yours.</p></div>
     <figure><img id="tkimg" src="../assets/story/film.webp" alt="Sample photo previewing a look"><figcaption class="dcap"><span>Look</span><b id="tkname">Classic Neg</b></figcaption></figure></div>
   <div class="tape"><button type="button" data-i="0">astia</button><button type="button" data-i="1">classic chrome</button><button type="button" data-i="2">classic neg</button><button type="button" data-i="3">eterna bleach bypass</button><button type="button" data-i="4">eterna cinema</button><button type="button" data-i="5">nostalgic neg</button><button type="button" data-i="6">pro neg std</button><button type="button" data-i="7">provia</button><button type="button" data-i="8">reala ace</button><button type="button" data-i="9">velvia</button><button type="button" data-i="10">portra 160 endura premier</button><button type="button" data-i="11">portra 400 endura premier</button><button type="button" data-i="12">portra 800 endura premier</button><button type="button" data-i="13">portra 400 supra endura</button><button type="button" data-i="14">portra 400 portra endura</button><button type="button" data-i="15">ektar 100 endura premier</button><button type="button" data-i="16">gold 200 endura premier</button><button type="button" data-i="17">ultramax 500 endura premier</button><button type="button" data-i="18">vericolor iii endura premier</button><button type="button" data-i="19">fuji pro 400h ca maxima</button><button type="button" data-i="20">fuji pro 160c ca maxima</button><button type="button" data-i="21">fuji pro 160s ca dpii</button><button type="button" data-i="22">fuji c200 ca dpii</button><button type="button" data-i="23">fuji superia reala ca pro pdii</button><button type="button" data-i="24">fuji superia xtra 400 ca dpii</button><button type="button" data-i="25">fuji natura 1600 ca dpii</button><button type="button" data-i="26">vision3 50d 2383</button><button type="button" data-i="27">vision3 200t 2383</button><button type="button" data-i="28">vision3 250d 2383</button><button type="button" data-i="29">vision3 250d 2393</button><button type="button" data-i="30">vision3 500t 2383</button><button type="button" data-i="31">vision3 500t 2393</button><button type="button" data-i="32">velvia 50 ilfochrome m</button><button type="button" data-i="33">provia 100f ilfochrome m</button><button type="button" data-i="34">ektachrome 100d radiance iii</button><button type="button" data-i="35">kodachrome 64 radiance iii</button><button type="button" data-i="36">fp100c fujiflex new</button><button type="button" data-i="37">instax color fujiflex new</button><button type="button" data-i="38">aerocolor endura premier</button><button type="button" data-i="39">aerocolor high endura premier</button><button type="button" data-i="40">agfa vista 100 ca dpii</button><button type="button" data-i="41">trix 400 polymax grade 2</button><button type="button" data-i="42">trix 400 polymax grade 3</button><button type="button" data-i="43">kodak 5222 polymax grade 2</button><button type="button" data-i="44">kodak 5222 2302 dev 5</button><button type="button" data-i="45">adox color implosion 100</button><button type="button" data-i="46">agfa agfacolor 100</button><button type="button" data-i="47">agfa agfacolor portrait xps 160</button><button type="button" data-i="0">astia</button><button type="button" data-i="1">classic chrome</button><button type="button" data-i="2">classic neg</button><button type="button" data-i="3">eterna bleach bypass</button><button type="button" data-i="4">eterna cinema</button><button type="button" data-i="5">nostalgic neg</button><button type="button" data-i="6">pro neg std</button><button type="button" data-i="7">provia</button><button type="button" data-i="8">reala ace</button><button type="button" data-i="9">velvia</button><button type="button" data-i="10">portra 160 endura premier</button><button type="button" data-i="11">portra 400 endura premier</button><button type="button" data-i="12">portra 800 endura premier</button><button type="button" data-i="13">portra 400 supra endura</button><button type="button" data-i="14">portra 400 portra endura</button><button type="button" data-i="15">ektar 100 endura premier</button><button type="button" data-i="16">gold 200 endura premier</button><button type="button" data-i="17">ultramax 500 endura premier</button><button type="button" data-i="18">vericolor iii endura premier</button><button type="button" data-i="19">fuji pro 400h ca maxima</button><button type="button" data-i="20">fuji pro 160c ca maxima</button><button type="button" data-i="21">fuji pro 160s ca dpii</button><button type="button" data-i="22">fuji c200 ca dpii</button><button type="button" data-i="23">fuji superia reala ca pro pdii</button><button type="button" data-i="24">fuji superia xtra 400 ca dpii</button><button type="button" data-i="25">fuji natura 1600 ca dpii</button><button type="button" data-i="26">vision3 50d 2383</button><button type="button" data-i="27">vision3 200t 2383</button><button type="button" data-i="28">vision3 250d 2383</button><button type="button" data-i="29">vision3 250d 2393</button><button type="button" data-i="30">vision3 500t 2383</button><button type="button" data-i="31">vision3 500t 2393</button><button type="button" data-i="32">velvia 50 ilfochrome m</button><button type="button" data-i="33">provia 100f ilfochrome m</button><button type="button" data-i="34">ektachrome 100d radiance iii</button><button type="button" data-i="35">kodachrome 64 radiance iii</button><button type="button" data-i="36">fp100c fujiflex new</button><button type="button" data-i="37">instax color fujiflex new</button><button type="button" data-i="38">aerocolor endura premier</button><button type="button" data-i="39">aerocolor high endura premier</button><button type="button" data-i="40">agfa vista 100 ca dpii</button><button type="button" data-i="41">trix 400 polymax grade 2</button><button type="button" data-i="42">trix 400 polymax grade 3</button><button type="button" data-i="43">kodak 5222 polymax grade 2</button><button type="button" data-i="44">kodak 5222 2302 dev 5</button><button type="button" data-i="45">adox color implosion 100</button><button type="button" data-i="46">agfa agfacolor 100</button><button type="button" data-i="47">agfa agfacolor portrait xps 160</button></div>
 </section>
 
 <section class="nums" aria-label="By the numbers"><span class="sn mono">03.0 — Numbers</span>
-  <div class="cell"><p class="mono">Film looks</p><div class="v" data-n="132">0</div></div>
+  <div class="cell"><p class="mono">Film looks</p><div class="v" data-n="113">0</div></div>
   <div class="cell"><p class="mono">Tools</p><div class="v" data-n="100">0</div></div>
   <div class="cell"><p class="mono">Uploads</p><div class="v" data-n="0">0</div></div>
   <div class="cell"><p class="mono">Offline</p><div class="v" data-n="100">0<small>%</small></div></div>
-  <div class="demo">
-    <div class="ctl"><p class="mono" style="color:var(--acc)">Try it</p>
-      <label>Grain<input type="range" id="sgrain" min="0" max="100" value="35"><output>35</output></label>
-      <label>Warmth<input type="range" id="swarm" min="-50" max="50" value="10"><output>10</output></label>
-      <label>Exposure<input type="range" id="sexpo" min="-50" max="50" value="0"><output>0</output></label></div>
-    <figure><img id="simg" src="../assets/story/film.webp" alt="Sample photo responding to the sliders"><div class="grain"></div></figure>
-  </div>
 </section>
 
 <section class="flow" id="flow" aria-label="The old workflow"><span class="sn mono">03.5 — Workflow</span>
@@ -547,11 +521,18 @@ section{position:relative}
     <h2 class="k" style="margin:18px 0 6vh">One person,<br>56 million tokens.</h2>
     <p class="quote">“I was too cheap to pay for subscriptions, too lazy to go through the whole multi-app workflow, and too unemployed, so I designed this app to turn my photos into masterpieces.”</p>
     <p class="mono who">Tareq Ameer · Dog father, pet photographer, and unemployed product manager</p>
-    <div class="dcap"><span>Place</span><b>Giza, Egypt</b><span>Edit</span><b>Chromasmith · selective colour</b></div>
   </div>
 </section>
 
-<section class="beta" id="beta"><span class="sn mono">05.0 — Beta</span>
+<section class="space" id="features"><span class="sn mono">05.0 — Tools</span>
+  <div class="shead"><p class="mono">Every tool</p><h2 class="k">The whole<br>darkroom.</h2>
+    <p class="t"><span class="dsk">Hover to light a tool. Click</span><span class="mob">Tap a tool</span> to see what it does.</p>
+    <a class="btn" href="#index" data-open-index>View as a list</a></div>
+  <div class="field" aria-label="All features"></div>
+  <div class="legend mono"></div>
+</section>
+
+<section class="beta" id="beta"><span class="sn mono">06.0 — Beta</span>
   <div class="head"><div><p class="mono">In beta now</p><h2 class="k" style="margin-top:18px">The darkroom<br>keeps growing.</h2></div>
     <a class="btn" href="../../chromasmith-22.html">Try the beta tools ↗</a></div>
   <div class="rows">
@@ -559,14 +540,6 @@ section{position:relative}
     <div class="row"><span class="n">02</span><h3>Astro stacking</h3><p>Combine night-sky frames into a cleaner image from the desktop library.</p><span class="mono">Beta</span></div>
     <div class="row"><span class="n">03</span><h3>Panorama</h3><p>Stitch two photos into a wider view. Larger sets are still planned.</p><span class="mono">Beta</span></div>
   </div>
-</section>
-
-<section class="space" id="features"><span class="sn mono">06.0 — Tools</span>
-  <div class="shead"><p class="mono">Every tool</p><h2 class="k">The whole<br>darkroom.</h2>
-    <p class="t"><span class="dsk">Hover to light a tool. Click</span><span class="mob">Tap a tool</span> to see what it does.</p>
-    <a class="btn" href="#index" data-open-index>View as a list</a></div>
-  <div class="field" aria-label="All features"></div>
-  <div class="legend mono"></div>
 </section>
 <div class="pop" id="pop" hidden><div class="card"><button class="x" type="button" aria-label="Close">×</button><p class="mono g"></p><h3></h3><p class="d"></p></div></div>
 
@@ -677,7 +650,7 @@ section{position:relative}
 
 <section class="faq paper" id="faq"><span class="sn mono">07.0 — FAQ</span>
   <div><p class="mono">FAQ</p><h2 class="k" style="margin-top:18px">Questions,<br>answered.</h2></div>
-  <div class="qa"><details><summary>Is Chromasmith really free?</summary><p>Yes. It's free, open-source software under the GPL-3.0 licence. There's no account, subscription or paywall.</p></details><details><summary>Do my photos get uploaded anywhere?</summary><p>No. Everything runs on your device, in the browser or the desktop app. Your photos never leave your machine.</p></details><details><summary>What's the difference between the web app and the desktop app?</summary><p>The web app has the full editor: looks, film effects, colour tools, masks and export. The desktop app adds the photo library, card import, on-device search, face tagging and the desktop-only tools such as HDR and focus stacking.</p></details><details><summary>Does it work offline?</summary><p>Yes. After the first load the web app keeps working without a connection, and the desktop app never needs one.</p></details><details><summary>Which RAW files can it open?</summary><p>Camera RAW files are decoded locally, with camera colour profiles for Panasonic Lumix bodies. JPEG, PNG and TIFF open everywhere.</p></details><details><summary>Can I use my own LUTs?</summary><p>Yes. Load any .cube LUT as a starting look, or build your own .cube from a before/after pair or a reference photo.</p></details><details><summary>How do I install it on iPhone?</summary><p>Chromasmith isn't on the App Store yet. Download the .ipa and install it with a third-party signing service such as Flarestore. Or add the web app to your home screen, which needs no signing.</p></details><details><summary>Where can I see every feature in a list?</summary><p>Open the <a href="#index" data-open-index>full feature list</a>. Every tool, grouped by what it does, with a one-line description.</p></details><details><summary>Is there a Windows version?</summary><p>Yes. A Windows installer is published alongside the Mac release.</p></details></div>
+  <div class="qa"><details><summary>Is Chromasmith really free?</summary><p>Yes. It's free, open-source software under the GPL-3.0 licence. There's no account, subscription or paywall.</p></details><details><summary>Do my photos get uploaded anywhere?</summary><p>No. Everything runs on your device, in the browser or the desktop app. Your photos never leave your machine.</p></details><details><summary>What's the difference between the web app and the desktop app?</summary><p>The web app has the full editor: looks, film effects, colour tools, masks and export. The desktop app adds the photo library, card import, on-device search, face tagging and the desktop-only tools such as HDR and focus stacking.</p></details><details><summary>Does it work offline?</summary><p>Yes. After the first load the web app keeps working without a connection, and the desktop app never needs one.</p></details><details><summary>Which RAW files can it open?</summary><p>Camera RAW files are decoded locally, with camera colour profiles for Panasonic Lumix bodies. JPEG, PNG and TIFF open everywhere.</p></details><details><summary>Can I use my own LUTs?</summary><p>Yes. Load any .cube LUT as a starting look, or build your own .cube from a before/after pair or a reference photo.</p></details><details><summary>How do I install it on iPhone?</summary><p>Chromasmith isn't on the App Store yet. Download the .ipa and install it with a third-party signing service such as Flarestore. Or add the web app to your home screen, which needs no signing.</p></details><details><summary>Where can I see every feature in a list?</summary><p>Open the <a href="#index" data-open-index>full feature list</a>. Every tool, grouped by what it does, with a one-line description.</p></details><details><summary>Is there a Windows version?</summary><p>Yes. A Windows installer is published alongside the Mac release.</p></details><details><summary>What is it made with?</summary><p>The whole editor is one HTML file with plain JavaScript and no framework or build step. Rendering runs on WebGL2, with GLSL shaders for the look, grain, halation, bloom and tiled full-resolution export. RAW files are decoded locally with LibRaw compiled to WebAssembly, plus Adobe DCP camera profiles. The desktop app is a Tauri shell with a Rust core and a local catalogue database, for Mac and Windows. On-device masks use ONNX Runtime models (EdgeSAM and SegFormer). Video uses mediabunny, the iPhone app is a Capacitor shell, and the film looks were calibrated with Python tooling. It works offline through a service worker, and the source is GPL-3.0.</p></details></div>
 </section>
 
 <section class="outro" id="yours"><span class="sn mono" style="color:#0b0b0a">08.0 — Download</span>
@@ -736,20 +709,20 @@ if(!reduce){
     .to('.intro .tag',{opacity:1,duration:.8},2.1)
     .to('.intro .cue',{opacity:1,duration:.8},2.6)
 
-  const W=document.querySelector('.word'),ws=W.querySelector('svg'),wt=W.querySelector('.t');let E;
+  const W=document.querySelector('.word'),ws=W.querySelector('svg'),wt=W.querySelector('.t');let E,WB={w:0,h:0},docked=false;
   const wb=()=>{const r=W.getBoundingClientRect();return{l:r.left,t:r.top}};
   const ir=()=>{const n=document.querySelector('.intro .name'),v=document.querySelector('.intro svg');return{n:n.getBoundingClientRect(),s:v.getBoundingClientRect(),fs:parseFloat(getComputedStyle(n).fontSize)}};
-  const measure=()=>{W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});const b=W.getBoundingClientRect(),a=ws.getBoundingClientRect(),c=wt.getBoundingClientRect();E={sx:a.left-b.left,sy:a.top-b.top,sw:a.width,tx:c.left-b.left,ty:c.top-b.top,tfs:parseFloat(getComputedStyle(wt).fontSize),th:c.height};W.style.width=b.width+'px';W.style.height=b.height+'px';W.classList.add('fly')};
+  const measure=()=>{W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});const b=W.getBoundingClientRect(),a=ws.getBoundingClientRect(),c=wt.getBoundingClientRect();E={sx:a.left-b.left,sy:a.top-b.top,sw:a.width,tx:c.left-b.left,ty:c.top-b.top,tfs:parseFloat(getComputedStyle(wt).fontSize),th:c.height};WB={w:b.width,h:b.height};W.style.width=b.width+'px';W.style.height=b.height+'px';W.classList.add('fly');docked=false};
   measure();ScrollTrigger.addEventListener('refreshInit',measure);
   gsap.set('.word',{opacity:0});
-  gsap.timeline({scrollTrigger:{trigger:'.intro',start:'top top',end:'+=120%',pin:true,scrub:1,invalidateOnRefresh:true}})
+  gsap.timeline({onUpdate(){const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'})}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=120%',pin:true,scrub:1,invalidateOnRefresh:true}})
     .to('.intro .cue',{opacity:0,duration:.1})
     .to('.intro .in',{opacity:0,duration:.02,ease:'none'},.01)
     .to('.word',{opacity:1,duration:.02,ease:'none'},.01)
     .fromTo(ws,{left:()=>ir().s.left-wb().l,top:()=>ir().s.top-wb().t,width:()=>ir().s.width,height:()=>ir().s.width},
-      {left:()=>E.sx,top:()=>E.sy,width:()=>E.sw,height:()=>E.sw,duration:.6,ease:'power3.inOut',immediateRender:true},0)
+      {left:()=>E.sx,top:()=>E.sy,width:()=>E.sw,height:()=>E.sw,duration:.8,ease:'power3.inOut',immediateRender:true},0)
     .fromTo(wt,{left:()=>ir().n.left-wb().l,top:()=>ir().n.top-wb().t,fontSize:()=>ir().fs,lineHeight:()=>ir().n.height+'px',letterSpacing:'0.01em'},
-      {left:()=>E.tx,top:()=>E.ty,fontSize:()=>E.tfs,lineHeight:()=>E.th+'px',letterSpacing:'0.02em',duration:.8,ease:'power3.inOut',immediateRender:true},.2)
+      {left:()=>E.tx,top:()=>E.ty,fontSize:()=>E.tfs,lineHeight:()=>E.th+'px',letterSpacing:'0.02em',duration:.8,ease:'power3.inOut',immediateRender:true},0)
     .to('.intro .curtain',{scaleY:1,duration:.7,ease:'power2.inOut'},.2);
   ScrollTrigger.create({trigger:'.pin',start:'top 60%',once:true,onEnter:heroIn});
 }
@@ -787,11 +760,13 @@ tl.to('.ph',{boxShadow:NOFR,duration:.3},2.1)
   .to('.favs .ring',{opacity:.9,scale:1,duration:.01},3.35)
   .to('.favs .ring',{scale:2.6,opacity:0,duration:.45,ease:'power2.out'},3.36)
   .to('.favs .heart',{scale:1,duration:.25,ease:'back.out(3)'},3.55)
+  .to('.favs .favt',{opacity:1,duration:.2},3.6)
   .to('.favs .stars svg',{opacity:1,scale:1,stagger:.06,duration:.2},3.7)
   .to('.favs .stars svg:nth-child(-n+4)',{fill:'#f2efe8',stroke:'#f2efe8',stagger:.12,duration:.15},3.95)
   .to({},{duration:.5},4.3)
   // zoom back out
   .to('.favs,.cap0,.ph .shade',{opacity:0,duration:.25},4.8)
+  .to('.favs .favt',{opacity:0,duration:.05},4.8)
   .to('.ph',{width:()=>innerWidth*.2,height:()=>innerWidth*.2*1125/844,ease:'power2.inOut',duration:.9},4.8)
   .to('.prog,.plab',{opacity:1,duration:.2},5.6)
   .addLabel('slide',PRE-0)
@@ -872,12 +847,22 @@ lens(R){
 },
 
 };
-V.lens('#lens');
 
 /* 2. quote lights up word by word */
 const q=document.querySelector('.quote');q.innerHTML=q.textContent.split(' ').map(w=>`<span class="w">${w}</span>`).join(' ');
 const ws=[...document.querySelectorAll('.quote .w')];
 ScrollTrigger.create({trigger:'.quote',start:'top 80%',end:'bottom 45%',scrub:true,onUpdate:s=>{const n=s.progress*ws.length;ws.forEach((w,i)=>{w.style.opacity=i<n?1:.12;w.classList.toggle('hot',i<n&&i>n-4)})}});
+{
+  const q=document.querySelector('.maker .quote');
+  q.innerHTML=q.textContent.trim().split(/\s+/).map(w=>'<span class="qw">'+w+'</span>').join(' ');
+  if(!reduce&&innerWidth>=760){
+    gsap.set('.maker .qw',{opacity:.15});
+    gsap.timeline({scrollTrigger:{trigger:'.maker',pin:true,start:'top top',end:'+=140%',scrub:.6,anticipatePin:1}})
+      .to('.maker .qw',{opacity:1,stagger:.08,ease:'none',duration:1})
+      .to('.maker .who',{opacity:1,duration:.2},'>-.1').to({},{duration:.3});
+    gsap.set('.maker .who',{opacity:.2});
+  }
+}
 gsap.from('.maker .por',{clipPath:'inset(100% 0 0 0)',duration:1.2,ease:'expo.out',scrollTrigger:{trigger:'.maker',start:'top 70%'}});
 
 /* 3. beta rows */
@@ -923,7 +908,7 @@ const PH=[P+'original.webp',DP+'dog-sitting.webp',P+'film.webp',P+'maker.webp',D
 const FX=['none','grayscale(1) contrast(1.15)','sepia(.45) saturate(1.3)','saturate(1.4) hue-rotate(-12deg)','contrast(1.2) brightness(.9)','sepia(.2) hue-rotate(160deg) saturate(.8)'];
 /* 1 grid lines draw in first */
 if(!reduce)gsap.from('.gridlines i',{scaleY:0,duration:1.1,stagger:.04,ease:'expo.inOut'});
-document.querySelectorAll('.paper').forEach(pp=>ScrollTrigger.create({trigger:pp,start:'top 50%',end:'bottom 50%',onToggle:s=>document.body.classList.toggle('onpaper',s.isActive)}));
+document.querySelectorAll('.paper').forEach(pp=>ScrollTrigger.create({trigger:pp,refreshPriority:-1,start:'top 50%',end:'bottom 50%',onToggle:s=>document.body.classList.toggle('onpaper',s.isActive)}));
 /* 9 contact sheet: frames flick on, one gets circled */
 {
   const sh=document.querySelector('.sheet');
@@ -935,7 +920,7 @@ document.querySelectorAll('.paper').forEach(pp=>ScrollTrigger.create({trigger:pp
 /* 10 loupe: 100% view under the cursor */
 {
   const L=document.querySelector('.loupe');
-  document.querySelectorAll('.ph img:not(.glow),.p4>img,.split .af,#simg,#tkimg').forEach(im=>{const host=im.closest('.ph,.p4,.split,figure');host.dataset.loupe='';
+  document.querySelectorAll('.ph img:not(.glow),.split .af,#tkimg').forEach(im=>{const host=im.closest('.ph,.split,figure');host.dataset.loupe='';
     host.addEventListener('pointermove',e=>{const top=[...host.querySelectorAll('img')].filter(i=>!i.classList.contains('glow')&&getComputedStyle(i).opacity>.5).pop()||im;const r=top.getBoundingClientRect();
       const nx=(e.clientX-r.left)/r.width,ny=(e.clientY-r.top)/r.height,W=top.naturalWidth||1600,H=top.naturalHeight||1000,sc=Math.max(r.width/W,r.height/H)*3;
       Object.assign(L.style,{left:e.clientX+'px',top:e.clientY+'px',opacity:1,backgroundImage:`url(${top.currentSrc||top.src})`,backgroundSize:`${r.width*3}px ${r.height*3}px`,backgroundPosition:`${-nx*r.width*3+85}px ${-ny*r.height*3+85}px`,filter:getComputedStyle(top).filter})});
@@ -966,13 +951,6 @@ document.querySelectorAll('.tile .f').forEach(f=>{let sx,sy,on=false;
 /* 15 numbers count up; sliders drive the print */
 document.querySelectorAll('.nums .v').forEach(v=>{const n=+v.dataset.n,sm=v.querySelector('small');const o={v:0};
   gsap.to(o,{v:n,duration:reduce?0:1.6,ease:'expo.out',snap:{v:1},onUpdate:()=>{v.firstChild.nodeValue=o.v},scrollTrigger:{trigger:v,start:'top 85%'}})});
-{
-  const im=document.getElementById('simg'),gr=document.querySelector('.nums .grain');
-  const upd=()=>{const g=+sgrain.value,w=+swarm.value,x=+sexpo.value;gr.style.opacity=g/100*.9;
-    im.style.filter=`brightness(${1+x/100}) sepia(${Math.max(0,w)/100*.6}) hue-rotate(${w<0?w*.8:0}deg) saturate(${1+Math.abs(w)/150})`;
-    document.querySelectorAll('.nums label').forEach(l=>l.querySelector('output').textContent=l.querySelector('input').value)};
-  document.querySelectorAll('.nums input').forEach(i=>i.addEventListener('input',upd));upd();
-}
 /* 16 colour index on the library */
 {
   const sw=document.querySelector('.swatches'),board=document.querySelector('.board'),tiles=[...document.querySelectorAll('.tile')];
@@ -1005,7 +983,7 @@ document.querySelectorAll('a[href$="chromasmith-22.html"]').forEach(a=>a.addEven
   const nv={s:4,c:83,t:22,q:88},$=id=>document.getElementById(id);
   const nset=()=>{$('nsub').textContent=Math.round(nv.s);$('ncost').textContent=Math.round(nv.c);$('ntime').textContent=Math.round(nv.t);$('nq').textContent=Math.round(nv.q);
     $('nbsub').style.transform=`scaleX(${nv.s/4})`;$('nbcost').style.transform=`scaleX(${nv.c/83})`;$('nbtime').style.transform=`scaleX(${nv.t/22})`;$('nbq').style.transform=`scaleX(${nv.q/100})`};nset();
-  gsap.timeline({scrollTrigger:{trigger:'.flow',refreshPriority:1,start:'top top',end:'+=550%',pin:true,scrub:true,
+  gsap.timeline({scrollTrigger:{trigger:'.flow',start:'top top',end:'+=550%',pin:true,scrub:true,
     onUpdate:s=>show(Math.min(li.length,Math.floor(s.progress/(.78/1.3)*(li.length+.999))))}})
     .to({},{duration:.78}).to('.now',{clipPath:'inset(0% 0 0 0)',ease:'power2.inOut',duration:.12})
     .fromTo(nv,{s:4,c:83,t:22,q:88},{s:0,c:0,t:0,q:100,ease:'power2.inOut',duration:.3,onUpdate:nset})   // everything unwinds; quality climbs back
