@@ -4121,6 +4121,11 @@
   };
   async function openInEditor(path) {
     rawPerf('open-click', path);
+    // The keyboard cursor follows the LATEST requested open (not the one that finishes last):
+    // a click/double-click/Enter/version open never moved it, so the next arrow key stepped from
+    // whatever card was last selected instead of from the photo on screen ("opened a different
+    // photo"), and X/P/U flags landed on that stale card too.
+    state._kbCursor = path;
     // The reveal starts on the click, before the busy check, so a queued arrow-key open still
     // answers instantly. Aspect comes from the grid thumbnail's dimensions (never its pixels).
     // Reopening the photo already on screen (reload after an NR/lens toggle) doesn't replay it.
