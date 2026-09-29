@@ -2409,6 +2409,12 @@ body.sk2 #lib-overlay :is(.lib-coll-count,.coll-count){font-size:11px!important;
 body.sk2 .sk2-dup-title>.fx-ctrl-title{min-height:36px;padding-top:6px!important;padding-bottom:6px!important}
 body.sk2 .sk2-dup-title>.fx-ctrl-title::before{content:attr(data-sk2-name);font-size:17px;font-weight:500;letter-spacing:-.01em;color:var(--k-color-ink);order:1;margin-right:auto}
 body.sk2 .sk2-dup-title>.fx-ctrl-title{min-height:48px!important}
+/* Histogram reads as a tool header like its Light-stage siblings (chevron left, same size/ink). */
+body.sk2 details#sk2-hist{border-top:0;margin-top:0;padding-top:0;box-shadow:0 1px 0 var(--bdr)}
+body.sk2 details#sk2-hist>summary{justify-content:flex-start;gap:12px;font-size:17px;font-weight:500;letter-spacing:-.01em;color:var(--k-color-ink);min-height:48px;align-items:center}
+body.sk2 details#sk2-hist>summary::before{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);margin:0 4px 0 2px;transition:transform .15s}
+body.sk2 details#sk2-hist[open]>summary::before{transform:rotate(45deg)}
+body.sk2 details#sk2-hist>summary::after{content:none}
 body.sk2 .fx-info-part>summary{font-size:15px!important;color:var(--k-color-ink)!important;padding:6px 0}
 body.sk2 .fx-info-part:first-of-type{margin-top:0;border-top:0}
 body.sk2.deskx .fx-ctrl[data-fxsec=info]>.fx-ctrl-title{display:none} /* the stage header already says Info */
@@ -3484,7 +3490,9 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       </div>
       <!-- LOOKS GALLERY + PRESET -->
       <div class="fx-ctrl" data-fxsec="looks">
-        <div class="fx-ctrl-title">Presets &amp; Looks</div>
+        <!-- This header folds only the input/print settings below it; the preset grid has its own
+             "Preset" header and stays visible, so the title names what it actually folds. -->
+        <div class="fx-ctrl-title">Input &amp; print</div>
         <div class="fx-label" style="margin-bottom:4px">Input</div>
         <select class="fx-select" id="sel-input" onchange="fxUpdate()" style="display:none"><option value="">Standard (sRGB/Rec.709)</option><option value="vlog">V-Log (Lumix)</option></select>
         <div class="btn-row chip-tap" id="chips-input" title="Source encoding. Pick V-Log for Lumix V-Log stills/frames — converts to Rec.709 BEFORE the film look, so any Rec.709 LUT applies correctly on top."></div>
@@ -3526,14 +3534,14 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <button class="btn bgh" id="btn-adj-scope" onclick="adjToggleScope()" title="By default Basic Adjustments apply to every loaded photo. Click to make THIS photo's adjustments independent (e.g. nudge just its exposure), or click again to sync it back to the shared value.">This photo only</button>
         </div>
         <div class="fx-fields ff-off" id="ff-adjust">
-          <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Light</div>
+          <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Tone</div>
           <div class="fx-row"><div class="fx-label">Exposure</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-exp">0</div></div>
           <div class="fx-row"><div class="fx-label">Contrast</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-con" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-con">0</div></div>
           <div class="fx-row"><div class="fx-label">Highlights</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-hi" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-hi">0</div></div>
           <div class="fx-row"><div class="fx-label">Shadows</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-sh" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sh">0</div></div>
           <div class="fx-row"><div class="fx-label">Whites</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-wh" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-wh">0</div></div>
           <div class="fx-row"><div class="fx-label">Blacks</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-bl" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-bl">0</div></div>
-          <div class="fx-sub">Colors</div>
+          <div class="fx-sub">Colour</div>
           <div class="fx-row"><div class="fx-label">Temp</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#4d8bff,#ff9f43)" type="range" min="-100" max="100" value="0" id="sl-adj-temp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-temp">0</div></div>
           <div class="fx-row"><div class="fx-label">Tint</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#51cf66,#9775fa)" type="range" min="-100" max="100" value="0" id="sl-adj-tint" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tint">0</div></div>
           <div class="fx-row"><div class="fx-label">Vibrance</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#888,#ff5b5b,#ffd43b,#51cf66,#3bc9db,#9775fa)" type="range" min="-100" max="100" value="0" id="sl-adj-vib" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-vib">0</div></div>
@@ -3765,9 +3773,9 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       </div>
       <!-- CROP & ROTATE -->
       <div class="fx-ctrl" data-fxsec="crop">
-        <div class="fx-ctrl-title" title="Rotate / flip / straighten / crop apply to every loaded image">Transform <div class="fx-toggle-lb" onclick="geomReset()" style="font-size:10px;color:var(--mut);cursor:pointer;font-family:var(--sans)">Reset</div></div>
+        <div class="fx-ctrl-title" title="Rotate / flip / straighten / crop apply to every loaded image">Transform <div class="fx-toggle-lb" onclick="geomReset()" style="font-size:12px;color:var(--mut);cursor:pointer;font-family:var(--sans)">Reset</div></div>
         <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Aspect ratio</div>
-        <div class="fx-row"><div class="fx-label">Aspect</div>
+        <div class="fx-row" style="display:none"><div class="fx-label">Aspect</div>
           <!-- A list of tap chips, not a dropdown — same convention as the Input/Print profile
                chips above (selectToChips) and the Canvas ratio chips (cvBuildChips): the <select>
                stays the one source of truth (still dispatches its own onchange, still restorable
@@ -3811,9 +3819,9 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <button class="btn bgh" id="btn-geom-apply-all" onclick="geomApplyToAll()" title="Copies this photo's crop/rotate/flip/straighten onto every other loaded photo, overwriting theirs">Apply to all photos</button>
         </div>
         <div class="fx-row" style="margin-top:10px"><div class="fx-label">Straighten</div><input class="fx-slider" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" oninput="geomStraightenSlider(this.value)"><div class="fx-val" id="vl-straighten">0°</div></div>
-        <div class="fx-row"><div class="fx-label"></div><button class="btn bgh" onclick="autoHorizon()" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button></div>
-        <div class="fx-row" title="Constrains where Auto level looks for a line — useful when a stronger false line elsewhere in the frame (a wave, a shoreline fragment) keeps outscoring the real horizon."><div class="fx-label"></div>
-          <button class="btn" id="btn-ah-roi" onclick="ahRoiArm()" style="flex:1">Set region…</button>
+        <div class="btn-row fx-level-row" style="margin-top:6px">
+          <button class="btn bgh" onclick="autoHorizon()" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button>
+          <button class="btn bgh" id="btn-ah-roi" onclick="ahRoiArm()" title="Constrains where Auto level looks for a line — useful when a stronger false line elsewhere in the frame (a wave, a shoreline fragment) keeps outscoring the real horizon.">Set region…</button>
           <button class="btn" id="btn-ah-roi-clear" onclick="ahRoiClear()" style="display:none;margin-left:6px" title="Clear region — Auto level goes back to searching the whole frame"><span class="fx-db-ic" id="ic-ah-clear"></span></button>
         </div>
         <div class="fx-row"><div class="fx-label">Grid</div>
@@ -4433,8 +4441,8 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
 
     <h3>Look</h3>
     <ul>
-      <li><b>Presets &amp; Looks</b> — 113 film looks (C41 still, cinema, reversal, instant, black &amp; white and more). Hover a look to preview it on your photo, click to apply, and set its <b>Strength</b>.</li>
-      <li><b>Input</b> — set to <b>V-Log (Lumix)</b> for V-Log stills so a normal Rec.709 look applies correctly. <b>Highlight response</b> and <b>Print</b> change how bright areas roll off.</li>
+      <li><b>Preset</b> — 113 film looks (C41 still, cinema, reversal, instant, black &amp; white and more). Hover a look to preview it on your photo, click to apply, and set its <b>Strength</b>.</li>
+      <li><b>Input &amp; print</b> — set Input to <b>V-Log (Lumix)</b> for V-Log stills so a normal Rec.709 look applies correctly. <b>Highlight response</b> and <b>Print</b> change how bright areas roll off.</li>
       <li><b>Apply LUT / LUT chart</b> — drop your own <code>.cube</code>, or use the LUT chart to turn any Lightroom preset into one (see the note below).</li>
       <li><b>All FX</b> (top bar) — applies your chosen effects in one click. The ▾ beside it picks which effects, their strengths and the look.</li>
     </ul>
@@ -6565,7 +6573,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929Z';
+const BUILD='1.0929A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23488,7 +23496,8 @@ function viewMenuBuild(){
   h+=`<button class="fx-ovf-item${window.chromasmithPhotoTransitions!==false?' on':''}" onclick="photoTransitionsToggle()"><span>Photo transitions</span>${chk}</button>`;
   if(window.sk2HistPinned)h+=`<button class="fx-ovf-item${sk2HistPinned()?' on':''}" onclick="sk2HistPinToggle();this.classList.toggle('on',sk2HistPinned())"><span>Pin histogram</span>${chk}</button>`;
   if(window.sk2CaptionOn)h+=`<button class="fx-ovf-item${sk2CaptionOn()?' on':''}" onclick="sk2CaptionToggle();this.classList.toggle('on',sk2CaptionOn())"><span>Caption under photo</span>${chk}</button>`;
-  if(typeof window.chromasmithRevealLab==='function')h+=`<button class="fx-ovf-item" onclick="viewMenuClose();window.chromasmithRevealLab()"><span>Reveal lab…</span></button>`;
+  // Reveal lab is a tuning tool: only offered when asked for (?reveallab=1 or localStorage cs_reveal_lab=1).
+  if(typeof window.chromasmithRevealLab==='function'&&(/[?&]reveallab=1/.test(location.search)||(()=>{try{return localStorage.getItem('cs_reveal_lab')==='1'}catch(e){return false}})()))h+=`<button class="fx-ovf-item" onclick="viewMenuClose();window.chromasmithRevealLab()"><span>Reveal lab…</span></button>`;
   h+='<div class="fx-ovf-sep"></div>';
   h+=`<button class="fx-ovf-item${fxGamutWarn?' on':''}" onclick="viewMenuClose();toggleGamutWarn()"><span>Show gamut warning</span>${chk}</button>`;
   h+='<div class="fx-ovf-sep"></div>';
