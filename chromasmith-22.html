@@ -13,6 +13,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Chromasmith">
 <title>CHROMASMITH</title>
+<link rel="icon" href="assets/brand/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/brand/icon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png">
+<meta property="og:title" content="Chromasmith">
+<meta property="og:image" content="https://tareqameer.github.io/Chroma-App/assets/brand/og-image.jpeg">
 <!-- Desktop (Tauri) boot gate — set SYNCHRONOUSLY here, before the parser ever reaches <body>,
      so header/main can be hidden from their very first paint rather than relying solely on
      #boot-splash's z-index to cover them. window.__TAURI__ is injected by Tauri's own document-
@@ -6600,7 +6605,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929L';
+const BUILD='1.0929M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as

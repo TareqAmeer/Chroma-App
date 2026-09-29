@@ -132,3 +132,5 @@ Archive/
 _local/
 
 # Raw film-border scans + extraction workspace (packed output ships in vendor/frames/film/)
+# Link-preview image (WhatsApp etc. need JPEG/PNG under ~300KB) — tools/scripts/build-brand-icons.mjs
+!assets/brand/og-image.jpeg
