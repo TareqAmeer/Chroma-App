@@ -2921,14 +2921,15 @@ ready(function(){
      styles so the FIRST paint is the final design. #boot-splash-bar/-progress stay (hidden) because
      the progress JS and library-ui.js write to them. -->
 <style id="boot-splash-style">
-  #boot-splash{position:fixed;inset:0;z-index:var(--z-splash);display:flex;align-items:center;justify-content:center;background:transparent;pointer-events:none;
+  #boot-splash{position:fixed;inset:0;z-index:var(--z-splash);display:flex;align-items:center;justify-content:center;background:#141414;pointer-events:none; /* fills the window: no white flash, no half-built UI showing around the card */
     --u:min(calc(54vw / 720),calc(60vh / 500));font-family:'Gramatika',system-ui,sans-serif;color:#f2f0ea}
   #boot-splash .bs{position:relative;width:calc(720*var(--u));height:calc(500*var(--u));overflow:hidden;background:#141414;transition:opacity .45s ease-out,transform .55s cubic-bezier(.2,.7,.2,1)}
   #boot-splash.out .bs{opacity:0;transform:scale(1.035)}
+  #boot-splash{transition:background-color .45s ease-out}#boot-splash.out{background:transparent}
   #boot-splash .bs>*{position:absolute}
   #boot-splash .ph{left:calc(194.5*var(--u));top:calc(42*var(--u));width:calc(331*var(--u));height:calc(225*var(--u));background:#fff;padding:calc(7*var(--u));box-sizing:border-box}
   #boot-splash .ph img{display:block;width:100%;height:100%;object-fit:cover;object-position:center 40%;filter:grayscale(1) contrast(1.1)}
-  #boot-splash .cr{right:calc(194.5*var(--u));top:calc(275*var(--u));font-size:calc(9.5*var(--u));font-style:italic;color:#8d8b85;white-space:nowrap}
+  #boot-splash .cr{display:none;right:calc(194.5*var(--u));top:calc(275*var(--u));font-size:calc(9.5*var(--u));font-style:italic;color:#8d8b85;white-space:nowrap}
   #boot-splash .br{left:0;right:0;top:calc(304*var(--u));display:flex;justify-content:center;align-items:center;gap:calc(13*var(--u));font-weight:700;font-size:calc(39*var(--u));line-height:1;letter-spacing:.02em;white-space:nowrap}
   #boot-splash .br svg{width:calc(45*var(--u));height:calc(45*var(--u));flex:none;margin:calc(-4*var(--u))}
   #boot-splash .wg{left:calc(158*var(--u));right:calc(158*var(--u));top:calc(378*var(--u));height:calc(19*var(--u));display:grid;grid-template-columns:repeat(11,1fr)}
@@ -2936,7 +2937,7 @@ ready(function(){
   #boot-splash .lb,#boot-splash .pc{top:calc(410*var(--u));font-size:calc(13*var(--u));line-height:1}
   #boot-splash .lb{left:calc(158*var(--u));color:#8d8b85}
   #boot-splash .pc{right:calc(158*var(--u));font-variant-numeric:tabular-nums}
-  #boot-splash .ver{left:0;right:0;top:calc(440*var(--u));text-align:center;font-size:calc(10.5*var(--u));color:#8d8b85;font-variant-numeric:tabular-nums}
+  #boot-splash .ver{left:0;right:0;top:calc(440*var(--u));text-align:center;font-size:max(11px,calc(13*var(--u)));color:#8d8b85;font-variant-numeric:tabular-nums}
   #boot-splash .bs{pointer-events:auto}
   #boot-splash-progress{display:none}
   /* Splash → app: the app fades up from the desktop while the card eases out (hideBootSplash). */
@@ -6469,7 +6470,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929C';
+const BUILD='1.0929D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23441,7 +23442,13 @@ function settingsToggle(e){
   if(e)e.stopPropagation();
   const m=document.getElementById('fx-settings-menu');if(!m)return;
   if(m.classList.contains('on')){settingsClose();return;}
-  settingsBuild();m.classList.add('on');
+  settingsBuild();
+  // In the Studio, open beside the side panel rather than over it, so the sliders you're adjusting
+  // stay visible; everywhere else it hangs under the gear as before.
+  const pn=!document.body.classList.contains('lib-full')&&document.querySelector('.fx-panel');
+  const pr=pn&&pn.getClientRects().length?pn.getBoundingClientRect():null;
+  m.style.right=pr&&pr.width>40?(innerWidth-pr.left+8)+'px':'';
+  m.classList.add('on');
 }
 document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#fx-settings,#fx-settings-menu,#lib-view-menu-btn'))settingsClose();});
 // Inline SVG icons (the app is fully offline — no icon webfont/CDN allowed).

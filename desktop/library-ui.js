@@ -6729,7 +6729,7 @@
     const t = row ? row.textContent.replace(/[\d,.\s]+$/, '').trim() : '';
     // Title names what's shown — the unscoped catalog view is "All Photos" (the sidebar's own
     // label for it), not a generic "Library".
-    return t || (state.source === 'catalog' && !state.catalogScope ? 'All Photos' : 'Library');
+    return t || (state.source === 'catalog' && (!state.catalogScope || state.catalogScope === 'all') ? 'All Photos' : 'Library');
   }
   function fmtGridDate(d, unit) {
     if (unit === 'month') return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
