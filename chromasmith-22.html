@@ -6572,7 +6572,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929I';
+const BUILD='1.0929J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17825,17 +17825,10 @@ function _applyZoom(smooth){
   // always just adds the screen-delta/zoom to whatever fxPanX/Y already were, regardless of
   // which regime that offset gets used in here.
   const {w,h}=_fxZoomFootprint();
-  let baseX=0,baseY=0;
-  if(fxZoom<1){
-    // Below 100%: without a correction the shrunk image collapses toward the (0,0)
-    // transform-origin — i.e. the frame's top-left corner — instead of staying centred. This
-    // base offset re-centres it; fxPanX/Y (unclamped here) then layer a free user drag on top,
-    // since there's no "must cover the frame" requirement to enforce when the image is
-    // already smaller than the frame.
-    baseX=w*(1-fxZoom)/(2*fxZoom);baseY=h*(1-fxZoom)/(2*fxZoom);
-  }
-  // Above 100%, pan remains deliberately unconstrained: editors use this to let people
-  // inspect and reposition any part of the enlarged photo, including beyond the frame edge.
+  // Centre-anchored at EVERY zoom (one continuous formula — the old "only below 100%" branch
+  // jumped at z=1, so zoom-in-off-centre then zoom-out landed the photo in a corner). With
+  // pan=0 the frame centre stays fixed for any zoom; pan is a free user offset on top.
+  const baseX=w*(1-fxZoom)/(2*fxZoom),baseY=h*(1-fxZoom)/(2*fxZoom);
   zw.style.transform=`scale(${fxZoom}) translate(${baseX+fxPanX}px,${baseY+fxPanY}px)`;
   if(fxZoom>1)fxEnsureFullQuality();
   _updateZoomReadout();
@@ -17885,13 +17878,23 @@ function zoomSet(z){
 // Zoom by a multiplicative step, anchored on the frame centre.
 function zoomBy(factor){
   if(fxLoupe)toggleLoupe();                 // leave loupe before CSS-zooming
-  const prev=fxZoom;
-  fxZoom=Math.max(0.25,Math.min(8,fxZoom*factor));
-  { // keep the frame centre fixed under the new zoom (ox=oy=0.5 in the cursor-zoom invariant)
-    const {w:cw,h:ch}=_fxZoomFootprint();
-    fxPanX+=0.5*cw*(1/fxZoom-1/prev);fxPanY+=0.5*ch*(1/fxZoom-1/prev);
-  }
+  _zoomAt(fxZoom*factor);                   // no anchor = frame centre, pan untouched
   _applyZoom(true);
+}
+// Set fxZoom to nz keeping the photo point under screen (cx,cy) fixed. Screen = L + z*(p+base(z)+pan),
+// base(z)=w(1-z)/(2z), so the invariant reduces to pan += (u-w/2)*(1/zNew-1/zOld) with u the
+// anchor in the wrapper's own unscaled box (L recovered from its current bounding rect).
+function _zoomAt(nz,cx,cy){
+  const zw=document.getElementById('fx-zoom-wrap');
+  const prev=fxZoom;
+  fxZoom=Math.max(0.25,Math.min(8,nz));
+  if(!zw||cx==null||fxZoom===prev)return;
+  const {w,h}=_fxZoomFootprint();if(!w||!h)return;
+  const r=zw.getBoundingClientRect();
+  const bx=w*(1-prev)/(2*prev),by=h*(1-prev)/(2*prev);
+  const L=r.left-prev*(bx+fxPanX),T=r.top-prev*(by+fxPanY);
+  fxPanX+=(cx-L-w/2)*(1/fxZoom-1/prev);
+  fxPanY+=(cy-T-h/2)*(1/fxZoom-1/prev);
 }
 function zoomFit(){if(fxLoupe)toggleLoupe();else _resetZoom(true);}
 // Mirrors the wireframe's own zoomctl mousedown/mouseup pair (Editor (Developer) View.dc.html:457-458)
@@ -17911,8 +17914,8 @@ function toggleLoupe(){
     // middle. transform is scale(z)·translate(pan) with origin 0 0, so the frame centre
     // (screen x=w/2) maps to local x=(w/2)/z−pan → normalised cx = 0.5/z − pan/w.
     const {w,h}=_fxZoomFootprint();
-    loupeCX=Math.min(1,Math.max(0,0.5/fxZoom-fxPanX/w));
-    loupeCY=Math.min(1,Math.max(0,0.5/fxZoom-fxPanY/h));
+    loupeCX=Math.min(1,Math.max(0,0.5-fxPanX/w));
+    loupeCY=Math.min(1,Math.max(0,0.5-fxPanY/h));
     _resetZoom();fxZoom=1;fxLoupeSeed=Math.random()*100;
   }
   _updateZoomReadout();
@@ -17958,25 +17961,8 @@ function initZoomPan(){
     _fxPreviewInteracting=true;
     clearTimeout(_fxZoomInteractTimer);
     _fxZoomInteractTimer=setTimeout(()=>{_fxPreviewInteracting=false;if(fxFullResPreview)renderPreview();},150);
-    const r=wrap.getBoundingClientRect();
-    const ox=(e.clientX-r.left)/r.width;
-    const oy=(e.clientY-r.top)/r.height;
-    const prev=fxZoom;
-    // A trackpad pinch is delivered as a rapid BURST of wheel events (not a single gesture
-    // event), so a 10%-per-tick step compounded dozens of times a second felt like the zoom
-    // was slamming in/out almost instantly. 2.5% per tick is ~4x gentler — a full pinch still
-    // reaches the same 1x-8x range, it just takes noticeably more travel to get there.
-    fxZoom=Math.max(0.25,Math.min(8,fxZoom*(e.deltaY<0?1.025:0.975)));
-    {
-      // Zoom toward cursor: keep the local point under the cursor fixed on screen.
-      // transform is scale(z)·translate(pan) about origin (0,0), so a local point p maps to
-      // screen z*(p+pan) — invariant p ⇒ pan_new = pan_old + o*size*(1/z_new − 1/z_old), same
-      // "anchor = mouse position in unscaled content space" identity used by OpenSeadragon's
-      // zoomBy/Google Maps/Figma-style canvas zoom.
-      const {w:cw,h:ch}=_fxZoomFootprint();
-      fxPanX+=ox*cw*(1/fxZoom-1/prev);
-      fxPanY+=oy*ch*(1/fxZoom-1/prev);
-    }
+    // 2.5% per tick: a trackpad pinch arrives as a rapid burst of wheel events.
+    _zoomAt(fxZoom*(e.deltaY<0?1.025:0.975),e.clientX,e.clientY);
     _applyZoom();
   },{passive:false});
   // Drag-to-pan (CSS zoom) OR drag-to-move the loupe crop
@@ -18023,7 +18009,7 @@ function initZoomPan(){
   };
   zw.addEventListener('pointerup',pup);zw.addEventListener('pointercancel',pup);
   // Double-click to reset
-  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(Math.abs(fxZoom-FX_FIT)>0.001){e.stopPropagation();_resetZoom(true);}else if(fxWork){e.stopPropagation();fxZoom=2.5;_applyZoom(true);}}); // dbl-tap: Fit ↔ zoomed (animated)
+  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(Math.abs(fxZoom-FX_FIT)>0.001){e.stopPropagation();_resetZoom(true);}else if(fxWork){e.stopPropagation();_zoomAt(2.5,e.clientX,e.clientY);_applyZoom(true);}}); // dbl-tap: Fit ↔ zoomed (animated)
   // Pinch
   let _pt={};
   wrap.addEventListener('touchstart',e=>{[...e.changedTouches].forEach(t=>_pt[t.identifier]={x:t.clientX,y:t.clientY});},{passive:true});
@@ -18040,7 +18026,7 @@ function initZoomPan(){
       const p0=_pt[t0.identifier]||{x:t0.clientX,y:t0.clientY};
       const p1=_pt[t1.identifier]||{x:t1.clientX,y:t1.clientY};
       const prev=Math.hypot(p0.x-p1.x,p0.y-p1.y)||dist;
-      fxZoom=Math.max(0.25,Math.min(8,fxZoom*(dist/prev)));
+      _zoomAt(fxZoom*(dist/prev),(t0.clientX+t1.clientX)/2,(t0.clientY+t1.clientY)/2);
       _applyZoom();
     }
     [...e.changedTouches].forEach(t=>_pt[t.identifier]={x:t.clientX,y:t.clientY});
@@ -19154,8 +19140,9 @@ function renderFullResCrop(P,iw,ih,cw,ch){
   // Visible region of the canvas in canvas-CSS coords (screen = z·(x+pan) — see _applyZoom).
   const visW=Math.min(cw,(wrap.clientWidth||cw)/z),visH=Math.min(ch,(wrap.clientHeight||ch)/z);
   const padX=visW*0.18,padY=visH*0.18;
-  const x0=Math.max(0,-fxPanX-padX),y0=Math.max(0,-fxPanY-padY);
-  const x1=Math.min(cw,-fxPanX+visW+padX),y1=Math.min(ch,-fxPanY+visH+padY);
+  const tx=fxPanX+cw*(1-z)/(2*z),ty=fxPanY+ch*(1-z)/(2*z); // total translate incl. centring base
+  const x0=Math.max(0,-tx-padX),y0=Math.max(0,-ty-padY);
+  const x1=Math.min(cw,-tx+visW+padX),y1=Math.min(ch,-ty+visH+padY);
   if(x1-x0<2||y1-y0<2)return false;
   const cropX=Math.max(0,Math.round(x0/cw*iw)),cropY=Math.max(0,Math.round(y0/ch*ih));
   const cropW=Math.min(iw-cropX,Math.round((x1-x0)/cw*iw)),cropH=Math.min(ih-cropY,Math.round((y1-y0)/ch*ih));
