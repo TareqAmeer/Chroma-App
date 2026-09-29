@@ -117,7 +117,6 @@ diagnostics/baseline.json
 .diagvenv/
 
 # @playwright/test artifacts (behaviour suite) — traces/screenshots from failing runs
-test-results/
 playwright-report/
 
 # Full-size layout-matrix screenshots (docs/ui-workflow/STATE.md, surface_capture.mjs) —
@@ -129,7 +128,7 @@ diagnostics/tools/
 
 # Local archive of non-essential files (kept on disk, untracked)
 Archive/
+# personal/generated workspace: local-borders, HomepagePhotos, Archive, test-results
+_local/
 
 # Raw film-border scans + extraction workspace (packed output ships in vendor/frames/film/)
-local borders/
-local-borders/

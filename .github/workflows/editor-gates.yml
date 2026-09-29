@@ -95,5 +95,5 @@ jobs:
           name: editor-gates-output
           path: |
             test/output/
-            test-results/
+            _local/test-results/
           retention-days: 14

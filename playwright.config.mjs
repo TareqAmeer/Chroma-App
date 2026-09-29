@@ -16,6 +16,7 @@ import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS } from './test
 
 export default defineConfig({
   testDir: './test',
+  outputDir: './_local/test-results',
   // catalog_visual.mjs moved to its own playwright.catalog.config.mjs 2026-09-13 (fullyParallel,
   // more workers) — see that file's header comment for why it's not just a testMatch tweak here.
   testMatch: /wireframe_behaviour\.mjs$|editor_wireframe_behaviour\.mjs$|library_dock_states\.mjs$|library_flag_state_leak\.mjs$/,

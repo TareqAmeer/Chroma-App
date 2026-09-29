@@ -15,6 +15,7 @@ import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS } from './test
 
 export default defineConfig({
   testDir: './test',
+  outputDir: './_local/test-results',
   testMatch: /catalog_visual\.mjs$/,
   fullyParallel: true,
   // Fixed at 4 rather than Playwright's own CPU-based default: tried unbounded once (2026-09-13)

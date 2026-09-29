@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Pack the reviewed film-edge strips into the app's shipped asset set.
 
-Reads "local borders/_out/" (report.json + votes/rejects/adjust from the review pages)
+Reads "_local/local-borders/_out/" (report.json + votes/rejects/adjust from the review pages)
 and writes vendor/frames/film/<n>-s<side>.webp + manifest.json. Scans are renumbered
-1..N; the number -> source-file map stays local in "local borders/_out/pack_map.json".
+1..N; the number -> source-file map stays local in "_local/local-borders/_out/pack_map.json".
 Run: .calibvenv/bin/python scripts/pack_borders.py
 """
 import json, os, shutil
@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, '..', 'local borders', '_out')
+OUT = os.path.join(HERE, '..', '_local', 'local-borders', '_out')
 DST = os.path.join(HERE, '..', 'vendor', 'frames', 'film')
 MAXW = 2000
 DROP_SMUDGED = False   # owner kept these after review; set True to drop strips with photo past the edge

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Extract reusable film-border textures from local scans.
 
-Input : "local borders/" (gitignored, personal-use scans)
-Output: "local borders/_out/<name>.png"  RGBA, RGB = grey edge texture (black-level
+Input : "_local/local-borders/" (gitignored, personal-use scans)
+Output: "_local/local-borders/_out/<name>.png"  RGBA, RGB = grey edge texture (black-level
         normalised, so the app tints it), A = frame coverage. Photo, outer paper,
         sprocket holes and edge text are removed.
-        "local borders/_out/report.json" per-file sides/thickness/flags
-        "local borders/_out/_sheet.jpg"  one review sheet on magenta
+        "_local/local-borders/_out/report.json" per-file sides/thickness/flags
+        "_local/local-borders/_out/_sheet.jpg"  one review sheet on magenta
 Run   : .calibvenv/bin/python scripts/extract_borders.py [name-substring ...]
 """
 import glob, json, os, sys
@@ -14,7 +14,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage as ndi
 
-ROOT = os.path.join(os.path.dirname(__file__), '..', 'local borders')
+ROOT = os.path.join(os.path.dirname(__file__), '..', '_local', 'local-borders')
 OUT = os.path.join(ROOT, '_out')
 LONG = 2400                      # working resolution (long side)
 SKIP = ('Pack-Cover', 'KODAK-GOLD', 'KODAK-PORTRA-400---', 'KODAK-PORTRA-800---', 'rawpixel-id-13960581')

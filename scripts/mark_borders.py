@@ -2,7 +2,7 @@
 """Tiny local tool: mark where the photo meets the frame on each border scan.
 
 Serves http://localhost:8765 . Drag the 4 lines (each end separately, so tilted scans
-work) onto the photo's edge. Marks go to "local borders/_out/marks.json" and
+work) onto the photo's edge. Marks go to "_local/local-borders/_out/marks.json" and
 extract_borders.py uses them instead of guessing.
 Run: .calibvenv/bin/python scripts/mark_borders.py
 """
@@ -10,7 +10,7 @@ import glob, io, json, os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from PIL import Image
 
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'local borders')
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_local', 'local-borders')
 OUT = os.path.join(ROOT, '_out'); os.makedirs(OUT, exist_ok=True)
 MARKS = os.path.join(OUT, 'marks.json')
 SKIP = ('Pack-Cover', 'KODAK-GOLD', 'KODAK-PORTRA-400---', 'KODAK-PORTRA-800---', 'rawpixel-id-13960581')
