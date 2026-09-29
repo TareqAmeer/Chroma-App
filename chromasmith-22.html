@@ -713,11 +713,8 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
 #msk-brush-cursor.on{display:block}
 #msk-brush-cursor.erase{border-color:var(--err)}
 .crop-rect{position:absolute;border:1px solid #fff;box-shadow:0 0 0 9999px var(--scrim-b4);cursor:move;box-sizing:border-box}
-.crop-grid-v{position:absolute;top:0;bottom:0;width:1px;background:var(--scrim-w2);pointer-events:none}
-.crop-grid-h{position:absolute;left:0;right:0;height:1px;background:var(--scrim-w2);pointer-events:none}
-.crop-rect::before,.crop-rect::after{content:'';position:absolute;background:var(--scrim-w1)}
-.crop-rect::before{left:33.33%;right:33.33%;top:0;bottom:0;border-left:1px solid var(--scrim-w1);border-right:1px solid var(--scrim-w1)}
-.crop-rect::after{top:33.33%;bottom:33.33%;left:0;right:0;border-top:1px solid rgba(255,255,255,.4);border-bottom:1px solid rgba(255,255,255,.4)}
+.crop-grid-v{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.8);box-shadow:0 0 0 1px rgba(0,0,0,.4);pointer-events:none}
+.crop-grid-h{position:absolute;left:0;right:0;height:1px;background:rgba(255,255,255,.8);box-shadow:0 0 0 1px rgba(0,0,0,.4);pointer-events:none}
 .crop-h{position:absolute;width:14px;height:14px;background:#fff;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 1px 4px var(--scrim-b5)}
 .crop-h.nw{left:0;top:0;cursor:nwse-resize}.crop-h.ne{left:100%;top:0;cursor:nesw-resize}
 .crop-h.sw{left:0;top:100%;cursor:nesw-resize}.crop-h.se{left:100%;top:100%;cursor:nwse-resize}
@@ -1786,7 +1783,7 @@ body.deskx #lib-overlay .lib-side-tabs{display:none}
    (.fx-knob-on). Track is a hairline with the moved span in accent A. The default marker is a
    small ink dot above the track at --sl-def-pct, shown only once the slider has moved
    (variant sliderResetDot "moved"); double-click resets (initSliderErgonomics). */
-.fx-slider{background:radial-gradient(circle,var(--k-color-ink) 0 1.6px,transparent 2.1px) no-repeat calc(var(--sl-def-pct,0%) + (var(--ctl-slider-thumb)/2) - (var(--sl-def-pct,0%) * var(--ctl-slider-thumb) / 100%) - 2.5px) 0/5px 5px}
+.fx-slider{background:radial-gradient(circle,var(--k-color-ink) 0 1.6px,transparent 2.1px) no-repeat var(--sl-def-pct,0%) 0/var(--ctl-slider-thumb) 5px}
 .fx-slider:not(.fx-knob-on){background-size:0 0}
 .fx-slider::-webkit-slider-runnable-track{border-radius:0;background:linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--k-color-accent-a) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
 .fx-slider::-moz-range-track{border-radius:0;background:linear-gradient(to right,var(--bdr) 0 var(--fillA,0%),var(--k-color-accent-a) var(--fillA,0%) var(--fillB,0%),var(--bdr) var(--fillB,0%) 100%)}
@@ -1913,6 +1910,7 @@ body{--k-menu-bg:#2c2c2a;--k-menu-fg:var(--k-color-ink);--k-menu-line:color-mix(
 .k-roll-strip>i::before{content:attr(data-c);display:block;white-space:pre}
 .k-roll-strip>i.k-num::before{content:"0\A 1\A 2\A 3\A 4\A 5\A 6\A 7\A 8\A 9";transform:translateY(calc(var(--k-d,0) * -1.2em));
   transition:transform var(--k-motion-duration) var(--k-motion-easing)}
+.k-roll-strip.k-snap>i.k-num::before{transition:none}
 .fx-val.k-roll:focus{color:var(--k-color-ink)!important}
 .fx-val.k-roll:focus>.k-roll-strip{display:none}
 @media (prefers-reduced-motion:reduce){.k-roll-strip>i.k-num::before{transition:none}}
@@ -3754,7 +3752,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="btn-row" id="btn-geom-apply-all-row" style="display:none;margin-top:8px">
           <button class="btn bgh" id="btn-geom-apply-all" onclick="geomApplyToAll()" title="Copies this photo's crop/rotate/flip/straighten onto every other loaded photo, overwriting theirs">Apply to all photos</button>
         </div>
-        <div class="fx-row" style="margin-top:10px"><div class="fx-label">Straighten</div><input class="fx-slider" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" oninput="geomStraighten(this.value)"><div class="fx-val" id="vl-straighten">0°</div></div>
+        <div class="fx-row" style="margin-top:10px"><div class="fx-label">Straighten</div><input class="fx-slider" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" oninput="geomStraightenSlider(this.value)"><div class="fx-val" id="vl-straighten">0°</div></div>
         <div class="fx-row"><div class="fx-label"></div><button class="btn bgh" onclick="autoHorizon()" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button></div>
         <div class="fx-row" title="Constrains where Auto level looks for a line — useful when a stronger false line elsewhere in the frame (a wave, a shoreline fragment) keeps outscoring the real horizon."><div class="fx-label"></div>
           <button class="btn" id="btn-ah-roi" onclick="ahRoiArm()" style="flex:1">Set region…</button>
@@ -6504,7 +6502,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929X';
+const BUILD='1.0929Y';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9740,6 +9738,7 @@ function cropGridLinesHtml(){
          stops.map(p=>`<div class="crop-grid-h" style="top:${p}%"></div>`).join('');
 }
 function cropSetGrid(v){cropGrid=v;try{localStorage.setItem('chromasmith_crop_grid',v);}catch(e){}
+  if(!cropMode&&typeof cropEnter==='function'&&curItem()&&curItem().img&&v!=='off')cropEnter(); // picking a grid shows it on the photo
   const r=document.getElementById('crop-rect');if(r){r.querySelectorAll('.crop-grid-v,.crop-grid-h').forEach(n=>n.remove());r.insertAdjacentHTML('beforeend',cropGridLinesHtml());}}
 // ── DPI read/write + metadata preservation (Exif/ICC/IPTC/XMP/pHYs) ─────────
 // Cameras/Lightroom often write resolution into Exif IFD0 (XResolution/
@@ -17126,7 +17125,7 @@ function applyUISnapshot(s,opts){
   if(s.geom!==undefined&&fxImages.length){            // restore geometry (undo a crop/rotate/flip/straighten) — CURRENT photo only, geometry is per-photo
     const cit=curItem();if(cit)cit.geom=s.geom?JSON.parse(JSON.stringify(s.geom)):defGeom();
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
-    const ang=(s.geom&&s.geom.angle)||0;if(ss)ss.value=ang;if(sv)sv.textContent=ang.toFixed(1)+'°';
+    const ang=(s.geom&&s.geom.angle)||0;if(ss)ss.value=_stA2S(ang);if(sv)sv.textContent=ang.toFixed(2)+'°';
     if(cropMode)cropExit();
     // opts.skipRender: the caller (loadFXImages) is about to replace fxImages and installFXImages runs its own
     // updateWork()+buildLookGallery() — re-rendering the OUTGOING photo here cost ~1.2s at 24MP (CHR-121).
@@ -17525,12 +17524,22 @@ async function _fxTimelineListInto(container,closeFn,showReset){
     container.appendChild(resetRow);
   }
 }
+// Desktop hides #btn-history, so the popover's own wrapper is zero-width and it lands far right. Anchor under the visible trigger (Undo).
+function fxAnchorPopover(pop){
+  const a=['btn-undo-db','btn-export-history','btn-history'].map(i=>document.getElementById(i)).find(b=>b&&b.offsetParent!==null);
+  pop.style.transform='';
+  if(!a){pop.style.position='';pop.style.left='';pop.style.top='';pop.style.right='';return;}
+  const r=a.getBoundingClientRect();
+  pop.style.position='fixed';pop.style.right='auto';pop.style.margin='0';
+  pop.style.left=r.left+'px';pop.style.top=(r.bottom+6)+'px';
+}
 async function fxToggleTimelinePopover(){
   const pop=document.getElementById('fx-timeline-popover');
   if(!pop)return;
   if(pop.style.display!=='none'){pop.style.display='none';return;}
   await _fxTimelineListInto(pop,()=>{pop.style.display='none';},true);
   pop.style.display='block';
+  fxAnchorPopover(pop);
   fxClampPopoverToViewport(pop);
 }
 // Desktop-only: same combined edit+export list, inline in the settings menu.
@@ -17889,7 +17898,7 @@ function initZoomPan(){
   // Drag-to-pan (CSS zoom) OR drag-to-move the loupe crop
   let pd=null;
   zw.addEventListener('pointerdown',e=>{
-    if(_fxEyeArmed()||mskPaintMode)return;
+    if(_fxEyeArmed()||mskPaintMode||(typeof _ahRoiArmed!=='undefined'&&_ahRoiArmed))return;
     e.preventDefault();pd={x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
     _fxPreviewInteracting=true;  // E1: drag-pan never set this — see the wheel handler above
@@ -18331,7 +18340,7 @@ function loadSessionGeomFor(){
     if(!s._geom)return;
     fxImages.forEach(it=>it.geom=JSON.parse(JSON.stringify(s._geom)));
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
-    const ang=s._geom.angle||0;if(ss)ss.value=ang;if(sv)sv.textContent=ang.toFixed(1)+'°';
+    const ang=s._geom.angle||0;if(ss)ss.value=_stA2S(ang);if(sv)sv.textContent=ang.toFixed(2)+'°';
     updateWork();
   }catch(e){/* geometry restore is best-effort */}
 }
@@ -19983,7 +19992,7 @@ function fxSelectImage(idx){
   if(cropMode)cropExit();
   fxImg=it.img;updateWork();
   const ss=document.getElementById('sl-straighten');
-  if(ss){const ang=(it.geom&&it.geom.angle)||0;ss.value=ang;document.getElementById('vl-straighten').textContent=ang.toFixed(1)+'°';}
+  if(ss){const ang=(it.geom&&it.geom.angle)||0;ss.value=_stA2S(ang);document.getElementById('vl-straighten').textContent=ang.toFixed(2)+'°';}
   if(typeof ahRoiSyncUI==='function'){_ahRoiArmed=false;_ahRoiDrag=null;ahRoiSyncUI();}
   // Basic Adjustments: show THIS photo's own values if it's been made independent
   // (adjToggleScope), else the shared batch-wide baseline.
@@ -20390,7 +20399,7 @@ function autoHorizon(){
   if(a===null){toast('No clear horizon found — straighten by hand',false);
     log('Auto horizon: no dominant line found (flat accumulator)','warn');return;}
   const sl=document.getElementById('sl-straighten');
-  if(sl)sl.value=a;
+  if(sl)sl.value=_stA2S(a);
   geomStraighten(a);
   if(typeof hapt==='function')hapt();
   toast(a===0?'Already level':`Straightened ${a>0?'+':''}${a.toFixed(1)}°`,true);
@@ -20464,7 +20473,11 @@ function _ahRoiFrac(e){
     if(!tooSmall)toast('Region set — Auto level will search only inside it',true);
   });
 })();
-function geomStraighten(v){const g=curGeom();if(!g)return;g.angle=parseFloat(v)||0;document.getElementById('vl-straighten').textContent=(g.angle).toFixed(1)+'°';broadcastGeom(); /* crop kept: it is normalised to the same-aspect inscribed frame, so it stays valid */updateWork();clearTimeout(fxTimer);fxTimer=setTimeout(()=>{renderPreview();fxHistoryPush();},120);}
+// Straighten slider is quadratic: fine steps near level (subtle corrections), full +-45 at the ends.
+function _stS2A(s){const t=(parseFloat(s)||0)/45;return Math.round(45*t*Math.abs(t)*20)/20;}
+function _stA2S(a){const t=Math.max(-1,Math.min(1,(a||0)/45));return 45*Math.sign(t)*Math.sqrt(Math.abs(t));}
+function geomStraightenSlider(v){geomStraighten(_stS2A(v));}
+function geomStraighten(v){const g=curGeom();if(!g)return;g.angle=parseFloat(v)||0;document.getElementById('vl-straighten').textContent=(g.angle).toFixed(2)+'°';broadcastGeom(); /* crop kept: it is normalised to the same-aspect inscribed frame, so it stays valid */updateWork();clearTimeout(fxTimer);fxTimer=setTimeout(()=>{renderPreview();fxHistoryPush();},120);}
 function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeof hapt==='function')hapt();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset','info');}
 
 // ── retouch interaction ───────────────────────────────────────────────────────────────────
@@ -25537,6 +25550,9 @@ if(/[?&]catalog=1/.test(location.search)){
       if(document.activeElement===el)return;
       if(strip.parentNode!==el){el.appendChild(strip);return;}   // re-append fires the observer again
       const t=el.textContent;if(strip._t===t)return;strip._t=t;
+      // Values changing continuously (slider drag) snap instead of rolling — otherwise digits sit mid-roll.
+      const now=performance.now(),fast=now-(strip._ts||0)<350;strip._ts=now;
+      strip.classList.toggle('k-snap',fast);clearTimeout(strip._snapT);strip._snapT=setTimeout(()=>strip.classList.remove('k-snap'),400);
       const cs=[...t];
       while(strip.children.length>cs.length)strip.firstElementChild.remove();
       while(strip.children.length<cs.length)strip.prepend(document.createElement('i'));
