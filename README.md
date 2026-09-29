@@ -1,10 +1,13 @@
 <h1>Chromasmith</h1>
 
-**Film looks for your photos — running entirely on your own device.**
+**The app that does it all.\* A whole photo studio, wherever inspiration finds you.**
+<sub>\*Almost everything. Your ideas are still yours.</sub>
 
-A free photo editor with 113 calibrated film emulations, real grain and halation, RAW support,
-local adjustments and full-resolution export. No account, no upload, no subscription. The web
-version is a single HTML file with no build step and no server behind it.
+Make a look in a click or take control of every detail. Chromasmith is a free photo studio with
+113 calibrated film looks, real grain, halation and bloom, RAW development, masks and retouching,
+a local photo library and full-resolution export — running entirely on your own device. No
+account, no upload, no subscription. The web version is a single HTML file with no build step
+and no server behind it.
 
 **→ [Open the app](https://tareqameer.github.io/Chroma-App/app/) ·
 [Product page](https://tareqameer.github.io/Chroma-App/) ·
@@ -15,7 +18,15 @@ version is a single HTML file with no build step and no server behind it.
 ![Licence GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-d4903a)
 ![No build step](https://img.shields.io/badge/build%20step-none-52c97a)
 
-![The Presets and Looks panel](site/assets/ui/looks.webp)
+![The Chromasmith studio with the Looks panel open](site/assets/ui/looks.webp)
+
+### Same frame. A different feeling.
+
+| Original | Exported from Chromasmith |
+|---|---|
+| ![Original photo](site/assets/story/original.webp) | ![The same photo, graded with Classic Neg, subtle grain and halation](site/assets/story/studio.webp) |
+
+<sub>Sample photograph. The right-hand image is a genuine export: Classic Neg, subtle grain and halation.</sub>
 
 ---
 
@@ -31,6 +42,18 @@ version is a single HTML file with no build step and no server behind it.
 Step-by-step instructions for each platform, in plain English, are on the
 [product page](https://tareqameer.github.io/Chroma-App/#get).
 
+## Highlights
+
+- **One click is all it takes** — 113 film looks across Kodak, Fuji, cinema, instant, reversal and B&W, previewed live on your photo
+- **Let the light linger** — grain, halation, bloom, dust, light leaks and film frames, each with room to be subtle or unmistakable
+- **A studio for every frame** — curves, an eight-band colour mixer, lift/gamma/gain, masks, heal and clone, full-resolution export
+- **A library for every shoot** — folders, culling, people and natural-language search, all on your machine (Mac app)
+- **Works with no signal** — no account, no upload; the web app runs offline after the first visit
+- **Beta, growing** — video grading, astro stacking and two-photo panorama
+
+The [product page](https://tareqameer.github.io/Chroma-App/) has the full tour, with a directory of
+every feature.
+
 ## What it does
 
 **Looks and film**
@@ -41,13 +64,14 @@ Step-by-step instructions for each platform, in plain English, are on the
 - Procedural **film frames** — 35mm sprockets, rebate and edge printing drawn to ISO/SMPTE geometry
 
 **Editing**
-- Exposure, contrast, white balance, dehaze, sharpening, noise reduction
-- **Tone curves** (master + R/G/B) and an eight-band **colour mixer**
-- **Local adjustments** — up to 8 masks: radial, linear, brush, sky, AI subject, colour range,
+- Exposure, contrast, white balance (with eyedropper), dehaze, sharpening (incl. deconvolution), noise reduction, highlight roll-off
+- **Tone curves** (master, R/G/B and parametric), an eight-band **colour mixer** and lift/gamma/gain wheels
+- **Local adjustments** — up to 8 masks: radial, linear, brush, sky, AI subject, depth, colour range,
   luminance range; each with amount, texture, clarity and an edge-aware refine
 - **Skin tone** — a contractive operator that evens out patchy tone instead of shifting all of it
 - **Heal and clone** applied before grading, so a repair takes the same grain and look
 - Crop, rotate, straighten, **auto-level**, perspective correction, borders and canvas mattes
+- Collage layouts, **HDR merge** and **focus stacking** (desktop)
 - Multi-photo batches with a filmstrip, shared edits, and **match a series to one reference**
 
 **Input and output**
@@ -62,10 +86,12 @@ Step-by-step instructions for each platform, in plain English, are on the
 - **Card import** from an SD card, organised by capture date, with a verified second copy
 - **People** — local face detection, recognition and naming
 - **Natural-language search** — describe a photo and find it, locally
-- Lightroom **Edit In** round-trip and a Lightroom cloud browser
+- Virtual copies, offline edits, suggested tags, and a Lightroom **Edit In** round-trip with cloud browser
 
-**Video**
-- Grade a clip with the same stack as stills, trim it, and export with audio passed through
+**Beta**
+- **Astro stacking** — combine night-sky frames into a cleaner image (desktop library)
+- **Panorama** — stitch two photos into a wider view; larger sets are still planned
+- **Video** — grade a clip with the same stack as stills, trim it, and export with audio passed through
   untouched; scopes, safe-area guides, fades, gate weave and film breath
 
 ## Screenshots
@@ -78,6 +104,8 @@ Step-by-step instructions for each platform, in plain English, are on the
 | Tone curves and colour mixer | Grain, halation and artifacts |
 | ![Library](site/assets/ui/library.webp) | ![Phone](site/assets/ui/mobile.webp) |
 | The desktop photo library | The same app on a phone |
+
+<sub>Captured from the running app with `node site/shoot-screenshots.mjs`, using a sample photograph.</sub>
 
 ## What's new
 
