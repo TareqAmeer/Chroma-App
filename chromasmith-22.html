@@ -14,16 +14,16 @@
 <meta name="apple-mobile-web-app-title" content="Chromasmith">
 <title>CHROMASMITH</title>
 <!-- Desktop (Tauri) boot gate — set SYNCHRONOUSLY here, before the parser ever reaches <body>,
-     so header/.tabs/main can be hidden from their very first paint rather than relying solely on
+     so header/main can be hidden from their very first paint rather than relying solely on
      #boot-splash's z-index to cover them. window.__TAURI__ is injected by Tauri's own document-
      start init script, so it's already present by the time this runs. Web/iOS builds never see
      __TAURI__ so this is a no-op there. Cleared by library-ui.js's startup chain once Library has
      actually opened/expanded (see hideBootSplash() call site), the same moment the splash itself
      is hidden — never on a timer, or it could reveal the editor before Library is ready. -->
 <script>if(window.__TAURI__)document.documentElement.classList.add('cs-boot-tauri');
-/* Web boot gate: this file is ~17MB, so the browser paints the chrome at the top of <body> long before the scripts that
-   pick the layout (deskx / mobile-fx, set by applyFxLayout) have run, which flashed the old header and logo. Hide that
-   chrome until parsing is done, then reveal it on the next frames with the right layout already applied. */
+/* Web load gate: this file is ~17MB, so the browser paints the editor's markup while it is still parsing, before
+   applyFxLayout() has arranged it (a phone showed the raw control list for about a second). Keep it unpainted until
+   parsing ends, then show it already laid out. */
 else{document.documentElement.classList.add('cs-boot-web');var _csBootOff=function(){document.documentElement.classList.remove('cs-boot-web')};
   document.addEventListener('DOMContentLoaded',function(){requestAnimationFrame(function(){requestAnimationFrame(_csBootOff)})});setTimeout(_csBootOff,8000)}</script>
 <!-- coi-serviceworker (MIT, Guido Zuidhof): injects COOP/COEP client-side so SharedArrayBuffer
@@ -34,8 +34,8 @@ else{document.documentElement.classList.add('cs-boot-web');var _csBootOff=functi
 /* Desktop boot gate (see the inline script above): hides the web-layout editor chrome until
    the Tauri shell has actually settled into the Library. visibility (not display:none) so
    layout/measurements that happen during startup are unaffected — only paint is suppressed. */
-html.cs-boot-tauri body>header,html.cs-boot-tauri body>.tabs,html.cs-boot-tauri body>main{visibility:hidden}
-html.cs-boot-web body>header,html.cs-boot-web body>.tabs,html.cs-boot-web body>main,html.cs-boot-web #cs-brand{visibility:hidden}
+html.cs-boot-tauri body>header,html.cs-boot-tauri body>main{visibility:hidden}
+html.cs-boot-web body>main,html.cs-boot-web #cs-brand{visibility:hidden}
 /* Splash-over-desktop: while the boot gate is up, html/body must be transparent (not the app's
    --bg) so the OS window itself (tauri.conf.json "transparent":true) shows the real desktop
    through the margins around the splash card — not the app's own background color. Reverts the
@@ -227,21 +227,19 @@ html,body{max-width:100%;overflow-x:clip}
 html.mobile-fx,html.mobile-cl{overflow:hidden;height:var(--app-h,100svh)}
 canvas,img,video,select,input{max-width:100%}
 body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh;font-size:var(--fs-4);line-height:var(--lh-base)}
-header{border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;
-  position:sticky;top:0;z-index:var(--z-sticky);background:var(--glass-bg)}
-.logo{display:flex;align-items:center;gap:12px}
-.logo-img{height:28px;width:auto;display:block}
-.logo .sub{color:var(--mut);font-size:var(--fs-1);font-family:var(--sans);letter-spacing:0;font-style:normal}
+header{border-bottom:1px solid var(--k-color-ink,var(--txt));padding:0 16px;display:flex;align-items:center;gap:14px;height:56px;
+  position:sticky;top:0;z-index:var(--z-sticky);background:var(--bg)}
+body:not(.cs-page-other) header{display:none}
+#cs-pagebar .pb-back{background:none;border:0;color:var(--mut);font:600 12px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;padding:8px 0;white-space:nowrap}
+#cs-pagebar .pb-back:hover{color:var(--txt)}
+#cs-pagebar .pb-title{flex:1;min-width:0;font:700 15px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hdr-right{display:flex;align-items:center;gap:var(--sp-2)}
 .bstamp{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);letter-spacing:var(--ls-2);cursor:pointer}
-.hdr-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);cursor:pointer;padding:6px;transition:all var(--dur-1)}
+.hdr-btn{display:inline-flex;align-items:center;justify-content:center;background:none;border:1px solid var(--bdr);border-radius:0;color:var(--txt);cursor:pointer;padding:6px;transition:all var(--dur-1)}
 .hdr-btn:hover{border-color:var(--mut)}
 .hdr-ic{display:inline-flex;color:var(--mut)}
 .hdr-ic svg{display:block}
 .badge{font-family:var(--mono);font-size:var(--fs-2);color:#fff;background:var(--ok);border:1px solid var(--ok);padding:3px 8px;border-radius:3px;letter-spacing:var(--ls-4)}
-.tabs{display:flex;border-bottom:1px solid var(--bdr);padding:0 24px;background:var(--sur);overflow-x:auto;touch-action:pan-x;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
-.tab{flex:0 0 auto;padding:12px var(--sp-4);font-size:var(--fs-2);font-weight:500;letter-spacing:0;font-family:var(--sans);color:var(--mut);cursor:pointer;border-bottom:var(--bw-2) solid transparent;margin-bottom:-1px;transition:color var(--dur-1) var(--ease);white-space:nowrap}
-.tab:hover{color:var(--txt)}.tab.active{color:var(--acc);border-bottom-color:var(--acc)}
 main{max-width:1180px;margin:0 auto;padding:24px 20px var(--sp-11)}
 main:has(#panel-fx.active){max-width:1640px;padding-bottom:16px}
 .panel{display:none}.panel.active{display:block}
@@ -830,7 +828,6 @@ body.diag-on .diag-only{display:flex}
 @media(max-width:700px){.dg2,.dg3,.sliders-row,.fx-layout{grid-template-columns:1fr}
   .fx-panel{column-count:1}
   main,main:has(#panel-fx.active){padding-left:14px;padding-right:14px}
-  .tabs{padding:0 12px}
   .btn{min-height:44px}
   .fx-slider{height:28px}
   #fx-fname{width:auto!important;flex:1}
@@ -846,9 +843,7 @@ body.diag-on .diag-only{display:flex}
   /* On the non-FX tabs the header just shows the title + subtitle; build / theme / log /
      status move to a slim fixed bar at the bottom so the top stays clean. */
   body:not(.mobile-fx) header{padding-top:env(safe-area-inset-top);height:auto;min-height:56px}
-  body:not(.mobile-fx) .hdr-right{position:fixed;left:0;right:0;bottom:0;justify-content:center;gap:16px;background:var(--sur);border-top:1px solid var(--bdr);padding:var(--sp-2) 14px calc(var(--sp-2) + env(safe-area-inset-bottom));z-index:var(--z-fixed)}
-  body:not(.mobile-fx) main{padding-bottom:70px}
-  body:not(.mobile-fx) #log-area{bottom:54px}}
+}
 
 /* ── MOBILE FX EDITOR: pinned image + horizontal section strip + scrolling controls ── */
 /* App height comes from the JS-owned --app-h (visualViewport.height — the only number that
@@ -866,9 +861,8 @@ body.diag-on .diag-only{display:flex}
    bug kept regressing: earlier fixes touched --app-h/height but never this competing rule. */
 body.mobile-fx{height:var(--app-h,100svh);min-height:0;display:flex;flex-direction:column;overflow:hidden;padding-top:max(10px,var(--sat))}
 body.mobile-fx header{display:none}
-body.mobile-fx .tabs{flex:0 0 auto}
 body.mobile-fx main{flex:1;min-height:0;min-width:0;display:flex;padding:0!important;margin:0;max-width:100vw;overflow:hidden}
-body.mobile-fx .tab{padding-top:8px;padding-bottom:var(--sp-2)}
+
 body.mobile-fx #panel-fx.panel.active{display:flex;flex:1;min-height:0;min-width:0;width:100%;max-width:100%}
 body.mobile-fx .fx-layout{display:flex;flex-direction:column;align-items:stretch;flex:1;min-height:0;min-width:0;gap:0;width:100%;max-width:100%}
 /* PREVIEW-FIRST layout (INS-style): the photo fills all space between the tab row and
@@ -1017,12 +1011,10 @@ body.mobile-fx #fx-toast.show{transform:translateX(-50%) translateY(0)}
 body.mobile-fx .fx-slider{min-height:34px}
 body.mobile-fx .fx-slider::-webkit-slider-thumb{width:22px;height:22px}
 /* mobile: the editor IS the app — web tabs live behind the ⋯ sheet */
-body.mobile-fx .tabs{display:none}
 body.mobile-fx .ni-hint{display:none}
 #fx-add-btn{display:flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:50%;background:var(--acc);color:#000;font-size:var(--fs-7);line-height:1;border:none;cursor:pointer;margin:var(--sp-4) auto 6px;box-shadow:none}
 #fx-add-btn:active{transform:scale(.94)}
 /* First-timer aids: hidden advanced tabs, window-wide drop overlay, plain-language card subtitles. */
-body.cs-adv-hidden .tab.cs-adv-tab{display:none}
 #cs-drop-ov{position:fixed;inset:0;z-index:calc(var(--z-modal,1000) + 5);background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;pointer-events:none;outline:3px dashed var(--acc);outline-offset:-16px}
 #cs-drop-ov div{display:flex;flex-direction:column;gap:6px;text-align:center;color:#fff;font-family:var(--sans)}
 #cs-drop-ov b{font-size:24px;font-weight:500}
@@ -1195,6 +1187,7 @@ body.deskx #fx-deskbar-tools .fx-zoom-ctrl{margin-left:var(--sp-3);padding-left:
 /* CHR-155: playground .rbar rhythm — gear sits one 8px gap from Export, flags 8px from zoom (Library matches). */
 body.deskx #fx-settings{margin-left:0;padding-left:0}
 body.deskx #btn-flag-red{margin-left:7px!important}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title #btn-flag-red{margin-left:2px!important} /* 6px cluster gap + 2 = the Gallery's 8px */
 /* Zoom cluster: was bare 18px text controls with no button affordance at all. */
 .zc-ic{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px}
 body.deskx .fx-zoom-ctrl{position:static;background:transparent;border:none;padding:0;gap:1px}
@@ -1306,7 +1299,7 @@ body.fx-deskb #fx-deskbar-tools .fx-mini{background:var(--sur2)}
    too-close-to-the-bar report) reads this var instead of repeating 44px, so a future deskbar
    resize can't silently reopen the same overlap in only some of them. */
 body.deskx{--deskx-topbar-h:56px;--deskbar-control-gap:12px}
-body.deskx header,body.deskx .tabs,body.deskx #fx-filmstrip{display:none}
+body.deskx header,body.deskx #fx-filmstrip{display:none}
 body.deskx main{max-width:none;margin:0;padding:var(--deskx-topbar-h) 0 0}
 body.deskx.fx-deskb main{overflow:hidden;height:100vh}
 body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:var(--sp-9) 24px var(--sp-11)}
@@ -1730,8 +1723,7 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 /* ── MOBILE COLLAGE: pinned stage on top + section strip (mirrors the FX editor) ── */
 /* min-height:0 override — see body.mobile-fx above for why this is required, not cosmetic. */
 body.mobile-cl{height:var(--app-h,100svh);min-height:0;display:flex;flex-direction:column;overflow:hidden;padding-top:max(10px,var(--sat))}
-body.mobile-cl header{display:none}
-body.mobile-cl .tabs{flex:0 0 auto}
+body.mobile-cl header{flex:0 0 auto}
 body.mobile-cl main{flex:1;min-height:0;min-width:0;display:flex;padding:0!important;margin:0;max-width:100vw;overflow:hidden}
 body.mobile-cl #panel-collage.panel.active{display:flex;flex:1;min-height:0;min-width:0;width:100%}
 body.mobile-cl .cl-layout{display:flex;flex-direction:column;align-items:stretch;flex:1;min-height:0;min-width:0;gap:0;width:100%}
@@ -1917,6 +1909,10 @@ body{--k-menu-bg:#2c2c2a;--k-menu-fg:var(--k-color-ink);--k-menu-line:color-mix(
 .fx-info-i{width:16px;height:16px;border-radius:0;border:1px solid var(--k-color-muted);color:var(--k-color-muted);font-weight:700;font-style:normal;font-size:10px;
   transition:background var(--k-motion-hover),border-color var(--k-motion-hover),color var(--k-motion-hover)}
 .fx-info-i:hover,.fx-info-i:focus-visible{background:var(--k-color-accent-b);border-color:var(--k-color-accent-b);color:#fff}
+/* Hit area is 28px (trackpad-friendly); the drawn square stays 16px via background-clip + an inset
+   shadow as the border, and a negative margin keeps the row layout unchanged. */
+.fx-info-i{width:28px!important;height:28px!important;margin:-6px!important;padding:0!important;border:6px solid transparent!important;background-clip:padding-box!important;box-shadow:inset 0 0 0 1px var(--k-color-muted);font-size:11px!important;box-sizing:border-box}
+.fx-info-i:hover,.fx-info-i:focus-visible{border-color:transparent!important;box-shadow:none}
 /* ── Swiss Kinetic: control row (prototype .k-row) ──
    Muted label, ink value readout in tabular figures; a modified row's label goes ink. */
 .fx-row>.fx-label,.fx-row>label{color:var(--k-color-muted)}
@@ -2195,7 +2191,10 @@ body.sk2 .bgh:not(:disabled):hover{box-shadow:inset 0 -1px 0 var(--k-color-ink)!
 /* Pressed/selected: ink text + ink underline, never a white slab (the dark-mode "white button" bug). */
 body.sk2 .bgh.on,body.sk2 .bgh[aria-pressed=true]{background:transparent!important;color:var(--k-color-ink)!important;box-shadow:inset 0 -2px 0 var(--k-color-ink)!important}
 /* Switched-off sections stay readable (were 40% opacity on already-muted labels = invisible). */
-body.sk2 .fx-fields.ff-off{opacity:.78}
+/* Off sections dim their controls, not their already-muted text (a whole-block .78 pushed muted
+   hints/segment labels under 4.5:1). */
+body.sk2 .fx-fields.ff-off{opacity:1}
+body.sk2 .fx-fields.ff-off :is(.fx-slider,.fx-val,.fx-row>.fx-label,canvas,.fx-toggle,input,select){opacity:.78}
 body.sk2 .fx-row.fx-mod>.fx-val.k-roll>.k-roll-strip{color:var(--k-color-ink)}
 body.sk2 .dz-fn{color:var(--k-color-muted)!important}
 body.sk2 .fx-db{background:transparent!important;border-color:transparent!important;color:var(--k-color-muted)!important}
@@ -2421,6 +2420,8 @@ body.sk2 details#sk2-hist>summary{justify-content:flex-start;gap:12px;font-size:
 body.sk2 details#sk2-hist>summary::before{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);margin:0 4px 0 2px;transition:transform .15s}
 body.sk2 details#sk2-hist[open]>summary::before{transform:rotate(45deg)}
 body.sk2 details#sk2-hist>summary::after{content:none}
+/* Swiss v2 buttons are upright everywhere (the header's Export already was); only panel primaries were still italic. */
+body.sk2 .bpri,body.sk2 #lib-overlay .lib-btn.on,body.sk2 #lib-overlay .lib-btn.lib-btn-export{font-style:normal}
 body.sk2 .fx-info-part>summary{font-size:15px!important;color:var(--k-color-ink)!important;padding:6px 0}
 body.sk2 .fx-info-part:first-of-type{margin-top:0;border-top:0}
 body.sk2.deskx .fx-ctrl[data-fxsec=info]>.fx-ctrl-title{display:none} /* the stage header already says Info */
@@ -2649,13 +2650,12 @@ body.sk2.sk2-hist-pin .sk2-hist>summary{cursor:default}body.sk2.sk2-hist-pin .sk
 body.sk2 .sk2-hist canvas{touch-action:none}
 body.sk2 .sk2-hist .sk2h-box{position:relative;margin-top:8px}
 body.sk2 .sk2-hist canvas{display:block;width:100%;height:80px;cursor:crosshair}
-body.sk2 .sk2h-clip{position:absolute;top:0;width:0;height:0;padding:0;border:6px solid transparent;background:none;cursor:pointer;opacity:.35}
-/* 12px triangles are fiddly on a trackpad: a 24px invisible hit area around each. */
-body.sk2 .sk2h-clip::before{content:'';position:absolute;inset:-12px}
-body.sk2 .sk2h-clip.lo{left:0;border-top-color:var(--k-color-muted);border-left-color:var(--k-color-muted)}
-body.sk2 .sk2h-clip.hi{right:0;border-top-color:var(--k-color-muted);border-right-color:var(--k-color-muted)}
-body.sk2 .sk2h-clip.on{opacity:1}body.sk2 .sk2h-clip.lo.on{border-top-color:#58f;border-left-color:#58f}body.sk2 .sk2h-clip.hi.on{border-top-color:#ff3b1f;border-right-color:#ff3b1f}
-body.sk2 .sk2h-clip.act{outline:1px solid var(--k-color-ink);outline-offset:2px}
+body.sk2 .sk2h-clip{position:absolute;top:0;width:28px;height:28px;padding:0;border:0;background:none;cursor:pointer;opacity:.35}
+body.sk2 .sk2h-clip::after{content:'';position:absolute;top:0;width:0;height:0;border:6px solid transparent}
+body.sk2 .sk2h-clip.lo{left:0}body.sk2 .sk2h-clip.lo::after{left:0;border-top-color:var(--k-color-muted);border-left-color:var(--k-color-muted)}
+body.sk2 .sk2h-clip.hi{right:0}body.sk2 .sk2h-clip.hi::after{right:0;border-top-color:var(--k-color-muted);border-right-color:var(--k-color-muted)}
+body.sk2 .sk2h-clip.on{opacity:1}body.sk2 .sk2h-clip.lo.on::after{border-top-color:#58f;border-left-color:#58f}body.sk2 .sk2h-clip.hi.on::after{border-top-color:#ff3b1f;border-right-color:#ff3b1f}
+body.sk2 .sk2h-clip.act::after{outline:1px solid var(--k-color-ink);outline-offset:2px}
 body.sk2 .sk2h-read{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
 /* Gallery top bar: the search column grows with the window (280-560px) while leaving each side
    ~460px, so Export and All FX keep their words; the search fills its column with 24px either side. */
@@ -2686,6 +2686,8 @@ new MutationObserver(fit).observe(b,{attributes:true,attributeFilter:['class']})
 })();</script>
 <script>/* Swiss v2 — always on (web + desktop). Scopes the body.sk2 CSS block; the old design lives at git tag pre-swiss-v2. */
 (function(){var b=document.body;b.classList.add('sk2');
+// Pick the web layout on the first paint (applyFxLayout confirms it later), so the page never shows unlaid-out chrome.
+if(!window.__TAURI__&&matchMedia('(min-width:701px)').matches)b.classList.add('deskx');
 // Window buttons stay invisible until the pointer reaches the top-left corner (see #cs-win CSS).
 var br=document.getElementById('cs-brand'),w=document.getElementById('cs-win');
 document.addEventListener('pointermove',function(e){if(!br||!w||w.hidden)return;var r=w.getBoundingClientRect(),on=e.clientY<r.bottom+14&&e.clientX<r.right+18;
@@ -2881,10 +2883,10 @@ ready(function(){
       var L=fr||(/(^|-)b1(-|$)/.test(id)?'b1':/(^|-)b2(-|$)/.test(id)?'b2':'');if(L)r.setAttribute('data-layer',L);
       var lb=r.querySelector('.fx-label');if(L&&lb&&lb.firstChild&&lb.firstChild.nodeType===3)lb.firstChild.textContent=lb.firstChild.textContent.replace(/^(Inner|Outer) /,'').replace(/^./,function(c){return c.toUpperCase()});});
     var tabs=document.createElement('div');tabs.className='btn-row chip-tap sk2-layers';tabs.setAttribute('role','tablist');
-    tabs.innerHTML='<button type="button" class="btn bgh on" data-l="b1">Inner</button><button type="button" class="btn bgh" data-l="b2">Outer</button>';
+    tabs.innerHTML='<button type="button" role="tab" aria-selected="true" class="btn bgh on" data-l="b1">Inner</button><button type="button" role="tab" aria-selected="false" class="btn bgh" data-l="b2">Outer</button>';
     ff.insertBefore(tabs,ff.firstChild);ff.setAttribute('data-sk2-layer','b1');
     tabs.onclick=function(e){var b=e.target.closest('button[data-l]');if(!b)return;ff.setAttribute('data-sk2-layer',b.dataset.l);
-      tabs.querySelectorAll('button').forEach(function(x){x.classList.toggle('on',x===b)});};
+      tabs.querySelectorAll('button').forEach(function(x){x.classList.toggle('on',x===b);x.setAttribute('aria-selected',String(x===b))});};
     var more=document.createElement('details');more.className='sk2-more';more.innerHTML='<summary>More</summary>';
     rows.filter(function(r){return !r.hasAttribute('data-layer')}).forEach(function(r){more.appendChild(r)});
     ff.appendChild(more);})();
@@ -3273,27 +3275,18 @@ window.bumpBootSplashWatchdog=function(graceMs){
 window.bumpBootSplashWatchdog(16000); // initial grace period before any progress event has arrived yet
 </script>
 <div id="status-cap"></div>
-<header>
-  <div class="logo"><img src="data:image/png;base64,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" alt="Chromasmith" class="logo-img"><span class="sub">film simulation tool</span></div>
-  <!-- ⚠️ Product chrome only. This header used to carry a build stamp, a "● OFFLINE" badge and a
-       raw diagnostics-log toggle — a harness bolted to the front of a photo tool. All three moved
-       into About (csAbout), which is where a build ID and a diagnostics entry point belong; the
-       theme toggle stays because it is the one control here a photographer actually reaches for. -->
+<!-- Page bar (Swiss). Only shows where the Studio's own top bar doesn't: the Match, Colour Copy, Collage and Guide
+     pages on a phone. Wider windows use the desktop bar (body.deskx hides this), and the phone Studio has its own.
+     It replaced the old logo header + tab strip, which also flashed for a moment while this large file parsed. -->
+<header id="cs-pagebar">
+  <button type="button" class="pb-back" onclick="switchTab('fx')" title="Back to the Studio">← Studio</button>
+  <span class="pb-title" id="pb-title"></span>
   <div class="hdr-right">
     <button class="hdr-btn" id="hdr-help" onclick="chromasmithShowTour()" title="Quick start: how to open, edit and export a photo" aria-label="Quick start"><span class="hdr-ic" style="font-weight:600;font-size:15px;line-height:1">?</span></button>
     <button class="hdr-btn" onclick="toggleTheme()" title="Switch light / dark theme"><span class="theme-ic hdr-ic"></span></button>
     <button class="hdr-btn" id="hdr-about" onclick="csAbout()" title="About Chromasmith"><span class="hdr-ic" id="hdr-info"></span></button>
   </div>
 </header>
-<!-- role/tabindex/aria-selected and arrow-key nav are applied by a11yEnhanceTabs() at boot,
-     rather than hand-written on all 5 — one place to get the roving-tabindex pattern right. -->
-<div class="tabs" role="tablist">
-  <div class="tab active" onclick="switchTab('fx')" title="Edit a photo: pick a film look, adjust it, export">Effects &amp; Export</div>
-  <div class="tab cs-adv-tab" onclick="switchTab('match')" title="Advanced: build a LUT from a before/after pair of photos">Match &amp; Refine</div>
-  <div class="tab cs-adv-tab" onclick="switchTab('copy')" title="Advanced: copy the colour of one photo onto another">Color Copy</div>
-  <div class="tab cs-adv-tab" onclick="switchTab('collage')" title="Advanced: combine several photos into one layout">Collage</div>
-  <div class="tab" onclick="switchTab('guide')" title="Help: what every tool does, plus the quick-start tour">Help</div>
-</div>
 <main>
 <!-- MATCH & REFINE -->
 <div class="panel" id="panel-match">
@@ -6579,7 +6572,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929H';
+const BUILD='1.0929I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -6649,7 +6642,7 @@ try{if(new URLSearchParams(location.search).has('deskx')){document.body.classLis
 // the class there, including on a narrower window where deskx should still apply).
 try{
   if(!window.__TAURI__){
-    const _mqDeskx=window.matchMedia('(min-width:900px)');
+    const _mqDeskx=window.matchMedia('(min-width:701px)');
     const _applyDeskxWidth=()=>{
       if(new URLSearchParams(location.search).has('deskx'))return; // explicit override always wins
       document.body.classList.toggle('deskx',_mqDeskx.matches);
@@ -23408,14 +23401,7 @@ function log(msg,type='',quiet){const a=document.getElementById('log-area'),now=
   // a toast. Deliberately only 'err': 'warn' entries here really are diagnostics ("HDR probe
   // write failed"), and toasting them would train people to ignore the channel.
   if(type==='err'&&!quiet)toast(msg,'err');}
-function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>{
-  const on=['fx','match','copy','collage','guide'][i]===n;
-  t.classList.toggle('active',on);
-  // aria-selected + roving tabindex, mirroring the .active class this already tracked visually
-  // — a screen reader had no way to know which tab was current, and Tab-key users had to step
-  // through all 5 to reach the panel instead of landing on the one that's actually open.
-  t.setAttribute('aria-selected',String(on));t.tabIndex=on?0:-1;
-});document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();if(n==='collage'&&typeof clInit==='function')clInit();if(typeof applyClLayout==='function')applyClLayout();
+function switchTab(n){document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();if(n==='collage'&&typeof clInit==='function')clInit();if(typeof applyClLayout==='function')applyClLayout();
   // Match/Copy/Collage/Guide are their own pages: the Studio's photo controls leave the top bar and
   // the page name takes the middle, with a way back to the Studio.
   document.body.classList.toggle('cs-page-other',n!=='fx');
@@ -23423,7 +23409,9 @@ function switchTab(n){document.querySelectorAll('.tab').forEach((t,i)=>{
   if(bar&&!pt){pt=document.createElement('div');pt.id='fx-page-title';
     pt.innerHTML='<button type="button" class="fx-page-back" title="Back to the Studio">← Studio</button><span></span>';
     pt.querySelector('button').onclick=()=>switchTab('fx');bar.appendChild(pt);}
-  if(pt)pt.querySelector('span').textContent={match:'Match & Refine',copy:'Color Copy',collage:'Collage',guide:'Guide'}[n]||'';
+  const pname={match:'Match & Refine',copy:'Color Copy',collage:'Collage',guide:'Guide'}[n]||'';
+  if(pt)pt.querySelector('span').textContent=pname;
+  const pb=document.getElementById('pb-title');if(pb)pb.textContent=pname;
 }
 
 // ── FX editor: section model, mobile strip + desktop tool rail ────────────────
@@ -23646,6 +23634,8 @@ function settingsToggle(e){
   const pr=pn&&pn.getClientRects().length?pn.getBoundingClientRect():null;
   m.style.right=pr&&pr.width>40?(innerWidth-pr.left+8)+'px':'';
   m.classList.add('on');
+  // No room beside the panel (narrow window): hang under the gear instead of going off-screen.
+  if(m.style.right&&(innerWidth<1000||m.getBoundingClientRect().left<8))m.style.right='';
 }
 document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#fx-settings,#fx-settings-menu,#lib-view-menu-btn'))settingsClose();});
 // Inline SVG icons (the app is fully offline — no icon webfont/CDN allowed).
@@ -24829,10 +24819,13 @@ document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(card=>{
     fxSecToggle(card);
   });
   // Clickable for keyboard and screen-reader users too, not just the mouse.
-  title.setAttribute('role','button');title.tabIndex=0;
-  const syncExp=()=>title.setAttribute('aria-expanded',String(!card.classList.contains('fx-sec-collapsed')));syncExp();
+  // The chevron is the focusable control, not the whole title: titles also hold the on/off
+  // toggle and Reset, and a button can't contain other buttons (axe nested-interactive).
+  chev.setAttribute('role','button');chev.tabIndex=0;
+  chev.setAttribute('aria-label','Show or hide '+(title.textContent||'').replace(/Reset|\s+/g,' ').trim());
+  const syncExp=()=>chev.setAttribute('aria-expanded',String(!card.classList.contains('fx-sec-collapsed')));syncExp();
   new MutationObserver(syncExp).observe(card,{attributes:true,attributeFilter:['class']});
-  title.addEventListener('keydown',(e)=>{if(e.target!==title||(e.key!=='Enter'&&e.key!==' '))return;e.preventDefault();fxSecToggle(card);});
+  chev.addEventListener('keydown',(e)=>{if(e.key!=='Enter'&&e.key!==' ')return;e.preventDefault();fxSecToggle(card);});
 });
 // 3.4.9: the Preset section's OWN collapse toggle, independent of the panel-level one above
 // (fxSecToggle collapses the whole "Presets & Looks" card, including RAW profile/Input/Print;
@@ -24915,28 +24908,6 @@ function a11yEnhanceToggles(){
     }
   });
 }
-function a11yEnhanceTabs(){
-  document.querySelectorAll('.tab').forEach(t=>{
-    t.setAttribute('role','tab');
-    t.setAttribute('aria-selected',String(t.classList.contains('active')));
-    t.tabIndex=t.classList.contains('active')?0:-1;
-  });
-  const order=['fx','match','copy','collage','guide'];
-  const tabsEl=document.querySelector('.tabs');
-  if(tabsEl&&!tabsEl.hasAttribute('data-a11y')){
-    tabsEl.setAttribute('data-a11y','1');
-    // Left/Right cycles focus AND activates, matching the native <select>/radio-group convention
-    // this is standing in for — a screen-reader or keyboard user expects arrow keys on a tablist
-    // to switch tabs directly, not just move an invisible cursor.
-    tabsEl.addEventListener('keydown',e=>{
-      if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;
-      const cur=[...document.querySelectorAll('.tab')].findIndex(t=>t.classList.contains('active'));
-      const next=(cur+(e.key==='ArrowRight'?1:-1)+order.length)%order.length;
-      e.preventDefault();switchTab(order[next]);
-      document.querySelectorAll('.tab')[next].focus();
-    });
-  }
-}
 // T41 (editor_ux_spec.json, 2026-09-11): an axe-core sweep found 33 serious/critical violations
 // across the Editor's panels — every plain slider/select/colour input had NO accessible name at
 // all (label:CRITICAL), and every section-master .fx-toggle had no aria-label despite
@@ -24978,7 +24949,7 @@ function a11yEnhanceFormLabels(){
     if(txt)tg.setAttribute('aria-label',txt);
   });
 }
-a11yEnhanceToggles();a11yEnhanceTabs();a11yEnhanceFormLabels();
+a11yEnhanceToggles();a11yEnhanceFormLabels();
 // Panels rebuild their own subtrees via innerHTML at runtime (mskRebuild, curve chips, the
 // Looks gallery, …) — a one-shot boot pass would miss every .fx-toggle those create afterward.
 // One body-level observer catches all of them at the source instead of re-running the enhancer

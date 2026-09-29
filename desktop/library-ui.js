@@ -7305,7 +7305,7 @@
     const paint = (rejected, picked, favorited) => {
     // Labelled and clickable: a bare "⚑ 209" didn't say what it counted, and it's the obvious
     // shortcut to filtering by that flag (it clicks the matching Flags filter chip).
-    const chip = (n, cnt, word, fval) => `<button type="button" class="lib-status-chip" data-fval="${fval}" title="Show only ${word}" style="display:inline-flex;align-items:center;gap:3px;background:none;border:0;padding:0;color:inherit;font:inherit;cursor:pointer"><span style="display:inline-flex">${ic(n, 12)}</span>${fmtN(cnt)} ${word}</button>`;
+    const chip = (n, cnt, word, fval) => `<button type="button" class="lib-status-chip" data-fval="${fval}" title="Show only ${word}" style="display:inline-flex;align-items:center;gap:3px;background:none;border:0;padding:0;min-height:28px;color:inherit;font:inherit;cursor:pointer"><span style="display:inline-flex">${ic(n, 12)}</span>${fmtN(cnt)} ${word}</button>`;
     lblEl.innerHTML = [
       rejected ? chip('close', rejected, 'rejected', 'red') : '',
       picked ? chip('flagGreen', picked, 'picked', 'green') : '',
@@ -11415,7 +11415,7 @@
         const head = document.createElement('div');
         head.style.cssText = 'display:flex;align-items:center;gap:7px;padding:6px 2px;cursor:pointer;font-size:12px;font-weight:600;margin-top:6px';
         head.innerHTML = `<input type="checkbox" ${dayAllSel ? 'checked' : ''} style="width:15px;height:15px">
-          <span class="imp-day-chev" style="display:inline-flex;transition:transform var(--duration-press,120ms) ease;transform:rotate(${isOpen ? '90' : '0'}deg)">${ic('chevron', 12)}</span>
+          <span class="imp-day-chev" style="display:inline-flex;transition:transform var(--k-motion-hover);transform:rotate(${isOpen ? '90' : '0'}deg)">${ic('chevron', 12)}</span>
           <span>${esc(dayLabel(k))}</span><span style="font-weight:400;color:var(--mut)">${dayFiles.length} · ${fmtBytes(dayBytes)}</span>`;
         const headCb = head.querySelector('input');
         if (!dayAllSel && daySomeSel) headCb.indeterminate = true;
@@ -11475,7 +11475,7 @@
         <label style="display:flex;align-items:center;gap:7px;font-size:12px;margin-bottom:14px;cursor:pointer">
           <input type="checkbox" id="imp-eject" ${prefs.eject ? 'checked' : ''}> Eject card when finished</label>
         <div id="imp-prog" style="display:none;margin-bottom:12px">
-          <div style="height:6px;background:var(--sur2);border-radius:3px;overflow:hidden"><div id="imp-bar" style="height:100%;width:0;background:var(--acc);transition:width var(--duration-press,120ms)"></div></div>
+          <div style="height:6px;background:var(--sur2);border-radius:3px;overflow:hidden"><div id="imp-bar" style="height:100%;width:0;background:var(--acc);transition:width var(--k-motion-hover)"></div></div>
           <div id="imp-prog-txt" style="font-size:11px;color:var(--mut);margin-top:5px"></div></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center">
           <div id="imp-cancel" style="font-size:12px;color:var(--mut);cursor:pointer;padding:8px 10px">Cancel</div>

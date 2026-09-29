@@ -384,7 +384,12 @@ function auditInPage({ minTap, minTapInline, inlineSel, edgeSel, minFont, minCon
       }
       const belowGap = m.top - t.bottom;
       const hOverlap = Math.min(m.right, t.right) - Math.max(m.left, t.left);
-      if (belowGap < -2 || belowGap > 12 || hOverlap < -2) {
+      // The Studio's settings menu deliberately opens beside the tool panel (01208ef) so the
+      // sliders being adjusted stay visible — accept that placement as anchored.
+      const pn = menu.id === 'fx-settings-menu' && !document.body.classList.contains('lib-full') && document.querySelector('.fx-panel');
+      const pr = pn && pn.getClientRects().length ? pn.getBoundingClientRect() : null;
+      const besidePanel = pr && pr.width > 40 && Math.abs(m.right - (pr.left - 8)) <= 2 && belowGap >= -2 && belowGap <= 12;
+      if (!besidePanel && (belowGap < -2 || belowGap > 12 || hOverlap < -2)) {
         out.push({ kind: 'MENU', el: desc(menu), detail: `not anchored under ${desc(trigger)} — gap ${Math.round(belowGap)}px, h-overlap ${Math.round(hOverlap)}px` });
       }
     }
