@@ -2571,6 +2571,10 @@ body.sk2 #fx-deskbar-title{transition:opacity .16s var(--k-motion-easing)}
 body.sk2 #fx-deskbar-title.sk2-cap-hide{opacity:0!important;transition:none}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center;gap:14px;max-width:none!important;overflow:visible!important;white-space:nowrap}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title>*{flex:none}
+/* The title now carries zoom + flags, so the bar's middle column must size to it (a fixed 240px
+   track let it spill over All FX). When space runs short the dimensions go first. */
+body.sk2.deskx #fx-deskbar{grid-template-columns:minmax(max-content,1fr) auto minmax(max-content,1fr)!important}
+@media(max-width:1440px){body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{display:none!important}}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #fx-zoom-ctrl{display:flex!important;flex-wrap:nowrap;align-items:center;gap:6px;margin-left:10px}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{display:inline!important}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{font-size:12px;color:var(--k-color-ink)}
@@ -6527,7 +6531,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929J';
+const BUILD='1.0929K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
