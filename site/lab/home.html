@@ -338,9 +338,10 @@ section{position:relative}
 .steps li.on{color:var(--fg)}.steps li.on .app{color:var(--dim)}.steps li.on em{color:var(--acc)}
 .steps li.cur{color:var(--acc)}
 .gen img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}
-.meters{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.meters{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+@media(max-width:760px){.meters{grid-template-columns:1fr 1fr;row-gap:12px}}
 .m{border-top:1px solid var(--fg);padding-top:10px}
-.m .v{font-size:clamp(40px,4.4vw,72px);font-weight:700;line-height:.95;font-variant-numeric:tabular-nums;margin-top:6px}
+.m .v{font-size:clamp(34px,3.6vw,60px);font-weight:700;line-height:.95;font-variant-numeric:tabular-nums;margin-top:6px}
 .m .v small{font-size:.38em;margin-left:4px}
 .m i{display:block;height:3px;background:#24231f;margin-top:10px}
 .m i b{display:block;height:100%;background:var(--acc);transform-origin:left;transform:scaleX(0)}
@@ -502,21 +503,23 @@ section{position:relative}
 <section class="flow" id="flow" aria-label="The old workflow"><span class="sn mono">03.5 — Workflow</span>
   <div class="fin">
     <div class="fl"><p class="mono" style="color:var(--acc)">How one photo used to get finished</p><h2 class="k">Three apps.<br>Four exports.</h2>
-      <ol class="steps"><li data-t="5" data-x="0" data-s="1"><span class="n">01</span><span class="app">Adobe Cloud</span><span class="what">Upload the shoot to the cloud</span></li><li data-t="1" data-x="0" data-s="1"><span class="n">02</span><span class="app">Lightroom</span><span class="what">Find and pick the photo</span></li><li data-t="4" data-x="0" data-s="1"><span class="n">03</span><span class="app">Lightroom</span><span class="what">Edit the colour</span></li><li data-t="1" data-x="1" data-s="1"><span class="n">04</span><span class="app">Lightroom</span><span class="what">Export</span><em>Export</em></li><li data-t="1" data-x="0" data-s="2"><span class="n">05</span><span class="app">Dehancer</span><span class="what">Import</span></li><li data-t="3" data-x="0" data-s="2"><span class="n">06</span><span class="app">Dehancer</span><span class="what">Add grain, bloom and halation</span></li><li data-t="1" data-x="1" data-s="2"><span class="n">07</span><span class="app">Dehancer</span><span class="what">Export again</span><em>Export</em></li><li data-t="1" data-x="0" data-s="3"><span class="n">08</span><span class="app">Darkroom</span><span class="what">Import</span></li><li data-t="1" data-x="0" data-s="3"><span class="n">09</span><span class="app">Darkroom</span><span class="what">Add the first border</span></li><li data-t="1" data-x="1" data-s="3"><span class="n">10</span><span class="app">Darkroom</span><span class="what">Export again</span><em>Export</em></li><li data-t="2" data-x="0" data-s="3"><span class="n">11</span><span class="app">Darkroom</span><span class="what">Import again, add the second border</span></li><li data-t="1" data-x="1" data-s="3"><span class="n">12</span><span class="app">Darkroom</span><span class="what">Export again</span><em>Export</em></li></ol></div>
+      <ol class="steps"><li data-t="5" data-x="0" data-s="1" data-c="32"><span class="n">01</span><span class="app">Adobe Cloud</span><span class="what">Upload the shoot to the cloud</span></li><li data-t="1" data-x="0" data-s="1" data-c="11"><span class="n">02</span><span class="app">Lightroom</span><span class="what">Find and pick the photo</span></li><li data-t="4" data-x="0" data-s="1" data-c="0"><span class="n">03</span><span class="app">Lightroom</span><span class="what">Edit the colour</span></li><li data-t="1" data-x="1" data-s="1" data-c="0"><span class="n">04</span><span class="app">Lightroom</span><span class="what">Export</span><em>Export</em></li><li data-t="1" data-x="0" data-s="2" data-c="30"><span class="n">05</span><span class="app">Dehancer</span><span class="what">Import</span></li><li data-t="3" data-x="0" data-s="2" data-c="0"><span class="n">06</span><span class="app">Dehancer</span><span class="what">Add grain, bloom and halation</span></li><li data-t="1" data-x="1" data-s="2" data-c="0"><span class="n">07</span><span class="app">Dehancer</span><span class="what">Export again</span><em>Export</em></li><li data-t="1" data-x="0" data-s="3" data-c="10"><span class="n">08</span><span class="app">Darkroom</span><span class="what">Import</span></li><li data-t="1" data-x="0" data-s="3" data-c="0"><span class="n">09</span><span class="app">Darkroom</span><span class="what">Add the first border</span></li><li data-t="1" data-x="1" data-s="3" data-c="0"><span class="n">10</span><span class="app">Darkroom</span><span class="what">Export again</span><em>Export</em></li><li data-t="2" data-x="0" data-s="3" data-c="0"><span class="n">11</span><span class="app">Darkroom</span><span class="what">Import again, add the second border</span></li><li data-t="1" data-x="1" data-s="3" data-c="0"><span class="n">12</span><span class="app">Darkroom</span><span class="what">Export again</span><em>Export</em></li></ol></div>
     <div class="fr">
       <figure class="gen"><img src="../assets/story/film.webp" alt="The same photo losing quality with each export"><figcaption class="dcap"><span>Generation</span><b id="fgen">Original</b></figcaption></figure>
       <div class="meters">
         <div class="m"><p class="mono">Subscriptions</p><div class="v"><span id="fsub">0</span></div><i><b id="bsub"></b></i></div>
+        <div class="m"><p class="mono">Per month</p><div class="v"><small style="margin:0 2px 0 0">$</small><span id="fcost">0</span></div><i><b id="bcost"></b></i></div>
         <div class="m"><p class="mono">Time</p><div class="v"><span id="ftime">0</span><small>min</small></div><i><b id="btime"></b></i></div>
         <div class="m"><p class="mono">Quality</p><div class="v"><span id="fq">100</span><small>%</small></div><i><b id="bq" style="transform:scaleX(1)"></b></i></div>
       </div>
-      <p class="mono note">Times and quality loss are illustrative: each export re-compresses the image.</p>
+      <p class="mono note">Prices are monthly subscriptions. Times and quality loss are illustrative: each export re-compresses the image.</p>
     </div>
   </div>
   <div class="now"><div>
     <p class="mono">With Chromasmith</p><h2 class="k">One app.<br>No subscriptions.<br>No re-exports.</h2>
     <div class="meters">
       <div class="m"><p class="mono">Subscriptions</p><div class="v">0</div></div>
+      <div class="m"><p class="mono">Per month</p><div class="v"><small style="margin:0 2px 0 0">$</small>0</div></div>
       <div class="m"><p class="mono">Extra exports</p><div class="v">0</div></div>
       <div class="m"><p class="mono">Quality</p><div class="v">100<small>%</small></div></div>
     </div>
@@ -936,8 +939,9 @@ document.querySelectorAll('a[href$="chromasmith-22.html"]').forEach(a=>a.addEven
   const li=[...document.querySelectorAll('.steps li')],gen=document.querySelector('.gen img'),G=document.getElementById('fgen');
   const S=document.getElementById('fsub'),T=document.getElementById('ftime'),Q=document.getElementById('fq'),bS=document.getElementById('bsub'),bT=document.getElementById('btime'),bQ=document.getElementById('bq');
   const tot=li.reduce((a,l)=>a+ +l.dataset.t,0),names=['Original','2nd generation','3rd generation','4th generation','5th generation'];
-  const show=k=>{let t=0,x=0,sub=0;li.forEach((l,i)=>{const on=i<k;l.classList.toggle('on',on);l.classList.toggle('cur',i===k-1);if(on){t+=+l.dataset.t;x+=+l.dataset.x;sub=Math.max(sub,+l.dataset.s)}});
-    const q=100-x*3;S.textContent=sub;T.textContent=t;Q.textContent=q;G.textContent=names[x];
+  const C=document.getElementById('fcost'),bC=document.getElementById('bcost'),ctot=li.reduce((a,l)=>a+ +l.dataset.c,0);
+  const show=k=>{let t=0,x=0,sub=0,c=0;li.forEach((l,i)=>{const on=i<k;l.classList.toggle('on',on);l.classList.toggle('cur',i===k-1);if(on){c+=+l.dataset.c;t+=+l.dataset.t;x+=+l.dataset.x;sub=Math.max(sub,+l.dataset.s)}});
+    const q=100-x*3;S.textContent=sub;C.textContent=c;bC.style.transform=`scaleX(${c/ctot})`;T.textContent=t;Q.textContent=q;G.textContent=names[x];
     bS.style.transform=`scaleX(${sub/3})`;bT.style.transform=`scaleX(${t/tot})`;bQ.style.transform=`scaleX(${q/100})`;
     gen.style.filter=`blur(${x*.45}px) contrast(${1-x*.04}) saturate(${1-x*.08})`};
   show(0);
