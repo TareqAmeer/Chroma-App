@@ -4,7 +4,7 @@
     "chromasmith-22.html",
     "desktop/library-ui.js"
   ],
-  "designRules": "chromasmith-design/project/design.md",
+  "designRules": "design/wireframes/project/design.md",
   "purpose": "App-wide source map for global component and semantic-icon changes.",
   "families": {
     "section-card": {
