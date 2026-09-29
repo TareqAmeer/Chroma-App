@@ -2393,7 +2393,11 @@ body.sk2 #btn-crop{min-height:28px}
 /* Sidebar counts are information, not decoration: one size (11px) and >=4.5:1 contrast. */
 body.sk2 #lib-overlay :is(.lib-coll-count,.coll-count){font-size:11px!important;color:color-mix(in srgb,var(--k-color-ink) 72%,var(--k-color-bg))!important}
 body.sk2 .sk2-dup-title>.fx-ctrl-title{min-height:36px;padding-top:6px!important;padding-bottom:6px!important}
-body.sk2 .sk2-dup-title>.fx-ctrl-title::before{content:attr(data-sk2-name);font-size:var(--sk-t4);color:var(--k-color-muted);order:1;margin-right:auto}
+body.sk2 .sk2-dup-title>.fx-ctrl-title::before{content:attr(data-sk2-name);font-size:17px;font-weight:500;letter-spacing:-.01em;color:var(--k-color-ink);order:1;margin-right:auto}
+body.sk2 .sk2-dup-title>.fx-ctrl-title{min-height:48px!important}
+body.sk2 .fx-info-part>summary{font-size:15px!important;color:var(--k-color-ink)!important;padding:6px 0}
+body.sk2 .fx-info-part:first-of-type{margin-top:0;border-top:0}
+body.sk2.deskx .fx-ctrl[data-fxsec=info]>.fx-ctrl-title{display:none} /* the stage header already says Info */
 body.sk2 .sk2-dup-title>.fx-ctrl-title>*{font-size:var(--sk-t4)}
 body.sk2 .sk2-dup-title>.fx-ctrl-title>.fx-ctrl-chev{order:0}
 body.sk2 .sk2-dup-title>.fx-ctrl-title>:not(.fx-ctrl-chev){order:2}
@@ -4118,20 +4122,26 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <!-- INFO / METADATA -->
       <div class="fx-ctrl" data-fxsec="info">
         <div class="fx-ctrl-title">Preview Info &amp; Metadata</div>
+        <!-- Info is split into Metadata (open) / Keywords / Tags (auto tags + People & Pets).
         <!-- People & Pets (people-pets wireframes screen I) — deliberately lives HERE, not as
              its own rail section: it's a fact about the photo, not a grading control, same
              reasoning as EXIF sitting right below it. `fx-people` is populated by
              fxRenderPeoplePanel(), called from showExif()'s one choke point. -->
-        <div id="fx-people"></div>
+        <details class="sk2-more fx-info-part" open><summary>Metadata</summary>
+        <div id="fx-exif"></div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--mut);line-height:1.6;margin-top:8px" id="fx-info"></div>
+        </details>
+        <details class="sk2-more fx-info-part"><summary>Keywords</summary>
         <!-- Keywords: same per-photo sidecar tags the Library's own Get Info popover edits
              (get_sidecar/set_keywords, desktop/library-ui.js) — this Info TAB had no way to see
              or edit them at all while a photo was open in the Editor. fxRenderKeywordsPanel()
              populates this, called from the same showExif() choke point as People & Pets. -->
         <div id="fx-keywords"></div>
-        <div id="fx-exif"></div>
-        <!-- CHR-164: preview render size sits BELOW the table — the table's Dimensions row is the
-             photo's full size; this is only what the live preview is currently drawing. -->
-        <div style="font-family:var(--mono);font-size:11px;color:var(--mut);line-height:1.6;margin-top:8px" id="fx-info"></div>
+        </details>
+        <details class="sk2-more fx-info-part"><summary>Tags</summary>
+        <div id="fx-autotags"></div>
+        <div id="fx-people"></div>
+        </details>
       </div>
     </div>
     <!-- PREVIEW -->
@@ -6542,7 +6552,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929M';
+const BUILD='1.0929N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18605,7 +18615,6 @@ async function fxRenderKeywordsPanel(){
     +`<div class="fx-label" style="width:auto;margin-bottom:6px">Keywords</div>`
     +`<div id="fx-kw-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${chips}</div>`
     +`<input id="fx-kw-add" placeholder="Add keyword…" class="fx-select" style="width:100%;background-image:none">`
-    +`<div id="fx-autotags" style="margin-top:12px"></div>`
     +`</div></div>`;
   fxRenderAutoTags(path,keywords);
   el.querySelectorAll('[data-kw-remove]').forEach(x=>{
@@ -24740,8 +24749,9 @@ document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(card=>{
   // and Film's are core, frequently-tweaked controls that shouldn't require rediscovering a
   // collapse toggle to even see. Still collapsible by hand within a session (fxSecToggle below
   // still writes the same map — this only skips reading it back for these five keys).
-  const FX_ALWAYS_OPEN=new Set(['grain','art','hal','bloom','vig']);
-  if(_fxSecCollapsed[card.dataset.fxsec]&&!FX_ALWAYS_OPEN.has(card.dataset.fxsec))card.classList.add('fx-sec-collapsed');
+  // Every tool starts folded on launch, so a stage reads as a list of its tools first. Info is the
+  // exception: it opens on Metadata (its Keywords/Tags parts fold inside it).
+  if(card.dataset.fxsec!=='info'){card.classList.add('fx-sec-collapsed');_fxSecCollapsed[card.dataset.fxsec]=true;}
   title.addEventListener('click',(e)=>{
     // The "|" separator between Reset and All (.fx-ctrl-title-reset-sep) sits between the two
     // buttons with its own horizontal padding and isn't itself a button/toggle, so a click that
