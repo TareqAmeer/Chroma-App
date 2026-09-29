@@ -949,9 +949,12 @@ document.querySelectorAll('a[href$="chromasmith-22.html"]').forEach(a=>a.addEven
   const S=document.getElementById('fsub'),T=document.getElementById('ftime'),Q=document.getElementById('fq'),bS=document.getElementById('bsub'),bT=document.getElementById('btime'),bQ=document.getElementById('bq');
   const tot=li.reduce((a,l)=>a+ +l.dataset.t,0),names=['Original','2nd generation','3rd generation','4th generation','5th generation'];
   const C=document.getElementById('fcost'),bC=document.getElementById('bcost'),ctot=li.reduce((a,l)=>a+ +l.dataset.c,0);
+  const fv={s:0,c:0,t:0,q:100};
+  const fset=()=>{S.textContent=Math.round(fv.s);C.textContent=Math.round(fv.c);T.textContent=Math.round(fv.t);Q.textContent=Math.round(fv.q);
+    bS.style.transform=`scaleX(${fv.s/4})`;bC.style.transform=`scaleX(${fv.c/ctot})`;bT.style.transform=`scaleX(${fv.t/tot})`;bQ.style.transform=`scaleX(${fv.q/100})`};
   const show=k=>{let t=0,x=0,sub=0,c=0;li.forEach((l,i)=>{const on=i<k;l.classList.toggle('on',on);l.classList.toggle('cur',i===k-1);if(on){c+=+l.dataset.c;t+=+l.dataset.t;x+=+l.dataset.x;sub=Math.max(sub,+l.dataset.s)}});
-    const q=100-x*3;S.textContent=sub;C.textContent=c;bC.style.transform=`scaleX(${c/ctot})`;T.textContent=t;Q.textContent=q;G.textContent=names[x];
-    bS.style.transform=`scaleX(${sub/4})`;bT.style.transform=`scaleX(${t/tot})`;bQ.style.transform=`scaleX(${q/100})`;
+    const q=100-x*3;G.textContent=names[x];
+    gsap.to(fv,{s:sub,c,t,q,duration:reduce?0:.6,ease:'power2.out',overwrite:true,onUpdate:fset});
     gen.style.filter=`blur(${x*.45}px) contrast(${1-x*.04}) saturate(${1-x*.08})`};
   show(0);
   const nv={s:4,c:83,t:22,q:88},$=id=>document.getElementById(id);
