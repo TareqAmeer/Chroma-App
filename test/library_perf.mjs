@@ -23,6 +23,9 @@ const server=createServer(async(req,res)=>{try{const u=req.url.split('?')[0];con
 await new Promise(r=>server.on('listening',r));
 const port=server.address().port;
 const b=await chromium.launch({args:['--use-gl=swiftshader','--enable-unsafe-swiftshader']});
+// The first-run welcome is a real modal; every page here is a returning user, so mark it seen
+// (otherwise it sits over the Gallery and swallows the clicks below).
+const _newPage=b.newPage.bind(b);b.newPage=async(...a)=>{const p=await _newPage(...a);await p.addInitScript(()=>{try{localStorage.setItem('chromasmith-tour-seen-v1','1')}catch(e){}});return p;};
 let failures=[];
 const BUDGET={200:{dom:8000},1000:{dom:6000},5000:{dom:6000,ms:20000}};
 console.log('kind        n      budget        actual   status');

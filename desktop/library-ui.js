@@ -6654,6 +6654,9 @@
     // and rebuilding from state.entries (the previous FOLDER's files) would silently replace
     // the cloud grid. Delegate to the cloud renderer instead (lrState.assets, no refetch).
     if (state.source === 'lr') { if (typeof renderLrGrid === 'function') await renderLrGrid(); return; }
+    // No folder added yet: every re-render (dock/expand toggles, resizes) must keep the
+    // first-launch empty state, not replace it with "No photos in this folder".
+    if (!state.root && state.source === 'folder' && !state.entries.length) { renderLibraryNoRoot(); return; }
     grid = document.getElementById('lib-grid');
     grid.innerHTML = '';
     thumbQueueReset(); // drop queued thumbnail jobs from the previous grid/folder
@@ -7353,7 +7356,7 @@
     // The selection count lives once, in #lib-status-sel (kept live by syncSelCount) — not repeated here.
     // Paged catalog views load 4,000 at a time and filter server-side, so the loaded page size
     // is not the real count ("4,000 of 4,000" while the library holds 50,071) — use the total.
-    const pagedTotal = state._catalogPaged && state._catalogTotal != null ? state._catalogTotal : null;
+    const pagedTotal = state._catalogPaged && (state.source === 'catalog' || state.source === 'folder') && state._catalogTotal != null ? state._catalogTotal : null;
     document.getElementById('lib-count').textContent = pagedTotal != null
       ? `${fmtN(pagedTotal)} ${pagedTotal === 1 ? 'photo' : 'photos'}`
       : `${fmtN(shown.length)} of ${fmtN(state.entries.length)} ${state.entries.length === 1 ? 'photo' : 'photos'}`;
@@ -8901,6 +8904,7 @@
   }
   async function openCollectionView(name) {
     state.source = name;
+    state._catalogPaged = false; // not catalog-backed: a previous catalog view's paged total must not leak into this one
     lrState.album = null; // leaving the cloud view — don't re-highlight a stale album later
     state.selected.clear();
     grid = document.getElementById('lib-grid');
@@ -8924,6 +8928,7 @@
   // original paths (and can still resolve cached thumbnails when the source drive is away).
   async function openOfflineCollectionView() {
     state.source = 'offline';
+    state._catalogPaged = false; // not catalog-backed: a previous catalog view's paged total must not leak into this one
     lrState.album = null;
     state.selected.clear();
     grid = document.getElementById('lib-grid');
@@ -8951,6 +8956,7 @@
   }
   async function openExportedView() {
     state.source = 'exported';
+    state._catalogPaged = false; // not catalog-backed: a previous catalog view's paged total must not leak into this one
     state.selected.clear();
     grid = document.getElementById('lib-grid');
     grid.innerHTML = libSkeletonHtml();
@@ -11613,6 +11619,7 @@
   // to land.
   function showLrEmptyState(msg) {
     state.source = 'lr'; lrState.album = null;
+    state._catalogPaged = false; // not catalog-backed: a previous catalog view's paged total must not leak into this one
     grid = document.getElementById('lib-grid');
     thumbQueueReset();
     grid.classList.remove('list-view');
@@ -11722,6 +11729,7 @@
   }
   async function openLrAlbum(albumId) {
     state.source = 'lr';
+    state._catalogPaged = false; // not catalog-backed: a previous catalog view's paged total must not leak into this one
     lrState.album = albumId;
     state.selected.clear();
     grid = document.getElementById('lib-grid');
@@ -11900,6 +11908,7 @@
   }
   async function openAlbumView(id) {
     state.source = 'album:' + id;
+    state._catalogPaged = false; // not catalog-backed: a previous catalog view's paged total must not leak into this one
     lrState.album = null;
     state.selected.clear();
     grid = document.getElementById('lib-grid');
@@ -12428,6 +12437,9 @@
           return;
         } catch (e) { console.error('reopen lr album', e); /* fall through to folder */ }
       }
+      // No folder yet: the first-launch empty state wins over any restored view (a restored "All
+      // photos" view over an empty catalog showed "No photos in this folder" instead).
+      if (!state.root) { renderLibraryNoRoot(); return; }
       if (!state._restoredLastView) {
         state._restoredLastView = true;
         try { if (await restoreSavedLibraryView()) return; } catch (e) { console.error('restore Library view', e); }
