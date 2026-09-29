@@ -409,7 +409,6 @@ section{position:relative}
 
 <header class="top">
   <a class="word" href="#"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="hdc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="hda" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#hdc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#hda)"/><polygon points="69,32 69,65 36,65" fill="url(#hdb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg>CHRO-MA-SMITH</a>
-  <div class="strip"><span><span class="dot"></span>Offline ready</span><span>Local <b id="clock">--:--</b></span><span>GPL-3.0</span><button class="motion" type="button" id="motion">Motion: on</button></div>
   <nav><a href="#features">Features</a><a href="#faq">FAQ</a><a href="https://github.com/TareqAmeer/Chroma-App">GitHub ↗</a><a href="#yours">Download</a><a href="../../chromasmith-22.html">Launch app ↗</a></nav>
 </header>
 
@@ -935,9 +934,7 @@ document.querySelectorAll('a[href$="chromasmith-22.html"]').forEach(a=>a.addEven
   const c=document.createElement('div');c.className='cells';c.innerHTML='<i></i>'.repeat(96);document.body.appendChild(c);
   gsap.to(c.children,{scale:1,duration:.35,ease:'power2.out',stagger:{each:.006,grid:[8,12],from:'start'},onComplete:()=>location.href=a.href})}));
 /* 19 clock */
-{const c=document.getElementById('clock'),t=()=>c.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});t();setInterval(t,15000)}
 /* 20 motion toggle */
-{const m=document.getElementById('motion');m.textContent='Motion: '+(still?'off':'on');m.onclick=()=>{try{localStorage.setItem('cs-motion',still?'on':'off')}catch(e){}location.reload()}}
 
 /* old workflow: each step lights up; subscriptions and time climb, quality drops at every export; then the vermilion "now" panel */
 {
