@@ -17,7 +17,7 @@ a{color:inherit}
 .mono{font-family:Gramatika,sans-serif;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
 .k{font-size:clamp(40px,6vw,96px);font-weight:900;letter-spacing:-.01em;line-height:.9}
 .t{max-width:400px;font-size:18px;line-height:1.4;color:var(--mid);margin-top:20px}
-.btn{display:inline-flex;gap:8px;align-items:center;font-weight:600;font-size:15px;padding:14px 22px;border-radius:999px;text-decoration:none;border:1px solid var(--fg);transition:background .2s,color .2s,border-color .2s}
+.btn{display:inline-flex;gap:8px;align-items:center;font-weight:600;font-size:15px;padding:14px 22px;border-radius:0;text-decoration:none;border:1px solid var(--fg);transition:background .2s,color .2s,border-color .2s}
 .btn.solid{background:var(--acc);border-color:var(--acc);color:#0b0b0a}
 .btn:hover{background:var(--fg);border-color:var(--fg);color:var(--bg)}
 .grain{position:absolute;inset:-50%;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");mix-blend-mode:overlay;animation:gr .4s steps(4) infinite}
@@ -68,7 +68,7 @@ a{color:inherit}
 .board{position:absolute;z-index:1;left:42vw;right:5vw;top:15vh;bottom:13vh}
 .lbar{position:absolute;left:0;right:0;top:0;height:64px;display:flex;gap:20px;align-items:flex-end;padding-bottom:12px;border-bottom:1px solid var(--ink,#0b0b0a);opacity:0}
 .lbar .gt{font-size:clamp(38px,4.2vw,72px);font-weight:700;letter-spacing:-.01em;line-height:.8}
-.lbar i{flex:1}.lbar::after{content:"";width:120px;height:22px;border:1px solid #33312c;border-radius:999px}
+.lbar i{flex:1}.lbar::after{content:"";width:120px;height:22px;border:1px solid #33312c;border-radius:0}
 .tile{position:absolute;will-change:transform}
 .tile .f{width:100%;height:100%}
 .tile .f{overflow:hidden}
@@ -76,7 +76,7 @@ a{color:inherit}
 .tile .cap{display:none}
 @keyframes float{50%{transform:translate3d(0,calc(var(--fl,1)*-14px),0) rotate(calc(var(--fl,1)*1.5deg))}}
 .p1 .stack{position:relative;width:100%;max-width:560px;aspect-ratio:1;justify-self:center}
-.p1 .stack img{position:absolute;width:58%;border-radius:2px;box-shadow:0 30px 60px rgba(0,0,0,.5)}
+.p1 .stack img{position:absolute;width:58%;border-radius:0;box-shadow:0 30px 60px rgba(0,0,0,.5)}
 .p1 .stack img:nth-child(1){left:0;top:4%;rotate:-6deg}
 .p1 .stack img:nth-child(2){right:0;top:0;rotate:5deg}
 .p1 .stack img:nth-child(3){left:10%;top:38%;width:80%}
@@ -85,14 +85,14 @@ a{color:inherit}
 .img img{display:block;width:100%;height:auto}
 .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:24px}
 .tags span::before{content:"";display:inline-block;width:6px;height:6px;background:var(--acc);margin-right:8px;vertical-align:1px}
-.tags span{border:1px solid #33312c;border-radius:999px;padding:7px 12px;font-size:13px;color:var(--mid)}
+.tags span{border:1px solid #33312c;border-radius:0;padding:7px 12px;font-size:13px;color:var(--mid)}
 .p3{width:100vw;grid-template-columns:1fr 1.25fr;gap:4vw;align-items:center}
 .big{font-size:20vw;font-weight:900;letter-spacing:-.01em;line-height:.78;color:transparent;-webkit-text-stroke:1.5px var(--acc)}
-.lensbox{position:relative;height:76vh;border-radius:3px;overflow:hidden;cursor:crosshair}
+.lensbox{position:relative;height:76vh;border-radius:0;overflow:hidden;cursor:crosshair}
 .lensbox canvas{position:absolute;inset:0;width:100%;height:100%}
 .lensbox .mono{position:absolute;right:14px;bottom:12px;color:var(--fg);mix-blend-mode:difference}
 .looks{display:flex;gap:6px;flex-wrap:wrap;margin-top:24px}
-.looks button{background:none;border:1px solid #3a3833;color:var(--fg);font:600 13px Gramatika;padding:9px 14px;border-radius:999px;cursor:pointer}
+.looks button{background:none;border:1px solid #3a3833;color:var(--fg);font:600 13px Gramatika;padding:9px 14px;border-radius:0;cursor:pointer}
 .looks button.on{background:var(--acc);border-color:var(--acc);color:#0b0b0a}
 .p4{width:100vw;padding:0;overflow:hidden}
 .p4>img{position:absolute;inset:0;width:108%;height:100%;object-fit:cover;left:-4%}
@@ -103,7 +103,7 @@ a{color:inherit}
 .p4 .terms span:hover{color:var(--acc)}
 .p4 .terms span{font-size:clamp(20px,2.4vw,36px);font-weight:600;letter-spacing:0}
 .p5{width:90vw;grid-template-columns:1.2fr 1fr;gap:4vw;align-items:center}
-.p5 .phone{height:74vh;justify-self:center;border-radius:28px;overflow:hidden;border:1px solid #2a2925;box-shadow:0 40px 80px rgba(0,0,0,.5)}
+.p5 .phone{height:74vh;justify-self:center;border-radius:0;overflow:hidden;border:1px solid #2a2925;box-shadow:0 40px 80px rgba(0,0,0,.5)}
 .p5 .phone img{height:100%;display:block}
 .prog{position:absolute;left:5vw;right:5vw;bottom:4vh;display:flex;gap:6px;opacity:0;z-index:3}
 .prog b{flex:1;height:2px;background:#2a2925;position:relative;overflow:hidden}
@@ -176,7 +176,7 @@ a{color:inherit}
 .legend button:hover{color:var(--acc)}
 .pop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:rgba(5,5,4,.6);backdrop-filter:blur(6px)}
 .pop[hidden]{display:none}
-.pop .card{position:relative;width:min(520px,90vw);background:var(--bg2);border:1px solid #2a2925;border-top:3px solid var(--acc);padding:36px;border-radius:4px}
+.pop .card{position:relative;width:min(520px,90vw);background:var(--bg2);border:1px solid #2a2925;border-top:3px solid var(--acc);padding:36px;border-radius:0}
 .pop .g{color:var(--acc)}.pop h3{font-size:clamp(28px,3vw,42px);font-weight:700;margin:14px 0 12px;line-height:1}
 .pop .d{color:var(--mid);font-size:18px;line-height:1.5}
 .pop .x{position:absolute;right:14px;top:10px;background:none;border:0;color:var(--dim);font-size:28px;cursor:pointer}.pop .x:hover{color:var(--acc)}
@@ -189,7 +189,7 @@ a{color:inherit}
 .outro .cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:48px}
 .full{font-size:clamp(18px,1.6vw,22px);max-width:620px;margin-top:28px;line-height:1.4;font-weight:500}
 .plats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:6vh}
-.plat{display:flex;flex-direction:column;gap:8px;padding:22px;border:1.5px solid #0b0b0a;border-radius:4px;text-decoration:none;min-height:230px;transition:background .25s,color .25s,transform .35s var(--ease)}
+.plat{display:flex;flex-direction:column;gap:8px;padding:22px;border:1.5px solid #0b0b0a;border-radius:0;text-decoration:none;min-height:230px;transition:background .25s,color .25s,transform .35s var(--ease)}
 .plat svg{width:40px;height:40px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;margin-bottom:auto}
 .plat b{font-size:28px;font-weight:700;margin-top:24px}
 .plat span{font-size:14px;line-height:1.35;opacity:.8}
@@ -197,7 +197,7 @@ a{color:inherit}
 .plat:hover{background:#0b0b0a;color:var(--acc)}
 .aux{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
 .aux button{font:inherit;font-weight:600;font-size:15px;background:none;cursor:pointer;color:#0b0b0a}
-.howto{display:grid;grid-template-columns:repeat(3,1fr) auto;gap:3vw;align-items:end;margin-top:28px;padding:24px;background:#0b0b0a;color:var(--fg);border-radius:4px}
+.howto{display:grid;grid-template-columns:repeat(3,1fr) auto;gap:3vw;align-items:end;margin-top:28px;padding:24px;background:#0b0b0a;color:var(--fg);border-radius:0}
 .howto[hidden]{display:none}.howto h4{margin-bottom:6px}.howto p{color:var(--mid);line-height:1.45;font-size:15px}
 .howto .btn.solid{background:var(--acc);color:#0b0b0a}
 @media(max-width:900px){.plats{grid-template-columns:1fr 1fr}.howto{grid-template-columns:1fr}}
@@ -370,8 +370,9 @@ section{position:relative}
 .flow{height:100vh;overflow:hidden;border-top:1px solid var(--line)}
 .fin{position:absolute;inset:0;display:grid;grid-template-columns:repeat(12,1fr);column-gap:16px;padding:12vh 5vw 6vh;align-items:start}
 .fl{grid-column:1/7}.fr{grid-column:8/13;display:grid;gap:22px}
-.steps{list-style:none;margin-top:4vh;border-top:1px solid var(--line)}
-.steps li{display:grid;grid-template-columns:34px 110px 1fr auto;gap:12px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line);font-size:15px;color:#3a3833;transition:color .25s}
+.fl .k{font-size:clamp(32px,min(4.4vw,7vh),76px);line-height:.95}
+.steps{list-style:none;margin-top:3vh;border-top:1px solid var(--line)}
+.steps li{display:grid;grid-template-columns:34px 110px 1fr auto;gap:12px;align-items:baseline;padding:min(8px,.9vh) 0;border-bottom:1px solid var(--line);font-size:min(15px,2vh);color:#3a3833;transition:color .25s}
 .steps li .n,.steps li .app{font-size:10px;letter-spacing:.12em;text-transform:uppercase}
 .steps li em{font-style:normal;font-size:10px;letter-spacing:.12em;text-transform:uppercase;border:1px solid currentColor;padding:2px 6px}
 .steps li.on{color:var(--fg)}.steps li.on .app{color:var(--dim)}.steps li.on em{color:var(--acc)}
@@ -393,7 +394,7 @@ section{position:relative}
 .now .m{border-color:#0b0b0a}.now .m i{background:rgba(11,11,10,.2)}.now .m i b{background:#0b0b0a}.now .m .v{font-size:clamp(56px,7vw,120px)}
 @media(max-width:760px){
   .fin{padding:10vh 16px 4vh;row-gap:14px}.fl,.fr{grid-column:1/13}
-  .fl .k{font-size:30px}.steps{margin-top:10px}.steps li{grid-template-columns:24px 78px 1fr auto;font-size:12px;padding:4px 0;gap:6px}
+  .fl .k{font-size:min(30px,4.4vh)}.steps{margin-top:10px}.steps li{grid-template-columns:24px 78px 1fr auto;font-size:min(12px,1.75vh);padding:min(4px,.45vh) 0;gap:6px}.m .v{font-size:min(34px,5vh)}
   .gen{display:none}.m .v{font-size:34px}.note{display:none}
   .now{padding:10vh 16px}
 }
@@ -485,8 +486,7 @@ section{position:relative}
 
     <div class="panel p2" data-lab="Studio">
       <div><div class="k">A studio for every frame.</div>
-        <p class="t">Start with a look. Then shape the light, colour and composition until the photo feels exactly right.</p>
-        <div class="tags"><span>Curves &amp; colour mixer</span><span>Local masks</span><span>Spot repair</span><span>Full-res export</span></div></div>
+        <p class="t">Start with a look. Then shape the light, colour and composition until the photo feels exactly right.</p></div>
       <div class="img"><img loading="lazy" src="../assets/story/studio-app.webp" alt="The Chromasmith studio editing a photo" decoding="async"></div>
     </div>
 
@@ -496,7 +496,7 @@ section{position:relative}
 </section>
 
 <section class="ticker" aria-label="Film looks">
-  <div class="hd"><div><h2 class="k lookn"><span class="cnt" data-n="132">0</span> film looks.</h2><p class="t" style="margin-top:18px">Select a film look to test it out.</p></div>
+  <div class="hd"><div><h2 class="k lookn"><span class="cnt" data-n="132">100</span> film looks.</h2><p class="t" style="margin-top:18px">Select a film look to test it out.</p></div>
     <figure><img loading="lazy" id="tkimg" src="../assets/story/main2-m.webp" alt="Sample photo previewing a look" style="filter:grayscale(1) contrast(1.3) brightness(.95)"><figcaption class="dcap"><span>Look</span><b id="tkname">Tri-X 400</b></figcaption></figure></div>
   <div class="tape"><button type="button" data-i="0">Tri-X 400</button><button type="button" data-i="1">Beach</button><button type="button" data-i="2">Classic Chrome</button><button type="button" data-i="3">Velvia 50</button><button type="button" data-i="4">Portra 400</button><button type="button" data-i="5">HP5 Plus</button><button type="button" data-i="6">Superia 400</button><button type="button" data-i="7">Kodachrome 64</button><button type="button" data-i="8">Acros 100</button><button type="button" data-i="9">Pro 400H</button><button type="button" data-i="10">Gold 200</button><button type="button" data-i="11">Lomo Purple</button><button type="button" data-i="12">Provia 100F</button><button type="button" data-i="13">Ektar 100</button><button type="button" data-i="14">Scala 200</button><button type="button" data-i="15">Classic Neg</button><button type="button" data-i="16">CineStill 800T</button><button type="button" data-i="17">Metropolis</button><button type="button" data-i="18">Pro 160C</button><button type="button" data-i="19">Ambrotype</button><button type="button" data-i="20">Vision3 500T</button><button type="button" data-i="21">Instax</button><button type="button" data-i="22">Prokudin-Gorsky</button><button type="button" data-i="23">Eterna</button><button type="button" data-i="0">Tri-X 400</button><button type="button" data-i="1">Beach</button><button type="button" data-i="2">Classic Chrome</button><button type="button" data-i="3">Velvia 50</button><button type="button" data-i="4">Portra 400</button><button type="button" data-i="5">HP5 Plus</button><button type="button" data-i="6">Superia 400</button><button type="button" data-i="7">Kodachrome 64</button><button type="button" data-i="8">Acros 100</button><button type="button" data-i="9">Pro 400H</button><button type="button" data-i="10">Gold 200</button><button type="button" data-i="11">Lomo Purple</button><button type="button" data-i="12">Provia 100F</button><button type="button" data-i="13">Ektar 100</button><button type="button" data-i="14">Scala 200</button><button type="button" data-i="15">Classic Neg</button><button type="button" data-i="16">CineStill 800T</button><button type="button" data-i="17">Metropolis</button><button type="button" data-i="18">Pro 160C</button><button type="button" data-i="19">Ambrotype</button><button type="button" data-i="20">Vision3 500T</button><button type="button" data-i="21">Instax</button><button type="button" data-i="22">Prokudin-Gorsky</button><button type="button" data-i="23">Eterna</button></div>
 </section>
@@ -745,7 +745,7 @@ gsap.set('.stagew span i',{yPercent:115});gsap.set('.ph',{xPercent:-50,yPercent:
 /* the photo flies to its slot in the library grid and becomes that tile */
 const ph=document.querySelector('.ph');let mid=null;
 const handoff=X=>{const t0=window.__tile0;if(!t0)return;
-  const a=panel0().offsetLeft-innerWidth*.6,b=panel0().offsetLeft+innerWidth*.15,q=Math.max(0,Math.min(1,(X-a)/(b-a))),e=q*q*(3-2*q);
+  const a=panel0().offsetLeft-innerWidth*.6,b=XH(),q=Math.max(0,Math.min(1,(X-a)/(b-a))),e=q*q*(3-2*q);
   const done=q>=1;t0.style.visibility=done?'visible':'hidden';ph.style.visibility=done?'hidden':'visible';
   if(q<=0){if(mid){ph.style.left='50%';ph.style.top='50%';mid=false}return}mid=true;if(done)return;
   const pr=ph.parentElement.getBoundingClientRect(),r=t0.querySelector('img').getBoundingClientRect();
@@ -761,7 +761,12 @@ const Wf=()=>Math.min(innerWidth,innerHeight*AR6),Hf=()=>Wf()/AR6,Wz=()=>innerWi
 const STG=[0,.5,1.2,1.9,2.6,3.3];let stgLast=-1;
 const stageWindow=t=>{document.querySelector('.ph').style.zIndex=t>=6.8?'3':'';let c=0;STG.forEach((s0,i)=>{if(t>=s0)c=i});if(t>=4.2)c=6;if(c===stgLast)return;stgLast=c;
   document.querySelectorAll('.ph img').forEach((im,i)=>{im.style.display=(c===6?i===5:Math.abs(i-c)<=1)?'':'none'})};
-const tl=gsap.timeline({onUpdate(){stageWindow(this.time())},scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*PRE+dist()*K()),scrub:1,invalidateOnRefresh:true}});
+const HOLD=1.4,XH=()=>{const g=document.querySelector('.p1');return g.offsetLeft+Math.max(0,g.offsetWidth-innerWidth)};
+function slideUpd(){const X=-gsap.getProperty(tr,'x'),D=dist()||1,f=X/D*bars.length;
+  bars.forEach((b,i)=>b.style.transform=`scaleX(${Math.max(0,Math.min(1,f-i))})`);
+  const pp=pans[Math.max(0,Math.min(pans.length-1,Math.floor(f)||0))];if(pp)plab.textContent=pp.dataset.lab;
+  handoff(X);const g=panel0().getBoundingClientRect();document.body.classList.toggle('onpaper',g.left<120&&g.right>innerWidth*.4)}
+const tl=gsap.timeline({onUpdate(){stageWindow(this.time())},scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*(PRE+HOLD)+dist()*K()),scrub:1,invalidateOnRefresh:true}});
 const W_=document.querySelectorAll('.stagew span'),wIn=(k,at)=>tl.to(W_[k].querySelectorAll('i'),{yPercent:0,stagger:{amount:.12},duration:.2,ease:'power3.out'},at),wOut=(k,at)=>tl.to(W_[k],{yPercent:-30,opacity:0,duration:.12,ease:'power2.in'},at);
 const PI=[...document.querySelectorAll('.ph img')],RV=document.querySelector('.ph .rvf'),CLOSED='inset(0% 0% 100% 0%)',OPEN='inset(0% 0% 0% 0%)',EZ='power1.inOut';
 gsap.set(PI,{clipPath:CLOSED});gsap.set(PI[0],{clipPath:OPEN});stageWindow(0);
@@ -792,14 +797,13 @@ tl.to('.ph',{left:'50%',width:Wf,height:Hf,ease:'power2.inOut',duration:1},4.2)
   .to('.ph',{width:Wz,height:()=>Wz()/AR6,ease:'power2.inOut',duration:.9},6.9)
   .to('.prog,.plab',{opacity:1,duration:.2},7.7)
   .addLabel('slide',PRE-0)
-  .to(tr,{x:()=>-dist(),ease:'none',duration:dist()/innerHeight*K(),onUpdate(){
-    const f=this.progress()*bars.length;bars.forEach((b,i)=>b.style.transform=`scaleX(${Math.max(0,Math.min(1,f-i))})`);
-    const pp=pans[Math.max(0,Math.min(pans.length-1,Math.floor(f)||0))];if(pp)plab.textContent=pp.dataset.lab;
-    handoff(this.progress()*dist());
-    const g=panel0().getBoundingClientRect();document.body.classList.toggle('onpaper',g.left<120&&g.right>innerWidth*.4)}},'slide');
+  .to(tr,{x:()=>-XH(),ease:'none',duration:XH()/innerHeight*K(),onUpdate:slideUpd},'slide')
+  .to({},{duration:HOLD})                                   // pause on the landed gallery so people can play with it
+  .to(tr,{x:()=>-dist(),ease:'none',duration:(dist()-XH())/innerHeight*K(),onUpdate:slideUpd});
+const xPos=X=>sPos()+X*K()+(X>XH()+1?innerHeight*HOLD:0);
 const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scrollTrigger.end-tl.scrollTrigger.start);
 pans.forEach(p=>{
-  const st=()=>sPos()+Math.max(0,p.offsetLeft-innerWidth)*K(),en=()=>st()+(innerWidth+p.offsetWidth)*K();
+  const st=()=>xPos(Math.max(0,p.offsetLeft-innerWidth)),en=()=>xPos(p.offsetLeft+p.offsetWidth);
   const o=()=>({scrub:true,invalidateOnRefresh:true,start:st,end:en});
   gsap.fromTo(p.querySelectorAll('.k,.t,.p1txt .mono,.panel>div>.mono,.in>.mono,.tags,.looks,.terms'),{x:60},{x:-30,ease:'none',scrollTrigger:o()});
     gsap.fromTo(p.querySelectorAll('.big'),{x:160},{x:-80,ease:'none',scrollTrigger:o()});
@@ -832,7 +836,7 @@ pans.forEach(p=>{
     let y=T;rows.forEach((rw,ri)=>{const h=hs[ri]*k,rowW=rw.reduce((a,x)=>a+x[1]*h,0)+g*(rw.length-1);let x=(W-rowW)/2;
       rw.forEach(([t,ar])=>{Object.assign(t.style,{width:ar*h+'px',height:h+'px',left:x+'px',top:y+'px'});x+=ar*h+g});y+=h+g})};
   layout();addEventListener('resize',()=>{layout();ScrollTrigger.refresh()});
-  const org=gsap.timeline({scrollTrigger:{start:()=>sPos()-innerHeight*.9,end:()=>sPos()+(panel.offsetLeft+innerWidth*.15)*K(),scrub:1,invalidateOnRefresh:true}});
+  const org=gsap.timeline({scrollTrigger:{start:()=>sPos()-innerHeight*.9,end:()=>sPos()+XH()*K(),scrub:1,invalidateOnRefresh:true}});
   // start on screen (the track has not moved yet), then fly into the grid as it slides in
   const home=t=>panel.offsetLeft+board.offsetLeft+parseFloat(t.style.left||0);
   tiles.forEach((t,i)=>{const at=rnd(i,5)*.5;
@@ -994,7 +998,8 @@ document.querySelectorAll('.paper').forEach(pp=>ScrollTrigger.create({trigger:pp
 /* 10 loupe: 100% view under the cursor */
 {
   const L=document.querySelector('.loupe');
-  document.querySelectorAll('.ph img,#tkimg').forEach(im=>{const host=im.closest('.ph,figure');if(host.dataset.loupe!==undefined)return;host.dataset.loupe='';
+  if(!matchMedia('(hover:hover) and (pointer:fine)').matches)L.style.display='none';  // touch: the loupe fights with scrolling
+  if(matchMedia('(hover:hover) and (pointer:fine)').matches)document.querySelectorAll('.ph img,#tkimg').forEach(im=>{const host=im.closest('.ph,figure');if(host.dataset.loupe!==undefined)return;host.dataset.loupe='';
     host.addEventListener('pointermove',e=>{if(host.classList.contains('ph')&&tl.time()>=4.2){L.style.opacity=0;return}  // no loupe once the tour photo goes full-screen
       const top=[...host.querySelectorAll('img')].filter(i=>i.style.display!=='none'&&getComputedStyle(i).opacity>.5&&!/100%/.test(i.style.clipPath||'')).pop()||im;const r=top.getBoundingClientRect();
       const nx=(e.clientX-r.left)/r.width,ny=(e.clientY-r.top)/r.height,W=top.naturalWidth||1600,H=top.naturalHeight||1000,sc=Math.max(r.width/W,r.height/H)*3;
@@ -1021,7 +1026,7 @@ document.querySelectorAll('.tile .f').forEach(f=>{let sx,sy,on=false,dx=0,dy=0,m
   f.addEventListener('pointerdown',e=>{on=true;mv=0;dx=e.clientX;dy=e.clientY;sx=e.clientX-(gsap.getProperty(f,'x')||0);sy=e.clientY-(gsap.getProperty(f,'y')||0);f.setPointerCapture(e.pointerId);gsap.killTweensOf(f);f.parentElement.style.zIndex=99});
   f.addEventListener('pointermove',e=>{if(on){mv=Math.max(mv,Math.hypot(e.clientX-dx,e.clientY-dy));gsap.set(f,{x:e.clientX-sx,y:e.clientY-sy})}});
   f.addEventListener('pointerup',()=>{on=false;gsap.to(f,{x:0,y:0,duration:.7,ease:'expo.out'});if(mv<6&&window.__openPhoto)window.__openPhoto(f.parentElement)})});
-document.querySelectorAll('.lookn .cnt').forEach(v=>{const o={v:0};gsap.to(o,{v:+v.dataset.n,duration:reduce?0:1.8,ease:'expo.out',onUpdate:()=>{v.textContent=Math.round(o.v)},scrollTrigger:{trigger:v,start:'top 85%'}})});
+document.querySelectorAll('.lookn .cnt').forEach(v=>{const o={v:100};v.textContent=100;gsap.to(o,{v:+v.dataset.n,duration:reduce?0:9,ease:'none',onUpdate:()=>{v.textContent=Math.round(o.v)},scrollTrigger:{trigger:v,start:'top 85%'}})});
 /* 17 wordmark parts slide apart on the grid */
 if(!reduce)gsap.fromTo('.bigword span',{x:i=>(1-i)*-innerWidth*.08},{x:0,ease:'none',scrollTrigger:{trigger:'.bigword',start:'top bottom',end:'bottom bottom',scrub:true}});
 /* 18 launch: vermilion cells fill the grid, then the app opens */
