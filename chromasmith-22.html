@@ -859,7 +859,7 @@ body.diag-on .diag-only{display:flex}
    body is always clamped back up to 100vh tall regardless of the correct --app-h height set
    here, and the whole page scrolls/bounces instead of just the inner panels. This is why this
    bug kept regressing: earlier fixes touched --app-h/height but never this competing rule. */
-body.mobile-fx{height:var(--app-h,100svh);min-height:0;display:flex;flex-direction:column;overflow:hidden;padding-top:max(10px,var(--sat))}
+body.mobile-fx{height:var(--app-h,100svh);min-height:0;display:flex;flex-direction:column;overflow:hidden;padding-top:max(2px,var(--sat));padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
 body.mobile-fx header{display:none}
 body.mobile-fx main{flex:1;min-height:0;min-width:0;display:flex;padding:0!important;margin:0;max-width:100vw;overflow:hidden}
 
@@ -1067,7 +1067,7 @@ body.mobile-fx #fx-secnav{display:none}
 #fx-quicknav,#fx-mobile-nav{display:none}
 body.mobile-fx{background:#121212}
 body.mobile-fx .fx-preview-col{background:#121212;padding-top:0}
-body.mobile-fx #fx-actionbar{height:62px;flex:0 0 62px;align-items:center;background:#121212;padding:0 4px}
+body.mobile-fx #fx-actionbar{height:48px;flex:0 0 48px;align-items:center;background:#121212;padding:0 4px}
 body.mobile-fx .fx-act{flex:1;min-width:0;padding:6px 2px;color:#f2f2f2}
 body.mobile-fx .fx-act-ic{font-family:var(--sans);font-size:30px;font-weight:300}
 body.mobile-fx .fx-canvas-wrap{margin:0;background:#121212}
@@ -1092,6 +1092,26 @@ body.mobile-fx #fx-tool-grid .fx-sec-btn{width:100%;min-width:0;min-height:90px;
 body.mobile-fx #fx-tool-grid .fx-sec-btn[hidden]{display:none}
 body.mobile-fx #fx-tool-grid .fx-sec-ic{font-size:28px;color:#f3f3f3}
 body.mobile-fx #fx-tool-grid .fx-sec-lb{white-space:normal;font-size:12px;font-weight:400;text-align:center}
+/* Phone trims: desk-only surfaces off, bigger targets, press-and-hold compare replaces the overlay row. */
+body.mobile-fx #fx-zoom-ctrl,body.mobile-fx #fx-preview-tools{display:none!important}
+body.mobile-fx #sk2-hist{display:none}
+body.mobile-fx #btn-gp-import,body.mobile-fx .sk2-more:has(#btn-lut-save),body.mobile-fx .ni-hint a{display:none!important}
+body.mobile-fx #fx-canvas,body.mobile-fx #fx-wrap{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.ni-guide{display:none}
+body.mobile-fx .ni-guide{display:block;margin-top:14px;color:var(--mut);font:14px var(--sans);text-decoration:underline;min-height:44px;line-height:44px}
+body.mobile-fx #fx-quicknav button span svg{width:26px;height:26px}
+body.mobile-fx #fx-quicknav .js-allfx.allon,body.mobile-fx #fx-quicknav .js-allfx.allon span{color:var(--acc)}
+body.mobile-fx .fx-act-ic svg{width:24px;height:24px}
+body.mobile-fx #fx-looks-cats .btn{min-height:40px}
+body.mobile-fx .look-cell{flex:0 0 96px}
+body.mobile-fx .look-cell canvas{background:var(--sur2);aspect-ratio:3/2}
+body.mobile-fx .look-cell .look-nm{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25;min-height:2.5em}
+body.mobile-fx.sheet-open .fx-panel{height:46vh;max-height:min(460px,calc(var(--app-h,100svh)*.55))}
+body.mobile-fx.sheet-open.sheet-full .fx-panel{height:78vh;max-height:calc(var(--app-h,100svh)*.8)}
+#fx-more-menu .mm-title{font:600 17px var(--sans);text-align:center;padding:4px 0 6px}
+#fx-more-menu .mm-row{display:flex;align-items:center;gap:12px;min-height:44px}
+#fx-more-menu .mm-row>span{flex:0 0 96px;font-size:14px}
+#fx-more-menu .mm-row>.fx-select,#fx-more-menu .mm-row>.fx-slider{flex:1;min-height:40px}
 body.mobile-fx #fx-tools-close{flex:0 0 46px;align-self:center;min-width:88px;border:1px solid #eee;border-radius:2px;background:#121212;color:#fff;font:600 14px var(--sans);text-transform:uppercase;cursor:pointer}
 #fx-fab-export{display:none}
 /* One-handed reach: #fx-actionbar (with Undo/Redo/Export/etc.) is top-anchored on mobile so its
@@ -4178,6 +4198,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         </div>
         <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
           <!-- Mask overlays live INSIDE fx-zoom-wrap (not fx-wrap) so they ride the exact same
+          <a href="#" class="ni-guide" onclick="switchTab('guide');return false">How it works</a>
                CSS transform as the canvas — glued to it by the compositor during zoom/pan with
                no per-event JS repositioning, instead of chasing getBoundingClientRect() a frame
                behind the transform (the "zooming moves the mask" bug). See mskOverlayBox(). -->
@@ -4365,19 +4386,20 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       </div>
       <!-- PERSISTENT ACTION BAR (mobile) -->
       <div id="fx-actionbar">
-        <button class="fx-act" onclick="fxMobileBack()" title="Back" aria-label="Back"><span class="fx-act-ic">‹</span></button>
-        <button class="fx-act" onclick="fxPickPhotos()" title="Open photo" aria-label="Open photo"><span class="fx-act-ic">▣</span></button>
-        <button class="fx-act" onclick="fxUndo()" title="Undo" aria-label="Undo"><span class="fx-act-ic">↶</span></button>
-        <button class="fx-act" onclick="fxRedo()" title="Redo" aria-label="Redo"><span class="fx-act-ic">↷</span></button>
-        <button class="fx-act" onclick="fxSection('info')" title="Photo information" aria-label="Photo information"><span class="fx-act-ic">ⓘ</span></button>
-        <button class="fx-act" onclick="fxMoreMenu()" title="More" aria-label="More"><span class="fx-act-ic">⋯</span></button>
+        <button class="fx-act" onclick="fxMobileBack()" title="Back" aria-label="Back"><span class="fx-act-ic" data-mic="chevleft"></span></button>
+        <button class="fx-act" onclick="fxPickPhotos()" title="Open photo" aria-label="Open photo"><span class="fx-act-ic" data-mic="plus"></span></button>
+        <button class="fx-act" onclick="fxUndo()" title="Undo" aria-label="Undo"><span class="fx-act-ic" data-mic="undo"></span></button>
+        <button class="fx-act" onclick="fxRedo()" title="Redo" aria-label="Redo"><span class="fx-act-ic" data-mic="redo"></span></button>
+        <button class="fx-act" onclick="fxSection('info')" title="Photo information" aria-label="Photo information"><span class="fx-act-ic" data-mic="info"></span></button>
+        <button class="fx-act" onclick="fxMoreMenu()" title="More" aria-label="More"><span class="fx-act-ic" data-mic="more"></span></button>
       </div>
       <div id="fx-quicknav" aria-label="Quick tools">
-        <button onclick="fxSection('adjust')"><span>☷</span>Adjust</button>
-        <button onclick="fxSection('curves')"><span>⌁</span>Curves</button>
-        <button onclick="fxSection('canvas')"><span>▣</span>Expand</button>
-        <button onclick="fxSection('crop')"><span>⌗</span>Crop</button>
-        <button onclick="fxToolsOpen()"><span>⊞</span>More</button>
+        <!-- No "More" here: the Tools tab below opens the same full grid. -->
+        <button class="js-allfx" onclick="enableAll()" title="All FX (long-press for settings)"><span data-mic="enableAll"></span>All FX</button>
+        <button onclick="fxSection('adjust')"><span data-mic="adjust"></span>Adjust</button>
+        <button onclick="fxSection('curves')"><span data-mic="curves"></span>Curves</button>
+        <button onclick="fxSection('hsl')"><span data-mic="hsl"></span>Mixer</button>
+        <button onclick="fxSection('crop')"><span data-mic="crop"></span>Crop</button>
       </div>
       <!-- HORIZONTAL SECTION STRIP (mobile) -->
       <div id="fx-secnav"></div>
@@ -4391,7 +4413,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
     <div id="fx-mobile-nav" aria-label="Editor navigation">
       <button id="fx-nav-looks" onclick="fxToolsClose();fxSection('looks')">Looks</button>
       <button id="fx-nav-tools" onclick="fxToolsOpen()">Tools</button>
-      <button id="fx-nav-export" onclick="exportFX()">Export</button>
+      <button id="fx-nav-export" onclick="fxMobileExportSheet()">Export</button>
     </div>
   </div>
 </div>
@@ -6572,7 +6594,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929J';
+const BUILD='1.0929K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13123,15 +13145,15 @@ function shortcutsHtml(){
 const _TOUR_KEY='chromasmith-tour-seen-v1';
 function tourHtml(){
   const step=(n,title,body)=>`<div class="cs-tour-step" data-n="${n}" style="margin-bottom:14px"><div class="cs-tour-k" style="font-family:var(--mono);font-size:11px;color:var(--acc);text-transform:uppercase;letter-spacing:var(--ls-2);margin-bottom:2px">Step ${n}</div><div style="font-size:14px;font-weight:600;margin-bottom:2px">${title}</div><div style="font-size:13px;color:var(--mut)">${body}</div></div>`;
-  const desk=!!window.__TAURI__;
+  const desk=!!window.__TAURI__,mob=document.body.classList.contains('mobile-fx');
   // A returning desktop user already has a Gallery folder — don't ask them to choose one again.
   let hasRoot=false;try{hasRoot=!!localStorage.getItem('chromasmith_lib_root');}catch(e){}
   return (desk&&hasRoot?'':desk
       ?step(1,'Choose your photo folder','Click <b>Choose folder…</b> (or drop a folder onto the window). Chromasmith reads it in the background, so you can start editing straight away while it indexes. Your original files are never changed.')
-      :step(1,'Open a photo','Drag a photo (or RAW) anywhere onto the window, or click <b>Open a photo</b>. Your original is never changed.'))
-    +step(desk&&hasRoot?1:2,'Pick a look',(desk?'Double-click any photo to open it. ':'')+'Open <b>Look</b> and tap a film look. Everything else (grain, glow, curves, masks…) is optional fine-tuning on top of it. Use the before/after button to compare.')
+      :step(1,'Open a photo',mob?'Tap <b>Open a photo</b>. Your original is never changed.':'Drag a photo (or RAW) anywhere onto the window, or click <b>Open a photo</b>. Your original is never changed.'))
+    +step(desk&&hasRoot?1:2,'Pick a look',(desk?'Double-click any photo to open it. ':'')+'Open <b>Look</b> and tap a film look. Everything else (grain, glow, curves, masks…) is optional fine-tuning on top of it. '+(mob?'Press and hold the photo to see the original.':'Use the before/after button to compare.'))
     +step(desk&&hasRoot?2:3,'Export','When it looks right, hit <b>Export</b> for a full-resolution file. Edits save automatically and nothing ever uploads.')
-    +'<div style="font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:10px">The <b>Guide</b> (⋯ menu) explains every tool. ⌘K searches every tool. Advanced tabs (Match &amp; Refine, Color Copy, Collage) appear after your first export, or <a href="#" onclick="csShowAdvancedTabs(true);document.getElementById(\'cs-modal-ov\').remove();return false" style="color:var(--acc)">show them now</a>.</div>'
+    +(mob?'':'<div style="font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:10px">The <b>Guide</b> (⋯ menu) explains every tool. ⌘K searches every tool. Advanced tabs (Match &amp; Refine, Color Copy, Collage) appear after your first export, or <a href="#" onclick="csShowAdvancedTabs(true);document.getElementById(\'cs-modal-ov\').remove();return false" style="color:var(--acc)">show them now</a>.</div>')
     +'<div class="btn-row" style="margin-top:14px"><button class="btn bpri" onclick="document.getElementById(\'cs-modal-ov\').remove()">Got it</button></div>';
 }
 function tourMaybeShow(){
@@ -13308,12 +13330,14 @@ function fxMoreMenu(){
   const old=document.getElementById('fx-more-menu');if(old){old.remove();return;}
   const m=document.createElement('div');m.id='fx-more-menu';
   const sh=document.createElement('div');sh.className='mm-sheet';
-  [['Match & Refine','match'],['Color Copy','copy'],['Collage','collage'],['Guide','guide']].forEach(([lb,tab])=>{
+  // Phone menu keeps only what is useful on the go: Match & Refine, Collage and the Log are
+  // desk tools, and the Guide is linked from the empty state instead.
+  [['Color Copy','copy']].forEach(([lb,tab])=>{
     const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;
     b.onclick=()=>{m.remove();switchTab(tab);};sh.appendChild(b);
   });
-  const logBtn=document.createElement('button');logBtn.className='btn bgh';logBtn.textContent='Log';
-  logBtn.onclick=()=>{m.remove();toggleLog();};sh.appendChild(logBtn);
+  const fx=document.createElement('button');fx.className='btn bgh';fx.textContent='All FX settings…';
+  fx.onclick=()=>{m.remove();allFxSettings();};sh.appendChild(fx);
   const c=document.createElement('button');c.className='btn bsec';c.textContent='Cancel';c.onclick=()=>m.remove();sh.appendChild(c);
   m.appendChild(sh);m.onclick=e=>{if(e.target===m)m.remove();};
   document.body.appendChild(m);
@@ -13322,6 +13346,51 @@ function fxMoreMenu(){
 // slider to reset it to its authored default.
 document.addEventListener('input',e=>{
   const s=e.target;if(!s.classList||!s.classList.contains('fx-slider'))return;
+// Phone export sheet: size, format and quality before saving, instead of exporting on one tap.
+// It edits the real Output controls, so desktop and phone share one set of export settings.
+function fxMobileExportSheet(){
+  if(!fxImages.length){toast('Open a photo first');return;}
+  const old=document.getElementById('fx-more-menu');if(old)old.remove();
+  const m=document.createElement('div');m.id='fx-more-menu';
+  const sh=document.createElement('div');sh.className='mm-sheet mm-export';
+  const h=document.createElement('div');h.className='mm-title';h.textContent='Export';sh.appendChild(h);
+  const mirror=(label,id)=>{
+    const src=document.getElementById(id);if(!src)return;
+    const row=document.createElement('label');row.className='mm-row';
+    const t=document.createElement('span');t.textContent=label;
+    const sel=document.createElement('select');sel.className='fx-select';sel.innerHTML=src.innerHTML;sel.value=src.value;
+    sel.onchange=()=>{src.value=sel.value;src.dispatchEvent(new Event('change',{bubbles:true}));};
+    row.append(t,sel);sh.appendChild(row);
+  };
+  mirror('Size','sel-exp-size');mirror('Format','sel-exp-fmt');
+  const q=document.getElementById('sl-exp-q');
+  if(q){const row=document.createElement('label');row.className='mm-row';
+    const t=document.createElement('span');const r=document.createElement('input');
+    r.type='range';r.className='fx-slider';r.min=q.min;r.max=q.max;r.value=q.value;
+    const lab=()=>t.textContent='Quality '+r.value;lab();
+    r.oninput=()=>{q.value=r.value;q.dispatchEvent(new Event('input',{bubbles:true}));lab();};
+    row.append(t,r);sh.appendChild(row);}
+  const go=document.createElement('button');go.className='btn bpri';go.textContent=fxImages.length>1?'Export '+fxImages.length+' photos':'Export photo';
+  go.onclick=()=>{m.remove();exportFX();};sh.appendChild(go);
+  const c=document.createElement('button');c.className='btn bsec';c.textContent='Cancel';c.onclick=()=>m.remove();sh.appendChild(c);
+  m.appendChild(sh);m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+}
+// Phone: press and hold the photo to see the original (replaces the tiny overlay button).
+(function(){
+  const w=document.getElementById('fx-wrap');if(!w)return;
+  let t=null,x=0,y=0,on=false;
+  const stop=()=>{clearTimeout(t);t=null;if(on){on=false;fxCompare=false;renderPreview();}};
+  w.addEventListener('pointerdown',e=>{
+    if(!document.body.classList.contains('mobile-fx')||cropMode||!e.isPrimary)return;
+    x=e.clientX;y=e.clientY;clearTimeout(t);
+    t=setTimeout(()=>{t=null;on=true;fxCompare=true;renderPreview();hapt();},350);
+  });
+  w.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-x,e.clientY-y)>8){clearTimeout(t);t=null;}});
+  ['pointerup','pointercancel','pointerleave'].forEach(n=>w.addEventListener(n,stop));
+  w.addEventListener('touchstart',e=>{if(e.touches.length>1)stop();},{passive:true});
+  w.addEventListener('contextmenu',e=>{if(document.body.classList.contains('mobile-fx'))e.preventDefault();});
+})();
   if(!document.body.classList.contains('mobile-fx'))return;
   let b=document.getElementById('fx-sl-bubble');
   if(!b){b=document.createElement('div');b.id='fx-sl-bubble';document.body.appendChild(b);}
@@ -20857,16 +20926,26 @@ function buildLookCatChips(){
   const cats=['All',...groupedLutKeys().map(([c])=>c)];
   if(!cats.includes(fxLookCatFilter))fxLookCatFilter='All';
   host.innerHTML='';
-  cats.forEach(c=>{
+  // Phones: three chips plus "More" instead of two wrapped rows of ten.
+  const MOB_CATS=['All','User Looks','Film'];
+  const mob=document.body.classList.contains('mobile-fx')&&!buildLookCatChips._more;
+  const shown=mob?cats.filter(c=>MOB_CATS.includes(c)||c===fxLookCatFilter):cats;
+  shown.forEach(c=>{
     const b=document.createElement('button');b.className='btn bgh'+(c===fxLookCatFilter?' on':'');
     b.textContent=c;
-    b.onclick=()=>{fxLookCatFilter=c;buildLookCatChips();buildLookGallery();};
+    b.onclick=()=>{fxLookCatFilter=c;buildLookCatChips._more=false;buildLookCatChips();buildLookGallery();};
     host.appendChild(b);
   });
 }
 function buildLookGallery(){
   const host=document.getElementById('fx-looks'),ctrl=document.getElementById('fx-looks-ctrl');
   if(!host||!ctrl)return;
+  if(document.body.classList.contains('mobile-fx')&&(shown.length<cats.length||buildLookCatChips._more)){
+    const m=document.createElement('button');m.className='btn bgh look-cat-more';
+    m.textContent=buildLookCatChips._more?'Less':'More';
+    m.onclick=()=>{buildLookCatChips._more=!buildLookCatChips._more;buildLookCatChips();};
+    host.appendChild(m);
+  }
   const work=fxWork||fxImg;
   // Empty state: with no photo the preset grid can't render, and the panel used to show nothing.
   let empty=document.getElementById('fx-looks-empty');
@@ -23858,6 +23937,7 @@ let _fxMobileCat='all';
 function fxToolsOpen(){
   if(!document.body.classList.contains('mobile-fx'))return;
   document.body.classList.remove('sheet-open');
+const FX_MOBILE_HIDE=new Set(['art','export','wm','exppreset','share']);
   document.body.classList.add('tools-open');
   document.getElementById('fx-nav-tools')?.classList.add('on');
   document.getElementById('fx-nav-looks')?.classList.remove('on');
@@ -23899,6 +23979,7 @@ function buildSecNav(){          // mobile categorized tool grid
     b.innerHTML=`<span class="fx-sec-ic">${icon(key,18)}</span><span class="fx-sec-lb">${lb}</span>`;
     b.onclick=()=>fxSection(key);
     grid.appendChild(b);
+    if(FX_MOBILE_HIDE.has(key))return; // desk-only on phones (Canvas stays)
   });
   const close=document.createElement('button');close.id='fx-tools-close';close.type='button';close.textContent='Close';close.onclick=fxToolsClose;nav.appendChild(close);
   fxMobileFilter(_fxMobileCat);
@@ -24078,6 +24159,8 @@ function fxSection(name,noSheet){
   if(mob){const ab=document.querySelector('#fx-secnav .fx-sec-btn.on');if(ab&&ab.scrollIntoView)try{ab.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});}catch(e){}}
   if(wasClosed){fxLiveFit(240);requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));} // photo reflows narrower when the panel reopens — live-fit tracks the transition, see the panel-close branch above
   if(members.includes('curves')&&typeof drawCurveEditor==='function')setTimeout(drawCurveEditor,0); // canvas sizes from clientWidth (0 while hidden)
+  // Phones open straight to the controls: a tool picked from the bar should never land folded.
+  if(mob&&name!=='looks')cards.forEach(c=>{if(c.classList.contains('fx-sec-collapsed')&&typeof fxSecToggle==='function')fxSecToggle(c);});
   // Same class of problem as drawCurveEditor's above, for the look thumbnails: the gallery is
   // built lazily against layout, and its cells have no layout at all while this card is
   // display:none. Re-seed once they do. (setTimeout 0, not immediate — sec-active was only just
@@ -24086,7 +24169,7 @@ function fxSection(name,noSheet){
   if(dx&&typeof sk2SubTabs==='function')sk2SubTabs(name,jumpTo);
 }
 function fxSheetClose(){
-  document.body.classList.remove('sheet-open');
+  document.body.classList.remove('sheet-open','sheet-full');
   document.querySelectorAll('#fx-secnav .fx-sec-btn').forEach(b=>b.classList.remove('on'));
   document.getElementById('fx-nav-looks')?.classList.remove('on');
   document.getElementById('fx-nav-tools')?.classList.add('on');
@@ -24207,7 +24290,8 @@ window.addEventListener('resize',()=>{
     if(now>lastT)vel=0.8*vel+0.2*(dy/(now-lastT)); // px/ms, +ve = downward
     lastY=e.clientY;lastT=now;
     if(Math.abs(e.clientY-startY)>6)moved=true;
-    p.style.height=Math.max(0,Math.min(startH,startH-(e.clientY-startY)))+'px';
+    const maxH=(window.innerHeight||800)*0.8; // drag UP grows the sheet to full height
+    p.style.height=Math.max(0,Math.min(maxH,startH-(e.clientY-startY)))+'px';
     fxLiveFit(90); // photo tracks the finger
   });
   const end=()=>{
@@ -24221,6 +24305,7 @@ window.addEventListener('resize',()=>{
     // would leave the inline height stuck): restore the stylesheet transition, force a
     // reflow so it registers the dragged height as the starting value, then flip state —
     // clearing the inline height animates from the finger position to the CSS target.
+    const grow=!close&&cur>startH*1.15;
     pn.style.transition='';
     void pn.offsetHeight;
     if(close)fxSheetClose();
@@ -24228,6 +24313,7 @@ window.addEventListener('resize',()=>{
     fxLiveFit(360);
     if(close)hapt();
   };
+    else document.body.classList.toggle('sheet-full',grow||(document.body.classList.contains('sheet-full')&&cur>startH*0.9));
   h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end);
 })();
 // Mark a section's rail/strip button when it's "in use":
@@ -24857,7 +24943,8 @@ document.querySelectorAll('.fx-fields[id^="ff-"]').forEach(ff=>{
 syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
 {const set=(id,n)=>{const e=document.getElementById(id);if(e)e.innerHTML=icon(n,18);};
  set('db-undo','undo');set('db-redo','redo');set('db-allfx','enableAll');set('db-export','export');set('db-export-lr','export');
- set('hdr-info','info'); // header About button (the old 'hdr-log' diagnostics button moved into it)
+ set('hdr-info','info');
+ document.querySelectorAll('[data-mic]').forEach(e=>{e.innerHTML=icon(e.dataset.mic,22);}); // header About button (the old 'hdr-log' diagnostics button moved into it)
  // Empty-state add button: ICONS.plus at 34px, replacing the U+FF0B FULLWIDTH PLUS glyph.
  {const ab=document.getElementById('fx-add-btn');if(ab)ab.innerHTML=icon('plus',34);}
  set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');set('btn-favorite','heart');set('db-history','history');
