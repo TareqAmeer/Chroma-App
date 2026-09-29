@@ -424,6 +424,7 @@ function auditInPage({ minTap, minTapInline, inlineSel, edgeSel, minFont, minCon
       const fg = parse(getComputedStyle(el).color); if (!fg) return;
       if (fg[3] !== undefined && fg[3] < 0.6) return;    // deliberately faded (disabled/dimmed) text
       const bg = bgOf(el); if (!bg) return;              // gradient-backed — not measurable here
+      if (el.closest('#cs-brand-tog') && el.classList.contains('on')) return; // white on the ::before accent slab — a pseudo-element, invisible to bgOf
       const l1 = lum(fg), l2 = lum(bg);
       const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
       if (ratio < minContrast) {

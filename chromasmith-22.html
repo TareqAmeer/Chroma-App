@@ -2346,7 +2346,12 @@ body.sk2 #lib-overlay .lib-btn:hover{color:var(--k-color-ink);box-shadow:inset 0
 body.sk2 #lib-overlay .lib-btn.on,body.sk2 #lib-overlay .lib-btn[aria-pressed=true]{background:transparent!important;color:var(--k-color-ink)!important;box-shadow:inset 0 -2px 0 var(--k-color-ink)!important}
 /* Photo caption (gallery-wall label) under the photo. */
 body.sk2 #sk2-cap-copy{position:absolute;z-index:3;display:flex;flex-direction:row;align-items:baseline;gap:12px;margin:0;white-space:nowrap;overflow:hidden;width:auto;justify-content:flex-start;pointer-events:none}
-body.sk2 #sk2-cap-copy .cp-name{font-size:12px;color:var(--k-color-ink);font-weight:400;overflow:hidden;text-overflow:ellipsis}
+body.sk2 #sk2-cap-copy .cp-name{font-size:12px;color:var(--k-color-ink);font-weight:400;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
+body.sk2 #sk2-cap-copy>:not(.cp-name):not(.cp-sl){flex-shrink:0}
+body.sk2 #sk2-cap-copy{container-type:inline-size}
+@container (max-width:600px){body.sk2 #sk2-cap-copy .cp-sl{display:none}}
+@container (max-width:560px){body.sk2 #sk2-cap-copy .cp-status{display:none}}
+@container (max-width:480px){body.sk2 #sk2-cap-copy{gap:4px}body.sk2 #sk2-cap-copy .cp-zc{gap:2px}}
 body.sk2 #sk2-cap-copy .cp-status{font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
 body.sk2 #sk2-cap-copy .cp-sl{width:80px;flex:0 0 80px;order:0;margin-top:0}
 body.sk2 #sk2-cap-copy .cp-zb{padding:0!important;min-width:28px!important}
@@ -2877,6 +2882,7 @@ function sk2ExportWire(){
       cap.style.display='flex';
       const cw=Math.min(w.width-32,Math.max(620,r?r.width:0)),cl=(w.width-cw)/2;
       cap.style.left=cl+'px';cap.style.top=(w.height-34)+'px';cap.style.width=cw+'px';
+      if(cw<240)cap.style.display='none'; // too narrow for flags + zoom: the top-bar caption is the only copy
     }else if(cap){cap.style.display='none';}
   });};
   function wire(){const cv=document.getElementById('fx-canvas'),wrap=document.getElementById('fx-wrap');if(!cv||!wrap)return;
@@ -4194,11 +4200,11 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
                PLUS, a CJK-width glyph standing in for an icon while ICONS.plus already existed. -->
           <button id="fx-add-btn" onclick="fxPickPhotos()" title="Add photos" aria-label="Add photos"></button>
           <div class="ni-add-lb">Open a photo</div>
+          <a href="#" class="ni-guide" onclick="switchTab('guide');return false">How it works</a>
           <div class="ni-hint">Click the button, or drag a photo anywhere onto this window. Your original is never changed · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none;cursor:pointer" title="Pick photos from your Google Photos library">Google Photos…</a></div>
         </div>
         <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
           <!-- Mask overlays live INSIDE fx-zoom-wrap (not fx-wrap) so they ride the exact same
-          <a href="#" class="ni-guide" onclick="switchTab('guide');return false">How it works</a>
                CSS transform as the canvas — glued to it by the compositor during zoom/pan with
                no per-event JS repositioning, instead of chasing getBoundingClientRect() a frame
                behind the transform (the "zooming moves the mask" bug). See mskOverlayBox(). -->
@@ -6594,7 +6600,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929K';
+const BUILD='1.0929L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13342,10 +13348,6 @@ function fxMoreMenu(){
   m.appendChild(sh);m.onclick=e=>{if(e.target===m)m.remove();};
   document.body.appendChild(m);
 }
-// Slider polish: value bubble above the thumb while dragging (mobile), and DOUBLE-TAP a
-// slider to reset it to its authored default.
-document.addEventListener('input',e=>{
-  const s=e.target;if(!s.classList||!s.classList.contains('fx-slider'))return;
 // Phone export sheet: size, format and quality before saving, instead of exporting on one tap.
 // It edits the real Output controls, so desktop and phone share one set of export settings.
 function fxMobileExportSheet(){
@@ -13391,6 +13393,10 @@ function fxMobileExportSheet(){
   w.addEventListener('touchstart',e=>{if(e.touches.length>1)stop();},{passive:true});
   w.addEventListener('contextmenu',e=>{if(document.body.classList.contains('mobile-fx'))e.preventDefault();});
 })();
+// Slider polish: value bubble above the thumb while dragging (mobile), and DOUBLE-TAP a
+// slider to reset it to its authored default.
+document.addEventListener('input',e=>{
+  const s=e.target;if(!s.classList||!s.classList.contains('fx-slider'))return;
   if(!document.body.classList.contains('mobile-fx'))return;
   let b=document.getElementById('fx-sl-bubble');
   if(!b){b=document.createElement('div');b.id='fx-sl-bubble';document.body.appendChild(b);}
@@ -20936,16 +20942,16 @@ function buildLookCatChips(){
     b.onclick=()=>{fxLookCatFilter=c;buildLookCatChips._more=false;buildLookCatChips();buildLookGallery();};
     host.appendChild(b);
   });
-}
-function buildLookGallery(){
-  const host=document.getElementById('fx-looks'),ctrl=document.getElementById('fx-looks-ctrl');
-  if(!host||!ctrl)return;
   if(document.body.classList.contains('mobile-fx')&&(shown.length<cats.length||buildLookCatChips._more)){
     const m=document.createElement('button');m.className='btn bgh look-cat-more';
     m.textContent=buildLookCatChips._more?'Less':'More';
     m.onclick=()=>{buildLookCatChips._more=!buildLookCatChips._more;buildLookCatChips();};
     host.appendChild(m);
   }
+}
+function buildLookGallery(){
+  const host=document.getElementById('fx-looks'),ctrl=document.getElementById('fx-looks-ctrl');
+  if(!host||!ctrl)return;
   const work=fxWork||fxImg;
   // Empty state: with no photo the preset grid can't render, and the panel used to show nothing.
   let empty=document.getElementById('fx-looks-empty');
@@ -23933,11 +23939,11 @@ const FX_MOBILE_CATS={
   fix:new Set(['crop','canvas','borders','vig','hal','bloom','art']),
   style:new Set(['looks','grain','style','wm','exppreset','export','share'])
 };
+const FX_MOBILE_HIDE=new Set(['art','export','wm','exppreset','share']);
 let _fxMobileCat='all';
 function fxToolsOpen(){
   if(!document.body.classList.contains('mobile-fx'))return;
   document.body.classList.remove('sheet-open');
-const FX_MOBILE_HIDE=new Set(['art','export','wm','exppreset','share']);
   document.body.classList.add('tools-open');
   document.getElementById('fx-nav-tools')?.classList.add('on');
   document.getElementById('fx-nav-looks')?.classList.remove('on');
@@ -23975,11 +23981,11 @@ function buildSecNav(){          // mobile categorized tool grid
   const grid=document.createElement('div');grid.id='fx-tool-grid';nav.appendChild(grid);
   _eachSection((key,lb)=>{
     if(key==='image'||key==='info'||key==='diag')return;
+    if(FX_MOBILE_HIDE.has(key))return; // desk-only on phones (Canvas stays)
     const b=document.createElement('button');b.className='fx-sec-btn';b.dataset.sec=key;
     b.innerHTML=`<span class="fx-sec-ic">${icon(key,18)}</span><span class="fx-sec-lb">${lb}</span>`;
     b.onclick=()=>fxSection(key);
     grid.appendChild(b);
-    if(FX_MOBILE_HIDE.has(key))return; // desk-only on phones (Canvas stays)
   });
   const close=document.createElement('button');close.id='fx-tools-close';close.type='button';close.textContent='Close';close.onclick=fxToolsClose;nav.appendChild(close);
   fxMobileFilter(_fxMobileCat);
@@ -24155,12 +24161,12 @@ function fxSection(name,noSheet){
   cards.forEach(c=>c.classList.add('sec-active'));
   document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
   const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
+  // Phones open straight to the controls: a tool picked from the bar should never land folded.
+  if(mob&&name!=='looks')cards.forEach(c=>{if(c.classList.contains('fx-sec-collapsed')&&typeof fxSecToggle==='function')fxSecToggle(c);});
   if(mob&&!noSheet){document.body.classList.add('sheet-open');fxLiveFit(360);hapt();}
   if(mob){const ab=document.querySelector('#fx-secnav .fx-sec-btn.on');if(ab&&ab.scrollIntoView)try{ab.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});}catch(e){}}
   if(wasClosed){fxLiveFit(240);requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));} // photo reflows narrower when the panel reopens — live-fit tracks the transition, see the panel-close branch above
   if(members.includes('curves')&&typeof drawCurveEditor==='function')setTimeout(drawCurveEditor,0); // canvas sizes from clientWidth (0 while hidden)
-  // Phones open straight to the controls: a tool picked from the bar should never land folded.
-  if(mob&&name!=='looks')cards.forEach(c=>{if(c.classList.contains('fx-sec-collapsed')&&typeof fxSecToggle==='function')fxSecToggle(c);});
   // Same class of problem as drawCurveEditor's above, for the look thumbnails: the gallery is
   // built lazily against layout, and its cells have no layout at all while this card is
   // display:none. Re-seed once they do. (setTimeout 0, not immediate — sec-active was only just
@@ -24301,19 +24307,19 @@ window.addEventListener('resize',()=>{
     // still moving just before lift-off — pausing >120ms decays the intent to zero.
     const flick=vel>0.5&&(performance.now()-lastT)<120;
     const close=!moved||flick||cur<startH*0.62;
+    const grow=!close&&cur>startH*1.15;
     // Synchronous release (NO rAF — it never fires in a hidden/backgrounded tab, which
     // would leave the inline height stuck): restore the stylesheet transition, force a
     // reflow so it registers the dragged height as the starting value, then flip state —
     // clearing the inline height animates from the finger position to the CSS target.
-    const grow=!close&&cur>startH*1.15;
     pn.style.transition='';
     void pn.offsetHeight;
     if(close)fxSheetClose();
+    else document.body.classList.toggle('sheet-full',grow||(document.body.classList.contains('sheet-full')&&cur>startH*0.9));
     pn.style.height='';
     fxLiveFit(360);
     if(close)hapt();
   };
-    else document.body.classList.toggle('sheet-full',grow||(document.body.classList.contains('sheet-full')&&cur>startH*0.9));
   h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end);
 })();
 // Mark a section's rail/strip button when it's "in use":

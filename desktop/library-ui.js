@@ -1642,6 +1642,9 @@
     /* CHR-12: square grid only — percentage height on a fractional-size tile can round 1 device px
        short of the tile, exposing the light plate as a thin line. Pin the image to the tile edges. */
     #lib-grid:not(.list-view):not(.aspect-view) .lib-thumb-wrap>img{position:absolute;inset:0}
+    /* Real aspect on a virtualized grid (400+ photos): the windowing needs uniform cells, so keep
+       square cells and letterbox the photo uncropped instead of the ragged-right flex layout. */
+    #lib-grid.aspect-fit .lib-thumb-wrap>img{object-fit:contain}
     .lib-photo-work{position:absolute;left:5px;bottom:5px;z-index:4;display:flex;align-items:center;gap:5px;
       max-width:calc(100% - 10px);padding:3px 6px;border:1px solid var(--bdr);border-radius:var(--r-pill);
       background:var(--sur);color:var(--txt);font-size:10px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2260,7 +2263,7 @@
           <div class="fx-ovf-item" id="lib-zerogap"><span>No spacing between photos</span>${LIB_CHECK_SVG}</div>
           <div class="fx-ovf-item" id="lib-mat"><span>Border around photos</span>${LIB_CHECK_SVG}</div>
           <div class="fx-ovf-item" id="lib-showtitle"><span>Show title</span>${LIB_CHECK_SVG}</div>
-          <button class="fx-ovf-item opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to)."><span>Real aspect ratio</span>${LIB_CHECK_SVG}</button>
+          <button class="fx-ovf-item opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square."><span>Real aspect ratio</span>${LIB_CHECK_SVG}</button>
           <div class="fx-ovf-sep"></div>
           <div class="fx-ovf-grp-label">Metadata overlay</div>
           <select id="lib-metadisp" style="display:none">
@@ -6685,13 +6688,9 @@
     // Item 31: aspect-ratio thumbnails only below VIRT_MIN — virtualization's row/col windowing
     // (virtMetrics) assumes a uniform CSS grid, which the flex-wrap ragged-right layout is not.
     grid.classList.toggle('aspect-view', state.gridAspect && !isList && !virtOn);
+    grid.classList.toggle('aspect-fit', state.gridAspect && !isList && virtOn);
     const aspectBtn = document.getElementById('lib-aspect-toggle');
-    if (aspectBtn) {
-      aspectBtn.classList.toggle('on', state.gridAspect);
-      const tooLarge = state.gridAspect && virtOn && !isList;
-      aspectBtn.classList.toggle('disabled-note', tooLarge);
-      if (tooLarge) aspectBtn.title = `Real-aspect thumbnails are on, but this folder (${shown.length} photos) is over the 400-photo virtualized-grid threshold — showing square crops here instead.`;
-    }
+    if (aspectBtn) aspectBtn.classList.toggle('on', state.gridAspect);
     // Build every card into a detached DocumentFragment and append ONCE, instead of one
     // appendChild() per card — on a large folder that was one reflow per photo. Wiring
     // (thumbnail load, click/drag handlers) still has to happen in a SEPARATE pass after the

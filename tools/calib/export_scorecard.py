@@ -20,7 +20,7 @@ import numpy as np
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(ROOT)
+REPO = os.path.dirname(os.path.dirname(ROOT))
 OUT_DIR = os.path.join(REPO, 'test', 'output')
 GOLDEN_DIR = os.path.join(REPO, 'test', 'golden')
 
