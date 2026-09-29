@@ -2779,9 +2779,10 @@ function sk2ExportWire(){
     const r=cv&&cv.getBoundingClientRect(),w=wrap.getBoundingClientRect();
     const zoomed=typeof fxZoom!=="undefined"&&(Math.abs(fxZoom-FX_FIT)>1e-3||fxPanX||fxPanY);
     const fits=!zoomed&&r&&r.left>=w.left-1&&r.right<=w.right+1&&r.top>=w.top-1;
+    // While the photo is zoomed/panned the caption rides in the top bar instead, so it stays visible.
     // One home: pinned to the preview's bottom edge, centred on the preview — never moved into the
     // top bar (where it collided with zoom/All FX) and never re-glued to the photo mid-drag.
-    if(deskx&&sk2CaptionOn()){
+    if(deskx&&sk2CaptionOn()&&!zoomed){
       if(t.parentNode!==wrap){wrap.appendChild(t);t.classList.add('sk2-cap');}
       const cw=Math.min(w.width-32,Math.max(620,r&&!zoomed?r.width:0)),cl=(w.width-cw)/2;
       t.style.left=cl+'px';t.style.top=(w.height-34)+'px';t.style.width=cw+'px';t.style.maxWidth='';
@@ -6502,7 +6503,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929C';
+const BUILD='1.0929D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
