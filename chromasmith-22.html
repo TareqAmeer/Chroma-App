@@ -2304,6 +2304,13 @@ body.sk2 #lib-overlay .lib-btn{text-transform:none!important;letter-spacing:0!im
 body.sk2 #lib-overlay .lib-btn:hover{color:var(--k-color-ink);box-shadow:inset 0 -1px 0 var(--k-color-ink)!important}
 body.sk2 #lib-overlay .lib-btn.on,body.sk2 #lib-overlay .lib-btn[aria-pressed=true]{background:transparent!important;color:var(--k-color-ink)!important;box-shadow:inset 0 -2px 0 var(--k-color-ink)!important}
 /* Photo caption (gallery-wall label) under the photo. */
+body.sk2 #sk2-cap-copy{position:absolute;z-index:3;display:flex;flex-direction:row;align-items:baseline;gap:12px;margin:0;white-space:nowrap;overflow:hidden;width:auto;justify-content:flex-start;pointer-events:none}
+body.sk2 #sk2-cap-copy .cp-name{font-size:12px;color:var(--k-color-ink);font-weight:400;overflow:hidden;text-overflow:ellipsis}
+body.sk2 #sk2-cap-copy .cp-status{font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
+body.sk2 #sk2-cap-copy .cp-sl{width:80px;flex:0 0 80px;order:0;margin-top:0}
+body.sk2 #sk2-cap-copy .cp-zb{padding:0!important;min-width:28px!important}
+body.sk2 #sk2-cap-copy .cp-loupe,body.sk2 #sk2-cap-copy .cp-pct{display:none!important}
+body.sk2 #sk2-cap-copy .cp-zc{margin-left:auto;pointer-events:auto;gap:6px}
 body.sk2 #fx-deskbar-title.sk2-cap{position:absolute;z-index:3;display:flex;flex-direction:row;align-items:baseline;gap:12px;transform:none;margin:0;pointer-events:none;white-space:nowrap;overflow:hidden}
 body.sk2 #fx-deskbar-title.sk2-cap #db-title-name{font-size:12px;color:var(--k-color-ink);font-weight:400;overflow:hidden;text-overflow:ellipsis}
 body.sk2 #fx-deskbar-title.sk2-cap #db-title-status{font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
@@ -2779,14 +2786,22 @@ function sk2ExportWire(){
     const r=cv&&cv.getBoundingClientRect(),w=wrap.getBoundingClientRect();
     const zoomed=typeof fxZoom!=="undefined"&&(Math.abs(fxZoom-FX_FIT)>1e-3||fxPanX||fxPanY);
     const fits=!zoomed&&r&&r.left>=w.left-1&&r.right<=w.right+1&&r.top>=w.top-1;
-    // While the photo is zoomed/panned the caption rides in the top bar instead, so it stays visible.
-    // One home: pinned to the preview's bottom edge, centred on the preview — never moved into the
-    // top bar (where it collided with zoom/All FX) and never re-glued to the photo mid-drag.
+    // The real caption always lives in the top bar. While the photo is at fit, an id-free live copy
+    // also sits under it; zooming or panning removes the copy and only the top bar keeps it.
+    if(t.classList.contains('sk2-cap')||t.parentNode===wrap){t.classList.remove('sk2-cap');t.style.left=t.style.top=t.style.maxWidth=t.style.width='';home.p.insertBefore(t,home.n&&home.n.parentNode===home.p?home.n:null);}
+    let cap=document.getElementById('sk2-cap-copy');
     if(deskx&&sk2CaptionOn()&&!zoomed){
-      if(t.parentNode!==wrap){wrap.appendChild(t);t.classList.add('sk2-cap');}
-      const cw=Math.min(w.width-32,Math.max(620,r&&!zoomed?r.width:0)),cl=(w.width-cw)/2;
-      t.style.left=cl+'px';t.style.top=(w.height-34)+'px';t.style.width=cw+'px';t.style.maxWidth='';
-    }else if(t.parentNode===wrap){t.classList.remove('sk2-cap');t.style.left=t.style.top=t.style.maxWidth=t.style.width='';home.p.insertBefore(t,home.n&&home.n.parentNode===home.p?home.n:null);}
+      if(!cap){cap=document.createElement('div');cap.id='sk2-cap-copy';cap.className='sk2-cap';wrap.appendChild(cap);
+        new MutationObserver(()=>place()).observe(t,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class','style','disabled','value','title']});}
+      const cl0=t.cloneNode(true);cl0.removeAttribute('id');[['db-title-name','cp-name'],['db-title-status','cp-status'],['fx-zoom-ctrl','cp-zc'],['fx-zoom-slider','cp-sl'],['fx-zoom-pct','cp-pct'],['btn-loupe','cp-loupe'],['btn-zoom-out','cp-zb'],['btn-zoom-in','cp-zb']].forEach(([i,c])=>{const n=cl0.querySelector('#'+i);if(n)n.classList.add(c);});cl0.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
+      cl0.style.cssText='';cl0.classList.remove('sk2-cap');
+      const html=cl0.innerHTML;if(cap._h!==html){cap.innerHTML=html;cap._h=html;}
+      const os=t.querySelector('#fx-zoom-slider'),cs=cap.querySelector('input[type=range]');if(os&&cs)cs.value=os.value;
+      const zc0=t.querySelector('#fx-zoom-ctrl'),zc1=cap.querySelector('.cp-zc');if(zc0&&zc1)zc1.style.display=zc0.style.display;
+      cap.style.display='flex';
+      const cw=Math.min(w.width-32,Math.max(620,r?r.width:0)),cl=(w.width-cw)/2;
+      cap.style.left=cl+'px';cap.style.top=(w.height-34)+'px';cap.style.width=cw+'px';
+    }else if(cap){cap.style.display='none';}
   });};
   function wire(){const cv=document.getElementById('fx-canvas'),wrap=document.getElementById('fx-wrap');if(!cv||!wrap)return;
     const ro=new ResizeObserver(()=>sk2Caption());ro.observe(cv);ro.observe(wrap);
@@ -6503,7 +6518,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929D';
+const BUILD='1.0929E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
