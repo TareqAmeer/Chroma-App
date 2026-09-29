@@ -676,14 +676,17 @@ mod tests {
     #[test]
     fn photo_style_reads_real_files() {
         let cases: &[(&str, u32)] = &[
-            ("/Users/tareqameer/Downloads/P_TM5168.RW2", 17),  // V-Log
-            ("/Users/tareqameer/Downloads/__TM3238.RW2", 3),   // Natural
-            ("/Users/tareqameer/Downloads/__TM2153.RW2", 1),   // Standard or Custom
-            ("/Users/tareqameer/Downloads/P_TM2125.RW2", 22),  // Leica Monochrome
+            ("P_TM5168.RW2", 17),  // V-Log
+            ("__TM3238.RW2", 3),   // Natural
+            ("__TM2153.RW2", 1),   // Standard or Custom
+            ("P_TM2125.RW2", 22),  // Leica Monochrome
         ];
         let mut checked = 0;
-        for (path, expected) in cases {
-            let Ok(bytes) = std::fs::read(path) else {
+        // Set CHROMASMITH_TEST_CAPTURES to the folder holding the real .RW2 files.
+        let dir = std::env::var("CHROMASMITH_TEST_CAPTURES").unwrap_or_default();
+        for (name, expected) in cases {
+            let path = format!("{dir}/{name}");
+            let Ok(bytes) = std::fs::read(&path) else {
                 eprintln!("skipping: {path} not present on this machine");
                 continue;
             };

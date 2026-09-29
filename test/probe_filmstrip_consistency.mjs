@@ -2,9 +2,10 @@ import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+const __CSROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 
-const root = '/Users/tareqameer/Documents/GitHub/Chroma-App';
-const imgdir = '/Users/tareqameer/Documents/GitHub/Chroma-App/test/fixtures';
+const root = __CSROOT;
+const imgdir = path.join(__CSROOT,'test/fixtures');
 
 const srv = createServer(async (q,r)=>{try{const b=await readFile(path.join(root,decodeURIComponent(q.url.split('?')[0]).replace(/\/$/,'/index.html')));r.setHeader('content-type',q.url.endsWith('.html')?'text/html':'application/octet-stream');r.end(b)}catch{r.statusCode=404;r.end()}}).listen(0);
 const port = srv.address().port;

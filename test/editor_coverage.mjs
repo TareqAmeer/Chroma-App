@@ -14,7 +14,7 @@
 //   - editor_wireframe_behaviour  → does clicking things still work?
 // None can answer "is this panel designed at all, and if it is, is anything checking it?"
 // That gap is exactly how a redesign reports green while most of it hasn't started, which is
-// the failure this repo has already paid for twice (HANDOVER_EDITOR.md §1, CLAUDE.md §10.14).
+// the failure this repo has already paid for twice (the removed HANDOVER_EDITOR.md (git history) §1, CLAUDE.md §10.14).
 //
 // This is a REPORT by default (always exit 0) so it can't block work in progress. `--strict`
 // makes it a gate: every panel that HAS a design must also have a PAIRS entry, a spec item and

@@ -9,7 +9,7 @@
 // ⚠️ THIS SUITE IS EXPECTED TO START RED. Per an explicit decision, tests here assert the
 // CORRECT behaviour, not the current one — so a genuine defect shows up as a failing test rather
 // than being baked in as "expected". Every failure should map to a numbered defect in
-// HANDOVER.md. A failure that ISN'T in that list is a real regression and must be investigated,
+// the removed HANDOVER.md (git history). A failure that ISN'T in that list is a real regression and must be investigated,
 // not added to the list.
 //
 // SAFETY: every run is `?libtest=1`, where library-ui.js swaps the Tauri `invoke` layer for
@@ -23,7 +23,7 @@
 // Playwright's own guidance that is the correct thing to assert against anyway ("avoid relying
 // on implementation details such as things which users will not typically use, see, or know").
 // Defects that are only visible in `state` and produce no observable symptom are recorded in
-// HANDOVER.md as code-review findings instead of being forced into an unobservable test.
+// the removed HANDOVER.md (git history) as code-review findings instead of being forced into an unobservable test.
 import { test as base, expect } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';

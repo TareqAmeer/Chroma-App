@@ -7,7 +7,7 @@
 // So the ordinary "did I break anything" command reported green while every Editor design check
 // sat unrun. That is the same shape as the failure this repo has already paid for: a gate that
 // exists, is believed to be enforcing, and isn't (CLAUDE.md's wireframe-fidelity note,
-// HANDOVER_EDITOR.md §0 on the regressions-only diff that always exited 0 on a clean checkout).
+// the removed HANDOVER_EDITOR.md (git history) §0 on the regressions-only diff that always exited 0 on a clean checkout).
 //
 // ⚠️ E7 (editor_ux_spec.json) — [light/photo] colour reads on #fx-deskbar descendants
 // intermittently returning the DARK theme's colour — ROOT-CAUSED AND FIXED 2026-09-10, by live

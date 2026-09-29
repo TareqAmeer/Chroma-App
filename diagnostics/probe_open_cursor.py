@@ -1,5 +1,5 @@
 import sys, os, json, time
-sys.path.insert(0, '/Users/tareqameer/Documents/GitHub/Chroma-App/diagnostics')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import raw_bench as rb, raw_open_bench as rob
 rb.app_stop(); rb._session_token=None
 t=rob.fresh_start()

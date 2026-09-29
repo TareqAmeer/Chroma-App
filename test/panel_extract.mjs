@@ -53,7 +53,7 @@ await page.keyboard.press('Escape'); // exit the boot-watchdog Library full-view
 await page.waitForTimeout(150);
 
 // Load a real photo so photo-gated sections/controls actually exist in the DOM — the same gap
-// HANDOVER_EDITOR.md flagged for the wireframe-diff PAIRS tool applies here too.
+// the removed HANDOVER_EDITOR.md (git history) flagged for the wireframe-diff PAIRS tool applies here too.
 const fixtureB64 = (await readFile(path.join(ROOT, 'test/fixtures/portrait.png'))).toString('base64');
 await page.evaluate(async (b64) => {
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));

@@ -1,8 +1,7 @@
 # Editor redesign — how to design the remaining panels and get them built correctly
 
 Written 2026-09-09. Load this before any Editor layout/style work. It is the process document;
-`test/editor_ux_spec.json` is the live backlog and `HANDOVER_EDITOR.md` is the (partly stale)
-history of how the tooling got here.
+`test/editor_ux_spec.json` is the live backlog.
 
 ---
 
@@ -128,7 +127,7 @@ The spec file can track them together; the work must not.
   (CLAUDE.md §4) share it. Every layout change must be checked at both. `editor_responsive_qa`
   stops at 700px; the phone pass lives in `test/ui_audit.mjs`.
 - **Read the computed style; never guess from a property name.** A plain-English symptom guessed
-  into a CSS property has already cost this project real time (HANDOVER_EDITOR.md §2).
+  into a CSS property has already cost this project real time.
 - **One property wrong across many unrelated zones is one root cause, not N bugs.** Check for a
   shared token or base rule before fixing anything individually.
 - **A GLSL-adjacent edit is a different risk class** — if a change reaches shader source, follow

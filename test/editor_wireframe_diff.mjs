@@ -84,7 +84,7 @@ function normFont(f) { return (f || '').replace(/BlinkMacSystemFont/g, 'system-u
 // every zone — 12 of the 59 pre-existing findings were exactly this. Rather than hand-listing
 // line-height as a permanent exception (a hand-list is itself an unfalsifiable constant that
 // drifts the moment the wireframe is re-exported — the "check that always passes" class,
-// HANDOVER_EDITOR.md §4), this derives the exception from the wireframe's OWN cascade: walk its
+// the removed HANDOVER_EDITOR.md (git history) §4), this derives the exception from the wireframe's OWN cascade: walk its
 // stylesheets for rules matching the element (and its ancestors, for inherited properties), and
 // only assert a PROPS entry the wireframe actually declares somewhere in that chain.
 const INHERITED = new Set(['fontFamily', 'fontSize', 'fontWeight', 'letterSpacing', 'lineHeight', 'color']);

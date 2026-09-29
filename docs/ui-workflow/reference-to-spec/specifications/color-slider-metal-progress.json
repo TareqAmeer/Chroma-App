@@ -9,8 +9,8 @@
       "usageNotes": "The recording is motion authority, the screenshot is static authority, and URL parameters are supporting evidence only. Generated WebGPU source is locked; source parity is not claimed."
     },
     "views": [
-      { "id": "static", "kind": "state", "assetRef": "/Users/tareqameer/Downloads/Screenshot 2026-09-13 at 1.10.55 PM.png", "description": "Supplied 52 percent state and deterministic PNG measurements.", "visibleScope": "Geometry, content placement, colour hierarchy, and settled front." },
-      { "id": "motion", "kind": "other", "assetRef": "/Users/tareqameer/Desktop/Screen Recording 2026-09-13 at 1.20.31 PM.mov", "description": "Supplied 22.767-second H.264 motion reference sampled once per second.", "visibleScope": "Three traversals, direction reversal, shape evolution, endpoint holds, and attached haze." },
+      { "id": "static", "kind": "state", "assetRef": "~/Downloads/Screenshot 2026-09-13 at 1.10.55 PM.png", "description": "Supplied 52 percent state and deterministic PNG measurements.", "visibleScope": "Geometry, content placement, colour hierarchy, and settled front." },
+      { "id": "motion", "kind": "other", "assetRef": "~/Desktop/Screen Recording 2026-09-13 at 1.20.31 PM.mov", "description": "Supplied 22.767-second H.264 motion reference sampled once per second.", "visibleScope": "Three traversals, direction reversal, shape evolution, endpoint holds, and attached haze." },
       { "id": "parameters", "kind": "other", "assetRef": "https://metalforge.xyz/editor#effect=progress&style=liquid&progress=52&speed=1&amount=0.085&lag=0.55&echo=0.055&bloom=1&jitter=0.3", "description": "User-supplied configured URL.", "visibleScope": "Parameter names and supplied values only; no units, equations, or implementation semantics." }
     ]
   },

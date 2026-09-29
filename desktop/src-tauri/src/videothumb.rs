@@ -245,7 +245,7 @@ mod tests {
     /// rotation-transform defect on real camera footage.
     #[test]
     fn poster_from_a_real_4k_clip_if_present() {
-        let dir = PathBuf::from("/Users/tareqameer/Documents/CHROMASMITH PHOTOS/2026/08/23");
+        let dir = PathBuf::from(std::env::var("CHROMASMITH_TEST_CLIPS").unwrap_or_default());
         if !dir.exists() {
             eprintln!("skipping: no real clip folder on this machine");
             return;

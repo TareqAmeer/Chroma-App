@@ -21,7 +21,7 @@ const DUMP_JSON = process.argv.includes('--json');
 // Added 2026-09-09, when this gate was wired into `npm test` for the first time (test/
 // editor_gates.mjs). It failed immediately on a CLEAN tree with 5 real topbar overlaps, and a
 // gate that is red on a clean checkout gets ignored within a day — which is the exact failure
-// mode this repo has already paid for twice (HANDOVER_EDITOR.md §0). So the known backlog is
+// mode this repo has already paid for twice (the removed HANDOVER_EDITOR.md (git history) §0). So the known backlog is
 // seeded honestly, the same way test/editor_wireframe_inventory_accepted.json seeds Editor's
 // structural backlog, and the gate is hard for everything else from day one.
 //

@@ -10,7 +10,7 @@
     },
     "views": [
       {"id":"current-full","kind":"full","assetRef":"docs/ui-workflow/reference-to-spec/evidence/color-mixer-pilot/current-full.png","description":"Existing Color Mixer presentation.","visibleScope":"Header, histogram, bands, three controls, and reset buttons."},
-      {"id":"darkroom-full","kind":"full","assetRef":"UNAVAILABLE — /Users/tareqameer/Downloads/Screenshot 2026-09-13 at 9.21.28 AM.png no longer exists on disk; not copied into evidence/ before it was removed. Observations below that cite this view are retained as prior evidence but cannot be re-verified against the original.","description":"Darkroom reference for thin histogram bars, circle treatment, and slider styling.","visibleScope":"Histogram, eight circles, and three controls."},
+      {"id":"darkroom-full","kind":"full","assetRef":"UNAVAILABLE — ~/Downloads/Screenshot 2026-09-13 at 9.21.28 AM.png no longer exists on disk; not copied into evidence/ before it was removed. Observations below that cite this view are retained as prior evidence but cannot be re-verified against the original.","description":"Darkroom reference for thin histogram bars, circle treatment, and slider styling.","visibleScope":"Histogram, eight circles, and three controls."},
       {"id":"darkroom-histogram","kind":"crop","assetRef":"docs/ui-workflow/reference-to-spec/evidence/color-mixer-pilot/darkroom-histogram.png","description":"Close reference for histogram height, colour progression, and selected-band overlay.","visibleScope":"Histogram only."}
     ]
   },
@@ -64,5 +64,5 @@
     ]
   },
   "validation":{"requiredScreenshots":["Identity state at a desktop width","Edited diagonal-split state at a desktop width","Narrow-width state with eight bands in one row"],"evidence":[]},
-  "approval":{"status":"approved","approvedBy":"user (tariqameer7575@gmail.com)","approvedAt":"2026-09-13","userDecisionRefs":["decision-reference-scope","decision-bands","decision-unedited","decision-edited","decision-interaction","decision-pilot-refinement","decision-square-variant","decision-rollout-scope"]}
+  "approval":{"status":"approved","approvedBy":"user","approvedAt":"2026-09-13","userDecisionRefs":["decision-reference-scope","decision-bands","decision-unedited","decision-edited","decision-interaction","decision-pilot-refinement","decision-square-variant","decision-rollout-scope"]}
 }

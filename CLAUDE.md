@@ -187,12 +187,7 @@ carrying it in every turn:
 - **[docs/editor-redesign-plan.md](docs/editor-redesign-plan.md)** — the Editor redesign process:
   the evidence-driven component and per-panel loop, its focused checks, the order of work, and
   what each check can and cannot see. **Load this
-  before any Editor layout/style work** — it supersedes HANDOVER_EDITOR.md's ordering, which
-  predates the tooling now in place. `npm run editor:coverage` is its live status view.
-- **[HANDOVER_EDITOR.md](HANDOVER_EDITOR.md)** — history of how that tooling got here: the
-  regressions-only gate bug, the seeded backlog, lessons from the Library pass. ⚠️ Partly stale
-  — several gaps it describes as missing (structural inventory, responsive sweep, behaviour
-  suite) now exist. Read it for the reasoning, not the current state.
+  before any Editor layout/style work.** `npm run editor:coverage` is its live status view.
 
 ## 6. Process lessons
 

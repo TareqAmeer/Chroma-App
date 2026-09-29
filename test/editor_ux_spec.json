@@ -1,5 +1,5 @@
 {
-  "_readme": "Stable-ID spec for the Editor UX/wireframe alignment pass. Each item: category (bug|topbar|context-menu|library-sidebar|looks-panel), status (open|fixed|backlog), source (verbatim ask), wireframeRef (source line in the .dc.html when the wireframe governs this item, else null), check (the test/check name that will assert it once written, else null). Update status in place as work lands \u2014 do not delete entries. See HANDOVER_EDITOR.md and the approved plan for the process this file is part of.",
+  "_readme": "Stable-ID spec for the Editor UX/wireframe alignment pass. Each item: category (bug|topbar|context-menu|library-sidebar|looks-panel), status (open|fixed|backlog), source (verbatim ask), wireframeRef (source line in the .dc.html when the wireframe governs this item, else null), check (the test/check name that will assert it once written, else null). Update status in place as work lands \u2014 do not delete entries. See the removed HANDOVER_EDITOR.md (git history) and the approved plan for the process this file is part of.",
   "items": {
     "E1": {
       "category": "bug",

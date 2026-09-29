@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/autostart-diagnostics.sh'"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.codex/hooks/autostart-diagnostics.sh"
           }
         ]
       },
@@ -15,11 +15,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/block-full-html-read.sh'"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.codex/hooks/block-full-html-read.sh"
           },
           {
             "type": "command",
-            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/nudge-explore-delegation.sh'"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.codex/hooks/nudge-explore-delegation.sh"
           }
         ]
       },
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/nudge-explore-delegation.sh'"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.codex/hooks/nudge-explore-delegation.sh"
           }
         ]
       },
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/reset-explore-counter.sh'"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.codex/hooks/reset-explore-counter.sh"
           }
         ]
       },
@@ -46,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/plan-completeness-gate.sh'"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.codex/hooks/plan-completeness-gate.sh"
           }
         ]
       }
@@ -57,11 +57,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/bump-build-stamp.sh'"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.codex/hooks/bump-build-stamp.sh"
           },
           {
             "type": "command",
-            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/warn-claude-md-size.sh'"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.codex/hooks/warn-claude-md-size.sh"
           }
         ]
       },
@@ -70,7 +70,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/token-lint-on-edit.sh'"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.codex/hooks/token-lint-on-edit.sh"
           }
         ]
       }
@@ -80,7 +80,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/precompact-snapshot.sh'"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.codex/hooks/precompact-snapshot.sh"
           }
         ]
       }
@@ -90,7 +90,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/reset-explore-counter.sh'"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.codex/hooks/reset-explore-counter.sh"
           }
         ]
       }
@@ -100,7 +100,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'/Users/tareqameer/Documents/GitHub/Chroma-App/.codex/hooks/stop-editor-gate-check.sh'"
+            "command": "\"$(git rev-parse --show-toplevel)\"/.codex/hooks/stop-editor-gate-check.sh"
           }
         ]
       }
