@@ -3968,6 +3968,11 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           </div>
         </div>
         <div class="fx-sub">Export</div>
+        <div class="fx-row" id="fx-exportdir-row" style="display:none" title="Where exported photos are saved">
+          <div class="fx-label">Save to</div>
+          <button class="btn bgh" id="fx-exportdir-btn" type="button" onclick="fxChooseExportDir()" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Downloads</button>
+          <button class="btn bgh" id="fx-exportdir-reset" type="button" onclick="fxChooseExportDir(true)" style="display:none" aria-label="Reset to Downloads" title="Reset to Downloads">×</button>
+        </div>
         <div id="fx-export-scope-row" style="margin-top:0;display:none">
           <div class="fx-label" style="width:auto;margin-bottom:4px" id="fx-export-scope-lb">Export scope</div>
           <div class="btn-row" style="margin-top:0;flex-wrap:nowrap">
@@ -6477,7 +6482,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929H';
+const BUILD='1.0929I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22239,6 +22244,31 @@ async function fxSaveGainMapHeic(pngBytes,fname,it){
     return false;
   }
 }
+// Export destination (desktop shell only). Persisted in localStorage, pushed to Rust on boot.
+function fxExportDirLabel(d){return d?(d.split(/[\\/]/).filter(Boolean).pop()||d):'Downloads';}
+function fxExportDirUI(d){
+  const row=document.getElementById('fx-exportdir-row');if(!row)return;
+  row.style.display='';
+  const b=document.getElementById('fx-exportdir-btn'),x=document.getElementById('fx-exportdir-reset');
+  b.textContent=fxExportDirLabel(d);b.title=d||'Downloads';x.style.display=d?'':'none';
+}
+async function fxChooseExportDir(reset){
+  let d='';
+  if(!reset){
+    try{d=await window.__TAURI__.core.invoke('plugin:dialog|open',{options:{directory:true,multiple:false,title:'Choose export folder'}});}catch(e){d=null;}
+    if(!d)return;
+  }
+  try{await window.__TAURI__.core.invoke('set_export_dir',{path:d});
+    try{localStorage.setItem('cs-export-dir',d);}catch(e){}
+    fxExportDirUI(d);}
+  catch(e){toast('Folder unavailable');}
+}
+(function(){
+  if(!tauriNative())return;
+  let d='';try{d=localStorage.getItem('cs-export-dir')||'';}catch(e){}
+  const go=()=>{fxExportDirUI(d);if(d)window.__TAURI__.core.invoke('set_export_dir',{path:d}).catch(()=>{fxExportDirUI('');});};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go();
+})();
 async function saveFilesNative(items){
   const out=[];
   for(const it of items){
@@ -22272,7 +22302,7 @@ function anchorDownload(content,fname,mime){const a=document.createElement('a');
 async function saveFile(content,fname,mime='application/octet-stream'){
   if(tauriNative()){
     const r=await saveFilesNative([{content,fname,mime}]);
-    if(r){if(r[0].ok)toast('Saved to Downloads ✓',true);else toast('Save failed — see log');return}
+    if(r){if(r[0].ok)toast('Saved to '+fxExportDirLabel((()=>{try{return localStorage.getItem('cs-export-dir')||''}catch(e){return ''}})())+' ✓',true);else toast('Save failed — see log');return}
   }
   if(capNative()){
     try{await capShareFiles([{content,fname,mime}]);toast('Saved ✓',true);return}

@@ -2161,7 +2161,33 @@ fn save_to_download_dir(dir: PathBuf, filename: String, data_b64: String) -> Res
 // report. Every export now goes through this command instead: one file per invoke, a real
 // Result per file, and the actual written path handed back so JS can log a concrete line.
 fn export_downloads_path() -> Result<PathBuf, String> {
+    if let Some(d) = EXPORT_DIR_OVERRIDE.lock().unwrap().clone() {
+        if d.is_dir() {
+            return Ok(d);
+        }
+    }
     crate::platform::downloads_dir()
+}
+
+// User-chosen export folder (Export panel "Save to"). None = the platform downloads folder. A
+// stale path (folder deleted/unplugged drive) silently falls back to Downloads rather than
+// failing the export.
+static EXPORT_DIR_OVERRIDE: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+/// Sets (or, with an empty string, clears) the export folder. Returns the folder now in effect.
+#[tauri::command]
+fn set_export_dir(path: String) -> Result<String, String> {
+    let p = path.trim();
+    if p.is_empty() {
+        *EXPORT_DIR_OVERRIDE.lock().unwrap() = None;
+    } else {
+        let pb = PathBuf::from(p);
+        if !pb.is_dir() {
+            return Err(format!("'{p}' is not a folder"));
+        }
+        *EXPORT_DIR_OVERRIDE.lock().unwrap() = Some(pb);
+    }
+    export_downloads_path().map(|d| d.to_string_lossy().into_owned())
 }
 
 // Next free "name (2).ext" / "name (3).ext" in `dir`. Deliberately NOT shared with
@@ -2689,6 +2715,7 @@ fn main() {
             library::set_people_regions,
             library::reset_edit,
             library::undo_reset_edit,
+            set_export_dir,
             library::get_export_history,
             library::append_export_history,
             library::duplicate_file,
