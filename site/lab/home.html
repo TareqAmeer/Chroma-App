@@ -408,11 +408,12 @@ section{position:relative}
   .hero-t{left:16px;top:12vh;font-size:13vw}
   .ph{width:92vw;height:61.33vw;left:50%}.stagew{top:15vh;width:auto;right:16px;transform:none}
   .panel{padding:0 16px}
-  .p1{overflow:hidden;align-content:start;padding-top:13vh}
+  .p1{align-content:start;padding-top:13vh}
   .p1txt{max-width:100%}.p1txt .t{font-size:16px}
   .board{position:relative;left:auto;right:auto;top:auto;bottom:auto;height:42vh;margin-top:3vh}
   .chips button{padding:5px 8px}.lbar{height:auto;flex-wrap:wrap;row-gap:8px;padding-bottom:8px}
   .lbar>.mono{display:none}
+  .lbar i{display:none}.chips{flex:1 1 100%;justify-content:flex-start}.chips button{padding:7px 8px;font-size:9px}.lbar .gt{font-size:34px}
   .k{font-size:clamp(34px,10vw,56px)}
   .t{font-size:16px}
   .p2 .img,.p3 .lensbox{width:100%}
@@ -458,11 +459,11 @@ section{position:relative}
 <section class="pin" aria-label="Chromasmith tour">
   <div class="ph">
     <img src="../assets/story/main1-2400.webp" srcset="../assets/story/main1-1600.webp 1600w, ../assets/story/main1-2400.webp 2400w, ../assets/story/main1.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="Raw, unedited beach photo" decoding="async">
-    <img class="st" src="../assets/story/main2-2400.webp" srcset="../assets/story/main2-1600.webp 1600w, ../assets/story/main2-2400.webp 2400w, ../assets/story/main2.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="" decoding="async" loading="lazy">
-    <img class="st" src="../assets/story/main3-2400.webp" srcset="../assets/story/main3-1600.webp 1600w, ../assets/story/main3-2400.webp 2400w, ../assets/story/main3.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="" decoding="async" loading="lazy">
-    <img class="st" src="../assets/story/main4-2400.webp" srcset="../assets/story/main4-1600.webp 1600w, ../assets/story/main4-2400.webp 2400w, ../assets/story/main4.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="" decoding="async" loading="lazy">
-    <img class="st" src="../assets/story/main5-2400.webp" srcset="../assets/story/main5-1600.webp 1600w, ../assets/story/main5-2400.webp 2400w, ../assets/story/main5.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="" decoding="async" loading="lazy">
-    <img class="st" src="../assets/story/main6-2400.webp" srcset="../assets/story/main6-1600.webp 1600w, ../assets/story/main6-2400.webp 2400w, ../assets/story/main6.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="" decoding="async" loading="lazy">
+    <img class="st" src="../assets/story/main2-2400.webp" srcset="../assets/story/main2-1600.webp 1600w, ../assets/story/main2-2400.webp 2400w, ../assets/story/main2.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="" decoding="async">
+    <img class="st" src="../assets/story/main3-2400.webp" srcset="../assets/story/main3-1600.webp 1600w, ../assets/story/main3-2400.webp 2400w, ../assets/story/main3.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="" decoding="async">
+    <img class="st" src="../assets/story/main4-2400.webp" srcset="../assets/story/main4-1600.webp 1600w, ../assets/story/main4-2400.webp 2400w, ../assets/story/main4.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="" decoding="async">
+    <img class="st" src="../assets/story/main5-2400.webp" srcset="../assets/story/main5-1600.webp 1600w, ../assets/story/main5-2400.webp 2400w, ../assets/story/main5.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="" decoding="async">
+    <img class="st" src="../assets/story/main6-2400.webp" srcset="../assets/story/main6-1600.webp 1600w, ../assets/story/main6-2400.webp 2400w, ../assets/story/main6.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="" decoding="async">
     <div class="shade"></div><div class="rvf"></div>
     <div class="favs mono" aria-hidden="true"><span class="fchip"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"/></svg><span>Fav</span></span></div>
   </div>
@@ -748,19 +749,19 @@ const handoff=X=>{const t0=window.__tile0;if(!t0)return;
   const done=q>=1;t0.style.visibility=done?'visible':'hidden';ph.style.visibility=done?'hidden':'visible';
   if(q<=0){if(mid){ph.style.left='50%';ph.style.top='50%';mid=false}return}mid=true;if(done)return;
   const pr=ph.parentElement.getBoundingClientRect(),r=t0.querySelector('img').getBoundingClientRect();
-  const w0=innerWidth*.22,h0=w0*4198/6123,cx0=pr.width/2,cy0=pr.height/2,cx1=r.left-pr.left+r.width/2,cy1=r.top-pr.top+r.height/2;
+  const w0=Wz(),h0=w0*4198/6123,cx0=pr.width/2,cy0=pr.height/2,cx1=r.left-pr.left+r.width/2,cy1=r.top-pr.top+r.height/2;
   const wNow=w0+(r.width-w0)*e;gsap.set('.favs',{scale:.42*wNow/w0});ph.style.left=(cx0+(cx1-cx0)*e)+'px';ph.style.top=(cy0+(cy1-cy0)*e)+'px';ph.style.width=(w0+(r.width-w0)*e)+'px';ph.style.height=(h0+(r.height-h0)*e)+'px'};
 const panel0=()=>document.querySelector('.p1');
 let PRE=8.1;
 const AR0=1.5,AR6=6123/4198,G6w=6123/5775,G6h=4198/3850,mob_=()=>innerWidth<760;
 const W0=()=>mob_()?innerWidth*.92:Math.min(innerWidth*.56,innerHeight*.76*AR0),H0=()=>W0()/AR0;
-const Wf=()=>Math.min(innerWidth,innerHeight*AR6),Hf=()=>Wf()/AR6,Wz=()=>innerWidth*.22;
+const Wf=()=>Math.min(innerWidth,innerHeight*AR6),Hf=()=>Wf()/AR6,Wz=()=>innerWidth*(innerWidth<760?.6:.22),K=()=>innerWidth<760?3:1;  // K: phones get more scroll per sideways pixel so the gallery doesn't flash past
 // memory: only the stage photos next to the current one stay in the page (display:none lets the browser drop the
 // other 3200px bitmaps), so at most three full-size layers exist at once instead of six
 const STG=[0,.5,1.2,1.9,2.6,3.3];let stgLast=-1;
 const stageWindow=t=>{document.querySelector('.ph').style.zIndex=t>=6.8?'3':'';let c=0;STG.forEach((s0,i)=>{if(t>=s0)c=i});if(t>=4.2)c=6;if(c===stgLast)return;stgLast=c;
   document.querySelectorAll('.ph img').forEach((im,i)=>{im.style.display=(c===6?i===5:Math.abs(i-c)<=1)?'':'none'})};
-const tl=gsap.timeline({onUpdate(){stageWindow(this.time())},scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*PRE+dist()),scrub:1,invalidateOnRefresh:true}});
+const tl=gsap.timeline({onUpdate(){stageWindow(this.time())},scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*PRE+dist()*K()),scrub:1,invalidateOnRefresh:true}});
 const W_=document.querySelectorAll('.stagew span'),wIn=(k,at)=>tl.to(W_[k].querySelectorAll('i'),{yPercent:0,stagger:{amount:.12},duration:.2,ease:'power3.out'},at),wOut=(k,at)=>tl.to(W_[k],{yPercent:-30,opacity:0,duration:.12,ease:'power2.in'},at);
 const PI=[...document.querySelectorAll('.ph img')],RV=document.querySelector('.ph .rvf'),CLOSED='inset(0% 0% 100% 0%)',OPEN='inset(0% 0% 0% 0%)',EZ='power1.inOut';
 gsap.set(PI,{clipPath:CLOSED});gsap.set(PI[0],{clipPath:OPEN});stageWindow(0);
@@ -791,14 +792,14 @@ tl.to('.ph',{left:'50%',width:Wf,height:Hf,ease:'power2.inOut',duration:1},4.2)
   .to('.ph',{width:Wz,height:()=>Wz()/AR6,ease:'power2.inOut',duration:.9},6.9)
   .to('.prog,.plab',{opacity:1,duration:.2},7.7)
   .addLabel('slide',PRE-0)
-  .to(tr,{x:()=>-dist(),ease:'none',duration:()=>dist()/innerHeight,onUpdate(){
+  .to(tr,{x:()=>-dist(),ease:'none',duration:dist()/innerHeight*K(),onUpdate(){
     const f=this.progress()*bars.length;bars.forEach((b,i)=>b.style.transform=`scaleX(${Math.max(0,Math.min(1,f-i))})`);
     const pp=pans[Math.max(0,Math.min(pans.length-1,Math.floor(f)||0))];if(pp)plab.textContent=pp.dataset.lab;
     handoff(this.progress()*dist());
     const g=panel0().getBoundingClientRect();document.body.classList.toggle('onpaper',g.left<120&&g.right>innerWidth*.4)}},'slide');
 const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scrollTrigger.end-tl.scrollTrigger.start);
 pans.forEach(p=>{
-  const st=()=>sPos()+Math.max(0,p.offsetLeft-innerWidth),en=()=>st()+innerWidth+p.offsetWidth;
+  const st=()=>sPos()+Math.max(0,p.offsetLeft-innerWidth)*K(),en=()=>st()+(innerWidth+p.offsetWidth)*K();
   const o=()=>({scrub:true,invalidateOnRefresh:true,start:st,end:en});
   gsap.fromTo(p.querySelectorAll('.k,.t,.p1txt .mono,.panel>div>.mono,.in>.mono,.tags,.looks,.terms'),{x:60},{x:-30,ease:'none',scrollTrigger:o()});
     gsap.fromTo(p.querySelectorAll('.big'),{x:160},{x:-80,ease:'none',scrollTrigger:o()});
@@ -831,7 +832,7 @@ pans.forEach(p=>{
     let y=T;rows.forEach((rw,ri)=>{const h=hs[ri]*k,rowW=rw.reduce((a,x)=>a+x[1]*h,0)+g*(rw.length-1);let x=(W-rowW)/2;
       rw.forEach(([t,ar])=>{Object.assign(t.style,{width:ar*h+'px',height:h+'px',left:x+'px',top:y+'px'});x+=ar*h+g});y+=h+g})};
   layout();addEventListener('resize',()=>{layout();ScrollTrigger.refresh()});
-  const org=gsap.timeline({scrollTrigger:{start:()=>sPos()-innerHeight*.9,end:()=>sPos()+panel.offsetLeft+innerWidth*.15,scrub:1,invalidateOnRefresh:true}});
+  const org=gsap.timeline({scrollTrigger:{start:()=>sPos()-innerHeight*.9,end:()=>sPos()+(panel.offsetLeft+innerWidth*.15)*K(),scrub:1,invalidateOnRefresh:true}});
   // start on screen (the track has not moved yet), then fly into the grid as it slides in
   const home=t=>panel.offsetLeft+board.offsetLeft+parseFloat(t.style.left||0);
   tiles.forEach((t,i)=>{const at=rnd(i,5)*.5;
