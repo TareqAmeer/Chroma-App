@@ -99,13 +99,14 @@ html.motion-ready .reveal.delay-2{transition-delay:.16s}
 .hero{background:#1d1d1d}
 .hero-img{position:absolute;inset:0;background:url("site/assets/hero-placeholder.webp") center 55%/cover no-repeat}
 .hero-img::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#000a 0%,#0002 74%),linear-gradient(0deg,#000a 0%,transparent 50%,#0006 100%)}
-.hero .chapter-inner{display:flex;flex-direction:column;justify-content:center}
+.hero .chapter-inner{display:flex;flex-direction:column;justify-content:flex-start;padding-top:clamp(80px,11vh,120px)}
+.hero h1 em b{font-weight:inherit;font-size:1.7em;line-height:0;vertical-align:-.12em;text-decoration:none;display:inline-block}
 .hero h1{max-width:11ch;margin-bottom:24px}
 .hero h1 span{display:block;margin-left:1.6ch}
 .hero h1 em{display:block;margin-left:3.1ch;font-style:normal;text-decoration:underline;text-decoration-color:var(--red-bright);text-decoration-thickness:.08em;text-underline-offset:.12em}
 .hero .lede{max-width:27em;margin-left:auto;color:#f5f2ee;text-align:right}
 .hero .btn-row{justify-content:flex-end}
-.hero-note{position:absolute;right:calc(var(--index) + clamp(28px,6vw,110px));bottom:30px;font-size:13px;color:#e7deda}
+.hero-note{position:absolute;right:calc(var(--index) + clamp(28px,6vw,110px));bottom:30px;font-size:clamp(16px,1.5vw,22px);font-weight:600;letter-spacing:.04em;max-width:26em;text-align:right;color:#fff}
 
 /* 02 — Gallery */
 .gallery{background:#050505}
@@ -246,7 +247,7 @@ html.motion-ready .reveal.delay-2{transition-delay:.16s}
   .hero h1 span,.hero h1 em{margin-left:0}
   .hero .lede{text-align:left;margin-left:0}
   .hero .btn-row{justify-content:flex-start}
-  .hero-note{right:50px;bottom:14px;font-size:10px}
+  .hero-note{right:50px;bottom:14px;font-size:14px;max-width:18em}
   .gallery .chapter-inner{display:flex;flex-direction:column;justify-content:center;gap:24px}
   .gallery .display-shot{aspect-ratio:4/3}
   .gallery .display-shot{max-height:none}
@@ -556,13 +557,13 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
   <section class="chapter hero" id="smith" data-rail="SMITH" aria-labelledby="smith-title">
     <!-- HERO-IMG:START --><div class="hero-img" role="img" aria-label="Black and white photograph of a dog"></div><!-- HERO-IMG:END -->
     <div class="chapter-inner">
-      <h1 id="smith-title" class="reveal delay-1">THE APP <span>THAT</span><em>DOES IT ALL*</em></h1>
+      <h1 id="smith-title" class="reveal delay-1">THE APP <span>THAT</span><em>DOES IT ALL<b>*</b></em></h1>
       <p class="lede reveal delay-2">A whole photo studio, wherever inspiration finds you. Make a look in a click or take control of every detail.</p>
       <div class="btn-row reveal delay-2">
         <a class="action solid" href="chromasmith-22.html">Launch the app ↗</a>
         <a class="action" href="#gallery">Explore the story ↓</a>
       </div>
-      <p class="hero-note">*Almost everything. Your ideas are still yours.</p>
+      <p class="hero-note">*ALMOST EVERYTHING. YOU STILL NEED TO TAKE THE PHOTOS.</p>
     </div>
   </section>
 
