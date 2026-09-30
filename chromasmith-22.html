@@ -4329,6 +4329,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
             <rect x="3.5" y="3.5" width="93" height="93" fill="none" stroke="rgba(255,210,80,.55)" stroke-width="0.15"/>
             <rect x="5" y="5" width="90" height="90" fill="none" stroke="rgba(255,210,80,.35)" stroke-width="0.15"/>
           </svg>
+          <svg id="fx-grid-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:var(--z-raise)"></svg>
         </div>
         <div class="fx-split-line" id="fx-split-line"><div class="fx-split-knob">⇔</div></div>
         <canvas id="fx-hist"></canvas>
@@ -6699,7 +6700,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930A';
+const BUILD='1.0930B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9936,8 +9937,22 @@ function cropGridLinesHtml(){
   return stops.map(p=>`<div class="crop-grid-v" style="left:${p}%"></div>`).join('')+
          stops.map(p=>`<div class="crop-grid-h" style="top:${p}%"></div>`).join('');
 }
+// Picking a grid shows it over the photo WITHOUT entering crop mode: crop mode freezes the preview
+// (straighten and zoom did nothing while a grid was on), and levelling a horizon against a grid is
+// the whole point of showing one. Crop mode draws its own grid inside the crop rectangle.
+let cropGridShown=false;
+function cropGridOverlaySync(){
+  const ov=document.getElementById('fx-grid-overlay');if(!ov)return;
+  const it=typeof curItem==='function'?curItem():null;
+  const on=cropGridShown&&cropGrid!=='off'&&!cropMode&&!!(it&&it.img);
+  ov.style.display=on?'block':'none';if(!on){ov.innerHTML='';return;}
+  const stops=cropGrid==='9x9'?[1,2,3,4,5,6,7,8].map(i=>i*100/9):cropGrid==='4x4'?[25,50,75]:cropGrid==='golden'?[38.2,61.8]:[33.333,66.667];
+  const ls=stops.map(p=>`<line x1="${p}" y1="0" x2="${p}" y2="100"/><line x1="0" y1="${p}" x2="100" y2="${p}"/>`).join('');
+  ov.innerHTML=`<g fill="none" vector-effect="non-scaling-stroke"><g stroke="rgba(0,0,0,.4)" stroke-width="3">${ls}</g><g stroke="rgba(255,255,255,.85)" stroke-width="1">${ls}</g></g>`;
+  ov.querySelectorAll('line').forEach(l=>l.setAttribute('vector-effect','non-scaling-stroke'));
+}
 function cropSetGrid(v){cropGrid=v;try{localStorage.setItem('chromasmith_crop_grid',v);}catch(e){}
-  if(!cropMode&&typeof cropEnter==='function'&&curItem()&&curItem().img&&v!=='off')cropEnter(); // picking a grid shows it on the photo
+  cropGridShown=v!=='off';cropGridOverlaySync();
   const r=document.getElementById('crop-rect');if(r){r.querySelectorAll('.crop-grid-v,.crop-grid-h').forEach(n=>n.remove());r.insertAdjacentHTML('beforeend',cropGridLinesHtml());}}
 // ── DPI read/write + metadata preservation (Exif/ICC/IPTC/XMP/pHYs) ─────────
 // Cameras/Lightroom often write resolution into Exif IFD0 (XResolution/
@@ -20249,6 +20264,7 @@ function resetGeomUI(){
 function curItem(){return fxImages[fxCurIdx]||null;}
 // ── multi-photo filmstrip: switch which loaded photo the preview/crop/export-current shows ──
 function buildFilmstrip(){
+  if(typeof cropGridOverlaySync==='function')cropGridOverlaySync();
   const el=document.getElementById('fx-filmstrip');if(!el)return;
   if(fxCurIdx>=fxImages.length)fxCurIdx=0;
   const _sl=el.scrollLeft;el.innerHTML='';
@@ -20903,7 +20919,7 @@ function cropDefaultForAR(){
 function cropEnter(){
   const it=curItem();if(!it){log('Load an image first','warn');return;}
   fxEnsureFullQuality('crop');
-  cropMode=true;
+  cropMode=true;cropGridOverlaySync();
   const g=it.geom||(it.geom=defGeom()),saved=g.crop;
   g.crop=null;cropBase=geomCanvas(it);g.crop=saved; // base = geometry WITHOUT user crop
   const wrap=document.getElementById('fx-wrap'),ov=document.getElementById('fx-crop-overlay');
@@ -21064,7 +21080,7 @@ function cropApply(){
 }
 function cropCancel(){cropExit();renderPreview();}
 function cropExit(){
-  cropMode=false;
+  cropMode=false;cropGridOverlaySync();
   const ov=document.getElementById('fx-crop-overlay');ov.classList.remove('on');ov.innerHTML='';ov.onpointerdown=null;
   document.getElementById('fx-crop-tools').style.display='none';
   document.getElementById('fx-preview-tools').style.display=curItem()?'flex':'none';
