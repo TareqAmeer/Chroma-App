@@ -19,7 +19,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SCHEMA_VERSION: i64 = 19;
+// v20: no new DDL of its own — forces the presence-keyed blocks at the end of migrate() (GPS/place, auto-tag tables,
+// auto_tagged_at) to run on catalogs already stamped v19 before those blocks existed; without it the Editor's Info
+// panel queried a photo_auto_tags table that was never created and every photo read as "not tagged".
+const SCHEMA_VERSION: i64 = 20;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
