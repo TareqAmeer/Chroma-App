@@ -1,7 +1,8 @@
 <h1>Chromasmith</h1>
 
 **Gallery. Studio. Film Lab**
-<sub>\*your photos. your workflow. your app.</sub>
+
+your photos. your workflow. your app.
 
 Make a look in a click or take control of every detail. Chromasmith is a free photo studio with
 132 calibrated film looks, real grain, halation and bloom, RAW development, masks and retouching,
