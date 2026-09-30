@@ -64,6 +64,14 @@ const PAIRS = [
   { name: 'acc vs mut (.fx-mod modified-row signal)', a: tokens.acc, b: tokens.mut },
 ];
 
+// Tokens alias each other (--acc -> var(--k-color-accent-a)); follow the chain to a literal.
+function resolveToken(v, depth = 0) {
+  if (!v || depth > 8) return v;
+  const m = v.match(/^var\(--([a-zA-Z0-9-]+)\s*(?:,[^)]*)?\)$/);
+  return m ? resolveToken(tokens[m[1]], depth + 1) : v;
+}
+for (const p of PAIRS) { p.a = resolveToken(p.a); p.b = resolveToken(p.b); }
+
 const findings = [];
 const MIN_DISTANCE = 40; // empirical floor for "still tells apart at a glance" in 0-441 RGB space
 

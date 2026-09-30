@@ -93,6 +93,7 @@ const AUDIT_FN = `(containerIds) => {
     const visibleKids = leaves(top).filter((el) => {
       const cs = getComputedStyle(el);
       if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+      if (el.getAttribute('aria-hidden') === 'true' && cs.pointerEvents === 'none') return false; // decorative marker (e.g. the rail indicator), not a control
       const b = el.getBoundingClientRect();
       return b.width > 0 && b.height > 0;
     });
@@ -162,9 +163,10 @@ const combos = LAYOUT_AXES.reduce((acc, ax) => acc.flatMap((c) => ax.states.map(
 findings.push(...await checkResizerCoverage(page, LAYOUT_AXES.map((a) => a.resizer), 'page load'));
 for (const vp of VIEWPORTS) {
   await page.setViewportSize({ width: vp.w, height: vp.h });
+  await page.waitForTimeout(200);
   for (const combo of combos) {
     await page.evaluate(combo.map(([, , js]) => js).join(';'));
-    await page.waitForTimeout(60);
+    await page.waitForTimeout(120); // fold pass is rAF-deferred
     const where = `${vp.label} | ${combo.map(([n, s]) => n + '=' + s).join(' ')}`;
     const result = await page.evaluate(`(${AUDIT_FN})(${JSON.stringify(CONTAINERS)})`);
     for (const [cid, a, bId, overlapPx] of result.overlaps) {

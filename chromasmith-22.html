@@ -1296,6 +1296,8 @@ body.deskx.cs-page-other #cs-tog-studio.on{opacity:.55}
 body.sk2.deskx.fx-deskbar-fold2 #fx-deskbar #fx-deskbar-title #db-title-name{display:none!important}
 body.sk2.deskx.fx-deskbar-fold3 #fx-deskbar #fx-deskbar-title #fx-zoom-slider{width:48px!important;flex-basis:48px!important}
 body.sk2.deskx.fx-deskbar-fold4 #fx-deskbar #fx-deskbar-title #fx-zoom-slider,body.sk2.deskx.fx-deskbar-fold4 #btn-fx-fullres{display:none!important}
+/* Last fold (below the ~760px design floor): drop the flag/favourite buttons rather than let them run into All FX — P/X/F keys and the filmstrip still set them. */
+body.sk2.deskx.fx-deskbar-fold5 #fx-deskbar #btn-flag-red,body.sk2.deskx.fx-deskbar-fold5 #fx-deskbar #btn-flag-green,body.sk2.deskx.fx-deskbar-fold5 #fx-deskbar #btn-favorite{display:none!important}
 body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
 body.fx-deskb #fx-toolrail{display:flex;flex-direction:column;gap:3px;position:sticky;top:calc(var(--deskbar-h, 58px) + 16px);align-self:start;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:6px}
 .fx-rail-btn{display:flex;align-items:center;gap:var(--sp-2);width:120px;background:none;border:none;border-radius:var(--r-sm);color:var(--mut);cursor:pointer;font-family:var(--sans);font-size:var(--fs-2);font-weight:500;letter-spacing:0;padding:var(--sp-2) var(--sp-2);text-align:left;transition:color var(--dur-1) var(--ease),background var(--dur-1) var(--ease)}
@@ -6634,7 +6636,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930L';
+const BUILD='1.0930M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13540,10 +13542,13 @@ function appHSync(){
   if(!bar)return;
   // Fold by real fit, not a fixed width: the title now carries zoom + flags, so fold one step at a
   // time (cheapest first) until the three clusters no longer touch.
-  const L=['fx-deskbar-fold1','fx-deskbar-tight1','fx-deskbar-fold2','fx-deskbar-tight2','fx-deskbar-fold3','fx-deskbar-fold4'];
+  const L=['fx-deskbar-fold1','fx-deskbar-tight1','fx-deskbar-fold2','fx-deskbar-tight2','fx-deskbar-fold3','fx-deskbar-fold4','fx-deskbar-fold5'];
   const fits=()=>{const l=document.getElementById('fx-deskbar-left'),t=document.getElementById('fx-deskbar-title'),r=document.getElementById('fx-deskbar-right');
-    if(!l||!t||!r||!t.offsetParent)return true;const a=l.getBoundingClientRect(),b=t.getBoundingClientRect(),c=r.getBoundingClientRect();
-    return a.right+12<=b.left&&b.right+12<=c.left&&c.right<=bar.getBoundingClientRect().right+1;};
+    if(!l||!t||!r||!t.getClientRects().length)return true;const a=l.getBoundingClientRect(),b=t.getBoundingClientRect(),c=r.getBoundingClientRect();
+    // the title's children can spill past its own box (nowrap flex), so measure their real extent too
+    let lo=b.left,hi=b.right;for(const k of t.children){const q=k.getBoundingClientRect();if(q.width>0){lo=Math.min(lo,q.left);hi=Math.max(hi,q.right);}}
+    b.left=lo;b.right=hi;
+    return a.right+12<=lo&&hi+12<=c.left&&c.right<=bar.getBoundingClientRect().right+1;};
   let busy=false;
   const sync=()=>{
     if(busy)return;const w=bar.offsetWidth;if(!w)return;busy=true;
@@ -13552,6 +13557,12 @@ function appHSync(){
     busy=false;
   };
   new ResizeObserver(sync).observe(bar);
+  // Panel/rail/dock changes move the bar's clusters without resizing the bar itself, so a width-only
+  // observer left a stale fold (overlaps after dragging a resizer). Re-fold on any non-fold body
+  // class change and on the layout's inline size variables.
+  const sig=()=>[...document.body.classList].filter(c=>!c.startsWith('fx-deskbar-')).join(' ');let lastSig=sig();
+  new MutationObserver(()=>{const n=sig();if(n!==lastSig){lastSig=n;requestAnimationFrame(sync);}}).observe(document.body,{attributes:true,attributeFilter:['class']});
+  const lay=document.querySelector('.fx-layout');if(lay)new MutationObserver(()=>requestAnimationFrame(sync)).observe(lay,{attributes:true,attributeFilter:['style']});
   const tt=document.getElementById('db-title-name');if(tt)new MutationObserver(()=>requestAnimationFrame(sync)).observe(tt,{childList:true,characterData:true,subtree:true});
   window.addEventListener('resize',sync);
   sync();

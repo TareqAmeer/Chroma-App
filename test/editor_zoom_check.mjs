@@ -30,6 +30,7 @@ function auditOverlaps(containerIds) {
     const visibleKids = leaves(top).filter((el) => {
       const cs = getComputedStyle(el);
       if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+      if (el.getAttribute('aria-hidden') === 'true' && cs.pointerEvents === 'none') return false; // decorative marker (e.g. the rail indicator), not a control
       const b = el.getBoundingClientRect();
       return b.width > 0 && b.height > 0;
     });
