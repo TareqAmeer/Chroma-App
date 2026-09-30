@@ -2343,6 +2343,9 @@ body.sk2 .look-cell canvas{display:block;width:100%;height:auto}
 body.sk2 .look-cell.kbd-focus{outline:1px solid var(--k-color-muted);outline-offset:2px}
 body.sk2 .look-cat-hdr{grid-column:1/-1;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);padding:14px 0 0;border:0;background:none}
 body.sk2 #row-lut-mix{position:sticky;bottom:0;z-index:7;background:var(--k-color-bg);margin:14px 0 0!important;padding:12px 0 14px;box-shadow:0 -1px 0 var(--bdr)}
+/* The card header ("Presets") already collapses the section; a second "Preset" collapse row inside it was a duplicate. */
+body.sk2 #fx-preset-head{display:none!important}
+body.sk2 #fx-looks-ctrl.fx-preset-collapsed #fx-preset-body{display:block!important}
 body.sk2 .fx-preset-head{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);margin:18px 0 8px!important}
 /* Export sheet: slides over the tool panel from the right; one big vermilion button. */
 body.sk2 #sk2-export{position:fixed;top:var(--deskx-topbar-h,56px);right:0;bottom:0;width:min(380px,100vw);z-index:calc(var(--z-overlay) + 4);background:var(--k-color-bg);box-shadow:-1px 0 0 var(--bdr);display:flex;flex-direction:column;transform:translateX(100%);visibility:hidden;transition:transform .22s var(--k-motion-easing),visibility 0s .22s}
@@ -2515,7 +2518,7 @@ body.sk2 .sk2-dup-title>.fx-ctrl-title{min-height:36px;padding-top:6px!important
 body.sk2 .sk2-dup-title>.fx-ctrl-title::before{content:attr(data-sk2-name);font-size:17px;font-weight:500;letter-spacing:-.01em;color:var(--k-color-ink);order:1;margin-right:auto}
 body.sk2 .sk2-dup-title>.fx-ctrl-title{min-height:48px!important}
 /* Histogram reads as a tool header like its Light-stage siblings (chevron left, same size/ink). */
-body.sk2 details#sk2-hist{border-top:0;margin:0 -15px;padding-top:0;box-shadow:0 1px 0 var(--bdr)}
+body.sk2 details#sk2-hist{border-top:0;margin:0 -8px;padding-top:0;box-shadow:0 1px 0 var(--bdr)} /* same inset as the .fx-ctrl-title rows below it */
 body.sk2 details#sk2-hist>summary{justify-content:flex-start;gap:12px;font-size:17px;font-weight:500;letter-spacing:-.01em;color:var(--k-color-ink);min-height:48px;align-items:center}
 body.sk2 details#sk2-hist>summary::before{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);margin:0 0 0 2px;transition:transform .15s}
 body.sk2 details#sk2-hist[open]>summary::before{transform:rotate(45deg)}
@@ -6700,7 +6703,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930F';
+const BUILD='1.0930G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
