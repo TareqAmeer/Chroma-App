@@ -54,7 +54,7 @@ vendor/                 libraw (RW2 wasm), dcp (14 DC-S9 profiles), mediabunny (
                         lazy import), luts (102 of 113 presets as raw 33³ bytes — §2)
 ios/, build-ios.sh, patches/   Capacitor iOS shell — docs/ios-shell.md
 .github/workflows/      ios-ipa.yml; desktop-release.yml (dmg + Windows NSIS installer) on `v*`
-                        tag. ⚠️ macos-13 (x86_64) required by the Intel-only libonnxruntime.dylib;
+                        tag. ⚠️ macos-15-intel (x86_64) required by the Intel-only libonnxruntime.dylib;
                         dmg via hdiutil, tauri.macos.conf.json targets:["app"]
 tools/calib/                  Calibration tooling (Python) — tools/calib/CLAUDE.md. Not needed to run the app.
                         LUT LIBRARY/ (46) + dehancer/cubes/ (67) = source of every preset
