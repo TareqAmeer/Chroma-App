@@ -58,14 +58,6 @@ Six tools, one editor: pick a look, shape the light and colour, add texture, the
 </tr>
 </table>
 
-### Same frame. A different feeling.
-
-| Original | Exported from Chromasmith |
-|---|---|
-| ![Original photo](site/assets/story/original.webp) | ![The same photo, graded with Classic Neg, subtle grain and halation](site/assets/story/studio.webp) |
-
-<sub>Sample photographs. The right-hand image is a genuine export: Classic Neg, subtle grain and halation.</sub>
-
 ---
 
 ## Get it
