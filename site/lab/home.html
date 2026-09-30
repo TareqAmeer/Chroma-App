@@ -503,7 +503,7 @@ section{position:relative}
 
     <div class="panel p2" data-lab="Studio">
       <div><div class="k">A studio for every frame.</div>
-        <p class="t">Start with a look. Then shape the light, colour and composition until the photo feels exactly right.</p></div>
+        <p class="t" id="studioNote">Look: pick from over 130 film presets and choose how it is printed.</p></div>
       <div class="img studiostack"><img loading="lazy" src="../assets/homepage/studio-1.webp" alt="Look panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-2.webp" alt="Light panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-3.webp" alt="Colour panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-4.webp" alt="Texture panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-5.webp" alt="Output panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-6.webp" alt="Info panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"></div>
     </div>
 
@@ -832,6 +832,8 @@ tl.to('.ph',{left:'50%',width:Wf,height:Hf,ease:'power2.inOut',duration:1},4.2)
   .to(tr,{x:()=>-dist(),ease:'none',duration:(dist()-XH())/innerHeight*K(),onUpdate:slideUpd})
   .addLabel('studioHold')
   .to({},{duration:HOLD2});
+const SN=['Look: pick from over 130 film presets and choose how it is printed.','Light: set exposure, contrast and curves, then add halation and bloom.','Colour: mix each colour, tint with wheels and fine-tune single shades.','Texture: add film grain, sharpen, reduce noise and paint local masks.','Output: crop to any ratio, then add borders and film frames.','Info: see the camera details and add keywords and tags.'];
+[0,1,2,3,4,5].forEach(k=>tl.call(()=>{document.getElementById('studioNote').textContent=SN[k]},null,k?'studioHold+='+(k*HOLD2/6+.075):'studioHold'));
 [1,2,3,4,5].forEach(k=>tl.to('.p2 .img img:nth-child('+(k+1)+')',{opacity:1,duration:.15,ease:'none'},'studioHold+='+(k*HOLD2/6)));  // scroll steps through Look, Light, Colour, Texture, Output, Info
 const xPos=X=>sPos()+X*K()+(X>XH()+1?innerHeight*HOLD:0)+(X>dist()-1?innerHeight*HOLD2:0);
 const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scrollTrigger.end-tl.scrollTrigger.start);
