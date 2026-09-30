@@ -253,7 +253,7 @@ footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;paddin
 .k{font-weight:700;letter-spacing:-.005em}
 .row h3,.group h3{font-size:clamp(24px,2.2vw,34px);font-weight:700}
 .quote{font-size:clamp(24px,2.6vw,40px)}
-.lead{position:relative;margin-top:-1px;padding:88px 5vw 14vh;background:var(--acc);color:#0b0b0a}.lead .hero-t sup{color:#0b0b0a}.lead .hero-t{position:relative;top:auto;left:auto;right:auto;pointer-events:auto;mix-blend-mode:normal}.lead .hero-t sup{font-size:1em;vertical-align:baseline;top:-.02em;line-height:0;margin-left:.03em}.lead .foot{position:absolute;right:5vw;bottom:4vh;margin:0;max-width:26em;text-align:right;font-size:clamp(15px,1.6vw,24px);font-weight:600;line-height:1.25;color:#0b0b0a}
+.lead{position:relative;margin-top:-1px;padding:88px 5vw 14vh;background:var(--acc);color:#0b0b0a}.lead .hero-t sup{color:#0b0b0a}.lead .hero-t{position:relative;top:auto;left:auto;right:auto;pointer-events:auto;mix-blend-mode:normal}.lead .hero-t sup{font-size:1em;vertical-align:baseline;top:-.02em;line-height:0;margin-left:.03em}.pinned .lead{z-index:6;margin-top:-70vh;background:transparent}.pinned .lead .hero-t,.pinned .lead .foot{opacity:0;transition:opacity .25s}.pinned.lead-on .lead{background:var(--acc)}.pinned.lead-on .lead .hero-t,.pinned.lead-on .lead .foot{opacity:1}.lead .foot{position:absolute;right:5vw;bottom:4vh;margin:0;max-width:26em;text-align:right;font-size:clamp(15px,1.6vw,24px);font-weight:600;line-height:1.25;color:#0b0b0a}
 /* 3 section numbers */
 .sn{position:absolute;right:5vw;top:88px;z-index:6;color:var(--dim)}
 .intro .sn,.pin .sn{position:absolute}
@@ -728,6 +728,7 @@ const heroIn=()=>{gsap.from('.hero-t',{yPercent:40,opacity:0,duration:1.4,ease:'
 /* intro: plays on load, holds (the light keeps breathing), scroll drives the vermilion curtain over it; scrolling back up returns to it */
 const reduce=still||matchMedia('(prefers-reduced-motion: reduce)').matches;
 if(!reduce){
+  document.documentElement.classList.add('pinned');
   gsap.set('.intro .name span',{yPercent:115});gsap.set('.intro .tag,.intro .cue',{opacity:0});gsap.set('.intro .expo',{svgOrigin:'69 32'});
   gsap.timeline({defaults:{ease:'expo.out'},delay:.2})
     .from('.intro .ink',{x:-60,opacity:0,duration:1.1})                          // ink plate slides into register
@@ -744,7 +745,7 @@ if(!reduce){
   const measure=()=>{W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});const b=W.getBoundingClientRect(),a=ws.getBoundingClientRect(),c=wt.getBoundingClientRect();E={sx:a.left-b.left,sy:a.top-b.top,sw:a.width,tx:c.left-b.left,ty:c.top-b.top,tfs:parseFloat(getComputedStyle(wt).fontSize),th:c.height};WB={w:b.width,h:b.height};W.style.width=b.width+'px';W.style.height=b.height+'px';W.classList.add('fly');docked=false};
   measure();ScrollTrigger.addEventListener('refreshInit',measure);
   gsap.set('.word',{opacity:0});
-  gsap.timeline({onUpdate(){const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'})}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=70%',pin:true,scrub:1,invalidateOnRefresh:true}})
+  gsap.timeline({onUpdate(){const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'})}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=70%',pin:true,scrub:1,invalidateOnRefresh:true,onUpdate:self=>document.documentElement.classList.toggle('lead-on',self.progress>.95)}})
     .to('.intro .cue',{opacity:0,duration:.1})
     .to('.intro .in',{opacity:0,duration:.02,ease:'none'},.01)
     .to('.word',{opacity:1,duration:.02,ease:'none'},.01)
