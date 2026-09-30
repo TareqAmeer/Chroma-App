@@ -732,12 +732,26 @@ if(matchMedia('(pointer:coarse)').matches){
   addEventListener('click',e=>{
     if(e.defaultPrevented||(lenis&&lenis.isStopped)||!e.target.closest)return;
     if(e.target.closest('a,button,input,select,textarea,label,summary,details,dialog,[role=dialog],[hidden],.idx,.tape,.tile,.board,.ba,.f,[data-i]'))return;
-    const y=scrollY,H=innerHeight,tops=[...document.querySelectorAll('body>section:not([hidden]),footer')].map(el=>el.getBoundingClientRect().top+y);
+    const y=scrollY,H=innerHeight;
+    const st=tl.scrollTrigger,span=st.end-st.start,px=t=>st.start+t/tl.duration()*span;
+    if(y>=st.start-4&&y<st.end-4){
+      // inside the pinned tour: glide between the scenes that "rest" (raw, each effect landed, full-screen frame, gallery, each studio tool)
+      const gl=tl.labels.slide+XH()/H*K()+.05,sh=tl.labels.studioHold;
+      const T=[.97,1.67,2.37,3.07,4.05,6.1,gl,sh,...[1,2,3,4,5].map(k=>sh+k*HOLD2/6+.2),tl.duration()];
+      const to=T.map(px).find(v=>v>y+H*.08);
+      if(to!==undefined){
+        const d=Math.abs(to-y),dur=Math.max(.9,Math.min(2.2,.9+d/H*.7));
+        const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+        lenis?lenis.scrollTo(to,{duration:dur,easing:ease,lock:true}):scrollTo({top:to,behavior:'smooth'});
+        return;
+      }
+    }
+    const tops=[...document.querySelectorAll('body>section:not([hidden]),footer')].map(el=>el.getBoundingClientRect().top+y);
     const next=tops.find(t=>t>y+H*.25);
     const maxY=document.documentElement.scrollHeight-H;
     if(y>=maxY-4)return;
     const to=Math.min(maxY,next===undefined?y+H:Math.min(next,y+H));
-    lenis?lenis.scrollTo(to,{duration:1.1}):scrollTo({top:to,behavior:'smooth'});
+    lenis?lenis.scrollTo(to,{duration:Math.max(.9,Math.min(1.8,.9+Math.abs(to-y)/H*.6)),easing:x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2,lock:true}):scrollTo({top:to,behavior:'smooth'});
   });
 }
 document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{const h=a.getAttribute('href');e.preventDefault();const tgt=h.length<2?0:h;lenis?lenis.scrollTo(tgt,{offset:-40}):(tgt?document.querySelector(tgt).scrollIntoView():scrollTo(0,0))}));
