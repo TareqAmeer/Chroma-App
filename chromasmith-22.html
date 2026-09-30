@@ -3895,6 +3895,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <select class="fx-select" id="sel-crop-grid" onchange="cropSetGrid(this.value)">
             <option value="3x3">3×3 (Rule of thirds)</option>
             <option value="4x4">4×4</option>
+            <option value="9x9">9×9</option>
             <option value="golden">Golden ratio</option>
             <option value="off">Off</option>
           </select>
@@ -6643,7 +6644,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930U';
+const BUILD='1.0930V';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9876,7 +9877,7 @@ let cropMode=false,cropN=null,cropAR=0,cropBase=null,_cropDrag=null; // interact
 let cropGrid='3x3'; try{cropGrid=localStorage.getItem('chromasmith_crop_grid')||'3x3';}catch(e){}
 function cropGridLinesHtml(){
   if(cropGrid==='off')return'';
-  const stops=cropGrid==='4x4'?[25,50,75]:cropGrid==='golden'?[38.2,61.8]:[33.333,66.667]; // default 3x3 (rule of thirds)
+  const stops=cropGrid==='9x9'?[1,2,3,4,5,6,7,8].map(i=>i*100/9):cropGrid==='4x4'?[25,50,75]:cropGrid==='golden'?[38.2,61.8]:[33.333,66.667]; // default 3x3 (rule of thirds)
   return stops.map(p=>`<div class="crop-grid-v" style="left:${p}%"></div>`).join('')+
          stops.map(p=>`<div class="crop-grid-h" style="top:${p}%"></div>`).join('');
 }
@@ -19637,6 +19638,15 @@ function fxPaintAllSliders(root){(root||document).querySelectorAll('input.fx-sli
 // range elements historically, hence capture.
 document.addEventListener('input',e=>{if(e.target&&e.target.classList&&e.target.classList.contains('fx-slider'))fxPaintSlider(e.target);},true);
 function initSliderErgonomics(){
+  // Arrow-key focus follows the last click: a slider keeps it (nudged above); a filmstrip thumb
+  // takes it back, so a still-focused slider never swallows the filmstrip arrows. Fine steps
+  // (0.1 / 0.01) are temporary — the native step returns on the next pointer-down on the slider.
+  document.addEventListener('pointerdown',e=>{
+    const t=e.target;if(!t||!t.closest)return;
+    const sl=t.closest('input.fx-slider[type=range]');
+    if(sl){if(sl.dataset.fxStep0!==undefined){if(sl.dataset.fxStep0)sl.step=sl.dataset.fxStep0;else sl.removeAttribute('step');delete sl.dataset.fxStep0;}return;}
+    if(t.closest('#fx-filmstrip,.fs-thumb')){const a=document.activeElement;if(a&&a.type==='range')a.blur();}
+  },true);
   // ── Click the value to type one ──
   document.addEventListener('click',e=>{
     const v=e.target.closest&&e.target.closest('.fx-val');
@@ -19663,10 +19673,20 @@ function initSliderErgonomics(){
     let d=0;
     if(e.key==='ArrowUp'||e.key==='ArrowRight')d=1;
     else if(e.key==='ArrowDown'||e.key==='ArrowLeft')d=-1;
-    const step=(parseFloat(sl.step)||1)*(e.shiftKey?10:1);
     if(d){
       e.preventDefault();
-      if(_fxSliderSet(sl,parseFloat(sl.value)+d*step))_fxFireInput(sl);
+      const mul=e.shiftKey?10:1;
+      if(sl.dataset.fxStep0===undefined)sl.dataset.fxStep0=sl.step||'';
+      if(sl.id==='sl-straighten'&&typeof geomStraighten==='function'){ // angle space, 0.01 deg per press
+        const g=curGeom();if(!g)return;
+        const a=Math.max(-45,Math.min(45,Math.round((g.angle+d*0.01*mul)*100)/100));
+        sl.step='any';sl.value=_stA2S(a);geomStraighten(a);
+        return;
+      }
+      sl.step='any';
+      const nv=Math.round((parseFloat(sl.value)+d*0.1*mul)*100)/100;
+      sl.value=Math.min(parseFloat(sl.max),Math.max(parseFloat(sl.min),nv));
+      _fxFireInput(sl);
       return;
     }
     if(e.key==='Home'||e.key==='End'){
