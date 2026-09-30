@@ -1187,10 +1187,42 @@ body.mobile-fx #row-lut-mix{position:sticky;bottom:0;z-index:3;background:var(--
 }
 body.mobile-fx #fx-tools-close{flex:0 0 46px;align-self:center;min-width:88px;border:1px solid #eee;border-radius:2px;background:#121212;color:#fff;font:600 14px var(--sans);text-transform:uppercase;cursor:pointer}
 #fx-fab-export{display:none}
+/* ── Mobile UX pass 2: strength on re-tap, current-look ring, favourites, skeleton tiles, tool strip, snap points, focus mode, bottom bar ── */
+body.mobile-fx #row-lut-mix{display:none!important}
+body.mobile-fx.lk-strength #row-lut-mix{display:flex!important}
+body.mobile-fx .look-cell{position:relative}
+body.mobile-fx .look-cell.sel canvas{outline:2px solid var(--acc);outline-offset:-2px}
+body.mobile-fx .look-cell.fav::after{content:'\2605';position:absolute;top:4px;left:7px;font-size:13px;color:#fff;text-shadow:0 0 3px #000}
+body.mobile-fx .look-cell canvas{background-color:var(--sur2);animation:csSkel 1.2s ease-in-out infinite alternate}
+@keyframes csSkel{from{background-color:var(--sur2)}to{background-color:var(--sur)}}
+@media (prefers-reduced-motion:reduce){body.mobile-fx .look-cell canvas{animation:none}}
+body.mobile-fx.sheet-open.sheet-peek .fx-panel{height:150px;max-height:150px;overflow:hidden}
+#fx-sheet-strip{display:none}
+body.mobile-fx.sheet-open #fx-sheet-strip{display:flex;gap:20px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;position:sticky;top:0;z-index:8;background:var(--k-color-bg);padding:8px 2px 6px;margin:0 -2px 4px;border-bottom:1px solid var(--bdr)}
+#fx-sheet-strip::-webkit-scrollbar{display:none}
+#fx-sheet-strip button{flex:0 0 auto;background:none;border:0;color:var(--k-color-muted);font:14px var(--sans);padding:4px 0;min-height:32px;cursor:pointer}
+#fx-sheet-strip button.on{color:var(--k-color-ink);box-shadow:inset 0 -2px 0 var(--k-color-accent-a)}
+body.mobile-fx #fx-mobile-nav #fx-nav-export{min-height:40px;padding:0 18px;font:600 14px var(--sans);align-self:center}
+body.mobile-fx .fx-nav-tabs{gap:2px}
+body.mobile-fx.sheet-open .fx-panel{padding-bottom:calc(var(--kb-h,0px) + 10px)}
+#fx-focus{display:none}
+body.mobile-fx #fx-focus.on{display:block;position:fixed;left:0;right:0;bottom:var(--mnav-h,74px);z-index:calc(var(--z-overlay) + 2);background:var(--k-color-bg);border-top:1px solid var(--bdr);padding:14px 20px 12px}
+#fx-focus .ff-head{display:flex;justify-content:space-between;align-items:baseline;font:600 16px var(--sans);color:var(--k-color-ink)}
+#fx-focus .ff-head b{font-variant-numeric:tabular-nums}
+#fx-focus input[type=range]{width:100%;min-height:56px;margin:6px 0}
+#fx-focus .ff-nav{display:flex;justify-content:space-between;align-items:center}
+#fx-focus .ff-nav button{background:none;border:0;color:var(--k-color-muted);font:14px var(--sans);min-height:40px;padding:0 6px}
+#fx-focus .ff-nav .ff-done{color:var(--k-color-ink);font-weight:600}
+#fx-focus .ff-hint{text-align:center;color:var(--k-color-muted);font:12px var(--sans)}
+.mm-presets{display:flex;gap:16px;margin:2px 0 6px}
+.mm-presets button{background:none;border:0;color:var(--k-color-muted);font:14px var(--sans);padding:6px 0;min-height:40px;cursor:pointer}
+.mm-presets button.on{color:var(--k-color-ink);box-shadow:inset 0 -2px 0 var(--k-color-accent-a)}
+.mm-est{font:12px var(--sans);color:var(--k-color-muted);text-align:center;margin:2px 0 8px;font-variant-numeric:tabular-nums}
+
 /* ── Mobile UX pass: bigger look tiles, one scrolling chip row, larger slider hit area, tool tiles, portrait only ── */
 body.mobile-fx .look-cell{flex:0 0 104px}
 /* Phones: the per-tool on/off switch is redundant (moving any slider switches the tool on, Reset switches it back off) — one control, one meaning. */
-body.mobile-fx .fx-ctrl:not([data-fxsec="lens"]):not([data-fxsec="wm"]):not([data-fxsec="export"])>.fx-ctrl-title>.fx-toggle{display:none}
+body.mobile-fx .fx-ctrl:not([data-fxsec="lens"]):not([data-fxsec="wm"]):not([data-fxsec="export"])>.fx-ctrl-title .fx-toggle{display:none}
 body.mobile-fx #fx-looks-cats{flex-wrap:nowrap!important;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 body.mobile-fx #fx-looks-cats::-webkit-scrollbar{display:none}
 body.mobile-fx #fx-looks-cats .btn{flex:0 0 auto}
@@ -4521,7 +4553,6 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <button class="fx-act" onclick="fxPickPhotos()" title="Open photo" aria-label="Open photo"><span class="fx-act-ic" data-mic="plus"></span></button>
         <button class="fx-act" onclick="fxUndo()" title="Undo" aria-label="Undo"><span class="fx-act-ic" data-mic="undo"></span></button>
         <button class="fx-act" onclick="fxRedo()" title="Redo" aria-label="Redo"><span class="fx-act-ic" data-mic="redo"></span></button>
-        <button class="fx-act" onclick="fxSection('info')" title="Photo information" aria-label="Photo information"><span class="fx-act-ic" data-mic="info"></span></button>
         <button class="fx-act" onclick="fxMoreMenu()" title="More" aria-label="More"><span class="fx-act-ic" data-mic="more"></span></button>
       </div>
       <div id="fx-quicknav" aria-label="Quick tools">
@@ -4544,7 +4575,8 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
     </div>
     <div id="fx-mobile-nav" aria-label="Editor navigation">
       <div class="fx-nav-tabs" role="tablist"><button id="fx-nav-looks" role="tab" onclick="fxToolsClose();fxSection('looks')">Looks</button>
-      <button id="fx-nav-tools" role="tab" onclick="fxToolsOpen()">Tools</button></div>
+      <button id="fx-nav-tools" role="tab" onclick="fxToolsOpen()">Tools</button>
+      <button id="fx-nav-crop" role="tab" onclick="fxToolsClose();fxSection('crop')">Crop</button></div>
       <button id="fx-nav-export" onclick="fxMobileExportSheet()">Export</button>
     </div>
   </div>
@@ -6726,7 +6758,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930M';
+const BUILD='1.0930N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13489,6 +13521,9 @@ function fxMoreMenu(){
     const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;
     b.onclick=()=>{m.remove();switchTab(tab);};sh.appendChild(b);
   });
+  [['Photo information',()=>fxSection('info')],['Histogram',()=>csToggleHist()]].forEach(([lb,fn])=>{
+    const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;b.onclick=()=>{m.remove();fn();};sh.appendChild(b);
+  });
   const pv=document.createElement('button');pv.className='btn bgh';pv.textContent='Apply previous settings';
   pv.onclick=()=>{m.remove();fxApplyPrevious();};sh.appendChild(pv);
   const fx=document.createElement('button');fx.className='btn bgh';fx.textContent='All FX settings…';
@@ -13531,6 +13566,7 @@ function fxMobileExportSheet(){
       row.appendChild(b);});
     sh.appendChild(row);
   }
+  csExportPresets(sh);
   mirror('Size','sel-exp-size');mirror('Format','sel-exp-fmt');
   const q=document.getElementById('sl-exp-q');
   if(q){const row=document.createElement('label');row.className='mm-row';
@@ -13539,6 +13575,7 @@ function fxMobileExportSheet(){
     const lab=()=>t.textContent='Quality '+r.value;lab();
     r.oninput=()=>{q.value=r.value;q.dispatchEvent(new Event('input',{bubbles:true}));lab();};
     row.append(t,r);sh.appendChild(row);}
+  csExportEstimate(sh);
   const go=document.createElement('button');go.className='btn bpri';
   const syncGo=()=>go.textContent=fxImages.length>1&&fxExportScope!=='current'?'Export '+fxImages.length+' photos':'Export photo';
   syncGo();go.onclick=()=>{m.remove();exportFX();};sh.appendChild(go);
@@ -21151,7 +21188,7 @@ function _lookMatches(key){
 }
 function buildLookCatChips(){
   const host=document.getElementById('fx-looks-cats');if(!host)return;
-  const cats=['All',...groupedLutKeys().map(([c])=>c)];
+  const cats=['All',...(window.csLookSpecials?csLookSpecials():[]),...groupedLutKeys().map(([c])=>c)];
   if(!cats.includes(fxLookCatFilter))fxLookCatFilter='All';
   host.innerHTML='';
   const shown=cats; // phones scroll one row of chips instead of hiding most behind "More"
@@ -21189,7 +21226,8 @@ function buildLookGallery(){
       ks.forEach(k=>entries.push(['p:'+k,prettyLUT(k)]));
     });
   }else{
-    const grp=groups.find(([cat])=>cat===fxLookCatFilter);
+    const sp=window.csLookSpecialKeys?csLookSpecialKeys(fxLookCatFilter):null;
+    const grp=sp?[fxLookCatFilter,sp]:groups.find(([cat])=>cat===fxLookCatFilter);
     (grp?grp[1]:[]).filter(_lookMatches).forEach(k=>entries.push(['p:'+k,prettyLUT(k)]));
   }
   // Cells are created immediately (so layout/click targets exist), but a cell only RENDERS once
@@ -21271,7 +21309,7 @@ function buildLookGallery(){
       const hdr=document.createElement('div');hdr.className='look-cat-hdr';hdr.textContent=label;curCat=label;
       host.appendChild(hdr);return;
     }
-    const cell=document.createElement('div');cell.className='look-cell'+(val===cur?' sel':'');
+    const cell=document.createElement('div');cell.className='look-cell'+(val===cur?' sel':'')+(window.csIsFav&&csIsFav(val)?' fav':'');
     const cv=document.createElement('canvas');cv.width=w;cv.height=h;
     cell.appendChild(cv);
     const nm=document.createElement('div');nm.className='look-nm';nm.textContent=label;cell.appendChild(nm);
@@ -24215,7 +24253,7 @@ function fxToolsOpen(){
   document.body.classList.add('tools-open');
   {const nv=document.getElementById('fx-mobile-nav');if(nv){const h=nv.offsetHeight;if(h)document.body.style.setProperty('--mnav-h',h+'px');}}
   document.getElementById('fx-nav-tools')?.classList.add('on');
-  document.getElementById('fx-nav-looks')?.classList.remove('on');
+  document.getElementById('fx-nav-looks')?.classList.remove('on');document.getElementById('fx-nav-crop')?.classList.remove('on');
   fxMobileFilter(_fxMobileCat);
   fxLiveFit(360);
   requestAnimationFrame(()=>renderPreview());
@@ -24403,7 +24441,8 @@ function fxSection(name,noSheet){
   const mob=document.body.classList.contains('mobile-fx');
   if(mob){
     document.getElementById('fx-nav-looks')?.classList.toggle('on',name==='looks');
-    document.getElementById('fx-nav-tools')?.classList.toggle('on',name!=='looks');
+    document.getElementById('fx-nav-crop')?.classList.toggle('on',name==='crop');
+    document.getElementById('fx-nav-tools')?.classList.toggle('on',name!=='looks'&&name!=='crop');
   }
   const isActive=cards.some(c=>c.classList.contains('sec-active'));
   // Mobile bottom-sheet behavior: tapping the ACTIVE tool's icon again closes the sheet.
@@ -24444,7 +24483,7 @@ function fxSection(name,noSheet){
   if(dx&&typeof sk2SubTabs==='function')sk2SubTabs(name,jumpTo);
 }
 function fxSheetClose(){
-  document.body.classList.remove('sheet-open','sheet-full');
+  document.body.classList.remove('sheet-open','sheet-full','sheet-peek','lk-strength');
   document.querySelectorAll('#fx-secnav .fx-sec-btn').forEach(b=>b.classList.remove('on'));
   document.getElementById('fx-nav-looks')?.classList.remove('on');
   document.getElementById('fx-nav-tools')?.classList.add('on');
@@ -24574,9 +24613,16 @@ window.addEventListener('resize',()=>{
     const cur=pn.getBoundingClientRect().height;
     // tap, downward flick, or dragged past ~38%. A flick only counts if the finger was
     // still moving just before lift-off — pausing >120ms decays the intent to zero.
-    const flick=vel>0.5&&(performance.now()-lastT)<120;
-    const close=!moved||flick||cur<startH*0.62;
-    const grow=!close&&cur>startH*1.15;
+    const recent=(performance.now()-lastT)<120;
+    const flickDown=vel>0.5&&recent,flickUp=vel<-0.5&&recent;
+    const vh=window.innerHeight||800,hs=[150,Math.min(vh*0.34,360,vh*0.45),vh*0.78];
+    const bd=document.body,st0=bd.classList.contains('sheet-full')?2:bd.classList.contains('sheet-peek')?0:1;
+    let idx;
+    if(!moved)idx=-1;                                   // a tap on the handle still closes
+    else if(flickDown)idx=st0-1;                        // flick down: one snap lower, or close from peek
+    else if(flickUp)idx=Math.min(2,st0+1);
+    else{idx=0;hs.forEach((hh,i)=>{if(Math.abs(cur-hh)<Math.abs(cur-hs[idx]))idx=i;});if(cur<hs[0]*0.6)idx=-1;}
+    const close=idx<0;
     // Synchronous release (NO rAF — it never fires in a hidden/backgrounded tab, which
     // would leave the inline height stuck): restore the stylesheet transition, force a
     // reflow so it registers the dragged height as the starting value, then flip state —
@@ -24584,7 +24630,7 @@ window.addEventListener('resize',()=>{
     pn.style.transition='';
     void pn.offsetHeight;
     if(close)fxSheetClose();
-    else document.body.classList.toggle('sheet-full',grow||(document.body.classList.contains('sheet-full')&&cur>startH*0.9));
+    else{bd.classList.toggle('sheet-peek',idx===0);bd.classList.toggle('sheet-full',idx===2);}
     pn.style.height='';
     fxLiveFit(360);
     if(close)hapt();
@@ -26122,6 +26168,147 @@ if(/[?&]catalog=1/.test(location.search)){
     e.preventDefault();sl.value=d;sl.dispatchEvent(new Event('input',{bubbles:true}));
     try{if(typeof hapt==='function')hapt('MEDIUM');}catch(_){}
   });
+})();
+</script>
+<script>
+/* Mobile UX pass 2 — see docs/mobile-ux-review.md. Everything here is inert unless body.mobile-fx. */
+(function(){
+  var mob=function(){return document.body.classList.contains('mobile-fx');};
+  var LS=function(k,d){try{return JSON.parse(localStorage.getItem(k)||'null')||d;}catch(e){return d;}};
+  var SV=function(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
+  var key=function(val){return String(val||'').replace(/^p:/,'');};
+  // ---- favourites / recents (looks are stored by preset key)
+  window.csIsFav=function(val){return !!val&&LS('csFavLooks',[]).indexOf(key(val))>=0;};
+  window.csLookSpecials=function(){if(!mob())return[];var o=[];if(LS('csRecentLooks',[]).length)o.push('Recent');if(LS('csFavLooks',[]).length)o.push('Favourites');return o;};
+  window.csLookSpecialKeys=function(cat){if(cat==='Recent')return LS('csRecentLooks',[]);if(cat==='Favourites')return LS('csFavLooks',[]);return null;};
+  function refreshLooks(){if(typeof buildLookCatChips==='function')buildLookCatChips();}
+  document.addEventListener('click',function(e){
+    if(!mob())return;var cell=e.target.closest&&e.target.closest('.look-cell');if(!cell)return;
+    if(cell._csLP){cell._csLP=false;e.stopPropagation();e.preventDefault();return;}
+    var val=cell._lookJob&&cell._lookJob.val;if(!val){document.body.classList.remove('lk-strength');return;}
+    if(cell.classList.contains('sel')){document.body.classList.toggle('lk-strength');return;}
+    document.body.classList.remove('lk-strength');
+    var r=LS('csRecentLooks',[]).filter(function(k){return k!==key(val);});r.unshift(key(val));SV('csRecentLooks',r.slice(0,8));
+    setTimeout(refreshLooks,400);
+  },true);
+  var lpT=null,lpCell=null,lpX=0,lpY=0;
+  document.addEventListener('pointerdown',function(e){
+    if(!mob())return;var cell=e.target.closest&&e.target.closest('.look-cell');if(!cell||!cell._lookJob||!cell._lookJob.val)return;
+    lpCell=cell;lpX=e.clientX;lpY=e.clientY;clearTimeout(lpT);
+    lpT=setTimeout(function(){
+      var k=key(cell._lookJob.val),f=LS('csFavLooks',[]),i=f.indexOf(k);if(i>=0)f.splice(i,1);else f.unshift(k);SV('csFavLooks',f);
+      cell.classList.toggle('fav',i<0);cell._csLP=true;try{hapt('MEDIUM');}catch(_){}
+      if(typeof toast==='function')toast(i<0?'Added to favourites':'Removed from favourites');
+      refreshLooks();if(typeof fxLookCatFilter!=='undefined'&&fxLookCatFilter==='Favourites'&&typeof buildLookGallery==='function')buildLookGallery();
+    },550);
+  },true);
+  document.addEventListener('pointermove',function(e){if(lpT&&Math.hypot(e.clientX-lpX,e.clientY-lpY)>10){clearTimeout(lpT);lpT=null;}},true);
+  ['pointerup','pointercancel'].forEach(function(n){document.addEventListener(n,function(){clearTimeout(lpT);lpT=null;},true);});
+
+  // ---- tool strip at the top of the sheet: hop between tools without the Tools list
+  function stripBuild(){
+    var panel=document.querySelector('.fx-panel');if(!panel)return null;
+    var btns=[].slice.call(document.querySelectorAll('#fx-tool-grid .fx-sec-btn'));if(!btns.length)return null;
+    var st=document.getElementById('fx-sheet-strip');
+    if(!st){st=document.createElement('div');st.id='fx-sheet-strip';var hd=document.getElementById('fx-sheet-handle');if(hd&&hd.parentElement===panel)hd.insertAdjacentElement('afterend',st);else panel.insertBefore(st,panel.firstChild);}
+    if(st.children.length!==btns.length){st.innerHTML='';btns.forEach(function(b){var k=document.createElement('button');k.type='button';k.dataset.sec=b.dataset.sec;k.textContent=(b.querySelector('.fx-sec-lb')||b).textContent.trim();k.onclick=function(){fxSection(b.dataset.sec);};st.appendChild(k);});}
+    return st;
+  }
+  function stripSync(){
+    if(!mob())return;var st=stripBuild();if(!st)return;
+    var c=document.querySelector('.fx-ctrl.sec-active'),cur=c&&c.dataset.fxsec,act=null;
+    [].forEach.call(st.children,function(b){var on=b.dataset.sec===cur;b.classList.toggle('on',on);if(on)act=b;});
+    if(act&&act.scrollIntoView)try{st.scrollTo({left:act.offsetLeft-st.clientWidth/2+act.offsetWidth/2,behavior:'smooth'});}catch(_){}
+  }
+  var _fs=window.fxSection;
+  if(typeof _fs==='function')window.fxSection=function(){var r=_fs.apply(this,arguments);try{stripSync();}catch(_){}return r;};
+
+  // ---- single-slider focus mode: tap a slider's label
+  var ff=null,ffSl=null,ffProxy=null,ft=null;
+  function ffList(){var c=ffSl&&ffSl.closest('.fx-ctrl');return c?[].filter.call(c.querySelectorAll('input.fx-slider[type=range]'),function(x){return x.offsetParent!==null;}):[];}
+  function ffSync(){
+    if(!ffSl||!ff)return;var row=ffSl.closest('.fx-row'),lb=row&&row.querySelector('.fx-label'),vl=row&&row.querySelector('.fx-val');
+    ff.querySelector('.ff-name').textContent=lb?lb.textContent.replace(/\s+/g,' ').trim():'';
+    ff.querySelector('.ff-val').textContent=vl?vl.textContent:ffSl.value;
+    ffProxy.min=ffSl.min;ffProxy.max=ffSl.max;ffProxy.step=ffSl.step||'any';ffProxy.value=ffSl.value;ffProxy.defaultValue=ffSl.defaultValue;
+    try{fxPaintSlider(ffProxy);}catch(_){}
+  }
+  function ffPush(v){ffSl.value=v;ffSl.dispatchEvent(new Event('input',{bubbles:true}));setTimeout(ffSync,0);}
+  function ffOpen(sl){
+    if(!ff){ff=document.createElement('div');ff.id='fx-focus';
+      ff.innerHTML='<div class="ff-head"><span class="ff-name"></span><b class="ff-val"></b></div><input type="range" class="fx-slider"><div class="ff-hint">Swipe the photo to adjust</div><div class="ff-nav"><button type="button" class="ff-prev">‹ Prev</button><button type="button" class="ff-done">Done</button><button type="button" class="ff-next">Next ›</button></div>';
+      document.body.appendChild(ff);ffProxy=ff.querySelector('input');
+      ffProxy.addEventListener('input',function(){ffPush(ffProxy.value);});
+      ff.querySelector('.ff-done').onclick=ffClose;
+      ff.querySelector('.ff-prev').onclick=function(){var l=ffList(),i=l.indexOf(ffSl);if(i>0){ffSl=l[i-1];ffSync();}};
+      ff.querySelector('.ff-next').onclick=function(){var l=ffList(),i=l.indexOf(ffSl);if(i>=0&&i<l.length-1){ffSl=l[i+1];ffSync();}};
+    }
+    ffSl=sl;ff.classList.add('on');ffSync();
+  }
+  function ffClose(){if(ff)ff.classList.remove('on');ffSl=null;}
+  document.addEventListener('click',function(e){
+    if(!mob())return;var lb=e.target.closest&&e.target.closest('.fx-panel .fx-row > .fx-label');if(!lb||e.target.closest('button,.fx-info-i'))return;
+    var sl=lb.parentElement.querySelector('input[type=range]');if(!sl)return;
+    clearTimeout(ft);ft=setTimeout(function(){ffOpen(sl);},280); // a second tap inside this window is the reset gesture instead
+  });
+  document.addEventListener('dblclick',function(){clearTimeout(ft);});
+  new MutationObserver(function(){if(!document.body.classList.contains('sheet-open'))ffClose();}).observe(document.body,{attributes:true,attributeFilter:['class']});
+  // swipe the photo horizontally while focus mode is open
+  (function(){
+    var w=document.getElementById('fx-wrap');if(!w)return;var x0=0,v0=0,on=false,ids=new Set();
+    w.addEventListener('pointerdown',function(e){ids.add(e.pointerId);if(!ffSl||ids.size>1){on=false;return;}x0=e.clientX;v0=parseFloat(ffSl.value);on=true;});
+    w.addEventListener('pointermove',function(e){
+      if(!on||!ffSl||ids.size>1)return;var dx=e.clientX-x0;if(Math.abs(dx)<6)return;
+      var min=parseFloat(ffSl.min),max=parseFloat(ffSl.max),st=parseFloat(ffSl.step)||((max-min)/200);
+      var v=Math.max(min,Math.min(max,v0+dx/Math.max(200,w.clientWidth)*(max-min)*0.9));v=Math.round((v-min)/st)*st+min;
+      if(String(v)!==ffSl.value)ffPush(v);
+    });
+    ['pointerup','pointercancel'].forEach(function(n){w.addEventListener(n,function(e){ids.delete(e.pointerId);on=false;});});
+  })();
+
+  // ---- double-tap the photo: toggle the 1:1 loupe (sharpness check)
+  (function(){
+    var w=document.getElementById('fx-wrap');if(!w)return;var lt=0,lx=0,ly=0;
+    w.addEventListener('pointerdown',function(e){
+      if(!mob()||!e.isPrimary||typeof fxWork==='undefined'||!fxWork||(typeof cropMode!=='undefined'&&cropMode)||ffSl)return;
+      var n=Date.now();if(n-lt<300&&Math.hypot(e.clientX-lx,e.clientY-ly)<30){lt=0;try{toggleLoupe();hapt();}catch(_){}}else{lt=n;lx=e.clientX;ly=e.clientY;}
+    });
+  })();
+
+  // ---- histogram (from ⋯ menu)
+  window.csToggleHist=function(){try{toggleHist();}catch(_){}};
+
+  // ---- export: presets + size estimate + remembered choice
+  var PRESETS=[['Web',{size:'2048',fmt:'jpg',q:88}],['Print',{size:'0',fmt:'jpg',q:99}],['Original',{size:'0',fmt:'auto',q:99}]];
+  window.csExportPresets=function(sh){
+    var row=document.createElement('div');row.className='mm-presets';var last=LS('csExpPreset','');
+    PRESETS.forEach(function(pr){var b=document.createElement('button');b.type='button';b.textContent=pr[0];b.className=last===pr[0]?'on':'';
+      b.onclick=function(){var v=pr[1],set=function(id,val,ev){var el=document.getElementById(id);if(el){el.value=val;el.dispatchEvent(new Event(ev,{bubbles:true}));}};
+        set('sel-exp-size',v.size,'change');set('sel-exp-fmt',v.fmt,'change');set('sl-exp-q',v.q,'input');SV('csExpPreset',pr[0]);
+        var old=document.getElementById('fx-more-menu');if(old)old.remove();fxMobileExportSheet();};
+      row.appendChild(b);});
+    sh.appendChild(row);
+  };
+  window.csExportEstimate=function(sh){
+    var el=document.createElement('div');el.className='mm-est';sh.appendChild(el);
+    var upd=function(){
+      var it=typeof curItem==='function'?curItem():null,im=it&&it.img;if(!im){el.textContent='';return;}
+      var w0=im.naturalWidth||im.width,h0=im.naturalHeight||im.height;if(!w0||!h0){el.textContent='';return;}
+      var le=parseInt((document.getElementById('sel-exp-size')||{}).value||'0',10)||0,mx=Math.max(w0,h0),sc=le&&mx>le?le/mx:1;
+      var w=Math.round(w0*sc),h=Math.round(h0*sc),px=w*h,q=parseInt((document.getElementById('sl-exp-q')||{}).value||'99',10);
+      var f=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
+      var bpp=q>=98?4.2:q>=95?3:q>=90?2:q>=85?1.5:1.1,bytes=f==='png'?px*3*0.6:px*bpp/8*(f==='webp'?0.72:1);
+      el.textContent='≈ '+(bytes>1e6?(bytes/1e6).toFixed(1)+' MB':Math.round(bytes/1e3)+' KB')+'  ·  '+w+' × '+h;
+    };
+    upd();sh.addEventListener('change',upd);sh.addEventListener('input',upd);
+  };
+
+  // ---- keyboard + safe-area care
+  function navH(){var n=document.getElementById('fx-mobile-nav');if(n&&n.offsetHeight)document.body.style.setProperty('--mnav-h',n.offsetHeight+'px');}
+  window.addEventListener('resize',navH);document.addEventListener('DOMContentLoaded',function(){navH();setTimeout(navH,600);});
+  if(window.visualViewport){var kb=function(){var d=Math.max(0,window.innerHeight-window.visualViewport.height-window.visualViewport.offsetTop);document.body.style.setProperty('--kb-h',(d>80?d:0)+'px');};
+    window.visualViewport.addEventListener('resize',kb);window.visualViewport.addEventListener('scroll',kb);}
+  document.addEventListener('focusin',function(e){if(!mob())return;var t=e.target;if(t.closest&&t.closest('.fx-panel')&&(t.matches('input:not([type=range]),select,textarea,[contenteditable="true"]')))setTimeout(function(){try{t.scrollIntoView({block:'center',behavior:'smooth'});}catch(_){}},320);});
 })();
 </script>
 </body>
