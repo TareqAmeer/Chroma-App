@@ -480,8 +480,7 @@ body.mobile-fx .fx-slider{touch-action:pan-x}
 .fx-val[contenteditable]:focus{background:var(--sur2);box-shadow:0 0 0 1px var(--acc);color:var(--txt);text-align:center;min-width:40px}
 /* The tap-to-type numeric entry only hints itself via the :hover background above, which never
    fires on a touchscreen — without this, mobile users have no way to discover it exists. */
-body.mobile-fx .fx-val[contenteditable]{border-bottom:1px dotted var(--mut)}
-body.mobile-fx .fx-val[contenteditable]:focus{border-bottom-style:solid}
+body.mobile-fx .fx-val[contenteditable]{border-bottom:0}
 .fx-color{width:32px;height:22px;border-radius:4px;border:1px solid var(--bdr);cursor:pointer;background:none;padding:1px}
 /* Color Mixer band swatches: plain circle + colored underline, no bordered chip box */
 .btn-icon{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;
@@ -1089,11 +1088,12 @@ body.mobile-fx #fx-mobile-nav button{flex:1;border:0;background:none;color:#f5f5
 body.mobile-fx #fx-mobile-nav button.on{color:#fff}
 body.mobile-fx #fx-mobile-nav button.on::before{content:'⌃';display:block;height:14px;line-height:14px;font-size:24px}
 body.mobile-fx.sheet-open #fx-quicknav{display:none}
-body.mobile-fx.tools-open #fx-actionbar,body.mobile-fx.tools-open #fx-quicknav,body.mobile-fx.tools-open #fx-mobile-nav{display:none}
+body.mobile-fx.tools-open #fx-actionbar,body.mobile-fx.tools-open #fx-quicknav{display:none} /* the Looks | Tools | Export bar stays put while the tool list is open */
 body.mobile-fx.tools-open .fx-preview-col{flex:0 0 min(34vh,280px)}
+body.mobile-fx.tools-open #fx-mobile-nav{position:fixed;left:0;right:0;bottom:0;z-index:calc(var(--z-overlay) + 1)}
 body.mobile-fx.tools-open #fx-preview-tools,body.mobile-fx.tools-open #fx-zoom-ctrl{display:none!important}
 body.mobile-fx.tools-open .fx-panel{display:none}
-body.mobile-fx.tools-open #fx-secnav{display:flex;position:fixed;z-index:var(--z-overlay);left:0;right:0;top:min(34vh,280px);bottom:0;flex-direction:column;overflow:hidden;padding:0 0 max(10px,var(--sab));background:#121212;color:#f3f3f3;border:0}
+body.mobile-fx.tools-open #fx-secnav{display:flex;position:fixed;z-index:var(--z-overlay);left:0;right:0;top:min(34vh,280px);bottom:var(--mnav-h,74px);flex-direction:column;overflow:hidden;padding:0;background:#121212;color:#f3f3f3;border:0}
 body.mobile-fx #fx-tool-cats{display:flex;flex:0 0 62px;align-items:center;gap:4px;overflow-x:auto;padding:8px 10px;scrollbar-width:none}
 body.mobile-fx #fx-tool-cats button{flex:0 0 auto;min-width:72px;padding:12px;border:0;border-radius:3px;background:none;color:#f3f3f3;font:600 14px var(--sans);text-transform:uppercase;cursor:pointer}
 body.mobile-fx #fx-tool-cats button.on{background:#ffbd00;color:#111}
@@ -1187,6 +1187,28 @@ body.mobile-fx #row-lut-mix{position:sticky;bottom:0;z-index:3;background:var(--
 }
 body.mobile-fx #fx-tools-close{flex:0 0 46px;align-self:center;min-width:88px;border:1px solid #eee;border-radius:2px;background:#121212;color:#fff;font:600 14px var(--sans);text-transform:uppercase;cursor:pointer}
 #fx-fab-export{display:none}
+/* ── Mobile UX pass: bigger look tiles, one scrolling chip row, larger slider hit area, tool tiles, portrait only ── */
+body.mobile-fx .look-cell{flex:0 0 104px}
+/* Phones: the per-tool on/off switch is redundant (moving any slider switches the tool on, Reset switches it back off) — one control, one meaning. */
+body.mobile-fx .fx-ctrl:not([data-fxsec="lens"]):not([data-fxsec="wm"]):not([data-fxsec="export"])>.fx-ctrl-title>.fx-toggle{display:none}
+body.mobile-fx #fx-looks-cats{flex-wrap:nowrap!important;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+body.mobile-fx #fx-looks-cats::-webkit-scrollbar{display:none}
+body.mobile-fx #fx-looks-cats .btn{flex:0 0 auto}
+body.mobile-fx .fx-slider{min-height:44px}
+body.mobile-fx #fx-tool-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;padding:0 16px 70px}
+body.mobile-fx #fx-tool-grid .fx-sec-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:92px;padding:12px 4px;border:0;box-shadow:0 0 0 .5px var(--bdr)}
+body.mobile-fx #fx-tool-grid .fx-sec-ic{grid-row:auto;font-size:26px}
+body.mobile-fx #fx-tool-grid .fx-sec-lb{font-size:14px;letter-spacing:0;text-align:center}
+body.mobile-fx #fx-tool-grid .fx-sec-ds{display:none}
+body.mobile-fx #fx-tool-grid .fx-sec-btn.edited{background:color-mix(in srgb,var(--k-color-ink) 12%,transparent)}
+body.mobile-fx #fx-tool-grid .fx-sec-btn.edited .fx-sec-ic::after,body.mobile-fx #fx-quicknav [data-sec].edited span::after{content:none}
+body.mobile-fx #fx-quicknav [data-sec].edited{background:color-mix(in srgb,var(--k-color-ink) 12%,transparent)}
+#cs-rotate{display:none}
+@media (orientation:landscape) and (max-height:500px) and (pointer:coarse){
+  #cs-rotate{display:flex;position:fixed;inset:0;z-index:2147483000;align-items:center;justify-content:center;flex-direction:column;gap:14px;background:var(--k-color-bg,#141414);color:var(--k-color-ink,#f2f0ea);font:600 16px var(--sans);text-align:center;padding:24px}
+  #cs-rotate svg{width:44px;height:44px;fill:none;stroke:currentColor;stroke-width:1.5}
+}
+
 /* One-handed reach: #fx-actionbar (with Undo/Redo/Export/etc.) is top-anchored on mobile so its
    height is reserved before the photo lays out (fxPreviewMaxH()) — export, the most-tapped and
    most consequential action, otherwise needs a two-handed stretch on a large phone. This FAB
@@ -6704,7 +6726,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930L';
+const BUILD='1.0930M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21132,22 +21154,14 @@ function buildLookCatChips(){
   const cats=['All',...groupedLutKeys().map(([c])=>c)];
   if(!cats.includes(fxLookCatFilter))fxLookCatFilter='All';
   host.innerHTML='';
-  // Phones: three chips plus "More" instead of two wrapped rows of ten.
-  const MOB_CATS=['All','User Looks','Film'];
-  const mob=document.body.classList.contains('mobile-fx')&&!buildLookCatChips._more;
-  const shown=mob?cats.filter(c=>MOB_CATS.includes(c)||c===fxLookCatFilter):cats;
+  const shown=cats; // phones scroll one row of chips instead of hiding most behind "More"
   shown.forEach(c=>{
     const b=document.createElement('button');b.className='btn bgh'+(c===fxLookCatFilter?' on':'');
     b.textContent=c;
-    b.onclick=()=>{fxLookCatFilter=c;buildLookCatChips._more=false;buildLookCatChips();buildLookGallery();};
+    b.onclick=()=>{fxLookCatFilter=c;buildLookCatChips();buildLookGallery();};
     host.appendChild(b);
+    if(c===fxLookCatFilter&&host.scrollWidth>host.clientWidth)requestAnimationFrame(()=>{host.scrollLeft=Math.max(0,b.offsetLeft-host.clientWidth/2+b.offsetWidth/2);});
   });
-  if(document.body.classList.contains('mobile-fx')&&(shown.length<cats.length||buildLookCatChips._more)){
-    const m=document.createElement('button');m.className='btn bgh look-cat-more';
-    m.textContent=buildLookCatChips._more?'Less':'More';
-    m.onclick=()=>{buildLookCatChips._more=!buildLookCatChips._more;buildLookCatChips();};
-    host.appendChild(m);
-  }
 }
 function buildLookGallery(){
   const host=document.getElementById('fx-looks'),ctrl=document.getElementById('fx-looks-ctrl');
@@ -23956,6 +23970,7 @@ const ICONS={
  // Library catalog's Keywords tree (library-ui.js) — sidebar section + the info panel's tag chips.
  tag:'<path d="M3 3h8l10 10-8 8L3 11Z"/><rect x="6" y="6" width="3" height="3"/>',
  looks:'<path d="M3 13 13 3M7 17 17 7M11 21 21 11M5 15l2 2"/>',
+ inprint:'<rect x="3" y="4" width="18" height="10"/><path d="M7 14v6h10v-6M7 8h4"/>',
  // Item 8's gamut-warning preview toggle (fx-preview-tools, next to the histogram/scope button).
  gamut:'<path d="M12 3 21 20H3Z"/><path d="M12 9v6M11.5 17.5h1"/>',
  // Deskbar Tools menu (rotate/flip/gamut warning/copy-paste edit/reset) — same wrench glyph as
@@ -24154,9 +24169,8 @@ const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEac
 // Desktop/web panel: the Looks card is two tools, not one — the preset library ("Looks", with its
 // count) and the source/print settings under it ("Input & Prints"). Split here, before the section
 // list is read, by moving the existing Input / Highlight response / Print nodes into their own card.
-// Phones keep the single Looks card (their sheet shows one card per tool).
+// Phones get the same split: Input & Prints is its own tool there too, so the Looks sheet is only presets.
 (function fxSplitLooksCard(){
-  if(!document.body.classList.contains('deskx'))return;
   const looks=document.querySelector('.fx-ctrl[data-fxsec="looks"]');if(!looks||document.querySelector('.fx-ctrl[data-fxsec="inprint"]'))return;
   const ids=['sel-input','chips-input','sel-tonemap','chips-tonemap','fx-hdr-preview-row','sel-print','chips-print'];
   const nodes=ids.map(i=>document.getElementById(i)).filter(Boolean);
@@ -24191,7 +24205,7 @@ const FX_MOBILE_CATS={all:null};
 Object.entries(FX_GROUPS).forEach(([g,d])=>{FX_MOBILE_CATS[g]=new Set(d.members);});
 const FX_MOBILE_HIDE=new Set(['art','export','wm','exppreset','share']);
 let _fxMobileCat='all';
-const FX_MOBILE_DESC={looks:'Film looks and print stocks.',adjust:'Exposure, contrast, white balance and colour.',crop:'Crop, rotate and straighten.',
+const FX_MOBILE_DESC={looks:'Film looks.',inprint:'Source profile, highlight response and print stock.',adjust:'Exposure, contrast, white balance and colour.',crop:'Crop, rotate and straighten.',
   borders:'Film borders and frames.',canvas:'Add space around the photo.',style:'Save and reuse whole edits.'};
 function fxToolsOpen(){
   if(!document.body.classList.contains('mobile-fx'))return;
@@ -24199,6 +24213,7 @@ function fxToolsOpen(){
     if(d&&!d.textContent)d.textContent=(window.CS_SUB||{})[b.dataset.sec]||FX_MOBILE_DESC[b.dataset.sec]||'';});
   document.body.classList.remove('sheet-open');
   document.body.classList.add('tools-open');
+  {const nv=document.getElementById('fx-mobile-nav');if(nv){const h=nv.offsetHeight;if(h)document.body.style.setProperty('--mnav-h',h+'px');}}
   document.getElementById('fx-nav-tools')?.classList.add('on');
   document.getElementById('fx-nav-looks')?.classList.remove('on');
   fxMobileFilter(_fxMobileCat);
@@ -24416,7 +24431,7 @@ function fxSection(name,noSheet){
   document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
   const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
   // Phones open straight to the controls: a tool picked from the bar should never land folded.
-  if(mob&&name!=='looks')cards.forEach(c=>{if(c.classList.contains('fx-sec-collapsed')&&typeof fxSecToggle==='function')fxSecToggle(c);});
+  if(mob)cards.forEach(c=>{if(c.classList.contains('fx-sec-collapsed')&&typeof fxSecToggle==='function')fxSecToggle(c);});
   if(mob&&!noSheet){document.body.classList.add('sheet-open');fxLiveFit(360);hapt();}
   if(mob){const ab=document.querySelector('#fx-secnav .fx-sec-btn.on');if(ab&&ab.scrollIntoView)try{ab.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});}catch(e){}}
   if(wasClosed){fxLiveFit(240);requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));} // photo reflows narrower when the panel reopens — live-fit tracks the transition, see the panel-close branch above
@@ -24575,6 +24590,30 @@ window.addEventListener('resize',()=>{
     if(close)hapt();
   };
   h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end);
+})();
+// Phones: pulling the sheet content (or the Tools list) down while it is already scrolled to the top
+// closes it, same as dragging the handle — back to the normal photo view.
+(function(){
+  var sy=0,sTop=0,el=null,dy=0,ok=false;
+  function bind(id,closeFn,isOpen){
+    var e=document.getElementById(id);if(!e)return;
+    e.addEventListener('touchstart',function(ev){
+      if(!document.body.classList.contains('mobile-fx')||!isOpen())return;
+      var t=ev.target;ok=!(t.closest&&t.closest('input,select,textarea,canvas,[contenteditable="true"],.fx-slider'));
+      sy=ev.touches[0].clientY;sTop=e.scrollTop;el=e;dy=0;
+    },{passive:true});
+    e.addEventListener('touchmove',function(ev){if(el!==e)return;dy=ev.touches[0].clientY-sy;},{passive:true});
+    e.addEventListener('touchend',function(){
+      if(el!==e)return;el=null;
+      if(ok&&sTop<=0&&e.scrollTop<=0&&dy>90){closeFn();try{if(typeof hapt==='function')hapt();}catch(_){}}
+    },{passive:true});
+  }
+  document.addEventListener('DOMContentLoaded',function(){
+    bind('fx-panel-scroll-host',function(){fxSheetClose();},function(){return document.body.classList.contains('sheet-open');});
+    var panel=document.querySelector('.fx-panel');if(panel){if(!panel.id)panel.id='fx-panel-auto';
+      bind(panel.id,function(){fxSheetClose();},function(){return document.body.classList.contains('sheet-open');});}
+    bind('fx-tool-grid',function(){fxToolsClose();},function(){return document.body.classList.contains('tools-open');});
+  });
 })();
 // Mark a section's rail/strip button when it's "in use":
 //  - toggle-able FX (grain/hal/bloom/vig/borders/adjust) → its toggle is on
@@ -25139,6 +25178,8 @@ function fxSecToggle(card){
   const open=card.classList.toggle('fx-sec-collapsed');
   _fxSecCollapsed[key]=open;
   try{localStorage.setItem('chromasmith_fx_sec_collapsed',JSON.stringify(_fxSecCollapsed));}catch(e){}
+  // Phones: folding the open tool's header means "done with it" — drop back to the normal photo view.
+  if(open&&document.body.classList.contains('mobile-fx')&&document.body.classList.contains('sheet-open')&&card.classList.contains('sec-active')&&typeof fxSheetClose==='function')fxSheetClose();
 }
 document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(card=>{
   const title=card.querySelector(':scope > .fx-ctrl-title');
@@ -26051,6 +26092,36 @@ if(/[?&]catalog=1/.test(location.search)){
     new MutationObserver(syncTheme).observe(document.body,{attributes:true,attributeFilter:['class']});}
   window.Kinetic={snap,bezier,attachSwitch,attachRoll,syncTheme};
   if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot);
+})();
+</script>
+<div id="cs-rotate" role="alert"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20"/><path d="M11 18h2"/></svg>Rotate your phone upright</div>
+<script>
+/* Phones stay portrait: lock where the browser allows it (installed app / fullscreen); everywhere else
+   #cs-rotate covers a sideways phone. Also: slider detent + tick, and double-tap a slider's label to reset it. */
+(function(){
+  var coarse=matchMedia('(pointer:coarse)').matches;
+  if(coarse&&screen.orientation&&screen.orientation.lock){
+    var tryLock=function(){screen.orientation.lock('portrait').catch(function(){});};
+    tryLock();document.addEventListener('pointerdown',tryLock,{once:true,passive:true});
+  }
+  var lastTick=0;
+  document.addEventListener('input',function(e){
+    var sl=e.target;if(!coarse||!sl||sl.type!=='range'||!sl.classList.contains('fx-slider')||sl._snapping)return;
+    var min=+sl.min,max=+sl.max,def=parseFloat(sl.defaultValue),v=+sl.value;
+    if(isFinite(def)&&def>min&&def<max&&Math.abs(v-def)<=(max-min)*0.015&&v!==def){sl._snapping=true;sl.value=def;sl.dispatchEvent(new Event('input',{bubbles:true}));sl._snapping=false;}
+    var now=Date.now(),step=(max-min)/40;
+    if(now-lastTick>45&&Math.abs(v-(sl._lastTick==null?v:sl._lastTick))>=step){lastTick=now;sl._lastTick=v;try{if(typeof hapt==='function')hapt('LIGHT');if(navigator.vibrate)navigator.vibrate(4);}catch(_){}}
+    if(sl._lastTick==null)sl._lastTick=v;
+  },true);
+  document.addEventListener('dblclick',function(e){
+    var lb=e.target.closest&&e.target.closest('.fx-row > .fx-label');if(!lb)return;
+    var sl=lb.parentElement.querySelector('input[type=range]');if(!sl)return;
+    var base=(typeof _fxPristineDefault!=='undefined'&&_fxPristineDefault&&_fxPristineDefault.sliders)||{};
+    var key=sl.id.replace(/^sl-/,''),d=base[key]!==undefined?base[key]:sl.defaultValue;
+    if(String(sl.value)===String(d))return;
+    e.preventDefault();sl.value=d;sl.dispatchEvent(new Event('input',{bubbles:true}));
+    try{if(typeof hapt==='function')hapt('MEDIUM');}catch(_){}
+  });
 })();
 </script>
 </body>

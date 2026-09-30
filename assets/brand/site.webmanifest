@@ -5,6 +5,7 @@
   "start_url": "../../chromasmith-22.html",
   "scope": "../../",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#0b0b0a",
   "theme_color": "#0b0b0a",
   "icons": [
