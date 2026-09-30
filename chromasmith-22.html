@@ -6704,7 +6704,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930J';
+const BUILD='1.0930K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10396,10 +10396,11 @@ async function selectLUT(v,skipFxDefaults){
 function selectPrint(v){
   const sel=document.getElementById('sel-print');if(sel&&sel.value!==v){sel.value=v;sel._chipsRender&&sel._chipsRender();}
   try{
-    if(!v||!PRINT_PRESETS[v]){fxState.print=null;FX.setPrintLUT(null);renderPreview();log('Print profile off');return}
+    if(!v||!PRINT_PRESETS[v]){fxState.print=null;FX.setPrintLUT(null);renderPreview();log('Print profile off');if(typeof syncSectionEnabled==='function')syncSectionEnabled();return}
     const lut=lutFromBytes(b64ToBytes(PRINT_PRESETS[v]));
     FX.setPrintLUT(lut);fxState.print=v;renderPreview();log(`Print profile: ${prettyLUT(v)}`,'ok');
   }catch(e){fxState.print=null;FX.setPrintLUT(null);log('Print error: '+e.message,'err')}
+  if(typeof syncSectionEnabled==='function')syncSectionEnabled(); // Print on/off lights the rail's edited bar
 }
 async function saveLUTToLibrary(){
   if(!lastUploadedLUT)return;
@@ -24580,12 +24581,15 @@ window.addEventListener('resize',()=>{
 //  - looks → a preset/LUT other than None/Original is selected
 //  - crop  → any rotate/flip/straighten/crop has been applied
 const _SEC_TOGGLE={adjust:'tg-adjust',curves:'tg-curves',hsl:'tg-hsl',wheels:'tg-wheels',pointcolor:'tg-pointcolor',local:'tg-local',nr:'tg-nr',deconv:'tg-deconv',grain:'tg-grain',art:'tg-art',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders',canvas:'tg-canvas'};
+function _secInPrintSet(){return ['sel-input','sel-tonemap','sel-print'].some(id=>{const e=document.getElementById(id);return !!(e&&e.value);});}
 function _secIsEnabled(key){
   if(typeof FX_GROUPS!=='undefined'&&FX_GROUPS[key])return FX_GROUPS[key].members.some(_secIsEnabled); // deskx Color/Film rail buttons
   const tg=_SEC_TOGGLE[key];
   if(tg){const e=document.getElementById(tg);return !!(e&&e.classList.contains('on'));}
-  if(key==='looks'){const s=document.getElementById('sel-lut');return !!(s&&s.value);}
-  if(key==='inprint')return ['sel-input','sel-tonemap','sel-print'].some(id=>{const e=document.getElementById(id);return !!(e&&e.value);});
+  if(key==='looks'){const s=document.getElementById('sel-lut');if(s&&s.value)return true;
+    // Phones keep Input / Highlight response / Print inside the Looks card; desktop has its own "Input & Prints" card.
+    return !document.querySelector('.fx-ctrl[data-fxsec="inprint"]')&&_secInPrintSet();}
+  if(key==='inprint')return _secInPrintSet();
   if(key==='crop'){const g=(typeof curGeom==='function')&&curGeom();return !!(g&&(g.rot||g.flipH||g.flipV||g.angle||g.crop));}
   return false;
 }
