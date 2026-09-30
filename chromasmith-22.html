@@ -1114,7 +1114,7 @@ body.mobile-fx #fx-mcap{display:flex;gap:12px;align-items:baseline;justify-conte
 body.mobile-fx #fx-mcap b{font-weight:400;font-size:12px;color:var(--k-color-ink);overflow:hidden;text-overflow:ellipsis;min-width:0}
 body.mobile-fx #fx-mcap:empty{display:none}
 body.mobile-fx.sheet-open #fx-mcap{display:none}
-body.mobile-fx #fx-quicknav button{font:10px var(--sans);text-transform:uppercase;letter-spacing:.06em;color:var(--k-color-muted)}
+body.mobile-fx #fx-quicknav button{font:11px var(--sans);text-transform:uppercase;letter-spacing:.06em;color:var(--k-color-muted)}
 body.mobile-fx #fx-quicknav button span{color:var(--k-color-ink)}
 body.mobile-fx #fx-mobile-nav{align-items:center;padding:0 12px max(8px,var(--sab));gap:12px;box-shadow:0 -1px 0 var(--bdr)}
 body.mobile-fx #fx-mobile-nav .fx-nav-tabs{display:flex;gap:22px;flex:1}
@@ -1122,7 +1122,7 @@ body.mobile-fx #fx-mobile-nav .fx-nav-tabs button{flex:0 0 auto;min-height:44px;
 body.mobile-fx #fx-mobile-nav .fx-nav-tabs button.on{color:var(--k-color-ink)}
 body.mobile-fx #fx-mobile-nav button.on::before{content:none}
 body.mobile-fx #fx-mobile-nav .fx-nav-tabs button.on::after{content:'';position:absolute;left:0;right:0;bottom:6px;height:2px;background:var(--k-color-accent-a)}
-body.mobile-fx #fx-mobile-nav #fx-nav-export{flex:0 0 auto;min-height:44px;padding:0 22px;border-radius:0;background:var(--k-color-accent-a);color:#fff;font:600 15px var(--sans)}
+body.mobile-fx #fx-mobile-nav #fx-nav-export{flex:0 0 auto;min-height:44px;padding:0 22px;border-radius:0;background:color-mix(in srgb,var(--k-color-accent-a) 80%,#000);color:#fff;font:600 15px var(--sans)} /* white on the raw vermilion was 3.56:1 */
 body.mobile-fx #fx-tool-cats button{border-radius:0;font:400 13px var(--sans);text-transform:none;color:var(--k-color-muted);min-width:0;padding:10px 4px;margin-right:14px;position:relative}
 body.mobile-fx #fx-tool-cats button.on{background:none;color:var(--k-color-ink)}
 body.mobile-fx #fx-tool-cats button.on::after{content:'';position:absolute;left:4px;right:4px;bottom:4px;height:2px;background:var(--k-color-accent-a)}
@@ -6700,7 +6700,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930E';
+const BUILD='1.0930F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
