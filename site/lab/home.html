@@ -97,6 +97,8 @@ a{color:inherit}
 .p2{width:100vw;grid-template-columns:1fr 1.6fr;gap:4vw;align-items:center}
 .img{overflow:hidden}
 .img img{display:block;width:100%;height:auto}
+.studiostack{position:relative}
+.studiostack img+img{position:absolute;inset:0;height:100%;opacity:0}
 .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:24px}
 .tags span::before{content:"";display:inline-block;width:6px;height:6px;background:var(--acc);margin-right:8px;vertical-align:1px}
 .tags span{border:1px solid #33312c;border-radius:0;padding:7px 12px;font-size:13px;color:var(--mid)}
@@ -501,7 +503,7 @@ section{position:relative}
     <div class="panel p2" data-lab="Studio">
       <div><div class="k">A studio for every frame.</div>
         <p class="t">Start with a look. Then shape the light, colour and composition until the photo feels exactly right.</p></div>
-      <div class="img"><img loading="lazy" src="../assets/story/studio-app.webp" alt="The CHRO-MA-SMITH studio editing a photo" decoding="async"></div>
+      <div class="img studiostack"><img loading="lazy" src="../assets/homepage/studio-1.webp" alt="Look panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-2.webp" alt="Light panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-3.webp" alt="Colour panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-4.webp" alt="Texture panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-5.webp" alt="Output panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-6.webp" alt="Info panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"></div>
     </div>
 
   </div>
@@ -766,21 +768,21 @@ const handoff=X=>{const t0=window.__tile0;if(!t0)return;
   const w0=Wz(),h0=w0*4198/6123,cx0=pr.width/2,cy0=pr.height/2,cx1=r.left-pr.left+r.width/2,cy1=r.top-pr.top+r.height/2;
   const wNow=w0+(r.width-w0)*e;gsap.set('.favs',{scale:.42*wNow/w0});ph.style.left=(cx0+(cx1-cx0)*e)+'px';ph.style.top=(cy0+(cy1-cy0)*e)+'px';ph.style.width=(w0+(r.width-w0)*e)+'px';ph.style.height=(h0+(r.height-h0)*e)+'px'};
 const panel0=()=>document.querySelector('.p1');
-let PRE=8.1;
+let PRE=7.5;
 const AR0=1.5,AR6=6123/4198,G6w=6123/5775,G6h=4198/3850,mob_=()=>innerWidth<760;
 const W0=()=>mob_()?innerWidth*.92:Math.min(innerWidth*.56,innerHeight*.76*AR0),H0=()=>W0()/AR0;
 const Wf=()=>Math.min(innerWidth,innerHeight*AR6),Hf=()=>Wf()/AR6,Wz=()=>innerWidth*(innerWidth<760?.6:.22),K=()=>innerWidth<760?3:1;  // K: phones get more scroll per sideways pixel so the gallery doesn't flash past
 // memory: only the stage photos next to the current one stay in the page (display:none lets the browser drop the
 // other 3200px bitmaps), so at most three full-size layers exist at once instead of six
 const STG=[0,.5,1.2,1.9,2.6,3.3];let stgLast=-1;
-const stageWindow=t=>{document.querySelector('.ph').style.zIndex=t>=6.8?'3':'';let c=0;STG.forEach((s0,i)=>{if(t>=s0)c=i});if(t>=4.2)c=6;if(c===stgLast)return;stgLast=c;
+const stageWindow=t=>{document.querySelector('.ph').style.zIndex=t>=6.2?'3':'';let c=0;STG.forEach((s0,i)=>{if(t>=s0)c=i});if(t>=4.2)c=6;if(c===stgLast)return;stgLast=c;
   document.querySelectorAll('.ph img').forEach((im,i)=>{im.style.display=(c===6?i===5:Math.abs(i-c)<=1)?'':'none'})};
-const HOLD=1.4,XH=()=>{const g=document.querySelector('.p1');return g.offsetLeft+Math.max(0,g.offsetWidth-innerWidth)};
+const HOLD2=2.4,HOLD=1.4,XH=()=>{const g=document.querySelector('.p1');return g.offsetLeft+Math.max(0,g.offsetWidth-innerWidth)};
 function slideUpd(){const X=-gsap.getProperty(tr,'x'),D=dist()||1,f=X/D*bars.length;
   bars.forEach((b,i)=>b.style.transform=`scaleX(${Math.max(0,Math.min(1,f-i))})`);
   const pp=pans[Math.max(0,Math.min(pans.length-1,Math.floor(f)||0))];if(pp)plab.textContent=pp.dataset.lab;
   handoff(X);const g=panel0().getBoundingClientRect();document.body.classList.toggle('onpaper',g.left<120&&g.right>innerWidth*.4)}
-const tl=gsap.timeline({onUpdate(){stageWindow(this.time())},scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*(PRE+HOLD)+dist()*K()),scrub:1,invalidateOnRefresh:true}});
+const tl=gsap.timeline({onUpdate(){stageWindow(this.time())},scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*(PRE+HOLD+HOLD2)+dist()*K()),scrub:1,invalidateOnRefresh:true}});
 const W_=document.querySelectorAll('.stagew span'),wIn=(k,at)=>tl.to(W_[k].querySelectorAll('i'),{yPercent:0,stagger:{amount:.12},duration:.2,ease:'power3.out'},at),wOut=(k,at)=>tl.to(W_[k],{yPercent:-30,opacity:0,duration:.12,ease:'power2.in'},at);
 const PI=[...document.querySelectorAll('.ph img')],RV=document.querySelector('.ph .rvf'),CLOSED='inset(0% 0% 100% 0%)',OPEN='inset(0% 0% 0% 0%)',EZ='power1.inOut';
 gsap.set(PI,{clipPath:CLOSED});gsap.set(PI[0],{clipPath:OPEN});stageWindow(0);
@@ -804,17 +806,19 @@ tl.to('.ph',{left:'50%',width:Wf,height:Hf,ease:'power2.inOut',duration:1},4.2)
   .fromTo('.fchip',{scale:.9},{scale:1,duration:.15},5.4)
   .to('.fchip',{scale:1.18,duration:.1,ease:'power2.out',onStart(){document.querySelector('.fchip').classList.add('on')},onReverseComplete(){document.querySelector('.fchip').classList.remove('on')}},5.7)
   .to('.fchip',{scale:1,duration:.2,ease:'back.out(3)'},5.8)
-  .to({},{duration:.5},6.3)
   // zoom back out, keeping the photo's own shape
-  .to('.cap0,.ph .shade',{opacity:0,duration:.25},6.9)
-  .to('.favs',{scale:.42,transformOrigin:'0 0',ease:'power2.inOut',duration:.9},6.9)
-  .to('.ph',{width:Wz,height:()=>Wz()/AR6,ease:'power2.inOut',duration:.9},6.9)
-  .to('.prog,.plab',{opacity:1,duration:.2},7.7)
+  .to('.cap0,.ph .shade',{opacity:0,duration:.25},6.3)
+  .to('.favs',{scale:.42,transformOrigin:'0 0',ease:'power2.inOut',duration:.9},6.3)
+  .to('.ph',{width:Wz,height:()=>Wz()/AR6,ease:'power2.inOut',duration:.9},6.3)
+  .to('.prog,.plab',{opacity:1,duration:.2},7.1)
   .addLabel('slide',PRE-0)
   .to(tr,{x:()=>-XH(),ease:'none',duration:XH()/innerHeight*K(),onUpdate:slideUpd},'slide')
   .to({},{duration:HOLD})                                   // pause on the landed gallery so people can play with it
-  .to(tr,{x:()=>-dist(),ease:'none',duration:(dist()-XH())/innerHeight*K(),onUpdate:slideUpd});
-const xPos=X=>sPos()+X*K()+(X>XH()+1?innerHeight*HOLD:0);
+  .to(tr,{x:()=>-dist(),ease:'none',duration:(dist()-XH())/innerHeight*K(),onUpdate:slideUpd})
+  .addLabel('studioHold')
+  .to({},{duration:HOLD2});
+[1,2,3,4,5].forEach(k=>tl.to('.p2 .img img:nth-child('+(k+1)+')',{opacity:1,duration:.15,ease:'none'},'studioHold+='+(k*HOLD2/6)));  // scroll steps through Look, Light, Colour, Texture, Output, Info
+const xPos=X=>sPos()+X*K()+(X>XH()+1?innerHeight*HOLD:0)+(X>dist()-1?innerHeight*HOLD2:0);
 const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scrollTrigger.end-tl.scrollTrigger.start);
 pans.forEach(p=>{
   const st=()=>xPos(Math.max(0,p.offsetLeft-innerWidth)),en=()=>xPos(p.offsetLeft+p.offsetWidth);
