@@ -10,7 +10,11 @@
           <div class="dz-ic">＋</div><div class="dz-lb">Add photos</div>
         </div>
         <div class="cl-tray" id="cl-tray"></div>
-        <div class="fx-hint" id="cl-tray-hint">Add photos, then pick a layout. Drag a photo onto a slot to place it; drag between slots to swap.</div>
+        <!-- Was a standing .fx-hint sentence — collapsed into the same tooltip/details pattern
+             every other long explanation in the panel redesign already uses (see .fx-info-i /
+             .fx-hint-x's own CSS comment). id="cl-tray-hint" kept on the <details> itself so
+             existing show/hide-by-id callers (if any) keep working unchanged. -->
+        <details class="fx-hint-x" id="cl-tray-hint"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Add photos, then pick a layout. Drag a photo onto a slot to place it; drag between slots to swap.</p></details>
       </div>
       <div class="fx-ctrl" data-clsec="canvas">
         <div class="ctitle" style="margin-bottom:10px">Canvas size</div>
@@ -21,6 +25,9 @@
       <div class="fx-ctrl" data-clsec="layout">
         <div class="ctitle" style="margin-bottom:10px">Layout</div>
         <div class="cl-shapes" id="cl-shapes"></div>
+        <!-- NOT converted to an info tooltip like its siblings — clRebuildShapes() rewrites this
+             element's textContent with a live photo count ("3 photos — pick an arrangement."),
+             so it's a status readout, not standing explanatory prose. -->
         <div class="fx-hint" id="cl-shape-hint">Add photos to see layout options.</div>
       </div>
       <div class="fx-ctrl" data-clsec="style">
@@ -29,14 +36,14 @@
           <input type="color" class="fx-color" id="cl-bg" value="#ffffff" aria-label="Background" style="">
           <div class="cl-swatches" id="cl-swatches"><button title="#ffffff" style="background: rgb(255, 255, 255);"></button><button title="#000000" style="background: rgb(0, 0, 0);"></button><button title="#f4f1ea" style="background: rgb(244, 241, 234);"></button><button title="#e8d9c5" style="background: rgb(232, 217, 197);"></button><button title="#171717" style="background: rgb(23, 23, 23);"></button><button title="#c8553d" style="background: rgb(200, 85, 61);"></button><button title="#2e4756" style="background: rgb(46, 71, 86);"></button><button title="#a3b18a" style="background: rgb(163, 177, 138);"></button></div>
         </div>
-        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Spacing</div><input class="fx-slider" type="range" min="0" max="60" value="8" id="cl-inner" aria-label="Spacing" style="--fillA: 0%; --fillB: 13.333333333333334%;"><div class="fx-val" id="cl-inner-v">8</div></div>
-        <div class="fx-row"><div class="fx-label">Outer margin</div><input class="fx-slider" type="range" min="0" max="80" value="0" id="cl-outer" aria-label="Outer margin" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="cl-outer-v">0</div></div>
-        <div class="fx-row"><div class="fx-label">Corner round</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="cl-radius" aria-label="Corner round" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="cl-radius-v">0</div></div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Spacing</div><input class="fx-slider" type="range" min="0" max="60" value="8" id="cl-inner" aria-label="Spacing" style="--fillA: 13.333333333333334%; --fillB: 13.333333333333334%; --sl-def-pct: 13.333333333333334%; --sl-roll: 0deg;"><div class="fx-val k-roll" id="cl-inner-v">8<span class="k-roll-strip" aria-hidden="true"><i class="k-num" style="--k-d: 8;"></i></span></div></div>
+        <div class="fx-row"><div class="fx-label">Outer margin</div><input class="fx-slider" type="range" min="0" max="80" value="0" id="cl-outer" aria-label="Outer margin" style="--fillA: 0%; --fillB: 0%; --sl-def-pct: 0%; --sl-roll: 0deg;"><div class="fx-val k-roll" id="cl-outer-v">0<span class="k-roll-strip" aria-hidden="true"><i class="k-num" style="--k-d: 0;"></i></span></div></div>
+        <div class="fx-row"><div class="fx-label">Corner round</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="cl-radius" aria-label="Corner round" style="--fillA: 0%; --fillB: 0%; --sl-def-pct: 0%; --sl-roll: 0deg;"><div class="fx-val k-roll" id="cl-radius-v">0<span class="k-roll-strip" aria-hidden="true"><i class="k-num" style="--k-d: 0;"></i></span></div></div>
       </div>
       <div class="fx-ctrl" id="cl-cellpanel" data-clsec="sel">
         <div class="ctitle" style="margin-bottom:10px">Selected photo</div>
-        <div class="fx-row"><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="100" max="400" value="100" id="cl-zoom" aria-label="Zoom" style="--fillA: 0%; --fillB: 0%;"><div class="fx-val" id="cl-zoom-v">100</div></div>
-        <div class="fx-hint">Drag inside the photo to reposition it. Scroll over a photo to zoom.</div>
+        <div class="fx-row"><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="100" max="400" value="100" id="cl-zoom" aria-label="Zoom" style="--fillA: 0%; --fillB: 0%; --sl-def-pct: 0%; --sl-roll: 0deg;"><div class="fx-val k-roll" id="cl-zoom-v">100<span class="k-roll-strip" aria-hidden="true"><i class="k-num" style="--k-d: 1;"></i><i class="k-num" style="--k-d: 0;"></i><i class="k-num" style="--k-d: 0;"></i></span></div></div>
+        <details class="fx-hint-x"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Drag inside the photo to reposition it. Scroll over a photo to zoom.</p></details>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bsec">Replace</button>
           <button class="btn bgh">Reset</button>

@@ -19,7 +19,7 @@
       <div class="lib-logo-gap"></div>
       <div id="lib-top-left">
       <div style="position:relative">
-        <button class="lib-btn lib-pill" id="lib-sort-btn" title="Sort by"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 15V3M4 6l3-3 3 3"></path><path d="M13 11h7M13 16h4M13 6h9"></path></svg><span class="lbl" id="lib-sort-label">Date taken</span></button>
+        <button class="lib-btn lib-pill" id="lib-sort-btn" title="Sort by"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.846" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M7 15V3M4 6l3-3 3 3"></path><path d="M13 11h7M13 16h4M13 6h9"></path></svg><span class="lbl" id="lib-sort-label">Date taken</span></button>
         <div class="lib-menu" id="lib-sort-menu">
           <div class="grp-label">Sort by</div>
           <select id="lib-sort" style="display:none">
@@ -51,14 +51,14 @@
         </div>
       </div>
       <div id="lib-filters-btn-wrap">
-        <button class="lib-btn lib-pill" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2" fill="var(--bg)"></circle><circle cx="15" cy="12" r="2" fill="var(--bg)"></circle><circle cx="9" cy="18" r="2" fill="var(--bg)"></circle></svg><span class="lbl">Filters</span><span id="lib-filters-badge"></span></button>
+        <button class="lib-btn lib-pill" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 6h16M4 12h16M4 18h16M8 4l2 2-2 2-2-2ZM16 10l2 2-2 2-2-2ZM11 16l2 2-2 2-2-2Z"></path></svg><span class="lbl">Filters</span><span id="lib-filters-badge"></span></button>
       </div>
       <!-- Grid/List only, matching Library View.html's 2-button toggle — Compare moved into the
            gear's View menu (below) per explicit decision: it's a real feature but not common
            enough to earn a permanent topbar slot next to the two everyday view modes. -->
-      <div class="lib-seg lib-viewtoggle" id="lib-viewmode-seg">
-        <button data-v="grid" title="Grid view" class="on"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg></button>
-        <button data-v="list" title="List view"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></button>
+      <div class="lib-seg lib-viewtoggle" id="lib-viewmode-seg" hidden="" style="display:none">
+        <button data-v="grid" title="Grid view" class="on"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.714" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg></button>
+        <button data-v="list" title="List view (unavailable while docked — expand the Gallery first)" disabled=""><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.714" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></button>
       </div>
       </div>
       <div class="lib-spacer"></div>
@@ -72,11 +72,12 @@
            #lib-top-center, same slot as the Editor's filename/status title. -->
       <div id="lib-top-center">
       <div class="lib-search-wrap">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.6-3.6"></path></svg>
-        <input id="lib-search" placeholder="Search name, keyword, or filter" style="">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.714" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.6-3.6"></path></svg>
+        <input id="lib-search" placeholder="Search places, keywords, anything" autocomplete="off" title="Type a place, keyword or filename; press Enter to also find photos that look like it (e.g. &quot;dog on a beach&quot;)" style="">
+        <div id="lib-search-suggest" hidden=""></div>
       </div>
       </div>
-      <div id="lib-top-right">
+      <div id="lib-top-right"><button type="button" id="sk2-act" title="Background work — click for details"><span class="sk2-act-dot" aria-hidden="true"></span><span class="sk2-act-body"><span id="lib-activity"></span><span style="font-size:11px;color:var(--mut)" id="lib-thumb-progress"></span></span></button>
       <!-- 2026-09-11 (topbar parity pass): zoom + flags merged into ONE cluster
            (#lib-zoomflag-cluster), mirroring the Editor's own #fx-zoom-ctrl (chromasmith-22.html)
            which holds its zoom slider AND flag buttons as one group carrying a single divider.
@@ -88,88 +89,70 @@
            body.deskx .fx-zoom-ctrl. -->
       <div id="lib-zoomflag-cluster">
       <div class="lib-zoomrow">
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <button type="button" class="lib-zoom-btn" id="lib-zoom-out" title="Smaller thumbnails"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.000" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M5 12h14"></path></svg></button>
         <input type="range" id="lib-thumbsize" min="90" max="320" step="10" title="Thumbnail size" style="">
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <button type="button" class="lib-zoom-btn" id="lib-zoom-in" title="Larger thumbnails"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.000" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
       </div>
-      <!-- Flag row: rates state.openedPath — whichever single photo is open in the Editor —
-           same window.chromasmithToggle*() bridge the Editor's own top-bar flag buttons already
-           use, so the two stay in sync automatically. HANDOVER §3.11 — this comment previously
-           claimed a multi-selection fallback; chromasmithToggleFlag/Favorite (below) read
-           state.openedPath only and ignore state.selected entirely.
+      <!-- Flag row: applies to the selected Library photos. The Editor's separate toolbar
+           continues to rate only the photo being edited via window.chromasmithToggle*().
            Reject icon is 'flagRed' (not the generic 'close' this used to render) — the Editor's
            own reject button (#btn-flag-red, chromasmith-22.html) uses 'flagRed' specifically so
            the two bars show the literal same glyph, not two different X shapes at two different
            stroke weights. -->
       <div class="lib-flagrow" id="lib-flagrow">
-        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-reject" title="Reject"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" fill="none"></path></svg></button>
-        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-pick" title="Pick"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4" fill="none"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="currentColor" stroke="none"></path></svg></button>
-        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-fav" title="Favorite"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z" fill="currentColor" stroke="none"></path></svg></button>
+        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-reject" title="Reject selected photos" disabled=""><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.333" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-pick" title="Pick selected photos" disabled=""><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.333" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M5 21V3M5 4h13l-4 4.5 4 4.5H5"></path></svg></button>
+        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-fav" title="Favorite selected photos" disabled=""><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.333" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M12 21 3 12a4.5 4.5 0 0 1 9-4.5 4.5 4.5 0 0 1 9 4.5Z"></path></svg></button>
       </div>
       </div>
-      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply a look to every selected photo"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3v4M3 5h4"></path><path d="M13 3l2.4 6.6L22 12l-6.6 2.4L13 21l-2.4-6.6L4 12l6.6-2.4z"></path></svg><span class="lbl">All FX</span></button>
-      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ⌘E"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4"></path><path d="M5 21h14"></path></svg><span class="lbl">Export</span></button>
+      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply your All FX effects to every selected photo (right-click to choose what it applies)" disabled=""><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.714" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M9 4l1.5 4.5L15 10l-4.5 1.5L9 16l-1.5-4.5L3 10l4.5-1.5ZM18 14v6M15 17h6"></path></svg><span class="lbl">All FX</span></button>
+      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ⌘E" disabled=""><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.714" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M3 9h10M3 9v12h12V11M9 15 21 3M14 3h7v7"></path></svg><span class="lbl">Export</span></button>
       <!-- id (not just a bare positioning div) so body.deskx can give it the SAME margin-left/
            padding-left/border-left divider as the Editor's own #fx-settings, instead of just the
            row's flat 8px gap — see the #lib-settings CSS rule below, copied from #fx-settings. -->
       <div style="position:relative" id="lib-settings">
-        <button class="lib-btn lib-btn-icon" id="lib-view-menu-btn" title="View settings"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
-        <!-- 2026-09-11 (gear submenu parity): two-column category drill-down, matching the
-             Editor's #fx-settings-menu (chromasmith-22.html) exactly — reuses ITS CSS classes
-             (.fx-settings-cat / .fx-settings-pane, and the #fx-settings-cats/#fx-settings-page
-             selectors extended to also match .fx-settings-cats/.fx-settings-page below) rather
-             than a parallel copy, so a future tweak to the Editor's drill-down styling (padth,
-             active-state color, pane width) can't silently drift out of sync here again. The
-             flat single-list #lib-view-menu this replaces bundled 5 unrelated groups (Library
-             actions / Thumbnails / Metadata overlay / Panels / Appearance) into one long scroll
-             with no equivalent to the Editor's own Transform/View/Compare/History/More tabs. -->
-        <div class="lib-menu fx-settings-menu-drill" id="lib-view-menu">
-          <div class="fx-settings-cats" id="lib-settings-cats"><button type="button" class="fx-settings-cat active" data-cat="library">Library</button><button type="button" class="fx-settings-cat" data-cat="thumbnails">Thumbnails</button><button type="button" class="fx-settings-cat" data-cat="metadata">Metadata</button><button type="button" class="fx-settings-cat" data-cat="panels">Panels</button><button type="button" class="fx-settings-cat" data-cat="appearance">Appearance</button></div>
-          <div class="fx-settings-page" id="lib-settings-page">
-            <div class="fx-settings-pane active" id="lib-cat-library">
-              <button class="lib-btn opt-action" id="lib-pick" title="Choose root folder"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.6.8l.9 1.2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg><span>Choose folder…</span></button>
-              <button class="lib-btn opt-action" id="lib-gphotos" title="Import from Google Photos"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.1 11.2 3.9 3.9 0 0 0 6.5 19z"></path></svg><span>Import from Google Photos…</span></button>
-              <button class="lib-btn opt-action" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg><span>Recent folders…</span></button>
-              <button class="lib-btn opt-action" id="lib-info-btn" title="Get Info for the selected photo — I"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg><span>Get Info</span></button>
-              <button class="lib-btn opt-action" id="lib-expand" title="Full-window view — G"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"></path></svg><span>Full-window view</span></button>
-              <button class="lib-btn opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" opacity=".55"></path></svg><span>Compare view</span></button>
-            </div>
-            <div class="fx-settings-pane" id="lib-cat-thumbnails">
-              <div class="opt" id="lib-hideicons"><span>Hide flag &amp; type icons</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
-              <div class="opt" id="lib-zerogap"><span>No spacing between photos</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
-              <div class="opt" id="lib-showtitle"><span>Show title</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
-              <!-- #10/#11: no leading icon — every other option row in this menu (metadata/theme/
-                   panels) is icon-less; this one's <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg> was its own inconsistency,
-                   confirmed by wireframe_inventory.mjs's self-consistency check. -->
-              <button class="lib-btn opt-action opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square. Only available for folders under 400 photos (larger folders use a virtualized grid this can't apply to)."><span>Real aspect ratio</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button>
-            </div>
-            <div class="fx-settings-pane" id="lib-cat-metadata">
-              <select id="lib-metadisp" style="display:none">
-                <option value="off">Off</option>
-                <option value="hover">On hover</option>
-                <option value="always">Always on</option>
-              </select>
-              <div class="opt sel" data-metaval="off"><span>Off</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
-              <div class="opt" data-metaval="always"><span>Always on</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
-              <div class="opt" data-metaval="hover"><span>On hover</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
-            </div>
-            <div class="fx-settings-pane" id="lib-cat-panels">
-              <button class="lib-btn opt-action opt-toggle on" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)"><span>Show sidebar</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button>
-            </div>
-            <div class="fx-settings-pane" id="lib-cat-appearance">
-              <div class="opt sel" data-theme="dark"><span>Dark</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
-              <div class="opt" data-theme="light"><span>Light</span><svg class="check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></div>
-            </div>
-          </div>
+        <button class="lib-btn lib-btn-icon" id="lib-view-menu-btn" title="View settings"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" stroke-linejoin="miter"><path d="M9 3h6l6 6v6l-6 6H9l-6-6V9Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+        <!-- CHR-147 fix: reverted to a flat single-list menu. The 2026-09-11 two-column
+             category drill-down (matching the Editor's #fx-settings-menu) hid every option
+             outside the default "Library" pane behind a tab click with no strong visual cue,
+             so toggles like "Hide flag & type icons" and the theme switch appeared unresponsive
+             — reported as "settings button doesn't work in library view". Library has far fewer
+             settings than the Editor, so the drill-down's scroll-avoidance tradeoff wasn't
+             worth the discoverability cost here. -->
+        <!-- Same drill-down as the Studio's #fx-settings-menu (categories left, page right),
+             sharing its .fx-settings-* classes. The first category opens by default and hovering
+             a category switches to it, so nothing is hidden behind an unexplained click (CHR-147). -->
+        <!-- One settings menu for gallery and Studio: these panes are moved into the Studio's
+             #fx-settings-menu at init (libSettingsAdopt) and shown as its gallery categories. -->
+        <div id="lib-view-menu" hidden="">
+          
+          
+          
         </div>
       </div>
       </div>
     </div>
-    <!-- Retired: every control this row used to hold moved into #lib-top above or the gear's
-         View menu. Kept as an empty, always-hidden pinned grid child rather than removed
-         outright, so the #lib-overlay grid's pinned row numbering (see the comment on that
-         rule) never has to be renumbered. -->
+    <!-- The filter row stays in this pinned grid track while #lib-main scrolls below it. -->
     <div id="lib-filters" class="lib-fullview-only">
+      <div class="lib-filterrow" id="lib-filter-row">
+        <span class="lib-flabel">Types</span>
+        <button class="lib-chip lib-sel" data-fgrp="type" data-fval="all">All</button>
+        <button class="lib-chip" data-fgrp="type" data-fval="raw">RAW</button>
+        <button class="lib-chip" data-fgrp="type" data-fval="jpeg">JPEG</button>
+        <button class="lib-chip" data-fgrp="type" data-fval="video">Video</button>
+        <button class="lib-chip" id="lib-types-more" title="More types">…</button>
+        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="heic" hidden="">HEIC</button>
+        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="tiff" hidden="">TIFF</button>
+        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="png" hidden="">PNG</button>
+        <div class="lib-filterdiv"></div>
+        <span class="lib-flabel">Flags &amp; tags</span>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="green" title="Picked"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.714" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M5 21V3M5 4h13l-4 4.5 4 4.5H5"></path></svg></button>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="red" title="Rejected"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.714" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"></path></svg></button>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="favorite" title="Favorited"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.714" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M12 21 3 12a4.5 4.5 0 0 1 9-4.5 4.5 4.5 0 0 1 9 4.5Z"></path></svg></button>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="none" title="Unflagged"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" stroke-linejoin="miter"><circle cx="12" cy="12" r="9"></circle><path d="M6 18 18 6"></path></svg></button>
+        <div class="lib-filterdiv"></div>
+        <button class="lib-chip" id="lib-more-filters" title="Camera, lens, ISO, duplicates, sync and rating filters">More…</button>
+      </div>
       <span id="lib-lr-chip">✓ Lightroom connected <span class="lib-lr-signout" title="Sign out of Adobe Lightroom">Sign out</span></span>
       <div id="lib-filter-chips"></div>
     </div>
@@ -177,15 +160,15 @@
     <div id="lib-filters-panel" class="lib-fullview-only">
       <div id="lib-filters-panel-head">
         <span>Filters</span>
-        <span id="lib-filters-panel-close" title="Close"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"></path></svg></span>
+        <span id="lib-filters-panel-close" title="Close"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.600" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"></path></svg></span>
       </div>
       <label id="lib-subfolders-wrap" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);white-space:nowrap;cursor:pointer" title="Also show photos in every subfolder, not just this one — matches Lightroom's 'Include Photos from Subfolders'">
         <input type="checkbox" id="lib-subfolders" style="">Subfolders</label>
-      <select id="lib-source" title="Photo source">
+      <div class="lib-filter-field"><label for="lib-source">Photo source</label><select id="lib-source" title="Photo source">
         <option value="folder">This folder</option>
         <option value="edited">All Edited</option>
-      </select>
-      <select id="lib-type-filter" title="Filter by file type">
+      </select><div class="k-fsel"><button type="button"><span class="dl">Photo source:</span><span class="dv">This folder</span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"></path></svg></button><div class="k-fmenu" role="listbox"><div data-i="0" aria-selected="true">This folder<i class="sq"></i></div><div data-i="1">All Edited<i class="sq"></i></div></div></div></div>
+      <div class="lib-filter-field"><label for="lib-type-filter">File type</label><select id="lib-type-filter" title="Filter by file type">
         <option value="all">All types</option>
         <option value="raw">RAW</option><option value="jpeg">JPEG</option>
         <option value="png">PNG</option><option value="tiff">TIFF</option>
@@ -198,24 +181,24 @@
         <option value="heic">HEIC</option><option value="webp">WebP</option>
         <option value="hdr">HDR/EXR</option><option value="other">Other</option>
         <option value="video">Video</option>
-      </select>
-      <select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option><option value="DC-S9">DC-S9</option></select>
-      <select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option><option value="LUMIX S 18-40">LUMIX S 18-40</option></select>
-      <select id="lib-iso-filter" title="Filter by ISO"><option value="all">All ISOs</option><option value="200">ISO 200</option></select>
-      <select id="lib-dupe-filter" title="Filter by duplicate status">
+      </select><div class="k-fsel"><button type="button"><span class="dl">File type:</span><span class="dv">All types</span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"></path></svg></button><div class="k-fmenu" role="listbox"><div data-i="0" aria-selected="true">All types<i class="sq"></i></div><div data-i="1">RAW<i class="sq"></i></div><div data-i="2">JPEG<i class="sq"></i></div><div data-i="3">PNG<i class="sq"></i></div><div data-i="4">TIFF<i class="sq"></i></div><div data-i="5">HEIC<i class="sq"></i></div><div data-i="6">WebP<i class="sq"></i></div><div data-i="7">HDR/EXR<i class="sq"></i></div><div data-i="8">Other<i class="sq"></i></div><div data-i="9">Video<i class="sq"></i></div></div></div></div>
+      <div class="lib-filter-field"><label for="lib-camera-filter">Camera</label><select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option><option value="DC-S9">DC-S9</option></select><div class="k-fsel"><button type="button"><span class="dl">Camera:</span><span class="dv">All cameras</span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"></path></svg></button><div class="k-fmenu" role="listbox"><div data-i="0" aria-selected="true">All cameras<i class="sq"></i></div><div data-i="1">DC-S9<i class="sq"></i></div></div></div></div>
+      <div class="lib-filter-field"><label for="lib-lens-filter">Lens</label><select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option><option value="LUMIX S 18-40">LUMIX S 18-40</option></select><div class="k-fsel"><button type="button"><span class="dl">Lens:</span><span class="dv">All lenses</span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"></path></svg></button><div class="k-fmenu" role="listbox"><div data-i="0" aria-selected="true">All lenses<i class="sq"></i></div><div data-i="1">LUMIX S 18-40<i class="sq"></i></div></div></div></div>
+      <div class="lib-filter-field"><label for="lib-iso-filter">ISO</label><select id="lib-iso-filter" title="Filter by ISO"><option value="all">All ISOs</option><option value="200">ISO 200</option></select><div class="k-fsel"><button type="button"><span class="dl">ISO:</span><span class="dv">All ISOs</span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"></path></svg></button><div class="k-fmenu" role="listbox"><div data-i="0" aria-selected="true">All ISOs<i class="sq"></i></div><div data-i="1">ISO 200<i class="sq"></i></div></div></div></div>
+      <div class="lib-filter-field"><label for="lib-dupe-filter">Duplicates</label><select id="lib-dupe-filter" title="Filter by duplicate status">
         <option value="all">All photos</option>
         <option value="dupes">Duplicates only</option>
-      </select>
-      <select id="lib-synced-filter" title="Filter by Google Photos sync status">
+      </select><div class="k-fsel"><button type="button"><span class="dl">Duplicates:</span><span class="dv">All photos</span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"></path></svg></button><div class="k-fmenu" role="listbox"><div data-i="0" aria-selected="true">All photos<i class="sq"></i></div><div data-i="1">Duplicates only<i class="sq"></i></div></div></div></div>
+      <div class="lib-filter-field"><label for="lib-synced-filter">Google Photos sync</label><select id="lib-synced-filter" title="Filter by Google Photos sync status">
         <option value="all">All photos</option>
         <option value="synced">Synced to Google Photos</option>
         <option value="notsynced">Not synced</option>
-      </select>
-      <select id="lib-faces-filter" title="Filter by face-indexing status">
+      </select><div class="k-fsel"><button type="button"><span class="dl">Google Photos sync:</span><span class="dv">All photos</span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"></path></svg></button><div class="k-fmenu" role="listbox"><div data-i="0" aria-selected="true">All photos<i class="sq"></i></div><div data-i="1">Synced to Google Photos<i class="sq"></i></div><div data-i="2">Not synced<i class="sq"></i></div></div></div></div>
+      <div class="lib-filter-field"><label for="lib-faces-filter">Face indexing</label><select id="lib-faces-filter" title="Filter by face-indexing status">
         <option value="all">All photos</option>
         <option value="indexed">Face-scanned</option>
         <option value="pending">Not face-scanned</option>
-      </select>
+      </select><div class="k-fsel"><button type="button"><span class="dl">Face indexing:</span><span class="dv">All photos</span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"></path></svg></button><div class="k-fmenu" role="listbox"><div data-i="0" aria-selected="true">All photos<i class="sq"></i></div><div data-i="1">Face-scanned<i class="sq"></i></div><div data-i="2">Not face-scanned<i class="sq"></i></div></div></div></div>
       <!-- Own wrapper, deliberately: syncFilterUI() hides _rf.closest('label') || _rf.parentElement
            when STARS_ENABLED is false (it is, unconditionally, in production today), so this
            select's PARENT must be a dedicated element it alone owns — otherwise that hide call
@@ -223,7 +206,7 @@
            seven other filters and #lib-filters-panel now, either of which this would have
            hidden in full; this wrapper is what makes STARS_ENABLED=false actually mean "hide
            just the rating filter" rather than "hide whichever container it happens to sit in". -->
-      <div id="lib-rating-filter-wrap" style="display: none;">
+      <div id="lib-rating-filter-wrap" class="lib-filter-field" style="display: none;"><label for="lib-rating-filter">Star rating</label>
         <select id="lib-rating-filter" title="Filter by star rating">
           <option value="all">Any rating</option>
           <option value="0">Unrated</option>
@@ -232,9 +215,9 @@
           <option value="3">★3+</option>
           <option value="4">★4+</option>
           <option value="5">★5</option>
-        </select>
+        </select><div class="k-fsel"><button type="button"><span class="dl">Star rating:</span><span class="dv">Any rating</span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"></path></svg></button><div class="k-fmenu" role="listbox"><div data-i="0" aria-selected="true">Any rating<i class="sq"></i></div><div data-i="1">Unrated<i class="sq"></i></div><div data-i="2">★1+<i class="sq"></i></div><div data-i="3">★2+<i class="sq"></i></div><div data-i="4">★3+<i class="sq"></i></div><div data-i="5">★4+<i class="sq"></i></div><div data-i="6">★5<i class="sq"></i></div></div></div>
       </div>
-      <select id="lib-tag-filter" title="Filter by tag">
+      <div class="lib-filter-field"><label for="lib-tag-filter">Tags</label><select id="lib-tag-filter" title="Filter by tag">
         <option value="all">All tags</option>
         <option value="red">Rejected (X)</option>
         <option value="green">Picked (flag)</option>
@@ -242,7 +225,7 @@
         <option value="noedited">Not edited</option>
         <option value="favorite">Favorites</option>
         <option value="none">Unflagged</option>
-      </select>
+      </select><div class="k-fsel"><button type="button"><span class="dl">Tags:</span><span class="dv">All tags</span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"></path></svg></button><div class="k-fmenu" role="listbox"><div data-i="0" aria-selected="true">All tags<i class="sq"></i></div><div data-i="1">Rejected (X)<i class="sq"></i></div><div data-i="2">Picked (flag)<i class="sq"></i></div><div data-i="3">Edited<i class="sq"></i></div><div data-i="4">Not edited<i class="sq"></i></div><div data-i="5">Favorites<i class="sq"></i></div><div data-i="6">Unflagged<i class="sq"></i></div></div></div></div>
       <button class="lib-btn" id="lib-filters-clear">Clear all</button>
       <div class="lib-fp-label">Display</div>
       <select id="lib-views" title="Saved filter + sort views"><option value="">Views…</option><option value="__save">+ Save current…</option></select>
@@ -267,22 +250,26 @@
              hides the <span> at that point (see its own comment). aria-label is set explicitly
              to the plain tab name (not the title's "Switch to X" phrasing) so hiding the span
              doesn't change what a screen reader announces this button as. -->
-        <button class="lib-side-tab on" id="lib-side-tab-library" title="Switch to Library" aria-label="Library"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.6.8l.9 1.2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg><span>Library</span></button>
+        <button class="lib-side-tab on" id="lib-side-tab-library" title="Switch to Gallery" aria-label="Gallery"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.846" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M3 5h7l2 3h9v12H3Z"></path></svg><span>Gallery</span></button>
         <!-- HANDOVER §3.4: "Develop — not yet available" contradicted the click, which already
              performs a real navigation (closes the Library, same as the header button / L key).
              The wiring is correct — Develop simply IS the editor you land back in — so the
              stale "not yet available" title was the lie, not the handler. -->
-        <button class="lib-side-tab" id="lib-side-tab-develop" title="Switch to Develop" aria-label="Develop"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z"></path></svg><span>Develop</span></button>
+        <button class="lib-side-tab" id="lib-side-tab-develop" title="Switch to Studio" aria-label="Studio"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.846" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M3 21 14 10M14 4h6v6h-6ZM4 4l6 6M3 8l5-5"></path></svg><span>Studio</span></button>
       </div>
       <div id="lib-collections" class="lib-fullview-only"><div class="lib-coll-row" data-catalog="all" role="button" tabindex="0">
-        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8.5" cy="9" r="1.5"></circle><path d="M21 16l-5-5L5 20"></path></svg></span><span class="lib-coll-lb">All Photos</span>
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.714" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><rect x="3" y="5" width="18" height="14"></rect><path d="M3 19l7-7 7 7M13 15l3-3 5 5"></path><path d="M16.5 7l1.5 1.5-1.5 1.5-1.5-1.5Z"></path></svg></span><span class="lib-coll-lb">All Photos</span>
         <span class="lib-coll-count">0</span>
       </div><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="collections" role="button" tabindex="0" aria-expanded="true">
-        <span class="lib-tree-chev open"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>Collections</span>
+        <span class="lib-tree-chev open"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.182" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span class="lib-sec-label">Collections</span>
       </div>
       <div class="lib-coll-row" data-coll="recents" role="button" tabindex="0">
         <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg></span><span class="lib-coll-lb">Recents</span>
         <span class="lib-coll-count">4</span>
+      </div>
+      <div class="lib-coll-row" data-coll="offline" role="button" tabindex="0">
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"></path><path d="M5 21h14"></path></svg></span><span class="lib-coll-lb">Offline Photos</span>
+        <span class="lib-coll-count">0</span>
       </div>
       <div class="lib-coll-row" data-coll="favorites" role="button" tabindex="0">
         <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span><span class="lib-coll-lb">Favorites</span>
@@ -313,72 +300,52 @@
         <span class="lib-coll-count">1</span>
       </div>
       <div class="lib-coll-row" data-type-shortcut="raw" title="All RAW files">
-        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8.5" cy="9" r="1.5"></circle><path d="M21 16l-5-5L5 20"></path></svg></span><span class="lib-coll-lb">Raw</span>
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.714" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><rect x="3" y="5" width="18" height="14"></rect><path d="M3 19l7-7 7 7M13 15l3-3 5 5"></path><path d="M16.5 7l1.5 1.5-1.5 1.5-1.5-1.5Z"></path></svg></span><span class="lib-coll-lb">Raw</span>
         <span class="lib-coll-count">0</span>
       </div>
       <div class="lib-coll-row" data-type-shortcut="video" title="All video clips">
-        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2"></rect><path d="M15.5 10.5l6-3v9l-6-3z"></path></svg></span><span class="lib-coll-lb">Videos</span>
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.714" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12"></rect><path d="M15.5 10.5l6-3v9l-6-3Z"></path></svg></span><span class="lib-coll-lb">Videos</span>
         <span class="lib-coll-count">0</span>
       </div><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="people" role="button" tabindex="0" aria-expanded="false">
-        <span class="lib-tree-chev"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>People &amp; Pets<span id="lib-people-scan" title="Analyze photos — find faces and enable AI search" style="float:right;cursor:pointer;padding:0 4px"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.6-3.6"></path></svg></span></span>
+        <span class="lib-tree-chev"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.182" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span class="lib-sec-label">People &amp; Pets</span><span class="lib-sec-trail"><span id="lib-people-scan" title="Analyze photos — find faces and enable AI search" style="cursor:pointer;padding:0 4px"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.846" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.6-3.6"></path></svg></span></span>
       </div><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="albums" role="button" tabindex="0" aria-expanded="false">
-        <span class="lib-tree-chev"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>Albums<span id="lib-album-new" title="New album" style="float:right;cursor:pointer;padding:0 4px">+</span></span>
+        <span class="lib-tree-chev"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.182" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span class="lib-sec-label">Albums</span><span class="lib-sec-trail"><span id="lib-album-new" title="New album" style="cursor:pointer;padding:0 4px">+</span></span>
       </div><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="drives" role="button" tabindex="0" aria-expanded="true">
-        <span class="lib-tree-chev open"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>Drives</span>
+        <span class="lib-tree-chev open"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.182" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span class="lib-sec-label">Drives</span>
       </div><div class="lib-coll-row" style="cursor:default" title="Offline thumbnails: 0.0 GB (never auto-cleared) · Decode cache: 0.0 GB (auto-managed) · Working thumbnails: 0.0 GB (auto-managed)">
-        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><circle cx="6.5" cy="16.5" r=".8" fill="currentColor" stroke="none"></circle><circle cx="10.5" cy="16.5" r=".8" fill="currentColor" stroke="none"></circle></svg></span>
+        <span class="lib-coll-ic"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.846" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M3 13h18v7H3ZM3 13l4-8h10l4 8M16 17.5l1-1M18 17.5l1-1"></path></svg></span>
         <span class="lib-coll-lb" style="color:var(--mut)">Using 0.0 of 20.0 GB</span>
       </div>
       <div style="padding:0 10px 6px"><div style="height:3px;border-radius:2px;background:var(--sur2);overflow:hidden">
         <div style="height:100%;width:0%;background:var(--acc)"></div>
       </div></div>
-      <div class="lib-coll-row" data-cache-free="1" style="cursor:pointer">
+      <button type="button" class="sk2-manage-btn">Manage</button><div class="lib-coll-row sk2-manage" data-lib-roots="1" style="cursor:pointer" title="Every folder the gallery is indexing — remove any of them (files are never deleted)">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Gallery folders…</span>
+      </div>
+      <div class="lib-coll-row sk2-manage" data-cache-free="1" style="cursor:pointer">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Free up space…</span>
       </div>
-      <div class="lib-coll-row" data-verify-library="1" style="cursor:pointer" title="Re-checks every already-hashed photo against its stored hash — flags any that changed WITHOUT its file date moving, which is what silent corruption looks like. New/never-hashed photos are already covered automatically in the background.">
-        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Verify library…</span>
+      <div class="lib-coll-row sk2-manage" data-verify-library="1" style="cursor:pointer" title="Re-checks every already-hashed photo against its stored hash — flags any that changed WITHOUT its file date moving, which is what silent corruption looks like. New/never-hashed photos are already covered automatically in the background.">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Verify gallery…</span>
       </div>
-      <div class="lib-coll-row" data-find-duplicates="1" style="cursor:pointer" title="Perceptual-hash duplicate detection for the CURRENT folder — deliberately manual, same as digiKam's own Find Duplicates tool, rather than an automatic pass on every folder open.">
+      <div class="lib-coll-row sk2-manage" data-find-duplicates="1" style="cursor:pointer" title="Perceptual-hash duplicate detection for the CURRENT folder — deliberately manual, same as digiKam's own Find Duplicates tool, rather than an automatic pass on every folder open.">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Find duplicates…</span>
       </div>
-      <div class="lib-coll-row" data-rescan-flags="1" style="cursor:pointer" title="The Flagged/Favorites/Edited/Rejected smart collections only see .xmp sidecars in folders you've opened or that are in Recents — a sidecar changed elsewhere (by this app in a subfolder you've never browsed, or by an external tool) can be invisible to them even though a plain folder browse shows it correctly. This walks the WHOLE library once to catch up.">
+      <div class="lib-coll-row sk2-manage" data-rescan-flags="1" style="cursor:pointer" title="The Flagged/Favorites/Edited/Rejected smart collections only see .xmp sidecars in folders you've opened or that are in Recents — a sidecar changed elsewhere (by this app in a subfolder you've never browsed, or by an external tool) can be invisible to them even though a plain folder browse shows it correctly. This walks the WHOLE library once to catch up.">
         <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Rescan flags…</span>
       </div><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="devices" role="button" tabindex="0" aria-expanded="false">
-        <span class="lib-tree-chev"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>Devices</span>
+        <span class="lib-tree-chev"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.182" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span class="lib-sec-label">Devices</span>
       </div></div><div id="lib-folders-header" class="lib-fullview-only"><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="folders" role="button" tabindex="0" aria-expanded="true">
-        <span class="lib-tree-chev open"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>Folders</span>
-      </div></div><div id="lib-tree" class="lib-fullview-only"><div class="lib-tree-node"><div class="lib-tree-row"><span class="lib-tree-chev" data-chev-toggle="1"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span style="display:inline-flex;vertical-align:-2px;margin-right:5px;color:var(--mut)"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"></path></svg></span><span>Photos</span></div></div></div><div id="lib-collections-post" class="lib-fullview-only"><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="cloud" role="button" tabindex="0" aria-expanded="false">
-        <span class="lib-tree-chev"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span>Cloud</span>
+        <span class="lib-tree-chev open"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.182" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span class="lib-sec-label">Folders</span>
+      </div></div><div id="lib-tree" class="lib-fullview-only"><div class="lib-tree-node"><div class="lib-tree-row" title="Right-click to remove this folder from the library"><span class="lib-tree-chev" data-chev-toggle="1"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.182" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span style="display:inline-flex;vertical-align:-2px;margin-right:5px;color:var(--mut)"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.846" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"></path></svg></span><span>Photos</span></div></div></div><div id="lib-collections-post" class="lib-fullview-only"><div class="lib-coll-sep"></div><div class="lib-coll-heading lib-sec-h" data-sec-toggle="cloud" role="button" tabindex="0" aria-expanded="false">
+        <span class="lib-tree-chev"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.182" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span><span class="lib-sec-label">Cloud</span>
       </div></div>
     </div>
     <div id="lib-main">
-      <!-- #5: the wireframe's own inline filter chip row (Library View.html:375-392), built
-           literally rather than re-derived — Types pills + a "…" more-types expander, then
-           Flags & tags icon chips. Drives the SAME state.typeFilter/tagFilter the (still-present,
-           still holding camera/lens/ISO/duplicates/sync/faces/rating — real features the
-           wireframe's static mock has no equivalent for) Filters popover panel already used, the
-           same way #lib-metadisp is a hidden <select> driven by the View menu's visible rows. -->
-      <div class="lib-filterrow" id="lib-filter-row">
-        <span class="lib-flabel">Types</span>
-        <button class="lib-chip lib-sel" data-fgrp="type" data-fval="all">All</button>
-        <button class="lib-chip" data-fgrp="type" data-fval="raw">RAW</button>
-        <button class="lib-chip" data-fgrp="type" data-fval="jpeg">JPEG</button>
-        <button class="lib-chip" data-fgrp="type" data-fval="video">Video</button>
-        <button class="lib-chip" id="lib-types-more" title="More types">…</button>
-        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="heic" hidden="">HEIC</button>
-        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="tiff" hidden="">TIFF</button>
-        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="png" hidden="">PNG</button>
-        <div class="lib-filterdiv"></div>
-        <span class="lib-flabel">Flags &amp; tags</span>
-        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="green" title="Picked"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4" fill="none"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="currentColor" stroke="none"></path></svg></button>
-        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="red" title="Rejected"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"></path></svg></button>
-        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="favorite" title="Favorited"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z" fill="currentColor" stroke="none"></path></svg></button>
-        <!-- No 'circleSlash' key in ICONS — wireframe's own unflagged glyph (Library View.html
-             :392) inlined verbatim: a plain circle with a diagonal line through it. -->
-        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="none" title="Unflagged"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="6" y1="18" x2="18" y2="6"></line></svg></button>
-        <div class="lib-filterdiv"></div>
-        <button class="lib-chip" id="lib-more-filters" title="Camera, lens, ISO, duplicates, sync and rating filters">More…</button>
-      </div>
+      <!-- Grid title: the view's name at the top; while scrolling it becomes the date of the top
+           visible row (month / day / hour, picked from the view's own date span) so a
+           several-thousand-photo folder reads as a timeline instead of one undivided wall. -->
+      <div id="lib-grid-title" class="has"><div class="lgt-l"><span class="lgt-k"></span><h1 class="lgt-h">Photos</h1></div><div class="lgt-m"><span style="font-size:11px;color:var(--mut)" id="lib-status-sel"></span><span id="lib-status-labels" style="font-size:11px;color:var(--mut);display:flex;gap:8px;align-items:center"><button type="button" class="lib-status-chip" data-fval="red" title="Show only rejected" style="display:inline-flex;align-items:center;gap:3px;background:none;border:0;padding:0;min-height:28px;color:inherit;font:inherit;cursor:pointer"><span style="display:inline-flex"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.000" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"></path></svg></span>18 rejected</button><button type="button" class="lib-status-chip" data-fval="green" title="Show only picked" style="display:inline-flex;align-items:center;gap:3px;background:none;border:0;padding:0;min-height:28px;color:inherit;font:inherit;cursor:pointer"><span style="display:inline-flex"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.000" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M5 21V3M5 4h13l-4 4.5 4 4.5H5"></path></svg></span>18 picked</button><button type="button" class="lib-status-chip" data-fval="favorite" title="Show only favourites" style="display:inline-flex;align-items:center;gap:3px;background:none;border:0;padding:0;min-height:28px;color:inherit;font:inherit;cursor:pointer"><span style="display:inline-flex"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.000" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M12 21 3 12a4.5 4.5 0 0 1 9-4.5 4.5 4.5 0 0 1 9 4.5Z"></path></svg></span>18 favourites</button></span><span style="font-size:11px;color:var(--mut)" id="lib-count">18 photos</span></div></div>
       <div id="lib-list-head">
         <div class="lib-lh-cell lib-lh-thumb"></div>
         <div class="lib-lh-cell" data-sort="name">Name</div>
@@ -392,7 +359,7 @@
         <div class="lib-lh-cell lib-lh-flags">Flags</div>
         <div class="lib-lh-cell" data-sort="edited">Edited<div class="lib-col-resize"></div></div>
       </div>
-      <div id="lib-grid" style="--lib-thumb: 140px;"><div class="lib-card" data-path="/test/AllPhotos/IMG_1001.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/d2f4574b-7642-4147-80c7-a6b5ed7e9874" class="loaded">
+      <div id="lib-grid" class="lib-mat" style="--lib-thumb: 140px;"><div class="lib-card" data-path="/test/AllPhotos/IMG_1001.RW2" role="button" aria-label="IMG_1001.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/6c4a3c73-f7b0-498b-859c-90a955188d7a" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -401,8 +368,7 @@
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1001.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1002.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/1defe9fb-09ba-497d-9b5e-ee170ab5a08b" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1002.RW2" role="button" aria-label="IMG_1002.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/2d548179-6dd2-4fc0-8bdb-82c8f5d98503" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -411,8 +377,7 @@
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1002.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1003.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/8d39b6dd-5261-461e-8ee4-e6f78448941f" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1003.RW2" role="button" aria-label="IMG_1003.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/c73f5bab-8dac-4e22-bc9d-995e4da171f2" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -421,8 +386,7 @@
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1003.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1004.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/56b85f8a-76eb-4702-87b9-db5644dea71f" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1004.RW2" role="button" aria-label="IMG_1004.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/216c8368-5fd2-46f4-906d-46f244065fe8" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -431,8 +395,7 @@
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1004.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1005.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/9f4650fe-0fc3-4a34-8a78-1e2eff12728f" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1005.RW2" role="button" aria-label="IMG_1005.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/64f96da3-ea9a-45dd-bca6-390cc9175c66" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -441,28 +404,16 @@
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1005.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/P_TM6006.MP4" draggable="true"><div class="lib-thumb-wrap lib-thumb-video"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/8e39f05f-c6c7-4ff3-8342-70e81d1b30cb" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/P_TM6006.MP4" role="button" aria-label="P_TM6006.MP4" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap lib-thumb-video"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/eaa6813c-f73c-4d99-a299-3d32d688d08d" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
           
-          <div class="lib-video-badge" title="Video clip"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2"></rect><path d="M15.5 10.5l6-3v9l-6-3z"></path></svg><span>0:13</span></div>
+          <div class="lib-video-badge" title="Video clip"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.400" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12"></rect><path d="M15.5 10.5l6-3v9l-6-3Z"></path></svg><span>0:13</span></div>
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">P_TM6006.MP4</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1007.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/62898142-dbd7-4479-8924-be99831b5919" class="loaded">
-            <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
-          </div>
-          
-          <div class="lib-raw-badge" title="RAW file">R</div>
-          
-          
-          
-          
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1007.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1008.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/c4fbf107-9c16-43ba-8491-b73d9f25381e" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1007.RW2" role="button" aria-label="IMG_1007.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/75ae5772-8640-49cf-b4f6-fad389cc4aec" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -471,8 +422,7 @@
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1008.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1009.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/c539fae3-32d4-48ca-9258-faf44c5a885c" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1008.RW2" role="button" aria-label="IMG_1008.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/cae26275-3d21-48d4-843c-2959eb412344" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -481,8 +431,7 @@
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1009.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1010.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/948c5a95-ffa6-4936-ab4c-d17ce2ba2636" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1009.RW2" role="button" aria-label="IMG_1009.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/f534ec6c-76d2-44c9-a3e8-293e0ee94f20" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -491,8 +440,7 @@
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1010.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1011.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/877679d1-1766-4099-9e6e-df15d42031bf" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1010.RW2" role="button" aria-label="IMG_1010.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/be2e3e68-fc92-448c-b903-6493ede37a84" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -501,18 +449,7 @@
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1011.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/P_TM6012.MP4" draggable="true"><div class="lib-thumb-wrap lib-thumb-video"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/ca3ec451-d0bc-4be1-adcd-6ecfdecfb415" class="loaded">
-            <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
-          </div>
-          
-          
-          <div class="lib-video-badge" title="Video clip"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2"></rect><path d="M15.5 10.5l6-3v9l-6-3z"></path></svg><span>0:13</span></div>
-          
-          
-          
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">P_TM6012.MP4</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1013.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/eacdf354-e33e-4f52-a905-617086bc61ff" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1011.RW2" role="button" aria-label="IMG_1011.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/07f85ecd-f6cc-48e8-ae79-26fdaa864f2c" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -521,8 +458,16 @@
           
           
           
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/P_TM6012.MP4" role="button" aria-label="P_TM6012.MP4" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap lib-thumb-video"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/02f8cbf9-239c-429f-b28d-966b7b0ad48a" class="loaded">
+            <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
+          </div>
           
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1013.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1014.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/b0d1015e-7e84-4296-9052-35491024e0ab" class="loaded">
+          
+          <div class="lib-video-badge" title="Video clip"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.400" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12"></rect><path d="M15.5 10.5l6-3v9l-6-3Z"></path></svg><span>0:13</span></div>
+          
+          
+          
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1013.RW2" role="button" aria-label="IMG_1013.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/bf8d2557-e51d-42ba-be42-fd705e74a6ae" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -531,8 +476,7 @@
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1014.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1015.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/12976f03-5025-4d88-99a4-bf804599c584" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1014.RW2" role="button" aria-label="IMG_1014.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/b33a6888-24a8-4e55-9fe6-fbb018d05804" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -541,8 +485,7 @@
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1015.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1016.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/e5d3c38e-88bf-4e20-a0af-932afd361929" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1015.RW2" role="button" aria-label="IMG_1015.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/072c35d1-eb28-4c68-9785-47117b00a4f0" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -551,8 +494,7 @@
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1016.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1017.RW2" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/9759aa73-5a1f-4089-995b-99291b382c7b" class="loaded">
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1016.RW2" role="button" aria-label="IMG_1016.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/40d3b4d2-cc09-4689-b530-221a59850f7a" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
@@ -561,28 +503,35 @@
           
           
           
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/IMG_1017.RW2" role="button" aria-label="IMG_1017.RW2" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/8a3579d3-fb8e-40a5-b779-2fb871cf1325" class="loaded">
+            <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
+          </div>
           
-          <div class="lib-strip-info"><span class="lib-strip-name">IMG_1017.RW2</span></div></div><div class="lib-card" data-path="/test/AllPhotos/P_TM6018.MP4" draggable="true"><div class="lib-thumb-wrap lib-thumb-video"><img loading="lazy" alt="" src="blob:http://127.0.0.1:57558/ab064b0f-2dc6-4156-8922-b1ffcf0ff25c" class="loaded">
+          <div class="lib-raw-badge" title="RAW file">R</div>
+          
+          
+          
+          
+          <div class="lib-strip-info"></div></div><div class="lib-card" data-path="/test/AllPhotos/P_TM6018.MP4" role="button" aria-label="P_TM6018.MP4" aria-pressed="false" draggable="true"><div class="lib-thumb-wrap lib-thumb-video"><img loading="lazy" alt="" src="blob:http://127.0.0.1:59006/08fd1327-30c5-4d8d-82e0-22f475409943" class="loaded">
             <div class="lib-flags"><span class="lib-flag" data-flag="Red" title="Reject (X)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg></span><span class="lib-flag" data-flag="Green" title="Pick (flag)"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"></path><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"></path></svg></span><span class="lib-flag lib-fav" data-flag="Favorite" title="Favorite (F)"><svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"></path></svg></span></div>
           </div>
           
           
-          <div class="lib-video-badge" title="Video clip"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2"></rect><path d="M15.5 10.5l6-3v9l-6-3z"></path></svg><span>0:13</span></div>
+          <div class="lib-video-badge" title="Video clip"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.400" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12"></rect><path d="M15.5 10.5l6-3v9l-6-3Z"></path></svg><span>0:13</span></div>
           
           
           
-          
-          <div class="lib-strip-info"><span class="lib-strip-name">P_TM6018.MP4</span></div></div></div>
+          <div class="lib-strip-info"></div></div></div>
       <div id="lib-compare"></div>
     </div>
     <div id="lib-bottom" class="lib-fullview-only">
-      <span style="font-size:11px;color:var(--mut)" id="lib-count">18 of 18 photo(s)</span>
-      <span style="font-size:11px;color:var(--mut)" id="lib-thumb-progress"></span>
-      <span id="lib-status-labels" style="font-size:11px;color:var(--mut);display:flex;gap:8px;align-items:center"></span>
-      <span id="lib-activity"></span>
+      
+      
+      
       <span style="flex:1"></span>
-      <span style="font-size:11px;color:var(--mut)" id="lib-status-size">270 MB</span>
-      <span style="font-size:11px;color:var(--mut)" id="lib-status-sel"></span>
+      
+      <!-- CHR-157: the photo count sits at the right end of the status bar. -->
+      
     </div>
   
 </div>

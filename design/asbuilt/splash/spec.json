@@ -1,7 +1,7 @@
 {
   "id": "splash",
   "group": "C",
-  "generatedAt": "2026-09-11T21:36:55.174Z",
+  "generatedAt": "2026-09-30T09:14:53.928Z",
   "note": "No live DOM route to capture — \"Splash Screen.html\" used verbatim as its as-built stand-in. No screenshots, no computed-value spec.",
   "wireframeSource": "design/wireframes/project/Splash Screen.html"
 }

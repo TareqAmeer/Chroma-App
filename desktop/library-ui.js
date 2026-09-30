@@ -1552,7 +1552,7 @@
     .lib-card.lbl-red.multi .lib-thumb-wrap::after{opacity:0}
     /* View menu: "Hide photo icons" — flags/badges are useful while culling, noise once you're
        just browsing. Stars are a rating, not a status icon, so they stay. */
-    #lib-overlay.lib-hide-icons .lib-flags,#lib-overlay.lib-hide-icons .lib-raw-badge,
+    #lib-overlay.lib-hide-icons .lib-flags,#lib-overlay.lib-hide-icons .lib-raw-badge,#lib-overlay.lib-hide-icons .lib-type-r,
     #lib-overlay.lib-hide-icons .lib-video-badge,#lib-overlay.lib-hide-icons .lib-dupe-badge,
     #lib-overlay.lib-hide-icons .lib-synced-badge,#lib-overlay.lib-hide-icons .lib-stack-badge,
     #lib-overlay.lib-hide-icons .lib-strip-flag,#lib-overlay.lib-hide-icons .lib-offline-badge,
@@ -1723,6 +1723,12 @@
     .lib-raw-badge{position:absolute;top:4px;left:4px;width:18px;height:18px;border-radius:5px;
       background:rgba(0,0,0,.55);color:#cfcfd6;font-size:9px;font-weight:700;letter-spacing:.02em;
       display:flex;align-items:center;justify-content:center;z-index:2}
+    /* RAW marker on the thumbnail itself (bottom-right "R"), governed by "Hide flag & type icons"
+       like every other corner tag. Replaces the old "RAW" caption under the photo. */
+    .lib-type-r{position:absolute;right:5px;bottom:5px;width:18px;height:18px;border-radius:50%;z-index:2;
+      background:rgba(0,0,0,.55);color:#fff;font-size:10px;font-weight:700;line-height:1;
+      display:flex;align-items:center;justify-content:center;pointer-events:none}
+    body.deskx #lib-overlay:not(.full) .lib-type-r{display:none}
     /* Stack badge reuses the RAW badge's own corner slot (see the JS comment at its markup) —
        widens for a 2-digit count and gets a pointer cursor since, unlike every other corner
        badge, it's clickable (expand/collapse in place). */
@@ -6878,11 +6884,11 @@
         // filename the user already knows (it's the one on screen), and surfacing it in the
         // Library grid too just duplicated chrome.
         const stripInfo = `<div class="lib-strip-info">${entry.path === state.openedPath || !state.showTitle ? '' : `<span class="lib-strip-name">${escName}${entry.missing ? ' (missing)' : ''}</span>`}${stripFlag}</div>`;
-        card.innerHTML = `<div class="lib-thumb-wrap${entry.is_video ? ' lib-thumb-video' : ''}"><img loading="lazy" alt="">${metaStripHtml(entry)}
+        card.innerHTML = `<div class="lib-thumb-wrap${entry.is_video ? ' lib-thumb-video' : ''}"><img loading="lazy" alt="">${metaStripHtml(entry)}${entry.kind === 'raw' && !(entry.stack_n > 1) ? '<div class="lib-type-r" title="RAW file">R</div>' : ''}
             <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>${starsHtml(sc.rating)}
           </div>
           ${sc.edited ? EDITED_BADGE_HTML : ''}
-          ${rawBadge}
+          ${entry.stack_n > 1 ? rawBadge : ''}
           ${videoBadge}
           ${dupeBadge}
           ${syncedBadge}

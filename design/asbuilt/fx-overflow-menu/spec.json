@@ -1,7 +1,7 @@
 {
   "id": "fx-overflow-menu",
   "group": "B",
-  "generatedAt": "2026-09-11T21:36:17.099Z",
+  "generatedAt": "2026-09-30T09:14:49.670Z",
   "tree": {
     "tag": "div",
     "id": "fx-overflow-menu",
@@ -11,29 +11,29 @@
     ],
     "style": {
       "color": {
-        "value": "rgb(255, 255, 255)",
-        "token": "/color/surface/page",
-        "appVar": "--bg",
-        "role": "surface.page"
+        "value": "rgb(242, 240, 234)",
+        "token": "/kinetic/color/ink",
+        "appVar": "--k-color-ink",
+        "role": "kinetic.color.ink"
       },
       "backgroundColor": {
         "value": "rgba(0, 0, 0, 0)",
         "token": null
       },
       "borderColor": {
-        "value": "rgb(255, 255, 255)",
-        "token": "/color/surface/page",
-        "appVar": "--bg",
-        "role": "surface.page"
+        "value": "rgb(242, 240, 234)",
+        "token": "/kinetic/color/ink",
+        "appVar": "--k-color-ink",
+        "role": "kinetic.color.ink"
       },
       "outlineColor": {
-        "value": "rgb(255, 255, 255)",
-        "token": "/color/surface/page",
-        "appVar": "--bg",
-        "role": "surface.page"
+        "value": "rgb(242, 240, 234)",
+        "token": "/kinetic/color/ink",
+        "appVar": "--k-color-ink",
+        "role": "kinetic.color.ink"
       },
       "fontSize": {
-        "value": "16px",
+        "value": "13px",
         "token": null
       },
       "fontWeight": {
@@ -41,11 +41,11 @@
         "token": null
       },
       "fontFamily": {
-        "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+        "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif",
         "token": null
       },
       "lineHeight": {
-        "value": "24px",
+        "value": "16.9px",
         "token": null
       },
       "letterSpacing": {
@@ -82,33 +82,33 @@
       },
       "borderRadius": {
         "value": "0px",
-        "token": "/designSystem/radius_none",
-        "appVar": "--radius-none",
-        "role": "radius.none"
+        "token": "/radius/control",
+        "appVar": "--r",
+        "role": "radius.control"
       },
       "borderTopLeftRadius": {
         "value": "0px",
-        "token": "/designSystem/radius_none",
-        "appVar": "--radius-none",
-        "role": "radius.none"
+        "token": "/radius/control",
+        "appVar": "--r",
+        "role": "radius.control"
       },
       "borderTopRightRadius": {
         "value": "0px",
-        "token": "/designSystem/radius_none",
-        "appVar": "--radius-none",
-        "role": "radius.none"
+        "token": "/radius/control",
+        "appVar": "--r",
+        "role": "radius.control"
       },
       "borderBottomLeftRadius": {
         "value": "0px",
-        "token": "/designSystem/radius_none",
-        "appVar": "--radius-none",
-        "role": "radius.none"
+        "token": "/radius/control",
+        "appVar": "--r",
+        "role": "radius.control"
       },
       "borderBottomRightRadius": {
         "value": "0px",
-        "token": "/designSystem/radius_none",
-        "appVar": "--radius-none",
-        "role": "radius.none"
+        "token": "/radius/control",
+        "appVar": "--r",
+        "role": "radius.control"
       },
       "transitionDuration": {
         "value": "0s",
@@ -120,7 +120,9 @@
       },
       "boxShadow": {
         "value": "none",
-        "token": null
+        "token": "/elevation/lift1",
+        "appVar": "--lift-1",
+        "role": "elevation.raised-1"
       }
     },
     "children": [
@@ -129,32 +131,32 @@
         "classes": [
           "fx-ovf-item"
         ],
-        "text": "✓ Editor",
+        "text": "✓ Studio",
         "style": {
           "color": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "backgroundColor": {
             "value": "rgba(0, 0, 0, 0)",
             "token": null
           },
           "borderColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "outlineColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "fontSize": {
-            "value": "12px",
+            "value": "13px",
             "token": null
           },
           "fontWeight": {
@@ -162,7 +164,7 @@
             "token": null
           },
           "fontFamily": {
-            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif",
             "token": null
           },
           "lineHeight": {
@@ -174,19 +176,19 @@
             "token": null
           },
           "paddingTop": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingRight": {
-            "value": "10px",
+            "value": "8px",
             "token": null
           },
           "paddingBottom": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingLeft": {
-            "value": "10px",
+            "value": "22px",
             "token": null
           },
           "gap": {
@@ -202,34 +204,34 @@
             "token": null
           },
           "borderRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "transitionDuration": {
             "value": "0s",
@@ -241,7 +243,9 @@
           },
           "boxShadow": {
             "value": "none",
-            "token": null
+            "token": "/elevation/lift1",
+            "appVar": "--lift-1",
+            "role": "elevation.raised-1"
           }
         },
         "children": []
@@ -254,29 +258,29 @@
         "text": "Match & Refine",
         "style": {
           "color": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "backgroundColor": {
             "value": "rgba(0, 0, 0, 0)",
             "token": null
           },
           "borderColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "outlineColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "fontSize": {
-            "value": "12px",
+            "value": "13px",
             "token": null
           },
           "fontWeight": {
@@ -284,7 +288,7 @@
             "token": null
           },
           "fontFamily": {
-            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif",
             "token": null
           },
           "lineHeight": {
@@ -296,19 +300,19 @@
             "token": null
           },
           "paddingTop": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingRight": {
-            "value": "10px",
+            "value": "8px",
             "token": null
           },
           "paddingBottom": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingLeft": {
-            "value": "10px",
+            "value": "22px",
             "token": null
           },
           "gap": {
@@ -324,34 +328,34 @@
             "token": null
           },
           "borderRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "transitionDuration": {
             "value": "0s",
@@ -363,7 +367,9 @@
           },
           "boxShadow": {
             "value": "none",
-            "token": null
+            "token": "/elevation/lift1",
+            "appVar": "--lift-1",
+            "role": "elevation.raised-1"
           }
         },
         "children": []
@@ -376,29 +382,29 @@
         "text": "Color Copy",
         "style": {
           "color": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "backgroundColor": {
             "value": "rgba(0, 0, 0, 0)",
             "token": null
           },
           "borderColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "outlineColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "fontSize": {
-            "value": "12px",
+            "value": "13px",
             "token": null
           },
           "fontWeight": {
@@ -406,7 +412,7 @@
             "token": null
           },
           "fontFamily": {
-            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif",
             "token": null
           },
           "lineHeight": {
@@ -418,19 +424,19 @@
             "token": null
           },
           "paddingTop": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingRight": {
-            "value": "10px",
+            "value": "8px",
             "token": null
           },
           "paddingBottom": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingLeft": {
-            "value": "10px",
+            "value": "22px",
             "token": null
           },
           "gap": {
@@ -446,34 +452,34 @@
             "token": null
           },
           "borderRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "transitionDuration": {
             "value": "0s",
@@ -485,7 +491,9 @@
           },
           "boxShadow": {
             "value": "none",
-            "token": null
+            "token": "/elevation/lift1",
+            "appVar": "--lift-1",
+            "role": "elevation.raised-1"
           }
         },
         "children": []
@@ -498,29 +506,29 @@
         "text": "Collage",
         "style": {
           "color": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "backgroundColor": {
             "value": "rgba(0, 0, 0, 0)",
             "token": null
           },
           "borderColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "outlineColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "fontSize": {
-            "value": "12px",
+            "value": "13px",
             "token": null
           },
           "fontWeight": {
@@ -528,7 +536,7 @@
             "token": null
           },
           "fontFamily": {
-            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif",
             "token": null
           },
           "lineHeight": {
@@ -540,19 +548,19 @@
             "token": null
           },
           "paddingTop": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingRight": {
-            "value": "10px",
+            "value": "8px",
             "token": null
           },
           "paddingBottom": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingLeft": {
-            "value": "10px",
+            "value": "22px",
             "token": null
           },
           "gap": {
@@ -568,34 +576,34 @@
             "token": null
           },
           "borderRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "transitionDuration": {
             "value": "0s",
@@ -607,7 +615,9 @@
           },
           "boxShadow": {
             "value": "none",
-            "token": null
+            "token": "/elevation/lift1",
+            "appVar": "--lift-1",
+            "role": "elevation.raised-1"
           }
         },
         "children": []
@@ -620,29 +630,29 @@
         "text": "Guide",
         "style": {
           "color": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "backgroundColor": {
             "value": "rgba(0, 0, 0, 0)",
             "token": null
           },
           "borderColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "outlineColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "fontSize": {
-            "value": "12px",
+            "value": "13px",
             "token": null
           },
           "fontWeight": {
@@ -650,7 +660,7 @@
             "token": null
           },
           "fontFamily": {
-            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif",
             "token": null
           },
           "lineHeight": {
@@ -662,19 +672,19 @@
             "token": null
           },
           "paddingTop": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingRight": {
-            "value": "10px",
+            "value": "8px",
             "token": null
           },
           "paddingBottom": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingLeft": {
-            "value": "10px",
+            "value": "22px",
             "token": null
           },
           "gap": {
@@ -690,34 +700,34 @@
             "token": null
           },
           "borderRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "transitionDuration": {
             "value": "0s",
@@ -729,7 +739,9 @@
           },
           "boxShadow": {
             "value": "none",
-            "token": null
+            "token": "/elevation/lift1",
+            "appVar": "--lift-1",
+            "role": "elevation.raised-1"
           }
         },
         "children": []
@@ -741,29 +753,27 @@
         ],
         "style": {
           "color": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(242, 240, 234)",
+            "token": "/kinetic/color/ink",
+            "appVar": "--k-color-ink",
+            "role": "kinetic.color.ink"
           },
           "backgroundColor": {
-            "value": "rgba(255, 255, 255, 0.12)",
+            "value": "color(srgb 0.94902 0.941176 0.917647 / 0.13)",
             "token": null
           },
           "borderColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "color(srgb 0.94902 0.941176 0.917647 / 0.13) rgb(242, 240, 234) rgb(242, 240, 234)",
+            "token": null
           },
           "outlineColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(242, 240, 234)",
+            "token": "/kinetic/color/ink",
+            "appVar": "--k-color-ink",
+            "role": "kinetic.color.ink"
           },
           "fontSize": {
-            "value": "16px",
+            "value": "13px",
             "token": null
           },
           "fontWeight": {
@@ -771,11 +781,11 @@
             "token": null
           },
           "fontFamily": {
-            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif",
             "token": null
           },
           "lineHeight": {
-            "value": "24px",
+            "value": "16.9px",
             "token": null
           },
           "letterSpacing": {
@@ -812,33 +822,33 @@
           },
           "borderRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopLeftRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopRightRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomLeftRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomRightRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "transitionDuration": {
             "value": "0s",
@@ -850,7 +860,9 @@
           },
           "boxShadow": {
             "value": "none",
-            "token": null
+            "token": "/elevation/lift1",
+            "appVar": "--lift-1",
+            "role": "elevation.raised-1"
           }
         },
         "children": []
@@ -860,32 +872,32 @@
         "classes": [
           "fx-ovf-item"
         ],
-        "text": "Library (L)",
+        "text": "Gallery (L)",
         "style": {
           "color": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "backgroundColor": {
             "value": "rgba(0, 0, 0, 0)",
             "token": null
           },
           "borderColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "outlineColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "fontSize": {
-            "value": "12px",
+            "value": "13px",
             "token": null
           },
           "fontWeight": {
@@ -893,7 +905,7 @@
             "token": null
           },
           "fontFamily": {
-            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif",
             "token": null
           },
           "lineHeight": {
@@ -905,19 +917,19 @@
             "token": null
           },
           "paddingTop": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingRight": {
-            "value": "10px",
+            "value": "8px",
             "token": null
           },
           "paddingBottom": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingLeft": {
-            "value": "10px",
+            "value": "22px",
             "token": null
           },
           "gap": {
@@ -933,34 +945,34 @@
             "token": null
           },
           "borderRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "transitionDuration": {
             "value": "0s",
@@ -972,7 +984,9 @@
           },
           "boxShadow": {
             "value": "none",
-            "token": null
+            "token": "/elevation/lift1",
+            "appVar": "--lift-1",
+            "role": "elevation.raised-1"
           }
         },
         "children": []
@@ -984,29 +998,27 @@
         ],
         "style": {
           "color": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(242, 240, 234)",
+            "token": "/kinetic/color/ink",
+            "appVar": "--k-color-ink",
+            "role": "kinetic.color.ink"
           },
           "backgroundColor": {
-            "value": "rgba(255, 255, 255, 0.12)",
+            "value": "color(srgb 0.94902 0.941176 0.917647 / 0.13)",
             "token": null
           },
           "borderColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "color(srgb 0.94902 0.941176 0.917647 / 0.13) rgb(242, 240, 234) rgb(242, 240, 234)",
+            "token": null
           },
           "outlineColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(242, 240, 234)",
+            "token": "/kinetic/color/ink",
+            "appVar": "--k-color-ink",
+            "role": "kinetic.color.ink"
           },
           "fontSize": {
-            "value": "16px",
+            "value": "13px",
             "token": null
           },
           "fontWeight": {
@@ -1014,11 +1026,11 @@
             "token": null
           },
           "fontFamily": {
-            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif",
             "token": null
           },
           "lineHeight": {
-            "value": "24px",
+            "value": "16.9px",
             "token": null
           },
           "letterSpacing": {
@@ -1055,33 +1067,33 @@
           },
           "borderRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopLeftRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopRightRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomLeftRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomRightRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "transitionDuration": {
             "value": "0s",
@@ -1093,7 +1105,9 @@
           },
           "boxShadow": {
             "value": "none",
-            "token": null
+            "token": "/elevation/lift1",
+            "appVar": "--lift-1",
+            "role": "elevation.raised-1"
           }
         },
         "children": []
@@ -1106,29 +1120,29 @@
         "text": "Reset all edits",
         "style": {
           "color": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "backgroundColor": {
             "value": "rgba(0, 0, 0, 0)",
             "token": null
           },
           "borderColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "outlineColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "fontSize": {
-            "value": "12px",
+            "value": "13px",
             "token": null
           },
           "fontWeight": {
@@ -1136,7 +1150,7 @@
             "token": null
           },
           "fontFamily": {
-            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif",
             "token": null
           },
           "lineHeight": {
@@ -1148,19 +1162,19 @@
             "token": null
           },
           "paddingTop": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingRight": {
-            "value": "10px",
+            "value": "8px",
             "token": null
           },
           "paddingBottom": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingLeft": {
-            "value": "10px",
+            "value": "22px",
             "token": null
           },
           "gap": {
@@ -1176,34 +1190,34 @@
             "token": null
           },
           "borderRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "transitionDuration": {
             "value": "0s",
@@ -1215,7 +1229,9 @@
           },
           "boxShadow": {
             "value": "none",
-            "token": null
+            "token": "/elevation/lift1",
+            "appVar": "--lift-1",
+            "role": "elevation.raised-1"
           }
         },
         "children": []
@@ -1227,29 +1243,27 @@
         ],
         "style": {
           "color": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(242, 240, 234)",
+            "token": "/kinetic/color/ink",
+            "appVar": "--k-color-ink",
+            "role": "kinetic.color.ink"
           },
           "backgroundColor": {
-            "value": "rgba(255, 255, 255, 0.12)",
+            "value": "color(srgb 0.94902 0.941176 0.917647 / 0.13)",
             "token": null
           },
           "borderColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "color(srgb 0.94902 0.941176 0.917647 / 0.13) rgb(242, 240, 234) rgb(242, 240, 234)",
+            "token": null
           },
           "outlineColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(242, 240, 234)",
+            "token": "/kinetic/color/ink",
+            "appVar": "--k-color-ink",
+            "role": "kinetic.color.ink"
           },
           "fontSize": {
-            "value": "16px",
+            "value": "13px",
             "token": null
           },
           "fontWeight": {
@@ -1257,11 +1271,11 @@
             "token": null
           },
           "fontFamily": {
-            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif",
             "token": null
           },
           "lineHeight": {
-            "value": "24px",
+            "value": "16.9px",
             "token": null
           },
           "letterSpacing": {
@@ -1298,33 +1312,33 @@
           },
           "borderRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopLeftRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopRightRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomLeftRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomRightRadius": {
             "value": "0px",
-            "token": "/designSystem/radius_none",
-            "appVar": "--radius-none",
-            "role": "radius.none"
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "transitionDuration": {
             "value": "0s",
@@ -1336,7 +1350,9 @@
           },
           "boxShadow": {
             "value": "none",
-            "token": null
+            "token": "/elevation/lift1",
+            "appVar": "--lift-1",
+            "role": "elevation.raised-1"
           }
         },
         "children": []
@@ -1346,32 +1362,32 @@
         "classes": [
           "fx-ovf-item"
         ],
-        "text": "About Chromasmith",
+        "text": "About CHRO-MA-SMITH",
         "style": {
           "color": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "backgroundColor": {
             "value": "rgba(0, 0, 0, 0)",
             "token": null
           },
           "borderColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "outlineColor": {
-            "value": "rgb(255, 255, 255)",
-            "token": "/color/surface/page",
-            "appVar": "--bg",
-            "role": "surface.page"
+            "value": "rgb(141, 139, 133)",
+            "token": "/kinetic/color/muted",
+            "appVar": "--k-color-muted",
+            "role": "kinetic.color.muted"
           },
           "fontSize": {
-            "value": "12px",
+            "value": "13px",
             "token": null
           },
           "fontWeight": {
@@ -1379,7 +1395,7 @@
             "token": null
           },
           "fontFamily": {
-            "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif",
+            "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif",
             "token": null
           },
           "lineHeight": {
@@ -1391,19 +1407,19 @@
             "token": null
           },
           "paddingTop": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingRight": {
-            "value": "10px",
+            "value": "8px",
             "token": null
           },
           "paddingBottom": {
-            "value": "9px",
+            "value": "8px",
             "token": null
           },
           "paddingLeft": {
-            "value": "10px",
+            "value": "22px",
             "token": null
           },
           "gap": {
@@ -1419,34 +1435,34 @@
             "token": null
           },
           "borderRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderTopRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomLeftRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "borderBottomRightRadius": {
-            "value": "6px",
-            "token": "/radius/controlSm",
-            "appVar": "--r-sm",
-            "role": "radius.control-sm"
+            "value": "0px",
+            "token": "/radius/control",
+            "appVar": "--r",
+            "role": "radius.control"
           },
           "transitionDuration": {
             "value": "0s",
@@ -1458,7 +1474,9 @@
           },
           "boxShadow": {
             "value": "none",
-            "token": null
+            "token": "/elevation/lift1",
+            "appVar": "--lift-1",
+            "role": "elevation.raised-1"
           }
         },
         "children": []
@@ -1484,7 +1502,7 @@
         "active"
       ],
       "prop": "fontSize",
-      "value": "16px"
+      "value": "13px"
     },
     {
       "tag": "div",
@@ -1504,7 +1522,7 @@
         "active"
       ],
       "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+      "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif"
     },
     {
       "tag": "div",
@@ -1514,7 +1532,7 @@
         "active"
       ],
       "prop": "lineHeight",
-      "value": "24px"
+      "value": "16.9px"
     },
     {
       "tag": "div",
@@ -1615,16 +1633,6 @@
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
-    },
-    {
-      "tag": "div",
-      "id": "fx-overflow-menu",
-      "classes": [
-        "fx-settings-pane",
-        "active"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
     },
     {
       "tag": "button",
@@ -1640,7 +1648,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontSize",
-      "value": "12px"
+      "value": "13px"
     },
     {
       "tag": "button",
@@ -1656,7 +1664,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+      "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif"
     },
     {
       "tag": "button",
@@ -1680,7 +1688,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingTop",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -1688,7 +1696,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingRight",
-      "value": "10px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -1696,7 +1704,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingBottom",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -1704,7 +1712,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingLeft",
-      "value": "10px"
+      "value": "22px"
     },
     {
       "tag": "button",
@@ -1745,14 +1753,6 @@
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-ovf-item"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
     },
     {
       "tag": "button",
@@ -1768,7 +1768,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontSize",
-      "value": "12px"
+      "value": "13px"
     },
     {
       "tag": "button",
@@ -1784,7 +1784,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+      "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif"
     },
     {
       "tag": "button",
@@ -1808,7 +1808,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingTop",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -1816,7 +1816,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingRight",
-      "value": "10px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -1824,7 +1824,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingBottom",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -1832,7 +1832,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingLeft",
-      "value": "10px"
+      "value": "22px"
     },
     {
       "tag": "button",
@@ -1873,14 +1873,6 @@
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-ovf-item"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
     },
     {
       "tag": "button",
@@ -1896,7 +1888,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontSize",
-      "value": "12px"
+      "value": "13px"
     },
     {
       "tag": "button",
@@ -1912,7 +1904,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+      "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif"
     },
     {
       "tag": "button",
@@ -1936,7 +1928,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingTop",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -1944,7 +1936,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingRight",
-      "value": "10px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -1952,7 +1944,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingBottom",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -1960,7 +1952,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingLeft",
-      "value": "10px"
+      "value": "22px"
     },
     {
       "tag": "button",
@@ -2001,14 +1993,6 @@
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-ovf-item"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
     },
     {
       "tag": "button",
@@ -2024,7 +2008,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontSize",
-      "value": "12px"
+      "value": "13px"
     },
     {
       "tag": "button",
@@ -2040,7 +2024,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+      "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif"
     },
     {
       "tag": "button",
@@ -2064,7 +2048,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingTop",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2072,7 +2056,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingRight",
-      "value": "10px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2080,7 +2064,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingBottom",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2088,7 +2072,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingLeft",
-      "value": "10px"
+      "value": "22px"
     },
     {
       "tag": "button",
@@ -2129,14 +2113,6 @@
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-ovf-item"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
     },
     {
       "tag": "button",
@@ -2152,7 +2128,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontSize",
-      "value": "12px"
+      "value": "13px"
     },
     {
       "tag": "button",
@@ -2168,7 +2144,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+      "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif"
     },
     {
       "tag": "button",
@@ -2192,7 +2168,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingTop",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2200,7 +2176,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingRight",
-      "value": "10px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2208,7 +2184,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingBottom",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2216,7 +2192,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingLeft",
-      "value": "10px"
+      "value": "22px"
     },
     {
       "tag": "button",
@@ -2257,14 +2233,6 @@
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-ovf-item"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
     },
     {
       "tag": "div",
@@ -2272,7 +2240,15 @@
         "fx-ovf-sep"
       ],
       "prop": "backgroundColor",
-      "value": "rgba(255, 255, 255, 0.12)"
+      "value": "color(srgb 0.94902 0.941176 0.917647 / 0.13)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ovf-sep"
+      ],
+      "prop": "borderColor",
+      "value": "color(srgb 0.94902 0.941176 0.917647 / 0.13) rgb(242, 240, 234) rgb(242, 240, 234)"
     },
     {
       "tag": "div",
@@ -2280,7 +2256,7 @@
         "fx-ovf-sep"
       ],
       "prop": "fontSize",
-      "value": "16px"
+      "value": "13px"
     },
     {
       "tag": "div",
@@ -2296,7 +2272,7 @@
         "fx-ovf-sep"
       ],
       "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+      "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif"
     },
     {
       "tag": "div",
@@ -2304,7 +2280,7 @@
         "fx-ovf-sep"
       ],
       "prop": "lineHeight",
-      "value": "24px"
+      "value": "16.9px"
     },
     {
       "tag": "div",
@@ -2385,14 +2361,6 @@
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
-    },
-    {
-      "tag": "div",
-      "classes": [
-        "fx-ovf-sep"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
     },
     {
       "tag": "button",
@@ -2408,7 +2376,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontSize",
-      "value": "12px"
+      "value": "13px"
     },
     {
       "tag": "button",
@@ -2424,7 +2392,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+      "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif"
     },
     {
       "tag": "button",
@@ -2448,7 +2416,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingTop",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2456,7 +2424,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingRight",
-      "value": "10px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2464,7 +2432,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingBottom",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2472,7 +2440,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingLeft",
-      "value": "10px"
+      "value": "22px"
     },
     {
       "tag": "button",
@@ -2513,14 +2481,6 @@
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-ovf-item"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
     },
     {
       "tag": "div",
@@ -2528,7 +2488,15 @@
         "fx-ovf-sep"
       ],
       "prop": "backgroundColor",
-      "value": "rgba(255, 255, 255, 0.12)"
+      "value": "color(srgb 0.94902 0.941176 0.917647 / 0.13)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ovf-sep"
+      ],
+      "prop": "borderColor",
+      "value": "color(srgb 0.94902 0.941176 0.917647 / 0.13) rgb(242, 240, 234) rgb(242, 240, 234)"
     },
     {
       "tag": "div",
@@ -2536,7 +2504,7 @@
         "fx-ovf-sep"
       ],
       "prop": "fontSize",
-      "value": "16px"
+      "value": "13px"
     },
     {
       "tag": "div",
@@ -2552,7 +2520,7 @@
         "fx-ovf-sep"
       ],
       "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+      "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif"
     },
     {
       "tag": "div",
@@ -2560,7 +2528,7 @@
         "fx-ovf-sep"
       ],
       "prop": "lineHeight",
-      "value": "24px"
+      "value": "16.9px"
     },
     {
       "tag": "div",
@@ -2641,14 +2609,6 @@
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
-    },
-    {
-      "tag": "div",
-      "classes": [
-        "fx-ovf-sep"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
     },
     {
       "tag": "button",
@@ -2664,7 +2624,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontSize",
-      "value": "12px"
+      "value": "13px"
     },
     {
       "tag": "button",
@@ -2680,7 +2640,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+      "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif"
     },
     {
       "tag": "button",
@@ -2704,7 +2664,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingTop",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2712,7 +2672,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingRight",
-      "value": "10px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2720,7 +2680,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingBottom",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2728,7 +2688,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingLeft",
-      "value": "10px"
+      "value": "22px"
     },
     {
       "tag": "button",
@@ -2769,14 +2729,6 @@
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-ovf-item"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
     },
     {
       "tag": "div",
@@ -2784,7 +2736,15 @@
         "fx-ovf-sep"
       ],
       "prop": "backgroundColor",
-      "value": "rgba(255, 255, 255, 0.12)"
+      "value": "color(srgb 0.94902 0.941176 0.917647 / 0.13)"
+    },
+    {
+      "tag": "div",
+      "classes": [
+        "fx-ovf-sep"
+      ],
+      "prop": "borderColor",
+      "value": "color(srgb 0.94902 0.941176 0.917647 / 0.13) rgb(242, 240, 234) rgb(242, 240, 234)"
     },
     {
       "tag": "div",
@@ -2792,7 +2752,7 @@
         "fx-ovf-sep"
       ],
       "prop": "fontSize",
-      "value": "16px"
+      "value": "13px"
     },
     {
       "tag": "div",
@@ -2808,7 +2768,7 @@
         "fx-ovf-sep"
       ],
       "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+      "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif"
     },
     {
       "tag": "div",
@@ -2816,7 +2776,7 @@
         "fx-ovf-sep"
       ],
       "prop": "lineHeight",
-      "value": "24px"
+      "value": "16.9px"
     },
     {
       "tag": "div",
@@ -2897,14 +2857,6 @@
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
-    },
-    {
-      "tag": "div",
-      "classes": [
-        "fx-ovf-sep"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
     },
     {
       "tag": "button",
@@ -2920,7 +2872,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontSize",
-      "value": "12px"
+      "value": "13px"
     },
     {
       "tag": "button",
@@ -2936,7 +2888,7 @@
         "fx-ovf-item"
       ],
       "prop": "fontFamily",
-      "value": "\"SF Pro Text\", system-ui, -apple-system, \"system-ui\", sans-serif"
+      "value": "Gramatika, system-ui, -apple-system, \"system-ui\", sans-serif"
     },
     {
       "tag": "button",
@@ -2960,7 +2912,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingTop",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2968,7 +2920,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingRight",
-      "value": "10px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2976,7 +2928,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingBottom",
-      "value": "9px"
+      "value": "8px"
     },
     {
       "tag": "button",
@@ -2984,7 +2936,7 @@
         "fx-ovf-item"
       ],
       "prop": "paddingLeft",
-      "value": "10px"
+      "value": "22px"
     },
     {
       "tag": "button",
@@ -3025,14 +2977,6 @@
       ],
       "prop": "transitionTimingFunction",
       "value": "ease"
-    },
-    {
-      "tag": "button",
-      "classes": [
-        "fx-ovf-item"
-      ],
-      "prop": "boxShadow",
-      "value": "none"
     }
   ]
 }
