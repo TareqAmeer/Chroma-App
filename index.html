@@ -414,7 +414,13 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
 .studio-frame{position:absolute;top:0;right:0;width:60%;max-width:none;height:100%;max-height:none;transform:none;box-shadow:none}
 .studio-frame::before{content:"";position:absolute;z-index:1;inset:0;background:linear-gradient(90deg,#08090d 0%,transparent 35%);pointer-events:none}
 .studio-frame .story-main{object-position:center 57%}
-.studio-ui{left:1%;right:auto;bottom:7%;width:55%;height:30%;transform:rotate(-4deg)}
+.studio-ui{position:absolute;z-index:2;right:9%;left:auto;top:0;bottom:0;margin:auto 0;width:80%;aspect-ratio:2000/1111;border:1px solid #ffffff40;box-shadow:0 26px 70px #000c;background:#111;overflow:hidden}
+.studio-ui img{position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity .35s ease}
+.studio-ui img.on{opacity:1}
+.studio-frame .story-main{opacity:.25}
+.studio-tabs{position:absolute;z-index:3;right:9%;bottom:4%;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:80%}
+.studio-tabs button{font:inherit;font-size:13px;color:#cfcac6;background:#000a;border:1px solid #ffffff40;padding:6px 12px;cursor:pointer}
+.studio-tabs button.on{background:var(--red-bright);border-color:var(--red-bright);color:#fff}
 .studio-frame figcaption{left:auto;right:18px;top:16px;bottom:auto}
 .click{background:#090909}
 .click .chapter-inner{display:block;padding:0}
@@ -492,7 +498,8 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
   .studio .lede{font-size:clamp(14px,3.8vw,17px);margin-bottom:8px}
   .studio .mini-list{margin-top:5px;gap:3px}
   .studio .mini-list li{font-size:11px;padding-top:2px}
-  .studio-ui{width:56%;height:29%}
+  .studio-ui{width:92%;right:4%}
+  .studio-tabs{right:4%;max-width:92%;bottom:4svh}
   .click .ba-stage{height:100%}
   .click .ba-tag{top:10svh;font-size:11px}
   .click .ba figcaption{left:6%;bottom:3%;max-width:74%;font-size:10px}
@@ -599,7 +606,8 @@ h2{font-size:clamp(44px,min(6.4vw,9svh),100px)}
       </div>
       <figure class="story-frame studio-frame reveal delay-1" data-story-photo="site/assets/story/studio.webp">
         <img class="story-main" src="site/assets/story/studio.webp" alt="The same canal photo after applying a Classic Neg look in CHRO-MA-SMITH" width="844" height="1125" loading="lazy">
-        <img class="story-ui studio-ui" src="site/assets/ui/color.webp" alt="CHRO-MA-SMITH tone curve and colour controls" width="1600" height="1000" loading="lazy">
+        <div class="studio-ui" aria-live="polite"><img src="site/assets/homepage/studio-1.webp" alt="CHRO-MA-SMITH Look panel" width="2000" height="1111" loading="eager" class="on"><img src="site/assets/homepage/studio-2.webp" alt="CHRO-MA-SMITH Light panel" width="2000" height="1111" loading="lazy"><img src="site/assets/homepage/studio-3.webp" alt="CHRO-MA-SMITH Colour panel" width="2000" height="1111" loading="lazy"><img src="site/assets/homepage/studio-4.webp" alt="CHRO-MA-SMITH Texture panel" width="2000" height="1111" loading="lazy"><img src="site/assets/homepage/studio-5.webp" alt="CHRO-MA-SMITH Output panel" width="2000" height="1111" loading="lazy"><img src="site/assets/homepage/studio-6.webp" alt="CHRO-MA-SMITH Info panel" width="2000" height="1111" loading="lazy"></div>
+        <div class="studio-tabs" role="group" aria-label="Editor tool panels"><button type="button" class="on">Look</button><button type="button">Light</button><button type="button">Colour</button><button type="button">Texture</button><button type="button">Output</button><button type="button">Info</button></div>
         <figcaption>Same frame. A different feeling.</figcaption>
       </figure>
     </div>
@@ -1010,6 +1018,30 @@ addEventListener("wheel", function (event) {
   }, 155);
 }, { passive: true });
 
+var studioShots = document.querySelectorAll(".studio-ui img"), studioTabs = document.querySelectorAll(".studio-tabs button");
+var studioStep = 0, studioAt = 0;
+function setStudioShot(i) {
+  studioStep = i;
+  studioShots.forEach(function (img, n) { img.classList.toggle("on", n === i); });
+  studioTabs.forEach(function (b, n) { b.classList.toggle("on", n === i); });
+}
+studioTabs.forEach(function (b, n) { b.addEventListener("click", function () { setStudioShot(n); }); });
+addEventListener("wheel", function (event) {
+  if (event.ctrlKey || !pageMode() || gliding) return;
+  if (sections[nearestIndex()].id !== "studio") return;
+  var d = Math.sign(event.deltaY);
+  if (!d) return;
+  var next = studioStep + d;
+  if (next < 0 || next >= studioShots.length) return;
+  event.stopImmediatePropagation();
+  clearTimeout(wheelTimer); wheelBase = -1;
+  var studioTop = sections[nearestIndex()].offsetTop;
+  wheelTimer = setTimeout(function () { scrollTo(0, studioTop); }, 120);
+  var now = performance.now();
+  if (now - studioAt < 420) return;
+  studioAt = now;
+  setStudioShot(next);
+}, { passive: true, capture: true });
 document.querySelectorAll('a[href^="#"]').forEach(function (link) {
   link.addEventListener("click", function (event) {
     var id = link.getAttribute("href").slice(1);
@@ -1079,7 +1111,7 @@ function paintMotion() {
   motion.galleryTitle.style.transform = "translate3d(0," + ((1 - g) * 130 - gx * 90) + "px,0)";
   var s = studio[0], sx = studio[1];
   motion.studio.style.transform = "translate3d(" + ((1 - s) * 230 - sx * 90) + "px,0,0) scale(" + (1.15 - s * .15 + sx * .12) + ")";
-  motion.studioUI.style.transform = "translate3d(" + ((1 - s) * 160) + "px," + ((1 - s) * 80) + "px,0) rotate(" + (-11 + s * 7) + "deg)";
+  motion.studioUI.style.transform = "translate3d(" + ((1 - s) * 160) + "px," + ((1 - s) * 80) + "px,0) rotate(" + (-11 + s * 11) + "deg)";
   motion.studioCopy.style.transform = "translate3d(" + ((1 - s) * -100 - sx * 90) + "px,0,0)";
   var c = click[0], cx = click[1];
   motion.comparison.style.transform = "scale(" + (1.18 - c * .18 + cx * .11) + ")";
