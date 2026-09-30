@@ -2743,7 +2743,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:#141414}
 function sync(){var f=b.classList.contains('lib-full');L.classList.toggle('on',f);S.classList.toggle('on',!f);L.setAttribute('aria-pressed',f);S.setAttribute('aria-pressed',!f)}
 new MutationObserver(sync).observe(b,{attributes:true,attributeFilter:['class']});sync();
 function go(lib){if(b.classList.contains('lib-full')===lib)return;var t=document.getElementById(lib?'lib-side-tab-library':'lib-side-tab-develop');if(t)t.click();else if(window.chromasmithToggleLibrary)window.chromasmithToggleLibrary()}
-L.onclick=function(){go(true)};S.onclick=function(){if(b.classList.contains('cs-page-other')&&typeof switchTab==='function')switchTab('fx');go(false)};
+L.onclick=function(){if(!window.__TAURI__){window.open('https://github.com/TareqAmeer/Chroma-App/releases/latest','_blank','noopener');return}go(true)};S.onclick=function(){if(b.classList.contains('cs-page-other')&&typeof switchTab==='function')switchTab('fx');go(false)};
 /* Both top bars pad themselves past the brand by --cs-brand-w. It used to be a hand-typed guess per breakpoint (four stacked overrides, all wrong at some width), so the search field slid under the gallery|studio switch. Measure the real brand instead. */
 var br=document.getElementById('cs-brand');
 function fit(){if(!br||!b.classList.contains('deskx'))return;var r=br.getBoundingClientRect();if(!r.width)return;var base=b.classList.contains('mac-titlebar-overlay')?84:12;b.style.setProperty('--cs-brand-w',Math.max(0,Math.ceil(r.right+16-base))+'px')}
@@ -6642,7 +6642,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930C';
+const BUILD='1.0930D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
