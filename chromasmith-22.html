@@ -11,12 +11,12 @@
      these up. -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Chromasmith">
-<title>CHROMASMITH</title>
+<meta name="apple-mobile-web-app-title" content="CHRO-MA-SMITH">
+<title>CHRO-MA-SMITH</title>
 <link rel="icon" href="assets/brand/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="assets/brand/icon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png">
-<meta property="og:title" content="Chromasmith">
+<meta property="og:title" content="CHRO-MA-SMITH">
 <meta property="og:image" content="https://tareqameer.github.io/Chroma-App/assets/brand/og-image.jpeg">
 <!-- Desktop (Tauri) boot gate — set SYNCHRONOUSLY here, before the parser ever reaches <body>,
      so header/main can be hidden from their very first paint rather than relying solely on
@@ -3315,7 +3315,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
   <div class="hdr-right">
     <button class="hdr-btn" id="hdr-help" onclick="chromasmithShowTour()" title="Quick start: how to open, edit and export a photo" aria-label="Quick start"><span class="hdr-ic" style="font-weight:600;font-size:15px;line-height:1">?</span></button>
     <button class="hdr-btn" onclick="toggleTheme()" title="Switch light / dark theme"><span class="theme-ic hdr-ic"></span></button>
-    <button class="hdr-btn" id="hdr-about" onclick="csAbout()" title="About Chromasmith"><span class="hdr-ic" id="hdr-info"></span></button>
+    <button class="hdr-btn" id="hdr-about" onclick="csAbout()" title="About CHRO-MA-SMITH"><span class="hdr-ic" id="hdr-info"></span></button>
   </div>
 </header>
 <main>
@@ -4150,7 +4150,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="fx-ctrl-title">Styles</div>
         <div class="btn-row" style="margin-top:0">
           <button class="btn bgh" onclick="styleSaveCurrent()" title="Save the current recipe (everything except crop/geometry) as a named, reusable Style">Save as Style…</button>
-          <button class="btn bgh" onclick="styleImportClick()" title="Import a Style .json exported from Chromasmith">Import…</button>
+          <button class="btn bgh" onclick="styleImportClick()" title="Import a Style .json exported from CHRO-MA-SMITH">Import…</button>
         </div>
         <div id="style-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
         <input type="file" id="style-import-input" accept="application/json,.json" style="display:none" onchange="styleImportFile(this.files[0])">
@@ -4431,7 +4431,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
 <!-- GUIDE -->
 <div class="panel" id="panel-guide">
   <div class="guide">
-    <h1>Chromasmith — Guide</h1>
+    <h1>CHRO-MA-SMITH — Guide</h1>
     <p class="lede">Film looks, grain, halation and colour grading for your photos, with a photo gallery built in. Everything runs on your own device — nothing is uploaded, and every edit, LUT and export is processed locally.</p>
 
     <div class="toc">
@@ -4448,7 +4448,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
 
     <h2 id="g-start">Getting started</h2>
     <div class="gcard">
-      <p>Chromasmith has two main views, switched with the <b>gallery | studio</b> toggle in the top-left corner (desktop app):</p>
+      <p>CHRO-MA-SMITH has two main views, switched with the <b>gallery | studio</b> toggle in the top-left corner (desktop app):</p>
       <ul>
         <li><b>Gallery</b> — browse, search, flag and organise the photos in your folders. Double-click a photo to edit it.</li>
         <li><b>Studio</b> — edit one photo: apply a film look, adjust light and colour, add grain and glow, crop, then export.</li>
@@ -4585,7 +4585,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <br><br><u>Desktop app:</u> create <b>Credentials → OAuth client ID → Desktop app</b> instead — no origins or redirect URIs to register at all; sign-in opens your system's default browser and completes over a local loopback connection (127.0.0.1), then hands control back to the app.
       <br><br>Either way, paste the client ID when the app asks (change it later via <b>ID…</b>). Notes: selection happens in Google's picker — the API no longer allows apps to browse your library directly; uploads count against your Google storage; sign-in lasts about an hour (the app re-prompts automatically); on the browser build, allow pop-ups for this site.</div>
 
-      <div class="faq-q">Can I edit a photo in Chromasmith from inside Lightroom?</div>
+      <div class="faq-q">Can I edit a photo in CHRO-MA-SMITH from inside Lightroom?</div>
       <div class="faq-a">Desktop app only. <b>Lightroom Classic:</b> Preferences → External Editing → Additional External Editor → choose Chromasmith (16-bit TIFF, sRGB recommended — the pipeline is sRGB/Rec.709). Then right-click a photo → <b>Edit In → Chromasmith</b>. <b>Lightroom (cloud/CC):</b> right-click a photo → <b>Edit In</b> → pick Chromasmith the first time (same TIFF handoff). Either way, edit as normal — a new <b>Save to Lightroom</b> button appears next to the regular Export button while a handoff photo is open. Use it to write straight back over the file Lightroom gave you (Lightroom re-imports and syncs the result automatically); the normal Export button is still there too, unchanged, for a regular local export of the same photo.</div>
 
       <div class="faq-q">Can I browse my Lightroom cloud photos?</div>
@@ -4595,7 +4595,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <div class="faq-a">First check what's showing your comparison — macOS Preview shows the camera's embedded JPEG (warmer/darker), not the real RAW render. Also pick the matching <b>RAW profile</b>. The remaining difference is usually just Lightroom's default noise reduction and sharpening, which a LUT can't carry.</div>
 
       <div class="faq-q">A <code>.cube</code> looks wrong in the Lumix Lab app.</div>
-      <div class="faq-a">Lumix needs a <code>#LUMIXPHOTOSTYLE STD</code> tag; without it the camera assumes V-Log and the colors go off. Every <b>Download .cube</b> from Chromasmith already includes it.</div>
+      <div class="faq-a">Lumix needs a <code>#LUMIXPHOTOSTYLE STD</code> tag; without it the camera assumes V-Log and the colors go off. Every <b>Download .cube</b> from CHRO-MA-SMITH already includes it.</div>
 
       <div class="faq-q">Why is my grain bigger in the preview than the export?</div>
       <div class="faq-a">The normal preview is downscaled, so effects look larger relative to the image. Use the <b>1:1</b> button to see grain &amp; halation at true export scale.</div>
@@ -4607,7 +4607,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <div class="faq-a">In the desktop app every edit is saved with the photo automatically. In the browser, use <b>Save session</b> or a <b>Style</b>; saved LUTs live in the browser too, and Safari may clear them after ~7 days of disuse, so keep a <code>.cube</code> copy of anything important.</div>
 
       <div class="faq-q">It looks like an old version.</div>
-      <div class="faq-a">The version is shown in <b>⋯ → About Chromasmith</b>. In the browser, hard-refresh to clear the cached page; on the desktop, download the latest release.</div>
+      <div class="faq-a">The version is shown in <b>⋯ → About CHRO-MA-SMITH</b>. In the browser, hard-refresh to clear the cached page; on the desktop, download the latest release.</div>
     </div>
   </div>
 </div>
@@ -6605,7 +6605,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0929O';
+const BUILD='1.0930A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -6637,7 +6637,7 @@ window.chromasmithShowWhatsNew=function(){if(typeof _csModal==='function')_csMod
 // and a build stamp is how you spot a stale Pages/Safari cache — they just aren't chrome.
 function csAbout(){
   if(typeof _csModal!=='function')return;
-  _csModal('Chromasmith',
+  _csModal('CHRO-MA-SMITH',
     '<div style="font-size:13px;line-height:1.6">'
     +'<p style="margin:0 0 12px">Film emulation and color grading, entirely on this device.</p>'
     +'<p style="margin:0 0 14px;color:var(--mut)">Photos are never uploaded. Every LUT, grain and '
@@ -6892,7 +6892,7 @@ function loadImg(file){return new Promise((res,rej)=>{
   i.onerror=()=>{
     URL.revokeObjectURL(url);
     if(HEIC_RE.test(file.name||'')||/heic|heif/i.test(file.type||'')){
-      rej(new Error('HEIC/HEIF is not supported by this browser. The Chromasmith desktop app and '
+      rej(new Error('HEIC/HEIF is not supported by this browser. The CHRO-MA-SMITH desktop app and '
         +'the iPhone app both open it — or convert to JPEG first.'));
     }else rej(new Error('could not be decoded (unsupported or damaged image)'));
   };
@@ -6906,12 +6906,12 @@ function loadImg(file){return new Promise((res,rej)=>{
 function unsupportedFormatMessage(name){
   const ext=(name.split('.').pop()||'').toLowerCase();
   if(RUST_ONLY_RE.test(name))
-    return `${name}: .${ext.toUpperCase()} opens in the Chromasmith desktop app — no browser can decode it.`;
+    return `${name}: .${ext.toUpperCase()} opens in the CHRO-MA-SMITH desktop app — no browser can decode it.`;
   if(!window.__TAURI__&&ext==='ari')
-    return `${name}: ARRIRAW (.ARI) opens in the Chromasmith desktop app — the web build's RAW decoder (LibRaw) doesn't support it.`;
+    return `${name}: ARRIRAW (.ARI) opens in the CHRO-MA-SMITH desktop app — the web build's RAW decoder (LibRaw) doesn't support it.`;
   if(HEIC_RE.test(name))
-    return `${name}: HEIC/HEIF is not supported by this browser. The Chromasmith desktop app and the iPhone app both open it — or convert to JPEG first.`;
-  return `${name}: not a photo or video format Chromasmith can open.`;
+    return `${name}: HEIC/HEIF is not supported by this browser. The CHRO-MA-SMITH desktop app and the iPhone app both open it — or convert to JPEG first.`;
+  return `${name}: not a photo or video format CHRO-MA-SMITH can open.`;
 }
 function getPx(img,mx=1800){const sc=Math.min(1,mx/img.width),w=img.width*sc|0,h=img.height*sc|0;const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return{px:c.getContext('2d').getImageData(0,0,w,h).data,w,h}}
 function resizePx(img,w,h){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return c.getContext('2d').getImageData(0,0,w,h).data}
@@ -11883,7 +11883,7 @@ async function loadRw2(file,opts){
         // linear pixels (in place — this decode's own buffer) before the LUT rather than baked into it.
         if(embDcp.gainMap)applyDngGainMap(rgb,w,h,embDcp.gainMap,dngGainInputMatrix(embDcp,fit));
       }else
-      if(!camPrefix)throw new Error(`No bundled colour profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile, or open this photo in the Chromasmith desktop app, which can also use camera profiles you've installed with Adobe Camera Raw.`);
+      if(!camPrefix)throw new Error(`No bundled colour profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile, or open this photo in the CHRO-MA-SMITH desktop app, which can also use camera profiles you've installed with Adobe Camera Raw.`);
       if(!lut)lut=await getDcpLUT(camPrefix,profile,m.iso_speed);
       hrOut=new Uint8ClampedArray(w*h);
       // ROADMAP.md R1: the real scene-linear buffer — see applyDcpLUT's own comment. Always
@@ -13160,7 +13160,7 @@ function tourHtml(){
   // A returning desktop user already has a Gallery folder — don't ask them to choose one again.
   let hasRoot=false;try{hasRoot=!!localStorage.getItem('chromasmith_lib_root');}catch(e){}
   return (desk&&hasRoot?'':desk
-      ?step(1,'Choose your photo folder','Click <b>Choose folder…</b> (or drop a folder onto the window). Chromasmith reads it in the background, so you can start editing straight away while it indexes. Your original files are never changed.')
+      ?step(1,'Choose your photo folder','Click <b>Choose folder…</b> (or drop a folder onto the window). CHRO-MA-SMITH reads it in the background, so you can start editing straight away while it indexes. Your original files are never changed.')
       :step(1,'Open a photo',mob?'Tap <b>Open a photo</b>. Your original is never changed.':'Drag a photo (or RAW) anywhere onto the window, or click <b>Open a photo</b>. Your original is never changed.'))
     +step(desk&&hasRoot?1:2,'Pick a look',(desk?'Double-click any photo to open it. ':'')+'Open <b>Look</b> and tap a film look. Everything else (grain, glow, curves, masks…) is optional fine-tuning on top of it. '+(mob?'Press and hold the photo to see the original.':'Use the before/after button to compare.'))
     +step(desk&&hasRoot?2:3,'Export','When it looks right, hit <b>Export</b> for a full-resolution file. Edits save automatically and nothing ever uploads.')
@@ -13174,9 +13174,9 @@ function tourMaybeShow(){
     localStorage.setItem(_TOUR_KEY,'1');localStorage.setItem('chromasmith-newuser-v2','1');
     document.body.classList.add('cs-adv-hidden');
   }catch(e){return;}
-  _csModal('Welcome to Chromasmith',tourHtml());
+  _csModal('Welcome to CHRO-MA-SMITH',tourHtml());
 }
-window.chromasmithShowTour=function(){_csModal('Welcome to Chromasmith',tourHtml());}; // manual replay (Help menu / palette) — bypasses the once-only flag
+window.chromasmithShowTour=function(){_csModal('Welcome to CHRO-MA-SMITH',tourHtml());}; // manual replay (Help menu / palette) — bypasses the once-only flag
 window.chromasmithShowShortcuts=function(){_csModal('Keyboard Shortcuts',shortcutsHtml());};
 // ── First-timer aids ─────────────────────────────────────────────────────────────────────
 // (1) Advanced tabs (Match & Refine / Color Copy / Collage) stay hidden for a brand-new user until
@@ -22527,7 +22527,7 @@ async function saveFiles(items){ // items: [{content,fname,mime}]
   const files=items.map(it=>new File([it.content],it.fname,{type:it.mime}));
   const canShare=useShareSheet()&&navigator.canShare&&navigator.canShare({files});
   if(canShare){
-    try{await navigator.share({files,title:'Chromasmith export'});return}
+    try{await navigator.share({files,title:'CHRO-MA-SMITH export'});return}
     catch(e){
       if(e&&e.name==='AbortError')return; // user cancelled — done, don't also download
       // activation expired (NotAllowedError) → offer an explicit tap to re-share
@@ -22564,7 +22564,7 @@ function showSaveButton(files,items){
       b.disabled=true;
       for(let i=0;i<items.length;i++){
         b.innerHTML=`Saving ${i+1} of ${items.length}…`;
-        try{await navigator.share({files:[files[i]],title:'Chromasmith export'});}
+        try{await navigator.share({files:[files[i]],title:'CHRO-MA-SMITH export'});}
         catch(e){
           if(e&&e.name==='AbortError')continue; // this one photo skipped — keep going with the rest
           anchorDownload(items[i].content,items[i].fname,items[i].mime);
@@ -22578,7 +22578,7 @@ function showSaveButton(files,items){
   }
   const b=document.createElement('button');b.className='btn bpri';b.style.width='100%';
   b.innerHTML=`Tap to save ${items.length} photo${items.length>1?'s':''} to Photos`;
-  b.onclick=async()=>{try{await navigator.share({files,title:'Chromasmith export'});host.innerHTML='';log('Saved to Photos','ok');}
+  b.onclick=async()=>{try{await navigator.share({files,title:'CHRO-MA-SMITH export'});host.innerHTML='';log('Saved to Photos','ok');}
     catch(e){if(e&&e.name==='AbortError')return;items.forEach(it=>anchorDownload(it.content,it.fname,it.mime));host.innerHTML='';log('Saved via download','ok');}};
   host.appendChild(b);
   log(`Tap "Save ${items.length} photo${items.length>1?'s':''}" to add to your gallery`,'info');
@@ -22882,7 +22882,7 @@ async function gpImportPhotos(preWin){
     }while(pageToken);
     const photos=items.filter(m=>m.type!=='VIDEO'&&m.mediaFile&&m.mediaFile.baseUrl);
     const skippedVid=items.length-photos.length;
-    if(skippedVid)log('Skipped '+skippedVid+' video(s) — Chromasmith is photos-only','warn');
+    if(skippedVid)log('Skipped '+skippedVid+' video(s) — CHRO-MA-SMITH is photos-only','warn');
     if(!photos.length){toast('No photos picked');return}
     const files=[];
     // "Load failed" (WKWebView's generic fetch()-network-abort string, distinct from gpFetch's
@@ -23514,7 +23514,7 @@ function ovfBuild(){
   // This is the desktop shell's ONLY menu (the web header and tabs are hidden under deskx), and
   // four of its rows were developer utilities — Clear image cache, Diagnostics log, Diagnostics
   // section, and a dim `build …` stamp. They all live in About now, one row instead of four.
-  h+='<button class="fx-ovf-item" onclick="ovfClose();csAbout()">About Chromasmith</button>';
+  h+='<button class="fx-ovf-item" onclick="ovfClose();csAbout()">About CHRO-MA-SMITH</button>';
   m.innerHTML=h;
 }
 // ovfClose/toolsClose/viewMenuClose are called from inside the HTML each of the three build
@@ -23628,12 +23628,12 @@ function performanceBuild(){
     `<div class="fx-ovf-item dim" title="${safe(diag.renderer)}"><span>${safe(diag.status)}</span></div>`+
     `<div class="fx-ovf-item dim"><span>${safe(diag.renderer)}</span></div>`+
     `<div class="fx-ovf-item dim"><span>${safe(diag.detail)}</span></div>`+
-    '<div class="fx-ovf-sep"></div><div class="fx-ovf-item dim"><span>Changes apply when Chromasmith is reloaded. On Windows, assign Chromasmith to High performance in Settings → System → Display → Graphics to choose a discrete GPU.</span></div>';
+    '<div class="fx-ovf-sep"></div><div class="fx-ovf-item dim"><span>Changes apply when CHRO-MA-SMITH is reloaded. On Windows, assign CHRO-MA-SMITH to High performance in Settings → System → Display → Graphics to choose a discrete GPU.</span></div>';
 }
 function gpuPreferenceSet(value){
   if(value!=='default'&&value!=='high-performance'&&value!=='low-power')return;
   try{localStorage.setItem(GPU_PREF_KEY,value);}catch(e){}
-  if(typeof toast==='function')toast('Graphics preference saved. Reload Chromasmith to apply it.',true);
+  if(typeof toast==='function')toast('Graphics preference saved. Reload CHRO-MA-SMITH to apply it.',true);
   // Do not rebuild a settings pane synchronously from its own click handler: the document's
   // click-outside listener would see the detached button and close the entire settings menu.
   setTimeout(performanceBuild,0);
