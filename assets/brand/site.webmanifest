@@ -1,0 +1,14 @@
+{
+  "name": "CHRO-MA-SMITH",
+  "short_name": "CHRO-MA-SMITH",
+  "description": "Gallery. Studio. Film Lab. your photos, your workflow, your app",
+  "start_url": "../../chromasmith-22.html",
+  "scope": "../../",
+  "display": "standalone",
+  "background_color": "#0b0b0a",
+  "theme_color": "#0b0b0a",
+  "icons": [
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+    {"src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png"}
+  ]
+}

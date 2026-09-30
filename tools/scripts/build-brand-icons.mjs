@@ -7,9 +7,12 @@ const svg=fs.readFileSync(root+'assets/brand/favicon.svg','utf8');
 const photo='data:image/webp;base64,'+fs.readFileSync(root+'site/assets/story/main1-1600.webp').toString('base64');
 const font='data:font/otf;base64,'+fs.readFileSync(root+'vendor/fonts/gramatika/GramatikaBold.otf').toString('base64');
 const b=await chromium.launch();const p=await b.newPage();
-for(const [n,s] of [['icon-32.png',32],['apple-touch-icon.png',180],['icon-512.png',512]]){
+// Home-screen icons get padding: iOS/Android round off the corners, so the mark sits in the
+// middle ~60% of a full-bleed dark square (mark spans x 21-79, y 21-77 in favicon.svg units).
+const padded=svg.replace(/viewBox="[^"]*"/,'viewBox="3 2 94 94"').replace('<rect x="17" y="17" width="66" height="66"','<rect x="0" y="0" width="100" height="100"');
+for(const [n,s,src] of [['icon-32.png',32,svg],['apple-touch-icon.png',180,padded],['icon-512.png',512,padded]]){
   await p.setViewportSize({width:s,height:s});
-  await p.setContent(`<body style="margin:0">${svg.replace('<svg ',`<svg width="${s}" height="${s}" style="display:block" `)}</body>`);
+  await p.setContent(`<body style="margin:0">${src.replace('<svg ',`<svg width="${s}" height="${s}" style="display:block" `)}</body>`);
   await p.screenshot({path:root+'assets/brand/'+n});
 }
 await p.setViewportSize({width:1200,height:630});
