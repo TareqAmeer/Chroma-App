@@ -2480,6 +2480,12 @@ body.sk2 details#sk2-hist>summary{justify-content:flex-start;gap:12px;font-size:
 body.sk2 details#sk2-hist>summary::before{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);margin:0 0 0 2px;transition:transform .15s}
 body.sk2 details#sk2-hist[open]>summary::before{transform:rotate(45deg)}
 body.sk2 details#sk2-hist>summary::after{content:none}
+body.sk2 details.fx-info-part{border-top:0;margin:0;padding-top:0;box-shadow:0 1px 0 var(--bdr)}
+body.sk2 details.fx-info-part>summary{justify-content:flex-start;gap:12px;font-size:17px;font-weight:500;letter-spacing:-.01em;color:var(--k-color-ink);min-height:48px;align-items:center}
+body.sk2 details.fx-info-part>summary::before{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);margin:0 0 0 2px;transition:transform .15s}
+body.sk2 details.fx-info-part[open]>summary::before{transform:rotate(45deg)}
+body.sk2 details.fx-info-part>summary::after,body.sk2 details.fx-info-part[open]>summary::after{content:none}
+body.sk2 details.fx-info-part[open]{padding-bottom:12px}
 /* Swiss v2 buttons are upright everywhere (the header's Export already was); only panel primaries were still italic. */
 body.sk2 .bpri,body.sk2 #lib-overlay .lib-btn.on,body.sk2 #lib-overlay .lib-btn.lib-btn-export{font-style:normal}
 body.sk2 .fx-info-part>summary{font-size:15px!important;color:var(--k-color-ink)!important;padding:6px 0}
@@ -6636,7 +6642,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930B';
+const BUILD='1.0930C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
