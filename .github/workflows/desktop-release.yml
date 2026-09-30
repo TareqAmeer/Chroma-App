@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   dmg:
-    # ⚠️ macos-13 is deliberate: it is the x86_64 runner. desktop/src-tauri/vendor/onnxruntime
+    # ⚠️ macos-15-intel is deliberate (macos-13 was retired by GitHub; jobs queued forever): it is the x86_64 runner. desktop/src-tauri/vendor/onnxruntime
     # holds an Intel-only libonnxruntime.dylib, pinned at v1.20.0 because Microsoft dropped Intel
     # Mac prebuilts after it (see that directory's README). Building on an arm64 runner would
     # produce an app whose Rust binary cannot load its own inference library. Apple Silicon users
@@ -36,7 +36,7 @@ jobs:
     # ⚠️ The app is UNSIGNED (no paid Apple developer certificate). The release notes tell users
     # to right-click → Open. Do not "fix" this by stripping the quarantine attribute in CI;
     # quarantine is applied by the downloading browser on the user's machine, not here.
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
         with:
