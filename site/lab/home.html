@@ -718,6 +718,19 @@ if(still)document.documentElement.classList.add('still');
 if(!location.hash){history.scrollRestoration='manual';scrollTo(0,0);addEventListener('load',()=>{scrollTo(0,0);lenis&&lenis.scrollTo(0,{immediate:true,force:true})})}
 let lenis;
 if(!still&&!matchMedia('(prefers-reduced-motion: reduce)').matches){lenis=new Lenis({lerp:.09});lenis.on('scroll',ScrollTrigger.update);gsap.ticker.add(t=>lenis.raf(t*1000));gsap.ticker.lagSmoothing(0);}
+/* phones: a tap on empty space glides to the next section (or one screen on for the long pinned tour) */
+if(matchMedia('(pointer:coarse)').matches){
+  addEventListener('click',e=>{
+    if(e.defaultPrevented||(lenis&&lenis.isStopped)||!e.target.closest)return;
+    if(e.target.closest('a,button,input,select,textarea,label,summary,details,dialog,[role=dialog],[hidden],.idx,.tape,.tile,.board,.ba,.f,[data-i]'))return;
+    const y=scrollY,H=innerHeight,tops=[...document.querySelectorAll('body>section:not([hidden]),footer')].map(el=>el.getBoundingClientRect().top+y);
+    const next=tops.find(t=>t>y+H*.25);
+    const maxY=document.documentElement.scrollHeight-H;
+    if(y>=maxY-4)return;
+    const to=Math.min(maxY,next===undefined?y+H:Math.min(next,y+H));
+    lenis?lenis.scrollTo(to,{duration:1.1}):scrollTo({top:to,behavior:'smooth'});
+  });
+}
 document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{const h=a.getAttribute('href');e.preventDefault();const tgt=h.length<2?0:h;lenis?lenis.scrollTo(tgt,{offset:-40}):(tgt?document.querySelector(tgt).scrollIntoView():scrollTo(0,0))}));
 
 /* 1. stage */
