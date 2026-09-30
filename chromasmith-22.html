@@ -1102,6 +1102,45 @@ body.mobile-fx #fx-tool-grid .fx-sec-btn{width:100%;min-width:0;min-height:90px;
 body.mobile-fx #fx-tool-grid .fx-sec-btn[hidden]{display:none}
 body.mobile-fx #fx-tool-grid .fx-sec-ic{font-size:28px;color:#f3f3f3}
 body.mobile-fx #fx-tool-grid .fx-sec-lb{white-space:normal;font-size:12px;font-weight:400;text-align:center}
+/* Chromasmith identity on the phone (not a Snapseed clone): brand accent instead of yellow,
+   desktop type, square sheets, tool list with descriptions, gallery caption, logo mark. */
+body.mobile-fx,body.mobile-fx .fx-preview-col,body.mobile-fx .fx-canvas-wrap,body.mobile-fx #fx-actionbar,body.mobile-fx #fx-quicknav,body.mobile-fx #fx-mobile-nav,body.mobile-fx.tools-open #fx-secnav{background:var(--k-color-bg)}
+body.mobile-fx .fx-act-logo{display:none}
+body.mobile-fx:not(.sheet-open):not(.tools-open) .fx-act-home .fx-act-ic{display:none}
+body.mobile-fx:not(.sheet-open):not(.tools-open) .fx-act-home .fx-act-logo{display:block;width:24px;height:24px}
+body.mobile-fx .fx-act-logo svg{width:100%;height:100%;display:block}
+#fx-mcap{display:none}
+body.mobile-fx #fx-mcap{display:flex;gap:12px;align-items:baseline;justify-content:center;padding:6px 16px 2px;font:11px var(--sans);color:var(--k-color-muted);white-space:nowrap;overflow:hidden;font-variant-numeric:tabular-nums}
+body.mobile-fx #fx-mcap b{font-weight:400;font-size:12px;color:var(--k-color-ink);overflow:hidden;text-overflow:ellipsis;min-width:0}
+body.mobile-fx #fx-mcap:empty{display:none}
+body.mobile-fx.sheet-open #fx-mcap{display:none}
+body.mobile-fx #fx-quicknav button{font:10px var(--sans);text-transform:uppercase;letter-spacing:.06em;color:var(--k-color-muted)}
+body.mobile-fx #fx-quicknav button span{color:var(--k-color-ink)}
+body.mobile-fx #fx-mobile-nav{align-items:center;padding:0 12px max(8px,var(--sab));gap:12px;box-shadow:0 -1px 0 var(--bdr)}
+body.mobile-fx #fx-mobile-nav .fx-nav-tabs{display:flex;gap:22px;flex:1}
+body.mobile-fx #fx-mobile-nav .fx-nav-tabs button{flex:0 0 auto;min-height:44px;padding:0;font:400 17px var(--sans);letter-spacing:-.02em;color:var(--k-color-muted);position:relative}
+body.mobile-fx #fx-mobile-nav .fx-nav-tabs button.on{color:var(--k-color-ink)}
+body.mobile-fx #fx-mobile-nav button.on::before{content:none}
+body.mobile-fx #fx-mobile-nav .fx-nav-tabs button.on::after{content:'';position:absolute;left:0;right:0;bottom:6px;height:2px;background:var(--k-color-accent-a)}
+body.mobile-fx #fx-mobile-nav #fx-nav-export{flex:0 0 auto;min-height:44px;padding:0 22px;border-radius:0;background:var(--k-color-accent-a);color:#fff;font:600 15px var(--sans)}
+body.mobile-fx #fx-tool-cats button{border-radius:0;font:400 13px var(--sans);text-transform:none;color:var(--k-color-muted);min-width:0;padding:10px 4px;margin-right:14px;position:relative}
+body.mobile-fx #fx-tool-cats button.on{background:none;color:var(--k-color-ink)}
+body.mobile-fx #fx-tool-cats button.on::after{content:'';position:absolute;left:4px;right:4px;bottom:4px;height:2px;background:var(--k-color-accent-a)}
+body.mobile-fx #fx-tool-grid{grid-template-columns:1fr;gap:0;padding:0 16px 70px}
+body.mobile-fx #fx-tool-grid .fx-sec-btn{display:grid;grid-template-columns:32px 1fr;grid-template-rows:auto auto;column-gap:12px;align-items:center;justify-items:start;min-height:64px;padding:10px 0;text-align:left;box-shadow:0 1px 0 var(--bdr);background:none}
+body.mobile-fx #fx-tool-grid .fx-sec-ic{grid-row:1/3;font-size:22px;color:var(--k-color-ink)}
+body.mobile-fx #fx-tool-grid .fx-sec-lb{font-size:19px;letter-spacing:-.02em;color:var(--k-color-ink);text-align:left}
+body.mobile-fx #fx-tool-grid .fx-sec-ds{grid-column:2;font:12px var(--sans);color:var(--k-color-muted);line-height:1.35}
+body.mobile-fx #fx-tool-grid .fx-sec-ds:empty{display:none}
+body.mobile-fx #fx-tool-grid .fx-sec-btn.on .fx-sec-lb{color:var(--k-color-accent-a)}
+body.mobile-fx #fx-secnav #fx-tools-close{border-radius:0;border-color:var(--bdr);background:none;color:var(--k-color-ink);font:400 14px var(--sans);text-transform:none;margin-bottom:6px}
+body.mobile-fx .fx-panel{border-radius:0;box-shadow:0 -1px 0 var(--bdr);background:var(--k-color-bg)}
+body.mobile-fx #fx-sheet-handle{background:var(--k-color-bg)}
+body.mobile-fx #fx-sheet-handle .fx-sheet-bar{border-radius:0;width:32px;height:2px;background:var(--k-color-muted)}
+body.mobile-fx #row-lut-mix{background:var(--k-color-bg)}
+#fx-more-menu .mm-sheet{border-radius:0;background:var(--k-color-bg);box-shadow:0 -1px 0 var(--bdr)}
+#fx-more-menu .btn{border-radius:0}
+body.mobile-fx .fx-slider::-webkit-slider-thumb{border-radius:0}
 /* Phone trims: desk-only surfaces off, bigger targets, press-and-hold compare replaces the overlay row. */
 body.mobile-fx #fx-zoom-ctrl,body.mobile-fx #fx-preview-tools{display:none!important}
 body.mobile-fx #sk2-hist{display:none}
@@ -4433,9 +4472,10 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <div class="btn-row" id="fx-crop-tools" style="justify-content:center;margin-top:8px;display:none">
         <button class="btn bgh" onclick="cropCancel()">Cancel</button>
       </div>
+      <div id="fx-mcap" aria-live="polite"></div>
       <!-- PERSISTENT ACTION BAR (mobile) -->
       <div id="fx-actionbar">
-        <button class="fx-act" onclick="fxMobileBack()" title="Back" aria-label="Back"><span class="fx-act-ic" data-mic="chevleft"></span></button>
+        <button class="fx-act fx-act-home" onclick="fxMobileBack()" title="Back" aria-label="Back"><span class="fx-act-ic" data-mic="chevleft"></span><span class="fx-act-logo" aria-hidden="true"><svg viewBox="18 18 64 62"><rect x="21" y="21" width="48" height="44" fill="var(--k-color-ink)"/><rect x="36" y="32" width="43" height="45" fill="var(--k-color-accent-a)"/><rect x="36" y="32" width="33" height="33" fill="#b0200e"/></svg></span></button>
         <button class="fx-act" onclick="fxPickPhotos()" title="Open photo" aria-label="Open photo"><span class="fx-act-ic" data-mic="plus"></span></button>
         <button class="fx-act" onclick="fxUndo()" title="Undo" aria-label="Undo"><span class="fx-act-ic" data-mic="undo"></span></button>
         <button class="fx-act" onclick="fxRedo()" title="Redo" aria-label="Redo"><span class="fx-act-ic" data-mic="redo"></span></button>
@@ -4461,8 +4501,8 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <button id="fx-fab-export" onclick="if(!this.disabled)exportFX()" title="Export at full resolution"><span class="fx-act-ic">↧</span></button>
     </div>
     <div id="fx-mobile-nav" aria-label="Editor navigation">
-      <button id="fx-nav-looks" onclick="fxToolsClose();fxSection('looks')">Looks</button>
-      <button id="fx-nav-tools" onclick="fxToolsOpen()">Tools</button>
+      <div class="fx-nav-tabs" role="tablist"><button id="fx-nav-looks" role="tab" onclick="fxToolsClose();fxSection('looks')">Looks</button>
+      <button id="fx-nav-tools" role="tab" onclick="fxToolsOpen()">Tools</button></div>
       <button id="fx-nav-export" onclick="fxMobileExportSheet()">Export</button>
     </div>
   </div>
@@ -6644,7 +6684,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930V';
+const BUILD='1.0930W';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10282,6 +10322,7 @@ async function refreshLUTSelect(keep){
   sel.value=keep||'';
 }
 async function selectLUT(v,skipFxDefaults){
+  setTimeout(()=>{if(typeof fxMobileCaption==='function')fxMobileCaption();},0);
   const del=document.getElementById('btn-lut-del');del.disabled=!v.startsWith('l:');
   if(typeof syncSectionEnabled==='function')syncSectionEnabled();
   const rowMix=document.getElementById('row-lut-mix');
@@ -12032,6 +12073,8 @@ function installFXImages(entries,loadKey,opts){
   samInvalidate();mskAiTapMode=false;
   fxImages=entries;
   setTimeout(()=>{if(typeof csInstallHint==='function')csInstallHint();},4000);
+  // Phones open on the looks: Chromasmith is a film-look app first, tools second.
+  setTimeout(()=>{if(typeof fxMobileCaption==='function')fxMobileCaption();if(document.body.classList.contains('mobile-fx')&&!document.body.classList.contains('sheet-open')&&!document.body.classList.contains('tools-open'))fxSection('looks');},300);
   if(cropMode)cropExit();
   fxImages.forEach(it=>{it.geom=defGeom();if(it.adjustOverride===undefined)it.adjustOverride=null;});
   fxState.sharedAdjust=null; // fresh batch/photo → Adjust panel starts from whatever's on the sliders (RAW defaults etc.)
@@ -13266,6 +13309,7 @@ window.csShowAdvancedTabs=csShowAdvancedTabs;
     grain:'Film-style texture over the whole photo.',nr:'Smooth out speckle from high ISO.',deconv:'Sharpen soft or blurry detail.',
     art:'Film imperfections: dust, scratches, light leaks.',vig:'Darken the corners to draw the eye in.',
     local:'Apply an edit to only part of the photo.',retouch:'Remove spots and blemishes.',lens:'Fix lens distortion and straighten the horizon.'};
+  window.CS_SUB=SUB;
   const init=()=>{Object.keys(SUB).forEach(k=>{const c=document.querySelector('.fx-ctrl[data-fxsec="'+k+'"]');if(!c||c.querySelector('.cs-sub'))return;
     const t=c.querySelector('.fx-ctrl-title');if(!t)return;const d=document.createElement('div');d.className='cs-sub';d.textContent=SUB[k];t.insertAdjacentElement('afterend',d);});};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
@@ -13395,6 +13439,16 @@ function fxMoreMenu(){
   const c=document.createElement('button');c.className='btn bsec';c.textContent='Cancel';c.onclick=()=>m.remove();sh.appendChild(c);
   m.appendChild(sh);m.onclick=e=>{if(e.target===m)m.remove();};
   document.body.appendChild(m);
+}
+// Phone caption under the photo, gallery-label style: name · look · size.
+function fxMobileCaption(){
+  const el=document.getElementById('fx-mcap');if(!el)return;
+  const it=fxImages[fxCurIdx];if(!it){el.textContent='';return;}
+  const v=(document.getElementById('sel-lut')||{}).value||'';
+  const look=v?(v.startsWith('p:')&&typeof prettyLUT==='function'?prettyLUT(v.slice(2)):v.replace(/^[a-z]:/,'')):'No look';
+  const im=it.img||{};const wh=im.naturalWidth||im.width?((im.naturalWidth||im.width)+' × '+(im.naturalHeight||im.height)):'';
+  el.innerHTML='<b></b><span></span><span></span>';
+  el.children[0].textContent=(it.name||'Photo').replace(/\.[^.]+$/,'');el.children[1].textContent=look;el.children[2].textContent=wh;
 }
 // Phone export sheet: size, format and quality before saving, instead of exporting on one tap.
 // It edits the real Output controls, so desktop and phone share one set of export settings.
@@ -24074,16 +24128,17 @@ function _activeSec(){
   const key=c.dataset.fxsec;
   return (document.body.classList.contains('deskx')&&FX_GROUP_OF[key])?FX_GROUP_OF[key]:key;
 }
-const FX_MOBILE_CATS={
-  all:null,
-  refine:new Set(['adjust','curves','hsl','pointcolor','nr','lens','retouch','local']),
-  fix:new Set(['crop','canvas','borders','vig','hal','bloom','art']),
-  style:new Set(['looks','grain','style','wm','exppreset','export','share'])
-};
+// Phone tool filters = the desktop rail's own groups (FX_GROUPS), so both apps sort tools the same way.
+const FX_MOBILE_CATS={all:null};
+Object.entries(FX_GROUPS).forEach(([g,d])=>{FX_MOBILE_CATS[g]=new Set(d.members);});
 const FX_MOBILE_HIDE=new Set(['art','export','wm','exppreset','share']);
 let _fxMobileCat='all';
+const FX_MOBILE_DESC={looks:'Film looks and print stocks.',adjust:'Exposure, contrast, white balance and colour.',crop:'Crop, rotate and straighten.',
+  borders:'Film borders and frames.',canvas:'Add space around the photo.',style:'Save and reuse whole edits.'};
 function fxToolsOpen(){
   if(!document.body.classList.contains('mobile-fx'))return;
+  document.querySelectorAll('#fx-tool-grid .fx-sec-btn').forEach(b=>{const d=b.querySelector('.fx-sec-ds');
+    if(d&&!d.textContent)d.textContent=(window.CS_SUB||{})[b.dataset.sec]||FX_MOBILE_DESC[b.dataset.sec]||'';});
   document.body.classList.remove('sheet-open');
   document.body.classList.add('tools-open');
   document.getElementById('fx-nav-tools')?.classList.add('on');
@@ -24114,7 +24169,7 @@ function buildSecNav(){          // mobile categorized tool grid
   const nav=document.getElementById('fx-secnav');if(!nav)return;
   nav.innerHTML='';
   const cats=document.createElement('div');cats.id='fx-tool-cats';
-  [['all','All'],['refine','Refine'],['fix','Fix'],['style','Style']].forEach(([key,label])=>{
+  [['all','All'],...Object.entries(FX_GROUPS).map(([g,d])=>[g,d.label])].forEach(([key,label])=>{
     const b=document.createElement('button');b.type='button';b.dataset.cat=key;b.textContent=label;
     b.onclick=()=>fxMobileFilter(key);cats.appendChild(b);
   });
@@ -24124,7 +24179,7 @@ function buildSecNav(){          // mobile categorized tool grid
     if(key==='image'||key==='info'||key==='diag')return;
     if(FX_MOBILE_HIDE.has(key))return; // desk-only on phones (Canvas stays)
     const b=document.createElement('button');b.className='fx-sec-btn';b.dataset.sec=key;
-    b.innerHTML=`<span class="fx-sec-ic">${icon(key,18)}</span><span class="fx-sec-lb">${lb}</span>`;
+    b.innerHTML=`<span class="fx-sec-ic">${icon(key,18)}</span><span class="fx-sec-lb">${lb}</span><span class="fx-sec-ds"></span>`;
     b.onclick=()=>fxSection(key);
     grid.appendChild(b);
   });
