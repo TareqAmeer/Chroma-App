@@ -5,7 +5,7 @@
 your photos. your workflow. your app.
 
 Make a look in a click or take control of every detail. Chromasmith is a free photo studio with
-132 calibrated film looks, real grain, halation and bloom, RAW development, masks and retouching,
+133 calibrated film looks, real grain, halation and bloom, RAW development, masks and retouching,
 a local photo library and full-resolution export — running entirely on your own device. No
 account, no upload, no subscription. The web version is a single HTML file with no build step
 and no server behind it.
@@ -18,6 +18,8 @@ and no server behind it.
 [![iOS build](https://github.com/TareqAmeer/Chroma-App/actions/workflows/ios-ipa.yml/badge.svg)](https://github.com/TareqAmeer/Chroma-App/actions/workflows/ios-ipa.yml)
 ![Licence GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-d4903a)
 ![No build step](https://img.shields.io/badge/build%20step-none-52c97a)
+
+**Jump to:** [Get it](#get-it) · [Highlights](#highlights) · [All features](#complete-feature-list) · [FAQ](#faq) · [Known limitations](#known-limitations) · [Privacy](#privacy) · [For developers](#for-developers)
 
 <p align="center"><img src="site/assets/story/main6-1600.webp" alt="A beach photograph, finished in Chromasmith with a film look, grain, halation and a double film frame" width="100%"></p>
 
@@ -71,12 +73,14 @@ Six tools, one editor: pick a look, shape the light and colour, add texture, the
 | **iPhone / iPad** | Open in Safari → Share → **Add to Home Screen** | Or sideload the unsigned IPA from [Actions](https://github.com/TareqAmeer/Chroma-App/actions/workflows/ios-ipa.yml) with Flarestore / AltStore / Sideloadly. |
 | **Android** | Open in Chrome → menu → **Add to Home screen** | Same app; the layout switches to a phone shell under 700px. |
 
+**Requirements:** any current Chrome, Edge, Firefox or Safari with WebGL2 · Mac: macOS on Intel, or Apple Silicon via Rosetta · Windows: 10/11, 64-bit (installer ~395 MB, includes the on-device AI models) · iPhone/iPad: iOS Safari.
+
 Step-by-step instructions for each platform, in plain English, are on the
 [product page](https://tareqameer.github.io/Chroma-App/#get).
 
 ## Highlights
 
-- **One click is all it takes** — 132 film looks across Kodak, Fuji, cinema, instant, reversal and B&W, previewed live on your photo
+- **One click is all it takes** — 133 film looks across Kodak, Fuji, cinema, instant, reversal and B&W, previewed live on your photo
 - **Let the light linger** — grain, halation, bloom, dust, light leaks and film frames, each with room to be subtle or unmistakable
 - **A studio for every frame** — curves, an eight-band colour mixer, lift/gamma/gain, masks, heal and clone, full-resolution export
 - **A library for every shoot** — folders, culling, people and natural-language search, all on your machine (desktop app)
@@ -86,51 +90,11 @@ Step-by-step instructions for each platform, in plain English, are on the
 Every tool is in the [complete feature list](#complete-feature-list) below; the
 [product page](https://tareqameer.github.io/Chroma-App/) has the full tour.
 
-## What it does
-
-**Looks and film**
-- 132 film-look presets (Kodak, Fuji, cinema, instant, reversal, B&W), plus any `.cube` you own
-- Kodak / Fuji **print profiles** applied after the film look, in the right order
-- **Grain** calibrated per film format (8mm → 65mm), **halation** and **bloom** from a measured
-  light-scatter model, film **artifacts** (dust, hairs, scratches, light leak)
-- Procedural **film frames** — 35mm sprockets, rebate and edge printing drawn to ISO/SMPTE geometry
-
-**Editing**
-- Exposure, contrast, white balance (with eyedropper), dehaze, sharpening (incl. deconvolution), noise reduction, highlight roll-off
-- **Tone curves** (master, R/G/B and parametric), an eight-band **colour mixer** and lift/gamma/gain wheels
-- **Local adjustments** — up to 8 masks: radial, linear, brush, sky, AI subject, depth, colour range,
-  luminance range; each with amount, texture, clarity and an edge-aware refine
-- **Skin tone** — a contractive operator that evens out patchy tone instead of shifting all of it
-- **Heal and clone** applied before grading, so a repair takes the same grain and look
-- Crop, rotate, straighten, **auto-level**, perspective correction, borders and canvas mattes
-- Collage layouts, **HDR merge** and **focus stacking** (desktop)
-- Multi-photo batches with a filmstrip, shared edits, and **match a series to one reference**
-
-**Input and output**
-- **RAW** (RW2/RAW) decoded locally, with Adobe DCP camera profiles for LR-like colour
-- **V-Log** input transform for Lumix footage and stills
-- Full-resolution export to JPEG / PNG / WebP / TIFF, XMP sidecars, **HDR gain-map** HEIC from RAW
-- Build a `.cube` LUT from a before/after pair, or match colour from a reference image
-- Emitted `.cube` files are tagged for **Lumix Lab**, so a look can go back into the camera
-
-**Desktop only** (the Mac and Windows apps)
-- A full **photo library**: folders, catalog, collections, keywords, duplicates, culling
-- **Card import** from an SD card, organised by capture date, with a verified second copy
-- **People** — local face detection, recognition and naming
-- **Natural-language search** — describe a photo and find it, locally
-- Virtual copies, offline edits, suggested tags, and a Lightroom **Edit In** round-trip with cloud browser
-
-**Beta**
-- **Astro stacking** — combine night-sky frames into a cleaner image (desktop library)
-- **Panorama** — stitch two photos into a wider view; larger sets are still planned
-- **Video** — grade a clip with the same stack as stills, trim it, and export with audio passed through
-  untouched; scopes, safe-area guides, fades, gate weave and film breath
-
 ## Complete feature list
 
 <details><summary><b>Looks and film</b> (13)</summary>
 
-- **132 film looks** — Start with calibrated colour, cinema, instant, reversal or black-and-white looks.
+- **133 film looks** — Start with calibrated colour, cinema, instant, reversal or black-and-white looks.
 - **One-tap Looks gallery** — Preview a look on your photo and apply it with one click.
 - **Custom .cube LUTs** — Load a LUT you already own and use it as the starting look.
 - **Kodak and Fuji print profiles** — Add a print-film response after the base look.
@@ -268,32 +232,6 @@ Every tool is in the [complete feature list](#complete-feature-list) below; the
 
 </details>
 
-## Screenshots
-
-| | |
-|---|---|
-| ![Looks](site/assets/ui/looks.webp) | ![Local adjustments](site/assets/ui/local.webp) |
-| Film looks, one tap | Masks and local adjustments |
-| ![Colour](site/assets/ui/color.webp) | ![Film](site/assets/ui/film.webp) |
-| Tone curves and colour mixer | Grain, halation and artifacts |
-| ![Gallery](site/assets/homepage/gallery-faces.webp) | ![Phone](site/assets/ui/mobile.webp) |
-| The gallery, filtered to one person | The same app on a phone |
-
-<sub>Captured from the running app with `node site/shoot-screenshots.mjs`, using a sample photograph.</sub>
-
-## What's new
-
-- **Card import** — copy a shoot straight off an SD card, organised into date folders, never moved
-- **People and natural-language search** — find someone, or describe a photo, entirely on-device
-- **Heal and clone** — spot removal that happens before grading, so repairs never look pasted in
-- **Auto-level** — finds the dominant line and straightens it (worst error 0.30° on ground truth)
-- **Match series to a reference** — fixes exposure/WB drift across a shoot without touching the look
-- **Film frames** — sprocket holes and edge printing from real 35mm measurements
-- **Video grading** — one clip, the full stack, audio remuxed rather than re-encoded
-- **HDR export from RAW** — gain-map HEIC derived from the app's own extended-range decode
-
-Full history: [commits on main](https://github.com/TareqAmeer/Chroma-App/commits/main).
-
 ## FAQ
 
 **Is Chromasmith really free?**  
@@ -326,6 +264,14 @@ Yes. A 64-bit Windows 10/11 installer is published on the [releases page](https:
 **What is it made with?**  
 The whole editor is one HTML file with plain JavaScript and no framework or build step. Rendering runs on WebGL2, with GLSL shaders for the look, grain, halation, bloom and tiled full-resolution export. RAW files are decoded locally with LibRaw compiled to WebAssembly, plus Adobe DCP camera profiles. The desktop app is a Tauri shell with a Rust core and a local catalogue database, for Mac and Windows. On-device masks use ONNX Runtime models (EdgeSAM and SegFormer). Video uses mediabunny, the iPhone app is a Capacitor shell, and the film looks were calibrated with Python tooling. It works offline through a service worker, and the source is GPL-3.0.
 
+## Known limitations
+
+- **Unsigned apps.** The Mac, Windows and iPhone builds aren't signed yet, so each system shows a one-time warning on first launch.
+- **Beta features.** Video grading, astro stacking and panorama (two photos only) are still in progress.
+- **Desktop-only tools.** The photo library, card import, people, search, depth masks, HDR merge and focus stacking need the Mac or Windows app.
+- **Phones.** The phone layout is touch-first; large RAW files and full-resolution exports are limited by the phone's memory.
+- **Not on the App Store** yet; iPhone installs go through the home screen or sideloading.
+
 ## Privacy
 
 No account, no telemetry, no uploads, no backend. Photos are read, processed and written on the
@@ -335,86 +281,14 @@ device you are using. The web build works with the network disconnected after it
 
 ## For developers
 
-### Run it
+No build step: serve the folder and open it.
 
 ```bash
 python3 -m http.server 8000   # then open http://localhost:8000/
 ```
 
-There is no build step. `chromasmith-22.html` is the entire web app — HTML, CSS, JS and GLSL
-shaders in one file. `index.html` is the product page; the editor is at `/app/`.
-
-RAW decoding in the browser needs cross-origin isolation (`SharedArrayBuffer`), which GitHub Pages
-cannot set headers for — `coi-serviceworker.min.js` enables it client-side and reloads once on the
-first visit. Everything else works without it.
-
-### Tests
-
-```bash
-npm test              # everything below, in order
-node test/export_harness.mjs           # 18 golden renders, byte-exact
-node test/export_harness.mjs --golden  # regenerate goldens (only when a change is intended)
-npm run ui:test       # desktop + phone layout audit
-npm run perf:test     # performance budgets
-npm run lib:test      # library grid scaling
-npm run video:test    # video demux/seek/export
-```
-
-`test/export_harness.mjs` drives the real HTML in headless Chromium with software GL, so output
-does not depend on the host GPU. After **any** shader edit, run it and watch for
-`[console.error] GLSL compile error` — a failed shader compile does not break the page, it
-silently switches the affected feature off.
-
-### The site
-
-```bash
-node site/shoot-screenshots.mjs   # re-capture the UI screenshots from the real app
-node site/build-assets.mjs        # optimise photos from site/photos-src/
-node site/build-page.mjs          # inject them into index.html
-```
-
-See [site/README.md](site/README.md).
-
-### Desktop app (macOS and Windows, Tauri)
-
-```bash
-cd desktop && npm ci
-# fetch the AI models — each vendor dir's README has the exact curl commands
-./install-app.sh                  # macOS: builds the release bundle
-npm run tauri build               # Windows: builds the NSIS installer
-```
-
-Needs Rust and Node, plus Xcode command-line tools (macOS) or VS Build Tools with the C++ workload
-(Windows). Windows status and notes: [docs/windows-port.md](docs/windows-port.md). The ONNX models (~1.1 GB) are not in git; see
-`desktop/src-tauri/vendor/*/README.md` for where each one comes from and
-[LICENSES-MODELS.md](LICENSES-MODELS.md) for their licences.
-
-### iOS app (Capacitor)
-
-```bash
-npm ci && ./build-ios.sh && npx cap sync ios
-```
-
-CI builds an unsigned IPA on every push
-([workflow](https://github.com/TareqAmeer/Chroma-App/actions/workflows/ios-ipa.yml)); this machine
-has no Xcode, so CI is the only build path.
-
-### Repository layout
-
-```
-index.html                 The product page (GitHub Pages root)
-app/index.html             Clean /app/ URL → the editor
-chromasmith-22.html        THE ENTIRE WEB APP — HTML + CSS + JS + GLSL in one file
-coi-serviceworker.min.js   Cross-origin-isolation shim so RAW decoding works on Pages
-site/                      Landing-page assets + the scripts that generate them
-vendor/                    LibRaw wasm, DCP camera profiles, mediabunny, 102 look LUTs, frames
-desktop/                   Tauri desktop shell (macOS + Windows): native RAW, the photo library, on-device AI
-ios/                       Capacitor iOS shell
-test/                      Export/UI/perf/mask/library/video regression gates
-tools/calib/               Python calibration + analysis tooling (not needed to run the app)
-CLAUDE.md                  Developer handoff: architecture, calibration science, hard-won lessons
-docs/ROADMAP.md            Feature roadmap with measured notes
-```
+Tests, desktop and iOS builds, the site generators and the repository layout are in
+**[CONTRIBUTING.md](CONTRIBUTING.md)**. Architecture and calibration notes live in [CLAUDE.md](CLAUDE.md) and [docs/](docs/).
 
 ## Third-party components
 
