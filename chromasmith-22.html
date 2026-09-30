@@ -2848,6 +2848,13 @@ function sk2SubTabs(g,jump){
   nav.innerHTML=histTab+cards.map(c=>`<button type="button" data-k="${c.dataset.fxsec}">${SK2_SUB[c.dataset.fxsec]||c.dataset.fxsec}</button>`).join('');
   document.body.style.setProperty('--sk2-sub-h',(nav.hidden?0:nav.offsetHeight)+'px');
   document.body.style.setProperty('--sk2-h-h',h.offsetHeight+'px');
+  // The stage title scales with the panel and its font loads late, so a one-off measurement leaves
+  // the sticky card headers parked at the wrong offset (a gap with content showing through).
+  if('ResizeObserver' in window){if(window._sk2StickRO)window._sk2StickRO.disconnect();
+    window._sk2StickRO=new ResizeObserver(()=>{
+      document.body.style.setProperty('--sk2-sub-h',(nav.hidden?0:nav.offsetHeight)+'px');
+      document.body.style.setProperty('--sk2-h-h',h.offsetHeight+'px');});
+    [h,nav,panel].forEach(el=>window._sk2StickRO.observe(el,{box:'border-box'}));}
   // Tail spacer: lets the last card of a stage scroll right up under the header when its tab is picked.
   let tail=document.getElementById('sk2-tail');if(!tail){tail=document.createElement('div');tail.id='sk2-tail';tail.setAttribute('aria-hidden','true');}
   panel.appendChild(tail);tail.style.height='0px';
@@ -6692,7 +6699,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930Z';
+const BUILD='1.0930A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17433,7 +17440,7 @@ function applyUISnapshot(s,opts){
   if(s.geom!==undefined&&fxImages.length){            // restore geometry (undo a crop/rotate/flip/straighten) — CURRENT photo only, geometry is per-photo
     const cit=curItem();if(cit)cit.geom=s.geom?JSON.parse(JSON.stringify(s.geom)):defGeom();
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
-    const ang=(s.geom&&s.geom.angle)||0;if(ss)ss.value=_stA2S(ang);if(sv)sv.textContent=ang.toFixed(2)+'°';
+    const ang=(s.geom&&s.geom.angle)||0;if(ss){ss.value=_stA2S(ang);fxPaintSlider(ss);}if(sv)sv.textContent=ang.toFixed(2)+'°';
     if(cropMode)cropExit();
     // opts.skipRender: the caller (loadFXImages) is about to replace fxImages and installFXImages runs its own
     // updateWork()+buildLookGallery() — re-rendering the OUTGOING photo here cost ~1.2s at 24MP (CHR-121).
@@ -18636,7 +18643,7 @@ function loadSessionGeomFor(){
     if(!s._geom)return;
     fxImages.forEach(it=>it.geom=JSON.parse(JSON.stringify(s._geom)));
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
-    const ang=s._geom.angle||0;if(ss)ss.value=_stA2S(ang);if(sv)sv.textContent=ang.toFixed(2)+'°';
+    const ang=s._geom.angle||0;if(ss){ss.value=_stA2S(ang);fxPaintSlider(ss);}if(sv)sv.textContent=ang.toFixed(2)+'°';
     updateWork();
   }catch(e){/* geometry restore is best-effort */}
 }
@@ -20234,7 +20241,7 @@ function geomApplyToAll(){
 // this routes through cropSetAspect, which also re-reads the aspect from the photo now loaded
 // (it differs per photo, and resetGeomUI runs on every load/switch).
 function resetGeomUI(){
-  const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;
+  const ss=document.getElementById('sl-straighten');if(ss){ss.value=0;fxPaintSlider(ss);}
   const sv=document.getElementById('vl-straighten');if(sv)sv.textContent='0°';
   const ar=document.getElementById('sel-crop-ar');
   if(ar){ar.value='shot';cropSetAspect('shot');}else{cropAR=0;}
@@ -20307,7 +20314,7 @@ function fxSelectImage(idx){
   if(cropMode)cropExit();
   fxImg=it.img;updateWork();
   const ss=document.getElementById('sl-straighten');
-  if(ss){const ang=(it.geom&&it.geom.angle)||0;ss.value=_stA2S(ang);document.getElementById('vl-straighten').textContent=ang.toFixed(2)+'°';}
+  if(ss){const ang=(it.geom&&it.geom.angle)||0;ss.value=_stA2S(ang);fxPaintSlider(ss);document.getElementById('vl-straighten').textContent=ang.toFixed(2)+'°';}
   if(typeof ahRoiSyncUI==='function'){_ahRoiArmed=false;_ahRoiDrag=null;ahRoiSyncUI();}
   // Basic Adjustments: show THIS photo's own values if it's been made independent
   // (adjToggleScope), else the shared batch-wide baseline.
@@ -20714,7 +20721,7 @@ function autoHorizon(){
   if(a===null){toast('No clear horizon found — straighten by hand',false);
     log('Auto horizon: no dominant line found (flat accumulator)','warn');return;}
   const sl=document.getElementById('sl-straighten');
-  if(sl)sl.value=_stA2S(a);
+  if(sl){sl.value=_stA2S(a);fxPaintSlider(sl);}
   geomStraighten(a);
   if(typeof hapt==='function')hapt();
   toast(a===0?'Already level':`Straightened ${a>0?'+':''}${a.toFixed(1)}°`,true);
@@ -20793,7 +20800,7 @@ function _stS2A(s){const t=(parseFloat(s)||0)/45;return Math.round(45*t*Math.abs
 function _stA2S(a){const t=Math.max(-1,Math.min(1,(a||0)/45));return 45*Math.sign(t)*Math.sqrt(Math.abs(t));}
 function geomStraightenSlider(v){geomStraighten(_stS2A(v));}
 function geomStraighten(v){const g=curGeom();if(!g)return;g.angle=parseFloat(v)||0;document.getElementById('vl-straighten').textContent=(g.angle).toFixed(2)+'°';broadcastGeom(); /* crop kept: it is normalised to the same-aspect inscribed frame, so it stays valid */updateWork();clearTimeout(fxTimer);fxTimer=setTimeout(()=>{renderPreview();fxHistoryPush();},120);}
-function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeof hapt==='function')hapt();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss)ss.value=0;document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset','info');}
+function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeof hapt==='function')hapt();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss){ss.value=0;fxPaintSlider(ss);}document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset','info');}
 
 // ── retouch interaction ───────────────────────────────────────────────────────────────────
 let healMode=false,_healShiftFrom=null;
@@ -24969,12 +24976,21 @@ applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail 
 // captured above before loadSession touched anything), not the whole photo like fxResetAll().
 // Generic by design — walks whatever sl-*/tg-* ids happen to live inside the clicked section's
 // card, so it needs no per-section list to keep in sync as sliders are added/removed.
+// Reset writes slider .value directly (no input event), so the fill / knob / "modified" row state
+// has to be repainted by hand or a reset slider keeps its old red fill.
+function _fxRepaintCard(card){
+  if(!card)return;
+  if(typeof fxPaintAllSliders==='function')fxPaintAllSliders(card);
+  if(typeof fxMarkModifiedSliders==='function')fxMarkModifiedSliders();
+  if(typeof syncSectionEnabled==='function')syncSectionEnabled();
+}
 function fxResetSection(cardOrName){
   const card=typeof cardOrName==='string'?document.querySelector(`.fx-ctrl[data-fxsec="${cardOrName}"]`):cardOrName.closest('.fx-ctrl');
   if(!card||!_fxPristineDefault)return;
   card.querySelectorAll('input[type=range][id^="sl-"]').forEach(sl=>{
     const id=sl.id.slice(3);
     if(_fxPristineDefault.sliders&&_fxPristineDefault.sliders[id]!==undefined)sl.value=_fxPristineDefault.sliders[id];
+    else if(sl.defaultValue!==''&&sl.dataset.noReset===undefined)sl.value=sl.defaultValue; // not in the snapshot list (grain motion, brush, zoom, quality…): its own shipped default
   });
   card.querySelectorAll('[id^="tg-"]').forEach(tg=>{
     const id=tg.id.slice(3);
@@ -25045,6 +25061,7 @@ document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title
     const override=_fxSectionResetOverride[fxsec];
     if(override&&typeof window[override]==='function')window[override]();
     else fxResetSection(title.parentElement);
+    _fxRepaintCard(title.parentElement);
   };
   // Reset and the on/off toggle (if any) are wrapped together so both sit flush at the title's
   // right edge — appending reset as a bare third flex child would land it BETWEEN the title
@@ -25924,8 +25941,8 @@ if(/[?&]catalog=1/.test(location.search)){
       if(strip.parentNode!==el){el.appendChild(strip);return;}   // re-append fires the observer again
       const t=el.textContent;if(strip._t===t)return;strip._t=t;
       // Values changing continuously (slider drag) snap instead of rolling — otherwise digits sit mid-roll.
-      const now=performance.now(),fast=now-(strip._ts||0)<350;strip._ts=now;
-      strip.classList.toggle('k-snap',fast);clearTimeout(strip._snapT);strip._snapT=setTimeout(()=>strip.classList.remove('k-snap'),400);
+      const now=performance.now(),fast=now-(strip._ts||0)<700||[...t].length!==strip.children.length;strip._ts=now; // also snap when the digit count changes: columns shift places and would roll through unrelated digits
+      strip.classList.toggle('k-snap',fast);clearTimeout(strip._snapT);strip._snapT=setTimeout(()=>strip.classList.remove('k-snap'),700);
       const cs=[...t];
       while(strip.children.length>cs.length)strip.firstElementChild.remove();
       while(strip.children.length<cs.length)strip.prepend(document.createElement('i'));
