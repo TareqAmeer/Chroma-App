@@ -2401,9 +2401,9 @@ body.sk2 #ff-borders[data-sk2-layer=b1] [data-layer=b2],body.sk2 #ff-borders[dat
 /* ── Swiss v2 refinement pass (20-point review, 2026-09-28) ─────────────────────────────── */
 /* 1 · One type scale: display 64 / stage 46 / section 21 / body 13 / caption 11. */
 body.sk2{--sk-t1:64px;--sk-t2:46px;--sk-t3:21px;--sk-t4:13px;--sk-t5:11px;--sk-g:8px}
-body.sk2 .fx-label,body.sk2 .fx-val,body.sk2 .fx-sub,body.sk2 .btn,body.sk2 .fx-select,body.sk2 .vinput{font-size:var(--sk-t4)!important}
+body.sk2 .fx-label,body.sk2 .fx-val,body.sk2 .fx-sub,body.sk2 .btn,body.sk2 .fx-select,body.sk2 .vinput,body.sk2 .fx-preset-head{font-size:var(--sk-t4)!important}
 body.sk2 .fx-sub{text-transform:none!important;letter-spacing:0!important;color:var(--k-color-muted)!important;font-weight:400!important;border:0!important;margin:calc(var(--sk-g)*3) 0 var(--sk-g)!important;padding:0!important}
-body.sk2 .look-cat-hdr,body.sk2 .sk2x-cap,body.sk2 .fx-preset-head,body.sk2 #lib-overlay .lib-coll-heading{font-size:var(--sk-t5)!important}
+body.sk2 .look-cat-hdr,body.sk2 .sk2x-cap,body.sk2 #lib-overlay .lib-coll-heading{font-size:var(--sk-t5)!important}
 /* 2 · One left edge: panel content, sub-tabs, titles and rows all start at the same x; no inner card padding. */
 body.sk2.deskx .fx-panel{padding-left:calc(var(--sk-g)*3)!important;padding-right:calc(var(--sk-g)*3)!important}
 body.sk2 .fx-ctrl,body.sk2 .fx-fields{padding-left:0!important;padding-right:0!important;margin-left:0!important;margin-right:0!important}
@@ -2475,9 +2475,9 @@ body.sk2 .sk2-dup-title>.fx-ctrl-title{min-height:36px;padding-top:6px!important
 body.sk2 .sk2-dup-title>.fx-ctrl-title::before{content:attr(data-sk2-name);font-size:17px;font-weight:500;letter-spacing:-.01em;color:var(--k-color-ink);order:1;margin-right:auto}
 body.sk2 .sk2-dup-title>.fx-ctrl-title{min-height:48px!important}
 /* Histogram reads as a tool header like its Light-stage siblings (chevron left, same size/ink). */
-body.sk2 details#sk2-hist{border-top:0;margin-top:0;padding-top:0;box-shadow:0 1px 0 var(--bdr)}
+body.sk2 details#sk2-hist{border-top:0;margin:0 -15px;padding-top:0;box-shadow:0 1px 0 var(--bdr)}
 body.sk2 details#sk2-hist>summary{justify-content:flex-start;gap:12px;font-size:17px;font-weight:500;letter-spacing:-.01em;color:var(--k-color-ink);min-height:48px;align-items:center}
-body.sk2 details#sk2-hist>summary::before{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);margin:0 4px 0 2px;transition:transform .15s}
+body.sk2 details#sk2-hist>summary::before{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);margin:0 0 0 2px;transition:transform .15s}
 body.sk2 details#sk2-hist[open]>summary::before{transform:rotate(45deg)}
 body.sk2 details#sk2-hist>summary::after{content:none}
 /* Swiss v2 buttons are upright everywhere (the header's Export already was); only panel primaries were still italic. */
@@ -3552,21 +3552,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <div class="fx-ctrl" data-fxsec="looks">
         <!-- This header folds only the input/print settings below it; the preset grid has its own
              "Preset" header and stays visible, so the title names what it actually folds. -->
-        <div class="fx-ctrl-title">Input &amp; print</div>
-        <div class="fx-label" style="margin-bottom:4px">Input</div>
-        <select class="fx-select" id="sel-input" onchange="fxUpdate()" style="display:none"><option value="">Standard (sRGB/Rec.709)</option><option value="vlog">V-Log (Lumix)</option></select>
-        <div class="btn-row chip-tap" id="chips-input" title="Source encoding. Pick V-Log for Lumix V-Log stills/frames — converts to Rec.709 BEFORE the film look, so any Rec.709 LUT applies correctly on top."></div>
-        <div class="fx-label" style="margin:10px 0 4px">Highlight response</div>
-        <select class="fx-select" id="sel-tonemap" onchange="fxUpdate()" style="display:none"><option value="">Standard (BT.2390)</option><option value="agx">AgX (filmic)</option><option value="native">Film stock (native)</option></select>
-        <div class="btn-row chip-tap" id="chips-tonemap" title="Only visible once real RAW highlight headroom survives to the render (a blown sky or window shot RAW) — otherwise there's nothing above white to roll off and both options render identically. AgX is a stronger filmic look with more shoulder compression; BT.2390 is a gentler broadcast-standard knee."></div>
-        <div class="fx-row" id="fx-hdr-preview-row" style="display:none" title="Loads floating-point highlight data for this RAW so the Highlight response controls can use real headroom. Off keeps normal SDR editing fast; it never changes the RAW's colour profile.">
-          <div class="fx-label">HDR preview</div><div class="fx-toggle" id="tg-hdr-preview" onclick="fxHdrPreviewChanged()"></div>
-        </div>
-        <div class="fx-label" style="margin:10px 0 4px">Print</div>
-        <select class="fx-select" id="sel-print" onchange="selectPrint(this.value)" style="display:none"><option value="">None</option><option value="kodak_print">Kodak Print</option><option value="fuji_print">Fuji Print</option></select>
-        <div class="btn-row chip-tap" id="chips-print" title="Dehancer-style print profile applied AFTER the film look (Kodak or Fuji print)."></div>
-        <select class="fx-select" id="sel-lut" onchange="selectLUT(this.value)" style="display:none"><option value="">None</option></select>
-        <div class="fx-row" id="row-lut-mix" style="display:none;margin-top:8px"><div class="fx-label">Strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-lut-mix" oninput="fxUpdate()" title="Blends the look LUT with the unfiltered image — 100 is the full look, lower values fade it toward the original."><div class="fx-val" id="vl-lut-mix">100</div></div>
+        <div class="fx-ctrl-title">Presets</div>
         <!-- 3.4.9: matches the wireframe's .presetbox (Editor (Developer) View.dc.html:317-341)
              — a dedicated collapse toggle for JUST the preset filter+grid, independent of the
              panel-level section collapse every .fx-ctrl already gets (fxSecToggle, further down
@@ -3586,6 +3572,20 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
             <div class="looks-grid" id="fx-looks" tabindex="0"></div>
           </div>
         </div>
+        <div class="fx-label" style="margin:14px 0 4px">Input</div>
+        <select class="fx-select" id="sel-input" onchange="fxUpdate()" style="display:none"><option value="">Standard (sRGB/Rec.709)</option><option value="vlog">V-Log (Lumix)</option></select>
+        <div class="btn-row chip-tap" id="chips-input" title="Source encoding. Pick V-Log for Lumix V-Log stills/frames — converts to Rec.709 BEFORE the film look, so any Rec.709 LUT applies correctly on top."></div>
+        <div class="fx-label" style="margin:10px 0 4px">Highlight response</div>
+        <select class="fx-select" id="sel-tonemap" onchange="fxUpdate()" style="display:none"><option value="">Standard (BT.2390)</option><option value="agx">AgX (filmic)</option><option value="native">Film stock (native)</option></select>
+        <div class="btn-row chip-tap" id="chips-tonemap" title="Only visible once real RAW highlight headroom survives to the render (a blown sky or window shot RAW) — otherwise there's nothing above white to roll off and both options render identically. AgX is a stronger filmic look with more shoulder compression; BT.2390 is a gentler broadcast-standard knee."></div>
+        <div class="fx-row" id="fx-hdr-preview-row" style="display:none" title="Loads floating-point highlight data for this RAW so the Highlight response controls can use real headroom. Off keeps normal SDR editing fast; it never changes the RAW's colour profile.">
+          <div class="fx-label">HDR preview</div><div class="fx-toggle" id="tg-hdr-preview" onclick="fxHdrPreviewChanged()"></div>
+        </div>
+        <div class="fx-label" style="margin:10px 0 4px">Print</div>
+        <select class="fx-select" id="sel-print" onchange="selectPrint(this.value)" style="display:none"><option value="">None</option><option value="kodak_print">Kodak Print</option><option value="fuji_print">Fuji Print</option></select>
+        <div class="btn-row chip-tap" id="chips-print" title="Dehancer-style print profile applied AFTER the film look (Kodak or Fuji print)."></div>
+        <select class="fx-select" id="sel-lut" onchange="selectLUT(this.value)" style="display:none"><option value="">None</option></select>
+        <div class="fx-row" id="row-lut-mix" style="display:none;margin-top:8px"><div class="fx-label">Strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-lut-mix" oninput="fxUpdate()" title="Blends the look LUT with the unfiltered image — 100 is the full look, lower values fade it toward the original."><div class="fx-val" id="vl-lut-mix">100</div></div>
       </div>
       <!-- BASIC ADJUSTMENTS -->
       <div class="fx-ctrl" data-fxsec="adjust">
@@ -6636,7 +6636,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930A';
+const BUILD='1.0930B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
