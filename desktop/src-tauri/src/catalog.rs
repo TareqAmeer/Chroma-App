@@ -3734,6 +3734,14 @@ pub struct PhotoFaceInfo {
 /// `find_photo_by_abs_path` rather than taking a `photo_id` directly. An unresolved path (or one
 /// this machine never ran a face scan against) returns an empty list, not an error — "no people
 /// data yet" is a normal, common state, not a failure.
+/// Resolves absolute paths to catalog photo ids (unresolvable paths are skipped) — for actions
+/// on a selection that isn't in the currently loaded grid page.
+#[tauri::command]
+pub fn catalog_photo_ids_for_paths(state: tauri::State<CatalogState>, paths: Vec<String>) -> Result<Vec<i64>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    Ok(paths.iter().filter_map(|p| find_photo_by_abs_path(&conn, p)).collect())
+}
+
 #[tauri::command]
 pub fn catalog_faces_for_path(state: tauri::State<CatalogState>, path: String) -> Result<Vec<PhotoFaceInfo>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;

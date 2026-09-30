@@ -6607,7 +6607,10 @@
       // currently shown in the grid (the same field catalog_query/expandStack/photoIds results
       // use elsewhere), so no new lookup command is needed — just match on path.
       const byPath = new Map(state.entries.map((e) => [e.path, e.id]));
-      const ids = paths.map((p) => byPath.get(p)).filter((id) => id != null);
+      let ids = paths.map((p) => byPath.get(p)).filter((id) => id > 0);
+      if (ids.length < paths.length) {
+        try { ids = await invoke('catalog_photo_ids_for_paths', { paths }); } catch (e) { console.error('catalog_photo_ids_for_paths', e); }
+      }
       if (!ids.length) { toast('Could not resolve the selected photos', 'err'); return; }
       await runFindFaces(ids);
     });

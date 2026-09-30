@@ -2776,6 +2776,7 @@ fn main() {
             catalog::catalog_pets_scan,
             catalog::catalog_photo_faces,
             catalog::catalog_faces_for_path,
+            catalog::catalog_photo_ids_for_paths,
             catalog::catalog_face_scan_status,
             catalog::catalog_record_pet_sighting,
             catalog::catalog_face_crop,
