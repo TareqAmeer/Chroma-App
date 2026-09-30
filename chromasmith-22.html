@@ -2344,6 +2344,8 @@ body.sk2 .look-cell.kbd-focus{outline:1px solid var(--k-color-muted);outline-off
 body.sk2 .look-cat-hdr{grid-column:1/-1;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);padding:14px 0 0;border:0;background:none}
 body.sk2 #row-lut-mix{position:sticky;bottom:0;z-index:7;background:var(--k-color-bg);margin:14px 0 0!important;padding:12px 0 14px;box-shadow:0 -1px 0 var(--bdr)}
 /* The card header ("Presets") already collapses the section; a second "Preset" collapse row inside it was a duplicate. */
+body.sk2 .fx-title-count{margin-left:auto;margin-right:12px;font-size:12px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
+body.sk2 .fx-ctrl.fx-sec-collapsed>#fx-looks-ctrl{display:none!important} /* the Looks header folds the whole preset library (its inline display:block used to win) */
 body.sk2 #fx-preset-head{display:none!important}
 body.sk2 #fx-looks-ctrl.fx-preset-collapsed #fx-preset-body{display:block!important}
 body.sk2 .fx-preset-head{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);margin:18px 0 8px!important}
@@ -2824,7 +2826,7 @@ new MutationObserver(apply).observe(b,{attributes:true,attributeFilter:['class']
    jumps between the stage's stacked cards and follows the scroll. Called by fxSection (deskx). */
 const SK2_SUB={image:'Image',looks:'Looks',adjust:'Basic',curves:'Curves',hal:'Halation',bloom:'Bloom',hsl:'Mixer',wheels:'Wheels',
   pointcolor:'Point colour',grain:'Grain',nr:'Noise',deconv:'Sharpen',lens:'Lens',art:'Artifacts',vig:'Effects',retouch:'Retouch',
-  local:'Masks',crop:'Crop',borders:'Border',canvas:'Canvas',export:'Output',wm:'Watermark',exppreset:'Presets',style:'Styles',share:'Sharing'};
+  inprint:'Input & Prints',local:'Masks',crop:'Crop',borders:'Border',canvas:'Canvas',export:'Output',wm:'Watermark',exppreset:'Presets',style:'Styles',share:'Sharing'};
 function sk2SubTabs(g,jump){
   const panel=document.querySelector('.fx-panel');if(!panel)return;
   let h=document.getElementById('sk2-stage-h'),nav=document.getElementById('sk2-sub');
@@ -6703,7 +6705,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930G';
+const BUILD='1.0930H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21164,6 +21166,7 @@ function buildLookGallery(){
   // 'All' interleaves a header before each category; a specific filter shows just that group
   // (no headers needed, there's only one).
   const groups=groupedLutKeys();
+  {const n=groups.reduce((a,[,ks])=>a+ks.length,0),ce=document.getElementById('fx-looks-count');if(ce)ce.textContent=n+' presets';}
   let entries=[['','Original']];
   if(fxLookCatFilter==='All'){
     groups.forEach(([cat,keys])=>{
@@ -24147,8 +24150,31 @@ const FX_GROUPS={look:{label:'Look',icon:'looks',members:['image','looks']},
   light:{label:'Light',icon:'adjust',members:['adjust','curves','hal','bloom']},
   colour:{label:'Colour',icon:'hsl',members:['hsl','wheels','pointcolor']},
   texture:{label:'Texture',icon:'grain',members:['grain','nr','deconv','lens','art','vig','retouch','local']},
-  output:{label:'Output',icon:'export',members:['crop','borders','canvas','export','wm','exppreset','style','share']}};
+  output:{label:'Crop',icon:'crop',members:['crop','borders','canvas','export','wm','exppreset','style','share']}};
 const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEach(k=>FX_GROUP_OF[k]=g));
+// Desktop/web panel: the Looks card is two tools, not one — the preset library ("Looks", with its
+// count) and the source/print settings under it ("Input & Prints"). Split here, before the section
+// list is read, by moving the existing Input / Highlight response / Print nodes into their own card.
+// Phones keep the single Looks card (their sheet shows one card per tool).
+(function fxSplitLooksCard(){
+  if(!document.body.classList.contains('deskx'))return;
+  const looks=document.querySelector('.fx-ctrl[data-fxsec="looks"]');if(!looks||document.querySelector('.fx-ctrl[data-fxsec="inprint"]'))return;
+  const ids=['sel-input','chips-input','sel-tonemap','chips-tonemap','fx-hdr-preview-row','sel-print','chips-print'];
+  const nodes=ids.map(i=>document.getElementById(i)).filter(Boolean);
+  const labels=[...looks.querySelectorAll(':scope > .fx-label')].filter(l=>['Input','Highlight response','Print'].includes(l.textContent.trim()));
+  const all=[...nodes,...labels].filter(n=>n.parentElement===looks||n.closest('.fx-ctrl')===looks);
+  if(!all.length)return;
+  all.sort((a,b)=>a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING?-1:1);
+  const card=document.createElement('div');card.className='fx-ctrl';card.dataset.fxsec='inprint';
+  const t=document.createElement('div');t.className='fx-ctrl-title';t.textContent='Input & Prints';card.appendChild(t);
+  all.forEach(n=>{card.appendChild(n);if(n.classList.contains('fx-label'))n.style.marginTop='10px';});
+  looks.insertAdjacentElement('afterend',card);
+  FX_SECTIONS.splice(FX_SECTIONS.findIndex(x=>x[0]==='looks')+1,0,['inprint','Input & Prints']);
+  FX_GROUPS.look.members.push('inprint');FX_GROUP_OF.inprint='look';
+  // Looks card: title carries the preset count.
+  const lt=looks.querySelector(':scope > .fx-ctrl-title');
+  if(lt){const c=document.createElement('span');c.className='fx-title-count';c.id='fx-looks-count';lt.appendChild(c);}
+})();
 // deskx rail: draw a hairline BEFORE each of these, so the rail reads as bands rather than one
 // undifferentiated list. With the FX_SECTIONS order above that yields:
 //   [Image Looks] [Adjust] [Color] [Detail Retouch] [Crop] [Masks] [Film] [Frame] [Export Info]
@@ -24564,6 +24590,7 @@ function _secIsEnabled(key){
   const tg=_SEC_TOGGLE[key];
   if(tg){const e=document.getElementById(tg);return !!(e&&e.classList.contains('on'));}
   if(key==='looks'){const s=document.getElementById('sel-lut');return !!(s&&s.value);}
+  if(key==='inprint')return ['sel-input','sel-tonemap','sel-print'].some(id=>{const e=document.getElementById(id);return !!(e&&e.value);});
   if(key==='crop'){const g=(typeof curGeom==='function')&&curGeom();return !!(g&&(g.rot||g.flipH||g.flipV||g.angle||g.crop));}
   return false;
 }
