@@ -746,7 +746,7 @@ document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',
 const tr=document.querySelector('.track'),bars=document.querySelectorAll('.prog i'),plab=document.querySelector('.plab'),
   pans=[...document.querySelectorAll('.panel[data-lab]')];
 const dist=()=>tr.scrollWidth-innerWidth;
-const heroIn=()=>{gsap.from('.hero-t',{yPercent:40,opacity:0,duration:1.4,ease:'expo.out'});gsap.from('.ph',{scale:.85,opacity:0,duration:1.4,ease:'expo.out',delay:.15});};
+const heroIn=()=>{};  // the raw photo is already in place when the section arrives; no fade-in
 /* intro: plays on load, holds (the light keeps breathing), scroll drives the vermilion curtain over it; scrolling back up returns to it */
 const reduce=still||matchMedia('(prefers-reduced-motion: reduce)').matches;
 if(!reduce){
