@@ -1,7 +1,7 @@
 <h1>Chromasmith</h1>
 
 **The app that does it all.\* A whole photo studio, wherever inspiration finds you.**
-<sub>\*Almost everything. Your ideas are still yours.</sub>
+<sub>\*ALMOST EVERYTHING. YOU STILL NEED TO TAKE THE PHOTOS.</sub>
 
 Make a look in a click or take control of every detail. Chromasmith is a free photo studio with
 113 calibrated film looks, real grain, halation and bloom, RAW development, masks and retouching,
@@ -18,7 +18,45 @@ and no server behind it.
 ![Licence GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-d4903a)
 ![No build step](https://img.shields.io/badge/build%20step-none-52c97a)
 
-![The Chromasmith studio with the Looks panel open](site/assets/ui/looks.webp)
+<p align="center"><img src="site/assets/story/main6-1600.webp" alt="A beach photograph, finished in Chromasmith with a film look, grain, halation and a double film frame" width="100%"></p>
+
+### From raw photo to finished frame
+
+<table>
+<tr>
+<td width="33%"><img src="site/assets/story/main1-1600.webp" alt="Raw photo"><br><sub><b>1 · Raw photo</b></sub></td>
+<td width="33%"><img src="site/assets/story/main2-1600.webp" alt="Edited"><br><sub><b>2 · Edit it</b></sub></td>
+<td width="33%"><img src="site/assets/story/main3-1600.webp" alt="Coloured"><br><sub><b>3 · Colour it</b></sub></td>
+</tr>
+<tr>
+<td><img src="site/assets/story/main4-1600.webp" alt="With grain"><br><sub><b>4 · Sprinkle some grain</b></sub></td>
+<td><img src="site/assets/story/main5-1600.webp" alt="With halation and bloom"><br><sub><b>5 · Make it glow</b></sub></td>
+<td><img src="site/assets/story/main6-1600.webp" alt="With a double film frame"><br><sub><b>6 · Frame it twice</b></sub></td>
+</tr>
+</table>
+
+### A gallery for every shoot
+
+Faces, pets, favourites and keywords are found for you, on your own machine. Click a photo to preview it, or try a filter.
+
+<img src="site/assets/homepage/gallery.webp" alt="The Chromasmith gallery: a grid of photos with All, Tareq, Lucifer, Fav, Rejected and Beach filters" width="100%">
+
+### A studio for every frame
+
+Six tools, one editor: pick a look, shape the light and colour, add texture, then crop and frame for output.
+
+<table>
+<tr>
+<td width="33%"><img src="site/assets/homepage/studio-1.webp" alt="Look panel"><br><sub><b>Look</b> · film presets and print</sub></td>
+<td width="33%"><img src="site/assets/homepage/studio-2.webp" alt="Light panel"><br><sub><b>Light</b> · tone, curves, halation, bloom</sub></td>
+<td width="33%"><img src="site/assets/homepage/studio-3.webp" alt="Colour panel"><br><sub><b>Colour</b> · mixer, wheels, point colour</sub></td>
+</tr>
+<tr>
+<td><img src="site/assets/homepage/studio-4.webp" alt="Texture panel"><br><sub><b>Texture</b> · grain, sharpen, noise, masks</sub></td>
+<td><img src="site/assets/homepage/studio-5.webp" alt="Output panel"><br><sub><b>Output</b> · crop, borders, film frames</sub></td>
+<td><img src="site/assets/homepage/studio-6.webp" alt="Info panel"><br><sub><b>Info</b> · camera details, keywords, tags</sub></td>
+</tr>
+</table>
 
 ### Same frame. A different feeling.
 
@@ -26,7 +64,7 @@ and no server behind it.
 |---|---|
 | ![Original photo](site/assets/story/original.webp) | ![The same photo, graded with Classic Neg, subtle grain and halation](site/assets/story/studio.webp) |
 
-<sub>Sample photograph. The right-hand image is a genuine export: Classic Neg, subtle grain and halation.</sub>
+<sub>Sample photographs. The right-hand image is a genuine export: Classic Neg, subtle grain and halation.</sub>
 
 ---
 
@@ -102,8 +140,8 @@ every feature.
 | Film looks, one tap | Masks and local adjustments |
 | ![Colour](site/assets/ui/color.webp) | ![Film](site/assets/ui/film.webp) |
 | Tone curves and colour mixer | Grain, halation and artifacts |
-| ![Library](site/assets/ui/library.webp) | ![Phone](site/assets/ui/mobile.webp) |
-| The desktop photo library | The same app on a phone |
+| ![Gallery](site/assets/homepage/gallery-faces.webp) | ![Phone](site/assets/ui/mobile.webp) |
+| The gallery, filtered to one person | The same app on a phone |
 
 <sub>Captured from the running app with `node site/shoot-screenshots.mjs`, using a sample photograph.</sub>
 
