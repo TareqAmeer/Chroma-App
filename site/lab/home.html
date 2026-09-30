@@ -848,16 +848,16 @@ pans.forEach(p=>{
 {
   const L='../assets/lib/',HEART='<svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"/></svg>';
   // t = Tareq, l = Lucifer, f = favourite, r = rejected, b = beach
-  const META=[['01','l b f','Lucifer, West Pier',1.459],['20','','',.679],['03','t l','',.761],['04','r','',1.477],['11','','',.679],['07','l','',1.459],['08','t l f','Louvre',1.459],['main6','b f','Brighton beach',1.459],['22','','',1.459],['12','b','',1.459],['13','l b','',1.459],['14','l f','',1.459],['17','r','',1.459],['18','t l f','',1.459],['19','r','',.679],['23','r','',.679],['24','l f','',2.477],['25','','',1.497]];
-  const PHOTOS=META.map(([id,tg,nm,ar])=>({id,ar,tags:tg.split(' '),name:nm,thumb:id==='main6'?'../assets/story/main6-t.webp':L+'lib'+id+'.webp',full:id==='main6'?'../assets/story/main6.webp':L+'full/lib'+id+'.webp'}));
+  const META=[['01','l b f','Lucifer, West Pier',1.459],['20','','',.679,'50% 100%'],['03','t l','',.761],['04','r','',1.477],['11','','',.679,'50% 12%'],['07','l','',1.459],['08','t l f','Louvre',1.459],['main6','b f','Brighton beach',1.459],['22','','',1.459],['12','b','',1.459],['13','l b','',1.459],['14','l f','',1.459],['17','r','',1.459],['18','t l f','',1.459],['19','r','',.679],['23','r','',.679],['24','l f','',2.477],['25','','',1.497]];
+  const PHOTOS=META.map(([id,tg,nm,ar,pos])=>({id,ar,pos,tags:tg.split(' '),name:nm,thumb:id==='main6'?'../assets/story/main6-t.webp':L+'lib'+id+'.webp',full:id==='main6'?'../assets/story/main6.webp':L+'full/lib'+id+'.webp'}));
   const src=PHOTOS.map(x=>x.thumb);
   const looks=['none','grayscale(1) contrast(1.15)','sepia(.45) saturate(1.3)','saturate(1.4) hue-rotate(-12deg)','contrast(1.2) brightness(.9)','sepia(.2) hue-rotate(160deg) saturate(.8)'];
   const mob=innerWidth<760,board=document.querySelector('.board'),N=mob?9:18,C=mob?3:6,RW=3,panel=document.querySelector('.p1'),tiles=[];
   for(let i=0;i<N;i++){
     const t=document.createElement('div');t.className='tile';t.style.setProperty('--d',(-i*.37)+'s');
-    const ph_=PHOTOS[i%PHOTOS.length];t.dataset.tags=ph_.tags.join(' ');t.dataset.full=ph_.full;t.dataset.name=ph_.name;if(ph_.tags.includes('r'))t.classList.add('isrej');
+    const ph_=PHOTOS[i%PHOTOS.length];t.dataset.tags=ph_.tags.join(' ');t.dataset.full=ph_.full;t.dataset.name=ph_.name;t.dataset.pos=ph_.pos||'';if(ph_.tags.includes('r'))t.classList.add('isrej');
     t.innerHTML=`<div class="f"><img src="${ph_.thumb}" alt="${ph_.name||'Gallery photo'}" decoding="async">${ph_.tags.includes('f')?'<span class="fav mono">'+HEART+'Fav</span>':''}${ph_.tags.includes('r')?'<span class="rej mono">✕ Rej</span>':''}<span class="cap mono"><span>IMG_${4100+i*7}</span><span>${ph_.tags.includes('f')?'♥':'★'+(3+i%3)}</span></span></div>`;
-    board.appendChild(t);tiles.push(t);
+    if(ph_.pos){const im=t.querySelector('img');im.style.objectPosition=ph_.pos;im.style.transformOrigin=ph_.pos.replace('100%','85%')}board.appendChild(t);tiles.push(t);
   }
   const MI=PHOTOS.findIndex(x=>x.id==='main6');window.__tile0=tiles[MI];tiles[MI].style.visibility='hidden';window.__gal=PHOTOS;
   const rnd=(i,k)=>{const x=Math.sin(i*127.1+k*311.7)*43758.5453;return x-Math.floor(x)};
