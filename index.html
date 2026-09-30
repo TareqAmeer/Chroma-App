@@ -46,9 +46,13 @@ a{color:inherit}
 .word .t{margin:0;max-width:none}
 .word svg{width:34px;height:34px;transition:transform .4s var(--ease)}.word:hover svg{transform:translate(-2px,-2px)}
 .top nav a:last-child{color:var(--acc);opacity:1}
+.sec{position:relative;font-size:14px;font-weight:500}.sec summary{list-style:none;cursor:pointer;opacity:.8;user-select:none}.sec summary::-webkit-details-marker{display:none}.sec summary:hover,.sec[open] summary{opacity:1}.sec summary i{font-style:normal;font-size:11px;display:inline-block;transition:transform .2s}.sec[open] summary i{transform:rotate(180deg)}
+.sec .menu{position:absolute;top:calc(100% + 12px);left:-14px;min-width:190px;display:flex;flex-direction:column;gap:2px;padding:8px;background:rgba(11,11,10,.96);border:1px solid rgba(242,239,232,.14);backdrop-filter:blur(12px)}
+.sec .menu a{padding:8px 10px;color:#f2f0ea;opacity:.85}.sec .menu a:hover{opacity:1;background:rgba(242,239,232,.08)}
+@media(max-width:700px){.top nav{gap:16px}.sec .menu{left:auto;right:-60px}}
 .top nav{display:flex;gap:22px;font-size:14px;font-weight:500}
 .top nav a{text-decoration:none;opacity:.8}.top nav a:hover{opacity:1}
-@media(max-width:700px){.top nav a:not(:last-child){display:none}}
+@media(max-width:700px){.top nav>a:not(:last-child){display:none}}
 
 /* 1. pinned stage: develop, grow, then sideways chapters */
 .pin{height:100vh;overflow:hidden;position:relative}
@@ -480,13 +484,13 @@ section{position:relative}
 
 <header class="top">
   <a class="word" href="#"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="hdc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="hda" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#hdc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#hda)"/><polygon points="69,32 69,65 36,65" fill="url(#hdb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg><span class="t">CHRO-MA-SMITH</span></a>
-  <nav><a href="#features">Features</a><a href="#faq">FAQ</a><a href="https://github.com/TareqAmeer/Chroma-App" target="_blank" rel="noopener" data-goatcounter-click="github-nav" data-goatcounter-title="github-nav">GitHub ↗</a><a href="#yours">Download</a><a href="chromasmith-22.html">Launch app ↗</a></nav>
+  <nav><details class="sec"><summary>Sections <i aria-hidden="true">▾</i></summary><div class="menu"><a href="#tour">Tour</a><a href="#looks">Film looks</a><a href="#flow">The old workflow</a><a href="#maker">Maker</a><a href="#features">Every tool</a><a href="#beta">In beta</a><a href="#faq">FAQ</a><a href="#yours">Download</a></div></details><a href="#features">Features</a><a href="#faq">FAQ</a><a href="https://github.com/TareqAmeer/Chroma-App" target="_blank" rel="noopener" data-goatcounter-click="github-nav" data-goatcounter-title="github-nav">GitHub ↗</a><a href="#yours">Download</a><a href="chromasmith-22.html">Launch app ↗</a></nav>
 </header>
 
 <section class="lead" aria-label="CHRO-MA-SMITH"><h1 class="hero-t">The app that<br>does it all<sup>*</sup></h1>
   <p class="mono foot">*ALMOST EVERYTHING. YOU STILL NEED TO TAKE THE PHOTOS.</p></section>
 
-<section class="pin" aria-label="CHRO-MA-SMITH tour">
+<section class="pin" id="tour" aria-label="CHRO-MA-SMITH tour">
   <div class="ph">
     <img src="site/assets/story/main1-2400.webp" srcset="site/assets/story/main1-1600.webp 1600w, site/assets/story/main1-2400.webp 2400w, site/assets/story/main1.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="Raw, unedited beach photo" decoding="async">
     <img class="st" src="site/assets/story/main2-2400.webp" srcset="site/assets/story/main2-1600.webp 1600w, site/assets/story/main2-2400.webp 2400w, site/assets/story/main2.webp 3200w" sizes="(max-width:760px) 92vw, 80vw" alt="" decoding="async">
@@ -525,7 +529,7 @@ section{position:relative}
   <div class="prog"><b><i></i></b><b><i></i></b></div>
 </section>
 
-<section class="ticker" aria-label="Film looks">
+<section class="ticker" id="looks" aria-label="Film looks">
   <div class="hd"><div><h2 class="k lookn"><span class="cnt" data-n="133">100</span> film<br>looks.</h2><p class="t" style="margin-top:18px">Select a film look to test it out.</p></div>
     <figure><img loading="lazy" id="tkimg" src="site/assets/story/main2-m.webp" alt="Sample photo previewing a look" style="filter:grayscale(1) contrast(1.3) brightness(.95)"><figcaption class="dcap"><span>Look</span><b id="tkname">Tri-X 400</b></figcaption></figure></div>
   <div class="tape"><button type="button" data-i="0">Tri-X 400</button><button type="button" data-i="1">Beach</button><button type="button" data-i="2">Classic Chrome</button><button type="button" data-i="3">Velvia 50</button><button type="button" data-i="4">Portra 400</button><button type="button" data-i="5">HP5 Plus</button><button type="button" data-i="6">Superia 400</button><button type="button" data-i="7">Kodachrome 64</button><button type="button" data-i="8">Acros 100</button><button type="button" data-i="9">Pro 400H</button><button type="button" data-i="10">Gold 200</button><button type="button" data-i="11">Lomo Purple</button><button type="button" data-i="12">Provia 100F</button><button type="button" data-i="13">Ektar 100</button><button type="button" data-i="14">Scala 200</button><button type="button" data-i="15">Classic Neg</button><button type="button" data-i="16">CineStill 800T</button><button type="button" data-i="17">Metropolis</button><button type="button" data-i="18">Pro 160C</button><button type="button" data-i="19">Ambrotype</button><button type="button" data-i="20">Vision3 500T</button><button type="button" data-i="21">Instax</button><button type="button" data-i="22">Prokudin-Gorsky</button><button type="button" data-i="23">Eterna</button><button type="button" data-i="0">Tri-X 400</button><button type="button" data-i="1">Beach</button><button type="button" data-i="2">Classic Chrome</button><button type="button" data-i="3">Velvia 50</button><button type="button" data-i="4">Portra 400</button><button type="button" data-i="5">HP5 Plus</button><button type="button" data-i="6">Superia 400</button><button type="button" data-i="7">Kodachrome 64</button><button type="button" data-i="8">Acros 100</button><button type="button" data-i="9">Pro 400H</button><button type="button" data-i="10">Gold 200</button><button type="button" data-i="11">Lomo Purple</button><button type="button" data-i="12">Provia 100F</button><button type="button" data-i="13">Ektar 100</button><button type="button" data-i="14">Scala 200</button><button type="button" data-i="15">Classic Neg</button><button type="button" data-i="16">CineStill 800T</button><button type="button" data-i="17">Metropolis</button><button type="button" data-i="18">Pro 160C</button><button type="button" data-i="19">Ambrotype</button><button type="button" data-i="20">Vision3 500T</button><button type="button" data-i="21">Instax</button><button type="button" data-i="22">Prokudin-Gorsky</button><button type="button" data-i="23">Eterna</button></div>
@@ -759,6 +763,7 @@ if(matchMedia('(pointer:coarse)').matches){
     lenis?lenis.scrollTo(to,{duration:Math.max(.9,Math.min(1.8,.9+Math.abs(to-y)/H*.6)),easing:x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2,lock:true}):scrollTo({top:to,behavior:'smooth'});
   });
 }
+document.querySelectorAll('.sec .menu a').forEach(a=>a.addEventListener('click',()=>a.closest('details').removeAttribute('open')));addEventListener('click',e=>{const d=document.querySelector('.sec[open]');d&&!d.contains(e.target)&&d.removeAttribute('open')});
 document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{const h=a.getAttribute('href');e.preventDefault();const tgt=h.length<2?0:h;lenis?lenis.scrollTo(tgt,{offset:-40}):(tgt?document.querySelector(tgt).scrollIntoView():scrollTo(0,0))}));
 
 /* 1. stage */
