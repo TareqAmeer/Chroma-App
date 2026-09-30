@@ -83,7 +83,7 @@ a{color:inherit}
 .lbar{position:absolute;left:0;right:0;top:0;height:64px;display:flex;gap:20px;align-items:flex-end;padding-bottom:12px;border-bottom:1px solid var(--ink,#0b0b0a);opacity:0}
 .lbar .gt{font-size:clamp(38px,4.2vw,72px);font-weight:700;letter-spacing:-.01em;line-height:.8}
 .lbar i{flex:1}.lbar::after{content:"";width:120px;height:22px;border:1px solid #33312c;border-radius:0}
-.tile{position:absolute;will-change:transform}
+.tile{position:absolute;will-change:transform}.board:not(.ready) .tile{pointer-events:none}
 .tile .f{width:100%;height:100%}
 .tile .f{overflow:hidden}
 .tile img{width:100%;height:100%;object-fit:cover;display:block;transform:scale(1.12)}
@@ -868,7 +868,7 @@ pans.forEach(p=>{
     let y=T;rows.forEach((rw,ri)=>{const h=hs[ri]*k,rowW=rw.reduce((a,x)=>a+x[1]*h,0)+g*(rw.length-1);let x=(W-rowW)/2;
       rw.forEach(([t,ar])=>{Object.assign(t.style,{width:ar*h+'px',height:h+'px',left:x+'px',top:y+'px'});x+=ar*h+g});y+=h+g})};
   layout();addEventListener('resize',()=>{layout();ScrollTrigger.refresh()});
-  const org=gsap.timeline({scrollTrigger:{start:()=>sPos()-innerHeight*.9,end:()=>sPos()+XH()*K(),scrub:1,invalidateOnRefresh:true}});
+  const org=gsap.timeline({onUpdate:()=>board.classList.toggle('ready',org.progress()>.98),scrollTrigger:{start:()=>sPos()-innerHeight*.9,end:()=>sPos()+XH()*K(),scrub:1,invalidateOnRefresh:true}});
   // start on screen (the track has not moved yet), then fly into the grid as it slides in
   const home=t=>panel.offsetLeft+board.offsetLeft+parseFloat(t.style.left||0);
   tiles.forEach((t,i)=>{const at=rnd(i,5)*.5;
