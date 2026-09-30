@@ -2626,14 +2626,22 @@ body.sk2 #lib-batchbar{box-shadow:none!important;border-width:1px 0 0!important}
 body.sk2.deskx #fx-toolrail{justify-content:center!important;align-items:center!important;padding-top:0!important}
 body.sk2.deskx #fx-toolrail .fx-rail-btn{width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;margin:0!important}
 body.sk2.deskx #fx-toolrail .fx-rail-lb{text-align:center}
-/* Edited tools get a hairline square around them (the 4px dot after the label was too easy to miss);
-   the current tool keeps its accent marker. More air between tools. */
+/* Rail states. Edited = grey bar that slides in from the rail's right edge behind icon + label.
+   Open tool = accent underline under its label (none while the tool panel is closed). */
 body.sk2.deskx #fx-toolrail{gap:18px!important}
 body.sk2.deskx #fx-toolrail .fx-rail-btn{padding:8px 3px!important}
-body.sk2 #fx-toolrail .fx-rail-btn.edited::before{display:block!important;background:none!important;border:1px solid var(--k-color-ink)!important;left:6px!important;right:6px!important;top:0!important;bottom:0!important}
+body.sk2 #fx-toolrail .fx-rail-btn::before,body.sk2 #fx-toolrail .fx-rail-btn.enabled::before{display:block!important;background:color-mix(in srgb,var(--k-color-ink) 12%,transparent)!important;border:0!important;outline:0!important;left:12px!important;right:-4px!important;top:2px!important;bottom:2px!important;clip-path:inset(0 0 0 100%);transition:clip-path .28s cubic-bezier(.2,.7,.2,1)}
+body.sk2 #fx-toolrail .fx-rail-btn.edited::before{clip-path:inset(0)}
+body.sk2 #fx-toolrail .fx-rail-btn.enabled:not(.edited){color:var(--k-color-muted)}
+body.sk2 #fx-toolrail .fx-rail-btn.enabled:not(.edited):hover{color:var(--k-color-ink)}
 body.sk2 #fx-toolrail .fx-rail-btn.enabled:not(.on) .fx-rail-lb::after{content:none!important}
 body.sk2 #fx-toolrail .fx-rail-btn.edited{color:var(--k-color-ink)}
-body.sk2 #fx-toolrail .fx-rail-btn.enabled:not(.edited)::before{border:0!important}
+body.sk2 #fx-toolrail .fx-rail-btn.on::after{content:none!important}
+body.sk2 #sk2-rail-mk{display:none!important}
+body.sk2 #fx-toolrail .fx-rail-lb{position:relative}
+body.sk2 #fx-toolrail .fx-rail-lb::after,body.sk2 #fx-toolrail .fx-rail-lb[data-ab]::after{content:''!important;position:absolute;left:0;right:0;bottom:-4px;height:2px;background:var(--k-color-accent-a);transform:scaleX(0);transform-origin:left;transition:transform .2s;font-size:0!important;margin:0!important;width:auto!important;display:block!important}
+body.sk2:not(.panel-closed) #fx-toolrail .fx-rail-btn.on .fx-rail-lb::after,body.sk2:not(.panel-closed) #fx-toolrail .fx-rail-btn.on .fx-rail-lb[data-ab]::after{transform:scaleX(1)}
+@media (prefers-reduced-motion:reduce){body.sk2 #fx-toolrail .fx-rail-btn::before,body.sk2 #fx-toolrail .fx-rail-lb::after{transition:none}}
 body.sk2 .fx-rail-btn{color:var(--k-color-muted)}
 body.sk2 .fx-rail-btn .fx-rail-ic{color:var(--k-color-ink)}
 /* Panel header: the stage title, sub-tabs and the current card title stay locked as one opaque
@@ -6684,7 +6692,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930X';
+const BUILD='1.0930Y';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as

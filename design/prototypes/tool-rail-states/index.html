@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tool rail states v3</title>
+<style>
+:root{--bg:#141414;--panel:#1b1b1a;--ink:#f2f0ea;--mut:#8d8b85;--acc:#ff3b1f;--line:#2e2d2a;color-scheme:dark}
+body.light{--bg:#f4f2ec;--panel:#fff;--ink:#111;--mut:#6b685f;--line:#dcd9d0;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.4 -apple-system,"Helvetica Neue",Inter,system-ui,sans-serif;padding:24px}
+h1{font-size:15px;font-weight:600;margin:0 0 4px}
+.sub{color:var(--mut);margin:0 0 16px;max-width:74ch}
+.bar{display:flex;gap:8px;margin-bottom:20px}
+.bar button{background:none;border:1px solid var(--line);color:var(--ink);padding:5px 10px;font:inherit;cursor:pointer}
+.row{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:18px 0 6px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.card{background:var(--panel);padding:14px 0 10px}
+.card h2{font-size:12px;margin:0 14px 12px;font-weight:600}
+.card h2 i{font-style:normal;color:var(--mut);margin-right:6px}
+.rail{display:flex;flex-direction:column;gap:10px;width:104px;margin:0 auto;border-right:1px solid var(--mut)}
+.t{all:unset;box-sizing:border-box;cursor:pointer;position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 3px;height:62px;color:var(--mut);transition:color .15s}
+.t svg,.t span{position:relative;z-index:1}
+.t svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.t span{font-size:13px;white-space:nowrap}
+.t:hover{color:var(--ink)}
+/* selected: accent underline under the tool name */
+.t span::after{content:"";position:absolute;left:0;right:0;bottom:-4px;height:2px;background:var(--acc);transform:scaleX(0);transform-origin:left;transition:transform .2s}
+.t.on{color:var(--ink)}.t.on span::after{transform:scaleX(1)}
+.t:hover:not(.on) span::after{transform:scaleX(1);background:var(--mut);height:1px}
+/* edited: bar slides in from the right border */
+.t::before{content:"";position:absolute;right:0;background:var(--bar,transparent);clip-path:inset(0 0 0 100%);transition:clip-path .28s cubic-bezier(.2,.7,.2,1)}
+.t.ed::before{clip-path:inset(0 0 0 0)}
+.t.ed{color:var(--ink)}
+/* chosen: ink wash behind both, plus a tiny accent square */
+.t::before{top:2px;bottom:2px;left:12px;--bar:color-mix(in srgb,var(--ink) 12%,transparent)}
+.t::after{content:"";position:absolute;width:12px;height:12px;background:var(--acc);opacity:0;transition:opacity .2s .15s}
+.t.ed::after{opacity:1}
+.p1 .t::after{top:6px;right:4px}
+.p2 .t::after{bottom:6px;right:4px}
+.p3 .t::after{top:6px;left:16px}
+.p4 .t::after{bottom:6px;left:16px}
+.p5 .t::after{top:50%;margin-top:-6px;right:4px}
+.p6 .t::after{top:50%;margin-top:-6px;left:16px}
+.p7 .t::after{top:10px;left:calc(50% + 14px)}
+.p8 .t::after{bottom:10px;right:4px}
+.tip{color:var(--mut);font-size:11.5px;margin-top:16px}
+</style></head><body>
+<h1>Tool rail — wash bar + accent square positions</h1>
+<p class="sub">Selected: accent underline under the name. Edited: ink-wash bar from the right border behind icon and text (your pick, 11) plus a 12px accent square inside the bar, in eight positions. Click to select; right-click or Alt-click toggles edited. Texture and Output start edited; Output is also selected.</p>
+<div class="bar"><button id="th">Light / dark</button><button id="rs">Reset</button></div>
+<div id="root"></div>
+<script>
+const ic={
+Look:'<path d="M10 4l-6 6M16 4L4 16M20 6L8 18M20 12l-6 6"/>',
+Light:'<path d="M4 8h16M4 16h16"/><path d="M9 6l-1 4h4l1-4zM15 14l-1 4h4l1-4z"/>',
+Colour:'<circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16M6.3 6.3l11.4 11.4M17.7 6.3L6.3 17.7" opacity=".7"/>',
+Texture:'<path d="M6 7l1 1M10 5l1 1M14 8l1 1M8 11l1 1M12 12l1 1M6 15l1 1M10 17l1 1M16 16l1 1" stroke-width="1.8"/>',
+Output:'<path d="M5 9v10h10M10 14L19 5M12 5h7v7"/>',
+Info:'<path d="M4 20h16M12 20v-7M12 13l-1-5 3-1 1 4z"/>'};
+const T=[['Look',''],['Light',''],['Colour',''],['Texture','ed'],['Output','on ed'],['Info','']];
+const pos=['Top-right corner','Bottom-right corner','Top-left corner','Bottom-left corner','Right-edge middle','Left-edge middle','Beside the icon','Bottom-right, low'];
+const root=document.getElementById('root');
+function build(){root.innerHTML='';const g=document.createElement('div');g.className='grid';
+pos.forEach((pl,k)=>{const c=document.createElement('div');c.className='card p'+(k+1);
+c.innerHTML=`<h2><i>${String(k+1).padStart(2,'0')}</i>${pl}</h2><div class="rail">${T.map(([nm,st])=>`<button class="t ${st}"><svg viewBox="0 0 24 24">${ic[nm]}</svg><span>${nm}</span></button>`).join('')}</div>`;
+c.querySelectorAll('.t').forEach(b=>{b.onclick=e=>{if(e.altKey){b.classList.toggle('ed');return}
+c.querySelectorAll('.t').forEach(x=>x.classList.remove('on'));b.classList.add('on')};
+b.oncontextmenu=e=>{e.preventDefault();b.classList.toggle('ed')}});g.appendChild(c)});
+root.appendChild(g)}
+build();
+document.getElementById('th').onclick=()=>document.body.classList.toggle('light');
+document.getElementById('rs').onclick=build;
+</script></body></html>
