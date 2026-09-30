@@ -849,7 +849,7 @@ const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scroll
 pans.forEach(p=>{
   const st=()=>xPos(Math.max(0,p.offsetLeft-innerWidth)),en=()=>xPos(p.offsetLeft+p.offsetWidth);
   const o=()=>({scrub:true,invalidateOnRefresh:true,start:st,end:en});
-  gsap.fromTo(p.querySelectorAll('.k,.t,.p1txt .mono,.panel>div>.mono,.in>.mono,.tags,.looks,.terms'),{x:60},{x:-30,ease:'none',scrollTrigger:o()});
+  if(!p.classList.contains('p2'))gsap.fromTo(p.querySelectorAll('.k,.t,.p1txt .mono,.panel>div>.mono,.in>.mono,.tags,.looks,.terms'),{x:60},{x:-30,ease:'none',scrollTrigger:o()});
     gsap.fromTo(p.querySelectorAll('.big'),{x:160},{x:-80,ease:'none',scrollTrigger:o()});
 });
 
