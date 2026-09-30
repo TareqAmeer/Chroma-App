@@ -9,6 +9,22 @@
 // the browser then upscales a 1x-resolution bitmap to fill a larger CSS box.
 import { bootEditor } from './editor_state_harness.mjs';
 
+// Swiss v2 folds the histogram, curves and wheels into collapsed sections/tool groups, so a canvas is
+// only measurable after its own section is opened. Read each one after opening its section.
+async function readAll(page) {
+  const out = {};
+  for (const id of CANVAS_IDS) {
+    await page.evaluate((id) => {
+      const el = document.getElementById(id); if (!el) return;
+      if (id === 'fx-hist' && typeof fxHistOn !== 'undefined' && !fxHistOn && typeof toggleHist === 'function') toggleHist(); // the histogram overlay only exists on the preview while toggled on
+      const det = el.closest('details'); if (det) det.open = true;
+      const sec = el.closest('[data-fxsec]'); if (sec && typeof fxSection === 'function') fxSection(sec.dataset.fxsec);
+    }, id);
+    await page.waitForTimeout(250);
+    Object.assign(out, await page.evaluate(readCanvasBacking, [id]));
+  }
+  return out;
+}
 const CANVAS_IDS = ['fx-hist', 'cv-curve', 'cv-wheel-lift', 'cv-wheel-gamma', 'cv-wheel-gain', 'fx-canvas'];
 
 function readCanvasBacking(ids) {
@@ -22,13 +38,13 @@ function readCanvasBacking(ids) {
   return out;
 }
 
-const b = await bootEditor();
+const b = await bootEditor({ withPhoto: true });
 const { page } = b;
 
 // Baseline at 1x.
 await page.evaluate(() => { if (typeof renderPreview === 'function') renderPreview(); if (typeof drawHistogram === 'function') drawHistogram(); });
 await page.waitForTimeout(300);
-const base = await page.evaluate(readCanvasBacking, CANVAS_IDS);
+const base = await readAll(page);
 
 const findings = [];
 for (const dpr of [2, 3]) {
@@ -41,7 +57,7 @@ for (const dpr of [2, 3]) {
   await page.evaluate(() => window.dispatchEvent(new Event('resize')));
   await page.waitForTimeout(300);
 
-  const after = await page.evaluate(readCanvasBacking, CANVAS_IDS);
+  const after = await readAll(page);
   for (const id of CANVAS_IDS) {
     const b0 = base[id], a = after[id];
     if (!a || !a.visible) { findings.push({ dpr, id, kind: 'MISSING', detail: 'not present/visible to check' }); continue; }

@@ -66,7 +66,7 @@ function auditClipping() {
   return out;
 }
 
-const b = await bootEditor();
+const b = await bootEditor({ withPhoto: true }); // the deskbar title (and its folds) only exist with a photo open
 const { page } = b;
 const findings = [];
 

@@ -6636,7 +6636,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930N';
+const BUILD='1.0930O';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13563,7 +13563,8 @@ function appHSync(){
   const sig=()=>[...document.body.classList].filter(c=>!c.startsWith('fx-deskbar-')).join(' ');let lastSig=sig();
   new MutationObserver(()=>{const n=sig();if(n!==lastSig){lastSig=n;requestAnimationFrame(sync);}}).observe(document.body,{attributes:true,attributeFilter:['class']});
   const lay=document.querySelector('.fx-layout');if(lay)new MutationObserver(()=>requestAnimationFrame(sync)).observe(lay,{attributes:true,attributeFilter:['style']});
-  const tt=document.getElementById('db-title-name');if(tt)new MutationObserver(()=>requestAnimationFrame(sync)).observe(tt,{childList:true,characterData:true,subtree:true});
+  // any text change in the bar (file name, status, dimensions) changes what has to fit
+  new MutationObserver(()=>requestAnimationFrame(sync)).observe(bar,{childList:true,characterData:true,subtree:true});
   window.addEventListener('resize',sync);
   sync();
 })();
@@ -17858,8 +17859,10 @@ function drawHistogram(){
 }
 function drawScopeHistogram(hc,px){
   const W=180,H=80,N=256;
-  hc.width=W;hc.height=H;
-  const ctx=hc.getContext('2d');
+  // Backing store at device pixels (CSS size stays 180x80) so the traces stay crisp on Retina.
+  const dpr=Math.max(1,Math.min(3,window.devicePixelRatio||1));
+  hc.width=Math.round(W*dpr);hc.height=Math.round(H*dpr);hc.style.width=W+'px';hc.style.height=H+'px';
+  const ctx=hc.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
   const rH=new Float32Array(N),gH=new Float32Array(N),bH=new Float32Array(N);
   for(let i=0;i<px.length;i+=4){rH[px[i]]++;gH[px[i+1]]++;bH[px[i+2]]++;}
   const peak=Math.max(1,...rH,...gH,...bH);
