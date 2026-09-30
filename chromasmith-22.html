@@ -2498,7 +2498,7 @@ body.sk2 .sk2-dup-title>.fx-ctrl-title>:not(.fx-ctrl-chev){order:2}
 /* 16 · Titles left, Reset beside them; ratios on a two-column grid. */
 body.sk2 .fx-ctrl-title{justify-content:flex-start!important;text-align:left!important}
 body.sk2 .fx-ctrl-title>.fx-title-right,body.sk2 .fx-ctrl-title>.fx-toggle{margin-left:auto}
-body.sk2 #crop-ar-chips{display:grid!important;grid-template-columns:1fr 1fr;gap:2px 16px!important}
+body.sk2 .fx-ctrl:not(.fx-sec-collapsed)>#crop-ar-chips{display:grid!important;grid-template-columns:1fr 1fr;gap:2px 16px!important}
 body.sk2 #crop-ar-chips>.btn{text-align:left;justify-self:start}
 /* 17 · Mixer bands as filled squares, the chosen one marked underneath. */
 body.sk2 .hsl-chip{background:var(--band-col)!important;border:0!important;border-radius:0!important;box-shadow:none!important;outline:0!important;height:22px!important;position:relative;opacity:.55}
@@ -6643,7 +6643,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930T';
+const BUILD='1.0930U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
