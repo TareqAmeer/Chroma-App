@@ -23,7 +23,7 @@ try {
   if (!restored?.includes('×')) failures.push(`completion did not restore photo dimensions: ${restored}`);
 
   const narrow = await page.evaluate(() => {
-    document.getElementById('fx-deskbar-title').style.display = 'none';
+    document.getElementById('fx-deskbar-title').style.setProperty('display', 'none', 'important'); // Swiss v2 forces display:flex!important, so a plain inline none no longer hides it
     fxDeskbarTitle(curItem().name, 'Opening photo…', true);
     const status = document.getElementById('fx-photo-work-status');
     return { statusVisible: !!status && !status.hidden, text: status?.textContent, live: status?.getAttribute('aria-live') };
@@ -31,7 +31,7 @@ try {
   if (!narrow.statusVisible || !narrow.text?.includes('Opening photo…') || narrow.live !== 'polite') failures.push(`hidden title has no visible accessible local loading status: ${JSON.stringify(narrow)}`);
   await page.evaluate(() => {
     fxDeskbarTitle(curItem().name, fxDimsFmt(curItem().name, curItem().img, curItem().ext), false);
-    document.getElementById('fx-deskbar-title').style.display = '';
+    document.getElementById('fx-deskbar-title').style.removeProperty('display');
   });
   if (await page.locator('#fx-photo-work-status').isVisible()) failures.push('narrow viewport loading status did not clear');
 

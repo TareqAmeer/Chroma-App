@@ -1,0 +1,18 @@
+/* Swiss v2 override layer — loaded AFTER the legacy SF Pro / Blue Slate tokens so the wireframes
+   describe the shipped design (Gramatika, ink + orange, square corners). Values mirror
+   design/tokens.json (the app's source of truth); when that file changes, change this too. */
+@font-face{font-family:"Gramatika";font-style:normal;font-weight:100 900;font-display:swap;src:url("../../../../../../vendor/fonts/gramatika/GramatikaBold.otf") format("opentype")}
+:root{
+--font-display:"Gramatika",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+--font-text:"Gramatika",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+/* brand: orange accent replaces the Blue Slate / Blue Mist pair */
+--primary:#ff3b1f;--primary-focus:#ff3b1f;--primary-active:#e02d14;--primary-on-dark:#ff3b1f;
+--accent:#ff3b1f;--text-link:#ff3b1f;--text-link-on-dark:#ff3b1f;
+/* ink + paper */
+--ink:#111111;--text-on-dark:#f2f0ea;--ink-on-dark:#f2f0ea;--on-dark:#f2f0ea;--text-muted:#8d8b85;
+--canvas:#f4f2ec;--canvas-parchment:#eeeeee;--surface-page:#f4f2ec;--surface-alt:#eeeeee;
+/* dark editor surfaces */
+--surface-tile-1:#141414;--surface-tile-2:#1c1c1c;--surface-tile-3:#141414;--surface-inverse:#141414;
+/* square corners everywhere */
+--radius-xs:0px;--radius-sm:0px;--radius-md:0px;--radius-lg:0px;--radius-pill:0px;--radius-full:0px;
+}
