@@ -7090,23 +7090,34 @@
     }
     let clipState = 'none'; // 'loading' | 'ready' | 'none' (not analyzed / no id)
     let aiTags = []; // [{term, score}] — what the AI sees in the photo, shown as its own section
-    if (entry.id != null) {
-      if (!state.clipTags.has(entry.id)) {
+    // Keyed by catalog id when the grid row has one, else by path: a row can lack an id (opened
+    // from a live folder listing before the catalog has caught up) while the photo is in fact
+    // indexed, and the backend resolves by path anyway — so ask it instead of giving up.
+    const clipKey = entry.id != null ? entry.id : 'p:' + path;
+    let clipPid = entry.id != null ? entry.id : null;
+    {
+      if (!state.clipTags.has(clipKey)) {
         clipState = 'loading';
-        state.clipTags.set(entry.id, null); // placeholder so we don't refetch while the real request is in flight
+        state.clipTags.set(clipKey, null); // placeholder so we don't refetch while the real request is in flight
         invoke('catalog_photo_tag_info', { path })
           .then(async (info) => {
             // Detected tags were just written as real keywords — reload this photo's sidecar
             // so the Keywords chips (and the sidebar's keyword counts) show them.
             if (info && info.keywords_added) { state.sidecars.delete(path); await getSidecar(path).catch(() => {}); refreshCatalogCounts(); }
-            return info && info.analyzed ? info.tags : [];
+            const tags = info && info.analyzed ? info.tags : [];
+            tags.pid = info ? info.photo_id : null;
+            return tags;
           })
-          .then((hits) => { state.clipTags.set(entry.id, hits || []); if (state.showInfo) renderInfoPanel(); })
-          .catch(() => { state.clipTags.set(entry.id, []); });
+          .then((hits) => { state.clipTags.set(clipKey, hits || []); if (state.showInfo) renderInfoPanel(); })
+          .catch(() => { state.clipTags.set(clipKey, []); });
       } else {
-        const hits = state.clipTags.get(entry.id);
+        const hits = state.clipTags.get(clipKey);
         if (hits === null) clipState = 'loading';
-        else if (hits.length) { clipState = 'ready'; aiTags = hits; }
+        else {
+          if (hits.pid != null) clipPid = hits.pid;
+          if (hits.length) { clipState = 'ready'; aiTags = hits; }
+          else if (clipPid == null) clipState = 'unindexed';
+        }
       }
     }
     // Library keywords this photo's neighbours in the current view already carry — the usual
@@ -7125,7 +7136,7 @@
     // state — tags, indexing, or an Analyze button — never silently absent.
     const aiShown = aiTags.filter((h) => !kwLeaves.has(h.term.toLowerCase()));
     const aiChips = `<div class="lib-info-sec"><div class="lib-info-sec-h"><span>In this photo</span>`
-      + (clipState === 'none' && entry.id != null ? `<button class="lib-info-link" id="lib-info-analyze" title="Let the AI look at this photo now">Analyze now</button>` : '')
+      + (clipState === 'none' && clipPid != null ? `<button class="lib-info-link" id="lib-info-analyze" title="Let the AI look at this photo now">Analyze now</button>` : '')
       + (aiShown.length > 1 ? `<button class="lib-info-link" id="lib-info-ai-all" title="Save every detected tag as a keyword">Add all</button>` : '')
       + `</div>`
       + (aiShown.length
@@ -7134,7 +7145,7 @@
           + `</div>`
         : `<div class="lib-info-hint">${clipState === 'loading' ? 'Checking…'
           : clipState === 'ready' ? 'All detected tags are saved as keywords.'
-          : entry.id == null ? 'Add this folder to the gallery to auto-tag it.'
+          : clipState === 'unindexed' ? 'This photo isn\'t in the library index yet — it will be tagged once scanning reaches it.'
           : 'Not tagged yet — photos are tagged automatically in the background.'}</div>`)
       + `</div>`;
     const suggestChips = aiChips + (!sugg.length ? '' : `<div class="lib-info-sec"><div class="lib-info-sec-h"><span>Suggested</span>`
@@ -7145,7 +7156,7 @@
             + `${suggIcon(h.kind)}${esc(h.term.split('|').pop())}<span class="lib-kw-suggest-chip-add">+</span></span>`).join('')
           + `</div>`
         : `<div class="lib-info-hint">${clipState === 'loading' ? 'Looking for suggestions…'
-          : entry.id == null ? 'Add this folder to the gallery to get suggestions.'
+          : clipState === 'unindexed' ? 'Suggestions appear once this photo has been indexed.'
           : 'No suggestions yet — analyze the photo to get some.'}</div>`)
       + `</div>`);
     // Autocomplete against every keyword path already known to the catalog — best-effort
@@ -7180,8 +7191,8 @@
     if (an) an.onclick = async (e) => {
       e.stopPropagation();
       an.disabled = true; an.textContent = 'Analyzing…';
-      try { await invoke('catalog_clip_embed', { photoIds: [entry.id] }); } catch (err) { toast('Could not analyze this photo'); }
-      state.clipTags.delete(entry.id);
+      try { await invoke('catalog_clip_embed', { photoIds: [clipPid] }); } catch (err) { toast('Could not analyze this photo'); }
+      state.clipTags.delete(clipKey);
       if (state.showInfo) renderInfoPanel();
     };
     const addInput = document.getElementById('lib-info-kw-add');
