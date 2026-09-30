@@ -2342,7 +2342,7 @@ body.sk2 #fx-looks-search:focus{border-bottom-color:var(--k-color-ink);outline:n
 body.sk2 .look-cell canvas{display:block;width:100%;height:auto}
 body.sk2 .look-cell.kbd-focus{outline:1px solid var(--k-color-muted);outline-offset:2px}
 body.sk2 .look-cat-hdr{grid-column:1/-1;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);padding:14px 0 0;border:0;background:none}
-body.sk2 #row-lut-mix{position:sticky;bottom:0;z-index:7;background:var(--k-color-bg);margin:14px 0 0!important;padding:12px 0 14px;box-shadow:0 -1px 0 var(--bdr)}
+body.sk2 #row-lut-mix{position:sticky;bottom:-8px;z-index:7;background:var(--k-color-bg);margin:14px 0 0!important;padding:12px 0 22px;box-shadow:0 -1px 0 var(--bdr)}
 /* The card header ("Presets") already collapses the section; a second "Preset" collapse row inside it was a duplicate. */
 body.sk2 .fx-title-count{margin-left:auto;margin-right:12px;font-size:12px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
 body.sk2 .fx-ctrl.fx-sec-collapsed>#fx-looks-ctrl{display:none!important} /* the Looks header folds the whole preset library (its inline display:block used to win) */
@@ -6705,7 +6705,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930H';
+const BUILD='1.0930I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
