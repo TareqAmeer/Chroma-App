@@ -6700,7 +6700,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.0930C';
+const BUILD='1.0930D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18182,7 +18182,7 @@ function initEditableVals(){
     el.title='Tap to type a value';
     const commit=()=>{
       const n=parseFloat((el.textContent||'').replace(/[^0-9.+-]/g,''));
-      if(!isNaN(n))sl.value=n;                   // range input sanitises to [min,max] + step
+      if(!isNaN(n))sl.value=(sl.id==='sl-straighten'&&typeof _stA2S==='function')?_stA2S(Math.max(-45,Math.min(45,n))):n; // straighten: typed value is an angle, slider is on a curved scale
       sl.dispatchEvent(new Event('input',{bubbles:true})); // runs the slider's own handler → updates display + render
     };
     el.addEventListener('focus',()=>{const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);});
@@ -19635,6 +19635,8 @@ function _fxFireInput(sl){
 function _fxSliderSet(sl,v){
   const min=parseFloat(sl.min),max=parseFloat(sl.max),step=parseFloat(sl.step)||1;
   if(!isFinite(v))return false;
+  if(sl.id==='sl-straighten'&&typeof _stA2S==='function'){ // typed/nudged value is an ANGLE; the slider itself runs on a curved scale
+    const nv=_stA2S(Math.max(-45,Math.min(45,v)));if(String(nv)===sl.value)return false;sl.value=nv;return true;}
   v=Math.min(max,Math.max(min,v));
   v=Math.round((v-min)/step)*step+min;
   if(String(v)===sl.value)return false;
