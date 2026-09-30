@@ -99,6 +99,13 @@ a{color:inherit}
 .img{overflow:hidden}
 .img img{display:block;width:100%;height:auto}
 .studiostack{position:relative}
+.studiostack .toolring{position:absolute;z-index:2;left:97.45%;top:29.4%;width:4.3%;height:7.6%;transform:translate(-50%,-50%);border:2px solid var(--acc);border-radius:2px;box-shadow:0 0 0 3px rgba(255,59,31,.25),0 0 18px rgba(255,59,31,.6);pointer-events:none;transition:top .45s var(--ease);animation:ringp 1.6s ease-in-out infinite}
+@keyframes ringp{50%{box-shadow:0 0 0 7px rgba(255,59,31,.08),0 0 26px rgba(255,59,31,.8)}}
+.steps6{list-style:none;margin:26px 0 0;padding:0;display:grid;gap:0;max-width:22rem}
+.steps6 li{display:flex;align-items:baseline;gap:16px;padding:9px 0;border-top:1px solid var(--line);color:var(--dim);font-size:clamp(15px,1.3vw,20px);transition:color .3s,transform .4s var(--ease)}
+.steps6 li b{font:600 12px/1 Gramatika,sans-serif;letter-spacing:.12em;min-width:1.8em}
+.steps6 li.on{color:var(--fg);transform:translateX(10px)}.steps6 li.on b{color:var(--acc)}
+.steps6 li.on span{font-weight:700}
 .studiostack img+img{position:absolute;inset:0;height:100%;opacity:0}
 .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:24px}
 .tags span::before{content:"";display:inline-block;width:6px;height:6px;background:var(--acc);margin-right:8px;vertical-align:1px}
@@ -503,8 +510,9 @@ section{position:relative}
 
     <div class="panel p2" data-lab="Studio">
       <div><div class="k">A studio for every frame.</div>
-        <p class="t" id="studioNote">Look: pick from over 130 film presets and choose how it is printed.</p></div>
-      <div class="img studiostack"><img loading="lazy" src="../assets/homepage/studio-1.webp" alt="Look panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-2.webp" alt="Light panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-3.webp" alt="Colour panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-4.webp" alt="Texture panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-5.webp" alt="Output panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-6.webp" alt="Info panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"></div>
+        <p class="t" id="studioNote">Look: pick from over 130 film presets and choose how it is printed.</p>
+        <ol class="steps6" aria-label="Studio tools"><li class="on"><b>01</b><span>Look</span></li><li><b>02</b><span>Light</span></li><li><b>03</b><span>Colour</span></li><li><b>04</b><span>Texture</span></li><li><b>05</b><span>Output</span></li><li><b>06</b><span>Info</span></li></ol></div>
+      <div class="img studiostack"><i class="toolring" aria-hidden="true"></i><img loading="lazy" src="../assets/homepage/studio-1.webp" alt="Look panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-2.webp" alt="Light panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-3.webp" alt="Colour panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-4.webp" alt="Texture panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-5.webp" alt="Output panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"><img loading="lazy" src="../assets/homepage/studio-6.webp" alt="Info panel in the CHRO-MA-SMITH studio" width="2000" height="1111" decoding="async"></div>
     </div>
 
   </div>
@@ -833,7 +841,8 @@ tl.to('.ph',{left:'50%',width:Wf,height:Hf,ease:'power2.inOut',duration:1},4.2)
   .addLabel('studioHold')
   .to({},{duration:HOLD2});
 const SN=['Look: pick from over 130 film presets and choose how it is printed.','Light: set exposure, contrast and curves, then add halation and bloom.','Colour: mix each colour, tint with wheels and fine-tune single shades.','Texture: add film grain, sharpen, reduce noise and paint local masks.','Output: crop to any ratio, then add borders and film frames.','Info: see the camera details and add keywords and tags.'];
-[0,1,2,3,4,5].forEach(k=>tl.call(()=>{document.getElementById('studioNote').textContent=SN[k]},null,k?'studioHold+='+(k*HOLD2/6+.075):'studioHold'));
+const RY=[29.4,38.5,47.7,56.9,66,75];
+[0,1,2,3,4,5].forEach(k=>tl.call(()=>{document.getElementById('studioNote').textContent=SN[k];document.querySelector('.toolring').style.top=RY[k]+'%';document.querySelectorAll('.steps6 li').forEach((li,n)=>li.classList.toggle('on',n===k))},null,k?'studioHold+='+(k*HOLD2/6+.075):'studioHold'));
 [1,2,3,4,5].forEach(k=>tl.to('.p2 .img img:nth-child('+(k+1)+')',{opacity:1,duration:.15,ease:'none'},'studioHold+='+(k*HOLD2/6)));  // scroll steps through Look, Light, Colour, Texture, Output, Info
 const xPos=X=>sPos()+X*K()+(X>XH()+1?innerHeight*HOLD:0)+(X>dist()-1?innerHeight*HOLD2:0);
 const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scrollTrigger.end-tl.scrollTrigger.start);
