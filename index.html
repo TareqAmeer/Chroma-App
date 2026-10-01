@@ -767,8 +767,9 @@ window.__advance=()=>{
     const end=T.end-2,nxt=secs.map(secTop).find(t=>t>T.end-H*.5);
     glide(end,9,flat,()=>{const to=Math.min(maxY,nxt===undefined?end+H:nxt);glide(to,1.4)});return}
   const F=window.__flowTl&&window.__flowTl.scrollTrigger;
-  if(F&&y>=F.start-4&&y<F.end-4){const nw=F.start+.66*(F.end-F.start);
-    if(y<nw-H*.1){glide(nw,Math.max(3,Math.min(8,(nw-y)/H*.8)),x=>x);return}}
+  if(F&&y>=F.start-4&&y<F.end-4){const q=f=>F.start+f*(F.end-F.start),old=q(.595),nw=q(.97);
+    if(y<old-H*.1){glide(old,Math.max(3,Math.min(8,(old-y)/H*.8)),x=>x);return}          // tap 1: the old workflow plays through
+    if(y<nw-H*.1){glide(nw,Math.max(3,Math.min(6,(nw-y)/H*.8)),x=>x);return}}            // tap 2: switch to the new workflow
   nextSection()};
 if(COARSE){
   addEventListener('touchstart',cancelGlide,{passive:true});
