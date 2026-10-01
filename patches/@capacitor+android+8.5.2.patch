@@ -1,0 +1,15 @@
+diff --git a/node_modules/@capacitor/android/capacitor/src/main/java/com/getcapacitor/WebViewLocalServer.java b/node_modules/@capacitor/android/capacitor/src/main/java/com/getcapacitor/WebViewLocalServer.java
+index 66bfef7..55a5238 100755
+--- a/node_modules/@capacitor/android/capacitor/src/main/java/com/getcapacitor/WebViewLocalServer.java
++++ b/node_modules/@capacitor/android/capacitor/src/main/java/com/getcapacitor/WebViewLocalServer.java
+@@ -103,6 +103,10 @@ public class WebViewLocalServer {
+                 tempResponseHeaders = responseHeaders;
+             }
+             tempResponseHeaders.put("Cache-Control", "no-cache");
++            // Chromasmith patch: cross-origin isolation so SharedArrayBuffer (libraw-wasm RW2
++            // decode) can be available in the Android WebView shell. All assets are same-origin.
++            tempResponseHeaders.put("Cross-Origin-Opener-Policy", "same-origin");
++            tempResponseHeaders.put("Cross-Origin-Embedder-Policy", "require-corp");
+             this.responseHeaders = tempResponseHeaders;
+         }
+ 

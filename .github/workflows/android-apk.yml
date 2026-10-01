@@ -1,0 +1,68 @@
+name: Build Android APK (sideload)
+
+# Builds the Capacitor Android shell around chromasmith-22.html and publishes an installable
+# Chromasmith.apk as a workflow artifact (and on v* release tags). This Mac has no Android SDK —
+# CI is the only build path. The APK is debug-signed: fine for sideloading, not for Play.
+on:
+  workflow_dispatch: {}
+  push:
+    tags: ['v*']
+    branches: [main]
+    paths:
+      - 'chromasmith-22.html'
+      - 'coi-serviceworker.min.js'
+      - 'vendor/**'
+      - 'android/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.json'
+      - 'build-ios.sh'
+      - 'patches/**'
+      - '.github/workflows/android-apk.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install JS deps (postinstall applies the COOP/COEP Capacitor patch)
+        run: npm ci
+
+      - name: Stage web assets + sync Capacitor
+        run: |
+          ./build-ios.sh
+          npx cap sync android
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk Chromasmith.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Chromasmith-apk
+          path: android/Chromasmith.apk
+          retention-days: 30
+
+      - name: Attach APK to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/Chromasmith.apk
