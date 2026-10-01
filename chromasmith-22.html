@@ -2880,6 +2880,9 @@ body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title{font-size:0!important;min-height:0!im
 body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title .fx-ctrl-chev{display:none}
 body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title>*{font-size:13px}
 body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title:not(:has(.fx-toggle)):not(:has(.fx-toggle-lb)) #fx-ctrl-title-reset[hidden]{display:none}
+.fx-label>.fx-lic{display:inline-flex;vertical-align:-2px;margin-right:7px;color:var(--k-color-muted,#8d8b85)}
+.fx-label>.fx-lic svg{width:14px;height:14px}
+.fx-row.fx-mod>.fx-label>.fx-lic{color:var(--k-color-ink,#f2f0ea)}
 </style>
 </head>
 <body>
@@ -6796,7 +6799,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001K';
+const BUILD='1.1001L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24369,6 +24372,33 @@ function fxToolsClose(){
   fxLiveFit(360);
   requestAnimationFrame(()=>renderPreview());
 }
+// Small icon beside each Light (Tone/Colour/Detail) slider name, same line style as the tool icons.
+const ADJ_ICONS={
+  exp:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/>',
+  con:'<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor"/>',
+  hi:'<circle cx="12" cy="12" r="8"/><path d="M4 12a8 8 0 0 1 16 0Z" fill="currentColor"/>',
+  sh:'<circle cx="12" cy="12" r="8"/><path d="M4 12a8 8 0 0 0 16 0Z" fill="currentColor"/>',
+  wh:'<rect x="5" y="5" width="14" height="14"/>',
+  bl:'<rect x="5" y="5" width="14" height="14" fill="currentColor"/>',
+  temp:'<path d="M10 4h4v10a4 4 0 1 1-4 0Z"/><path d="M12 10v7"/>',
+  tint:'<path d="M12 3l6 9a6 6 0 1 1-12 0Z"/>',
+  vib:'<path d="M3 12c3-6 6 6 9 0s6 6 9 0"/>',
+  sat:'<circle cx="9" cy="10" r="5"/><circle cx="15" cy="10" r="5"/><circle cx="12" cy="15" r="5"/>',
+  clarity:'<path d="M12 3l9 9-9 9-9-9Z"/><path d="M12 8l4 4-4 4-4-4Z"/>',
+  texture:'<path d="M4 4h4v4H4ZM12 4h4v4h-4ZM8 8h4v4H8ZM16 8h4v4h-4ZM4 12h4v4H4ZM12 12h4v4h-4ZM8 16h4v4H8ZM16 16h4v4h-4Z"/>',
+  sharp:'<path d="M3 20 12 4l9 16Z"/>',
+  dehaze:'<path d="M4 8h16M6 12h12M8 16h8"/>',
+  skin:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'};
+function fxAddAdjIcons(){
+  Object.entries(ADJ_ICONS).forEach(([k,d])=>{
+    const sl=document.getElementById('sl-adj-'+k),lb=sl&&sl.closest('.fx-row')&&sl.closest('.fx-row').querySelector('.fx-label');
+    if(!lb||lb.querySelector('.fx-lic'))return;
+    const ic=document.createElement('span');ic.className='fx-lic';ic.setAttribute('aria-hidden','true');
+    ic.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square">'+d+'</svg>';
+    lb.insertBefore(ic,lb.firstChild);
+  });
+}
+document.addEventListener('DOMContentLoaded',fxAddAdjIcons);
 // Press-and-hold a tool in the phone quick bar or Tools grid, then drag, to change its place.
 // Order is per container, saved in localStorage by each button's key (data-sec, or its class
 // for All FX / Previous) and re-applied whenever the container is rebuilt.
