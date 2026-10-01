@@ -2701,6 +2701,10 @@ body.sk2 #sk2-rail-mk{display:none!important}
 body.sk2 #fx-toolrail .fx-rail-lb{position:relative}
 body.sk2 #fx-toolrail .fx-rail-lb::after,body.sk2 #fx-toolrail .fx-rail-lb[data-ab]::after{content:''!important;position:absolute;left:0;right:0;bottom:-4px;height:2px;background:var(--k-color-accent-a);transform:scaleX(0);transform-origin:left;transition:transform .2s;font-size:0!important;margin:0!important;width:auto!important;display:block!important}
 body.sk2:not(.panel-closed) #fx-toolrail .fx-rail-btn.on .fx-rail-lb::after,body.sk2:not(.panel-closed) #fx-toolrail .fx-rail-btn.on .fx-rail-lb[data-ab]::after{transform:scaleX(1)}
+/* Every-tool rail (Settings → View): many buttons, so stack from the top and scroll. */
+body.deskx.rail-flat #fx-toolrail{justify-content:flex-start!important;gap:4px!important;padding-top:12px!important;overflow-y:auto;scrollbar-width:thin}
+body.deskx.rail-flat #fx-toolrail .fx-rail-btn{flex:0 0 auto}
+body.deskx.rail-flat #fx-toolrail .fx-rail-sep{display:none}
 @media (prefers-reduced-motion:reduce){body.sk2 #fx-toolrail .fx-rail-btn::before,body.sk2 #fx-toolrail .fx-rail-lb::after{transition:none}}
 body.sk2 .fx-rail-btn{color:var(--k-color-muted)}
 body.sk2 .fx-rail-btn .fx-rail-ic{color:var(--k-color-ink)}
@@ -6840,7 +6844,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001X';
+const BUILD='1.1001Y';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24046,6 +24050,8 @@ function viewMenuBuild(){
   h+='<div class="fx-ovf-sep"></div>';
   h+=`<button class="fx-ovf-item${fxGamutWarn?' on':''}" onclick="viewMenuClose();toggleGamutWarn()"><span>Show gamut warning</span>${chk}</button>`;
   h+='<div class="fx-ovf-sep"></div>';
+  h+='<div class="fx-ovf-grp-label">Tool bar</div>';
+  h+=`<button class="fx-ovf-item${fxRailFlat()?' on':''}" onclick="fxRailFlatToggle()"><span>Every tool in the bar</span>${chk}</button>`;
   m.innerHTML=h;
 }
 // Appearance: its own category so the gallery (which hides the Studio-only View pane) shows it too.
@@ -24438,7 +24444,20 @@ const RAIL_GROUP_BREAK=new Set(['light','colour','texture','output','info']);
 function _activeSec(){
   const c=document.querySelector('.fx-ctrl.sec-active');if(!c)return null;
   const key=c.dataset.fxsec;
-  return (document.body.classList.contains('deskx')&&FX_GROUP_OF[key])?FX_GROUP_OF[key]:key;
+  return (_fxGrouped()&&FX_GROUP_OF[key])?FX_GROUP_OF[key]:key;
+}
+// Settings → View → "Every tool in the bar": the rail lists each tool as its own button
+// (scrolling) instead of the five grouped stages. Off = grouped (default).
+function fxRailFlat(){try{return localStorage.getItem('cs_rail_flat')==='1';}catch(e){return false;}}
+function _fxGrouped(){return document.body.classList.contains('deskx')&&!fxRailFlat();}
+function fxRailFlatToggle(){
+  const on=!fxRailFlat();
+  try{localStorage.setItem('cs_rail_flat',on?'1':'0');}catch(e){}
+  document.body.classList.toggle('rail-flat',on);
+  const cur=document.querySelector('.fx-ctrl.sec-active');
+  buildToolRail();
+  if(cur&&cur.dataset.fxsec)fxSection(cur.dataset.fxsec,true);
+  viewMenuBuild();
 }
 // Phone tool filters = the desktop rail's own groups (FX_GROUPS), so both apps sort tools the same way.
 const FX_MOBILE_CATS={all:null};
@@ -24671,14 +24690,18 @@ function buildSecNav(){          // mobile categorized tool grid
 }
 // Short uppercase codes shown under the rail icons (full name stays in the tooltip + a11y text).
 const RAIL_CODE={image:'IMG',looks:'LK',adjust:'ADJ',color:'COL',detail:'DET',retouch:'RET',crop:'CRP',local:'MSK',film:'FLM',frame:'FRM',exportgrp:'EXP',info:'INF',diag:'DIA'};
+// Tools without their own glyph borrow a close one, so the every-tool rail has no blank buttons.
+const RAIL_ICON_FALLBACK={wm:'tag',share:'cloud',exppreset:'download',wheels:'hsl',deconv:'focus'};
 function buildToolRail(){        // desktop vertical labelled rail
   const rail=document.getElementById('fx-toolrail');if(!rail)return;
   rail.innerHTML='';
   const dx=document.body.classList.contains('deskx');
+  const grp=_fxGrouped();
+  document.body.classList.toggle('rail-flat',dx&&!grp);
   const seenGroups=new Set();
   _eachSection((key,lb)=>{
-    let bKey=key,bLb=lb,bIcon=key;
-    if(dx&&FX_GROUP_OF[key]){
+    let bKey=key,bLb=lb,bIcon=ICONS[key]?key:(RAIL_ICON_FALLBACK[key]||key);
+    if(grp&&FX_GROUP_OF[key]){
       const g=FX_GROUP_OF[key];
       if(seenGroups.has(g))return; // this group's button was already emitted at its first member
       seenGroups.add(g);
@@ -24803,8 +24826,10 @@ function fxSection(name,noSheet){
   const dx=document.body.classList.contains('deskx');
   // A member key (e.g. fxSection('local') from the command palette) opens its stage and scrolls to it.
   let jumpTo=null;
-  if(dx&&!FX_GROUPS[name]&&FX_GROUP_OF[name]){jumpTo=name;name=FX_GROUP_OF[name];noSheet=true;}
-  const members=(dx&&FX_GROUPS[name])?FX_GROUPS[name].members:[name];
+  const grp=dx&&!fxRailFlat();
+  if(grp&&!FX_GROUPS[name]&&FX_GROUP_OF[name]){jumpTo=name;name=FX_GROUP_OF[name];noSheet=true;}
+  if(dx&&!grp&&FX_GROUPS[name])name=FX_GROUPS[name].members[0];
+  const members=(grp&&FX_GROUPS[name])?FX_GROUPS[name].members:[name];
   const cards=members.map(_fxSectionCard).filter(Boolean);
   if(!cards.length)return;
   if(members.includes('hsl'))setTimeout(hslBuildHist,60);
