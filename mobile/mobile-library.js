@@ -151,6 +151,15 @@ const css=`
 #mlib.orig.dates .cell{margin-bottom:20px}
 #mlib .cell .dt{position:absolute;left:2px;top:100%;margin-top:2px;font-size:10px;opacity:.6;white-space:nowrap;display:none}
 #mlib.dates .cell .dt{display:block}
+#mlib .cell.sel::after{content:'✓';position:absolute;top:6px;left:6px;width:22px;height:22px;border-radius:50%;background:var(--k-color-accent-a,#ff3b1f);color:#fff;font-size:13px;line-height:22px;text-align:center}
+#mlib .cell.sel img{opacity:.75}
+#mlib.selecting .cell:not(.sel)::after{content:'';position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:50%;border:1.5px solid #fff;background:rgba(0,0,0,.25)}
+#mlib .selbar{display:none;align-items:center;gap:6px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid color-mix(in srgb,var(--mink,#eee) 14%,transparent)}
+#mlib.selecting .selbar{display:flex}
+#mlib .selbar .n{flex:1;font-size:14px}
+#mlib .selbar button{border:0;border-radius:999px;padding:9px 14px;font:600 14px inherit;background:color-mix(in srgb,var(--mink,#eee) 10%,transparent);color:inherit}
+#mlib .selbar button.warn{color:#ff6b6b}
+#mlib .selbar button:disabled{opacity:.35}
 #mlib .empty{grid-column:1/-1;text-align:center;color:var(--tx2,#999);padding:80px 24px;font-size:15px;line-height:1.5}
 #mlib-sheet{position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.5);display:none;align-items:flex-end}
 #mlib-sheet.open{display:flex}
@@ -179,9 +188,10 @@ function build(){
   const st=document.createElement('style');st.textContent=css;document.head.appendChild(st);
   root=document.createElement('div');root.id='mlib';
   root.innerHTML=`<div class="top"><svg viewBox="18 18 64 62" aria-hidden="true"><rect x="21" y="21" width="48" height="44" fill="var(--mink,#f2f0ea)"/><rect x="36" y="32" width="43" height="45" fill="var(--k-color-accent-a,#ff3b1f)"/><rect x="36" y="32" width="33" height="33" fill="#b0200e"/></svg><span class="wm">CHRO-MA-SMITH</span><button class="set" data-a="settings" aria-label="Settings">${typeof icon==='function'?icon('more',22):'⋯'}</button></div>
-<div class="mh"><h1>Gallery</h1><button class="pri" data-a="import">Import</button><button data-a="close" aria-label="Close gallery">Editor</button></div>
+<div class="mh"><h1>Gallery</h1><button data-a="select">Select</button><button class="pri" data-a="import">Import</button><button data-a="close" aria-label="Close gallery">Editor</button></div>
 <div class="tabs"><button data-f="all" class="on">All</button><button data-f="edited">Edited</button><button data-f="exported">Exported</button></div>
 <div class="grid"></div>
+<div class="selbar"><span class="n">0 selected</span><button data-a="sel-open">Edit</button><button data-a="sel-revert">Revert</button><button data-a="sel-del" class="warn">Remove</button></div>
 <input type="file" accept="image/*,.rw2,.dng" multiple hidden>`;
   document.body.appendChild(root);
   grid=root.querySelector('.grid');applyPrefs();
@@ -195,7 +205,10 @@ function build(){
     openedId=null;openedIds=ids;};
   root.addEventListener('click',e=>{
     const a=e.target.closest('[data-a]'),f=e.target.closest('[data-f]'),c=e.target.closest('.cell');
-    if(a&&a.dataset.a==='import')inp.click();
+    if(a&&a.dataset.a==='select')setSelecting(!selecting);
+    else if(a&&a.dataset.a.startsWith('sel-'))selAction(a.dataset.a.slice(4));
+    else if(c&&selecting){const id=c.dataset.id;sel.has(id)?sel.delete(id):sel.add(id);c.classList.toggle('sel',sel.has(id));selCount();}
+    else if(a&&a.dataset.a==='import')inp.click();
     else if(a&&a.dataset.a==='close')close();
     else if(a&&a.dataset.a==='settings')settings();
     else if(f){filter=f.dataset.f;root.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b===f));render();}
@@ -204,6 +217,7 @@ function build(){
   // long-press a photo → actions sheet (original / versions / revert / delete)
   let lp=null;
   grid.addEventListener('pointerdown',e=>{const c=e.target.closest('.cell');if(!c)return;
+    if(selecting)return;
     lp=setTimeout(()=>{lp='fired';if(typeof hapt==='function')hapt('MEDIUM');sheet(c.dataset.id)},500);});
   const cancel=()=>{if(lp&&lp!=='fired')clearTimeout(lp)};
   grid.addEventListener('pointerup',cancel);grid.addEventListener('pointercancel',cancel);grid.addEventListener('pointermove',cancel);
@@ -220,7 +234,7 @@ async function render(){
   if(!ps.length){grid.innerHTML=`<div class="empty">${filter==='all'?'No photos yet.<br>Tap <b>Import</b> to add photos — originals stay safe here and every edit is saved automatically.':'Nothing here yet.'}</div>`;return}
   grid.innerHTML=ps.map(p=>{const t=p.thumbEdited||p.thumb;let u='';if(t){u=URL.createObjectURL(t);urls.push(u)}
     const badge=p.exports.length?'Exported':p.recipe?'Edited':'';
-    return `<button class="cell" data-id="${p.id}">${u?`<img src="${u}" alt="">`:`<span class="nm">${esc(p.name)}</span>`}${badge?`<span class="b">${badge}</span>`:''}<span class="dt">${p.edited?'Edited '+day(p.edited):'Added '+day(p.added)}</span></button>`}).join('');
+    return `<button class="cell${sel.has(p.id)?' sel':''}" data-id="${p.id}">${u?`<img src="${u}" alt="">`:`<span class="nm">${esc(p.name)}</span>`}${badge?`<span class="b">${badge}</span>`:''}<span class="dt">${p.edited?'Edited '+day(p.edited):'Added '+day(p.added)}</span></button>`}).join('');
 }
 async function sheet(id){
   const p=await getPhoto(id);if(!p)return;
@@ -284,9 +298,38 @@ async function settings(){
   };
   sh.classList.add('open');
 }
+// ── multi-select ───────────────────────────────────────────────────────────────────────────────
+let selecting=false;const sel=new Set();
+function setSelecting(on){selecting=on;sel.clear();if(!root)return;
+  root.classList.toggle('selecting',on);root.querySelector('[data-a="select"]').textContent=on?'Cancel':'Select';
+  root.querySelectorAll('.cell.sel').forEach(c=>c.classList.remove('sel'));selCount();}
+function selCount(){if(!root)return;root.querySelector('.selbar .n').textContent=sel.size+' selected';
+  root.querySelectorAll('.selbar button').forEach(b=>b.disabled=!sel.size);}
+async function selAction(k){
+  const ids=[...sel];if(!ids.length)return;
+  if(k==='open'){
+    if(ids.length===1){setSelecting(false);openPhoto(ids[0]);return}
+    const files=[];let first=null;
+    for(const id of ids){const p=await getPhoto(id),b=await getBlob(id);if(!p||!b)continue;
+      if(!first)first=p;files.push(new File([b],p.name,{type:p.type,lastModified:p.added}));}
+    setSelecting(false);close();
+    window.__mlibOpening=true;window.__csLibOpen=true;
+    try{await origLoad(files)}finally{window.__mlibOpening=false;window.__csLibOpen=false}
+    openedId=null;openedIds=ids;
+    try{if(first&&first.recipe){applyUISnapshot(unb64(first.recipe));if(typeof fxUpdate==='function')fxUpdate();}}catch(e){}
+  }else if(k==='revert'){
+    if(!confirm('Revert '+ids.length+' photo'+(ids.length>1?'s':'')+' to the original? Saved versions and exports are kept.'))return;
+    for(const id of ids){const p=await getPhoto(id);if(p){p.recipe=null;p.thumbEdited=null;await putPhoto(p);}}
+    setSelecting(false);render();toast('Reverted '+ids.length);
+  }else if(k==='del'){
+    if(!confirm('Remove '+ids.length+' photo'+(ids.length>1?'s':'')+' and their edits from the gallery? Exported files in your photo library are not affected.'))return;
+    for(const id of ids){await tx('photos','readwrite',s=>s.delete(id));await tx('blobs','readwrite',s=>s.delete(id));if(openedId===id)openedId=null;}
+    setSelecting(false);render();
+  }
+}
 const isOpen=()=>!!(root&&root.classList.contains('open'));
 function open(){build();root.classList.add('open');render();}
-function close(){if(root)root.classList.remove('open');}
+function close(){if(root){root.classList.remove('open');if(selecting)setSelecting(false);}}
 window.chromasmithToggleLibrary=()=>isOpen()?close():open();
 window.chromasmithOpenGallery=open;
 
