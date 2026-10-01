@@ -2522,6 +2522,9 @@ body.sk2 #fx-toolrail.sk2-mk .fx-rail-btn.on::after{content:none!important}
 /* 6 · Pop-ups: flat panel, big title, numbered margin. */
 body.sk2 .cs-modal{background:var(--k-color-bg)!important;border:1px solid var(--bdr)!important;border-radius:0!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;padding:32px 32px 28px!important;box-shadow:0 24px 64px rgba(0,0,0,.35)!important}
 body.sk2 .cs-modal h2{font-size:var(--sk-t2)!important;font-weight:400;letter-spacing:-.045em;line-height:.95}
+/* The wordmark never breaks across lines; on a phone the title shrinks to fit instead. */
+.cs-modal h2 .cs-nowrap{white-space:nowrap}
+body.sk2.mobile-fx .cs-modal h2{font-size:min(var(--sk-t2),10.5vw)!important}
 body.sk2 .cs-tour-step{position:relative;padding-left:48px;margin-bottom:22px!important}
 body.sk2 .cs-tour-step::before{content:attr(data-n);position:absolute;left:0;top:-4px;font-size:30px;letter-spacing:-.04em;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
 body.sk2 .cs-tour-k{display:none}
@@ -6758,7 +6761,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001W';
+const BUILD='1.1001X';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13334,13 +13337,14 @@ const _TOUR_KEY='chromasmith-tour-seen-v1';
 function tourHtml(){
   const step=(n,title,body)=>`<div class="cs-tour-step" data-n="${n}" style="margin-bottom:14px"><div class="cs-tour-k" style="font-family:var(--mono);font-size:11px;color:var(--acc);text-transform:uppercase;letter-spacing:var(--ls-2);margin-bottom:2px">Step ${n}</div><div style="font-size:14px;font-weight:600;margin-bottom:2px">${title}</div><div style="font-size:13px;color:var(--mut)">${body}</div></div>`;
   const desk=!!window.__TAURI__,mob=document.body.classList.contains('mobile-fx');
+  const gal=typeof window.chromasmithOpenGallery==='function'; // phone app shell (mobile/mobile-library.js)
   // A returning desktop user already has a Gallery folder — don't ask them to choose one again.
   let hasRoot=false;try{hasRoot=!!localStorage.getItem('chromasmith_lib_root');}catch(e){}
   return (desk&&hasRoot?'':desk
       ?step(1,'Choose your photo folder','Click <b>Choose folder…</b> (or drop a folder onto the window). CHRO-MA-SMITH reads it in the background, so you can start editing straight away while it indexes. Your original files are never changed.')
-      :step(1,'Open a photo',mob?'Tap <b>Open a photo</b>. Your original is never changed.':'Drag a photo (or RAW) anywhere onto the window, or click <b>Open a photo</b>. Your original is never changed.'))
+      :step(1,gal?'Import photos':'Open a photo',gal?'Tap <b>Import</b> in the Gallery. Your photos are kept in the app and the originals are never changed.':mob?'Tap <b>Open a photo</b>. Your original is never changed.':'Drag a photo (or RAW) anywhere onto the window, or click <b>Open a photo</b>. Your original is never changed.'))
     +step(desk&&hasRoot?1:2,'Pick a look',(desk?'Double-click any photo to open it. ':'')+'Open <b>Look</b> and tap a film look. Everything else (grain, glow, curves, masks…) is optional fine-tuning on top of it. '+(mob?'Press and hold the photo to see the original.':'Use the before/after button to compare.'))
-    +step(desk&&hasRoot?2:3,'Export','When it looks right, hit <b>Export</b> for a full-resolution file. Edits save automatically and nothing ever uploads.')
+    +step(desk&&hasRoot?2:3,'Export',gal?'When it looks right, hit <b>Export</b>. Full-resolution photos go to a <b>Chromasmith</b> album in Photos. Edits save automatically, and the Gallery keeps every version (press and hold a photo).':'When it looks right, hit <b>Export</b> for a full-resolution file. Edits save automatically and nothing ever uploads.')
     +(mob?'':'<div style="font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:10px">The <b>Guide</b> (⋯ menu) explains every tool. ⌘K searches every tool. Advanced tabs (Match &amp; Refine, Color Copy, Collage) appear after your first export, or <a href="#" onclick="csShowAdvancedTabs(true);document.getElementById(\'cs-modal-ov\').remove();return false" style="color:var(--acc)">show them now</a>.</div>')
     +'<div class="btn-row" style="margin-top:14px"><button class="btn bpri" onclick="document.getElementById(\'cs-modal-ov\').remove()">Got it</button></div>';
 }
@@ -13351,9 +13355,9 @@ function tourMaybeShow(){
     localStorage.setItem(_TOUR_KEY,'1');localStorage.setItem('chromasmith-newuser-v2','1');
     document.body.classList.add('cs-adv-hidden');
   }catch(e){return;}
-  _csModal('Welcome to CHRO-MA-SMITH',tourHtml());
+  _csModal('Welcome to <span class="cs-nowrap">CHRO-MA-SMITH</span>',tourHtml());
 }
-window.chromasmithShowTour=function(){_csModal('Welcome to CHRO-MA-SMITH',tourHtml());}; // manual replay (Help menu / palette) — bypasses the once-only flag
+window.chromasmithShowTour=function(){_csModal('Welcome to <span class="cs-nowrap">CHRO-MA-SMITH</span>',tourHtml());}; // manual replay (Help menu / palette) — bypasses the once-only flag
 window.chromasmithShowShortcuts=function(){_csModal('Keyboard Shortcuts',shortcutsHtml());};
 // ── First-timer aids ─────────────────────────────────────────────────────────────────────
 // (1) Advanced tabs (Match & Refine / Color Copy / Collage) stay hidden for a brand-new user until
