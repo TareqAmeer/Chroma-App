@@ -6844,7 +6844,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001Y';
+const BUILD='1.1001Z';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24243,6 +24243,12 @@ const ICONS={
  borders:'<rect x="3" y="3" width="18" height="18"/><path d="M12 5l7 7-7 7-7-7Z"/>',
  canvas:'<rect x="3" y="5" width="18" height="14"/><rect x="8.5" y="8" width="7" height="8"/><path d="M3 5l5.5 3M21 5l-5.5 3M3 19l5.5-3M21 19l-5.5-3"/>',
  export:'<path d="M3 9h10M3 9v12h12V11M9 15 21 3M14 3h7v7"/>',
+ // Every-tool rail glyphs (Settings → View → Every tool in the bar).
+ wm:'<rect x="3" y="4" width="18" height="16"/><path d="M10 12l1.5 5 1.5-3.5 1.5 3.5 1.5-5M3 9h6"/>',
+ share:'<rect x="16" y="3" width="5" height="5"/><rect x="3" y="9.5" width="5" height="5"/><rect x="16" y="16" width="5" height="5"/><path d="M8 11l8-4.5M8 13l8 4.5"/>',
+ exppreset:'<path d="M3 7v14h14"/><rect x="7" y="3" width="14" height="14"/><path d="M11 13l6-6M13 7h4v4"/>',
+ wheels:'<circle cx="7" cy="8" r="4"/><circle cx="17" cy="8" r="4"/><circle cx="12" cy="16.5" r="4"/><path d="M7 8h.01M17 8h.01M12 16.5h.01"/>',
+ deconv:'<path d="M3 20h18M5 20 12 4l7 16M12 4v16"/>',
  info:'<path d="M11 10v11M4 21h16"/><rect x="10" y="3.5" width="3.2" height="3.2" transform="rotate(20 11.6 5.1)"/>',
  diag:'<path d="M12 3l9 9-9 9-9-9Z"/><circle cx="12" cy="12" r="3"/>',
  // 2026-09-10: swapped for a plain right-angle hook (Feather's corner-up-left/-right shape) —
@@ -24690,8 +24696,6 @@ function buildSecNav(){          // mobile categorized tool grid
 }
 // Short uppercase codes shown under the rail icons (full name stays in the tooltip + a11y text).
 const RAIL_CODE={image:'IMG',looks:'LK',adjust:'ADJ',color:'COL',detail:'DET',retouch:'RET',crop:'CRP',local:'MSK',film:'FLM',frame:'FRM',exportgrp:'EXP',info:'INF',diag:'DIA'};
-// Tools without their own glyph borrow a close one, so the every-tool rail has no blank buttons.
-const RAIL_ICON_FALLBACK={wm:'tag',share:'cloud',exppreset:'download',wheels:'hsl',deconv:'focus'};
 function buildToolRail(){        // desktop vertical labelled rail
   const rail=document.getElementById('fx-toolrail');if(!rail)return;
   rail.innerHTML='';
@@ -24700,7 +24704,7 @@ function buildToolRail(){        // desktop vertical labelled rail
   document.body.classList.toggle('rail-flat',dx&&!grp);
   const seenGroups=new Set();
   _eachSection((key,lb)=>{
-    let bKey=key,bLb=lb,bIcon=ICONS[key]?key:(RAIL_ICON_FALLBACK[key]||key);
+    let bKey=key,bLb=lb,bIcon=key;
     if(grp&&FX_GROUP_OF[key]){
       const g=FX_GROUP_OF[key];
       if(seenGroups.has(g))return; // this group's button was already emitted at its first member
