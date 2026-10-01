@@ -469,6 +469,7 @@ section{position:relative}
   .colhead{display:none}
   .feat{position:static;transform:none!important;max-width:none;font-size:15px!important;opacity:.85!important;filter:none!important;padding:0;text-align:left}
   .feat::before{display:none}
+  .feat.mhide{display:none}
   .outro{padding:14vh 16px 6vh}.plats{grid-template-columns:1fr 1fr;gap:8px}.plat{min-height:170px;padding:16px}.plat b{font-size:22px;margin-top:12px}
   .aux .btn{width:100%;justify-content:center}
   .bigword{font-size:12.2vw}
@@ -1038,7 +1039,7 @@ gsap.from('.plat',{y:50,opacity:0,stagger:.08,duration:1,ease:'expo.out',immedia
   all.forEach((f,i)=>{
     const z=rnd(i,1),b=document.createElement('button');b.type='button';b.className='feat';b.textContent=f.name;b.dataset.g=f.gi;
     const k=per[f.gi].indexOf(f),n=per[f.gi].length;
-    const hero=USP.has(f.name);if(hero)b.classList.add('usp');
+    const hero=USP.has(f.name);if(hero)b.classList.add('usp');if(!hero&&k>=2)b.classList.add('mhide');  // phones: highlights plus the first two of each group
     Object.assign(b.style,{left:'calc('+(f.gi/groups.length*100)+'% + '+(rnd(i,2)*10)+'px)',top:((k+.5)/n*100)+'%',fontSize:(hero?30+z*10:11+z*z*9)+'px',fontWeight:hero?700:(z>.7?500:400),opacity:hero?1:.3+z*.4,filter:'none'});
     b.onclick=()=>{pop.querySelector('.g').textContent=f.g;pop.querySelector('h3').textContent=f.name;pop.querySelector('.d').textContent=f.desc;pop.hidden=false;lenis&&lenis.stop();pop.querySelector('.x').focus()};
     field.appendChild(b);feats.push({el:b,z,gi:f.gi,hero});
