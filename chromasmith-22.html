@@ -2868,6 +2868,10 @@ body.mobile-fx #fx-quicknav button,body.mobile-fx #fx-tool-grid .fx-sec-btn{-web
 body.mobile-fx #fx-quicknav [data-sec].edited{background:none}
 body.mobile-fx #fx-quicknav [data-sec].edited span::after,body.mobile-fx #fx-tool-grid .fx-sec-btn.edited .fx-sec-ic::after{content:''!important;position:absolute;top:-3px;right:-7px;width:6px;height:6px;border-radius:0;background:var(--k-color-accent-a)}
 body.mobile-fx #fx-tool-grid .fx-sec-btn .fx-sec-ic{position:relative}
+/* Sliders: a vertical swipe scrolls the sheet instead of grabbing the slider; sideways still drags it. */
+body.mobile-fx .fx-panel .fx-slider{touch-action:pan-y}
+/* User-sized tool sheet (drag the handle and let go anywhere). */
+body.mobile-fx.sheet-open.sheet-user .fx-panel{height:var(--sheet-user-h)!important;max-height:calc(var(--app-h,100svh)*.85)!important}
 </style>
 </head>
 <body>
@@ -6784,7 +6788,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001G';
+const BUILD='1.1001H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24750,7 +24754,7 @@ window.addEventListener('resize',()=>{
     if(!moved)idx=-1;                                   // a tap on the handle still closes
     else if(flickDown)idx=st0-1;                        // flick down: one snap lower, or close from peek
     else if(flickUp)idx=Math.min(2,st0+1);
-    else{idx=0;hs.forEach((hh,i)=>{if(Math.abs(cur-hh)<Math.abs(cur-hs[idx]))idx=i;});if(cur<hs[0]*0.6)idx=-1;}
+    else idx=cur<hs[0]*0.6?-1:3;                       // a slow drag leaves the sheet wherever you let go
     const close=idx<0;
     // Synchronous release (NO rAF — it never fires in a hidden/backgrounded tab, which
     // would leave the inline height stuck): restore the stylesheet transition, force a
@@ -24759,12 +24763,18 @@ window.addEventListener('resize',()=>{
     pn.style.transition='';
     void pn.offsetHeight;
     if(close)fxSheetClose();
-    else{bd.classList.toggle('sheet-peek',idx===0);bd.classList.toggle('sheet-full',idx===2);}
+    else{bd.classList.toggle('sheet-peek',idx===0);bd.classList.toggle('sheet-full',idx===2);
+      // free height: remembered, and used every time the sheet opens until a flick snaps it again
+      const userH=idx===3?Math.round(Math.min(cur,vh*0.85)):0;
+      bd.classList.toggle('sheet-user',!!userH);
+      if(userH)document.documentElement.style.setProperty('--sheet-user-h',userH+'px');
+      try{userH?localStorage.setItem('cs-sheet-h',String(userH)):localStorage.removeItem('cs-sheet-h');}catch(_){}}
     pn.style.height='';
     fxLiveFit(360);
     if(close)hapt();
   };
   h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end);
+  try{const sh=+localStorage.getItem('cs-sheet-h');if(sh>0){document.documentElement.style.setProperty('--sheet-user-h',sh+'px');document.body.classList.add('sheet-user');}}catch(_){}
 })();
 // Phones: pulling the sheet content (or the Tools list) down while it is already scrolled to the top
 // closes it, same as dragging the handle — back to the normal photo view.
@@ -26379,7 +26389,8 @@ if(/[?&]catalog=1/.test(location.search)){
   document.addEventListener('click',function(e){
     if(!mob())return;var lb=e.target.closest&&e.target.closest('.fx-panel .fx-row > .fx-label');if(!lb||e.target.closest('button,.fx-info-i'))return;
     var sl=lb.parentElement.querySelector('input[type=range]');if(!sl)return;
-    clearTimeout(ft);ft=setTimeout(function(){ffOpen(sl);},280); // a second tap inside this window is the reset gesture instead
+    // Single-tap no longer opens the full-screen focus slider (felt unnecessary on phones);
+    // double-tapping the label still resets the slider.
   });
   document.addEventListener('dblclick',function(){clearTimeout(ft);});
   new MutationObserver(function(){if(!document.body.classList.contains('sheet-open'))ffClose();}).observe(document.body,{attributes:true,attributeFilter:['class']});
