@@ -13,3 +13,8 @@ $F -i "aevalsrc='0.5*sin(2*PI*1800*t)*exp(-mod(t,0.04)*140)':d=0.6" ratchet.wav
 $F -i "anoisesrc=c=pink:a=0.08:d=2.2" -af "afade=t=in:d=0.3,afade=t=out:st=1.8:d=0.4,highpass=f=2000" hiss.wav
 $F -i "aevalsrc='0.35*sin(2*PI*(220+180*t)*t)*sin(PI*t/1.6)':d=1.6" swell.wav
 $F -i "aevalsrc='0.7*sin(2*PI*520*t)*exp(-t*35)+0.4*(random(0)*2-1)*exp(-t*200)':d=0.12" clack.wav
+# v3 additions: a soft low pulse (90bpm click track), a pen strike, a print pin
+$F -i "aevalsrc='0.9*sin(2*PI*55*t)*exp(-t*28)':d=0.18" pulse.wav
+$F -i "aevalsrc='0.6*(random(0)*2-1)*sin(PI*t/0.22)':d=0.22" -af "bandpass=f=4200:width_type=h:w=2500" strike.wav
+$F -i "aevalsrc='0.8*sin(2*PI*1200*t)*exp(-t*70)+0.5*(random(0)*2-1)*exp(-t*300)':d=0.1" pin.wav
+$F -i "aevalsrc='0.9*(random(0)*2-1)*exp(-t*220)+0.7*sin(2*PI*180*t)*exp(-t*60)+0.8*(random(0)*2-1)*exp(-(t-0.09)*180)*gte(t,0.09)':d=0.25" -af "bandpass=f=2200:width_type=h:w=3500" camera.wav
