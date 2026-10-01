@@ -2857,6 +2857,10 @@ body.sk2.mobile-fx #row-lut-mix>.fx-slider{order:2;flex:1 1 auto;min-width:0;hei
 body.sk2.mobile-fx #row-lut-mix>.fx-val{order:3;flex:0 0 auto;min-width:28px;text-align:right}
 /* thumb centred on the track: the base rule centres with --ctl-slider-thumb, so the phone size must set that, not a bare width */
 body.mobile-fx .fx-slider{--ctl-slider-thumb:22px}
+/* quick bar scrolls sideways to reach every tool */
+body.mobile-fx #fx-quicknav{justify-content:flex-start;overflow-x:auto;overflow-y:hidden;touch-action:pan-x;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+body.mobile-fx #fx-quicknav::-webkit-scrollbar{display:none}
+body.mobile-fx #fx-quicknav button{flex:0 0 auto;min-width:68px;padding:0 8px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -2895,7 +2899,7 @@ new MutationObserver(apply).observe(b,{attributes:true,attributeFilter:['class']
    jumps between the stage's stacked cards and follows the scroll. Called by fxSection (deskx). */
 const SK2_SUB={image:'Image',looks:'Looks',adjust:'Basic',curves:'Curves',hal:'Halation',bloom:'Bloom',hsl:'Mixer',wheels:'Wheels',
   pointcolor:'Point colour',grain:'Grain',nr:'Noise',deconv:'Sharpen',lens:'Lens',art:'Artifacts',vig:'Effects',retouch:'Retouch',
-  inprint:'Input & Prints',local:'Masks',crop:'Crop',borders:'Border',canvas:'Canvas',export:'Output',wm:'Watermark',exppreset:'Presets',style:'Styles',share:'Sharing'};
+  inprint:'Input & Prints',local:'Masks',crop:'Crop',borders:'Border',canvas:'Canvas',export:'Output',wm:'Watermark',exppreset:'Export Presets',style:'Presets',share:'Sharing'};
 function sk2SubTabs(g,jump){
   const panel=document.querySelector('.fx-panel');if(!panel)return;
   let h=document.getElementById('sk2-stage-h'),nav=document.getElementById('sk2-sub');
@@ -3687,7 +3691,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <div class="fx-ctrl" data-fxsec="looks">
         <!-- This header folds only the input/print settings below it; the preset grid has its own
              "Preset" header and stays visible, so the title names what it actually folds. -->
-        <div class="fx-ctrl-title">Presets</div>
+        <div class="fx-ctrl-title">Looks</div>
         <!-- 3.4.9: matches the wireframe's .presetbox (Editor (Developer) View.dc.html:317-341)
              — a dedicated collapse toggle for JUST the preset filter+grid, independent of the
              panel-level section collapse every .fx-ctrl already gets (fxSecToggle, further down
@@ -3729,7 +3733,6 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <button class="btn bgh" id="btn-adj-scope" onclick="adjToggleScope()" title="By default Tone adjustments apply to every loaded photo. Click to make THIS photo's adjustments independent (e.g. nudge just its exposure), or click again to sync it back to the shared value.">This photo only</button>
         </div>
         <div class="fx-fields ff-off" id="ff-adjust">
-          <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Tone</div>
           <div class="fx-row"><div class="fx-label">Exposure</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-exp">0</div></div>
           <div class="fx-row"><div class="fx-label">Contrast</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-con" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-con">0</div></div>
           <div class="fx-row"><div class="fx-label">Highlights</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-hi" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-hi">0</div></div>
@@ -4313,7 +4316,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
            devices. Modelled on darktable's Styles (a saved history-stack, separate from
            per-module presets). -->
       <div class="fx-ctrl" data-fxsec="style">
-        <div class="fx-ctrl-title">Styles</div>
+        <div class="fx-ctrl-title">Presets</div>
         <div class="btn-row" style="margin-top:0">
           <button class="btn bgh" onclick="styleSaveCurrent()" title="Save the current recipe (everything except crop/geometry) as a named, reusable Style">Save as Style…</button>
           <button class="btn bgh" onclick="styleImportClick()" title="Import a Style .json exported from CHRO-MA-SMITH">Import…</button>
@@ -4591,7 +4594,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
     </div>
     <div id="fx-mobile-nav" aria-label="Editor navigation">
       <div class="fx-nav-tabs" role="tablist"><button id="fx-nav-looks" role="tab" onclick="fxToolsClose();fxSection('looks')">Looks</button>
-      <button id="fx-nav-tools" role="tab" onclick="fxToolsOpen()">Tools</button>
+      <button id="fx-nav-tools" role="tab" onclick="document.body.classList.contains('tools-open')?fxToolsClose():fxToolsOpen()">Tools</button>
       <button id="fx-nav-crop" role="tab" onclick="fxToolsClose();fxSection('crop')">Crop</button></div>
       <button id="fx-nav-export" onclick="fxMobileExportSheet()">Export</button>
     </div>
@@ -4709,7 +4712,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <ul>
         <li><b>Export</b> (top right) opens the export sheet: pick a size (full size down to 1080 social) and a format (match source, JPG, PNG, WebP). <b>More</b> has quality, file name, the destination folder, watermark, export presets, Styles and sharing.</li>
         <li>Exports always render at full resolution, not preview size. Your original is never changed.</li>
-        <li><b>Styles</b> save a whole edit to reuse on other photos; <b>Copy / Paste edit settings</b> is in the settings menu.</li>
+        <li><b>Presets</b> save a whole edit to reuse on other photos; <b>Copy / Paste edit settings</b> is in the settings menu.</li>
       </ul>
     </div>
 
@@ -6774,7 +6777,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001Z';
+const BUILD='1.1001A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17822,7 +17825,7 @@ async function _fxSplitListInto(container,closeFn){
   }
   const styles=stylesList();
   if(styles.length){
-    container.appendChild(_fxSplitHead('Styles'));
+    container.appendChild(_fxSplitHead('Presets'));
     styles.forEach(s=>{container.appendChild(_fxSplitRow(s.name,()=>pick({style:s.name}),fxSplitSrc&&fxSplitSrc.style===s.name));});
   }
   if(typeof window.chromasmithGetExportHistory==='function'){
@@ -24066,6 +24069,8 @@ document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('#
 // Inline SVG icons (the app is fully offline — no icon webfont/CDN allowed).
 const _SVG=(p,sz)=>`<svg viewBox="0 0 24 24" width="${sz||20}" height="${sz||20}" fill="none" stroke="currentColor" stroke-width="${(24/(sz||20)).toFixed(3)}" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">${p}</svg>`; // E4 constructivist set: a 1px hairline at any size
 const ICONS={
+ // Presets (saved whole-edit recipes, key 'style'): stacked layers.
+ style:'<path d="M12 3l9 5-9 5-9-5Z"/><path d="M3 12l9 5 9-5M3 16l9 5 9-5"/>',
  image:'<rect x="3" y="5" width="18" height="14"/><path d="M3 19l7-7 7 7M13 15l3-3 5 5"/><path d="M16.5 7l1.5 1.5-1.5 1.5-1.5-1.5Z"/>',
  // Library catalog's date browser (library-ui.js) — the sidebar's "By Date" tree row.
  calendar:'<rect x="3" y="5" width="18" height="16"/><path d="M3 10h18M8 3v4M16 3v4M13 18l3-3M15 18l3-3"/>',
@@ -24229,7 +24234,7 @@ const FX_SECTIONS=[['image','Image'],['looks','Looks'],['adjust','Light'],
   ['local','Masks'],
   ['grain','Grain'],['hal','Halation'],['bloom','Bloom'],['art','Artifacts'],['vig','Effects'],
   ['borders','Borders'],['canvas','Canvas'],
-  ['export','Output'],['wm','Watermark'],['exppreset','Export Presets'],['style','Styles'],['share','Sharing'],
+  ['export','Output'],['wm','Watermark'],['exppreset','Export Presets'],['style','Presets'],['share','Sharing'],
   ['info','Info'],['diag','Diag']];
 // A16: the card lookup is cached. This ran a querySelector per section on every rail and
 // section-nav rebuild (and those rebuild on every layout change / window resize). The cards are
@@ -24366,7 +24371,16 @@ function buildSecNav(){          // mobile categorized tool grid
     b.onclick=()=>fxSection(key);
     grid.appendChild(b);
   });
-  const close=document.createElement('button');close.id='fx-tools-close';close.type='button';close.textContent='Close';close.onclick=fxToolsClose;nav.appendChild(close);
+  // Phone quick bar (All FX / Previous / Light / …): the rest of the tools follow, reached by
+  // scrolling the bar sideways — same list and order as the Tools grid.
+  const qn=document.getElementById('fx-quicknav');
+  if(qn)_eachSection((key,lb)=>{
+    if(key==='image'||key==='looks'||key==='info'||key==='diag'||FX_MOBILE_HIDE.has(key))return;
+    if(qn.querySelector('[data-sec="'+key+'"]'))return;
+    const q=document.createElement('button');q.dataset.sec=key;q.title=lb;
+    q.innerHTML=`<span>${icon(key,22)}</span>${lb}`;q.onclick=()=>fxSection(key);qn.appendChild(q);
+  });
+  // No Close button: tapping Tools again or pulling the panel down closes it.
   fxMobileFilter(_fxMobileCat);
   fxSection(_activeSec()||(window.__TAURI__?'looks':'image'),true);
 }
@@ -24730,7 +24744,7 @@ window.addEventListener('resize',()=>{
     bind('fx-panel-scroll-host',function(){fxSheetClose();},function(){return document.body.classList.contains('sheet-open');});
     var panel=document.querySelector('.fx-panel');if(panel){if(!panel.id)panel.id='fx-panel-auto';
       bind(panel.id,function(){fxSheetClose();},function(){return document.body.classList.contains('sheet-open');});}
-    bind('fx-tool-grid',function(){fxToolsClose();},function(){return document.body.classList.contains('tools-open');});
+    bind('fx-secnav',function(){fxToolsClose();},function(){return document.body.classList.contains('tools-open');});
   });
 })();
 // Mark a section's rail/strip button when it's "in use":
