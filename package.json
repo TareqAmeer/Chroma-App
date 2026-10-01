@@ -1,7 +1,7 @@
 {
   "name": "chromasmith",
   "version": "1.0.0",
-  "description": "Chromasmith — offline film-emulation photo editor (iOS shell wraps the single-file web app)",
+  "description": "Chromasmith \u2014 offline film-emulation photo editor (iOS shell wraps the single-file web app)",
   "private": true,
   "scripts": {
     "postinstall": "patch-package && git config core.hooksPath tools/githooks || true",
@@ -82,7 +82,8 @@
     "reference:measure": "node tools/scripts/measure-ui-reference.mjs",
     "reference:compare": "node tools/scripts/measure-ui-reference.mjs --compare",
     "masks:inventory": "node test/panel_extract.mjs --section=local && node test/mask_inventory_check.mjs",
-    "stop-hook:test": "node --test test/stop_editor_gate_check.mjs"
+    "stop-hook:test": "node --test test/stop_editor_gate_check.mjs",
+    "native:contract": "node test/native_contract.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.4.1",
