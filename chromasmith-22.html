@@ -2844,6 +2844,19 @@ body.sk2 #cs-brand-tog::before{background:linear-gradient(225deg,#ff8a5c 0%,#ff3
 body.sk2 #cs-brand-tog::after{display:block!important;z-index:0!important;background:var(--k-color-ink)!important;transform:translateX(calc(var(--k-sx,0px) - 4px))!important;top:1px!important;bottom:3px!important}
 /* Splash: dark behind the card, no white window frame. */
 html.cs-boot-tauri,html.cs-boot-tauri body{background:#141414}
+
+/* Phone Looks panel: everything (title, search, categories, thumbnails, Strength) fits the sheet
+   with no vertical scroll. Smaller section titles, a one-line Strength row, and the thumbnail /
+   category strips scroll sideways only. */
+body.sk2.mobile-fx .fx-ctrl-title{font-size:15px;line-height:1.2;padding-top:8px;padding-bottom:6px;margin-bottom:6px}
+body.sk2.mobile-fx .sk2-dup-title>.fx-ctrl-title{min-height:0!important}
+body.mobile-fx #fx-looks-cats,body.mobile-fx #fx-looks{overflow-y:hidden!important;touch-action:pan-x}
+body.sk2.mobile-fx #row-lut-mix{position:static;flex-wrap:nowrap;align-items:center;gap:10px;margin:8px 0 0!important;padding:2px 0;box-shadow:none}
+body.sk2.mobile-fx #row-lut-mix>.fx-label{order:1;flex:0 0 auto;margin:0}
+body.sk2.mobile-fx #row-lut-mix>.fx-slider{order:2;flex:1 1 auto;min-width:0;height:32px;margin:0}
+body.sk2.mobile-fx #row-lut-mix>.fx-val{order:3;flex:0 0 auto;min-width:28px;text-align:right}
+/* thumb centred on the track: the base rule centres with --ctl-slider-thumb, so the phone size must set that, not a bare width */
+body.mobile-fx .fx-slider{--ctl-slider-thumb:22px}
 </style>
 </head>
 <body>
@@ -3711,9 +3724,9 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       </div>
       <!-- BASIC ADJUSTMENTS -->
       <div class="fx-ctrl" data-fxsec="adjust">
-        <div class="fx-ctrl-title">Basic Adjustments <div class="fx-toggle" id="tg-adjust" onclick="toggleFX('adjust')"></div></div>
+        <div class="fx-ctrl-title">Tone <div class="fx-toggle" id="tg-adjust" onclick="toggleFX('adjust')"></div></div>
         <div class="btn-row" id="adj-scope-row" style="display:none;margin-bottom:8px">
-          <button class="btn bgh" id="btn-adj-scope" onclick="adjToggleScope()" title="By default Basic Adjustments apply to every loaded photo. Click to make THIS photo's adjustments independent (e.g. nudge just its exposure), or click again to sync it back to the shared value.">This photo only</button>
+          <button class="btn bgh" id="btn-adj-scope" onclick="adjToggleScope()" title="By default Tone adjustments apply to every loaded photo. Click to make THIS photo's adjustments independent (e.g. nudge just its exposure), or click again to sync it back to the shared value.">This photo only</button>
         </div>
         <div class="fx-fields ff-off" id="ff-adjust">
           <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Tone</div>
@@ -4562,7 +4575,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <!-- No "More" here: the Tools tab below opens the same full grid. -->
         <button class="js-allfx" onclick="enableAll()" title="All FX (long-press for settings)"><span data-mic="enableAll"></span>All FX</button>
         <button class="js-prevfx" onclick="fxApplyPrevious()" title="Apply the settings from the last photo you edited"><span data-mic="paste"></span>Previous</button>
-        <button data-sec="adjust" onclick="fxSection('adjust')"><span data-mic="adjust"></span>Adjust</button>
+        <button data-sec="adjust" onclick="fxSection('adjust')"><span data-mic="adjust"></span>Light</button>
         <button data-sec="curves" onclick="fxSection('curves')"><span data-mic="curves"></span>Curves</button>
         <button data-sec="hsl" onclick="fxSection('hsl')"><span data-mic="hsl"></span>Mixer</button>
         <button data-sec="crop" onclick="fxSection('crop')"><span data-mic="crop"></span>Crop</button>
@@ -6761,7 +6774,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001Y';
+const BUILD='1.1001Z';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13425,7 +13438,7 @@ function _cpCommands(){
   const add=(group,label,run)=>cmds.push({group,label,run});
   const TABS={fx:'Effects & Export',match:'Match & Refine',copy:'Color Copy',collage:'Collage',guide:'Guide'};
   Object.entries(TABS).forEach(([k,label])=>add('Tab','Go to '+label,()=>switchTab(k)));
-  const SECTIONS={looks:'Presets & Looks',adjust:'Basic Adjustments',nr:'Noise Reduction',deconv:'Deconvolution',curves:'Tone Curves',
+  const SECTIONS={looks:'Presets & Looks',adjust:'Tone',nr:'Noise Reduction',deconv:'Deconvolution',curves:'Tone Curves',
     hsl:'Color Mixer',wheels:'Colour Wheels',pointcolor:'Point Color',local:'Masks / Local Adjustments',lens:'Lens Correction',
     grain:'Film Grain',art:'Film Artifacts',hal:'Halation',bloom:'Bloom',vig:'Effects (Vignette, Clarity, Texture, Dehaze)',
     borders:'Borders',canvas:'Canvas',export:'Export: Output',wm:'Export: Watermark',exppreset:'Export: Presets',style:'Export: Styles',share:'Export: Sharing'};
@@ -17440,7 +17453,7 @@ const PASTE_CATEGORIES=[
   {key:'lut',label:'Look (LUT + Print profile)',sliders:['lut-mix'],toggles:[],selects:['sel-lut','sel-print']},
   {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','hsl','pointColors']},
   {key:'wheels',label:'Colour Wheels',sliders:[],toggles:['tg-wheels'],selects:[],extra:['wheels']},
-  {key:'adjust',label:'Basic Adjustments',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
+  {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-hldesat'],toggles:[],selects:[]},
   {key:'deconv',label:'Deconvolution',sliders:['deconv-amt','deconv-rad'],toggles:[],selects:[]},
   {key:'grain',label:'Film Grain',sliders:['grain-a','grain-sz'],toggles:['tg-grain'],selects:['sel-grain-fmt']},
@@ -24209,7 +24222,7 @@ function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // Crop and Masks used to sit AFTER Borders and Canvas — i.e. you framed and matted the photo
 // before you cropped it. Film keeps the requested grain > halation > bloom > artifacts >
 // vignette order. Render order is unaffected by any of this; it is UI ordering only.
-const FX_SECTIONS=[['image','Image'],['looks','Looks'],['adjust','Adjust'],
+const FX_SECTIONS=[['image','Image'],['looks','Looks'],['adjust','Light'],
   ['curves','Curves'],['hsl','Mixer'],['pointcolor','Point Color'],
   ['nr','Noise'],['lens','Lens'],['retouch','Retouch'],
   ['crop','Crop'],
