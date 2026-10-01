@@ -2884,6 +2884,9 @@ body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title:not(:has(.fx-toggle)):not(:has(.fx-to
 .fx-label>.fx-lic svg{width:14px;height:14px}
 .fx-row.fx-mod>.fx-label>.fx-lic{color:var(--k-color-ink,#f2f0ea)}
 body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title>.fx-toggle-lb{margin-left:auto}
+/* edited marker on the sheet's tool-name strip, same square as the tool bar */
+#fx-sheet-strip button.edited{position:relative}
+#fx-sheet-strip button.edited::after{content:'';position:absolute;top:5px;right:-7px;width:5px;height:5px;background:var(--k-color-accent-a)}
 </style>
 </head>
 <body>
@@ -6807,7 +6810,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001M';
+const BUILD='1.1001N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -12477,7 +12480,7 @@ function _ffAutoEnable(e){
   const tg=document.getElementById('tg-'+name);
   if(!tg||tg.classList.contains('on'))return;
   toggleFX(name);
-  if(typeof toast==='function')toast(name.charAt(0).toUpperCase()+name.slice(1)+' turned on');
+  if(typeof toast==='function'){const lb=(FX_SECTIONS.find(x=>x[0]===name)||[])[1]||(name.charAt(0).toUpperCase()+name.slice(1));toast(lb+' turned on');}
 }
 document.addEventListener('input',_ffAutoEnable,true);
 document.addEventListener('change',_ffAutoEnable,true);
@@ -24898,7 +24901,7 @@ function _secIsEdited(key){
   return _secIsEnabled(key);
 }
 function syncSectionEnabled(){
-  document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn,#fx-quicknav [data-sec]').forEach(b=>{
+  document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn,#fx-quicknav [data-sec],#fx-sheet-strip [data-sec]').forEach(b=>{
     b.classList.toggle('enabled',_secIsEnabled(b.dataset.sec));
     b.classList.toggle('edited',_secIsEdited(b.dataset.sec));
   });
@@ -26423,6 +26426,7 @@ if(/[?&]catalog=1/.test(location.search)){
   }
   function stripSync(){
     if(!mob())return;var st=stripBuild();if(!st)return;
+    if(typeof syncSectionEnabled==='function')syncSectionEnabled();
     var c=document.querySelector('.fx-ctrl.sec-active'),cur=c&&c.dataset.fxsec,act=null;
     [].forEach.call(st.children,function(b){var on=b.dataset.sec===cur;b.classList.toggle('on',on);if(on)act=b;});
     if(act&&act.scrollIntoView)try{st.scrollTo({left:act.offsetLeft-st.clientWidth/2+act.offsetWidth/2,behavior:'smooth'});}catch(_){}
