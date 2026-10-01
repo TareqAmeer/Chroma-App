@@ -6758,7 +6758,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001B';
+const BUILD='1.1001C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24208,21 +24208,25 @@ const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEac
 // count) and the source/print settings under it ("Input & Prints"). Split here, before the section
 // list is read, by moving the existing Input / Highlight response / Print nodes into their own card.
 // Phones get the same split: Input & Prints is its own tool there too, so the Looks sheet is only presets.
-(function fxSplitLooksCard(){
-  const looks=document.querySelector('.fx-ctrl[data-fxsec="looks"]');if(!looks||document.querySelector('.fx-ctrl[data-fxsec="inprint"]'))return;
+function fxSplitLooksCard(){
+  const looks=document.querySelector('.fx-ctrl[data-fxsec="looks"]');if(!looks)return;
+  const existing=document.querySelector('.fx-ctrl[data-fxsec="inprint"]');
   const ids=['sel-input','chips-input','sel-tonemap','chips-tonemap','fx-hdr-preview-row','sel-print','chips-print'];
   const nodes=ids.map(i=>document.getElementById(i)).filter(Boolean);
   const labels=[...looks.querySelectorAll(':scope > .fx-label')].filter(l=>['Input','Highlight response','Print'].includes(l.textContent.trim()));
   const all=[...nodes,...labels].filter(n=>n.parentElement===looks||n.closest('.fx-ctrl')===looks);
   if(!all.length)return;
   all.sort((a,b)=>a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING?-1:1);
+  if(existing){all.forEach(n=>{existing.appendChild(n);}); // the desktop shell's Looks reorder pulls these back into the Looks card — move them out again
+    return;}
   const card=document.createElement('div');card.className='fx-ctrl';card.dataset.fxsec='inprint';
   const t=document.createElement('div');t.className='fx-ctrl-title';t.textContent='Input & Prints';card.appendChild(t);
   all.forEach(n=>{card.appendChild(n);if(n.classList.contains('fx-label'))n.style.marginTop='10px';});
   looks.insertAdjacentElement('afterend',card);
   FX_SECTIONS.splice(FX_SECTIONS.findIndex(x=>x[0]==='looks')+1,0,['inprint','Input & Prints']);
   FX_GROUPS.look.members.push('inprint');FX_GROUP_OF.inprint='look';
-})();
+}
+fxSplitLooksCard();
 // deskx rail: draw a hairline BEFORE each of these, so the rail reads as bands rather than one
 // undifferentiated list. With the FX_SECTIONS order above that yields:
 //   [Image Looks] [Adjust] [Color] [Detail Retouch] [Crop] [Masks] [Film] [Frame] [Export Info]
@@ -24769,6 +24773,7 @@ function fxDesktopFoldImageIntoLooks(){
   // Library instead — hidden here rather than deleted from the markup outright.
   const gp=document.getElementById('btn-gp-import');if(gp)gp.style.display='none';
   fxDesktopReorderLooksPanel(looksCard,title);
+  if(typeof fxSplitLooksCard==='function')fxSplitLooksCard();
 }
 // 3.4.5/3.4.7/3.4.8: reorders the Looks panel's EXISTING elements (moves nodes, writes no new
 // markup) into the wireframe's presetbox sequence — RAW profile -> Input -> Preset section (with
