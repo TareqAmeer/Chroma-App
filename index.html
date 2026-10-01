@@ -86,6 +86,12 @@ a{color:inherit}
 .hero-t sup{color:var(--acc);font-size:.35em;vertical-align:top;position:relative;top:.2em}
 .lb{position:absolute;top:58%;font-size:11px}.lb.l{left:5vw}.lb.r{right:5vw;text-align:right}
 .scrollcue{position:absolute;bottom:5vh;left:50%;transform:translateX(-50%)}
+.hovercue{position:absolute;top:92px;left:50%;transform:translateX(-50%);z-index:4;pointer-events:none;display:flex;align-items:center;gap:10px;padding:10px 16px;background:rgba(11,11,10,.72);border:1px solid rgba(242,239,232,.28);backdrop-filter:blur(8px);color:var(--fg);white-space:nowrap;transition:opacity .4s}
+.hovercue i{width:14px;height:14px;border:1.5px solid var(--acc);border-radius:50%;position:relative;animation:hcpulse 1.8s ease-in-out infinite}.hovercue i::after{content:"";position:absolute;width:6px;height:1.5px;background:var(--acc);right:-5px;bottom:-2px;transform:rotate(45deg)}
+.hovercue.seen{opacity:0!important}
+@keyframes hcpulse{50%{transform:scale(1.25)}}
+@media(hover:none),(pointer:coarse){.hovercue{display:none}}
+.still .hovercue i{animation:none}
 .cap0{position:absolute;left:5vw;right:5vw;bottom:10vh;opacity:0;display:flex;justify-content:space-between;align-items:end;gap:24px;flex-wrap:wrap}
 .cap0 .k{max-width:14ch}
 .cap0 .foot{margin-top:14px;color:var(--mid)}
@@ -509,6 +515,7 @@ section{position:relative}
     <div class="panel p0">
       <div class="stagew" aria-hidden="true"><span>Raw photo</span><span>Edit it</span><span>Colour it</span><span>Sprinkle some grain</span><span>Make it glow</span><span>Frame it twice</span></div>
       <span class="mono scrollcue">Scroll to develop</span>
+      <span class="mono hovercue" id="hovercue"><i aria-hidden="true"></i>Hover over the photo to see the detail</span>
       <div class="cap0">
         <div><div class="k">A whole photo studio, wherever inspiration finds you.</div></div>
       </div>
@@ -852,7 +859,8 @@ const W_=document.querySelectorAll('.stagew span'),wIn=(k,at)=>tl.to(W_[k].query
 const PI=[...document.querySelectorAll('.ph img')],RV=document.querySelector('.ph .rvf'),CLOSED='inset(0% 0% 100% 0%)',OPEN='inset(0% 0% 0% 0%)',EZ='power1.inOut';
 gsap.set(PI,{clipPath:CLOSED});gsap.set(PI[0],{clipPath:OPEN});stageWindow(0);
 tl.fromTo('.ph',{width:W0,height:H0},{width:W0,height:H0,duration:.001},0)
-  .to('.scrollcue',{opacity:0,duration:.1},0);
+  .to('.scrollcue',{opacity:0,duration:.1},0)
+  .to('.hovercue',{opacity:0,duration:.2},3.9);
 gsap.set(W_[0].querySelectorAll('i'),{yPercent:0});wOut(0,.4);
 // the app's reveal: the frame shows, the old photo's bottom edge rises while it fades, the new one fills top to bottom, the frame fades
 [.5,1.2,1.9,2.6,3.3].forEach((t,n)=>{const k=n+1,grow=k===5,f=t+.2+(grow?.25:0);
@@ -1091,6 +1099,7 @@ document.querySelectorAll('.paper').forEach(pp=>ScrollTrigger.create({trigger:pp
   if(!reduce)gsap.to('.sheet',{yPercent:-12,opacity:0,ease:'none',scrollTrigger:{trigger:'.intro',start:'top top',end:'+=80%',scrub:true}});
 }
 /* 10 loupe: 100% view under the cursor */
+{const hc=document.getElementById('hovercue'),ph0=document.querySelector('.ph');hc&&ph0&&ph0.addEventListener('pointerenter',()=>setTimeout(()=>hc.classList.add('seen'),1200),{once:true})}
 {
   const L=document.querySelector('.loupe');
   if(!matchMedia('(hover:hover) and (pointer:fine)').matches)L.style.display='none';  // touch: the loupe fights with scrolling
