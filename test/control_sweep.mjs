@@ -13,6 +13,7 @@
 //   error     page error or console.error raised while it ran            -> FAIL
 //   changed   DOM, form values, URL or app canvas changed                -> ok
 //   inert     nothing observable changed                                 -> reported (ratchet)
+//   selected  already-selected chip/tab re-pressed, no change (correct) -> ok
 //   unreach   path replay could not find it again (conditional control)  -> reported
 //
 // Output: test/output/control_sweep.json + a summary table. Exit 1 on any `error`, or on an
@@ -44,6 +45,10 @@ function enumerate() {
   const seen = new Map(), out = [];
   for (const el of document.querySelectorAll(sel)) {
     if (el.disabled || el.closest('[inert],[aria-hidden=true]')) continue;
+    // Closed <details> content still has layout boxes in Chromium but is never painted or
+    // focusable (the Export sheet's "More" cards were reported inert for this reason).
+    if (el.closest('details:not([open])') && !el.closest('summary')) continue;
+    if (el.checkVisibility && !el.checkVisibility({ contentVisibilityAuto: true, opacityProperty: true, visibilityProperty: true })) continue;
     const r = el.getBoundingClientRect();
     if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) continue;
     const cs = getComputedStyle(el);
@@ -55,7 +60,8 @@ function enumerate() {
     const base = `${el.tagName.toLowerCase()}${el.type ? ':' + el.type : ''}|${label}|${data}`;
     const n = (seen.get(base) || 0) + 1; seen.set(base, n);
     const family = `${el.tagName}|${el.type || ''}|${el.className}|${[...el.attributes].map((a) => a.name).filter((a) => a.startsWith('data-')).sort().join(',')}`;
-    out.push({ family, key: `${base}|${n}`, kind: el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' ? (el.type || el.tagName.toLowerCase()) : 'click', label, x: cx, y: cy });
+    const selected = el.classList.contains('on') || el.classList.contains('active') || el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-selected') === 'true';
+    out.push({ family, selected, key: `${base}|${n}`, kind: el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' ? (el.type || el.tagName.toLowerCase()) : 'click', label, x: cx, y: cy });
   }
   return out;
 }
@@ -172,7 +178,8 @@ for (const [name, s] of Object.entries(SURFACES)) {
       await page.waitForTimeout(150);
       try { after = await page.evaluate(fingerprint); } catch (e) { errs.push('navigated: ' + e.message.split('\n')[0]); break; }
     }
-    const status = errs.length ? 'error' : after !== before ? 'changed' : 'inert';
+    // Re-pressing the already-selected chip/tab is a correct no-op, not an inert control.
+    const status = errs.length ? 'error' : after !== before ? 'changed' : cur.selected ? 'selected' : 'inert';
     results.set(c.key, { status, label: c.label, kind: c.kind, path: c.path, errors: errs.slice(0, 3) });
     if (status === 'changed') {
       atBaseline = false;

@@ -1,34 +1,13 @@
 {
   "note": "Controls the sweep pressed with no observable effect. Each is a bug or needs a reason; the list may only shrink.",
   "inert": [
-    "editor::button:button|#cs-tog-studio||1",
-    "editor::button:button|#lib-zoom-in||1",
-    "editor::button:button|Full size|data-v=0|1",
-    "editor::button:button|Transform|data-cat=tools|1",
-    "editor::button:submit|#btn-favorite||1",
-    "editor::button:submit|#btn-flag-green||1",
-    "editor::button:submit|#btn-flag-red||1",
-    "editor::button:submit|#btn-wb-eye||1",
-    "editor::button:submit|All|data-fgrp=type,data-fval=all|1",
-    "editor::button:submit|All||1",
-    "editor::button:submit|As shot||1",
-    "editor::button:submit|Favorite (Gallery)||1",
-    "editor::button:submit|Green flag (Gallery)||1",
     "editor::button:submit|One-click levels and white balance from the image histogram||1",
-    "editor::button:submit|Reject (Gallery)||1",
     "editor::div|#fx-looks||1",
-    "editor::div|#tg-exp-wm|data-a11y=1|1",
-    "editor::span|Show or hide Export Presets||1",
-    "editor::span|Show or hide Output||1",
-    "editor::span|Show or hide Watermark||1",
-    "library::button:button|#cs-tog-studio||1",
-    "library::button:button|Transform|data-cat=tools|1",
-    "library::button:submit|#btn-before||1",
-    "library::button:submit|#fx-add-btn||1",
-    "library::button:submit|#fx-panel-resizer||1",
-    "library::button:submit|#fx-rail-resizer||1",
-    "library::button:submit|Highlight clipping — click to show clipped areas on the photo||1",
-    "library::div|IMG_1009.RW2|data-path=/test/AllPhotos/IMG_1009.RW2|1",
-    "library::div|Reset|data-a11y=1|1"
-  ]
+    "library::button:submit|#fx-panel-resizer||1"
+  ],
+  "reasons": {
+    "editor::button:submit|One-click levels and white balance from the image histogram||1": "test fixture is already neutral/full-range, so auto-levels has nothing to change",
+    "editor::div|#fx-looks||1": "focusable scroll container for the look grid, not a control",
+    "library::button:submit|#fx-panel-resizer||1": "tool panel is closed on the Library surface; the drag has nothing to resize"
+  }
 }
