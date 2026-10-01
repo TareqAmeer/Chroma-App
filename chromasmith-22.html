@@ -1221,8 +1221,7 @@ body.mobile-fx #fx-focus.on{display:block;position:fixed;left:0;right:0;bottom:v
 
 /* ── Mobile UX pass: bigger look tiles, one scrolling chip row, larger slider hit area, tool tiles, portrait only ── */
 body.mobile-fx .look-cell{flex:0 0 104px}
-/* Phones: the per-tool on/off switch is redundant (moving any slider switches the tool on, Reset switches it back off) — one control, one meaning. */
-body.mobile-fx .fx-ctrl:not([data-fxsec="lens"]):not([data-fxsec="wm"]):not([data-fxsec="export"])>.fx-ctrl-title .fx-toggle{display:none}
+/* Phones keep the per-tool on/off switch: it's the quick before/after for that tool's changes. */
 body.mobile-fx #fx-looks-cats{flex-wrap:nowrap!important;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 body.mobile-fx #fx-looks-cats::-webkit-scrollbar{display:none}
 body.mobile-fx #fx-looks-cats .btn{flex:0 0 auto}
@@ -6785,7 +6784,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001F';
+const BUILD='1.1001G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
