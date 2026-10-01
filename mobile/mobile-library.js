@@ -122,10 +122,15 @@ if(typeof fxUpdateHistoryBtn==='function')fxUpdateHistoryBtn();
 
 // ── gallery UI ─────────────────────────────────────────────────────────────────────────────────
 const css=`
-#mlib{position:fixed;inset:0;z-index:9000;background:var(--bg,#0e0e0e);color:var(--tx,#eee);display:none;flex-direction:column;
+#mlib{position:fixed;inset:0;z-index:9000;background:#1c1c1c;color:var(--tx,#eee);display:none;flex-direction:column;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);font-family:var(--sans,system-ui)}
 #mlib.open{display:flex}
-#mlib .mh{display:flex;align-items:center;gap:8px;padding:10px 14px}
+#mlib .top{display:flex;align-items:center;gap:10px;padding:10px 8px 6px 14px}
+#mlib .top svg{width:26px;height:26px;flex:0 0 auto}
+#mlib .top .wm{flex:1;font-size:15px;letter-spacing:.02em;white-space:nowrap}
+#mlib .top .set{border:0;background:none;color:inherit;width:40px;height:40px;display:flex;align-items:center;justify-content:center}
+#mlib .top .set svg{width:22px;height:22px}
+#mlib .mh{display:flex;align-items:center;gap:8px;padding:6px 14px 10px}
 #mlib .mh h1{flex:1;margin:0;font-size:22px;font-weight:600;letter-spacing:-.01em}
 #mlib .mh button{border:0;border-radius:999px;padding:9px 16px;font:600 14px inherit;background:var(--sur,#1d1d1d);color:inherit}
 #mlib .mh .pri{background:var(--primary,#e8e2d0);color:#111}
@@ -134,7 +139,7 @@ const css=`
 #mlib .tabs button.on{background:var(--sur,#1d1d1d);color:inherit}
 #mlib .grid{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:2px;
   padding:0 2px calc(16px + env(safe-area-inset-bottom));align-content:start;-webkit-overflow-scrolling:touch}
-#mlib .cell{position:relative;aspect-ratio:1;background:#1a1a1a;overflow:hidden;border:0;padding:0}
+#mlib .cell{position:relative;aspect-ratio:1;background:#262626;overflow:hidden;border:0;padding:0}
 #mlib .cell img{width:100%;height:100%;object-fit:cover;display:block}
 #mlib .cell .nm{position:absolute;inset:auto 4px 4px 4px;font-size:10px;color:#ccc;text-align:left;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 #mlib .cell .b{position:absolute;top:5px;right:5px;font-size:10px;padding:2px 6px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff}
@@ -152,7 +157,8 @@ function build(){
   if(root)return;
   const st=document.createElement('style');st.textContent=css;document.head.appendChild(st);
   root=document.createElement('div');root.id='mlib';
-  root.innerHTML=`<div class="mh"><h1>Gallery</h1><button class="pri" data-a="import">Import</button><button data-a="close" aria-label="Close gallery">Editor</button></div>
+  root.innerHTML=`<div class="top"><svg viewBox="18 18 64 62" aria-hidden="true"><rect x="21" y="21" width="48" height="44" fill="var(--k-color-ink,#f2f0ea)"/><rect x="36" y="32" width="43" height="45" fill="var(--k-color-accent-a,#ff3b1f)"/><rect x="36" y="32" width="33" height="33" fill="#b0200e"/></svg><span class="wm">CHRO-MA-SMITH</span><button class="set" data-a="settings" aria-label="Settings">${typeof icon==='function'?icon('more',22):'⋯'}</button></div>
+<div class="mh"><h1>Gallery</h1><button class="pri" data-a="import">Import</button><button data-a="close" aria-label="Close gallery">Editor</button></div>
 <div class="tabs"><button data-f="all" class="on">All</button><button data-f="edited">Edited</button><button data-f="exported">Exported</button></div>
 <div class="grid"></div>
 <input type="file" accept="image/*,.rw2,.dng" multiple hidden>`;
@@ -170,6 +176,7 @@ function build(){
     const a=e.target.closest('[data-a]'),f=e.target.closest('[data-f]'),c=e.target.closest('.cell');
     if(a&&a.dataset.a==='import')inp.click();
     else if(a&&a.dataset.a==='close')close();
+    else if(a&&a.dataset.a==='settings')settings();
     else if(f){filter=f.dataset.f;root.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b===f));render();}
     else if(c)openPhoto(c.dataset.id);
   });
@@ -219,6 +226,30 @@ ${p.recipe?`<button data-k="revert">Revert to original</button>`:''}
     else if(k==='del'){if(!confirm('Remove this photo and its edits from the gallery? Exported files in your photo library are not affected.'))return;
       await tx('photos','readwrite',s=>s.delete(id));await tx('blobs','readwrite',s=>s.delete(id));
       if(openedId===id)openedId=null;render();}
+  };
+  sh.classList.add('open');
+}
+// Gallery settings: app-level only (editor actions stay in the editor's ⋯ menu).
+async function settings(){
+  let sh=document.getElementById('mlib-sheet');
+  if(!sh){sh=document.createElement('div');sh.id='mlib-sheet';document.body.appendChild(sh);
+    sh.addEventListener('click',e=>{if(e.target===sh)sh.classList.remove('open')});}
+  const ps=await allPhotos();let used='';
+  try{const e=await navigator.storage.estimate();used=(e.usage/1048576).toFixed(0)+' MB used';}catch(e){}
+  const light=document.body.classList.contains('light');
+  sh.innerHTML=`<div class="s"><div class="t">Settings</div>
+<button data-k="theme">${light?'Dark':'Light'} theme</button>
+<button data-k="tour">Show welcome guide</button>
+<div class="h">Gallery</div>
+<div class="t">${ps.length} photo${ps.length===1?'':'s'}${used?' · '+used:''}</div>
+<button data-k="clear" class="dz">Remove all photos from gallery</button>
+<div class="t" style="padding-top:10px">CHRO-MA-SMITH · build ${typeof BUILD!=='undefined'?BUILD:''}</div></div>`;
+  sh.querySelector('.s').onclick=async e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;
+    sh.classList.remove('open');
+    if(k==='theme'&&typeof toggleTheme==='function')toggleTheme();
+    else if(k==='tour'&&window.chromasmithShowTour){close();window.chromasmithShowTour();}
+    else if(k==='clear'){if(!confirm('Remove every photo and its edits from the gallery? Exported files in your photo library are not affected.'))return;
+      await tx('photos','readwrite',s=>s.clear());await tx('blobs','readwrite',s=>s.clear());openedId=null;openedIds=[];render();}
   };
   sh.classList.add('open');
 }
