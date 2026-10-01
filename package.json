@@ -1,7 +1,7 @@
 {
   "name": "chromasmith",
   "version": "1.0.0",
-  "description": "Chromasmith \u2014 offline film-emulation photo editor (iOS shell wraps the single-file web app)",
+  "description": "Chromasmith — offline film-emulation photo editor (iOS shell wraps the single-file web app)",
   "private": true,
   "scripts": {
     "postinstall": "patch-package && git config core.hooksPath tools/githooks || true",
