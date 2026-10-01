@@ -66,6 +66,12 @@ CI builds an unsigned IPA on every push
 ([workflow](https://github.com/TareqAmeer/Chroma-App/actions/workflows/ios-ipa.yml)); this machine
 has no Xcode, so CI is the only build path.
 
+## Android app (Capacitor)
+
+Same shell as iOS: `./build-ios.sh` stages `www/`, then `npx cap sync android`. CI builds a debug-signed
+`Chromasmith.apk` ([workflow](https://github.com/TareqAmeer/Chroma-App/actions/workflows/android-apk.yml));
+this machine has no Android SDK, so CI is the only build path. See [docs/android-shell.md](docs/android-shell.md).
+
 ## Repository layout
 
 ```
@@ -77,6 +83,7 @@ site/                      Landing-page assets + the scripts that generate them
 vendor/                    LibRaw wasm, DCP camera profiles, mediabunny, 102 look LUTs, frames
 desktop/                   Tauri desktop shell (macOS + Windows): native RAW, the photo library, on-device AI
 ios/                       Capacitor iOS shell
+android/                   Capacitor Android shell
 test/                      Export/UI/perf/mask/library/video regression gates
 tools/calib/               Python calibration + analysis tooling (not needed to run the app)
 CLAUDE.md                  Developer handoff: architecture, calibration science, hard-won lessons

@@ -12,10 +12,11 @@ and no server behind it.
 
 **→ [Open the app](https://tareqameer.github.io/Chroma-App/app/) ·
 [Product page](https://tareqameer.github.io/Chroma-App/) ·
-[Mac & Windows downloads](https://github.com/TareqAmeer/Chroma-App/releases/latest)**
+[Mac, Windows, iPhone & Android downloads](https://tareqameer.github.io/Chroma-App/#yours)**
 
 [![Export gate](https://github.com/TareqAmeer/Chroma-App/actions/workflows/export-gate.yml/badge.svg)](https://github.com/TareqAmeer/Chroma-App/actions/workflows/export-gate.yml)
 [![iOS build](https://github.com/TareqAmeer/Chroma-App/actions/workflows/ios-ipa.yml/badge.svg)](https://github.com/TareqAmeer/Chroma-App/actions/workflows/ios-ipa.yml)
+[![Android build](https://github.com/TareqAmeer/Chroma-App/actions/workflows/android-apk.yml/badge.svg)](https://github.com/TareqAmeer/Chroma-App/actions/workflows/android-apk.yml)
 ![Licence GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-d4903a)
 ![No build step](https://img.shields.io/badge/build%20step-none-52c97a)
 
@@ -71,9 +72,9 @@ Six tools, one editor: pick a look, shape the light and colour, add texture, the
 | **Mac** | [Download the latest `.dmg`](https://github.com/TareqAmeer/Chroma-App/releases/latest) | Unsigned: **right-click → Open** the first time. Intel build; runs under Rosetta on Apple Silicon. Adds the photo library, card import, faces and local AI. |
 | **Windows** | [Download the latest `windows-x64-setup.exe`](https://github.com/TareqAmeer/Chroma-App/releases/latest) | Windows 10/11, 64-bit. Unsigned: if SmartScreen appears, choose **More info → Run anyway**. The same full desktop app as on Mac: library, card import, faces and local AI. |
 | **iPhone / iPad** | Open in Safari → Share → **Add to Home Screen** | Or sideload the unsigned IPA from [Actions](https://github.com/TareqAmeer/Chroma-App/actions/workflows/ios-ipa.yml) with Flarestore / AltStore / Sideloadly. |
-| **Android** | Open in Chrome → menu → **Add to Home screen** | Same app; the layout switches to a phone shell under 700px. |
+| **Android** | [Download the latest `.apk`](https://tareqameer.github.io/Chroma-App/download/android.html) | Not on Google Play: allow **Install unknown apps** when asked. Or open in Chrome → menu → **Add to Home screen** for the same app without a download. |
 
-**Requirements:** any current Chrome, Edge, Firefox or Safari with WebGL2 · Mac: macOS on Intel, or Apple Silicon via Rosetta · Windows: 10/11, 64-bit (installer ~395 MB, includes the on-device AI models) · iPhone/iPad: iOS Safari.
+**Requirements:** any current Chrome, Edge, Firefox or Safari with WebGL2 · Mac: macOS on Intel, or Apple Silicon via Rosetta · Windows: 10/11, 64-bit (installer ~395 MB, includes the on-device AI models) · iPhone/iPad: iOS Safari · Android: Chrome, or the `.apk`.
 
 Step-by-step instructions for each platform, in plain English, are on the
 [product page](https://tareqameer.github.io/Chroma-App/#get).
@@ -252,6 +253,9 @@ Camera RAW files from any camera are decoded locally on your device. JPEG, PNG a
 **Can I use my own LUTs?**  
 Yes. Load any .cube LUT as a starting look, or build your own .cube from a before/after pair or a reference photo.
 
+**How do I install it on Android?**  
+Chromasmith isn't on Google Play. Download the .apk from the [Android page](https://tareqameer.github.io/Chroma-App/download/android.html) and open it, allowing installs from outside the store when asked. Newer versions install over older ones. Or add the web app to your home screen, which needs no download.
+
 **How do I install it on iPhone?**  
 Chromasmith isn't on the App Store yet. Download the .ipa and install it with a third-party signing service such as Flarestore. Or add the web app to your home screen, which needs no signing.
 
@@ -262,15 +266,15 @@ Open the [full feature list](#complete-feature-list). Every tool, grouped by wha
 Yes. A 64-bit Windows 10/11 installer is published on the [releases page](https://github.com/TareqAmeer/Chroma-App/releases/latest) alongside the Mac build, with the same library, import and on-device AI features.
 
 **What is it made with?**  
-The whole editor is one HTML file with plain JavaScript and no framework or build step. Rendering runs on WebGL2, with GLSL shaders for the look, grain, halation, bloom and tiled full-resolution export. RAW files are decoded locally with LibRaw compiled to WebAssembly, plus Adobe DCP camera profiles. The desktop app is a Tauri shell with a Rust core and a local catalogue database, for Mac and Windows. On-device masks use ONNX Runtime models (EdgeSAM and SegFormer). Video uses mediabunny, the iPhone app is a Capacitor shell, and the film looks were calibrated with Python tooling. It works offline through a service worker, and the source is GPL-3.0.
+The whole editor is one HTML file with plain JavaScript and no framework or build step. Rendering runs on WebGL2, with GLSL shaders for the look, grain, halation, bloom and tiled full-resolution export. RAW files are decoded locally with LibRaw compiled to WebAssembly, plus Adobe DCP camera profiles. The desktop app is a Tauri shell with a Rust core and a local catalogue database, for Mac and Windows. On-device masks use ONNX Runtime models (EdgeSAM and SegFormer). Video uses mediabunny, the iPhone and Android apps are Capacitor shells, and the film looks were calibrated with Python tooling. It works offline through a service worker, and the source is GPL-3.0.
 
 ## Known limitations
 
-- **Unsigned apps.** The Mac, Windows and iPhone builds aren't signed yet, so each system shows a one-time warning on first launch.
+- **Unsigned apps.** The Mac, Windows and iPhone builds aren't signed yet, so each system shows a one-time warning on first launch. The Android `.apk` is debug-signed, so Android asks to allow installs from outside the Play Store.
 - **Beta features.** Video grading, astro stacking and panorama (two photos only) are still in progress.
 - **Desktop-only tools.** The photo library, card import, people, search, depth masks, HDR merge and focus stacking need the Mac or Windows app.
 - **Phones.** The phone layout is touch-first; large RAW files and full-resolution exports are limited by the phone's memory.
-- **Not on the App Store** yet; iPhone installs go through the home screen or sideloading.
+- **Not on the App Store or Google Play** yet; iPhone installs go through the home screen or sideloading, and Android installs through the `.apk` or the home screen.
 
 ## Privacy
 

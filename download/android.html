@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#970500">
-<title>Download for Windows — CHRO-MA-SMITH</title>
-<meta name="description" content="Download CHRO-MA-SMITH for Windows. Free, open source and fully offline.">
+<title>Download for Android — CHRO-MA-SMITH</title>
+<meta name="description" content="Download CHRO-MA-SMITH for Android. Free, open source and fully offline.">
 <link rel="icon" href="../assets/brand/favicon.svg?v=3" type="image/svg+xml">
 <style>
 @font-face{font-family:Gramatika;font-weight:300 500;src:url(../vendor/fonts/gramatika/GramatikaRegular.otf) format("opentype");font-display:swap}
@@ -37,19 +37,19 @@ ol li b{color:var(--fg)}
 <header class="top"><a class="w" href="../">CHRO-MA-SMITH</a><a href="../#yours">← All platforms</a></header>
 <main>
 <p class="mono">Download</p>
-<h1>Windows</h1>
-<p class="req">Windows 10 or 11, 64-bit</p>
-<p class="note">The installer is not code-signed yet, so Windows SmartScreen may warn about an "unknown publisher".</p>
-<div class="cta"><a class="btn solid" id="dl" href="https://github.com/TareqAmeer/Chroma-App/releases/latest" data-goatcounter-click="get-windows" data-goatcounter-title="get-windows">Download for Windows ↓</a></div>
+<h1>Android</h1>
+<p class="req">Android phone or tablet · Chrome recommended</p>
+<p class="note">CHRO-MA-SMITH is not on Google Play, so you install the app file directly. Android asks once for permission to install apps from outside the store.</p>
+<div class="cta"><a class="btn solid" id="dl" href="https://github.com/TareqAmeer/Chroma-App/releases/latest" data-goatcounter-click="get-android" data-goatcounter-title="get-android">Download the Android .apk ↓</a><a class="btn" href="../chromasmith-22.html">Open the web app ↗</a></div>
 <p class="ver" id="ver"></p>
 <h2>How to install</h2>
-<ol><li>Download the <b>setup.exe</b> installer and run it.</li><li>If SmartScreen appears, click <b>More info</b>, then <b>Run anyway</b>.</li><li>Follow the installer. Chromasmith appears in your Start menu.</li></ol>
+<ol><li>Download the <b>.apk</b> file on your phone and open it.</li><li>When asked, allow <b>Install unknown apps</b> for your browser or Files app, then tap <b>Install</b>.</li><li>No download wanted? Open the web app in Chrome, tap the <b>⋮ menu</b>, then <b>Add to Home screen</b> or <b>Install app</b>.</li><li>Newer versions install over older ones and keep your data.</li></ol>
 <div class="more"><a href="https://github.com/TareqAmeer/Chroma-App/releases/latest" target="_blank" rel="noopener">All files on GitHub ↗</a><a href="https://github.com/TareqAmeer/Chroma-App/releases" target="_blank" rel="noopener">Older versions</a><a href="https://github.com/TareqAmeer/Chroma-App" target="_blank" rel="noopener">Source code</a><a href="../download/mac.html">Mac</a><a href="../download/windows.html">Windows</a><a href="../download/ios.html">iPhone</a><a href="../download/android.html">Android</a></div>
 </main>
 <script>
 // the file name carries the version, so look up the latest release and point the button at the matching file
 fetch('https://api.github.com/repos/TareqAmeer/Chroma-App/releases/latest').then(r=>r.ok?r.json():Promise.reject()).then(r=>{
-  const a=(r.assets||[]).find(x=>x.name.toLowerCase().endsWith('-setup.exe'));
+  const a=(r.assets||[]).find(x=>x.name.toLowerCase().endsWith('.apk'));
   if(a){document.getElementById('dl').href=a.browser_download_url;document.getElementById('ver').textContent=r.tag_name+' · '+(a.size/1048576).toFixed(0)+' MB · '+a.name}
 }).catch(()=>{});
 </script>
