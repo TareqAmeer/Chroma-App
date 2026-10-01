@@ -191,7 +191,7 @@ function build(){
 <div class="mh"><h1>Gallery</h1><button data-a="select">Select</button><button class="pri" data-a="import">Import</button><button data-a="close" aria-label="Close gallery">Editor</button></div>
 <div class="tabs"><button data-f="all" class="on">All</button><button data-f="edited">Edited</button><button data-f="exported">Exported</button></div>
 <div class="grid"></div>
-<div class="selbar"><span class="n">0 selected</span><button data-a="sel-open">Edit</button><button data-a="sel-revert">Revert</button><button data-a="sel-del" class="warn">Remove</button></div>
+<div class="selbar"><span class="n">0 selected</span><button data-a="sel-open">Edit</button><button data-a="sel-paste">Paste edits</button><button data-a="sel-revert">Revert</button><button data-a="sel-del" class="warn">Remove</button></div>
 <input type="file" accept="image/*,.rw2,.dng" multiple hidden>`;
   document.body.appendChild(root);
   grid=root.querySelector('.grid');applyPrefs();
@@ -216,7 +216,8 @@ function build(){
   });
   // long-press a photo → actions sheet (original / versions / revert / delete)
   let lp=null;
-  grid.addEventListener('pointerdown',e=>{const c=e.target.closest('.cell');if(!c)return;
+  grid.addEventListener('pointerdown',e=>{lp=null; // a long-press whose release landed on the sheet must not swallow the next tap
+    const c=e.target.closest('.cell');if(!c)return;
     if(selecting)return;
     lp=setTimeout(()=>{lp='fired';if(typeof hapt==='function')hapt('MEDIUM');sheet(c.dataset.id)},500);});
   const cancel=()=>{if(lp&&lp!=='fired')clearTimeout(lp)};
@@ -245,6 +246,8 @@ async function sheet(id){
   sh.innerHTML=`<div class="s"><div class="t">${esc(p.name)}</div>
 <button data-k="open">Open${p.recipe?' edited version':''}</button>
 <button data-k="orig">Open original (no edits)</button>
+${p.recipe?`<button data-k="copy">Copy edits</button>`:''}
+${copied()?`<button data-k="paste">Paste edits</button>`:''}
 ${p.recipe?`<button data-k="snap">Save this edit as a version</button>`:''}
 ${p.versions.length?`<div class="h">Saved versions</div>`+p.versions.map((v,i)=>`<button data-k="ver" data-i="${i}">${esc(v.name)} · ${when(v.ts)}</button>`).join(''):''}
 ${p.exports.length?`<div class="h">Exports</div>`+p.exports.map((v,i)=>`<button data-k="exp" data-i="${i}">Export v${esc(v.version)} · ${when(v.ts)}</button>`).join(''):''}
@@ -254,6 +257,8 @@ ${p.recipe?`<button data-k="revert">Revert to original</button>`:''}
     sh.classList.remove('open');
     if(k==='open')openPhoto(id);
     else if(k==='orig')openPhoto(id,{original:true});
+    else if(k==='copy'){setCopied(p.recipe);toast('Edits copied');}
+    else if(k==='paste'){await pasteTo([id]);}
     else if(k==='ver')openPhoto(id,{recipe:p.versions[i].recipe});
     else if(k==='exp')openPhoto(id,{recipe:p.exports[i].recipe});
     else if(k==='snap'){p.versions.push({name:'Version '+(p.versions.length+1),recipe:p.recipe,ts:Date.now()});await putPhoto(p);toast('Version saved')}
@@ -304,7 +309,21 @@ function setSelecting(on){selecting=on;sel.clear();if(!root)return;
   root.classList.toggle('selecting',on);root.querySelector('[data-a="select"]').textContent=on?'Cancel':'Select';
   root.querySelectorAll('.cell.sel').forEach(c=>c.classList.remove('sel'));selCount();}
 function selCount(){if(!root)return;root.querySelector('.selbar .n').textContent=sel.size+' selected';
-  root.querySelectorAll('.selbar button').forEach(b=>b.disabled=!sel.size);}
+  root.querySelectorAll('.selbar button').forEach(b=>b.disabled=!sel.size||(b.dataset.a==='sel-paste'&&!copied()));}
+// Copy / paste edits between gallery photos. Geometry (crop, rotate, straighten) is per-photo, so
+// it is not pasted — every other setting is.
+const CK='cs-mlib-copied';
+const copied=()=>{try{return localStorage.getItem(CK)}catch(e){return null}};
+function setCopied(rec){try{localStorage.setItem(CK,rec)}catch(e){}}
+async function pasteTo(ids){
+  const src=copied();if(!src)return;
+  let snap;try{snap=unb64(src)}catch(e){return}
+  for(const id of ids){const p=await getPhoto(id);if(!p)continue;
+    let own=null;try{own=p.recipe?unb64(p.recipe):null}catch(e){}
+    const s2=Object.assign({},snap,{geom:own?own.geom:null});
+    p.recipe=b64(s2);p.edited=Date.now();p.thumbEdited=null;await putPhoto(p);}
+  render();toast('Edits pasted to '+ids.length+' photo'+(ids.length>1?'s':''));
+}
 async function selAction(k){
   const ids=[...sel];if(!ids.length)return;
   if(k==='open'){
@@ -317,6 +336,9 @@ async function selAction(k){
     try{await origLoad(files)}finally{window.__mlibOpening=false;window.__csLibOpen=false}
     openedId=null;openedIds=ids;
     try{if(first&&first.recipe){applyUISnapshot(unb64(first.recipe));if(typeof fxUpdate==='function')fxUpdate();}}catch(e){}
+  }else if(k==='paste'){
+    if(!copied()){toast('Copy edits from a photo first (press and hold it)');return}
+    await pasteTo(ids);setSelecting(false);
   }else if(k==='revert'){
     if(!confirm('Revert '+ids.length+' photo'+(ids.length>1?'s':'')+' to the original? Saved versions and exports are kept.'))return;
     for(const id of ids){const p=await getPhoto(id);if(p){p.recipe=null;p.thumbEdited=null;await putPhoto(p);}}
