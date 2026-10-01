@@ -737,32 +737,45 @@ if(still)document.documentElement.classList.add('still');
 if(!location.hash){history.scrollRestoration='manual';scrollTo(0,0);addEventListener('load',()=>{scrollTo(0,0);lenis&&lenis.scrollTo(0,{immediate:true,force:true})})}
 let lenis;
 if(!still&&!matchMedia('(prefers-reduced-motion: reduce)').matches){lenis=new Lenis({lerp:.09});lenis.on('scroll',ScrollTrigger.update);gsap.ticker.add(t=>lenis.raf(t*1000));gsap.ticker.lagSmoothing(0);}
-/* phones: a tap on empty space glides to the next section (or one screen on for the long pinned tour) */
-if(matchMedia('(pointer:coarse)').matches){
+/* guided advance (phones: tap anywhere empty, or the pill): one tap per beat.
+   raw -> develops the photo until it lands in the gallery grid; next tap clicks the filters then moves to the studio;
+   next tap walks every studio tool and carries on to the next section. Touching the screen mid-glide cancels it. */
+const COARSE=matchMedia('(pointer:coarse)').matches;
+let gliding=false,glideTimer=0;
+let gtok=0;
+const setY=y=>{lenis?lenis.scrollTo(y,{immediate:true,force:true}):scrollTo(0,y)};
+// own rAF glide (time-based, native scroll position) so it behaves the same with or without Lenis, on iOS and Android
+const glide=(to,dur,ease,done)=>{const y0=lenis?lenis.scroll:scrollY,t0=performance.now(),tok=++gtok,E=ease||(x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2);gliding=true;
+  const f=t=>{if(tok!==gtok)return;const k=Math.min(1,(t-t0)/(dur*1000));setY(y0+(to-y0)*E(k));if(k<1)requestAnimationFrame(f);else{gliding=false;done&&done()}};requestAnimationFrame(f)};
+const cancelGlide=()=>{if(!gliding)return;gtok++;gliding=false;clearTimeout(glideTimer)};
+window.__advance=()=>{
+  if(gliding)return;
+  const y=lenis?lenis.scroll:scrollY,H=innerHeight,T=window.__tourInfo&&window.__tourInfo();
+  const secTop=el=>{const b=(el.parentElement&&el.parentElement.classList.contains('pin-spacer')?el.parentElement:el).getBoundingClientRect();return b.top+scrollY};
+  const maxY=document.documentElement.scrollHeight-H;
+  const secs=[...document.querySelectorAll('body>section:not([hidden]),footer')];
+  const nextSection=()=>{const n=secs.map(secTop).find(t=>t>y+H*.25);const to=Math.min(maxY,n===undefined?y+H:Math.min(n,y+H));if(y>=maxY-4)return;glide(to,Math.max(.9,Math.min(1.8,.9+Math.abs(to-y)/H*.6)))};
+  if(T&&y>=T.start-4&&y<T.end-4){
+    const px=t=>T.start+t/T.dur*(T.end-T.start),gl=px(T.gallery),sh=px(T.studio);
+    if(y<gl-H*.1){glide(gl,Math.max(3.5,Math.min(9,(gl-y)/H*.9)),x=>x);return}               // raw -> photo lands in the grid
+    if(y<sh-H*.1){                                                                            // gallery: click the filters, then to the studio
+      const chips=[...document.querySelectorAll('.chips button')];gliding=true;
+      const seq=[chips[3],chips[4],chips[5],chips[0]].filter(Boolean);let n=0;
+      const step=()=>{if(!gliding)return;if(n<seq.length){seq[n++].click();glideTimer=setTimeout(step,850)}else{gliding=false;glide(sh,Math.max(2,Math.min(4,(sh-y)/H*.7)))}};
+      step();return}
+    const flat=x=>x;                                                                          // studio: walk every tool, then on to the next section
+    const end=T.end-2,nxt=secs.map(secTop).find(t=>t>T.end-H*.5);
+    glide(end,9,flat,()=>{const to=Math.min(maxY,nxt===undefined?end+H:nxt);glide(to,1.4)});return}
+  const F=window.__flowTl&&window.__flowTl.scrollTrigger;
+  if(F&&y>=F.start-4&&y<F.end-4){const nw=F.start+.66*(F.end-F.start);
+    if(y<nw-H*.1){glide(nw,Math.max(3,Math.min(8,(nw-y)/H*.8)),x=>x);return}}
+  nextSection()};
+if(COARSE){
+  addEventListener('touchstart',cancelGlide,{passive:true});
   addEventListener('click',e=>{
     if(e.defaultPrevented||(lenis&&lenis.isStopped)||!e.target.closest)return;
-    if(e.target.closest('a,button,input,select,textarea,label,summary,details,dialog,[role=dialog],[hidden],.idx,.tape,.tile,.board,.ba,.f,[data-i]'))return;
-    const y=scrollY,H=innerHeight;
-    const st=tl.scrollTrigger,span=st.end-st.start,px=t=>st.start+t/tl.duration()*span;
-    if(y>=st.start-4&&y<st.end-4){
-      // inside the pinned tour: glide between the scenes that "rest" (raw, each effect landed, full-screen frame, gallery, each studio tool)
-      const gl=tl.labels.slide+XH()/H*K()+.05,sh=tl.labels.studioHold;
-      const T=[.97,1.67,2.37,3.07,4.05,6.1,gl,sh,...[1,2,3,4,5].map(k=>sh+k*HOLD2/6+.2),tl.duration()];
-      const to=T.map(px).find(v=>v>y+H*.08);
-      if(to!==undefined){
-        const d=Math.abs(to-y),dur=Math.max(.9,Math.min(2.2,.9+d/H*.7));
-        const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
-        lenis?lenis.scrollTo(to,{duration:dur,easing:ease,lock:true}):scrollTo({top:to,behavior:'smooth'});
-        return;
-      }
-    }
-    const tops=[...document.querySelectorAll('body>section:not([hidden]),footer')].map(el=>el.getBoundingClientRect().top+y);
-    const next=tops.find(t=>t>y+H*.25);
-    const maxY=document.documentElement.scrollHeight-H;
-    if(y>=maxY-4)return;
-    const to=Math.min(maxY,next===undefined?y+H:Math.min(next,y+H));
-    lenis?lenis.scrollTo(to,{duration:Math.max(.9,Math.min(1.8,.9+Math.abs(to-y)/H*.6)),easing:x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2,lock:true}):scrollTo({top:to,behavior:'smooth'});
-  });
+    if(e.target.closest('a,button,input,select,textarea,label,summary,details,dialog,[role=dialog],[hidden],.idx,.tape,.tile,.board,.ba,.f,[data-i],.auto'))return;
+    window.__advance()})
 }
 document.querySelectorAll('.sec .menu a').forEach(a=>a.addEventListener('click',()=>a.closest('details').removeAttribute('open')));addEventListener('click',e=>{const d=document.querySelector('.sec[open]');d&&!d.contains(e.target)&&d.removeAttribute('open')});
 document.querySelector('.sec')&&document.addEventListener('keydown',e=>{const d=document.querySelector('.sec');if(!d.open)return;const L=[...d.querySelectorAll('.menu a')],i=L.indexOf(document.activeElement);
@@ -866,6 +879,7 @@ tl.to('.ph',{left:'50%',width:Wf,height:Hf,ease:'power2.inOut',duration:1},4.2)
   .addLabel('studioHold')
   .to({},{duration:HOLD2});
 /* menu jumps inside the two pinned scroll-stories */
+window.__tourInfo=()=>{const st=tl.scrollTrigger;return{start:st.start,end:st.end,dur:tl.duration(),gallery:tl.labels.slide+XH()/innerHeight*K()+.05,studio:tl.labels.studioHold}};
 window.__tourTo=k=>{
   const pos=(t,f)=>{const st=t.scrollTrigger;return st.start+f*(st.end-st.start)};
   let y;
@@ -1152,7 +1166,8 @@ document.querySelectorAll('a[href$="chromasmith-22.html"]').forEach(a=>a.addEven
   ['wheel','touchstart','pointerdown'].forEach(n=>addEventListener(n,manual,{passive:true}));
   addEventListener('keydown',e=>{if(on&&['ArrowDown','ArrowUp','PageDown','PageUp','Home','End',' '].includes(e.key))stop()});
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&on)stop()});
-  if(reduce)box.hidden=true;ui()}
+  if(reduce)box.hidden=true;
+  if(COARSE){sb.hidden=true;pb.querySelector('.tx').textContent='Next';const nx=pb.cloneNode(true);pb.replaceWith(nx);nx.addEventListener('click',()=>window.__advance());box.classList.add('guide')}else ui()}
 /* "you are here" label, driven by where each section sits */
 {const hr=document.getElementById('here');
 const S=[['tour','01–03','Tour','#looks','Skip tour'],['looks','04','Film Looks','#flow','Next'],['flow','05–06','Workflow','#maker','Skip workflow'],['maker','07','The Designer','#features','Next'],['features','08','Feature List','#beta','Next'],['beta','09','In Beta','#faq','Next'],['faq','10','FAQ','#yours','Next']];
