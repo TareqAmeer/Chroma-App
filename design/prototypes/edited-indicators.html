@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Edited Tool Indicators</title>
+<style>
+:root{--bg:#141414;--ink:#f2f0ea;--mut:#8d8b85;--acc:#ff3b1f;--bdr:color-mix(in srgb,#f2f0ea 13%,transparent);--sans:'Gramatika',system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:#0b0b0b;color:var(--ink);font-family:var(--sans);padding:24px 16px 60px}
+h1{font-size:22px;font-weight:500;margin:0 0 4px}
+p.lead{color:var(--mut);font-size:14px;margin:0 0 24px;max-width:640px;line-height:1.5}
+.wrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}
+.opt{background:var(--bg);border:1px solid var(--bdr);padding:14px 0 16px}
+.opt h2{font-size:15px;font-weight:500;margin:0 14px 2px}
+.opt .d{font-size:12px;color:var(--mut);margin:0 14px 12px;line-height:1.4}
+.lbl{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:12px 14px 6px}
+.row{display:flex;overflow-x:auto;scrollbar-width:none;padding:2px 6px}
+.row::-webkit-scrollbar{display:none}
+.row button{flex:0 0 auto;min-width:64px;padding:6px 6px;border:0;background:none;color:var(--mut);font:10px var(--sans);text-transform:uppercase;letter-spacing:.06em;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;cursor:pointer}
+.row .ic,.grid .ic{color:var(--ink);position:relative;display:inline-flex}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:0 6px}
+.grid button{border:0;background:none;color:var(--mut);font:11px var(--sans);display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 2px;position:relative;cursor:pointer}
+svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.2;stroke-linecap:square;stroke-linejoin:miter}
+.grid svg{width:20px;height:20px}
+.pick{margin-top:12px;margin-left:14px;border:1px solid var(--bdr);background:none;color:var(--ink);font:13px var(--sans);padding:7px 12px;cursor:pointer}
+.opt.chosen{outline:2px solid var(--acc)}
+
+/* A — dot */
+.A .ed .ic::after{content:'';position:absolute;top:-3px;right:-7px;width:6px;height:6px;border-radius:50%;background:var(--acc)}
+/* B — underline bar */
+.B .ed::after{content:'';position:absolute;left:30%;right:30%;bottom:0;height:2px;background:var(--acc)}
+/* C — accent-coloured icon + label */
+.C .ed,.C .ed .ic{color:var(--acc)}
+/* D — filled tile */
+.D .ed{background:color-mix(in srgb,var(--ink) 11%,transparent)}
+.D .ed{color:var(--ink)}
+/* E — corner tick (square, matches the selected-look corner) */
+.E .ed::before{content:'';position:absolute;top:4px;right:6px;width:7px;height:7px;background:var(--acc)}
+/* F — edited count + dimmed untouched */
+.F button:not(.ed){opacity:.45}
+.F .ed{color:var(--ink)}
+/* G — outlined square around the icon */
+.G .ed .ic{outline:1px solid var(--acc);outline-offset:5px}
+/* H — edited tools first, divider, then the rest */
+.H .sep{flex:0 0 1px;align-self:stretch;margin:8px 4px;background:var(--bdr)}
+.H .grid .sep{grid-column:1/-1;height:1px;margin:4px 0;background:var(--bdr)}
+.H .ed{color:var(--ink)}
+.H .ed .ic::after{content:'';position:absolute;top:-3px;right:-7px;width:6px;height:6px;border-radius:50%;background:var(--acc)}
+</style></head><body>
+<h1>Edited tools: pick a style</h1>
+<p class="lead">How the quick bar and Tools grid could show which tools you've changed on this photo. In every example, <b>Light</b>, <b>Curves</b>, <b>Grain</b> and <b>Halation</b> are edited. The quick bar scrolls sideways. Tap <b>Choose this</b> on the one you like and tell me the letter.</p>
+<div class="wrap" id="wrap"></div>
+<script>
+const I={enableAll:'<path d="M9 4l1.5 4.5L15 10l-4.5 1.5L9 16l-1.5-4.5L3 10l4.5-1.5ZM18 14v6M15 17h6"/>',paste:'<rect x="4" y="4" width="16" height="18"/><rect x="8" y="2" width="8" height="4"/><path d="M8 11h8M8 15h5"/>',adjust:'<path d="M3 7h18M3 17h18M9 4h4l-2 6H7ZM15 14h3l-2 6h-3Z"/>',curves:'<rect x="3" y="3" width="18" height="18"/><path d="M3 21l7-5 4-8 7-5"/>',hsl:'<circle cx="12" cy="12" r="9"/><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/>',crop:'<path d="M6 3v15h15M3 6h15v15M3 21 21 3"/>',inprint:'<rect x="3" y="4" width="18" height="10"/><path d="M7 14v6h10v-6M7 8h4"/>',pointcolor:'<circle cx="11" cy="13" r="7"/><path d="M13 11 21 3"/><rect x="9.5" y="11.5" width="3" height="3"/>',nr:'<path d="M12 3l7 10a7 7 0 1 1-14 0Z"/><path d="M9 17l6-6"/>',lens:'<path d="M3 21 21 3M3 21l18-9M3 21l9-18M3 21h18"/>',retouch:'<circle cx="14" cy="10" r="6"/><path d="M3 19 15 7l2 2L5 21Z"/>',local:'<circle cx="14" cy="10" r="7"/><path d="M3 21 13 8l3 3Z"/>',grain:'<path d="M5 7l1 1M11 4l1 1M18 7l1 1M7 13l1 1M14 11l1 1M19 16l1 1M5 18l1 1M12 19l1 1M11 15l1 1"/>',hal:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',bloom:'<path d="M12 2l2 8 8 2-8 2-2 8-2-8-8-2 8-2Z"/>',vig:'<rect x="3" y="3" width="18" height="18"/><circle cx="12" cy="12" r="5"/><path d="M3 3l4 4M21 3l-4 4M3 21l4-4M21 21l-4-4"/>',borders:'<rect x="3" y="3" width="18" height="18"/><path d="M12 5l7 7-7 7-7-7Z"/>',style:'<path d="M12 3l9 5-9 5-9-5Z"/><path d="M3 12l9 5 9-5M3 16l9 5 9-5"/>'};
+const BAR=[['enableAll','All FX',0],['paste','Previous',0],['adjust','Light',1],['curves','Curves',1],['hsl','Mixer',0],['crop','Crop',0],['inprint','Input & Prints',0],['pointcolor','Point Color',0],['nr','Noise',0],['grain','Grain',1],['hal','Halation',1],['bloom','Bloom',0]];
+const GRID=[['adjust','Light',1],['curves','Curves',1],['hsl','Mixer',0],['pointcolor','Point Color',0],['nr','Noise',0],['lens','Lens',0],['retouch','Retouch',0],['local','Masks',0],['grain','Grain',1],['hal','Halation',1],['bloom','Bloom',0],['vig','Effects',0],['borders','Borders',0],['crop','Crop',0],['inprint','Input & Prints',0],['style','Presets',0]];
+const OPTS=[['A','Dot','A small orange dot on the icon. Quiet, what the app does today on some tools.'],
+['B','Underline','A short orange bar under edited tools, like the selected tab underline.'],
+['C','Orange icon','Edited tools turn orange, icon and label. Strongest at a glance.'],
+['D','Filled tile','A soft grey tile behind edited tools. No colour, very calm.'],
+['E','Corner square','A small orange square in the corner, matching the selected-look marker.'],
+['F','Dim the rest','Edited tools stay bright; untouched ones fade back.'],
+['G','Outlined icon','A thin orange square around edited icons.'],
+['H','Edited first','Edited tools jump to the front (with a dot), then a divider, then the rest.']];
+const ic=k=>`<span class="ic"><svg viewBox="0 0 24 24">${I[k]}</svg></span>`;
+const btn=([k,l,e])=>`<button class="${e?'ed':''}">${ic(k)}${l}</button>`;
+function order(list,v){if(v!=='H')return list.map(btn).join('');
+  const fixed=list.filter(x=>x[0]==='enableAll'||x[0]==='paste'),rest=list.filter(x=>!fixed.includes(x));
+  return fixed.map(btn).join('')+rest.filter(x=>x[2]).map(btn).join('')+'<span class="sep"></span>'+rest.filter(x=>!x[2]).map(btn).join('');}
+document.getElementById('wrap').innerHTML=OPTS.map(([v,t,d])=>`<section class="opt ${v}" id="o${v}"><h2>${v} · ${t}</h2><div class="d">${d}</div>
+<div class="lbl">Quick bar</div><div class="row">${order(BAR,v)}</div>
+<div class="lbl">Tools grid</div><div class="grid">${order(GRID,v)}</div>
+<button class="pick" onclick="document.querySelectorAll('.opt').forEach(o=>o.classList.remove('chosen'));this.parentElement.classList.add('chosen')">Choose this</button></section>`).join('');
+</script>
+</body></html>

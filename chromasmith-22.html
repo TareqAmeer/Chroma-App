@@ -2861,6 +2861,9 @@ body.mobile-fx .fx-slider{--ctl-slider-thumb:22px}
 body.mobile-fx #fx-quicknav{justify-content:flex-start;overflow-x:auto;overflow-y:hidden;touch-action:pan-x;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 body.mobile-fx #fx-quicknav::-webkit-scrollbar{display:none}
 body.mobile-fx #fx-quicknav button{flex:0 0 auto;min-width:68px;padding:0 8px;white-space:nowrap}
+body.mobile-fx .fx-reordering{touch-action:none}
+body.mobile-fx .fx-dragging{opacity:.55;transform:scale(1.08);transition:transform .12s}
+body.mobile-fx #fx-quicknav button,body.mobile-fx #fx-tool-grid .fx-sec-btn{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 </style>
 </head>
 <body>
@@ -6777,7 +6780,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001A';
+const BUILD='1.1001B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24341,6 +24344,41 @@ function fxToolsClose(){
   fxLiveFit(360);
   requestAnimationFrame(()=>renderPreview());
 }
+// Press-and-hold a tool in the phone quick bar or Tools grid, then drag, to change its place.
+// Order is per container, saved in localStorage by each button's key (data-sec, or its class
+// for All FX / Previous) and re-applied whenever the container is rebuilt.
+function _fxReKey(b){return b.dataset.sec||(b.classList.contains('js-allfx')?'allfx':b.classList.contains('js-prevfx')?'prevfx':'');}
+function fxReorderable(box){
+  if(!box)return;
+  const LS='cs-tool-order-'+box.id;
+  try{const saved=JSON.parse(localStorage.getItem(LS)||'[]');
+    const by={};[...box.children].forEach(b=>{const k=_fxReKey(b);if(k)by[k]=b;});
+    saved.forEach(k=>{if(by[k])box.appendChild(by[k]);});
+    [...box.children].forEach(b=>{if(!saved.includes(_fxReKey(b)))box.appendChild(b);}); // new tools keep their place at the end
+  }catch(e){}
+  if(box._reorderWired)return;box._reorderWired=true;
+  let timer=null,drag=null,sx=0,sy=0,swallow=false;
+  const save=()=>{try{localStorage.setItem(LS,JSON.stringify([...box.children].map(_fxReKey).filter(Boolean)));}catch(e){}};
+  box.addEventListener('pointerdown',e=>{
+    const b=e.target.closest('button');if(!b||b.parentElement!==box)return;
+    sx=e.clientX;sy=e.clientY;
+    timer=setTimeout(()=>{drag=b;b.classList.add('fx-dragging');box.classList.add('fx-reordering');if(typeof hapt==='function')hapt('MEDIUM');},450);
+  });
+  box.addEventListener('pointermove',e=>{
+    if(!drag){if(timer&&Math.hypot(e.clientX-sx,e.clientY-sy)>8){clearTimeout(timer);timer=null;}return;}
+    const t=document.elementFromPoint(e.clientX,e.clientY),o=t&&t.closest('button');
+    if(!o||o===drag||o.parentElement!==box)return;
+    const r=o.getBoundingClientRect(),grid=getComputedStyle(box).display==='grid';
+    const after=grid?(e.clientY>r.bottom-r.height/2&&e.clientX>r.left)||(e.clientX>r.left+r.width/2):e.clientX>r.left+r.width/2;
+    box.insertBefore(drag,after?o.nextSibling:o);
+  });
+  const end=()=>{clearTimeout(timer);timer=null;if(!drag)return;
+    drag.classList.remove('fx-dragging');box.classList.remove('fx-reordering');drag=null;swallow=true;save();};
+  box.addEventListener('pointerup',end);box.addEventListener('pointercancel',end);
+  box.addEventListener('click',e=>{if(swallow){e.stopPropagation();e.preventDefault();swallow=false;}},true);
+  box.addEventListener('touchmove',e=>{if(drag)e.preventDefault();},{passive:false}); // no scrolling while dragging
+  box.addEventListener('contextmenu',e=>e.preventDefault());
+}
 function fxMobileBack(){
   if(document.body.classList.contains('tools-open')){fxToolsClose();return;}
   if(document.body.classList.contains('sheet-open')){fxSheetClose();return;}
@@ -24380,6 +24418,7 @@ function buildSecNav(){          // mobile categorized tool grid
     const q=document.createElement('button');q.dataset.sec=key;q.title=lb;
     q.innerHTML=`<span>${icon(key,22)}</span>${lb}`;q.onclick=()=>fxSection(key);qn.appendChild(q);
   });
+  fxReorderable(qn);fxReorderable(grid);
   // No Close button: tapping Tools again or pulling the panel down closes it.
   fxMobileFilter(_fxMobileCat);
   fxSection(_activeSec()||(window.__TAURI__?'looks':'image'),true);
