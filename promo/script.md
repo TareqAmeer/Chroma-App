@@ -25,7 +25,7 @@ Text cards are centred, 3–6 words each, and stay on screen for at least 0.3s p
 | 1 | 0–2.5 | none | Silence, then the flat RAW beach photo lands at 70% width | hard cut on the shutter | camera shutter |
 | 2 | 2.5–5 | Every photo comes off the camera **flat**. | Photo slides up along the grid; the line rises from behind a baseline mask | masked text rise | music enters, very low |
 | 3 | 5–8 | Making it look like **film** | Line 1 holds; line 2 pushes in from the right on the same baseline | words pushing on a baseline | |
-| 4 | 8–11 | usually takes **three** apps. | Three app names (Lightroom · Dehancer · a border app) set as a type column; the photo steps through them | modular column shift | three soft clacks |
+| 4 | 8–11 | usually takes **three** apps. | Three app names (Lightroom · Dehancer · Darkroom) set as a type column; the photo steps through them | modular column shift | three soft clacks |
 | 5 | 11–14 | and every export loses **quality**. | The same photo, exported four times: each "Export" stamp adds visible compression blocks; a thin bar falls 100 → 88% | repetition with progressive change (Basel "minimal shifts") | pen strike per export |
 | 6 | 14–17 | **Chromasmith** does it in one. | The three columns slide shut into one; the wordmark resolves on the grid; the photo comes back clean | grid columns collapsing | 0.3s silence, then low tone |
 | 7 | 17–19 | On your computer. Nothing **uploaded**. | Photo sits on a dark field; small lock-free "local" label | text only | |
@@ -35,7 +35,7 @@ Text cards are centred, 3–6 words each, and stay on screen for at least 0.3s p
 | 11 | 32–36 | Make the highlights **glow**. | Halation/Bloom sliders, before/after split on the photo | vertical split moving along the grid | swell |
 | 12 | 36–39 | Add a **border**. | Border toggle click; the photo gains its paper border | frame drawn as four lines | paper slide |
 | 13 | 39–42 | Export once, at full **resolution**. | Export button click; "6000 × 4000" label | type scale shift | camera shutter |
-| 14 | 42–48 | Save **$83** a month. / Save **20 minutes** a photo. / Lose **no** quality. | One sentence per card; the number does the moving (rolls in on a mask) | typographic scale contrast | soft ping per card |
+| 14 | 42–48 | Save **$83** a month. / Save **20 minutes** a photo. / Preserve **full** image quality. | One sentence per card; the number does the moving (rolls in on a mask) | typographic scale contrast | soft ping per card |
 | 15 | 48–53 | On **Mac**, Windows, iPhone and the web. | One photo stays centred; the *frame around it* changes shape on the grid: desktop window → phone → browser tab. Flat outlines in `--line`, no device renders. Each platform word lights red in turn | single shape morphing on the grid | tick per platform |
 | 16 | 53–57 | **Ready** for the wall. | Museum wall (see below) | slow lateral camera move | room tone, footsteps-free |
 | 17 | 57–62 | **Chromasmith**. Download free. / Mac · Windows · iOS · Web / URL | The logo's two squares slide in on the grid and overlap; text below | modular squares | music resolves; one tone |
@@ -67,6 +67,6 @@ A calm, minimal track that is CC0 (no attribution needed), about 80–95 bpm, pi
 
 The 90 bpm pulse will be dropped once music carries the rhythm, so the cuts follow the track's beat instead.
 
-## Open questions
-1. Is "Lose **no** quality" OK, or should it be "Keep **100%** quality"?
-2. Should the old-way apps be named on screen (Lightroom, Dehancer)? Naming them makes the problem clearer, but it is comparative advertising. The alternative is "an editor · a film plugin · a border app".
+## Decisions
+1. The savings card reads "Preserve **full** image quality."
+2. The old-way apps are named on screen: Lightroom · Dehancer · Darkroom (as on the homepage).
