@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#970500">
+<title>Feature List — CHRO-MA-SMITH</title>
+<meta name="description" content="Every CHRO-MA-SMITH feature, grouped and collapsible. Free, open source and fully offline.">
+<link rel="icon" href="assets/brand/favicon.svg?v=3" type="image/svg+xml">
+<style>
+@font-face{font-family:Gramatika;font-weight:300 500;src:url(vendor/fonts/gramatika/GramatikaRegular.otf) format("opentype");font-display:swap}
+@font-face{font-family:Gramatika;font-weight:600 900;src:url(vendor/fonts/gramatika/GramatikaBold.otf) format("opentype");font-display:swap}
+:root{--bg:#0b0b0a;--bg2:#121210;--fg:#f2efe8;--mid:#c9c5bb;--dim:#8b877e;--line:#24231f;--acc:#ff3b1f}
+::selection{background:var(--acc);color:#0b0b0a}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--fg);font-family:Gramatika,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.top{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;padding:14px 5vw;background:rgba(11,11,10,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);font-size:14px;font-weight:500}
+.top .w{font-weight:700;letter-spacing:.02em;text-decoration:none}
+.top nav{display:flex;gap:22px}.top nav a{text-decoration:none;opacity:.8}.top nav a:hover{opacity:1}.top nav a:last-child{color:var(--acc);opacity:1}
+main{max-width:980px;margin:0 auto;padding:10vh 5vw 14vh}
+.mono{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--acc)}
+h1{font-size:clamp(40px,7vw,88px);font-weight:900;letter-spacing:-.01em;line-height:.92;margin:18px 0 18px}
+.lede{font-size:18px;line-height:1.4;color:var(--mid);max-width:520px}
+.tools{display:flex;flex-wrap:wrap;gap:10px;margin:34px 0 22px}
+.tools input{flex:1 1 220px;background:var(--bg2);border:1px solid var(--line);color:var(--fg);font:inherit;font-size:16px;padding:13px 14px;border-radius:0}
+.tools input:focus{outline:1px solid var(--acc)}
+.tools button{background:none;border:1px solid var(--line);color:var(--fg);font:600 12px Gramatika,sans-serif;letter-spacing:.1em;text-transform:uppercase;padding:0 16px;cursor:pointer}
+.tools button:hover{border-color:var(--acc);color:var(--acc)}
+.grp{border-top:1px solid var(--line)}.grp:last-of-type{border-bottom:1px solid var(--line)}
+.grp>summary{list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:16px;padding:22px 0}
+.grp>summary::-webkit-details-marker{display:none}
+.grp>summary small{font-size:12px;color:var(--acc);letter-spacing:.1em;width:24px}
+.grp>summary h2{flex:1;font-size:clamp(22px,3vw,34px);font-weight:700;letter-spacing:-.005em}
+.grp>summary .ct{font-size:12px;color:var(--dim);letter-spacing:.1em}
+.grp>summary::after{content:"+";font-size:26px;color:var(--dim);margin-left:6px;transition:transform .2s}
+.grp[open]>summary::after{content:"−";color:var(--acc)}
+.grp>summary:hover h2{color:var(--acc)}
+.items{padding:0 0 18px 40px}
+.items h3{display:none}
+.items details{border-top:1px solid var(--line)}
+.items summary{cursor:pointer;list-style:none;padding:13px 0;font-size:18px;font-weight:600;display:flex;justify-content:space-between;gap:12px}
+.items summary::-webkit-details-marker{display:none}
+.items summary::after{content:"+";color:var(--dim)}.items details[open]>summary::after{content:"−";color:var(--acc)}
+.items summary:hover{color:var(--acc)}
+.items p{padding:0 0 16px;color:var(--mid);line-height:1.45;max-width:560px}
+.items details.hide,.grp.hide{display:none}
+.none{display:none;color:var(--dim);padding:24px 0}
+@media(max-width:700px){.top nav a:not(:last-child){display:none}.items{padding-left:0}.grp>summary{gap:12px}}
+</style>
+</head>
+<body>
+<header class="top"><a class="w" href="./">CHRO-MA-SMITH</a><nav><a href="./#features">Back to the tour</a><a href="https://github.com/TareqAmeer/Chroma-App" target="_blank" rel="noopener">GitHub ↗</a><a href="chromasmith-22.html">Launch app ↗</a></nav></header>
+<main>
+<p class="mono">Feature list</p>
+<h1>The whole<br>darkroom.</h1>
+<p class="lede">Everything CHRO-MA-SMITH does, grouped. Open a section, or search.</p>
+<div class="tools"><input id="q" type="search" placeholder="Search features, e.g. grain, RAW, mask" aria-label="Search features"><button type="button" id="open">Expand all</button><button type="button" id="shut">Collapse all</button></div>
+<details class="grp" id="g0"><summary><small>01</small><h2>Looks and film</h2><span class="ct">13</span></summary><div class="items"><details><summary>133 film looks</summary><p>Start with calibrated colour, cinema, instant, reversal or black-and-white looks.</p></details>
+          <details><summary>One-tap Looks gallery</summary><p>Preview a look on your photo and apply it with one click.</p></details>
+          <details><summary>Custom .cube LUTs</summary><p>Load a LUT you already own and use it as the starting look.</p></details>
+          <details><summary>Kodak and Fuji print profiles</summary><p>Add a print-film response after the base look.</p></details>
+          <details><summary>Film grain</summary><p>Add grain shaped for formats from 8mm to 65mm.</p></details>
+          <details><summary>Halation</summary><p>Let bright edges glow into neighbouring dark areas.</p></details>
+          <details><summary>No-remjet halation</summary><p>Push halation toward a stronger, stylised glow.</p></details>
+          <details><summary>Bloom</summary><p>Give bright areas a softer spread of light.</p></details>
+          <details><summary>Film dust and scratches</summary><p>Layer procedurally placed dust, hairs and scratches onto the image.</p></details>
+          <details><summary>Light leaks</summary><p>Add warm film-like light intrusions and reshuffle their placement.</p></details>
+          <details><summary>Film frames</summary><p>Finish with sprockets, rebates and edge printing.</p></details>
+          <details><summary>Vignette</summary><p>Draw attention inward by shaping the edge brightness.</p></details>
+          <details><summary>Reusable Styles</summary><p>Save a finished editing recipe and apply it again later.</p></details></div></details>
+<details class="grp" id="g1"><summary><small>02</small><h2>Light and colour</h2><span class="ct">15</span></summary><div class="items"><details><summary>Exposure</summary><p>Brighten or darken the image without changing the chosen look.</p></details>
+          <details><summary>Contrast</summary><p>Shape the separation between lighter and darker tones.</p></details>
+          <details><summary>White balance</summary><p>Adjust temperature and tint to make the colour feel right.</p></details>
+          <details><summary>White-balance eyedropper</summary><p>Click a neutral area to correct the colour cast.</p></details>
+          <details><summary>Auto-enhance</summary><p>Set a quick starting point for levels and white balance.</p></details>
+          <details><summary>Master tone curve</summary><p>Draw the overall tonal response directly.</p></details>
+          <details><summary>RGB channel curves</summary><p>Shape the red, green and blue channels independently.</p></details>
+          <details><summary>Parametric curves</summary><p>Adjust shadows, darks, lights and highlights with four controls.</p></details>
+          <details><summary>Eight-band colour mixer</summary><p>Tune hue, saturation and luminance by colour band.</p></details>
+          <details><summary>Lift, gamma and gain wheels</summary><p>Tint shadows, midtones and highlights separately.</p></details>
+          <details><summary>Dehaze</summary><p>Recover clarity in flat or hazy scenes.</p></details>
+          <details><summary>Noise reduction</summary><p>Quiet unwanted image noise while keeping useful detail.</p></details>
+          <details><summary>Sharpening</summary><p>Restore crispness at the level the image needs.</p></details>
+          <details><summary>Deconvolution sharpening</summary><p>Recover detail softened by lens or sensor blur.</p></details>
+          <details><summary>Highlight roll-off</summary><p>Keep bright regions gentler with filmic tone-mapping options.</p></details></div></details>
+<details class="grp" id="g2"><summary><small>03</small><h2>Masks and retouching</h2><span class="ct">14</span></summary><div class="items"><details><summary>Radial masks</summary><p>Make a soft oval adjustment around a subject or light source.</p></details>
+          <details><summary>Linear masks</summary><p>Grade one side of the frame with a graduated transition.</p></details>
+          <details><summary>Brush masks</summary><p>Paint an adjustment exactly where it belongs.</p></details>
+          <details><summary>Sky masks</summary><p>Separate the sky for its own grade.</p></details>
+          <details><summary>AI subject masks</summary><p>Select a subject from the photo for local editing.</p></details>
+          <details><summary>Colour-range masks</summary><p>Target pixels by colour rather than by location.</p></details>
+          <details><summary>Luminance-range masks</summary><p>Target an adjustment to a chosen brightness range.</p></details>
+          <details><summary>Depth masks</summary><p>Use estimated scene depth to separate near and far areas on desktop.</p></details>
+          <details><summary>Mask edge refinement</summary><p>Snap rough mask edges toward real image boundaries.</p></details>
+          <details><summary>Skin-tone tools</summary><p>Even out patchy skin colour while keeping the image's character.</p></details>
+          <details><summary>Face-feature exclusion</summary><p>Keep eyes, lips and other facial details out of a skin adjustment.</p></details>
+          <details><summary>Named-subject masks</summary><p>Teach a subject from examples and find it again in other photos.</p></details>
+          <details><summary>Heal</summary><p>Blend away a spot before the film look and grain are applied.</p></details>
+          <details><summary>Clone</summary><p>Copy a source area precisely to repair the frame.</p></details></div></details>
+<details class="grp" id="g3"><summary><small>04</small><h2>Composition and multi-image</h2><span class="ct">10</span></summary><div class="items"><details><summary>Crop and aspect ratio</summary><p>Reframe the photo for its final destination.</p></details>
+          <details><summary>Rotate and flip</summary><p>Change image orientation without leaving the editor.</p></details>
+          <details><summary>Straighten and auto-level</summary><p>Level the horizon manually or let the app find a dominant line.</p></details>
+          <details><summary>Perspective correction</summary><p>Bring leaning lines back into shape.</p></details>
+          <details><summary>Borders and canvas mattes</summary><p>Place the image inside a chosen border, aspect and background.</p></details>
+          <details><summary>Collage layouts</summary><p>Place multiple images in adjustable rows, columns and grids.</p></details>
+          <details><summary>HDR merge</summary><p>Blend bracketed exposures into one image on desktop.</p></details>
+          <details><summary>Focus stacking</summary><p>Combine frames focused at different distances on desktop.</p></details>
+          <details><summary>Astro stacking — beta</summary><p>Stack night-sky captures from the desktop library.</p></details>
+          <details><summary>Two-photo panorama — beta</summary><p>Stitch a pair of photos into one wider image.</p></details></div></details>
+<details class="grp" id="g4"><summary><small>05</small><h2>Desktop photo library</h2><span class="ct">13</span></summary><div class="items"><details><summary>Local library</summary><p>Browse your archive on your machine without uploading it.</p></details>
+          <details><summary>Folder and collection browsing</summary><p>Move through folders, dates and curated groups of images.</p></details>
+          <details><summary>SD-card import</summary><p>Copy a shoot by capture date and make a verified second copy.</p></details>
+          <details><summary>Keywords</summary><p>Add searchable words to describe and group photos.</p></details>
+          <details><summary>Duplicate detection</summary><p>Find repeated files while reviewing the library.</p></details>
+          <details><summary>Culling</summary><p>Pick the keepers from a shoot before editing.</p></details>
+          <details><summary>People recognition</summary><p>Find and name faces with processing on your device.</p></details>
+          <details><summary>Natural-language search</summary><p>Describe a photo in words and search locally for it.</p></details>
+          <details><summary>Suggested tags</summary><p>Get on-device tag suggestions for a selected photo.</p></details>
+          <details><summary>Virtual copies</summary><p>Keep more than one edit version of the same photo.</p></details>
+          <details><summary>Offline edits</summary><p>Work from a cached preview and apply the edit when the source returns.</p></details>
+          <details><summary>Lightroom round-trip</summary><p>Open a Lightroom photo in CHRO-MA-SMITH and return the result.</p></details>
+          <details><summary>Lightroom cloud browser</summary><p>Browse connected Lightroom cloud photos from the desktop app.</p></details></div></details>
+<details class="grp" id="g5"><summary><small>06</small><h2>Input, export and workflow</h2><span class="ct">19</span></summary><div class="items"><details><summary>RAW decoding</summary><p>Open camera RAW files and develop them locally.</p></details>
+          <details><summary>DCP camera profiles</summary><p>Use camera colour profiles for more faithful RAW starting colour.</p></details>
+          <details><summary>V-Log input</summary><p>Convert Lumix V-Log material before grading it.</p></details>
+          <details><summary>Multi-photo filmstrip</summary><p>Load several images and switch between their previews.</p></details>
+          <details><summary>Shared and per-photo edits</summary><p>Apply a look to the batch, then adjust an individual frame.</p></details>
+          <details><summary>Match a series</summary><p>Align exposure and white balance across a shoot to one reference photo.</p></details>
+          <details><summary>Before-and-after comparison</summary><p>Check your grade against the original image.</p></details>
+          <details><summary>Live histogram</summary><p>Watch tonal distribution while you edit.</p></details>
+          <details><summary>1:1 loupe</summary><p>Inspect the full rendering pipeline at native image scale.</p></details>
+          <details><summary>Undo and redo</summary><p>Move safely backward and forward through editing decisions.</p></details>
+          <details><summary>Session save and restore</summary><p>Keep slider settings locally and return to them later.</p></details>
+          <details><summary>Full-resolution export</summary><p>Render the finished image at its original resolution.</p></details>
+          <details><summary>JPEG, PNG, WebP and TIFF</summary><p>Choose the output format that suits the job.</p></details>
+          <details><summary>HDR gain-map HEIC</summary><p>Export extended-range highlights from a RAW source.</p></details>
+          <details><summary>XMP sidecars</summary><p>Keep an edit record alongside the source file.</p></details>
+          <details><summary>Export presets</summary><p>Save quality, format, resize and sharpening settings as a preset.</p></details>
+          <details><summary>LUT from a before/after pair</summary><p>Build a reusable .cube look from two versions of one image.</p></details>
+          <details><summary>Colour Copy</summary><p>Match a reference image's colour into a .cube LUT or XMP preset.</p></details>
+          <details><summary>Lumix Lab LUT export</summary><p>Tag a .cube file for a look you can take back to a Lumix camera.</p></details></div></details>
+<details class="grp" id="g6"><summary><small>07</small><h2>Video — beta</h2><span class="ct">8</span></summary><div class="items"><details><summary>Clip grading</summary><p>Use the still-photo look stack on a video clip.</p></details>
+          <details><summary>Trim in and out</summary><p>Choose the segment of a clip to export.</p></details>
+          <details><summary>Audio passthrough</summary><p>Keep the source audio without re-encoding it.</p></details>
+          <details><summary>Scopes</summary><p>Read the clip's signal as you grade.</p></details>
+          <details><summary>Safe-area guides</summary><p>Check framing with overlay guides.</p></details>
+          <details><summary>Fades</summary><p>Ease the picture in or out of a clip.</p></details>
+          <details><summary>Gate weave and film breath</summary><p>Add restrained analogue motion to a graded clip.</p></details>
+          <details><summary>Frame capture</summary><p>Export the current video frame as a still image.</p></details></div></details>
+<details class="grp" id="g7"><summary><small>08</small><h2>Access and privacy</h2><span class="ct">8</span></summary><div class="items"><details><summary>Browser editor</summary><p>Open the app without installing a desktop package.</p></details>
+          <details><summary>Phone layout</summary><p>Edit with a touch-first tool sheet on a smaller screen.</p></details>
+          <details><summary>Offline web use</summary><p>Keep editing after the first load when the connection goes away.</p></details>
+          <details><summary>Home-screen install</summary><p>Add the web app to your phone's home screen.</p></details>
+          <details><summary>Swipe between photos</summary><p>Move through a loaded batch with a touch gesture.</p></details>
+          <details><summary>Hold to compare</summary><p>Press and hold on mobile to check the original.</p></details>
+          <details><summary>On-device processing</summary><p>Keep your photos on the device where you edit them.</p></details>
+          <details><summary>No account or subscription</summary><p>Open the free, open-source app without signing in.</p></details></div></details>
+<p class="none" id="none">No feature matches that.</p>
+</main>
+<script>
+const G=[...document.querySelectorAll('.grp')],q=document.getElementById('q'),none=document.getElementById('none');
+document.getElementById('open').onclick=()=>G.forEach(g=>g.open=true);
+document.getElementById('shut').onclick=()=>G.forEach(g=>g.open=false);
+q.addEventListener('input',()=>{const t=q.value.trim().toLowerCase();let any=false;
+  G.forEach(g=>{let hit=false;g.querySelectorAll('.items details').forEach(d=>{const m=!t||d.textContent.toLowerCase().includes(t);d.classList.toggle('hide',!m);if(m)hit=true});
+    g.classList.toggle('hide',!hit);if(t&&hit)g.open=true;if(!t)g.open=false;if(hit)any=true});
+  none.style.display=any?'none':'block'});
+if(location.hash){const g=document.querySelector(location.hash);g&&g.tagName==='DETAILS'&&(g.open=true,g.scrollIntoView())}
+</script>
+</body>
+</html>
