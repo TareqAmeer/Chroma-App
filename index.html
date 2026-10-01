@@ -36,6 +36,10 @@ a{color:inherit}
 .t{max-width:400px;font-size:18px;line-height:1.4;color:var(--mid);margin-top:20px}
 .btn{display:inline-flex;gap:8px;align-items:center;font-weight:600;font-size:15px;padding:14px 22px;border-radius:0;text-decoration:none;border:1px solid var(--fg);transition:background .2s,color .2s,border-color .2s}
 .btn.solid{background:var(--acc);border-color:var(--acc);color:#0b0b0a}
+.lead .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}.lead .btn{border-color:#0b0b0a;color:#0b0b0a}.lead .btn.go{background:#0b0b0a;color:#f2f0ea}.lead .skip{position:fixed;right:5vw;bottom:18px;z-index:40;font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;color:#f2f0ea;background:rgba(11,11,10,.82);border:1px solid rgba(242,239,232,.25);padding:10px 14px;text-decoration:none;opacity:0;pointer-events:none;transform:translateY(8px);transition:opacity .25s,transform .25s}.skip.on{opacity:1;pointer-events:auto;transform:none}.skip:hover{background:var(--acc);color:#0b0b0a;border-color:var(--acc)}
+.here{position:fixed;left:5vw;bottom:20px;z-index:40;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);opacity:0;transition:opacity .25s;pointer-events:none}.here.on{opacity:1}.here b{color:var(--acc);font-weight:600;margin-right:8px}
+@media(max-width:760px){.skip{right:16px;bottom:14px}.here{left:16px;bottom:18px}}
+.btn:hover{background:#f2f0ea;border-color:#f2f0ea;color:#0b0b0a}
 .btn:hover{background:var(--fg);border-color:var(--fg);color:var(--bg)}
 .grain{position:absolute;inset:-50%;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");mix-blend-mode:overlay;animation:gr .4s steps(4) infinite}
 @keyframes gr{0%{transform:translate(0,0)}25%{transform:translate(-3%,2%)}50%{transform:translate(2%,-3%)}75%{transform:translate(-1%,3%)}}
@@ -472,6 +476,7 @@ section{position:relative}
 <script>(function(){var GC_CODE='tareqameer';if(!GC_CODE)return;var s=document.createElement('script');s.async=true;s.dataset.goatcounter='https://'+GC_CODE+'.goatcounter.com/count';s.src='vendor/goatcounter-count.js';document.head.appendChild(s)})()</script>
 </head>
 <body>
+<a class="skip" id="skip" href="#looks">Skip ↓</a><div class="here mono" id="here" aria-hidden="true"></div>
 <div class="counter mono" aria-hidden="true">Frame <b>01</b> / 36</div>
 <div class="loupe" aria-hidden="true"></div>
 <section class="intro" aria-label="CHRO-MA-SMITH"><div class="in"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="inc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="ina" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="inb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#inc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#ina)"/><polygon points="69,32 69,65 36,65" fill="url(#inb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg><div class="name"><span>C</span><span>H</span><span>R</span><span>O</span><span>-</span><span>M</span><span>A</span><span>-</span><span>S</span><span>M</span><span>I</span><span>T</span><span>H</span></div><p class="mono tag">Gallery. Studio. Film Lab.<br>your photos, your workflow, your app</p></div><p class="mono cue">Scroll to enter ↓</p><div class="sheet" aria-hidden="true"></div><div class="curtain"></div></section>
@@ -482,7 +487,8 @@ section{position:relative}
 </header>
 
 <section class="lead" aria-label="CHRO-MA-SMITH"><h1 class="hero-t">The app that<br>does it all<sup>*</sup></h1>
-  <p class="mono foot">*ALMOST EVERYTHING. YOU STILL NEED TO TAKE THE PHOTOS.</p></section>
+  <p class="mono foot">*ALMOST EVERYTHING. YOU STILL NEED TO TAKE THE PHOTOS.</p>
+  <p class="cta"><a class="btn go" href="chromasmith-22.html" data-goatcounter-click="hero-launch" data-goatcounter-title="hero-launch">Launch the free app ↗</a><a class="btn" href="#looks">Skip the tour ↓</a></p></section>
 
 <section class="pin" id="tour" aria-label="CHRO-MA-SMITH tour">
   <div class="ph">
@@ -718,9 +724,9 @@ section{position:relative}
   <footer class="mono"><span>Free software under GPL-3.0 · Designed by Tareq Ameer</span><a href="https://github.com/TareqAmeer/Chroma-App" target="_blank" rel="noopener" data-goatcounter-click="github-footer" data-goatcounter-title="github-footer">Source code</a></footer>
 </section>
 
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/lenis@1.3.4/dist/lenis.min.js"></script>
+<script src="vendor/web/gsap.min.js"></script>
+<script src="vendor/web/ScrollTrigger.min.js"></script>
+<script src="vendor/web/lenis.min.js"></script>
 <script>
 gsap.registerPlugin(ScrollTrigger);
 let still=false;try{still=localStorage.getItem('cs-motion')==='off'}catch(e){}
@@ -756,6 +762,10 @@ if(matchMedia('(pointer:coarse)').matches){
   });
 }
 document.querySelectorAll('.sec .menu a').forEach(a=>a.addEventListener('click',()=>a.closest('details').removeAttribute('open')));addEventListener('click',e=>{const d=document.querySelector('.sec[open]');d&&!d.contains(e.target)&&d.removeAttribute('open')});
+document.querySelector('.sec')&&document.addEventListener('keydown',e=>{const d=document.querySelector('.sec');if(!d.open)return;const L=[...d.querySelectorAll('.menu a')],i=L.indexOf(document.activeElement);
+  if(e.key==='Escape'){d.removeAttribute('open');d.querySelector('summary').focus()}
+  else if(e.key==='ArrowDown'){e.preventDefault();L[(i+1)%L.length].focus()}
+  else if(e.key==='ArrowUp'){e.preventDefault();L[(i<0?0:i-1+L.length)%L.length].focus()}});
 document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{const h=a.getAttribute('href');e.preventDefault();if(a.dataset.tour&&window.__tourTo){window.__tourTo(a.dataset.tour);return}const tgt=h.length<2?0:h;lenis?lenis.scrollTo(tgt,{offset:-40}):(tgt?document.querySelector(tgt).scrollIntoView():scrollTo(0,0))}));
 
 /* 1. stage */
@@ -782,7 +792,7 @@ if(!reduce){
   const measure=()=>{W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});const b=W.getBoundingClientRect(),a=ws.getBoundingClientRect(),c=wt.getBoundingClientRect();E={sx:a.left-b.left,sy:a.top-b.top,sw:a.width,tx:c.left-b.left,ty:c.top-b.top,tfs:parseFloat(getComputedStyle(wt).fontSize),th:c.height};WB={w:b.width,h:b.height};W.style.width=b.width+'px';W.style.height=b.height+'px';W.classList.add('fly');docked=false};
   measure();ScrollTrigger.addEventListener('refreshInit',measure);
   gsap.set('.word',{opacity:0});
-  gsap.timeline({onUpdate(){const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'})}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=70%',pin:true,scrub:1,invalidateOnRefresh:true,onUpdate:self=>document.documentElement.classList.toggle('lead-on',self.progress>.95)}})
+  gsap.timeline({onUpdate(){const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'})}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=45%',pin:true,scrub:1,invalidateOnRefresh:true,onUpdate:self=>document.documentElement.classList.toggle('lead-on',self.progress>.95)}})
     .to('.intro .cue',{opacity:0,duration:.1})
     .to('.intro .in',{opacity:0,duration:.02,ease:'none'},.01)
     .to('.word',{opacity:1,duration:.02,ease:'none'},.01)
@@ -809,7 +819,7 @@ const panel0=()=>document.querySelector('.p1');
 let PRE=7.5;
 const AR0=1.5,AR6=6123/4198,G6w=6123/5775,G6h=4198/3850,mob_=()=>innerWidth<760;
 const W0=()=>mob_()?innerWidth*.92:Math.min(innerWidth*.56,innerHeight*.76*AR0),H0=()=>W0()/AR0;
-const Wf=()=>Math.min(innerWidth,innerHeight*AR6),Hf=()=>Wf()/AR6,Wz=()=>innerWidth*(innerWidth<760?.6:.22),K=()=>innerWidth<760?3:1;  // K: phones get more scroll per sideways pixel so the gallery doesn't flash past
+const Wf=()=>Math.min(innerWidth,innerHeight*AR6),Hf=()=>Wf()/AR6,Wz=()=>innerWidth*(innerWidth<760?.6:.22),K=()=>innerWidth<760?2:1;  // K: phones get more scroll per sideways pixel so the gallery doesn't flash past
 // memory: only the stage photos next to the current one stay in the page (display:none lets the browser drop the
 // other 3200px bitmaps), so at most three full-size layers exist at once instead of six
 const STG=[0,.5,1.2,1.9,2.6,3.3];let stgLast=-1;
@@ -818,7 +828,7 @@ const stageWindow=t=>{document.querySelector('.ph').style.zIndex=t>=6.2?'3':'';l
 const HOLD2=2.4,HOLD=1.4,XH=()=>{const g=document.querySelector('.p1');return g.offsetLeft+Math.max(0,g.offsetWidth-innerWidth)};
 function slideUpd(){const X=-gsap.getProperty(tr,'x');
   handoff(X);const g=panel0().getBoundingClientRect();document.body.classList.toggle('onpaper',g.left<120&&g.right>innerWidth*.4)}
-const tl=window.__tourTl=gsap.timeline({onUpdate(){stageWindow(this.time());if(this.time()>=tl.labels.slide+XH()/innerHeight*K()){ph.style.visibility='hidden';const t0=window.__tile0;if(t0)t0.style.visibility='visible'}},scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*(PRE+HOLD+HOLD2)+dist()*K()),scrub:1,invalidateOnRefresh:true}});
+const tl=window.__tourTl=gsap.timeline({onUpdate(){stageWindow(this.time());if(this.time()>=tl.labels.slide+XH()/innerHeight*K()){ph.style.visibility='hidden';const t0=window.__tile0;if(t0)t0.style.visibility='visible'}},scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*(PRE+HOLD+HOLD2)+dist()*K())*.5,scrub:1,invalidateOnRefresh:true}});
 const W_=document.querySelectorAll('.stagew span'),wIn=(k,at)=>tl.to(W_[k].querySelectorAll('i'),{yPercent:0,stagger:{amount:.12},duration:.2,ease:'power3.out'},at),wOut=(k,at)=>tl.to(W_[k],{yPercent:-30,opacity:0,duration:.12,ease:'power2.in'},at);
 const PI=[...document.querySelectorAll('.ph img')],RV=document.querySelector('.ph .rvf'),CLOSED='inset(0% 0% 100% 0%)',OPEN='inset(0% 0% 0% 0%)',EZ='power1.inOut';
 gsap.set(PI,{clipPath:CLOSED});gsap.set(PI[0],{clipPath:OPEN});stageWindow(0);
@@ -977,7 +987,7 @@ ScrollTrigger.create({trigger:'.quote',start:'top 80%',end:'bottom 45%',scrub:tr
   q.innerHTML=q.textContent.trim().split(/\s+/).map(w=>/^masterpieces/.test(w)?'<span class="qw"><span class="shifted" data-t="masterpieces">masterpieces</span>'+w.slice(12)+'</span>':'<span class="qw">'+w+'</span>').join(' ');
   if(!reduce&&innerWidth>=760){
     gsap.set('.maker .qw',{opacity:.15});
-    gsap.timeline({scrollTrigger:{trigger:'.maker',pin:true,start:'top top',end:'+=140%',scrub:.6,anticipatePin:1}})
+    gsap.timeline({scrollTrigger:{trigger:'.maker',pin:true,start:'top top',end:'+=80%',scrub:.6,anticipatePin:1}})
       .to('.maker .qw',{opacity:1,stagger:.08,ease:'none',duration:1})
       .to('.maker .who',{opacity:1,duration:.2},'>-.1').to({},{duration:.3});
     gsap.set('.maker .who',{opacity:.2});
@@ -1058,7 +1068,7 @@ document.querySelectorAll('.paper').forEach(pp=>ScrollTrigger.create({trigger:pp
   const pen=sh.querySelector('.pen path');if(pen)gsap.set(pen,{strokeDasharray:1,strokeDashoffset:1});
   if(reduce){gsap.set('.sheet div',{opacity:1});pen&&gsap.set(pen,{strokeDashoffset:0})}
   else gsap.timeline({delay:.6}).to('.sheet div',{opacity:1,duration:.05,stagger:{each:.06,from:'random'}}).to('.sheet div:not(.pick)',{opacity:.35,duration:.4},'+=.3').to(pen,{strokeDashoffset:0,duration:.9,ease:'power1.inOut'},'<');
-  if(!reduce)gsap.to('.sheet',{yPercent:-12,opacity:0,ease:'none',scrollTrigger:{trigger:'.intro',start:'top top',end:'+=80%',scrub:true}});
+  if(!reduce)gsap.to('.sheet',{yPercent:-12,opacity:0,ease:'none',scrollTrigger:{trigger:'.intro',start:'top top',end:'+=50%',scrub:true}});
 }
 /* 10 loupe: 100% view under the cursor */
 {
@@ -1118,12 +1128,19 @@ document.querySelectorAll('a[href$="chromasmith-22.html"]').forEach(a=>a.addEven
   const nv={s:4,c:83,t:22,q:88},$=id=>document.getElementById(id);
   const nset=()=>{$('nsub').textContent=Math.round(nv.s);$('ncost').textContent=Math.round(nv.c);$('ntime').textContent=Math.round(nv.t);$('nq').textContent=Math.round(nv.q);
     $('nbsub').style.transform=`scaleX(${nv.s/4})`;$('nbcost').style.transform=`scaleX(${nv.c/83})`;$('nbtime').style.transform=`scaleX(${nv.t/22})`;$('nbq').style.transform=`scaleX(${nv.q/100})`};nset();
-  window.__flowTl=gsap.timeline({scrollTrigger:{trigger:'.flow',start:'top top',end:'+=550%',pin:true,scrub:true,
+  window.__flowTl=gsap.timeline({scrollTrigger:{trigger:'.flow',start:'top top',end:'+=260%',pin:true,scrub:true,
     onUpdate:s=>show(Math.min(li.length,Math.floor(s.progress/(.78/1.3)*(li.length+.999))))}})
     .to({},{duration:.78}).to('.now',{clipPath:'inset(0% 0 0 0)',ease:'power2.inOut',duration:.12})
     .fromTo(nv,{s:4,c:83,t:22,q:88},{s:0,c:0,t:0,q:100,ease:'power2.inOut',duration:.3,onUpdate:nset})   // everything unwinds; quality climbs back
     .to({},{duration:.1});
 }
+/* skip pill + "you are here" label, driven by where each section sits */
+{const sk=document.getElementById('skip'),hr=document.getElementById('here');
+const S=[['tour','01–03','Tour','#looks','Skip tour'],['looks','04','Film Looks','#flow','Next'],['flow','05–06','Workflow','#maker','Skip workflow'],['maker','07','The Designer','#features','Next'],['features','08','Feature List','#beta','Next'],['beta','09','In Beta','#faq','Next'],['faq','10','FAQ','#yours','Next']];
+const upd=()=>{const mid=innerHeight*.5;let c=null;for(const r of S){const e=document.getElementById(r[0]),sp=e&&(e.parentElement.classList.contains('pin-spacer')?e.parentElement:e);if(!sp)continue;const b=sp.getBoundingClientRect();if(b.top<=mid&&b.bottom>mid){c=r;break}}
+  if(!c){sk.classList.remove('on');hr.classList.remove('on');return}
+  sk.href=c[3];sk.textContent=c[4]+' ↓';sk.classList.add('on');hr.innerHTML='<b>'+c[1]+'</b>'+c[2];hr.classList.add('on')};
+addEventListener('scroll',upd,{passive:true});addEventListener('resize',upd);setTimeout(upd,600)}
 /* 5. outro lines rise */
 gsap.from('.outro .k i',{yPercent:105,stagger:.12,duration:1.2,ease:'expo.out',scrollTrigger:{trigger:'.outro',start:'top 65%'}});
 </script>
