@@ -1,3 +1,5 @@
+> **Superseded:** the current storyboard is the scene table in [script.md](script.md) (v4). This file is kept for history.
+
 # Chromasmith promo storyboard: "Gallery → Darkroom → Print"
 
 16:9, 1920×1080, about 38s, sound effects synced to every animation beat plus burned-in captions; no music and no voiceover.
