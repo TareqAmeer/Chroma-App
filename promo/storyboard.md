@@ -1,6 +1,6 @@
 # Chromasmith promo storyboard: "Gallery → Darkroom → Print"
 
-16:9, 1920×1080, about 38s, music with burned-in captions and no voiceover.
+16:9, 1920×1080, about 38s, sound effects synced to every animation beat plus burned-in captions; no music and no voiceover.
 
 ## Visual system (taken from the homepage, `index.html`)
 | Role | Value |
@@ -31,9 +31,9 @@
 | 3 | 7.0–10.5 | **Organised for you** | The boxes slide into clean rows grouped by shoot, and thin labels type on (date, place, faces). Rejects drop to `#6B685F`, and favourites get a `#1238FF` corner tick. | *Organised for you.* |
 | 4 | 10.5–13.5 | **Find the one** | Everything dims to `#24231F` except one box, which turns **accent red**. The camera pushes in until the red box fills a third of the frame. | *Find the one.* |
 | 5 | 13.5–15.0 | **Flip** | The red box flips on its vertical axis (one flat flip, 0.4s). Its back face is the **raw photo**. | *(no text: beat)* |
-| 6 | 15.0–24.0 | **The darkroom** | A real app capture (Playwright) frames the photo in the Studio. Each tool gets a spotlight-focus beat of about 1.5s: **Look** (thumbnail segments cycle colour like the radio-canada rings: Portra → Tri-X → CineStill) · **Grain** · **Halation / Bloom** · **Border**. A split line keeps a before/after visible during the whole scene. | *Pick a film.* / *Add grain.* / *Make it glow.* / *Frame it.* |
+| 6 | 15.0–24.0 | **The darkroom** | A real app capture (Playwright) frames the photo in the Studio. Each tool gets a spotlight-focus beat of about 1.5s: **Look** (thumbnail segments cycle colour like the radio-canada rings: Portra → Tri-X → CineStill) · **Grain** · **Halation / Bloom** · **Border**. A split line keeps a before/after visible during the whole scene. | *133 film looks.* / *Add grain.* / *Make it glow.* / *Frame it.* |
 | 7 | 24.0–30.0 | **Simpler workflow** | Left: the old chain of 12 steps as small paper boxes in a row (Upload → Lightroom → Export → Dehancer → Export → Darkroom → Export…), each "Export" in dim. They collapse sideways into **one** accent box: *Chromasmith*. | *12 steps.* → *1 app.* *1 export.* |
-| 8 | 30.0–34.0 | **Time · Quality · Money** | Three columns, each with a big number that rolls like an odometer from the old to the new value: **$83 → $0** /month · **22 min → [new] min** · **88% → 100%** quality. Small labels underneath. | *Save time.* *Keep quality.* *Keep your money.* |
+| 8 | 30.0–34.0 | **Time · Quality · Money** | Three columns, each with a big number that rolls like an odometer from the old to the new value: **$83 → $0** /month · **22 min → 2 min** · **88% → 100%** quality. Small labels underneath. | *Save time.* *Keep quality.* *Keep your money.* |
 | 9 | 34.0–38.0 | **Print & hang** | The finished photo shrinks into a paper-white print with a border and slides onto a parchment wall, beside 2 other prints. Soft circles drift behind (Tonhalle). End card: wordmark **CHRO-MA-SMITH** with the line "Gallery. Studio. Film Lab." and the URL, with a red dot as the full stop. | *Free. Offline. Yours.* |
 
 ## Assets
@@ -41,7 +41,19 @@
 - App footage: Playwright at a fixed 1920×1080, dark theme, Studio tab, scripted look → grain → halation → border.
 - Workflow numbers come from the homepage's Old/New Workflow sections (see the open questions below).
 
-## Open questions before building
-1. **Film look count**: the homepage says "100 film looks", "over 130 film presets" and "133 film looks", while the repo docs say 113. Which number goes on screen?
-2. **New workflow time**: the homepage gives 22 min for the old workflow but no figure for Chromasmith. Use about 2 min, or leave it as "minutes → seconds"?
-3. Is the music track already chosen, or should one be picked from a royalty-free library?
+## Sound design (no music; every sound sits on an animation beat)
+All sounds are synthesised or taken from a CC0 library (freesound CC0 / Kenney). Each cue is placed by frame in Remotion, so picture and sound stay in sync by construction.
+
+| Scene | Visual beat | Sound |
+|---|---|---|
+| 1 | Wipe bar crosses frame | Dry paper slide (whoosh, under 300ms) ending on a soft click |
+| 2 | Each box pops in (4→16→64→256) | Short tick per wave, getting denser and higher; odometer ratchet clicks |
+| 3 | Rows snap into place | Soft wooden clacks, one per row; typewriter taps under the labels |
+| 4 | Grid dims, one box turns red | Low thud followed by silence |
+| 5 | Box flips | Card flip (paper snap) |
+| 6 | Each tool spotlight | Lens/shutter click on each focus change; film-advance ratchet per look change; faint grain hiss under "grain"; soft swell under "glow" |
+| 7 | 12 boxes collapse into 1 | Rapid run of clicks that stacks into one heavy click |
+| 8 | Counters roll | Odometer ratchet, then a bell-like ping when each one lands |
+| 9 | Print slides onto the wall | Paper slide, then a pin/hang tap; one soft tone on the red dot |
+
+Rule: no sound without a matching move on screen, and ~150ms of silence before each hard cut.
