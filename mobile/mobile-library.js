@@ -160,7 +160,12 @@ function build(){
   grid=root.querySelector('.grid');
   const inp=root.querySelector('input');
   inp.onchange=async()=>{const fl=[...inp.files];inp.value='';if(!fl.length)return;
-    await importFiles(fl);toast(fl.length+' photo'+(fl.length>1?'s':'')+' added');render();};
+    const ids=await importFiles(fl);if(!ids.length)return;
+    if(ids.length===1){openPhoto(ids[0]);return}
+    // several photos: open them all in the editor's filmstrip, edits saved to each
+    close();window.__mlibOpening=true;window.__csLibOpen=true;
+    try{await origLoad(fl)}finally{window.__mlibOpening=false;window.__csLibOpen=false}
+    openedId=null;openedIds=ids;};
   root.addEventListener('click',e=>{
     const a=e.target.closest('[data-a]'),f=e.target.closest('[data-f]'),c=e.target.closest('.cell');
     if(a&&a.dataset.a==='import')inp.click();
