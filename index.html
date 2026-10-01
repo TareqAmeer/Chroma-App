@@ -732,7 +732,7 @@ section{position:relative}
 <script src="vendor/web/ScrollTrigger.min.js"></script>
 <script src="vendor/web/lenis.min.js"></script>
 <script>
-gsap.registerPlugin(ScrollTrigger);
+gsap.registerPlugin(ScrollTrigger);ScrollTrigger.config({ignoreMobileResize:true});
 let still=false;try{still=localStorage.getItem('cs-motion')==='off'}catch(e){}
 if(still)document.documentElement.classList.add('still');
 if(!location.hash){history.scrollRestoration='manual';scrollTo(0,0);addEventListener('load',()=>{scrollTo(0,0);lenis&&lenis.scrollTo(0,{immediate:true,force:true})})}
@@ -928,7 +928,7 @@ pans.forEach(p=>{
     let hs=rows.map(rw=>(W-g*(rw.length-1))/rw.reduce((a,x)=>a+x[1],0));const tot=hs.reduce((a,b)=>a+b,0)+g*(rows.length-1),k=Math.min(1,H/tot);
     let y=T;rows.forEach((rw,ri)=>{const h=hs[ri]*k,rowW=rw.reduce((a,x)=>a+x[1]*h,0)+g*(rw.length-1);let x=(W-rowW)/2;
       rw.forEach(([t,ar])=>{Object.assign(t.style,{width:ar*h+'px',height:h+'px',left:x+'px',top:y+'px'});x+=ar*h+g});y+=h+g})};
-  layout();document.fonts&&document.fonts.ready.then(layout);addEventListener('resize',()=>{layout();ScrollTrigger.refresh()});
+  layout();document.fonts&&document.fonts.ready.then(layout);{let rw=innerWidth;addEventListener('resize',()=>{if(innerWidth===rw)return;rw=innerWidth;layout();ScrollTrigger.refresh()})}  // phones: the address bar showing/hiding changes only the height, and must not re-lay-out the pinned story mid-scroll
   const org=gsap.timeline({onUpdate:()=>board.classList.toggle('ready',org.progress()>.98),scrollTrigger:{start:()=>sPos()-innerHeight*.9,end:()=>sPos()+XH()*K(),scrub:1,invalidateOnRefresh:true}});
   // start on screen (the track has not moved yet), then fly into the grid as it slides in
   const home=t=>panel.offsetLeft+board.offsetLeft+parseFloat(t.style.left||0);
