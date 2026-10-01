@@ -2872,6 +2872,12 @@ body.mobile-fx #fx-tool-grid .fx-sec-btn .fx-sec-ic{position:relative}
 body.mobile-fx .fx-panel .fx-slider{touch-action:pan-y}
 /* User-sized tool sheet (drag the handle and let go anywhere). */
 body.mobile-fx.sheet-open.sheet-user .fx-panel{height:var(--sheet-user-h)!important;max-height:calc(var(--app-h,100svh)*.85)!important}
+/* Phone: each tool is its own sheet (named in the strip above), so the section header text and
+   collapse chevron go. The row keeps only its right-hand controls (Reset, on/off), compact. */
+body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title{font-size:0!important;min-height:0!important;padding:2px 0!important;margin:0 0 4px!important;box-shadow:none!important;position:static;justify-content:flex-end}
+body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title .fx-ctrl-chev{display:none}
+body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title>*{font-size:13px}
+body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title:not(:has(.fx-toggle)):not(:has(.fx-toggle-lb)) #fx-ctrl-title-reset[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -6788,7 +6794,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001H';
+const BUILD='1.1001I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
