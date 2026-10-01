@@ -2715,6 +2715,8 @@ body.sk2.deskx #sk2-stage-h,body.sk2.deskx #sk2-sub{margin-left:calc(var(--sk-g)
 body.sk2 .fx-row .fx-label{color:var(--k-color-ink)}
 body.sk2 .fx-row:not(.fx-mod) .fx-val{color:var(--k-color-muted)}
 body.sk2 .fx-row.fx-mod .fx-label,body.sk2 .fx-row.fx-mod .fx-val{color:var(--k-color-ink)!important}
+/* ...but a rolling readout's own text must stay transparent (the strip draws the digits) — the rule above made edited values print twice, offset. */
+body.sk2 .fx-row.fx-mod .fx-val.k-roll:not(:focus){color:transparent!important}
 body.sk2 .fx-sub,body.sk2 .fx-fields>.fx-label:not(.fx-row .fx-label){color:var(--k-color-ink)!important;font-weight:500!important}
 body.sk2 .fx-ctrl-title{font-weight:500}
 body.sk2 .fx-slider::-webkit-slider-runnable-track{background:linear-gradient(to right,color-mix(in srgb,var(--k-color-ink) 22%,transparent) 0 var(--fillA,0%),var(--k-color-accent-a) var(--fillA,0%) var(--fillB,0%),color-mix(in srgb,var(--k-color-ink) 22%,transparent) var(--fillB,0%) 100%)!important}
@@ -6794,7 +6796,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001J';
+const BUILD='1.1001K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
