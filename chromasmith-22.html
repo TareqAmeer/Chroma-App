@@ -2887,6 +2887,13 @@ body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title>.fx-toggle-lb{margin-left:auto}
 /* edited marker on the sheet's tool-name strip, same square as the tool bar */
 #fx-sheet-strip button.edited{position:relative}
 #fx-sheet-strip button.edited::after{content:'';position:absolute;top:5px;right:-7px;width:5px;height:5px;background:var(--k-color-accent-a)}
+/* Canvas aspect tiles (Swiss: flat, square, ink fill when picked) */
+#cv-ar-chips{display:flex!important;flex-wrap:nowrap!important;align-items:flex-end;gap:6px!important;overflow-x:auto;scrollbar-width:none;padding:2px 0 6px;touch-action:pan-x}
+#cv-ar-chips::-webkit-scrollbar{display:none}
+.cv-tile{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:1px solid var(--bdr);border-radius:0;background:transparent;color:var(--k-color-ink,#f2f0ea);font:12px var(--sans);padding:0;cursor:pointer}
+.cv-tile .cv-use{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--k-color-muted,#8d8b85)}
+.cv-tile.on{background:var(--k-color-ink,#f2f0ea);color:var(--k-color-bg,#141414);border-color:var(--k-color-ink,#f2f0ea)}
+.cv-tile.on .cv-use{color:inherit;opacity:.7}
 </style>
 </head>
 <body>
@@ -4211,6 +4218,13 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
             <div class="btn-row" id="cv-bg-swatches" style="gap:4px;flex-wrap:wrap;margin-top:0"></div>
           </div>
           <div class="fx-row" style="margin-top:4px"><div class="fx-label">Custom</div><input type="color" class="fx-color" id="cl-canvas-bg" value="#000000" oninput="cvSetBg(this.value)"></div>
+          <div id="cv-blur-row" style="display:none">
+            <div class="fx-row" style="margin-top:4px"><div class="fx-label">Background photo</div>
+              <span id="cv-bgphoto-lb" style="color:var(--mut);font-size:12px;margin-left:auto;margin-right:8px">This photo</span>
+              <button class="btn bgh" onclick="cvPickBgPhoto()">Choose…</button>
+              <button class="btn bgh" id="cv-bgphoto-clear" onclick="cvClearBgPhoto()" style="display:none">Use this photo</button></div>
+            <div class="fx-row"><div class="fx-label">Blur</div><input class="fx-slider" type="range" min="0" max="100" value="60" id="sl-canvas-blur" oninput="fxState.canvas.blurAmt=+this.value;document.getElementById('vl-canvas-blur').textContent=this.value;fxUpdate()"><div class="fx-val" id="vl-canvas-blur">60</div></div>
+          </div>
         </div>
       </div>
       <!-- DIAGNOSTICS -->
@@ -6810,7 +6824,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001N';
+const BUILD='1.1001O';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13936,16 +13950,24 @@ function _expOverlay(show){
 }
 
 // ══ CANVAS — aspect-ratio matte around image+borders (see canvasCompose) ═══════
-const CV_ARS=[['Fit',0],['1:1',1],['4:5',0.8],['3:4',0.75],['4:3',4/3],['9:16',9/16],['16:9',16/9],['3:2',1.5],['2:3',2/3]];
+const CV_ARS=[['Fit',0],['1:1',1,'Post'],['4:5',0.8,'Portrait'],['9:16',9/16,'Story'],['16:9',16/9,'Wide'],['3:2',1.5],['2:3',2/3],['4:3',4/3],['3:4',0.75]];
+let _cvBgImg=null; // optional different photo for the blurred background (session only)
+function cvPickBgPhoto(){const i=document.createElement('input');i.type='file';i.accept='image/*';
+  i.onchange=()=>{const f=i.files[0];if(!f)return;const im=new Image();im.onload=()=>{_cvBgImg=im;fxState.canvas.blur=true;cvBuildChips();fxUpdate();};im.src=URL.createObjectURL(f);};i.click();}
+function cvClearBgPhoto(){_cvBgImg=null;cvBuildChips();fxUpdate();}
 const CV_BGS=['#000000','#ffffff','#141414','#f5f0e8','#d4903a','#4a5d73','#7a3b3b','blur'];
 function cvBuildChips(){
   const row=document.getElementById('cv-ar-chips');
   if(row){row.innerHTML='';
-    CV_ARS.forEach(([lb,ar])=>{
-      const b=document.createElement('button');
-      b.className='btn '+(fxState.canvas.ar===ar?'bsec':'bgh');
-      b.style.cssText='padding:6px 9px;min-width:0';
-      b.textContent=lb;b.onclick=()=>{fxState.canvas.ar=ar;cvBuildChips();fxUpdate();};
+    // Shape tiles: each tile IS its ratio (Swiss: flat, square corners, ink when picked).
+    CV_ARS.forEach(([lb,ar,use])=>{
+      const b=document.createElement('button');b.type='button';
+      b.className='cv-tile'+(fxState.canvas.ar===ar?' on':'');
+      const r=ar||1,H=64,W=Math.round(Math.min(104,Math.max(42,H*r)));
+      b.style.width=W+'px';b.style.height=Math.round(ar?Math.min(H,W/r):H)+'px';
+      b.innerHTML=(use?'<span class="cv-use">'+use+'</span>':'')+'<span class="cv-ar">'+lb+'</span>';
+      b.setAttribute('aria-pressed',String(fxState.canvas.ar===ar));
+      b.onclick=()=>{fxState.canvas.ar=ar;cvBuildChips();fxUpdate();};
       row.appendChild(b);
     });}
   const sw=document.getElementById('cv-bg-swatches');
@@ -13968,6 +13990,12 @@ function cvBuildChips(){
       b.onclick=()=>{if(isBlur){fxState.canvas.blur=!fxState.canvas.blur;}else{fxState.canvas.bg=c;fxState.canvas.blur=false;}cvBuildChips();fxUpdate();};
       sw.appendChild(b);
     });}
+  // background photo + blur amount (only meaningful with the photo background on)
+  const bl=document.getElementById('cv-blur-row'),sl=document.getElementById('sl-canvas-blur'),pb=document.getElementById('cv-bgphoto-lb');
+  if(bl)bl.style.display=fxState.canvas.blur?'':'none';
+  if(sl){sl.value=fxState.canvas.blurAmt==null?60:fxState.canvas.blurAmt;const v=document.getElementById('vl-canvas-blur');if(v)v.textContent=sl.value;}
+  if(pb)pb.textContent=_cvBgImg?'Other photo ✓':'This photo';
+  const cb=document.getElementById('cv-bgphoto-clear');if(cb)cb.style.display=_cvBgImg?'':'none';
 }
 function cvSetBg(c){fxState.canvas.bg=c;fxState.canvas.blur=false;cvBuildChips();fxUpdate();}
 
@@ -19381,7 +19409,8 @@ function getFXParams(adjValsOverride){return{
   debug:parseFloat((document.getElementById('sel-debug')||{}).value||0),
   vignette:document.getElementById('tg-vig').classList.contains('on')?(adjVal('sl-vig')/100):0,
   canvas:{enabled:!!(document.getElementById('tg-canvas')||{classList:{contains:()=>false}}).classList.contains('on'),
-    ar:fxState.canvas.ar,zoom:adjVal('sl-canvas-z')/100||1,bg:fxState.canvas.bg,blur:fxState.canvas.blur},
+    ar:fxState.canvas.ar,zoom:adjVal('sl-canvas-z')/100||1,bg:fxState.canvas.bg,blur:fxState.canvas.blur,
+    blurAmt:fxState.canvas.blurAmt==null?60:fxState.canvas.blurAmt,bgImg:fxState.canvas.blur?_cvBgImg:null},
   bordersEnabled:document.getElementById('tg-borders').classList.contains('on'),
   b1:_borderLayerParams('b1'),
   b2:_borderLayerParams('b2'),
@@ -20121,11 +20150,15 @@ function canvasCompose(src,CV){
     // blur = draw a cover-fit copy at 1/16 scale then upscale with smoothing — reliable on
     // every browser (ctx.filter blur is not trustworthy on iOS), and resolution-independent
     // so the preview blur matches the export blur.
+    // blurAmt 0..100 → downscale 1..48 (0 = the background photo sharp). bgImg = a different
+    // photo the user picked for the background (session-only, not saved in the recipe).
+    const bsrc=CV.bgImg||src,bw=bsrc.naturalWidth||bsrc.width,bh=bsrc.naturalHeight||bsrc.height;
+    const div=1+(CV.blurAmt==null?60:CV.blurAmt)/100*47;
     const t=document.createElement('canvas');
-    const tw=Math.max(1,Math.round(outW/16)),th=Math.max(1,Math.round(outH/16));
+    const tw=Math.max(1,Math.round(outW/div)),th=Math.max(1,Math.round(outH/div));
     t.width=tw;t.height=th;const tx=t.getContext('2d');
-    const s=Math.max(tw/sw,th/sh);
-    tx.drawImage(src,(tw-sw*s)/2,(th-sh*s)/2,sw*s,sh*s);
+    const s=Math.max(tw/bw,th/bh);
+    tx.drawImage(bsrc,(tw-bw*s)/2,(th-bh*s)/2,bw*s,bh*s);
     x.imageSmoothingEnabled=true;
     x.drawImage(t,0,0,outW,outH);
     x.fillStyle='rgba(0,0,0,.22)';x.fillRect(0,0,outW,outH); // slight dim so the photo pops
