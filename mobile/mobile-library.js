@@ -31,6 +31,7 @@ const allPhotos=()=>tx('photos','readonly',s=>s.getAll());
 const getBlob=id=>tx('blobs','readonly',s=>s.get(id)).then(r=>r&&r.blob);
 const b64=snap=>btoa(unescape(encodeURIComponent(JSON.stringify(snap))));
 const unb64=s=>JSON.parse(decodeURIComponent(escape(atob(s))));
+const day=t=>new Date(t).toLocaleDateString([], {day:'numeric',month:'short'});
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 // ── thumbnails ────────────────────────────────────────────────────────────────────────────────
@@ -122,7 +123,7 @@ if(typeof fxUpdateHistoryBtn==='function')fxUpdateHistoryBtn();
 
 // ── gallery UI ─────────────────────────────────────────────────────────────────────────────────
 const css=`
-#mlib{position:fixed;inset:0;z-index:9000;background:#1c1c1c;color:var(--tx,#eee);display:none;flex-direction:column;
+#mlib{position:fixed;inset:0;z-index:9000;background:var(--mbg,#1c1c1c);color:var(--mink,#eee);display:none;flex-direction:column;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);font-family:var(--sans,system-ui)}
 #mlib.open{display:flex}
 #mlib .top{display:flex;align-items:center;gap:10px;padding:10px 8px 6px 14px}
@@ -132,17 +133,24 @@ const css=`
 #mlib .top .set svg{width:22px;height:22px}
 #mlib .mh{display:flex;align-items:center;gap:8px;padding:6px 14px 10px}
 #mlib .mh h1{flex:1;margin:0;font-size:22px;font-weight:600;letter-spacing:-.01em}
-#mlib .mh button{border:0;border-radius:999px;padding:9px 16px;font:600 14px inherit;background:var(--sur,#1d1d1d);color:inherit}
+#mlib .mh button{border:0;border-radius:999px;padding:9px 16px;font:600 14px inherit;background:color-mix(in srgb,var(--mink,#eee) 10%,transparent);color:inherit}
 #mlib .mh .pri{background:var(--primary,#e8e2d0);color:#111}
 #mlib .tabs{display:flex;gap:6px;padding:0 14px 8px}
 #mlib .tabs button{border:0;border-radius:999px;padding:6px 12px;background:none;color:var(--tx2,#999);font:13px inherit}
-#mlib .tabs button.on{background:var(--sur,#1d1d1d);color:inherit}
+#mlib .tabs button.on{background:color-mix(in srgb,var(--mink,#eee) 10%,transparent);color:inherit}
 #mlib .grid{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:2px;
   padding:0 2px calc(16px + env(safe-area-inset-bottom));align-content:start;-webkit-overflow-scrolling:touch}
-#mlib .cell{position:relative;aspect-ratio:1;background:#262626;overflow:hidden;border:0;padding:0}
+#mlib .cell{position:relative;aspect-ratio:1;background:var(--mcell,#262626);overflow:hidden;border:0;padding:0}
 #mlib .cell img{width:100%;height:100%;object-fit:cover;display:block}
 #mlib .cell .nm{position:absolute;inset:auto 4px 4px 4px;font-size:10px;color:#ccc;text-align:left;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 #mlib .cell .b{position:absolute;top:5px;right:5px;font-size:10px;padding:2px 6px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff}
+#mlib.orig .grid{display:block;column-count:3;column-gap:2px}
+#mlib.orig .cell{display:block;width:100%;aspect-ratio:auto;margin:0 0 2px;break-inside:avoid}
+#mlib.orig .cell img{height:auto}
+#mlib.dates .cell{overflow:visible;margin-bottom:18px}
+#mlib.orig.dates .cell{margin-bottom:20px}
+#mlib .cell .dt{position:absolute;left:2px;top:100%;margin-top:2px;font-size:10px;opacity:.6;white-space:nowrap;display:none}
+#mlib.dates .cell .dt{display:block}
 #mlib .empty{grid-column:1/-1;text-align:center;color:var(--tx2,#999);padding:80px 24px;font-size:15px;line-height:1.5}
 #mlib-sheet{position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.5);display:none;align-items:flex-end}
 #mlib-sheet.open{display:flex}
@@ -151,19 +159,32 @@ const css=`
 #mlib-sheet .t{font-size:13px;color:var(--tx2,#999);padding:2px 4px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #mlib-sheet .s>button{border:0;border-radius:10px;padding:13px;font:15px var(--sans,system-ui);background:var(--bg,#111);color:inherit;text-align:left}
 #mlib-sheet .s>button.dz{color:#ff6b6b}
+#mlib-sheet .seg{display:flex;gap:6px;flex-wrap:wrap}
+#mlib-sheet .seg button{flex:1;border:1px solid var(--bdr,#333);border-radius:10px;padding:10px 6px;font:13px var(--sans,system-ui);background:none;color:inherit;display:flex;align-items:center;justify-content:center;gap:6px}
+#mlib-sheet .seg button.on{border-color:var(--k-color-accent-a,#ff3b1f)}
+#mlib-sheet .seg i{width:12px;height:12px;border:1px solid #666;display:inline-block}
 #mlib-sheet .h{font-size:12px;color:var(--tx2,#999);padding:8px 4px 0;text-transform:uppercase;letter-spacing:.06em}`;
 let root,grid,filter='all',urls=[];
+// Gallery display preferences (per device).
+const PREF_KEY='cs-mlib-prefs';
+const BGS={dark:['#1c1c1c','#f2f0ea','#262626'],black:['#000','#f2f0ea','#161616'],grey:['#2c2c2c','#f2f0ea','#383838'],light:['#edeeee','#141414','#dcdcdc']};
+function prefs(){let p={};try{p=JSON.parse(localStorage.getItem(PREF_KEY)||'{}')}catch(e){}
+  return Object.assign({bg:'dark',aspect:'square',sort:'edited',dates:false},p);}
+function setPref(k,v){const p=prefs();p[k]=v;try{localStorage.setItem(PREF_KEY,JSON.stringify(p))}catch(e){}applyPrefs();render();}
+function applyPrefs(){if(!root)return;const p=prefs(),c=BGS[p.bg]||BGS.dark;
+  root.style.setProperty('--mbg',c[0]);root.style.setProperty('--mink',c[1]);root.style.setProperty('--mcell',c[2]);
+  root.classList.toggle('orig',p.aspect==='original');root.classList.toggle('dates',!!p.dates);}
 function build(){
   if(root)return;
   const st=document.createElement('style');st.textContent=css;document.head.appendChild(st);
   root=document.createElement('div');root.id='mlib';
-  root.innerHTML=`<div class="top"><svg viewBox="18 18 64 62" aria-hidden="true"><rect x="21" y="21" width="48" height="44" fill="var(--k-color-ink,#f2f0ea)"/><rect x="36" y="32" width="43" height="45" fill="var(--k-color-accent-a,#ff3b1f)"/><rect x="36" y="32" width="33" height="33" fill="#b0200e"/></svg><span class="wm">CHRO-MA-SMITH</span><button class="set" data-a="settings" aria-label="Settings">${typeof icon==='function'?icon('more',22):'⋯'}</button></div>
+  root.innerHTML=`<div class="top"><svg viewBox="18 18 64 62" aria-hidden="true"><rect x="21" y="21" width="48" height="44" fill="var(--mink,#f2f0ea)"/><rect x="36" y="32" width="43" height="45" fill="var(--k-color-accent-a,#ff3b1f)"/><rect x="36" y="32" width="33" height="33" fill="#b0200e"/></svg><span class="wm">CHRO-MA-SMITH</span><button class="set" data-a="settings" aria-label="Settings">${typeof icon==='function'?icon('more',22):'⋯'}</button></div>
 <div class="mh"><h1>Gallery</h1><button class="pri" data-a="import">Import</button><button data-a="close" aria-label="Close gallery">Editor</button></div>
 <div class="tabs"><button data-f="all" class="on">All</button><button data-f="edited">Edited</button><button data-f="exported">Exported</button></div>
 <div class="grid"></div>
 <input type="file" accept="image/*,.rw2,.dng" multiple hidden>`;
   document.body.appendChild(root);
-  grid=root.querySelector('.grid');
+  grid=root.querySelector('.grid');applyPrefs();
   const inp=root.querySelector('input');
   inp.onchange=async()=>{const fl=[...inp.files];inp.value='';if(!fl.length)return;
     const ids=await importFiles(fl);if(!ids.length)return;
@@ -192,13 +213,14 @@ function build(){
 async function render(){
   build();
   urls.forEach(u=>URL.revokeObjectURL(u));urls=[];
-  let ps=(await allPhotos()).sort((a,b)=>(b.edited||b.added)-(a.edited||a.added));
+  const pr=prefs();
+  let ps=(await allPhotos()).sort(pr.sort==='added'?(a,b)=>b.added-a.added:(a,b)=>(b.edited||b.added)-(a.edited||a.added));
   if(filter==='edited')ps=ps.filter(p=>p.recipe);
   if(filter==='exported')ps=ps.filter(p=>p.exports.length);
   if(!ps.length){grid.innerHTML=`<div class="empty">${filter==='all'?'No photos yet.<br>Tap <b>Import</b> to add photos — originals stay safe here and every edit is saved automatically.':'Nothing here yet.'}</div>`;return}
   grid.innerHTML=ps.map(p=>{const t=p.thumbEdited||p.thumb;let u='';if(t){u=URL.createObjectURL(t);urls.push(u)}
     const badge=p.exports.length?'Exported':p.recipe?'Edited':'';
-    return `<button class="cell" data-id="${p.id}">${u?`<img src="${u}" alt="">`:`<span class="nm">${esc(p.name)}</span>`}${badge?`<span class="b">${badge}</span>`:''}</button>`}).join('');
+    return `<button class="cell" data-id="${p.id}">${u?`<img src="${u}" alt="">`:`<span class="nm">${esc(p.name)}</span>`}${badge?`<span class="b">${badge}</span>`:''}<span class="dt">${p.edited?'Edited '+day(p.edited):'Added '+day(p.added)}</span></button>`}).join('');
 }
 async function sheet(id){
   const p=await getPhoto(id);if(!p)return;
@@ -236,15 +258,24 @@ async function settings(){
     sh.addEventListener('click',e=>{if(e.target===sh)sh.classList.remove('open')});}
   const ps=await allPhotos();let used='';
   try{const e=await navigator.storage.estimate();used=(e.usage/1048576).toFixed(0)+' MB used';}catch(e){}
-  const light=document.body.classList.contains('light');
+  const light=document.body.classList.contains('light'),pr=prefs();
   sh.innerHTML=`<div class="s"><div class="t">Settings</div>
 <button data-k="theme">${light?'Dark':'Light'} theme</button>
 <button data-k="tour">Show welcome guide</button>
+<div class="h">Gallery background</div>
+<div class="seg">${Object.keys(BGS).map(k=>`<button data-k="bg" data-v="${k}" class="${pr.bg===k?'on':''}"><i style="background:${BGS[k][0]}"></i>${k[0].toUpperCase()+k.slice(1)}</button>`).join('')}</div>
+<div class="h">Thumbnails</div>
+<div class="seg"><button data-k="aspect" data-v="square" class="${pr.aspect==='square'?'on':''}">Square</button><button data-k="aspect" data-v="original" class="${pr.aspect==='original'?'on':''}">Original shape</button></div>
+<div class="h">Order by</div>
+<div class="seg"><button data-k="sort" data-v="edited" class="${pr.sort==='edited'?'on':''}">Last edited</button><button data-k="sort" data-v="added" class="${pr.sort==='added'?'on':''}">Date added</button></div>
+<button data-k="dates">${pr.dates?'✓ ':''}Show date under each photo</button>
 <div class="h">Gallery</div>
 <div class="t">${ps.length} photo${ps.length===1?'':'s'}${used?' · '+used:''}</div>
 <button data-k="clear" class="dz">Remove all photos from gallery</button>
 <div class="t" style="padding-top:10px">CHRO-MA-SMITH · build ${typeof BUILD!=='undefined'?BUILD:''}</div></div>`;
   sh.querySelector('.s').onclick=async e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;
+    if(k==='bg'||k==='aspect'||k==='sort'){setPref(k,b.dataset.v);settings();return}
+    if(k==='dates'){setPref('dates',!prefs().dates);settings();return}
     sh.classList.remove('open');
     if(k==='theme'&&typeof toggleTheme==='function')toggleTheme();
     else if(k==='tour'&&window.chromasmithShowTour){close();window.chromasmithShowTour();}
