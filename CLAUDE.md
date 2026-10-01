@@ -52,7 +52,7 @@ LICENSES-MODELS.md      Bundled ONNX models + licences (EdgeSAM, SegFormer are n
 coi-serviceworker.min.js  Cross-origin isolation shim so RAW decode works on Pages
 vendor/                 libraw (RW2 wasm), dcp (14 DC-S9 profiles), mediabunny (video, MPL-2.0,
                         lazy import), luts (102 of 113 presets as raw 33³ bytes — §2)
-ios/, build-ios.sh, patches/   Capacitor iOS shell — docs/ios-shell.md
+ios/, android/, build-ios.sh, patches/   Capacitor iOS/Android shells — docs/ios-shell.md, docs/android-shell.md
 .github/workflows/      ios-ipa.yml; desktop-release.yml (dmg + Windows NSIS installer) on `v*`
                         tag. ⚠️ macos-15-intel (x86_64) required by the Intel-only libonnxruntime.dylib;
                         dmg via hdiutil, tauri.macos.conf.json targets:["app"]

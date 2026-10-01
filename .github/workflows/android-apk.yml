@@ -48,6 +48,13 @@ jobs:
           ./build-ios.sh
           npx cap sync android
 
+      # Keep ONE debug signing key across runs so new APKs install over old ones (Android refuses
+      # an update signed by a different key). Never-expiring cache key; regenerated only if evicted.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chromasmith-android-debug-keystore
+
       - name: Build APK
         run: |
           cd android
@@ -61,8 +68,18 @@ jobs:
           path: android/Chromasmith.apk
           retention-days: 30
 
+      # The in-app update check compares this asset's name with the running BUILD.
+      - name: Stamp build marker
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          b=$(grep -m1 -o "const BUILD='[^']*'" chromasmith-22.html | cut -d"'" -f2)
+          echo "$b" > "android/build-$b.txt"
+          echo "BUILD_MARKER=android/build-$b.txt" >> "$GITHUB_ENV"
+
       - name: Attach APK to the release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: android/Chromasmith.apk
+          files: |
+            android/Chromasmith.apk
+            ${{ env.BUILD_MARKER }}

@@ -6758,7 +6758,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001O';
+const BUILD='1.1001P';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22584,11 +22584,39 @@ async function capShareFiles(items){ // [{content:Uint8Array|string,fname,mime}]
     const data=typeof it.content==='string'
       ?btoa(unescape(encodeURIComponent(it.content)))
       :_u8b64(it.content instanceof Uint8Array?it.content:new Uint8Array(it.content));
+    // Android: the share sheet has no "save to gallery" target, so write straight to the public
+    // Documents/Chromasmith folder (no permission needed on Android 11+; the media scanner then
+    // lists it in Google Photos device folders). iOS keeps the share sheet (it has "Save Image").
+    if(capAndroid()){
+      try{await Filesystem.writeFile({path:'Chromasmith/'+it.fname,data,directory:'DOCUMENTS',recursive:true});continue}
+      catch(e){log('Android save to Documents failed ('+(e&&e.message||e)+') — using share sheet','warn');}
+    }
     const r=await Filesystem.writeFile({path:'export/'+it.fname,data,directory:'CACHE',recursive:true});
     uris.push(r.uri);
   }
-  await Share.share({files:uris});
+  if(uris.length)await Share.share({files:uris});
+  else toast('Saved to Documents/Chromasmith ✓',true);
 }
+function capAndroid(){return capNative()&&window.Capacitor.getPlatform&&window.Capacitor.getPlatform()==='android';}
+// Sideloaded Android builds don't auto-update: the release CI attaches an empty "build-<BUILD>.txt"
+// asset, so a differing name on the latest GitHub release means a newer APK exists.
+async function capUpdateCheck(){
+  if(!capAndroid())return;
+  try{
+    const r=await fetch('https://api.github.com/repos/TareqAmeer/Chroma-App/releases/latest',{mode:'cors'});
+    if(!r.ok)return;
+    const j=await r.json(),a=(j.assets||[]).find(x=>/^build-.+\.txt$/.test(x.name));
+    if(!a||a.name==='build-'+BUILD+'.txt')return;
+    const apk=(j.assets||[]).find(x=>/\.apk$/.test(x.name));
+    const b=document.createElement('div');
+    b.style.cssText='position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:9999;background:var(--sur);color:var(--tx,#eee);border-radius:12px;padding:12px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.4);font-size:14px';
+    b.innerHTML='<span style="flex:1">New version '+(j.tag_name||'')+' available</span><a style="color:inherit;font-weight:600" target="_blank" rel="noopener">Download</a><button style="background:none;border:0;color:inherit;font-size:18px" aria-label="Dismiss">×</button>';
+    b.querySelector('a').href=apk?apk.browser_download_url:j.html_url;
+    b.querySelector('button').onclick=()=>b.remove();
+    document.body.appendChild(b);
+  }catch(e){}
+}
+setTimeout(capUpdateCheck,4000);
 // ── Tauri-native save path (the desktop shell) ────────────────────────────────
 // The desktop shell used to fall through to the browser <a download> loop below, which after a
 // multi-minute full-res batch render has no user activation left: WKWebView silently dropped
