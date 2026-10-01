@@ -54,12 +54,14 @@ async function importFiles(files){
   for(const f of files){
     if(!(f.type.startsWith('image/')||/\.(rw2|dng|tiff?|heic|heif|jpe?g|png|webp|avif)$/i.test(f.name)))continue;
     const id='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-    const blob=new Blob([await f.arrayBuffer()],{type:f.type});
-    await tx('blobs','readwrite',s=>s.put({id,blob,name:f.name,type:f.type}));
+    // Store the file as-is (no copy into memory first) and make thumbnails afterwards, so the
+    // photo opens straight away instead of waiting for every import to be processed.
+    await tx('blobs','readwrite',s=>s.put({id,blob:f,name:f.name,type:f.type}));
     await putPhoto({id,name:f.name,type:f.type,size:f.size,added:Date.now(),edited:0,
-      recipe:null,versions:[],exports:[],thumb:await thumbFromFile(f),thumbEdited:null});
+      recipe:null,versions:[],exports:[],thumb:null,thumbEdited:null,flag:null});
     ids.push(id);
   }
+  thumbQueue(ids.map((id,i)=>[id,files[i]]));
   return ids;
 }
 const origLoad=window.loadFXImages;
@@ -75,7 +77,11 @@ window.loadFXImages=async function(fileList){
 };
 
 // ── open a gallery photo in the editor ─────────────────────────────────────────────────────────
+const LAST='cs-mlib-last';
+function setLast(o){try{localStorage.setItem(LAST,JSON.stringify(o))}catch(e){}}
 async function openPhoto(id,{original=false,recipe=null}={}){
+  setLast({id,inEditor:true});
+  try{if(!localStorage.getItem('cs-tip-hold')){localStorage.setItem('cs-tip-hold','1');setTimeout(()=>toast('Tip: press and hold the photo to see the original'),2500);}}catch(e){}
   const p=await getPhoto(id);const blob=await getBlob(id);
   if(!p||!blob){toast('Photo not found');return}
   const file=new File([blob],p.name,{type:p.type,lastModified:p.added});
@@ -160,6 +166,14 @@ const css=`
 #mlib .selbar button{border:0;border-radius:999px;padding:9px 14px;font:600 14px inherit;background:color-mix(in srgb,var(--mink,#eee) 10%,transparent);color:inherit}
 #mlib .selbar button.warn{color:#ff6b6b}
 #mlib .selbar button:disabled{opacity:.35}
+#mlib .cell{touch-action:pan-y}
+#mlib .cell.rej img{opacity:.35}
+#mlib .cell .fav{position:absolute;left:6px;bottom:5px;color:#ff3b1f;font-size:14px;z-index:1}
+#mlib-undo{position:fixed;left:12px;right:12px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:9600;background:#f2f0ea;color:#141414;display:flex;align-items:center;gap:10px;padding:12px 14px;font:14px var(--sans,system-ui);transform:translateY(150%);transition:transform .2s}
+#mlib-undo.on{transform:none}
+#mlib-undo span{flex:1}
+#mlib-undo button{border:0;background:none;font:700 14px inherit;color:#141414;text-transform:uppercase;letter-spacing:.05em}
+#mlib-sheet label.pc{display:flex;align-items:center;gap:10px;padding:10px 4px;font-size:15px}
 #mlib .empty{grid-column:1/-1;text-align:center;color:var(--tx2,#999);padding:80px 24px;font-size:15px;line-height:1.5}
 #mlib-sheet{position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.5);display:none;align-items:flex-end}
 #mlib-sheet.open{display:flex}
@@ -189,9 +203,9 @@ function build(){
   root=document.createElement('div');root.id='mlib';
   root.innerHTML=`<div class="top"><svg viewBox="18 18 64 62" aria-hidden="true"><rect x="21" y="21" width="48" height="44" fill="var(--mink,#f2f0ea)"/><rect x="36" y="32" width="43" height="45" fill="var(--k-color-accent-a,#ff3b1f)"/><rect x="36" y="32" width="33" height="33" fill="#b0200e"/></svg><span class="wm">CHRO-MA-SMITH</span><button class="set" data-a="settings" aria-label="Settings">${typeof icon==='function'?icon('more',22):'⋯'}</button></div>
 <div class="mh"><h1>Gallery</h1><button data-a="select">Select</button><button class="pri" data-a="import">Import</button><button data-a="close" aria-label="Close gallery">Editor</button></div>
-<div class="tabs"><button data-f="all" class="on">All</button><button data-f="edited">Edited</button><button data-f="exported">Exported</button></div>
+<div class="tabs"><button data-f="all" class="on">All</button><button data-f="edited">Edited</button><button data-f="exported">Exported</button><button data-f="fav">Favourites</button><button data-f="rej">Rejected</button></div>
 <div class="grid"></div>
-<div class="selbar"><span class="n">0 selected</span><button data-a="sel-open">Edit</button><button data-a="sel-paste">Paste edits</button><button data-a="sel-revert">Revert</button><button data-a="sel-del" class="warn">Remove</button></div>
+<div class="selbar"><span class="n">0 selected</span><button data-a="sel-open">Edit</button><button data-a="sel-paste">Paste edits</button><button data-a="sel-fav">♥</button><button data-a="sel-revert">Revert</button><button data-a="sel-del" class="warn">Remove</button></div>
 <input type="file" accept="image/*,.rw2,.dng" multiple hidden>`;
   document.body.appendChild(root);
   grid=root.querySelector('.grid');applyPrefs();
@@ -224,6 +238,13 @@ function build(){
   grid.addEventListener('pointerup',cancel);grid.addEventListener('pointercancel',cancel);grid.addEventListener('pointermove',cancel);
   grid.addEventListener('click',e=>{if(lp==='fired'){e.stopPropagation();e.preventDefault();lp=null}},true);
   grid.addEventListener('contextmenu',e=>e.preventDefault());
+  // Swipe a photo sideways: right = favourite, left = reject (again to undo).
+  let sw=null;
+  grid.addEventListener('pointerdown',e=>{const c=e.target.closest('.cell');sw=c&&!selecting?{c,x:e.clientX,y:e.clientY}:null;});
+  grid.addEventListener('pointerup',async e=>{if(!sw)return;const{c,x,y}=sw;sw=null;const dx=e.clientX-x,dy=e.clientY-y;
+    if(Math.abs(dx)>60&&Math.abs(dy)<35){lp='fired';setTimeout(()=>{if(lp==='fired')lp=null},400); // swallow just this gesture's click
+      const p=await getPhoto(c.dataset.id);if(!p)return;const f=dx>0?'fav':'rej';await setFlag([p.id],p.flag===f?null:f);
+      toast(p.flag===f?'Cleared':(f==='fav'?'♥ Favourite':'Rejected'));}});
 }
 async function render(){
   build();
@@ -231,11 +252,14 @@ async function render(){
   const pr=prefs();
   let ps=(await allPhotos()).sort(pr.sort==='added'?(a,b)=>b.added-a.added:(a,b)=>(b.edited||b.added)-(a.edited||a.added));
   if(filter==='edited')ps=ps.filter(p=>p.recipe);
+  ps=ps.filter(p=>!p.trashed);
   if(filter==='exported')ps=ps.filter(p=>p.exports.length);
+  if(filter==='fav')ps=ps.filter(p=>p.flag==='fav');
+  if(filter==='rej')ps=ps.filter(p=>p.flag==='rej');
   if(!ps.length){grid.innerHTML=`<div class="empty">${filter==='all'?'No photos yet.<br>Tap <b>Import</b> to add photos — originals stay safe here and every edit is saved automatically.':'Nothing here yet.'}</div>`;return}
   grid.innerHTML=ps.map(p=>{const t=p.thumbEdited||p.thumb;let u='';if(t){u=URL.createObjectURL(t);urls.push(u)}
     const badge=p.exports.length?'Exported':p.recipe?'Edited':'';
-    return `<button class="cell${sel.has(p.id)?' sel':''}" data-id="${p.id}">${u?`<img src="${u}" alt="">`:`<span class="nm">${esc(p.name)}</span>`}${badge?`<span class="b">${badge}</span>`:''}<span class="dt">${p.edited?'Edited '+day(p.edited):'Added '+day(p.added)}</span></button>`}).join('');
+    return `<button class="cell${sel.has(p.id)?' sel':''}${p.flag==='rej'?' rej':''}" data-id="${p.id}">${p.flag==='fav'?'<span class="fav">♥</span>':''}${u?`<img src="${u}" alt="">`:`<span class="nm">${esc(p.name)}</span>`}${badge?`<span class="b">${badge}</span>`:''}<span class="dt">${p.edited?'Edited '+day(p.edited):'Added '+day(p.added)}</span></button>`}).join('');
 }
 async function sheet(id){
   const p=await getPhoto(id);if(!p)return;
@@ -246,6 +270,8 @@ async function sheet(id){
   sh.innerHTML=`<div class="s"><div class="t">${esc(p.name)}</div>
 <button data-k="open">Open${p.recipe?' edited version':''}</button>
 <button data-k="orig">Open original (no edits)</button>
+<button data-k="fav">${p.flag==='fav'?'Remove favourite':'♥ Favourite'}</button>
+<button data-k="rej">${p.flag==='rej'?'Un-reject':'Reject'}</button>
 ${p.recipe?`<button data-k="copy">Copy edits</button>`:''}
 ${copied()?`<button data-k="paste">Paste edits</button>`:''}
 ${p.recipe?`<button data-k="snap">Save this edit as a version</button>`:''}
@@ -259,14 +285,13 @@ ${p.recipe?`<button data-k="revert">Revert to original</button>`:''}
     else if(k==='orig')openPhoto(id,{original:true});
     else if(k==='copy'){setCopied(p.recipe);toast('Edits copied');}
     else if(k==='paste'){await pasteTo([id]);}
+    else if(k==='fav'||k==='rej'){await setFlag([id],p.flag===k?null:k);}
     else if(k==='ver')openPhoto(id,{recipe:p.versions[i].recipe});
     else if(k==='exp')openPhoto(id,{recipe:p.exports[i].recipe});
     else if(k==='snap'){p.versions.push({name:'Version '+(p.versions.length+1),recipe:p.recipe,ts:Date.now()});await putPhoto(p);toast('Version saved')}
     else if(k==='revert'){if(!confirm('Revert to the original? Saved versions and exports are kept.'))return;
       p.recipe=null;p.thumbEdited=null;await putPhoto(p);render();toast('Reverted to original')}
-    else if(k==='del'){if(!confirm('Remove this photo and its edits from the gallery? Exported files in your photo library are not affected.'))return;
-      await tx('photos','readwrite',s=>s.delete(id));await tx('blobs','readwrite',s=>s.delete(id));
-      if(openedId===id)openedId=null;render();}
+    else if(k==='del')removeWithUndo([id]);
   };
   sh.classList.add('open');
 }
@@ -290,6 +315,8 @@ async function settings(){
 <button data-k="dates">${pr.dates?'✓ ':''}Show date under each photo</button>
 <div class="h">Gallery</div>
 <div class="t">${ps.length} photo${ps.length===1?'':'s'}${used?' · '+used:''}</div>
+${(()=>{const ex=ps.filter(p=>p.exports.length&&!p.trashed);const mb=ex.reduce((a,p)=>a+(p.size||0),0)/1048576;
+  return ex.length?`<button data-k="freeexp">Free up space: remove ${ex.length} exported photo${ex.length>1?'s':''} (frees ~${mb.toFixed(mb>=10?0:1)} MB)</button>`:''})()}
 <button data-k="clear" class="dz">Remove all photos from gallery</button>
 <div class="t" style="padding-top:10px">CHRO-MA-SMITH · build ${typeof BUILD!=='undefined'?BUILD:''}</div></div>`;
   sh.querySelector('.s').onclick=async e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;
@@ -298,6 +325,7 @@ async function settings(){
     sh.classList.remove('open');
     if(k==='theme'&&typeof toggleTheme==='function')toggleTheme();
     else if(k==='tour'&&window.chromasmithShowTour){close();window.chromasmithShowTour();}
+    else if(k==='freeexp'){removeWithUndo(ps.filter(p=>p.exports.length&&!p.trashed).map(p=>p.id));}
     else if(k==='clear'){if(!confirm('Remove every photo and its edits from the gallery? Exported files in your photo library are not affected.'))return;
       await tx('photos','readwrite',s=>s.clear());await tx('blobs','readwrite',s=>s.clear());openedId=null;openedIds=[];render();}
   };
@@ -318,11 +346,50 @@ function setCopied(rec){try{localStorage.setItem(CK,rec)}catch(e){}}
 async function pasteTo(ids){
   const src=copied();if(!src)return;
   let snap;try{snap=unb64(src)}catch(e){return}
+  // Choose what to paste (same categories as the desktop's selective paste).
+  const cats=window.PASTE_CATEGORIES||(typeof PASTE_CATEGORIES!=='undefined'?PASTE_CATEGORIES:null);
+  let keys=null;
+  if(cats&&typeof pasteEditSelectiveApply==='function'){
+    keys=await new Promise(res=>{const sh=sheetEl();
+      sh.innerHTML=`<div class="s"><div class="t">Paste edits to ${ids.length} photo${ids.length>1?'s':''} — choose what to include</div>
+${cats.map(c=>`<label class="pc"><input type="checkbox" value="${c.key}" checked> ${esc(c.label)}</label>`).join('')}
+<button data-k="go">Paste</button><button data-k="cancel">Cancel</button></div>`;
+      sh.querySelector('.s').onclick=e=>{const b=e.target.closest('button');if(!b)return;sh.classList.remove('open');
+        res(b.dataset.k==='go'?[...sh.querySelectorAll('input:checked')].map(x=>x.value):null);};
+      sh.classList.add('open');});
+    if(!keys||!keys.length)return;
+  }
   for(const id of ids){const p=await getPhoto(id);if(!p)continue;
     let own=null;try{own=p.recipe?unb64(p.recipe):null}catch(e){}
-    const s2=Object.assign({},snap,{geom:own?own.geom:null});
+    let s2;
+    if(keys){const base=own||JSON.parse(JSON.stringify(typeof _fxPristineDefault!=='undefined'&&_fxPristineDefault||snap));s2=pasteEditSelectiveApply(base,snap,keys);}
+    else s2=Object.assign({},snap);
+    s2.geom=own?own.geom:null; // crop / rotate / straighten stay per-photo
     p.recipe=b64(s2);p.edited=Date.now();p.thumbEdited=null;await putPhoto(p);}
   render();toast('Edits pasted to '+ids.length+' photo'+(ids.length>1?'s':''));
+}
+async function setFlag(ids,flag){for(const id of ids){const p=await getPhoto(id);if(p){p.flag=flag;await putPhoto(p);}}render();
+  if(typeof hapt==='function')hapt('LIGHT');}
+// Remove with a few seconds to undo, instead of a confirm box every time.
+let trashT=null;
+async function removeWithUndo(ids){
+  if(!ids.length)return;
+  for(const id of ids){const p=await getPhoto(id);if(p){p.trashed=Date.now();await putPhoto(p);}if(openedId===id)openedId=null;}
+  render();
+  let bar=document.getElementById('mlib-undo');
+  if(!bar){bar=document.createElement('div');bar.id='mlib-undo';document.body.appendChild(bar);}
+  bar.innerHTML=`<span>Removed ${ids.length} photo${ids.length>1?'s':''}</span><button>Undo</button>`;bar.classList.add('on');
+  clearTimeout(trashT);
+  bar.querySelector('button').onclick=async()=>{clearTimeout(trashT);bar.classList.remove('on');
+    for(const id of ids){const p=await getPhoto(id);if(p){delete p.trashed;await putPhoto(p);}}render();};
+  trashT=setTimeout(()=>{bar.classList.remove('on');purgeTrash();},6000);
+}
+async function purgeTrash(){const ps=await allPhotos();
+  for(const p of ps)if(p.trashed){await tx('photos','readwrite',s=>s.delete(p.id));await tx('blobs','readwrite',s=>s.delete(p.id));}}
+// Thumbnails are made in the background after import.
+async function thumbQueue(pairs){
+  for(const[id,f]of pairs){const t=await thumbFromFile(f);if(!t)continue;const p=await getPhoto(id);if(p&&!p.thumb){p.thumb=t;await putPhoto(p);}}
+  if(isOpen())render();
 }
 async function selAction(k){
   const ids=[...sel];if(!ids.length)return;
@@ -343,14 +410,16 @@ async function selAction(k){
     if(!confirm('Revert '+ids.length+' photo'+(ids.length>1?'s':'')+' to the original? Saved versions and exports are kept.'))return;
     for(const id of ids){const p=await getPhoto(id);if(p){p.recipe=null;p.thumbEdited=null;await putPhoto(p);}}
     setSelecting(false);render();toast('Reverted '+ids.length);
-  }else if(k==='del'){
-    if(!confirm('Remove '+ids.length+' photo'+(ids.length>1?'s':'')+' and their edits from the gallery? Exported files in your photo library are not affected.'))return;
-    for(const id of ids){await tx('photos','readwrite',s=>s.delete(id));await tx('blobs','readwrite',s=>s.delete(id));if(openedId===id)openedId=null;}
-    setSelecting(false);render();
+  }else if(k==='del'){setSelecting(false);removeWithUndo(ids);
+  }else if(k==='fav'){await setFlag(ids,'fav');setSelecting(false);
   }
 }
+function sheetEl(){let sh=document.getElementById('mlib-sheet');
+  if(!sh){sh=document.createElement('div');sh.id='mlib-sheet';document.body.appendChild(sh);
+    sh.addEventListener('click',e=>{if(e.target===sh)sh.classList.remove('open')});}
+  return sh;}
 const isOpen=()=>!!(root&&root.classList.contains('open'));
-function open(){build();root.classList.add('open');render();}
+function open(){build();root.classList.add('open');render();try{const l=JSON.parse(localStorage.getItem(LAST)||'null');if(l){l.inEditor=false;setLast(l);}}catch(e){}}
 function close(){if(root){root.classList.remove('open');if(selecting)setSelecting(false);}}
 window.chromasmithToggleLibrary=()=>isOpen()?close():open();
 window.chromasmithOpenGallery=open;
@@ -366,5 +435,11 @@ const lb=document.getElementById('db-lib-btn');if(lb)lb.style.display='';
 // Ask the OS not to evict stored originals under storage pressure.
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
 // Launch into the gallery.
-if(document.readyState==='complete')open();else window.addEventListener('load',open);
+// Launch: if the app was closed mid-edit (e.g. the phone reclaimed it), go straight back to that
+// photo with its edits; otherwise start in the gallery. Leftover "removed" photos are cleared.
+async function launch(){purgeTrash();
+  let l=null;try{l=JSON.parse(localStorage.getItem(LAST)||'null')}catch(e){}
+  if(l&&l.inEditor&&await getPhoto(l.id)){openPhoto(l.id);return}
+  open();}
+if(document.readyState==='complete')launch();else window.addEventListener('load',launch);
 })();

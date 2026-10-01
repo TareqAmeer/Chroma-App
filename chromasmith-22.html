@@ -2897,6 +2897,13 @@ body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title>.fx-toggle-lb{margin-left:auto}
 /* Phone: Info is just Metadata — Keywords / Tags are a desktop Library thing */
 body.mobile-fx .fx-ctrl[data-fxsec="info"] .fx-info-part:not([open]){display:none!important}
 body.mobile-fx .fx-ctrl[data-fxsec="info"] .fx-info-part[open]>summary{display:none}
+.exp-plain{display:flex;flex-direction:column;gap:4px;margin:0 0 6px}
+.exp-plain-b{display:flex;align-items:baseline;gap:6px;text-align:left;border:1px solid var(--bdr);border-radius:0;background:none;color:var(--k-color-ink,#f2f0ea);font:13px var(--sans);padding:9px 10px;cursor:pointer}
+.exp-plain-b span{color:var(--k-color-muted,#8d8b85);font-size:12px}
+.exp-plain-b.on{border-color:var(--k-color-ink,#f2f0ea);box-shadow:inset 3px 0 0 var(--k-color-accent-a,#ff3b1f)}
+#fx-swipe-hud{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 64px);transform:translateX(-50%);z-index:60;background:rgba(0,0,0,.72);color:#fff;font:600 14px var(--sans);padding:8px 14px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:pre}
+#fx-swipe-hud.on{opacity:1}
+.fx-hist-row.on{box-shadow:inset 3px 0 0 var(--k-color-accent-a,#ff3b1f)}
 </style>
 </head>
 <body>
@@ -4252,6 +4259,9 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
            sharing with no real separation between them. -->
       <div class="fx-ctrl" data-fxsec="export">
         <div class="fx-ctrl-title">Output</div>
+        <!-- Plain export choices (set the size/quality/format controls below — those stay editable). -->
+        <div id="exp-plain" class="exp-plain"></div>
+        <div id="exp-est" style="font-size:12px;color:var(--mut);margin:2px 0 8px"></div>
         <div class="vrow">
           <div class="vlb">Filename <button class="fx-info-i" title="Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></div>
           <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px">
@@ -4369,6 +4379,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
            per-module presets). -->
       <div class="fx-ctrl" data-fxsec="style">
         <div class="fx-ctrl-title">Presets</div>
+        <div class="fx-row" id="row-preset-str" style="display:none"><div class="fx-label">Preset strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-preset-str" oninput="presetStrength(+this.value)" onchange="fxHistoryPush()"><div class="fx-val" id="vl-preset-str">100</div></div>
         <div class="btn-row" style="margin-top:0">
           <button class="btn bgh" onclick="styleSaveCurrent()" title="Save the current recipe (everything except crop/geometry) as a named, reusable Style">Save as Style…</button>
           <button class="btn bgh" onclick="styleImportClick()" title="Import a Style .json exported from CHRO-MA-SMITH">Import…</button>
@@ -6829,7 +6840,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001U';
+const BUILD='1.1001V';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13606,7 +13617,7 @@ function fxMoreMenu(){
     const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;
     b.onclick=()=>{m.remove();switchTab(tab);};sh.appendChild(b);
   });
-  [['Metadata',()=>fxSection('info')],['Histogram',()=>csToggleHist()]].forEach(([lb,fn])=>{
+  [['History',()=>fxShowHistoryList()],['Compare (split view)',()=>toggleSplit()],['Metadata',()=>fxSection('info')],['Histogram',()=>csToggleHist()]].forEach(([lb,fn])=>{
     const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;b.onclick=()=>{m.remove();fn();};sh.appendChild(b);
   });
   const pv=document.createElement('button');pv.className='btn bgh';pv.textContent='Apply previous settings';
@@ -13919,7 +13930,7 @@ function diagLayout(){
   let sx=0,sy=0,st=0,valid=false;
   wrap.addEventListener('touchstart',e=>{valid=e.touches.length===1;if(valid){sx=e.touches[0].clientX;sy=e.touches[0].clientY;st=Date.now();}},{passive:true});
   wrap.addEventListener('touchend',e=>{
-    if(!valid||fxZoom>1||cropMode||fxLoupe||fxImages.length<2)return;
+    if(!valid||fxZoom>1||cropMode||fxLoupe||fxImages.length<2||document.body.classList.contains('sheet-open'))return;
     const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;
     if(Math.abs(dx)>60&&Math.abs(dy)<45&&Date.now()-st<600){fxSelectImage(fxCurIdx+(dx<0?1:-1));hapt();}
   },{passive:true});
@@ -18629,7 +18640,9 @@ async function styleSaveCurrent(){
 }
 async function styleApply(name){
   const s=stylesList().find(x=>x.name===name);if(!s)return;
-  try{await applyUISnapshot(JSON.parse(JSON.stringify(s.recipe)));fxUpdate();log(`Style applied: ${name}`,'ok');}
+  const pre=getUISnapshot({skipRaster:true});
+  try{await applyUISnapshot(JSON.parse(JSON.stringify(s.recipe)));fxUpdate();log(`Style applied: ${name}`,'ok');
+    _presetBlend={pre,post:getUISnapshot({skipRaster:true})};const r=document.getElementById('row-preset-str');if(r){r.style.display='';const sl=document.getElementById('sl-preset-str');sl.value=100;document.getElementById('vl-preset-str').textContent='100';}}
   catch(e){log('Could not apply style: '+e.message,'err');}
 }
 async function styleDelete(name){
@@ -21626,8 +21639,17 @@ let _fxExportRuns=0;
 window.addEventListener('beforeunload',e=>{if(document.body.classList.contains('fx-exporting')){e.preventDefault();e.returnValue='';}});
 async function exportFX(...a){
   _fxExportRuns++;document.body.classList.add('fx-exporting');
+  // Phone app: keep the screen awake for the whole export (a locked phone suspends the app and
+  // the export with it), and if the app was in the background when it finished, say so with a
+  // notification. Both plugins are optional — missing ones are simply skipped.
+  const P=capNative()&&window.Capacitor.Plugins||{},t0=Date.now();
+  try{P.KeepAwake&&await P.KeepAwake.keepAwake();}catch(e){}
   try{return await _exportFXRun(...a);}
-  finally{if(--_fxExportRuns<=0){_fxExportRuns=0;document.body.classList.remove('fx-exporting');}}
+  finally{if(--_fxExportRuns<=0){_fxExportRuns=0;document.body.classList.remove('fx-exporting');
+      try{P.KeepAwake&&P.KeepAwake.allowSleep();}catch(e){}
+      if(P.LocalNotifications&&(document.hidden||Date.now()-t0>15000)){
+        try{const perm=await P.LocalNotifications.requestPermissions();
+          if(perm&&perm.display==='granted')await P.LocalNotifications.schedule({notifications:[{id:Date.now()%2147483647,title:'Export finished',body:'Your photos are in Photos › Chromasmith.'}]});}catch(e){}}}}
 }
 async function _exportFXRun(){
   if(!fxImages.length){log('No image loaded','warn');return}
@@ -24471,6 +24493,103 @@ function fxAddAdjIcons(){
   });
 }
 document.addEventListener('DOMContentLoaded',fxAddAdjIcons);
+// ── Plain export choices + live file-size estimate ───────────────────────────────────────────
+const EXP_PLAIN=[['Full quality',0,99,'auto'],['Instagram',1080,92,'jpg'],['Messaging',2048,85,'jpg'],['Small',1600,80,'webp']];
+function _expDims(edge){const it=typeof curItem==='function'&&curItem(),im=it&&(it.img||it.fullImg);
+  let w=(it&&(it.w||it.width))||(im&&(im.naturalWidth||im.width))||0,h=(it&&(it.h||it.height))||(im&&(im.naturalHeight||im.height))||0;
+  if(!w||!h)return null;const k=edge&&Math.max(w,h)>edge?edge/Math.max(w,h):1;return[Math.round(w*k),Math.round(h*k)];}
+function _expBytes(d,q,fmt){if(!d)return 0;const px=d[0]*d[1];
+  const jpg=q>=99?0.95:q>=95?0.6:q>=90?0.42:q>=85?0.32:0.25;
+  return px*(fmt==='png'?2.6:fmt==='webp'?jpg*0.7:jpg);}
+const _mb=b=>b>=1048576?(b/1048576).toFixed(b>=10485760?0:1)+' MB':Math.max(1,Math.round(b/1024))+' KB';
+function expPlainRender(){
+  const host=document.getElementById('exp-plain');if(!host)return;
+  const curE=+((document.getElementById('sel-exp-size')||{}).value||0),curQ=+((document.getElementById('sl-exp-q')||{}).value||99),curF=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
+  host.innerHTML='';
+  EXP_PLAIN.forEach(([lb,edge,q,fmt])=>{const d=_expDims(edge),b=document.createElement('button');b.type='button';
+    b.className='exp-plain-b'+(curE===edge&&curQ===q&&curF===fmt?' on':'');
+    b.innerHTML='<b>'+lb+'</b> <span>('+(d?d[0]+'×'+d[1]+' · ~'+_mb(_expBytes(d,q,fmt==='auto'?'jpg':fmt)):'size depends on photo')+')</span>';
+    b.onclick=()=>{const se=document.getElementById('sel-exp-size'),sq=document.getElementById('sl-exp-q'),sf=document.getElementById('sel-exp-fmt');
+      if(se){se.value=String(edge);se.dispatchEvent(new Event('change',{bubbles:true}));}
+      if(sq){sq.value=q;sq.dispatchEvent(new Event('input',{bubbles:true}));}
+      if(sf){sf.value=fmt;sf.dispatchEvent(new Event('change',{bubbles:true}));}
+      expPlainRender();};
+    host.appendChild(b);});
+  const est=document.getElementById('exp-est'),d=_expDims(curE);
+  if(est)est.textContent=d?'This export: '+d[0]+'×'+d[1]+' · about '+_mb(_expBytes(d,curQ,curF==='auto'?'jpg':curF)):'';
+}
+document.addEventListener('change',e=>{if(e.target&&/^(sel-exp-size|sel-exp-fmt)$/.test(e.target.id))expPlainRender();},true);
+document.addEventListener('input',e=>{if(e.target&&e.target.id==='sl-exp-q')expPlainRender();},true);
+window.addEventListener('load',()=>{const f=window.fxSection;if(typeof f==='function')window.fxSection=function(n){const r=f.apply(this,arguments);if(n==='export')expPlainRender();return r;};expPlainRender();});
+// ══ Phone editing comforts ══════════════════════════════════════════════════════════════════
+(function(){
+  const mob=()=>document.body.classList.contains('mobile-fx');
+  // (1) Press and hold a tool's on/off switch: see the photo without that tool while held.
+  let ht=null,held=null,swallow=null;
+  document.addEventListener('pointerdown',e=>{
+    if(!mob())return;const t=e.target.closest&&e.target.closest('.fx-ctrl-title .fx-toggle');if(!t)return;
+    clearTimeout(ht);ht=setTimeout(()=>{ht=null;held=t;t.click();if(typeof hapt==='function')hapt();},350);
+  },true);
+  const rel=()=>{clearTimeout(ht);ht=null;if(held){const t=held;held=null;t.click();swallow=t;setTimeout(()=>{swallow=null;},400);}};
+  ['pointerup','pointercancel'].forEach(n=>document.addEventListener(n,rel,true));
+  document.addEventListener('click',e=>{if(swallow&&e.isTrusted&&e.target.closest&&e.target.closest('.fx-toggle')===swallow){e.stopImmediatePropagation();e.preventDefault();swallow=null;}},true);
+
+  // (3) A light tick when a slider passes its default (zero/centre), so the middle can be felt.
+  document.addEventListener('input',e=>{
+    const sl=e.target;if(!mob()||!sl.matches||!sl.matches('input.fx-slider[type=range]'))return;
+    const d=parseFloat(sl.defaultValue),v=parseFloat(sl.value),pv=sl._lastV;sl._lastV=v;
+    if(pv!=null&&(pv-d)*(v-d)<=0&&pv!==v&&typeof hapt==='function')hapt('LIGHT');
+  },true);
+
+  // (2) Swipe on the photo to adjust (while a tool sheet is open): sideways changes the slider,
+  //     up/down picks the previous/next slider in that tool. A label shows what is changing.
+  let cur=null;
+  document.addEventListener('input',e=>{if(e.target.matches&&e.target.matches('.fx-panel input.fx-slider[type=range]')&&!e.target._swipe)cur=e.target;},true);
+  const list=()=>{const c=document.querySelector('.fx-ctrl.sec-active');return c?[...c.querySelectorAll('input.fx-slider[type=range]')].filter(x=>x.offsetParent!==null):[];};
+  const nameOf=sl=>{const lb=sl.closest('.fx-row')&&sl.closest('.fx-row').querySelector('.fx-label');return lb?lb.textContent.replace(/\s+/g,' ').trim():'';};
+  let hud=null;const show=sl=>{if(!hud){hud=document.createElement('div');hud.id='fx-swipe-hud';document.body.appendChild(hud);}
+    const vl=sl.closest('.fx-row')&&sl.closest('.fx-row').querySelector('.fx-val');hud.textContent=nameOf(sl)+'  '+(vl?vl.textContent:sl.value);hud.classList.add('on');};
+  const hide=()=>{if(hud)hud.classList.remove('on');};
+  const w=document.getElementById('fx-wrap');if(!w)return;
+  let sx=0,sy=0,mode=null,sl=null,v0=0,stepY=0;
+  w.addEventListener('touchstart',e=>{
+    mode=null;if(!mob()||e.touches.length!==1||!document.body.classList.contains('sheet-open')||(typeof fxZoom!=='undefined'&&fxZoom>1)||(typeof cropMode!=='undefined'&&cropMode))return;
+    const L=list();if(!L.length)return;sl=(cur&&L.includes(cur))?cur:L[0];
+    sx=e.touches[0].clientX;sy=e.touches[0].clientY;v0=parseFloat(sl.value);stepY=sy;mode='wait';
+  },{passive:true});
+  w.addEventListener('touchmove',e=>{
+    if(!mode)return;const t=e.touches[0],dx=t.clientX-sx,dy=t.clientY-sy;
+    if(mode==='wait'){if(Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.5)mode='x';else if(Math.abs(dy)>24&&Math.abs(dy)>Math.abs(dx)*1.5)mode='y';else return;}
+    e.preventDefault();
+    if(mode==='x'){const mn=+sl.min,mx=+sl.max,st=parseFloat(sl.step)||1;
+      let v=v0+dx/w.clientWidth*(mx-mn);v=Math.round(v/st)*st;v=Math.max(mn,Math.min(mx,v));
+      if(String(v)!==sl.value){sl.value=v;sl._swipe=true;sl.dispatchEvent(new Event('input',{bubbles:true}));sl._swipe=false;}show(sl);}
+    else{const L=list(),i=L.indexOf(sl);
+      if(t.clientY-stepY>36&&i<L.length-1){sl=L[i+1];stepY=t.clientY;v0=parseFloat(sl.value);sx=t.clientX;if(typeof hapt==='function')hapt('LIGHT');}
+      else if(stepY-t.clientY>36&&i>0){sl=L[i-1];stepY=t.clientY;v0=parseFloat(sl.value);sx=t.clientX;if(typeof hapt==='function')hapt('LIGHT');}
+      cur=sl;show(sl);if(e.touches.length===1&&Math.abs(t.clientX-sx)>16){mode='x';sx=t.clientX;v0=parseFloat(sl.value);}}
+  },{passive:false});
+  w.addEventListener('touchend',()=>{if(mode==='x'&&sl){sl.dispatchEvent(new Event('change',{bubbles:true}));if(typeof fxHistoryPush==='function')setTimeout(fxHistoryPush,0);}
+    if(mode&&mode!=='wait')setTimeout(hide,700);mode=null;},{passive:true});
+})();
+// (7) Edit history list + (5) split compare, reachable from the phone ⋯ menu.
+function fxShowHistoryList(){
+  if(!fxHistory.length){toast('No edits yet');return;}
+  const rows=fxHistory.map((h,i)=>`<button class="btn bgh fx-hist-row${i===fxHistIdx?' on':''}" data-i="${i}" style="display:block;width:100%;text-align:left;margin:0 0 4px">${i===0?'Opened':(h.label||'Edit')}<span style="float:right;color:var(--mut);font-size:11px">${new Date(h.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></button>`).reverse().join('');
+  _csModal('History',`<div style="max-height:55vh;overflow-y:auto">${rows}</div>`);
+  document.querySelectorAll('#cs-modal-ov .fx-hist-row').forEach(b=>b.onclick=async()=>{const i=+b.dataset.i;document.getElementById('cs-modal-ov').remove();
+    await _fxHistoryRestore(i);fxHistIdx=i;if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled();});
+}
+// (4) Preset strength: after applying a saved Preset, blend every slider between the photo's
+// state before the preset and the preset itself.
+let _presetBlend=null;
+function presetStrength(k){
+  if(!_presetBlend)return;const{pre,post}=_presetBlend;
+  Object.keys(post.sliders||{}).forEach(id=>{const el=document.getElementById('sl-'+id);if(!el)return;
+    const a=parseFloat((pre.sliders||{})[id]),b=parseFloat(post.sliders[id]);if(isNaN(a)||isNaN(b))return;
+    el.value=a+(b-a)*k/100;el.dispatchEvent(new Event('input',{bubbles:true}));});
+  const v=document.getElementById('vl-preset-str');if(v)v.textContent=Math.round(k);
+}
 // Press-and-hold a tool in the phone quick bar or Tools grid, then drag, to change its place.
 // Order is per container, saved in localStorage by each button's key (data-sec, or its class
 // for All FX / Previous) and re-applied whenever the container is rebuilt.
