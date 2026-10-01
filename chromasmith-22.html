@@ -6758,7 +6758,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001Q';
+const BUILD='1.1001R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9609,7 +9609,10 @@ async function fxToggleFlag(label){
   fxUpdateFlagBtns();
 }
 function fxUpdateFlagBtns(){
-  const has=typeof window.chromasmithOpenedFlag==='function';
+  // Only for a photo opened FROM the Gallery: a dropped/Open-File photo has no catalog entry, so
+  // the buttons used to show and silently do nothing (found by test/control_sweep.mjs).
+  const fromLib=typeof window.chromasmithHasOpenedPhoto!=='function'||window.chromasmithHasOpenedPhoto();
+  const has=fromLib&&typeof window.chromasmithOpenedFlag==='function';
   const r=document.getElementById('btn-flag-red'),g=document.getElementById('btn-flag-green'),f=document.getElementById('btn-favorite');
   if(r&&g){
     r.style.display=g.style.display=has?'':'none';
@@ -9620,7 +9623,7 @@ function fxUpdateFlagBtns(){
     }
   }
   if(f){
-    const hasFav=typeof window.chromasmithOpenedFavorite==='function';
+    const hasFav=fromLib&&typeof window.chromasmithOpenedFavorite==='function';
     f.style.display=hasFav?'':'none';
     if(hasFav)f.classList.toggle('on',window.chromasmithOpenedFavorite());
   }
@@ -12254,6 +12257,7 @@ function fxDisplayTierCanvas(full){
   return c;
 }
 async function loadFXImages(fileList){
+  if(!window.__csLibOpen&&typeof window.chromasmithForgetOpened==='function')window.chromasmithForgetOpened();
   fxRememberPrevious();
   window.__pm&&window.__pm('lfx-start');
   fxPhotoActivityInvalidate();

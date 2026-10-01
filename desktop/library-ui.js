@@ -16,6 +16,12 @@
   // Resolve through the current Tauri function at call time so the native diagnostics
   // wrapper installed by chromasmith-22.html can observe Library IPC too.
   const invoke = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
+  // Every Library-originated Editor load goes through here so loadFXImages can tell it apart
+  // from a drag-drop / Open File load (see chromasmithForgetOpened).
+  async function libLoadFX(files) {
+    window.__csLibOpen = true;
+    try { return await loadFXImages(files); } finally { window.__csLibOpen = false; }
+  }
   // A Rust command's Result::Err reaches here as a bare String (sometimes a plain sentence like
   // "no such album", sometimes an internal detail like an os-error from a failed write) — either
   // way it was landing in a toast completely unframed, with no verb telling the user what had
@@ -4502,7 +4508,7 @@
         // the cache from the final decoded pixels, keyed by this path + recipe. Never for an
         // offline preview or an hq-offline copy — those bytes aren't the real file's.
         window.__chromasmithPersistTarget = (isRaw && !offlinePreview && !hqOfflineCacheExt) ? { path, recipeKey, size: byteLen } : null;
-        const decodeT0 = performance.now(); let installed = null; try { installed = await loadFXImages([file]); } finally { window.__chromasmithPersistTarget = null; }
+        const decodeT0 = performance.now(); let installed = null; try { installed = await libLoadFX([file]); } finally { window.__chromasmithPersistTarget = null; }
         // loadFXImages swallows decode failures (log + toast, no throw) and leaves the PREVIOUS photo in fxImages[0]; without this check that stale photo was stamped with this path, cached under it and got this photo's recipe ("opened one image, got a different one").
         if (!installed || fxImages[0] !== installed) throw new Error('decode failed or was superseded');
         rawPerf('open-decode', path, { ms: performance.now() - decodeT0, bytes: byteLen }); // bare identifier — see desktop-native.js's note on this
@@ -5526,6 +5532,18 @@
     const cur = await getSidecar(path);
     await setLabel(path, cur.label === label ? '' : label);
   };
+  window.chromasmithHasOpenedPhoto = () => !!state.openedPath;
+  // A photo that reaches the Editor any other way (drag-drop, Open File) is not the Gallery photo
+  // that was open before it — forget that one, or the topbar flag/favorite (and the export's
+  // source-path lookups) kept acting on the previous Gallery photo. Called by loadFXImages
+  // unless the load came through libLoadFX. Found by test/control_sweep.mjs triage.
+  window.chromasmithForgetOpened = () => {
+    if (!state.openedPath && !(state.openedPaths || []).length) return;
+    state.openedPath = ''; state.openedPaths = [];
+    window.chromasmithSourcePath = null;
+    if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
+    if (typeof syncLibActionButtons === 'function') syncLibActionButtons();
+  };
   window.chromasmithOpenedFlag = () => {
     const path = state.openedPath;
     return path ? (state.sidecars.get(path) || {}).label || '' : '';
@@ -5557,7 +5575,7 @@
         const [path] = paths;
         const buf = await invoke('read_file_bytes', { path });
         const file = new File([buf], baseName(path), { type: mimeFromName(path), lastModified: 0 });
-        await loadFXImages([file]);
+        await libLoadFX([file]);
         window.chromasmithEditInPath = path;
         state.openedPath = path;
         if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
@@ -5911,7 +5929,7 @@
     state.openedPath = '';
     window.chromasmithSourcePath = null;
     state.openedPaths = okPaths;
-    await loadFXImages(files);
+    await libLoadFX(files);
     // Seed shared FX (LUT/grain/halation/curves/etc.) from the first photo's saved recipe —
     // same reasoning as the "Export N photos" path below: without this the shared sliders
     // stay at whatever stale state the app was in, and exporting straight from here (without
@@ -6217,7 +6235,7 @@
     state.openedPath = '';
     window.chromasmithSourcePath = null;
     state.openedPaths = okPaths;
-    await loadFXImages(files);
+    await libLoadFX(files);
     try {
       const firstSc = await getSidecar(okPaths[0]);
       if (firstSc.recipe) {

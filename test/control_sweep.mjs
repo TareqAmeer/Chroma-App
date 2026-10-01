@@ -165,9 +165,13 @@ for (const [name, s] of Object.entries(SURFACES)) {
     errs = [];
     const before = await page.evaluate(fingerprint);
     try { await act(page, cur); } catch (e) { errs.push('act: ' + e.message.split('\n')[0]); }
-    await page.waitForTimeout(300);
+    // Poll rather than one fixed wait: thumbnails, the add-photo picker and zoom settle async
+    // (300ms marked them inert falsely; triage showed them changing by ~1s).
     let after = before;
-    try { after = await page.evaluate(fingerprint); } catch (e) { errs.push('navigated: ' + e.message.split('\n')[0]); }
+    for (let t = 0; t < 1500 && after === before; t += 150) {
+      await page.waitForTimeout(150);
+      try { after = await page.evaluate(fingerprint); } catch (e) { errs.push('navigated: ' + e.message.split('\n')[0]); break; }
+    }
     const status = errs.length ? 'error' : after !== before ? 'changed' : 'inert';
     results.set(c.key, { status, label: c.label, kind: c.kind, path: c.path, errors: errs.slice(0, 3) });
     if (status === 'changed') {
