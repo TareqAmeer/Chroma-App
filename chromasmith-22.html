@@ -2894,6 +2894,9 @@ body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title>.fx-toggle-lb{margin-left:auto}
 .cv-tile .cv-use{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--k-color-muted,#8d8b85)}
 .cv-tile.on{background:var(--k-color-ink,#f2f0ea);color:var(--k-color-bg,#141414);border-color:var(--k-color-ink,#f2f0ea)}
 .cv-tile.on .cv-use{color:inherit;opacity:.7}
+/* Phone: Info is just Metadata — Keywords / Tags are a desktop Library thing */
+body.mobile-fx .fx-ctrl[data-fxsec="info"] .fx-info-part:not([open]){display:none!important}
+body.mobile-fx .fx-ctrl[data-fxsec="info"] .fx-info-part[open]>summary{display:none}
 </style>
 </head>
 <body>
@@ -6824,7 +6827,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001O';
+const BUILD='1.1001P';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13601,7 +13604,7 @@ function fxMoreMenu(){
     const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;
     b.onclick=()=>{m.remove();switchTab(tab);};sh.appendChild(b);
   });
-  [['Photo information',()=>fxSection('info')],['Histogram',()=>csToggleHist()]].forEach(([lb,fn])=>{
+  [['Metadata',()=>fxSection('info')],['Histogram',()=>csToggleHist()]].forEach(([lb,fn])=>{
     const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;b.onclick=()=>{m.remove();fn();};sh.appendChild(b);
   });
   const pv=document.createElement('button');pv.className='btn bgh';pv.textContent='Apply previous settings';
@@ -13951,10 +13954,22 @@ function _expOverlay(show){
 
 // ══ CANVAS — aspect-ratio matte around image+borders (see canvasCompose) ═══════
 const CV_ARS=[['Fit',0],['1:1',1,'Post'],['4:5',0.8,'Portrait'],['9:16',9/16,'Story'],['16:9',16/9,'Wide'],['3:2',1.5],['2:3',2/3],['4:3',4/3],['3:4',0.75]];
-let _cvBgImg=null; // optional different photo for the blurred background (session only)
+let _cvBgImg=null; // decoded background photo; the saved copy is fxState.canvas.bgSrc (a small JPEG data URL), so it travels with the photo's edits
+function cvSyncBgImg(){
+  const src=fxState.canvas.bgSrc||null;
+  if(!src){_cvBgImg=null;return;}
+  if(_cvBgImg&&_cvBgImg._src===src)return;
+  const im=new Image();im._src=src;im.onload=()=>{_cvBgImg=im;if(typeof fxUpdate==='function')fxUpdate();};im.src=src;
+}
 function cvPickBgPhoto(){const i=document.createElement('input');i.type='file';i.accept='image/*';
-  i.onchange=()=>{const f=i.files[0];if(!f)return;const im=new Image();im.onload=()=>{_cvBgImg=im;fxState.canvas.blur=true;cvBuildChips();fxUpdate();};im.src=URL.createObjectURL(f);};i.click();}
-function cvClearBgPhoto(){_cvBgImg=null;cvBuildChips();fxUpdate();}
+  i.onchange=()=>{const f=i.files[0];if(!f)return;const im=new Image();
+    im.onload=()=>{ // a background is blurred anyway — 1200px is plenty and keeps the saved edit small
+      const k=Math.min(1,1200/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');
+      c.width=Math.round(im.naturalWidth*k);c.height=Math.round(im.naturalHeight*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+      fxState.canvas.bgSrc=c.toDataURL('image/jpeg',0.82);fxState.canvas.blur=true;URL.revokeObjectURL(im.src);
+      cvBuildChips();fxUpdate();fxHistoryPush();};
+    im.src=URL.createObjectURL(f);};i.click();}
+function cvClearBgPhoto(){fxState.canvas.bgSrc=null;_cvBgImg=null;cvBuildChips();fxUpdate();fxHistoryPush();}
 const CV_BGS=['#000000','#ffffff','#141414','#f5f0e8','#d4903a','#4a5d73','#7a3b3b','blur'];
 function cvBuildChips(){
   const row=document.getElementById('cv-ar-chips');
@@ -13991,6 +14006,7 @@ function cvBuildChips(){
       sw.appendChild(b);
     });}
   // background photo + blur amount (only meaningful with the photo background on)
+  cvSyncBgImg();
   const bl=document.getElementById('cv-blur-row'),sl=document.getElementById('sl-canvas-blur'),pb=document.getElementById('cv-bgphoto-lb');
   if(bl)bl.style.display=fxState.canvas.blur?'':'none';
   if(sl){sl.value=fxState.canvas.blurAmt==null?60:fxState.canvas.blurAmt;const v=document.getElementById('vl-canvas-blur');if(v)v.textContent=sl.value;}
@@ -24320,7 +24336,7 @@ const FX_SECTIONS=[['image','Image'],['looks','Looks'],['adjust','Light'],
   ['grain','Grain'],['hal','Halation'],['bloom','Bloom'],['art','Artifacts'],['vig','Effects'],
   ['borders','Borders'],['canvas','Canvas'],
   ['export','Output'],['wm','Watermark'],['exppreset','Export Presets'],['style','Presets'],['share','Sharing'],
-  ['info','Info'],['diag','Diag']];
+  ['info','Metadata'],['diag','Diag']];
 // A16: the card lookup is cached. This ran a querySelector per section on every rail and
 // section-nav rebuild (and those rebuild on every layout change / window resize). The cards are
 // static markup — they are never added or removed at runtime — so one pass is enough.
