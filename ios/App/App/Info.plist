@@ -45,6 +45,8 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Chromasmith keeps your exports together in a Chromasmith album.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Chromasmith saves your exported photos to your photo library.</string>
 	<key>UIUserInterfaceStyle</key>

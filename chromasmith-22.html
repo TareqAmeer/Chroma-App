@@ -6758,7 +6758,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001R';
+const BUILD='1.1001S';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22581,25 +22581,42 @@ function useShareSheet(){return isMemoryConstrained()} // same touch/iOS predica
 // completely inert in every browser (GitHub Pages behavior unchanged).
 function capNative(){return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}
 function _u8b64(u8){let s='';const CH=32768;for(let i=0;i<u8.length;i+=CH)s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));return btoa(s);}
-async function capShareFiles(items){ // [{content:Uint8Array|string,fname,mime}] → native share sheet
+async function capShareFiles(items){ // [{content:Uint8Array|string,fname,mime}] → "Chromasmith" photo album, else share sheet
   const{Filesystem,Share}=window.Capacitor.Plugins;
-  const uris=[];
+  const uris=[];let nAlbum=0,nDocs=0;
   for(const it of items){
     const data=typeof it.content==='string'
       ?btoa(unescape(encodeURIComponent(it.content)))
       :_u8b64(it.content instanceof Uint8Array?it.content:new Uint8Array(it.content));
-    // Android: the share sheet has no "save to gallery" target, so write straight to the public
-    // Documents/Chromasmith folder (no permission needed on Android 11+; the media scanner then
-    // lists it in Google Photos device folders). iOS keeps the share sheet (it has "Save Image").
+    const r=await Filesystem.writeFile({path:'export/'+it.fname,data,directory:'CACHE',recursive:true});
+    // Images go straight into a "Chromasmith" album in the phone's photo library (Media plugin);
+    // LUTs/JSON and any album failure fall through to the share sheet / Documents below.
+    if(/^image\//.test(it.mime||'')||/\.(jpe?g|png|webp|avif|tiff?|heic)$/i.test(it.fname)){
+      try{const album=await capAlbumId();
+        await window.Capacitor.Plugins.Media.savePhoto({path:r.uri,albumIdentifier:album,fileName:it.fname.replace(/\.[^.]+$/,'')});
+        nAlbum++;continue;}
+      catch(e){log('Save to Photos album failed ('+(e&&e.message||e)+')','warn');}
+    }
+    // Android: the share sheet has no "save to gallery" target, so fall back to the public
+    // Documents/Chromasmith folder (no permission needed on Android 11+).
     if(capAndroid()){
-      try{await Filesystem.writeFile({path:'Chromasmith/'+it.fname,data,directory:'DOCUMENTS',recursive:true});continue}
+      try{await Filesystem.writeFile({path:'Chromasmith/'+it.fname,data,directory:'DOCUMENTS',recursive:true});nDocs++;continue}
       catch(e){log('Android save to Documents failed ('+(e&&e.message||e)+') — using share sheet','warn');}
     }
-    const r=await Filesystem.writeFile({path:'export/'+it.fname,data,directory:'CACHE',recursive:true});
     uris.push(r.uri);
   }
   if(uris.length)await Share.share({files:uris});
-  else toast('Saved to Documents/Chromasmith ✓',true);
+  if(nAlbum||nDocs)toast(nAlbum?'Saved to Photos › Chromasmith ✓':'Saved to Documents/Chromasmith ✓',true);
+}
+let _capAlbum=null;
+async function capAlbumId(){ // find-or-create the "Chromasmith" album; identifier is required on Android
+  if(_capAlbum)return _capAlbum;
+  const M=window.Capacitor.Plugins.Media;if(!M)throw new Error('Media plugin missing');
+  const find=async()=>{const r=await M.getAlbums();const a=(r.albums||[]).find(x=>x.name==='Chromasmith');return a&&a.identifier;};
+  let id=await find();
+  if(!id){await M.createAlbum({name:'Chromasmith'});id=await find();}
+  if(!id)throw new Error('could not create album');
+  return(_capAlbum=id);
 }
 function capAndroid(){return capNative()&&window.Capacitor.getPlatform&&window.Capacitor.getPlatform()==='android';}
 // Sideloaded Android builds don't auto-update: the release CI attaches an empty "build-<BUILD>.txt"
@@ -22621,6 +22638,8 @@ async function capUpdateCheck(){
   }catch(e){}
 }
 setTimeout(capUpdateCheck,4000);
+// Phone gallery (mobile/mobile-library.js): native shells only, or ?mlib=1 to try it in a browser.
+if(capNative()||/[?&]mlib=1/.test(location.search)){const sc=document.createElement('script');sc.src='mobile/mobile-library.js';document.head.appendChild(sc);}
 // ── Tauri-native save path (the desktop shell) ────────────────────────────────
 // The desktop shell used to fall through to the browser <a download> loop below, which after a
 // multi-minute full-res batch render has no user activation left: WKWebView silently dropped

@@ -12,6 +12,7 @@ on:
       - 'chromasmith-22.html'
       - 'coi-serviceworker.min.js'
       - 'vendor/**'
+      - 'mobile/**'
       - 'ios/**'
       - 'package.json'
       - 'package-lock.json'

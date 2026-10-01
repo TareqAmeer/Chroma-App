@@ -10,5 +10,6 @@ mkdir -p www
 cp chromasmith-22.html www/index.html
 cp coi-serviceworker.min.js www/
 cp -R vendor www/vendor
+cp -R mobile www/mobile
 
 echo "www/ staged: $(du -sh www | cut -f1)"

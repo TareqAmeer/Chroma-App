@@ -19,3 +19,11 @@
   and opens the NATIVE share sheet (Share plugin) — no user-activation limits, so the
   multi-photo "Tap to save" fallback never fires natively. `Info.plist` carries
   `NSPhotoLibraryAddUsageDescription` (share-sheet "Save Image" runs in-process and needs it).
+
+## Phone gallery + Photos album (both shells)
+`mobile/mobile-library.js` (staged into `www/mobile/`, loaded only when `capNative()` or
+`?mlib=1`) is the phone counterpart of the desktop Library: originals kept untouched in IndexedDB
+`chromasmith-mlib`, recipes auto-saved through `chromasmithOnEdit`, export history through
+`chromasmithRecordExport`/`chromasmithGetExportHistory`, named versions, revert/open-original.
+The app launches into it; Back on the editor's home state returns to it. Exported images go to a
+"Chromasmith" album via `@capacitor-community/media` (`capAlbumId()`), share sheet as fallback.
