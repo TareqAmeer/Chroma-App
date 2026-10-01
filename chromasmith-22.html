@@ -1153,7 +1153,7 @@ body.mobile-fx #fx-quicknav .js-allfx.allon,body.mobile-fx #fx-quicknav .js-allf
 body.mobile-fx .fx-act-ic svg{width:24px;height:24px}
 body.mobile-fx #fx-looks-cats .btn{min-height:40px}
 body.mobile-fx .look-cell{flex:0 0 96px}
-body.mobile-fx .look-cell canvas{background:var(--sur2);aspect-ratio:3/2}
+body.mobile-fx .look-cell canvas{background:var(--sur2)} /* no forced aspect-ratio: the canvas is sized from the photo, so a 3/2 box squeezed every non-3:2 photo */
 body.mobile-fx .look-cell .look-nm{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25;min-height:2.5em}
 body.mobile-fx.sheet-open .fx-panel{height:46vh;max-height:min(460px,calc(var(--app-h,100svh)*.55))}
 body.mobile-fx.sheet-open.sheet-full .fx-panel{height:78vh;max-height:calc(var(--app-h,100svh)*.8)}
@@ -6761,7 +6761,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1001X';
+const BUILD='1.1001Y';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
