@@ -12837,14 +12837,33 @@
       leak.style.opacity = '1'; setTimeout(() => { leak.style.opacity = '0'; }, 550); };
     const cap = document.createElement('div'); cap.id = 'cs-pv-cap'; cap.style.cssText = 'position:absolute;left:20px;bottom:16px;z-index:3;font-size:12px;color:#bbb;text-shadow:0 1px 3px #000'; pv.stage.appendChild(cap);
     let i = 0, top = 0, paused = false, timer = 0, urls = new Map(), gen = 0;
+    // Edited photos are rendered with their saved edit through the editor's export pipeline
+    // (chromasmithRenderCurrentGraded) — one at a time, since there is one renderer — and the
+    // next slide is prefetched while the current one shows. Unedited photos use the camera
+    // preview. The editor's open photo is put back when the slideshow closes.
+    const prevOpen = state.openedPath;
+    let chain = Promise.resolve(), touchedEditor = false;
+    const camera = (path) => invoke('get_quicklook_preview', { path }).then((b) => URL.createObjectURL(new Blob([b], { type: 'image/jpeg' })))
+      .catch(() => invoke('get_thumbnail_or_offline', { path }).then((b) => URL.createObjectURL(new Blob([b], { type: 'image/jpeg' }))));
+    const graded = (path) => (chain = chain.catch(() => {}).then(async () => {
+      if (!pv) throw new Error('closed');
+      const sc = await getSidecar(path).catch(() => null);
+      if (!sc || !sc.recipe || typeof window.chromasmithRenderCurrentGraded !== 'function') return camera(path);
+      const files = await readPathsAsFiles([path]); if (!files.length) return camera(path);
+      touchedEditor = true;
+      await libLoadFX([files[0]]); await applyUISnapshot(snapshotFromB64(sc.recipe));
+      if (typeof applyRawDefaults === 'function') applyRawDefaults();
+      const bm = await window.chromasmithRenderCurrentGraded(2400);
+      const c = document.createElement('canvas'); c.width = bm.width; c.height = bm.height; c.getContext('2d').drawImage(bm, 0, 0); bm.close && bm.close();
+      const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92)); c.width = c.height = 0;
+      return URL.createObjectURL(blob);
+    }).catch(() => camera(path)));
     const load = (k) => { const e = all[(k + all.length) % all.length]; if (urls.has(e.path)) return urls.get(e.path);
-      const pr = invoke('get_quicklook_preview', { path: e.path }).then((b) => URL.createObjectURL(new Blob([b], { type: 'image/jpeg' })))
-        .catch(() => invoke('get_thumbnail_or_offline', { path: e.path }).then((b) => URL.createObjectURL(new Blob([b], { type: 'image/jpeg' }))));
-      urls.set(e.path, pr); return pr; };
+      const pr = graded(e.path); urls.set(e.path, pr); return pr; };
     const label = () => { const e = all[i], sc = state.sidecars.get(e.path) || {}; cap.textContent = `${i + 1} / ${all.length} · ${baseName(e.path)}${sc.label === 'Green' ? ' · Picked' : sc.label === 'Red' ? ' · Rejected' : ''}${sc.rating ? ' · ' + '★'.repeat(sc.rating) : ''}${paused ? ' · Paused' : ''}`; };
     const show = async (k) => {
-      const g = ++gen; i = (k + all.length) % all.length; label();
-      const url = await load(i).catch(() => null); if (g !== gen || !pv) return;
+      const g = ++gen; i = (k + all.length) % all.length; label(); cap.textContent += ' · rendering…';
+      const url = await load(i).catch(() => null); if (g !== gen || !pv) return; label();
       load(i + 1).catch(() => {});
       const im = layers[top ^= 1], other = layers[top ^ 1];
       flash();
@@ -12866,7 +12885,8 @@
       if (used) { e.preventDefault(); e.stopPropagation(); }
     };
     pv.stage.onclick = () => pvOpen(all[i].path);
-    pv.stop.push(() => { gen++; clearTimeout(timer); urls.forEach((pr) => pr.then((u) => URL.revokeObjectURL(u)).catch(() => {})); });
+    pv.stop.push(() => { gen++; clearTimeout(timer); urls.forEach((pr) => pr.then((u) => URL.revokeObjectURL(u)).catch(() => {}));
+      if (touchedEditor) chain.finally(() => { if (prevOpen) openInEditor(prevOpen).catch(() => {}); }); });
     show(0);
   }
   // Wall: a tiled plane bigger than the window; offsets wrap, so it never runs out. Drag with momentum.
