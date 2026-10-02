@@ -86,6 +86,9 @@
     "native:contract": "node test/native_contract.mjs",
     "control:sweep": "node test/control_sweep.mjs",
     "real:sweep": "node test/real_app_sweep.mjs",
+    "library:visual": "node test/library_visual.mjs",
+    "library:flows": "node test/library_flows.mjs",
+    "journey:perf": "node test/journey_perf.mjs",
     "mobile:test": "node test/mobile_ux.mjs",
     "mobile:test:all": "node test/mobile_ux.mjs --all && node test/mobile_edge_cases.mjs --all"
   },
