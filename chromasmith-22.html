@@ -4432,6 +4432,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="btn-row" style="margin-top:4px">
           <button class="btn bgh" onclick="exportPresetSaveCurrent()" title="Save the current Quality/Format/Resize/Sharpening as a named preset">Save preset…</button>
           <button class="btn bgh" id="btn-exp-preset-del" onclick="exportPresetDeleteCurrent()" disabled title="Delete the selected preset">Delete</button>
+          <button class="btn bgh" onclick="presetsManagerOpen('export')" title="Rename, delete and review all Looks, Edit Styles and Export Recipes in one place">Manage…</button>
           <button class="btn bgh" onclick="exportMultiPresetOpen()" title="Export the same photos once per chosen preset — e.g. full-size archive + small web copy — in one go">Export several…</button>
         </div>
       </div>
@@ -4448,6 +4449,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="btn-row" style="margin-top:0">
           <button class="btn bgh" onclick="styleSaveCurrent()" title="Save the current recipe (everything except crop/geometry) as a named, reusable Style">Save as Style…</button>
           <button class="btn bgh" onclick="styleImportClick()" title="Import a Style .json exported from CHRO-MA-SMITH">Import…</button>
+          <button class="btn bgh" onclick="presetsManagerOpen('styles')" title="Rename, delete and review all Looks, Edit Styles and Export Recipes in one place">Manage…</button>
         </div>
         <div id="style-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
         <input type="file" id="style-import-input" accept="application/json,.json" style="display:none" onchange="styleImportFile(this.files[0])">
@@ -6929,7 +6931,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002D';
+const BUILD='1.1002E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13798,6 +13800,7 @@ function _cpCommands(){
   add('Action','Save as Style…',()=>{if(typeof styleSaveCurrent==='function')styleSaveCurrent();});
   add('Action','Toggle theme',()=>{if(typeof toggleTheme==='function')toggleTheme();});
   add('Action','Keyboard shortcuts',()=>window.chromasmithShowShortcuts());
+  add('Action','Manage presets',()=>presetsManagerOpen('styles'));cmds[cmds.length-1].aliases='looks styles export recipes presets favourites';
   add('Action','Edit history',()=>{if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover();});cmds[cmds.length-1].aliases='history undo steps versions';
   add('Action','Compare before / after',()=>{if(typeof toggleSplit==='function')toggleSplit();});cmds[cmds.length-1].aliases='split compare original';
   add('Action','Show welcome tour',()=>window.chromasmithShowTour());
@@ -19068,6 +19071,48 @@ async function exportMultiPresetRun(names){
       if(typeof fxExportCancel!=='undefined'&&fxExportCancel)break;
     }
   }finally{ids.forEach((id,i)=>{const e=document.getElementById(id);if(e&&saved[i]!=null)e.value=saved[i];});const vl=document.getElementById('vl-exp-q'),q=document.getElementById('sl-exp-q');if(vl&&q)vl.textContent=q.value;if(typeof expPlainRender==='function')expPlainRender();}
+}
+// ── CHR-197: one Presets manager for the three kinds of saved recipe ───────────────────────
+// Looks = colour/film treatment (favourites + your own saved .cube looks); Edit Styles = saved
+// adjustments (never crop/rotation); Export Recipes = how files are written. Each row says what
+// it changes and offers the same actions where the kind supports them.
+function _pmEsc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function _pmStyleSummary(r){const parts=[];const lut=r&&r.selects&&r.selects['sel-lut'];
+  if(lut)parts.push('Look ('+(lut.startsWith('p:')||lut.startsWith('l:')?prettyLUT(lut.slice(2)):lut)+')');
+  Object.entries((r&&r.toggles)||{}).forEach(([k,on])=>{if(on&&CS_NAMES[k])parts.push(CS_NAMES[k]);});
+  if(r&&r.masks&&r.masks.length)parts.push(r.masks.length+' mask'+(r.masks.length>1?'s':''));
+  return parts.length?'Changes: '+parts.join(', '):'Changes: no tools switched on';}
+function _pmExportSummary(st){const s=st||{};const f={auto:'Match source',jpg:'JPG',png:'PNG',webp:'WebP'}[s.fmt]||s.fmt||'—';
+  return `${f}${s.fmt==='png'?'':' · quality '+(s.q??'—')} · ${+s.size?('long edge '+s.size+'px'):'full size'}${+s.sharp?' · sharpened':''}`;}
+let _pmTab='styles';
+function presetsManagerOpen(tab){_pmTab=tab||_pmTab;_csModal('Presets','<div id="pm-body"></div>');presetsManagerRender();}
+function presetsManagerRender(){
+  const host=document.getElementById('pm-body');if(!host)return;
+  const looks=[...((document.getElementById('sel-lut')||{}).options||[])].filter(o=>o.value);
+  const favs=(()=>{try{return JSON.parse(localStorage.getItem('csFavLooks')||'[]')}catch(e){return[]}})();
+  const own=looks.filter(o=>o.value.startsWith('l:'));
+  const styles=stylesList(),exps=exportPresetsList();
+  const tab=(k,t)=>`<button class="${_pmTab===k?'on':''}" style="flex:1" onclick="_pmTab='${k}';presetsManagerRender()">${t}</button>`;
+  const row=(name,sum,btns)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bdr)"><div style="flex:1;min-width:0"><div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_pmEsc(name)}</div><div style="font-size:11px;color:var(--k-color-muted)">${_pmEsc(sum)}</div></div>${btns}</div>`;
+  const b=(t,js)=>`<button class="btn bgh" style="font-size:11px;padding:3px 8px" onclick="${js}">${t}</button>`;
+  const q=t=>JSON.stringify(t).replace(/"/g,'&quot;');
+  let h=`<div class="seg" style="display:flex;margin-bottom:10px">${tab('looks',`Looks (${looks.length})`)}${tab('styles',`Edit Styles (${styles.length})`)}${tab('export',`Export Recipes (${exps.length})`)}</div>`;
+  if(_pmTab==='looks'){
+    h+=`<div style="font-size:12px;color:var(--k-color-muted);margin-bottom:8px">A <b>Look</b> changes only the colour and film treatment. Star looks in the Looks grid to pin them here.</div>`;
+    h+=`<div style="font-size:11px;color:var(--k-color-muted);margin:6px 0 2px">FAVOURITES</div>`+(favs.length?favs.map(k=>row(prettyLUT(k),'Look',b('Apply',`selectLUT('p:'+${q(k)});document.getElementById('cs-modal-ov').remove()`))).join(''):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet.</div>');
+    h+=`<div style="font-size:11px;color:var(--k-color-muted);margin:12px 0 2px">YOUR SAVED LOOKS</div>`+(own.length?own.map(o=>row(o.textContent,'Your .cube look',b('Apply',`const s=document.getElementById('sel-lut');s.value=${q(o.value)};selectLUT(${q(o.value)});document.getElementById('cs-modal-ov').remove()`)+b('Delete',`(async()=>{if(!await confirmModal('Delete this saved look?','Delete'))return;await lutLibDel(${q(o.value.slice(2))});await refreshLUTSelect();presetsManagerOpen('looks');})()`))).join(''):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet — Colour Copy → Use in editor, or Look → Apply LUT → Save, adds one.</div>');
+  }else if(_pmTab==='styles'){
+    h+=`<div style="font-size:12px;color:var(--k-color-muted);margin-bottom:8px">An <b>Edit Style</b> reapplies saved adjustments to any photo. It never changes crop or rotation.</div>`;
+    h+=(styles.length?styles.sort((x,y)=>x.name.localeCompare(y.name)).map(st=>row(st.name,_pmStyleSummary(st.recipe),
+      b('Apply',`styleApply(${q(st.name)});document.getElementById('cs-modal-ov').remove()`)+b('Rename',`styleRename(${q(st.name)}).then(()=>presetsManagerOpen('styles'))`)+b('Export',`styleExport(${q(st.name)})`)+b('Delete',`(async()=>{if(!await confirmModal('Delete this style?','Delete'))return;stylesSave(stylesList().filter(x=>x.name!==${q(st.name)}));styleListRefresh();presetsManagerOpen('styles');})()`))).join(''):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet.</div>');
+    h+=`<div class="btn-row" style="margin-top:12px"><button class="btn bsec" onclick="document.getElementById('cs-modal-ov').remove();styleSaveCurrent()">Save current edit as style…</button><button class="btn bgh" onclick="document.getElementById('cs-modal-ov').remove();styleImportClick()">Import…</button></div>`;
+  }else{
+    h+=`<div style="font-size:12px;color:var(--k-color-muted);margin-bottom:8px">An <b>Export Recipe</b> only changes the files you export: format, quality, size and sharpening.</div>`;
+    h+=(exps.length?exps.map(e=>row(e.name,_pmExportSummary(e.settings),
+      b('Use',`exportPresetApply(${q(e.name)});document.getElementById('cs-modal-ov').remove()`)+b('Rename',`(async()=>{const n=(await askTextModal('Rename export recipe','',${q(e.name)})||'').trim();if(!n)return;const l=exportPresetsList();const it=l.find(x=>x.name===${q(e.name)});if(it)it.name=n;exportPresetsSave(l);if(typeof exportPresetListRefresh==='function')exportPresetListRefresh(n);presetsManagerOpen('export');})()`)+b('Delete',`(async()=>{if(!await confirmModal('Delete this export recipe?','Delete'))return;exportPresetsSave(exportPresetsList().filter(x=>x.name!==${q(e.name)}));if(typeof exportPresetListRefresh==='function')exportPresetListRefresh();presetsManagerOpen('export');})()`))).join(''):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet.</div>');
+    h+=`<div class="btn-row" style="margin-top:12px"><button class="btn bsec" onclick="document.getElementById('cs-modal-ov').remove();exportPresetSaveCurrent()">Save current export settings…</button></div>`;
+  }
+  host.innerHTML=h;
 }
 async function exportPresetDeleteCurrent(){
   const sel=document.getElementById('sel-exp-preset');const name=sel&&sel.value;if(!name)return;
