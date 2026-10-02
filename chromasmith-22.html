@@ -4910,6 +4910,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <div class="fx-ctrl" data-clsec="layout">
         <div class="ctitle" style="margin-bottom:10px">Layout</div>
         <div class="cl-shapes" id="cl-shapes"></div>
+        <div class="btn-row" style="margin-top:6px"><button class="btn bgh" onclick="clSaveLayout()" title="Save this arrangement (including dragged dividers) and the page style, to reuse with the same number of photos">Save layout…</button></div>
         <!-- NOT converted to an info tooltip like its siblings — clRebuildShapes() rewrites this
              element's textContent with a live photo count ("3 photos — pick an arrangement."),
              so it's a status readout, not standing explanatory prose. -->
@@ -26136,7 +26137,28 @@ function clTemplates(n){
   else if(n===6)extra=[_col(_row(L(),L(),L()),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L()),_col(L(),L())),_col(_row(L(),L()),_row(L(),L()),_row(L(),L()))];
   else{const cols=Math.ceil(Math.sqrt(n)),rows=Math.ceil(n/cols);let rem=n;const rws=[];
     for(let r=0;r<rows;r++){const cs=[];for(let c=0;c<cols&&rem>0;c++){cs.push(L());rem--;}rws.push(_row.apply(null,cs));}extra=[_col.apply(null,rws)];}
-  return[rowAll(),colAll()].concat(extra);
+  // CHR-216: the user's saved layouts for this photo count come last (marked in clRebuildShapes).
+  return[rowAll(),colAll()].concat(extra,clSavedLayouts().filter(x=>x.n===n).map(x=>Object.assign(clClone(x.tree),{_saved:x.name})));
+}
+// CHR-216: saved collage layouts — the tree (with any divider moves) plus the look of the page
+// (aspect, background, spacing, margin, corners, frame, title placement). localStorage, like Styles.
+const _CL_SAVED_KEY='chromasmith-collage-layouts-v1';
+function clSavedLayouts(){try{return JSON.parse(localStorage.getItem(_CL_SAVED_KEY)||'[]')}catch(e){return[]}}
+async function clSaveLayout(){
+  if(!CL.tree){toast('Pick a layout first');return;}
+  const name=(await askTextModal('Save layout','Saved layouts appear at the end of the list whenever you have the same number of photos.')||'').trim();if(!name)return;
+  const list=clSavedLayouts().filter(x=>x.name!==name);
+  list.push({name,n:clLeafCount(CL.tree),tree:clClone(CL.tree),opts:{aspect:CL.aspect[0],bg:CL.bg,inner:CL.inner,outer:CL.outer,radius:CL.radius,frame:CL.frame,titlePos:CL.titlePos,titleSize:CL.titleSize,capSize:CL.capSize}});
+  try{localStorage.setItem(_CL_SAVED_KEY,JSON.stringify(list));}catch(e){toast('Could not save layout',false);return;}
+  CL.templates=clTemplates(CL.photos.length);CL.templateIdx=CL.templates.length-1;clRebuildShapes();toast(`Layout "${name}" saved`,true);
+}
+function clDeleteLayout(name){try{localStorage.setItem(_CL_SAVED_KEY,JSON.stringify(clSavedLayouts().filter(x=>x.name!==name)));}catch(e){}
+  CL.templates=clTemplates(CL.photos.length);if(CL.templateIdx>=CL.templates.length)CL.templateIdx=0;clRebuildShapes();}
+function clApplySavedOpts(name){const x=clSavedLayouts().find(y=>y.name===name);if(!x||!x.opts)return;const o=x.opts;
+  ['bg','inner','outer','radius','titleSize','capSize'].forEach(k=>{if(o[k]!=null){CL[k]=o[k];const el=document.getElementById('cl-'+k);if(el)el.value=o[k];const v=document.getElementById('cl-'+k+'-v');if(v)v.textContent=o[k];}});
+  if(o.frame){CL.frame=o.frame;const f=document.getElementById('cl-frame-sel');if(f)f.value=o.frame;}
+  if(o.titlePos){CL.titlePos=o.titlePos;const t=document.getElementById('cl-titlepos');if(t)t.value=o.titlePos;}
+  const a=CL_ASPECTS.find(z=>z[0]===o.aspect);if(a){CL.aspect=a;const s=document.getElementById('cl-aspect');if(s)s.value=o.aspect;}
 }
 function clLayoutRects(node,x,y,w,h,gap,divs){
   if(node.leaf)return[{x,y,w,h}];
@@ -26223,8 +26245,9 @@ function clRebuildShapes(){
   CL.templates.forEach((t,i)=>{
     const rects=clLayoutRects(clClone(t),0,0,100,100,3,null);
     const svg='<svg viewBox="0 0 100 100">'+rects.map(r=>`<rect x="${r.x}" y="${r.y}" width="${Math.max(0,r.w)}" height="${Math.max(0,r.h)}" rx="2" fill="currentColor" opacity=".5"/>`).join('')+'</svg>';
-    const b=document.createElement('div');b.className='cl-shape'+(i===CL.templateIdx?' on':'');b.style.color='var(--mut)';b.innerHTML=svg;
-    b.onclick=()=>clSetTemplate(i,false);host.appendChild(b);
+    const b=document.createElement('div');b.className='cl-shape'+(i===CL.templateIdx?' on':'');b.style.color=t._saved?'var(--acc)':'var(--mut)';b.innerHTML=svg;
+    if(t._saved){b.title=t._saved+' — saved layout (right-click to delete)';b.oncontextmenu=e=>{e.preventDefault();confirmModal(`Delete saved layout "${t._saved}"?`,'Delete').then(ok=>{if(ok)clDeleteLayout(t._saved);});};}
+    b.onclick=()=>{if(t._saved)clApplySavedOpts(t._saved);clSetTemplate(i,false);};host.appendChild(b);
   });
 }
 function clMarkShapes(){document.querySelectorAll('#cl-shapes .cl-shape').forEach((el,i)=>el.classList.toggle('on',i===CL.templateIdx));}
