@@ -4409,6 +4409,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="btn-row" style="margin-top:4px">
           <button class="btn bgh" onclick="exportPresetSaveCurrent()" title="Save the current Quality/Format/Resize/Sharpening as a named preset">Save preset…</button>
           <button class="btn bgh" id="btn-exp-preset-del" onclick="exportPresetDeleteCurrent()" disabled title="Delete the selected preset">Delete</button>
+          <button class="btn bgh" onclick="exportMultiPresetOpen()" title="Export the same photos once per chosen preset — e.g. full-size archive + small web copy — in one go">Export several…</button>
         </div>
       </div>
       <!-- STYLES: named, reusable, re-editable recipes (curves/HSL/masks/grain/halation/bloom/
@@ -6897,7 +6898,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002B';
+const BUILD='1.1002C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18912,6 +18913,31 @@ function exportPresetApply(name){
   if(sharpEl&&s.sharp!=null)sharpEl.value=s.sharp;
   const delBtn=document.getElementById('btn-exp-preset-del');if(delBtn)delBtn.disabled=false;
   log(`Export preset applied: ${name}`,'ok');
+}
+// CHR-202: run one export per chosen preset, back to back. Each run's files get the preset name
+// appended ({name}_<preset>) so the deliveries never overwrite each other; the panel's own
+// format/quality/size/sharpening and filename are put back afterwards.
+function exportMultiPresetOpen(){
+  const list=exportPresetsList();
+  if(list.length<2){toast('Save at least two export presets first');return;}
+  const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  _csModal('Export with several presets',list.map((p,i)=>`<label style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="emp-cb" value="${i}" checked> ${esc(p.name)}</label>`).join('')
+    +`<div style="margin-top:12px;font-size:12px;color:var(--mut)">Each preset saves its own copy of every photo in the current export scope, named "photo_&lt;preset&gt;".</div><div class="btn-row" style="margin-top:12px"><button class="btn bpri" id="emp-go">Export</button></div>`);
+  document.getElementById('emp-go').onclick=()=>{const idx=[...document.querySelectorAll('.emp-cb:checked')].map(c=>+c.value);
+    document.getElementById('cs-modal-ov').remove();if(idx.length)exportMultiPresetRun(idx.map(i=>list[i].name));};
+}
+async function exportMultiPresetRun(names){
+  const ids=['sel-exp-fmt','sl-exp-q','sel-exp-size','sel-exp-sharp','fx-fname'],saved=ids.map(id=>{const e=document.getElementById(id);return e?e.value:null;});
+  try{
+    for(let k=0;k<names.length;k++){
+      exportPresetApply(names[k]);
+      const fn=document.getElementById('fx-fname'),tag=names[k].replace(/[^\w-]+/g,'-');
+      if(fn)fn.value=`{name}_${tag}{nover}`;
+      toast(`Exporting ${k+1}/${names.length}: ${names[k]}`);
+      await exportFX();
+      if(typeof fxExportCancel!=='undefined'&&fxExportCancel)break;
+    }
+  }finally{ids.forEach((id,i)=>{const e=document.getElementById(id);if(e&&saved[i]!=null)e.value=saved[i];});const vl=document.getElementById('vl-exp-q'),q=document.getElementById('sl-exp-q');if(vl&&q)vl.textContent=q.value;if(typeof expPlainRender==='function')expPlainRender();}
 }
 async function exportPresetDeleteCurrent(){
   const sel=document.getElementById('sel-exp-preset');const name=sel&&sel.value;if(!name)return;
