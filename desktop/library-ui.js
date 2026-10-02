@@ -12774,7 +12774,7 @@
   // Portfolio-site style ways to look through a random set from the current view. Uses the
   // same thumbnail command as the grid; click (double-click on prints) opens a photo. Esc or ×
   // closes. All motion stops for Reduce Motion (drift/wall stay static, prints don't fly in).
-  const PV_MODES = [['slides', 'Slideshow'], ['wall', 'Wall'], ['drift', 'Drift'], ['prints', 'Prints'], ['trail', 'Trail']];
+  const PV_MODES = [['slides', 'Slideshow'], ['wall', 'Wall'], ['drift', 'Drift'], ['prints', 'Prints'], ['carousel', 'Carousel'], ['trail', 'Trail']];
   let pv = null;
   async function openPhotoPreview(mode) {
     const pool = (state.entries || []).filter((e) => e && e.path && !/\.(mp4|mov|m4v|avi|mkv|webm|mts)$/i.test(e.path));
@@ -12820,7 +12820,7 @@
     cancelAnimationFrame(pv.raf); pv.stop.forEach((f) => f()); pv.stop = []; pv.keyHook = null; pv.stage.onclick = null;
     pv.mode = k; pv.stage.textContent = '';
     Object.entries(pv.btns).forEach(([m, b]) => { b.style.background = m === k ? 'rgba(255,255,255,.16)' : ''; b.style.color = m === k ? '#fff' : '#bbb'; });
-    ({ slides: pvSlides, wall: pvWall, drift: pvDrift, prints: pvPrints, trail: pvTrail })[k]();
+    ({ slides: pvSlides, wall: pvWall, drift: pvDrift, prints: pvPrints, carousel: pvCarousel, trail: pvTrail })[k]();
   }
   // Slideshow (CHR-174 + CHR-212): large previews one at a time with a slow pan-and-zoom and a
   // crossfade. ←/→ step, Space pauses, P/X/U flag and 0–5 rate the photo on screen (the same
@@ -12939,6 +12939,30 @@
         window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
       };
     });
+  }
+  // Carousel (CHR-227 curved gallery / CHR-213 orbit): photos on a ring seen from inside its
+  // front edge, so the strip bends away at the sides. Spins slowly; drag or scroll to turn,
+  // momentum carries on; the front photo is largest; click opens it.
+  function pvCarousel() {
+    const P = pv.photos.slice(0, 18), n = P.length, w = 240, h = 320, R = Math.max(420, (w + 30) * n / (2 * Math.PI));
+    const ring = document.createElement('div');
+    ring.style.cssText = `position:absolute;left:50%;top:50%;width:0;height:0;transform-style:preserve-3d`;
+    const stage3d = document.createElement('div'); stage3d.style.cssText = 'position:absolute;inset:0;perspective:1400px;perspective-origin:50% 45%';
+    stage3d.appendChild(ring); pv.stage.appendChild(stage3d);
+    const items = P.map((p, i) => { const im = pvImg(p, `left:${-w / 2}px;top:${-h / 2}px;width:${w}px;height:${h}px;max-width:none;border-radius:6px;cursor:pointer;box-shadow:0 20px 40px rgba(0,0,0,.6);backface-visibility:hidden`);
+      im.onclick = () => { if (!moved) pvOpen(p.path); }; ring.appendChild(im); return { im, a: i / n * 360 }; });
+    let rot = 0, v = pvReduced() ? 0 : -0.08, drag = null, moved = false;
+    const place = () => { ring.style.transform = `translateZ(${-R}px) rotateY(${rot}deg)`;
+      items.forEach((t) => { const d = Math.cos(((t.a + rot) % 360) * Math.PI / 180); t.im.style.transform = `rotateY(${t.a}deg) translateZ(${R}px) scale(${0.85 + 0.25 * Math.max(0, d)})`; t.im.style.opacity = (0.35 + 0.65 * Math.max(0, d)).toFixed(2); }); };
+    const down = (e) => { drag = { x: e.clientX }; moved = false; v = 0; };
+    const move = (e) => { if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 3) moved = true; rot += dx * 0.15; v = dx * 0.15; drag.x = e.clientX; };
+    const up = () => { drag = null; };
+    const wheel = (e) => { rot -= (e.deltaX || e.deltaY) * 0.1; e.preventDefault(); };
+    pv.stage.addEventListener('pointerdown', down); window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+    pv.stage.addEventListener('wheel', wheel, { passive: false });
+    pv.stop.push(() => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); pv.stage.removeEventListener('pointerdown', down); pv.stage.removeEventListener('wheel', wheel); });
+    const tick = () => { if (!drag) { rot += v; if (Math.abs(v) > 0.08) v *= 0.96; else if (!pvReduced()) v = v < 0 ? -0.08 : 0.08; } place(); pv.raf = requestAnimationFrame(tick); };
+    tick();
   }
   // Trail: moving the pointer drops photos under it that fade away.
   function pvTrail() {
