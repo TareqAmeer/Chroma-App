@@ -133,6 +133,7 @@
         return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive });
       }
       case 'sidecar_set_active_version': { ltActive = A.index; return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive }); }
+      case 'sidecar_rename_version': { if (ltVersions[A.index]) ltVersions[A.index].name = A.name; return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive }); }
       case 'sidecar_delete_version': {
         ltVersions.splice(A.index, 1);
         if (ltVersions.length <= 1) { ltVersions.length = 0; ltActive = 0; } else if (ltActive >= ltVersions.length) ltActive = ltVersions.length - 1;
@@ -5777,6 +5778,16 @@
   // fxImages was loaded — used to record which photo a successful Google Photos upload
   // actually came from (see gpUploadItems' call site / window.chromasmithRecordSynced).
   window.chromasmithGetOpenedPaths = () => (state.openedPath ? [state.openedPath] : (state.openedPaths || []));
+  // CHR-203: the Editor's Versions panel uses the same sidecar version commands as the
+  // right-click "New virtual copy" / version rows, for the single photo that's open.
+  window.chromasmithVersions = {
+    available: () => !!state.openedPath,
+    get: async () => { const p = state.openedPath; if (!p) return null; const sc = await getSidecar(p); return { versions: sc.versions || [], active: sc.active || 0 }; },
+    add: async (name) => { const p = state.openedPath; await flushPendingSave(); const sc = await invoke('sidecar_add_version', { path: p, name }); state.sidecars.set(p, sc); renderGrid(); return sc; },
+    setActive: async (index) => { const p = state.openedPath; const sc = await invoke('sidecar_set_active_version', { path: p, index }); state.sidecars.set(p, sc); renderGrid(); await openInEditor(p); return sc; },
+    rename: async (index, name) => { const p = state.openedPath; const sc = await invoke('sidecar_rename_version', { path: p, index, name }); state.sidecars.set(p, sc); return sc; },
+    del: async (index) => { const p = state.openedPath; const sc = await invoke('sidecar_delete_version', { path: p, index }); state.sidecars.set(p, sc); renderGrid(); return sc; },
+  };
   window.chromasmithGetExportHistory = async () => {
     const path = state.openedPath;
     if (!path) return [];

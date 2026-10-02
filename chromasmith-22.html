@@ -1852,6 +1852,7 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 /* CHR-215: collage title band + per-photo captions (geometry shared with clExport via clTextGeom) */
 .cl-title{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:600;white-space:nowrap;overflow:hidden;pointer-events:none}
 .cl-in{position:absolute;overflow:hidden}
+.ver-list{display:flex;flex-direction:column}
 /* CHR-194: edit-persistence state beside the photo name (desktop Library photos only) */
 #cs-save-state{margin-left:10px;font-size:var(--fs-1);color:var(--mut);white-space:nowrap}
 #cs-save-state.err{color:var(--err)}
@@ -2979,7 +2980,7 @@ new MutationObserver(apply).observe(b,{attributes:true,attributeFilter:['class']
 const CS_NAMES={image:'Image',looks:'Looks',inprint:'Input & Prints',adjust:'Light',curves:'Curves',hsl:'Colour Mixer',wheels:'Colour Wheels',
   pointcolor:'Point Colour',nr:'Noise Reduction',deconv:'Sharpen',lens:'Lens',art:'Artifacts',grain:'Grain',hal:'Halation',bloom:'Bloom',vig:'Effects',
   retouch:'Retouch',local:'Masks',crop:'Crop',rotate:'Rotate & Flip',straighten:'Straighten',borders:'Borders',canvas:'Canvas',
-  export:'Output',wm:'Watermark',exppreset:'Export Recipes',style:'Edit Styles',share:'Sharing',info:'Metadata',diag:'Diagnostics'};
+  versions:'Versions',export:'Output',wm:'Watermark',exppreset:'Export Recipes',style:'Edit Styles',share:'Sharing',info:'Metadata',diag:'Diagnostics'};
 // Everyday words and old names that should find each tool in the command palette (⌘K).
 const CS_ALIASES={adjust:'basic tone exposure brightness contrast highlights shadows whites blacks white balance wb temperature tint vibrance saturation',
   looks:'presets film luts look',curves:'tone curve',hsl:'hsl color mixer hue saturation luminance',pointcolor:'point color',wheels:'color wheels grading lift gamma gain',
@@ -4468,6 +4469,14 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         </div>
       </div>
       <!-- INFO / METADATA -->
+      <!-- CHR-203: Versions — the photo's saved alternatives (desktop virtual copies, stored in its
+           sidecar), with compare / make current / rename / delete, and the way to undo history. -->
+      <div class="fx-ctrl" data-fxsec="versions">
+        <div class="fx-ctrl-title">Versions</div>
+        <div id="ver-list" class="ver-list"></div>
+        <div class="btn-row" style="margin-top:10px"><button class="btn bsec" id="btn-ver-new" onclick="verSaveNew()">Save as new version…</button><button class="btn bgh" onclick="if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover()">Edit history</button></div>
+        <div class="fx-hint" style="margin-top:12px;line-height:1.5">Undo history is lost when you close the photo. Versions are saved with the photo and survive restarts; the original file is never changed. Duplicating the file is a separate copy on disk.</div>
+      </div>
       <div class="fx-ctrl" data-fxsec="info">
         <div class="fx-ctrl-title">Preview Info &amp; Metadata</div>
         <!-- Info is split into Metadata (open) / Keywords / Tags (auto tags + People & Pets).
@@ -6920,7 +6929,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002C';
+const BUILD='1.1002D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -12802,6 +12811,45 @@ function secScopeSyncUI(){
     b.setAttribute('aria-label',b.title);
   });
 }
+// ── CHR-203: Versions panel ───────────────────────────────────────────────────────────────
+// Talks to the desktop Library through window.chromasmithVersions (library-ui.js), which wraps
+// the existing sidecar_*_version commands. In the browser there's no sidecar, so the list says so.
+async function verRender(){
+  const host=document.getElementById('ver-list');if(!host)return;
+  const api=window.chromasmithVersions,b=document.getElementById('btn-ver-new');
+  if(!api||!api.available()){host.innerHTML='<div class="fx-hint">Versions are saved with photos opened from the gallery in the desktop app.</div>';if(b)b.disabled=true;return;}
+  if(b)b.disabled=false;
+  let d;try{d=await api.get();}catch(e){d=null;}
+  const vers=(d&&d.versions&&d.versions.length)?d.versions:[{name:'Current edit',recipe:null}],act=d&&d.versions&&d.versions.length?d.active:0;
+  const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  let thumb='';try{const c=document.createElement('canvas'),cv=FX.cv,k=72/Math.max(cv.width,1);c.width=72;c.height=Math.max(1,Math.round(cv.height*k));c.getContext('2d').drawImage(cv,0,0,c.width,c.height);thumb=c.toDataURL('image/jpeg',.8);}catch(e){}
+  const hasV=!!(d&&d.versions&&d.versions.length),sb='font-size:11px;padding:3px 8px';
+  host.innerHTML=vers.map((v,i)=>{const cur=i===act;
+    const acts=(cur?'':`<button class="btn bgh" style="${sb}" onclick="verCompare(${i})">Compare</button><button class="btn bgh" style="${sb}" onclick="verMakeCurrent(${i})">Make current</button>`)
+      +(hasV?`<button class="btn bgh" style="${sb}" onclick="verRename(${i})">Rename</button>`:'')+(hasV&&!cur?`<button class="btn bgh" style="${sb}" onclick="verDelete(${i})">Delete</button>`:'');
+    return `<div class="ver-row" style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--bdr)">
+      ${cur&&thumb?`<img src="${thumb}" width="72" alt="" style="outline:2px solid var(--k-color-accent-a);flex:0 0 auto">`:'<div style="width:72px;height:48px;border:1px solid var(--bdr);flex:0 0 auto"></div>'}
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.name)}</div>
+        <div class="fx-hint" style="margin:0">${cur?'Current':'Saved version'}</div>
+        ${acts?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${acts}</div>`:''}
+      </div></div>`;}).join('');
+}
+async function verSaveNew(){const api=window.chromasmithVersions;if(!api)return;
+  const name=(await askTextModal('Save as new version','The current edit stays as it is; the new version starts as a copy of it.')||'').trim();if(!name)return;
+  try{await api.add(name);toast(`Saved version "${name}"`,true);}catch(e){toast('Could not save the version — '+(e.message||e),false);}verRender();}
+async function verMakeCurrent(i){try{await window.chromasmithVersions.setActive(i);}catch(e){toast('Could not switch version — '+(e.message||e),false);}
+  setTimeout(()=>{if(typeof fxSection==='function')fxSection('versions');verRender();},800);} // reopening the photo closes the panel — bring Versions back
+async function verRename(i){const d=await window.chromasmithVersions.get();const v=d.versions[i];if(!v)return;
+  const name=(await askTextModal('Rename version','',v.name)||'').trim();if(!name||name===v.name)return;
+  try{await window.chromasmithVersions.rename(i,name);}catch(e){toast('Could not rename — '+(e.message||e),false);}verRender();}
+async function verDelete(i){const d=await window.chromasmithVersions.get();const v=d.versions[i];if(!v)return;
+  if(!await confirmModal(`Delete version "${v.name}"? This cannot be undone.`,'Delete'))return;
+  try{await window.chromasmithVersions.del(i);}catch(e){toast('Could not delete — '+(e.message||e),false);}verRender();}
+// Compare: the split view's "Pinned" side shows that version's edit against the current one.
+async function verCompare(i){const d=await window.chromasmithVersions.get();const v=d&&d.versions[i];if(!v||!v.recipe)return;
+  try{fxPinned=JSON.parse(decodeURIComponent(escape(atob(v.recipe))));}catch(e){toast('Could not read that version',false);return;}
+  fxSetSplitSrc('pin');toast(`Comparing with "${v.name}" — drag the split line`);}
 function adjSyncScopeUI(){
   if(typeof secScopeSyncUI==='function')secScopeSyncUI();
   const row=document.getElementById('adj-scope-row');if(!row)return;
@@ -24791,6 +24839,7 @@ const ICONS={
  gridView:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
  tableView:'<path d="M3 6h18M3 12h18M3 18h18"/>'
 };
+ICONS.versions=ICONS.versions||ICONS.history; // CHR-203 rail icon
 function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // Label per section, in rail / strip order.
 //
@@ -24816,7 +24865,7 @@ const FX_SECTIONS=[['image','Image'],['looks','Looks'],['adjust','Light'],
   ['grain','Grain'],['hal','Halation'],['bloom','Bloom'],['art','Artifacts'],['vig','Effects'],
   ['borders','Borders'],['canvas','Canvas'],
   ['export','Output'],['wm','Watermark'],['exppreset','Export Presets'],['style','Presets'],['share','Sharing'],
-  ['info','Metadata'],['diag','Diag']];
+  ['versions','Versions'],['info','Metadata'],['diag','Diag']];
 FX_SECTIONS.forEach(x=>{if(CS_NAMES[x[0]])x[1]=CS_NAMES[x[0]];}); // CHR-196: one name per tool
 // A16: the card lookup is cached. This ran a querySelector per section on every rail and
 // section-nav rebuild (and those rebuild on every layout change / window resize). The cards are
@@ -25292,6 +25341,7 @@ function fxInitEdges(){
   });
 }
 function fxSection(name,noSheet){
+  if(name==='versions'&&typeof verRender==='function')setTimeout(verRender,0); // CHR-203: fresh list each time it's shown
   if(document.body.classList.contains('tools-open'))fxToolsClose();
   const dx=document.body.classList.contains('deskx');
   // A member key (e.g. fxSection('local') from the command palette) opens its stage and scrolls to it.
@@ -26121,7 +26171,8 @@ document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(card=>{
   // still writes the same map — this only skips reading it back for these five keys).
   // Every tool starts folded on launch, so a stage reads as a list of its tools first. Info is the
   // exception: it opens on Metadata (its Keywords/Tags parts fold inside it).
-  if(card.dataset.fxsec!=='info'){card.classList.add('fx-sec-collapsed');_fxSecCollapsed[card.dataset.fxsec]=true;}
+  // Versions (CHR-203) is a one-card stage like Info, so it opens unfolded too.
+  if(card.dataset.fxsec!=='info'&&card.dataset.fxsec!=='versions'){card.classList.add('fx-sec-collapsed');_fxSecCollapsed[card.dataset.fxsec]=true;}
   title.addEventListener('click',(e)=>{
     // The "|" separator between Reset and All (.fx-ctrl-title-reset-sep) sits between the two
     // buttons with its own horizontal padding and isn't itself a button/toggle, so a click that
