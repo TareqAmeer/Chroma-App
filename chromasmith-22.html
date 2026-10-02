@@ -6920,7 +6920,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002B';
+const BUILD='1.1002C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24455,6 +24455,48 @@ function viewMenuBuild(){
   h+=`<button class="fx-ovf-item${fxRailFlat()?' on':''}" onclick="fxRailFlatToggle()"><span>Every tool in the bar</span>${chk}</button>`;
   m.innerHTML=h;
 }
+function csLayoutMenuHtml(){let h='';
+  // CHR-198: layouts live here (no new top-bar button). Cull/Edit/Compare jump to the existing
+  // views; saved layouts are the panel sizes, rail mode, open sections, Library sidebar/dock and
+  // studio background, applied with a reload (each part reads its setting at start-up).
+  h+='<div class="fx-ovf-sep"></div><div class="fx-ovf-grp-label">Layout</div>';
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutView('cull')"><span>Cull — full gallery</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutView('edit')"><span>Edit — studio</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutView('compare')"><span>Compare — two-up</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();editorBgSet('#777777')"><span>Neutral grey surround</span></button>`;
+  csLayoutsList().forEach((l,i)=>{h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutApply(${i})"><span>${String(l.name).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}</span></button>`;});
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutSave()"><span>Save current layout…</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutReset()"><span>Reset layout</span></button>`;
+  return h;
+}
+const CS_LAYOUT_KEYS=['cs_panelw','cs_railmode','cs_rail_flat','chromasmith_fx_sec_collapsed','chromasmith_lib_side_w','chromasmith_lib_dock_w','chromasmith_lib_dock_collapsed','chromasmith_lib_sidebar','chromasmith_lib_info_pos','chromasmith_lib_thumbsize','chromasmith_lib_cols'];
+function _csLayoutKeys(){return CS_LAYOUT_KEYS.concat(typeof LS_EDITOR_BG!=='undefined'?[LS_EDITOR_BG]:[]);}
+function csLayoutsList(){try{return JSON.parse(localStorage.getItem('cs_layouts')||'[]')}catch(e){return[]}}
+function csLayoutView(v){
+  const lib=document.getElementById('cs-tog-lib'),studio=document.getElementById('cs-tog-studio');
+  if(v==='edit'){studio&&studio.click();return;}
+  if(!window.__TAURI__&&!/[?&]libtest=1/.test(location.search)){toast('Cull and Compare use the gallery in the desktop app');return;}
+  lib&&lib.click();
+  if(v==='compare')setTimeout(()=>{const b=document.getElementById('lib-compare-btn');if(b)b.click();},300);
+}
+async function csLayoutSave(){
+  const name=(await askTextModal('Save layout','Saves panel sizes, open sections, the gallery sidebar and dock, and the studio background.')||'').trim();if(!name)return;
+  const keys={};_csLayoutKeys().forEach(k=>{try{const v=localStorage.getItem(k);if(v!=null)keys[k]=v;}catch(e){}});
+  const list=csLayoutsList().filter(l=>l.name!==name);list.push({name,keys});
+  try{localStorage.setItem('cs_layouts',JSON.stringify(list));}catch(e){toast('Could not save the layout',false);return;}
+  toast(`Layout "${name}" saved`,true);
+}
+async function csLayoutApply(i){
+  const l=csLayoutsList()[i];if(!l)return;
+  if(!await confirmModal(`Switch to "${l.name}"? The window reloads to apply it — your edits are already saved.`,'Switch'))return;
+  _csLayoutKeys().forEach(k=>{try{if(k in l.keys)localStorage.setItem(k,l.keys[k]);else localStorage.removeItem(k);}catch(e){}});
+  location.reload();
+}
+async function csLayoutReset(){
+  if(!await confirmModal('Reset panel sizes, open sections, the gallery sidebar and dock, and the studio background to their defaults? The window reloads — your edits are already saved.','Reset'))return;
+  _csLayoutKeys().forEach(k=>{try{localStorage.removeItem(k);}catch(e){}});
+  location.reload();
+}
 // Appearance: its own category so the gallery (which hides the Studio-only View pane) shows it too.
 function appearanceBuild(){
   const m=document.getElementById('fx-appearance-menu');if(!m)return;
@@ -24467,6 +24509,7 @@ function appearanceBuild(){
   h+=`<label class="fx-ovf-item" style="cursor:pointer"><span>Primary colour</span><input type="color" data-accent="a" value="${acc.a}" oninput="fxAccentSet('a',this.value)" style="width:28px;height:18px;padding:0;border:0;background:none;cursor:pointer"></label>`;
   h+=`<label class="fx-ovf-item" style="cursor:pointer"><span>Secondary colour</span><input type="color" data-accent="b" value="${acc.b}" oninput="fxAccentSet('b',this.value)" style="width:28px;height:18px;padding:0;border:0;background:none;cursor:pointer"></label>`;
   h+=`<button class="fx-ovf-item" onclick="fxAccentReset()"><span>Reset colours</span></button>`;
+  h+=csLayoutMenuHtml(); // CHR-198: under Appearance so the gallery's settings show it too
   m.innerHTML=h;
 }
 const FX_ACCENT_DEF={a:'#e0500c',b:'#1414a0'};
