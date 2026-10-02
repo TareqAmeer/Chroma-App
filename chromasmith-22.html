@@ -1369,7 +1369,7 @@ body.deskx #btn-loupe,body.deskx #btn-editor-bg,body.deskx #btn-hist{display:non
    from the bar loses no distinct feature, and the hold-Undo gesture (fxUndoMousedown, see
    btn-undo-db's own title) still reaches edit history in one motion without opening any menu.
    Hidden, not deleted, for the same shared-DOM-node reason as the zoom-cluster rules above. */
-body.deskx #btn-split,body.deskx #btn-split-menu,body.deskx #db-history-wrap,body.deskx #btn-history{display:none!important}
+body.deskx #btn-fx-ref,body.deskx #btn-split,body.deskx #btn-split-menu,body.deskx #db-history-wrap,body.deskx #btn-history{display:none!important}
 /* 2026-09-09: width-driven responsive fold, cheapest-first — All FX loses its label before
    Export does, both fold to icon-only (not hidden — they're the two most-used actions in the
    bar) rather than the title/flags/zoom ever having to give up space. Driven by a ResizeObserver
@@ -1844,6 +1844,11 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:var(--fs-2);pointer-events:none}
 #cl-frame{position:relative;box-shadow:none;display:none}
 .cl-cell{position:absolute;overflow:hidden;cursor:pointer;background:transparent}
+/* CHR-178: floating reference photo over the editor canvas — drag the bar, resize the corner */
+#fx-ref-win{position:fixed;z-index:var(--z-dropdown,50);width:320px;min-width:140px;min-height:100px;resize:both;overflow:hidden;background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r-sm);box-shadow:var(--lift-2);display:flex;flex-direction:column}
+#fx-ref-win .ref-bar{display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:var(--fs-1);color:var(--mut);cursor:move;user-select:none}
+#fx-ref-win .ref-bar span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#fx-ref-win img{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
 /* CHR-215: collage title band + per-photo captions (geometry shared with clExport via clTextGeom) */
 .cl-title{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:600;white-space:nowrap;overflow:hidden;pointer-events:none}
 .cl-cap{position:absolute;left:0;right:0;bottom:0;padding:1.2em .6em .45em;color:#fff;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:linear-gradient(transparent,rgba(0,0,0,.55));pointer-events:none}
@@ -4532,6 +4537,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <button class="db-btn" id="btn-editor-bg" onclick="const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)" title="Studio background colour (also right-click the empty area around the photo)" style="padding:0;min-width:28px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center"><span style="display:block;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#000 50%,#fff 50%);border:1px solid var(--bdr)"></span></button>
           <button class="db-btn" id="btn-before" title="Press and hold to see the original"><span class="fx-db-ic" id="ic-before"></span></button>
           <button class="db-btn" id="btn-split" onclick="toggleSplit()" title="Split before/after view"><span class="fx-db-ic" id="ic-split"></span></button>
+          <button class="db-btn" id="btn-fx-ref" onclick="fxRefMenu(this)" title="Reference photo — pin a photo beside the one you're editing to grade toward it"><span class="fx-db-ic" id="ic-fxref"></span></button>
           <div style="position:relative;display:inline-flex">
             <button class="db-btn db-btn-narrow" id="btn-split-menu" onclick="fxToggleSplitMenu(event)" title="Choose what the split's before-side compares against"><span class="fx-db-ic" id="ic-splitmenu"></span></button>
             <div id="fx-split-popover" style="display:none;position:absolute;top:100%;left:0;margin-top:6px;min-width:210px;max-height:320px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:4px;z-index:var(--z-dropdown);box-shadow:none"></div>
@@ -6869,7 +6875,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002K';
+const BUILD='1.1002L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18033,7 +18039,11 @@ async function settingsSplitBuild(){
   await _fxSplitListInto(container,()=>settingsClose());
   const chk='<svg class="fx-ovf-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
   container.insertAdjacentHTML('afterbegin',
-    `<button class="fx-ovf-item${fxSplit?' on':''}" onclick="viewMenuClose();toggleSplit()"><span>Split before / after</span>${chk}</button>`);
+    `<button class="fx-ovf-item${fxSplit?' on':''}" onclick="viewMenuClose();toggleSplit()"><span>Split before / after</span>${chk}</button>`
+    // CHR-178: desktop hides the preview-tools Reference button, so its entries live here.
+    +(document.getElementById('fx-ref-win')
+      ?`<button class="fx-ovf-item on" onclick="viewMenuClose();fxRefClose()"><span>Close reference photo</span>${chk}</button>`
+      :`<button class="fx-ovf-item" onclick="viewMenuClose();fxRefSnapshot()"><span>Pin this photo as reference</span></button><button class="fx-ovf-item" onclick="viewMenuClose();fxRefPickFile()"><span>Reference photo from file…</span></button>`));
 }
 document.addEventListener('click',e=>{
   const wrap=document.getElementById('fx-split-popover');
@@ -19372,6 +19382,48 @@ function _matchOffsets(ref,tgt){
   return{exp:Math.round(clamp(stops*20,40)),temp:Math.round(clamp(temp,40)),tint:Math.round(clamp(tint,40))};
 }
 /// Matches every loaded photo to `refIdx`, writing per-photo adjustOverride values.
+// CHR-178: reference photo window. A pinned image floats over the editor (draggable, resizable)
+// so a photo can be graded by eye toward another — any file on disk, the Library photo passed
+// in by library-ui.js, or a snapshot of the current graded preview (handy before switching to
+// the next photo in a batch). Session-only by design: the object URL dies with the page.
+let _fxRefUrl=null;
+function fxRefShow(url,label){
+  if(_fxRefUrl&&_fxRefUrl!==url)URL.revokeObjectURL(_fxRefUrl);_fxRefUrl=url;
+  let w=document.getElementById('fx-ref-win');
+  if(!w){
+    w=document.createElement('div');w.id='fx-ref-win';
+    w.innerHTML='<div class="ref-bar"><span></span><button class="btn-icon" title="Change reference">'+icon('folder',14)+'</button><button class="btn-icon" title="Close reference">'+icon('close',14)+'</button></div><img alt="Reference photo">';
+    const[bChange,bClose]=w.querySelectorAll('button');
+    bChange.onclick=()=>fxRefPickFile();bClose.onclick=()=>fxRefClose();
+    const bar=w.querySelector('.ref-bar');
+    bar.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;const r=w.getBoundingClientRect(),dx=e.clientX-r.left,dy=e.clientY-r.top;
+      const mv=ev=>{w.style.left=Math.max(0,Math.min(innerWidth-60,ev.clientX-dx))+'px';w.style.top=Math.max(0,Math.min(innerHeight-30,ev.clientY-dy))+'px';};
+      const up=()=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);};addEventListener('pointermove',mv);addEventListener('pointerup',up);});
+    const wrap=document.getElementById('fx-wrap'),r=wrap?wrap.getBoundingClientRect():{right:innerWidth,top:80};
+    w.style.left=Math.max(8,r.right-336)+'px';w.style.top=(r.top+16)+'px';
+    document.body.appendChild(w);
+  }
+  {const im=w.querySelector('img');im.onerror=()=>{fxRefClose();toast('Can\'t preview that file as a reference (RAW?) — open it and use "Pin this photo as edited"',false);};im.src=url;}w.querySelector('.ref-bar span').textContent=label||'Reference';w.style.display='flex';
+  const b=document.getElementById('btn-fx-ref');if(b)b.classList.add('on');
+}
+function fxRefClose(){const w=document.getElementById('fx-ref-win');if(w)w.remove();if(_fxRefUrl){URL.revokeObjectURL(_fxRefUrl);_fxRefUrl=null;}
+  const b=document.getElementById('btn-fx-ref');if(b)b.classList.remove('on');}
+function fxRefPickFile(){const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=()=>{const f=inp.files&&inp.files[0];if(f)fxRefShow(URL.createObjectURL(f),f.name);};inp.click();}
+function fxRefSnapshot(){
+  const cv=FX&&FX.cv;if(!cv||!cv.width){toast('Open a photo first');return;}
+  renderPreview();cv.toBlob(b=>{if(!b){toast('Could not capture the preview');return;}
+    const it=curItem();fxRefShow(URL.createObjectURL(b),(it&&it.name?it.name+' — ':'')+'as edited');},'image/jpeg',0.92);
+}
+window.chromasmithSetReference=(blob,label)=>fxRefShow(URL.createObjectURL(blob),label);
+function fxRefMenu(btn){
+  if(document.getElementById('fx-ref-win')){fxRefClose();return;}
+  const r=btn.getBoundingClientRect();
+  const m=document.createElement('div');m.className='cs-ctx';
+  m.style.cssText=`position:fixed;left:${r.left}px;top:${r.bottom+6}px;z-index:9999;background:var(--glass-bg);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;min-width:200px;box-shadow:var(--lift-2)`;
+  [['Pin this photo as edited',fxRefSnapshot],['Choose a photo…',fxRefPickFile]].forEach(([t,fn])=>{const it=document.createElement('div');it.className='cs-ctx-it';it.style.cssText='padding:7px 10px;border-radius:5px;cursor:pointer';it.textContent=t;it.onclick=()=>{m.remove();fn();};m.appendChild(it);});
+  document.body.appendChild(m);setTimeout(()=>document.addEventListener('click',()=>m.remove(),{once:true}),0);
+}
 async function matchSeriesToReference(refIdx){
   if(fxImages.length<2){toast('Load a set of photos first');return;}
   refIdx=(refIdx==null)?fxCurIdx:refIdx;
@@ -25820,7 +25872,7 @@ syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
  // Replacements for the emoji + unicode glyphs that used to sit in this bar (see ICONS).
  set('db-lib-ic','library');set('db-settings','view');set('ic-before','showOriginal');set('ic-split','split');
  set('ic-zoom-out','zoomOut');set('ic-zoom-in','zoomIn');
- set('ic-splitmenu','chevron');set('ic-timeline','history');set('ic-scope','scope');set('ic-ah-clear','close');set('ic-fullres','fullres');
+ set('ic-splitmenu','chevron');set('ic-fxref','pin');set('ic-timeline','history');set('ic-scope','scope');set('ic-ah-clear','close');set('ic-fullres','fullres');
  // Every element carrying a data-ic attribute — the drop-zone icons, the crop/rotate/flip row,
  // the video transport row — gets its icon() populated the same way as the id-keyed set() calls
  // above. One data-driven pass instead of one `set()` call per element because these sites are

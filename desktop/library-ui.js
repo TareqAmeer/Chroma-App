@@ -6502,6 +6502,13 @@
     // rather than the file itself.
     const verMenu = submenu(`Edit${n > 1 ? ` (${n})` : ''}`); // 3.2.2 rename (was "Versions & edit") — see "Undo last reset" below for the other half of this item
     verMenu.subItem('Copy edit', () => libCopyEdit(paths), kbd('shift', 'C'));
+    // CHR-178: pin this photo (original file) as the Editor's floating reference.
+    if (n === 1 && typeof window.chromasmithSetReference === 'function') {
+      verMenu.subItem('Use as editor reference', async () => {
+        try { const f = await readPathsAsFiles([paths[0]]); if (f[0]) window.chromasmithSetReference(f[0], f[0].name); }
+        catch (e) { toast(humanizeErr('pin reference', e)); }
+      });
+    }
     const pasteRow = verMenu.subItem('Paste edit', () => libPasteEdit(paths), kbd('shift', 'V'));
     // Selective paste (darktable idiom): pick WHICH parts of the copied recipe to apply instead
     // of all-or-nothing — e.g. paste just the grain+halation without also overwriting the LUT.
