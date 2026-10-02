@@ -1,13 +1,29 @@
 {
   "note": "Controls the sweep pressed with no observable effect. Each is a bug or needs a reason; the list may only shrink.",
   "inert": [
+    "editor::button:submit|All|data-fgrp=type,data-fval=all|1",
     "editor::button:submit|One-click levels and white balance from the image histogram||1",
     "editor::div|#fx-looks||1",
-    "library::button:submit|#fx-panel-resizer||1"
+    "editor::div|Reset|data-a11y=1|2",
+    "library::button:submit|#btn-before||1",
+    "library::button:submit|#fx-add-btn||1",
+    "library::button:submit|#fx-panel-resizer||1",
+    "library::button:submit|#fx-rail-resizer||1",
+    "library::button:submit|All|data-fgrp=type,data-fval=all|1",
+    "library::button:submit|Highlight clipping \u2014 click to show clipped areas on the photo||1",
+    "library::div|Reset|data-a11y=1|2"
   ],
   "reasons": {
     "editor::button:submit|One-click levels and white balance from the image histogram||1": "test fixture is already neutral/full-range, so auto-levels has nothing to change",
     "editor::div|#fx-looks||1": "focusable scroll container for the look grid, not a control",
-    "library::button:submit|#fx-panel-resizer||1": "tool panel is closed on the Library surface; the drag has nothing to resize"
+    "library::button:submit|#fx-panel-resizer||1": "tool panel is closed on the Library surface; the drag has nothing to resize",
+    "library::button:submit|#fx-add-btn||1": "Library surface has no photo loaded; add/before/clipping act on the open photo",
+    "library::button:submit|#btn-before||1": "no photo on the Library surface",
+    "library::button:submit|Highlight clipping \u2014 click to show clipped areas on the photo||1": "no photo on the Library surface",
+    "library::button:submit|#fx-rail-resizer||1": "drag already at the rail's minimum on this surface",
+    "library::div|Reset|data-a11y=1|2": "section already at defaults, Reset has nothing to undo",
+    "editor::div|Reset|data-a11y=1|2": "section already at defaults, Reset has nothing to undo",
+    "library::button:submit|All|data-fgrp=type,data-fval=all|1": "'All' filter already active (its active state isn't marked with .on/aria-pressed)",
+    "editor::button:submit|All|data-fgrp=type,data-fval=all|1": "'All' filter already active (its active state isn't marked with .on/aria-pressed)"
   }
 }

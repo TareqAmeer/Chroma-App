@@ -25,7 +25,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { startServer } from './editor_state_harness.mjs';
-import { enumerate, fingerprint } from './sweep_lib.mjs';
+import { enumerate, fingerprint, locate } from './sweep_lib.mjs';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS } from './wireframe_diff_lib.mjs';
 
 const ROOT = process.cwd();
@@ -110,14 +110,31 @@ for (const [name, s] of Object.entries(SURFACES)) {
   const known = new Set(queue.map((c) => c.key));
   const t0 = Date.now();
 
-  const find = async (key) => (await page.evaluate(enumerate)).find((c) => c.key === key);
+  // Wait until the page stops changing (async sidebars, counts, dialogs) — a fixed 250ms after a
+  // replay step left later controls not yet rendered, reported as unreach (CHR-230).
+  const settle = async () => {
+    let prev = null;
+    for (let t = 0; t < 2500; t += 150) {
+      const fp = await page.evaluate(fingerprint).catch(() => null);
+      if (fp !== null && fp === prev) return; prev = fp; await page.waitForTimeout(150);
+    }
+  };
+  const find = async (key) => {
+    const c = (await page.evaluate(enumerate)).find((x) => x.key === key);
+    const at = c && await page.evaluate(locate, key);
+    return at ? { ...c, ...at } : null;
+  };
   const reach = async (c) => {
     let cur = await find(c.key);
     if (cur) return cur; // still visible and uncovered: reuse the page instead of a 2-10s reboot
-    await boot(page, port, s); atBaseline = true;
-    for (const step of c.path) {
-      const sc = await find(step); if (!sc) return null;
-      await act(page, sc); await page.waitForTimeout(250); atBaseline = false;
+    await boot(page, port, s); await settle(); atBaseline = true;
+    for (let i = 0; i < c.path.length; i++) {
+      const sc = await find(c.path[i]); if (!sc) return null;
+      // A toggle whose on/off state already differs from when discovery clicked it is already in
+      // the state that click produced (e.g. the Gallery toggle after a fresh boot) — clicking it
+      // again would undo the step (CHR-230).
+      if (c.pathSel && sc.selected !== c.pathSel[i]) continue;
+      await act(page, sc); await settle(); atBaseline = false;
     }
     return find(c.key);
   };
@@ -146,7 +163,7 @@ for (const [name, s] of Object.entries(SURFACES)) {
       atBaseline = false;
       if (c.path.length < DEPTH) {
         for (const n of await page.evaluate(enumerate).catch(() => [])) {
-          if (!known.has(n.key)) { known.add(n.key); queue.push({ ...n, path: [...c.path, c.key] }); }
+          if (!known.has(n.key)) { known.add(n.key); queue.push({ ...n, path: [...c.path, c.key], pathSel: [...(c.pathSel || []), cur.selected] }); }
         }
       }
       await page.keyboard.press('Escape').catch(() => {});

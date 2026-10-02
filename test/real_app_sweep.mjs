@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { enumerate, fingerprint } from './sweep_lib.mjs';
+import { enumerate, fingerprint, locate } from './sweep_lib.mjs';
 
 const arg = (k, d) => { const a = process.argv.find((x) => x.startsWith(`--${k}=`)); return a ? a.split('=')[1] : d; };
 const DEPTH = +arg('depth', 1), LIMIT = +arg('limit', 1e9), ONLY = arg('surface', null);
@@ -143,14 +143,19 @@ try {
     const results = new Map(), famCount = new Map();
     const queue = (await call(enumerate)).map((c) => ({ ...c, path: [] }));
     const known = new Set(queue.map((c) => c.key));
-    const find = async (k) => (await call(enumerate)).find((c) => c.key === k);
+    const settle = async () => { let prev = null; for (let t = 0; t < 2500; t += 200) { const fp = await call(fingerprint).catch(() => null); if (fp !== null && fp === prev) return; prev = fp; await sleep(200); } };
+    const find = async (k) => {
+      const c = (await call(enumerate)).find((x) => x.key === k);
+      const at = c && await call(locate, k);
+      return at ? { ...c, ...at } : null;
+    };
     while (queue.length && results.size < LIMIT) {
       const c = queue.shift();
       if (results.has(c.key)) continue;
       if (SKIP.test(c.label)) { results.set(c.key, { status: 'skipped', label: c.label, path: c.path }); continue; }
       const fk = c.family + '@' + c.path.length, fc = (famCount.get(fk) || 0) + 1; famCount.set(fk, fc); if (fc > 3) continue;
       let cur = await find(c.key);
-      if (!cur) { await reload(surface); for (const st of c.path) { const sc = await find(st); if (sc) { await call(actInPage, sc); await sleep(300); } } cur = await find(c.key); }
+      if (!cur) { await reload(surface); for (let i = 0; i < c.path.length; i++) { const sc = await find(c.path[i]); if (sc && !(c.pathSel && sc.selected !== c.pathSel[i])) { await call(actInPage, sc); await settle(); } } cur = await find(c.key); }
       if (!cur) { results.set(c.key, { status: 'unreach', label: c.label, path: c.path }); continue; }
       await call(installErrHook);
       const before = await call(fingerprint);
@@ -162,7 +167,7 @@ try {
       const status = errs.length ? 'error' : after !== before ? 'changed' : cur.selected ? 'selected' : 'inert';
       results.set(c.key, { status, label: c.label, kind: c.kind, path: c.path, errors: errs });
       if (status === 'changed' && c.path.length < DEPTH) {
-        for (const n of await call(enumerate).catch(() => [])) if (!known.has(n.key)) { known.add(n.key); queue.push({ ...n, path: [...c.path, c.key] }); }
+        for (const n of await call(enumerate).catch(() => [])) if (!known.has(n.key)) { known.add(n.key); queue.push({ ...n, path: [...c.path, c.key], pathSel: [...(c.pathSel || []), cur.selected] }); }
       }
       if (status === 'changed') await call(pressEscape).catch(() => {});
       if (results.size % 20 === 0) console.log(`  ${surface}: ${results.size} done, ${queue.length} queued`);
