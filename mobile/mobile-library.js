@@ -65,7 +65,7 @@ async function importFiles(files){
   await flush();const ids=[],issues=[],ps=await allPhotos();let duplicates=0;
   for(let n=0;n<files.length;n++){
     const f=files[n];status('Importing '+(n+1)+' of '+files.length+' · '+f.name);
-    if(!(f.type.startsWith('image/')||/\.(rw2|dng|tiff?|heic|heif|jpe?g|png|webp|avif)$/i.test(f.name))){issues.push({name:f.name,message:'Unsupported file type'});continue;}
+    if(!(f.type.startsWith('image/')||/\.(rw2|raw|dng|cr2|cr3|nef|arw|orf|raf|tiff?|heic|heif|jpe?g|png|webp|avif)$/i.test(f.name))){issues.push({name:f.name,message:'Unsupported file type'});continue;}
     try{
       const hash=await fingerprint(f);let existing=ps.find(p=>p.hash===hash);if(existing&&hash.startsWith('fnv:')&&!await identical(f,await getBlob(existing.id)))existing=null;
       // Legacy imports and origins without Web Crypto use a byte-verified fallback hash.
@@ -85,6 +85,15 @@ async function importFiles(files){
   return [...new Set(ids)];
 }
 function showImportIssues(issues,files){UI().sheet('Import results',issues.map(i=>'<p><b>'+esc(i.name)+'</b><br>'+esc(i.message)+'</p>').join('')+'<button data-retry>Retry failed files</button>',(el,close)=>el.querySelector('[data-retry]').onclick=()=>{close();safe(()=>importAndOpen(files.filter(f=>issues.some(i=>i.name===f.name))));});}
+// iOS: the native picker returns every original of each picked photo, so a RAW+JPEG shot
+// arrives as both files (the web file picker only hands over the JPEG). False = not available.
+async function importFromPhotos(){
+  const cap=window.Capacitor,pp=cap?.Plugins?.PhotoPair;if(!pp||cap.getPlatform?.()!=='ios')return false;
+  let res;try{res=await pp.pick();}catch(e){status(e?.message||'Could not open Photos',true);return true;}
+  const list=res?.files||[];if(!list.length)return true;status('Importing '+list.length+' file'+(list.length>1?'s':'')+'…');
+  const files=[];for(const f of list){try{const blob=await (await fetch(cap.convertFileSrc(f.path))).blob();files.push(new File([blob],f.name,{type:blob.type||''}));}catch(e){}}
+  if(files.length)await importAndOpen(files);else status('');return true;
+}
 async function importAndOpen(files){const ids=await importFiles([...files]);if(!ids.length){await open();return;}queue=ids;await openPhoto(ids[0]);}
 window.loadFXImages=async function(files){if(window.__mlibOpening)return origLoad.apply(this,arguments);await importAndOpen([...files]);return curItem();};
 async function openPhoto(i,{recipe,original=false}={}){
@@ -189,7 +198,7 @@ function build(){
     if(b?.dataset.f){filter=b.dataset.f;setSelecting(false);safe(render);return;}
     const menu=e.target.closest('.photo-menu');if(menu){safe(()=>filter==='trash'?trashActions([menu.dataset.id]):photoActions(menu.dataset.id));return;}
     if(c){if(selecting){selected.has(c.dataset.id)?selected.delete(c.dataset.id):selected.add(c.dataset.id);c.classList.toggle('sel',selected.has(c.dataset.id));c.setAttribute('aria-pressed',String(selected.has(c.dataset.id)));selectionCount();}else if(filter==='trash')safe(()=>trashActions([c.dataset.id]));else safe(async()=>{queue=[c.dataset.id];await openPhoto(c.dataset.id);});return;}
-    if(!b)return;safe(async()=>{switch(b.dataset.a){case 'select':setSelecting(!selecting);break;case 'import':root.querySelector('.import-file').click();break;case 'editor':if(openedId)close();else toast('Import or open a photo first');break;case 'settings':await settings();break;case 'edit':queue=[...selected];setSelecting(false);await openPhoto(queue[0]);break;case 'more':await selectionActions();break;case 'remove':filter==='trash'?await removePermanently([...selected]):await trash([...selected]);break;}});
+    if(!b)return;safe(async()=>{switch(b.dataset.a){case 'select':setSelecting(!selecting);break;case 'import':if(!await importFromPhotos())root.querySelector('.import-file').click();break;case 'editor':if(openedId)close();else toast('Import or open a photo first');break;case 'settings':await settings();break;case 'edit':queue=[...selected];setSelecting(false);await openPhoto(queue[0]);break;case 'more':await selectionActions();break;case 'remove':filter==='trash'?await removePermanently([...selected]):await trash([...selected]);break;}});
   };
   ensureEditorChrome();
 }
