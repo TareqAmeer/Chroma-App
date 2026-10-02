@@ -590,6 +590,36 @@
         }
         return Promise.resolve({ total: n, capped: false, entries });
       }
+      // ── Stand-ins added for native:contract (shapes from the Rust signatures). Side-effect
+      // commands record into window.__libtestCalls so flow tests can assert what was asked for.
+      case 'append_export_history': case 'registry_set_many': case 'catalog_keep_root':
+      case 'reveal_in_finder': case 'touch_recent': case 'write_file_bytes':
+      case 'cancel_registry_rescan': case 'hq_offline_force_quit':
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        return Promise.resolve(null);
+      case 'backfill_edited_registry': return Promise.resolve(0);
+      case 'rescan_edited_registry_recursive': return Promise.resolve(0);
+      case 'catalog_remove_root': return Promise.resolve(0);
+      case 'catalog_photo_ids_for_paths': return Promise.resolve((A.paths || []).map((p) => parseInt((/(\d+)\.\w+$/.exec(p) || [])[1] || '0', 10) - 1000));
+      case 'collage_output_path': return Promise.resolve(String(A.firstSource || '/test/AllPhotos/x.jpg').replace(/[^/]*$/, 'Collage.jpg'));
+      case 'take_pending_open_path': return Promise.resolve([]);
+      // Decode caches: the real commands return Err on a miss, which every caller already treats
+      // as "decode it yourself" — a permanent miss exercises that path.
+      case 'cache_raw_decode': case 'get_cached_raw_decode': case 'get_decode_cache': case 'get_decode_cache_path':
+        return Promise.reject(new Error('libtest: not cached'));
+      // ?libshapes tests time the real fallback path (full read_file_bytes), which these fast
+      // paths would short-circuit with the wrong bytes — keep them missing there.
+      case 'get_thumbnail_fast': case 'read_file_head':
+        if (LT_SHAPES) return Promise.reject(new Error('libtest: fast path off in shapes mode'));
+        return Promise.resolve(png.buffer.slice(0));
+      // The mock's ".RW2" files are really PNG bytes, so a camera ident would route them into the
+      // RAW decoder; only ?libraw=1 (a test that supplies real RAW bytes) gets one.
+      case 'peek_raw_camera': case 'peek_raw_camera_path':
+        if (!/[?&]libraw=1/.test(location.search)) return Promise.reject(new Error('libtest: not a RAW'));
+        return Promise.resolve({ make: 'Panasonic', model: 'DC-S9', lens: 'LUMIX S 18-40/F4.5-6.3', photo_style: null });
+      case 'merge_hdr_photos': case 'merge_focus_photos': case 'merge_panorama_photos': case 'merge_astro_photos':
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        return Promise.resolve(String((A.paths || ['/test/AllPhotos/IMG_1001.RW2'])[0]).replace(/\.\w+$/, `-${cmd.split('_')[1]}.tif`));
       default: return Promise.reject(new Error('libtest: no mock for ' + cmd));
     }
   }
