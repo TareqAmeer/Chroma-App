@@ -681,6 +681,11 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 /* A look whose vendor/luts/ fetch failed (offline before the warm-up finished). Marked rather
    than removed, so the cell keeps its place and retries on the next gallery rebuild. */
 .look-cell-err{opacity:var(--op-2)}
+/* CHR-189: desktop favourite star — hover to reveal, stays visible once starred. Phones use long-press instead. */
+.look-fav{position:absolute;top:3px;left:3px;width:22px;height:22px;padding:0;border:0;border-radius:var(--r-sm);background:rgba(0,0,0,.45);color:#fff;font-size:13px;line-height:22px;text-align:center;cursor:pointer;opacity:0;transition:opacity .12s}
+.look-cell:hover .look-fav,.look-fav:focus-visible,.look-cell.fav .look-fav{opacity:1}
+.look-cell.fav .look-fav{color:var(--acc)}
+body.mobile-fx .look-fav{display:none}
 .look-cell-err::after{content:"offline";position:absolute;inset:auto 0 18px 0;text-align:center;font-size:var(--fs-2);color:var(--mut)}
 .look-cell canvas{display:block;width:100%;height:auto}
 .look-cell .look-nm{font-family:var(--mono);font-size:var(--fs-2);color:var(--txt);padding:2px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--scrim-b3)}
@@ -6844,7 +6849,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002C';
+const BUILD='1.1002D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21455,6 +21460,8 @@ function buildLookGallery(){
     const cv=document.createElement('canvas');cv.width=w;cv.height=h;
     cell.appendChild(cv);
     const nm=document.createElement('div');nm.className='look-nm';nm.textContent=label;cell.appendChild(nm);
+    if(val){const st=document.createElement('button');st.type='button';st.className='look-fav';st.textContent='\u2605';st.title='Favourite';st.setAttribute('aria-label','Favourite '+label);
+      st.onclick=e=>{e.stopPropagation();if(window.csToggleFav)csToggleFav(cell,val);};cell.appendChild(st);}
     cell.title=label+(curCat&&val?' — '+curCat:'');
     cell.onclick=()=>{
       // Tap the already-chosen look again: jump to its Strength slider (phone editors' convention).
@@ -26577,6 +26584,35 @@ if(/[?&]catalog=1/.test(location.search)){
     e.preventDefault();sl.value=d;sl.dispatchEvent(new Event('input',{bubbles:true}));
     try{if(typeof hapt==='function')hapt('MEDIUM');}catch(_){}
   });
+})();
+</script>
+<script>
+/* CHR-189: favourite + recent looks on desktop. Same storage keys as the mobile long-press
+   block below (csFavLooks / csRecentLooks), so both share one list. Wraps csLookSpecials
+   rather than editing the mobile block, which only offers the chips on phones. */
+(function(){
+  var mob=function(){return document.body.classList.contains('mobile-fx');};
+  var LS=function(k,d){try{return JSON.parse(localStorage.getItem(k)||'null')||d;}catch(e){return d;}};
+  var SV=function(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
+  var key=function(val){return String(val||'').replace(/^p:/,'');};
+  function specials(){var o=[];if(LS('csRecentLooks',[]).length)o.push('Recent');if(LS('csFavLooks',[]).length)o.push('Favourites');return o;}
+  document.addEventListener('DOMContentLoaded',function(){
+    var base=window.csLookSpecials;
+    window.csLookSpecials=function(){return mob()&&base?base():specials();};
+  });
+  window.csToggleFav=function(cell,val){
+    var k=key(val),f=LS('csFavLooks',[]),i=f.indexOf(k);if(i>=0)f.splice(i,1);else f.unshift(k);SV('csFavLooks',f);
+    cell.classList.toggle('fav',i<0);
+    if(typeof toast==='function')toast(i<0?'Added to favourites':'Removed from favourites');
+    if(typeof buildLookCatChips==='function')buildLookCatChips();
+    if(typeof fxLookCatFilter!=='undefined'&&fxLookCatFilter==='Favourites'&&typeof buildLookGallery==='function')buildLookGallery();
+  };
+  document.addEventListener('click',function(e){
+    if(mob())return;var t=e.target;if(!t.closest||t.closest('.look-fav'))return;
+    var cell=t.closest('.look-cell');if(!cell||!cell._lookJob||!cell._lookJob.val)return;
+    var k=key(cell._lookJob.val),r=LS('csRecentLooks',[]).filter(function(x){return x!==k;});r.unshift(k);SV('csRecentLooks',r.slice(0,8));
+    setTimeout(function(){if(typeof buildLookCatChips==='function')buildLookCatChips();},400);
+  },true);
 })();
 </script>
 <script>
