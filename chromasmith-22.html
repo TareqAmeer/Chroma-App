@@ -3600,17 +3600,26 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="dz-sb">Photo with the look you want to copy</div><div class="dz-fn" id="fn-cp-ref"></div>
       </div>
     </div>
+    <!-- CHR-223: live preview — drag the line: left is your photo as shot, right is the match -->
+    <div id="cp-prev" style="display:none;margin:10px 0;gap:10px;align-items:flex-start">
+      <div style="position:relative;flex:0 1 auto;max-width:72%;cursor:ew-resize;touch-action:none" id="cp-prev-wrap">
+        <canvas id="cp-prev-after" style="display:block;max-width:100%;max-height:340px;width:auto;height:auto"></canvas>
+        <canvas id="cp-prev-before" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+        <div id="cp-prev-line" style="position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 4px rgba(0,0,0,.6);pointer-events:none"></div>
+      </div>
+      <div style="flex:0 1 200px;min-width:0"><div class="vlb" style="margin-bottom:4px">Reference</div><canvas id="cp-prev-ref" style="display:block;max-width:100%;max-height:200px;width:auto;height:auto"></canvas></div>
+    </div>
     <div class="vrow">
       <div class="vlb">Name</div>
       <input class="vinput" id="cp-name" value="colour_copy" placeholder="colour_copy">
       <div class="vlb" id="cp-ver" style="color:var(--acc)">v1.0</div>
     </div>
     <!-- CHR-220: how much of the match to apply, per tonal range, and keep skin tones out of it -->
-    <div class="vrow"><div class="vlb">Strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-str" oninput="document.getElementById('cp-str-v').textContent=this.value"><div class="vlb" id="cp-str-v">100</div></div>
-    <div class="vrow"><div class="vlb">Shadows</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-sh" oninput="document.getElementById('cp-sh-v').textContent=this.value"><div class="vlb" id="cp-sh-v">100</div></div>
-    <div class="vrow"><div class="vlb">Midtones</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-md" oninput="document.getElementById('cp-md-v').textContent=this.value"><div class="vlb" id="cp-md-v">100</div></div>
-    <div class="vrow"><div class="vlb">Highlights</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-hl" oninput="document.getElementById('cp-hl-v').textContent=this.value"><div class="vlb" id="cp-hl-v">100</div></div>
-    <label class="vrow" style="cursor:pointer;gap:8px"><input type="checkbox" id="cp-skin"> Protect skin tones</label>
+    <div class="vrow"><div class="vlb">Strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-str" oninput="document.getElementById('cp-str-v').textContent=this.value;cpPreviewUpdate()"><div class="vlb" id="cp-str-v">100</div></div>
+    <div class="vrow"><div class="vlb">Shadows</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-sh" oninput="document.getElementById('cp-sh-v').textContent=this.value;cpPreviewUpdate()"><div class="vlb" id="cp-sh-v">100</div></div>
+    <div class="vrow"><div class="vlb">Midtones</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-md" oninput="document.getElementById('cp-md-v').textContent=this.value;cpPreviewUpdate()"><div class="vlb" id="cp-md-v">100</div></div>
+    <div class="vrow"><div class="vlb">Highlights</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-hl" oninput="document.getElementById('cp-hl-v').textContent=this.value;cpPreviewUpdate()"><div class="vlb" id="cp-hl-v">100</div></div>
+    <label class="vrow" style="cursor:pointer;gap:8px"><input type="checkbox" id="cp-skin" onchange="cpPreviewUpdate()"> Protect skin tones</label>
     <div class="btn-row">
       <button class="btn bpri" id="btn-cp" disabled onclick="runColourCopy('lut')">Download .cube LUT</button>
       <button class="btn bsec" id="btn-cp-xmp" disabled onclick="runColourCopy('xmp')">Download .xmp Preset</button>
@@ -6879,7 +6888,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002N';
+const BUILD='1.1002O';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -7427,6 +7436,33 @@ function cpAdjustLUT(lut,o){
 }
 function cpOpts(){const v=id=>{const e=document.getElementById(id);return e?(+e.value)/100:1;};
   return{str:v('cp-str'),sh:v('cp-sh'),md:v('cp-md'),hl:v('cp-hl'),skin:!!(document.getElementById('cp-skin')||{}).checked};}
+// CHR-223: small live preview of the match. The base histogram LUT is cached per photo pair;
+// slider moves only re-run cpAdjustLUT + the 640px apply, which is fast enough to track a drag.
+let _cpPrev=null,_cpSplit=0.5;
+async function cpPreviewBuild(){
+  const box=document.getElementById('cp-prev');if(!box)return;
+  try{
+    const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
+    const s=getPx(sImg,640),r=getPx(rImg,640),rs=getPx(rImg,320);
+    _cpPrev={s,base:histMatch(s.px,r.px,s.w*s.h,r.w*r.h)};
+    const put=(id,o)=>{const c=document.getElementById(id);c.width=o.w;c.height=o.h;c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(o.px),o.w,o.h),0,0);};
+    put('cp-prev-before',s);put('cp-prev-ref',rs);
+    box.style.display='flex';cpPreviewUpdate();
+    const wrap=document.getElementById('cp-prev-wrap');
+    if(!wrap._wired){wrap._wired=true;const set=e=>{const b=wrap.getBoundingClientRect();_cpSplit=Math.max(0,Math.min(1,(e.clientX-b.left)/b.width));cpPreviewSplit();};
+      wrap.addEventListener('pointerdown',e=>{wrap.setPointerCapture(e.pointerId);set(e);});wrap.addEventListener('pointermove',e=>{if(e.buttons)set(e);});}
+  }catch(e){box.style.display='none';}
+}
+function cpPreviewUpdate(){
+  if(!_cpPrev)return;const{s,base}=_cpPrev;
+  const out=applyLUTtoPx(s.px,cpAdjustLUT(base,cpOpts()));
+  const c=document.getElementById('cp-prev-after');c.width=s.w;c.height=s.h;c.getContext('2d').putImageData(new ImageData(out,s.w,s.h),0,0);
+  cpPreviewSplit();
+}
+function cpPreviewSplit(){
+  const b=document.getElementById('cp-prev-before'),l=document.getElementById('cp-prev-line');if(!b||!l)return;
+  b.style.clipPath=`inset(0 ${(100-_cpSplit*100).toFixed(1)}% 0 0)`;l.style.left=`calc(${(_cpSplit*100).toFixed(1)}% - 1px)`;
+}
 async function runColourCopy(type){
   if(!ST.cpSrcFile||!ST.cpRefFile)return;
   const btn=document.getElementById(type==='lut'?'btn-cp':type==='look'?'btn-cp-look':'btn-cp-xmp');btn.disabled=true;
@@ -24083,7 +24119,7 @@ async function hf(file,type){
   else if(type.startsWith('dev-')){const idx=parseInt(type.split('-')[1]);if(ST.history[idx]){ST.history[idx].deviceFile=file;setDZ(`dz-dev-${idx}`,`fn-dev-${idx}`,file.name);const btn=document.getElementById(`btn-ref-${idx}`);if(btn)btn.disabled=false}}
 }
 function chkStart(){document.getElementById('btn-start').disabled=!(ST.beforeFile&&ST.targetFile)}
-function chkCP(){const ok=ST.cpSrcFile&&ST.cpRefFile;document.getElementById('btn-cp').disabled=!ok;document.getElementById('btn-cp-xmp').disabled=!ok;const lk=document.getElementById('btn-cp-look');if(lk)lk.disabled=!ok}
+function chkCP(){const ok=ST.cpSrcFile&&ST.cpRefFile;if(ok)cpPreviewBuild();document.getElementById('btn-cp').disabled=!ok;document.getElementById('btn-cp-xmp').disabled=!ok;const lk=document.getElementById('btn-cp-look');if(lk)lk.disabled=!ok}
 function setDZ(dzId,fnId,name){const dz=document.getElementById(dzId);if(dz)dz.classList.add('loaded');const fn=document.getElementById(fnId);if(fn)fn.textContent=name}
 
 // ═══════════════════════════
