@@ -2525,6 +2525,15 @@ body.sk2 .look-cat-hdr,body.sk2 .sk2x-cap,body.sk2 #lib-overlay .lib-coll-headin
 body.sk2.deskx .fx-panel{padding-left:calc(var(--sk-g)*3)!important;padding-right:calc(var(--sk-g)*3)!important}
 body.sk2 .fx-ctrl,body.sk2 .fx-fields{padding-left:0!important;padding-right:0!important;margin-left:0!important;margin-right:0!important}
 body.sk2 .fx-ctrl-title{padding-left:0!important;padding-right:0!important}
+/* CHR-193: per-section scope icon — only when several photos are open (body.cs-multi) */
+.sec-scope{display:none;all:unset;cursor:pointer;margin-left:10px;width:22px;height:22px;align-items:center;justify-content:center;color:var(--k-color-muted);flex:0 0 auto}
+body.cs-multi .sec-scope{display:inline-flex}
+.sec-scope:hover{color:var(--k-color-ink)}
+.sec-scope.one{color:var(--k-color-accent-a)}
+.sec-scope[aria-disabled="true"]{cursor:default;opacity:.55}
+.sec-scope:focus-visible{outline:2px solid var(--k-color-accent-a);outline-offset:2px}
+
+body.cs-multi #adj-scope-row{display:none!important}
 /* 3 · Numbers: tabular, one colour, one right edge. */
 body.sk2 .fx-val,body.sk2 #lib-overlay .lib-coll-count,body.sk2 #lib-overlay .lgt-m,body.sk2 .sk2-bb-n{font-variant-numeric:tabular-nums;text-align:right}
 body.sk2 .fx-val{min-width:3.2em}
@@ -6911,7 +6920,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002A';
+const BUILD='1.1002B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -12669,6 +12678,7 @@ function fxUpdate(){
   {const it=typeof curItem==='function'?curItem():null;
    if(it&&it.adjustOverride)it.adjustOverride=domAdjustVals();
    else fxState.sharedAdjust=domAdjustVals();}
+  if(typeof secScopePersist==='function')secScopePersist();
   // History push is debounced here (unlike the curve editor/brush, which push explicitly on
   // pointerup) because every one of the ~35 sliders above calls fxUpdate() on `oninput` —
   // dozens of times per second while dragging. fxHistoryPush() stringifies the whole UI
@@ -12737,7 +12747,63 @@ function adjToggleScope(){
   adjSyncScopeUI();
   fxUpdate();
 }
+// CHR-193: per-section "this photo / all photos" scope. With several photos open each section
+// header gets an icon: stacked photos = the section is shared by all open photos, single photo
+// (accent) = this photo has its own values. Light uses the existing adjustOverride; the film and
+// detail sections below read only their own inputs + on/off switch (getFXParams reads the DOM),
+// so a photo's own values are kept as a snapshot of those inputs and swapped into the DOM when
+// that photo is shown or rendered. Geometry, masks and retouch are always per photo (locked);
+// the rest (looks, curves, colour tools…) keep internal state outside their inputs and stay
+// shared for now (locked).
+const SEC_SCOPE_DOM=['grain','art','hal','bloom','vig','nr','deconv'];
+// One photo vs a stack of photos — drawn here (no stock icon says "all open photos").
+const _SEC_ICON_ONE='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="6" width="14" height="12"/><path d="M5 15l4-4 4 4 2-2 4 4"/></svg>';
+const _SEC_ICON_ALL='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="9" width="12" height="10"/><path d="M7 9V6h11v9h-3"/><path d="M11 6V3h10v9h-3"/></svg>';
+const SEC_ALWAYS_ONE=['crop','rotate','straighten','local','retouch'];
+fxState.sharedSec=fxState.sharedSec||{};
+let _secSwap=false;
+function _secInputs(sec){const c=document.querySelector(`.fx-ctrl[data-fxsec="${sec}"]`);return c?[...c.querySelectorAll('input[id],select[id]')].filter(e=>e.type!=='file'):[];}
+function secVals(sec){const v={};_secInputs(sec).forEach(e=>{v[e.id]=e.type==='checkbox'?e.checked:e.value;});const tg=document.getElementById('tg-'+sec);if(tg)v.__on=tg.classList.contains('on');return v;}
+function secApply(sec,v){if(!v)return;_secInputs(sec).forEach(e=>{if(!(e.id in v))return;if(e.type==='checkbox')e.checked=v[e.id];else e.value=v[e.id];if(e.type==='range'&&typeof fxPaintSlider==='function')fxPaintSlider(e);});
+  const tg=document.getElementById('tg-'+sec);if(tg&&'__on' in v&&tg.classList.contains('on')!==v.__on){tg.classList.toggle('on',v.__on);const ff=document.getElementById('ff-'+sec);if(ff)ff.classList.toggle('ff-off',!v.__on);}}
+function _secScoped(){const set=new Set();(fxImages||[]).forEach(it=>Object.keys(it.secOverride||{}).forEach(k=>set.add(k)));return[...set];}
+// Called from fxUpdate and before switching photos: file the live inputs under the right owner.
+function secScopePersist(){if(_secSwap)return;const it=curItem();_secScoped().forEach(sec=>{
+  if(it&&it.secOverride&&it.secOverride[sec])it.secOverride[sec]=secVals(sec);else fxState.sharedSec[sec]=secVals(sec);});}
+function secScopeShowItem(it){_secSwap=true;try{_secScoped().forEach(sec=>secApply(sec,(it.secOverride&&it.secOverride[sec])||fxState.sharedSec[sec]));}finally{_secSwap=false;}secScopeSyncUI();}
+// Export: temporarily put item's own values in the DOM; returns a restore function.
+function secScopeSwapIn(it){const secs=_secScoped();if(!secs.length)return null;const cur=curItem();
+  _secSwap=true;secs.forEach(sec=>secApply(sec,(it.secOverride&&it.secOverride[sec])||fxState.sharedSec[sec]));
+  return()=>{secs.forEach(sec=>secApply(sec,(cur&&cur.secOverride&&cur.secOverride[sec])||fxState.sharedSec[sec]));_secSwap=false;};}
+function secScopeToggle(sec){
+  const it=curItem();if(!it||fxImages.length<2)return;
+  if(sec==='adjust'){adjToggleScope();secScopeSyncUI();return;}
+  if(!SEC_SCOPE_DOM.includes(sec))return;
+  it.secOverride=it.secOverride||{};
+  if(it.secOverride[sec]){delete it.secOverride[sec];_secSwap=true;secApply(sec,fxState.sharedSec[sec]);_secSwap=false;
+    toast(`${CS_NAMES[sec]||sec} follows all ${fxImages.length} photos again`);}
+  else{const v=secVals(sec);if(!fxState.sharedSec[sec])fxState.sharedSec[sec]=v;it.secOverride[sec]=JSON.parse(JSON.stringify(v));
+    toast(`${CS_NAMES[sec]||sec}: changes now apply to this photo only`);}
+  secScopeSyncUI();fxUpdate();
+}
+function secScopeSyncUI(){
+  const multi=(fxImages||[]).length>1;document.body.classList.toggle('cs-multi',multi);if(!multi)return;
+  const it=curItem(),n=fxImages.length;
+  document.querySelectorAll('.fx-ctrl[data-fxsec]>.fx-ctrl-title').forEach(t=>{
+    const sec=t.parentElement.dataset.fxsec;let b=t.querySelector(':scope>.sec-scope');
+    if(!b){b=document.createElement('button');b.type='button';b.className='sec-scope';const tg=t.querySelector(':scope>.fx-toggle');t.insertBefore(b,tg||null);
+      b.addEventListener('click',e=>{e.stopPropagation();if(b.getAttribute('aria-disabled')!=='true')secScopeToggle(sec);});}
+    const always=SEC_ALWAYS_ONE.includes(sec),canToggle=sec==='adjust'||SEC_SCOPE_DOM.includes(sec);
+    const one=always||(sec==='adjust'?!!(it&&it.adjustOverride):!!(it&&it.secOverride&&it.secOverride[sec]));
+    b.classList.toggle('one',one&&!always);b.innerHTML=one?_SEC_ICON_ONE:_SEC_ICON_ALL;
+    b.setAttribute('aria-disabled',String(always||!canToggle));b.setAttribute('aria-pressed',String(one));
+    const nm=CS_NAMES[sec]||sec;
+    b.title=always?`${nm} always applies to this photo only`:!canToggle?`${nm} applies to all ${n} photos`:one?`${nm}: this photo only — click to apply to all ${n} photos`:`${nm}: applies to all ${n} photos — click for this photo only`;
+    b.setAttribute('aria-label',b.title);
+  });
+}
 function adjSyncScopeUI(){
+  if(typeof secScopeSyncUI==='function')secScopeSyncUI();
   const row=document.getElementById('adj-scope-row');if(!row)return;
   row.style.display=fxImages.length>1?'flex':'none';
   const btn=document.getElementById('btn-adj-scope');if(!btn)return;
@@ -20810,6 +20876,7 @@ function fxSelectImage(idx){
   // with the incoming photo's own values below.
   {const outIt=fxImages[fxCurIdx];
    if(outIt){if(outIt.adjustOverride)outIt.adjustOverride=domAdjustVals();else fxState.sharedAdjust=domAdjustVals();}}
+  if(typeof secScopePersist==='function')secScopePersist();
   fxCurIdx=idx;
   samInvalidate(); // AI Select embeddings belong to the OUTGOING photo — see samInvalidate's doc comment
   const it=fxImages[fxCurIdx];
@@ -20826,6 +20893,7 @@ function fxSelectImage(idx){
   // (adjToggleScope), else the shared batch-wide baseline.
   applyAdjustVals(it.adjustOverride||fxState.sharedAdjust||domAdjustVals());
   if(typeof adjSyncScopeUI==='function')adjSyncScopeUI();
+  if(typeof secScopeShowItem==='function')secScopeShowItem(it);
   document.getElementById('fx-fname').value=it.name;
   fxDeskbarTitle(it.name,fxDimsFmt(it.name,it.img,it.ext));
   setDZ('dz-fx-img','fn-fx-img',fxImages.length>1?`${fxImages.length} images — previewing ${fxCurIdx+1}/${fxImages.length}: ${it.name}`:it.name);
@@ -22061,7 +22129,8 @@ async function _exportFXRun(){
     // CHR-183: every photo's parameters are captured BEFORE the first render, so sliders moved
     // while the export runs can't leak into the photos still waiting in the queue.
     const _expPs=items.map(it=>{const sm=fxState.masks;fxState.masks=it.masks||[];
-      try{const p=getFXParams(it.adjustOverride||undefined);try{return structuredClone(p);}catch(e){return p;}}finally{fxState.masks=sm;}});
+      const undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null; // CHR-193: this photo's own section values
+      try{const p=getFXParams(it.adjustOverride||undefined);try{return structuredClone(p);}catch(e){return p;}}finally{fxState.masks=sm;if(undo)undo();}});
     for(let idx=0;idx<items.length;idx++){
       if(fxExportCancel){log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
       const it=items[idx];
