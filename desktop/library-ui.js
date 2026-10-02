@@ -2295,6 +2295,7 @@
           <button class="fx-ovf-item opt-action" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',15)}<span>Get Info</span></button>
           <button class="fx-ovf-item opt-action" id="lib-expand" title="Full-window view — G">${ic('fit',15)}<span>Full-window view</span></button>
           <button class="fx-ovf-item opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C">${ic('compare',15)}<span>Compare view</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-preview-btn" title="Show photos from this view as a moving wall, drift, scattered prints or cursor trail">${ic('play',15)}<span>Photo preview</span></button>
           </div>
           <div class="fx-settings-pane lib-settings-pane" id="lib-pane-thumbnails">
           <div class="fx-ovf-grp-label">Layout</div>
@@ -8496,6 +8497,7 @@
   // keyboard shortcut, still wired the same way elsewhere) — a real feature, just not one of
   // the two everyday view modes.
   overlay.querySelector('#lib-compare-btn')?.addEventListener('click', () => enterCompareMode());
+  overlay.querySelector('#lib-preview-btn')?.addEventListener('click', () => { if (window.settingsClose) settingsClose(); openPhotoPreview(); });
   // 'compare' was never a persisted-view default before this session — a stale localStorage
   // value from a crash mid-compare should fall back to grid on next load, not silently retry
   // entering compare with no selection.
@@ -12754,5 +12756,140 @@
   // photo into the guaranteed-offline set without waiting for the next relaunch. 90s, not
   // continuous — a full drain pass touches the DB and (when there's real work) does full RAW
   // decodes, so this stays a background heartbeat, not a tight poll.
+
+  // ── Photo preview (CHR-224 wall, CHR-210 drift, CHR-211 prints, CHR-225 trail) ─────────
+  // Portfolio-site style ways to look through a random set from the current view. Uses the
+  // same thumbnail command as the grid; click (double-click on prints) opens a photo. Esc or ×
+  // closes. All motion stops for Reduce Motion (drift/wall stay static, prints don't fly in).
+  const PV_MODES = [['wall', 'Wall'], ['drift', 'Drift'], ['prints', 'Prints'], ['trail', 'Trail']];
+  let pv = null;
+  async function openPhotoPreview(mode) {
+    const pool = (state.entries || []).filter((e) => e && e.path && !/\.(mp4|mov|m4v|avi|mkv|webm|mts)$/i.test(e.path));
+    if (!pool.length) { toast('No photos in this view to preview'); return; }
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const pick = pool.slice(0, 36);
+    closePhotoPreview();
+    const root = document.createElement('div');
+    root.id = 'cs-pv';
+    root.style.cssText = 'position:fixed;inset:0;z-index:10000;background:#0c0c0c;overflow:hidden;color:#eee;font-family:var(--sans);user-select:none';
+    const bar = document.createElement('div');
+    bar.style.cssText = 'position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:2;display:flex;gap:4px;padding:4px;border-radius:8px;background:rgba(20,20,20,.7);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)';
+    const mkBtn = (t, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.style.cssText = 'all:unset;cursor:pointer;padding:5px 10px;border-radius:5px;font-size:12px;color:#ddd'; b.onclick = fn; bar.appendChild(b); return b; };
+    pv = { root, raf: 0, stop: [], photos: [], mode: mode || 'wall', btns: {} };
+    PV_MODES.forEach(([k, t]) => { pv.btns[k] = mkBtn(t, () => pvMode(k)); });
+    mkBtn('Shuffle', () => openPhotoPreview(pv.mode));
+    mkBtn('×', closePhotoPreview).setAttribute('aria-label', 'Close preview');
+    root.appendChild(bar);
+    const stage = document.createElement('div'); stage.style.cssText = 'position:absolute;inset:0;z-index:0;isolation:isolate'; root.appendChild(stage); pv.stage = stage;
+    document.body.appendChild(root);
+    pv.onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); closePhotoPreview(); } };
+    window.addEventListener('keydown', pv.onKey, true);
+    const me = pv;
+    const urls = await Promise.all(pick.map((e) => invoke('get_thumbnail_or_offline', { path: e.path })
+      .then((buf) => URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }))).catch(() => null)));
+    if (pv !== me) { urls.forEach((u) => u && URL.revokeObjectURL(u)); return; }
+    pv.photos = pick.map((e, i) => ({ path: e.path, url: urls[i] })).filter((p) => p.url);
+    if (!pv.photos.length) { toast('Could not load thumbnails'); closePhotoPreview(); return; }
+    pvMode(pv.mode);
+  }
+  function closePhotoPreview() {
+    if (!pv) return;
+    cancelAnimationFrame(pv.raf); pv.stop.forEach((f) => f());
+    window.removeEventListener('keydown', pv.onKey, true);
+    pv.photos.forEach((p) => URL.revokeObjectURL(p.url));
+    pv.root.remove(); pv = null;
+  }
+  const pvReduced = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function pvOpen(path) { closePhotoPreview(); openInEditor(path); }
+  function pvImg(p, css) { const im = document.createElement('img'); im.src = p.url; im.alt = ''; im.draggable = false; im.style.cssText = 'position:absolute;object-fit:cover;' + (css || ''); return im; }
+  function pvMode(k) {
+    if (!pv) return;
+    cancelAnimationFrame(pv.raf); pv.stop.forEach((f) => f()); pv.stop = [];
+    pv.mode = k; pv.stage.textContent = '';
+    Object.entries(pv.btns).forEach(([m, b]) => { b.style.background = m === k ? 'rgba(255,255,255,.16)' : ''; b.style.color = m === k ? '#fff' : '#bbb'; });
+    ({ wall: pvWall, drift: pvDrift, prints: pvPrints, trail: pvTrail })[k]();
+  }
+  // Wall: a tiled plane bigger than the window; offsets wrap, so it never runs out. Drag with momentum.
+  function pvWall() {
+    const P = pv.photos, tw = 260, th = 340, gap = 14, cw = tw + gap, ch = th + gap;
+    const cols = Math.ceil(innerWidth / cw) + 2, rows = Math.ceil(innerHeight / ch) + 2, W = cols * cw, H = rows * ch;
+    const tiles = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const p = P[(r * cols + c * 7) % P.length];
+      const im = pvImg(p, `width:${tw}px;height:${th}px;border-radius:4px;cursor:pointer;will-change:transform`);
+      im.onclick = () => { if (!moved) pvOpen(p.path); };
+      pv.stage.appendChild(im); tiles.push({ im, x: c * cw + (r % 2) * cw / 2, y: r * ch });
+    }
+    let ox = 0, oy = 0, vx = pvReduced() ? 0 : -0.35, vy = pvReduced() ? 0 : -0.2, drag = null, moved = false;
+    const mod = (a, m) => ((a % m) + m) % m;
+    const place = () => tiles.forEach((t) => { t.im.style.transform = `translate(${mod(t.x + ox, W) - cw}px,${mod(t.y + oy, H) - ch}px)`; });
+    const down = (e) => { drag = { x: e.clientX, y: e.clientY, t: performance.now() }; moved = false; vx = vy = 0; };
+    const move = (e) => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+      const dt = Math.max(1, performance.now() - drag.t); vx = dx / dt * 16; vy = dy / dt * 16; ox += dx; oy += dy; drag = { x: e.clientX, y: e.clientY, t: performance.now() }; };
+    const up = () => { drag = null; };
+    pv.stage.addEventListener('pointerdown', down); window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+    const wheel = (e) => { ox -= e.deltaX; oy -= e.deltaY; e.preventDefault(); };
+    pv.stage.addEventListener('wheel', wheel, { passive: false });
+    pv.stop.push(() => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); });
+    const tick = () => { if (!drag) { ox += vx; oy += vy; if (Math.abs(vx) > 0.4) vx *= 0.95; if (Math.abs(vy) > 0.4) vy *= 0.95; } place(); pv.raf = requestAnimationFrame(tick); };
+    tick();
+  }
+  // Drift: photos float upward at three depths — far ones smaller, slower, softer.
+  function pvDrift() {
+    const P = pv.photos, items = [], N = Math.min(12, P.length * 2);
+    let next = 0;
+    const spawn = (it, initial) => {
+      const p = P[next++ % P.length]; it.p = p; it.im.src = p.url; it.im.onclick = () => pvOpen(p.path);
+      it.z = 0.35 + Math.random() * 0.65; it.w = 90 + it.z * 190;
+      it.x = Math.random() * (innerWidth - it.w * 0.5); it.y = initial ? Math.random() * innerHeight : innerHeight + 20;
+      it.rot = (Math.random() - 0.5) * 8; it.spd = 0.25 + it.z * 0.9;
+      it.im.style.width = it.w + 'px'; it.im.style.height = it.w * 1.25 + 'px';
+      it.im.style.filter = `blur(${((1 - it.z) * 3).toFixed(1)}px)`; it.im.style.opacity = (0.45 + it.z * 0.55).toFixed(2); it.im.style.zIndex = Math.round(it.z * 100);
+    };
+    for (let i = 0; i < N; i++) { const it = { im: pvImg(P[0], 'border-radius:3px;cursor:pointer;box-shadow:0 10px 30px rgba(0,0,0,.5)') }; pv.stage.appendChild(it.im); spawn(it, true); items.push(it); }
+    const still = pvReduced();
+    const tick = () => { items.forEach((it) => { if (!still) { it.y -= it.spd; it.x += Math.sin(it.y / 140) * 0.15 * it.z; } if (it.y < -it.w * 1.4) spawn(it, false); it.im.style.transform = `translate(${it.x}px,${it.y}px) rotate(${it.rot}deg)`; }); if (!still) pv.raf = requestAnimationFrame(tick); };
+    tick();
+  }
+  // Prints: a fresh handful tossed onto a table; drag to move, double-click to open.
+  function pvPrints() {
+    const P = pv.photos.slice(0, 14);
+    let zTop = 10;
+    P.forEach((p, i) => {
+      const card = document.createElement('div'), w = 200 + Math.random() * 60;
+      card.style.cssText = `position:absolute;left:0;top:0;width:${w}px;padding:10px 10px 38px;background:#f6f4ee;box-shadow:0 12px 30px rgba(0,0,0,.55);cursor:grab;z-index:${i};transition:transform .9s cubic-bezier(.2,.8,.2,1)`;
+      const im = pvImg(p, `position:static;display:block;width:100%;height:${w * 1.1}px`); card.appendChild(im);
+      const tx = innerWidth * 0.12 + Math.random() * (innerWidth * 0.76 - w), ty = innerHeight * 0.1 + Math.random() * (innerHeight * 0.7 - w), rot = (Math.random() - 0.5) * 24;
+      const fromX = Math.random() < 0.5 ? -w - 80 : innerWidth + 80, fromY = Math.random() * innerHeight;
+      card.style.transform = pvReduced() ? `translate(${tx}px,${ty}px) rotate(${rot}deg)` : `translate(${fromX}px,${fromY}px) rotate(${rot * 3}deg)`;
+      card.dataset.x = tx; card.dataset.y = ty; card.dataset.r = rot;
+      pv.stage.appendChild(card);
+      setTimeout(() => { card.style.transform = `translate(${tx}px,${ty}px) rotate(${rot}deg)`; }, 40 + i * 70);
+      card.ondblclick = () => pvOpen(p.path);
+      card.onpointerdown = (e) => {
+        card.style.transition = 'none'; card.style.zIndex = ++zTop; card.style.cursor = 'grabbing';
+        const sx = e.clientX - +card.dataset.x, sy = e.clientY - +card.dataset.y;
+        const mv = (ev) => { card.dataset.x = ev.clientX - sx; card.dataset.y = ev.clientY - sy; card.style.transform = `translate(${card.dataset.x}px,${card.dataset.y}px) rotate(${card.dataset.r}deg)`; };
+        const up = () => { card.style.cursor = 'grab'; window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); };
+        window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+      };
+    });
+  }
+  // Trail: moving the pointer drops photos under it that fade away.
+  function pvTrail() {
+    const P = pv.photos, pool = [];
+    for (let i = 0; i < 12; i++) { const im = pvImg(P[i % P.length], 'width:180px;height:230px;opacity:0;pointer-events:none;transition:opacity .6s,transform .5s cubic-bezier(.2,.8,.2,1)'); pv.stage.appendChild(im); pool.push(im); }
+    const hint = document.createElement('div'); hint.textContent = 'Move the pointer'; hint.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:14px;color:#777;pointer-events:none';
+    pv.stage.appendChild(hint);
+    let lx = -999, ly = -999, k = 0, n = 0, z = 1;
+    const mv = (e) => {
+      if (Math.hypot(e.clientX - lx, e.clientY - ly) < 90) return; lx = e.clientX; ly = e.clientY; hint.remove();
+      const im = pool[k++ % pool.length], p = P[n++ % P.length]; im.src = p.url; im.style.zIndex = ++z;
+      im.style.transition = 'none'; im.style.opacity = '1'; im.style.transform = `translate(${lx - 90}px,${ly - 115}px) scale(.6)`;
+      void im.offsetWidth; im.style.transition = ''; im.style.transform = `translate(${lx - 90}px,${ly - 115}px) scale(1)`;
+      clearTimeout(im._t); im._t = setTimeout(() => { im.style.opacity = '0'; }, 700);
+    };
+    pv.stage.addEventListener('pointermove', mv);
+  }
   if (!LIBTEST) setInterval(() => { if (!bgPaused() && !_bgStopped) hqOfflineDrainLoop(); }, 90000);
 })();
