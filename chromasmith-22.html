@@ -6888,7 +6888,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002O';
+const BUILD='1.1002P';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18083,7 +18083,8 @@ async function settingsSplitBuild(){
     // CHR-178: desktop hides the preview-tools Reference button, so its entries live here.
     +(document.getElementById('fx-ref-win')
       ?`<button class="fx-ovf-item on" onclick="viewMenuClose();fxRefClose()"><span>Close reference photo</span>${chk}</button>`
-      :`<button class="fx-ovf-item" onclick="viewMenuClose();fxRefSnapshot()"><span>Pin this photo as reference</span></button><button class="fx-ovf-item" onclick="viewMenuClose();fxRefPickFile()"><span>Reference photo from file…</span></button>`));
+      :`<button class="fx-ovf-item" onclick="viewMenuClose();fxRefSnapshot()"><span>Pin this photo as reference</span></button><button class="fx-ovf-item" onclick="viewMenuClose();fxRefPickFile()"><span>Reference photo from file…</span></button>`)
+    +`<button class="fx-ovf-item${fxPeakOn?' on':''}" onclick="viewMenuClose();fxTogglePeak()"><span>Focus peaking</span>${chk}</button>`);
 }
 document.addEventListener('click',e=>{
   const wrap=document.getElementById('fx-split-popover');
@@ -18228,6 +18229,34 @@ let fxGamutWarn=false;
 // Histogram clipping overlay: blue = crushed shadows, red = blown highlights, toggled separately
 // from the histogram's corner triangles. Shares the gamutWarn uniform: 1 lo, 2 hi, 3 both, 4 zebra.
 let fxClipLo=false,fxClipHi=false;
+// CHR-172: focus peaking — paints the sharpest edges of the CURRENT preview red so in-focus vs
+// soft frames show at fit-to-screen. Pure 2D overlay read back from #fx-canvas (no shader
+// change): luma Sobel magnitude on a ≤900px copy, keep roughly the strongest 4% of edges
+// (adaptive per photo, so a soft frame shows almost nothing). Rebuilt after every preview render.
+let fxPeakOn=false;
+function fxTogglePeak(){fxPeakOn=!fxPeakOn;if(fxPeakOn)fxPeakUpdate();else{const o=document.getElementById('fx-peak');if(o)o.remove();}
+  toast(fxPeakOn?'Focus peaking on — red marks the sharpest edges':'Focus peaking off');}
+function fxPeakUpdate(){
+  const src=document.getElementById('fx-canvas');if(!src||!src.width||!src.offsetWidth)return;
+  let o=document.getElementById('fx-peak');
+  if(!o){o=document.createElement('canvas');o.id='fx-peak';o.style.cssText='position:absolute;pointer-events:none;image-rendering:auto';src.parentElement.appendChild(o);}
+  const k=Math.min(1,900/Math.max(src.width,src.height)),w=Math.max(2,src.width*k|0),h=Math.max(2,src.height*k|0);
+  const t=fxPeakUpdate._t||(fxPeakUpdate._t=document.createElement('canvas'));t.width=w;t.height=h;
+  const tc=t.getContext('2d',{willReadFrequently:true});tc.drawImage(src,0,0,w,h);
+  const d=tc.getImageData(0,0,w,h).data,L=new Float32Array(w*h);
+  for(let i=0,j=0;j<L.length;i+=4,j++)L[j]=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2];
+  const M=new Float32Array(w*h),hist=new Uint32Array(256);
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){const i=y*w+x;
+    const gx=L[i-w+1]+2*L[i+1]+L[i+w+1]-L[i-w-1]-2*L[i-1]-L[i+w-1],gy=L[i+w-1]+2*L[i+w]+L[i+w+1]-L[i-w-1]-2*L[i-w]-L[i-w+1];
+    const m=Math.min(255,Math.sqrt(gx*gx+gy*gy)/4);M[i]=m;hist[m|0]++;}
+  let need=w*h*0.04,thr=255;for(;thr>0&&need>0;thr--)need-=hist[thr];
+  thr=Math.max(thr,24); // floor: a featureless/blurred frame must not light up its few weak edges
+  o.width=w;o.height=h;const oc=o.getContext('2d'),od=oc.createImageData(w,h),p=od.data;
+  for(let j=0;j<M.length;j++)if(M[j]>=thr){const q=j*4;p[q]=255;p[q+1]=40;p[q+2]=40;p[q+3]=230;}
+  oc.putImageData(od,0,0);
+  o.style.left=src.offsetLeft+'px';o.style.top=src.offsetTop+'px';o.style.width=src.offsetWidth+'px';o.style.height=src.offsetHeight+'px';
+  o.style.transform=src.style.transform||'';o.style.transformOrigin=src.style.transformOrigin||'';
+}
 function fxClipCode(){return fxGamutWarn?4:(fxClipLo?1:0)+(fxClipHi?2:0)}
 function toggleGamutWarn(){
   fxGamutWarn=!fxGamutWarn;
@@ -19679,6 +19708,7 @@ function renderLoupe(){
   document.getElementById('fx-info').textContent=`1:1 — native ${cropW}×${cropH}px crop · grain & halation at true export scale · drag to move`;
   document.getElementById('btn-fx-export').disabled=false;
   if(fxHistOn)drawHistogram();
+  if(fxPeakOn)fxPeakUpdate();
 }
 // On phones the preview is moved to the top and made sticky, so cap its height to ~46% of
 // the viewport — otherwise a portrait image would fill the screen and bury the controls.
@@ -19884,6 +19914,7 @@ function renderPreview(){
       document.getElementById('fx-info').textContent=`Full res ${Math.round(fxZoom*100)}% — native-quality crop of ${iw}×${ih}`;
       document.getElementById('btn-fx-export').disabled=false;
       if(fxHistOn)drawHistogram();
+      if(fxPeakOn)fxPeakUpdate();
       return;
     }
   }
@@ -19979,6 +20010,7 @@ function renderPreview(){
   fxRefreshDims();
   document.getElementById('btn-fx-export').disabled=false;
   if(fxHistOn)drawHistogram();
+  if(fxPeakOn)fxPeakUpdate();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // canvas rect may have just changed (new photo / resize)
 }
 // ── CANVAS matte (INS-style): put the (bordered) image on an aspect-ratio canvas with a
