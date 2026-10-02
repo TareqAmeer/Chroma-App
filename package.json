@@ -85,6 +85,7 @@
     "stop-hook:test": "node --test test/stop_editor_gate_check.mjs",
     "native:contract": "node test/native_contract.mjs",
     "control:sweep": "node test/control_sweep.mjs",
+    "real:sweep": "node test/real_app_sweep.mjs",
     "mobile:test": "node test/mobile_ux.mjs",
     "mobile:test:all": "node test/mobile_ux.mjs --all"
   },
