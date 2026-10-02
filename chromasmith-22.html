@@ -4108,7 +4108,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="btn-row chip-tap" id="crop-ar-chips" style="margin-bottom:2px"></div>
         <div class="fx-row" title="Swap the picked aspect ratio between portrait and landscape (e.g. 3:2 ↔ 2:3) — the chip list above only lists one orientation each.">
           <div class="fx-label">Orientation</div>
-          <button class="btn bgh" id="btn-crop-orient" onclick="cropSwapOrientation()">Swap portrait/landscape</button>
+          <div class="crop-orient" role="group" aria-label="Orientation"><button class="btn bgh" id="btn-crop-orient-h" aria-pressed="true" title="Horizontal" aria-label="Horizontal" onclick="cropSetOrientation(true)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3.0" y="6.5" width="18" height="11" rx="2"/></svg></button><button class="btn bgh" id="btn-crop-orient-v" aria-pressed="false" title="Vertical" aria-label="Vertical" onclick="cropSetOrientation(false)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="6.5" y="3.0" width="11" height="18" rx="2"/></svg></button></div>
         </div>
         <div class="fx-row" id="crop-custom-row" style="display:none">
           <div class="fx-label">Custom</div>
@@ -6935,7 +6935,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002J';
+const BUILD='1.1002K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21616,6 +21616,8 @@ function cropEnter(){
   {const b=document.getElementById('btn-crop');b.classList.add('bpri');b.textContent='Apply crop';}
   document.getElementById('fx-info').textContent='Drag the corners to crop · pick an aspect ratio above';
   positionCropRect();
+  // Keep the crop box and its grid glued to the photo when the sheet grows or shrinks.
+  if(!cc._ro&&typeof ResizeObserver!=='undefined'){cc._ro=new ResizeObserver(()=>positionCropRect());cc._ro.observe(cc);}
 }
 function cropImgBox(){
   const ov=document.getElementById('fx-crop-overlay').getBoundingClientRect();
@@ -21682,6 +21684,10 @@ function filmFrameChanged(v){
 // meaningful orientation to swap (the source photo's own AR, or none at all), so those no-op —
 // swapping them would either fight the source image or do literally nothing, both confusing.
 // "Custom" swaps its own W:H number fields instead of touching cropAR, so the chip stays in sync.
+// Orientation is a two-way toggle (horizontal / vertical phone) over the same swap.
+function cropOrientSync(){const land=!cropAR||cropAR>=1;const h=document.getElementById('btn-crop-orient-h'),v=document.getElementById('btn-crop-orient-v');
+  if(h)h.setAttribute('aria-pressed',String(land));if(v)v.setAttribute('aria-pressed',String(!land));}
+function cropSetOrientation(land){if(cropAR&&(cropAR>=1)!==land)cropSwapOrientation();cropOrientSync();}
 function cropSwapOrientation(){
   const sel=document.getElementById('sel-crop-ar');if(!sel)return;
   if(sel.value==='custom'){
@@ -21708,6 +21714,7 @@ function cropSetAspect(v){
     cropAR=parseFloat(v)||0;
   }
   if(cropMode){cropN=cropDefaultForAR();positionCropRect();}
+  if(typeof cropOrientSync==='function')cropOrientSync();
 }
 function _cropCustomAR(){
   const w=parseFloat((document.getElementById('crop-custom-w')||{}).value)||1;
