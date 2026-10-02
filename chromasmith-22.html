@@ -4957,6 +4957,9 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
             <option value="4000">4000 px (large)</option>
           </select>
         </div>
+        <div class="fx-row"><div class="fx-label">Format</div><select class="fx-select" id="cl-fmt"><option value="jpg">JPEG</option><option value="png">PNG</option></select></div>
+        <div class="fx-row"><div class="fx-label">JPEG quality</div><input class="fx-slider" type="range" min="60" max="100" value="95" id="cl-q" oninput="document.getElementById('cl-q-v').textContent=this.value"><div class="fx-val" id="cl-q-v">95</div></div>
+        <label class="fx-row" style="cursor:pointer;gap:8px" title="For wide canvases (2:1, 3:1…): saves equal square-ish panels that line up when swiped on Instagram"><input type="checkbox" id="cl-split"> Split into carousel panels</label>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bpri" id="cl-export" onclick="clExport()">Export collage</button>
           <button class="btn bgh" onclick="clShuffle()" title="Randomly redistribute photos into the slots">Shuffle</button>
@@ -6889,7 +6892,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002U';
+const BUILD='1.1002V';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -26124,7 +26127,7 @@ if(typeof document!=='undefined')document.addEventListener('visibilitychange',()
 });
 
 // ════════════════════ COLLAGE TAB ════════════════════
-const CL_ASPECTS=[['1:1',1,1],['4:5',4,5],['5:4',5,4],['3:4',3,4],['4:3',4,3],['2:3',2,3],['3:2',3,2],['9:16',9,16],['16:9',16,9]];
+const CL_ASPECTS=[['1:1',1,1],['4:5',4,5],['5:4',5,4],['3:4',3,4],['4:3',4,3],['2:3',2,3],['3:2',3,2],['9:16',9,16],['16:9',16,9],['2:1 carousel',2,1],['3:1 carousel',3,1]];
 const CL_SWATCHES=['#ffffff','#000000','#f4f1ea','#e8d9c5','#171717','#c8553d','#2e4756','#a3b18a'];
 const CL={photos:[],aspect:CL_ASPECTS[0],tree:null,templates:[],templateIdx:0,assign:[],cells:[],dividers:[],bg:'#ffffff',inner:8,outer:0,radius:0,frame:'none',title:'',titlePos:'bottom',titleSize:45,capSize:28,capAuto:false,sel:-1,frameW:0,frameH:0,inited:false};
 const _leaf=()=>({leaf:true,size:1});
@@ -26454,7 +26457,23 @@ function clExport(){
       ctx.fillText(cap,r.x+tg.capPx*0.6,r.y+r.h-tg.capPx*0.55,r.w-tg.capPx*1.2);}
     ctx.restore();
   });
-  cv.toBlob(b=>{if(!b){log('Export failed','err');return;}const url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download='collage.jpg';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);log('Collage exported ('+W+'×'+H+')','ok');},'image/jpeg',0.95);
+  // CHR-218: format/quality choice, optional split into equal square panels for a swipeable
+  // Instagram carousel, and saving through saveFiles() — the same path the Effects export uses —
+  // so the desktop app's native save and the iOS share sheet work (was a plain <a download>).
+  const fmt=(document.getElementById('cl-fmt')||{}).value||'jpg',q=(+((document.getElementById('cl-q')||{}).value||95))/100;
+  const mime=fmt==='png'?'image/png':'image/jpeg',split=!!(document.getElementById('cl-split')||{}).checked;
+  const panels=split?Math.max(1,Math.round(W/H)):1,pw=Math.floor(W/panels);
+  const enc=c=>new Promise(r=>c.toBlob(r,mime,q));
+  (async()=>{
+    const items=[];
+    for(let k=0;k<panels;k++){
+      let c=cv;if(panels>1){c=document.createElement('canvas');c.width=pw;c.height=H;c.getContext('2d').drawImage(cv,k*pw,0,pw,H,0,0,pw,H);}
+      const b=await enc(c);if(!b){log('Export failed','err');return;}
+      items.push({content:new Uint8Array(await b.arrayBuffer()),fname:`collage${panels>1?'_'+(k+1):''}.${fmt}`,mime});
+    }
+    await saveFiles(items);
+    log(`Collage exported (${panels>1?panels+' panels of '+pw+'×'+H:W+'×'+H})`,'ok');
+  })();
 }
 // ══ ?catalog=1 — component catalogue (docs/ui-workflow/STATE.md S1(d)) ══════════════════════
 // No refactor: reuses the real app's own <style> tag (already loaded) and clones REAL section
