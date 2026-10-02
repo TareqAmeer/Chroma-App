@@ -6892,7 +6892,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002Y';
+const BUILD='1.1002Z';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20980,14 +20980,18 @@ function fxSyncDcpProfileUI(){
 // the post-rotate/flip/straighten frame; straighten (centred rotation) commutes with a 90° turn,
 // so remapping the rect is exact for rotate and exact for flip when angle is 0.
 function _cropRot90(c,d){if(!c)return c;return d>0?{x:1-(c.y+c.h),y:c.x,w:c.h,h:c.w}:{x:c.y,y:1-(c.x+c.w),w:c.h,h:c.w};}
-function geomRotate(d){const g=curGeom();if(!g)return;g.rot=(((g.rot+d)%360)+360)%360;
+// CHR-167: with the crop tool open the live rectangle lives in cropN, not g.crop — rotating or
+// flipping transformed the stale g.crop, then Apply wrote the untransformed cropN back, so the
+// crop "reset" to the wrong region. Commit cropN first, transform, then reopen the tool on the result.
+function _geomCropSync(g){if(cropMode&&cropN){g.crop={...cropN};return true;}return false;}
+function geomRotate(d){const g=curGeom();if(!g)return;const reCrop=_geomCropSync(g);g.rot=(((g.rot+d)%360)+360)%360;
   {const n=((d%360)+360)%360/90;for(let i=0;i<n;i++){if(g.crop)g.crop=_cropRot90(g.crop,1);if(typeof mskRemapForGeom==='function')mskRemapForGeom('cw');}}
-  if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
-function geomFlip(ax){const g=curGeom();if(!g)return;if(ax==='h')g.flipH=!g.flipH;else g.flipV=!g.flipV;
+  if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();if(reCrop)cropEnter();}
+function geomFlip(ax){const g=curGeom();if(!g)return;const reCrop=_geomCropSync(g);if(ax==='h')g.flipH=!g.flipH;else g.flipV=!g.flipV;
   // flip is applied in SOURCE space before the rotation, so at 90/270 it mirrors the other axis on screen
   if(g.crop){const c=g.crop,sw=(g.rot===90||g.rot===270),horiz=(ax==='h')!==sw;
     g.crop=horiz?{x:1-(c.x+c.w),y:c.y,w:c.w,h:c.h}:{x:c.x,y:1-(c.y+c.h),w:c.w,h:c.h};}
-  if(typeof mskRemapForGeom==='function'){const sw=(g.rot===90||g.rot===270);mskRemapForGeom(((ax==='h')!==sw)?'mx':'my');}if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();}
+  if(typeof mskRemapForGeom==='function'){const sw=(g.rot===90||g.rot===270);mskRemapForGeom(((ax==='h')!==sw)?'mx':'my');}if(typeof hapt==='function')hapt();broadcastGeom();updateWork();renderPreview();fxHistoryPush();if(reCrop)cropEnter();}
 // ══ AUTO HORIZON ══════════════════════════════════════════════════════════════════════════
 // Finds the dominant near-horizontal (or near-vertical) line in the photo and returns the angle
 // that would level it. A Hough transform, which is the standard answer and the reason this was
