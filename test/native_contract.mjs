@@ -24,13 +24,24 @@ const registered = new Set(
 );
 
 const FRONTEND = ['chromasmith-22.html', 'desktop/library-ui.js', 'desktop/desktop-native.js'];
-const callRe = /\b(?:invoke|_samFramedInvoke|invokeNative|tauriInvoke)\(\s*['"]([a-z_0-9]+)['"]/g;
+// A call's first argument may be a literal or a ternary of literals (invoke(a?'x':'y', ...)).
+const callRe = /\b(?:invoke|_samFramedInvoke|framedInvoke|invokeNative|tauriInvoke)\(([^,)]*)/g;
 const called = new Map();
+const note = (c, f) => { if (!called.has(c)) called.set(c, new Set()); called.get(c).add(f); };
+const stripMock = (f, src) => {
+  if (f !== 'desktop/library-ui.js') return src;
+  const a = src.indexOf('function libtestInvoke('), b = src.indexOf('libtest: no mock for', a);
+  return src.slice(0, a) + src.slice(b);
+};
 for (const f of FRONTEND) {
-  for (const m of read(f).matchAll(callRe)) {
-    if (!called.has(m[1])) called.set(m[1], new Set());
-    called.get(m[1]).add(f);
-  }
+  const src = stripMock(f, read(f));
+  for (const m of src.matchAll(callRe)) for (const q of m[1].matchAll(/['"`]([a-z_0-9]+)['"`]/g)) note(q[1], f);
+}
+// A registered command named as a string literal anywhere outside the mock (e.g. assigned to a
+// variable, then invoked) counts as called: indirect, but not dead.
+for (const f of FRONTEND) {
+  const src = stripMock(f, read(f));
+  for (const c of registered) if (!called.has(c) && new RegExp(`['"\`]${c}['"\`]`).test(src)) note(c, f);
 }
 
 const lib = read('desktop/library-ui.js');
