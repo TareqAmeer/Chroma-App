@@ -12814,6 +12814,14 @@
   // setLabel/setRating every other Library path uses). Shows the camera preview, not the edit.
   function pvSlides() {
     const all = pv.all, layers = [0, 1].map(() => { const im = pvImg({ url: '' }, 'inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity 1s'); pv.stage.appendChild(im); return im; });
+    // CHR-226: film light-leak flash over each change — a warm screen-blended glow from a random
+    // edge that peaks mid-crossfade. CSS only; skipped for Reduce Motion.
+    const leak = document.createElement('div');
+    leak.style.cssText = 'position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0;mix-blend-mode:screen;transition:opacity .55s ease-in-out';
+    pv.stage.appendChild(leak);
+    const flash = () => { if (pvReduced()) return; const x = Math.random() < 0.5 ? 0 : 100, y = Math.random() * 100, h = 10 + Math.random() * 30;
+      leak.style.background = `radial-gradient(ellipse 70% 90% at ${x}% ${y}%, hsla(${h},100%,60%,.85), hsla(${h + 15},100%,50%,.35) 40%, transparent 70%)`;
+      leak.style.opacity = '1'; setTimeout(() => { leak.style.opacity = '0'; }, 550); };
     const cap = document.createElement('div'); cap.id = 'cs-pv-cap'; cap.style.cssText = 'position:absolute;left:20px;bottom:16px;z-index:3;font-size:12px;color:#bbb;text-shadow:0 1px 3px #000'; pv.stage.appendChild(cap);
     let i = 0, top = 0, paused = false, timer = 0, urls = new Map(), gen = 0;
     const load = (k) => { const e = all[(k + all.length) % all.length]; if (urls.has(e.path)) return urls.get(e.path);
@@ -12826,6 +12834,7 @@
       const url = await load(i).catch(() => null); if (g !== gen || !pv) return;
       load(i + 1).catch(() => {});
       const im = layers[top ^= 1], other = layers[top ^ 1];
+      flash();
       if (url) im.src = url;
       const zx = (Math.random() - 0.5) * 6, zy = (Math.random() - 0.5) * 6, rm = pvReduced();
       im.style.transition = 'none'; im.style.transform = rm ? '' : `scale(1.02) translate(${-zx}%,${-zy}%)`; void im.offsetWidth;
