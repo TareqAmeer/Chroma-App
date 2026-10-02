@@ -117,6 +117,10 @@ function labelControls(root=document){
     if(row&&s.id&&!row.querySelector('.phone-reset')){const b=document.createElement('button');b.className='phone-reset';b.type='button';b.textContent='Reset';b.setAttribute('aria-label','Reset '+(lb?.textContent.trim()||'value'));b.onclick=()=>{const base=_fxPristineDefault?.sliders?.[s.id.replace(/^sl-/,'')]??s.defaultValue;s.value=base;s.dispatchEvent(new Event('input',{bubbles:true}));s.dispatchEvent(new Event('change',{bubbles:true}));fxHistoryPush();};row.appendChild(b);}
   });
 }
+// Reset shows only on changed sliders; checked after any value change, including undo.
+function syncResets(root=document){root.querySelectorAll('.fx-row>.phone-reset').forEach(b=>{const s=b.parentElement.querySelector('input.fx-slider');if(!s)return;const base=_fxPristineDefault?.sliders?.[s.id.replace(/^sl-/,'')]??s.defaultValue;b.parentElement.classList.toggle('phone-changed',Math.abs(+s.value-(+base))>1e-9);});}
+function centreTab(strip,btn){if(!strip||!btn)return;const l=btn.offsetLeft-(strip.clientWidth-btn.offsetWidth)/2;strip.scrollTo({left:Math.max(0,l),behavior:'smooth'});}
+window.phoneCentreTab=centreTab;
 function precision(value){
   const row=value.closest('.fx-row'),sl=row?.querySelector('input.fx-slider');if(!sl)return;
   const title=row.querySelector('.fx-label')?.textContent.trim()||'Adjustment';
@@ -150,26 +154,27 @@ function syncNavigation(){
   if(!mob())return;const home=$('.fx-act-home');if(home){home.setAttribute('aria-label','Gallery');home.title='Gallery';if(!home.querySelector('.phone-home-label')){const t=document.createElement('span');t.className='phone-home-label';t.textContent='Gallery';home.appendChild(t);}home.onclick=()=>window.MobileLibrary?MobileLibrary.open().catch(e=>toast(e.message)):fxMobileBack();}
   const sec=document.querySelector('.fx-ctrl.sec-active')?.dataset.fxsec;
   document.querySelectorAll('#fx-mobile-nav [role=tab]').forEach(b=>b.setAttribute('aria-selected',String(b.classList.contains('on'))));
-  document.querySelectorAll('#fx-sheet-strip button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.sec===sec)));
+  document.querySelectorAll('#fx-sheet-strip button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.sec===sec)));centreTab($('#fx-sheet-strip'),$('#fx-sheet-strip button.on'));syncResets();
   maskStatus();
 }
 const section0=window.fxSection;window.fxSection=function(){const r=section0.apply(this,arguments);if(mob()){syncNavigation();setupLooks();labelControls($('.fx-panel'));lookActions();}return r;};
 function boot(){
   const link=document.createElement('link');link.rel='stylesheet';link.href='mobile/mobile-ui.css';document.head.appendChild(link);
-  const ctx=document.createElement('div');ctx.id='phone-context';ctx.innerHTML='<button id="phone-compare" aria-pressed="false">Compare</button><button id="phone-swipe" aria-pressed="false">Swipe adjust: off</button><button id="phone-zoom">100%</button><button id="phone-sheet-size">Expand</button><span id="phone-original" hidden>Original</span>';
+  const ctx=document.createElement('div');ctx.id='phone-context';ctx.innerHTML='<button id="phone-compare" aria-pressed="false">Compare</button><button id="phone-swipe" aria-pressed="false" aria-label="Swipe adjust">Swipe</button><button id="phone-zoom">100%</button><button id="phone-sheet-size">Expand</button><span id="phone-original" hidden>Original</span>';
   $('#fx-actionbar')?.after(ctx);
-  const queue=$('#phone-queue');if(queue)ctx.after(queue);
+  const queue=$('#phone-queue');if(queue)ctx.appendChild(queue);
   ctx.querySelector('#phone-compare').onclick=()=>compare(!fxCompare);
-  ctx.querySelector('#phone-swipe').onclick=e=>{window.csSwipeAdjust=!window.csSwipeAdjust;e.target.textContent='Swipe adjust: '+(csSwipeAdjust?'on':'off');e.target.setAttribute('aria-pressed',String(csSwipeAdjust));if(csSwipeAdjust)toast('Swipe sideways on the photo to adjust; up or down changes the slider.');};
+  ctx.querySelector('#phone-swipe').onclick=e=>{window.csSwipeAdjust=!window.csSwipeAdjust;e.target.setAttribute('aria-pressed',String(csSwipeAdjust));if(csSwipeAdjust)toast('Swipe sideways on the photo to adjust; up or down changes the slider.');};
   ctx.querySelector('#phone-zoom').onclick=e=>{toggleLoupe();e.target.textContent=fxLoupe?'Fit':'100%';e.target.setAttribute('aria-pressed',String(fxLoupe));};
   ctx.querySelector('#phone-sheet-size').onclick=()=>{document.body.classList.remove('sheet-user','sheet-peek');document.body.classList.toggle('sheet-full');rememberSheet();};
+  {let q=0;const pnl=$('.fx-panel');if(pnl)new MutationObserver(()=>{if(q||!mob())return;q=requestAnimationFrame(()=>{q=0;syncResets(pnl);});}).observe(pnl,{subtree:true,characterData:true,childList:true});}
   toolBrowser();setupLooks();maskWorkflow();magnifier();if(mob())labelControls($('.fx-panel'));syncNavigation();
   document.body.style.setProperty('--phone-text-scale',String(pref('textSize',1)));
   new MutationObserver(()=>{if(mob()){syncNavigation();rememberSheet();}}).observe(document.body,{attributes:true,attributeFilter:['class']});
   const dynamic=$('#fx-mask-controls')||$('.fx-ctrl[data-fxsec=local]');if(dynamic)new MutationObserver(()=>{if(mob()){labelControls(dynamic);maskStatus();}}).observe(dynamic,{childList:true,subtree:true});
   document.addEventListener('click',e=>{if(!mob())return;const v=e.target.closest('.fx-val');if(v&&v.closest('.fx-panel')){e.preventDefault();e.stopImmediatePropagation();precision(v);}},true);
   document.addEventListener('keydown',e=>{if(!mob())return;if((e.key==='Enter'||e.key===' ')&&e.target.matches('.fx-val')){e.preventDefault();precision(e.target);}else if(e.key==='Escape'&&!activeDialog){e.preventDefault();back();}},true);
-  document.addEventListener('input',e=>{if(mob()&&e.target.matches('input.fx-slider')){const v=e.target.closest('.fx-row')?.querySelector('.fx-val');if(v)e.target.setAttribute('aria-valuetext',v.textContent.trim());}});
+  document.addEventListener('input',e=>{if(mob()&&e.target.matches('input.fx-slider')){syncResets(e.target.closest('.fx-row')?.parentElement||document);const v=e.target.closest('.fx-row')?.querySelector('.fx-val');if(v)e.target.setAttribute('aria-valuetext',v.textContent.trim());}});
   const app=window.Capacitor?.Plugins?.App;
   if(typeof capNative==='function'&&capNative()&&app){
     app.addListener('backButton',async()=>{if(!await back()){await window.MobileLibrary?.flush();await app.minimizeApp();}});

@@ -131,3 +131,36 @@ body.sk2.mobile-fx #phone-save-status.phone-error{min-height:48px;min-width:48px
  body.sk2.mobile-fx.sheet-open .fx-panel{max-height:calc(var(--app-h,100svh) - 240px - var(--phone-queue-height,0px) - var(--mnav-h,72px))!important}
  body.sk2.mobile-fx #fx-wrap{min-height:80px}
 }
+
+/* Roomier phone layout: one slim context row, one-line sliders, fading tab edges. */
+body.sk2.mobile-fx #phone-context{align-items:center;scrollbar-width:none}
+body.sk2.mobile-fx #phone-context::-webkit-scrollbar{display:none}
+body.sk2.mobile-fx #phone-context #phone-queue{margin-left:auto;padding:0;flex-wrap:nowrap;gap:0}
+body.sk2.mobile-fx #phone-context #phone-queue button{border:0;font:calc(13px * var(--phone-text-scale,1)) var(--sans)}
+body.sk2.mobile-fx #phone-context #phone-queue span{flex:none;padding:0 2px;font-size:13px;white-space:nowrap}
+body.sk2.mobile-fx .fx-panel .fx-row:has(>input.fx-slider){grid-template-columns:minmax(72px,30%) minmax(0,1fr) 48px 0;grid-template-rows:48px;gap:0 6px;margin:0;align-items:center}
+body.sk2.mobile-fx .fx-panel .fx-row.phone-changed:has(>input.fx-slider){grid-template-columns:minmax(72px,30%) minmax(0,1fr) 48px 48px}
+body.sk2.mobile-fx .fx-panel .fx-row:has(>input.fx-slider)>.fx-label{grid-column:1;grid-row:1;overflow-wrap:anywhere}
+body.sk2.mobile-fx .fx-panel .fx-row:has(>input.fx-slider)>.fx-slider{grid-column:2;grid-row:1}
+body.sk2.mobile-fx .fx-panel .fx-row:has(>input.fx-slider)>.fx-val{grid-column:3;grid-row:1;width:48px;min-width:48px;justify-content:flex-end;text-decoration:none}
+body.sk2.mobile-fx .fx-panel .fx-row:has(>input.fx-slider)>.phone-reset{grid-column:4;grid-row:1;min-width:48px;padding:0}
+body.sk2.mobile-fx .fx-panel .phone-reset{font-size:0!important}
+body.sk2.mobile-fx .fx-panel .phone-reset::before{content:'↺';font-size:18px}
+body.sk2.mobile-fx .fx-panel .fx-row:not(.phone-changed)>.phone-reset{display:none}
+body.sk2.mobile-fx.sheet-open #fx-sheet-strip,#mlib .tabs{-webkit-mask-image:linear-gradient(90deg,transparent,#000 20px,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,transparent,#000 20px,#000 calc(100% - 28px),transparent)}
+#mlib .search-row select{max-width:none;flex:1 1 50%}
+#mlib .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+@media (max-width:380px){#mlib .top .wm{font-size:13px;letter-spacing:.04em}}
+@media (orientation:portrait) and (max-width:699px){
+ body.sk2.mobile-fx .fx-preview-col{min-height:280px!important}
+ body.sk2.mobile-fx.sheet-open .fx-panel{max-height:calc(var(--app-h,100svh) - 280px - var(--mnav-h,72px))!important}
+}
+/* Toasts sit above the bottom bar and clear of the photo controls. */
+body.sk2.mobile-fx #fx-toast{bottom:calc(var(--mnav-h,72px) + 12px + env(safe-area-inset-bottom))!important;z-index:40}
+@media (orientation:landscape) and (max-height:600px), (min-width:700px) and (pointer:coarse){
+  body.sk2.mobile-fx #fx-toast{left:27%!important;top:calc(56px + env(safe-area-inset-top));bottom:auto!important}
+  body.sk2.mobile-fx .fx-panel{flex-basis:38%;width:38%!important}
+  body.sk2.mobile-fx .fx-preview-col,body.sk2.mobile-fx.tools-open .fx-preview-col{flex-basis:62%}
+  body.sk2.mobile-fx.tools-open #fx-secnav{left:62%}
+}
+@media (orientation:portrait) and (max-width:420px){body.sk2.mobile-fx #phone-context{gap:0;padding:0 4px}body.sk2.mobile-fx #phone-context button{padding:4px 6px}body.sk2.mobile-fx #phone-context #phone-queue button{min-width:40px}}
