@@ -3122,7 +3122,9 @@ function sk2ExportWire(){
       const zc0=t.querySelector('#fx-zoom-ctrl'),zc1=cap.querySelector('.cp-zc');if(zc0&&zc1)zc1.style.display=zc0.style.display;
       cap.style.display='flex';
       const cw=Math.min(w.width-32,Math.max(620,r?r.width:0)),cl=(w.width-cw)/2;
-      cap.style.left=cl+'px';cap.style.top=(w.height-34)+'px';cap.style.width=cw+'px';
+      cap.style.left=cl+'px';cap.style.width=cw+'px';
+      // CHR-192: sit just under the photo itself, not pinned to the bottom of the canvas area.
+      cap.style.top=Math.min(w.height-34,r?Math.round(r.bottom-w.top+8):w.height-34)+'px';
       if(cw<240)cap.style.display='none'; // too narrow for flags + zoom: the top-bar caption is the only copy
     }else if(cap){cap.style.display='none';}
   });};
@@ -6898,7 +6900,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002Y';
+const BUILD='1.1002Z';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
