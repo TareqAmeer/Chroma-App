@@ -86,7 +86,11 @@ function toolBrowser(){
   if(!$('#phone-tool-search')){
     const row=document.createElement('label');row.className='phone-tool-search';row.innerHTML='<span class="phone-sr">Search tools</span><input id="phone-tool-search" type="search" placeholder="Search tools" autocomplete="off">';cats.before(row);
     row.querySelector('input').oninput=e=>{search=e.target.value;filterTools();};
-    const msg=document.createElement('p');msg.id='phone-tool-empty';msg.textContent='No tools match. Try another category or search.';msg.hidden=true;cats.after(msg);
+    // Search stays hidden until the magnifier left of the categories is tapped.
+    const bar=document.createElement('div');bar.id='phone-tools-bar';cats.before(bar);const fb=document.createElement('button');fb.id='phone-tools-find';fb.type='button';fb.setAttribute('aria-label','Search tools');fb.setAttribute('aria-pressed','false');fb.innerHTML=typeof icon==='function'?icon('search',20):'⌕';bar.append(fb,cats);
+    const inp=row.querySelector('input');fb.onclick=()=>{const on=!document.body.classList.contains('phone-tools-search')||!!inp.value;document.body.classList.toggle('phone-tools-search',on);fb.setAttribute('aria-pressed',String(on));if(on)inp.focus();};
+    document.body.classList.remove('phone-tools-search');
+    const msg=document.createElement('p');msg.id='phone-tool-empty';msg.textContent='No tools match. Try another category or search.';msg.hidden=true;bar.after(msg);
   }
   filterTools();
 }

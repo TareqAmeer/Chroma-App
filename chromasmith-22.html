@@ -4091,7 +4091,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
                precedent): the proposal's checklist-style .rlist is a genuine picker-widget swap,
                not a markup move, so it's deferred (tracked as R7) — this keeps the existing,
                already-correct chip mechanism and only regroups it under an "Aspect ratio" heading. -->
-          <select class="fx-select" id="sel-crop-ar" onchange="cropSetAspect(this.value)" style="display:none">
+          <select class="fx-select" id="sel-crop-ar" onchange="cropSetAspect(this.value);if(!cropMode&&curItem()){cropEnter();if(cropAR){cropN=cropDefaultForAR();positionCropRect();}}" style="display:none">
             <option value="shot">As shot</option>
             <option value="0">Free</option>
             <option value="custom">Custom</option>
@@ -4705,6 +4705,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
            One less button doing the same thing; Cancel still needs its own control. -->
       <div class="btn-row" id="fx-crop-tools" style="justify-content:center;margin-top:8px;display:none">
         <button class="btn bgh" onclick="cropCancel()">Cancel</button>
+        <button class="btn bpri" id="btn-crop-apply2" onclick="cropToggle()">Apply crop</button>
       </div>
       <div id="fx-mcap" aria-live="polite"></div>
       <!-- PERSISTENT ACTION BAR (mobile) -->
@@ -6934,7 +6935,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002I';
+const BUILD='1.1002J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18718,7 +18719,8 @@ function initZoomPan(){
   let pd=null;
   zw.addEventListener('pointerdown',e=>{
     if(_fxEyeArmed()||mskPaintMode||(typeof _ahRoiArmed!=='undefined'&&_ahRoiArmed))return;
-    e.preventDefault();pd={x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
+    e.preventDefault();if(pd&&pd.id!==e.pointerId)return; // a pinch's second finger never drives the pan
+    pd={id:e.pointerId,x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
     _fxPreviewInteracting=true;  // E1: drag-pan never set this — see the wheel handler above
   });
@@ -18732,7 +18734,7 @@ function initZoomPan(){
   // _fxZoomRenderDebounced already uses for the normal full-res preview.
   let _loupeDragT=null;
   zw.addEventListener('pointermove',e=>{
-    if(!pd)return;
+    if(!pd||pd.id!==e.pointerId||_pinching)return;
     if(fxLoupe){
       const dx=e.clientX-pd.x,dy=e.clientY-pd.y;
       // Divide by fxZoom: this translate lands INSIDE the wrapper's own scale(fxZoom) transform,
@@ -18756,11 +18758,13 @@ function initZoomPan(){
     if(fxLoupe){clearTimeout(_loupeDragT);FX.cv.style.transform='';renderPreview();}
     else if(fxFullResPreview)renderPreview();
   };
-  zw.addEventListener('pointerup',pup);zw.addEventListener('pointercancel',pup);
+  const pupOwn=e=>{if(pd&&pd.id!==e.pointerId)return;pup();};
+  zw.addEventListener('pointerup',pupOwn);zw.addEventListener('pointercancel',pupOwn);
   // Double-click to reset
   wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(Math.abs(fxZoom-FX_FIT)>0.001){e.stopPropagation();_resetZoom(true);}else if(fxWork){e.stopPropagation();_zoomAt(2.5,e.clientX,e.clientY);_applyZoom(true);}}); // dbl-tap: Fit ↔ zoomed (animated)
-  // Pinch
-  let _pt={};
+  // Pinch: zooms about the fingers' midpoint and pans with it; one-finger pan is suspended until all
+  // fingers lift, so a finger left behind after a pinch cannot yank the photo to a stale anchor.
+  let _pt={},_pinching=false,_pmid=null;
   wrap.addEventListener('touchstart',e=>{[...e.changedTouches].forEach(t=>_pt[t.identifier]={x:t.clientX,y:t.clientY});},{passive:true});
   wrap.addEventListener('touchmove',e=>{
     if(e.touches.length===2&&!fxLoupe){
@@ -18775,13 +18779,18 @@ function initZoomPan(){
       const p0=_pt[t0.identifier]||{x:t0.clientX,y:t0.clientY};
       const p1=_pt[t1.identifier]||{x:t1.clientX,y:t1.clientY};
       const prev=Math.hypot(p0.x-p1.x,p0.y-p1.y)||dist;
-      _zoomAt(fxZoom*(dist/prev),(t0.clientX+t1.clientX)/2,(t0.clientY+t1.clientY)/2);
+      const mx=(t0.clientX+t1.clientX)/2,my=(t0.clientY+t1.clientY)/2;
+      if(!_pinching){_pinching=true;_pmid={x:mx,y:my};}
+      _zoomAt(fxZoom*(dist/prev),mx,my);
+      fxPanX+=(mx-_pmid.x)/fxZoom;fxPanY+=(my-_pmid.y)/fxZoom;_pmid={x:mx,y:my};
       _applyZoom();
     }
     [...e.changedTouches].forEach(t=>_pt[t.identifier]={x:t.clientX,y:t.clientY});
   },{passive:false});
   wrap.addEventListener('touchend',e=>{
     [...e.changedTouches].forEach(t=>delete _pt[t.identifier]);
+    if(e.touches.length===0&&_pinching){_pinching=false;_pmid=null;}
+    else if(e.touches.length===1)_pmid=null;
     if(e.touches.length<2){_fxPreviewInteracting=false;if(fxFullResPreview)renderPreview();}
   },{passive:true});
 }
@@ -21591,6 +21600,13 @@ function cropEnter(){
   if(!cc){cc=document.createElement('canvas');cc.id='fx-canvas-crop';cc.style.cssText='display:block;max-width:100%;height:auto;max-height:70vh';wrap.insertBefore(cc,ov);}
   cc.width=cropBase.naturalWidth||cropBase.width;cc.height=cropBase.naturalHeight||cropBase.height;
   cc.getContext('2d').drawImage(cropBase,0,0);cc.style.display='block';
+  // Show the crop over the GRADED photo (look and adjustments applied), not the bare source:
+  // render the uncropped geometry through the same pipeline at a screen-sized resolution.
+  try{const bw=cc.width,bh=cc.height,k=Math.min(1,1600/Math.max(bw,bh)),rw=Math.max(1,Math.round(bw*k)),rh=Math.max(1,Math.round(bh*k));
+    const sm=document.createElement('canvas');sm.width=rw;sm.height=rh;sm.getContext('2d').drawImage(cropBase,0,0,rw,rh);
+    FX.setImage(sm);FX.render(getFXParams(),rw,rh,{glowScale:typeof fxPreviewGlowScale==='function'?fxPreviewGlowScale():1,scOverride:bw/FXR.CAL.refWidth});
+    cc.getContext('2d').drawImage(FX.cv,0,0,bw,bh);}catch(err){console.warn('graded crop view failed',err);}
+  finally{if(fxWork)FX.setImage(fxWork);}
   FX.cv.style.display='none';const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
   cropN=saved?{...saved}:cropDefaultForAR();
   ov.innerHTML='<div class="crop-rect" id="crop-rect">'+cropGridLinesHtml()+'<div class="crop-h nw" data-c="nw"></div><div class="crop-h ne" data-c="ne"></div><div class="crop-h sw" data-c="sw"></div><div class="crop-h se" data-c="se"></div></div>';
@@ -25617,19 +25633,31 @@ window.addEventListener('resize',()=>{
 // Phones: pulling the sheet content (or the Tools list) down while it is already scrolled to the top
 // closes it, same as dragging the handle — back to the normal photo view.
 (function(){
-  var sy=0,sTop=0,el=null,dy=0,ok=false;
+  // The pull only counts from the top of whatever list the finger is actually in, needs a firm
+  // pull (CLOSE_PX), and the sheet follows the finger with a "Release to close" cue past it, so an
+  // ordinary scroll-up no longer closes it by accident.
+  var CLOSE_PX=150,sy=0,el=null,dy=0,ok=false,armed=false;
+  function scroller(t,root){for(var n=t;n&&n!==root.parentElement;n=n.parentElement){if(n.scrollHeight>n.clientHeight+1&&/(auto|scroll)/.test(getComputedStyle(n).overflowY))return n;}return root;}
+  function cue(e,on){var c=document.getElementById('fx-pull-cue');if(!c){c=document.createElement('div');c.id='fx-pull-cue';c.textContent='Release to close';document.body.appendChild(c);}
+    var r=e.getBoundingClientRect();c.style.top=Math.max(8,r.top+8)+'px';c.classList.toggle('on',on);}
+  function reset(e){e.style.transform='';e.style.transition='transform .18s';setTimeout(function(){e.style.transition='';},200);var c=document.getElementById('fx-pull-cue');if(c)c.classList.remove('on');}
   function bind(id,closeFn,isOpen){
     var e=document.getElementById(id);if(!e)return;
     e.addEventListener('touchstart',function(ev){
       if(!document.body.classList.contains('mobile-fx')||!isOpen())return;
-      var t=ev.target;ok=!(t.closest&&t.closest('input,select,textarea,canvas,[contenteditable="true"],.fx-slider'));
-      sy=ev.touches[0].clientY;sTop=e.scrollTop;el=e;dy=0;
+      var t=ev.target;ok=!(t.closest&&t.closest('input,select,textarea,canvas,[contenteditable="true"],.fx-slider'))&&scroller(t,e).scrollTop<=0&&e.scrollTop<=0;
+      sy=ev.touches[0].clientY;el=e;dy=0;armed=false;
     },{passive:true});
-    e.addEventListener('touchmove',function(ev){if(el!==e)return;dy=ev.touches[0].clientY-sy;},{passive:true});
+    e.addEventListener('touchmove',function(ev){if(el!==e)return;dy=ev.touches[0].clientY-sy;
+      if(!ok)return;if(dy<=0){e.style.transform='';return;}
+      e.style.transform='translateY('+Math.round(Math.min(dy,CLOSE_PX*1.6)*0.45)+'px)';
+      var a=dy>CLOSE_PX;if(a!==armed){armed=a;cue(e,a);if(a)try{if(typeof hapt==='function')hapt();}catch(_){}}
+    },{passive:true});
     e.addEventListener('touchend',function(){
-      if(el!==e)return;el=null;
-      if(ok&&sTop<=0&&e.scrollTop<=0&&dy>90){closeFn();try{if(typeof hapt==='function')hapt();}catch(_){}}
+      if(el!==e)return;el=null;var go=ok&&armed;reset(e);
+      if(go){closeFn();try{if(typeof hapt==='function')hapt();}catch(_){}}
     },{passive:true});
+    e.addEventListener('touchcancel',function(){if(el===e){el=null;reset(e);}},{passive:true});
   }
   document.addEventListener('DOMContentLoaded',function(){
     bind('fx-panel-scroll-host',function(){fxSheetClose();},function(){return document.body.classList.contains('sheet-open');});

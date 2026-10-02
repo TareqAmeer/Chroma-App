@@ -136,7 +136,7 @@ async function exercise(name, engine) {
       await page.evaluate(()=>chromasmithShowMobileExportResult());assert.match(await page.locator('.phone-dialog-content').textContent(),/save not confirmed/);await page.locator('.phone-close').click();
     });
     await check('tool search/categories and remembered sheet size remain usable',async()=>{
-      await page.evaluate(()=>fxToolsOpen());await page.locator('#phone-tool-search').fill('Halation');assert.equal(await page.locator('#fx-tool-grid .fx-sec-btn:visible').count(),1);
+      await page.evaluate(()=>fxToolsOpen());assert(!(await page.locator('#phone-tool-search').isVisible()));await page.locator('#phone-tools-find').click();await page.locator('#phone-tool-search').fill('Halation');assert.equal(await page.locator('#fx-tool-grid .fx-sec-btn:visible').count(),1);
       await page.locator('#phone-tool-search').fill('');await page.locator('#fx-tool-cats [data-cat=geometry]').click();
       assert(await page.locator('#fx-tool-grid .fx-sec-btn:visible').count()>=3);
       await page.evaluate(()=>{fxToolsClose();fxToolsOpen();});assert.equal(await page.locator('#fx-tool-cats [data-cat=geometry]').getAttribute('aria-pressed'),'true');

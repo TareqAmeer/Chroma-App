@@ -208,3 +208,14 @@ body.sk2.mobile-fx.phone-qn-thin #fx-quicknav [data-sec].edited span::after{top:
 /* Rotate & Flip: no hover/press accent block or spinning icon on touch. */
 body.sk2.mobile-fx .fx-ctrl[data-fxsec=rotate] .btn-icon::after{display:none!important}
 body.sk2.mobile-fx .fx-ctrl[data-fxsec=rotate] .btn-icon,body.sk2.mobile-fx .fx-ctrl[data-fxsec=rotate] .btn-icon *{transform:none!important;transition:none!important;background:transparent!important;color:var(--k-color-ink)!important}
+body.sk2.mobile-fx:not(.phone-tools-search) .phone-tool-search{display:none!important}
+body.sk2.mobile-fx #phone-tools-bar{display:flex;align-items:center;flex:0 0 52px;min-width:0;padding-left:4px}
+body.sk2.mobile-fx #phone-tools-bar #fx-tool-cats{flex:1;min-width:0;padding-left:0}
+body.sk2.mobile-fx #phone-tools-find{flex:none;width:48px;height:48px;padding:0;background:none;border:0;color:var(--k-color-ink);display:flex;align-items:center;justify-content:center}
+body.sk2.mobile-fx #phone-tools-find[aria-pressed=true]{color:var(--acc)}
+#fx-pull-cue{position:fixed;left:50%;transform:translate(-50%,-8px);z-index:9600;padding:8px 14px;background:var(--k-color-bg);color:var(--k-color-ink);border:1px solid var(--k-color-ink);font:13px var(--sans);opacity:0;pointer-events:none;transition:opacity .12s,transform .12s}
+#fx-pull-cue.on{opacity:1;transform:translate(-50%,0)}
+/* Phones: Apply sits beside Cancel under the photo. */
+#btn-crop-apply2{display:none}
+body.mobile-fx #btn-crop-apply2{display:inline-flex;margin-left:8px}
+body.sk2.mobile-fx #fx-canvas-crop{max-height:100%!important;max-width:100%!important;width:auto!important;height:auto!important;margin:auto}
