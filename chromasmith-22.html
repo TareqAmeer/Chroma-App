@@ -1852,6 +1852,10 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 /* CHR-215: collage title band + per-photo captions (geometry shared with clExport via clTextGeom) */
 .cl-title{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:600;white-space:nowrap;overflow:hidden;pointer-events:none}
 .cl-in{position:absolute;overflow:hidden}
+/* CHR-194: edit-persistence state beside the photo name (desktop Library photos only) */
+#cs-save-state{margin-left:10px;font-size:var(--fs-1);color:var(--mut);white-space:nowrap}
+#cs-save-state.err{color:var(--err)}
+#cs-save-state button{all:unset;cursor:pointer;text-decoration:underline;margin-left:4px}
 .cl-cell.cl-framed{box-shadow:0 2px 10px rgba(0,0,0,.28)}
 .cl-cap.cl-cap-mat{background:none;color:#222;padding:0 .6em;display:flex;align-items:center}
 .cl-cap{position:absolute;left:0;right:0;bottom:0;padding:1.2em .6em .45em;color:#fff;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:linear-gradient(transparent,rgba(0,0,0,.55));pointer-events:none}
@@ -3663,7 +3667,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
     <!-- "Reset all edits" moved into the ⋯ overflow menu (ovfBuild()) — the one genuinely rare,
          semi-destructive action in the always-visible cluster; Undo/Redo already cover the
          common "I changed my mind" case. -->
-    <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status" role="status" aria-live="polite" aria-atomic="true"></span></div>
+    <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status" role="status" aria-live="polite" aria-atomic="true"></span><span id="cs-save-state" role="status" aria-live="polite" hidden></span></div>
     <div id="fx-deskbar-right">
       <div id="fx-deskbar-tools"></div>
       <button class="fx-db js-allfx" onclick="enableAll()" title="All FX: one click adds film grain, glow and borders. Use the ▾ to choose which effects and how strong."><span class="fx-db-ic" id="db-allfx"></span><span class="fx-db-lb">All FX</span></button><button class="fx-db js-allfx-cfg" onclick="allFxSettings()" title="Choose what All FX applies — effects, strengths and look" aria-label="All FX settings">▾</button>
@@ -6892,7 +6896,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002Z';
+const BUILD='1.1002A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -19327,6 +19331,15 @@ function fxFullDimsText(it){
 // Header shows what's loaded right now (proxy until the full decode is in, then the full size);
 // the table's Dimensions row is always the full size. Both are re-synced on every preview render
 // so a background full-quality promotion updates them instead of leaving stale numbers behind.
+// CHR-194: called by library-ui.js's autosave. "saved" is only ever set after the sidecar write
+// resolved — never optimistically. st: pending | saving | saved | queued | error | ''.
+window.chromasmithSaveState=function(st,onRetry){
+  const el=document.getElementById('cs-save-state');if(!el)return;
+  clearTimeout(el._t);el.className=st==='error'?'err':'';el.hidden=!st;el.textContent='';
+  const T={pending:'Edited',saving:'Saving…',saved:'Saved',queued:'Saved offline — applies when the drive reconnects',error:'Couldn\'t save edit'};
+  el.textContent=T[st]||'';el.title=st==='saved'?'Edit written to the photo\'s sidecar — safe to close':'';
+  if(st==='error'&&onRetry){const b=document.createElement('button');b.type='button';b.textContent='Retry';b.onclick=onRetry;el.appendChild(b);}
+};
 function fxRefreshDims(){
   const it=fxImages[fxCurIdx]||fxImages[0];if(!it||it.kind==='video')return;
   const s=document.getElementById('db-title-status');

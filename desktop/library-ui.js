@@ -4250,7 +4250,7 @@
     if (saveLrBtn) saveLrBtn.style.display = 'none';
     // A pending disk write for the PREVIOUS photo must land before we move state.openedPath
     // off it — otherwise a quick edit right before switching photos could be dropped.
-    const flushT0 = performance.now(); await flushPendingSave(); rawPerf('open-flush-save', path, { ms: performance.now() - flushT0 });
+    const flushT0 = performance.now(); await flushPendingSave(); rawPerf('open-flush-save', path, { ms: performance.now() - flushT0 }); if (window.chromasmithSaveState) window.chromasmithSaveState('');
     // Selecting a photo from the full-window home screen transitions into the editor — the
     // library collapses to the docked filmstrip (stays open, just narrow), it doesn't close.
     if (state.expanded_view) toggleExpandedView(false);
@@ -4791,7 +4791,12 @@
     if (!pendingSave) return;
     clearTimeout(saveTimer);
     const { paths, snap, thumbPath } = pendingSave;
+    const job = pendingSave;
     pendingSave = null;
+    // CHR-194: track the real outcome so the title-bar state never claims "Saved" early.
+    let failed = false, queued = false;
+    const ss = window.chromasmithSaveState || (() => {});
+    ss('saving');
     await Promise.all(paths.map(async (path, i) => {
       // FX/adjustments are shared, but geometry is per-photo (see chromasmith-22.html's
       // geomApplyToAll) — the snapshot captured at edit time reflects only the CURRENTLY
@@ -4820,11 +4825,14 @@
         // to write to. Queue the recipe in the catalog DB instead; it replays for real once the
         // volume reconnects (see wireOfflineQueueReconnect below). This does NOT update the local
         // sidecar cache/UI "edited" badge as saved-for-real — it stays queued until applied.
-        await invoke('queue_offline_edit', { path, recipe }).catch((e) => console.error('queue_offline_edit', e));
+        queued = true;
+        await invoke('queue_offline_edit', { path, recipe }).catch((e) => { failed = true; console.error('queue_offline_edit', e); });
       } else {
-        await invoke('set_sidecar', { path, rating: cur.rating, label: cur.label, edited: true, recipe }).catch((e) => console.error('auto-save recipe', e));
+        await invoke('set_sidecar', { path, rating: cur.rating, label: cur.label, edited: true, recipe }).catch((e) => { failed = true; console.error('auto-save recipe', e); });
       }
     }));
+    if (failed) ss('error', () => { if (!pendingSave) pendingSave = job; flushPendingSave(); });
+    else ss(queued ? 'queued' : 'saved');
     // The live canvas only ever shows ONE photo (the currently previewed one) — refreshing
     // every batch photo's thumbnail from it would overwrite the rest with the wrong image.
     if (thumbPath) refreshCardThumbFromCanvas(thumbPath);
@@ -4845,6 +4853,7 @@
     clearTimeout(saveTimer);
     pendingSave = { paths, snap, thumbPath };
     saveTimer = setTimeout(flushPendingSave, 2000);
+    if (window.chromasmithSaveState) window.chromasmithSaveState('pending');
   };
   // A pending write must not be silently dropped by switching photos (or quitting) inside
   // the 2s debounce window — flush it immediately whenever either happens.
