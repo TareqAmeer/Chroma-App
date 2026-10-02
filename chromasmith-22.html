@@ -4719,6 +4719,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <!-- No "More" here: the Tools tab below opens the same full grid. -->
         <button class="js-allfx" onclick="enableAll()" title="All FX (long-press for settings)"><span data-mic="enableAll"></span>All FX</button>
         <button class="js-prevfx" onclick="fxApplyPrevious()" title="Apply the settings from the last photo you edited"><span data-mic="paste"></span>Previous</button>
+        <button data-sec="looks" onclick="fxSection('looks')"><span data-mic="view"></span>Looks</button>
         <button data-sec="adjust" onclick="fxSection('adjust')"><span data-mic="adjust"></span>Light</button>
         <button data-sec="curves" onclick="fxSection('curves')"><span data-mic="curves"></span>Curves</button>
         <button data-sec="hsl" onclick="fxSection('hsl')"><span data-mic="hsl"></span>Mixer</button>
@@ -6933,7 +6934,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002H';
+const BUILD='1.1002I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18889,8 +18890,12 @@ function wbEyedropperClick(e){
 }
 
 // ── Auto-enhance ───────────────────────────────────────────────────────────────
+let _autoEnh=null; // values the last Auto-enhance applied; a second click while they still hold resets Light
+const _AE_IDS=['sl-adj-exp','sl-adj-bl','sl-adj-wh','sl-adj-temp','sl-adj-tint'];
 function autoEnhance(){
   const src=fxWork||fxImg;if(!src){log('Load an image first','warn');return;}
+  const aeBtn=document.querySelector('[onclick="autoEnhance()"]');
+  if(_autoEnh&&_AE_IDS.every((id,i)=>+document.getElementById(id)?.value===_autoEnh[i])){_autoEnh=null;aeBtn?.classList.remove('on');fxResetSection('adjust');return;}
   const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height;
   const mw=Math.min(sw,400),mh=Math.max(1,(mw*sh/sw)|0);
   const tc=document.createElement('canvas');tc.width=mw;tc.height=mh;
@@ -18915,6 +18920,7 @@ function autoEnhance(){
   setSlider('sl-adj-exp',expAdj);setSlider('sl-adj-bl',blacksAdj);setSlider('sl-adj-wh',whitesAdj);
   setSlider('sl-adj-temp',tempAdj);setSlider('sl-adj-tint',tintAdj);
   const tg=document.getElementById('tg-adjust');if(!tg.classList.contains('on'))toggleFX('adjust');
+  _autoEnh=[expAdj,blacksAdj,whitesAdj,tempAdj,tintAdj];aeBtn?.classList.add('on');
   fxUpdate();
   log(`Auto-enhance: exp ${expAdj}, blacks ${blacksAdj}, whites ${whitesAdj}, temp ${tempAdj}, tint ${tintAdj}`,'ok');
 }

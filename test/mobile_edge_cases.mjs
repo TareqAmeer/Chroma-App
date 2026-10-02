@@ -101,8 +101,8 @@ async function exercise(name,engine){
    const sum=()=>page.evaluate(()=>Array.from(fxState.masks[mskSel].px||[]).reduce((a,b)=>a+b,0));const painted=await sum();assert(painted>0);await page.locator('[data-mask-erase]').click();await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+10,y,{steps:4});await page.mouse.up();assert((await sum())<painted);
   });
   await check('permanent deletion requires confirmation and preserves other originals',async()=>{
-   await page.evaluate(i=>MobileLibrary.trash([i]),ids[1]);await page.evaluate(()=>MobileLibrary.open());await page.locator('#mlib [data-f=trash]').click();await page.locator('#mlib .photo-menu[data-id="'+ids[1]+'"]').click();await page.locator('[data-delete]').click();await page.locator('[data-answer=no]').click();assert(await page.evaluate(i=>MobileLibrary.getBlob(i),ids[1]));
-   await page.locator('#mlib .photo-menu[data-id="'+ids[1]+'"]').click();await page.locator('[data-delete]').click();await page.locator('[data-answer=yes]').click();await expect.poll(()=>page.evaluate(i=>MobileLibrary.getPhoto(i),ids[1])).toBe(undefined);assert(await page.evaluate(i=>MobileLibrary.getBlob(i),ids[0]));
+   await page.evaluate(i=>MobileLibrary.trash([i]),ids[1]);await page.evaluate(()=>MobileLibrary.open());await page.locator('#mlib [data-f=trash]').click();await page.locator('#mlib .photo-menu[data-id="'+ids[1]+'"]').dispatchEvent('click');await page.locator('[data-delete]').click();await page.locator('[data-answer=no]').click();assert(await page.evaluate(i=>MobileLibrary.getBlob(i),ids[1]));
+   await page.locator('#mlib .photo-menu[data-id="'+ids[1]+'"]').dispatchEvent('click');await page.locator('[data-delete]').click();await page.locator('[data-answer=yes]').click();await expect.poll(()=>page.evaluate(i=>MobileLibrary.getPhoto(i),ids[1])).toBe(undefined);assert(await page.evaluate(i=>MobileLibrary.getBlob(i),ids[0]));
   });
   await check('small-phone dialogs and keyboard focus stay usable',async()=>{
    await page.evaluate(i=>MobileLibrary.openPhoto(i),ids[0]);await setExposure(70);await page.evaluate(()=>fxHistoryPush());

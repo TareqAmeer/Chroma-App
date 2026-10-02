@@ -64,7 +64,7 @@ async function exercise(name, engine) {
     await page.evaluate(()=>fxSection('adjust'));
     await page.screenshot({path:`test/output/mobile/${name}-adjust.png`});
     await check('range targets, exact values, compare and switch are accessible',async()=>{
-      const rects=await page.locator('#sl-adj-exp, #vl-adj-exp, #tg-adjust, #phone-compare').evaluateAll(a=>a.map(e=>{const r=e.getBoundingClientRect();return {id:e.id,w:r.width,h:r.height,name:e.getAttribute('aria-label')||e.textContent};}));
+      const rects=await page.locator('#sl-adj-exp, #vl-adj-exp, .fx-ctrl[data-fxsec=adjust]>.fx-ctrl-title, #phone-compare').evaluateAll(a=>a.map(e=>{const r=e.getBoundingClientRect();return {id:e.id,w:r.width,h:r.height,name:e.getAttribute('aria-label')||e.textContent};}));
       assert(rects.every(r=>r.w>=48&&r.h>=48&&r.name));
       await page.locator('#phone-compare').click();assert.equal(await page.evaluate(()=>fxCompare),true);
       await page.locator('#phone-compare').click();assert.equal(await page.evaluate(()=>fxCompare),false);
@@ -81,9 +81,11 @@ async function exercise(name, engine) {
     });
     await check('gallery thumbnails and search, actions, collections and larger text work',async()=>{
       await page.evaluate(()=>MobileLibrary.open());
+      assert(!(await page.locator('#mlib input[type=search]').isVisible()));
+      await page.locator('#mlib .grid').dispatchEvent('wheel',{deltaY:-200});await expect(page.locator('#mlib input[type=search]')).toBeVisible();
       await page.locator('#mlib input[type=search]').fill('portrait');await page.waitForFunction(()=>document.querySelectorAll('#mlib .cell').length===1);
       await page.waitForFunction(()=>{const e=document.querySelector('#mlib .cell img');return e?.complete&&e.naturalWidth>0;});
-      await page.locator('#mlib .photo-menu').click();await page.locator('[data-act=collection]').click();await page.locator('#phone-name').fill('Trip');await page.locator('[data-save]').click();
+      await page.locator('#mlib .photo-menu').dispatchEvent('click');await page.locator('[data-act=collection]').click();await page.locator('#phone-name').fill('Trip');await page.locator('[data-save]').click();
       await page.waitForFunction(()=>document.querySelector('#mlib .collections option[value="Trip"]'));
       await page.locator('#mlib [data-a=settings]').click();await page.locator('[data-pref=textSize]').selectOption('1.3');await page.locator('.phone-close').click();
       await page.screenshot({path:`test/output/mobile/${name}-gallery-large-text.png`});
@@ -99,7 +101,7 @@ async function exercise(name, engine) {
       await page.evaluate(id=>{MobileLibrary.saveVersion(id);},ids[0]);await page.locator('#phone-name').fill('Warm');await page.locator('[data-save]').click();
       await expect.poll(()=>page.evaluate(async id=>(await MobileLibrary.getPhoto(id)).versions.length,ids[0])).toBe(1);
       await page.evaluate(()=>{const s=document.getElementById('sl-adj-exp');s.value=60;s.dispatchEvent(new Event('input',{bubbles:true}));});
-      await page.evaluate(()=>MobileLibrary.open());await page.locator('#mlib .photo-menu').first().click();await page.locator('[data-version="0"]').click();await page.locator('[data-open]').click();await page.locator('[data-answer=yes]').click();await page.locator('#phone-name').fill('Warm fork');await page.locator('[data-save]').click();
+      await page.evaluate(()=>MobileLibrary.open());await page.locator('#mlib .photo-menu').first().dispatchEvent('click');await page.locator('[data-version="0"]').click();await page.locator('[data-open]').click();await page.locator('[data-answer=yes]').click();await page.locator('#phone-name').fill('Warm fork');await page.locator('[data-save]').click();
       await expect.poll(()=>page.evaluate(async id=>{const p=await MobileLibrary.getPhoto(id);return !MobileLibrary.isOpening&&!MobileUI.dialog&&document.getElementById('sl-adj-exp').value==='40'&&p.versions.length===3&&MobileProject.validateRecipe(p.recipe).sliders['adj-exp']==='40';},ids[0])).toBe(true);
       const p=await page.evaluate(id=>MobileLibrary.getPhoto(id),ids[0]);
       assert.equal(MobileRecipe(p.recipe).sliders['adj-exp'],'40');

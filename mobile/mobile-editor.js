@@ -27,7 +27,8 @@ function sheet(title,html,setup){
   };
   ov.onclick=e=>{if(e.target===ov||e.target.closest('.phone-close'))close();};ov.addEventListener('keydown',key);
   activeDialog={el:ov,close,closed};setup?.(ov,close);
-  if(!ov.contains(document.activeElement))(ov.querySelector('.phone-dialog-content input:not([type=checkbox]),.phone-dialog-content button,.phone-dialog-content select')||ov.querySelector('button,input'))?.focus();
+  if(!ov.contains(document.activeElement))// Focus the close button, never a select: focusing one pops its picker open on phones.
+  (ov.querySelector('.phone-close')||ov.querySelector('.phone-dialog-content button')||ov.querySelector('button'))?.focus();
   return {el:ov,close,closed};
 }
 async function ask(title,text,action='Continue'){
@@ -66,7 +67,7 @@ const hapt0=window.hapt;window.hapt=function(){if(!pref('haptics',true))return;r
 window.csSwipeAdjust=false;
 function compare(v){fxCompare=v;renderPreview();syncCompare();}
 function syncCompare(){
-  const b=$('#phone-compare'),lb=$('#phone-original');if(b){b.textContent=fxCompare?'Show edit':'Compare';b.setAttribute('aria-pressed',String(fxCompare));}if(lb)lb.hidden=!fxCompare;
+  const b=$('#phone-compare'),lb=$('#phone-original');if(b){b.setAttribute('aria-label',fxCompare?'Show edit':'Compare with original');b.setAttribute('aria-pressed',String(fxCompare));}if(lb)lb.hidden=!fxCompare;
 }
 const render0=window.renderPreview;window.renderPreview=function(){const r=render0.apply(this,arguments);if(mob())syncCompare();return r;};
 const GROUPS={all:{label:'All'},light:{label:'Light',keys:['adjust','curves']},colour:{label:'Colour',keys:['hsl','wheels','pointcolor']},film:{label:'Film',keys:['looks','inprint','grain','hal','bloom','vig','art']},local:{label:'Local',keys:['local','retouch']},geometry:{label:'Geometry',keys:['crop','rotate','straighten','lens','borders','canvas']},detail:{label:'Detail',keys:['nr','deconv']},saved:{label:'Saved',keys:['style']}};
@@ -98,6 +99,12 @@ function lookActions(){
 }
 function setupLooks(){
   const looks=$('#fx-looks');if(!looks||$('#phone-look-actions'))return;
+  // Search stays hidden behind a magnifier at the start of the category chips.
+  const cats=$('#fx-looks-cats'),search=$('#fx-looks-search');
+  if(cats&&search&&!$('#phone-looks-bar')){const bar=document.createElement('div');bar.id='phone-looks-bar';cats.before(bar);
+    const sb=document.createElement('button');sb.id='phone-looks-find';sb.type='button';sb.setAttribute('aria-label','Search looks');sb.setAttribute('aria-pressed','false');sb.innerHTML=typeof icon==='function'?icon('search',20):'⌕';
+    bar.append(sb,cats);sb.onclick=()=>{const on=!document.body.classList.contains('phone-looks-search')||!!search.value;document.body.classList.toggle('phone-looks-search',on);sb.setAttribute('aria-pressed',String(on));if(on)search.focus();};
+    search.addEventListener('blur',()=>{if(!search.value){document.body.classList.remove('phone-looks-search');sb.setAttribute('aria-pressed','false');}});}
   const row=document.createElement('div');row.id='phone-look-actions';row.className='phone-actions';
   row.innerHTML='<button id="phone-look-browse" aria-pressed="false">Browse all</button><button id="phone-look-strength">Strength</button><button id="phone-look-fav">Favourite</button>';
   looks.before(row);
@@ -150,24 +157,37 @@ function magnifier(){
   c.hidden=true;wrap.addEventListener('pointerdown',e=>{on=mob()&&mskPaintMode&&e.isPrimary;show(e);},true);wrap.addEventListener('pointermove',show,true);
   const stop=()=>{on=false;c.hidden=true;};window.addEventListener('pointerup',stop);window.addEventListener('pointercancel',stop);
 }
+let straightenGrid=null;
 function syncNavigation(){
   if(!mob())return;const home=$('.fx-act-home');if(home){home.setAttribute('aria-label','Gallery');home.title='Gallery';if(!home.querySelector('.phone-home-label')){const t=document.createElement('span');t.className='phone-home-label';t.textContent='Gallery';home.appendChild(t);}home.onclick=()=>window.MobileLibrary?MobileLibrary.open().catch(e=>toast(e.message)):fxMobileBack();}
   const sec=document.querySelector('.fx-ctrl.sec-active')?.dataset.fxsec;
+  // Straighten shows a levelling grid over the photo; leaving it restores the user's own grid choice.
+  if(typeof cropGridOverlaySync==='function'){const st=sec==='straighten'&&document.body.classList.contains('sheet-open');
+    if(st&&!straightenGrid){straightenGrid={shown:cropGridShown,grid:cropGrid};if(cropGrid==='off')cropGrid='3x3';cropGridShown=true;cropGridOverlaySync();}
+    else if(!st&&straightenGrid){cropGridShown=straightenGrid.shown;cropGrid=straightenGrid.grid;straightenGrid=null;cropGridOverlaySync();}}
   document.querySelectorAll('#fx-mobile-nav [role=tab]').forEach(b=>b.setAttribute('aria-selected',String(b.classList.contains('on'))));
-  document.querySelectorAll('#fx-sheet-strip button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.sec===sec)));centreTab($('#fx-sheet-strip'),$('#fx-sheet-strip button.on'));syncResets();
+  document.querySelectorAll('#fx-sheet-strip button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.sec===sec)));centreTab($('#fx-sheet-strip'),$('#fx-sheet-strip button.on'));syncResets();document.querySelectorAll('.fx-ctrl>.fx-ctrl-title').forEach(t=>{t.classList.remove('phone-bare');t.classList.toggle('phone-bare',![...t.children].some(c=>c.getClientRects().length));});
   maskStatus();
 }
 const section0=window.fxSection;window.fxSection=function(){const r=section0.apply(this,arguments);if(mob()){syncNavigation();setupLooks();labelControls($('.fx-panel'));lookActions();}return r;};
 function boot(){
   const link=document.createElement('link');link.rel='stylesheet';link.href='mobile/mobile-ui.css';document.head.appendChild(link);
-  const ctx=document.createElement('div');ctx.id='phone-context';ctx.innerHTML='<button id="phone-compare" aria-pressed="false">Compare</button><button id="phone-swipe" aria-pressed="false" aria-label="Swipe adjust">Swipe</button><button id="phone-zoom">100%</button><button id="phone-sheet-size">Expand</button><span id="phone-original" hidden>Original</span>';
+  const ctx=document.createElement('div');ctx.id='phone-context';ctx.innerHTML='<button id="phone-sheet-size">Expand</button><span id="phone-original" hidden>Original</span>';
   $('#fx-actionbar')?.after(ctx);
   const queue=$('#phone-queue');if(queue)ctx.appendChild(queue);
-  ctx.querySelector('#phone-compare').onclick=()=>compare(!fxCompare);
-  ctx.querySelector('#phone-swipe').onclick=e=>{window.csSwipeAdjust=!window.csSwipeAdjust;e.target.setAttribute('aria-pressed',String(csSwipeAdjust));if(csSwipeAdjust)toast('Swipe sideways on the photo to adjust; up or down changes the slider.');};
-  ctx.querySelector('#phone-zoom').onclick=e=>{toggleLoupe();e.target.textContent=fxLoupe?'Fit':'100%';e.target.setAttribute('aria-pressed',String(fxLoupe));};
+  // Compare is a faded eye in the photo's bottom-right corner.
+  const eye=document.createElement('button');eye.id='phone-compare';eye.type='button';eye.setAttribute('aria-pressed','false');eye.setAttribute('aria-label','Compare with original');
+  eye.innerHTML='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  ($('#fx-wrap')||document.body).appendChild(eye);eye.onclick=()=>compare(!fxCompare);
   ctx.querySelector('#phone-sheet-size').onclick=()=>{document.body.classList.remove('sheet-user','sheet-peek');document.body.classList.toggle('sheet-full');rememberSheet();};
   {let q=0;const pnl=$('.fx-panel');if(pnl)new MutationObserver(()=>{if(q||!mob())return;q=requestAnimationFrame(()=>{q=0;syncResets(pnl);});}).observe(pnl,{subtree:true,characterData:true,childList:true});}
+  // Quick tool bar has two sizes: icons, or a thin text-only strip. Swipe down on it to thin it, up to restore.
+  {const qn=$('#fx-quicknav');document.body.classList.toggle('phone-qn-thin',pref('qnThin',false));
+   if(qn){let y0=null;qn.addEventListener('touchstart',e=>{y0=e.touches[0].clientY;},{passive:true});
+    qn.addEventListener('touchend',e=>{if(y0===null)return;const dy=e.changedTouches[0].clientY-y0;y0=null;if(Math.abs(dy)<28)return;const thin=dy>0;document.body.classList.toggle('phone-qn-thin',thin);setPref('qnThin',thin);},{passive:true});}}
+  // Double-tap a slider to reset it (the hidden per-row reset button does the work).
+  {let last={t:0,s:null,x:0};document.addEventListener('pointerup',e=>{if(!mob())return;const sl=e.target.closest?.('.fx-panel input.fx-slider');if(!sl)return;const now=performance.now();
+    if(last.s===sl&&now-last.t<350&&Math.abs(e.clientX-last.x)<24){last.s=null;sl.closest('.fx-row')?.querySelector('.phone-reset')?.click();window.hapt?.();}else last={t:now,s:sl,x:e.clientX};},true);}
   toolBrowser();setupLooks();maskWorkflow();magnifier();if(mob())labelControls($('.fx-panel'));syncNavigation();
   document.body.style.setProperty('--phone-text-scale',String(pref('textSize',1)));
   new MutationObserver(()=>{if(mob()){syncNavigation();rememberSheet();}}).observe(document.body,{attributes:true,attributeFilter:['class']});

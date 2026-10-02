@@ -27,7 +27,7 @@ body.sk2.mobile-fx .fx-act{color:var(--k-color-ink)}
 body.sk2.mobile-fx .fx-act-home{flex-direction:column;gap:0}
 body.sk2.mobile-fx .fx-act-logo{display:none!important}
 body.sk2.mobile-fx .fx-act-home .fx-act-ic{display:block!important}
-body.sk2.mobile-fx .phone-home-label{display:block;font:12px var(--sans)}
+body.sk2.mobile-fx .phone-home-label{display:none}
 body.sk2.mobile-fx #phone-context{display:flex;flex:0 0 auto;gap:4px;padding:0 8px;position:relative;overflow-x:auto}
 body.sk2.mobile-fx #phone-context button{min-height:48px;flex:0 0 auto;background:none;border:0;color:var(--k-color-ink);font:calc(13px * var(--phone-text-scale,1)) var(--sans);padding:4px 8px}
 #phone-original{position:fixed;top:calc(62px + env(safe-area-inset-top));left:12px;background:var(--k-color-bg);color:var(--k-color-ink);padding:8px;z-index:30;font:14px var(--sans);border:1px solid var(--bdr)}
@@ -39,11 +39,6 @@ body.sk2.mobile-fx .fx-panel .phone-reset{display:inline-flex;align-items:center
 body.sk2.mobile-fx .fx-panel .fx-slider{flex:1 1 65%;width:auto;margin:0}
 body.sk2.mobile-fx .fx-panel .fx-ctrl-title{min-height:48px;margin-bottom:4px}
 body.sk2.mobile-fx .fx-panel .cs-sub{font-size:calc(14px * var(--phone-text-scale,1));line-height:1.4}
-body.sk2.mobile-fx .fx-toggle{min-width:48px!important;min-height:48px!important;position:relative;background:transparent!important;border:0!important;box-shadow:none!important;display:inline-flex;align-items:center;justify-content:center}
-body.sk2.mobile-fx .fx-toggle::before{content:'';position:absolute;inset:auto!important;left:8px!important;top:16px!important;width:30px;height:16px;border:1px solid var(--k-color-muted);background:var(--sur2)}
-body.sk2.mobile-fx .fx-toggle.on::before{background:var(--acc)}
-body.sk2.mobile-fx .fx-toggle::after{position:absolute!important;left:10px!important;top:18px!important;transform:none!important;width:12px;height:12px;background:var(--k-color-ink)}
-body.sk2.mobile-fx .fx-toggle.on::after{transform:translateX(16px)!important}
 body.sk2.mobile-fx #fx-mobile-nav{min-height:72px;flex-basis:72px;padding:4px 8px max(8px,var(--sab));gap:8px}
 body.sk2.mobile-fx #fx-mobile-nav .fx-nav-tabs{gap:4px;flex:1;justify-content:space-between;min-width:0}
 body.sk2.mobile-fx #fx-mobile-nav .fx-nav-tabs button{font-size:calc(15px * var(--phone-text-scale,1));padding:0 4px}
@@ -164,3 +159,52 @@ body.sk2.mobile-fx #fx-toast{bottom:calc(var(--mnav-h,72px) + 12px + env(safe-ar
   body.sk2.mobile-fx.tools-open #fx-secnav{left:62%}
 }
 @media (orientation:portrait) and (max-width:420px){body.sk2.mobile-fx #phone-context{gap:0;padding:0 4px}body.sk2.mobile-fx #phone-context button{padding:4px 6px}body.sk2.mobile-fx #phone-context #phone-queue button{min-width:40px}}
+#mlib .filters{display:none}#mlib.filters-open .filters{display:block}
+/* Save state only surfaces when something needs attention. */
+body.sk2.mobile-fx #phone-save-status:not(.phone-error){display:none}
+#mlib .photo-menu{position:absolute;width:1px;height:1px;min-height:0!important;min-width:0!important;overflow:hidden;clip-path:inset(50%);padding:0;border:0}
+#mlib:not(.names) .cell .fn{display:none}#mlib:not(.names):not(.dates) .cell .nm{display:none}
+#mlib .cell{-webkit-touch-callout:none;user-select:none}
+#phone-compare{display:none}
+body.sk2.mobile-fx .fx-preview-col{position:relative}
+body.sk2.mobile-fx #phone-compare{display:flex;align-items:center;justify-content:center;position:absolute;right:8px;bottom:8px;z-index:20;width:48px;height:48px;padding:0;background:none;border:0;color:var(--k-color-ink);opacity:.45}
+body.sk2.mobile-fx #phone-compare[aria-pressed=true]{opacity:1;color:var(--acc)}
+/* The photo area must not size to the canvas: refitting it otherwise loops (visible flicker with the tool box open). */
+body.sk2.mobile-fx #fx-wrap{flex:1 1 0!important;overflow:hidden}
+/* The tab strip already names the tool: hide the card's own title text, keep its reset/on-off controls. */
+body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title{font-size:0!important;justify-content:flex-end!important;gap:8px}
+body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title>*{font-size:13px}
+body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title.phone-bare{display:none!important}
+body.sk2.mobile-fx:not(.phone-looks-search) #fx-looks-search{display:none}
+body.sk2.mobile-fx #phone-looks-bar{display:flex;align-items:center;gap:4px;min-width:0}
+body.sk2.mobile-fx #phone-looks-bar #fx-looks-cats{flex:1;min-width:0;margin-bottom:0!important}
+body.sk2.mobile-fx #phone-looks-find{flex:none;width:48px;height:48px;padding:0;background:none;border:0;color:var(--k-color-ink);display:flex;align-items:center;justify-content:center}
+body.sk2.mobile-fx #phone-looks-find[aria-pressed=true]{color:var(--acc)}
+/* Expanded look grid scrolls vertically; the strip's sideways-only touch rule trapped it. */
+body.sk2.mobile-fx.phone-looks-grid #fx-looks{touch-action:pan-y!important;overflow-y:visible!important}
+/* Gallery button shows the logo instead of a back chevron. */
+body.sk2.mobile-fx .fx-act-home .fx-act-ic{display:none!important}
+body.sk2.mobile-fx .fx-act-home .fx-act-logo{display:flex!important;align-items:center;justify-content:center}
+body.sk2.mobile-fx .fx-act-home .fx-act-logo svg{width:24px;height:24px}
+body.sk2.mobile-fx #fx-wrap{position:relative}
+body.sk2.mobile-fx #fx-wrap:not(:has(#fx-canvas[style*="block"])) #phone-compare{display:none}
+/* Toggles keep the desktop look and sliding knob; only the touch area grows to 48px. */
+body.sk2.mobile-fx .fx-toggle::before{inset:calc((var(--ctl-toggle-h) - 48px)/2) -8px!important}
+/* No per-slider reset buttons on phones. */
+body.sk2.mobile-fx .fx-panel .phone-reset{display:none!important}
+body.sk2.mobile-fx .fx-panel .fx-row.phone-changed:has(>input.fx-slider){grid-template-columns:minmax(72px,30%) minmax(0,1fr) 48px 0}
+/* Edited tools carry the same small accent square in both the icon bar and the thin tab strip. */
+body.sk2.mobile-fx #fx-quicknav [data-sec].edited{position:relative}
+body.sk2.mobile-fx #fx-quicknav [data-sec].edited span{position:relative}
+body.sk2.mobile-fx #fx-quicknav [data-sec].edited span::after{content:''!important;position:absolute;top:-2px;right:-8px;width:6px;height:6px;border-radius:0;background:var(--k-color-accent-a)}
+body.sk2.mobile-fx #fx-sheet-strip button.edited::after{top:8px;right:-6px;width:6px;height:6px}
+body.sk2.mobile-fx.sheet-open #fx-sheet-strip{padding-right:10px!important}
+/* Thin quick bar: labels only, edited square stays. */
+body.sk2.mobile-fx.phone-qn-thin #fx-quicknav{flex-basis:40px!important;max-height:40px!important;min-height:40px!important;align-items:center}
+body.sk2.mobile-fx.phone-qn-thin #fx-quicknav button{height:40px!important;min-height:40px!important;flex-direction:row!important;gap:0;font-size:12px;position:relative}
+body.sk2.mobile-fx.phone-qn-thin #fx-quicknav button span{position:static!important}
+body.sk2.mobile-fx.phone-qn-thin #fx-quicknav button span svg{display:none}
+body.sk2.mobile-fx.phone-qn-thin #fx-quicknav [data-sec].edited span::after{top:8px;right:2px}
+/* Rotate & Flip: no hover/press accent block or spinning icon on touch. */
+body.sk2.mobile-fx .fx-ctrl[data-fxsec=rotate] .btn-icon::after{display:none!important}
+body.sk2.mobile-fx .fx-ctrl[data-fxsec=rotate] .btn-icon,body.sk2.mobile-fx .fx-ctrl[data-fxsec=rotate] .btn-icon *{transform:none!important;transition:none!important;background:transparent!important;color:var(--k-color-ink)!important}
