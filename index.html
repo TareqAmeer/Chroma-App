@@ -169,6 +169,9 @@ a{color:inherit}
 .shifted::before{content:attr(data-t);position:absolute;left:.07em;top:.06em;color:var(--acc);z-index:-1;mix-blend-mode:multiply}
 
 /* 3. beta */
+.beta[hidden],.faq[hidden]{display:none}
+.fmore{display:none}
+@media(max-width:760px){.fmore{display:inline}}
 .beta{padding:16vh 5vw;border-top:1px solid var(--line)}
 .beta .head{display:flex;justify-content:space-between;align-items:end;gap:24px;flex-wrap:wrap;margin-bottom:8vh}
 .rows{border-top:1px solid var(--line)}
@@ -741,14 +744,16 @@ section{position:relative}
     </div>
   </div>
   <div class="bigword" aria-hidden="true"><span>CHRO-</span><span>MA-</span><span>SMITH</span></div>
-  <footer class="mono"><span>Free software under GPL-3.0 · Designed by Tareq Ameer</span><a href="https://github.com/TareqAmeer/Chroma-App" target="_blank" rel="noopener" data-goatcounter-click="github-footer" data-goatcounter-title="github-footer">Source code</a></footer>
+  <footer class="mono"><span class="fmore"><a href="#beta" data-reveal>In beta</a> · <a href="#faq" data-reveal>FAQ</a> · </span><span>Free software under GPL-3.0 · Designed by Tareq Ameer</span><a href="https://github.com/TareqAmeer/Chroma-App" target="_blank" rel="noopener" data-goatcounter-click="github-footer" data-goatcounter-title="github-footer">Source code</a></footer>
 </section>
 
 <script src="vendor/web/gsap.min.js"></script>
 <script src="vendor/web/ScrollTrigger.min.js"></script>
 <script src="vendor/web/lenis.min.js"></script>
 <script>
-gsap.registerPlugin(ScrollTrigger);ScrollTrigger.config({ignoreMobileResize:true});
+gsap.registerPlugin(ScrollTrigger);
+const PHONE=matchMedia('(max-width:760px)').matches;if(PHONE)['beta','faq'].forEach(i=>document.getElementById(i).hidden=true);
+document.querySelectorAll('a[href="#beta"],a[href="#faq"]').forEach(a=>a.addEventListener('click',e=>{const t=document.querySelector(a.getAttribute('href'));if(!t.hidden)return;e.preventDefault();e.stopImmediatePropagation();t.hidden=false;ScrollTrigger.refresh();const go=()=>{lenis&&lenis.resize&&lenis.resize();const y=t.getBoundingClientRect().top+scrollY-40;lenis?lenis.scrollTo(y,{immediate:true,force:true}):scrollTo(0,y)};setTimeout(go,150);setTimeout(go,600)},true));ScrollTrigger.config({ignoreMobileResize:true});
 let still=false;try{still=localStorage.getItem('cs-motion')==='off'}catch(e){}
 if(still)document.documentElement.classList.add('still');
 if(!location.hash){history.scrollRestoration='manual';scrollTo(0,0);addEventListener('load',()=>{scrollTo(0,0);lenis&&lenis.scrollTo(0,{immediate:true,force:true})})}
@@ -762,7 +767,7 @@ let gliding=false,glideTimer=0;
 let gtok=0;
 const setY=y=>{lenis?lenis.scrollTo(y,{immediate:true,force:true}):scrollTo(0,y)};
 // own rAF glide (time-based, native scroll position) so it behaves the same with or without Lenis, on iOS and Android
-const glide=(to,dur,ease,done)=>{const y0=lenis?lenis.scroll:scrollY,t0=performance.now(),tok=++gtok,E=ease||(x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2);gliding=true;
+const glide=(to,dur,ease,done)=>{dur*=COARSE?1.8:1;const y0=lenis?lenis.scroll:scrollY,t0=performance.now(),tok=++gtok,E=ease||(x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2);gliding=true;
   const f=t=>{if(tok!==gtok)return;const k=Math.min(1,(t-t0)/(dur*1000));setY(y0+(to-y0)*E(k));if(k<1)requestAnimationFrame(f);else{gliding=false;done&&done()}};requestAnimationFrame(f)};
 const cancelGlide=()=>{if(!gliding)return;gtok++;gliding=false;clearTimeout(glideTimer)};
 window.__advance=()=>{
