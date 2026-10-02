@@ -12761,7 +12761,7 @@
   // Portfolio-site style ways to look through a random set from the current view. Uses the
   // same thumbnail command as the grid; click (double-click on prints) opens a photo. Esc or ×
   // closes. All motion stops for Reduce Motion (drift/wall stay static, prints don't fly in).
-  const PV_MODES = [['wall', 'Wall'], ['drift', 'Drift'], ['prints', 'Prints'], ['trail', 'Trail']];
+  const PV_MODES = [['slides', 'Slideshow'], ['wall', 'Wall'], ['drift', 'Drift'], ['prints', 'Prints'], ['trail', 'Trail']];
   let pv = null;
   async function openPhotoPreview(mode) {
     const pool = (state.entries || []).filter((e) => e && e.path && !/\.(mp4|mov|m4v|avi|mkv|webm|mts)$/i.test(e.path));
@@ -12775,14 +12775,14 @@
     const bar = document.createElement('div');
     bar.style.cssText = 'position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:2;display:flex;gap:4px;padding:4px;border-radius:8px;background:rgba(20,20,20,.7);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)';
     const mkBtn = (t, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.style.cssText = 'all:unset;cursor:pointer;padding:5px 10px;border-radius:5px;font-size:12px;color:#ddd'; b.onclick = fn; bar.appendChild(b); return b; };
-    pv = { root, raf: 0, stop: [], photos: [], mode: mode || 'wall', btns: {} };
+    pv = { root, raf: 0, stop: [], photos: [], all: pool.slice(0, 500), mode: mode || 'wall', btns: {} };
     PV_MODES.forEach(([k, t]) => { pv.btns[k] = mkBtn(t, () => pvMode(k)); });
     mkBtn('Shuffle', () => openPhotoPreview(pv.mode));
     mkBtn('×', closePhotoPreview).setAttribute('aria-label', 'Close preview');
     root.appendChild(bar);
     const stage = document.createElement('div'); stage.style.cssText = 'position:absolute;inset:0;z-index:0;isolation:isolate'; root.appendChild(stage); pv.stage = stage;
     document.body.appendChild(root);
-    pv.onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); closePhotoPreview(); } };
+    pv.onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); closePhotoPreview(); return; } if (pv && pv.keyHook) pv.keyHook(e); };
     window.addEventListener('keydown', pv.onKey, true);
     const me = pv;
     const urls = await Promise.all(pick.map((e) => invoke('get_thumbnail_or_offline', { path: e.path })
@@ -12804,10 +12804,48 @@
   function pvImg(p, css) { const im = document.createElement('img'); im.src = p.url; im.alt = ''; im.draggable = false; im.style.cssText = 'position:absolute;object-fit:cover;' + (css || ''); return im; }
   function pvMode(k) {
     if (!pv) return;
-    cancelAnimationFrame(pv.raf); pv.stop.forEach((f) => f()); pv.stop = [];
+    cancelAnimationFrame(pv.raf); pv.stop.forEach((f) => f()); pv.stop = []; pv.keyHook = null; pv.stage.onclick = null;
     pv.mode = k; pv.stage.textContent = '';
     Object.entries(pv.btns).forEach(([m, b]) => { b.style.background = m === k ? 'rgba(255,255,255,.16)' : ''; b.style.color = m === k ? '#fff' : '#bbb'; });
-    ({ wall: pvWall, drift: pvDrift, prints: pvPrints, trail: pvTrail })[k]();
+    ({ slides: pvSlides, wall: pvWall, drift: pvDrift, prints: pvPrints, trail: pvTrail })[k]();
+  }
+  // Slideshow (CHR-174 + CHR-212): large previews one at a time with a slow pan-and-zoom and a
+  // crossfade. ←/→ step, Space pauses, P/X/U flag and 0–5 rate the photo on screen (the same
+  // setLabel/setRating every other Library path uses). Shows the camera preview, not the edit.
+  function pvSlides() {
+    const all = pv.all, layers = [0, 1].map(() => { const im = pvImg({ url: '' }, 'inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity 1s'); pv.stage.appendChild(im); return im; });
+    const cap = document.createElement('div'); cap.id = 'cs-pv-cap'; cap.style.cssText = 'position:absolute;left:20px;bottom:16px;z-index:3;font-size:12px;color:#bbb;text-shadow:0 1px 3px #000'; pv.stage.appendChild(cap);
+    let i = 0, top = 0, paused = false, timer = 0, urls = new Map(), gen = 0;
+    const load = (k) => { const e = all[(k + all.length) % all.length]; if (urls.has(e.path)) return urls.get(e.path);
+      const pr = invoke('get_quicklook_preview', { path: e.path }).then((b) => URL.createObjectURL(new Blob([b], { type: 'image/jpeg' })))
+        .catch(() => invoke('get_thumbnail_or_offline', { path: e.path }).then((b) => URL.createObjectURL(new Blob([b], { type: 'image/jpeg' }))));
+      urls.set(e.path, pr); return pr; };
+    const label = () => { const e = all[i], sc = state.sidecars.get(e.path) || {}; cap.textContent = `${i + 1} / ${all.length} · ${baseName(e.path)}${sc.label === 'Green' ? ' · Picked' : sc.label === 'Red' ? ' · Rejected' : ''}${sc.rating ? ' · ' + '★'.repeat(sc.rating) : ''}${paused ? ' · Paused' : ''}`; };
+    const show = async (k) => {
+      const g = ++gen; i = (k + all.length) % all.length; label();
+      const url = await load(i).catch(() => null); if (g !== gen || !pv) return;
+      load(i + 1).catch(() => {});
+      const im = layers[top ^= 1], other = layers[top ^ 1];
+      if (url) im.src = url;
+      const zx = (Math.random() - 0.5) * 6, zy = (Math.random() - 0.5) * 6, rm = pvReduced();
+      im.style.transition = 'none'; im.style.transform = rm ? '' : `scale(1.02) translate(${-zx}%,${-zy}%)`; void im.offsetWidth;
+      im.style.transition = rm ? 'opacity 1s' : 'opacity 1s, transform 7s linear'; im.style.opacity = '1'; im.style.zIndex = 2; other.style.zIndex = 1;
+      if (!rm) im.style.transform = `scale(1.12) translate(${zx}%,${zy}%)`;
+      other.style.opacity = '0';
+      clearTimeout(timer); if (!paused) timer = setTimeout(() => show(i + 1), 5500);
+    };
+    pv.keyHook = (e) => {
+      const k = e.key, p = all[i] && all[i].path; let used = true;
+      if (k === 'ArrowRight') show(i + 1); else if (k === 'ArrowLeft') show(i - 1);
+      else if (k === ' ') { paused = !paused; clearTimeout(timer); if (!paused) timer = setTimeout(() => show(i + 1), 2000); label(); }
+      else if (/^[pxu]$/i.test(k) && p) { setLabel(p, { p: 'Green', x: 'Red', u: '' }[k.toLowerCase()]); setTimeout(label, 50); }
+      else if (/^[0-5]$/.test(k) && p) { setRating(p, +k); setTimeout(label, 50); }
+      else used = false;
+      if (used) { e.preventDefault(); e.stopPropagation(); }
+    };
+    pv.stage.onclick = () => pvOpen(all[i].path);
+    pv.stop.push(() => { gen++; clearTimeout(timer); urls.forEach((pr) => pr.then((u) => URL.revokeObjectURL(u)).catch(() => {})); });
+    show(0);
   }
   // Wall: a tiled plane bigger than the window; offsets wrap, so it never runs out. Drag with momentum.
   function pvWall() {
