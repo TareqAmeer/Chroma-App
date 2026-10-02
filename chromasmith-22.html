@@ -6892,7 +6892,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002W';
+const BUILD='1.1002X';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9724,6 +9724,13 @@ FXR.CAL={
                    '35mm':{cellPx:3.0,scale:1.00}, '65mm':{cellPx:3.0,scale:0.52} }}
 };
 const FX=new FXR();
+// CHR-183: renderer state the UI changes mid-export is queued, not applied, so the export keeps
+// rendering with the look it started with (setMaskTex is NOT here: render() rebuilds it per call
+// from the params, including the export's own).
+['setLUT','setPrintLUT','setHslLUT','setCurveTex','setDepthTex'].forEach(m=>{
+  if(typeof FX[m]!=='function')return;const f=FX[m].bind(FX);FX['_'+m]=f;
+  FX[m]=(...a)=>{if(window.__csExporting){(FX._deferred||(FX._deferred=[])).push([m,a]);return;}return f(...a);};
+});
 
 // ═══════════════════════════
 // FX UI
@@ -19890,6 +19897,10 @@ function resolveSplitSnapshot(src){
   return 'orig';
 }
 function renderPreview(){
+  // CHR-183: an export drives the SAME renderer (FX) and yields between tiles/photos — a preview
+  // render in that gap swapped FX's image and size under the export and corrupted tiles. While
+  // exporting, edits still apply; the preview just catches up once the export finishes.
+  if(window.__csExporting){if(!window.__csPreviewPending){window.__csPreviewPending=true;if(typeof toast==='function')toast('Exporting — the preview catches up when it finishes');}return;}
   const work=fxWork||fxImg;
   if(!work||!FX.ok)return;
   if(cropMode)return;            // crop overlay owns the canvas while active
@@ -21870,7 +21881,7 @@ window.chromasmithRenderCurrentGraded=async function(maxEdge){
   return bm;
 };
 async function exportFX(...a){
-  _fxExportRuns++;document.body.classList.add('fx-exporting');
+  _fxExportRuns++;document.body.classList.add('fx-exporting');window.__csExporting=true;
   // Phone app: keep the screen awake for the whole export (a locked phone suspends the app and
   // the export with it), and if the app was in the background when it finished, say so with a
   // notification. Both plugins are optional — missing ones are simply skipped.
@@ -21878,6 +21889,11 @@ async function exportFX(...a){
   try{P.KeepAwake&&await P.KeepAwake.keepAwake();}catch(e){}
   try{return await _exportFXRun(...a);}
   finally{if(--_fxExportRuns<=0){_fxExportRuns=0;document.body.classList.remove('fx-exporting');
+      window.__csExporting=false;
+      // CHR-183: replay renderer changes the user made mid-export (look, print, curves, HSL,
+      // depth), then repaint the preview once with everything.
+      const q=FX._deferred||[];FX._deferred=[];q.forEach(([m,a])=>{try{FX['_'+m](...a);}catch(e){}});
+      if(window.__csPreviewPending||q.length){window.__csPreviewPending=false;try{renderPreview();}catch(e){}}
       try{P.KeepAwake&&P.KeepAwake.allowSleep();}catch(e){}
       if(P.LocalNotifications&&(document.hidden||Date.now()-t0>15000)){
         try{const perm=await P.LocalNotifications.requestPermissions();
@@ -21974,6 +21990,10 @@ async function _exportFXRun(){
     // the outer catch and `saveFiles` was never called, so a whole export could vanish with only
     // an error logged. Now a per-image failure is logged and skipped; the rest of the batch and
     // whatever already succeeded still gets saved. ──
+    // CHR-183: every photo's parameters are captured BEFORE the first render, so sliders moved
+    // while the export runs can't leak into the photos still waiting in the queue.
+    const _expPs=items.map(it=>{const sm=fxState.masks;fxState.masks=it.masks||[];
+      try{const p=getFXParams(it.adjustOverride||undefined);try{return structuredClone(p);}catch(e){return p;}}finally{fxState.masks=sm;}});
     for(let idx=0;idx<items.length;idx++){
       if(fxExportCancel){log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
       const it=items[idx];
@@ -22023,9 +22043,7 @@ async function _exportFXRun(){
         // Basic Adjustments can ALSO be made per-photo (adjToggleScope/"This photo only") — pass
         // this item's own override (or undefined to fall back to the shared DOM value) so an
         // independent exposure tweak on one photo doesn't leak into the rest of the export.
-        const savedMasks=fxState.masks;fxState.masks=it.masks||[];
-        const P=getFXParams(it.adjustOverride||undefined);
-        fxState.masks=savedMasks;
+        const P=_expPs[idx];
         const src=geomCanvas(it);   // apply this image's rotate/flip/straighten/crop first (now on the denoised pixels, if High ran above)
         const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
         setExportPhotoStatus(idx,'rendering');
