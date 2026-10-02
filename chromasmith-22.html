@@ -6849,7 +6849,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002F';
+const BUILD='1.1002G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18635,7 +18635,7 @@ function stylesList(){try{return JSON.parse(localStorage.getItem(_STYLES_KEY)||'
 function stylesSave(list){try{localStorage.setItem(_STYLES_KEY,JSON.stringify(list))}catch(e){log('Could not save styles: '+e.message,'err')}}
 async function styleSaveCurrent(){
   // askTextModal, never window.prompt — see saveLUTToLibrary.
-  const name=(await askTextModal('Name this Style','')||'').trim();
+  const name=(await askTextModal('Name this Style','Use "Folder/Name" to file it in a folder.')||'').trim();
   if(!name)return;
   const snap=getUISnapshot();
   delete snap.geom;delete snap.adjustIndependent; // not portable across photos — see comment above
@@ -18683,18 +18683,35 @@ async function styleImportFile(file){
   }catch(e){log('Style import failed: '+e.message,'err');toast('Not a valid Style file',false);}
   finally{const inp=document.getElementById('style-import-input');if(inp)inp.value='';}
 }
+// CHR-179: a "/" in a Style name files it under a folder ("Portraits/Warm skin"); the list groups
+// by folder. Built with DOM nodes, not an HTML string — an imported Style's name is untrusted text.
+function _styleSplit(name){const i=name.lastIndexOf('/');return i>0?[name.slice(0,i).trim(),name.slice(i+1).trim()]:['',name];}
+async function styleRename(name){
+  const list=stylesList(),s=list.find(x=>x.name===name);if(!s)return;
+  const nn=(await askTextModal('Rename Style','Use "Folder/Name" to file it in a folder.',name)||'').trim();
+  if(!nn||nn===name)return;
+  if(list.some(x=>x.name===nn)){toast(`A Style named "${nn}" already exists`,false);return;}
+  s.name=nn;stylesSave(list);styleListRefresh();
+}
 function styleListRefresh(){
   const el=document.getElementById('style-list');if(!el)return;
   const list=stylesList();
-  if(!list.length){el.innerHTML='<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">No styles saved yet.</div>';return;}
-  el.innerHTML=list.map(s=>{
-    const n=s.name.replace(/'/g,"\\'");
-    return `<div class="btn-row" style="margin:0;gap:4px">`
-      +`<button class="btn bgh" style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="styleApply('${n}')" title="Apply this style">${s.name}</button>`
-      +`<button class="btn-icon" onclick="styleExport('${n}')" title="Export as .json">${icon('download',16)}</button>`
-      +`<button class="btn-icon" onclick="styleDelete('${n}')" title="Delete">${icon('close',16)}</button>`
-      +`</div>`;
-  }).join('');
+  el.textContent='';
+  if(!list.length){const d=document.createElement('div');d.style.cssText='font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)';d.textContent='No styles saved yet. Tip: name one "Folder/Name" to group it.';el.appendChild(d);return;}
+  const groups=new Map();
+  list.forEach(s=>{const[f]=_styleSplit(s.name);if(!groups.has(f))groups.set(f,[]);groups.get(f).push(s);});
+  const keys=[...groups.keys()].sort((x,y)=>x===''?-1:y===''?1:x.localeCompare(y));
+  const iconBtn=(ic,title,fn)=>{const b=document.createElement('button');b.className='btn-icon';b.title=title;b.innerHTML=icon(ic,16);b.onclick=fn;return b;};
+  keys.forEach(f=>{
+    if(f){const h=document.createElement('div');h.className='style-folder';h.style.cssText='margin-top:6px;font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);display:flex;align-items:center;gap:4px';h.innerHTML=icon('folder',14);h.appendChild(document.createTextNode(f));el.appendChild(h);}
+    groups.get(f).sort((x,y)=>x.name.localeCompare(y.name)).forEach(s=>{
+      const row=document.createElement('div');row.className='btn-row';row.style.cssText='margin:0;gap:4px';
+      const ap=document.createElement('button');ap.className='btn bgh';ap.style.cssText='flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      ap.title='Apply this style';ap.textContent=_styleSplit(s.name)[1];ap.onclick=()=>styleApply(s.name);
+      row.append(ap,iconBtn('rename','Rename / move to folder',()=>styleRename(s.name)),iconBtn('download','Export as .json',()=>styleExport(s.name)),iconBtn('close','Delete',()=>styleDelete(s.name)));
+      el.appendChild(row);
+    });
+  });
 }
 // ── Named export presets: just the 4 export-panel controls (format/quality/resize/sharpen),
 // saved/recalled by name. Same localStorage-flat-list shape as Styles above, deliberately not
