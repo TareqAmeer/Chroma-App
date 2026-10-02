@@ -6505,6 +6505,19 @@
     verMenu.subItem('Copy edit', () => libCopyEdit(paths), kbd('shift', 'C'));
     // CHR-178: pin this photo (original file) as the Editor's floating reference.
     if (n === 1 && typeof window.chromasmithSetReference === 'function') {
+      // CHR-221: send to Colour Copy. Uses the large preview (decodes for RAW too), not the file.
+      const toCC = async (which) => {
+        try {
+          const buf = await invoke('get_quicklook_preview', { path: paths[0] });
+          const file = new File([buf], baseName(paths[0]).replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+          if (state.open) await toggleLibrary();
+          window.chromasmithColourCopySet(which, file);
+        } catch (e) { toast(humanizeErr('load this photo for Colour Copy', e)); }
+      };
+      if (typeof window.chromasmithColourCopySet === 'function') {
+        verMenu.subItem('Colour Copy: match this photo…', () => toCC('src'));
+        verMenu.subItem('Colour Copy: use as reference', () => toCC('ref'));
+      }
       verMenu.subItem('Use as editor reference', async () => {
         try { const f = await readPathsAsFiles([paths[0]]); if (f[0]) window.chromasmithSetReference(f[0], f[0].name); }
         catch (e) { toast(humanizeErr('pin reference', e)); }
