@@ -1,6 +1,6 @@
 {
   "name": "chromasmith",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Chromasmith — offline film-emulation photo editor (iOS shell wraps the single-file web app)",
   "private": true,
   "scripts": {
@@ -84,18 +84,22 @@
     "masks:inventory": "node test/panel_extract.mjs --section=local && node test/mask_inventory_check.mjs",
     "stop-hook:test": "node --test test/stop_editor_gate_check.mjs",
     "native:contract": "node test/native_contract.mjs",
-    "control:sweep": "node test/control_sweep.mjs"
+    "control:sweep": "node test/control_sweep.mjs",
+    "mobile:test": "node test/mobile_ux.mjs",
+    "mobile:test:all": "node test/mobile_ux.mjs --all"
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "^8.0.1",
     "@capacitor-community/media": "^9.1.0",
     "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.4.1",
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/ios": "^8.4.1",
     "@capacitor/local-notifications": "^8.3.1",
-    "@capacitor/share": "^8.0.1"
+    "@capacitor/share": "^8.0.1",
+    "fflate": "^0.8.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

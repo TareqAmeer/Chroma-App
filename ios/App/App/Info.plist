@@ -45,6 +45,10 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Chromasmith keeps your exports together in a Chromasmith album.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

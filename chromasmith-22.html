@@ -6888,7 +6888,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002R';
+const BUILD='1.1002S';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13725,6 +13725,7 @@ function fxMoreMenu(){
   const sh=document.createElement('div');sh.className='mm-sheet';
   // Phone menu keeps only what is useful on the go: Match & Refine, Collage and the Log are
   // desk tools, and the Guide is linked from the empty state instead.
+  const project=document.createElement('button');project.className='btn bgh';project.textContent='Open mobile project…';project.onclick=()=>{m.remove();MobileProject.openDesktop();};sh.appendChild(project);
   [['Color Copy','copy']].forEach(([lb,tab])=>{
     const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;
     b.onclick=()=>{m.remove();switchTab(tab);};sh.appendChild(b);
@@ -13824,7 +13825,7 @@ function csInstallHint(){
   let t=null,x=0,y=0,on=false;
   const stop=()=>{clearTimeout(t);t=null;if(on){on=false;fxCompare=false;renderPreview();}};
   w.addEventListener('pointerdown',e=>{
-    if(!document.body.classList.contains('mobile-fx')||cropMode||!e.isPrimary)return;
+    if(!document.body.classList.contains('mobile-fx')||cropMode||mskPaintMode||window.csSwipeAdjust||!e.isPrimary)return;
     x=e.clientX;y=e.clientY;clearTimeout(t);
     t=setTimeout(()=>{t=null;on=true;fxCompare=true;renderPreview();hapt();},350);
   });
@@ -21876,7 +21877,7 @@ async function exportFX(...a){
       try{P.KeepAwake&&P.KeepAwake.allowSleep();}catch(e){}
       if(P.LocalNotifications&&(document.hidden||Date.now()-t0>15000)){
         try{const perm=await P.LocalNotifications.requestPermissions();
-          if(perm&&perm.display==='granted')await P.LocalNotifications.schedule({notifications:[{id:Date.now()%2147483647,title:'Export finished',body:'Your photos are in Photos › Chromasmith.'}]});}catch(e){}}}}
+          if(perm&&perm.display==='granted')await P.LocalNotifications.schedule({notifications:[{id:Date.now()%2147483647,title:'Export finished',body:'Open Chromasmith to check the export results and destination.'}]});}catch(e){}}}}
 }
 async function _exportFXRun(){
   if(!fxImages.length){log('No image loaded','warn');return}
@@ -22237,7 +22238,7 @@ async function _exportFXRun(){
         let saveFailed=0;
         results.forEach((r,i)=>{
           const s=sr[i];
-          if(s&&s.ok)setExportPhotoStatus(r.srcIdx,'saved');
+          if(s&&s.ok)setExportPhotoStatus(r.srcIdx,s.status==='shared'?'rendered':'saved',s.status==='shared'?'shared — save not confirmed':undefined);
           else{saveFailed++;setExportPhotoStatus(r.srcIdx,'failed',((s&&s.err)||'save failed').slice(0,60));}
         });
         if(saveFailed){failed+=saveFailed;results=results.filter((r,i)=>sr[i]&&sr[i].ok);}
@@ -22290,6 +22291,7 @@ async function _exportFXRun(){
     else if(results.length){
       const _paths=(typeof sr!=='undefined'&&Array.isArray(sr))?sr.filter(x=>x&&x.ok&&x.path).map(x=>x.path):[];
       if(_paths.length&&window.__TAURI__)csExportDone(results.length,_paths[0]);
+      else if(capNative()&&Array.isArray(sr)&&sr.some(r=>r.status==='shared'))toast('Handed to share sheet — save not confirmed');
       else toast(`Exported ${results.length} photo${results.length>1?'s':''} ✓`,true);
     }
     // Every photo failed (render OR native save) — say so. Without this the run ended silently,
@@ -22303,6 +22305,7 @@ async function _exportFXRun(){
     if(cancelBtn)cancelBtn.style.display='none';
     if(progBox)progBox.style.display='none';
     _expOverlay(false);
+    if(capNative()&&typeof window.chromasmithShowMobileExportResult==='function')window.chromasmithShowMobileExportResult();
     fxExportCancel=false;
     if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting'});
   }
@@ -23222,8 +23225,8 @@ async function saveFiles(items){ // items: [{content,fname,mime}]
     if(r)return r;
   }
   if(capNative()){
-    try{await capShareFiles(items);toast('Saved ✓',true);return}
-    catch(e){if(e&&/cancel/i.test(e.message||''))return; log('Native share failed ('+(e&&e.message||e)+') — falling back','warn');}
+    // Native saves report every file. Never silently fall back to browser downloads.
+    return await capShareFiles(items);
   }
   const files=items.map(it=>new File([it.content],it.fname,{type:it.mime}));
   const canShare=useShareSheet()&&navigator.canShare&&navigator.canShare({files});
@@ -24205,6 +24208,8 @@ function ovfBuild(){
   tabs.forEach(([k,lb])=>{h+=`<button class="fx-ovf-item" onclick="ovfClose();switchTab('${k}')">${active==='panel-'+k?'✓ ':''}${lb}</button>`;});
   h+='<div class="fx-ovf-sep"></div>';
   if(window.chromasmithToggleLibrary)h+='<button class="fx-ovf-item" onclick="ovfClose();chromasmithToggleLibrary()">Gallery (L)</button>';
+  h+='<button class="fx-ovf-item" onclick="ovfClose();MobileProject.openDesktop()">Open mobile project…</button>';
+  if(window.chromasmithProjectVersions?.length)h+='<button class="fx-ovf-item" onclick="ovfClose();MobileProject.showDesktopVersions()">Mobile project versions…</button>';
   h+='<div class="fx-ovf-sep"></div>';
   // Appearance moved to the View menu (viewMenuBuild, below) — single source now, not
   // duplicated between this menu and Tools.
@@ -24801,7 +24806,7 @@ window.addEventListener('load',()=>{const f=window.fxSection;if(typeof f==='func
   const w=document.getElementById('fx-wrap');if(!w)return;
   let sx=0,sy=0,mode=null,sl=null,v0=0,stepY=0;
   w.addEventListener('touchstart',e=>{
-    mode=null;if(!mob()||e.touches.length!==1||!document.body.classList.contains('sheet-open')||(typeof fxZoom!=='undefined'&&fxZoom>1)||(typeof cropMode!=='undefined'&&cropMode))return;
+    mode=null;if(!window.csSwipeAdjust||!mob()||e.touches.length!==1||!document.body.classList.contains('sheet-open')||(typeof fxZoom!=='undefined'&&fxZoom>1)||(typeof cropMode!=='undefined'&&cropMode))return;
     const L=list();if(!L.length)return;sl=(cur&&L.includes(cur))?cur:L[0];
     sx=e.touches[0].clientX;sy=e.touches[0].clientY;v0=parseFloat(sl.value);stepY=sy;mode='wait';
   },{passive:true});
@@ -25180,10 +25185,12 @@ window.addEventListener('resize',()=>{
 (function(){
   const wrap=document.getElementById('fx-wrap');
   if(!wrap||typeof ResizeObserver==='undefined')return;
-  let _rt=0;
+  let _rt=0,_fitFrame=0;
   new ResizeObserver(()=>{
     if(cropMode||fxLoupe)return; // both own the canvas / have their own resize handling
-    fxLiveFit(220);
+    // Refit on the next frame: resizing the observed wrap synchronously can trigger
+    // WebKit's ResizeObserver delivery loop when a mobile sheet changes height.
+    cancelAnimationFrame(_fitFrame);_fitFrame=requestAnimationFrame(()=>fxLiveFit(220));
     clearTimeout(_rt);
     _rt=setTimeout(()=>{fxLiveFitStop();if(!cropMode&&!fxLoupe)renderPreview();},220);
   }).observe(wrap);
@@ -25459,7 +25466,7 @@ function fxDesktopReorderLooksPanel(looksCard,title){
 let _mqMobile=window.matchMedia('(max-width:700px), (max-height:500px) and (pointer:coarse)'); // phones turned sideways stay in the phone layout
 function applyFxLayout(){
   const onFx=document.getElementById('panel-fx').classList.contains('active');
-  const mob=_mqMobile.matches&&onFx, desk=!_mqMobile.matches&&onFx;
+  const mob=(_mqMobile.matches||capNative()||matchMedia('(pointer:coarse) and (max-width:1100px)').matches)&&onFx, desk=!mob&&onFx;
   document.body.classList.toggle('mobile-fx',mob);
   // Mirrored onto <html> too — html has no overflow-y constraint of its own otherwise, so it
   // stays a second scrollable ancestor even once body is height-capped (see the CSS comment
@@ -26741,7 +26748,7 @@ if(/[?&]catalog=1/.test(location.search)){
       // Swallow the click the browser fires at the end of a drag so it doesn't select the start cell.
       el.addEventListener('click',(ev)=>{ev.stopPropagation();ev.preventDefault();},{capture:true,once:true});setTimeout(()=>{dragged=false;},0);};
     window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',end,true);
-    if('ResizeObserver' in window)new ResizeObserver(()=>{if(!start){cancelAnimationFrame(raf);raf=0;idx=cur();p=Math.max(0,idx);render();}}).observe(el);
+    if('ResizeObserver' in window)new ResizeObserver(()=>{if(!start){cancelAnimationFrame(raf);raf=0;idx=cur();p=Math.max(0,idx);requestAnimationFrame(render);}}).observe(el);
     requestAnimationFrame(()=>{render();requestAnimationFrame(render);});
     return(el._kSwitch={render,snapTo:()=>{p=Math.max(0,idx);render();}});
   }
@@ -26823,21 +26830,17 @@ if(/[?&]catalog=1/.test(location.search)){
 </script>
 <div id="cs-rotate" role="alert"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20"/><path d="M11 18h2"/></svg>Rotate your phone upright</div>
 <script>
-/* Phones stay portrait: lock where the browser allows it (installed app / fullscreen); everywhere else
-   #cs-rotate covers a sideways phone. Also: slider detent + tick, and double-tap a slider's label to reset it. */
+/* Touch slider detent + tick, and double-tap a slider's label to reset it. */
 (function(){
   var coarse=matchMedia('(pointer:coarse)').matches;
-  if(coarse&&screen.orientation&&screen.orientation.lock){
-    var tryLock=function(){screen.orientation.lock('portrait').catch(function(){});};
-    tryLock();document.addEventListener('pointerdown',tryLock,{once:true,passive:true});
-  }
+  // Landscape and foldable layouts are supported; never force portrait.
   var lastTick=0;
   document.addEventListener('input',function(e){
     var sl=e.target;if(!coarse||!sl||sl.type!=='range'||!sl.classList.contains('fx-slider')||sl._snapping)return;
     var min=+sl.min,max=+sl.max,def=parseFloat(sl.defaultValue),v=+sl.value;
     if(isFinite(def)&&def>min&&def<max&&Math.abs(v-def)<=(max-min)*0.015&&v!==def){sl._snapping=true;sl.value=def;sl.dispatchEvent(new Event('input',{bubbles:true}));sl._snapping=false;}
     var now=Date.now(),step=(max-min)/40;
-    if(now-lastTick>45&&Math.abs(v-(sl._lastTick==null?v:sl._lastTick))>=step){lastTick=now;sl._lastTick=v;try{if(typeof hapt==='function')hapt('LIGHT');if(navigator.vibrate)navigator.vibrate(4);}catch(_){}}
+    if(now-lastTick>45&&Math.abs(v-(sl._lastTick==null?v:sl._lastTick))>=step){lastTick=now;sl._lastTick=v;try{if(typeof hapt==='function')hapt('LIGHT');if(navigator.vibrate&&(!window.MobileUI||MobileUI.pref('haptics',true)))navigator.vibrate(4);}catch(_){}}
     if(sl._lastTick==null)sl._lastTick=v;
   },true);
   document.addEventListener('dblclick',function(e){
@@ -27023,5 +27026,8 @@ if(/[?&]catalog=1/.test(location.search)){
   document.addEventListener('focusin',function(e){if(!mob())return;var t=e.target;if(t.closest&&t.closest('.fx-panel')&&(t.matches('input:not([type=range]),select,textarea,[contenteditable="true"]')))setTimeout(function(){try{t.scrollIntoView({block:'center',behavior:'smooth'});}catch(_){}},320);});
 })();
 </script>
+<script src="mobile/mobile-project.js"></script>
+<script src="mobile/mobile-editor.js"></script>
+<script src="mobile/mobile-export.js"></script>
 </body>
 </html>

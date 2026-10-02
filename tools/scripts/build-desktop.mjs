@@ -76,6 +76,7 @@ const distDir = cd('desktop', 'dist');
 mkdirSync(distDir, { recursive: true });
 
 mirrorDir(cd('vendor'), join(distDir, 'vendor'));
+mirrorDir(cd('mobile'), join(distDir, 'mobile')); // responsive editor + portable project handoff
 mirrorDir(cd('assets', 'brand'), join(distDir, 'assets', 'brand')); // favicon + site.webmanifest linked from the page head
 copyIfChanged(cd('desktop', 'desktop-native.js'), join(distDir, 'desktop-native.js'));
 copyIfChanged(cd('desktop', 'library-ui.js'), join(distDir, 'library-ui.js'));

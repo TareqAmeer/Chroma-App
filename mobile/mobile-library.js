@@ -1,445 +1,244 @@
-// Chromasmith phone gallery (iOS/Android Capacitor shells only — loaded by chromasmith-22.html
-// when capNative() or ?mlib=1). The desktop Library (desktop/library-ui.js) is Rust-backed; this
-// is its phone counterpart, built on the SAME editor hooks so the editor needs no new code paths:
-//   window.chromasmithOnEdit(snap)            — per-photo recipe auto-save
-//   window.chromasmithRecordExport(v,snap)    — export history (feeds the editor's version menu)
-//   window.chromasmithGetExportHistory()      — read back by the editor's split/history menus
-//   window.chromasmithToggleLibrary()         — the gallery toggle (#db-lib-btn, Back on home)
-// Originals are stored untouched in IndexedDB ('chromasmith-mlib'); edits are recipes only, so
-// "original" and "edited" are always both recoverable.
+/* Native phone/tablet gallery. Existing v1 IndexedDB originals and recipes remain compatible.
+ * A selection is an editing queue, not shared global FX: each photo loads its own recipe. */
 (function(){
 'use strict';
-const DBN='chromasmith-mlib';
-let _db=null,openedId=null,openedIds=[],saveT=null,thumbT=null;
-
-function db(){
-  if(_db)return Promise.resolve(_db);
-  return new Promise((res,rej)=>{
-    const rq=indexedDB.open(DBN,1);
-    rq.onupgradeneeded=()=>{const d=rq.result;
-      if(!d.objectStoreNames.contains('photos'))d.createObjectStore('photos',{keyPath:'id'});
-      if(!d.objectStoreNames.contains('blobs'))d.createObjectStore('blobs',{keyPath:'id'});};
-    rq.onsuccess=()=>{_db=rq.result;res(_db)};rq.onerror=()=>rej(rq.error);
-  });
-}
-async function tx(store,mode,fn){const d=await db();return new Promise((res,rej)=>{
-  const t=d.transaction(store,mode),s=t.objectStore(store),r=fn(s);
-  t.oncomplete=()=>res(r&&'result'in r?r.result:undefined);t.onerror=()=>rej(t.error);});}
-const getPhoto=id=>tx('photos','readonly',s=>s.get(id));
-const putPhoto=p=>tx('photos','readwrite',s=>s.put(p));
-const allPhotos=()=>tx('photos','readonly',s=>s.getAll());
-const getBlob=id=>tx('blobs','readonly',s=>s.get(id)).then(r=>r&&r.blob);
-const b64=snap=>btoa(unescape(encodeURIComponent(JSON.stringify(snap))));
-const unb64=s=>JSON.parse(decodeURIComponent(escape(atob(s))));
-const day=t=>new Date(t).toLocaleDateString([], {day:'numeric',month:'short'});
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-
-// ── thumbnails ────────────────────────────────────────────────────────────────────────────────
-function thumbFrom(src,w,h){
-  const S=360,k=Math.min(1,S/Math.max(w,h)),c=document.createElement('canvas');
-  c.width=Math.max(1,Math.round(w*k));c.height=Math.max(1,Math.round(h*k));
-  c.getContext('2d').drawImage(src,0,0,c.width,c.height);
-  return new Promise(r=>c.toBlob(r,'image/jpeg',0.8));
-}
-async function thumbFromFile(f){try{const bm=await createImageBitmap(f);const t=await thumbFrom(bm,bm.width,bm.height);bm.close&&bm.close();return t}catch(e){return null}}
-async function thumbFromEditor(){ // preserveDrawingBuffer is on, so the live preview reads back
-  const cv=document.getElementById('fx-canvas');
-  if(!cv||!cv.width)return null;
-  try{return await thumbFrom(cv,cv.width,cv.height)}catch(e){return null}
-}
-
-// ── import: every photo opened in the shell is kept in the gallery ─────────────────────────────
-async function importFiles(files){
-  const ids=[];
-  for(const f of files){
-    if(!(f.type.startsWith('image/')||/\.(rw2|dng|tiff?|heic|heif|jpe?g|png|webp|avif)$/i.test(f.name)))continue;
-    const id='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-    // Store the file as-is (no copy into memory first) and make thumbnails afterwards, so the
-    // photo opens straight away instead of waiting for every import to be processed.
-    await tx('blobs','readwrite',s=>s.put({id,blob:f,name:f.name,type:f.type}));
-    await putPhoto({id,name:f.name,type:f.type,size:f.size,added:Date.now(),edited:0,
-      recipe:null,versions:[],exports:[],thumb:null,thumbEdited:null,flag:null});
-    ids.push(id);
-  }
-  thumbQueue(ids.map((id,i)=>[id,files[i]]));
-  return ids;
-}
+const UI=()=>window.MobileUI,$=s=>document.querySelector(s),esc=s=>UI().esc(s);
+const DBN='chromasmith-mlib',LAST='cs-mlib-last',JOURNAL='cs-mlib-pending-v2';
+const b64=s=>btoa(unescape(encodeURIComponent(JSON.stringify(s)))),unb64=s=>MobileProject.validateRecipe(s);
+const id=()=>('p'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
+let database,root,grid,openedId=null,queue=[],restoring=false,opening=false,selecting=false,filter='all',search='',collection='',urls=[];
+const selected=new Set(),pending=new Map(),known=new Map();let saveTimer,inputTimer,writing=Promise.resolve(),renderKey=0;
 const origLoad=window.loadFXImages;
-window.loadFXImages=async function(fileList){
-  if(window.__mlibOpening)return origLoad.apply(this,arguments);
-  const files=[...fileList];
-  let ids=[];try{ids=await importFiles(files)}catch(e){console.error('gallery import',e)}
-  openedId=ids.length===1?ids[0]:null;openedIds=ids;
-  close(); // opening photos always lands in the editor
-  const r=await origLoad.call(this,files);
-  if(openedId)setTimeout(refreshEditedThumb,1500); // RAW has no browser thumbnail — take the decoded one
-  return r;
-};
-
-// ── open a gallery photo in the editor ─────────────────────────────────────────────────────────
-const LAST='cs-mlib-last';
-function setLast(o){try{localStorage.setItem(LAST,JSON.stringify(o))}catch(e){}}
-async function openPhoto(id,{original=false,recipe=null}={}){
-  setLast({id,inEditor:true});
-  try{if(!localStorage.getItem('cs-tip-hold')){localStorage.setItem('cs-tip-hold','1');setTimeout(()=>toast('Tip: press and hold the photo to see the original'),2500);}}catch(e){}
-  const p=await getPhoto(id);const blob=await getBlob(id);
-  if(!p||!blob){toast('Photo not found');return}
-  const file=new File([blob],p.name,{type:p.type,lastModified:p.added});
-  close();
-  window.__mlibOpening=true;window.__csLibOpen=true;
-  try{await origLoad([file])}finally{window.__mlibOpening=false;window.__csLibOpen=false}
-  openedId=id;openedIds=[id];
-  const r=recipe||(!original&&p.recipe);
+function db(){return database||(database=new Promise((res,rej)=>{
+  const r=indexedDB.open(DBN,1);r.onupgradeneeded=()=>{for(const name of ['photos','blobs'])if(!r.result.objectStoreNames.contains(name))r.result.createObjectStore(name,{keyPath:'id'});};
+  r.onsuccess=()=>res(r.result);r.onerror=()=>{database=null;rej(r.error);};
+}));}
+async function tx(stores,mode,fn){const d=await db();return new Promise((res,rej)=>{const t=d.transaction(stores,mode);let result;try{result=fn(t);}catch(e){t.abort();rej(e);return;}t.oncomplete=()=>res(result&&'result'in result?result.result:result);t.onerror=()=>rej(t.error||new Error('Storage write failed'));t.onabort=()=>rej(t.error||new Error('Storage write cancelled'));});}
+// Binary buffers avoid WebKit's IndexedDB Blob-cloning failures. Older Blob-backed
+// originals and thumbnails are still readable without a destructive database migration.
+const readThumb=v=>v?.bytes?new Blob([v.bytes],{type:v.type||'image/jpeg'}):v;
+const writeThumb=async v=>v instanceof Blob?{bytes:await v.arrayBuffer(),type:v.type}:v;
+const readPhoto=p=>p?{...p,thumb:readThumb(p.thumb),thumbEdited:readThumb(p.thumbEdited),versions:(p.versions||[]).map(v=>({...v,thumb:readThumb(v.thumb)})),exports:p.exports||[]}:p;
+const getPhoto=i=>tx('photos','readonly',t=>t.objectStore('photos').get(i)).then(readPhoto);
+const allPhotos=()=>tx('photos','readonly',t=>t.objectStore('photos').getAll()).then(ps=>ps.map(readPhoto));
+async function patchPhoto(i,patch={},versions=[],exports=[]){
+  const changes={...patch};for(const k of ['thumb','thumbEdited'])if(k in changes)changes[k]=await writeThumb(changes[k]);
+  const additions=await Promise.all(versions.map(async v=>({...v,thumb:await writeThumb(v.thumb)})));
+  // Read and merge inside ONE readwrite transaction. A thumbnail, flag, export receipt or
+  // version must never write a stale copy of the recipe or erase a concurrently saved version.
+  return tx('photos','readwrite',t=>{const store=t.objectStore('photos'),r=store.get(i);r.onsuccess=()=>{
+    if(!r.result)return;const record={...r.result,...changes};
+    if(additions.length)record.versions=[...(r.result.versions||[]),...additions];
+    if(exports.length)record.exports=[...(r.result.exports||[]),...exports];store.put(record);
+  };});
+}
+const getBlob=i=>tx('blobs','readonly',t=>t.objectStore('blobs').get(i)).then(p=>p?.bytes?new Blob([p.bytes],{type:p.type}):p?.blob);
+const safe=fn=>Promise.resolve().then(fn).catch(e=>{status(e.message,true);if(window.toast)toast(e.message);});
+function status(text,error=false){build();const e=root.querySelector('.status');e.textContent=text;e.classList.toggle('phone-error',error);}
+function saveStatus(text,error=false){const e=$('#phone-save-status');if(e){e.textContent=text;e.classList.toggle('phone-error',error);e.disabled=!error;e.setAttribute('aria-label',error?'Save failed. Retry saving':text);}}
+function journal(){try{if(pending.size)localStorage.setItem(JOURNAL,JSON.stringify([...pending]));else localStorage.removeItem(JOURNAL);}catch(e){/* IndexedDB holds full masks; the small emergency journal is best effort. */}}
+function capture(snap){
+  if(!openedId||restoring||opening)return;const recipe=b64(snap);if(known.get(openedId)===recipe&&!pending.has(openedId))return;
+  pending.set(openedId,{recipe,edited:Date.now()});journal();saveStatus('Saving…');clearTimeout(saveTimer);saveTimer=setTimeout(()=>safe(()=>flush(false)),200);
+}
+async function flush(captureLive=true){
+  clearTimeout(saveTimer);clearTimeout(inputTimer);
+  // Capture before changing the photo: the editor history debounce has not necessarily fired.
+  if(captureLive&&openedId&&!restoring&&!opening&&typeof getUISnapshot==='function')capture(getUISnapshot());
+  clearTimeout(saveTimer);const batch=[...pending];
+  const task=async()=>{
+    for(const [i,value]of batch){const p=await getPhoto(i);if(!p)continue;await patchPhoto(i,{recipe:value.recipe,edited:value.edited});known.set(i,value.recipe);if(pending.get(i)===value)pending.delete(i);}
+    journal();saveStatus(pending.size?'Saving…':'Saved');
+  };
+  const next=writing.catch(()=>{}).then(task);writing=next;
+  try{await next;}catch(e){saveStatus('Save failed · Retry',true);throw new Error('Edits could not be saved. Free up storage, then tap Retry.');}
+}
+window.chromasmithOnEdit=capture;
+async function thumb(src,w,h){const k=Math.min(1,360/Math.max(w,h)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*k));c.height=Math.max(1,Math.round(h*k));c.getContext('2d').drawImage(src,0,0,c.width,c.height);return new Promise(r=>c.toBlob(r,'image/jpeg',.8));}
+async function fileThumb(file){try{const bm=await createImageBitmap(file),t=await thumb(bm,bm.width,bm.height);bm.close();return t;}catch(_){return null;}}
+async function editorThumb(){renderPreview();const bd=$('#fx-canvas-bd'),c=bd&&bd.style.display!=='none'?bd:$('#fx-canvas');return c?.width?thumb(c,c.width,c.height):null;}
+async function refreshThumb(){if(!openedId||restoring)return;const i=openedId,t=await editorThumb();if(!t)return;await flush();const p=await getPhoto(i);if(!p)return;if(p.recipe)await patchPhoto(i,{thumbEdited:t});else if(!p.thumb)await patchPhoto(i,{thumb:t});}
+async function fingerprint(f){const bytes=await f.arrayBuffer();if(window.crypto?.subtle){const digest=await crypto.subtle.digest('SHA-256',bytes);return Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('');}let hash=2166136261;for(const b of new Uint8Array(bytes))hash=Math.imul(hash^b,16777619);return 'fnv:'+bytes.byteLength+':'+(hash>>>0).toString(16);}
+async function identical(a,b){if(a.size!==b.size)return false;const x=new Uint8Array(await a.arrayBuffer()),y=new Uint8Array(await b.arrayBuffer());return x.every((v,i)=>v===y[i]);}
+async function importFiles(files){
+  await flush();const ids=[],issues=[],ps=await allPhotos();let duplicates=0;
+  for(let n=0;n<files.length;n++){
+    const f=files[n];status('Importing '+(n+1)+' of '+files.length+' · '+f.name);
+    if(!(f.type.startsWith('image/')||/\.(rw2|dng|tiff?|heic|heif|jpe?g|png|webp|avif)$/i.test(f.name))){issues.push({name:f.name,message:'Unsupported file type'});continue;}
+    try{
+      const hash=await fingerprint(f);let existing=ps.find(p=>p.hash===hash);if(existing&&hash.startsWith('fnv:')&&!await identical(f,await getBlob(existing.id)))existing=null;
+      // Legacy imports and origins without Web Crypto use a byte-verified fallback hash.
+      if(!existing)for(const p of ps.filter(p=>p.size===f.size&&p.hash!==hash)){
+        const original=await getBlob(p.id);if(original&&await fingerprint(original)===hash&&(!hash.startsWith('fnv:')||await identical(f,original))){p.hash=hash;await patchPhoto(p.id,{hash});existing=p;break;}}
+      if(existing){if(existing.trashed){delete existing.trashed;await patchPhoto(existing.id,{trashed:undefined});}ids.push(existing.id);duplicates++;continue;}
+      const i=id(),p={id:i,name:f.name,type:f.type,size:f.size,hash,added:Date.now(),edited:0,recipe:null,versions:[],exports:[],thumb:null,thumbEdited:null,flag:null,collection:''};
+      // Safari can reject a disk-backed File when IndexedDB clones it. Store its exact
+      // bytes instead; getBlob also continues reading originals from the older Blob records.
+      const bytes=await f.arrayBuffer();
+      await tx(['photos','blobs'],'readwrite',t=>{t.objectStore('photos').put(p);t.objectStore('blobs').put({id:i,bytes,name:f.name,type:f.type});});
+      ps.push(p);ids.push(i);status('Building thumbnail '+(n+1)+' of '+files.length);await patchPhoto(i,{thumb:await fileThumb(f)});
+    }catch(e){issues.push({name:f.name,message:e.message});}
+  }
+  status(ids.length+' photo'+(ids.length===1?'':'s')+' ready'+(duplicates?' · '+duplicates+' duplicate'+(duplicates===1?'':'s')+' reused':''));
+  if(issues.length)showImportIssues(issues,files);
+  return [...new Set(ids)];
+}
+function showImportIssues(issues,files){UI().sheet('Import results',issues.map(i=>'<p><b>'+esc(i.name)+'</b><br>'+esc(i.message)+'</p>').join('')+'<button data-retry>Retry failed files</button>',(el,close)=>el.querySelector('[data-retry]').onclick=()=>{close();safe(()=>importAndOpen(files.filter(f=>issues.some(i=>i.name===f.name))));});}
+async function importAndOpen(files){const ids=await importFiles([...files]);if(!ids.length){await open();return;}queue=ids;await openPhoto(ids[0]);}
+window.loadFXImages=async function(files){if(window.__mlibOpening)return origLoad.apply(this,arguments);await importAndOpen([...files]);return curItem();};
+async function openPhoto(i,{recipe,original=false}={}){
+  if(opening||document.body.classList.contains('fx-exporting'))return false;
+  if(openedId)capture(getUISnapshot());opening=true;restoring=true;status('Opening photo…');
   try{
-    if(r){applyUISnapshot(unb64(r));if(typeof applyRawDefaults==='function')applyRawDefaults();}
-    else if(typeof window.chromasmithApplyPristineDefault==='function')window.chromasmithApplyPristineDefault();
-    if(typeof fxUpdate==='function')fxUpdate();
-  }catch(e){console.error('restore recipe',e)}
-  if(original)toast('Opened original — editing saves over the current edit');
-}
-
-// ── auto-save edits ────────────────────────────────────────────────────────────────────────────
-window.chromasmithOnEdit=function(snap){
-  const ids=openedId?[openedId]:openedIds;if(!ids.length)return;
-  const rec=b64(snap);
-  clearTimeout(saveT);
-  saveT=setTimeout(async()=>{
-    for(const id of ids){const p=await getPhoto(id);if(!p)continue;
-      p.recipe=rec;p.edited=Date.now();await putPhoto(p);}
-  },400);
-  clearTimeout(thumbT);thumbT=setTimeout(refreshEditedThumb,1500);
-};
-async function refreshEditedThumb(){
-  if(!openedId)return;const t=await thumbFromEditor();if(!t)return;
-  const p=await getPhoto(openedId);if(!p)return;
-  if(p.recipe)p.thumbEdited=t;else if(!p.thumb)p.thumb=t;
-  await putPhoto(p);
-}
-
-// ── export history ─────────────────────────────────────────────────────────────────────────────
-window.chromasmithRecordExport=async function(version,snap){
-  const ids=openedId?[openedId]:openedIds;
-  for(const id of ids){const p=await getPhoto(id);if(!p)continue;
-    p.exports.push({version,recipe:b64(snap),ts:Date.now()});await putPhoto(p);}
-};
-window.chromasmithGetExportHistory=async function(){
-  if(!openedId)return[];const p=await getPhoto(openedId);return p?p.exports:[];
-};
-if(typeof fxUpdateHistoryBtn==='function')fxUpdateHistoryBtn();
-
-// ── gallery UI ─────────────────────────────────────────────────────────────────────────────────
-const css=`
-#mlib{position:fixed;inset:0;z-index:9000;background:var(--mbg,#1c1c1c);color:var(--mink,#eee);display:none;flex-direction:column;
-  padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);font-family:var(--sans,system-ui)}
-#mlib.open{display:flex}
-#mlib .top{display:flex;align-items:center;gap:10px;padding:10px 8px 6px 14px}
-#mlib .top svg{width:26px;height:26px;flex:0 0 auto}
-#mlib .top .wm{flex:1;font-size:15px;letter-spacing:.02em;white-space:nowrap}
-#mlib .top .set{border:0;background:none;color:inherit;width:40px;height:40px;display:flex;align-items:center;justify-content:center}
-#mlib .top .set svg{width:22px;height:22px}
-#mlib .mh{display:flex;align-items:center;gap:8px;padding:6px 14px 10px}
-#mlib .mh h1{flex:1;margin:0;font-size:22px;font-weight:600;letter-spacing:-.01em}
-#mlib .mh button{border:0;border-radius:999px;padding:9px 16px;font:600 14px inherit;background:color-mix(in srgb,var(--mink,#eee) 10%,transparent);color:inherit}
-#mlib .mh .pri{background:var(--primary,#e8e2d0);color:#111}
-#mlib .tabs{display:flex;gap:6px;padding:0 14px 8px}
-#mlib .tabs button{border:0;border-radius:999px;padding:6px 12px;background:none;color:var(--tx2,#999);font:13px inherit}
-#mlib .tabs button.on{background:color-mix(in srgb,var(--mink,#eee) 10%,transparent);color:inherit}
-#mlib .grid{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:2px;
-  padding:0 2px calc(16px + env(safe-area-inset-bottom));align-content:start;-webkit-overflow-scrolling:touch}
-#mlib .cell{position:relative;aspect-ratio:1;background:var(--mcell,#262626);overflow:hidden;border:0;padding:0}
-#mlib .cell img{width:100%;height:100%;object-fit:cover;display:block}
-#mlib .cell .nm{position:absolute;inset:auto 4px 4px 4px;font-size:10px;color:#ccc;text-align:left;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-#mlib .cell .b{position:absolute;top:5px;right:5px;font-size:10px;padding:2px 6px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff}
-#mlib.orig .grid{display:block;column-count:3;column-gap:2px}
-#mlib.orig .cell{display:block;width:100%;aspect-ratio:auto;margin:0 0 2px;break-inside:avoid}
-#mlib.orig .cell img{height:auto}
-#mlib.dates .cell{overflow:visible;margin-bottom:18px}
-#mlib.orig.dates .cell{margin-bottom:20px}
-#mlib .cell .dt{position:absolute;left:2px;top:100%;margin-top:2px;font-size:10px;opacity:.6;white-space:nowrap;display:none}
-#mlib.dates .cell .dt{display:block}
-#mlib .cell.sel::after{content:'✓';position:absolute;top:6px;left:6px;width:22px;height:22px;border-radius:50%;background:var(--k-color-accent-a,#ff3b1f);color:#fff;font-size:13px;line-height:22px;text-align:center}
-#mlib .cell.sel img{opacity:.75}
-#mlib.selecting .cell:not(.sel)::after{content:'';position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:50%;border:1.5px solid #fff;background:rgba(0,0,0,.25)}
-#mlib .selbar{display:none;align-items:center;gap:6px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid color-mix(in srgb,var(--mink,#eee) 14%,transparent)}
-#mlib.selecting .selbar{display:flex}
-#mlib .selbar .n{flex:1;font-size:14px}
-#mlib .selbar button{border:0;border-radius:999px;padding:9px 14px;font:600 14px inherit;background:color-mix(in srgb,var(--mink,#eee) 10%,transparent);color:inherit}
-#mlib .selbar button.warn{color:#ff6b6b}
-#mlib .selbar button:disabled{opacity:.35}
-#mlib .cell{touch-action:pan-y}
-#mlib .cell.rej img{opacity:.35}
-#mlib .cell .fav{position:absolute;left:6px;bottom:5px;color:#ff3b1f;font-size:14px;z-index:1}
-#mlib-undo{position:fixed;left:12px;right:12px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:9600;background:#f2f0ea;color:#141414;display:flex;align-items:center;gap:10px;padding:12px 14px;font:14px var(--sans,system-ui);transform:translateY(150%);transition:transform .2s}
-#mlib-undo.on{transform:none}
-#mlib-undo span{flex:1}
-#mlib-undo button{border:0;background:none;font:700 14px inherit;color:#141414;text-transform:uppercase;letter-spacing:.05em}
-#mlib-sheet label.pc{display:flex;align-items:center;gap:10px;padding:10px 4px;font-size:15px}
-#mlib .empty{grid-column:1/-1;text-align:center;color:var(--tx2,#999);padding:80px 24px;font-size:15px;line-height:1.5}
-#mlib-sheet{position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.5);display:none;align-items:flex-end}
-#mlib-sheet.open{display:flex}
-#mlib-sheet .s{background:var(--sur,#1d1d1d);color:var(--tx,#eee);width:100%;border-radius:14px 14px 0 0;
-  padding:14px 14px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:6px;max-height:80vh;overflow-y:auto}
-#mlib-sheet .t{font-size:13px;color:var(--tx2,#999);padding:2px 4px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#mlib-sheet .s>button{border:0;border-radius:10px;padding:13px;font:15px var(--sans,system-ui);background:var(--bg,#111);color:inherit;text-align:left}
-#mlib-sheet .s>button.dz{color:#ff6b6b}
-#mlib-sheet .seg{display:flex;gap:6px;flex-wrap:wrap}
-#mlib-sheet .seg button{flex:1;border:1px solid var(--bdr,#333);border-radius:10px;padding:10px 6px;font:13px var(--sans,system-ui);background:none;color:inherit;display:flex;align-items:center;justify-content:center;gap:6px}
-#mlib-sheet .seg button.on{border-color:var(--k-color-accent-a,#ff3b1f)}
-#mlib-sheet .seg i{width:12px;height:12px;border:1px solid #666;display:inline-block}
-#mlib-sheet .h{font-size:12px;color:var(--tx2,#999);padding:8px 4px 0;text-transform:uppercase;letter-spacing:.06em}`;
-let root,grid,filter='all',urls=[];
-// Gallery display preferences (per device).
-const PREF_KEY='cs-mlib-prefs';
-const BGS={dark:['#1c1c1c','#f2f0ea','#262626'],black:['#000','#f2f0ea','#161616'],grey:['#2c2c2c','#f2f0ea','#383838'],light:['#edeeee','#141414','#dcdcdc']};
-function prefs(){let p={};try{p=JSON.parse(localStorage.getItem(PREF_KEY)||'{}')}catch(e){}
-  return Object.assign({bg:'dark',aspect:'square',sort:'edited',dates:false},p);}
-function setPref(k,v){const p=prefs();p[k]=v;try{localStorage.setItem(PREF_KEY,JSON.stringify(p))}catch(e){}applyPrefs();render();}
-function applyPrefs(){if(!root)return;const p=prefs(),c=BGS[p.bg]||BGS.dark;
-  root.style.setProperty('--mbg',c[0]);root.style.setProperty('--mink',c[1]);root.style.setProperty('--mcell',c[2]);
-  root.classList.toggle('orig',p.aspect==='original');root.classList.toggle('dates',!!p.dates);}
-function build(){
-  if(root)return;
-  const st=document.createElement('style');st.textContent=css;document.head.appendChild(st);
-  root=document.createElement('div');root.id='mlib';
-  root.innerHTML=`<div class="top"><svg viewBox="18 18 64 62" aria-hidden="true"><rect x="21" y="21" width="48" height="44" fill="var(--mink,#f2f0ea)"/><rect x="36" y="32" width="43" height="45" fill="var(--k-color-accent-a,#ff3b1f)"/><rect x="36" y="32" width="33" height="33" fill="#b0200e"/></svg><span class="wm">CHRO-MA-SMITH</span><button class="set" data-a="settings" aria-label="Settings">${typeof icon==='function'?icon('more',22):'⋯'}</button></div>
-<div class="mh"><h1>Gallery</h1><button data-a="select">Select</button><button class="pri" data-a="import">Import</button><button data-a="close" aria-label="Close gallery">Editor</button></div>
-<div class="tabs"><button data-f="all" class="on">All</button><button data-f="edited">Edited</button><button data-f="exported">Exported</button><button data-f="fav">Favourites</button><button data-f="rej">Rejected</button></div>
-<div class="grid"></div>
-<div class="selbar"><span class="n">0 selected</span><button data-a="sel-open">Edit</button><button data-a="sel-paste">Paste edits</button><button data-a="sel-fav">♥</button><button data-a="sel-revert">Revert</button><button data-a="sel-del" class="warn">Remove</button></div>
-<input type="file" accept="image/*,.rw2,.dng" multiple hidden>`;
-  document.body.appendChild(root);
-  grid=root.querySelector('.grid');applyPrefs();
-  const inp=root.querySelector('input');
-  inp.onchange=async()=>{const fl=[...inp.files];inp.value='';if(!fl.length)return;
-    const ids=await importFiles(fl);if(!ids.length)return;
-    if(ids.length===1){openPhoto(ids[0]);return}
-    // several photos: open them all in the editor's filmstrip, edits saved to each
-    close();window.__mlibOpening=true;window.__csLibOpen=true;
-    try{await origLoad(fl)}finally{window.__mlibOpening=false;window.__csLibOpen=false}
-    openedId=null;openedIds=ids;};
-  root.addEventListener('click',e=>{
-    const a=e.target.closest('[data-a]'),f=e.target.closest('[data-f]'),c=e.target.closest('.cell');
-    if(a&&a.dataset.a==='select')setSelecting(!selecting);
-    else if(a&&a.dataset.a.startsWith('sel-'))selAction(a.dataset.a.slice(4));
-    else if(c&&selecting){const id=c.dataset.id;sel.has(id)?sel.delete(id):sel.add(id);c.classList.toggle('sel',sel.has(id));selCount();}
-    else if(a&&a.dataset.a==='import')inp.click();
-    else if(a&&a.dataset.a==='close')close();
-    else if(a&&a.dataset.a==='settings')settings();
-    else if(f){filter=f.dataset.f;root.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b===f));render();}
-    else if(c)openPhoto(c.dataset.id);
-  });
-  // long-press a photo → actions sheet (original / versions / revert / delete)
-  let lp=null;
-  grid.addEventListener('pointerdown',e=>{lp=null; // a long-press whose release landed on the sheet must not swallow the next tap
-    const c=e.target.closest('.cell');if(!c)return;
-    if(selecting)return;
-    lp=setTimeout(()=>{lp='fired';if(typeof hapt==='function')hapt('MEDIUM');sheet(c.dataset.id)},500);});
-  const cancel=()=>{if(lp&&lp!=='fired')clearTimeout(lp)};
-  grid.addEventListener('pointerup',cancel);grid.addEventListener('pointercancel',cancel);grid.addEventListener('pointermove',cancel);
-  grid.addEventListener('click',e=>{if(lp==='fired'){e.stopPropagation();e.preventDefault();lp=null}},true);
-  grid.addEventListener('contextmenu',e=>e.preventDefault());
-  // Swipe a photo sideways: right = favourite, left = reject (again to undo).
-  let sw=null;
-  grid.addEventListener('pointerdown',e=>{const c=e.target.closest('.cell');sw=c&&!selecting?{c,x:e.clientX,y:e.clientY}:null;});
-  grid.addEventListener('pointerup',async e=>{if(!sw)return;const{c,x,y}=sw;sw=null;const dx=e.clientX-x,dy=e.clientY-y;
-    if(Math.abs(dx)>60&&Math.abs(dy)<35){lp='fired';setTimeout(()=>{if(lp==='fired')lp=null},400); // swallow just this gesture's click
-      const p=await getPhoto(c.dataset.id);if(!p)return;const f=dx>0?'fav':'rej';await setFlag([p.id],p.flag===f?null:f);
-      toast(p.flag===f?'Cleared':(f==='fav'?'♥ Favourite':'Rejected'));}});
-}
-async function render(){
-  build();
-  urls.forEach(u=>URL.revokeObjectURL(u));urls=[];
-  const pr=prefs();
-  let ps=(await allPhotos()).sort(pr.sort==='added'?(a,b)=>b.added-a.added:(a,b)=>(b.edited||b.added)-(a.edited||a.added));
-  if(filter==='edited')ps=ps.filter(p=>p.recipe);
-  ps=ps.filter(p=>!p.trashed);
-  if(filter==='exported')ps=ps.filter(p=>p.exports.length);
-  if(filter==='fav')ps=ps.filter(p=>p.flag==='fav');
-  if(filter==='rej')ps=ps.filter(p=>p.flag==='rej');
-  if(!ps.length){grid.innerHTML=`<div class="empty">${filter==='all'?'No photos yet.<br>Tap <b>Import</b> to add photos — originals stay safe here and every edit is saved automatically.':'Nothing here yet.'}</div>`;return}
-  grid.innerHTML=ps.map(p=>{const t=p.thumbEdited||p.thumb;let u='';if(t){u=URL.createObjectURL(t);urls.push(u)}
-    const badge=p.exports.length?'Exported':p.recipe?'Edited':'';
-    return `<button class="cell${sel.has(p.id)?' sel':''}${p.flag==='rej'?' rej':''}" data-id="${p.id}">${p.flag==='fav'?'<span class="fav">♥</span>':''}${u?`<img src="${u}" alt="">`:`<span class="nm">${esc(p.name)}</span>`}${badge?`<span class="b">${badge}</span>`:''}<span class="dt">${p.edited?'Edited '+day(p.edited):'Added '+day(p.added)}</span></button>`}).join('');
-}
-async function sheet(id){
-  const p=await getPhoto(id);if(!p)return;
-  let sh=document.getElementById('mlib-sheet');
-  if(!sh){sh=document.createElement('div');sh.id='mlib-sheet';document.body.appendChild(sh);
-    sh.addEventListener('click',e=>{if(e.target===sh)sh.classList.remove('open')});}
-  const when=t=>new Date(t).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
-  sh.innerHTML=`<div class="s"><div class="t">${esc(p.name)}</div>
-<button data-k="open">Open${p.recipe?' edited version':''}</button>
-<button data-k="orig">Open original (no edits)</button>
-<button data-k="fav">${p.flag==='fav'?'Remove favourite':'♥ Favourite'}</button>
-<button data-k="rej">${p.flag==='rej'?'Un-reject':'Reject'}</button>
-${p.recipe?`<button data-k="copy">Copy edits</button>`:''}
-${copied()?`<button data-k="paste">Paste edits</button>`:''}
-${p.recipe?`<button data-k="snap">Save this edit as a version</button>`:''}
-${p.versions.length?`<div class="h">Saved versions</div>`+p.versions.map((v,i)=>`<button data-k="ver" data-i="${i}">${esc(v.name)} · ${when(v.ts)}</button>`).join(''):''}
-${p.exports.length?`<div class="h">Exports</div>`+p.exports.map((v,i)=>`<button data-k="exp" data-i="${i}">Export v${esc(v.version)} · ${when(v.ts)}</button>`).join(''):''}
-${p.recipe?`<button data-k="revert">Revert to original</button>`:''}
-<button data-k="del" class="dz">Remove from gallery</button></div>`;
-  sh.querySelector('.s').onclick=async e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k,i=+b.dataset.i;
-    sh.classList.remove('open');
-    if(k==='open')openPhoto(id);
-    else if(k==='orig')openPhoto(id,{original:true});
-    else if(k==='copy'){setCopied(p.recipe);toast('Edits copied');}
-    else if(k==='paste'){await pasteTo([id]);}
-    else if(k==='fav'||k==='rej'){await setFlag([id],p.flag===k?null:k);}
-    else if(k==='ver')openPhoto(id,{recipe:p.versions[i].recipe});
-    else if(k==='exp')openPhoto(id,{recipe:p.exports[i].recipe});
-    else if(k==='snap'){p.versions.push({name:'Version '+(p.versions.length+1),recipe:p.recipe,ts:Date.now()});await putPhoto(p);toast('Version saved')}
-    else if(k==='revert'){if(!confirm('Revert to the original? Saved versions and exports are kept.'))return;
-      p.recipe=null;p.thumbEdited=null;await putPhoto(p);render();toast('Reverted to original')}
-    else if(k==='del')removeWithUndo([id]);
-  };
-  sh.classList.add('open');
-}
-// Gallery settings: app-level only (editor actions stay in the editor's ⋯ menu).
-async function settings(){
-  let sh=document.getElementById('mlib-sheet');
-  if(!sh){sh=document.createElement('div');sh.id='mlib-sheet';document.body.appendChild(sh);
-    sh.addEventListener('click',e=>{if(e.target===sh)sh.classList.remove('open')});}
-  const ps=await allPhotos();let used='';
-  try{const e=await navigator.storage.estimate();used=(e.usage/1048576).toFixed(0)+' MB used';}catch(e){}
-  const light=document.body.classList.contains('light'),pr=prefs();
-  sh.innerHTML=`<div class="s"><div class="t">Settings</div>
-<button data-k="theme">${light?'Dark':'Light'} theme</button>
-<button data-k="tour">Show welcome guide</button>
-<div class="h">Gallery background</div>
-<div class="seg">${Object.keys(BGS).map(k=>`<button data-k="bg" data-v="${k}" class="${pr.bg===k?'on':''}"><i style="background:${BGS[k][0]}"></i>${k[0].toUpperCase()+k.slice(1)}</button>`).join('')}</div>
-<div class="h">Thumbnails</div>
-<div class="seg"><button data-k="aspect" data-v="square" class="${pr.aspect==='square'?'on':''}">Square</button><button data-k="aspect" data-v="original" class="${pr.aspect==='original'?'on':''}">Original shape</button></div>
-<div class="h">Order by</div>
-<div class="seg"><button data-k="sort" data-v="edited" class="${pr.sort==='edited'?'on':''}">Last edited</button><button data-k="sort" data-v="added" class="${pr.sort==='added'?'on':''}">Date added</button></div>
-<button data-k="dates">${pr.dates?'✓ ':''}Show date under each photo</button>
-<div class="h">Gallery</div>
-<div class="t">${ps.length} photo${ps.length===1?'':'s'}${used?' · '+used:''}</div>
-${(()=>{const ex=ps.filter(p=>p.exports.length&&!p.trashed);const mb=ex.reduce((a,p)=>a+(p.size||0),0)/1048576;
-  return ex.length?`<button data-k="freeexp">Free up space: remove ${ex.length} exported photo${ex.length>1?'s':''} (frees ~${mb.toFixed(mb>=10?0:1)} MB)</button>`:''})()}
-<button data-k="clear" class="dz">Remove all photos from gallery</button>
-<div class="t" style="padding-top:10px">CHRO-MA-SMITH · build ${typeof BUILD!=='undefined'?BUILD:''}</div></div>`;
-  sh.querySelector('.s').onclick=async e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;
-    if(k==='bg'||k==='aspect'||k==='sort'){setPref(k,b.dataset.v);settings();return}
-    if(k==='dates'){setPref('dates',!prefs().dates);settings();return}
-    sh.classList.remove('open');
-    if(k==='theme'&&typeof toggleTheme==='function')toggleTheme();
-    else if(k==='tour'&&window.chromasmithShowTour){close();window.chromasmithShowTour();}
-    else if(k==='freeexp'){removeWithUndo(ps.filter(p=>p.exports.length&&!p.trashed).map(p=>p.id));}
-    else if(k==='clear'){if(!confirm('Remove every photo and its edits from the gallery? Exported files in your photo library are not affected.'))return;
-      await tx('photos','readwrite',s=>s.clear());await tx('blobs','readwrite',s=>s.clear());openedId=null;openedIds=[];render();}
-  };
-  sh.classList.add('open');
-}
-// ── multi-select ───────────────────────────────────────────────────────────────────────────────
-let selecting=false;const sel=new Set();
-function setSelecting(on){selecting=on;sel.clear();if(!root)return;
-  root.classList.toggle('selecting',on);root.querySelector('[data-a="select"]').textContent=on?'Cancel':'Select';
-  root.querySelectorAll('.cell.sel').forEach(c=>c.classList.remove('sel'));selCount();}
-function selCount(){if(!root)return;root.querySelector('.selbar .n').textContent=sel.size+' selected';
-  root.querySelectorAll('.selbar button').forEach(b=>b.disabled=!sel.size||(b.dataset.a==='sel-paste'&&!copied()));}
-// Copy / paste edits between gallery photos. Geometry (crop, rotate, straighten) is per-photo, so
-// it is not pasted — every other setting is.
-const CK='cs-mlib-copied';
-const copied=()=>{try{return localStorage.getItem(CK)}catch(e){return null}};
-function setCopied(rec){try{localStorage.setItem(CK,rec)}catch(e){}}
-async function pasteTo(ids){
-  const src=copied();if(!src)return;
-  let snap;try{snap=unb64(src)}catch(e){return}
-  // Choose what to paste (same categories as the desktop's selective paste).
-  const cats=window.PASTE_CATEGORIES||(typeof PASTE_CATEGORIES!=='undefined'?PASTE_CATEGORIES:null);
-  let keys=null;
-  if(cats&&typeof pasteEditSelectiveApply==='function'){
-    keys=await new Promise(res=>{const sh=sheetEl();
-      sh.innerHTML=`<div class="s"><div class="t">Paste edits to ${ids.length} photo${ids.length>1?'s':''} — choose what to include</div>
-${cats.map(c=>`<label class="pc"><input type="checkbox" value="${c.key}" checked> ${esc(c.label)}</label>`).join('')}
-<button data-k="go">Paste</button><button data-k="cancel">Cancel</button></div>`;
-      sh.querySelector('.s').onclick=e=>{const b=e.target.closest('button');if(!b)return;sh.classList.remove('open');
-        res(b.dataset.k==='go'?[...sh.querySelectorAll('input:checked')].map(x=>x.value):null);};
-      sh.classList.add('open');});
-    if(!keys||!keys.length)return;
-  }
-  for(const id of ids){const p=await getPhoto(id);if(!p)continue;
-    let own=null;try{own=p.recipe?unb64(p.recipe):null}catch(e){}
-    let s2;
-    if(keys){const base=own||JSON.parse(JSON.stringify(typeof _fxPristineDefault!=='undefined'&&_fxPristineDefault||snap));s2=pasteEditSelectiveApply(base,snap,keys);}
-    else s2=Object.assign({},snap);
-    s2.geom=own?own.geom:null; // crop / rotate / straighten stay per-photo
-    p.recipe=b64(s2);p.edited=Date.now();p.thumbEdited=null;await putPhoto(p);}
-  render();toast('Edits pasted to '+ids.length+' photo'+(ids.length>1?'s':''));
-}
-async function setFlag(ids,flag){for(const id of ids){const p=await getPhoto(id);if(p){p.flag=flag;await putPhoto(p);}}render();
-  if(typeof hapt==='function')hapt('LIGHT');}
-// Remove with a few seconds to undo, instead of a confirm box every time.
-let trashT=null;
-async function removeWithUndo(ids){
-  if(!ids.length)return;
-  for(const id of ids){const p=await getPhoto(id);if(p){p.trashed=Date.now();await putPhoto(p);}if(openedId===id)openedId=null;}
-  render();
-  let bar=document.getElementById('mlib-undo');
-  if(!bar){bar=document.createElement('div');bar.id='mlib-undo';document.body.appendChild(bar);}
-  bar.innerHTML=`<span>Removed ${ids.length} photo${ids.length>1?'s':''}</span><button>Undo</button>`;bar.classList.add('on');
-  clearTimeout(trashT);
-  bar.querySelector('button').onclick=async()=>{clearTimeout(trashT);bar.classList.remove('on');
-    for(const id of ids){const p=await getPhoto(id);if(p){delete p.trashed;await putPhoto(p);}}render();};
-  trashT=setTimeout(()=>{bar.classList.remove('on');purgeTrash();},6000);
-}
-async function purgeTrash(){const ps=await allPhotos();
-  for(const p of ps)if(p.trashed){await tx('photos','readwrite',s=>s.delete(p.id));await tx('blobs','readwrite',s=>s.delete(p.id));}}
-// Thumbnails are made in the background after import.
-async function thumbQueue(pairs){
-  for(const[id,f]of pairs){const t=await thumbFromFile(f);if(!t)continue;const p=await getPhoto(id);if(p&&!p.thumb){p.thumb=t;await putPhoto(p);}}
-  if(isOpen())render();
-}
-async function selAction(k){
-  const ids=[...sel];if(!ids.length)return;
-  if(k==='open'){
-    if(ids.length===1){setSelecting(false);openPhoto(ids[0]);return}
-    const files=[];let first=null;
-    for(const id of ids){const p=await getPhoto(id),b=await getBlob(id);if(!p||!b)continue;
-      if(!first)first=p;files.push(new File([b],p.name,{type:p.type,lastModified:p.added}));}
-    setSelecting(false);close();
+    await flush(false);
+    const p=await getPhoto(i),blob=await getBlob(i);if(!p||!blob||p.trashed)throw new Error('Photo is unavailable. Restore it from Trash first.');
     window.__mlibOpening=true;window.__csLibOpen=true;
-    try{await origLoad(files)}finally{window.__mlibOpening=false;window.__csLibOpen=false}
-    openedId=null;openedIds=ids;
-    try{if(first&&first.recipe){applyUISnapshot(unb64(first.recipe));if(typeof fxUpdate==='function')fxUpdate();}}catch(e){}
-  }else if(k==='paste'){
-    if(!copied()){toast('Copy edits from a photo first (press and hold it)');return}
-    await pasteTo(ids);setSelecting(false);
-  }else if(k==='revert'){
-    if(!confirm('Revert '+ids.length+' photo'+(ids.length>1?'s':'')+' to the original? Saved versions and exports are kept.'))return;
-    for(const id of ids){const p=await getPhoto(id);if(p){p.recipe=null;p.thumbEdited=null;await putPhoto(p);}}
-    setSelecting(false);render();toast('Reverted '+ids.length);
-  }else if(k==='del'){setSelecting(false);removeWithUndo(ids);
-  }else if(k==='fav'){await setFlag(ids,'fav');setSelecting(false);
-  }
+    let entry;
+    try{entry=await origLoad([new File([blob],p.name,{type:p.type,lastModified:p.added})]);}finally{window.__mlibOpening=false;window.__csLibOpen=false;}
+    if(!entry)throw new Error('Could not decode '+p.name+'. Try another format or retry importing.');
+    openedId=i;if(!queue.includes(i))queue=[i];
+    const r=recipe??(!original&&p.recipe);
+    if(r)applyUISnapshot(unb64(r));else window.chromasmithApplyPristineDefault?.();
+    if(!r&&RAW_FILE_EXT_RE.test('.'+entry.ext)&&typeof applyRawDefaults==='function')applyRawDefaults();fxUpdate();clearTimeout(_fxHistPushTimer);
+    const snap=getUISnapshot();known.set(i,b64(snap));
+    // An explicit version/original fork must replace the working recipe AFTER the outgoing
+    // editor has flushed. Otherwise that last flush overwrites the version being opened.
+    if(recipe!==undefined||original){await patchPhoto(i,{recipe:b64(snap),edited:Date.now(),thumbEdited:null});}
+    fxHistory=[{j:JSON.stringify(snap),snap,rasters:fxState.masks.map(m=>m.px||null),label:'Opened',ts:Date.now()}];fxHistIdx=0;fxSyncTopbarDisabled();
+    if(p.importError){await patchPhoto(i,{importError:undefined});}
+    localStorage.setItem(LAST,JSON.stringify({id:i,inEditor:true}));close();status('');saveStatus('Saved');syncQueue();return true;
+  }catch(e){await open(false);status(e.message,true);UI().sheet('Photo could not open','<p>'+esc(e.message)+'</p><button data-retry>Retry</button>',(el,close)=>el.querySelector('[data-retry]').onclick=()=>{close();safe(()=>openPhoto(i));});}
+  finally{opening=false;restoring=false;}
 }
-function sheetEl(){let sh=document.getElementById('mlib-sheet');
-  if(!sh){sh=document.createElement('div');sh.id='mlib-sheet';document.body.appendChild(sh);
-    sh.addEventListener('click',e=>{if(e.target===sh)sh.classList.remove('open')});}
-  return sh;}
-const isOpen=()=>!!(root&&root.classList.contains('open'));
-function open(){build();root.classList.add('open');render();try{const l=JSON.parse(localStorage.getItem(LAST)||'null');if(l){l.inEditor=false;setLast(l);}}catch(e){}}
-function close(){if(root){root.classList.remove('open');if(selecting)setSelecting(false);}}
-window.chromasmithToggleLibrary=()=>isOpen()?close():open();
-window.chromasmithOpenGallery=open;
-
-// Back on the editor's home state opens the gallery (it is the app's home screen).
-const origBack=window.fxMobileBack;
-if(typeof origBack==='function')window.fxMobileBack=function(){
-  const b=document.body.classList;
-  if(!b.contains('tools-open')&&!b.contains('sheet-open')){open();return}
-  return origBack.apply(this,arguments);
-};
-const lb=document.getElementById('db-lib-btn');if(lb)lb.style.display='';
-// Ask the OS not to evict stored originals under storage pressure.
-try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
-// Launch into the gallery.
-// Launch: if the app was closed mid-edit (e.g. the phone reclaimed it), go straight back to that
-// photo with its edits; otherwise start in the gallery. Leftover "removed" photos are cleared.
-async function launch(){purgeTrash();
-  let l=null;try{l=JSON.parse(localStorage.getItem(LAST)||'null')}catch(e){}
-  if(l&&l.inEditor&&await getPhoto(l.id)){openPhoto(l.id);return}
-  open();}
-if(document.readyState==='complete')launch();else window.addEventListener('load',launch);
+async function setFlag(ids,flag){await flush();for(const i of ids){const p=await getPhoto(i);if(p){await patchPhoto(i,{flag});}}await render();hapt();}
+const CK='cs-mlib-copied',copied=()=>localStorage.getItem(CK);
+async function pasteTo(ids,source=copied(),verb='Paste'){
+  if(!source){toast('Copy edits from a photo first');return;}await flush();const snap=unb64(source);
+  // Geometry, retouch and masks are per-photo. Sharing masks needs its own explicit workflow.
+  const cats=PASTE_CATEGORIES.filter(c=>c.key!=='masks');let keys=null;
+  const s=UI().sheet(verb+' selected settings', '<p>'+ids.length+' photo'+(ids.length===1?'':'s')+'. Crop, retouch and masks stay individual.</p>'+cats.map(c=>'<label><input type="checkbox" value="'+c.key+'" checked>'+esc(c.label)+'</label>').join('')+'<button data-paste>'+verb+'</button>',(el,close)=>el.querySelector('[data-paste]').onclick=()=>{keys=[...el.querySelectorAll('input:checked')].map(i=>i.value);close();});
+  await s.closed;if(!keys?.length)return;
+  for(const i of ids){const p=await getPhoto(i);if(!p)continue;const own=p.recipe?unb64(p.recipe):structuredClone(_fxPristineDefault),out=pasteEditSelectiveApply(own,snap,keys);
+    out.geom=own.geom;out.heal=own.heal;out.masks=own.masks;p.recipe=b64(out);await patchPhoto(i,{recipe:p.recipe,edited:Date.now(),thumbEdited:null});known.delete(i);
+    if(i===openedId){restoring=true;applyUISnapshot(out);fxUpdate();clearTimeout(_fxHistPushTimer);restoring=false;known.set(i,p.recipe);}}
+  await render();toast(verb+' applied to '+ids.length+' photo'+(ids.length===1?'':'s'));
+}
+async function saveVersion(i){await refreshThumb();await flush();const p=await getPhoto(i);if(!p)return;const n=await UI().name('Save named version','Version '+((p.versions||[]).length+1));if(!n)return;
+  await patchPhoto(i,{},[{name:n,recipe:p.recipe||b64(_fxPristineDefault),thumb:p.thumbEdited||p.thumb,ts:Date.now()}]);toast('Version saved');}
+async function forkVersion(i,recipe,label){await flush();const p=await getPhoto(i);if(!p)return;
+  if(!await UI().ask('Create a new version?', 'Your current edit will be kept as a named version before opening '+label+'.','Create version'))return;
+  const name=await UI().name('Name the new version',label);if(!name)return;
+  const target=recipe||b64(_fxPristineDefault);
+  await patchPhoto(i,{},[{name:'Before '+name,recipe:p.recipe||b64(_fxPristineDefault),thumb:p.thumbEdited||p.thumb,ts:Date.now()},{name,recipe:target,ts:Date.now()}]);
+  await openPhoto(i,{recipe:target});
+}
+function compareVersion(p,v){
+  const a=p.thumbEdited||p.thumb,b=v.thumb||p.thumb,ua=a?URL.createObjectURL(a):'',ub=b?URL.createObjectURL(b):'';
+  const s=UI().sheet('Compare versions','<div class="phone-compare-pair"><div><p>Current edit</p>'+(ua?'<img src="'+ua+'" alt="Current edit">':'<p>Preview unavailable</p>')+'</div><div><p>'+esc(v.name)+'</p>'+(v.thumb?'<img src="'+ub+'" alt="'+esc(v.name)+'">':'<p>No saved preview for this older version. Open a copy to inspect it.</p>')+'</div></div><button data-open>Create version from this</button>',(el,close)=>el.querySelector('[data-open]').onclick=()=>{close();safe(()=>forkVersion(p.id,v.recipe,v.name));});
+  s.closed.then(()=>{if(ua)URL.revokeObjectURL(ua);if(ub)URL.revokeObjectURL(ub);});
+}
+async function photoActions(i){await flush();const p=await getPhoto(i);if(!p)return;
+  UI().sheet(p.name,'<button data-act="open">Open current edit</button><button data-act="original">Create version from original</button><button data-act="favourite">'+(p.flag==='fav'?'Unfavourite':'Favourite')+'</button><button data-act="reject">'+(p.flag==='rej'?'Un-reject':'Reject')+'</button><button data-act="collection">Move to collection</button>'+(p.recipe?'<button data-act="copy">Copy edits</button><button data-act="version">Save named version</button>':'')+(copied()?'<button data-act="paste">Paste selected settings</button>':'')+p.versions.map((v,n)=>'<button data-version="'+n+'">Compare '+esc(v.name)+'</button>').join('')+p.exports.map((v,n)=>'<button data-export="'+n+'">'+esc(v.status==='shared'?'Shared':'Exported')+' '+esc(v.version)+' · '+esc(new Date(v.ts).toLocaleString())+'</button>').join('')+'<button data-act="backup">Export project for desktop</button><button data-act="trash">Move to Trash</button>',(el,close)=>{
+    el.querySelector('.phone-dialog-content').onclick=e=>{const b=e.target.closest('button');if(!b)return;close();safe(async()=>{
+      if(b.dataset.version!==undefined){compareVersion(p,p.versions[+b.dataset.version]);return;}
+      if(b.dataset.export!==undefined){const v=p.exports[+b.dataset.export];await forkVersion(i,v.recipe,'Export '+v.version);return;}
+      switch(b.dataset.act){case 'open':queue=[i];await openPhoto(i);break;case 'original':await forkVersion(i,null,'Original');break;case 'favourite':await setFlag([i],p.flag==='fav'?null:'fav');break;case 'reject':await setFlag([i],p.flag==='rej'?null:'rej');break;case 'copy':localStorage.setItem(CK,p.recipe);toast('Edits copied');break;case 'paste':await pasteTo([i]);break;case 'version':if(openedId!==i)await openPhoto(i);await saveVersion(i);break;case 'collection':await moveCollection([i]);break;case 'backup':await backup([i]);break;case 'trash':await trash([i]);break;}
+    });};
+  });
+}
+async function moveCollection(ids){const n=await UI().name('Collection name');if(!n)return;for(const i of ids){const p=await getPhoto(i);if(p){await patchPhoto(i,{collection:n});}}await render();}
+async function trash(ids){await flush();for(const i of ids){const p=await getPhoto(i);if(p){await patchPhoto(i,{trashed:Date.now()});}if(openedId===i){openedId=null;queue=[];localStorage.removeItem(LAST);}}setSelecting(false);await render();toast('Moved to Trash. Restore any time from Gallery → Trash.');}
+async function restore(ids){for(const i of ids){const p=await getPhoto(i);if(p){await patchPhoto(i,{trashed:undefined});}}setSelecting(false);await render();toast('Photos restored');}
+async function removePermanently(ids){if(!await UI().ask('Delete permanently?','These originals, edits and versions will be removed from this app. Exported files stay on your device.','Delete permanently'))return;
+  await tx(['photos','blobs'],'readwrite',t=>ids.forEach(i=>{t.objectStore('photos').delete(i);t.objectStore('blobs').delete(i);}));setSelecting(false);await render();}
+const BGS={dark:['#1c1c1c','#f2f0ea','#262626'],black:['#000','#f2f0ea','#161616'],grey:['#2c2c2c','#f2f0ea','#383838'],light:['#ededee','#141414','#dcdcdc']};
+function prefs(){let p={};try{p=JSON.parse(localStorage.getItem('cs-mlib-prefs')||'{}');}catch(_){}return {...{bg:'dark',aspect:'square',sort:'edited',dates:false},...p};}
+function setGalleryPref(k,v){const p=prefs();p[k]=v;localStorage.setItem('cs-mlib-prefs',JSON.stringify(p));applyPrefs();safe(render);}
+function applyPrefs(){if(!root)return;const p=prefs(),c=BGS[p.bg]||BGS.dark;root.style.setProperty('--mbg',c[0]);root.style.setProperty('--mink',c[1]);root.style.setProperty('--mcell',c[2]);root.classList.toggle('orig',p.aspect==='original');root.classList.toggle('dates',p.dates);}
+function build(){
+  if(root)return;root=document.createElement('div');root.id='mlib';root.setAttribute('aria-label','Photo gallery');
+  root.innerHTML='<div class="top"><svg viewBox="18 18 64 62" aria-hidden="true"><rect x="21" y="21" width="48" height="44" fill="currentColor"/><rect x="36" y="32" width="43" height="45" fill="var(--acc,#ff3b1f)"/></svg><span class="wm">CHRO-MA-SMITH</span><button data-a="settings" aria-label="Gallery settings">⋯</button></div><div class="mh"><h1>Gallery</h1><button data-a="select">Select</button><button class="pri" data-a="import">Import</button><button data-a="editor">Editor</button></div><div class="search-row"><input type="search" aria-label="Search photos by filename" placeholder="Search photos"><select aria-label="Sort photos"><option value="edited">Last edited</option><option value="added">Date added</option><option value="name">Name</option></select></div><div class="search-row"><select class="collections" aria-label="Filter by collection"><option value="">All collections</option></select></div><div class="tabs" aria-label="Photo filters">'+[['all','All'],['edited','Edited'],['exported','Exported'],['fav','Favourites'],['rej','Rejected'],['trash','Trash']].map(([key,label])=>'<button data-f="'+key+'" aria-pressed="'+(key==='all')+'">'+label+'</button>').join('')+'</div><div class="status" role="status" aria-live="polite"></div><div class="grid" aria-label="Photos"></div><div class="selbar"><span class="n" role="status">0 selected</span><button data-a="edit">Edit</button><button data-a="more">Actions</button><button data-a="remove" class="warn">Trash</button></div><input class="import-file" type="file" accept="image/*,.rw2,.dng" multiple hidden>';
+  document.body.appendChild(root);grid=root.querySelector('.grid');applyPrefs();root.querySelector('[aria-label="Sort photos"]').value=prefs().sort;
+  root.querySelector('input[type=search]').oninput=e=>{search=e.target.value;safe(render);};root.querySelector('[aria-label="Sort photos"]').onchange=e=>setGalleryPref('sort',e.target.value);
+  root.querySelector('.collections').onchange=e=>{collection=e.target.value;safe(render);};root.querySelector('.import-file').onchange=e=>{const files=[...e.target.files];e.target.value='';if(files.length)safe(()=>importAndOpen(files));};
+  root.onclick=e=>{const b=e.target.closest('[data-a],[data-f]'),c=e.target.closest('.cell');
+    if(b?.dataset.f){filter=b.dataset.f;setSelecting(false);safe(render);return;}
+    const menu=e.target.closest('.photo-menu');if(menu){safe(()=>filter==='trash'?trashActions([menu.dataset.id]):photoActions(menu.dataset.id));return;}
+    if(c){if(selecting){selected.has(c.dataset.id)?selected.delete(c.dataset.id):selected.add(c.dataset.id);c.classList.toggle('sel',selected.has(c.dataset.id));c.setAttribute('aria-pressed',String(selected.has(c.dataset.id)));selectionCount();}else if(filter==='trash')safe(()=>trashActions([c.dataset.id]));else safe(async()=>{queue=[c.dataset.id];await openPhoto(c.dataset.id);});return;}
+    if(!b)return;safe(async()=>{switch(b.dataset.a){case 'select':setSelecting(!selecting);break;case 'import':root.querySelector('.import-file').click();break;case 'editor':if(openedId)close();else toast('Import or open a photo first');break;case 'settings':await settings();break;case 'edit':queue=[...selected];setSelecting(false);await openPhoto(queue[0]);break;case 'more':await selectionActions();break;case 'remove':filter==='trash'?await removePermanently([...selected]):await trash([...selected]);break;}});
+  };
+  ensureEditorChrome();
+}
+function ensureEditorChrome(){
+  if(!$('#phone-save-status')){
+    const save=document.createElement('button');save.id='phone-save-status';save.type='button';save.setAttribute('role','status');save.setAttribute('aria-live','polite');save.textContent='Saved';save.onclick=()=>safe(()=>flush());document.body.appendChild(save);
+  }
+  if($('#phone-queue'))return;
+  const q=document.createElement('div');q.id='phone-queue';q.hidden=true;q.innerHTML='<button data-q="prev" aria-label="Previous photo">‹</button><span></span><button data-q="next" aria-label="Next photo">›</button><button data-q="actions">Actions</button>';
+  const anchor=$('#phone-context')||$('#fx-actionbar');if(anchor)anchor.after(q);else document.body.appendChild(q);
+  const measure=()=>requestAnimationFrame(()=>{const height=q.hidden?'0px':q.offsetHeight+'px';if(document.body.style.getPropertyValue('--phone-queue-height')!==height)document.body.style.setProperty('--phone-queue-height',height);});window.addEventListener('resize',measure);q._measure=measure;
+  q.onclick=e=>{const b=e.target.closest('button');if(!b)return;safe(async()=>{const index=queue.indexOf(openedId);if(b.dataset.q==='prev'&&index>0)await openPhoto(queue[index-1]);if(b.dataset.q==='next'&&index<queue.length-1)await openPhoto(queue[index+1]);if(b.dataset.q==='actions')UI().sheet('Selected photos','<p>Each photo keeps its own edits.</p><button data-queue-sync>Sync selected settings</button><button data-queue-export>Export selected photos</button>',(el,close)=>{el.querySelector('[data-queue-sync]').onclick=()=>{close();safe(async()=>{await flush();await pasteTo(queue.filter(i=>i!==openedId),b64(getUISnapshot()),'Sync');});};el.querySelector('[data-queue-export]').onclick=()=>{close();safe(exportQueue);};});});};
+}
+function syncQueue(){ensureEditorChrome();const q=$('#phone-queue');q.hidden=queue.length<2;const n=queue.indexOf(openedId);q.querySelector('span').textContent='This photo · '+(n+1)+' / '+queue.length;q.querySelector('[data-q=prev]').disabled=n<=0;q.querySelector('[data-q=next]').disabled=n>=queue.length-1;q._measure?.();}
+function setSelecting(on){selecting=on;selected.clear();root?.classList.toggle('selecting',on);if(root){root.querySelector('[data-a=select]').textContent=on?'Cancel':'Select';root.querySelectorAll('.cell').forEach(c=>{c.classList.remove('sel');c.setAttribute('aria-pressed','false');});selectionCount();}}
+function selectionCount(){if(!root)return;root.querySelector('.n').textContent=selected.size+' selected';root.querySelectorAll('.selbar button').forEach(b=>b.disabled=!selected.size);root.querySelector('[data-a=remove]').textContent=filter==='trash'?'Delete':'Trash';root.querySelector('[data-a=edit]').hidden=filter==='trash';}
+async function render(){
+  build();const generation=++renderKey,ps=await allPhotos();if(generation!==renderKey)return;
+  urls.forEach(u=>URL.revokeObjectURL(u));urls=[];
+  const collections=[...new Set(ps.filter(p=>!p.trashed).map(p=>p.collection).filter(Boolean))].sort();const select=root.querySelector('.collections');select.innerHTML='<option value="">All collections</option>'+collections.map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');select.value=collection;
+  root.querySelectorAll('[data-f]').forEach(b=>{const on=b.dataset.f===filter;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});
+  let list=ps.filter(p=>(filter==='trash'?!!p.trashed:!p.trashed)&&(!collection||p.collection===collection)&&p.name.toLowerCase().includes(search.toLowerCase()));
+  if(filter==='edited')list=list.filter(p=>p.recipe);if(filter==='exported')list=list.filter(p=>p.exports?.some(e=>e.status!=='shared'));if(filter==='fav'||filter==='rej')list=list.filter(p=>p.flag===filter);
+  const pr=prefs();list.sort(pr.sort==='name'?(a,b)=>a.name.localeCompare(b.name):pr.sort==='added'?(a,b)=>b.added-a.added:(a,b)=>(b.edited||b.added)-(a.edited||a.added));
+  if(!list.length){grid.innerHTML='<div class="empty">'+(search?'No matching photos.':filter==='trash'?'Trash is empty. Removed photos stay here until you delete them.':filter==='all'?'Import photos to start. Originals stay untouched and edits save automatically.':'No photos in this view.')+'</div>';return;}
+  grid.innerHTML=list.map(p=>{const t=p.thumbEdited||p.thumb,u=t?URL.createObjectURL(t):'';if(u)urls.push(u);const label=p.name+(p.recipe?', edited':'')+(p.flag==='fav'?', favourite':'')+(p.trashed?', in Trash':'');
+    return '<div class="photo-tile"><button class="cell'+(selected.has(p.id)?' sel':'')+(p.flag==='rej'?' rej':'')+'" data-id="'+p.id+'" aria-label="'+esc(label)+'" aria-pressed="'+selected.has(p.id)+'">'+(u?'<img loading="lazy" src="'+u+'" alt="">':'')+'<span class="nm">'+esc(p.name)+(pr.dates?'<span class="dt">'+esc(new Date(p.edited||p.added).toLocaleDateString())+'</span>':'')+'</span>'+(p.flag==='fav'?'<span class="fav" aria-hidden="true">♥</span>':'')+(p.recipe?'<span class="badge" aria-hidden="true">Edited</span>':'')+'</button><button class="photo-menu" data-id="'+p.id+'" aria-label="Actions for '+esc(p.name)+'">⋯</button></div>';}).join('');
+}
+async function selectionActions(){const ids=[...selected];if(filter==='trash'){await trashActions(ids);return;}
+  UI().sheet(ids.length+' selected','<button data-k="paste">Paste selected settings</button><button data-k="fav">Favourite</button><button data-k="collection">Move to collection</button><button data-k="export">Export each photo with its own edits</button><button data-k="backup">Back up selected photos</button>',(el,close)=>el.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{close();safe(async()=>{switch(b.dataset.k){case 'paste':await pasteTo(ids);break;case 'fav':await setFlag(ids,'fav');break;case 'collection':await moveCollection(ids);break;case 'export':queue=ids;setSelecting(false);await openPhoto(ids[0]);await exportQueue();break;case 'backup':await backup(ids);break;}});}));}
+function trashActions(ids){UI().sheet('Trash','<p>Originals, edits and versions are kept until you delete permanently.</p><button data-restore>Restore</button><button data-delete>Delete permanently</button>',(el,close)=>{el.querySelector('[data-restore]').onclick=()=>{close();safe(()=>restore(ids));};el.querySelector('[data-delete]').onclick=()=>{close();safe(()=>removePermanently(ids));};});}
+async function backup(ids){await flush();const ps=(await allPhotos()).filter(p=>ids?ids.includes(p.id):true);if(!ps.length){toast('No photos to back up');return;}status('Preparing project…');const blob=await MobileProject.pack(ps,getBlob,(n,total)=>status('Backing up '+n+' of '+total));await MobileProject.download(blob,'Chromasmith-'+new Date().toISOString().slice(0,10)+'.chromasmith.zip');status('Project ready. Keep the ZIP to restore or continue on desktop.');}
+async function restoreBackup(file){if(!file)file=await MobileProject.choose();if(!file)return;await flush();status('Checking project…');const records=await MobileProject.unpack(file);
+  const additions=await Promise.all(records.map(async r=>{const i=id();return {p:{...r.photo,id:i},b:{id:i,bytes:await r.blob.arrayBuffer(),name:r.photo.name,type:r.photo.type}};}));
+  await tx(['photos','blobs'],'readwrite',t=>additions.forEach(({p,b})=>{t.objectStore('photos').put(p);t.objectStore('blobs').put(b);}));
+  for(const {p,b}of additions){status('Restoring thumbnails…');await patchPhoto(p.id,{thumb:await fileThumb(new Blob([b.bytes],{type:b.type}))});}filter='all';await open();status('Restored '+records.length+' photos. Existing photos were kept.');
+}
+async function settings(){
+  const p=prefs(),ps=await allPhotos();let used='';try{const e=await navigator.storage.estimate();used=Math.round(e.usage/1048576)+' MB used';}catch(_){}
+  UI().sheet('Gallery settings','<label>Text size<select data-pref="textSize"><option value="1">Standard</option><option value="1.15">Larger</option><option value="1.3">Largest</option></select></label><label><input data-haptics type="checkbox" '+(UI().pref('haptics',true)?'checked':'')+'>Haptic feedback</label><label>Gallery background<select data-pref="bg">'+Object.keys(BGS).map(k=>'<option>'+k+'</option>').join('')+'</select></label><label>Thumbnail shape<select data-pref="aspect"><option value="square">Square</option><option value="original">Original shape</option></select></label><label><input data-dates type="checkbox" '+(p.dates?'checked':'')+'>Show dates</label><button data-k="theme">Switch '+(document.body.classList.contains('light')?'to dark':'to light')+' theme</button><button data-k="guide">Welcome guide</button><button data-k="backup">Back up gallery / continue on desktop</button><button data-k="restore">Restore project</button><button data-k="free">Move exported photos to Trash</button><button data-k="empty">Empty Trash permanently</button><p>'+ps.length+' photos · '+esc(used)+'<br>Build '+esc(BUILD)+'</p>',(el,close)=>{
+    el.querySelector('[data-pref=bg]').value=p.bg;el.querySelector('[data-pref=aspect]').value=p.aspect;el.querySelector('[data-pref=textSize]').value=UI().pref('textSize',1);
+    el.querySelectorAll('[data-pref]').forEach(e=>e.onchange=()=>{if(e.dataset.pref==='textSize'){UI().setPref('textSize',+e.value);document.body.style.setProperty('--phone-text-scale',e.value);}else setGalleryPref(e.dataset.pref,e.value);});
+    el.querySelector('[data-haptics]').onchange=e=>UI().setPref('haptics',e.target.checked);el.querySelector('[data-dates]').onchange=e=>setGalleryPref('dates',e.target.checked);
+    el.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{close();safe(async()=>{switch(b.dataset.k){case 'theme':toggleTheme();break;case 'guide':closeGallery();chromasmithShowTour();break;case 'backup':await backup();break;case 'restore':await restoreBackup();break;case 'free':{const exported=ps.filter(p=>p.exports?.some(e=>e.status!=='shared')&&!p.trashed);if(await UI().ask('Free up space?',exported.length+' originals and their edits will move to recoverable Trash. Storage is freed only when you empty Trash.','Move to Trash'))await trash(exported.map(p=>p.id));break;}case 'empty':await removePermanently(ps.filter(p=>p.trashed).map(p=>p.id));break;}});});
+  });
+}
+let lastReceipt=[];window.chromasmithMobileSaveReceipt=receipts=>{lastReceipt=receipts;};
+window.chromasmithRecordExport=async function(version,snap,dest,context){const photoId=context?.id||openedId;if(!photoId)return;const p=await getPhoto(photoId);if(!p)return;const receipt=(context?.receipts||lastReceipt).find(r=>r.ok);if(!receipt&&typeof capNative==='function'&&capNative())return;
+  await patchPhoto(photoId,{},[],[{version,recipe:b64(snap),ts:Date.now(),status:receipt?.status||'downloaded',path:receipt?.path||dest||''}]);};
+window.chromasmithGetExportHistory=async()=>openedId?(await getPhoto(openedId))?.exports||[]:[];
+async function exportQueue(){
+  const destination=await window.chromasmithChooseExportDestination?.();if(!destination)return;await flush();
+  const ids=[...queue],current=openedId;window.chromasmithMobileExportDestination=destination;
+  const opts=UI().sheet('Export selected photos','<p>Each photo uses its own saved edits.</p><button data-go>Export '+ids.length+' photos</button>',(el,close)=>el.querySelector('[data-go]').onclick=()=>{close();safe(async()=>{
+    window.MobileExport?.beginBatch();
+    try{for(const i of ids){const p=await getPhoto(i);if(!await openPhoto(i)){window.MobileExport?.reportFailure(p?.name||'Photo','Could not open this photo. Reopen it in Gallery and try again.');continue;}lastReceipt=[];await exportFX();if(!lastReceipt.length)window.MobileExport?.reportFailure(p?.name||'Photo','Could not render this photo. Open it in Gallery and export again.');}}
+    finally{await openPhoto(current);window.MobileExport?.endBatch();}
+  });});return opts.closed;
+}
+async function open(doFlush=true){if(doFlush){await flush();await refreshThumb();}build();root.classList.add('open');document.querySelector('.fx-layout')?.setAttribute('inert','');await render();const last=openedId?{id:openedId,inEditor:false}:null;if(last)localStorage.setItem(LAST,JSON.stringify(last));}
+function closeGallery(){if(!openedId){toast('Open a photo first');return;}close();}
+function close(){root?.classList.remove('open');const layout=document.querySelector('.fx-layout');if(layout)layout.inert=!!UI().dialog;setSelecting(false);}
+window.chromasmithOpenGallery=()=>safe(()=>open());window.chromasmithToggleLibrary=()=>root?.classList.contains('open')?closeGallery():safe(()=>open());
+window.MobileLibrary={open,close,flush,isOpen:()=>!!root?.classList.contains('open'),cancelSelection:()=>{if(!selecting)return false;setSelecting(false);return true;},backup,restoreBackup,openPhoto,importFiles,getPhoto,allPhotos,getBlob,saveVersion,pasteTo,trash,restore,get isOpening(){return opening;},get currentId(){return openedId;},get queue(){return [...queue];}};
+window.fxMobileBack=()=>safe(()=>UI().back());
+function saveLeaving(){if(openedId&&!restoring&&!opening){capture(getUISnapshot());flush(false).catch(()=>{});}}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)saveLeaving();});window.addEventListener('pagehide',saveLeaving);
+document.addEventListener('input',e=>{if(e.target.closest?.('.fx-panel')&&!restoring&&!opening&&openedId){saveStatus('Saving…');clearTimeout(inputTimer);inputTimer=setTimeout(()=>capture(getUISnapshot()),180);}});
+async function launch(){
+  build();try{const j=JSON.parse(localStorage.getItem(JOURNAL)||'[]');for(const [i,v]of j){unb64(v.recipe);pending.set(i,v);}await flush(false);}catch(e){status('Pending edits need saving. Tap Retry in the editor.',true);}
+  try{await navigator.storage?.persist?.();}catch(_){}
+  let last;try{last=JSON.parse(localStorage.getItem(LAST)||'null');}catch(_){}
+  if(last?.inEditor&&await getPhoto(last.id)){queue=[last.id];await openPhoto(last.id);}else await open(false);
+}
+if(document.readyState==='complete')safe(launch);else window.addEventListener('load',()=>safe(launch));
 })();
