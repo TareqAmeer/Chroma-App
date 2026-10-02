@@ -3770,8 +3770,42 @@
   }
   /// Mirrors setLabel exactly — optimistic local update, sidecar write, same failure handling —
   /// because a rating and a flag are the same kind of edit and should not drift apart.
+  // CHR-184: ⌘Z in the Library undoes rating / flag / favourite changes, not only "Reset edit".
+  // Every write path for those three funnels through setRating/setLabel/setFavorite, so they
+  // record the PREVIOUS value here. Writes made in the same tick (a multi-select X, a 5-key on
+  // 40 photos) share one group, so one ⌘Z reverts the whole action. Resets go on the same stack
+  // so ⌘Z always undoes the most recent thing, whichever kind it was.
+  const libMetaUndo = [];
+  let libMetaGroup = null, libMetaUndoing = false;
+  function libMetaRecord(rec) {
+    if (libMetaUndoing) return;
+    if (!libMetaGroup) {
+      libMetaGroup = [];
+      libMetaUndo.push(libMetaGroup);
+      if (libMetaUndo.length > 50) libMetaUndo.shift();
+      setTimeout(() => { libMetaGroup = null; }, 0);
+    }
+    libMetaGroup.push(rec);
+  }
+  async function libUndoLast() {
+    const g = libMetaUndo.pop();
+    if (!g || !g.length) { toast('Nothing to undo'); return; }
+    if (g[0].kind === 'reset') { await libUndoLastReset(g[0].paths); return; }
+    libMetaUndoing = true;
+    try {
+      // Reverse order so a path changed twice in one group lands on its oldest value.
+      for (const r of [...g].reverse()) {
+        if (r.kind === 'rating') await setRating(r.path, r.prev);
+        else if (r.kind === 'label') await setLabel(r.path, r.prev);
+        else if (r.kind === 'favorite') await setFavorite(r.path, r.prev);
+      }
+    } finally { libMetaUndoing = false; }
+    const n = new Set(g.map((r) => r.path)).size;
+    toast(`Undid ${g[0].kind === 'label' ? 'flag' : g[0].kind} change${n > 1 ? ` on ${n} photos` : ''}`);
+  }
   async function setRating(path, rating) {
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });
     const n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
     const updated = { ...cur, rating: n };
     state.sidecars.set(path, updated);
@@ -5513,6 +5547,7 @@
   }
   async function setLabel(path, label) {
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    libMetaRecord({ kind: 'label', path, prev: cur.label || '' });
     const updated = { ...cur, label };
     state.sidecars.set(path, updated);
     await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited })
@@ -5544,6 +5579,7 @@
   // (and can coexist with) a Red/Green flag.
   async function setFavorite(path, favorite) {
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false, favorite: false };
+    libMetaRecord({ kind: 'favorite', path, prev: !!cur.favorite });
     const updated = { ...cur, favorite };
     state.sidecars.set(path, updated);
     await invoke('set_sidecar', { path, rating: updated.rating, label: updated.label, edited: updated.edited, favorite })
@@ -6223,7 +6259,8 @@
       if (badge) badge.remove();
       if (p === state.openedPath) { openInEditor(p); }
     }));
-    toast(n > 1 ? `Reset ${n} photos — Undo last reset is in this menu` : 'Reset edit — Undo last reset is in this menu');
+    libMetaUndo.push([{ kind: 'reset', paths: [...paths] }]);
+    toast(n > 1 ? `Reset ${n} photos — ⌘Z to undo` : 'Reset edit — ⌘Z to undo');
   }
   async function libUndoLastReset(paths) {
     const restorable = paths.filter((p) => (state.sidecars.get(p) || {}).last_reset_recipe);
@@ -8080,7 +8117,7 @@
       if (k === 'c' && e.shiftKey) { e.preventDefault(); libCopyEdit(cmKbTargets()); return; }
       if (k === 'v' && e.shiftKey) { e.preventDefault(); libPasteEdit(cmKbTargets()); return; }
       if (k === 'r' && e.shiftKey) { e.preventDefault(); libResetEdit(cmKbTargets()); return; }
-      if (k === 'z' && !e.shiftKey) { e.preventDefault(); libUndoLastReset(cmKbTargets()); return; }
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); libUndoLast(); return; }
       if (k === 'e' && !e.shiftKey) { e.preventDefault(); libExportPaths(cmKbTargets()); return; }
       if (k === 'd' && !e.shiftKey) { e.preventDefault(); libDuplicatePaths(cmKbTargets()); return; }
     }
