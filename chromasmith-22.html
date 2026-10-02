@@ -3606,6 +3606,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
     <div class="btn-row">
       <button class="btn bpri" id="btn-cp" disabled onclick="runColourCopy('lut')">Download .cube LUT</button>
       <button class="btn bsec" id="btn-cp-xmp" disabled onclick="runColourCopy('xmp')">Download .xmp Preset</button>
+      <button class="btn bsec" id="btn-cp-look" disabled onclick="runColourCopy('look')" title="Save the match as a look in the editor's LUT library and apply it — then fine-tune with the look's Strength and every other slider">Use in editor</button>
     </div>
     <div class="pb" id="pb-cp"><div class="pf" id="pf-cp"></div></div>
     <div class="sum-box" id="cp-sum" style="display:none">
@@ -6868,7 +6869,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002J';
+const BUILD='1.1002K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -7418,7 +7419,7 @@ function cpOpts(){const v=id=>{const e=document.getElementById(id);return e?(+e.
   return{str:v('cp-str'),sh:v('cp-sh'),md:v('cp-md'),hl:v('cp-hl'),skin:!!(document.getElementById('cp-skin')||{}).checked};}
 async function runColourCopy(type){
   if(!ST.cpSrcFile||!ST.cpRefFile)return;
-  const btn=document.getElementById(type==='lut'?'btn-cp':'btn-cp-xmp');btn.disabled=true;
+  const btn=document.getElementById(type==='lut'?'btn-cp':type==='look'?'btn-cp-look':'btn-cp-xmp');btn.disabled=true;
   showPB('pb-cp');log('Running color copy…','info');
   try{
     const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
@@ -7430,7 +7431,16 @@ async function runColourCopy(type){
     setP('pf-cp',70);
     const name=document.getElementById('cp-name').value||'colour_copy';
     const ver=`v${ST.cpVer.toFixed(1)}`;
-    if(type==='lut'){
+    if(type==='look'){
+      // CHR-219: hand the match to the editor as an ordinary user look (same LUT library the
+      // "Load .cube → Save" path uses), so it stays editable: look Strength plus every slider.
+      const lname=`${name} ${ver}`;
+      await lutLibPut(lname,lutToBytes(lut));await refreshLUTSelect('l:'+lname);
+      const sel=document.getElementById('sel-lut');if(sel)sel.value='l:'+lname;
+      await selectLUT('l:'+lname);
+      if(typeof switchTab==='function')switchTab('fx');
+      toast(`"${lname}" added to your looks`,true);
+    }else if(type==='lut'){
       dl(writeCube(lut,`${name} ${ver}`),`${name}_${ver}.cube`);
       log(`Downloaded ${name}_${ver}.cube`,'ok');
     } else {
@@ -24017,7 +24027,7 @@ async function hf(file,type){
   else if(type.startsWith('dev-')){const idx=parseInt(type.split('-')[1]);if(ST.history[idx]){ST.history[idx].deviceFile=file;setDZ(`dz-dev-${idx}`,`fn-dev-${idx}`,file.name);const btn=document.getElementById(`btn-ref-${idx}`);if(btn)btn.disabled=false}}
 }
 function chkStart(){document.getElementById('btn-start').disabled=!(ST.beforeFile&&ST.targetFile)}
-function chkCP(){const ok=ST.cpSrcFile&&ST.cpRefFile;document.getElementById('btn-cp').disabled=!ok;document.getElementById('btn-cp-xmp').disabled=!ok}
+function chkCP(){const ok=ST.cpSrcFile&&ST.cpRefFile;document.getElementById('btn-cp').disabled=!ok;document.getElementById('btn-cp-xmp').disabled=!ok;const lk=document.getElementById('btn-cp-look');if(lk)lk.disabled=!ok}
 function setDZ(dzId,fnId,name){const dz=document.getElementById(dzId);if(dz)dz.classList.add('loaded');const fn=document.getElementById(fnId);if(fn)fn.textContent=name}
 
 // ═══════════════════════════
