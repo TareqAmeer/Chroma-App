@@ -123,6 +123,8 @@ body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title{font-size:15px!important;min-height:4
 #mlib .photo-menu{min-height:48px;width:100%;border:0;border-bottom:1px solid var(--bdr);padding:0;text-align:center}
 #mlib.selecting .photo-menu{display:none}
 body.sk2.mobile-fx .fx-panel:not(:has(.sec-active)){padding-bottom:0!important}
+body.sk2.mobile-fx #phone-save-status{z-index:8999}
+body.sk2.mobile-fx #phone-save-status.phone-error{min-height:48px;min-width:48px;padding:8px;font-size:14px}
 
 @media (orientation:portrait) and (max-width:699px){
  body.sk2.mobile-fx .fx-preview-col{min-height:calc(240px + var(--phone-queue-height,0px))!important}

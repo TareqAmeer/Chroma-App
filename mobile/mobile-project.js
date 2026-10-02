@@ -75,7 +75,7 @@ async function openDesktop(){
         const r=records[+b.dataset.project];MobileUI.dialog?.close();
         const entry=await loadFXImages([new File([r.blob],r.photo.name,{type:r.photo.type})]);
         if(!entry)throw new Error('This photo could not be decoded.');
-        if(r.photo.recipe){applyUISnapshot(validateRecipe(r.photo.recipe));fxUpdate();}
+        if(r.photo.recipe){await applyUISnapshot(validateRecipe(r.photo.recipe));fxUpdate();}
         desktopPhoto=curItem();desktopViewingVersion=false;desktopCurrent=r.photo.recipe||getUISnapshot();
         window.chromasmithProjectVersions=r.photo.versions;
         toast('Mobile edit opened. Saved versions are in More → Mobile project versions.');
@@ -88,10 +88,10 @@ function showDesktopVersions(){
   if(curItem()!==desktopPhoto){toast('Open the mobile project photo again to view its versions.');return;}
   const versions=window.chromasmithProjectVersions||[],esc=MobileUI.esc;
   MobileUI.sheet('Mobile project versions','<p>Opening a saved version keeps your current edit available here.</p><button data-current>Return to current edit</button>'+versions.map((v,i)=>'<button data-version="'+i+'">'+esc(v.name)+'</button>').join(''),(el,close)=>{
-    el.querySelector('[data-current]').onclick=()=>{applyUISnapshot(validateRecipe(desktopCurrent));fxUpdate();desktopViewingVersion=false;close();};
-    el.querySelectorAll('[data-version]').forEach(b=>b.onclick=()=>{
+    el.querySelector('[data-current]').onclick=async()=>{await applyUISnapshot(validateRecipe(desktopCurrent));fxUpdate();desktopViewingVersion=false;close();};
+    el.querySelectorAll('[data-version]').forEach(b=>b.onclick=async()=>{
       if(!desktopViewingVersion)desktopCurrent=getUISnapshot();desktopViewingVersion=true;
-      applyUISnapshot(validateRecipe(versions[+b.dataset.version].recipe));fxUpdate();fxHistoryPush();close();
+      await applyUISnapshot(validateRecipe(versions[+b.dataset.version].recipe));fxUpdate();fxHistoryPush();close();
     });
   });
 }

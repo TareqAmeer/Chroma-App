@@ -125,6 +125,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.pack.outputs.dmg }}
+          append_body: true
           body: |
             ## Chromasmith ${{ steps.pack.outputs.version }}
 

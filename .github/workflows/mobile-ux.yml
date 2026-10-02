@@ -9,10 +9,11 @@ on:
       - 'chromasmith-22.html'
       - 'vendor/fflate/**'
       - 'test/mobile_ux.mjs'
+      - 'test/mobile_edge_cases.mjs'
       - 'package*.json'
       - '.github/workflows/mobile-ux.yml'
   pull_request:
-    paths: ['mobile/**', 'chromasmith-22.html', 'test/mobile_ux.mjs', 'package*.json']
+    paths: ['mobile/**', 'chromasmith-22.html', 'test/mobile_ux.mjs', 'test/mobile_edge_cases.mjs', 'package*.json']
 permissions:
   contents: read
 jobs:

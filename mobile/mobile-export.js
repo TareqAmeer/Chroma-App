@@ -32,9 +32,20 @@ async function save(items,destination){
   for(const item of items){
     const receipt={ok:false,fname:item.fname,status:'failed',path:'',err:''};
     try{
-      const data=typeof item.content==='string'?btoa(unescape(encodeURIComponent(item.content))):_u8b64(item.content instanceof Uint8Array?item.content:new Uint8Array(item.content));
+      const content=item.content instanceof Blob?await item.content.arrayBuffer():item.content;
+      const data=typeof content==='string'?btoa(unescape(encodeURIComponent(content))):_u8b64(ArrayBuffer.isView(content)?new Uint8Array(content.buffer,content.byteOffset,content.byteLength):new Uint8Array(content));
       if(destination==='files'){
-        const r=await Filesystem.writeFile({path:'Chromasmith/'+item.fname,data,directory:'DOCUMENTS',recursive:true});receipt.ok=true;receipt.status='saved';receipt.path=r.uri;
+        const filename=String(item.fname).replace(/[\\/:*?"<>|\x00-\x1f]/g,'_'),dot=filename.lastIndexOf('.'),base=dot>0?filename.slice(0,dot):filename,ext=dot>0?filename.slice(dot):'';
+        let path;
+        // Filesystem.writeFile replaces an existing file. Choose a free name first, so
+        // repeated exports and different photos with the same name retain both outputs.
+        for(let n=1;n<=10000;n++){
+          path='Chromasmith/'+base+(n===1?'':' ('+n+')')+ext;
+          try{await Filesystem.stat({path,directory:'DOCUMENTS'});}
+          catch(e){if(e.code==='OS-PLUG-FILE-0008'||e.code==='ENOENT'||/not exist|not found|no such file/i.test(e.message||''))break;throw e;}
+          if(n===10000)throw new Error('Too many exports use this filename. Choose another name.');
+        }
+        const r=await Filesystem.writeFile({path,data,directory:'DOCUMENTS',recursive:true});receipt.ok=true;receipt.status='saved';receipt.path=r.uri;
       }else{
         const r=await Filesystem.writeFile({path:'export/'+item.fname,data,directory:'CACHE',recursive:true});
         if(destination==='share'){

@@ -15,15 +15,20 @@ function sheet(title,html,setup){
   const previous=underneath.map(e=>[e,e.inert]);underneath.forEach(e=>e.inert=true);
   let dismiss;
   const closed=new Promise(resolve=>dismiss=resolve);
-  const close=()=>{if(!ov.isConnected)return;ov.remove();previous.forEach(([e,inert])=>e.inert=inert);if(window.MobileLibrary){const layout=$('.fx-layout');if(layout)layout.inert=MobileLibrary.isOpen();}document.removeEventListener('keydown',key);if(activeDialog?.el===ov)activeDialog=null;focus?.focus?.();dismiss();};
+  const close=()=>{if(!ov.isConnected)return;ov.remove();previous.forEach(([e,inert])=>e.inert=inert);if(window.MobileLibrary){const layout=$('.fx-layout');if(layout)layout.inert=MobileLibrary.isOpen();}if(activeDialog?.el===ov)activeDialog=null;focus?.focus?.();dismiss();};
   const key=e=>{
+    // Inert backgrounds do not disable document-level editor shortcuts. Keep keyboard
+    // events inside the dialog so Undo, tool shortcuts and Escape cannot edit behind it.
+    e.stopPropagation();
     if(e.key==='Escape'){e.preventDefault();close();return;}
     if(e.key!=='Tab')return;
     const a=[...ov.querySelectorAll('button,input,select,textarea,a[href],[tabindex="0"]')].filter(e=>!e.disabled&&e.offsetParent!==null);
     const first=a[0],last=a.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
   };
-  ov.onclick=e=>{if(e.target===ov||e.target.closest('.phone-close'))close();};document.addEventListener('keydown',key);
-  activeDialog={el:ov,close,closed};setup?.(ov,close);ov.querySelector('button,input')?.focus();return {el:ov,close,closed};
+  ov.onclick=e=>{if(e.target===ov||e.target.closest('.phone-close'))close();};ov.addEventListener('keydown',key);
+  activeDialog={el:ov,close,closed};setup?.(ov,close);
+  if(!ov.contains(document.activeElement))(ov.querySelector('.phone-dialog-content input:not([type=checkbox]),.phone-dialog-content button,.phone-dialog-content select')||ov.querySelector('button,input'))?.focus();
+  return {el:ov,close,closed};
 }
 async function ask(title,text,action='Continue'){
   let answer=false;const s=sheet(title,'<p>'+esc(text)+'</p><div class="phone-actions"><button data-answer="yes">'+esc(action)+'</button><button data-answer="no">Cancel</button></div>',(el,close)=>{

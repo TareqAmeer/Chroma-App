@@ -7,7 +7,7 @@ const DBN='chromasmith-mlib',LAST='cs-mlib-last',JOURNAL='cs-mlib-pending-v2';
 const b64=s=>btoa(unescape(encodeURIComponent(JSON.stringify(s)))),unb64=s=>MobileProject.validateRecipe(s);
 const id=()=>('p'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
 let database,root,grid,openedId=null,queue=[],restoring=false,opening=false,selecting=false,filter='all',search='',collection='',urls=[];
-const selected=new Set(),pending=new Map(),known=new Map();let saveTimer,inputTimer,writing=Promise.resolve(),renderKey=0;
+const selected=new Set(),pending=new Map(),known=new Map();let saveTimer,inputTimer,writing=Promise.resolve(),renderKey=0,saveFailed=false;
 const origLoad=window.loadFXImages;
 function db(){return database||(database=new Promise((res,rej)=>{
   const r=indexedDB.open(DBN,1);r.onupgradeneeded=()=>{for(const name of ['photos','blobs'])if(!r.result.objectStoreNames.contains(name))r.result.createObjectStore(name,{keyPath:'id'});};
@@ -27,15 +27,16 @@ async function patchPhoto(i,patch={},versions=[],exports=[]){
   // Read and merge inside ONE readwrite transaction. A thumbnail, flag, export receipt or
   // version must never write a stale copy of the recipe or erase a concurrently saved version.
   return tx('photos','readwrite',t=>{const store=t.objectStore('photos'),r=store.get(i);r.onsuccess=()=>{
-    if(!r.result)return;const record={...r.result,...changes};
+    try{if(!r.result)return;const record={...r.result,...changes};
     if(additions.length)record.versions=[...(r.result.versions||[]),...additions];
     if(exports.length)record.exports=[...(r.result.exports||[]),...exports];store.put(record);
+    }catch(_){t.abort();}
   };});
 }
 const getBlob=i=>tx('blobs','readonly',t=>t.objectStore('blobs').get(i)).then(p=>p?.bytes?new Blob([p.bytes],{type:p.type}):p?.blob);
 const safe=fn=>Promise.resolve().then(fn).catch(e=>{status(e.message,true);if(window.toast)toast(e.message);});
 function status(text,error=false){build();const e=root.querySelector('.status');e.textContent=text;e.classList.toggle('phone-error',error);}
-function saveStatus(text,error=false){const e=$('#phone-save-status');if(e){e.textContent=text;e.classList.toggle('phone-error',error);e.disabled=!error;e.setAttribute('aria-label',error?'Save failed. Retry saving':text);}}
+function saveStatus(text,error=false){if(saveFailed&&text==='Saving…'){text='Save failed · Retry';error=true;}const e=$('#phone-save-status');if(e){e.textContent=text;e.classList.toggle('phone-error',error);e.disabled=!error;e.setAttribute('aria-label',error?'Save failed. Retry saving':text);}}
 function journal(){try{if(pending.size)localStorage.setItem(JOURNAL,JSON.stringify([...pending]));else localStorage.removeItem(JOURNAL);}catch(e){/* IndexedDB holds full masks; the small emergency journal is best effort. */}}
 function capture(snap){
   if(!openedId||restoring||opening)return;const recipe=b64(snap);if(known.get(openedId)===recipe&&!pending.has(openedId))return;
@@ -48,10 +49,10 @@ async function flush(captureLive=true){
   clearTimeout(saveTimer);const batch=[...pending];
   const task=async()=>{
     for(const [i,value]of batch){const p=await getPhoto(i);if(!p)continue;await patchPhoto(i,{recipe:value.recipe,edited:value.edited});known.set(i,value.recipe);if(pending.get(i)===value)pending.delete(i);}
-    journal();saveStatus(pending.size?'Saving…':'Saved');
+    journal();saveFailed=false;saveStatus(pending.size?'Saving…':'Saved');
   };
   const next=writing.catch(()=>{}).then(task);writing=next;
-  try{await next;}catch(e){saveStatus('Save failed · Retry',true);throw new Error('Edits could not be saved. Free up storage, then tap Retry.');}
+  try{await next;}catch(e){saveFailed=true;saveStatus('Save failed · Retry',true);throw new Error('Edits could not be saved. Free up storage, then tap Retry.');}
 }
 window.chromasmithOnEdit=capture;
 async function thumb(src,w,h){const k=Math.min(1,360/Math.max(w,h)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*k));c.height=Math.max(1,Math.round(h*k));c.getContext('2d').drawImage(src,0,0,c.width,c.height);return new Promise(r=>c.toBlob(r,'image/jpeg',.8));}
@@ -88,7 +89,8 @@ async function importAndOpen(files){const ids=await importFiles([...files]);if(!
 window.loadFXImages=async function(files){if(window.__mlibOpening)return origLoad.apply(this,arguments);await importAndOpen([...files]);return curItem();};
 async function openPhoto(i,{recipe,original=false}={}){
   if(opening||document.body.classList.contains('fx-exporting'))return false;
-  if(openedId)capture(getUISnapshot());opening=true;restoring=true;status('Opening photo…');
+  const previous={id:openedId,images:[...fxImages],snap:getUISnapshot(),history:fxHistory,index:fxHistIdx,loadKey:_fxLoadKey,version:fxVersion};
+  if(openedId)capture(previous.snap);opening=true;restoring=true;status('Opening photo…');
   try{
     await flush(false);
     const p=await getPhoto(i),blob=await getBlob(i);if(!p||!blob||p.trashed)throw new Error('Photo is unavailable. Restore it from Trash first.');
@@ -98,7 +100,7 @@ async function openPhoto(i,{recipe,original=false}={}){
     if(!entry)throw new Error('Could not decode '+p.name+'. Try another format or retry importing.');
     openedId=i;if(!queue.includes(i))queue=[i];
     const r=recipe??(!original&&p.recipe);
-    if(r)applyUISnapshot(unb64(r));else window.chromasmithApplyPristineDefault?.();
+    if(r)await applyUISnapshot(unb64(r));else await window.chromasmithApplyPristineDefault?.();
     if(!r&&RAW_FILE_EXT_RE.test('.'+entry.ext)&&typeof applyRawDefaults==='function')applyRawDefaults();fxUpdate();clearTimeout(_fxHistPushTimer);
     const snap=getUISnapshot();known.set(i,b64(snap));
     // An explicit version/original fork must replace the working recipe AFTER the outgoing
@@ -107,20 +109,31 @@ async function openPhoto(i,{recipe,original=false}={}){
     fxHistory=[{j:JSON.stringify(snap),snap,rasters:fxState.masks.map(m=>m.px||null),label:'Opened',ts:Date.now()}];fxHistIdx=0;fxSyncTopbarDisabled();
     if(p.importError){await patchPhoto(i,{importError:undefined});}
     localStorage.setItem(LAST,JSON.stringify({id:i,inEditor:true}));close();status('');saveStatus('Saved');syncQueue();return true;
-  }catch(e){await open(false);status(e.message,true);UI().sheet('Photo could not open','<p>'+esc(e.message)+'</p><button data-retry>Retry</button>',(el,close)=>el.querySelector('[data-retry]').onclick=()=>{close();safe(()=>openPhoto(i));});}
+  }catch(e){
+    // The shared decoder resets controls before attempting a new image. Roll back both
+    // pixels and recipe on failure, so a later autosave cannot persist those reset controls
+    // over the outgoing photo. Keep its undo history and pending writes available too.
+    openedId=previous.id;
+    if(previous.images.length){if(fxImages[0]!==previous.images[0])installFXImages(previous.images,previous.loadKey);await applyUISnapshot(previous.snap);fxVersion=previous.version;fxUpdate();}
+    else{fxImages=[];fxImg=null;fxWork=null;applyUISnapshot(previous.snap);}
+    clearTimeout(_fxHistPushTimer);fxHistory=previous.history;fxHistIdx=previous.index;fxSyncTopbarDisabled();
+    await open(false);status(e.message,true);UI().sheet('Photo could not open','<p>'+esc(e.message)+'</p><button data-retry>Retry</button>',(el,close)=>el.querySelector('[data-retry]').onclick=()=>{close();safe(()=>openPhoto(i));});
+  }
   finally{opening=false;restoring=false;}
 }
 async function setFlag(ids,flag){await flush();for(const i of ids){const p=await getPhoto(i);if(p){await patchPhoto(i,{flag});}}await render();hapt();}
 const CK='cs-mlib-copied',copied=()=>localStorage.getItem(CK);
 async function pasteTo(ids,source=copied(),verb='Paste'){
-  if(!source){toast('Copy edits from a photo first');return;}await flush();const snap=unb64(source);
+  if(!source){toast('Copy edits from a photo first');return;}await flush();
+  const normalize=r=>{const s=unb64(r);if(s.ver!==2&&s.sliders['adj-exp']!==undefined)s.sliders['adj-exp']=String(Math.max(-100,Math.min(100,+s.sliders['adj-exp']*(20/50))));s.ver=2;return s;},snap=normalize(source);
   // Geometry, retouch and masks are per-photo. Sharing masks needs its own explicit workflow.
   const cats=PASTE_CATEGORIES.filter(c=>c.key!=='masks');let keys=null;
   const s=UI().sheet(verb+' selected settings', '<p>'+ids.length+' photo'+(ids.length===1?'':'s')+'. Crop, retouch and masks stay individual.</p>'+cats.map(c=>'<label><input type="checkbox" value="'+c.key+'" checked>'+esc(c.label)+'</label>').join('')+'<button data-paste>'+verb+'</button>',(el,close)=>el.querySelector('[data-paste]').onclick=()=>{keys=[...el.querySelectorAll('input:checked')].map(i=>i.value);close();});
   await s.closed;if(!keys?.length)return;
-  for(const i of ids){const p=await getPhoto(i);if(!p)continue;const own=p.recipe?unb64(p.recipe):structuredClone(_fxPristineDefault),out=pasteEditSelectiveApply(own,snap,keys);
+  for(const i of ids){const p=await getPhoto(i);if(!p)continue;const own=p.recipe?normalize(p.recipe):structuredClone(_fxPristineDefault),out=pasteEditSelectiveApply(own,snap,keys);
+    for(const key of ['nr','deconv'])if(keys.includes(key)&&snap.toggles[key]!==undefined)out.toggles[key]=snap.toggles[key];
     out.geom=own.geom;out.heal=own.heal;out.masks=own.masks;p.recipe=b64(out);await patchPhoto(i,{recipe:p.recipe,edited:Date.now(),thumbEdited:null});known.delete(i);
-    if(i===openedId){restoring=true;applyUISnapshot(out);fxUpdate();clearTimeout(_fxHistPushTimer);restoring=false;known.set(i,p.recipe);}}
+    if(i===openedId){restoring=true;try{await applyUISnapshot(out);fxUpdate();clearTimeout(_fxHistPushTimer);known.set(i,p.recipe);}finally{restoring=false;}}}
   await render();toast(verb+' applied to '+ids.length+' photo'+(ids.length===1?'':'s'));
 }
 async function saveVersion(i){await refreshThumb();await flush();const p=await getPhoto(i);if(!p)return;const n=await UI().name('Save named version','Version '+((p.versions||[]).length+1));if(!n)return;

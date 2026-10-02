@@ -1,4 +1,4 @@
-# Mobile release 1.2.0 (CHR-169)
+# Mobile release 1.2.1 (CHR-169)
 
 This release implements the 20 approved iOS and Android improvements. The mobile
 shell still uses the shared image renderer; originals remain separate from recipes.
@@ -38,7 +38,7 @@ requires this release or a later build. Keep the project ZIP to reopen other pho
 Files exports are written to `Documents/Chromasmith`. iOS exposes Documents in
 Files with file sharing enabled. Photos exports use the Chromasmith album. Android
 APK updates retain the existing debug signing-key cache and increase versionCode
-to 3; iOS uses marketing version 1.2.0 and build 3. The IPA is unsigned and needs
+to 4; iOS uses marketing version 1.2.1 and build 4. The IPA is unsigned and needs
 the same signing/sideloading service as previous releases.
 
 ## Automated verification
@@ -56,6 +56,28 @@ Native platform builds are independently produced by the Android and iOS workflo
 The broad Editor gate set has existing failures on unmodified main (including
 snapshot-list gaps, wireframe drift and missing surface inventory). These are
 not treated as a mobile acceptance pass. The shared UI audit is required to pass.
+
+## Validation follow-up: 1.2.1
+
+Additional checks found and fixed recovery and export gaps: a corrupt image now
+restores the outgoing pixels, recipe and undo history; storage failures retain a
+clickable Retry state; Files exports choose an unused filename; single-file and
+Blob exports report the actual save result and preserve their bytes. Dialogs
+keep keyboard shortcuts inside the modal and focus numeric/name fields correctly.
+Photo/project opening waits for the saved look to load. Selective sync normalizes
+older exposure recipes and includes NR/Deconvolution enable states.
+
+`test/mobile_edge_cases.mjs` adds checks for failed decode and storage recovery,
+Tone sync preserving crop/masks/retouch/grain, older recipes, same-name outputs,
+partial retries belonging to the correct photo, single-file failures and Blob
+bytes, real brush/erase/magnifier interaction, deletion confirmation and keyboard
+focus on a 320px phone. The complete mobile command runs both suites in Chromium
+and WebKit. Native 1.2.1 uses build/versionCode 4; release notes remain intact when
+the companion desktop workflow attaches its assets.
+
+The machine has no iOS simulator toolchain or Android SDK. Automated native bridge
+failures are substituted; signed installation, real Photos/Files permissions and
+VoiceOver/TalkBack still require physical-device testing.
 
 ## Device testing
 

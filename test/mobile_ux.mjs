@@ -1,11 +1,12 @@
 // Mobile data safety and user-flow gate. Drives the shipped WebView assets, with only
 // native filesystem/share/media bridges substituted so denial and cancellation are repeatable.
 import assert from 'node:assert/strict';
-import {expect} from '@playwright/test';
+import {expect as baseExpect} from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { chromium, webkit } from 'playwright';
+const expect=baseExpect.configure({timeout:30000});
 
 const root = resolve('.');
 const mime = {'.html':'text/html','.js':'text/javascript','.css':'text/css','.wasm':'application/wasm','.png':'image/png','.woff2':'font/woff2'};
@@ -31,7 +32,7 @@ async function exercise(name, engine) {
     window.nativeCalls = []; window.nativeBack = {};
     window.Capacitor = {isNativePlatform:()=>true, getPlatform:()=> 'android', Plugins:{
       App:{addListener:async (event,cb)=>{window.nativeBack[event]=cb;return {remove(){}};},minimizeApp:async()=>window.nativeCalls.push('minimize')},
-      Filesystem:{writeFile:async opts=>{if(window.failFiles)throw Error('Storage full');window.nativeCalls.push(opts);return {uri:'file:///test/'+opts.path};}},
+      Filesystem:{stat:async()=>{throw Object.assign(Error('File does not exist'),{code:'OS-PLUG-FILE-0008'});},writeFile:async opts=>{if(window.failFiles)throw Error('Storage full');window.nativeCalls.push(opts);return {uri:'file:///test/'+opts.path};}},
       Share:{share:async()=>{if(window.cancelShare)throw Error('User cancelled');window.nativeCalls.push('share');return {};}},
       Media:{getAlbums:async()=>({albums:[{name:'Chromasmith',identifier:'album1'}]}),createAlbum:async()=>({identifier:'album1'}),savePhoto:async()=>{if(window.denyPhotos)throw Error('Permission denied');window.nativeCalls.push('photo');return {};}}
     }};

@@ -6898,7 +6898,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002U';
+const BUILD='1.1002V';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23280,8 +23280,12 @@ async function saveFile(content,fname,mime='application/octet-stream'){
     if(r){if(r[0].ok)toast('Saved to '+fxExportDirLabel((()=>{try{return localStorage.getItem('cs-export-dir')||''}catch(e){return ''}})())+' ✓',true);else toast('Save failed — see log');return}
   }
   if(capNative()){
-    try{await capShareFiles([{content,fname,mime}]);toast('Saved ✓',true);return}
-    catch(e){if(e&&/cancel/i.test(e.message||''))return; log('Native share failed ('+(e&&e.message||e)+') — falling back','warn');}
+    try{
+      const receipts=await capShareFiles([{content,fname,mime}]);
+      const r=receipts&&receipts[0];
+      toast(r?.ok?(r.status==='shared'?'Handed to share sheet — save not confirmed':'Saved ✓'):(r?.err||'Could not save the file'),!!r?.ok);
+      window.chromasmithShowMobileExportResult?.();return receipts;
+    }catch(e){toast('Could not save the file: '+(e.message||e),false);return [{ok:false,fname,err:e.message||String(e)}];}
   }
   try{const file=new File([content],fname,{type:mime});
     if(useShareSheet()&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}}
