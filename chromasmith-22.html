@@ -1851,6 +1851,9 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 #fx-ref-win img{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
 /* CHR-215: collage title band + per-photo captions (geometry shared with clExport via clTextGeom) */
 .cl-title{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:600;white-space:nowrap;overflow:hidden;pointer-events:none}
+.cl-in{position:absolute;overflow:hidden}
+.cl-cell.cl-framed{box-shadow:0 2px 10px rgba(0,0,0,.28)}
+.cl-cap.cl-cap-mat{background:none;color:#222;padding:0 .6em;display:flex;align-items:center}
 .cl-cap{position:absolute;left:0;right:0;bottom:0;padding:1.2em .6em .45em;color:#fff;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:linear-gradient(transparent,rgba(0,0,0,.55));pointer-events:none}
 .cl-cell.sel{outline:var(--bw-2) solid var(--acc);outline-offset:-2px;z-index:var(--z-raise);touch-action:none}
 #cl-dz.hot{border-style:solid;border-color:var(--acc);background:var(--tint-1)}
@@ -4911,6 +4914,7 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         </div>
         <div class="fx-row" style="margin-top:8px"><div class="fx-label">Spacing</div><input class="fx-slider" type="range" min="0" max="60" value="8" id="cl-inner" oninput="clSet('inner',+this.value)"><div class="fx-val" id="cl-inner-v">8</div></div>
         <div class="fx-row"><div class="fx-label">Outer margin</div><input class="fx-slider" type="range" min="0" max="80" value="0" id="cl-outer" oninput="clSet('outer',+this.value)"><div class="fx-val" id="cl-outer-v">0</div></div>
+        <div class="fx-row"><div class="fx-label">Photo frame</div><select class="fx-select" id="cl-frame-sel" onchange="CL.frame=this.value;clRenderFrame()"><option value="none">None</option><option value="keyline">Thin border</option><option value="mat">Paper mat</option><option value="print">Instant print</option></select></div>
         <div class="fx-row"><div class="fx-label">Corner round</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="cl-radius" oninput="clSet('radius',+this.value)"><div class="fx-val" id="cl-radius-v">0</div></div>
       </div>
       <div class="fx-ctrl" data-clsec="text">
@@ -6875,7 +6879,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002L';
+const BUILD='1.1002M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -26038,7 +26042,7 @@ if(typeof document!=='undefined')document.addEventListener('visibilitychange',()
 // ════════════════════ COLLAGE TAB ════════════════════
 const CL_ASPECTS=[['1:1',1,1],['4:5',4,5],['5:4',5,4],['3:4',3,4],['4:3',4,3],['2:3',2,3],['3:2',3,2],['9:16',9,16],['16:9',16,9]];
 const CL_SWATCHES=['#ffffff','#000000','#f4f1ea','#e8d9c5','#171717','#c8553d','#2e4756','#a3b18a'];
-const CL={photos:[],aspect:CL_ASPECTS[0],tree:null,templates:[],templateIdx:0,assign:[],cells:[],dividers:[],bg:'#ffffff',inner:8,outer:0,radius:0,title:'',titlePos:'bottom',titleSize:45,capSize:28,capAuto:false,sel:-1,frameW:0,frameH:0,inited:false};
+const CL={photos:[],aspect:CL_ASPECTS[0],tree:null,templates:[],templateIdx:0,assign:[],cells:[],dividers:[],bg:'#ffffff',inner:8,outer:0,radius:0,frame:'none',title:'',titlePos:'bottom',titleSize:45,capSize:28,capAuto:false,sel:-1,frameW:0,frameH:0,inited:false};
 const _leaf=()=>({leaf:true,size:1});
 function _row(){return{dir:'row',size:1,children:[].slice.call(arguments)};}
 function _col(){return{dir:'col',size:1,children:[].slice.call(arguments)};}
@@ -26175,6 +26179,15 @@ function clTextGeom(W,H){
 }
 function clTextColor(){const h=CL.bg.replace('#','');const n=parseInt(h.length===3?h.replace(/./g,'$&$&'):h,16)||0;
   const l=(0.299*(n>>16&255)+0.587*(n>>8&255)+0.114*(n&255))/255;return l<0.55?'#ffffff':'#111111';}
+// CHR-217: per-cell photo frames. Returns the photo's inset inside its cell (px) and the mat
+// colour; "print" is the instant-print shape (thick bottom, where its caption is written).
+function clFrameInset(w,h){
+  const m=Math.min(w,h);
+  if(CL.frame==='keyline'){const k=Math.max(2,m*0.015);return{t:k,r:k,b:k,l:k,col:'#ffffff'};}
+  if(CL.frame==='mat'){const k=m*0.05;return{t:k,r:k,b:k,l:k,col:'#ffffff'};}
+  if(CL.frame==='print'){const k=m*0.055;return{t:k,r:k,b:k*3.6,l:k,col:'#fbfaf6'};}
+  return null;
+}
 function clCaption(i){const p=CL.photos[CL.assign[i]];if(!p)return'';return(p.caption!=null&&p.caption!=='')?p.caption:(CL.capAuto?String(p.name||'').replace(/\.[^.]+$/,''):'');}
 function clSetCaption(v){const p=CL.photos[CL.assign[CL.sel]];if(!p)return;p.caption=v;clRenderFrame();}
 function clRenderFrame(){
@@ -26198,11 +26211,15 @@ function clRenderFrame(){
     const pIdx=CL.assign[i];
     const hasPhoto=pIdx!=null&&CL.photos[pIdx];
     let im=null;
-    if(hasPhoto){im=document.createElement('img');im.alt='';im.src=CL.photos[pIdx].url;cell.appendChild(im);cell.classList.add('has-photo');}
+    const fi=hasPhoto&&clFrameInset(r.w,r.h);let host=cell;
+    if(fi){cell.classList.add('cl-framed');cell.style.background=fi.col;host=document.createElement('div');host.className='cl-in';
+      host.style.cssText=`left:${fi.l}px;top:${fi.t}px;right:${fi.r}px;bottom:${fi.b}px`;cell.appendChild(host);}
+    if(hasPhoto){im=document.createElement('img');im.alt='';im.src=CL.photos[pIdx].url;host.appendChild(im);cell.classList.add('has-photo');}
     else cell.innerHTML='<div class="cl-cell-empty">'+icon('plus',22)+'</div>';
     cell.dataset.i=i;cell.draggable=false; // assigned cells pan on drag; rearrange via the tray
     const cap=hasPhoto&&clCaption(i);
-    if(cap){const c=document.createElement('div');c.className='cl-cap';c.textContent=cap;c.style.fontSize=tg.capPx+'px';cell.appendChild(c);}
+    if(cap){const c=document.createElement('div');c.className='cl-cap';c.textContent=cap;c.style.fontSize=tg.capPx+'px';
+      if(CL.frame==='print'){c.classList.add('cl-cap-mat');c.style.height=fi.b+'px';c.style.left=fi.l+'px';cell.appendChild(c);}else host.appendChild(c);}
     clWireCell(cell,i,r);frame.appendChild(cell);
     if(im){ // cell is now in the DOM (real size) — position the photo (cover-fit + clamped offset)
       const[iw,ih]=clNat(i);
@@ -26309,14 +26326,23 @@ function clExport(){
   rects.forEach((r,i)=>{
     const pIdx=CL.assign[i];if(pIdx==null||!CL.photos[pIdx])return;
     const img=CL.photos[pIdx].img,c=CL.cells[i],iw=img.naturalWidth,ih=img.naturalHeight;
-    ctx.save();clRoundRect(ctx,r.x,r.y,r.w,r.h,rad);ctx.clip();
+    const fi=clFrameInset(r.w,r.h),R=r;let matCap=null;
+    if(fi){ // mat + soft shadow first, then the photo clipped to the opening
+      ctx.save();ctx.shadowColor='rgba(0,0,0,.28)';ctx.shadowBlur=base*0.012;ctx.shadowOffsetY=base*0.003;
+      ctx.fillStyle=fi.col;clRoundRect(ctx,R.x,R.y,R.w,R.h,rad);ctx.fill();ctx.restore();
+      if(CL.frame==='print')matCap={x:R.x+fi.l,y:R.y+R.h-fi.b,h:fi.b,w:R.w-fi.l-fi.r};
+      r={x:R.x+fi.l,y:R.y+fi.t,w:R.w-fi.l-fi.r,h:R.h-fi.t-fi.b};
+    }
+    ctx.save();if(fi){ctx.beginPath();ctx.rect(r.x,r.y,r.w,r.h);}else clRoundRect(ctx,r.x,r.y,r.w,r.h,rad);ctx.clip();
     const cover=Math.max(r.w/iw,r.h/ih)*c.scale,dw=iw*cover,dh=ih*cover;
     const mx=Math.max(0,(dw-r.w)/(2*r.w)),my=Math.max(0,(dh-r.h)/(2*r.h)); // keep the image covering the cell
     const ox=Math.min(mx,Math.max(-mx,c.ox)),oy=Math.min(my,Math.max(-my,c.oy));
     const dx=r.x+(r.w-dw)/2+ox*r.w,dy=r.y+(r.h-dh)/2+oy*r.h;
     ctx.drawImage(img,dx,dy,dw,dh);
     const cap=clCaption(i);
-    if(cap){const ch=tg.capPx*2.4,g=ctx.createLinearGradient(0,r.y+r.h-ch,0,r.y+r.h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.55)');
+    if(cap&&matCap){ctx.restore();ctx.save();ctx.fillStyle='#222';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='middle';ctx.textAlign='left';
+      ctx.fillText(cap,matCap.x+tg.capPx*0.6,matCap.y+matCap.h/2,matCap.w-tg.capPx*1.2);}
+    else if(cap){const ch=tg.capPx*2.4,g=ctx.createLinearGradient(0,r.y+r.h-ch,0,r.y+r.h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.55)');
       ctx.fillStyle=g;ctx.fillRect(r.x,r.y+r.h-ch,r.w,ch);
       ctx.fillStyle='#fff';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='alphabetic';ctx.textAlign='left';
       ctx.fillText(cap,r.x+tg.capPx*0.6,r.y+r.h-tg.capPx*0.55,r.w-tg.capPx*1.2);}
