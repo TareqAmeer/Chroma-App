@@ -1844,6 +1844,9 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:var(--fs-2);pointer-events:none}
 #cl-frame{position:relative;box-shadow:none;display:none}
 .cl-cell{position:absolute;overflow:hidden;cursor:pointer;background:transparent}
+/* CHR-215: collage title band + per-photo captions (geometry shared with clExport via clTextGeom) */
+.cl-title{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:600;white-space:nowrap;overflow:hidden;pointer-events:none}
+.cl-cap{position:absolute;left:0;right:0;bottom:0;padding:1.2em .6em .45em;color:#fff;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:linear-gradient(transparent,rgba(0,0,0,.55));pointer-events:none}
 .cl-cell.sel{outline:var(--bw-2) solid var(--acc);outline-offset:-2px;z-index:var(--z-raise);touch-action:none}
 #cl-dz.hot{border-style:solid;border-color:var(--acc);background:var(--tint-1)}
 #cl-dz.hot .dz-ic,#cl-dz.hot .dz-lb{color:var(--acc)}
@@ -4897,9 +4900,19 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="fx-row"><div class="fx-label">Outer margin</div><input class="fx-slider" type="range" min="0" max="80" value="0" id="cl-outer" oninput="clSet('outer',+this.value)"><div class="fx-val" id="cl-outer-v">0</div></div>
         <div class="fx-row"><div class="fx-label">Corner round</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="cl-radius" oninput="clSet('radius',+this.value)"><div class="fx-val" id="cl-radius-v">0</div></div>
       </div>
+      <div class="fx-ctrl" data-clsec="text">
+        <div class="ctitle" style="margin-bottom:10px">Title &amp; captions</div>
+        <div class="fx-row"><div class="fx-label">Title</div><input class="vinput" id="cl-title" type="text" placeholder="None" oninput="CL.title=this.value;clRenderFrame()"></div>
+        <div class="fx-row"><div class="fx-label">Position</div><select class="fx-select" id="cl-titlepos" onchange="CL.titlePos=this.value;clRenderFrame()"><option value="bottom">Bottom</option><option value="top">Top</option></select></div>
+        <div class="fx-row"><div class="fx-label">Title size</div><input class="fx-slider" type="range" min="20" max="120" value="45" id="cl-titleSize" oninput="clSet('titleSize',+this.value)"><div class="fx-val" id="cl-titleSize-v">45</div></div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Caption size</div><input class="fx-slider" type="range" min="12" max="70" value="28" id="cl-capSize" oninput="clSet('capSize',+this.value)"><div class="fx-val" id="cl-capSize-v">28</div></div>
+        <label class="fx-row" style="cursor:pointer;gap:8px"><input type="checkbox" id="cl-capAuto" onchange="CL.capAuto=this.checked;clRenderFrame()"> Show file names as captions</label>
+        <div class="fx-hint">Select a photo to write its own caption.</div>
+      </div>
       <div class="fx-ctrl" id="cl-cellpanel" data-clsec="sel">
         <div class="ctitle" style="margin-bottom:10px">Selected photo</div>
         <div class="fx-row"><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="100" max="400" value="100" id="cl-zoom" oninput="clCellZoom(+this.value)"><div class="fx-val" id="cl-zoom-v">100</div></div>
+        <div class="fx-row"><div class="fx-label">Caption</div><input class="vinput" id="cl-caption" type="text" placeholder="None" oninput="clSetCaption(this.value)"></div>
         <details class="fx-hint-x"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Drag inside the photo to reposition it. Scroll over a photo to zoom.</p></details>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bsec" onclick="clReplaceSelected()">Replace</button>
@@ -6849,7 +6862,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002H';
+const BUILD='1.1002I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -25932,7 +25945,7 @@ if(typeof document!=='undefined')document.addEventListener('visibilitychange',()
 // ════════════════════ COLLAGE TAB ════════════════════
 const CL_ASPECTS=[['1:1',1,1],['4:5',4,5],['5:4',5,4],['3:4',3,4],['4:3',4,3],['2:3',2,3],['3:2',3,2],['9:16',9,16],['16:9',16,9]];
 const CL_SWATCHES=['#ffffff','#000000','#f4f1ea','#e8d9c5','#171717','#c8553d','#2e4756','#a3b18a'];
-const CL={photos:[],aspect:CL_ASPECTS[0],tree:null,templates:[],templateIdx:0,assign:[],cells:[],dividers:[],bg:'#ffffff',inner:8,outer:0,radius:0,sel:-1,frameW:0,frameH:0,inited:false};
+const CL={photos:[],aspect:CL_ASPECTS[0],tree:null,templates:[],templateIdx:0,assign:[],cells:[],dividers:[],bg:'#ffffff',inner:8,outer:0,radius:0,title:'',titlePos:'bottom',titleSize:45,capSize:28,capAuto:false,sel:-1,frameW:0,frameH:0,inited:false};
 const _leaf=()=>({leaf:true,size:1});
 function _row(){return{dir:'row',size:1,children:[].slice.call(arguments)};}
 function _col(){return{dir:'col',size:1,children:[].slice.call(arguments)};}
@@ -25976,7 +25989,7 @@ function clInit(){
   clRebuildShapes();clRenderFrame();applyClLayout();
 }
 // mobile: pinned stage + section strip (mirrors the FX editor)
-const CL_SECTIONS=[['photos','image','Photos'],['canvas','vig','Size'],['layout','borders','Layout'],['style','bloom','Style'],['sel','adjust','Photo'],['export','export','Export']];
+const CL_SECTIONS=[['photos','image','Photos'],['canvas','vig','Size'],['layout','borders','Layout'],['style','bloom','Style'],['text','rename','Text'],['sel','adjust','Photo'],['export','export','Export']];
 function clBuildNav(){
   const nav=document.getElementById('cl-secnav');if(!nav)return;nav.innerHTML='';
   CL_SECTIONS.forEach(([key,ic,lb])=>{
@@ -26058,6 +26071,19 @@ function clRemovePhoto(i){
   CL.assign=CL.assign.map(a=>a==null?null:(a===i?null:(a>i?a-1:a)));
   clPhotosChanged();
 }
+// CHR-215: one place decides where the title band goes and how big text is, in units of the
+// frame's short side — so the on-screen frame and the exported file always match.
+function clTextGeom(W,H){
+  const base=Math.min(W,H),outer=CL.outer/1000*base;
+  const tPx=CL.title.trim()?CL.titleSize/1000*base:0,band=tPx?tPx*1.9:0;
+  return{base,outer,tPx,band,capPx:CL.capSize/1000*base,
+    lx:outer,ly:outer+(CL.titlePos==='top'?band:0),lw:W-2*outer,lh:H-2*outer-band,
+    ty:CL.titlePos==='top'?outer:H-outer-band};
+}
+function clTextColor(){const h=CL.bg.replace('#','');const n=parseInt(h.length===3?h.replace(/./g,'$&$&'):h,16)||0;
+  const l=(0.299*(n>>16&255)+0.587*(n>>8&255)+0.114*(n&255))/255;return l<0.55?'#ffffff':'#111111';}
+function clCaption(i){const p=CL.photos[CL.assign[i]];if(!p)return'';return(p.caption!=null&&p.caption!=='')?p.caption:(CL.capAuto?String(p.name||'').replace(/\.[^.]+$/,''):'');}
+function clSetCaption(v){const p=CL.photos[CL.assign[CL.sel]];if(!p)return;p.caption=v;clRenderFrame();}
 function clRenderFrame(){
   const stage=document.getElementById('cl-stage'),frame=document.getElementById('cl-frame');if(!stage||!frame)return;
   if(!CL.photos.length||!CL.tree){frame.style.display='none';return;}
@@ -26067,10 +26093,12 @@ function clRenderFrame(){
   let fw=availW,fh=fw/ar;if(fh>availH){fh=availH;fw=fh*ar;}
   CL.frameW=fw;CL.frameH=fh;
   frame.style.width=fw+'px';frame.style.height=fh+'px';frame.style.background=CL.bg;
-  const base=Math.min(fw,fh),gap=CL.inner/1000*base,outer=CL.outer/1000*base,rad=CL.radius/1000*base;
+  const base=Math.min(fw,fh),gap=CL.inner/1000*base,rad=CL.radius/1000*base,tg=clTextGeom(fw,fh);
   CL.dividers=[];
-  const rects=clLayoutRects(CL.tree,outer,outer,fw-2*outer,fh-2*outer,gap,CL.dividers);
+  const rects=clLayoutRects(CL.tree,tg.lx,tg.ly,tg.lw,tg.lh,gap,CL.dividers);
   frame.innerHTML='';
+  if(tg.band){const t=document.createElement('div');t.className='cl-title';t.textContent=CL.title;
+    t.style.cssText=`top:${tg.ty}px;height:${tg.band}px;font-size:${tg.tPx}px;color:${clTextColor()}`;frame.appendChild(t);}
   rects.forEach((r,i)=>{
     const cell=document.createElement('div');cell.className='cl-cell'+(i===CL.sel?' sel':'');
     cell.style.cssText=`left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;border-radius:${rad}px`;
@@ -26080,6 +26108,8 @@ function clRenderFrame(){
     if(hasPhoto){im=document.createElement('img');im.alt='';im.src=CL.photos[pIdx].url;cell.appendChild(im);cell.classList.add('has-photo');}
     else cell.innerHTML='<div class="cl-cell-empty">'+icon('plus',22)+'</div>';
     cell.dataset.i=i;cell.draggable=false; // assigned cells pan on drag; rearrange via the tray
+    const cap=hasPhoto&&clCaption(i);
+    if(cap){const c=document.createElement('div');c.className='cl-cap';c.textContent=cap;c.style.fontSize=tg.capPx+'px';cell.appendChild(c);}
     clWireCell(cell,i,r);frame.appendChild(cell);
     if(im){ // cell is now in the DOM (real size) — position the photo (cover-fit + clamped offset)
       const[iw,ih]=clNat(i);
@@ -26147,6 +26177,7 @@ function clWireDivider(el,d){
 function clSelectCell(i){CL.sel=i;
   document.querySelectorAll('#cl-frame .cl-cell').forEach((el,j)=>{el.classList.toggle('sel',j===i);el.draggable=false;});
   document.getElementById('cl-cellpanel').classList.add('cl-has-sel');clSyncZoom();
+  {const ci=document.getElementById('cl-caption'),p=CL.photos[CL.assign[i]];if(ci)ci.value=(p&&p.caption)||'';}
   if(document.body.classList.contains('mobile-cl')){clBuildNav();clSection('sel');}
 }
 function clHideCellPanel(){const p=document.getElementById('cl-cellpanel');if(p)p.classList.remove('cl-has-sel');if(document.body.classList.contains('mobile-cl'))clBuildNav();}
@@ -26177,8 +26208,11 @@ function clExport(){
   let W,H;if(ar>=1){W=long;H=Math.round(long/ar);}else{H=long;W=Math.round(long*ar);}
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;const ctx=cv.getContext('2d');
   ctx.fillStyle=CL.bg;ctx.fillRect(0,0,W,H);
-  const base=Math.min(W,H),gap=CL.inner/1000*base,outer=CL.outer/1000*base,rad=CL.radius/1000*base;
-  const rects=clLayoutRects(CL.tree,outer,outer,W-2*outer,H-2*outer,gap,null);
+  const base=Math.min(W,H),gap=CL.inner/1000*base,rad=CL.radius/1000*base,tg=clTextGeom(W,H);
+  const rects=clLayoutRects(CL.tree,tg.lx,tg.ly,tg.lw,tg.lh,gap,null);
+  const fam=getComputedStyle(document.body).fontFamily||'sans-serif';
+  if(tg.band){ctx.save();ctx.fillStyle=clTextColor();ctx.font=`600 ${tg.tPx}px ${fam}`;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(CL.title,W/2,tg.ty+tg.band/2,W-2*tg.outer);ctx.restore();}
   rects.forEach((r,i)=>{
     const pIdx=CL.assign[i];if(pIdx==null||!CL.photos[pIdx])return;
     const img=CL.photos[pIdx].img,c=CL.cells[i],iw=img.naturalWidth,ih=img.naturalHeight;
@@ -26187,7 +26221,13 @@ function clExport(){
     const mx=Math.max(0,(dw-r.w)/(2*r.w)),my=Math.max(0,(dh-r.h)/(2*r.h)); // keep the image covering the cell
     const ox=Math.min(mx,Math.max(-mx,c.ox)),oy=Math.min(my,Math.max(-my,c.oy));
     const dx=r.x+(r.w-dw)/2+ox*r.w,dy=r.y+(r.h-dh)/2+oy*r.h;
-    ctx.drawImage(img,dx,dy,dw,dh);ctx.restore();
+    ctx.drawImage(img,dx,dy,dw,dh);
+    const cap=clCaption(i);
+    if(cap){const ch=tg.capPx*2.4,g=ctx.createLinearGradient(0,r.y+r.h-ch,0,r.y+r.h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.55)');
+      ctx.fillStyle=g;ctx.fillRect(r.x,r.y+r.h-ch,r.w,ch);
+      ctx.fillStyle='#fff';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='alphabetic';ctx.textAlign='left';
+      ctx.fillText(cap,r.x+tg.capPx*0.6,r.y+r.h-tg.capPx*0.55,r.w-tg.capPx*1.2);}
+    ctx.restore();
   });
   cv.toBlob(b=>{if(!b){log('Export failed','err');return;}const url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download='collage.jpg';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);log('Collage exported ('+W+'×'+H+')','ok');},'image/jpeg',0.95);
 }
