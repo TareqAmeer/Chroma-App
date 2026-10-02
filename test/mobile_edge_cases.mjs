@@ -12,7 +12,7 @@ let entry='chromasmith-22.html';try{await access(resolve(root,entry));}catch{ent
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');const path=url.pathname.startsWith('/test/fixtures/')?resolve(fixtures,url.pathname.slice('/test/fixtures/'.length)):resolve(root,'.'+url.pathname);
  if(!path.startsWith(root+'/')&&!path.startsWith(fixtures+'/')){res.writeHead(403).end();return;}
- try{res.writeHead(200,{'Content-Type':({'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.wasm':'application/wasm'})[extname(path)]||'application/octet-stream','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp'}).end(await readFile(path));}catch{res.writeHead(404).end();}
+ try{const bytes=await readFile(path);res.writeHead(200,{'Content-Type':({'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.wasm':'application/wasm'})[extname(path)]||'application/octet-stream','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp'}).end(bytes);}catch{res.writeHead(404).end();}
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 await mkdir('test/output/mobile',{recursive:true});
