@@ -12865,6 +12865,11 @@
       const p = P[(r * cols + c * 7) % P.length];
       const im = pvImg(p, `width:${tw}px;height:${th}px;border-radius:4px;cursor:pointer;will-change:transform`);
       im.onclick = () => { if (!moved) pvOpen(p.path); };
+      // CHR-228: tiles wipe in once (staggered), then lift and tilt slightly under the pointer.
+      if (!pvReduced()) { im.animate([{ clipPath: 'inset(100% 0 0 0)' }, { clipPath: 'inset(0 0 0 0)' }], { duration: 700, delay: (r * 3 + c) * 35, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'backwards' });
+        im.addEventListener('pointermove', (e) => { if (drag) return; const b = im.getBoundingClientRect(), dx = (e.clientX - b.left) / b.width - 0.5, dy = (e.clientY - b.top) / b.height - 0.5; im.style.rotate = `${dx * 3}deg`; im.style.scale = '1.04'; im.style.filter = `brightness(${1.05 - dy * 0.1})`; });
+        im.addEventListener('pointerleave', () => { im.style.rotate = ''; im.style.scale = ''; im.style.filter = ''; });
+        im.style.transition = 'rotate .25s, scale .25s, filter .25s'; }
       pv.stage.appendChild(im); tiles.push({ im, x: c * cw + (r % 2) * cw / 2, y: r * ch });
     }
     let ox = 0, oy = 0, vx = pvReduced() ? 0 : -0.35, vy = pvReduced() ? 0 : -0.2, drag = null, moved = false;
