@@ -4301,7 +4301,8 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="fx-ctrl-title">Output</div>
         <!-- Plain export choices (set the size/quality/format controls below — those stay editable). -->
         <div id="exp-plain" class="exp-plain"></div>
-        <div id="exp-est" style="font-size:12px;color:var(--mut);margin:2px 0 8px"></div>
+        <div id="exp-est" style="font-size:12px;color:var(--mut);margin:2px 0 8px;line-height:1.5"></div>
+        <div id="exp-last" style="font-size:12px;color:var(--mut);margin:-4px 0 8px" hidden></div>
         <div class="vrow">
           <div class="vlb">Filename <button class="fx-info-i" title="Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></div>
           <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px">
@@ -6896,7 +6897,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002A';
+const BUILD='1.1002B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13417,6 +13418,14 @@ function toast(msg,kind){
 }
 // Export-finished pill with a "Show in Finder" action — says WHERE the file went, which a bare
 // "Exported ✓" never did. Desktop only (needs the real saved path); auto-dismisses after 9s.
+// CHR-201: the last export's outcome stays in the Output panel after the pill disappears.
+function csExportResultKeep(saved,failed,path){
+  const el=document.getElementById('exp-last');if(!el)return;el.hidden=false;el.textContent='';
+  const t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  el.appendChild(document.createTextNode(`Last export (${t}): ${saved} saved${failed?`, ${failed} failed — see the log`:''}`));
+  if(path&&window.__TAURI__){const b=document.createElement('button');b.type='button';b.className='btn bgh';b.style.cssText='margin-left:6px;padding:2px 8px;font-size:11px';
+    b.textContent='Show in '+((window.CS_PLATFORM&&window.CS_PLATFORM.revealLabel)||'Finder');b.onclick=()=>{try{window.__TAURI__.core.invoke('reveal_in_finder',{path});}catch(e){}};el.appendChild(b);}
+}
 function csExportDone(n,path){
   const old=document.getElementById('cs-export-done');if(old)old.remove();
   const d=document.createElement('div');d.id='cs-export-done';d.setAttribute('role','status');
@@ -22327,6 +22336,8 @@ async function _exportFXRun(){
     if(results.length)fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
     if(failed&&results.length)log(`Export finished: ${results.length} saved, ${failed} failed (see log above)`,'warn');
     if(failed&&results.length)toast(`Exported ${results.length}/${N} — ${failed} failed, see log`,false);
+    {const _p=(typeof sr!=='undefined'&&Array.isArray(sr))?sr.filter(x=>x&&x.ok&&x.path).map(x=>x.path):[];csExportResultKeep(results.length,failed,_p[0]);}
+    if(failed&&results.length){}
     else if(results.length){
       const _paths=(typeof sr!=='undefined'&&Array.isArray(sr))?sr.filter(x=>x&&x.ok&&x.path).map(x=>x.path):[];
       if(_paths.length&&window.__TAURI__)csExportDone(results.length,_paths[0]);
@@ -24816,7 +24827,28 @@ function expPlainRender(){
       expPlainRender();};
     host.appendChild(b);});
   const est=document.getElementById('exp-est'),d=_expDims(curE);
-  if(est)est.textContent=d?'This export: '+d[0]+'×'+d[1]+' · about '+_mb(_expBytes(d,curQ,curF==='auto'?'jpg':curF)):'';
+  if(est){est.textContent='';(d?_expPreflight(curE,curQ,curF):[]).forEach(l=>{const r=document.createElement('div');r.textContent=l;est.appendChild(r);});}
+}
+// CHR-201: a plain preflight of what Export will actually write — photo count (scope), the
+// concrete format(s) "Auto" resolves to per source (same rule as _exportFXRun), size, quality,
+// and an example filename built with the same pattern logic.
+function _expPreflight(edge,q,fmt){
+  const all=typeof fxImages!=='undefined'?fxImages:[];if(!all.length)return[];
+  const items=(typeof fxExportScope!=='undefined'&&fxExportScope==='current')||all.length===1?[fxImages[fxCurIdx]||all[0]]:all;
+  const lossless=it=>it&&(it.ext==='png'||it.ext==='tif'||it.ext==='tiff'||(typeof RAW_FILE_EXT_RE!=='undefined'&&RAW_FILE_EXT_RE.test('.'+it.ext))||(typeof RUST_ONLY_RE!=='undefined'&&RUST_ONLY_RE.test('.'+it.ext)));
+  const fmtOf=it=>fmt==='webp'?'WebP':fmt==='png'?'PNG':fmt==='jpg'?'JPG':(lossless(it)?'PNG':'JPG');
+  const counts={};items.forEach(it=>{const f=fmtOf(it);counts[f]=(counts[f]||0)+1;});
+  const fmts=Object.entries(counts).map(([f,n])=>items.length>1?`${n} ${f}`:f).join(', ');
+  const d=_expDims(edge);
+  const fld=((document.getElementById('fx-fname')||{}).value||'').trim(),noVer=fld.includes('{nover}'),pat=fld.replace('{nover}','').trim();
+  const single=items.length===1,it0=items[0]||{};
+  let base=(pat&&pat!=='photo'&&(single||pat.includes('{')))?pat.replace(/\{name\}/g,it0.name||'photo').replace(/\{seq\}/g,'1').replace(/\{date\}/g,new Date().toISOString().slice(0,10))+(!single&&!pat.includes('{name}')&&!pat.includes('{seq}')?'_1':''):(single?(fld||it0.name):it0.name);
+  const ver=noVer||typeof fxVersion==='undefined'?'':'_v'+fxVersion.toFixed(1).replace('.','-');
+  const ext=fmtOf(it0)==='WebP'?'webp':fmtOf(it0)==='PNG'?'png':'jpg';
+  const lines=[`${items.length} photo${items.length>1?'s':''} · ${fmts}${fmt==='auto'?' (Auto: lossless sources stay PNG)':''}`,
+    `${d[0]}×${d[1]}${items.length>1?' (first photo)':''} · about ${_mb(_expBytes(d,q,ext))}${ext==='png'?'':' · quality '+q}`,
+    `Saved as ${base}${ver}.${ext}${items.length>1?' …':''}`];
+  return lines;
 }
 document.addEventListener('change',e=>{if(e.target&&/^(sel-exp-size|sel-exp-fmt)$/.test(e.target.id))expPlainRender();},true);
 document.addEventListener('input',e=>{if(e.target&&e.target.id==='sl-exp-q')expPlainRender();},true);
