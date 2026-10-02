@@ -2964,9 +2964,20 @@ function apply(){var lib=isLib();if(lib===wasLib)return;wasLib=lib;var t=null;tr
 new MutationObserver(apply).observe(b,{attributes:true,attributeFilter:['class']});apply();})();</script>
 <script>/* Swiss v2 — stage header for the tool panel: a big stage title, then a sticky sub-tab row that
    jumps between the stage's stacked cards and follows the scroll. Called by fxSection (deskx). */
-const SK2_SUB={image:'Image',looks:'Looks',adjust:'Basic',curves:'Curves',hal:'Halation',bloom:'Bloom',hsl:'Mixer',wheels:'Wheels',
-  pointcolor:'Point colour',grain:'Grain',nr:'Noise',deconv:'Sharpen',lens:'Lens',art:'Artifacts',vig:'Effects',retouch:'Retouch',
-  inprint:'Input & Prints',local:'Masks',crop:'Crop',borders:'Border',canvas:'Canvas',export:'Output',wm:'Watermark',exppreset:'Export Presets',style:'Presets',share:'Sharing'};
+// CHR-196: ONE visible name per tool, used by the jump strip, the section headers, the rail
+// section list and the command palette (all four used to drift: Basic/Tone, Sharpen/
+// Deconvolution, Mixer/Color Mixer, "rotate" in lower case…). Change a name here only.
+const CS_NAMES={image:'Image',looks:'Looks',inprint:'Input & Prints',adjust:'Light',curves:'Curves',hsl:'Colour Mixer',wheels:'Colour Wheels',
+  pointcolor:'Point Colour',nr:'Noise Reduction',deconv:'Sharpen',lens:'Lens',art:'Artifacts',grain:'Grain',hal:'Halation',bloom:'Bloom',vig:'Effects',
+  retouch:'Retouch',local:'Masks',crop:'Crop',rotate:'Rotate & Flip',straighten:'Straighten',borders:'Borders',canvas:'Canvas',
+  export:'Output',wm:'Watermark',exppreset:'Export Recipes',style:'Edit Styles',share:'Sharing',info:'Metadata',diag:'Diagnostics'};
+// Everyday words and old names that should find each tool in the command palette (⌘K).
+const CS_ALIASES={adjust:'basic tone exposure brightness contrast highlights shadows whites blacks white balance wb temperature tint vibrance saturation',
+  looks:'presets film luts look',curves:'tone curve',hsl:'hsl color mixer hue saturation luminance',pointcolor:'point color',wheels:'color wheels grading lift gamma gain',
+  nr:'noise denoise',deconv:'deconvolution sharpening detail',local:'local adjustments mask brush radial linear sky',retouch:'heal clone spot removal',
+  crop:'crop aspect',rotate:'rotate flip',straighten:'level horizon angle',borders:'border frame',canvas:'matte background',vig:'vignette clarity texture dehaze',
+  art:'dust scratches light leak',grain:'film grain',info:'exif info metadata keywords',exppreset:'export presets recipes',style:'styles presets saved edits',inprint:'input profile print v-log'};
+const SK2_SUB=Object.assign({},CS_NAMES);
 function sk2SubTabs(g,jump){
   const panel=document.querySelector('.fx-panel');if(!panel)return;
   let h=document.getElementById('sk2-stage-h'),nav=document.getElementById('sk2-sub');
@@ -6900,7 +6911,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002Z';
+const BUILD='1.1002A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13652,11 +13663,9 @@ function _cpCommands(){
   const add=(group,label,run)=>cmds.push({group,label,run});
   const TABS={fx:'Effects & Export',match:'Match & Refine',copy:'Color Copy',collage:'Collage',guide:'Guide'};
   Object.entries(TABS).forEach(([k,label])=>add('Tab','Go to '+label,()=>switchTab(k)));
-  const SECTIONS={looks:'Presets & Looks',adjust:'Tone',nr:'Noise Reduction',deconv:'Deconvolution',curves:'Tone Curves',
-    hsl:'Color Mixer',wheels:'Colour Wheels',pointcolor:'Point Color',local:'Masks / Local Adjustments',lens:'Lens Correction',
-    grain:'Film Grain',art:'Film Artifacts',hal:'Halation',bloom:'Bloom',vig:'Effects (Vignette, Clarity, Texture, Dehaze)',
-    borders:'Borders',canvas:'Canvas',export:'Export: Output',wm:'Export: Watermark',exppreset:'Export: Presets',style:'Export: Styles',share:'Export: Sharing'};
-  Object.entries(SECTIONS).forEach(([k,label])=>add('Section',label,()=>{switchTab('fx');fxSection(k);}));
+  // CHR-196: every tool card, named as it is everywhere else, with its aliases searchable.
+  const SECTIONS={};document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(c=>{const k=c.dataset.fxsec;if(CS_NAMES[k]&&!SECTIONS[k])SECTIONS[k]=(['export','wm','exppreset','share'].includes(k)?'Export: ':'')+CS_NAMES[k];});
+  Object.entries(SECTIONS).forEach(([k,label])=>{add('Section',label,()=>{switchTab('fx');fxSection(k);});cmds[cmds.length-1].aliases=CS_ALIASES[k]||'';});
   // Looks/LUTs and Print profiles are read live from their <select>s so a palette entry can never
   // point at a preset that doesn't actually exist in this build.
   const lutSel=document.getElementById('sel-lut');
@@ -13675,6 +13684,8 @@ function _cpCommands(){
   add('Action','Save as Style…',()=>{if(typeof styleSaveCurrent==='function')styleSaveCurrent();});
   add('Action','Toggle theme',()=>{if(typeof toggleTheme==='function')toggleTheme();});
   add('Action','Keyboard shortcuts',()=>window.chromasmithShowShortcuts());
+  add('Action','Edit history',()=>{if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover();});cmds[cmds.length-1].aliases='history undo steps versions';
+  add('Action','Compare before / after',()=>{if(typeof toggleSplit==='function')toggleSplit();});cmds[cmds.length-1].aliases='split compare original';
   add('Action','Show welcome tour',()=>window.chromasmithShowTour());
   return cmds;
 }
@@ -13686,9 +13697,12 @@ function _cpFilter(cmds,q){
   for(const c of cmds){
     const hay=(c.group+' '+c.label).toLowerCase();
     const sub=hay.indexOf(q);
-    if(sub>=0){scored.push([sub,c]);continue;}
+    // CHR-196: tools and actions outrank the 113 look names; an alias hit counts as a match.
+    const pri=(c.group==='Section'||c.group==='Action')?0:500;
+    if(sub>=0){scored.push([sub+pri,c]);continue;}
+    if(c.aliases&&c.aliases.includes(q)){scored.push([200+pri,c]);continue;}
     let qi=0;for(let i=0;i<hay.length&&qi<q.length;i++)if(hay[i]===q[qi])qi++;
-    if(qi===q.length)scored.push([1000+hay.length,c]);
+    if(qi===q.length)scored.push([1000+pri+hay.length,c]);
   }
   scored.sort((a,b)=>a[0]-b[0]);
   return scored.slice(0,60).map(s=>s[1]);
@@ -24691,6 +24705,7 @@ const FX_SECTIONS=[['image','Image'],['looks','Looks'],['adjust','Light'],
   ['borders','Borders'],['canvas','Canvas'],
   ['export','Output'],['wm','Watermark'],['exppreset','Export Presets'],['style','Presets'],['share','Sharing'],
   ['info','Metadata'],['diag','Diag']];
+FX_SECTIONS.forEach(x=>{if(CS_NAMES[x[0]])x[1]=CS_NAMES[x[0]];}); // CHR-196: one name per tool
 // A16: the card lookup is cached. This ran a querySelector per section on every rail and
 // section-nav rebuild (and those rebuild on every layout change / window resize). The cards are
 // static markup — they are never added or removed at runtime — so one pass is enough.
@@ -25967,6 +25982,9 @@ document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title
 // Sidebar sections collapse independently of their on/off state (a section can be OFF and
 // expanded, or ON and collapsed) — clicking the header (anywhere but the toggle/reset controls)
 // folds its body away. Persisted per-section in localStorage, same pattern as _mskGroupOpen.
+// CHR-196: the section headers' own text follows CS_NAMES too.
+document.querySelectorAll('.fx-ctrl[data-fxsec]>.fx-ctrl-title').forEach(t=>{const k=t.parentElement.dataset.fxsec,n=CS_NAMES[k];if(!n)return;
+  const tn=[...t.childNodes].find(x=>x.nodeType===3&&x.textContent.trim());if(tn)tn.textContent=n+' ';});
 let _fxSecCollapsed={};
 try{const c=JSON.parse(localStorage.getItem('chromasmith_fx_sec_collapsed')||'null');if(c)_fxSecCollapsed=c;}catch(e){}
 function fxSecToggle(card){
