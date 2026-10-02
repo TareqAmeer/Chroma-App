@@ -607,11 +607,12 @@
       // as "decode it yourself" — a permanent miss exercises that path.
       case 'cache_raw_decode': case 'get_cached_raw_decode': case 'get_decode_cache': case 'get_decode_cache_path':
         return Promise.reject(new Error('libtest: not cached'));
-      // ?libshapes tests time the real fallback path (full read_file_bytes), which these fast
-      // paths would short-circuit with the wrong bytes — keep them missing there.
+      // Header sniff + fast thumbnail: answering these with the 1px stand-in PNG made every
+      // Gallery -> Editor open fail ("decode failed") in libtest, because the opener trusts the
+      // header over the file name. Missing is what every caller already handles (full read).
+      // Caught by test/library_flows.mjs.
       case 'get_thumbnail_fast': case 'read_file_head':
-        if (LT_SHAPES) return Promise.reject(new Error('libtest: fast path off in shapes mode'));
-        return Promise.resolve(png.buffer.slice(0));
+        return Promise.reject(new Error('libtest: fast path unavailable'));
       // The mock's ".RW2" files are really PNG bytes, so a camera ident would route them into the
       // RAW decoder; only ?libraw=1 (a test that supplies real RAW bytes) gets one.
       case 'peek_raw_camera': case 'peek_raw_camera_path':
@@ -620,6 +621,42 @@
       case 'merge_hdr_photos': case 'merge_focus_photos': case 'merge_panorama_photos': case 'merge_astro_photos':
         (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
         return Promise.resolve(String((A.paths || ['/test/AllPhotos/IMG_1001.RW2'])[0]).replace(/\.\w+$/, `-${cmd.split('_')[1]}.tif`));
+      // ── Editor-side stand-ins (CHR-229). Heavy native pixel work — RAW/image decode, denoise,
+      // SAM/depth/face-parse models, gain-map/TIFF writers — deliberately MISSES here so the
+      // Editor's browser fallback is what the browser gates exercise; the native path itself is
+      // covered by npm run real:sweep inside the real app.
+      case 'decode_image_v1': case 'decode_raw_v2': case 'denoise_raw_high': case 'depth_run': case 'faceparse_run':
+      case 'sam_encode': case 'sam2_encode': case 'sam_points': case 'sam2_points': case 'subject_learn':
+      case 'subject_locate': case 'write_gainmap_heic': case 'write_gainmap_heic_from_map': case 'write_gainmap_uhdr_from_map':
+      case 'write_lightroom_tiff': case 'write_lightroom_tiff_raw': case 'store_dcp_lut': case 'read_dcp_file':
+      case 'get_display_decode_cache': case 'get_display_decode_cache_path': case 'download_url_native':
+      case 'google_oauth_loopback': case 'http_native':
+        return Promise.reject(new Error('libtest: native-only ' + cmd));
+      case 'cancel_denoise_high': case 'haptic_feedback': case 'open_url_native': case 'catalog_record_pet_sighting':
+      case 'subject_delete': case 'subject_rename': case 'subject_rename_ref': case 'stream_write':
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        return Promise.resolve(null);
+      case 'catalog_face_scan_status': return Promise.resolve(true);
+      case 'catalog_photo_faces': return Promise.resolve([{ x0: 0.3, y0: 0.2, x1: 0.6, y1: 0.6, score: 0.97 }]);
+      case 'diag_native_state': return Promise.resolve({ binary_path: '/libtest', binary_mtime: null, thumb_generated_session: 0, thumb_remaining: 0 });
+      case 'diag_state_path': return Promise.resolve('/libtest/chromasmith_diag_state.json');
+      case 'native_build_tag': return Promise.resolve('libtest');
+      case 'platform_capabilities':
+        return Promise.resolve({ os: 'macos', hdr_export: 'heic', eject: true, haptics: true, fast_thumb: true, video_poster: true, reveal_label: 'Show in Finder', mod_key: '⌘' });
+      case 'list_dcp_profiles': return Promise.resolve(A.make ? { prefix: 'DC-S9', source: 'bundled', styles: ['Standard', 'Vivid', 'Natural'] } : null);
+      case 'list_lens_profiles': return Promise.resolve([{ maker: 'Panasonic', model: 'LUMIX S 18-40/F4.5-6.3', focal_min: 18, focal_max: 40 }]);
+      case 'source_has_hdr': return Promise.resolve(false);
+      case 'set_export_dir': return Promise.resolve(String(A.path || '/test/Exports'));
+      case 'save_export_file_raw': case 'save_to_gphotos_downloads': case 'save_to_lr_downloads':
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        return Promise.resolve({ path: '/test/Exports/' + (A.filename || 'export.jpg'), bytes: 1, renamed: false });
+      case 'stream_open': return Promise.resolve({ handle: 'libtest-stream', path: '/test/Exports/' + (A.filename || 'video.mp4') });
+      case 'stream_close': return Promise.resolve({ path: '/test/Exports/video.mp4', bytes: 1, renamed: false });
+      case 'subject_list': return Promise.resolve(window.__libtestSubjects || []);
+      case 'subject_import': return Promise.resolve(A.subjects || []);
+      case 'subject_merge': case 'subject_remove_ref':
+        return Promise.resolve({ id: A.keepId || A.id, name: 'Subject', prototype: [], refs: [], encoder: 'libtest' });
+      case 'subject_locate_multi': return Promise.resolve([{ x: 0.5, y: 0.5, score: 0.9 }]);
       default: return Promise.reject(new Error('libtest: no mock for ' + cmd));
     }
   }
