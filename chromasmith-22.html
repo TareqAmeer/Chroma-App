@@ -3597,6 +3597,12 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <input class="vinput" id="cp-name" value="colour_copy" placeholder="colour_copy">
       <div class="vlb" id="cp-ver" style="color:var(--acc)">v1.0</div>
     </div>
+    <!-- CHR-220: how much of the match to apply, per tonal range, and keep skin tones out of it -->
+    <div class="vrow"><div class="vlb">Strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-str" oninput="document.getElementById('cp-str-v').textContent=this.value"><div class="vlb" id="cp-str-v">100</div></div>
+    <div class="vrow"><div class="vlb">Shadows</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-sh" oninput="document.getElementById('cp-sh-v').textContent=this.value"><div class="vlb" id="cp-sh-v">100</div></div>
+    <div class="vrow"><div class="vlb">Midtones</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-md" oninput="document.getElementById('cp-md-v').textContent=this.value"><div class="vlb" id="cp-md-v">100</div></div>
+    <div class="vrow"><div class="vlb">Highlights</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-hl" oninput="document.getElementById('cp-hl-v').textContent=this.value"><div class="vlb" id="cp-hl-v">100</div></div>
+    <label class="vrow" style="cursor:pointer;gap:8px"><input type="checkbox" id="cp-skin"> Protect skin tones</label>
     <div class="btn-row">
       <button class="btn bpri" id="btn-cp" disabled onclick="runColourCopy('lut')">Download .cube LUT</button>
       <button class="btn bsec" id="btn-cp-xmp" disabled onclick="runColourCopy('xmp')">Download .xmp Preset</button>
@@ -6862,7 +6868,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002I';
+const BUILD='1.1002J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -7389,6 +7395,27 @@ function histMatch(srcPx,refPx,sN,rN){
   }
   return lut;
 }
+// CHR-220: blend the matched LUT back toward identity. Weight per lattice point =
+// strength × (shadow/mid/high amount, smoothly by the INPUT colour's luma) × (1 − skin weight).
+// Skin = warm hue, moderate saturation, mid lightness (the usual YCbCr-style box, softened).
+function cpAdjustLUT(lut,o){
+  if(o.str>=1&&o.sh>=1&&o.md>=1&&o.hl>=1&&!o.skin)return lut;
+  const out=new Float32Array(lut.length),ss=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
+  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
+    const i=li(r,g,b),R=r/(SZ-1),G=g/(SZ-1),B=b/(SZ-1),Y=0.2126*R+0.7152*G+0.0722*B;
+    const wS=1-ss(0.15,0.45,Y),wH=ss(0.55,0.85,Y),wM=Math.max(0,1-wS-wH);
+    let w=o.str*(wS*o.sh+wM*o.md+wH*o.hl);
+    if(o.skin){const mx=Math.max(R,G,B),mn=Math.min(R,G,B),sat=mx>0?(mx-mn)/mx:0;
+      let hue=0;if(mx>mn){if(mx===R)hue=60*(((G-B)/(mx-mn))%6);else if(mx===G)hue=60*((B-R)/(mx-mn)+2);else hue=60*((R-G)/(mx-mn)+4);}if(hue<0)hue+=360;
+      const hw=hue<=50?1-ss(30,50,hue):(hue>=345?1:0);
+      const sk=hw*ss(0.08,0.2,sat)*(1-ss(0.6,0.8,sat))*ss(0.15,0.3,Y)*(1-ss(0.85,0.97,Y));
+      w*=1-0.9*sk;}
+    for(let c=0;c<3;c++){const id=c===0?R:c===1?G:B;out[i+c]=id+(lut[i+c]-id)*w;}
+  }
+  return out;
+}
+function cpOpts(){const v=id=>{const e=document.getElementById(id);return e?(+e.value)/100:1;};
+  return{str:v('cp-str'),sh:v('cp-sh'),md:v('cp-md'),hl:v('cp-hl'),skin:!!(document.getElementById('cp-skin')||{}).checked};}
 async function runColourCopy(type){
   if(!ST.cpSrcFile||!ST.cpRefFile)return;
   const btn=document.getElementById(type==='lut'?'btn-cp':'btn-cp-xmp');btn.disabled=true;
@@ -7397,7 +7424,9 @@ async function runColourCopy(type){
     const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
     const{px:sPx,w:sw,h:sh}=getPx(sImg);const{px:rPx,w:rw,h:rh}=getPx(rImg);
     log('Matching histograms per channel…');setP('pf-cp',30);await yd();
-    const lut=histMatch(sPx,rPx,sw*sh,rw*rh);
+    const opts=cpOpts();
+    const lut=cpAdjustLUT(histMatch(sPx,rPx,sw*sh,rw*rh),opts);
+    const adjusted=opts.str<1||opts.sh<1||opts.md<1||opts.hl<1||opts.skin;
     setP('pf-cp',70);
     const name=document.getElementById('cp-name').value||'colour_copy';
     const ver=`v${ST.cpVer.toFixed(1)}`;
@@ -7406,7 +7435,9 @@ async function runColourCopy(type){
       log(`Downloaded ${name}_${ver}.cube`,'ok');
     } else {
       log('Deriving XMP…');
-      const tPx=resizePx(rImg,sw,sh);
+      // With strength/range/skin controls in play the target is the source run through the
+      // adjusted LUT; untouched, keep the original reference-image target.
+      const tPx=adjusted?applyLUTtoPx(sPx,lut):resizePx(rImg,sw,sh);
       const xmp=await deriveXMP(sPx,tPx,sw,sh,`${name} ${ver}`,'pf-cp');
       dl(xmp,`${name}_${ver}.xmp`,'text/xml');
       log(`Downloaded ${name}_${ver}.xmp`,'ok');
