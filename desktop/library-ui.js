@@ -5917,7 +5917,24 @@
       const files = await readPathsAsFiles(paths);
       if (!files.length) { prog.fail('Could not read any of the selected photos'); return; }
       const okPaths = files.okPaths || paths;
-      const bitmaps = await Promise.all(files.map((f) => createImageBitmap(f)));
+      // CHR-214: photos with a saved edit go in graded — each is loaded into the editor on its
+      // own, its recipe applied, and rendered through the export pipeline. Unedited photos (or
+      // any render failure) fall back to the plain decode, as before.
+      const bitmaps = [];
+      for (let i = 0; i < files.length; i++) {
+        let bm = null;
+        try {
+          const sc = await getSidecar(okPaths[i]);
+          if (sc && sc.recipe && typeof window.chromasmithRenderCurrentGraded === 'function') {
+            prog.update && prog.update(`Rendering edit ${i + 1}/${files.length}…`);
+            await libLoadFX([files[i]]);
+            await applyUISnapshot(snapshotFromB64(sc.recipe));
+            if (typeof applyRawDefaults === 'function') applyRawDefaults();
+            bm = await window.chromasmithRenderCurrentGraded(Math.round(3200 * 0.75));
+          }
+        } catch (e) { console.error('collage: graded render failed, using original', okPaths[i], e); }
+        bitmaps.push(bm || await createImageBitmap(files[i]));
+      }
       const CW = 3200;
       const CH = Math.round(CW / tpl.aspect);
       const canvas = document.createElement('canvas');

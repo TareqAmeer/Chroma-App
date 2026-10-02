@@ -6849,7 +6849,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002D';
+const BUILD='1.1002E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21648,6 +21648,24 @@ async function chromasmithSaveToLightroom(){
 // don't stop it early; finally guarantees it stops on errors and early returns too.
 let _fxExportRuns=0;
 window.addEventListener('beforeunload',e=>{if(document.body.classList.contains('fx-exporting')){e.preventDefault();e.returnValue='';}});
+// CHR-214: render the photo currently loaded in the editor (fxImages[0], with whatever recipe
+// the caller just applied) to a canvas, through the SAME processToCanvas the export uses, then
+// downscale to maxEdge. The desktop Library's "Create collage" calls this per photo so a collage
+// shows each photo's own look/grade instead of the untouched originals. No borders/canvas matte:
+// the collage draws its own.
+window.chromasmithRenderCurrentGraded=async function(maxEdge){
+  const it=fxImages[fxCurIdx]||fxImages[0];if(!it)throw new Error('no photo loaded');
+  const savedMasks=fxState.masks;fxState.masks=it.masks||savedMasks;
+  const P=getFXParams(it.adjustOverride||undefined);
+  fxState.masks=savedMasks;
+  const src=geomCanvas(it);
+  const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
+  const proc=await processToCanvas(P,src,iw,ih,()=>{});
+  const k=Math.min(1,(maxEdge||2400)/Math.max(proc.width,proc.height));
+  const bm=await createImageBitmap(proc,{resizeWidth:Math.max(1,Math.round(proc.width*k)),resizeHeight:Math.max(1,Math.round(proc.height*k)),resizeQuality:'high'});
+  proc.width=proc.height=0;
+  return bm;
+};
 async function exportFX(...a){
   _fxExportRuns++;document.body.classList.add('fx-exporting');
   // Phone app: keep the screen awake for the whole export (a locked phone suspends the app and
