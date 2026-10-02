@@ -6935,7 +6935,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002L';
+const BUILD='1.1002M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -25582,13 +25582,16 @@ window.addEventListener('resize',()=>{
 (function(){
   const h=document.getElementById('fx-sheet-handle');if(!h)return;
   h.style.touchAction='none';
-  let p=null,startY=0,startH=0,lastY=0,lastT=0,vel=0,moved=false;
+  let p=null,startY=0,startH=0,lastY=0,lastT=0,vel=0,moved=false,wasOpening=false;
   h.addEventListener('pointerdown',e=>{
-    if(!document.body.classList.contains('sheet-open'))return;
+    const opening=wasOpening=!document.body.classList.contains('sheet-open');
+    if(opening&&!document.body.classList.contains('mobile-fx'))return;
     p=document.querySelector('.fx-panel');if(!p)return;
-    startY=lastY=e.clientY;lastT=performance.now();vel=0;moved=false;
-    startH=p.getBoundingClientRect().height;
     p.style.transition='none';
+    // Dragging the handle up from the closed state opens the sheet under the finger, live.
+    if(opening){p.style.height='0px';fxSection((typeof _activeSec==='function'&&_activeSec())||'adjust');p.style.height='0px';}
+    startY=lastY=e.clientY;lastT=performance.now();vel=0;moved=false;
+    startH=opening?0:p.getBoundingClientRect().height;
     try{h.setPointerCapture(e.pointerId);}catch(_){}
     e.preventDefault();
   });
@@ -25612,9 +25615,9 @@ window.addEventListener('resize',()=>{
     const vh=window.innerHeight||800,hs=[150,Math.min(vh*0.34,360,vh*0.45),vh*0.78];
     const bd=document.body,st0=bd.classList.contains('sheet-full')?2:bd.classList.contains('sheet-peek')?0:1;
     let idx;
-    if(!moved)idx=-1;                                   // a tap on the handle still closes
-    else if(flickDown)idx=st0-1;                        // flick down: one snap lower, or close from peek
-    else if(flickUp)idx=Math.min(2,st0+1);
+    if(!moved)idx=wasOpening?1:-1;                      // a tap on the handle opens a closed sheet, closes an open one
+    else if(flickDown)idx=-1;                           // quick swipe down closes
+    else if(flickUp)idx=2;                              // quick swipe up expands fully
     else idx=cur<hs[0]*0.6?-1:3;                       // a slow drag leaves the sheet wherever you let go
     const close=idx<0;
     // Synchronous release (NO rAF — it never fires in a hidden/backgrounded tab, which
@@ -26040,7 +26043,8 @@ function selectToChips(selectId,chipsId){
     Array.from(sel.options).forEach(o=>{
       const b=document.createElement('button');b.className='btn bgh'+(o.value===sel.value?' on':'');
       b.textContent=o.textContent;
-      b.onclick=()=>{sel.value=o.value;sel.dispatchEvent(new Event('change',{bubbles:true}));render();};
+      // Mark the tapped chip in place (no rebuild under the finger: iOS left the old paint until a scroll).
+      b.onclick=()=>{sel.value=o.value;row.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));sel.dispatchEvent(new Event('change',{bubbles:true}));};
       row.appendChild(b);
     });
   };

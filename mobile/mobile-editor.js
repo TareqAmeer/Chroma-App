@@ -79,6 +79,18 @@ function filterTools(){
   let n=0;document.querySelectorAll('#fx-tool-grid .fx-sec-btn').forEach(b=>{const show=(!keys||keys.includes(b.dataset.sec))&&b.textContent.toLowerCase().includes(search.toLowerCase());b.hidden=!show;if(show)n++;});
   const msg=$('#phone-tool-empty');if(msg)msg.hidden=!!n;
 }
+function toolsHandle(){const nav=$('#fx-secnav');if(nav&&!$('#phone-tools-handle')){const h=document.createElement('div');h.id='phone-tools-handle';h.innerHTML='<span></span>';nav.prepend(h);
+    const MIN=56,root=document.documentElement;let y0=0,top0=0,ly=0,lt=0,v=0,on=false;
+    const setTop=t=>{root.style.setProperty('--tools-top',t+'px');typeof fxLiveFit==='function'&&fxLiveFit(90);};
+    const saved=+pref('toolsTop',0);if(saved)root.style.setProperty('--tools-top',saved+'px');
+    h.addEventListener('pointerdown',e=>{on=true;y0=ly=e.clientY;lt=performance.now();v=0;top0=nav.getBoundingClientRect().top;h.setPointerCapture(e.pointerId);e.preventDefault();});
+    h.addEventListener('pointermove',e=>{if(!on)return;const now=performance.now();if(now>lt)v=.8*v+.2*((e.clientY-ly)/(now-lt));ly=e.clientY;lt=now;
+      setTop(Math.max(MIN,Math.min(innerHeight-200,top0+e.clientY-y0)));});
+    const end=e=>{if(!on)return;on=false;const recent=performance.now()-lt<120,t=nav.getBoundingClientRect().top;
+      if(v>.5&&recent){root.style.removeProperty('--tools-top');const sv=+pref('toolsTop',0);if(sv)root.style.setProperty('--tools-top',sv+'px');fxToolsClose();window.hapt?.();}
+      else if(v<-.5&&recent){setTop(MIN);setPref('toolsTop',MIN);}
+      else if(Math.abs(e.clientY-y0)<6){}else setPref('toolsTop',Math.round(t));};
+    h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end);}}
 function toolBrowser(){
   const cats=$('#fx-tool-cats');if(!cats)return;
   cats.innerHTML=Object.entries(GROUPS).map(([key,g])=>'<button data-cat="'+key+'" aria-pressed="false">'+g.label+'</button>').join('');
@@ -92,7 +104,7 @@ function toolBrowser(){
     document.body.classList.remove('phone-tools-search');
     const msg=document.createElement('p');msg.id='phone-tool-empty';msg.textContent='No tools match. Try another category or search.';msg.hidden=true;bar.after(msg);
   }
-  filterTools();
+  filterTools();toolsHandle();
 }
 const build0=window.buildSecNav;window.buildSecNav=function(){const r=build0.apply(this,arguments);if(mob())toolBrowser();return r;};
 function selectedLook(){return $('#fx-looks .look-cell.sel');}
@@ -198,6 +210,9 @@ function boot(){
    document.addEventListener('click',e=>{if(!mob())return;const lb=e.target.closest?.('.fx-panel .fx-row>.fx-label');const sl=lb?.parentElement.querySelector('input.fx-slider');
      const was=window.csSwipeSlider;pickOff();if(sl&&sl!==was){window.csSwipeSlider=sl;window.csSwipeAdjust=true;sl.closest('.fx-row').classList.add('phone-swipe-pick');window.hapt?.();}},true);
    const sec0=window.fxSection;window.fxSection=function(){pickOff();return sec0.apply(this,arguments);};}
+  // Tools grid: a grab bar on top resizes it live under the finger; a quick swipe down closes it,
+  // a quick swipe up fills the screen, a slow drag leaves it where it is let go.
+  toolsHandle();
   toolBrowser();setupLooks();maskWorkflow();magnifier();if(mob())labelControls($('.fx-panel'));syncNavigation();
   document.body.style.setProperty('--phone-text-scale',String(pref('textSize',1)));
   new MutationObserver(()=>{if(mob()){syncNavigation();rememberSheet();}}).observe(document.body,{attributes:true,attributeFilter:['class']});

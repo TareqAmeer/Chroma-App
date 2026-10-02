@@ -230,3 +230,9 @@ body.mobile-fx .crop-h{border-radius:0}
  body.sk2.mobile-fx .fx-layout{padding-bottom:var(--mnav-h,72px)!important;box-sizing:border-box}
 }
 body.sk2.mobile-fx .fx-row.phone-swipe-pick>.fx-label{text-decoration:underline;text-decoration-color:var(--k-color-accent-a);text-decoration-thickness:2px;text-underline-offset:5px;color:var(--k-color-ink)}
+/* Resizable tools grid: its top edge (and the photo above it) follow --tools-top. */
+body.sk2.mobile-fx.tools-open #fx-secnav{top:var(--tools-top,min(34vh,280px))!important}
+body.sk2.mobile-fx.tools-open .fx-preview-col{flex:0 0 var(--tools-top,min(34vh,280px))!important;min-height:0!important;max-height:var(--tools-top,min(34vh,280px))}
+#phone-tools-handle{display:none}
+body.sk2.mobile-fx.tools-open #phone-tools-handle{display:flex;flex:0 0 24px;align-items:center;justify-content:center;touch-action:none;cursor:ns-resize}
+#phone-tools-handle span{width:32px;height:2px;background:var(--k-color-muted)}
