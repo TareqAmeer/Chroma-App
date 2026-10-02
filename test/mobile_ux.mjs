@@ -55,7 +55,7 @@ async function exercise(name, engine) {
     await page.waitForFunction(()=>fxImages.length===1&&!MobileLibrary.isOpen()&&MobileLibrary.queue.length===2);
     let ids = await page.evaluate(()=>MobileLibrary.queue);
     await check('multiple imports form an explicit per-photo queue',async()=>{
-      assert.equal(await page.locator('#phone-queue span').textContent(),'This photo · 1 / 2');
+      assert.equal(await page.locator('#phone-queue span').textContent(),'1 / 2');
       assert.equal(await page.evaluate(()=>fxImages.length),1);
     });
     await check('exact duplicate reuse also works without Web Crypto',async()=>{
