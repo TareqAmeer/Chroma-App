@@ -229,3 +229,4 @@ body.mobile-fx .crop-h{border-radius:0}
  body.sk2.mobile-fx #fx-mobile-nav{position:fixed!important;left:0;right:0;bottom:0;z-index:calc(var(--z-overlay,100) + 1)}
  body.sk2.mobile-fx .fx-layout{padding-bottom:var(--mnav-h,72px)!important;box-sizing:border-box}
 }
+body.sk2.mobile-fx .fx-row.phone-swipe-pick>.fx-label{text-decoration:underline;text-decoration-color:var(--k-color-accent-a);text-decoration-thickness:2px;text-underline-offset:5px;color:var(--k-color-ink)}

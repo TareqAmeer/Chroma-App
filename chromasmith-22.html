@@ -6935,7 +6935,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1002K';
+const BUILD='1.1002L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -25170,7 +25170,7 @@ window.addEventListener('load',()=>{const f=window.fxSection;if(typeof f==='func
   let sx=0,sy=0,mode=null,sl=null,v0=0,stepY=0;
   w.addEventListener('touchstart',e=>{
     mode=null;if(!window.csSwipeAdjust||!mob()||e.touches.length!==1||!document.body.classList.contains('sheet-open')||(typeof fxZoom!=='undefined'&&fxZoom>1)||(typeof cropMode!=='undefined'&&cropMode))return;
-    const L=list();if(!L.length)return;sl=(cur&&L.includes(cur))?cur:L[0];
+    const L=list();const pick=window.csSwipeSlider;if(!pick||!L.includes(pick))return;sl=pick; // only the slider the user selected (tap its name)
     sx=e.touches[0].clientX;sy=e.touches[0].clientY;v0=parseFloat(sl.value);stepY=sy;mode='wait';
   },{passive:true});
   w.addEventListener('touchmove',e=>{

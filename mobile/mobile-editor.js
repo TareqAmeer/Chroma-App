@@ -192,6 +192,12 @@ function boot(){
   // Double-tap a slider to reset it (the hidden per-row reset button does the work).
   {let last={t:0,s:null,x:0};document.addEventListener('pointerup',e=>{if(!mob())return;const sl=e.target.closest?.('.fx-panel input.fx-slider');if(!sl)return;const now=performance.now();
     if(last.s===sl&&now-last.t<350&&Math.abs(e.clientX-last.x)<24){last.s=null;sl.closest('.fx-row')?.querySelector('.phone-reset')?.click();window.hapt?.();}else last={t:now,s:sl,x:e.clientX};},true);}
+  // Swipe-on-photo adjusts only a slider the user picked by tapping its name (underlined while
+  // picked). Any other tap, including its name again, turns it off.
+  {const pickOff=()=>{const p=window.csSwipeSlider;if(p)p.closest('.fx-row')?.classList.remove('phone-swipe-pick');window.csSwipeSlider=null;window.csSwipeAdjust=false;};
+   document.addEventListener('click',e=>{if(!mob())return;const lb=e.target.closest?.('.fx-panel .fx-row>.fx-label');const sl=lb?.parentElement.querySelector('input.fx-slider');
+     const was=window.csSwipeSlider;pickOff();if(sl&&sl!==was){window.csSwipeSlider=sl;window.csSwipeAdjust=true;sl.closest('.fx-row').classList.add('phone-swipe-pick');window.hapt?.();}},true);
+   const sec0=window.fxSection;window.fxSection=function(){pickOff();return sec0.apply(this,arguments);};}
   toolBrowser();setupLooks();maskWorkflow();magnifier();if(mob())labelControls($('.fx-panel'));syncNavigation();
   document.body.style.setProperty('--phone-text-scale',String(pref('textSize',1)));
   new MutationObserver(()=>{if(mob()){syncNavigation();rememberSheet();}}).observe(document.body,{attributes:true,attributeFilter:['class']});
