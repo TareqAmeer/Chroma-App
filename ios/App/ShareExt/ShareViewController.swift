@@ -118,22 +118,18 @@ class ShareViewController: UIViewController {
 
     @objc private func doneTapped() { done() }
 
-    // Extensions can't call UIApplication.shared.open directly; walk the responder chain to the host
-    // UIApplication and invoke open(_:options:completionHandler:) (openURL: no longer works on iOS 18+).
+    // Share extensions can't call UIApplication.shared (marked unavailable), and the responder chain ends at a
+    // UIScene whose openURL: is NOT the UIApplication one — calling it by selector crashes the extension
+    // (found on the iOS 26 simulator: the sheet said "Opening…" then vanished). Fetch the real UIApplication
+    // by class and use its public open(_:options:completionHandler:). If anything is missing, report failure
+    // so the sheet shows the manual "open Chromasmith" hint instead of crashing.
     private func openViaResponder(_ url: URL, _ completion: @escaping (Bool) -> Void) {
-        var responder: UIResponder? = self
-        let modern = NSSelectorFromString("openURL:options:completionHandler:")
-        let legacy = NSSelectorFromString("openURL:")
-        while let r = responder {
-            if r.responds(to: modern) {
-                typealias Fn = @convention(c) (AnyObject, Selector, URL, [UIApplication.OpenExternalURLOptionsKey: Any], @convention(block) (Bool) -> Void) -> Void
-                let imp = r.method(for: modern)
-                let block: @convention(block) (Bool) -> Void = { ok in completion(ok) }
-                unsafeBitCast(imp, to: Fn.self)(r, modern, url, [:], block)
-                return
-            }
-            if r.responds(to: legacy) { _ = r.perform(legacy, with: url); completion(true); return }
-            responder = r.next
+        let sel = NSSelectorFromString("sharedApplication")
+        if let cls = NSClassFromString("UIApplication") as? NSObject.Type,
+           cls.responds(to: sel),
+           let app = cls.perform(sel)?.takeUnretainedValue() as? UIApplication {
+            app.open(url, options: [:]) { ok in completion(ok) }
+            return
         }
         completion(false)
     }
