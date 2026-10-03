@@ -31,3 +31,9 @@ The app launches into it; Back on the editor's home state returns to it. Exporte
 ## Share sheet (iOS Share Extension / Android SEND)
 - iOS: `ios/App/ShareExt/` is a Share Extension target (bundle `com.tareq.chromasmith.share`, embedded in the app's PlugIns). It copies shared images (RAW preferred) into the app group `group.com.tareq.chromasmith` (`shared/`), then opens `chromasmith://shared`; `PhotoPairPlugin.takeShared` moves them to temp and the web layer (`checkShared` in `mobile/mobile-library.js`) imports them. No app group (some sideload signers can't provide one) → it opens `chromasmith://import`, which launches the in-app Photos picker. Both targets carry `*.entitlements` with the group; the unsigned CI build ignores them, the signer decides. Not compiled on the dev Mac (no Xcode there) — CI is the first compile.
 - Android: `SEND`/`SEND_MULTIPLE` intent filters on `MainActivity`; `SharedImportPlugin` copies streams to cache and the same `PhotoPair.takeShared` JS call drains them.
+
+## Running on the iOS Simulator
+- Needs Xcode's iOS platform installed (Settings → Components) and `./build-ios.sh && npx cap sync ios` first (`cap sync` rewrites `ios/App/Podfile` — `git checkout` it afterwards; delete the generated `Podfile.lock`). Use `LANG=en_US.UTF-8` or CocoaPods crashes.
+- ⚠️ Build **ad-hoc signed**, not with `CODE_SIGNING_ALLOWED=NO`: an unsigned simulator build installs and launches but the web view never loads (blank dark screen, no console output). Working command (from `ios/App`):
+  `xcodebuild -workspace App.xcworkspace -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/csbuild CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= build`, then `xcrun simctl install booted <App.app>` and `xcrun simctl launch booted com.tareq.chromasmith`.
+- The CI IPA build stays unsigned (the signer re-signs it).
