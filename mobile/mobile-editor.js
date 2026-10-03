@@ -10,6 +10,9 @@ function sheet(title,html,setup){
   if(activeDialog)activeDialog.close();
   const focus=document.activeElement,ov=document.createElement('div');ov.className='phone-dialog';
   ov.innerHTML='<section role="dialog" aria-modal="true" aria-labelledby="phone-dialog-title"><header><h2 id="phone-dialog-title">'+esc(title)+'</h2><button class="phone-close" aria-label="Close">×</button></header><div class="phone-dialog-content">'+html+'</div></section>';
+  // A sheet opened over the gallery takes the gallery's own colours (its background setting), so the two never clash.
+  try{const lib=document.getElementById('mlib');if(lib&&getComputedStyle(lib).display!=='none'){const cs=getComputedStyle(lib),bg=cs.getPropertyValue('--mbg').trim(),ink=cs.getPropertyValue('--mink').trim();
+    if(bg&&ink){ov.style.setProperty('--k-color-bg',bg);ov.style.setProperty('--k-color-ink',ink);ov.style.setProperty('--sur',cs.getPropertyValue('--mcell').trim()||bg);ov.style.setProperty('--bdr','color-mix(in srgb,'+ink+' 30%,transparent)');}}}catch(_){}
   document.body.appendChild(ov);
   const underneath=[...document.body.children].filter(e=>e!==ov&&!['SCRIPT','STYLE','LINK'].includes(e.tagName));
   const previous=underneath.map(e=>[e,e.inert]);underneath.forEach(e=>e.inert=true);
