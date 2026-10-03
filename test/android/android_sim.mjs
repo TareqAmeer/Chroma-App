@@ -91,12 +91,23 @@ Object.assign(info, { webview: env.ua, deviceMemory: env.mem, build: env.build }
 state('AC-03', env.plat === 'android' && env.build && !env.missing.length ? 'PASS' : 'FAIL', `platform=${env.plat} build=${env.build} missing plugins=[${env.missing}]`);
 state('AC-04', env.gl2 ? 'PASS' : 'FAIL', 'webgl2=' + env.gl2);
 
-// ---- AC-05 system bar strips
+// ---- AC-05 system bar strips: the glyphs (clock/battery) must contrast with the strip, in BOTH themes. The strip is
+// the window background, so it has to follow the page colour that mobile-editor.js picks the glyph colour against.
 {
-  const p = shot('bars'); const top = [], bot = [];
-  for (let x = 0; x < p.width; x += 3) { top.push(lum(p.data, (40 * p.width + x) * 4)); bot.push(lum(p.data, ((p.height - 30) * p.width + x) * 4)); }
-  const med = a => a.sort((x, y) => x - y)[a.length >> 1]; const t = med(top), b = med(bot);
-  state('AC-05', t < 0.35 && b < 0.35 ? 'PASS' : 'FAIL', `status-bar luminance ${t.toFixed(2)}, nav-bar luminance ${b.toFixed(2)} (app background ~0.07, system icons are white)`);
+  const med = a => [...a].sort((x, y) => x - y)[a.length >> 1];
+  const measure = (name) => {
+    const p = shot(name); const strip = [], glyph = [];
+    for (let x = 0; x < p.width; x += 3) strip.push(lum(p.data, (12 * p.width + x) * 4));
+    for (let y = 30; y < 80; y += 2) for (let x = 50; x < 200; x += 2) glyph.push(lum(p.data, (y * p.width + x) * 4));
+    const bg = med(strip), contrast = Math.max(...glyph.map(g => Math.abs(g - bg)));
+    return { bg, contrast, nav: lum(p.data, ((p.height - 8) * p.width + 8) * 4) };
+  };
+  const dark = measure('bars-dark');
+  await c.ev(`toggleTheme()`); await sleep(2500);
+  const light = measure('bars-light');
+  await c.ev(`toggleTheme()`); await sleep(1500);
+  const ok = dark.contrast >= 0.4 && light.contrast >= 0.4;
+  state('AC-05', ok ? 'PASS' : 'FAIL', `status-bar glyph contrast dark theme ${dark.contrast.toFixed(2)} (strip ${dark.bg.toFixed(2)}), light theme ${light.contrast.toFixed(2)} (strip ${light.bg.toFixed(2)}); need >= 0.40; nav strip ${dark.nav.toFixed(2)}/${light.nav.toFixed(2)}`);
 }
 
 // ---- AC-07 import + open in studio

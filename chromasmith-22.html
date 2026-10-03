@@ -6939,7 +6939,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1003P';
+const BUILD='1.1003Q';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23322,6 +23322,20 @@ async function capUpdateCheck(){
     const lift=setInterval(place,500);place();
   }catch(e){}
 }
+// Android only: keep the system-bar strips the same colour as the page under them. mobile-editor.js picks light/dark bar
+// glyphs from the page background (right for iOS, where the bar is transparent over the page); on Android the strip is the
+// window background, so it must follow the same colour or the glyphs end up on a clashing strip.
+if(capAndroid()){
+  // Debounced LONGER than mobile-editor.js's own sync (80ms) and applied on every settle, not just on change: Capacitor's
+  // SystemBars.setStyle (which that sync calls on each theme change) resets the bar colours, so this has to land after it.
+  const sync=()=>{try{
+    const bp=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.BarBackground;if(!bp)return;
+    const lib=document.getElementById('mlib'),open=lib&&getComputedStyle(lib).display!=='none';
+    const m=getComputedStyle(open?lib:document.body).backgroundColor.match(/\d+(\.\d+)?/g);
+    if(!m||m.length<3||(m[3]!==undefined&&+m[3]===0))return;
+    bp.setColor({color:'#'+m.slice(0,3).map(v=>('0'+Math.round(+v).toString(16)).slice(-2)).join('')});}catch(e){}};
+  let t=0;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(sync,300);}).observe(document.documentElement,{attributes:true,subtree:true,attributeFilter:['class','style']});
+  setTimeout(sync,500);setTimeout(sync,2500);}
 setTimeout(capUpdateCheck,4000);
 // Phone gallery (mobile/mobile-library.js): native shells only, or ?mlib=1 to try it in a browser.
 if(capNative()||/[?&]mlib=1/.test(location.search)){const sc=document.createElement('script');sc.src='mobile/mobile-library.js';document.head.appendChild(sc);}

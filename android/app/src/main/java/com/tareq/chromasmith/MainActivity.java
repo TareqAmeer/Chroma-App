@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(SharedImportPlugin.class);
+        registerPlugin(BarBackgroundPlugin.class);
         super.onCreate(savedInstanceState);
         ingestShared(getIntent());
     }

@@ -17,7 +17,7 @@ the native plugins and the system UI only exist here.
 | AC-02 | Cold start reaches the gallery UI within 120 s, and the boot watchdog (`[boot] watchdog fired`) never fires. | CDP: `.vtog` present; logcat |
 | AC-03 | The page runs inside the native shell: `Capacitor.getPlatform()==='android'`, `BUILD` is defined, `Filesystem`/`Share`/`Media` plugins are present. | CDP |
 | AC-04 | WebGL2 is available (the FXR renderer cannot run without it). | CDP |
-| AC-05 | System bars are legible: the status-bar and navigation-bar strips are dark like the app (not a light bar behind light icons). | screenshot: strip luminance |
+| AC-05 | System bars are legible in both the dark and light theme: the status-bar glyphs contrast with their strip (>= 0.40 luminance difference). The strip is the window background, so it must follow the page colour. | screenshot: glyph vs strip contrast |
 | AC-06 | RAW prerequisites hold: `crossOriginIsolated===true` and `SharedArrayBuffer` is defined (libraw-wasm needs it). | CDP |
 | AC-07 | A photo imported into the gallery opens in the Studio and the preview canvas renders non-blank, within 300 s. | CDP + screenshot |
 | AC-08 | Tapping a look thumbnail changes the preview (real touch event, pixels differ from the Original). | `adb input tap`, screenshot diff |
@@ -48,14 +48,19 @@ avdmanager create avd -n chroma_pixel -k "system-images;android-35;google_apis;x
 APK that is already in `android/app/build/outputs/apk/debug/`. `--only AC-05,AC-06` runs a subset.
 Env overrides: `ANDROID_HOME`, `JAVA_HOME`.
 
-## Findings from the first run (Pixel 7 AVD, Android 15, WebView 124, build 1.1003L) — 12/16 pass
+## Findings from the first run, and how each was resolved
 
-| ID | Problem | Evidence / likely cause |
-|----|---------|------------------------|
-| AC-05 | **Status bar and nav bar are near-white (luminance 0.98) behind white system icons** — the clock and battery are unreadable above the dark app. | `out/bars.png`. `capacitor.config.json` sets `SystemBars.style: "DARK"` and `android.backgroundColor: "#141414"`, but the bar strips still draw the window's light background. Needs a theme/`windowBackground` or `SystemBars` fix. |
-| AC-06 | **RAW decode cannot work**: `crossOriginIsolated=false`, `SharedArrayBuffer` undefined. | The native patch does send COOP/COEP on `/` (verified with `fetch('/')`), but the page is still not isolated and the `coi-serviceworker` has set `coiCoepHasFailed` and degraded. Step 3 of the Pixel checklist ("open a RAW") will hit "RW2 needs SharedArrayBuffer". WebView 124 here; worth re-checking on a current WebView. |
-| AC-16 | **The "New version available" banner covers the Studio bottom nav.** Tapping Export (or Looks/Tools/Crop) hits the banner's **Download** link and opens the browser. | `elementFromPoint` at the Export button returns the banner's `<a>`. `capUpdateCheck()` pins it `position:fixed; bottom:12px; z-index:9999` over the nav. Any user on an older build sees it. The only escape is the small ×. |
-| AC-02 | **Boot watchdog fires on a cold start** (`[boot] watchdog fired: stalled on "walk" after 16s`); gallery usable ~31 s after launch. | Software-rendered emulator, 17.7 MB page plus the service-worker reload, so likely worse than a real device. Re-test on hardware before treating as a regression. |
+The first run on a Pixel 7 AVD (Android 15, WebView 124, build 1.1003L) passed 12/16. All four failures were real
+app problems and are fixed in 1.2.8; the same run now passes 16/16.
+
+| ID | Problem found | Fix |
+|----|---------------|-----|
+| AC-05 | Status/nav bar strips were near-white behind white glyphs (the window background, which DayNight makes white). | Dark `windowBackground`/bar colours in `styles.xml`, plus an Android-only `BarBackground` plugin that sets the strip to the current page colour so it also works in the light theme. It re-applies after `SystemBars.setStyle` (iOS-shared code in `mobile-editor.js`), which resets the bar colours. |
+| AC-06 | RAW import threw "RW2 needs SharedArrayBuffer". The WebView never reports `crossOriginIsolated`, but libraw's wasm only needs *shared WebAssembly.Memory*, which it does create. | `rawSharedMemoryOk()` feature-detects shared wasm memory on Android only. Verified by decoding a synthetic DNG (`test/fixtures/make_dng.py`) through the real import path. |
+| AC-16 | The "new version" banner sat on top of the Studio bottom nav; tapping Export hit its Download link. | `capUpdateCheck` lifts the banner above the nav while it is showing. |
+| AC-02 | `[boot] watchdog fired: stalled on "walk"` on every cold start. The watchdog guards the desktop library scan; the phone shell has nothing for it to watch. | Not armed on Android. |
+
+Everything shared with iOS is gated to Android (`capAndroid()` / `getPlatform()==='android'`); the iOS shell is untouched.
 
 Test-harness notes (not app bugs): the first-run welcome modal (`#cs-modal-ov`) and the update banner both
 intercept taps, so the runner dismisses them like a user would. A tap that leaves the app (e.g. the Download link
@@ -64,4 +69,4 @@ errors are allow-listed in AC-15 (Capacitor SystemBars' own safe-area injection 
 `Filesystem.stat` on a not-yet-existing export name).
 
 ## Not covered yet
-Real RAW decode (blocked by AC-06), AI masks, video, Pixel Fold / dual-screen, and the system file picker.
+A real camera RAW (AC-06 uses a synthetic DNG; a real RW2/DNG is still worth one manual pass), AI masks, video, Pixel Fold / dual-screen, and the system file picker.
