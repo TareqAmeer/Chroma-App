@@ -6936,7 +6936,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1003C';
+const BUILD='1.1003D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18583,7 +18583,7 @@ function _applyZoom(smooth){
   // pan=0 the frame centre stays fixed for any zoom; pan is a free user offset on top.
   const baseX=w*(1-fxZoom)/(2*fxZoom),baseY=h*(1-fxZoom)/(2*fxZoom);
   zw.style.transform=`scale(${fxZoom}) translate3d(${(baseX+fxPanX).toFixed(2)}px,${(baseY+fxPanY).toFixed(2)}px,0)`; // translate3d keeps the photo on its own GPU layer: WebKit smeared edge pixels into streaks when a panned layer was repainted
-  if(fxZoom>1)fxEnsureFullQuality();
+  if(fxZoom>1)fxEnsureFullQuality('zoom');
   _updateZoomReadout();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
   if(typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
@@ -18596,6 +18596,10 @@ function fxEnsureFullQuality(why){
   // Browser RAW proxy: a full decode is ~20-40s, so only the things that SHOW the extra pixels
   // (zoom past fit, loupe, export) wait for it — edits and crop work fine on the proxy.
   const it=curItem();
+  // Phones: zooming must NOT trigger the full-resolution decode — it holds the whole frame several times
+  // over (wasm output + 16-bit buffer + canvas) and the OS kills the page. Zoom keeps the half-size proxy;
+  // export still decodes the full frame on its own path.
+  if(it&&it._rawHalf&&why==='zoom'&&typeof isMemoryConstrained==='function'&&isMemoryConstrained())return Promise.resolve();
   if(it&&it._rawHalf&&why!=='edit'&&why!=='crop')return fxPromoteWebRaw(it).catch(()=>{});
   return (typeof window.chromasmithEnsureFullQuality==='function')?window.chromasmithEnsureFullQuality():Promise.resolve();
 }
@@ -25599,6 +25603,9 @@ window.addEventListener('resize',()=>{
     if(opening){p.style.height='0px';fxSection((typeof _activeSec==='function'&&_activeSec())||'adjust');p.style.height='0px';}
     startY=lastY=e.clientY;lastT=performance.now();vel=0;moved=false;
     startH=opening?0:p.getBoundingClientRect().height;
+    // A remembered free height is forced with !important, which beats the inline height this drag sets — so a second resize
+    // did nothing and the sheet only ever opened or closed. Drop it for the gesture; end() re-applies the new height.
+    if(!opening&&document.body.classList.contains('sheet-user')){document.body.classList.remove('sheet-user');p.style.height=startH+'px';}
     try{h.setPointerCapture(e.pointerId);}catch(_){}
     e.preventDefault();
   });

@@ -243,7 +243,7 @@ function phoneBare(){document.querySelectorAll('.fx-ctrl>.fx-ctrl-title').forEac
 // jump the value. A press that starts off the thumb is ignored (any value change is rolled back)
 // until the finger lifts, so vertical scrolling over a slider stays harmless.
 {let guard=null;const mob=()=>document.body.classList.contains('mobile-fx');
-  const hit=(el,x)=>{const r=el.getBoundingClientRect(),mn=+el.min||0,mx=el.max===''?100:+el.max,f=mx>mn?(+el.value-mn)/(mx-mn):0,tw=28,cx=r.left+tw/2+f*(r.width-tw);return Math.abs(x-cx)<=26;};
+  const hit=(el,x)=>{const r=el.getBoundingClientRect(),mn=+el.min||0,mx=el.max===''?100:+el.max,f=mx>mn?(+el.value-mn)/(mx-mn):0,tw=22,cx=r.left+tw/2+f*(r.width-tw);return Math.abs(x-cx)<=16;};
   const end=()=>{guard=null;};
   document.addEventListener('pointerdown',e=>{
     if(!mob())return;const el=e.target;

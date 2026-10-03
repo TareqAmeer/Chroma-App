@@ -312,8 +312,8 @@ body.sk2.mobile-fx .fx-panel :is(.fx-info-i,.hsl-chip,.pc-chip){position:relativ
 body.sk2.mobile-fx .fx-panel :is(.fx-info-i,.hsl-chip,.pc-chip)::after{content:'';position:absolute;inset:-9px -6px}
 /* Gallery tab strip: opaque, no side fade (scrolled content showed through the fade). */
 #mlib .tabs{-webkit-mask-image:none!important;mask-image:none!important;background:var(--mbg,#1c1c1c);position:relative;z-index:2}
-body.sk2.mobile-fx :is(.chip-tap>.btn.bgh,.fx-panel .seg>button,.fx-panel .fx-title-right>*,.btn-frame-shuffle){position:relative}
-body.sk2.mobile-fx :is(.chip-tap>.btn.bgh,.fx-panel .seg>button,.fx-panel .fx-title-right>*,.btn-frame-shuffle)::after{content:'';position:absolute;inset:-9px -6px}
+body.sk2.mobile-fx :is(.chip-tap>.btn.bgh,.fx-panel .seg>button,.fx-panel .fx-title-right>*:not(.fx-toggle),.btn-frame-shuffle){position:relative}
+body.sk2.mobile-fx :is(.chip-tap>.btn.bgh,.fx-panel .seg>button,.fx-panel .fx-title-right>*:not(.fx-toggle),.btn-frame-shuffle)::after{content:'';position:absolute;inset:-9px -6px}
 body.sk2.mobile-fx .btn-frame-shuffle{min-height:40px}
 /* Studio top bar: same Gallery / Studio switch as the gallery header (desktop-style: bold words, muted until active, bar divider, accent block on the active one). */
 body.sk2.mobile-fx #fx-actionbar .vtog{display:flex;align-items:center;flex:0 0 auto}
@@ -332,3 +332,23 @@ body.sk2.mobile-fx #fx-actionbar .vtog,#mlib .vtog{display:flex}
 .phone-dialog input[type=checkbox]:checked,#mlib input[type=checkbox]:checked,#fx-more-menu input[type=checkbox]:checked{background:var(--k-color-accent-a,#ff3b1f);box-shadow:none}
 .phone-dialog input[type=checkbox]:checked::after,#mlib input[type=checkbox]:checked::after,#fx-more-menu input[type=checkbox]:checked::after{transform:rotate(90deg)}
 @media (prefers-reduced-motion:reduce){.phone-dialog input[type=checkbox]::after,#mlib input[type=checkbox]::after,#fx-more-menu input[type=checkbox]::after{transition:none}}
+/* Gallery colours follow the gallery's own background setting (--mbg / --mink, which includes a Light option), not the app theme:
+   mixing the two put dark text on a dark gallery in light mode and vice versa. */
+#mlib .top .wm{color:var(--mink)}
+#mlib .vtog button{color:color-mix(in srgb,var(--mink) 55%,transparent)}
+#mlib .vtog button+button::before{background:color-mix(in srgb,var(--mink) 55%,transparent)}
+#mlib .vtog button.on{color:#fff}
+#mlib .top button[data-a=settings]{color:var(--mink)}
+#mlib .mh{background:var(--mbg);border-top-color:color-mix(in srgb,var(--mink) 18%,transparent)}
+#mlib .mh button:not(.pri){color:var(--mink);background:transparent}
+#mlib .tabs button{color:var(--mink)}
+#mlib input[type=checkbox]{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mink) 55%,transparent)}
+#mlib input[type=checkbox]::after{background:var(--mink)}
+/* Selection bar: plain text buttons (no outlines), with a Cancel at the start. */
+#mlib .selbar{background:var(--mbg);border-top-color:color-mix(in srgb,var(--mink) 18%,transparent);flex-wrap:nowrap;gap:0;padding:0 8px calc(8px + env(safe-area-inset-bottom))}
+#mlib .selbar button{border:0!important;background:transparent;color:var(--mink);min-height:52px;padding:0 12px;font:600 15px var(--sans)}
+#mlib .selbar button:disabled{opacity:.4}
+#mlib .selbar .n{flex:1;text-align:center;min-width:0;white-space:nowrap}
+#mlib .selbar .warn{color:#ff9383}
+/* The hard-coded black status-bar cap showed as a black strip above the Studio (the gallery overlay covers it); match the app instead. */
+#status-cap{background:var(--k-color-bg,#141414)!important}
