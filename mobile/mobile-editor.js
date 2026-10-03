@@ -188,14 +188,13 @@ function syncNavigation(){
 const section0=window.fxSection;window.fxSection=function(){const r=section0.apply(this,arguments);if(mob()){syncNavigation();setupLooks();labelControls($('.fx-panel'));lookActions();}return r;};
 function boot(){
   const link=document.createElement('link');link.rel='stylesheet';link.href='mobile/mobile-ui.css';document.head.appendChild(link);
-  const ctx=document.createElement('div');ctx.id='phone-context';ctx.innerHTML='<button id="phone-sheet-size">Expand</button><span id="phone-original" hidden>Original</span>';
+  const ctx=document.createElement('div');ctx.id='phone-context';ctx.innerHTML='<span id="phone-original" hidden>Original</span>';
   $('#fx-actionbar')?.after(ctx);
   const queue=$('#phone-queue');if(queue)ctx.appendChild(queue);
   // Compare is a faded eye in the photo's bottom-right corner.
   const eye=document.createElement('button');eye.id='phone-compare';eye.type='button';eye.setAttribute('aria-pressed','false');eye.setAttribute('aria-label','Compare with original');
   eye.innerHTML='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
   ($('#fx-wrap')||document.body).appendChild(eye);eye.onclick=()=>compare(!fxCompare);
-  ctx.querySelector('#phone-sheet-size').onclick=()=>{document.body.classList.remove('sheet-user','sheet-peek');document.body.classList.toggle('sheet-full');rememberSheet();};
   {let q=0;const pnl=$('.fx-panel');if(pnl)new MutationObserver(()=>{if(q||!mob())return;q=requestAnimationFrame(()=>{q=0;syncResets(pnl);});}).observe(pnl,{subtree:true,characterData:true,childList:true});}
   // Quick tool bar has two sizes: icons, or a thin text-only strip. Swipe down on it to thin it, up to restore.
   {const qn=$('#fx-quicknav');document.body.classList.toggle('phone-qn-thin',pref('qnThin',false));

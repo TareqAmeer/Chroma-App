@@ -56,7 +56,18 @@ async function flush(captureLive=true){
 }
 window.chromasmithOnEdit=capture;
 async function thumb(src,w,h){const k=Math.min(1,360/Math.max(w,h)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*k));c.height=Math.max(1,Math.round(h*k));c.getContext('2d').drawImage(src,0,0,c.width,c.height);return new Promise(r=>c.toBlob(r,'image/jpeg',.8));}
-async function fileThumb(file){try{const bm=await createImageBitmap(file),t=await thumb(bm,bm.width,bm.height);bm.close();return t;}catch(_){return null;}}
+// RAW files (RW2 etc.) can't be decoded by createImageBitmap, but each embeds full JPEG previews:
+// find the JPEG start markers, try the largest segments first and use the first that decodes.
+async function rawEmbeddedThumb(file){
+  try{const u=new Uint8Array(await file.arrayBuffer()),starts=[];
+    for(let i=0;i<u.length-3;i++)if(u[i]===0xFF&&u[i+1]===0xD8&&u[i+2]===0xFF)starts.push(i);
+    const segs=starts.map((a,k)=>({a,b:k+1<starts.length?starts[k+1]:u.length})).sort((x,y)=>(y.b-y.a)-(x.b-x.a)).slice(0,4);
+    for(const g of segs){let e=g.b;while(e>g.a+2&&!(u[e-2]===0xFF&&u[e-1]===0xD9))e--;
+      if(e<=g.a+2)continue;
+      try{const bm=await createImageBitmap(new Blob([u.subarray(g.a,e)],{type:'image/jpeg'})),t=await thumb(bm,bm.width,bm.height);bm.close();if(t)return t;}catch(_){}}
+  }catch(_){}
+  return null;}
+async function fileThumb(file){try{const bm=await createImageBitmap(file),t=await thumb(bm,bm.width,bm.height);bm.close();return t;}catch(_){return rawEmbeddedThumb(file);}}
 async function editorThumb(){renderPreview();const bd=$('#fx-canvas-bd'),c=bd&&bd.style.display!=='none'?bd:$('#fx-canvas');return c?.width?thumb(c,c.width,c.height):null;}
 async function refreshThumb(){if(!openedId||restoring)return;const i=openedId,t=await editorThumb();if(!t)return;await flush();const p=await getPhoto(i);if(!p)return;if(p.recipe)await patchPhoto(i,{thumbEdited:t});else if(!p.thumb)await patchPhoto(i,{thumb:t});}
 async function fingerprint(f){const bytes=await f.arrayBuffer();if(window.crypto?.subtle){const digest=await crypto.subtle.digest('SHA-256',bytes);return Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('');}let hash=2166136261;for(const b of new Uint8Array(bytes))hash=Math.imul(hash^b,16777619);return 'fnv:'+bytes.byteLength+':'+(hash>>>0).toString(16);}
@@ -215,8 +226,17 @@ function ensureEditorChrome(){
 function syncQueue(){ensureEditorChrome();const q=$('#phone-queue');q.hidden=queue.length<2;const n=queue.indexOf(openedId);q.querySelector('span').textContent=(n+1)+' / '+queue.length;q.querySelector('span').setAttribute('aria-label','Photo '+(n+1)+' of '+queue.length);q.querySelector('[data-q=prev]').disabled=n<=0;q.querySelector('[data-q=next]').disabled=n>=queue.length-1;q._measure?.();}
 function setSelecting(on){selecting=on;selected.clear();root?.classList.toggle('selecting',on);if(root){root.querySelector('[data-a=select]').textContent=on?'Cancel':'Select';root.querySelectorAll('.cell').forEach(c=>{c.classList.remove('sel');c.setAttribute('aria-pressed','false');});selectionCount();}}
 function selectionCount(){if(!root)return;root.querySelector('.n').textContent=selected.size+' selected';root.querySelectorAll('.selbar button').forEach(b=>b.disabled=!selected.size);root.querySelector('[data-a=remove]').textContent=filter==='trash'?'Delete':'Trash';root.querySelector('[data-a=edit]').hidden=filter==='trash';}
+let backfilling=false;
+// Photos imported before RAW previews were extracted have no thumbnail until edited: fill them in once.
+async function backfillThumbs(ps){
+  if(backfilling)return;backfilling=true;
+  try{let did=false;for(const p of ps){if(p.thumb||p.thumbEdited||p.thumbTried)continue;
+    const b=await getBlob(p.id);const t=b?await fileThumb(b):null;await patchPhoto(p.id,t?{thumb:t}:{thumbTried:1});did=did||!!t;}
+    if(did)render();}catch(_){}finally{backfilling=false;}
+}
 async function render(){
   build();const generation=++renderKey,ps=await allPhotos();if(generation!==renderKey)return;
+  setTimeout(()=>backfillThumbs(ps),0);
   urls.forEach(u=>URL.revokeObjectURL(u));urls=[];
   const collections=[...new Set(ps.filter(p=>!p.trashed).map(p=>p.collection).filter(Boolean))].sort();const select=root.querySelector('.collections');select.innerHTML='<option value="">All collections</option>'+collections.map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');select.value=collection;
   root.querySelectorAll('[data-f]').forEach(b=>{const on=b.dataset.f===filter;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));if(on)window.phoneCentreTab?.(b.parentElement,b);});
