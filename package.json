@@ -1,6 +1,6 @@
 {
   "name": "chromasmith",
-  "version": "1.2.5",
+  "version": "1.2.7",
   "description": "Chromasmith \u2014 offline film-emulation photo editor (iOS shell wraps the single-file web app)",
   "private": true,
   "scripts": {

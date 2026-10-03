@@ -3,6 +3,7 @@ import Capacitor
 import Photos
 import PhotosUI
 import UniformTypeIdentifiers
+import CoreImage
 
 // Photo picker that returns EVERY original stored for each picked photo: a RAW+JPEG capture is
 // one Photos asset with a .photo (JPEG/HEIC) and an .alternatePhoto (RAW) resource, and the web
@@ -17,6 +18,23 @@ public class PhotoPairPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControlle
         CAPPluginMethod(name: "takeShared", returnType: CAPPluginReturnPromise)
     ]
     private var pending: CAPPluginCall?
+
+    // Apple ProRAW / DNG at full size (48MP) can't be decoded by the web view's WASM RAW decoder: it holds the
+    // whole frame several times over and iOS kills the page ("Opening…" then the gallery refreshes). Develop it
+    // natively instead — Core Image's RAW pipeline renders the same image Photos shows — and hand the web side a
+    // full-resolution sRGB JPEG to edit; the DNG itself is still kept as the original. nil = fall back to WASM.
+    static func developDNG(_ src: URL) -> URL? {
+        guard #available(iOS 15.0, *), let raw = CIRAWFilter(imageURL: src), let img = raw.outputImage,
+              let cs = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        let out = src.deletingPathExtension().appendingPathExtension("developed.jpg")
+        let ctx = CIContext(options: [.cacheIntermediates: false])
+        do {
+            try ctx.writeJPEGRepresentation(of: img, to: out, colorSpace: cs,
+                options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.95])
+            return out
+        } catch { return nil }
+    }
+    static func isDNG(name: String, uti: String?) -> Bool { name.lowercased().hasSuffix(".dng") || uti == "com.adobe.raw-image" }
 
     @objc func pick(_ call: CAPPluginCall) {
         PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
@@ -55,7 +73,9 @@ public class PhotoPairPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControlle
             do { try fm.moveItem(at: from, to: to) } catch { continue }
             // Drop the "xxxxxxxx-" collision prefix the extension added.
             let clean = n.count > 9 && n[n.index(n.startIndex, offsetBy: 8)] == "-" ? String(n.dropFirst(9)) : n
-            out.append(["path": to.path, "name": clean])
+            var entry: [String: Any] = ["path": to.path, "name": clean]
+            if PhotoPairPlugin.isDNG(name: clean, uti: nil), let dev = PhotoPairPlugin.developDNG(to) { entry["dev"] = dev.path }
+            out.append(entry)
         }
         call.resolve(["files": out])
     }
@@ -94,8 +114,10 @@ public class PhotoPairPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControlle
                 PHAssetResourceManager.default().writeData(for: r, toFile: url, options: opts) { err in
                     lock.lock()
                     if err == nil {
-                        out.append(["path": url.path, "name": r.originalFilename, "uti": r.uniformTypeIdentifier,
-                                    "raw": r.type == .alternatePhoto || r.uniformTypeIdentifier == "com.adobe.raw-image", "order": i * 10 + j])
+                        var entry: [String: Any] = ["path": url.path, "name": r.originalFilename, "uti": r.uniformTypeIdentifier,
+                                    "raw": r.type == .alternatePhoto || r.uniformTypeIdentifier == "com.adobe.raw-image", "order": i * 10 + j]
+                        if PhotoPairPlugin.isDNG(name: r.originalFilename, uti: r.uniformTypeIdentifier), let dev = PhotoPairPlugin.developDNG(url) { entry["dev"] = dev.path }
+                        out.append(entry)
                     }
                     lock.unlock()
                     group.leave()

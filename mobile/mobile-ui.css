@@ -352,3 +352,8 @@ body.sk2.mobile-fx #fx-actionbar .vtog,#mlib .vtog{display:flex}
 #mlib .selbar .warn{color:#ff9383}
 /* The hard-coded black status-bar cap showed as a black strip above the Studio (the gallery overlay covers it); match the app instead. */
 #status-cap{background:var(--k-color-bg,#141414)!important}
+/* Sliders move only when the thumb itself is grabbed. The JS guard in mobile-editor.js could not stop the app's own
+   input listeners (toggle "turned on", recipe write) from running before it rolled the value back, so take the track out of
+   hit-testing instead: touches on the line fall through (the panel scrolls), the 22px square still drags. */
+body.mobile-fx input[type=range].fx-slider{pointer-events:none}
+body.mobile-fx input[type=range].fx-slider::-webkit-slider-thumb{pointer-events:auto}

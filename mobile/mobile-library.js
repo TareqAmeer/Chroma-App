@@ -34,6 +34,8 @@ async function patchPhoto(i,patch={},versions=[],exports=[]){
   };});
 }
 const getBlob=i=>tx('blobs','readonly',t=>t.objectStore('blobs').get(i)).then(p=>p?.bytes?new Blob([p.bytes],{type:p.type}):p?.blob);
+// The natively developed JPEG of a DNG/ProRAW (iOS), if the import made one.
+const getDev=i=>tx('blobs','readonly',t=>t.objectStore('blobs').get(i)).then(p=>p?.devBytes?new Blob([p.devBytes],{type:'image/jpeg'}):null);
 const safe=fn=>Promise.resolve().then(fn).catch(e=>{status(e.message,true);if(window.toast)toast(e.message);});
 function status(text,error=false){build();const e=root.querySelector('.status');e.textContent=text;e.classList.toggle('phone-error',error);}
 function saveStatus(text,error=false){if(saveFailed&&text==='Saving…'){text='Save failed · Retry';error=true;}const e=$('#phone-save-status');if(e){e.textContent=text;e.classList.toggle('phone-error',error);e.disabled=!error;e.setAttribute('aria-label',error?'Save failed. Retry saving':text);}}
@@ -86,9 +88,9 @@ async function importFiles(files){
       const i=id(),p={id:i,name:f.name,type:f.type,size:f.size,hash,added:Date.now(),edited:0,recipe:null,versions:[],exports:[],thumb:null,thumbEdited:null,flag:null,collection:''};
       // Safari can reject a disk-backed File when IndexedDB clones it. Store its exact
       // bytes instead; getBlob also continues reading originals from the older Blob records.
-      const bytes=await f.arrayBuffer();
-      await tx(['photos','blobs'],'readwrite',t=>{t.objectStore('photos').put(p);t.objectStore('blobs').put({id:i,bytes,name:f.name,type:f.type});});
-      ps.push(p);ids.push(i);status('Building thumbnail '+(n+1)+' of '+files.length);await patchPhoto(i,{thumb:await fileThumb(f)});
+      const bytes=await f.arrayBuffer(),devBytes=f.__csDev?await f.__csDev.arrayBuffer():undefined;
+      await tx(['photos','blobs'],'readwrite',t=>{t.objectStore('photos').put(p);t.objectStore('blobs').put({id:i,bytes,name:f.name,type:f.type,devBytes});});
+      ps.push(p);ids.push(i);status('Building thumbnail '+(n+1)+' of '+files.length);await patchPhoto(i,{thumb:await fileThumb(f.__csDev||f)});
     }catch(e){issues.push({name:f.name,message:e.message});}
   }
   status(ids.length+' photo'+(ids.length===1?'':'s')+' ready'+(duplicates?' · '+duplicates+' duplicate'+(duplicates===1?'':'s')+' reused':''));
@@ -96,13 +98,24 @@ async function importFiles(files){
   return [...new Set(ids)];
 }
 function showImportIssues(issues,files){UI().sheet('Import results',issues.map(i=>'<p><b>'+esc(i.name)+'</b><br>'+esc(i.message)+'</p>').join('')+'<button data-retry>Retry failed files</button>',(el,close)=>el.querySelector('[data-retry]').onclick=()=>{close();safe(()=>importAndOpen(files.filter(f=>issues.some(i=>i.name===f.name))));});}
+// Native photo list -> File objects. A DNG/ProRAW comes with `dev`: a full-size JPEG the native side developed
+// (the WASM RAW decoder can't hold a 48MP frame on a phone). It rides along as __csDev and is stored next to the DNG.
+async function nativeFiles(list,cap){
+  const files=[];
+  for(const f of list){try{
+    const blob=await (await fetch(cap.convertFileSrc(f.path))).blob(),file=new File([blob],f.name,{type:blob.type||''});
+    if(f.dev){try{file.__csDev=await (await fetch(cap.convertFileSrc(f.dev))).blob();}catch(e){}}
+    files.push(file);
+  }catch(e){}}
+  return files;
+}
 // iOS: the native picker returns every original of each picked photo, so a RAW+JPEG shot
 // arrives as both files (the web file picker only hands over the JPEG). False = not available.
 async function importFromPhotos(){
   const cap=window.Capacitor,pp=cap?.Plugins?.PhotoPair;if(!pp||cap.getPlatform?.()!=='ios')return false;
   let res;try{res=await pp.pick();}catch(e){status(e?.message||'Could not open Photos',true);return true;}
   const list=res?.files||[];if(!list.length)return true;status('Importing '+list.length+' file'+(list.length>1?'s':'')+'…');
-  const files=[];for(const f of list){try{const blob=await (await fetch(cap.convertFileSrc(f.path))).blob();files.push(new File([blob],f.name,{type:blob.type||''}));}catch(e){}}
+  const files=await nativeFiles(list,cap);
   if(files.length)await importAndOpen(files);else status('');return true;
 }
 // Photos shared to the app from the system share sheet (iOS Share Extension via the app group,
@@ -113,11 +126,12 @@ async function checkShared(){
   sharedBusy=true;
   try{const res=await pp.takeShared(),list=res?.files||[];if(!list.length)return;
     status('Importing '+list.length+' shared file'+(list.length>1?'s':'')+'…');
-    const files=[];for(const f of list){try{const blob=await (await fetch(cap.convertFileSrc(f.path))).blob();files.push(new File([blob],f.name,{type:blob.type||''}));}catch(e){}}
+    const files=await nativeFiles(list,cap);
     if(files.length)await importAndOpen(files);else status('Could not read the shared photos',true);}
   catch(e){status(e?.message||'Could not import shared photos',true);}finally{sharedBusy=false;}
 }
 window.csCheckShared=()=>safe(checkShared);
+new MutationObserver(()=>applyPrefs()).observe(document.body,{attributes:true,attributeFilter:['class']});
 setTimeout(()=>window.csCheckShared(),1200);
 async function importAndOpen(files){const ids=await importFiles([...files]);if(!ids.length){await open();return;}queue=ids;await openPhoto(ids[0]);}
 window.loadFXImages=async function(files){if(window.__mlibOpening)return origLoad.apply(this,arguments);await importAndOpen([...files]);return curItem();};
@@ -130,7 +144,7 @@ async function openPhoto(i,{recipe,original=false}={}){
     const p=await getPhoto(i),blob=await getBlob(i);if(!p||!blob||p.trashed)throw new Error('Photo is unavailable. Restore it from Trash first.');
     window.__mlibOpening=true;window.__csLibOpen=true;
     let entry;
-    try{entry=await origLoad([new File([blob],p.name,{type:p.type,lastModified:p.added})]);}finally{window.__mlibOpening=false;window.__csLibOpen=false;}
+    try{const dev=await getDev(i);entry=await origLoad([dev?new File([dev],p.name.replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:p.added}):new File([blob],p.name,{type:p.type,lastModified:p.added})]);}finally{window.__mlibOpening=false;window.__csLibOpen=false;}
     if(!entry)throw new Error('Could not decode '+p.name+'. Try another format or retry importing.');
     openedId=i;if(!queue.includes(i))queue=[i];
     const r=recipe??(!original&&p.recipe);
@@ -199,9 +213,11 @@ async function restore(ids){for(const i of ids){const p=await getPhoto(i);if(p){
 async function removePermanently(ids){if(!await UI().ask('Delete permanently?','These originals, edits and versions will be removed from this app. Exported files stay on your device.','Delete permanently'))return;
   await tx(['photos','blobs'],'readwrite',t=>ids.forEach(i=>{t.objectStore('photos').delete(i);t.objectStore('blobs').delete(i);}));setSelecting(false);await render();}
 const BGS={dark:['#1c1c1c','#f2f0ea','#262626'],black:['#000','#f2f0ea','#161616'],grey:['#2c2c2c','#f2f0ea','#383838'],light:['#ededee','#141414','#dcdcdc']};
-function prefs(){let p={};try{p=JSON.parse(localStorage.getItem('cs-mlib-prefs')||'{}');}catch(_){}return {...{bg:'dark',aspect:'square',sort:'edited',dates:false,names:false},...p};}
+function prefs(){let p={};try{p=JSON.parse(localStorage.getItem('cs-mlib-prefs')||'{}');}catch(_){}return {...{bg:'auto',aspect:'square',sort:'edited',dates:false,names:false},...p};}
 function setGalleryPref(k,v){const p=prefs();p[k]=v;localStorage.setItem('cs-mlib-prefs',JSON.stringify(p));applyPrefs();safe(render);}
-function applyPrefs(){if(!root)return;const p=prefs(),c=BGS[p.bg]||BGS.dark;root.style.setProperty('--mbg',c[0]);root.style.setProperty('--mink',c[1]);root.style.setProperty('--mcell',c[2]);root.classList.toggle('orig',p.aspect==='original');root.classList.toggle('dates',p.dates);root.classList.toggle('names',p.names);}
+// 'auto' (default) follows the app theme so the gallery and the sheets over it always match; the other options pin it.
+const galleryBg=p=>p.bg==='auto'||!BGS[p.bg]?(document.body.classList.contains('light')?'light':'dark'):p.bg;
+function applyPrefs(){if(!root)return;const p=prefs(),c=BGS[galleryBg(p)];root.style.setProperty('--mbg',c[0]);root.style.setProperty('--mink',c[1]);root.style.setProperty('--mcell',c[2]);root.classList.toggle('orig',p.aspect==='original');root.classList.toggle('dates',p.dates);root.classList.toggle('names',p.names);}
 function build(){
   if(root)return;root=document.createElement('div');root.id='mlib';root.setAttribute('aria-label','Photo gallery');
   root.innerHTML='<div class="top"><svg viewBox="18 18 64 62" aria-hidden="true"><rect x="21" y="21" width="48" height="44" fill="var(--mink,currentColor)"/><rect x="36" y="32" width="43" height="45" fill="var(--k-color-accent-a,var(--acc,#ff3b1f))"/><rect x="36" y="32" width="33" height="33" fill="#b0200e"/></svg><span class="wm">CHRO-MA-SMITH</span><div class="vtog" role="group" aria-label="View"><button type="button" class="on" aria-pressed="true" aria-label="Gallery">gallery</button><button type="button" data-a="editor" aria-pressed="false" aria-label="Studio">studio</button></div><button data-a="settings" aria-label="Gallery settings">'+(typeof icon==='function'?icon('settings',24):'⚙')+'</button></div><div class="mh"><button data-a="select">'+(typeof icon==='function'?icon('select',18):'')+'<span>Select</span></button><button class="pri" data-a="import">'+(typeof icon==='function'?icon('download',18):'')+'<span>Import</span></button></div><div class="filters"><div class="search-row"><input type="search" aria-label="Search photos by filename" placeholder="Search photos"></div><div class="search-row"><select aria-label="Sort photos"><option value="edited">Last edited</option><option value="added">Date added</option><option value="name">Name</option></select><select class="collections" aria-label="Filter by collection"><option value="">All collections</option></select></div></div><div class="tabs" aria-label="Photo filters">'+[['all','All'],['edited','Edited'],['exported','Exported'],['fav','Favourites'],['rej','Rejected'],['trash','Trash']].map(([key,label])=>'<button data-f="'+key+'" aria-pressed="'+(key==='all')+'">'+label+'</button>').join('')+'</div><div class="status" role="status" aria-live="polite"></div><div class="grid" aria-label="Photos"></div><div class="selbar"><button data-a="cancelsel" aria-label="Cancel selection">Cancel</button><span class="n" role="status">0 selected</span><button data-a="edit">Edit</button><button data-a="more">Actions</button><button data-a="remove" class="warn">Trash</button></div><input class="import-file" type="file" accept="image/*,.rw2,.dng" multiple hidden>';
@@ -245,7 +261,7 @@ let backfilling=false;
 async function backfillThumbs(ps){
   if(backfilling)return;backfilling=true;
   try{let did=false;for(const p of ps){if(p.thumb||p.thumbEdited||p.thumbTried)continue;
-    const b=await getBlob(p.id);const t=b?await fileThumb(b):null;await patchPhoto(p.id,t?{thumb:t}:{thumbTried:1});did=did||!!t;}
+    const b=(await getDev(p.id))||await getBlob(p.id);const t=b?await fileThumb(b):null;await patchPhoto(p.id,t?{thumb:t}:{thumbTried:1});did=did||!!t;}
     if(did)render();}catch(_){}finally{backfilling=false;}
 }
 async function render(){
@@ -272,7 +288,7 @@ async function restoreBackup(file){if(!file)file=await MobileProject.choose();if
 }
 async function settings(){
   const p=prefs(),ps=await allPhotos();let used='';try{const e=await navigator.storage.estimate();used=Math.round(e.usage/1048576)+' MB used';}catch(_){}
-  UI().sheet('Gallery settings','<label>Text size<select data-pref="textSize"><option value="1">Standard</option><option value="1.15">Larger</option><option value="1.3">Largest</option></select></label><label><input data-haptics type="checkbox" '+(UI().pref('haptics',true)?'checked':'')+'>Haptic feedback</label><label>Gallery background<select data-pref="bg">'+Object.keys(BGS).map(k=>'<option>'+k+'</option>').join('')+'</select></label><label>Thumbnail shape<select data-pref="aspect"><option value="square">Square</option><option value="original">Original shape</option></select></label><label><input data-names type="checkbox" '+(p.names?'checked':'')+'>Show photo names</label><label><input data-dates type="checkbox" '+(p.dates?'checked':'')+'>Show dates</label><button data-k="theme">Switch '+(document.body.classList.contains('light')?'to dark':'to light')+' theme</button><button data-k="guide">Welcome guide</button><button data-k="backup">Back up gallery / continue on desktop</button><button data-k="restore">Restore project</button><button data-k="free">Move exported photos to Trash</button><button data-k="empty">Empty Trash permanently</button><p>'+ps.length+' photos · '+esc(used)+'<br>Build '+esc(BUILD)+'</p>',(el,close)=>{
+  UI().sheet('Gallery settings','<label>Text size<select data-pref="textSize"><option value="1">Standard</option><option value="1.15">Larger</option><option value="1.3">Largest</option></select></label><label><input data-haptics type="checkbox" '+(UI().pref('haptics',true)?'checked':'')+'>Haptic feedback</label><label>Gallery background<select data-pref="bg">'+['auto',...Object.keys(BGS)].map(k=>'<option value="'+k+'"'+(k===p.bg?' selected':'')+'>'+(k==='auto'?'Match app theme':k)+'</option>').join('')+'</select></label><label>Thumbnail shape<select data-pref="aspect"><option value="square">Square</option><option value="original">Original shape</option></select></label><label><input data-names type="checkbox" '+(p.names?'checked':'')+'>Show photo names</label><label><input data-dates type="checkbox" '+(p.dates?'checked':'')+'>Show dates</label><button data-k="theme">Switch '+(document.body.classList.contains('light')?'to dark':'to light')+' theme</button><button data-k="guide">Welcome guide</button><button data-k="backup">Back up gallery / continue on desktop</button><button data-k="restore">Restore project</button><button data-k="free">Move exported photos to Trash</button><button data-k="empty">Empty Trash permanently</button><p>'+ps.length+' photos · '+esc(used)+'<br>Build '+esc(BUILD)+'</p>',(el,close)=>{
     el.querySelector('[data-pref=bg]').value=p.bg;el.querySelector('[data-pref=aspect]').value=p.aspect;el.querySelector('[data-pref=textSize]').value=UI().pref('textSize',1);
     el.querySelectorAll('[data-pref]').forEach(e=>e.onchange=()=>{if(e.dataset.pref==='textSize'){UI().setPref('textSize',+e.value);document.body.style.setProperty('--phone-text-scale',e.value);}else setGalleryPref(e.dataset.pref,e.value);});
     el.querySelector('[data-haptics]').onchange=e=>UI().setPref('haptics',e.target.checked);el.querySelector('[data-dates]').onchange=e=>setGalleryPref('dates',e.target.checked);el.querySelector('[data-names]').onchange=e=>setGalleryPref('names',e.target.checked);
