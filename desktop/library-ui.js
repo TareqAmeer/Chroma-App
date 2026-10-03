@@ -10459,6 +10459,10 @@
     try { localStorage.setItem(LS_BG_PAUSED, paused ? '1' : '0'); } catch (e) {}
     if (!LIBTEST) invoke('catalog_bg_set_paused', { paused: !!paused }).catch(() => {});
     if (paused) bgStopAll();
+    // Resume must actually restart the chain: the phases only otherwise start after a new folder
+    // scan, so Resume used to leave CLIP indexing (the only source of auto tags for un-indexed
+    // photos) stopped for the rest of the session — "dog" stuck while 51k photos sat unindexed.
+    else if (!LIBTEST) { _bgStopped = false; catalogRunBackgroundPhases(); }
     renderActivity();
   }
   window.chromasmithBgPaused = bgPaused;
