@@ -48,7 +48,7 @@ a{color:inherit}
 .auto button+button{border-left:1px solid rgba(242,239,232,.2);min-width:46px;justify-content:center}
 .auto button:hover{background:var(--acc);color:#0b0b0a}.auto.on #autoPlay{background:var(--acc);color:#0b0b0a}
 .here{position:fixed;left:5vw;bottom:20px;z-index:40;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);opacity:0;transition:opacity .25s;pointer-events:none}.here.on{opacity:1}.here b{color:var(--acc);font-weight:600;margin-right:8px}
-@media(max-width:760px){.auto{right:16px;bottom:12px}.here{left:16px;bottom:18px}}
+@media(max-width:760px){.auto{display:none!important}.auto{right:16px;bottom:12px}.here{left:16px;bottom:18px}}
 .btn:hover{background:#f2f0ea;border-color:#f2f0ea;color:#0b0b0a}
 .btn:hover{background:var(--fg);border-color:var(--fg);color:var(--bg)}
 .grain{position:absolute;inset:-50%;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");mix-blend-mode:overlay;animation:gr .4s steps(4) infinite}
@@ -454,7 +454,7 @@ section{position:relative}
   .counter,.lb{display:none}
   .top{padding:12px 16px}.word{font-size:13px}.word svg{width:28px;height:28px}
   .sn{top:70px;right:16px}
-  .intro{padding:0 16px 12vh}.sheet{left:16px;right:16px;top:17vh;width:auto;gap:4px}
+  .intro{padding:0 16px 24vh}.intro .cue{bottom:13vh}.sheet{left:16px;right:16px;top:17vh;width:auto;gap:4px}
   .hero-t{left:16px;top:12vh;font-size:13vw}
   .ph{width:92vw;height:61.33vw;left:50%}.stagew{top:15vh;width:auto;right:16px;transform:none}
   .panel{padding:0 16px}
