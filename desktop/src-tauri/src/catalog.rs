@@ -866,6 +866,15 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         if !has_col("auto_tagged_at")? {
             conn.execute("ALTER TABLE photos ADD COLUMN auto_tagged_at INTEGER", [])?;
         }
+        // Breed tags arrived after the first auto-tag pass: re-tag every dog/cat photo once (pure
+        // math on stored embeddings). Keyed on this marker table's presence, like `place` above.
+        let has_breeds: bool = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'auto_tag_breeds_v1'")?.exists([])?;
+        if !has_breeds {
+            conn.execute_batch(
+                "CREATE TABLE auto_tag_breeds_v1 (done INTEGER);
+                 UPDATE photos SET auto_tagged_at = NULL WHERE id IN (SELECT photo_id FROM photo_auto_tags WHERE term IN ('dog', 'cat'));",
+            )?;
+        }
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -5736,7 +5745,13 @@ const AUTO_TAG_THRESHOLD: f32 = 0.235;
 const AUTO_TAG_TOP_K: usize = 6;
 
 fn store_auto_tags(conn: &Connection, id: i64, mtime: i64, emb: &[f32]) -> Result<(), String> {
-    let tags = crate::clip::suggest_tags(emb, AUTO_TAG_TOP_K, AUTO_TAG_THRESHOLD)?;
+    let mut tags = crate::clip::suggest_tags(emb, AUTO_TAG_TOP_K, AUTO_TAG_THRESHOLD)?;
+    let species: Vec<&str> = ["dog", "cat"].into_iter().filter(|sp| tags.iter().any(|(t, _)| t == sp)).collect();
+    for sp in species {
+        if let Some((breed, p)) = crate::clip::suggest_breed(emb, sp)? {
+            tags.push((breed, p));
+        }
+    }
     conn.execute("DELETE FROM photo_auto_tags WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
     for (term, score) in tags {
         conn.execute("INSERT OR REPLACE INTO photo_auto_tags (photo_id, term, score) VALUES (?1, ?2, ?3)", params![id, term, score])
