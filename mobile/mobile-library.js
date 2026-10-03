@@ -34,6 +34,8 @@ async function patchPhoto(i,patch={},versions=[],exports=[]){
   };});
 }
 const getBlob=i=>tx('blobs','readonly',t=>t.objectStore('blobs').get(i)).then(p=>p?.bytes?new Blob([p.bytes],{type:p.type}):p?.blob);
+// The natively developed JPEG of a DNG/ProRAW (iOS), if the import made one.
+const getDev=i=>tx('blobs','readonly',t=>t.objectStore('blobs').get(i)).then(p=>p?.devBytes?new Blob([p.devBytes],{type:'image/jpeg'}):null);
 const safe=fn=>Promise.resolve().then(fn).catch(e=>{status(e.message,true);if(window.toast)toast(e.message);});
 function status(text,error=false){build();const e=root.querySelector('.status');e.textContent=text;e.classList.toggle('phone-error',error);}
 function saveStatus(text,error=false){if(saveFailed&&text==='Saving…'){text='Save failed · Retry';error=true;}const e=$('#phone-save-status');if(e){e.textContent=text;e.classList.toggle('phone-error',error);e.disabled=!error;e.setAttribute('aria-label',error?'Save failed. Retry saving':text);}}
@@ -86,9 +88,9 @@ async function importFiles(files){
       const i=id(),p={id:i,name:f.name,type:f.type,size:f.size,hash,added:Date.now(),edited:0,recipe:null,versions:[],exports:[],thumb:null,thumbEdited:null,flag:null,collection:''};
       // Safari can reject a disk-backed File when IndexedDB clones it. Store its exact
       // bytes instead; getBlob also continues reading originals from the older Blob records.
-      const bytes=await f.arrayBuffer();
-      await tx(['photos','blobs'],'readwrite',t=>{t.objectStore('photos').put(p);t.objectStore('blobs').put({id:i,bytes,name:f.name,type:f.type});});
-      ps.push(p);ids.push(i);status('Building thumbnail '+(n+1)+' of '+files.length);await patchPhoto(i,{thumb:await fileThumb(f)});
+      const bytes=await f.arrayBuffer(),devBytes=f.__csDev?await f.__csDev.arrayBuffer():undefined;
+      await tx(['photos','blobs'],'readwrite',t=>{t.objectStore('photos').put(p);t.objectStore('blobs').put({id:i,bytes,name:f.name,type:f.type,devBytes});});
+      ps.push(p);ids.push(i);status('Building thumbnail '+(n+1)+' of '+files.length);await patchPhoto(i,{thumb:await fileThumb(f.__csDev||f)});
     }catch(e){issues.push({name:f.name,message:e.message});}
   }
   status(ids.length+' photo'+(ids.length===1?'':'s')+' ready'+(duplicates?' · '+duplicates+' duplicate'+(duplicates===1?'':'s')+' reused':''));
@@ -96,13 +98,24 @@ async function importFiles(files){
   return [...new Set(ids)];
 }
 function showImportIssues(issues,files){UI().sheet('Import results',issues.map(i=>'<p><b>'+esc(i.name)+'</b><br>'+esc(i.message)+'</p>').join('')+'<button data-retry>Retry failed files</button>',(el,close)=>el.querySelector('[data-retry]').onclick=()=>{close();safe(()=>importAndOpen(files.filter(f=>issues.some(i=>i.name===f.name))));});}
+// Native photo list -> File objects. A DNG/ProRAW comes with `dev`: a full-size JPEG the native side developed
+// (the WASM RAW decoder can't hold a 48MP frame on a phone). It rides along as __csDev and is stored next to the DNG.
+async function nativeFiles(list,cap){
+  const files=[];
+  for(const f of list){try{
+    const blob=await (await fetch(cap.convertFileSrc(f.path))).blob(),file=new File([blob],f.name,{type:blob.type||''});
+    if(f.dev){try{file.__csDev=await (await fetch(cap.convertFileSrc(f.dev))).blob();}catch(e){}}
+    files.push(file);
+  }catch(e){}}
+  return files;
+}
 // iOS: the native picker returns every original of each picked photo, so a RAW+JPEG shot
 // arrives as both files (the web file picker only hands over the JPEG). False = not available.
 async function importFromPhotos(){
   const cap=window.Capacitor,pp=cap?.Plugins?.PhotoPair;if(!pp||cap.getPlatform?.()!=='ios')return false;
   let res;try{res=await pp.pick();}catch(e){status(e?.message||'Could not open Photos',true);return true;}
   const list=res?.files||[];if(!list.length)return true;status('Importing '+list.length+' file'+(list.length>1?'s':'')+'…');
-  const files=[];for(const f of list){try{const blob=await (await fetch(cap.convertFileSrc(f.path))).blob();files.push(new File([blob],f.name,{type:blob.type||''}));}catch(e){}}
+  const files=await nativeFiles(list,cap);
   if(files.length)await importAndOpen(files);else status('');return true;
 }
 // Photos shared to the app from the system share sheet (iOS Share Extension via the app group,
@@ -113,7 +126,7 @@ async function checkShared(){
   sharedBusy=true;
   try{const res=await pp.takeShared(),list=res?.files||[];if(!list.length)return;
     status('Importing '+list.length+' shared file'+(list.length>1?'s':'')+'…');
-    const files=[];for(const f of list){try{const blob=await (await fetch(cap.convertFileSrc(f.path))).blob();files.push(new File([blob],f.name,{type:blob.type||''}));}catch(e){}}
+    const files=await nativeFiles(list,cap);
     if(files.length)await importAndOpen(files);else status('Could not read the shared photos',true);}
   catch(e){status(e?.message||'Could not import shared photos',true);}finally{sharedBusy=false;}
 }
@@ -130,7 +143,7 @@ async function openPhoto(i,{recipe,original=false}={}){
     const p=await getPhoto(i),blob=await getBlob(i);if(!p||!blob||p.trashed)throw new Error('Photo is unavailable. Restore it from Trash first.');
     window.__mlibOpening=true;window.__csLibOpen=true;
     let entry;
-    try{entry=await origLoad([new File([blob],p.name,{type:p.type,lastModified:p.added})]);}finally{window.__mlibOpening=false;window.__csLibOpen=false;}
+    try{const dev=await getDev(i);entry=await origLoad([dev?new File([dev],p.name.replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:p.added}):new File([blob],p.name,{type:p.type,lastModified:p.added})]);}finally{window.__mlibOpening=false;window.__csLibOpen=false;}
     if(!entry)throw new Error('Could not decode '+p.name+'. Try another format or retry importing.');
     openedId=i;if(!queue.includes(i))queue=[i];
     const r=recipe??(!original&&p.recipe);
@@ -245,7 +258,7 @@ let backfilling=false;
 async function backfillThumbs(ps){
   if(backfilling)return;backfilling=true;
   try{let did=false;for(const p of ps){if(p.thumb||p.thumbEdited||p.thumbTried)continue;
-    const b=await getBlob(p.id);const t=b?await fileThumb(b):null;await patchPhoto(p.id,t?{thumb:t}:{thumbTried:1});did=did||!!t;}
+    const b=(await getDev(p.id))||await getBlob(p.id);const t=b?await fileThumb(b):null;await patchPhoto(p.id,t?{thumb:t}:{thumbTried:1});did=did||!!t;}
     if(did)render();}catch(_){}finally{backfilling=false;}
 }
 async function render(){

@@ -244,6 +244,8 @@ function phoneBare(){document.querySelectorAll('.fx-ctrl>.fx-ctrl-title').forEac
 // until the finger lifts, so vertical scrolling over a slider stays harmless.
 {let guard=null;const mob=()=>document.body.classList.contains('mobile-fx');
   const hit=(el,x)=>{const r=el.getBoundingClientRect(),mn=+el.min||0,mx=el.max===''?100:+el.max,f=mx>mn?(+el.value-mn)/(mx-mn):0,tw=22,cx=r.left+tw/2+f*(r.width-tw);return Math.abs(x-cx)<=16;};
+  // iOS delivers the value change for a TAP on the track AFTER pointerup/touchend, so the guard has to outlive the
+  // gesture (a zero-delay release let it through and the slider jumped). The next pointerdown replaces it.
   const end=()=>{guard=null;};
   document.addEventListener('pointerdown',e=>{
     if(!mob())return;const el=e.target;
@@ -251,5 +253,19 @@ function phoneBare(){document.querySelectorAll('.fx-ctrl>.fx-ctrl-title').forEac
   },true);
   const block=e=>{if(guard&&e.target===guard.el){guard.el.value=guard.v;e.stopImmediatePropagation();}};
   document.addEventListener('input',block,true);document.addEventListener('change',block,true);
-  ['pointerup','pointercancel','touchend','touchcancel','mouseup'].forEach(t=>document.addEventListener(t,()=>setTimeout(end,0),true));
+  ['pointerup','pointercancel','touchend','touchcancel','mouseup'].forEach(t=>document.addEventListener(t,()=>setTimeout(end,700),true));
+  document.addEventListener('click',block,true);
 }
+
+// Status-bar glyphs must contrast with whatever is under them: the gallery overlay uses its OWN background (--mbg, which can
+// be dark while the app theme is light, or the reverse) and the Studio uses the app theme. Capacitor SystemBars: style LIGHT =
+// dark glyphs (for light backgrounds), DARK = light glyphs. Only calls native when the choice changes.
+{let last='';
+  const lum=c=>{const m=(c||'').match(/\d+(\.\d+)?/g);if(!m||m.length<3)return null;const[r,g,b]=m.slice(0,3).map(Number);return(0.2126*r+0.7152*g+0.0722*b)/255;};
+  const sync=()=>{try{
+    const lib=document.getElementById('mlib'),open=lib&&getComputedStyle(lib).display!=='none';
+    const bg=getComputedStyle(open?lib:document.body).backgroundColor,l=lum(bg);
+    const style=(l==null?document.body.classList.contains('light'):l>0.5)?'LIGHT':'DARK';
+    if(style===last)return;last=style;
+    const sb=window.Capacitor?.Plugins?.SystemBars;if(sb?.setStyle)sb.setStyle({style});}catch(_){}};
+  sync();let t=0;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(sync,80);}).observe(document.documentElement,{attributes:true,subtree:true,attributeFilter:['class','style']});}
