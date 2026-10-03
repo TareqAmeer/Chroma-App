@@ -10,11 +10,12 @@
   "dependencies": {
     "@remotion/cli": "^4.0.532",
     "@remotion/fonts": "^4.0.532",
+    "@remotion/media": "4.0.532",
+    "@remotion/motion-blur": "^4.0.532",
     "@types/react": "^19.3.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "remotion": "^4.0.532",
-    "typescript": "^7.0.2",
-    "@remotion/media": "4.0.532"
+    "typescript": "^7.0.2"
   }
 }
