@@ -140,7 +140,7 @@ async function exercise(name, engine) {
       await page.locator('#phone-tool-search').fill('');await page.locator('#fx-tool-cats [data-cat=geometry]').click();
       assert(await page.locator('#fx-tool-grid .fx-sec-btn:visible').count()>=3);
       await page.evaluate(()=>{fxToolsClose();fxToolsOpen();});assert.equal(await page.locator('#fx-tool-cats [data-cat=geometry]').getAttribute('aria-pressed'),'true');
-      await page.evaluate(()=>fxSection('adjust'));await page.locator('#phone-sheet-size').click();
+      await page.evaluate(()=>fxSection('adjust'));await page.evaluate(()=>document.body.classList.toggle('sheet-full'));await page.waitForTimeout(100); // the Expand/Reduce button was removed; the sheet size is now set by dragging, which toggles this same class
       await page.evaluate(()=>{fxSheetClose();fxSection('adjust');});assert.equal(await page.evaluate(()=>document.body.classList.contains('sheet-full')),true);
     });
     await check('look grid exposes strength/favourite and mask workflow has explicit paint/erase',async()=>{

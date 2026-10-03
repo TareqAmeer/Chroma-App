@@ -249,7 +249,7 @@ body.sk2.mobile-fx::before{content:'';position:fixed;top:0;left:0;right:0;height
 /* The on/off switch used to sit alone on its own 44px row above every tool's description. Float it
    into the first content row's right edge instead, so every tool starts 36-44px higher. */
 body.sk2.mobile-fx .fx-ctrl.sec-active{position:relative}
-body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare):has(+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row,.fx-fields)){position:absolute;top:2px;right:6px;margin:0!important;padding:0!important;min-height:0!important;height:48px;z-index:3;width:auto}
+body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare):has(+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row,.fx-fields)){position:absolute;top:2px;right:6px;margin:0!important;padding:0!important;min-height:0!important;height:48px;z-index:3;width:48px;min-width:48px;justify-content:center!important}
 body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row),body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+.fx-fields:not(:has(>#cv-ar-chips))>:first-child{padding-right:56px;min-height:48px;box-sizing:border-box}
 body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+.cs-sub{display:flex;align-items:center;margin:0}
 body.sk2.mobile-fx #fx-pull-cue{display:none!important}
