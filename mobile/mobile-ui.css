@@ -213,7 +213,7 @@ body.sk2.mobile-fx #phone-tools-bar{display:flex;align-items:center;flex:0 0 52p
 body.sk2.mobile-fx #phone-tools-bar #fx-tool-cats{flex:1;min-width:0;padding-left:0}
 body.sk2.mobile-fx #phone-tools-find{flex:none;width:48px;height:48px;padding:0;background:none;border:0;color:var(--k-color-ink);display:flex;align-items:center;justify-content:center}
 body.sk2.mobile-fx #phone-tools-find[aria-pressed=true]{color:var(--acc)}
-#fx-pull-cue{position:fixed;left:50%;transform:translate(-50%,-8px);z-index:9600;padding:8px 14px;background:var(--k-color-bg);color:var(--k-color-ink);border:1px solid var(--k-color-ink);font:13px var(--sans);opacity:0;pointer-events:none;transition:opacity .12s,transform .12s}
+#fx-pull-cue{position:fixed;left:50%;transform:translate(-50%,-8px);z-index:9600;padding:8px 14px;background:var(--k-color-bg);color:var(--k-color-ink);border:0;font:13px var(--sans);opacity:0;pointer-events:none;transition:opacity .12s,transform .12s}
 #fx-pull-cue.on{opacity:1;transform:translate(-50%,0)}
 /* Phones: Apply sits beside Cancel under the photo. */
 #btn-crop-apply2{display:none}
@@ -236,3 +236,99 @@ body.sk2.mobile-fx.tools-open .fx-preview-col{flex:0 0 var(--tools-top,min(34vh,
 #phone-tools-handle{display:none}
 body.sk2.mobile-fx.tools-open #phone-tools-handle{display:flex;flex:0 0 24px;align-items:center;justify-content:center;touch-action:none;cursor:ns-resize}
 #phone-tools-handle span{width:32px;height:2px;background:var(--k-color-muted)}
+/* Looks strips scroll sideways, but must hand vertical swipes to the sheet (pan-x alone trapped them). */
+body.sk2.mobile-fx #fx-looks,body.sk2.mobile-fx #fx-looks-cats{touch-action:pan-x pan-y!important;overscroll-behavior-x:contain}
+body.sk2.mobile-fx .fx-panel{-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
+/* No empty title row where the tool name used to be. */
+body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title{min-height:0!important;margin-bottom:0!important;padding:0!important}
+body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title:not(.phone-bare){min-height:36px!important}
+/* Status-bar area matches the app (it showed pure black), and the action bar tucks up under it. */
+html:has(body.sk2.mobile-fx){background:var(--k-color-bg,#141414)}
+body.sk2.mobile-fx{padding-top:max(2px,calc(var(--sat) - 10px))}
+body.sk2.mobile-fx::before{content:'';position:fixed;top:0;left:0;right:0;height:var(--sat);background:var(--k-color-bg,#141414);pointer-events:none;z-index:0}
+/* The on/off switch used to sit alone on its own 44px row above every tool's description. Float it
+   into the first content row's right edge instead, so every tool starts 36-44px higher. */
+body.sk2.mobile-fx .fx-ctrl.sec-active{position:relative}
+body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare):has(+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row,.fx-fields)){position:absolute;top:2px;right:6px;margin:0!important;padding:0!important;min-height:0!important;height:48px;z-index:3;width:auto}
+body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row),body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+.fx-fields:not(:has(>#cv-ar-chips))>:first-child{padding-right:56px;min-height:48px;box-sizing:border-box}
+body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+.cs-sub{display:flex;align-items:center;margin:0}
+body.sk2.mobile-fx #fx-pull-cue{display:none!important}
+/* Tab strip is opaque edge to edge: the side fade let scrolled controls (icons, values) show through behind it. */
+body.sk2.mobile-fx.sheet-open #fx-sheet-strip{-webkit-mask-image:none!important;mask-image:none!important;background:var(--k-color-bg)!important;z-index:20}
+body.sk2.mobile-fx .fx-panel{box-shadow:none!important}
+/* Resize grips: same visual height, but a much bigger touch target (they were ~18-24px, easy to miss,
+   which made the sheet feel fixed-size). Slightly bolder bar so it reads as draggable. */
+body.sk2.mobile-fx #phone-tools-handle{position:relative}
+body.sk2.mobile-fx #fx-sheet-handle,body.sk2.mobile-fx #phone-tools-handle{touch-action:none}
+body.sk2.mobile-fx #fx-sheet-handle::before,body.sk2.mobile-fx #phone-tools-handle::before{content:'';position:absolute;left:0;right:0;top:-16px;bottom:-14px}
+body.sk2.mobile-fx #fx-sheet-handle .fx-sheet-bar{width:44px!important;height:4px!important;border-radius:2px!important;background:var(--k-color-muted)!important}
+body.sk2.mobile-fx #phone-tools-handle span{width:44px;height:4px;border-radius:2px}
+/* Bottom bar: icon beside each label. */
+body.sk2.mobile-fx #fx-mobile-nav button{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+body.sk2.mobile-fx #fx-mobile-nav .fx-nav-ic{display:inline-flex;flex:0 0 auto;width:18px;height:18px}
+body.sk2.mobile-fx #fx-mobile-nav .fx-nav-ic svg{width:18px;height:18px;display:block}
+@media (max-width:380px){body.sk2.mobile-fx #fx-mobile-nav button{gap:4px}body.sk2.mobile-fx #fx-mobile-nav .fx-nav-ic,body.sk2.mobile-fx #fx-mobile-nav .fx-nav-ic svg{width:16px;height:16px}}
+/* Gallery settings: bare icon, no outline box. */
+#mlib .top button[data-a=settings]{border:0!important;background:none!important;box-shadow:none!important;padding:0 4px;min-width:48px;display:flex;align-items:center;justify-content:center}
+#mlib .top button[data-a=settings] svg{width:24px;height:24px}
+/* Gallery Select / Import / Studio: shorter boxes (touch height stays comfortable via the row's own padding). */
+#mlib .mh button{min-height:36px;padding:4px 12px;align-self:center}
+/* Approved wordmark styling (matches the desktop brand name): bold, uppercase, tight tracking. */
+#mlib .top .wm{font-family:var(--sans);font-weight:700;font-size:20px;line-height:1;letter-spacing:-.02em;text-transform:uppercase;color:var(--k-color-ink,inherit);white-space:nowrap}
+@media (max-width:380px){#mlib .top .wm{font-size:17px;letter-spacing:-.02em}}
+/* Gallery / Studio switch lives in the top bar beside the wordmark, styled like the desktop toggle:
+   bold lowercase words, muted until active, 2px bar divider, accent block behind the active one. */
+#mlib .top{gap:8px}
+#mlib .top .wm{flex:0 1 auto;min-width:0;font-size:17px}
+#mlib .top .vtog{display:flex;align-items:center;margin-left:auto;flex:none}
+#mlib .vtog button{min-height:36px;min-width:0;border:0;background:transparent;color:var(--k-color-muted);font:700 17px/1 var(--sans);letter-spacing:-.03em;text-transform:none;padding:0 8px;position:relative}
+#mlib .vtog button+button{margin-left:9px}
+#mlib .vtog button+button::before{content:'';position:absolute;left:-6px;top:10px;bottom:10px;width:2px;background:var(--k-color-muted)}
+#mlib .vtog button.on{color:#fff;background:var(--k-color-accent-a)}
+#mlib .vtog button.on+button::before,#mlib .vtog button:has(+button.on)::before{display:none}
+#mlib .top button[data-a=settings]{flex:none;margin-left:0}
+#mlib .mh{justify-content:flex-end}
+@media (max-width:380px){#mlib .top .wm{font-size:14px}#mlib .vtog button{font-size:15px;padding:0 6px}}
+/* Gallery action bar: Select + Import pinned to the bottom like the Studio Looks/Tools/Export bar. */
+#mlib .mh{order:90;flex:0 0 auto;flex-wrap:nowrap;align-items:stretch;gap:0;padding:0 0 max(8px,env(safe-area-inset-bottom));background:var(--k-color-bg,#141414);border-top:1px solid var(--bdr,#333);justify-content:stretch}
+#mlib .selbar{order:91}
+#mlib.selecting .mh{display:none}
+#mlib .mh button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:56px;padding:0 16px;border:0;font:600 15px var(--sans);letter-spacing:0}
+#mlib .mh button svg{width:18px;height:18px;flex:none}
+#mlib .mh .pri{flex:0 0 42%;background:color-mix(in srgb,var(--k-color-accent-a,#ff3b1f) 80%,#000);color:#fff}
+/* The tools panel already ends above the bottom bar, so the grid's 60-70px clearance padding just left a dead band. */
+body.sk2.mobile-fx #fx-tool-grid{padding-bottom:8px!important}
+/* Looks row: browse / strength / favourite are icon buttons on the category row. */
+body.sk2.mobile-fx #phone-looks-bar #phone-look-actions{flex:none;flex-wrap:nowrap;gap:0;margin:0}
+body.sk2.mobile-fx #phone-look-actions button{padding:0;display:inline-flex;align-items:center;justify-content:center}
+body.sk2.mobile-fx #phone-look-actions button svg{width:20px;height:20px}
+body.sk2.mobile-fx #phone-look-actions button[aria-pressed=true],body.sk2.mobile-fx #phone-look-actions #phone-look-fav.on{color:var(--acc)}
+body.sk2.mobile-fx #phone-look-fav.on svg{fill:currentColor}
+body.sk2.mobile-fx #phone-look-actions button:disabled{opacity:.35}
+/* A tool's first control sits right under the tab strip. */
+body.sk2.mobile-fx .fx-ctrl.sec-active>:first-child,body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title+*{margin-top:0!important}
+/* Small inline controls keep their look but get a 44px+ touch area. */
+body.sk2.mobile-fx .fx-panel :is(.fx-info-i,.hsl-chip,.pc-chip){position:relative}
+body.sk2.mobile-fx .fx-panel :is(.fx-info-i,.hsl-chip,.pc-chip)::after{content:'';position:absolute;inset:-9px -6px}
+/* Gallery tab strip: opaque, no side fade (scrolled content showed through the fade). */
+#mlib .tabs{-webkit-mask-image:none!important;mask-image:none!important;background:var(--mbg,#1c1c1c);position:relative;z-index:2}
+body.sk2.mobile-fx :is(.chip-tap>.btn.bgh,.fx-panel .seg>button,.fx-panel .fx-title-right>*,.btn-frame-shuffle){position:relative}
+body.sk2.mobile-fx :is(.chip-tap>.btn.bgh,.fx-panel .seg>button,.fx-panel .fx-title-right>*,.btn-frame-shuffle)::after{content:'';position:absolute;inset:-9px -6px}
+body.sk2.mobile-fx .btn-frame-shuffle{min-height:40px}
+/* Studio top bar: same Gallery / Studio switch as the gallery header (desktop-style: bold words, muted until active, bar divider, accent block on the active one). */
+body.sk2.mobile-fx #fx-actionbar .vtog{display:flex;align-items:center;flex:0 0 auto}
+body.sk2.mobile-fx #fx-actionbar .vtog button{min-height:36px!important;min-width:0!important;border:0;background:transparent;color:var(--k-color-muted);font:700 15px/1 var(--sans);letter-spacing:-.03em;padding:0 7px;position:relative;cursor:pointer}
+body.sk2.mobile-fx #fx-actionbar .vtog button+button{margin-left:8px}
+body.sk2.mobile-fx #fx-actionbar .vtog button+button::before{content:'';position:absolute;left:-5px;top:9px;bottom:9px;width:2px;background:var(--k-color-muted)}
+body.sk2.mobile-fx #fx-actionbar .vtog button.on{color:#fff;background:var(--k-color-accent-a)}
+body.sk2.mobile-fx #fx-actionbar .vtog button.on::before{display:none}
+body.sk2.mobile-fx #fx-actionbar .fx-act{min-width:40px}
+.vtog{display:none}
+body.sk2.mobile-fx #fx-actionbar .vtog,#mlib .vtog{display:flex}
+/* Dialog / sheet checkboxes use the same on/off switch as the tools: the square flips over into the other half. */
+.phone-dialog input[type=checkbox],#mlib input[type=checkbox],#fx-more-menu input[type=checkbox]{-webkit-appearance:none;appearance:none;position:relative;flex:none;width:32px;height:16px;min-width:32px;min-height:16px;margin:0 4px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:inset 0 0 0 1px var(--k-color-muted,#888);cursor:pointer;vertical-align:middle}
+.phone-dialog input[type=checkbox]::before,#mlib input[type=checkbox]::before,#fx-more-menu input[type=checkbox]::before{content:'';position:absolute;inset:-14px -8px}
+.phone-dialog input[type=checkbox]::after,#mlib input[type=checkbox]::after,#fx-more-menu input[type=checkbox]::after{content:'';position:absolute;top:0;left:0;width:16px;height:16px;background:var(--k-color-ink,#f2f0ea);transform-origin:bottom right;transition:transform .14s var(--k-motion-easing,ease)}
+.phone-dialog input[type=checkbox]:checked,#mlib input[type=checkbox]:checked,#fx-more-menu input[type=checkbox]:checked{background:var(--k-color-accent-a,#ff3b1f);box-shadow:none}
+.phone-dialog input[type=checkbox]:checked::after,#mlib input[type=checkbox]:checked::after,#fx-more-menu input[type=checkbox]:checked::after{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){.phone-dialog input[type=checkbox]::after,#mlib input[type=checkbox]::after,#fx-more-menu input[type=checkbox]::after{transition:none}}

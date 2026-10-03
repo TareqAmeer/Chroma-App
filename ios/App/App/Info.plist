@@ -53,6 +53,17 @@
 	<string>Chromasmith imports your photos, including both the RAW and JPEG of RAW+JPEG shots, and keeps your exports together in a Chromasmith album.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Chromasmith saves your exported photos to your photo library.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.tareq.chromasmith</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>chromasmith</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIUserInterfaceStyle</key>
 	<string>Dark</string>
 </dict>

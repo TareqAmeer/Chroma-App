@@ -632,7 +632,7 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-split-line{display:none;position:absolute;top:0;bottom:0;width:3px;background:var(--scrim-w4);cursor:col-resize;z-index:var(--z-sticky)}
 .fx-split-knob{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 2px 8px var(--scrim-b5);display:flex;align-items:center;justify-content:center;font-size:var(--fs-2);color:#000;user-select:none}
 #fx-hist{display:none;position:absolute;bottom:8px;right:8px;border-radius:4px;background:var(--scrim-b3);opacity:var(--op-8);pointer-events:none}
-.fx-zoom-wrap{transform-origin:0 0;cursor:grab;touch-action:none}
+.fx-zoom-wrap{transform-origin:0 0;cursor:grab;touch-action:none;will-change:transform;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 .fx-zoom-wrap.dragging{cursor:grabbing}
 .fx-zoom-ctrl{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:2px;background:var(--scrim-b4);border:1px solid var(--bdr);border-radius:6px;padding:2px;z-index:var(--z-sticky);font-family:var(--sans);font-variant-numeric:tabular-nums}
 .fx-zoom-ctrl #fx-zoom-slider{width:70px}
@@ -2392,8 +2392,8 @@ body.sk2 .fx-toggle::after{top:-1px;left:-1px}
 /* Reads as a switch, not a colour swatch: an outlined track, and the square slides across when on
    (it used to rotate in place, so on/off looked like two different swatches). */
 body.sk2 .fx-toggle:not(.on){background:transparent;box-shadow:inset 0 0 0 1px var(--k-color-muted)}
-body.sk2 .fx-toggle::after{transition:transform .14s var(--k-motion-easing)}
-body.sk2 .fx-toggle.on::after{transform:translateX(calc(var(--ctl-toggle-w) - var(--ctl-toggle-h)))}
+body.sk2 .fx-toggle::after{transition:transform .14s var(--k-motion-easing);transform-origin:bottom right}
+body.sk2 .fx-toggle.on::after{transform:rotate(90deg)} /* the whole square flips over its bottom-right corner into the other half, not a sideways slide */
 /* Stage header + sticky sub-tabs + sticky card titles. The panel loses its top padding so nothing
    can show above a stuck title; each stuck layer is opaque. */
 body.sk2.deskx .fx-panel{padding-top:0!important}
@@ -4711,10 +4711,11 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <!-- PERSISTENT ACTION BAR (mobile) -->
       <div id="fx-actionbar">
         <button class="fx-act fx-act-home" onclick="fxMobileBack()" title="Back" aria-label="Back"><span class="fx-act-ic" data-mic="chevleft"></span><span class="fx-act-logo" aria-hidden="true"><svg viewBox="18 18 64 62"><rect x="21" y="21" width="48" height="44" fill="var(--k-color-ink)"/><rect x="36" y="32" width="43" height="45" fill="var(--k-color-accent-a)"/><rect x="36" y="32" width="33" height="33" fill="#b0200e"/></svg></span></button>
+        <div class="vtog" role="group" aria-label="View"><button type="button" onclick="fxMobileBack()" aria-label="Gallery">gallery</button><button type="button" class="on" aria-pressed="true" aria-label="Studio">studio</button></div>
         <button class="fx-act" onclick="fxPickPhotos()" title="Open photo" aria-label="Open photo"><span class="fx-act-ic" data-mic="plus"></span></button>
         <button class="fx-act" onclick="fxUndo()" title="Undo" aria-label="Undo"><span class="fx-act-ic" data-mic="undo"></span></button>
         <button class="fx-act" onclick="fxRedo()" title="Redo" aria-label="Redo"><span class="fx-act-ic" data-mic="redo"></span></button>
-        <button class="fx-act" onclick="fxMoreMenu()" title="More" aria-label="More"><span class="fx-act-ic" data-mic="more"></span></button>
+        <button class="fx-act" onclick="fxMoreMenu()" title="Settings" aria-label="Settings"><span class="fx-act-ic" data-mic="settings"></span></button>
       </div>
       <div id="fx-quicknav" aria-label="Quick tools">
         <!-- No "More" here: the Tools tab below opens the same full grid. -->
@@ -4736,10 +4737,10 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
       <button id="fx-fab-export" onclick="if(!this.disabled)exportFX()" title="Export at full resolution"><span class="fx-act-ic">↧</span></button>
     </div>
     <div id="fx-mobile-nav" aria-label="Editor navigation">
-      <div class="fx-nav-tabs" role="tablist"><button id="fx-nav-looks" role="tab" onclick="fxToolsClose();fxSection('looks')">Looks</button>
-      <button id="fx-nav-tools" role="tab" onclick="document.body.classList.contains('tools-open')?fxToolsClose():fxToolsOpen()">Tools</button>
-      <button id="fx-nav-crop" role="tab" onclick="fxToolsClose();fxSection('crop')">Crop</button></div>
-      <button id="fx-nav-export" onclick="fxMobileExportSheet()">Export</button>
+      <div class="fx-nav-tabs" role="tablist"><button id="fx-nav-looks" role="tab" onclick="fxToolsClose();fxSection('looks')"><span class="fx-nav-ic" data-mic="looks" aria-hidden="true"></span><span>Looks</span></button>
+      <button id="fx-nav-tools" role="tab" onclick="document.body.classList.contains('tools-open')?fxToolsClose():fxToolsOpen()"><span class="fx-nav-ic" data-mic="tools" aria-hidden="true"></span><span>Tools</span></button>
+      <button id="fx-nav-crop" role="tab" onclick="fxToolsClose();fxSection('crop')"><span class="fx-nav-ic" data-mic="crop" aria-hidden="true"></span><span>Crop</span></button></div>
+      <button id="fx-nav-export" onclick="fxMobileExportSheet()"><span class="fx-nav-ic" data-mic="export" aria-hidden="true"></span><span>Export</span></button>
     </div>
   </div>
 </div>
@@ -6935,7 +6936,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1003A';
+const BUILD='1.1003B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -12669,6 +12670,8 @@ function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=
 function _ffAutoEnable(e){
   const ff=e.target&&e.target.closest&&e.target.closest('.fx-fields.ff-off');
   if(!ff)return;
+  // Picking a band/zone only changes which one you're looking at — not an edit, so it must not switch the section on.
+  if(e.target.closest('.hsl-hist-zone,.hsl-chip'))return;
   const name=ff.id.replace(/^ff-/,'');
   const tg=document.getElementById('tg-'+name);
   if(!tg||tg.classList.contains('on'))return;
@@ -13989,9 +13992,9 @@ function csInstallHint(){
   w.addEventListener('pointerdown',e=>{
     if(!document.body.classList.contains('mobile-fx')||cropMode||mskPaintMode||window.csSwipeAdjust||!e.isPrimary)return;
     x=e.clientX;y=e.clientY;clearTimeout(t);
-    t=setTimeout(()=>{t=null;on=true;fxCompare=true;renderPreview();hapt();},350);
+    t=setTimeout(()=>{t=null;on=true;fxCompare=true;renderPreview();hapt();},600); // deliberate hold: 600ms, so a pause while panning or aiming doesn't flash the original
   });
-  w.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-x,e.clientY-y)>8){clearTimeout(t);t=null;}});
+  w.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-x,e.clientY-y)>14){clearTimeout(t);t=null;}});
   ['pointerup','pointercancel','pointerleave'].forEach(n=>w.addEventListener(n,stop));
   w.addEventListener('touchstart',e=>{if(e.touches.length>1)stop();},{passive:true});
   w.addEventListener('contextmenu',e=>{if(document.body.classList.contains('mobile-fx'))e.preventDefault();});
@@ -14225,9 +14228,9 @@ function diagLayout(){
     active.add(e.pointerId);
     if(active.size>1){cancelCompare();return;}
     sx=e.clientX;sy=e.clientY;engaged=false;
-    t=setTimeout(()=>{engaged=true;fxCompare=true;renderPreview();hapt();},380);
+    t=setTimeout(()=>{engaged=true;fxCompare=true;renderPreview();hapt();},600);
   });
-  wrap.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-sx,e.clientY-sy)>12){clearTimeout(t);t=null;}});
+  wrap.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-sx,e.clientY-sy)>14){clearTimeout(t);t=null;}});
   const end=e=>{active.delete(e.pointerId);cancelCompare();};
   wrap.addEventListener('pointerup',end);wrap.addEventListener('pointercancel',end);wrap.addEventListener('pointerleave',end);
 })();
@@ -18579,7 +18582,7 @@ function _applyZoom(smooth){
   // jumped at z=1, so zoom-in-off-centre then zoom-out landed the photo in a corner). With
   // pan=0 the frame centre stays fixed for any zoom; pan is a free user offset on top.
   const baseX=w*(1-fxZoom)/(2*fxZoom),baseY=h*(1-fxZoom)/(2*fxZoom);
-  zw.style.transform=`scale(${fxZoom}) translate(${baseX+fxPanX}px,${baseY+fxPanY}px)`;
+  zw.style.transform=`scale(${fxZoom}) translate3d(${(baseX+fxPanX).toFixed(2)}px,${(baseY+fxPanY).toFixed(2)}px,0)`; // translate3d keeps the photo on its own GPU layer: WebKit smeared edge pixels into streaks when a panned layer was repainted
   if(fxZoom>1)fxEnsureFullQuality();
   _updateZoomReadout();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
@@ -18719,6 +18722,7 @@ function initZoomPan(){
   let pd=null;
   zw.addEventListener('pointerdown',e=>{
     if(_fxEyeArmed()||mskPaintMode||(typeof _ahRoiArmed!=='undefined'&&_ahRoiArmed))return;
+    if(window.csSwipeAdjust&&window.csSwipeSlider&&document.body.classList.contains('mobile-fx'))return; // a picked slider owns one-finger swipes: the photo stays put until two fingers zoom/pan
     e.preventDefault();if(pd&&pd.id!==e.pointerId)return; // a pinch's second finger never drives the pan
     pd={id:e.pointerId,x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
@@ -18735,6 +18739,7 @@ function initZoomPan(){
   let _loupeDragT=null;
   zw.addEventListener('pointermove',e=>{
     if(!pd||pd.id!==e.pointerId||_pinching)return;
+    if(window.csSwipeAdjust&&window.csSwipeSlider&&document.body.classList.contains('mobile-fx'))return;
     if(fxLoupe){
       const dx=e.clientX-pd.x,dy=e.clientY-pd.y;
       // Divide by fxZoom: this translate lands INSIDE the wrapper's own scale(fxZoom) transform,
@@ -24857,6 +24862,8 @@ const ICONS={
  zoomIn:'<path d="M12 5v14M5 12h14"/>',
  zoomOut:'<path d="M5 12h14"/>',
  fit:'<path d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5"/>',
+ select:'<rect x="4" y="4" width="16" height="16"/><path d="M8 12l3 3 5-6"/>',
+ settings:'<path d="M10 3h4l.6 2.6 1.9 1.1 2.5-.9 2 3.4-2 1.7v2.2l2 1.7-2 3.4-2.5-.9-1.9 1.1L14 21h-4l-.6-2.6-1.9-1.1-2.5.9-2-3.4 2-1.7v-2.2l-2-1.7 2-3.4 2.5.9 1.9-1.1Z"/><circle cx="12" cy="12" r="3"/>',
  more:'<path d="M5 10.5l1.5 1.5-1.5 1.5-1.5-1.5ZM12 10.5l1.5 1.5-1.5 1.5-1.5-1.5ZM19 10.5l1.5 1.5-1.5 1.5-1.5-1.5Z"/>',
  brush:'<path d="M11 15 20 4l1 1-10 10ZM10 14l-5 1-2 6 6-2 1-5"/>',
  eraser:'<path d="M3 16l9-9 6 6-9 9H6ZM9 10l6 6M12 22h9"/>',
@@ -25169,7 +25176,7 @@ window.addEventListener('load',()=>{const f=window.fxSection;if(typeof f==='func
   const w=document.getElementById('fx-wrap');if(!w)return;
   let sx=0,sy=0,mode=null,sl=null,v0=0,stepY=0;
   w.addEventListener('touchstart',e=>{
-    mode=null;if(!window.csSwipeAdjust||!mob()||e.touches.length!==1||!document.body.classList.contains('sheet-open')||(typeof fxZoom!=='undefined'&&fxZoom>1)||(typeof cropMode!=='undefined'&&cropMode))return;
+    mode=null;if(!window.csSwipeAdjust||!mob()||e.touches.length!==1||!document.body.classList.contains('sheet-open')||(typeof cropMode!=='undefined'&&cropMode))return;
     const L=list();const pick=window.csSwipeSlider;if(!pick||!L.includes(pick))return;sl=pick; // only the slider the user selected (tap its name)
     sx=e.touches[0].clientX;sy=e.touches[0].clientY;v0=parseFloat(sl.value);stepY=sy;mode='wait';
   },{passive:true});
@@ -25648,8 +25655,8 @@ window.addEventListener('resize',()=>{
   // ordinary scroll-up no longer closes it by accident.
   var CLOSE_PX=150,sy=0,el=null,dy=0,ok=false,armed=false;
   function scroller(t,root){for(var n=t;n&&n!==root.parentElement;n=n.parentElement){if(n.scrollHeight>n.clientHeight+1&&/(auto|scroll)/.test(getComputedStyle(n).overflowY))return n;}return root;}
-  function cue(e,on){var c=document.getElementById('fx-pull-cue');if(!c){c=document.createElement('div');c.id='fx-pull-cue';c.textContent='Release to close';document.body.appendChild(c);}
-    var r=e.getBoundingClientRect();c.style.top=Math.max(8,r.top+8)+'px';c.classList.toggle('on',on);}
+  function cue(e,on){var c=document.getElementById('fx-pull-cue');if(!c){c=document.createElement('div');c.id='fx-pull-cue';document.body.appendChild(c);}
+    c.classList.remove('on');}  /* no on-screen cue while pulling the sheet down */
   function reset(e){e.style.transform='';e.style.transition='transform .18s';setTimeout(function(){e.style.transition='';},200);var c=document.getElementById('fx-pull-cue');if(c)c.classList.remove('on');}
   function bind(id,closeFn,isOpen){
     var e=document.getElementById(id);if(!e)return;

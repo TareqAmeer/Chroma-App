@@ -27,3 +27,7 @@
 `chromasmithRecordExport`/`chromasmithGetExportHistory`, named versions, revert/open-original.
 The app launches into it; Back on the editor's home state returns to it. Exported images go to a
 "Chromasmith" album via `@capacitor-community/media` (`capAlbumId()`), share sheet as fallback.
+
+## Share sheet (iOS Share Extension / Android SEND)
+- iOS: `ios/App/ShareExt/` is a Share Extension target (bundle `com.tareq.chromasmith.share`, embedded in the app's PlugIns). It copies shared images (RAW preferred) into the app group `group.com.tareq.chromasmith` (`shared/`), then opens `chromasmith://shared`; `PhotoPairPlugin.takeShared` moves them to temp and the web layer (`checkShared` in `mobile/mobile-library.js`) imports them. No app group (some sideload signers can't provide one) → it opens `chromasmith://import`, which launches the in-app Photos picker. Both targets carry `*.entitlements` with the group; the unsigned CI build ignores them, the signer decides. Not compiled on the dev Mac (no Xcode there) — CI is the first compile.
+- Android: `SEND`/`SEND_MULTIPLE` intent filters on `MainActivity`; `SharedImportPlugin` copies streams to cache and the same `PhotoPair.takeShared` JS call drains them.

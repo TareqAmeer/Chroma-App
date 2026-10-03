@@ -110,7 +110,7 @@ const build0=window.buildSecNav;window.buildSecNav=function(){const r=build0.app
 function selectedLook(){return $('#fx-looks .look-cell.sel');}
 function lookActions(){
   const cell=selectedLook(),val=cell?._lookJob?.val;
-  const b=$('#phone-look-fav');if(b){b.disabled=!val;b.textContent=val&&csIsFav(val)?'Unfavourite':'Favourite';b.setAttribute('aria-pressed',String(!!val&&csIsFav(val)));}
+  const b=$('#phone-look-fav');if(b){b.disabled=!val;b.setAttribute('aria-label',val&&csIsFav(val)?'Unfavourite':'Favourite');b.classList.toggle('on',!!val&&csIsFav(val));b.setAttribute('aria-pressed',String(!!val&&csIsFav(val)));}
   $('#phone-look-strength')?.toggleAttribute('disabled',!val);
 }
 function setupLooks(){
@@ -122,9 +122,11 @@ function setupLooks(){
     bar.append(sb,cats);sb.onclick=()=>{const on=!document.body.classList.contains('phone-looks-search')||!!search.value;document.body.classList.toggle('phone-looks-search',on);sb.setAttribute('aria-pressed',String(on));if(on)search.focus();};
     search.addEventListener('blur',()=>{if(!search.value){document.body.classList.remove('phone-looks-search');sb.setAttribute('aria-pressed','false');}});}
   const row=document.createElement('div');row.id='phone-look-actions';row.className='phone-actions';
-  row.innerHTML='<button id="phone-look-browse" aria-pressed="false">Browse all</button><button id="phone-look-strength">Strength</button><button id="phone-look-fav">Favourite</button>';
-  looks.before(row);
-  row.querySelector('#phone-look-browse').onclick=e=>{const on=!document.body.classList.contains('phone-looks-grid');document.body.classList.toggle('phone-looks-grid',on);document.body.classList.toggle('sheet-full',on);e.target.textContent=on?'Quick rail':'Browse all';e.target.setAttribute('aria-pressed',String(on));};
+  const I=(n,sz)=>typeof icon==='function'?icon(n,sz||20):'';
+  row.innerHTML='<button id="phone-look-browse" aria-pressed="false" aria-label="Browse all looks" title="Browse all">'+I('gridView')+'</button><button id="phone-look-strength" aria-label="Look strength" title="Strength">'+I('adjust')+'</button><button id="phone-look-fav" aria-label="Favourite" title="Favourite">'+I('star')+'</button>';
+  // Icon-only actions share the category row (search · categories · browse/strength/favourite) instead of taking a row of their own.
+  const bar0=$('#phone-looks-bar');if(bar0)bar0.append(row);else looks.before(row);
+  row.querySelector('#phone-look-browse').onclick=e=>{const on=!document.body.classList.contains('phone-looks-grid');document.body.classList.toggle('phone-looks-grid',on);document.body.classList.toggle('sheet-full',on);const b=e.currentTarget;b.setAttribute('aria-pressed',String(on));b.setAttribute('aria-label',on?'Back to quick rail':'Browse all looks');};
   row.querySelector('#phone-look-strength').onclick=()=>{document.body.classList.add('lk-strength');$('#row-lut-mix')?.scrollIntoView({block:'nearest'});$('#sl-lut-mix')?.focus();};
   row.querySelector('#phone-look-fav').onclick=()=>{
     const val=selectedLook()?._lookJob?.val;if(!val)return;const key=String(val).replace(/^p:/,'');let a=JSON.parse(localStorage.getItem('csFavLooks')||'[]'),on=a.includes(key);
@@ -182,7 +184,7 @@ function syncNavigation(){
     if(st&&!straightenGrid){straightenGrid={shown:cropGridShown,grid:cropGrid};if(cropGrid==='off')cropGrid='3x3';cropGridShown=true;cropGridOverlaySync();}
     else if(!st&&straightenGrid){cropGridShown=straightenGrid.shown;cropGrid=straightenGrid.grid;straightenGrid=null;cropGridOverlaySync();}}
   document.querySelectorAll('#fx-mobile-nav [role=tab]').forEach(b=>b.setAttribute('aria-selected',String(b.classList.contains('on'))));
-  document.querySelectorAll('#fx-sheet-strip button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.sec===sec)));centreTab($('#fx-sheet-strip'),$('#fx-sheet-strip button.on'));syncResets();document.querySelectorAll('.fx-ctrl>.fx-ctrl-title').forEach(t=>{t.classList.remove('phone-bare');t.classList.toggle('phone-bare',![...t.children].some(c=>c.getClientRects().length));});
+  document.querySelectorAll('#fx-sheet-strip button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.sec===sec)));centreTab($('#fx-sheet-strip'),$('#fx-sheet-strip button.on'));syncResets();phoneBare();
   maskStatus();
 }
 const section0=window.fxSection;window.fxSection=function(){const r=section0.apply(this,arguments);if(mob()){syncNavigation();setupLooks();labelControls($('.fx-panel'));lookActions();}return r;};
@@ -222,10 +224,32 @@ function boot(){
   const app=window.Capacitor?.Plugins?.App;
   if(typeof capNative==='function'&&capNative()&&app){
     app.addListener('backButton',async()=>{if(!await back()){await window.MobileLibrary?.flush();await app.minimizeApp();}});
-    app.addListener('appStateChange',({isActive})=>{if(!isActive)window.MobileLibrary?.flush().catch(()=>{});});
+    app.addListener('appStateChange',({isActive})=>{if(!isActive)window.MobileLibrary?.flush().catch(()=>{});else window.csCheckShared?.();});
+    // iOS Share Extension hands over with chromasmith://shared (files in the app group) or chromasmith://import (no group: open the Photos picker).
+    app.addListener('appUrlOpen',({url})=>{if(/^chromasmith:\/\/import/i.test(url||''))window.MobileLibrary?.importPhotos?.();else if(/^chromasmith:\/\//i.test(url||''))window.csCheckShared?.();});
   }
 }
 function rememberSheet(){if(!mob()||!document.body.classList.contains('sheet-open'))return;const size=document.body.classList.contains('sheet-full')?'full':document.body.classList.contains('sheet-peek')?'peek':'half';try{setPref('sheet',size);}catch(_){}const b=$('#phone-sheet-size');if(b)b.textContent=size==='full'?'Reduce':'Expand';}
 const open0=window.fxSection;window.fxSection=function(){const opening=!document.body.classList.contains('sheet-open');const saved=pref('sheet','half'),r=open0.apply(this,arguments);if(mob()&&opening&&document.body.classList.contains('sheet-open')){document.body.classList.toggle('sheet-full',saved==='full');document.body.classList.toggle('sheet-peek',saved==='peek');}return r;};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
+
+// A card title row is only worth its height when it holds a visible control (reset, on/off toggle).
+// Controls show/hide as values change, so re-check after any interaction too.
+function phoneBare(){document.querySelectorAll('.fx-ctrl>.fx-ctrl-title').forEach(t=>{t.classList.remove('phone-bare');t.classList.toggle('phone-bare',![...t.children].some(c=>c.offsetWidth>1&&c.offsetHeight>1));});}
+{let q=0;const later=()=>{cancelAnimationFrame(q);q=requestAnimationFrame(()=>setTimeout(phoneBare,60));};['input','change','click','pointerup'].forEach(e=>document.addEventListener(e,later,true));setTimeout(phoneBare,300);}
+
+// Sliders only move when the thumb itself is grabbed: a tap or stray touch on the track must not
+// jump the value. A press that starts off the thumb is ignored (any value change is rolled back)
+// until the finger lifts, so vertical scrolling over a slider stays harmless.
+{let guard=null;const mob=()=>document.body.classList.contains('mobile-fx');
+  const hit=(el,x)=>{const r=el.getBoundingClientRect(),mn=+el.min||0,mx=el.max===''?100:+el.max,f=mx>mn?(+el.value-mn)/(mx-mn):0,tw=28,cx=r.left+tw/2+f*(r.width-tw);return Math.abs(x-cx)<=26;};
+  const end=()=>{guard=null;};
+  document.addEventListener('pointerdown',e=>{
+    if(!mob())return;const el=e.target;
+    if(el&&el.matches&&el.matches('input[type=range]')&&!hit(el,e.clientX))guard={el,v:el.value};else guard=null;
+  },true);
+  const block=e=>{if(guard&&e.target===guard.el){guard.el.value=guard.v;e.stopImmediatePropagation();}};
+  document.addEventListener('input',block,true);document.addEventListener('change',block,true);
+  ['pointerup','pointercancel','touchend','touchcancel','mouseup'].forEach(t=>document.addEventListener(t,()=>setTimeout(end,0),true));
+}

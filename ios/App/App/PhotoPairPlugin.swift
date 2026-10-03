@@ -13,7 +13,8 @@ public class PhotoPairPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControlle
     public let identifier = "PhotoPairPlugin"
     public let jsName = "PhotoPair"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "pick", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "pick", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "takeShared", returnType: CAPPluginReturnPromise)
     ]
     private var pending: CAPPluginCall?
 
@@ -33,6 +34,30 @@ public class PhotoPairPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControlle
                 self.bridge?.viewController?.present(picker, animated: true)
             }
         }
+    }
+
+    // Photos handed over by the Share Extension (ShareExt) through the app group folder: move them to
+    // temp (so the group folder is emptied) and return them like picked photos. Empty if none/no group.
+    @objc func takeShared(_ call: CAPPluginCall) {
+        let fm = FileManager.default
+        guard let src = fm.containerURL(forSecurityApplicationGroupIdentifier: "group.com.tareq.chromasmith")?
+            .appendingPathComponent("shared", isDirectory: true),
+              let names = try? fm.contentsOfDirectory(atPath: src.path), !names.isEmpty else {
+            call.resolve(["files": []]); return
+        }
+        let dir = fm.temporaryDirectory.appendingPathComponent("shared-in", isDirectory: true)
+        try? fm.removeItem(at: dir)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        var out: [[String: Any]] = []
+        for n in names.sorted() {
+            let from = src.appendingPathComponent(n)
+            let to = dir.appendingPathComponent(n)
+            do { try fm.moveItem(at: from, to: to) } catch { continue }
+            // Drop the "xxxxxxxx-" collision prefix the extension added.
+            let clean = n.count > 9 && n[n.index(n.startIndex, offsetBy: 8)] == "-" ? String(n.dropFirst(9)) : n
+            out.append(["path": to.path, "name": clean])
+        }
+        call.resolve(["files": out])
     }
 
     public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
@@ -59,14 +84,18 @@ public class PhotoPairPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControlle
             let wanted = res.filter { $0.type == .photo || $0.type == .alternatePhoto || $0.type == .fullSizePhoto }
             // When edited in Photos there is a fullSizePhoto (the edit) as well as the .photo original: keep originals only.
             let picks = wanted.contains { $0.type == .photo } ? wanted.filter { $0.type != .fullSizePhoto } : wanted
-            for (j, r) in picks.enumerated() {
+            // Apple ProRAW / any DNG original: bring in the DNG ITSELF, not the HEIC/JPEG rendition Photos
+            // stores beside it. (Third-party RAW+JPEG pairs like RW2+JPEG still arrive as both files.)
+            let dngs = picks.filter { $0.uniformTypeIdentifier == "com.adobe.raw-image" || $0.originalFilename.lowercased().hasSuffix(".dng") }
+            let chosen = dngs.isEmpty ? picks : dngs
+            for (j, r) in chosen.enumerated() {
                 let url = dir.appendingPathComponent("\(i)-\(j)-\(r.originalFilename)")
                 group.enter()
                 PHAssetResourceManager.default().writeData(for: r, toFile: url, options: opts) { err in
                     lock.lock()
                     if err == nil {
                         out.append(["path": url.path, "name": r.originalFilename, "uti": r.uniformTypeIdentifier,
-                                    "raw": r.type == .alternatePhoto, "order": i * 10 + j])
+                                    "raw": r.type == .alternatePhoto || r.uniformTypeIdentifier == "com.adobe.raw-image", "order": i * 10 + j])
                     }
                     lock.unlock()
                     group.leave()
