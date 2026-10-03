@@ -1,0 +1,14 @@
+import React from 'react';
+import {AbsoluteFill,Img,staticFile,delayRender,continueRender,Sequence} from 'remotion';
+import {loadFont} from '@remotion/fonts';
+import {Audio} from '@remotion/media';
+import {C,FONT} from './theme';
+const handle=delayRender('Gramatika');
+Promise.all([loadFont({family:'Gramatika',url:staticFile('fonts/GramatikaRegular.otf'),weight:'400'}),loadFont({family:'Gramatika',url:staticFile('fonts/GramatikaBold.otf'),weight:'700'})]).then(()=>continueRender(handle));
+export const Full:React.FC<{bg?:string;children?:React.ReactNode}>=({bg=C.paper,children})=><AbsoluteFill style={{background:bg,color:bg===C.bg?C.paper:C.bg,fontFamily:FONT,overflow:'hidden'}}>{children}</AbsoluteFill>;
+export const Photo:React.FC<{src:string;style?:React.CSSProperties;fit?:'contain'|'cover'}>=({src,style,fit='cover'})=><Img src={staticFile(`img/${src}`)} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:fit,...style}}/>;
+export const Box:React.FC<{x:number;y:number;w:number;h:number;children?:React.ReactNode;style?:React.CSSProperties}>=({x,y,w,h,children,style})=><div style={{position:'absolute',left:x,top:y,width:w,height:h,overflow:'hidden',...style}}>{children}</div>;
+export const Type:React.FC<{children:React.ReactNode;x:number;y:number;size?:number;color?:string;w?:number;weight?:number;style?:React.CSSProperties}>=({children,x,y,size=144,color=C.bg,w,weight=700,style})=><div data-promo-text style={{position:'absolute',left:x,top:y,width:w,fontSize:size,color,fontWeight:weight,letterSpacing:'-0.045em',lineHeight:.96,...style}}>{children}</div>;
+export const Rule:React.FC<{x:number;y:number;w:number;color?:string;h?:number}>=({x,y,w,color=C.bg,h=3})=><div style={{position:'absolute',left:x,top:y,width:w,height:h,background:color}}/>;
+export const Sound:React.FC<{src:string;at?:number;volume?:number}>=({src,at=0,volume=.4})=><Sequence from={at} premountFor={30}><Audio src={staticFile(src)} volume={volume}/></Sequence>;
+export const Wipe:React.FC<{before:string;after:string;amount:number;zoom?:number;focal?:string}>=({before,after,amount,zoom=1,focal='50% 50%'})=><><Photo src={before} style={{scale:zoom,transformOrigin:focal}}/><div style={{position:'absolute',inset:0,clipPath:`inset(0 ${100-100*amount}% 0 0)`}}><Photo src={after} style={{scale:zoom,transformOrigin:focal}}/></div>{amount>.02&&amount<.98&&<div style={{position:'absolute',left:`${amount*100}%`,top:0,bottom:0,width:3,background:C.paper}}/>}</>;

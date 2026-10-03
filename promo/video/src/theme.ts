@@ -1,0 +1,11 @@
+import {Easing, interpolate} from 'remotion';
+export const C={bg:'#0b0b0a',paper:'#f2efe8',mid:'#c9c5bb',dim:'#8b877e',line:'#24231f',acc:'#ff3b1f',fav:'#1238ff'};
+export const FONT='Gramatika, sans-serif';
+export const FPS=30;
+export const move=Easing.bezier(0.65,0,0.2,1);
+export const settle=Easing.bezier(0.16,1,0.3,1);
+export const mix=(a:number,b:number,p:number)=>a+(b-a)*p;
+export const p=(f:number,at:number,dur=30)=>interpolate(f,[at,at+dur],[0,1],{extrapolateLeft:'clamp',extrapolateRight:'clamp',easing:move});
+export const out=(f:number,at:number,dur=30)=>interpolate(f,[at,at+dur],[0,1],{extrapolateLeft:'clamp',extrapolateRight:'clamp',easing:settle});
+export const img=(n:string)=>`img/${n}`;
+export const prog=out;
