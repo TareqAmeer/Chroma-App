@@ -9248,6 +9248,7 @@
   }
 
   function refreshCatalogCounts() {
+    catalogAutoTagBackfill(); // once per session; runs even with no folder scan / paused indexing
     invoke('catalog_counts').then((counts) => { catalogCounts = counts; renderCollections(); }).catch(() => {});
     invoke('catalog_date_counts').then((counts) => { dateCounts = counts; renderCollections(); }).catch(() => {});
     invoke('catalog_volumes').then((vols) => { catalogVolumes = vols || []; renderCollections(); }).catch(() => {});
@@ -10458,6 +10459,10 @@
     try { localStorage.setItem(LS_BG_PAUSED, paused ? '1' : '0'); } catch (e) {}
     if (!LIBTEST) invoke('catalog_bg_set_paused', { paused: !!paused }).catch(() => {});
     if (paused) bgStopAll();
+    // Resume must actually restart the chain: the phases only otherwise start after a new folder
+    // scan, so Resume used to leave CLIP indexing (the only source of auto tags for un-indexed
+    // photos) stopped for the rest of the session — "dog" stuck while 51k photos sat unindexed.
+    else if (!LIBTEST) { _bgStopped = false; catalogRunBackgroundPhases(); }
     renderActivity();
   }
   window.chromasmithBgPaused = bgPaused;
@@ -10494,7 +10499,21 @@
     }
   }
   let _catalogBgRunning = false;
+  // Tagging photos that ALREADY have a CLIP embedding is pure math on stored vectors (seconds, no
+  // image decode), so it must not wait behind the chain below: that chain is skipped entirely
+  // while background indexing is paused, and otherwise only reaches 'autotag' after CLIP has
+  // decoded every remaining photo (hours on a 57k library). Both kept already-indexed photos
+  // untagged indefinitely ("dog" showed 6 photos, ~3000 were indexed dogs). Once per session.
+  var _autoTagBackfillDone = false; // var, not let: refreshCatalogCounts can call this before this line runs (TDZ)
+  function catalogAutoTagBackfill() {
+    if (LIBTEST || _autoTagBackfillDone) return;
+    _autoTagBackfillDone = true;
+    invoke('catalog_auto_tag')
+      .then(() => { refreshAutoTags(); refreshCatalogCounts(); if (state.showInfo) { state.clipTags.clear(); renderInfoPanel(); } })
+      .catch((e) => console.error('auto-tag backfill', e));
+  }
   function catalogRunBackgroundPhases() {
+    catalogAutoTagBackfill();
     if (LIBTEST || _catalogBgRunning || bgPaused() || _bgStopped) return;
     _catalogBgRunning = true;
     // ⚠️ Each phase is independently attempted. This used to be a bare .then() chain, so a

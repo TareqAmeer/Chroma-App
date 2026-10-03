@@ -22,7 +22,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // v20: no new DDL of its own — forces the presence-keyed blocks at the end of migrate() (GPS/place, auto-tag tables,
 // auto_tagged_at) to run on catalogs already stamped v19 before those blocks existed; without it the Editor's Info
 // panel queried a photo_auto_tags table that was never created and every photo read as "not tagged".
-const SCHEMA_VERSION: i64 = 20;
+// v21: same trick for the auto_tag_breeds_v1 block (breed re-tag), which v20 catalogs skipped.
+const SCHEMA_VERSION: i64 = 21;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -5867,6 +5868,9 @@ pub async fn catalog_auto_tag(app: tauri::AppHandle) -> Result<usize, String> {
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::Manager;
         let state = app.state::<CatalogState>();
+        // Same as every other one-shot job: a stale Cancel from an earlier scan must not make
+        // this break before its first batch.
+        state.cancel.store(false, Ordering::Relaxed);
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         auto_tag_run(&conn, &state.cancel)
     })
