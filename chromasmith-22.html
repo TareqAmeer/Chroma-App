@@ -3564,7 +3564,10 @@ window.bumpBootSplashWatchdog=function(graceMs){
   // is wanted later; console.warn still logs the stall for anyone actually debugging.
   console.warn(`[boot] watchdog fired: stalled on "${window._bootLastPhase||'walk'}" after ${Math.round(elapsed/1000)}s`);
 },graceMs||8000);};
-window.bumpBootSplashWatchdog(16000); // initial grace period before any progress event has arrived yet
+// The watchdog guards the desktop library scan (Tauri). The Android shell has no splash to hide and no scan
+// to report progress (their splash is already removed above), so it could only ever fire spuriously there: it logged
+// a "stalled on walk" warning on every cold start. Android only: the iOS shell is deliberately left as it was.
+if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatform()==='android'))window.bumpBootSplashWatchdog(16000); // initial grace period before any progress event has arrived yet
 </script>
 <div id="status-cap"></div>
 <!-- Page bar (Swiss). Only shows where the Studio's own top bar doesn't: the Match, Colour Copy, Collage and Guide
@@ -12168,13 +12171,22 @@ function applyDngGainMap(u16,w,h,gm,M){
   }
   return u16;
 }
+// libraw's wasm imports a SHARED WebAssembly.Memory, so it needs shared memory — not cross-origin isolation as such.
+// Browsers only offer that via crossOriginIsolated, but the Android WebView never reports isolated (it ignores the
+// COOP/COEP the shell sends) while still creating shared wasm memory fine, so the isolation check blocked every RAW
+// there. On Android only (iOS is left as it was), feature-detect the thing the decoder actually uses.
+function rawSharedMemoryOk(){
+  if(self.crossOriginIsolated)return true;
+  if(!capAndroid())return false;
+  try{new WebAssembly.Memory({initial:1,maximum:1,shared:true});return true;}catch(e){return false;}
+}
 async function loadRw2(file,opts){
   // opts.half (browser only): LibRaw half-size decode — each 2×2 Bayer block becomes one pixel, so
   // no demosaic and a quarter of the pixels through every JS pass below. Used for the on-screen
   // proxy; fxPromoteWebRaw decodes the full frame when zoom/loupe/export actually need it.
   const half=!!(opts&&opts.half)&&!window.__TAURI__;
   window.__pm&&window.__pm('loadRw2-enter');
-  if(!self.crossOriginIsolated)throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
+  if(!rawSharedMemoryOk())throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
   let profile=rawProfile();
   const LibRaw=await getLibRaw();
   // By-path RAW (desktop Library open, see library-ui's makePathRawFile): the native shim reads
@@ -23300,8 +23312,14 @@ async function capUpdateCheck(){
     b.style.cssText='position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:9999;background:var(--sur);color:var(--tx,#eee);border-radius:12px;padding:12px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.4);font-size:14px';
     b.innerHTML='<span style="flex:1">New version '+(j.tag_name||'')+' available</span><a style="color:inherit;font-weight:600" target="_blank" rel="noopener">Download</a><button style="background:none;border:0;color:inherit;font-size:18px" aria-label="Dismiss">×</button>';
     b.querySelector('a').href=apk?apk.browser_download_url:j.html_url;
-    b.querySelector('button').onclick=()=>b.remove();
+    b.querySelector('button').onclick=()=>{clearInterval(lift);b.remove();};
     document.body.appendChild(b);
+    // Sit above the Studio bottom nav (Looks/Tools/Crop/Export) instead of covering it: a fixed bottom banner
+    // swallowed taps on Export and its Download link opened the browser. The nav comes and goes with the view.
+    const place=()=>{const n=document.getElementById('fx-mobile-nav'),r=n&&n.getBoundingClientRect();
+      const h=r&&r.height>0&&getComputedStyle(n).display!=='none'?Math.max(0,innerHeight-r.top):0;
+      b.style.bottom=h?(h+12)+'px':'calc(12px + env(safe-area-inset-bottom))';};
+    const lift=setInterval(place,500);place();
   }catch(e){}
 }
 setTimeout(capUpdateCheck,4000);
@@ -25931,7 +25949,7 @@ window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+errStr(e.
     const mem=typeof navigator.deviceMemory==='number'?navigator.deviceMemory+'GB':'n/a';
     const share=(navigator.canShare&&navigator.canShare({files:[new File([new Uint8Array(1)],'t.jpg',{type:'image/jpeg'})]}))?'yes':'no';
     const native=capNative()?' · NATIVE app shell':'';
-    const coi=self.crossOriginIsolated?'yes':'no';
+    const coi=self.crossOriginIsolated?'yes':rawSharedMemoryOk()?'shared-wasm':'no';
     log(`Device: maxTexture ${maxTex}px · deviceMemory ${mem} · file-share ${share} · SAB/RAW ${coi}${native} · full-res export${isMemoryConstrained()?` (${fxGlowScale()}× reduced glow, tiled >40MP)`:''}`,'info');
   }catch(e){}
 })();

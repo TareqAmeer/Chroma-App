@@ -13,6 +13,11 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- The system-bar strips draw the window background. DayNight defaults it to white in light mode,
+             which put white bars (and unreadable white icons) around the dark app. -->
+        <item name="android:windowBackground">@color/chromasmith_bg</item>
+        <item name="android:statusBarColor">@color/chromasmith_bg</item>
+        <item name="android:navigationBarColor">@color/chromasmith_bg</item>
     </style>
 
 

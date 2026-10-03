@@ -83,14 +83,13 @@ const wd = /\[boot\] watchdog fired[^\n]*/.exec(log());
 state('AC-02', bootMs && !wd ? 'PASS' : 'FAIL', bootMs ? `gallery in ${Math.round(bootMs / 1000)}s${wd ? ' — ' + wd[0].replace(/^.*Msg: /, '') : ''}` : 'gallery never appeared');
 
 let c = await page();
-// ---- AC-03 / AC-04 / AC-06
+// ---- AC-03 / AC-04
 const env = JSON.parse(await c.ev(`JSON.stringify({plat:window.Capacitor&&Capacitor.getPlatform(),build:typeof BUILD!=='undefined'?BUILD:null,
   missing:['Filesystem','Share','Media'].filter(p=>!Capacitor.Plugins[p]),gl2:!!document.createElement('canvas').getContext('webgl2'),
   coi:self.crossOriginIsolated,sab:typeof SharedArrayBuffer,mem:navigator.deviceMemory,ua:navigator.userAgent.match(/Chrome\\/[\\d.]+/)[0]})`));
 Object.assign(info, { webview: env.ua, deviceMemory: env.mem, build: env.build });
 state('AC-03', env.plat === 'android' && env.build && !env.missing.length ? 'PASS' : 'FAIL', `platform=${env.plat} build=${env.build} missing plugins=[${env.missing}]`);
 state('AC-04', env.gl2 ? 'PASS' : 'FAIL', 'webgl2=' + env.gl2);
-state('AC-06', env.coi && env.sab === 'function' ? 'PASS' : 'FAIL', `crossOriginIsolated=${env.coi} SharedArrayBuffer=${env.sab} — RAW decode ${env.coi ? 'available' : 'will throw "RW2 needs SharedArrayBuffer"'}`);
 
 // ---- AC-05 system bar strips
 {
@@ -204,6 +203,23 @@ try {
   const denied = /Permission Denial|EACCES|Could not read the shared|FileUriExposed/.test(log().slice(mark));
   state('AC-14', after > before ? 'PASS' : denied ? 'SKIP' : 'FAIL', `photos ${before} -> ${after}${after > before ? '' : denied ? ' (see out/logcat.txt)' : ''}`);
 } catch (e) { state('AC-14', 'FAIL', e.message.split('\n')[0]); }
+
+// ---- AC-06 RAW: a DNG goes through the real import path and decodes with libraw's wasm. Needs shared wasm memory,
+// which the Android WebView provides even though it never reports crossOriginIsolated (info.isolated records that).
+{
+  try {
+    const dng = path.join(OUT, 'synthetic.dng');
+    for (const py of ['python', 'python3', 'py']) { try { execFileSync(py, [path.join(ROOT, 'test/fixtures/make_dng.py'), dng], { stdio: 'ignore' }); break; } catch { /* try next */ } }
+    const d64 = fs.readFileSync(dng).toString('base64'); const cc = await page();
+    const r = JSON.parse(await cc.ev(`(async()=>{const bin=atob('${d64}');const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+      const f=new File([u],'synthetic.dng',{type:''});const issues=[];
+      let direct;try{const x=await loadRw2(f);direct={w:x.canvas&&x.canvas.width,h:x.canvas&&x.canvas.height}}catch(e){direct={err:String(e&&e.message||e).slice(0,160)}}
+      const ids=await MobileLibrary.importFiles([new File([u],'synthetic2.dng',{type:''})],issues);const p=ids[0]&&await MobileLibrary.getPhoto(ids[0]);
+      return JSON.stringify({coi:self.crossOriginIsolated,direct,ids:ids.length,err:p&&p.importError||null,issues:issues.length})})()`)); cc.close();
+    const ok = r.direct.w > 0 && r.ids === 1 && !r.err;
+    state('AC-06', ok ? 'PASS' : 'FAIL', `DNG decode ${r.direct.err ? 'ERROR: ' + r.direct.err : r.direct.w + 'x' + r.direct.h}, import ids=${r.ids} importError=${r.err} (crossOriginIsolated=${r.coi})`);
+  } catch (e) { state('AC-06', 'FAIL', e.message.split('\n')[0]); }
+}
 
 // ---- AC-15 JS errors anywhere in the run
 {
