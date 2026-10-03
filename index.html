@@ -250,7 +250,7 @@ a{color:inherit}
 .howto{display:grid;grid-template-columns:repeat(3,1fr) auto;gap:3vw;align-items:end;margin-top:28px;padding:24px;background:#0b0b0a;color:var(--fg);border-radius:0}
 .howto[hidden]{display:none}.howto h4{margin-bottom:6px}.howto p{color:var(--mid);line-height:1.45;font-size:15px}
 .howto .btn.solid{background:var(--acc);color:#0b0b0a}
-@media(max-width:900px){.plats{grid-template-columns:1fr 1fr}.plat:last-child:nth-child(odd){grid-column:1/-1;min-height:140px}.howto{grid-template-columns:1fr}}
+@media(max-width:900px){.plats{grid-template-columns:1fr 1fr}.plat[href="chromasmith-22.html"]{order:5;grid-column:1/-1;min-height:140px}.howto{grid-template-columns:1fr}}
 .which{display:grid;grid-template-columns:1fr 1fr;gap:5vw;margin-top:10vh;max-width:900px}
 .which h4{font-size:18px;margin-bottom:8px}.which p{line-height:1.45}
 .outro .t{color:#0b0b0a}.outro .mono{color:#0b0b0a}.outro .btn{border-color:#0b0b0a}.outro .btn.solid{background:#0b0b0a;color:var(--fg)}.outro .btn:hover{background:var(--fg);border-color:var(--fg);color:#0b0b0a}
@@ -486,7 +486,7 @@ section{position:relative}
   .feat{position:static;transform:none!important;max-width:none;font-size:15px!important;opacity:.85!important;filter:none!important;padding:0;text-align:left}
   .feat::before{display:none}
   .feat.mhide{display:none}
-  .outro{padding:14vh 16px 6vh}.plats{grid-template-columns:1fr 1fr;gap:8px}.plat{min-height:170px;padding:16px}.plat[href$="android.html"]{order:3}.plat[href="chromasmith-22.html"]{order:5}.plat b{font-size:22px;margin-top:12px}
+  .outro{padding:14vh 16px 6vh}.plats{grid-template-columns:1fr 1fr;gap:8px}.plat{min-height:170px;padding:16px}.plat[href="chromasmith-22.html"]{order:5;grid-column:1/-1;min-height:140px}.plat b{font-size:22px;margin-top:12px}
   .aux .btn{width:100%;justify-content:center}
   .bigword{font-size:12.2vw}
   footer{padding-top:6vh}
