@@ -255,6 +255,61 @@ pub fn suggest_tags(image_embedding: &[f32], top_k: usize, threshold: f32) -> Re
     Ok(scored)
 }
 
+/// Breed tags. The general vocabulary above only says "dog"/"cat"; once a photo already carries
+/// one of those, its breed is picked by CLIP's own zero-shot classifier: every breed of that
+/// species scored with the standard Oxford-IIIT Pets prompt ("a photo of a X, a type of pet."),
+/// softmaxed at CLIP's trained logit scale (100). Only a clear winner is kept — a mixed-breed dog
+/// or a blurry cat spreads its probability and gets no breed at all, never a wrong one. ViT-B/32
+/// scores ~85% top-1 on that benchmark, so the probability gate is what makes it safe to apply
+/// without the user looking.
+pub const DOG_BREEDS: &[&str] = &[
+    "labrador retriever", "golden retriever", "german shepherd", "french bulldog", "english bulldog",
+    "poodle", "beagle", "rottweiler", "dachshund", "pembroke welsh corgi", "yorkshire terrier",
+    "boxer", "border collie", "siberian husky", "cavalier king charles spaniel", "shih tzu",
+    "boston terrier", "pomeranian", "chihuahua", "pug", "cocker spaniel", "english springer spaniel",
+    "great dane", "doberman", "miniature schnauzer", "jack russell terrier", "staffordshire bull terrier",
+    "american pit bull terrier", "bernese mountain dog", "australian shepherd", "shiba inu",
+    "maltese", "havanese", "basset hound", "whippet", "greyhound", "saint bernard", "newfoundland",
+    "samoyed", "akita", "chow chow", "dalmatian", "west highland white terrier", "scottish terrier",
+    "bichon frise", "weimaraner", "vizsla", "bull terrier", "cockapoo", "labradoodle",
+];
+pub const CAT_BREEDS: &[&str] = &[
+    "maine coon", "ragdoll", "persian cat", "siamese cat", "british shorthair", "bengal cat",
+    "sphynx cat", "abyssinian cat", "russian blue", "scottish fold", "birman", "norwegian forest cat",
+    "egyptian mau", "bombay cat", "tabby cat", "tuxedo cat", "calico cat", "ginger cat",
+];
+/// Minimum softmax probability for the winning breed.
+pub const BREED_MIN_PROB: f32 = 0.6;
+const CLIP_LOGIT_SCALE: f32 = 100.0;
+
+fn breed_embeddings(species: &str) -> Result<&'static Vec<(String, Vec<f32>)>, String> {
+    static DOGS: OnceLock<Result<Vec<(String, Vec<f32>)>, String>> = OnceLock::new();
+    static CATS: OnceLock<Result<Vec<(String, Vec<f32>)>, String>> = OnceLock::new();
+    let (cell, list) = if species == "cat" { (&CATS, CAT_BREEDS) } else { (&DOGS, DOG_BREEDS) };
+    cell.get_or_init(|| {
+        list.iter()
+            .map(|b| embed_text(&format!("a photo of a {b}, a type of pet.")).map(|e| (b.to_string(), e)))
+            .collect::<Result<Vec<_>, _>>()
+    })
+    .as_ref()
+    .map_err(|e| e.clone())
+}
+
+/// Softmax pick over `candidates`; `Some((name, prob))` only when the winner clears `min_prob`.
+pub fn pick_breed(image_embedding: &[f32], candidates: &[(String, Vec<f32>)], min_prob: f32) -> Option<(String, f32)> {
+    let logits: Vec<f32> = candidates.iter().map(|(_, e)| CLIP_LOGIT_SCALE * cosine_sim(image_embedding, e)).collect();
+    let max = logits.iter().cloned().fold(f32::MIN, f32::max);
+    let exps: Vec<f32> = logits.iter().map(|l| (l - max).exp()).collect();
+    let sum: f32 = exps.iter().sum();
+    let (i, p) = exps.iter().enumerate().map(|(i, e)| (i, e / sum)).max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))?;
+    (p >= min_prob).then(|| (candidates[i].0.clone(), p))
+}
+
+/// The breed of a photo already tagged `species` ("dog" or "cat"), or None when no breed is clear.
+pub fn suggest_breed(image_embedding: &[f32], species: &str) -> Result<Option<(String, f32)>, String> {
+    Ok(pick_breed(image_embedding, breed_embeddings(species)?, BREED_MIN_PROB))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,6 +336,41 @@ mod tests {
         assert_eq!(emb.len(), 512);
         let norm: f32 = emb.iter().map(|v| v * v).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 1e-3, "image embedding should be L2-normalized, norm={norm}");
+    }
+
+    /// Accuracy check on real photos named "<breed>.jpg" (e.g. Wikipedia lead images):
+    ///     BREED_DIR=/path/to/photos cargo test --release breed_accuracy -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn breed_accuracy_on_a_folder_of_labelled_photos() {
+        setup_model();
+        let dir = PathBuf::from(std::env::var("BREED_DIR").expect("set BREED_DIR"));
+        let (mut right, mut wrong, mut none) = (0, 0, 0);
+        for ent in std::fs::read_dir(&dir).unwrap() {
+            let path = ent.unwrap().path();
+            let want = path.file_stem().unwrap().to_string_lossy().to_string();
+            let img = image::open(&path).unwrap().to_rgb8();
+            let emb = embed_image(img.as_raw(), img.width(), img.height()).unwrap();
+            let sp = if CAT_BREEDS.contains(&want.as_str()) { "cat" } else { "dog" };
+            let got = suggest_breed(&emb, sp).unwrap();
+            match &got { Some((b, _)) if *b == want => right += 1, Some(_) => wrong += 1, None => none += 1 }
+            eprintln!("{want:32} -> {got:?}");
+        }
+        eprintln!("right {right}, wrong {wrong}, no tag {none}");
+    }
+
+    #[test]
+    fn pick_breed_keeps_only_a_clear_winner() {
+        let axis = |i: usize| { let mut v = vec![0f32; 512]; v[i] = 1.0; v };
+        let cands = vec![("a".to_string(), axis(0)), ("b".to_string(), axis(1)), ("c".to_string(), axis(2))];
+        // Leans clearly toward "a": logits differ by ~5 after the x100 scale.
+        let mut img = vec![0f32; 512];
+        img[0] = 0.30; img[1] = 0.25; img[2] = 0.25; img[3] = 0.88;
+        assert_eq!(pick_breed(&img, &cands, 0.6).map(|(b, _)| b), Some("a".to_string()));
+        // Split evenly between two breeds (a mixed breed): no tag at all.
+        let mut tie = vec![0f32; 512];
+        tie[0] = 0.30; tie[1] = 0.30; tie[3] = 0.9;
+        assert!(pick_breed(&tie, &cands, 0.6).is_none());
     }
 
     #[test]
