@@ -3762,7 +3762,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <div class="dz-ic" data-ic="image"></div><div class="dz-lb">Drop a photo here, or click to browse</div><div class="dz-fn" id="fn-fx-img"></div>
         </div>
         <div id="fx-image-movable">
-        <div class="fx-row" style="margin-top:8px"><div class="fx-label">RAW profile</div>
+        <div class="fx-row" id="row-raw-profile" style="margin-top:8px"><div class="fx-label">RAW profile</div>
           <select class="fx-select" id="sel-dcp" onchange="setRawProfile(this.value)"></select>
         </div>
         <!-- Clip info — video only, hidden for photos (see fxSyncVideoUI/fxUpdateClipInfoUI).
@@ -3870,7 +3870,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
       <div class="fx-ctrl" data-fxsec="nr">
         <div class="fx-ctrl-title">Noise Reduction <div class="fx-toggle on" id="tg-nr" onclick="toggleFX('nr')"></div></div>
         <div class="fx-fields" id="ff-nr">
-        <div class="fx-row">
+        <div class="fx-row" id="row-raw-nr">
           <div class="fx-label">RAW Noise Reduction <button class="fx-info-i" title="Off: untouched decode. Fast (default): the native Rust-side shadow + chroma-wavelet denoise on linear RAW data, before any tone curve — a few seconds, applies automatically. High: additionally runs a neural (RawNIND UtNet2) denoiser, 25–90s at 24MP — never automatic; press &quot;Denoise now&quot; below, or it runs once at export if selected. Requires reopening this photo (or Denoise now) to take effect. Desktop/RAW only.">i</button></div>
           <select id="sel-raw-nr" onchange="fxRawNrChanged(this.value)" style="display:none"><option value="off">Off</option><option value="fast" selected>Fast</option><option value="high">High</option></select>
           <div class="seg" id="seg-raw-nr" style="flex:1"></div>
@@ -3890,7 +3890,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <div style="height:4px;border-radius:2px;background:var(--sur2);overflow:hidden"><div id="nr-high-progress-bar" style="height:100%;width:0%;background:var(--acc);transition:width var(--dur-1)"></div></div>
           </div>
         </div>
-        <div class="fx-row">
+        <div class="fx-row" id="row-raw-ahd">
           <div class="fx-label">Sparkle-optimized RAW <button class="fx-info-i" title="Uses AHD interpolation, which cleans up dense green/magenta false-color speckle on sunlit water/specular highlights much further than Standard — but it trades away some general chroma-noise headroom elsewhere in the frame, so it's opt-in per photo rather than a global default. Requires reopening this photo to take effect. Desktop only.">i</button></div><div class="fx-toggle" id="tg-demosaic-ahd" onclick="fxDemosaicToggled(this)"></div>
         </div>
         <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
@@ -4052,7 +4052,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
       <!-- LENS CORRECTION -->
       <div class="fx-ctrl" data-fxsec="lens">
         <div class="fx-ctrl-title">Lens Correction <div class="fx-toggle" id="tg-lens-auto" onclick="this.classList.toggle('on');fxLensAutoToggled()"></div></div>
-        <div class="fx-row">
+        <div class="fx-row" id="row-lens-auto">
           <div class="fx-label">Auto (lens profile) <button class="fx-info-i" title="Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.">i</button></div>
         </div>
         <div id="lens-auto-status" style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);line-height:1.5;margin:2px 0 8px"></div>
@@ -6939,7 +6939,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1004F';
+const BUILD='1.1004G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10086,7 +10086,8 @@ try{window.chromasmithRawNrHighStrength=parseInt(localStorage.getItem('chromasmi
 function fxRawNrSyncUI(){
   const sel=document.getElementById('sel-raw-nr');
   if(sel){sel.value=window.chromasmithRawNr;sel._chipsRender&&sel._chipsRender();}
-  const isHigh=window.chromasmithRawNr==='high';
+  const _nrIt=(typeof curItem==='function')?curItem():null;
+  const isHigh=window.chromasmithRawNr==='high'&&!!(_nrIt&&_nrIt.rawFile); // High rows are RAW-only too
   const rowHigh=document.getElementById('row-nr-high');
   if(rowHigh)rowHigh.style.display=isHigh?'':'none';
   const rowStrength=document.getElementById('row-nr-high-strength');
@@ -11641,7 +11642,8 @@ if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',fxHdrP
 try{window.chromasmithRawFullCleanup=localStorage.getItem('chromasmithRawFullCleanup')==='1';}catch(e){window.chromasmithRawFullCleanup=false;}
 function fxRawFullCleanupSyncUI(){
   const row=document.getElementById('fx-raw-cleanup-row'),tg=document.getElementById('tg-raw-full-cleanup');
-  if(row)row.style.display=window.__TAURI__?'':'none';
+  const it=(typeof curItem==='function')?curItem():null;
+  if(row)row.style.display=(window.__TAURI__&&!!(it&&it.rawFile))?'':'none';
   if(tg)tg.classList.toggle('on',!!window.chromasmithRawFullCleanup);
 }
 function fxRawFullCleanupChanged(){
@@ -21238,6 +21240,16 @@ function fxSyncDcpProfileUI(){
   const isRaw=!!(it&&it.rawFile);
   sel.disabled=!isRaw;
   sel.title=isRaw?'':'RAW profile only applies to RAW files';
+  // RAW-only controls are hidden (not just disabled) for JPEG/PNG/etc. Auto lens profile also
+  // needs the desktop (Tauri) lensfun lookup, so it is hidden on web/iOS/Android regardless.
+  const show=(id,on)=>{const el=document.getElementById(id);if(el)el.style.display=on?'':'none';};
+  show('row-raw-profile',isRaw);show('row-raw-nr',isRaw);show('row-raw-ahd',isRaw);
+  const lensAuto=isRaw&&!!window.__TAURI__;
+  show('row-lens-auto',lensAuto);show('lens-auto-status',lensAuto);
+  {const tg=document.getElementById('tg-lens-auto');if(tg)tg.style.display=lensAuto?'':'none';}
+  if(!window.__TAURI__){show('row-lens-manual',false);show('row-lens-manual-focal',false);}
+  if(typeof fxRawNrSyncUI==='function')fxRawNrSyncUI();
+  if(typeof fxRawFullCleanupSyncUI==='function')fxRawFullCleanupSyncUI();
 }
 // Rotate/flip carry the crop with the image instead of clearing it. g.crop is normalised in
 // the post-rotate/flip/straighten frame; straighten (centred rotation) commutes with a 90° turn,
