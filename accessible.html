@@ -550,11 +550,20 @@ body{letter-spacing:.012em}
 @supports (grid-template-rows:subgrid){.plats{grid-auto-rows:auto}.plat{grid-row:span 5;grid-template-rows:subgrid;row-gap:8px}}
 .playic{width:.72em;height:.72em;margin-inline-start:.35em;vertical-align:-.02em}
 
-.lead .ba{align-items:start}.lead .ba p.one{font-size:clamp(26px,2.6vw,44px);font-weight:900;line-height:1.05;letter-spacing:-.005em;margin-top:22px}
+.lead .ba{align-items:center}.lead .ba p.one{white-space:nowrap;font-size:clamp(18px,min(2.1vw,5.6vw),40px);font-weight:900;line-height:1.05;letter-spacing:-.005em;margin-top:22px}
 
 .top nav>a,.top .sec summary,.word .t{white-space:nowrap}
 @media(max-width:420px){.top nav{gap:12px;font-size:13px}.top .sec{font-size:13px}.word{gap:6px}.word .t{font-size:12px}}
 .top{gap:12px}@media(max-width:350px){.word .t{font-size:11px}.top nav,.top .sec{gap:9px;font-size:12px}.top{padding-left:12px;padding-right:12px}}
+
+.intro .name{white-space:nowrap}
+@media(max-width:760px){.lead .ba p.one{font-size:clamp(16px,5.4vw,30px)}}
+
+.here{display:none!important}
+.bigword{letter-spacing:-.01em!important}
+.fl>p.mono,.now p.mono.wc{font-size:clamp(16px,1.5vw,24px)!important;letter-spacing:.1em}
+
+.bigword{font-size:11.2vw}
 </style>
 <!-- Analytics: GoatCounter (cookieless). Set GC_CODE to your site code from goatcounter.com; blank = off. -->
 <script>(function(){var GC_CODE='tareqameer';if(!GC_CODE)return;var s=document.createElement('script');s.async=true;s.dataset.goatcounter='https://'+GC_CODE+'.goatcounter.com/count';s.src='vendor/goatcounter-count.js';document.head.appendChild(s)})()</script>
@@ -664,7 +673,7 @@ body{letter-spacing:.012em}
 </section>
 
 <section class="space" id="features">
-  <div class="shead"><p class="mono">08 — Feature List</p><h2 class="k">The whole<br>darkroom.</h2>
+  <div class="shead"><p class="mono">08 — Feature List</p><h2 class="k">The whole<br>darkroom of features.</h2>
     <p class="t"><span class="dsk">Hover to light a tool. Click</span><span class="mob">Tap a tool</span> to see what it does.</p>
     <a class="btn" href="features.html">View as a list ↗</a></div>
   <div class="field" aria-label="All features"></div>
@@ -851,7 +860,9 @@ window.__advance=()=>{
   const nextSection=()=>{const n=secs.map(secTop).find(t=>t>y+H*.25);const to=Math.min(maxY,n===undefined?y+H:Math.min(n,y+H));if(y>=maxY-4)return;glide(to,Math.max(.9,Math.min(1.8,.9+Math.abs(to-y)/H*.6)))};
   if(T&&y>=T.start-4&&y<T.end-4){
     const px=t=>T.start+t/T.dur*(T.end-T.start),gl=px(T.gallery),sh=px(T.studio);
-    if(y<gl-H*.1){glide(gl,Math.max(3.5,Math.min(9,(gl-y)/H*.9)),x=>x);return}               // raw -> photo lands in the grid
+    const fr=px(3.75);                                                                        // 'Frame it twice' is fully on screen here
+    if(y<fr-H*.05){glide(fr,Math.max(6,Math.min(14,(fr-y)/H*1.6)),x=>x);return}               // raw -> develops step by step, stops on 'Frame it twice'
+    if(y<gl-H*.1){glide(gl,Math.max(3.5,Math.min(9,(gl-y)/H*.9)),x=>x);return}               // then the photo lands in the grid
     if(y<sh-H*.1){                                                                            // gallery: click the filters, then to the studio
       const chips=[...document.querySelectorAll('.chips button')];gliding=true;
       const seq=[chips[3],chips[4],chips[5],chips[0]].filter(Boolean);let n=0;
@@ -900,6 +911,7 @@ if(!reduce){
     .to('.intro .name span',{yPercent:0,stagger:.045,duration:1.1},1.3)         // name rises letter by letter
     .to('.intro .tag',{opacity:1,duration:.8},2.1)
     .to('.intro .cue',{opacity:1,duration:.8},2.6)
+    .call(()=>window.__wmCollapse&&window.__wmCollapse(),null,2.6)
 
   const W=document.querySelector('.word'),ws=W.querySelector('svg'),wt=W.querySelector('.t');let E,WB={w:0,h:0},docked=false;
   const wb=()=>{const r=W.getBoundingClientRect();return{l:r.left,t:r.top}};
@@ -908,34 +920,44 @@ if(!reduce){
      measure both at the start size once and correct the start offset + letter-spacing so the swap is invisible */
   let K=null;
   const RTL=document.documentElement.dir==='rtl';
-  const calRtl=()=>{const r=ir();gsap.set(wt,{x:0,y:0,scale:1,left:r.n.left-wb().l,top:r.n.top-wb().t,fontSize:r.fs,lineHeight:r.n.height+'px',letterSpacing:0});const w=wt.getBoundingClientRect(),q=document.createRange();q.setStart(wt.firstChild,0);q.setEnd(wt.firstChild,1);
+  const calRtl=()=>{const r=ir();gsap.set(wt,{x:0,y:0,scale:1,left:r.n.left-wb().l,top:r.n.top-wb().t,fontSize:r.fs,lineHeight:r.n.height+'px'});wt.style.letterSpacing='0px';const w=wt.getBoundingClientRect(),q=document.createRange();q.setStart(wt.firstChild,0);q.setEnd(wt.firstChild,1);
     K={dx:r.n.right-w.right,dy:0,ls:0,gx:0,gy:q.getBoundingClientRect().top-w.top,col:getComputedStyle(document.querySelector('.intro .name')).color}};  // Arabic is joined script: no per-letter matching, no letter-spacing; right edges line up
-  const cal=(ls)=>{if(RTL)return calRtl();const r=ir(),sp=document.querySelectorAll('.intro .name span'),first=ls==null;if(first)ls=parseFloat(getComputedStyle(document.querySelector('.intro .name')).letterSpacing)||0;
-    gsap.set(wt,{x:0,y:0,scale:1,left:r.n.left-wb().l,top:r.n.top-wb().t,fontSize:r.fs,lineHeight:r.n.height+'px',letterSpacing:ls+'px'});
-    const g=(el,i)=>{const t=el.firstChild,q=document.createRange();q.setStart(t,i);q.setEnd(t,i+1);return q.getBoundingClientRect()};
-    const y=[...sp].map(e=>gsap.getProperty(e,'yPercent'));gsap.set(sp,{yPercent:0});
-    const a0=g(sp[0],0),a1=g(sp[sp.length-1],0),b0=g(wt,0),b1=g(wt,wt.textContent.length-1);
-    sp.forEach((e,i)=>gsap.set(e,{yPercent:y[i]}));
-    K={dx:a0.left-b0.left,dy:a0.top-b0.top,ls:ls+((a1.left-a0.left)-(b1.left-b0.left))/(sp.length-1)};if(first){gsap.set(wt,{x:0,y:0,scale:1});cal(K.ls);return}
-    const wr=wt.getBoundingClientRect();K.gx=b0.left-wr.left;K.gy=b0.top-wr.top;K.col=getComputedStyle(document.querySelector('.intro .name')).color};
+  /* once the letters have risen, the intro name becomes one plain text run, exactly like the flying copy: same glyphs,
+     same kerning, same spacing, so the hand-off can't change the letter spacing */
+  const NM=document.querySelector('.intro .name');
+  const collapse=()=>{if(NM.dataset.run)return;const sp=[...NM.querySelectorAll('span')];if(!sp.length)return;gsap.killTweensOf(sp);NM.textContent=sp.map(e=>e.textContent).join('');NM.dataset.run='1';K=null};
+  window.__wmCollapse=()=>{collapse();ScrollTrigger.refresh()};
+  const cal=()=>{collapse();if(RTL)return calRtl();const r=ir();
+    const g=(n,i)=>{const q=document.createRange();q.setStart(n,i);q.setEnd(n,i+1);return q.getBoundingClientRect()};
+    // measure the spacing instead of trusting the computed value: same text, same font, so the gap difference is the spacing
+    gsap.set(wt,{x:0,y:0,scale:1,left:r.n.left-wb().l,top:r.n.top-wb().t,fontSize:r.fs,lineHeight:r.n.height+'px'});wt.style.letterSpacing='0px';  // (gsap.set writes letter-spacing as 0 here, so set it directly)
+    const nt=NM.firstChild,tt=wt.firstChild,n=nt.length,spanN=g(nt,n-1).left-g(nt,0).left,spanT=g(tt,n-1).left-g(tt,0).left,ls=(spanN-spanT)/(n-1);
+    wt.style.letterSpacing=ls+'px';
+    const a0=g(nt,0),b0=g(tt,0),wr=wt.getBoundingClientRect();
+    K={dx:a0.left-b0.left,dy:a0.top-b0.top,ls,gx:b0.left-wr.left,gy:b0.top-wr.top,col:getComputedStyle(NM).color}};
   const k=()=>K||(cal(),K);
   const measure=()=>{W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});const b=W.getBoundingClientRect(),a=ws.getBoundingClientRect(),c=wt.getBoundingClientRect(),q=document.createRange();q.setStart(wt.firstChild,0);q.setEnd(wt.firstChild,1);const g=q.getBoundingClientRect(),cs=getComputedStyle(wt);E={sx:a.left-b.left,sy:a.top-b.top,sw:a.width,tx:c.left-b.left,ty:c.top-b.top,tfs:parseFloat(cs.fontSize),th:c.height,gx:g.left-c.left,gy:g.top-c.top,ls:parseFloat(cs.letterSpacing)||0,col:cs.color};if(document.documentElement.dir==='rtl'){E.gx=0;E.ls=0}WB={w:b.width,h:b.height};W.style.width=b.width+'px';W.style.height=b.height+'px';W.classList.add('fly');docked=false;K=null};
   measure();ScrollTrigger.addEventListener('refreshInit',measure);
+  document.fonts&&document.fonts.ready.then(()=>{K=null;ScrollTrigger.refresh()});
   gsap.set('.word',{opacity:0});
   /* the orange section sits over the intro while the curtain rises; clip it to the curtain so its dark text never covers the intro tagline */
   const LD=document.querySelector('.lead'),CU=document.querySelector('.intro .curtain');
   let LP=0;const clipLead=p=>{if(!LD)return;LP=p;if(p>=1){LD.style.clipPath='';return}LD.style.clipPath='inset('+Math.max(0,CU.getBoundingClientRect().top-LD.getBoundingClientRect().top+3)+'px 0 0 0)'};
   gsap.ticker.add(()=>clipLead(LP)); // the page moves every frame while the scrubbed curtain lags, so re-clip per frame
-  gsap.timeline({onUpdate(){clipLead(this.progress());const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){ws.style.transition='none';W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});ws.style.transition='none';ws.getBoundingClientRect();requestAnimationFrame(()=>requestAnimationFrame(()=>ws.style.transition=''));if(K&&!RTL)wt.style.letterSpacing=(K.ls*E.tfs/ir().fs)+'px'}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=70%',pin:true,scrub:.6,invalidateOnRefresh:true,onUpdate:self=>document.documentElement.classList.toggle('lead-on',self.progress>.95)}})
+  /* the flying copy never hands back to a separate docked layout: its last frame IS the top-bar position, so scrolling either
+     way never swaps elements. Values that don't change during the flight are set here (a tween skips a from==to value). */
+  const applyConst=()=>{const r=ir();gsap.set(ws,{x:0,y:0,width:r.s.width,height:r.s.width,transformOrigin:'0 0'});const L=k().ls;gsap.set(wt,{left:0,top:0,fontSize:r.fs,lineHeight:r.n.height+'px',transformOrigin:'0 0'});wt.style.letterSpacing=L+'px'};
+  ScrollTrigger.addEventListener('refresh',applyConst);
+  requestAnimationFrame(applyConst);
+  gsap.timeline({onUpdate(){clipLead(this.progress())},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=70%',pin:true,scrub:.6,invalidateOnRefresh:true,onUpdate:self=>document.documentElement.classList.toggle('lead-on',self.progress>.95)}})
     .to('.intro .cue',{opacity:0,duration:.1})
     .to('.intro .in svg,.intro .name,.intro .name-en',{opacity:0,duration:.001,ease:'none'},.01)
     .to('.word',{opacity:1,duration:.001,ease:'none'},.01)
-    /* the flight is transform-only (translate + scale down from the big size), so nothing re-lays-out or re-hints per frame;
-       start and end are measured glyph-for-glyph so both hand-offs are invisible, and the colour eases across the whole move */
-    .fromTo(ws,{x:0,y:0,width:()=>ir().s.width,height:()=>ir().s.width,transformOrigin:'0 0',left:()=>ir().s.left-wb().l,top:()=>ir().s.top-wb().t,scale:1},
-      {x:0,y:0,width:()=>ir().s.width,height:()=>ir().s.width,left:()=>E.sx,top:()=>E.sy,scale:()=>E.sw/ir().s.width,duration:.8,ease:'power3.inOut',immediateRender:true},0)
-    .fromTo(wt,{left:0,top:0,transformOrigin:'0 0',fontSize:()=>ir().fs,lineHeight:()=>ir().n.height+'px',x:()=>ir().n.left-wb().l+k().dx,y:()=>ir().n.top-wb().t+k().dy,scale:1,letterSpacing:()=>k().ls+'px'},
-      {left:0,top:0,fontSize:()=>ir().fs,lineHeight:()=>ir().n.height+'px',x:()=>E.tx+E.gx-k().gx*E.tfs/ir().fs,y:()=>E.ty+E.gy-k().gy*E.tfs/ir().fs,scale:()=>E.tfs/ir().fs,letterSpacing:()=>k().ls+'px',duration:.8,ease:'power3.inOut',immediateRender:true},0)
+    /* the flight is transform-only (scale down from the big size), measured glyph-for-glyph at both ends */
+    .fromTo(ws,{left:()=>ir().s.left-wb().l,top:()=>ir().s.top-wb().t,scale:1},
+      {left:()=>E.sx,top:()=>E.sy,scale:()=>E.sw/ir().s.width,duration:.8,ease:'power3.inOut',immediateRender:true},0)
+    .fromTo(wt,{x:()=>ir().n.left-wb().l+k().dx,y:()=>ir().n.top-wb().t+k().dy,scale:1},
+      {x:()=>E.tx+E.gx-k().gx*E.tfs/ir().fs,y:()=>E.ty+E.gy-k().gy*E.tfs/ir().fs,scale:()=>E.tfs/ir().fs,duration:.8,ease:'power3.inOut',immediateRender:true},0)
     .fromTo(wt,{color:()=>k().col},{color:()=>E.col,duration:.8,ease:'none',immediateRender:true},0)  // colour settles evenly over the whole flight
     .to('.intro .curtain',{scaleY:1,duration:.7,ease:'power2.inOut'},.2);
   ScrollTrigger.create({trigger:'.pin',start:'top 60%',once:true,onEnter:heroIn});
@@ -962,7 +984,7 @@ const Wf=()=>Math.min(innerWidth,innerHeight*AR6),Hf=()=>Wf()/AR6,Wz=()=>innerWi
 const STG=[0,.5,1.2,1.9,2.6,3.3];let stgLast=-1;
 const stageWindow=t=>{document.querySelector('.ph').style.zIndex=t>=6.2?'3':'';let c=0;STG.forEach((s0,i)=>{if(t>=s0)c=i});if(t>=4.2)c=6;if(c===stgLast)return;stgLast=c;
   document.querySelectorAll('.ph img').forEach((im,i)=>{im.style.display=(c===6?i===5:Math.abs(i-c)<=1)?'':'none'})};
-const HOLD2=2.4,HOLD=1.4,XH=()=>{const g=document.querySelector('.p1');return g.offsetLeft+Math.max(0,g.offsetWidth-innerWidth)};
+const HOLD2=2.4,HOLD=.45,XH=()=>{const g=document.querySelector('.p1');return g.offsetLeft+Math.max(0,g.offsetWidth-innerWidth)};
 function slideUpd(){const X=-gsap.getProperty(tr,'x');
   handoff(X);const g=panel0().getBoundingClientRect();document.body.classList.toggle('onpaper',g.left<120&&g.right>innerWidth*.4)}
 const tl=window.__tourTl=gsap.timeline({onUpdate(){stageWindow(this.time());if(this.time()>=tl.labels.slide+XH()/innerHeight*K()){ph.style.visibility='hidden';const t0=window.__tile0;if(t0)t0.style.visibility='visible'}},scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*(PRE+HOLD+HOLD2)+dist()*K()),scrub:1,invalidateOnRefresh:true}});
@@ -984,14 +1006,14 @@ gsap.set(W_[0].querySelectorAll('i'),{yPercent:0});wOut(0,.4);
 wOut(5,4.05);
 tl.to('.ph',{left:'50%',width:Wf,height:Hf,ease:'power2.inOut',duration:1},4.2)
   .to('.ph .shade',{opacity:1,duration:.3},4.9)
-  .to('.cap0',{opacity:1,y:-16,duration:.3},5.2)
+  .fromTo('.cap0',{opacity:0,y:0},{opacity:1,y:-16,duration:.3,immediateRender:false},5.2)
   // the favourite chip, as in the app
   .to('.favs',{opacity:1,duration:.15},5.4)
   .fromTo('.fchip',{scale:.9},{scale:1,duration:.15},5.4)
   .to('.fchip',{scale:1.18,duration:.1,ease:'power2.out',onStart(){document.querySelector('.fchip').classList.add('on')},onReverseComplete(){document.querySelector('.fchip').classList.remove('on')}},5.7)
   .to('.fchip',{scale:1,duration:.2,ease:'back.out(3)'},5.8)
   // zoom back out, keeping the photo's own shape
-  .to('.cap0',{opacity:0,duration:.22},5.96)   // gone before the photo is lifted over the track at 6.2
+  .fromTo('.cap0',{opacity:1},{opacity:0,duration:.22,immediateRender:false},5.96)   // gone before the photo is lifted over the track at 6.2
   .to('.ph .shade',{opacity:0,duration:.25},6.3)
   .to('.favs',{scale:.42,transformOrigin:'0 0',ease:'power2.inOut',duration:.9},6.3)
   .to('.ph',{width:Wz,height:()=>Wz()/AR6,ease:'power2.inOut',duration:.9},6.3)
@@ -1272,11 +1294,13 @@ document.querySelectorAll('a[href$="chromasmith-22.html"]').forEach(a=>a.addEven
   show(0);
   const nv={s:4,c:83,t:22,q:88},$=id=>document.getElementById(id);
   const nset=()=>{$('nsub').textContent=Math.round(nv.s);$('ncost').textContent=Math.round(nv.c);$('ntime').textContent=Math.round(nv.t);$('nq').textContent=Math.round(nv.q);
-    $('nbsub').style.transform=`scaleX(${nv.s/4})`;$('nbcost').style.transform=`scaleX(${nv.c/83})`;$('nbtime').style.transform=`scaleX(${nv.t/22})`;$('nbq').style.transform=`scaleX(${nv.q/100})`};nset();
+    $('nbsub').style.transform=`scaleX(${nv.s/4})`;$('nbcost').style.transform=`scaleX(${nv.c/83})`;$('nbtime').style.transform=`scaleX(${nv.t/22})`;$('nbq').style.transform=`scaleX(${nv.q/100})`};nset();let nPlayed=false;
   window.__flowTl=gsap.timeline({scrollTrigger:{trigger:'.flow',start:'top top',end:'+=550%',pin:true,scrub:true,
-    onUpdate:s=>show(Math.min(li.length,Math.floor(s.progress/(.78/1.3)*(li.length+.999))))}})
+    onUpdate:s=>{show(Math.min(li.length,Math.floor(s.progress/(.78/1.3)*(li.length+.999))));
+      // the new-workflow numbers count down once the panel has fully arrived (time-based, so they're seen happening), and reset if you scroll back out
+      const on=s.progress>=.9/1.3;if(on&&!nPlayed){nPlayed=true;gsap.fromTo(nv,{s:4,c:83,t:22,q:88},{s:0,c:0,t:0,q:100,duration:reduce?0:1.8,ease:'power2.inOut',overwrite:true,onUpdate:nset})}else if(!on&&nPlayed){nPlayed=false;gsap.killTweensOf(nv);Object.assign(nv,{s:4,c:83,t:22,q:88});nset()}}}})
     .to({},{duration:.78}).to('.now',{clipPath:'inset(0% 0 0 0)',ease:'power2.inOut',duration:.12})
-    .fromTo(nv,{s:4,c:83,t:22,q:88},{s:0,c:0,t:0,q:100,ease:'power2.inOut',duration:.3,onUpdate:nset})   // everything unwinds; quality climbs back
+    .to({},{duration:.3})   // the panel holds while its numbers count down (see onUpdate)
     .to({},{duration:.1});
 }
 /* auto-scroll: glides down the page at a steady pace; any manual input (wheel, touch, keys, drag) pauses it */
