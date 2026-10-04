@@ -108,6 +108,7 @@ for (const page of PAGES) {
   const up = '../'.repeat(depth);
   html = relinkHtml(html, page);
   html = html.replace(/<html lang="en">/, '<html lang="ar" dir="rtl">');
+  html = html.split('assets/brand/og-image.jpeg').join('assets/brand/og-image-ar.jpeg');   // Arabic link-preview card (site/og/og-ar.html)
   html = html.replace(/(@font-face\{[^}]*\})|font-family:Gramatika(?=[,;}])/g, (m, ff) => ff || "font-family:Gramatika,'Noto Kufi Arabic'");
   const enUrl = SITE + page.replace(/(^|\/)index\.html$/, '$1');
   const arUrl = SITE + 'ar/' + page.replace(/(^|\/)index\.html$/, '$1');
