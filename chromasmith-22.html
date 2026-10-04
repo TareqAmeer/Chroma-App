@@ -6947,7 +6947,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1004E';
+const BUILD='1.1004F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18634,6 +18634,17 @@ function _applyZoom(smooth){
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
   if(typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
 }
+// The preview's on-screen size changed (tool sheet opened/resized, panel switched, re-render at a
+// new fit): keep the SAME part of the photo in view. Pan is in canvas-CSS px, so it scales with
+// the footprint; then re-derive the centring offset from the new size.
+function _zoomRefit(oldW){
+  const nw=_fxZoomFootprint().w;
+  const changed=oldW>0&&nw>0&&Math.abs(nw-oldW)>0.5;
+  if(changed){const r=nw/oldW;fxPanX*=r;fxPanY*=r;}
+  // Only when the size actually moved (or below 100%, the old new-photo re-centre): _applyZoom
+  // schedules a re-render, which would call back here — unconditional would loop.
+  if(changed||fxZoom<1)_applyZoom();
+}
 function _resetZoom(smooth){fxZoom=FX_FIT;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
 // Desktop Library RAW opens edit on the 2560px display tier until full resolution is actually
 // needed (library-ui.js's chromasmithEnsureFullQuality): zoom past fit, loupe, first edit, crop,
@@ -19982,7 +19993,7 @@ function renderLoupe(){
   // deskx: don't cap at 900 — same reasoning as renderPreview's own maxW (a large desktop window
   // has far more than 900px to show real detail in); web/mobile keep the 900 cap.
   const deskx=document.body.classList.contains('deskx');
-  const maxW=deskx?(fxWrapInner().w||900):Math.min(900,wrap.clientWidth||900);
+  const maxW=deskx?(fxWrapInner().w||900):Math.min(900,fxWrapInner().w||wrap.clientWidth||900); // content box, same as renderPreview
   const fit=Math.min(1,maxW/fw,fxPreviewMaxH()/fh),cw=fw*fit|0,ch=fh*fit|0; // on-screen footprint at fxZoom=1 (matches normal preview)
   const dpr=Math.min(window.devicePixelRatio||1,2);
   // fxZoom used to be pure CSS (transform:scale on the wrapper) applied ON TOP of a crop that
@@ -20092,7 +20103,7 @@ function renderFullResCrop(P,iw,ih,cw,ch){
   const zw=document.getElementById('fx-zoom-wrap');
   // Keep the zoom surface at the full image footprint. The crisp tile is smaller and
   // translated inside it, but its layout box must not become the pan/clamp reference.
-  if(zw){zw.style.width=cw+'px';zw.style.height=ch+'px';}
+  {const _ow=_fxZoomFootprint().w;if(zw){zw.style.width=cw+'px';zw.style.height=ch+'px';}if(Math.abs(cw-_ow)>0.5)_zoomRefit(_ow);}
   const z=fxZoom;
   // Visible region of the canvas in canvas-CSS coords (screen = z·(x+pan) — see _applyZoom).
   const visW=Math.min(cw,(wrap.clientWidth||cw)/z),visH=Math.min(ch,(wrap.clientHeight||ch)/z);
@@ -20205,7 +20216,9 @@ function renderPreview(){
   const deskx=document.body.classList.contains('deskx');
   // deskx: no 900px cap — the photo fills the whole preview cell (DRK-style). The GPU
   // cost is bounded by the BACKING-STORE cap below, not the CSS size.
-  const maxW=deskx?(fxWrapInner().w||900):Math.min(900,wrap.clientWidth||900);
+  // Content box on phones too: clientWidth includes the canvas inset, so the render came out wider
+  // than fxLiveFit's fit and the photo jumped (and a zoomed view shifted) every time the sheet moved.
+  const maxW=deskx?(fxWrapInner().w||900):Math.min(900,fxWrapInner().w||wrap.clientWidth||900);
   const maxH=fxPreviewMaxH();                           // cap height on phones (sticky preview)
   const sc=Math.min(1,maxW/iw,maxH/ih);
   const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
@@ -20294,10 +20307,11 @@ function renderPreview(){
   // here as well meant split view paid for the graded frame TWICE on every single preview
   // update. Only render it up front when we are not about to throw it away.
   if(!fxSplit)FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),...seedOpt});
+  const _oldFootW=_fxZoomFootprint().w;
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
-  // Below 100% the centring offset is derived from this footprint; a new photo's zoom was applied
-  // before its first render, so re-centre now that the real size is known.
-  if(fxZoom<1&&typeof _applyZoom==='function')_applyZoom();
+  // The centring offset AND the pan are derived from this footprint — re-fit at any zoom (it used
+  // to only run below 100%, so a zoomed-in photo jumped when the sheet changed the preview size).
+  _zoomRefit(_oldFootW);
   document.getElementById('fx-no-img').style.display='none';
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
   if(fxSplit){
@@ -25592,12 +25606,30 @@ function fxLiveFit(ms){
   // pinned height lagged until the final renderPreview — the photo resized width-then-height.
   const fit=()=>{
     const {w:aw,h:ah}=fxWrapInner();
+    const zw=document.getElementById('fx-zoom-wrap');
+    if(aw>0&&ah>0&&cv.id==='fx-canvas'&&zw&&zw.style.width){
+      // Zoomed-in full-res mode: #fx-zoom-wrap holds the photo footprint and cv is only the crisp
+      // tile inside it. Re-fit the FOOTPRINT (and scale the tile with it until its re-render), then
+      // re-anchor the pan so the same part of the photo stays in view.
+      const fw=parseFloat(zw.style.width),fh=parseFloat(zw.style.height);
+      const k=Math.min(aw/fw,ah/fh);
+      if(fw>0&&fh>0&&Math.abs(k-1)>0.002){
+        zw.style.width=(fw*k)+'px';zw.style.height=(fh*k)+'px';
+        ['width','height','left','top'].forEach(p=>{const v=parseFloat(cv.style[p]);if(!isNaN(v))cv.style[p]=(v*k)+'px';});
+        _zoomRefit(fw);
+      }
+      return;
+    }
     if(aw>0&&ah>0){
       // Use the CURRENT canvas intrinsic dimensions, not the previous photo's CSS dimensions.
       // A pasted edit can switch from portrait to landscape while this observer is still
       // settling; scaling stale w0/h0 independently was the direct squeeze/stretch path.
       const s=Math.min(aw/nativeW,ah/nativeH,1);
+      const oldW=_fxZoomFootprint().w;
       cv.style.width=(nativeW*s)+'px';cv.style.height=(nativeH*s)+'px';
+      // Full-res crop mode pins #fx-zoom-wrap to the photo footprint and cv is only the crisp
+      // tile — its own re-render re-fits; here the footprint IS the canvas, so re-anchor the pan.
+      if(cv.id==='fx-canvas')_zoomRefit(oldW);
     }
   };
   const step=()=>{fit();_lfRaf=(performance.now()<_lfUntil)?requestAnimationFrame(step):0;};
