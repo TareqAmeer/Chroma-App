@@ -543,6 +543,8 @@ section{position:relative}
 .fl>p.mono,.now p.mono.wc{font-size:clamp(16px,1.5vw,24px)!important;letter-spacing:.1em}
 
 .bigword{font-size:11.2vw}
+
+.outro{padding-top:max(80px,9vh)}.outro .full{margin-top:18px}.outro .plats{margin-top:4vh}
 </style>
 <!-- Analytics: GoatCounter (cookieless). Set GC_CODE to your site code from goatcounter.com; blank = off. -->
 <script>(function(){var GC_CODE='tareqameer';if(!GC_CODE)return;var s=document.createElement('script');s.async=true;s.dataset.goatcounter='https://'+GC_CODE+'.goatcounter.com/count';s.src='../vendor/goatcounter-count.js';document.head.appendChild(s)})()</script>
@@ -567,7 +569,7 @@ html[lang=ar] .pin .panel{direction:rtl}
 /* Arabic reads right to left, so the sideways tour is mirrored: a wrapper round the track flips about the screen centre and each panel flips back, so the LTR maths still drives it but panels arrive from the left */
 html[lang=ar] .trflip{position:absolute;inset:0;z-index:1;pointer-events:none;scale:-1 1}html[lang=ar] .pin .panel{transform:scaleX(-1)}
 html[lang=ar] .lead .hero-t{text-align:right}
-html[lang=ar] .tape{direction:ltr}  /* look names stay English and the marquee maths is LTR */
+html[lang=ar] .tape{direction:ltr;justify-self:end}  /* look names stay English and the marquee maths is LTR */
 html[lang=ar] .langsw{font-family:Gramatika,system-ui,sans-serif}
 </style>
 </head>
@@ -804,7 +806,6 @@ html[lang=ar] .langsw{font-family:Gramatika,system-ui,sans-serif}
 <section class="outro" id="yours">
   <div>
     <h2 class="k"><span><i>والآن</i></span><span><i>اجعله لك.</i></span></h2>
-    <p class="t" style="font-size:20px">صورك. طريقتك. تطبيقك. مجاني ومفتوح المصدر على كل جهاز.</p>
     <p class="full">للتجربة الكاملة، نزّل تطبيق سطح المكتب: المكتبة المحلية، والاستيراد من البطاقة، والبحث على الجهاز، والتعرّف على الوجوه، كلها هناك.</p>
     <div class="plats">
       <a class="plat" href="download/mac.html" data-goatcounter-click="download-mac" data-goatcounter-title="download-mac"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="12" rx="1.5"/><path d="M1.5 19.5h21"/></svg><b>Mac</b><span>تطبيق سطح المكتب الكامل · ‎.dmg‎</span><em>تنزيل ↓</em></a>
