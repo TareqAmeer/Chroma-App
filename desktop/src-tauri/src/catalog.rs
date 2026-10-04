@@ -4808,12 +4808,14 @@ fn auto_assign_space(
     if profiles.is_empty() {
         return Ok(0);
     }
-    // Moments that already contain a tagged face of each person: (person, captured).
+    // Moments anchored on faces the USER confirmed only: anchoring on auto tags too let one
+    // auto tag widen the moment for the next, chaining through a whole outing.
+    // (person, captured).
     let mut tstmt = conn
         .prepare(
             "SELECT f.person_id, p.captured FROM photo_faces f JOIN photos p ON p.id = f.photo_id
              JOIN people pp ON pp.id = f.person_id
-             WHERE f.confirmed IN (1, 2) AND pp.auto = 0 AND p.captured IS NOT NULL",
+             WHERE f.confirmed = 1 AND pp.auto = 0 AND p.captured IS NOT NULL",
         )
         .map_err(|e| e.to_string())?;
     let mut tagged_times: std::collections::HashMap<i64, Vec<i64>> = Default::default();
@@ -4825,7 +4827,18 @@ fn auto_assign_space(
     for v in tagged_times.values_mut() {
         v.sort_unstable();
     }
+    // Pets never get the same-moment discount. Their face-detector rows are matched with a
+    // HUMAN face model, where a dog's face and a patch of gravel can score alike, so "taken
+    // seconds after a photo of Lucifer" pulled sky, rocks and passers-by into Lucifer.
+    let pet_ids: std::collections::HashSet<i64> = {
+        let mut st = conn.prepare("SELECT id FROM people WHERE kind = 'pet'").map_err(|e| e.to_string())?;
+        let v = st.query_map([], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+        v
+    };
     let near_tagged = |pid: i64, t: Option<i64>| -> bool {
+        if pet_ids.contains(&pid) {
+            return false;
+        }
         let (Some(t), Some(v)) = (t, tagged_times.get(&pid)) else { return false };
         let i = v.partition_point(|x| *x < t - BURST_GAP_SECS);
         v.get(i).map_or(false, |x| (x - t).abs() <= BURST_GAP_SECS)
@@ -10418,11 +10431,15 @@ mod tests {
         eprintln!("auto-assigned {} faces across {} people", r.assigned, r.people);
     }
 
+    fn who0(conn: &Connection, f: i64) -> (Option<i64>, i64) {
+        conn.query_row("SELECT person_id, confirmed FROM photo_faces WHERE id = ?1", params![f], |r| Ok((r.get(0)?, r.get(1)?))).unwrap()
+    }
+
     #[test]
     fn auto_assign_tags_confident_faces_and_whole_moments() {
         let conn = temp_db();
         let dir = scratch_photos_dir("auto_assign");
-        for f in ["a.jpg", "b.jpg", "c.jpg", "d.jpg"] {
+        for f in ["a.jpg", "b.jpg", "c.jpg", "d.jpg", "e.jpg", "f.jpg"] {
             std::fs::write(dir.join(f), f.as_bytes()).unwrap();
         }
         let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
@@ -10435,6 +10452,8 @@ mod tests {
         conn.execute("UPDATE photos SET captured = 1010 WHERE id = ?1", params![photo("b.jpg")]).unwrap();
         conn.execute("UPDATE photos SET captured = 9000 WHERE id = ?1", params![photo("c.jpg")]).unwrap();
         conn.execute("UPDATE photos SET captured = 9999 WHERE id = ?1", params![photo("d.jpg")]).unwrap();
+        conn.execute("UPDATE photos SET captured = 1035 WHERE id = ?1", params![photo("e.jpg")]).unwrap(); // 25s after b, 35s after a
+        conn.execute("UPDATE photos SET captured = 1005 WHERE id = ?1", params![photo("f.jpg")]).unwrap();
         let emb = |a: f32, b: f32| -> Vec<u8> {
             let mut v = vec![0f32; 512];
             v[0] = a;
@@ -10457,8 +10476,11 @@ mod tests {
         let same_moment_weak = face(photo("b.jpg"), emb(0.4, 0.9), None, 0); // cos ~0.41: only passes as same moment
         let strong = face(photo("c.jpg"), emb(0.7, 0.7), None, 0); // cos ~0.71
         let weak_elsewhere = face(photo("d.jpg"), emb(0.4, 0.9), None, 0);
+        // Near only the AUTO-tagged b.jpg: an auto tag must not stretch the moment onward.
+        let chained = face(photo("e.jpg"), emb(0.4, 0.9), None, 0);
         let r = auto_assign_run(&conn).unwrap();
         assert_eq!(r.assigned, 2);
+        assert_eq!(who0(&conn, chained), (None, 0));
         let who = |f: i64| -> (Option<i64>, i64) {
             conn.query_row("SELECT person_id, confirmed FROM photo_faces WHERE id = ?1", params![f], |r| Ok((r.get(0)?, r.get(1)?))).unwrap()
         };
@@ -10468,6 +10490,12 @@ mod tests {
         // Auto tags survive a re-cluster and are undoable.
         cluster_run(&conn, 0.1, 2).unwrap();
         assert_eq!(who(strong), (Some(me), 2));
+        // A pet gets no same-moment discount: a weak face seconds after a confirmed pet photo
+        // (sky, gravel, a passer-by) stays untagged.
+        conn.execute("UPDATE people SET kind = 'pet' WHERE id = ?1", params![me]).unwrap();
+        let pet_moment_weak = face(photo("f.jpg"), emb(0.4, 0.9), None, 0);
+        auto_assign_run(&conn).unwrap();
+        assert_eq!(who(pet_moment_weak), (None, 0));
         std::fs::remove_dir_all(&dir).ok();
     }
 
