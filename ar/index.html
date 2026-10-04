@@ -545,6 +545,19 @@ section{position:relative}
 .bigword{font-size:11.2vw}
 
 .outro{padding-top:max(80px,9vh)}.outro .full{margin-top:18px}.outro .plats{margin-top:4vh}
+
+.outro .k{font-size:clamp(38px,min(13vw,14vh),230px)}html[lang=ar] .outro .k{font-size:clamp(34px,min(12vw,11vh),200px)}
+@media(min-width:600px) and (max-width:1100px){.outro .plats{grid-template-columns:repeat(3,1fr)}.outro .plat{min-height:0}}
+@media(max-height:700px){.outro .full{display:none}}
+@media(max-width:760px){.outro .plat{min-height:0}}
+/* download cards, final layout: the four installable apps first, the web app as a slim full-width row under them on tablets/phones */
+.outro .plat{grid-template-rows:auto auto auto auto auto}
+@media(max-width:1100px){.outro .plats{grid-template-columns:repeat(4,1fr)}.outro .plat:nth-child(3){order:5;grid-column:1/-1;grid-row:auto;display:flex;flex-direction:row;align-items:center;gap:14px;min-height:0;padding:12px 16px}.outro .plat:nth-child(3) svg{width:26px;height:26px}.outro .plat:nth-child(3) b{margin:0;font-size:18px}.outro .plat:nth-child(3) span{min-height:0;flex:1}.outro .plat:nth-child(3) em{margin:0}}
+@media(max-width:600px){.outro .plats{grid-template-columns:1fr 1fr}}
+@media(max-width:1100px) and (max-height:820px){.outro .plat span{display:none}.outro .plat:nth-child(3) span{display:block}}
+@media(max-height:600px){.outro .plat:nth-child(3) span{display:none}.outro .k{font-size:clamp(30px,min(10vw,12vh),120px)}}
+
+html[lang=ar] .lead .ba p.one{font-size:clamp(15px,1.6vw,34px)}@media(max-width:760px){html[lang=ar] .lead .ba p.one{font-size:min(4.3vw,26px)}}.lead .ba>*{min-width:0}
 </style>
 <!-- Analytics: GoatCounter (cookieless). Set GC_CODE to your site code from goatcounter.com; blank = off. -->
 <script>(function(){var GC_CODE='tareqameer';if(!GC_CODE)return;var s=document.createElement('script');s.async=true;s.dataset.goatcounter='https://'+GC_CODE+'.goatcounter.com/count';s.src='../vendor/goatcounter-count.js';document.head.appendChild(s)})()</script>
