@@ -10552,12 +10552,14 @@
       // photos" action, so a library never got fully scanned on its own. Faces first (small
       // backlog), then CLIP tagging, then pets (largest backlog) — each resumable, so a relaunch
       // continues where it stopped.
-      .then(() => step('faces', () => invoke('catalog_faces_scan', {})))
+      // Re-run while a pass still finds work: one worker pass can end early (watchdog kill, a
+      // throttle pause) with thousands left; a relaunch used to be the only way to resume it.
+      .then(() => step('faces', async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_faces_scan', {}); if (!r || !r.scanned) break; } }))
       .then(() => step('embed', () => invoke('catalog_embed_faces', {})))
       .then(() => step('cluster', () => invoke('catalog_cluster_faces').then(() => refreshPeople())))
       .then(() => step('clip', () => invoke('catalog_clip_embed', {})))
       .then(() => step('autotag', () => invoke('catalog_auto_tag').then(() => { refreshAutoTags(); if (state.showInfo) { state.clipTags.clear(); renderInfoPanel(); } })))
-      .then(() => step('pets', () => invoke('catalog_pets_scan', {}).then(() => refreshPeople())))
+      .then(() => step('pets', async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_pets_scan', {}); if (!r || !r.scanned) break; } refreshPeople(); }))
       .catch((e) => console.error('catalog background phases', e))
       .finally(() => { _catalogBgRunning = false; refreshCatalogCounts(); });
   }
