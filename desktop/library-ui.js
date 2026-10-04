@@ -10548,8 +10548,16 @@
       // background, then tag it — previously this only ran when the user found and clicked
       // "Analyze photos", so most libraries had no tags at all. Backfill tags photos that were
       // indexed before auto-tagging existed.
+      // People (faces -> embed -> cluster) and pets used to run ONLY from the manual "Analyze
+      // photos" action, so a library never got fully scanned on its own. Faces first (small
+      // backlog), then CLIP tagging, then pets (largest backlog) — each resumable, so a relaunch
+      // continues where it stopped.
+      .then(() => step('faces', () => invoke('catalog_faces_scan', {})))
+      .then(() => step('embed', () => invoke('catalog_embed_faces', {})))
+      .then(() => step('cluster', () => invoke('catalog_cluster_faces').then(() => refreshPeople())))
       .then(() => step('clip', () => invoke('catalog_clip_embed', {})))
       .then(() => step('autotag', () => invoke('catalog_auto_tag').then(() => { refreshAutoTags(); if (state.showInfo) { state.clipTags.clear(); renderInfoPanel(); } })))
+      .then(() => step('pets', () => invoke('catalog_pets_scan', {}).then(() => refreshPeople())))
       .catch((e) => console.error('catalog background phases', e))
       .finally(() => { _catalogBgRunning = false; refreshCatalogCounts(); });
   }
@@ -12859,6 +12867,11 @@
       // editor can already treat a cached photo as local even before this launch's drain loop
       // does any new work), then start the paced drain AFTER the splash is down, same gating
       // reasoning as catalogRunBackgroundPhases — this must never compete with first paint.
+      // ⚠️ The background chain (thumbnails/focus/hash/faces/CLIP tags/pets) normally starts from
+      // openFolder after a catalog_scan. A launch that restores a catalog view (All Photos, a
+      // date, a keyword) never calls openFolder, so the chain never started: "Tagged X of Y"
+      // sat frozen forever with the app idle. Start it here when openFolder didn't.
+      if (!window._lastCatalogRegisterPromise) catalogRunBackgroundPhases();
       refreshHqOfflineIndex().then(() => hqOfflineDrainLoop());
     });
   }
