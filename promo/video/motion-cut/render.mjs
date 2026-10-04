@@ -6,7 +6,7 @@ import {extname, resolve, join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const dir = dirname(fileURLToPath(import.meta.url));
 const arg = (k, d) => (process.argv.find(a => a.startsWith(k + '=')) || `${k}=${d}`).split('=')[1];
-const preview = arg('--preview', ''), sub = arg('--sub', '8'), out = resolve(dir, arg('--out', 'frames'));
+const preview = arg('--preview', ''), sub = arg('--sub', '8'), mult = +arg('--mult', '2') /* 2 = 48fps, blended to 24fps in finish.sh */, out = resolve(dir, arg('--out', 'frames'));
 const types = {'.html': 'text/html', '.js': 'text/javascript', '.otf': 'font/otf', '.webp': 'image/webp', '.png': 'image/png'};
 const server = createServer(async (q, r) => { try { const p = resolve(dir, '.' + decodeURIComponent(q.url.split('?')[0])); if (!p.startsWith(dir)) throw 0;
   r.writeHead(200, {'content-type': types[extname(p)] || 'application/octet-stream'}); r.end(await readFile(p)); } catch { r.writeHead(404); r.end(); } }).listen(0);
@@ -18,7 +18,7 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}/index.html?sub=${sub}`);
   await page.waitForFunction(() => window.ready === true, null, {timeout: 120000});
   const {DUR, FPS} = await page.evaluate(() => ({DUR: window.DUR, FPS: window.FPS}));
-  const times = preview ? preview.split(',').map(Number) : Array.from({length: Math.round(DUR * FPS)}, (_, i) => i / FPS);
+  const times = preview ? preview.split(',').map(Number) : Array.from({length: Math.round(DUR * FPS * mult)}, (_, i) => i / (FPS * mult));
   for (const [i, t] of times.entries()) {
     await page.evaluate(t => window.renderAt(t), t);
     await page.screenshot({path: join(out, `${String(i).padStart(4, '0')}.png`)});
