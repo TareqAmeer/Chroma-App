@@ -6939,7 +6939,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1004X';
+const BUILD='1.1004Y';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14019,7 +14019,7 @@ function csInstallHint(){
   w.addEventListener('pointerdown',e=>{
     if(!document.body.classList.contains('mobile-fx')||cropMode||mskPaintMode||window.csSwipeAdjust||!e.isPrimary)return;
     x=e.clientX;y=e.clientY;clearTimeout(t);
-    t=setTimeout(()=>{t=null;on=true;fxCompare=true;renderPreview();hapt();},600); // deliberate hold: 600ms, so a pause while panning or aiming doesn't flash the original
+    t=setTimeout(()=>{t=null;on=true;fxCompare=true;renderPreview();hapt();},300); // short hold: 300ms — still longer than a tap, and moving >14px (a pan) cancels it
   });
   w.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-x,e.clientY-y)>14){clearTimeout(t);t=null;}});
   ['pointerup','pointercancel','pointerleave'].forEach(n=>w.addEventListener(n,stop));
@@ -14255,7 +14255,7 @@ function diagLayout(){
     active.add(e.pointerId);
     if(active.size>1){cancelCompare();return;}
     sx=e.clientX;sy=e.clientY;engaged=false;
-    t=setTimeout(()=>{engaged=true;fxCompare=true;renderPreview();hapt();},600);
+    t=setTimeout(()=>{engaged=true;fxCompare=true;renderPreview();hapt();},300);
   });
   wrap.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-sx,e.clientY-sy)>14){clearTimeout(t);t=null;}});
   const end=e=>{active.delete(e.pointerId);cancelCompare();};
