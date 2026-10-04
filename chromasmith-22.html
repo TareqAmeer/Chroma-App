@@ -6944,7 +6944,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1004B';
+const BUILD='1.1004C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -25702,10 +25702,12 @@ window.addEventListener('resize',()=>{
     const vh=window.innerHeight||800,hs=[150,Math.min(vh*0.34,360,vh*0.45),vh*0.78];
     const bd=document.body,st0=bd.classList.contains('sheet-full')?2:bd.classList.contains('sheet-peek')?0:1;
     let idx;
-    if(!moved)idx=wasOpening?1:-1;                      // a tap on the handle opens a closed sheet, closes an open one
-    else if(flickDown)idx=-1;                           // quick swipe down closes
+    // Closes ONLY when dragged all the way down (or by tapping the open tool again) — a tap on the
+    // handle or a downward flick mid-way used to close it by accident while resizing.
+    if(!moved)idx=wasOpening?1:3;                       // tap: opens a closed sheet, leaves an open one alone
+    else if(cur<90||lastY>vh-70)idx=-1;                 // dragged to the bottom: close
     else if(flickUp)idx=2;                              // quick swipe up expands fully
-    else idx=cur<hs[0]*0.6?-1:3;                       // a slow drag leaves the sheet wherever you let go
+    else idx=3;                                         // otherwise the sheet stays wherever you let go
     const close=idx<0;
     // Synchronous release (NO rAF — it never fires in a hidden/backgrounded tab, which
     // would leave the inline height stuck): restore the stylesheet transition, force a
@@ -25757,9 +25759,8 @@ window.addEventListener('resize',()=>{
     e.addEventListener('touchcancel',function(){if(el===e){el=null;reset(e);}},{passive:true});
   }
   document.addEventListener('DOMContentLoaded',function(){
-    bind('fx-panel-scroll-host',function(){fxSheetClose();},function(){return document.body.classList.contains('sheet-open');});
-    var panel=document.querySelector('.fx-panel');if(panel){if(!panel.id)panel.id='fx-panel-auto';
-      bind(panel.id,function(){fxSheetClose();},function(){return document.body.classList.contains('sheet-open');});}
+    // Tool sheet: no pull-down-to-close from the content any more — only the handle dragged to the
+    // bottom, or tapping the open tool again, closes it.
     bind('fx-secnav',function(){fxToolsClose();},function(){return document.body.classList.contains('tools-open');});
   });
 })();
@@ -27433,7 +27434,7 @@ if(/[?&]catalog=1/.test(location.search)){
     var btns=[].slice.call(document.querySelectorAll('#fx-tool-grid .fx-sec-btn'));if(!btns.length)return null;
     var st=document.getElementById('fx-sheet-strip');
     if(!st){st=document.createElement('div');st.id='fx-sheet-strip';var hd=document.getElementById('fx-sheet-handle');if(hd&&hd.parentElement===panel)hd.insertAdjacentElement('afterend',st);else panel.insertBefore(st,panel.firstChild);}
-    if(st.children.length!==btns.length){st.innerHTML='';btns.forEach(function(b){var k=document.createElement('button');k.type='button';k.dataset.sec=b.dataset.sec;k.textContent=(b.querySelector('.fx-sec-lb')||b).textContent.trim();k.onclick=function(){fxSection(b.dataset.sec);};st.appendChild(k);});}
+    if(st.children.length!==btns.length){st.innerHTML='';btns.forEach(function(b){var k=document.createElement('button');k.type='button';k.dataset.sec=b.dataset.sec;k.textContent=(b.querySelector('.fx-sec-lb')||b).textContent.trim();k.onclick=function(){if(k.classList.contains('on')&&document.body.classList.contains('sheet-open')){fxSheetClose();return;}fxSection(b.dataset.sec);};st.appendChild(k);});}
     return st;
   }
   function stripSync(){
