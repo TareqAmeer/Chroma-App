@@ -847,7 +847,8 @@ if(!reduce){
   gsap.set('.word',{opacity:0});
   /* the orange section sits over the intro while the curtain rises; clip it to the curtain so its dark text never covers the intro tagline */
   const LD=document.querySelector('.lead'),CU=document.querySelector('.intro .curtain');
-  const clipLead=p=>{if(!LD)return;if(p>=1||p<=0){LD.style.clipPath='';return}LD.style.clipPath='inset('+Math.max(0,CU.getBoundingClientRect().top-LD.getBoundingClientRect().top)+'px 0 0 0)'};
+  let LP=0;const clipLead=p=>{if(!LD)return;LP=p;if(p>=1){LD.style.clipPath='';return}LD.style.clipPath='inset('+Math.max(0,CU.getBoundingClientRect().top-LD.getBoundingClientRect().top+3)+'px 0 0 0)'};
+  gsap.ticker.add(()=>clipLead(LP)); // the page moves every frame while the scrubbed curtain lags, so re-clip per frame
   gsap.timeline({onUpdate(){clipLead(this.progress());const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'})}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=70%',pin:true,scrub:1,invalidateOnRefresh:true,onUpdate:self=>document.documentElement.classList.toggle('lead-on',self.progress>.95)}})
     .to('.intro .cue',{opacity:0,duration:.1})
     .to('.intro .in svg,.intro .name',{opacity:0,duration:.001,ease:'none'},.01)
