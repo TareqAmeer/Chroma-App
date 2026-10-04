@@ -599,6 +599,8 @@ body{letter-spacing:.012em}
  .flow .meters .m>p.mono{font-size:min(11px,1.45vh)!important;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  .flow .meters .m .v{font-size:min(30px,3.7vh,7vw);margin-top:2px}
 }
+
+.steps6 li{pointer-events:auto;cursor:pointer}.steps6 li:hover{color:var(--fg)}.steps6 li:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 </style>
 <!-- Analytics: GoatCounter (cookieless). Set GC_CODE to your site code from goatcounter.com; blank = off. -->
 <script>(function(){var GC_CODE='tareqameer';if(!GC_CODE)return;var s=document.createElement('script');s.async=true;s.dataset.goatcounter='https://'+GC_CODE+'.goatcounter.com/count';s.src='vendor/goatcounter-count.js';document.head.appendChild(s)})()</script>
@@ -914,7 +916,7 @@ window.__advance=()=>{
   addEventListener('click',e=>{
     if(e.defaultPrevented||(lenis&&lenis.isStopped)||!e.target.closest||e.button!==0||String(getSelection()).length)return;
     if(document.querySelector('.sec[open]'))return;
-    if(e.target.closest('a,button,input,select,textarea,label,summary,details,dialog,[role=dialog],[hidden],.idx,.tape,.tile,.board,.ba,.f,[data-i],.auto'))return;
+    if(e.target.closest('a,button,input,select,textarea,label,summary,details,dialog,[role=dialog],[hidden],.idx,.tape,.tile,.board,.ba,.f,[data-i],.auto,.steps6'))return;
     window.__advance()})
 }
 document.querySelectorAll('.sec .menu a').forEach(a=>a.addEventListener('click',()=>a.closest('details').removeAttribute('open')));addEventListener('click',e=>{document.querySelectorAll('.sec[open]').forEach(d=>!d.contains(e.target)&&d.removeAttribute('open'));const d=null;d&&!d.contains(e.target)&&d.removeAttribute('open')});
@@ -1068,6 +1070,14 @@ const SN=['Look: pick from over 130 film presets and choose how it is printed.',
 const RY=[29.4,38.5,47.7,56.9,66,75];
 [0,1,2,3,4,5].forEach(k=>tl.call(()=>{document.getElementById('studioNote').textContent=SN[k];document.querySelector('.toolring').style.top=RY[k]+'%';document.querySelectorAll('.steps6 li').forEach((li,n)=>li.classList.toggle('on',n===k))},null,k?'studioHold+='+(k*HOLD2/6+.075):'studioHold'));
 [1,2,3,4,5].forEach(k=>tl.to('.p2 .studiostack img:nth-of-type('+(k+1)+')',{opacity:1,duration:.15,ease:'none'},'studioHold+='+(k*HOLD2/6)));  // scroll steps through Look, Light, Colour, Texture, Output, Info
+/* studio state follows the timeline position in both directions (one-shot calls fire on the wrong side when scrolling back) */
+{let lastK=-1;gsap.ticker.add(()=>{const t=tl.time(),h=tl.labels.studioHold;if(t<h-.01){lastK=-1;return}const k=Math.max(0,Math.min(5,Math.floor((t-h-.075)/(HOLD2/6)+1e-6)));if(k===lastK)return;lastK=k;
+  document.getElementById('studioNote').textContent=SN[k];document.querySelector('.toolring').style.top=RY[k]+'%';document.querySelectorAll('.steps6 li').forEach((li,n)=>li.classList.toggle('on',n===k))})}
+/* studio tools are clickable: a short glide to that tool's beat in the scroll story (which switches the panel, note and ring) */
+document.querySelectorAll('.steps6 li').forEach((li,k)=>{li.tabIndex=0;li.setAttribute('role','button');li.setAttribute('aria-label',li.textContent.replace(/^\d+/,'').trim());
+  const go=()=>{const st=tl.scrollTrigger,t=tl.labels.studioHold+k*HOLD2/6+HOLD2/12,y=st.start+t/tl.duration()*(st.end-st.start),d=Math.abs(y-scrollY);
+    lenis?lenis.scrollTo(y,{duration:Math.min(1,.35+d/4000),force:true}):scrollTo({top:y,behavior:'smooth'})};
+  li.addEventListener('click',e=>{e.stopPropagation();go()});li.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}})});
 const xPos=X=>sPos()+X*K()+(X>XH()+1?innerHeight*HOLD:0)+(X>dist()-1?innerHeight*HOLD2:0);
 const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scrollTrigger.end-tl.scrollTrigger.start);
 pans.forEach(p=>{
