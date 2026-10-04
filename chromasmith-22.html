@@ -2899,6 +2899,12 @@ body.sk2.mobile-fx #row-lut-mix>.fx-slider{order:2;flex:1 1 auto;min-width:0;hei
 body.sk2.mobile-fx #row-lut-mix>.fx-val{order:3;flex:0 0 auto;min-width:28px;text-align:right}
 /* thumb centred on the track: the base rule centres with --ctl-slider-thumb, so the phone size must set that, not a bare width */
 body.mobile-fx .fx-slider{--ctl-slider-thumb:22px}
+/* Phones: no keyboard-focus ring on look tiles (a tap left a white box around the cell). */
+body.mobile-fx .look-cell.kbd-focus{outline:none!important;box-shadow:none!important}
+/* Looks sheet hugs its content (one row of tiles) instead of a fixed tall height — bigger photo. */
+body.mobile-fx.sheet-open:not(.sheet-full) .fx-panel:has(.fx-ctrl.sec-active[data-fxsec="looks"]){height:auto!important;padding-bottom:12px}
+/* Tools quick bar: no dead band under the icons. */
+body.mobile-fx #fx-quicknav{flex-basis:68px;padding-top:0;padding-bottom:0}
 /* Smaller visible square (14px), same 22px grab area: a transparent 4px border is part of the thumb's touch box but not painted. */
 body.mobile-fx .fx-slider::-webkit-slider-thumb{border:4px solid transparent!important;background-clip:padding-box!important;box-sizing:border-box}
 body.mobile-fx .fx-slider::-moz-range-thumb{border:4px solid transparent!important;background-clip:padding-box!important;box-sizing:border-box}
@@ -6947,7 +6953,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1004G';
+const BUILD='1.1004H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -27465,7 +27471,7 @@ if(/[?&]catalog=1/.test(location.search)){
 
   // ---- tool strip at the top of the sheet: hop between tools without the Tools list
   // Tools that live only in the Tools grid (or the bottom bar: Looks, Crop) — kept off the sheet's quick strip.
-  var STRIP_SKIP=['looks','inprint','curves','pointcolor','lens','retouch','crop','straighten','local','vig','style','versions'];
+  var STRIP_SKIP=['nr','looks','inprint','curves','pointcolor','lens','retouch','crop','straighten','local','vig','style','versions'];
   function stripBuild(){
     var panel=document.querySelector('.fx-panel');if(!panel)return null;
     var btns=[].slice.call(document.querySelectorAll('#fx-tool-grid .fx-sec-btn')).filter(function(b){return STRIP_SKIP.indexOf(b.dataset.sec)<0;});if(!btns.length)return null;
