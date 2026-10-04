@@ -556,6 +556,12 @@ section{position:relative}
 @media(max-width:600px){.outro .plats{grid-template-columns:1fr 1fr}}
 @media(max-width:1100px) and (max-height:820px){.outro .plat span{display:none}.outro .plat:nth-child(3) span{display:block}}
 @media(max-height:600px){.outro .plat:nth-child(3) span{display:none}.outro .k{font-size:clamp(30px,min(10vw,12vh),120px)}}
+
+/* orange section: the two calls to action sit beside the headline, larger */
+.lead .leadhead{display:flex;align-items:flex-end;justify-content:flex-start;gap:28px 44px;flex-wrap:wrap}
+.lead .leadhead .cta{margin:0 0 .6em;display:flex;gap:14px}
+.lead .leadhead .btn{font-size:clamp(17px,1.35vw,22px);padding:20px 34px;min-width:clamp(200px,17vw,280px);border-width:2px}
+@media(max-width:760px){.lead .leadhead{display:block}.lead .leadhead .cta{margin:26px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:10px}.lead .leadhead .btn{min-width:0;font-size:16px;padding:16px 8px}}
 </style>
 <!-- Analytics: GoatCounter (cookieless). Set GC_CODE to your site code from goatcounter.com; blank = off. -->
 <script>(function(){var GC_CODE='tareqameer';if(!GC_CODE)return;var s=document.createElement('script');s.async=true;s.dataset.goatcounter='https://'+GC_CODE+'.goatcounter.com/count';s.src='vendor/goatcounter-count.js';document.head.appendChild(s)})()</script>
@@ -574,15 +580,14 @@ section{position:relative}
   <nav><details class="sec"><summary>Sections <i aria-hidden="true">▾</i></summary><div class="menu"><a href="#tour" data-tour="raw"><small>01</small>RAW Editing</a><a href="#tour" data-tour="gallery"><small>02</small>Gallery</a><a href="#tour" data-tour="studio"><small>03</small>Studio</a><a href="#looks"><small>04</small>Film Looks</a><a href="#flow"><small>05</small>Old Workflow</a><a href="#flow" data-tour="new"><small>06</small>New Workflow</a><a href="#maker"><small>07</small>The Designer</a><a href="#features"><small>08</small>Feature List</a><a href="#beta"><small>09</small>In Beta</a><a href="#faq"><small>10</small>FAQ</a><a href="#yours"><small>11</small>Download</a></div></details><a href="https://github.com/TareqAmeer/Chroma-App" target="_blank" rel="noopener" data-goatcounter-click="github-nav" data-goatcounter-title="github-nav">GitHub ↗</a><details class="sec more"><summary>More <i aria-hidden="true">▾</i></summary><div class="menu"><a href="#features">Features</a><a href="#faq">FAQ</a><a class="langsw" href="ar/" lang="ar" hreflang="ar">العربية · Arabic</a><a href="./" lang="en" aria-current="page" data-only="en">English</a><a href="accessible.html">Accessible version</a><a href="chromasmith-22.html">Launch the web app ↗</a></div></details><a class="navlaunch" href="chromasmith-22.html">Launch app ↗</a><a href="#yours">Download ↓</a></nav>
 </header>
 
-<section class="lead" aria-label="CHRO-MA-SMITH"><h1 class="hero-t">The app that<br>does it all<sup>*</sup><span class="vh"> — Chromasmith, the free offline photo editor for film looks, grain and RAW</span></h1>
+<section class="lead" aria-label="CHRO-MA-SMITH"><div class="leadhead"><h1 class="hero-t">The app that<br>does it all<sup>*</sup><span class="vh"> — Chromasmith, the free offline photo editor for film looks, grain and RAW</span></h1><p class="cta"><a class="btn go" href="#yours" data-goatcounter-click="hero-download" data-goatcounter-title="hero-download">Download ↓</a><button class="btn" type="button" id="tourbtn" data-goatcounter-click="hero-tour" data-goatcounter-title="hero-tour">Start the tour <svg class="playic" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.8v8.4L10 6z" fill="currentColor"/></svg></button></p></div>
   <div class="usp">
     <div class="ba">
       <div class="cmp" id="cmp" role="slider" tabindex="0" aria-label="Drag to compare the original photo with the Chromasmith edit" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"><img src="site/assets/story/main1-1600.webp" alt="Original, unedited beach photo" decoding="async" loading="lazy"><img class="after" src="site/assets/story/main5-1600.webp" alt="The same photo with a film look, grain and glow from Chromasmith" decoding="async" loading="lazy"><i class="bar"><b>↔</b></i><span class="l a">Your photo</span><span class="l b">Chromasmith</span></div>
       <div><ol><li>Import RAW photos into your private gallery</li><li>Auto-cull and auto-tag them</li><li>Pick one of 130+ film looks</li><li>Add realistic grain, halation &amp; bloom</li><li>Export at full resolution</li></ol><p class="one">1 app. $0 subscriptions. Fully offline.</p></div>
     </div>
   </div>
-  <p class="mono foot">*ALMOST EVERYTHING. YOU STILL NEED TO TAKE THE PHOTOS.</p>
-  <p class="cta"><a class="btn go" href="#yours" data-goatcounter-click="hero-download" data-goatcounter-title="hero-download">Download ↓</a><button class="btn" type="button" id="tourbtn" data-goatcounter-click="hero-tour" data-goatcounter-title="hero-tour">Start the tour <svg class="playic" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.8v8.4L10 6z" fill="currentColor"/></svg></button></p></section>
+  <p class="mono foot">*ALMOST EVERYTHING. YOU STILL NEED TO TAKE THE PHOTOS.</p></section>
 
 <section class="pin" id="tour" aria-label="Chromasmith tour">
   <div class="ph">
