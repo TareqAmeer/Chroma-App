@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Halation film</title>
+<style>
+@font-face{font-family:Gramatika;src:url('tex/GramatikaRegular.otf');font-weight:400}
+@font-face{font-family:Gramatika;src:url('tex/GramatikaBold.otf');font-weight:700}
+html,body{margin:0;background:transparent;overflow:hidden}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden}
+canvas{position:absolute;inset:0;width:1920px;height:1080px}
+#ov{position:absolute;inset:0;font-family:Gramatika,sans-serif;color:#f4efe6}
+.line{position:absolute;left:0;width:100%;text-align:center;font-size:46px;letter-spacing:-.01em;font-weight:400;will-change:opacity,filter,transform}
+.lbl{position:absolute;font-size:20px;letter-spacing:.06em;text-transform:uppercase;color:rgba(244,239,230,.62)}
+#ui{position:absolute;left:70px;bottom:110px;width:420px;padding:26px 30px 22px;border-radius:14px;background:rgba(17,17,17,.82);box-shadow:0 30px 80px rgba(0,0,0,.45);font-size:22px;opacity:0}
+#ui .hd{display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:26px;margin-bottom:18px}
+.tg{width:44px;height:24px;border-radius:12px;background:#3a3a3a;position:relative}
+.tg i{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#bbb}
+.tg.on{background:#ff3b1f}.tg.on i{left:23px;background:#fff}
+.row{display:grid;grid-template-columns:110px 1fr 44px;align-items:center;gap:16px;margin:12px 0;color:rgba(244,239,230,.82)}
+.trk{height:4px;border-radius:2px;background:#3a3a3a;position:relative}
+.trk b{position:absolute;left:0;top:0;bottom:0;background:#ff3b1f;border-radius:2px}
+.trk u{position:absolute;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+.v{text-align:right;font-variant-numeric:tabular-nums}
+.trow{display:flex;justify-content:space-between;align-items:center;margin:12px 0;color:rgba(244,239,230,.82)}
+#logo{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:34px;opacity:0}
+#logo .w{font-weight:700;font-size:84px;letter-spacing:-.035em;color:#f4efe6}
+</style>
+<script type="importmap">{"imports":{"three":"./lib/three/build/three.module.min.js","three/addons/":"./lib/three/jsm/"}}</script>
+</head><body><div id="stage"><canvas id="gl" width="1920" height="1080"></canvas><canvas id="c2" width="1920" height="1080"></canvas>
+<div id="ov">
+ <div id="lines"></div><div id="lbls"></div>
+ <div id="ui"><div class="hd">Halation <div class="tg on" id="tgH"><i></i></div></div>
+  <div class="row"><span>Amount</span><div class="trk"><b id="fa"></b><u id="ka"></u></div><span class="v" id="va">0</span></div>
+  <div class="row"><span>Radius</span><div class="trk"><b id="fr"></b><u id="kr"></u></div><span class="v" id="vr">8</span></div>
+  <div class="trow"><span>No remjet</span><div class="tg" id="tgN"><i></i></div></div>
+  <div class="trow"><span>White glow</span><div class="tg" id="tgW"><i></i></div></div>
+ </div>
+ <div id="logo"><svg viewBox="21 21 58 56" width="150" height="145"><rect x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect x="36" y="32" width="43" height="45" fill="#ff3b1f"/></svg><div class="w">CHRO-MA-SMITH</div></div>
+</div></div>
+<script type="module">
+import * as THREE from 'three';
+const W=1920,H=1080,FPS=24,DUR=32;
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x)),lerp=(a,b,u)=>a+(b-a)*u;
+const sm=(a,b,t)=>{const x=clamp((t-a)/(b-a));return x*x*(3-2*x)};
+const eio=u=>u<.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2;
+const win=(t,a,b,f=.6)=>sm(a,a+f,t)*(1-sm(b-f,b,t));   // on between a..b with soft edges
+
+// ---------- timeline ----------
+// A planet limb (halation off) -> B filament (halation blooms) -> C film cross-section -> D photo + slider -> E B&W white glow -> F logo
+const SH={A:[0,5.2],B:[5.2,10.4],C:[10.4,17.6],D:[17.6,24.6],E:[24.6,28],F:[28,32]};
+const LINES=[
+ [.8,4.8,'Light has an edge.'],
+ [5.8,10,'On film, it doesn\'t stop there.'],
+ [10.9,13,'Cinema film has a black backing.'],
+ [13.2,15,'Take it away,'],
+ [15.1,17.4,'and light bounces back through the red layer.'],
+ [18.3,21.6,'Halation.'],
+ [21.8,24.4,'Made the way film makes it.'],
+ [25.1,27.8,'Even in black and white.'],
+ [30.1,31.6,'Authentic halation. In Chromasmith.'],
+];
+// per-frame app settings: what appfx.mjs applies through the real app
+function params(t){
+ let hal=0,rad=8,noremjet=false,white=false;
+ if(t>=SH.B[0]&&t<SH.B[1])hal=70*sm(6.2,9.2,t);
+ if(t>=SH.C[0]&&t<SH.C[1]){hal=70;noremjet=t>=13.4}
+ if(t>=SH.D[0]&&t<SH.D[1]){hal=lerp(0,85,eio(clamp((t-19)/3.2)));rad=Math.round(lerp(6,10,sm(19,22.2,t)))}
+ if(t>=SH.E[0]&&t<SH.E[1]){hal=60;white=true}
+ if(t>=SH.F[0])hal=0;
+ return {hal:Math.round(hal),rad:Math.round(rad),noremjet,white,grain:true};
+}
+
+// ---------- 3D: limb, filament, cross-section (no glow here: the app adds it) ----------
+const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('gl'),antialias:true,preserveDrawingBuffer:true,alpha:false});
+renderer.setPixelRatio(1);renderer.setSize(W,H,false);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.NoToneMapping;
+const camera=new THREE.PerspectiveCamera(30,W/H,.1,500);
+const sA=new THREE.Scene(),sB=new THREE.Scene(),sC=new THREE.Scene();
+for(const s of [sA,sB,sC])s.background=new THREE.Color(0x030304);
+// A: a dark world with a thin sunrise rim
+const planet=new THREE.Mesh(new THREE.SphereGeometry(40,128,96),new THREE.MeshStandardMaterial({color:0x0b0c10,roughness:1}));planet.position.set(0,-41.2,0);sA.add(planet);
+const rimMat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,uniforms:{t:{value:0}},
+ vertexShader:'varying vec3 vN;varying vec3 vP;void main(){vN=normalize(normalMatrix*normal);vP=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+ fragmentShader:`varying vec3 vN;varying vec3 vP;uniform float t;void main(){float f=pow(1.-abs(vN.z),9.);float sun=exp(-pow((vP.x-2.)/6.,2.));
+  vec3 c=mix(vec3(.35,.55,1.),vec3(1.,.93,.82),sun)*f*(.6+2.2*sun)*t;gl_FragColor=vec4(c,1.);}`});
+const rim=new THREE.Mesh(new THREE.SphereGeometry(40.25,128,96),rimMat);rim.position.copy(planet.position);sA.add(rim);
+sA.add(new THREE.AmbientLight(0x223344,.25));const sunL=new THREE.DirectionalLight(0xffeedd,1.2);sunL.position.set(4,2,-10);sA.add(sunL);
+const stars=new THREE.Points(new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(Array.from({length:900},(_,i)=>{const r=Math.sin(i*12.9898)*43758.5453;return (r-Math.floor(r)-.5)*(i%3===2?10:120)}),3)),new THREE.PointsMaterial({color:0x9aa6b8,size:.05}));stars.position.z=-60;sA.add(stars);
+// B: a tungsten filament, coiled, bent into the same arc
+const coil=[];for(let i=0;i<=900;i++){const u=i/900,a=lerp(-1.05,1.05,u),R=6,r=.16,turns=46;const cx=Math.sin(a)*R,cy=Math.cos(a)*R-R,ph=u*turns*Math.PI*2;
+ coil.push(new THREE.Vector3(cx+Math.sin(a)*r*Math.cos(ph),cy+Math.cos(a)*r*Math.cos(ph),r*Math.sin(ph)))}
+const filMat=new THREE.MeshBasicMaterial({color:new THREE.Color(1,.82,.55)});
+const fil=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(coil),3000,.035,8),filMat);sB.add(fil);
+const leadMat=new THREE.MeshStandardMaterial({color:0x5d5852,metalness:.8,roughness:.35});
+for(const s of [-1,1]){const l=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,8,12),leadMat);l.position.set(s*Math.sin(1.05)*6,Math.cos(1.05)*6-6-4,0);sB.add(l)}
+sB.add(new THREE.PointLight(0xffb070,40,30));const bulb=new THREE.Mesh(new THREE.SphereGeometry(9,64,48),new THREE.MeshPhysicalMaterial({color:0xffffff,transmission:1,roughness:.05,thickness:.2,transparent:true,opacity:.12}));bulb.position.y=-3;sB.add(bulb);
+// C: film cross-section as stacked arcs (blue, green, red layers, base, remjet) and a ray of light
+const LAY=[['blue',0x1d2a5a,.9],['green',0x173d27,.9],['red',0x4a1612,.9],['base',0x2a2620,1.6],['remjet',0x000000,.8]];
+const layers=[];let rr=30;
+LAY.forEach(([n,c,th],i)=>{const g=new THREE.RingGeometry(rr-th,rr,256,1,Math.PI*.5-.42,.84);const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:c,transparent:true}));m.position.y=-30+2.6;sC.add(m);layers.push({n,m,mid:rr-th/2});rr-=th+.06});
+const edge=new THREE.Mesh(new THREE.RingGeometry(29.97,30.03,256,1,Math.PI*.5-.42,.84),new THREE.MeshBasicMaterial({color:0x6a6f78}));edge.position.y=-27.4;sC.add(edge);
+const beam=new THREE.Mesh(new THREE.PlaneGeometry(.09,1),new THREE.MeshBasicMaterial({color:new THREE.Color(1,.97,.9)}));sC.add(beam);
+const back=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,uniforms:{a:{value:0}},
+ vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+ fragmentShader:'varying vec2 vUv;uniform float a;void main(){vec2 p=(vUv-.5)*vec2(2.,2.);float d=exp(-dot(p,p)*3.);gl_FragColor=vec4(vec3(1.,.28,.12)*d*a,1.);}'}));sC.add(back);
+
+// ---------- 2D: photos ----------
+const c2=document.getElementById('c2'),g2=c2.getContext('2d');
+const load=s=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=s});
+const PIER=await load('tex/pier.webp'),FLOW=await load('tex/flowers.webp');
+await document.fonts.load('400 46px Gramatika');await document.fonts.load('700 84px Gramatika');
+function photo(img,t,a,b,push=.05){g2.fillStyle='#030304';g2.fillRect(0,0,W,H);const u=clamp((t-a)/(b-a));const fit=img.height>img.width?H/img.height:Math.max(W/img.width,H/img.height);const s=fit*(1.0+push*u);  /* portraits sit centred at native size on black */
+ const w=img.width*s,h=img.height*s;g2.globalAlpha=sm(a,a+.5,t)*(1-sm(b-.4,b,t));const x0=(W-w)/2,y0=(H-h)/2-(h-H)*.15*u;g2.drawImage(img,x0,y0,w,h);g2.globalAlpha=1;
+ if(img.height>img.width){for(const [gx,dir] of [[Math.max(0,x0),1],[Math.min(W,x0+w),-1]]){const gr=g2.createLinearGradient(gx,0,gx+dir*90,0);gr.addColorStop(0,'#030304');gr.addColorStop(1,'rgba(3,3,4,0)');g2.fillStyle=gr;g2.fillRect(dir>0?gx:gx-90,0,90,H)}}}  /* feathered sides: no hard bright edge for halation to rim */
+
+// ---------- overlay ----------
+const linesEl=document.getElementById('lines');const lineEls=LINES.map(l=>{const d=document.createElement('div');d.className='line';d.textContent=l[2];linesEl.appendChild(d);return d});
+const lblsEl=document.getElementById('lbls');const lblEls=LAY.map(l=>{const d=document.createElement('div');d.className='lbl';d.textContent=l[0];lblsEl.appendChild(d);return d});
+function overlay(t){
+ LINES.forEach((l,i)=>{const e=lineEls[i],o=win(t,l[0],l[1],.55);e.style.opacity=o;e.style.filter=`blur(${(1-o)*6}px)`;e.style.top=(t>=SH.D[0]&&t<SH.E[1]?900:t>=SH.F[0]?700:150)+'px'});
+ const P=params(t),ui=document.getElementById('ui');ui.style.opacity=win(t,18.6,24.4,.5)+win(t,25,27.8,.5);
+ document.getElementById('va').textContent=P.hal;document.getElementById('vr').textContent=P.rad;
+ document.getElementById('fa').style.width=P.hal+'%';document.getElementById('ka').style.left=P.hal+'%';
+ const rp=(P.rad-2)/38*100;document.getElementById('fr').style.width=rp+'%';document.getElementById('kr').style.left=rp+'%';
+ document.getElementById('tgN').classList.toggle('on',false);document.getElementById('tgW').classList.toggle('on',P.white);
+ const lg=document.getElementById('logo');lg.style.opacity=win(t,28.4,31.9,.6);
+ // layer labels sit at the right end of each arc during the cross-section
+ lblEls.forEach((e,i)=>{const L=layers[i];const p=new THREE.Vector3(Math.sin(.38)*L.mid,Math.cos(.38)*L.mid-27.4,0).project(camera);
+  e.style.left=((p.x*.5+.5)*W+18)+'px';e.style.top=((-p.y*.5+.5)*H-12)+'px';
+  e.style.opacity=t>=SH.C[0]&&t<SH.C[1]?win(t,10.9+i*.12,17.4,.4)*(L.n==='remjet'?1-sm(13.3,14,t):1):0});
+}
+
+// ---------- base frame ----------
+let layerMode='base';
+window.renderAt=function(t,mode='base'){
+ const base=mode==='base';document.getElementById('ov').style.display=base?'none':'block';
+ document.getElementById('gl').style.display=base?'block':'none';document.getElementById('c2').style.display=base?'block':'none';
+ document.body.style.background=base?'#000':'transparent';
+ if(!base){overlay(t);return params(t)}
+ let scene=null;g2.clearRect(0,0,W,H);
+ if(t<SH.A[1]){scene=sA;const u=t/SH.A[1];camera.position.set(lerp(-1.5,1.5,u),lerp(-.2,.6,u),lerp(30,24,eio(u)));camera.lookAt(0,-.6,0);
+  rimMat.uniforms.t.value=sm(.2,2.4,t)*(1-sm(4.7,5.2,t));planet.rotation.y=t*.01}
+ else if(t<SH.B[1]){scene=sB;const u=(t-SH.B[0])/5.2;camera.position.set(lerp(1.2,-1.2,u),lerp(-1.2,-.6,u),lerp(16,12.5,eio(u)));camera.lookAt(0,-1.4,0);
+  filMat.color.setRGB(1,.82,.55).multiplyScalar(sm(5.2,5.9,t)*(1-sm(9.9,10.4,t)))}
+ else if(t<SH.C[1]){scene=sC;const u=(t-SH.C[0])/7.2;camera.position.set(0,lerp(.4,.1,u),lerp(34,27,eio(u)));camera.lookAt(0,-.4,0);
+  const fade=sm(10.4,11,t)*(1-sm(17.1,17.6,t));layers.forEach(L=>L.m.material.opacity=fade*(L.n==='remjet'?1-sm(13.3,14,t):1));edge.material.color.setRGB(.42,.44,.47).multiplyScalar(fade);
+  // the ray: in from above, down to the base; once the remjet is gone it reflects back up through the red layer
+  const top=4.2,baseY=Math.cos(0)*layers[3].mid-27.4,down=sm(11.2,12.4,t),y1=lerp(top,baseY,down);
+  beam.scale.y=Math.max(.001,top-y1);beam.position.set(-.6,(top+y1)/2,.01);beam.material.color.setRGB(1,.97,.9).multiplyScalar(fade);
+  const bounce=sm(14.4,16,t)*fade;back.position.set(-.6,lerp(baseY,layers[2].mid-27.4,.5),.02);back.scale.set(lerp(.2,5.5,bounce),lerp(.2,1.6,bounce),1);back.material.uniforms.a.value=bounce*1.4}
+ else if(t<SH.D[1]){photo(PIER,t,SH.D[0],SH.D[1])}
+ else if(t<SH.E[1]){photo(FLOW,t,SH.E[0],SH.E[1],.04)}
+ else{g2.fillStyle='#030304';g2.fillRect(0,0,W,H)}
+ if(scene){renderer.render(scene,camera);document.getElementById('c2').style.display='none'}else document.getElementById('gl').style.display='none';
+ return params(t);
+};
+window.DUR=DUR;window.FPS=FPS;window.params=params;window.ready=true;
+</script></body></html>

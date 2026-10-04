@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Chromasmith Ep1 v10</title>
+<style>
+@font-face{font-family:Gramatika;src:url('tex/GramatikaBold.otf');font-weight:700}
+@font-face{font-family:Gramatika;src:url('tex/GramatikaRegular.otf');font-weight:400}
+html,body{margin:0;background:#000;overflow:hidden}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden}
+canvas#gl{position:absolute;inset:0;width:1920px;height:1080px}
+.cap{position:absolute;left:0;top:0;font-family:Gramatika,sans-serif;white-space:nowrap;will-change:transform,opacity}
+.cap .t{font-weight:700;font-size:64px;letter-spacing:-.035em;line-height:1}
+.cap .s{font-weight:400;font-size:26px;letter-spacing:.005em;margin-top:12px;opacity:.72}
+.cap .m{overflow:hidden;padding-bottom:.12em}
+.cap .m>div{will-change:transform}
+</style>
+<script type="importmap">{"imports":{"three":"./lib/three/build/three.module.min.js","three/addons/":"./lib/three/jsm/"}}</script>
+</head><body><div id="stage"><canvas id="gl" width="1920" height="1080"></canvas><div id="caps"></div></div>
+<script type="module">
+import * as THREE from 'three';
+import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
+import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
+import {BokehPass} from 'three/addons/postprocessing/BokehPass.js';
+import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+const W=1920,H=1080,FPS=24,DUR=45;
+const SUB=+(new URLSearchParams(location.search).get('sub')||8),SHUTTER=.5/FPS;
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x)),lerp=(a,b,u)=>a+(b-a)*u;
+const sm=(a,b,t)=>{const x=clamp((t-a)/(b-a));return x*x*(3-2*x)};
+const eio=u=>u<.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2, eo=u=>1-Math.pow(1-u,3), eo5=u=>1-Math.pow(1-u,5);
+const ring=(t,at,amp,k=7,w=22)=>t<at?0:amp*Math.exp(-k*(t-at))*Math.cos(w*(t-at));
+const bump=(t,a,b)=>t<a||t>b?0:Math.sin(Math.PI*(t-a)/(b-a));
+const keys=(t,k)=>{if(t<=k[0][0])return k[0][1];for(let i=1;i<k.length;i++)if(t<=k[i][0]){const u=eio(clamp((t-k[i-1][0])/(k[i][0]-k[i-1][0])));return Array.isArray(k[i][1])?k[i][1].map((v,j)=>lerp(k[i-1][1][j],v,u)):lerp(k[i-1][1],k[i][1],u)}return k[k.length-1][1]};
+const col=(hex)=>new THREE.Color(hex);
+const loadImg=src=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=src});
+
+// ---------- renderer ----------
+const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('gl'),antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(1);renderer.setSize(W,H,false);
+renderer.toneMapping=THREE.NoToneMapping;renderer.outputColorSpace=THREE.LinearSRGBColorSpace;
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+const scene=new THREE.Scene();
+const pmrem=new THREE.PMREMGenerator(renderer);
+scene.environment=pmrem.fromScene(new RoomEnvironment(),.04).texture;scene.environmentIntensity=.3;
+const camera=new THREE.PerspectiveCamera(32,W/H,.1,200);
+scene.fog=new THREE.Fog(0xe9e4da,26,70);
+
+// ---------- textures ----------
+const IM={};
+const names=['beach1','beach2','beach3','beach4','beach5','beach6','studio1','studio2','studio3','studio4','studio5'];
+for(let i=1;i<=24;i++)names.push('lib'+String(i).padStart(2,'0'));
+await Promise.all(names.map(async n=>IM[n]=await loadImg(`tex/${n}.webp`)));
+await document.fonts.load('700 64px Gramatika');await document.fonts.load('400 26px Gramatika');
+const texOf=(c)=>{const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;return t};
+const canvas=(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c};
+
+// ---------- world ----------
+const PAPER=0xe9e4da;
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(400,200),new THREE.MeshStandardMaterial({color:PAPER,roughness:.92}));
+floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
+// a far backdrop wall so the horizon reads as a seamless studio cyc
+const slab=(w,h,d,mats)=>{const m=new THREE.Mesh(new RoundedBoxGeometry(w,h,d,3,Math.min(.03,d/3)),mats);m.castShadow=m.receiveShadow=true;scene.add(m);return m};
+const faceMats=(front,side=0xdedad2,{basic=false,rough=.5}={})=>{
+ const s=new THREE.MeshStandardMaterial({color:side,roughness:.55});
+ const f=basic?new THREE.MeshBasicMaterial({map:front,toneMapped:false}):new THREE.MeshStandardMaterial({map:front,roughness:rough});
+ return [s,s,s,s,f,s];
+};
+const plane=(w,h,mat)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat);scene.add(m);return m};
+
+// logo (two lockups: opening and closing)
+const gradCanvas=(()=>{const c=canvas(430,450),g=c.getContext('2d');g.scale(10,10);g.fillStyle='#ff3b1f';g.fillRect(0,0,43,45);
+ const g1=g.createRadialGradient(33,0,0,33,0,41.25);g1.addColorStop(0,'#fff1e0');g1.addColorStop(.35,'#ff6a3a');g1.addColorStop(.7,'#b0200e');g1.addColorStop(1,'#7a1208');
+ const g2=g.createRadialGradient(33,0,0,33,0,41.25);g2.addColorStop(0,'#fff1e0');g2.addColorStop(.4,'#ff7a4c');g2.addColorStop(1,'#ff2a10');
+ g.fillStyle=g1;g.beginPath();g.moveTo(0,0);g.lineTo(33,0);g.lineTo(0,33);g.fill();g.fillStyle=g2;g.beginPath();g.moveTo(33,0);g.lineTo(33,33);g.lineTo(0,33);g.fill();return c})();
+const wordCanvas=(()=>{const c=canvas(2400,360),g=c.getContext('2d');g.fillStyle='#111';g.font='700 250px Gramatika';g.textBaseline='alphabetic';
+ g.save();g.translate(0,0);const txt='CHRO-MA-SMITH';let x=10;for(const ch of txt){g.fillText(ch,x,270);x+=g.measureText(ch).width-250*.035}g.restore();return c})();
+const LOGO=[0,80].map(x0=>{
+ const ink=slab(2.4,2.2,.22,new THREE.MeshPhysicalMaterial({color:0x111111,roughness:.38,clearcoat:.6,clearcoatRoughness:.2}));
+ ink.position.set(x0-.25,1.75,0);
+ const word=plane(5.4,.81,new THREE.MeshBasicMaterial({map:texOf(wordCanvas),transparent:true,toneMapped:false}));word.position.set(x0+4.6,.75,.3);
+ return {x0,ink,word,home:new THREE.Vector3(x0+.375,.05,.22)};
+});
+
+// the hero: a bevelled red block with clearcoat
+const heroMat=new THREE.MeshPhysicalMaterial({color:0xff3b1f,roughness:.32,clearcoat:1,clearcoatRoughness:.12});
+const hero=new THREE.Mesh(new RoundedBoxGeometry(1,1,1,4,.06),heroMat);hero.castShadow=true;scene.add(hero);
+const decal=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:texOf(gradCanvas),transparent:true,toneMapped:false}));
+decal.position.z=.502;hero.add(decal);
+
+// the photo, standing as a print
+const PH={x:9.5,w:4.2,h:2.8};
+const photoPrint=slab(PH.w,PH.h,.08,faceMats((()=>{const t=new THREE.TextureLoader().load('tex/beach1.webp');t.colorSpace=THREE.SRGBColorSpace;return t})(),0xf3f0ea,{rough:.6}));
+photoPrint.position.set(PH.x,PH.h/2+.35,0);photoPrint.rotation.y=-.12;
+const easel=slab(.5,.35,.6,new THREE.MeshStandardMaterial({color:0xcfc8bb,roughness:.7}));easel.position.set(PH.x,.175,-.1);
+
+// the old way: four generic apps, further apart each time
+const OLD=[{x:17,n:'Import',a:'App 1',c:'#7b8794'},{x:26.5,n:'Edit',a:'App 2',c:'#7f8b7d'},{x:37,n:'Grain plug-in',a:'App 3',c:'#8a7f8c'},{x:48.5,n:'Export',a:'App 4',c:'#8c8471'}];
+OLD.forEach((o,i)=>{
+ const c=canvas(1080,720),g=c.getContext('2d');g.fillStyle='#e4e6e8';g.fillRect(0,0,1080,720);
+ g.fillStyle=o.c;g.fillRect(0,0,1080,92);g.fillStyle='rgba(255,255,255,.55)';for(let k=0;k<3;k++)g.fillRect(34+k*34,36,20,20);
+ g.fillStyle='#fff';g.font='700 46px Gramatika';g.fillText(o.n,160,62);g.font='400 30px Gramatika';g.globalAlpha=.75;g.fillText(o.a,900,60);g.globalAlpha=1;
+ g.fillStyle='#c9ced3';
+ if(i===0){for(let k=0;k<10;k++)g.fillRect(60+(k%5)*196,140+Math.floor(k/5)*150,172,120);g.fillRect(60,560,960,22);g.fillStyle=o.c;g.fillRect(60,560,180,22);g.fillStyle='#8a9097';g.font='400 30px Gramatika';g.fillText('Importing 214 photos…',60,530)}
+ if(i===1){['Exposure','Contrast','Highlights','Shadows','Colour'].forEach((l,k)=>{g.fillStyle='#7f8b7d';g.font='400 28px Gramatika';g.fillText(l,60,160+k*100);g.fillStyle='#c9ced3';g.fillRect(60,180+k*100,420,5);g.fillStyle='#7f8b7d';g.fillRect(60+((k*137)%380),170+k*100,14,24)});g.fillStyle='#cdd3cc';g.fillRect(560,140,460,500)}
+ if(i===2){g.fillStyle='#d6cfd8';g.fillRect(560,140,460,500);for(let k=0;k<2600;k++){g.fillStyle=`rgba(80,60,90,${(k%7)/40})`;g.fillRect(560+(k*397)%460,140+(k*211)%500,3,3)}['Size','Roughness','Amount'].forEach((l,k)=>{g.fillStyle='#8a7f8c';g.font='400 28px Gramatika';g.fillText(l,60,190+k*120);g.fillStyle='#c9ced3';g.fillRect(60,210+k*120,420,5)})}
+ if(i===3){g.fillStyle='#8c8471';g.font='400 40px Gramatika';g.fillText('Export failed. Retrying…',200,330);g.fillStyle='#d9d3c5';g.fillRect(200,380,680,24);g.fillStyle='#b35b45';g.fillRect(200,380,90,24)}
+ const m=slab(3.6,2.4,.1,faceMats(texOf(c),0xd7d9db,{rough:.7}));m.position.set(o.x,1.2+.35,0);m.rotation.y=(i%2?.1:-.1);o.mesh=m;
+ const st=slab(.5,.35,.6,new THREE.MeshStandardMaterial({color:0xc6c9cc,roughness:.7}));st.position.set(o.x,.175,-.1);
+});
+
+// Chromasmith: the app rises out of the floor; panels swap as the square works
+const APP={x:61,w:8,h:4.444};
+const appC=canvas(2000,1111),appG=appC.getContext('2d'),appTex=texOf(appC);
+const app=slab(APP.w,APP.h,.18,faceMats(appTex,0x1a1a1a,{basic:true}));
+const photoC=canvas(1600,1096),photoG=photoC.getContext('2d'),photoTex=texOf(photoC);
+// photo rect inside the studio screenshot: x 292..1422, y 183..957 of 2000x1111
+const PR={u:(292+1422)/2/2000-.5,v:.5-(183+957)/2/1111,w:(1422-292)/2000,h:(957-183)/1111};
+const appPhoto=new THREE.Mesh(new THREE.PlaneGeometry(APP.w*PR.w,APP.h*PR.h),new THREE.MeshBasicMaterial({map:photoTex,toneMapped:false}));
+scene.add(appPhoto);
+const grainC=canvas(512,512),grainG=grainC.getContext('2d'),grainTex=texOf(grainC);grainTex.wrapS=grainTex.wrapT=THREE.RepeatWrapping;grainTex.repeat.set(4,3);
+const grain=new THREE.Mesh(new THREE.PlaneGeometry(APP.w*PR.w,APP.h*PR.h),new THREE.MeshBasicMaterial({map:grainTex,transparent:true,opacity:0,toneMapped:false,blending:THREE.NormalBlending}));scene.add(grain);
+
+// the library: real gallery cards that fly out into two wings around the app
+const cards=[];for(let i=0;i<24;i++){const t=new THREE.Texture(IM['lib'+String(i+1).padStart(2,'0')]);t.colorSpace=THREE.SRGBColorSpace;t.needsUpdate=true;
+ const m=new THREE.Mesh(new RoundedBoxGeometry(1.5,1.03,.04,2,.01),[0,1,2,3,4,5].map(k=>k===4?new THREE.MeshBasicMaterial({map:t,toneMapped:false}):new THREE.MeshStandardMaterial({color:0xf3f0ea})));
+ m.castShadow=true;scene.add(m);const side=i<12?-1:1,k=i%12,cx=k%4,cy=Math.floor(k/4);
+ cards.push({m,to:new THREE.Vector3(APP.x+side*(5.6+cx*1.62),.95+cy*1.18,-.6-cx*.55),ry:-side*(.28+cx*.1),delay:i*.035})}
+
+// lights
+const hemi=new THREE.HemisphereLight(0xffffff,0xd8d0c4,.9);scene.add(hemi);
+const key=new THREE.DirectionalLight(0xfff3e4,2.4);key.castShadow=true;key.shadow.mapSize.set(2048,2048);
+Object.assign(key.shadow.camera,{left:-12,right:12,top:10,bottom:-6,near:1,far:60});key.shadow.bias=-.0003;key.shadow.normalBias=.02;key.shadow.radius=6;
+scene.add(key,key.target);
+const rim=new THREE.DirectionalLight(0xbfd6ff,1.2);scene.add(rim,rim.target);
+const sweep=new THREE.SpotLight(0xffffff,0,30,.35,.8,1);scene.add(sweep,sweep.target);
+
+// landing dust
+const DN=36,dustGeo=new THREE.BufferGeometry(),dustArr=new Float32Array(DN*8*3);dustGeo.setAttribute('position',new THREE.BufferAttribute(dustArr,3));
+const dust=new THREE.Points(dustGeo,new THREE.PointsMaterial({color:0x8d877c,size:.05,transparent:true,opacity:.7,depthWrite:false}));scene.add(dust);
+
+// ---------- the square's journey ----------
+// each hop: [takeoff, land, x, y, z, arc height, size]
+const L0=LOGO[0].home,L1=LOGO[1].home,topOf=o=>1.2+.35+1.2;
+const appTop=()=>APP.h+.02;
+const HOPS=[
+ [1.7,2.6, PH.x+1.2,PH.h+.35,0, 2.2, .62],
+ [4.3,4.9, PH.x+.2,PH.h+.35,0, .7, .62],
+ [5.9,7.0, OLD[0].x+1,topOf(),0, 2.6, .6],
+ [8.9,9.9, OLD[1].x+1.1,topOf(),0, 2.2, .52],
+ [11.4,12.5, OLD[2].x+1.1,topOf(),0, 1.8, .46],
+ [14.0,15.3, OLD[3].x+1.1,topOf(),0, 1.4, .42],
+ [15.9,16.2, OLD[3].x+.7,topOf(),0, .3, .42],
+ [16.5,16.8, OLD[3].x+.3,topOf(),0, .25, .42],
+ [17.2,18.0, OLD[3].x+3.2,0,1.2, .4, .42],      // falls off
+ [20.0,21.4, APP.x+3.2,appTop(),0, 3.5, .62],   // snaps up onto the app
+ [24.0,24.4, APP.x+2.4,appTop(),0, .6, .62],    // Look
+ [26.6,27.0, APP.x+1.5,appTop(),0, .6, .62],    // Light
+ [29.2,29.6, APP.x+.6,appTop(),0, .6, .62],     // Colour
+ [31.8,32.2, APP.x-.4,appTop(),0, .6, .62],     // Texture
+ [34.4,34.8, APP.x-1.4,appTop(),0, .6, .62],    // Output
+ [37.0,37.5, APP.x-2.6,appTop(),0, .8, .62],    // Library
+ [40.4,43.0, L1.x,L1.y,L1.z, 5.0, 1],           // home
+];
+const LANDS=HOPS.map(h=>h[1]);
+function heroState(t){
+ let p=L0.clone(),size=0,from=L0.clone(),fromSize=0,flat=0;
+ const s={pos:L0.clone(),sx:2.15,sy:2.25,sz:.22,rot:0,grey:0,grad:1,q:0};
+ if(t<HOPS[0][0]){s.q=-.1*bump(t,1.45,1.7);s.rot=.05*Math.sin((t-.9)*16)*bump(t,.9,1.3);return s}
+ let prev={x:L0.x,y:L0.y,z:L0.z,size:-1};
+ for(let i=0;i<HOPS.length;i++){
+  const [a,b,x,y,z,h,sz]=HOPS[i];
+  if(t<a){break}
+  const u=clamp((t-a)/(b-a)),k=eio(u);
+  const px=lerp(prev.x,x,k),pz=lerp(prev.z,z,k),py=lerp(prev.y,y,u)+h*Math.sin(Math.PI*u);
+  s.pos.set(px,py,pz);
+  const fs=prev.size<0?null:prev.size, ts=i===HOPS.length-1?null:sz;
+  if(fs===null&&ts!==null){s.sx=lerp(2.15,ts,eo(Math.min(1,u*2)));s.sy=lerp(2.25,ts,eo(Math.min(1,u*2)));s.sz=lerp(.22,ts,eo(Math.min(1,u*2)))}
+  else if(ts===null){s.sx=lerp(fs,2.15,eio(u));s.sy=lerp(fs,2.25,eio(u));s.sz=lerp(fs,.22,eio(u))}
+  else{s.sx=s.sy=s.sz=lerp(fs,ts,k)}
+  s.rot=(x>prev.x?-1:1)*.35*Math.sin(Math.PI*u)*(i===HOPS.length-1?.4:1);
+  s.q=.16*bump(t,a-.12,a)*-1+(u<1?.18*Math.sin(Math.PI*u)*(1-u):0)+ring(t,b,-.22,9,26);
+  prev={x,y,z,size:sz};
+ }
+ // old way: it greys out; the fall leaves it flat; the snap restores it
+ s.grey=sm(6,17,t)*(1-sm(19.6,19.75,t));
+ if(t>18&&t<19.6){s.sy*=.25;s.sx*=1.6}
+ if(t>=19.6&&t<20){const g=eo(clamp((t-19.6)/.12));s.sy=lerp(s.sy*.25,s.sy,g);s.sx=lerp(s.sx*1.6,s.sx,g);s.q+=ring(t,19.72,.3,8,30)}
+ s.q+=-.1*bump(t,18.85,19.05);  // heartbeat twitch
+ s.grad=t<HOPS[0][0]+.3?1-sm(1.7,2.0,t):sm(42.2,43,t);
+ if(t>=43)s.q=ring(t,43,-.18,8,24);
+ return s;
+}
+
+// ---------- camera: a smooth follow with a little lead, never cuts ----------
+const SECT=[ // t, [distance, height, azimuth deg, look-ahead x]
+ [0,[12.5,1.2,8,2.4]],[1.6,[12,1.2,6,1.6]],[2.6,[12,1.8,-6,1]],[5.5,[13,2.4,-14,1.2]],[7,[15,3,-28,2.2]],[16,[15,3,-22,1.2]],[18.2,[9,1.2,-8,0]],
+ [19.8,[12,2.6,-4,0]],[22,[12.5,2.4,6,0]],[24,[10.5,1.6,8,0]],[31.6,[9.4,1.4,4,0]],[33,[7.6,1,2,0]],[34.3,[10.5,1.6,-6,0]],[37,[19,3,-4,0]],[39.8,[20,3.4,6,1.5]],[43,[13,1.4,14,0]],[45,[12.2,1.3,17,0]]];
+const ANCH=[[0,0],[19.8,0],[23.4,1],[39.8,1],[41.2,0]];      // 1 = frame the app instead of the square
+const APPCAM=[[22,[0,.2,12.5,6]],[24.2,[1.5,1.1,8.2,16]],[26.4,[1.5,1.1,8.2,16]],[26.9,[2.3,1.3,7.2,-12]],[29,[2.3,1.3,7.2,-12]],[29.5,[2.4,.7,8,12]],[31.6,[2.4,.7,8,12]],[32.2,[-.6,0,4.3,3]],[34.2,[-.6,0,4.0,-3]],[34.8,[-.3,0,9,-8]],[36.8,[-.3,0,9.5,-6]],[37.6,[0,.6,19,-4]],[39.8,[0,.8,20,6]]];
+function rawCam(t){
+ // weighted lag over the last 0.6 s of the square's path
+ const c=new THREE.Vector3();let n=0;for(let k=0;k<9;k++){const w=Math.sin(Math.PI*(k+1)/10),p=heroState(clamp(t-k*.1+.4,0,DUR)).pos;/* centred window: lags a little, leads a little */c.addScaledVector(p,w);n+=w}c.multiplyScalar(1/n);
+ const [d,hh,az,ahead]=keys(t,SECT);const aw=keys(t,ANCH);
+ const [ox,oy,ad,aaz]=keys(t,APPCAM);
+ const tgt=new THREE.Vector3(lerp(c.x+ahead,APP.x+ox,aw),lerp(c.y*.55+.9,APP.h*.5+oy,aw),lerp(c.z,0,aw));
+ const D=lerp(d,ad,aw),A=lerp(az,aaz,aw),HH=lerp(hh,.6+ad*.08,aw);
+ const a=THREE.MathUtils.degToRad(A+1.5*Math.sin(t*.37));
+ return {pos:new THREE.Vector3(tgt.x+D*Math.sin(a),tgt.y+HH,tgt.z+D*Math.cos(a)),tgt};
+}
+// the camera's own path is averaged over ~1.6 s, so it glides and can never whip
+function camAt(t){
+ const P=new THREE.Vector3(),T=new THREE.Vector3();let n=0;
+ for(let k=-8;k<=8;k++){const w=Math.exp(-(k*k)/22),c=rawCam(clamp(t+k*.1,0,DUR));P.addScaledVector(c.pos,w);T.addScaledVector(c.tgt,w);n+=w}
+ P.multiplyScalar(1/n);T.multiplyScalar(1/n);camera.position.copy(P);camera.lookAt(T);camera.updateMatrixWorld();return T;
+}
+
+// ---------- the app's content per beat ----------
+const BEATS=[{t:24.4,p:'studio1'},{t:27,p:'studio2'},{t:29.6,p:'studio3'},{t:32.2,p:'studio4'},{t:34.8,p:'studio5'}];
+let lastAppKey='';
+function drawApp(t){
+ let i=-1;for(let k=0;k<BEATS.length;k++)if(t>=BEATS[k].t)i=k;
+ const cur=i<0?'studio1':BEATS[i].p,prev=i<=0?'studio1':BEATS[i-1].p,f=i<0?1:clamp((t-BEATS[i].t)/.25);
+ const key=cur+prev+f.toFixed(2);if(key!==lastAppKey){lastAppKey=key;appG.globalAlpha=1;appG.drawImage(IM[prev],0,0,2000,1111);appG.globalAlpha=f;appG.drawImage(IM[cur],0,0,2000,1111);appG.globalAlpha=1;appTex.needsUpdate=true}
+ // the photo: raw -> four real looks -> the chosen look, then a border for Output
+ const looks=[[24.5,'beach2'],[25.1,'beach3'],[25.7,'beach4'],[26.3,'beach5']];
+ let a='beach1',b='beach1',m=0;
+ for(let k=0;k<looks.length;k++)if(t>=looks[k][0]){a=k?looks[k-1][1]:'beach1';b=looks[k][1];m=clamp((t-looks[k][0])/.22)}
+ const light=sm(27.1,28,t)*(1-sm(29.4,29.6,t)), colour=sm(29.7,30.6,t);
+ const border=sm(34.9,35.8,t)*36;
+ photoG.fillStyle='#fff';photoG.fillRect(0,0,1600,1096);
+ const bw=14+border;
+ photoG.save();photoG.beginPath();photoG.rect(bw,bw,1600-2*bw,1096-2*bw);photoG.clip();
+ photoG.filter=`brightness(${1+.12*light}) contrast(${1+.1*light}) saturate(${1+.18*colour})`;
+ photoG.globalAlpha=1;photoG.drawImage(IM[a],bw,bw,1600-2*bw,1096-2*bw);photoG.globalAlpha=m;photoG.drawImage(IM[b],bw,bw,1600-2*bw,1096-2*bw);
+ photoG.restore();photoG.globalAlpha=1;photoG.filter='none';photoTex.needsUpdate=true;
+ // grain: fine, moving, only during Texture
+ const ga=sm(32.3,32.9,t)*(1-sm(34.2,34.6,t));grain.material.opacity=ga*.55;
+ if(ga>0){const id=grainG.createImageData(512,512);let s=Math.floor(t*FPS)*7919+13;for(let q=0;q<id.data.length;q+=4){s=(s*16807)%2147483647;const v=(s%255);id.data[q]=id.data[q+1]=id.data[q+2]=v;id.data[q+3]=Math.abs(v-128)}grainG.putImageData(id,0,0);grainTex.needsUpdate=true}
+}
+
+// ---------- captions anchored to the square ----------
+const CAPS=[
+ [3.0,5.6,'You shot something beautiful.','Then the work started.'],
+ [7.2,8.8,'Import in one app…',''],
+ [10.1,11.4,'…edit in another…',''],
+ [12.7,13.9,'…grain in a plug-in…',''],
+ [15.5,17.0,'…export. Fail. Again.',''],
+ [21.6,23.8,'Meet Chromasmith.','Everything, in one app.'],
+ [24.5,26.5,'Film looks','113 film looks, built in'],
+ [27.1,29.1,'Light','Tone, curves, histogram'],
+ [29.7,31.7,'Colour','Mixer and colour wheels'],
+ [32.3,34.3,'Real grain','Film grain, halation, bloom'],
+ [34.9,36.9,'Borders & export','Full resolution, every time'],
+ [37.6,40.2,'Your whole library','Tagged and searchable, offline'],
+ [43.3,45,'Free on Mac, Windows, iPhone & Android',''],
+];
+const capsEl=document.getElementById('caps');
+const capEls=CAPS.map(c=>{const d=document.createElement('div');d.className='cap';d.innerHTML=`<div class="m"><div class="t">${c[2]}</div></div>${c[3]?`<div class="m"><div class="s">${c[3]}</div></div>`:''}`;capsEl.appendChild(d);return d});
+function capsAt(t,dark){
+ const p=heroState(t).pos.clone();p.y+=.9;p.project(camera);
+ const sx=(p.x*.5+.5)*W,sy=(-p.y*.5+.5)*H;
+ CAPS.forEach((c,i)=>{const el=capEls[i];const [a,b]=c;const fixed=i===CAPS.length-1;
+  if(t<a-.1||t>b+.4){el.style.opacity=0;return}
+  const inU=eo5(clamp((t-a)/.45)),out=clamp((t-b)/.35);
+  el.style.opacity=1;el.style.color=dark?'#f2efe8':'#111';
+  const rows=el.querySelectorAll('.m>div');rows.forEach((r,j)=>{const uj=eo5(clamp((t-a-j*.08)/.45));r.style.transform=`translateY(${(1-uj)*110+out*-110}%)`});
+  const w=el.offsetWidth,right=sx+70+w<W-80,off=p.z>1||sx<0||sx>W||sy<200||sy>H;
+  let x=fixed?(W-w)/2:off?120:right?sx+70:sx-70-w, y=fixed?900:off?130:sy-50;
+  x=clamp(x,100,W-100-w);y=clamp(y,120,H-200);
+  el.style.transform=`translate(${x}px,${y}px)`;
+ });
+}
+
+// ---------- post ----------
+const composer=new EffectComposer(renderer,new THREE.WebGLRenderTarget(W,H,{type:THREE.HalfFloatType}));
+composer.addPass(new RenderPass(scene,camera));
+const bokeh=new BokehPass(scene,camera,{focus:12,aperture:.0018,maxblur:.008});composer.addPass(bokeh);
+const bloom=new UnrealBloomPass(new THREE.Vector2(W,H),.12,.4,1.05);composer.addPass(bloom);
+const QP=new URLSearchParams(location.search);bokeh.enabled=!QP.has('nobokeh');bloom.enabled=!QP.has('nobloom');
+for(const p of composer.passes)p.renderToScreen=false;composer.renderToScreen=false;
+const accum=new THREE.WebGLRenderTarget(W,H,{type:THREE.FloatType});
+const qc=new THREE.OrthographicCamera(-1,1,1,-1,0,1),qg=new THREE.PlaneGeometry(2,2),vs='varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position,1.);}';
+const addMat=new THREE.ShaderMaterial({uniforms:{tex:{value:null},w:{value:1}},vertexShader:vs,fragmentShader:'uniform sampler2D tex;uniform float w;varying vec2 vUv;void main(){gl_FragColor=vec4(texture2D(tex,vUv).rgb*w,w);}',
+ blending:THREE.CustomBlending,blendSrc:THREE.OneFactor,blendDst:THREE.OneFactor,blendSrcAlpha:THREE.OneFactor,blendDstAlpha:THREE.OneFactor,depthTest:false,depthWrite:false,transparent:true});
+const addScene=new THREE.Scene();addScene.add(new THREE.Mesh(qg,addMat));
+// output: linear -> sRGB with a soft shoulder only above white (brand colours stay true), fine grain
+const outMat=new THREE.ShaderMaterial({uniforms:{tex:{value:accum.texture},seed:{value:0},fade:{value:1}},vertexShader:vs,depthTest:false,depthWrite:false,
+ fragmentShader:`uniform sampler2D tex;uniform float seed,fade;varying vec2 vUv;
+ float h(vec2 p){vec3 q=fract(vec3(p.xyx+seed*vec3(.71,.37,.53))*.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
+ vec3 srgb(vec3 c){return mix(c*12.92,1.055*pow(c,vec3(1./2.4))-.055,step(.0031308,c));}
+ void main(){vec3 c=texture2D(tex,vUv).rgb;
+  c=srgb(clamp(c,0.,1.))*fade;float l=dot(c,vec3(.299,.587,.114));
+  float g=(h(gl_FragCoord.xy)+h(gl_FragCoord.xy+19.1)-1.)*.028*(1.-l*.5);
+  gl_FragColor=vec4(c+g,1.);}`});
+const outScene=new THREE.Scene();outScene.add(new THREE.Mesh(qg,outMat));
+
+// ---------- the world at time t ----------
+const BG={warm:col(0xe9e4da),cool:col(0xcfd3d6),dark:col(0x0c0c0d)};
+function worldAt(t){
+ const s=heroState(t);
+ hero.position.set(s.pos.x,s.pos.y+s.sy*(1+s.q)/2,s.pos.z);
+ const sy=1+s.q,sx=1/Math.sqrt(sy);
+ hero.scale.set(s.sx*sx,s.sy*sy,s.sz*sx);hero.rotation.z=s.rot;
+ heroMat.color.set(0xff3b1f).lerp(col(0x8f8a85),s.grey*.8);decal.material.opacity=s.grad;
+ // mood: warm studio -> cooler, dimmer old way -> dark low point -> warm again
+ const cool=sm(6,15,t)*(1-sm(19.6,21,t)),dark=sm(17.6,18.2,t)*(1-sm(19.55,20.3,t));
+ const bg=BG.warm.clone().lerp(BG.cool,cool).lerp(BG.dark,dark);
+ scene.background=bg;scene.fog.color.copy(bg);floor.material.color.copy(bg).multiplyScalar(.98);
+ hemi.intensity=.42*(1-.85*dark)*(1-.15*cool);key.intensity=1.15*(1-.9*dark)*(1-.25*cool);rim.intensity=.5+1.2*dark;
+ // old apps sag a little when the square lands; the app rises out of the floor
+ OLD.forEach((o,i)=>{o.mesh.rotation.x=ring(t,HOPS[i+2][1],.04,6,18)});
+ const rise=eo5(clamp((t-19.7)/1.4));app.position.set(APP.x,lerp(-APP.h/2-.4,APP.h/2+.02,rise)+ring(t,21.4,-.03,6,20),0);
+ app.rotation.x=ring(t,21.4,.012,6,20);
+ appPhoto.position.set(APP.x+PR.u*APP.w,app.position.y+PR.v*APP.h,.095+.35*sm(35.4,36.4,t)*(1-sm(37,37.6,t)));
+ grain.position.copy(appPhoto.position).add(new THREE.Vector3(0,0,.003));
+ drawApp(t);
+ cards.forEach((c,i)=>{const u=eo5(clamp((t-37.6-c.delay)/1));const from=new THREE.Vector3(APP.x,app.position.y,-.4);
+  c.m.visible=u>0;c.m.position.lerpVectors(from,c.to,u);c.m.position.y+=Math.sin(Math.PI*u)*1.2;c.m.rotation.y=c.ry*u;c.m.rotation.z=(1-u)*(i%2?.5:-.5)});
+ // the closing lockup: wordmark and ink block only appear for the second logo once the square heads home
+ const close=sm(40.2,41.4,t);LOGO[1].ink.position.y=lerp(-1.2,1.75,eo5(close));LOGO[1].word.position.y=lerp(-.6,.75,eo5(sm(41,42,t)));
+ // dust puffs on every landing
+ let di=0;for(const lt of LANDS){const dt=t-lt;for(let k=0;k<DN;k++){const o=di*3;if(dt>0&&dt<.8){const h0=HOPS[LANDS.indexOf(lt)];const a=k/DN*Math.PI*2,sp=.7+((k*37)%10)/10;
+   dustArr[o]=h0[2]+Math.cos(a)*sp*dt*1.6;dustArr[o+1]=h0[3]+.02+Math.max(0,.5*dt-1.2*dt*dt)*sp;dustArr[o+2]=h0[4]+Math.sin(a)*sp*dt*1.6}else{dustArr[o]=dustArr[o+1]=dustArr[o+2]=-999}di++}}
+ dustGeo.attributes.position.needsUpdate=true;
+ const tgt=camAt(t);
+ key.position.set(tgt.x+6,tgt.y+10,tgt.z+8);key.target.position.copy(tgt);rim.position.set(tgt.x-8,tgt.y+5,tgt.z-6);rim.target.position.copy(tgt);
+ sweep.intensity=60*bump(t,20.6,22.4);sweep.position.set(APP.x+lerp(-7,7,sm(20.6,22.4,t)),APP.h+3,5);sweep.target.position.set(APP.x+lerp(-3,3,sm(20.6,22.4,t)),APP.h/2,0);
+ bokeh.uniforms.focus.value=camera.position.distanceTo(hero.position);
+ bokeh.uniforms.aperture.value=t>23.4&&t<40?.0009:.0018;
+ return {dark:dark>.5};
+}
+
+let fno=0;
+window.renderAt=function(t){
+ renderer.setRenderTarget(accum);renderer.setClearColor(0,0);renderer.clear();
+ for(let j=0;j<SUB;j++){const st=Math.max(0,t+(SUB>1?(j/(SUB-1)-.5):0)*SHUTTER);worldAt(st);composer.render();
+  addMat.uniforms.tex.value=composer.readBuffer.texture;addMat.uniforms.w.value=1/SUB;renderer.setRenderTarget(accum);renderer.autoClear=false;renderer.render(addScene,qc);renderer.autoClear=true}
+ const st=worldAt(t);capsAt(t,st.dark);
+ outMat.uniforms.seed.value=(fno++%97)*1.37;outMat.uniforms.fade.value=sm(0,.5,t)*(1-sm(DUR-.5,DUR,t));
+ renderer.setRenderTarget(null);renderer.render(outScene,qc);
+};
+window.DUR=DUR;window.FPS=FPS;
+window.renderAt(0);window.ready=true;
+</script></body></html>
