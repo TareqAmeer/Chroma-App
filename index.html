@@ -1176,12 +1176,16 @@ document.querySelectorAll('.paper').forEach(pp=>ScrollTrigger.create({trigger:pp
 {const hc=document.getElementById('hovercue'),ph0=document.querySelector('.ph');hc&&ph0&&ph0.addEventListener('pointerenter',()=>setTimeout(()=>hc.classList.add('seen'),1200),{once:true})}
 {
   const L=document.querySelector('.loupe');
+  const FULL={};
   if(!matchMedia('(hover:hover) and (pointer:fine)').matches)L.style.display='none';  // touch: the loupe fights with scrolling
   if(matchMedia('(hover:hover) and (pointer:fine)').matches)document.querySelectorAll('.ph img,#tkimg').forEach(im=>{const host=im.closest('.ph,figure');if(host.dataset.loupe!==undefined)return;host.dataset.loupe='';
     host.addEventListener('pointermove',e=>{if(host.classList.contains('ph')&&tl.time()>=4.2){L.style.opacity=0;return}  // no loupe once the tour photo goes full-screen
       const top=[...host.querySelectorAll('img')].filter(i=>i.style.display!=='none'&&getComputedStyle(i).opacity>.5&&!/100%/.test(i.style.clipPath||'')).pop()||im;const r=top.getBoundingClientRect();
       const nx=(e.clientX-r.left)/r.width,ny=(e.clientY-r.top)/r.height,W=top.naturalWidth||1600,H=top.naturalHeight||1000,sc=Math.max(r.width/W,r.height/H)*3;
-      Object.assign(L.style,{left:e.clientX+'px',top:e.clientY+'px',opacity:1,backgroundImage:`url(${top.currentSrc||top.src})`,backgroundSize:`${r.width*3}px ${r.height*3}px`,backgroundPosition:`${-nx*r.width*3+85}px ${-ny*r.height*3+85}px`,filter:getComputedStyle(top).filter})});
+      // true 100%: swap in the full-resolution original (name without the -1600/-2400 size suffix) once it has loaded
+      const cur=top.currentSrc||top.src,full=cur.replace(/-(1600|2400|m|t)\.webp(\?.*)?$/,'.webp'),F=FULL[full]||(FULL[full]=Object.assign(new Image(),{decoding:'async',src:full}));
+      const hi=F.complete&&F.naturalWidth>0,bw=hi?F.naturalWidth:r.width*3,bh=hi?F.naturalHeight:r.height*3;
+      Object.assign(L.style,{left:e.clientX+'px',top:e.clientY+'px',opacity:1,backgroundImage:`url(${hi?full:cur})`,backgroundSize:`${bw}px ${bh}px`,backgroundPosition:`${-nx*bw+85}px ${-ny*bh+85}px`,filter:getComputedStyle(top).filter})});
     host.addEventListener('pointerleave',()=>L.style.opacity=0)});
 }
 /* 11 look ticker: hover a name to re-grade the print */
