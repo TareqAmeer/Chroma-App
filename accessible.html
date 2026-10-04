@@ -76,7 +76,7 @@ a{color:inherit}
 .word{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.02em;font-size:15px;text-decoration:none}
 .word.fly{position:relative}.word.fly>*{position:absolute;margin:0;white-space:nowrap}
 .word .t{margin:0;max-width:none}
-.word svg{width:34px;height:34px;transition:transform .4s var(--ease)}.word:hover svg{transform:translate(-2px,-2px)}
+.word svg{width:34px;height:34px;transition:transform .4s var(--ease)}.word.fly svg{transition:none}.word:hover svg{transform:translate(-2px,-2px)}
 .top nav a:last-child{color:var(--acc);opacity:1}
 .sec{position:relative;font-size:14px;font-weight:500}.sec summary{list-style:none;cursor:pointer;opacity:.8;user-select:none}.sec summary::-webkit-details-marker{display:none}.sec summary:hover,.sec[open] summary{opacity:1}.sec summary i{font-style:normal;font-size:11px;display:inline-block;transition:transform .2s}.sec[open] summary i{transform:rotate(180deg)}
 .sec .menu{position:absolute;top:calc(100% + 12px);left:-14px;min-width:190px;display:flex;flex-direction:column;gap:2px;padding:8px;background:rgba(11,11,10,.96);border:1px solid rgba(242,239,232,.14);backdrop-filter:blur(12px)}
@@ -538,12 +538,17 @@ body{letter-spacing:.012em}
 @media(max-width:760px){.plat{min-height:0;padding:12px;gap:4px}.plat svg{width:28px;height:28px}.plat b{font-size:19px;margin-top:6px}.plat span{font-size:13px}}
 @media(max-width:760px) and (max-height:700px){.plat span{display:none}}
 
-.sec.more .menu{left:auto;right:-14px;min-width:200px}
+.sec.more .menu{left:auto;right:auto;inset-inline-end:-14px;min-width:200px}html[lang=ar] [data-only=en]{display:none}
 .outro{grid-template-columns:minmax(0,1fr)}.outro>*{min-width:0}
 @media(max-height:520px){.plats{grid-template-columns:repeat(5,1fr)!important;gap:6px}.plat{min-height:0;padding:10px;gap:4px}.plat svg{width:24px;height:24px}.plat b{font-size:17px;margin-top:4px}.plat span{display:none}.plat em{font-size:12px}}
 
 .lead button.btn{font:inherit;font-weight:600;font-size:15px;background:none;cursor:pointer}
 .top nav a.navlaunch{color:inherit;opacity:.8}
+
+.plat{display:grid;grid-template-rows:auto 1fr auto auto auto;align-content:stretch}.plat svg{margin-bottom:0}.plat b{align-self:end}
+/* cards in a row share row tracks, so every title, description and action sits on the same line */
+@supports (grid-template-rows:subgrid){.plats{grid-auto-rows:auto}.plat{grid-row:span 5;grid-template-rows:subgrid;row-gap:8px}}
+.playic{width:.72em;height:.72em;margin-inline-start:.35em;vertical-align:-.02em}
 </style>
 <!-- Analytics: GoatCounter (cookieless). Set GC_CODE to your site code from goatcounter.com; blank = off. -->
 <script>(function(){var GC_CODE='tareqameer';if(!GC_CODE)return;var s=document.createElement('script');s.async=true;s.dataset.goatcounter='https://'+GC_CODE+'.goatcounter.com/count';s.src='vendor/goatcounter-count.js';document.head.appendChild(s)})()</script>
@@ -559,7 +564,7 @@ body{letter-spacing:.012em}
 
 <header class="top">
   <a class="word" href="#"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="hdc"><rect x="36" y="32" width="33" height="33"/></clipPath><radialGradient id="hda" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="hdb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient></defs><rect class="ink" x="21" y="21" width="48" height="44" fill="#f2f0ea"/><rect class="ver" x="36" y="32" width="43" height="45" fill="#ff3b1f"/><g clip-path="url(#hdc)"><g class="expo" style="transform-origin:69px 32px"><polygon points="36,32 69,32 36,65" fill="url(#hda)"/><polygon points="69,32 69,65 36,65" fill="url(#hdb)"/></g><line class="seam" x1="69" y1="32" x2="36" y2="65" stroke="#fff1e0" stroke-width=".35" opacity=".8" stroke-dasharray="46.67"/></g></svg><span class="t">CHRO-MA-SMITH</span></a>
-  <nav><details class="sec"><summary>Sections <i aria-hidden="true">▾</i></summary><div class="menu"><a href="#tour" data-tour="raw"><small>01</small>RAW Editing</a><a href="#tour" data-tour="gallery"><small>02</small>Gallery</a><a href="#tour" data-tour="studio"><small>03</small>Studio</a><a href="#looks"><small>04</small>Film Looks</a><a href="#flow"><small>05</small>Old Workflow</a><a href="#flow" data-tour="new"><small>06</small>New Workflow</a><a href="#maker"><small>07</small>The Designer</a><a href="#features"><small>08</small>Feature List</a><a href="#beta"><small>09</small>In Beta</a><a href="#faq"><small>10</small>FAQ</a><a href="#yours"><small>11</small>Download</a></div></details><a href="https://github.com/TareqAmeer/Chroma-App" target="_blank" rel="noopener" data-goatcounter-click="github-nav" data-goatcounter-title="github-nav">GitHub ↗</a><details class="sec more"><summary>More <i aria-hidden="true">▾</i></summary><div class="menu"><a href="#features">Features</a><a href="#faq">FAQ</a><a class="langsw" href="ar/" lang="ar" hreflang="ar">العربية · Arabic</a><a href="accessible.html" lang="en" aria-current="page">English</a><a href="index.html">Standard version</a><a href="chromasmith-22.html">Launch the web app ↗</a></div></details><a class="navlaunch" href="chromasmith-22.html">Launch app ↗</a><a href="#yours">Download ↓</a></nav>
+  <nav><details class="sec"><summary>Sections <i aria-hidden="true">▾</i></summary><div class="menu"><a href="#tour" data-tour="raw"><small>01</small>RAW Editing</a><a href="#tour" data-tour="gallery"><small>02</small>Gallery</a><a href="#tour" data-tour="studio"><small>03</small>Studio</a><a href="#looks"><small>04</small>Film Looks</a><a href="#flow"><small>05</small>Old Workflow</a><a href="#flow" data-tour="new"><small>06</small>New Workflow</a><a href="#maker"><small>07</small>The Designer</a><a href="#features"><small>08</small>Feature List</a><a href="#beta"><small>09</small>In Beta</a><a href="#faq"><small>10</small>FAQ</a><a href="#yours"><small>11</small>Download</a></div></details><a href="https://github.com/TareqAmeer/Chroma-App" target="_blank" rel="noopener" data-goatcounter-click="github-nav" data-goatcounter-title="github-nav">GitHub ↗</a><details class="sec more"><summary>More <i aria-hidden="true">▾</i></summary><div class="menu"><a href="#features">Features</a><a href="#faq">FAQ</a><a class="langsw" href="ar/" lang="ar" hreflang="ar">العربية · Arabic</a><a href="accessible.html" lang="en" aria-current="page" data-only="en">English</a><a href="index.html">Standard version</a><a href="chromasmith-22.html">Launch the web app ↗</a></div></details><a class="navlaunch" href="chromasmith-22.html">Launch app ↗</a><a href="#yours">Download ↓</a></nav>
 </header>
 
 <section class="lead" aria-label="CHRO-MA-SMITH"><h1 class="hero-t">The app that<br>does it all<sup>*</sup><span class="vh"> — Chromasmith, the free offline photo editor for film looks, grain and RAW</span></h1>
@@ -571,7 +576,7 @@ body{letter-spacing:.012em}
     </div>
   </div>
   <p class="mono foot">*ALMOST EVERYTHING. YOU STILL NEED TO TAKE THE PHOTOS.</p>
-  <p class="cta"><a class="btn go" href="#yours" data-goatcounter-click="hero-download" data-goatcounter-title="hero-download">Download ↓</a><button class="btn" type="button" id="tourbtn" data-goatcounter-click="hero-tour" data-goatcounter-title="hero-tour">Start the tour ↓</button></p></section>
+  <p class="cta"><a class="btn go" href="#yours" data-goatcounter-click="hero-download" data-goatcounter-title="hero-download">Download ↓</a><button class="btn" type="button" id="tourbtn" data-goatcounter-click="hero-tour" data-goatcounter-title="hero-tour">Start the tour <svg class="playic" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.8v8.4L10 6z" fill="currentColor"/></svg></button></p></section>
 
 <section class="pin" id="tour" aria-label="Chromasmith tour">
   <div class="ph">
@@ -791,8 +796,8 @@ body{letter-spacing:.012em}
       <a class="plat" href="download/mac.html" data-goatcounter-click="download-mac" data-goatcounter-title="download-mac"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="12" rx="1.5"/><path d="M1.5 19.5h21"/></svg><b>Mac</b><span>Full desktop app · .dmg</span><em>Download ↓</em></a>
       <a class="plat" href="download/windows.html" data-goatcounter-click="download-windows" data-goatcounter-title="download-windows"><svg viewBox="0 0 24 24"><rect x="3" y="3.5" width="18" height="13" rx="1.5"/><path d="M12 3.5v13M3 10h18M8 20.5h8"/></svg><b>Windows</b><span>Full desktop app · installer</span><em>Download ↓</em></a>
       <a class="plat" href="chromasmith-22.html" data-goatcounter-click="open-web-app" data-goatcounter-title="open-web-app"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c3 3.2 3 15.8 0 19M12 2.5c-3 3.2-3 15.8 0 19"/></svg><b>Web</b><span>Any modern browser · nothing to install</span><em>Launch app ↗</em></a>
-      <a class="plat" href="download/ios.html" data-goatcounter-click="download-ios" data-goatcounter-title="download-ios"><svg viewBox="0 0 24 24"><rect x="6.5" y="2" width="11" height="20" rx="2.5"/><path d="M10.5 18.5h3"/></svg><b>iPhone</b><span>Install the .ipa with a third-party signing service (e.g. Flarestore)</span><em>Get the .ipa ↗</em></a>
-      <a class="plat" href="download/android.html" data-goatcounter-click="download-android" data-goatcounter-title="download-android"><svg viewBox="0 0 24 24"><rect x="6.5" y="2" width="11" height="20" rx="2.5"/><path d="M10.5 18.5h3"/></svg><b>Android</b><span>Install the .apk directly, or add the web app to your home screen</span><em>Get the .apk ↗</em></a>
+      <a class="plat" href="download/ios.html" data-goatcounter-click="download-ios" data-goatcounter-title="download-ios"><svg viewBox="0 0 24 24"><rect x="6.5" y="2" width="11" height="20" rx="2.5"/><path d="M10.5 18.5h3"/></svg><b>iPhone</b><span>Install the .ipa with a third-party signing service (e.g. Flarestore)</span><em>Get the .ipa ↓</em></a>
+      <a class="plat" href="download/android.html" data-goatcounter-click="download-android" data-goatcounter-title="download-android"><svg viewBox="0 0 24 24"><path d="M5 17V11a7 7 0 0 1 14 0v6H5z"/><path d="M8 5.5 6.5 3M16 5.5 17.5 3"/><circle cx="9.3" cy="8.7" r=".6" fill="currentColor"/><circle cx="14.7" cy="8.7" r=".6" fill="currentColor"/><path d="M8.5 17v3.5M15.5 17v3.5M3 11.5v4M21 11.5v4"/></svg><b>Android</b><span>Install the .apk directly, or add the web app to your home screen</span><em>Get the .apk ↓</em></a>
     </div>
     <div class="aux">
       <button class="btn" id="homebtn" type="button">Add the web app to your home screen</button>
@@ -815,7 +820,7 @@ body{letter-spacing:.012em}
 <script>
 gsap.registerPlugin(ScrollTrigger);
 const PHONE=matchMedia('(max-width:760px)').matches;if(PHONE)['beta','faq'].forEach(i=>document.getElementById(i).hidden=true);
-document.querySelectorAll('a[href="#beta"],a[href="#faq"]').forEach(a=>a.addEventListener('click',e=>{const t=document.querySelector(a.getAttribute('href'));if(!t.hidden)return;e.preventDefault();e.stopImmediatePropagation();t.hidden=false;ScrollTrigger.refresh();const go=()=>{lenis&&lenis.resize&&lenis.resize();const y=t.getBoundingClientRect().top+scrollY;lenis?lenis.scrollTo(y,{immediate:true,force:true}):scrollTo(0,y)};setTimeout(go,150);setTimeout(go,600)},true));ScrollTrigger.config({ignoreMobileResize:true});
+document.querySelectorAll('a[href="#beta"],a[href="#faq"]').forEach(a=>a.addEventListener('click',e=>{const t=document.querySelector(a.getAttribute('href'));if(!t.hidden)return;e.preventDefault();e.stopImmediatePropagation();t.hidden=false;ScrollTrigger.refresh();window.__navClicked=true;window.__fadeTo(()=>Math.max(0,Math.round(t.getBoundingClientRect().top+scrollY)))},true));ScrollTrigger.config({ignoreMobileResize:true});
 let still=false;try{still=localStorage.getItem('cs-motion')==='off'}catch(e){}
 if(still)document.documentElement.classList.add('still');
 if(!location.hash){history.scrollRestoration='manual';scrollTo(0,0);addEventListener('load',()=>{if(window.__navClicked)return;scrollTo(0,0);lenis&&lenis.scrollTo(0,{immediate:true,force:true})})}
@@ -868,7 +873,10 @@ document.querySelector('.sec')&&document.addEventListener('keydown',e=>{const d=
   if(e.key==='Escape'){d.removeAttribute('open');d.querySelector('summary').focus()}
   else if(e.key==='ArrowDown'){e.preventDefault();L[(i+1)%L.length].focus()}
   else if(e.key==='ArrowUp'){e.preventDefault();L[(i<0?0:i-1+L.length)%L.length].focus()}});
-document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{const h=a.getAttribute('href');e.preventDefault();window.__navClicked=true;if(a.dataset.tour&&window.__tourTo){window.__tourTo(a.dataset.tour);return}const tgt=h.length<2?0:h;if(!tgt){lenis?lenis.scrollTo(0):scrollTo(0,0);return}const el=document.querySelector(tgt);const yOf=()=>{let y=el.getBoundingClientRect().top+scrollY;const pl=tgt==='#yours'&&document.querySelector('.plats');if(pl){const r=pl.getBoundingClientRect();y=Math.max(y,r.bottom+scrollY-innerHeight+16)}return Math.max(0,Math.round(y))};/* land exactly on the section (no strip of the previous one); for downloads, make sure every platform card is on screen */if(Math.abs(yOf()-scrollY)>2*innerHeight){/* far jump (e.g. Download): quick fade-cut instead of scrolling through the whole page */let cut=document.getElementById('jumpcut');if(!cut){cut=document.createElement('div');cut.id='jumpcut';cut.style.cssText='position:fixed;inset:0;background:#0b0b0a;z-index:200;opacity:0;pointer-events:none;transition:opacity .18s';document.body.appendChild(cut)}cut.style.opacity=1;setTimeout(()=>{let k=0;const jump=()=>{lenis&&lenis.resize&&lenis.resize();lenis?lenis.scrollTo(yOf(),{immediate:true,force:true}):scrollTo(0,yOf());ScrollTrigger.update();if(++k<4&&Math.abs(yOf()-scrollY)>4)requestAnimationFrame(jump);else setTimeout(()=>cut.style.opacity=0,60)};jump()},190);return}if(!lenis){scrollTo(0,yOf());return}let n=0;const go=()=>{lenis.resize&&lenis.resize();lenis.scrollTo(yOf(),{duration:Math.min(2.4,Math.max(.8,Math.abs(yOf()-scrollY)/9000)),lock:true,force:true,onComplete:()=>{if(++n<4&&Math.abs(yOf()-scrollY)>4)setTimeout(go,60)}})};go()}));
+/* every in-page jump (wordmark, Sections, More, Download...) is a short fade to black, an instant move, and a fade back: never a fast scroll through the page */
+window.__fadeTo=yOf=>{let cut=document.getElementById('jumpcut');if(!cut){cut=document.createElement('div');cut.id='jumpcut';cut.style.cssText='position:fixed;inset:0;background:#0b0b0a;z-index:200;opacity:0;pointer-events:none;transition:opacity .22s ease';document.body.appendChild(cut)}
+  cut.style.opacity=1;setTimeout(()=>{let k=0;const jump=()=>{lenis&&lenis.resize&&lenis.resize();lenis?lenis.scrollTo(yOf(),{immediate:true,force:true}):scrollTo(0,yOf());ScrollTrigger.update();if(++k<4&&Math.abs(yOf()-scrollY)>4)requestAnimationFrame(jump);else setTimeout(()=>cut.style.opacity=0,80)};jump()},230)};
+document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{const h=a.getAttribute('href');e.preventDefault();window.__navClicked=true;if(a.dataset.tour&&window.__tourTo){window.__tourTo(a.dataset.tour);return}const tgt=h.length<2?0:h;if(!tgt){window.__fadeTo(()=>0);return}const el=document.querySelector(tgt);const yOf=()=>{let y=el.getBoundingClientRect().top+scrollY;const pl=tgt==='#yours'&&document.querySelector('.plats');if(pl){const r=pl.getBoundingClientRect();y=Math.max(y,r.bottom+scrollY-innerHeight+16)}return Math.max(0,Math.round(y))};/* land exactly on the section (no strip of the previous one); for downloads, make sure every platform card is on screen */window.__fadeTo(yOf)}));
 
 /* 1. stage */
 const tr=document.querySelector('.track'),pans=[...document.querySelectorAll('.panel[data-lab]')];
@@ -894,7 +902,10 @@ if(!reduce){
   /* the flying copy is one text run, the intro name is one block per letter, so their glyphs don't land in the same place;
      measure both at the start size once and correct the start offset + letter-spacing so the swap is invisible */
   let K=null;
-  const cal=(ls)=>{const r=ir(),sp=document.querySelectorAll('.intro .name span'),first=ls==null;if(first)ls=parseFloat(getComputedStyle(document.querySelector('.intro .name')).letterSpacing)||0;
+  const RTL=document.documentElement.dir==='rtl';
+  const calRtl=()=>{const r=ir();gsap.set(wt,{x:0,y:0,scale:1,left:r.n.left-wb().l,top:r.n.top-wb().t,fontSize:r.fs,lineHeight:r.n.height+'px',letterSpacing:0});const w=wt.getBoundingClientRect(),q=document.createRange();q.setStart(wt.firstChild,0);q.setEnd(wt.firstChild,1);
+    K={dx:r.n.right-w.right,dy:0,ls:0,gx:0,gy:q.getBoundingClientRect().top-w.top,col:getComputedStyle(document.querySelector('.intro .name')).color}};  // Arabic is joined script: no per-letter matching, no letter-spacing; right edges line up
+  const cal=(ls)=>{if(RTL)return calRtl();const r=ir(),sp=document.querySelectorAll('.intro .name span'),first=ls==null;if(first)ls=parseFloat(getComputedStyle(document.querySelector('.intro .name')).letterSpacing)||0;
     gsap.set(wt,{x:0,y:0,scale:1,left:r.n.left-wb().l,top:r.n.top-wb().t,fontSize:r.fs,lineHeight:r.n.height+'px',letterSpacing:ls+'px'});
     const g=(el,i)=>{const t=el.firstChild,q=document.createRange();q.setStart(t,i);q.setEnd(t,i+1);return q.getBoundingClientRect()};
     const y=[...sp].map(e=>gsap.getProperty(e,'yPercent'));gsap.set(sp,{yPercent:0});
@@ -903,23 +914,23 @@ if(!reduce){
     K={dx:a0.left-b0.left,dy:a0.top-b0.top,ls:ls+((a1.left-a0.left)-(b1.left-b0.left))/(sp.length-1)};if(first){gsap.set(wt,{x:0,y:0,scale:1});cal(K.ls);return}
     const wr=wt.getBoundingClientRect();K.gx=b0.left-wr.left;K.gy=b0.top-wr.top;K.col=getComputedStyle(document.querySelector('.intro .name')).color};
   const k=()=>K||(cal(),K);
-  const measure=()=>{W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});const b=W.getBoundingClientRect(),a=ws.getBoundingClientRect(),c=wt.getBoundingClientRect(),q=document.createRange();q.setStart(wt.firstChild,0);q.setEnd(wt.firstChild,1);const g=q.getBoundingClientRect(),cs=getComputedStyle(wt);E={sx:a.left-b.left,sy:a.top-b.top,sw:a.width,tx:c.left-b.left,ty:c.top-b.top,tfs:parseFloat(cs.fontSize),th:c.height,gx:g.left-c.left,gy:g.top-c.top,ls:parseFloat(cs.letterSpacing)||0,col:cs.color};WB={w:b.width,h:b.height};W.style.width=b.width+'px';W.style.height=b.height+'px';W.classList.add('fly');docked=false;K=null};
+  const measure=()=>{W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});const b=W.getBoundingClientRect(),a=ws.getBoundingClientRect(),c=wt.getBoundingClientRect(),q=document.createRange();q.setStart(wt.firstChild,0);q.setEnd(wt.firstChild,1);const g=q.getBoundingClientRect(),cs=getComputedStyle(wt);E={sx:a.left-b.left,sy:a.top-b.top,sw:a.width,tx:c.left-b.left,ty:c.top-b.top,tfs:parseFloat(cs.fontSize),th:c.height,gx:g.left-c.left,gy:g.top-c.top,ls:parseFloat(cs.letterSpacing)||0,col:cs.color};if(document.documentElement.dir==='rtl'){E.gx=0;E.ls=0}WB={w:b.width,h:b.height};W.style.width=b.width+'px';W.style.height=b.height+'px';W.classList.add('fly');docked=false;K=null};
   measure();ScrollTrigger.addEventListener('refreshInit',measure);
   gsap.set('.word',{opacity:0});
   /* the orange section sits over the intro while the curtain rises; clip it to the curtain so its dark text never covers the intro tagline */
   const LD=document.querySelector('.lead'),CU=document.querySelector('.intro .curtain');
   let LP=0;const clipLead=p=>{if(!LD)return;LP=p;if(p>=1){LD.style.clipPath='';return}LD.style.clipPath='inset('+Math.max(0,CU.getBoundingClientRect().top-LD.getBoundingClientRect().top+3)+'px 0 0 0)'};
   gsap.ticker.add(()=>clipLead(LP)); // the page moves every frame while the scrubbed curtain lags, so re-clip per frame
-  gsap.timeline({onUpdate(){clipLead(this.progress());const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'})}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=70%',pin:true,scrub:.6,invalidateOnRefresh:true,onUpdate:self=>document.documentElement.classList.toggle('lead-on',self.progress>.95)}})
+  gsap.timeline({onUpdate(){clipLead(this.progress());const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){ws.style.transition='none';W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});ws.style.transition='none';ws.getBoundingClientRect();requestAnimationFrame(()=>requestAnimationFrame(()=>ws.style.transition=''));if(K&&!RTL)wt.style.letterSpacing=(K.ls*E.tfs/ir().fs)+'px'}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=70%',pin:true,scrub:.6,invalidateOnRefresh:true,onUpdate:self=>document.documentElement.classList.toggle('lead-on',self.progress>.95)}})
     .to('.intro .cue',{opacity:0,duration:.1})
-    .to('.intro .in svg,.intro .name',{opacity:0,duration:.001,ease:'none'},.01)
+    .to('.intro .in svg,.intro .name,.intro .name-en',{opacity:0,duration:.001,ease:'none'},.01)
     .to('.word',{opacity:1,duration:.001,ease:'none'},.01)
     /* the flight is transform-only (translate + scale down from the big size), so nothing re-lays-out or re-hints per frame;
        start and end are measured glyph-for-glyph so both hand-offs are invisible, and the colour eases across the whole move */
-    .fromTo(ws,{left:0,top:0,width:()=>ir().s.width,height:()=>ir().s.width,transformOrigin:'0 0',x:()=>ir().s.left-wb().l,y:()=>ir().s.top-wb().t,scale:1},
-      {left:0,top:0,width:()=>ir().s.width,height:()=>ir().s.width,x:()=>E.sx,y:()=>E.sy,scale:()=>E.sw/ir().s.width,duration:.8,ease:'power3.inOut',immediateRender:true},0)
+    .fromTo(ws,{x:0,y:0,width:()=>ir().s.width,height:()=>ir().s.width,transformOrigin:'0 0',left:()=>ir().s.left-wb().l,top:()=>ir().s.top-wb().t,scale:1},
+      {x:0,y:0,width:()=>ir().s.width,height:()=>ir().s.width,left:()=>E.sx,top:()=>E.sy,scale:()=>E.sw/ir().s.width,duration:.8,ease:'power3.inOut',immediateRender:true},0)
     .fromTo(wt,{left:0,top:0,transformOrigin:'0 0',fontSize:()=>ir().fs,lineHeight:()=>ir().n.height+'px',x:()=>ir().n.left-wb().l+k().dx,y:()=>ir().n.top-wb().t+k().dy,scale:1,letterSpacing:()=>k().ls+'px'},
-      {left:0,top:0,fontSize:()=>ir().fs,lineHeight:()=>ir().n.height+'px',x:()=>E.tx+E.gx-k().gx*E.tfs/ir().fs,y:()=>E.ty+E.gy-k().gy*E.tfs/ir().fs,scale:()=>E.tfs/ir().fs,letterSpacing:()=>E.ls*ir().fs/E.tfs+'px',duration:.8,ease:'power3.inOut',immediateRender:true},0)
+      {left:0,top:0,fontSize:()=>ir().fs,lineHeight:()=>ir().n.height+'px',x:()=>E.tx+E.gx-k().gx*E.tfs/ir().fs,y:()=>E.ty+E.gy-k().gy*E.tfs/ir().fs,scale:()=>E.tfs/ir().fs,letterSpacing:()=>k().ls+'px',duration:.8,ease:'power3.inOut',immediateRender:true},0)
     .fromTo(wt,{color:()=>k().col},{color:()=>E.col,duration:.8,ease:'none',immediateRender:true},0)  // colour settles evenly over the whole flight
     .to('.intro .curtain',{scaleY:1,duration:.7,ease:'power2.inOut'},.2);
   ScrollTrigger.create({trigger:'.pin',start:'top 60%',once:true,onEnter:heroIn});
@@ -975,7 +986,8 @@ tl.to('.ph',{left:'50%',width:Wf,height:Hf,ease:'power2.inOut',duration:1},4.2)
   .to('.fchip',{scale:1.18,duration:.1,ease:'power2.out',onStart(){document.querySelector('.fchip').classList.add('on')},onReverseComplete(){document.querySelector('.fchip').classList.remove('on')}},5.7)
   .to('.fchip',{scale:1,duration:.2,ease:'back.out(3)'},5.8)
   // zoom back out, keeping the photo's own shape
-  .to('.cap0,.ph .shade',{opacity:0,duration:.25},6.3)
+  .to('.cap0',{opacity:0,duration:.22},5.96)   // gone before the photo is lifted over the track at 6.2
+  .to('.ph .shade',{opacity:0,duration:.25},6.3)
   .to('.favs',{scale:.42,transformOrigin:'0 0',ease:'power2.inOut',duration:.9},6.3)
   .to('.ph',{width:Wz,height:()=>Wz()/AR6,ease:'power2.inOut',duration:.9},6.3)
   .addLabel('slide',PRE-0)
@@ -991,7 +1003,7 @@ window.__tourTo=k=>{
   let y;
   if(k==='new'){y=pos(window.__flowTl,.62)}
   else{const t=window.__tourTl,T=t.duration(),at={raw:0,gallery:t.labels.slide+XH()/innerHeight*K(),studio:t.labels.studioHold}[k];y=pos(t,at/T)}
-  lenis?lenis.scrollTo(y,{duration:1.6,lock:true}):scrollTo({top:y,behavior:'smooth'})};
+  window.__fadeTo?window.__fadeTo(()=>y):scrollTo(0,y)};
 const SN=['Look: pick from over 130 film presets and choose how it is printed.','Light: set exposure, contrast and curves, then add halation and bloom.','Colour: mix each colour, tint with wheels and fine-tune single shades.','Texture: add film grain, sharpen, reduce noise and paint local masks.','Output: crop to any ratio, then add borders and film frames.','Info: see the camera details and add keywords and tags.'];
 const RY=[29.4,38.5,47.7,56.9,66,75];
 [0,1,2,3,4,5].forEach(k=>tl.call(()=>{document.getElementById('studioNote').textContent=SN[k];document.querySelector('.toolring').style.top=RY[k]+'%';document.querySelectorAll('.steps6 li').forEach((li,n)=>li.classList.toggle('on',n===k))},null,k?'studioHold+='+(k*HOLD2/6+.075):'studioHold'));
