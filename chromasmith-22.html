@@ -6939,7 +6939,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1004H';
+const BUILD='1.1004I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -12999,8 +12999,10 @@ function bakeCurves(){
 function curveSetCh(ch){curveCh=ch;document.querySelectorAll('.crv-chip').forEach(b=>b.classList.toggle('on',b.dataset.ch===ch));drawCurveEditor();}
 function curveResetCh(){fxState.curves[curveCh]=_identityCurvePts();curveChanged();}
 function curveResetAll(){fxState.curves=_curveDefault();curveChanged();}
+// Editing the curve switches Tone Curves on, like touching any other tool would.
+function _crvEnsureOn(){const tg=document.getElementById('tg-curves');if(tg&&!tg.classList.contains('on')&&!curvesIdentity())toggleFX('curves');}
 function curveChanged(){
-  bakeCurves();drawCurveEditor();fxUpdate();
+  _crvEnsureOn();bakeCurves();drawCurveEditor();fxUpdate();
   // Curve edits (point-mode canvas drags, parametric sliders) aren't tracked by the generic
   // fxMarkModifiedSliders()/.fx-mod snapshot — same reason Curves always had its own bespoke
   // reset. This is what actually drives the header's "Reset | All" visibility for this section.
@@ -13057,7 +13059,7 @@ function _crvInit(){
       return;
     }
     if(hit<0){pts.push([px,py]);pts.sort((a,b)=>a[0]-b[0]);hit=pts.findIndex(p=>p[0]===px&&p[1]===py);}
-    _crvDrag=hit;cv.setPointerCapture(e.pointerId);
+    _crvDrag=hit;cv.setPointerCapture(e.pointerId);_crvEnsureOn();
     bakeCurves();drawCurveEditor();
   });
   cv.addEventListener('pointermove',e=>{
@@ -13065,7 +13067,7 @@ function _crvInit(){
     if(_crvDrag<0)return;const pts=fxState.curves[curveCh];let[px,py]=_crvPos(e);
     if(_crvDrag===0)px=0;else if(_crvDrag===pts.length-1)px=1;              // endpoints: x pinned, y free
     else px=Math.min(pts[_crvDrag+1][0]-0.01,Math.max(pts[_crvDrag-1][0]+0.01,px));
-    pts[_crvDrag]=[px,py];bakeCurves();drawCurveEditor();
+    pts[_crvDrag]=[px,py];_crvEnsureOn();bakeCurves();drawCurveEditor();
     clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,120);           // live drag preview; history on release
   });
   const up=()=>{_crvScroll=null;if(_crvDrag<0)return;_crvDrag=-1;curveChanged();};
@@ -13286,11 +13288,22 @@ function hslPreviewClear(){if(!hslPreviewBand)return;hslPreviewBand=null;hslBuil
 {
   const histEl=document.getElementById('hsl-hist');
   if(histEl){
+    // Touch: the finger stays "on" the first zone it hit (implicit pointer capture), so pick the
+    // band from the finger's x instead, and commit whichever band it rests on at lift-off.
+    const bandAt=e=>{const r=histEl.getBoundingClientRect();if(!r.width)return null;
+      return HSL_BANDS[Math.min(HSL_BANDS.length-1,Math.max(0,Math.floor((e.clientX-r.left)/r.width*HSL_BANDS.length)))];};
+    let scrub=null;
+    histEl.style.touchAction='pan-y';
+    histEl.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')return;scrub={x:e.clientX,y:e.clientY,band:bandAt(e)};});
     histEl.addEventListener('pointermove',e=>{
+      if(scrub){if(Math.abs(e.clientY-scrub.y)>Math.abs(e.clientX-scrub.x)+12){scrub=null;hslPreviewClear();return;}
+        const b=bandAt(e);if(b){scrub.band=b;hslPreviewSet(b);}return;}
       const zone=e.target.closest&&e.target.closest('.hsl-hist-zone');
       if(zone)hslPreviewSet(zone.getAttribute('aria-label').replace('Select ',''));
     });
-    histEl.addEventListener('pointerleave',hslPreviewClear);
+    histEl.addEventListener('pointerup',e=>{if(!scrub)return;const b=scrub.band;scrub=null;if(b)hslSetBand(b);});
+    histEl.addEventListener('pointercancel',()=>{scrub=null;hslPreviewClear();});
+    histEl.addEventListener('pointerleave',e=>{if(!scrub)hslPreviewClear();});
   }
 }
 function hslSyncUI(opts){
