@@ -48,12 +48,19 @@ a{color:inherit}
 .lead .stats div{padding:16px 18px 0;border-left:1px solid rgba(11,11,10,.25)}.lead .stats div:first-child{padding-left:0;border-left:0}
 .lead .stats b{display:block;font-size:clamp(40px,5vw,84px);font-weight:900;line-height:.9;letter-spacing:-.01em}
 .lead .stats span{display:block;margin-top:10px;font-size:clamp(13px,1.1vw,17px);font-weight:600;line-height:1.3;max-width:16em}
-.lead .rep{display:flex;align-items:center;gap:18px 28px;flex-wrap:wrap;margin-top:5vh;padding-top:16px;border-top:1px solid rgba(11,11,10,.25)}
-.lead .rep ul{list-style:none;display:flex;flex-wrap:wrap;gap:6px 22px;margin:0;padding:0}
-.lead .rep li{font-size:clamp(16px,1.5vw,24px);font-weight:700;text-decoration:line-through;text-decoration-thickness:2px;opacity:.55}
-.lead .rep .arr{font-size:clamp(22px,2vw,32px);font-weight:900}
-.lead .rep p{margin:0;background:#0b0b0a;color:#f2f0ea;padding:10px 16px;font-size:clamp(16px,1.5vw,24px);font-weight:600}.lead .rep p b{color:var(--acc)}
-@media(max-width:760px){.lead .stats{grid-template-columns:1fr 1fr}.lead .stats div{padding:14px 0 12px;border-left:0;border-bottom:1px solid rgba(11,11,10,.25)}.lead .stats div:nth-child(even){padding-left:14px;border-left:1px solid rgba(11,11,10,.25)}.lead .rep{gap:10px;flex-direction:column;align-items:flex-start}.lead .rep ul{flex-direction:column}.lead .rep .arr{transform:rotate(90deg)}}
+@media(max-width:760px){.lead .stats{grid-template-columns:1fr 1fr}.lead .stats div{padding:14px 0 12px;border-left:0;border-bottom:1px solid rgba(11,11,10,.25)}.lead .stats div:nth-child(even){padding-left:14px;border-left:1px solid rgba(11,11,10,.25)}}
+.lead .ba{display:grid;grid-template-columns:minmax(0,1.3fr) 1fr;gap:4vw;align-items:center;margin-top:5vh;pointer-events:auto}
+.lead .cmp{position:relative;aspect-ratio:3/2;width:min(100%,84vh);overflow:hidden;background:#0b0b0a;cursor:ew-resize;touch-action:pan-y;--x:50%}
+.lead .cmp img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;user-select:none}
+.lead .cmp .after{clip-path:inset(0 0 0 var(--x))}
+.lead .cmp .bar{position:absolute;top:0;bottom:0;left:var(--x);width:2px;margin-left:-1px;background:#f2f0ea}
+.lead .cmp .bar b{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:38px;height:38px;display:grid;place-items:center;background:#f2f0ea!important;color:#0b0b0a!important;font-size:16px}
+.lead .cmp .l{position:absolute;bottom:10px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#fff;mix-blend-mode:difference}.lead .cmp .l.a{left:12px}.lead .cmp .l.b{right:12px}
+.lead .ba ol{list-style:none;margin:0;padding:0;counter-reset:s}
+.lead .ba li{counter-increment:s;display:flex;gap:14px;align-items:baseline;padding:11px 0;border-top:1px solid rgba(11,11,10,.3);font-size:clamp(17px,1.6vw,26px);font-weight:700}
+.lead .ba li::before{content:"0" counter(s);font-size:12px;letter-spacing:.12em}
+.lead .ba p{margin-top:14px;font-size:15px;font-weight:600}
+@media(max-width:760px){.lead .ba{grid-template-columns:1fr;gap:16px}.lead .cmp{max-height:none}}
 .lead .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}.lead .btn{border-color:#0b0b0a;color:#0b0b0a;border-width:2px;min-width:210px;justify-content:center}@media(max-width:760px){.lead .cta{display:grid;grid-template-columns:1fr 1fr;gap:10px}.lead .btn{min-width:0;padding:14px 10px}}.lead .btn.go{background:#0b0b0a;color:#f2f0ea}.lead .auto{position:fixed;right:5vw;bottom:14px;z-index:40;display:flex;background:rgba(11,11,10,.86);border:1px solid rgba(242,239,232,.25);backdrop-filter:blur(8px)}
 .auto button{font:600 12px/1 inherit;font-family:inherit;letter-spacing:.1em;text-transform:uppercase;color:#f2f0ea;background:none;border:0;padding:11px 14px;cursor:pointer;display:flex;gap:8px;align-items:center}
 .auto button+button{border-left:1px solid rgba(242,239,232,.2);min-width:46px;justify-content:center}
@@ -524,7 +531,10 @@ section{position:relative}
 <section class="lead" aria-label="CHRO-MA-SMITH"><h1 class="hero-t">The app that<br>does it all<sup>*</sup><span class="vh"> — Chromasmith, the free offline photo editor for film looks, grain and RAW</span></h1>
   <div class="usp">
     <div class="stats"><div><b>130+</b><span>film looks with real grain, halation &amp; bloom</span></div><div><b>0</b><span>uploads. Every photo stays on your device</span></div><div><b>£0</b><span>free and open source, forever</span></div><div><b>1</b><span>app for library, RAW, editing &amp; export</span></div></div>
-    <div class="rep"><ul><li>Photo library</li><li>RAW editor</li><li>Film-look plugins</li><li>Cloud subscription</li></ul><span class="arr" aria-hidden="true">→</span><p><b>One free app.</b> All of it, offline.</p></div>
+    <div class="ba">
+      <div class="cmp" id="cmp" role="slider" tabindex="0" aria-label="Drag to compare the original photo with the Chromasmith edit" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"><img src="site/assets/story/main1-1600.webp" alt="Original, unedited beach photo" decoding="async" loading="lazy"><img class="after" src="site/assets/story/main5-1600.webp" alt="The same photo with a film look, grain and glow from Chromasmith" decoding="async" loading="lazy"><i class="bar"><b>↔</b></i><span class="l a">Your photo</span><span class="l b">Chromasmith</span></div>
+      <div><ol><li>Import a RAW or JPEG</li><li>Pick a film look</li><li>Add grain &amp; glow</li><li>Export full-res</li></ol><p>Drag the photo to compare. Nothing leaves your device.</p></div>
+    </div>
   </div>
   <p class="mono foot">*ALMOST EVERYTHING. YOU STILL NEED TO TAKE THE PHOTOS.</p>
   <p class="cta"><a class="btn go" href="chromasmith-22.html" data-goatcounter-click="hero-launch" data-goatcounter-title="hero-launch">Launch the free app ↗</a><a class="btn" href="#yours" data-goatcounter-click="hero-download" data-goatcounter-title="hero-download">Download ↓</a></p></section>
@@ -1235,6 +1245,11 @@ const upd=()=>{const mid=innerHeight*.5;let c=null;for(const r of S){const e=doc
 addEventListener('scroll',upd,{passive:true});addEventListener('resize',upd);setTimeout(upd,600)}
 /* 5. outro lines rise */
 gsap.from('.outro .k i',{yPercent:105,stagger:.12,duration:1.2,ease:'expo.out',scrollTrigger:{trigger:'.outro',start:'top 65%'}});
+
+/* orange section: before/after drag */
+{const c=document.getElementById('cmp');if(c){const set=v=>{v=Math.max(0,Math.min(100,v));c.style.setProperty('--x',v+'%');c.setAttribute('aria-valuenow',Math.round(v))};let dn=false;const at=e=>{const r=c.getBoundingClientRect();set((e.clientX-r.left)/r.width*100)};
+c.addEventListener('pointerdown',e=>{dn=true;c.setPointerCapture(e.pointerId);at(e)});c.addEventListener('pointermove',e=>{if(dn||e.pointerType==='mouse')at(e)});c.addEventListener('pointerup',()=>dn=false);c.addEventListener('pointercancel',()=>dn=false);
+c.addEventListener('keydown',e=>{const v=parseFloat(c.style.getPropertyValue('--x'))||50;if(e.key==='ArrowLeft'){set(v-5);e.preventDefault()}if(e.key==='ArrowRight'){set(v+5);e.preventDefault()}})}}
 </script>
 </body>
 </html>
