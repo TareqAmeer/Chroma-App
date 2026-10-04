@@ -355,7 +355,7 @@ section{position:relative}
 .split .lab.l{left:5vw}.split .lab.r{right:5vw}
 .split .k{position:absolute;left:5vw;bottom:10vh;color:#fff;mix-blend-mode:difference}
 /* 13 frame counter */
-.counter{position:fixed;right:14px;top:50%;z-index:45;transform:translateY(-50%);writing-mode:vertical-rl;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);mix-blend-mode:difference}
+.counter{display:none!important;position:fixed;right:14px;top:50%;z-index:45;transform:translateY(-50%);writing-mode:vertical-rl;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);mix-blend-mode:difference}
 .counter b{color:var(--acc);font-weight:400}
 /* 14 draggable while floating */
 .tile .f{touch-action:none;cursor:grab}.tile .f:active{cursor:grabbing}
@@ -831,16 +831,30 @@ if(!reduce){
   const W=document.querySelector('.word'),ws=W.querySelector('svg'),wt=W.querySelector('.t');let E,WB={w:0,h:0},docked=false;
   const wb=()=>{const r=W.getBoundingClientRect();return{l:r.left,t:r.top}};
   const ir=()=>{const n=document.querySelector('.intro .name'),v=document.querySelector('.intro svg');return{n:n.getBoundingClientRect(),s:v.getBoundingClientRect(),fs:parseFloat(getComputedStyle(n).fontSize)}};
-  const measure=()=>{W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});const b=W.getBoundingClientRect(),a=ws.getBoundingClientRect(),c=wt.getBoundingClientRect();E={sx:a.left-b.left,sy:a.top-b.top,sw:a.width,tx:c.left-b.left,ty:c.top-b.top,tfs:parseFloat(getComputedStyle(wt).fontSize),th:c.height};WB={w:b.width,h:b.height};W.style.width=b.width+'px';W.style.height=b.height+'px';W.classList.add('fly');docked=false};
+  /* the flying copy is one text run, the intro name is one block per letter, so their glyphs don't land in the same place;
+     measure both at the start size once and correct the start offset + letter-spacing so the swap is invisible */
+  let K=null;
+  const cal=(ls)=>{const r=ir(),sp=document.querySelectorAll('.intro .name span'),first=ls==null;if(first)ls=parseFloat(getComputedStyle(document.querySelector('.intro .name')).letterSpacing)||0;
+    gsap.set(wt,{left:r.n.left-wb().l,top:r.n.top-wb().t,fontSize:r.fs,lineHeight:r.n.height+'px',letterSpacing:ls+'px'});
+    const g=(el,i)=>{const t=el.firstChild,q=document.createRange();q.setStart(t,i);q.setEnd(t,i+1);return q.getBoundingClientRect()};
+    const y=[...sp].map(e=>gsap.getProperty(e,'yPercent'));gsap.set(sp,{yPercent:0});
+    const a0=g(sp[0],0),a1=g(sp[sp.length-1],0),b0=g(wt,0),b1=g(wt,wt.textContent.length-1);
+    sp.forEach((e,i)=>gsap.set(e,{yPercent:y[i]}));
+    K={dx:a0.left-b0.left,dy:a0.top-b0.top,ls:ls+((a1.left-a0.left)-(b1.left-b0.left))/(sp.length-1)};if(first)cal(K.ls)};
+  const k=()=>K||(cal(),K);
+  const measure=()=>{W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});const b=W.getBoundingClientRect(),a=ws.getBoundingClientRect(),c=wt.getBoundingClientRect();E={sx:a.left-b.left,sy:a.top-b.top,sw:a.width,tx:c.left-b.left,ty:c.top-b.top,tfs:parseFloat(getComputedStyle(wt).fontSize),th:c.height};WB={w:b.width,h:b.height};W.style.width=b.width+'px';W.style.height=b.height+'px';W.classList.add('fly');docked=false;K=null};
   measure();ScrollTrigger.addEventListener('refreshInit',measure);
   gsap.set('.word',{opacity:0});
-  gsap.timeline({onUpdate(){const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'})}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=70%',pin:true,scrub:1,invalidateOnRefresh:true,onUpdate:self=>document.documentElement.classList.toggle('lead-on',self.progress>.95)}})
+  /* the orange section sits over the intro while the curtain rises; clip it to the curtain so its dark text never covers the intro tagline */
+  const LD=document.querySelector('.lead'),CU=document.querySelector('.intro .curtain');
+  const clipLead=p=>{if(!LD)return;if(p>=1||p<=0){LD.style.clipPath='';return}LD.style.clipPath='inset('+Math.max(0,CU.getBoundingClientRect().top-LD.getBoundingClientRect().top)+'px 0 0 0)'};
+  gsap.timeline({onUpdate(){clipLead(this.progress());const d=this.progress()>=1;if(d===docked)return;docked=d;if(d){W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'})}else{W.style.width=WB.w+'px';W.style.height=WB.h+'px';W.classList.add('fly')}},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=70%',pin:true,scrub:1,invalidateOnRefresh:true,onUpdate:self=>document.documentElement.classList.toggle('lead-on',self.progress>.95)}})
     .to('.intro .cue',{opacity:0,duration:.1})
-    .to('.intro .in',{opacity:0,duration:.02,ease:'none'},.01)
-    .to('.word',{opacity:1,duration:.02,ease:'none'},.01)
+    .to('.intro .in svg,.intro .name',{opacity:0,duration:.001,ease:'none'},.01)
+    .to('.word',{opacity:1,duration:.001,ease:'none'},.01)
     .fromTo(ws,{left:()=>ir().s.left-wb().l,top:()=>ir().s.top-wb().t,width:()=>ir().s.width,height:()=>ir().s.width},
       {left:()=>E.sx,top:()=>E.sy,width:()=>E.sw,height:()=>E.sw,duration:.8,ease:'power3.inOut',immediateRender:true},0)
-    .fromTo(wt,{left:()=>ir().n.left-wb().l,top:()=>ir().n.top-wb().t,fontSize:()=>ir().fs,lineHeight:()=>ir().n.height+'px',letterSpacing:'0.01em'},
+    .fromTo(wt,{left:()=>ir().n.left-wb().l+k().dx,top:()=>ir().n.top-wb().t+k().dy,fontSize:()=>ir().fs,lineHeight:()=>ir().n.height+'px',letterSpacing:()=>k().ls+'px'},
       {left:()=>E.tx,top:()=>E.ty,fontSize:()=>E.tfs,lineHeight:()=>E.th+'px',letterSpacing:'0.02em',duration:.8,ease:'power3.inOut',immediateRender:true},0)
     .to('.intro .curtain',{scaleY:1,duration:.7,ease:'power2.inOut'},.2);
   ScrollTrigger.create({trigger:'.pin',start:'top 60%',once:true,onEnter:heroIn});
