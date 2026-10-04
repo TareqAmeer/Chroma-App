@@ -1,0 +1,375 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Chromasmith Ep1 v13</title>
+<style>
+@font-face{font-family:G;src:url('tex/GramatikaBold.otf');font-weight:700}
+@font-face{font-family:G;src:url('tex/GramatikaRegular.otf');font-weight:400}
+:root{--red:#ff3b1f;--ink:#111;--paper:#f2efe8}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--paper);font-family:G,sans-serif;color:var(--ink)}
+#stage{position:absolute;inset:0;overflow:hidden;background:var(--paper)}
+.L{position:absolute;inset:0;overflow:hidden}
+.abs{position:absolute}
+img{display:block}
+.cover{position:absolute;left:0;top:0;transform-origin:0 0}
+/* kinetic type: each word rises out of its own mask */
+.kt{position:absolute;font-weight:700;letter-spacing:-.035em;line-height:1;white-space:nowrap}
+.kt.chip{background:var(--paper);color:var(--ink)!important;padding:18px 28px 6px;border-radius:12px;box-shadow:0 22px 50px rgba(0,0,0,.4);text-shadow:none!important}
+.kt .w{display:inline-block;overflow:hidden;vertical-align:top;padding:.04em .02em .12em}
+.kt .w i{display:inline-block;font-style:normal}
+.on-photo{color:#fff;text-shadow:0 4px 30px rgba(0,0,0,.35)}
+.win{position:absolute;width:640px;height:440px;background:#e2dfd8;border-radius:12px;box-shadow:0 30px 70px rgba(0,0,0,.22),0 3px 10px rgba(0,0,0,.12);overflow:hidden;transform-origin:50% 100%}
+.win .tb{height:60px;background:#c8c4bb;display:flex;align-items:center;padding:0 22px;gap:12px}
+.win .tb i{width:14px;height:14px;border-radius:50%;background:#a9a59c;display:inline-block}
+.win .box{position:absolute;background:#cfcbc2;border-radius:5px}
+.sq{position:absolute;left:0;top:0;background:var(--red)}
+.sq svg{position:absolute;inset:0;width:100%;height:100%}
+/* the app (vector rebuild, as v12) */
+#world{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
+#app{position:absolute;left:150px;top:170px;width:1620px;height:860px;background:#141414;border-radius:16px;overflow:hidden;box-shadow:0 50px 110px rgba(20,14,8,.28),0 8px 24px rgba(20,14,8,.18)}
+#app .top{position:absolute;left:0;top:0;width:1620px;height:56px;border-bottom:1px solid #262626}
+#app .wm{position:absolute;left:58px;top:18px;font-size:21px;color:#f2efe8;font-weight:700;line-height:1}
+#app .nav{position:absolute;left:300px;top:15px;font-size:24px;color:#777;font-weight:700;line-height:1}
+#app .nav em{font-style:normal;background:var(--red);color:#fff;padding:1px 8px 2px;margin-left:10px}
+#exportBtn{position:absolute;left:1478px;top:11px;width:118px;height:34px;background:var(--red);color:#fff;font-size:19px;font-weight:700;display:flex;align-items:center;justify-content:center}
+#viewer{position:absolute;left:0;top:57px;width:1120px;height:803px;background:#0d0d0d}
+#photo{position:absolute;left:50px;top:61px;width:1020px;height:680px;overflow:hidden;background:#000}
+#photo img{position:absolute;left:0;top:0;width:1020px;height:680px}
+#panel{position:absolute;left:1120px;top:57px;width:380px;height:803px;background:#161616}
+#rail{position:absolute;left:1500px;top:57px;width:120px;height:803px;background:#161616}
+.tab{position:absolute;left:20px;width:80px;height:74px;border:1.5px solid #555;border-radius:3px;color:#ddd;font-size:15px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:9px}
+.tab.on{border-color:#ddd}
+.pv{position:absolute;inset:0;color:#eee}
+.pv h2{position:absolute;left:30px;top:22px;font-size:60px;font-weight:400;letter-spacing:-.03em}
+.subs{position:absolute;left:30px;top:106px;font-size:18px;color:#8a8a8a;display:flex;gap:20px}
+.subs .on{color:#eee;border-bottom:2px solid var(--red);padding-bottom:6px}
+.sec{position:absolute;left:30px;width:320px;font-size:25px;color:#eee}
+.tog{position:absolute;width:44px;height:22px;box-shadow:inset 0 0 0 1.5px #777}
+.tog u{position:absolute;inset:0;background:var(--red);opacity:0}
+.tog b{position:absolute;left:0;top:0;width:22px;height:22px;background:#eee;transform-origin:100% 100%}
+.row{position:absolute;left:30px;width:320px;height:60px}
+.row .lab{position:absolute;left:0;top:0;font-size:21px;color:#ddd}
+.row .val{position:absolute;right:0;top:0;font-size:21px;color:#ddd}
+.row .trk{position:absolute;left:0;top:41px;width:320px;height:2px;background:#3d3d3d}
+.row .fil{position:absolute;top:41px;height:2px;background:var(--red)}
+.row .dot{position:absolute;top:30px;width:5px;height:5px;border-radius:50%;background:#eee;margin-left:-2.5px}
+.row .thm{position:absolute;top:34px;width:16px;height:16px;background:#161616;box-shadow:inset 0 0 0 1.5px #eee;margin-left:-8px}
+.trow{position:absolute;left:30px;width:320px;font-size:21px;color:#ccc}
+.sel{position:absolute;left:120px;top:-6px;width:200px;height:38px;border:1.5px solid #555;font-size:19px;color:#eee;padding:8px 12px}
+.th{position:absolute;width:152px;height:101px;overflow:hidden}
+.th img{width:152px;height:101px}
+.thl{position:absolute;font-size:15px;color:#bbb;white-space:nowrap}
+/* floating control card (halation) */
+#card{position:absolute;width:520px;background:#161616;border-radius:14px;box-shadow:0 40px 90px rgba(0,0,0,.55),0 4px 14px rgba(0,0,0,.35);transform-origin:100% 100%;color:#eee}
+#card .ct{position:absolute;left:30px;top:26px;font-size:34px}
+#loupe{position:absolute;overflow:hidden;box-shadow:0 0 0 6px var(--red),0 30px 80px rgba(0,0,0,.45)}
+#loupe img{position:absolute;left:0;top:0;transform-origin:0 0}
+.lbl{position:absolute;font-size:44px;font-weight:700;color:#fff;background:rgba(17,17,17,.55);padding:10px 16px 9px;border-radius:6px;letter-spacing:.02em}
+.cell{position:absolute;overflow:hidden;box-shadow:0 26px 60px rgba(20,14,8,.22)}
+.cell img{position:absolute}
+</style></head>
+<body><div id="stage"></div>
+<script>
+const W=1920,H=1080,FPS=24,BPM=112,B=60/BPM,BAR=4*B,DUR=25*BAR; // 51.43 s, every cut on the beat grid
+const b=n=>n*B; // beat -> seconds
+const RED='#ff3b1f';
+const clamp=(x,a,c)=>Math.min(c,Math.max(a,x)),lerp=(a,c,p)=>a+(c-a)*p,seg=(t,a,c)=>clamp((t-a)/(c-a),0,1);
+const sm=(a,c,t)=>{const x=seg(t,a,c);return x*x*(3-2*x)};
+function bez(x1,y1,x2,y2){const F=(a,c,u)=>3*a*u*(1-u)*(1-u)+3*c*u*u*(1-u)+u*u*u;return x=>{if(x<=0)return 0;if(x>=1)return 1;let lo=0,hi=1,u=x;for(let i=0;i<28;i++){u=(lo+hi)/2;if(F(x1,x2,u)<x)lo=u;else hi=u}return F(y1,y2,u)}}
+const kE=bez(.16,1,.3,1);        // the app's motion curve: arrivals
+const inE=bez(.7,0,.84,0);       // departures: accelerate away
+const ioE=bez(.65,0,.35,1);      // camera/morphs
+const spring=(p,z=.55,f=2.2)=>p<=0?0:p>=1?1:1-Math.exp(-p*6/z*.5)*Math.cos(p*f*Math.PI); // underdamped: only for things that are thrown
+const stage=document.getElementById('stage');
+const el=(tag,cls,parent,html)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;(parent||stage).appendChild(e);return e};
+const css=(e,o)=>{for(const k in o)e.style[k]=o[k]};
+const show=(e,v)=>{e.style.display=v?'':'none';return v};
+const IMG='bake13/';
+const DIM={beach:[2400,1600],neon:[2400,1600],pier:[2400,1645],lib:[1600,1097],sunset:[1600,1063]};
+// place an image so that image point (fx,fy) sits at screen (cx,cy) with total scale s
+function place(im,w,h,s,fx,fy,cx=W/2,cy=H/2){css(im,{width:w+'px',height:h+'px',transform:`translate(${cx-fx*w*s}px,${cy-fy*h*s}px) scale(${s})`})}
+const coverS=(w,h)=>Math.max(W/w,H/h);
+const srcCache={};function setSrc(im,n){if(im._n!==n){im.src=IMG+n+'.png';im._n=n}}
+// kinetic text block
+function kt(parent,text,size,cls=''){const e=el('div','kt '+cls,parent);e.style.fontSize=size+'px';e.innerHTML=text.split(' ').map(w=>`<span class="w"><i>${w}</i></span>`).join(' ');e._w=[...e.querySelectorAll('i')];return e}
+// words rise into place (staggered), and drop away on exit
+function ktAnim(e,t,tIn,tOut,stag=.07,dur=.5){const vis=t>=tIn&&t<tOut+.45;show(e,vis);if(!vis)return;
+ e._w.forEach((w,i)=>{const p=kE(seg(t,tIn+i*stag,tIn+i*stag+dur)),q=inE(seg(t,tOut+i*.03,tOut+i*.03+.35));w.style.transform=`translateY(${(1-p)*110+q*110}%)`})}
+
+/* ======== layers ======== */
+const LFull=el('div','L');           // full-bleed photo scenes
+const fbA=el('img','cover',LFull),fbB=el('img','cover',LFull);
+const LPaper=el('div','L');           // paper / type scenes
+const LWorld=el('div','L');const world=el('div',null,LWorld);world.id='world';
+const LFg=el('div','L');              // square, cards, loupe, type above everything
+const PRISM=`<svg viewBox="36 32 43 45" preserveAspectRatio="none"><defs><radialGradient id="pa" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="pb" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient><clipPath id="pc"><rect x="36" y="32" width="33" height="33"/></clipPath></defs><g clip-path="url(#pc)"><polygon points="36,32 69,32 36,65" fill="url(#pa)"/><polygon points="69,32 69,65 36,65" fill="url(#pb)"/><line x1="36" y1="65" x2="69" y2="32" stroke="#fff1e0" stroke-width=".35" opacity=".8"/></g></svg>`;
+
+/* ---- S1 hook: the square is a window onto the finished film ---- */
+const hookTxt1=kt(LFg,'Your RAW photo.',120,'on-photo');css(hookTxt1,{left:'96px',top:'860px'});
+const hookTxt2=kt(LFg,'On film.',220,'on-photo');css(hookTxt2,{left:'90px',top:'790px'});
+const hookWin=el('div','abs',LFg);css(hookWin,{overflow:'hidden'});const hookWinImg=el('img','cover',hookWin);
+const hookRed=el('div','abs',hookWin);css(hookRed,{inset:'0',background:RED});
+const hookLabel=el('div','abs',LFg);css(hookLabel,{font:'700 34px G',color:'#fff',letterSpacing:'.04em',textShadow:'0 2px 14px rgba(0,0,0,.5)'});
+const HOOK_LOOKS=[['look_kodachrome_64_radiance_iii','KODACHROME 64'],['look_trix_400_polymax_grade_3','TRI-X 400'],['look_vision3_500t_2383','VISION3 500T'],['look_velvia_50_ilfochrome_m','VELVIA 50'],['look_eterna_bleach_bypass_composed','BLEACH BYPASS'],['look_aerocolor_endura_premier','AEROCOLOR'],['look_portra_400_endura_premier','PORTRA 400']];
+
+/* ---- S2 brand: the window shrinks, turns red and docks into the prism logo ---- */
+const LK={sq:150,size:150};
+const lockBack=el('div','abs',LPaper);css(lockBack,{background:'#111'});
+const lockTxt=el('div','abs',LPaper);css(lockTxt,{font:`700 ${LK.size}px G`,letterSpacing:'-.02em',whiteSpace:'nowrap',lineHeight:1,overflow:'hidden'});
+const lockLetters='CHRO-MA-SMITH'.split('').map(c=>{const s=el('span','',lockTxt,c);css(s,{display:'inline-block'});return s});
+const brandSub=kt(LPaper,'133 film looks for your RAW photos.',58);const brandFree=kt(LPaper,'Free.',58);brandFree.style.color=RED;
+const tag=kt(LPaper,'Raw Digital. Pure Film.',64);
+
+/* ---- S3 the old way: kinetic words, the cards pile on the square ---- */
+const OLD=['IMPORT.','EDIT.','PLUGIN.','EXPORT.'];
+const oldWords=OLD.map(w=>kt(LPaper,w,300));
+const oldLines=[kt(LPaper,'Every photo.',150),kt(LPaper,'Every time.',150)];
+const piles=OLD.map((n,i)=>{const w=el('div','win',LPaper);w.innerHTML=`<div class="tb"><i></i><i></i><i></i><span style="font:700 30px G;color:#4a4740;margin-left:10px">${['Import','Edit','Grain plugin','Export'][i]}</span></div>`;
+ const bx=(x,y,ww,hh)=>{const q=el('div','box',w);css(q,{left:x+'px',top:y+'px',width:ww+'px',height:hh+'px'})};bx(24,84,300,200);bx(350,84,266,30);bx(350,130,200,30);bx(24,320,592,16);return w});
+
+/* ---- S5-S6 the app (rebuilt, as v12) ---- */
+const app=el('div',null,world);app.id='app';
+app.innerHTML=`<div class="top"><div class="wm">CHRO-MA-SMITH</div><div class="nav">gallery<em>studio</em></div><div id="exportBtn">Export</div></div>
+<div id="viewer"><div id="photo"><img id="pA"><img id="pB"></div></div><div id="panel"></div><div id="rail"></div>`;
+const AX=150,AY=170,APPk=16/43;
+const appTop=app.querySelector('.top');
+{const k=APPk,b0=el('div','abs',appTop);css(b0,{left:26-15*k+'px',top:43-45*k-11*k+'px',width:48*k+'px',height:44*k+'px',background:'#f2f0ea'});
+ const r=el('div','abs',appTop,PRISM);css(r,{left:'26px',top:43-45*k+'px',width:'16px',height:45*k+'px',background:RED}); // the app's own logo, always complete
+ r.firstChild.style.cssText='position:absolute;inset:0;width:100%;height:100%'}
+const APPLOGO=[AX+34,AY+43-45*APPk/2]; // centre of the app logo's red square (world)
+const pA=app.querySelector('#pA'),pB=app.querySelector('#pB');
+const panel=app.querySelector('#panel'),rail=app.querySelector('#rail');
+const TABS=['Look','Light','Colour','Texture','Output'],TAB_Y=i=>60+i*96;
+const tabEls=TABS.map((n,i)=>{const t=el('div','tab',rail,n);t.style.top=TAB_Y(i)+'px';return t});
+const views={};
+function view(name,title,subs,on){const v=el('div','pv',panel);v.innerHTML=`<h2>${title}</h2><div class="subs">${subs.map((s,i)=>`<span class="${i===on?'on':''}">${s}</span>`).join('')}</div>`;views[name]=v;return v}
+const PX=x=>AX+1120+x,PY=y=>AY+57+y;
+const vLook=view('look','Look',['All','Film','B&W','Cinema'],0);
+const GRID=[['raw','Original'],...HOOK_LOOKS.slice(0,5).map(([f,n])=>[f,n[0]+n.slice(1).toLowerCase()]),['look_a_beach_preset','A Beach Preset']];
+const thPos=i=>[30+(i%2)*168,170+Math.floor(i/2)*134];
+GRID.forEach(([f,n],i)=>{if(i>5)return;const[x,y]=thPos(i);const d=el('div','th',vLook,`<img src="${IMG+f}.png">`);css(d,{left:x+'px',top:y+'px'});const l=el('div','thl',vLook,n);css(l,{left:x+'px',top:y+106+'px'})});
+const lc=el('div','thl',vLook,'+ 127 more looks');css(lc,{left:'30px',top:'580px',fontSize:'18px',color:'#888'});
+const SL={};
+function slider(v,key,label,y,min,max,def,val=def){const r=el('div','row',v,`<div class="lab">${label}</div><div class="val"></div><div class="trk"></div><div class="fil"></div><div class="dot"></div><div class="thm"></div>`);r.style.top=y+'px';
+ SL[key]={min,max,def,val,y,valEl:r.querySelector('.val'),fil:r.querySelector('.fil'),dot:r.querySelector('.dot'),thm:r.querySelector('.thm')}}
+const pct=(k,v)=>{const s=SL[k];return(v-s.min)/(s.max-s.min)};
+const roll=(k,v)=>{const s=SL[k];return(v-s.def)*6*200/(s.max-s.min)};
+const TOG=[];function toggle(v,x,y,ton=1e9){const t=el('div','tog',v,'<u></u><b></b>');css(t,{left:x+'px',top:y+'px'});TOG.push({e:t,ton});return t}
+const vTex=view('tex','Texture',['Noise','Sharpen','Lens','Grain'],3);
+{const s=el('div','sec',vTex,'Grain');s.style.top='170px'}
+const T_GTOG=b(45);toggle(vTex,306,174,T_GTOG);
+slider(vTex,'ga','Amount',250,0,100,0);slider(vTex,'gs','Size',330,1,20,3);
+{const r=el('div','trow',vTex,'Film format<div class="sel">65mm — fine</div>');r.style.top='426px'}
+function paintSliders(t){for(const k in SL){const s=SL[k],v=VAL[k]?kf(VAL[k],t):s.val,moved=Math.abs(v-s.def)>1e-3,drag=VAL[k]&&t>=VAL[k][1][0]&&t<VAL[k][2][0]+.25;
+ s.valEl.textContent=Math.round(v);s.valEl.style.color=drag?RED:'#ddd';
+ const a=pct(k,Math.min(v,s.def))*(s.w||320),c=pct(k,Math.max(v,s.def))*(s.w||320);css(s.fil,{left:a+'px',width:c-a+'px'});css(s.dot,{left:pct(k,s.def)*(s.w||320)+'px',opacity:moved?1:0});
+ css(s.thm,{left:pct(k,v)*(s.w||320)+'px',background:moved?RED:'#161616',boxShadow:moved?'none':'inset 0 0 0 1.5px #eee',transform:`rotate(${roll(k,v)}deg)`})}}
+function paintToggles(t){for(const g of TOG){const p=kE(seg(t,g.ton,g.ton+.5));g.e.lastChild.style.transform=`rotate(${90*p}deg)`;g.e.firstChild.style.opacity=seg(t,g.ton,g.ton+.12)}}
+// values over time [t,v] pairs, eased
+const VAL={ga:[[0,0],[b(46),0],[b(48),40]],ha:[[0,0],[b(59),0],[b(61),100]]};
+function kf(keys,t){if(t<=keys[0][0])return keys[0][1];for(let i=1;i<keys.length;i++){const[a,va]=keys[i-1],[c,vc]=keys[i];if(t<=c)return lerp(va,vc,ioE(seg(t,a,c)))}return keys[keys.length-1][1]}
+
+/* ---- S7 floating halation card (screen space, big enough to read on a phone) ---- */
+const card=el('div','',LFg);card.id='card';css(card,{left:'1310px',top:'560px',height:'420px'});
+card.innerHTML='<div class="ct">Halation</div>';
+const cardTog=toggle(card,440,36,b(58));
+const cardRow=(()=>{const r=el('div','row',card,`<div class="lab">Amount</div><div class="val"></div><div class="trk"></div><div class="fil"></div><div class="dot"></div><div class="thm"></div>`);css(r,{top:'110px',width:'460px'});
+ SL.ha={min:0,max:100,def:0,val:0,y:110,w:460,valEl:r.querySelector('.val'),fil:r.querySelector('.fil'),dot:r.querySelector('.dot'),thm:r.querySelector('.thm')};r.querySelector('.trk').style.width='460px';return r})();
+const xRow=el('div','trow',card,'Extreme');css(xRow,{top:'210px',width:'460px',fontSize:'26px'});const xTog=toggle(xRow,416,0,b(63));
+const radRow=el('div','trow',card,'Radius <span style="float:right">30</span>');css(radRow,{top:'270px',width:'460px',fontSize:'22px',color:'#999'});
+const spRow=el('div','trow',card,'Shadow protect <span style="float:right">20</span>');css(spRow,{top:'315px',width:'460px',fontSize:'22px',color:'#999'});
+const wgRow=el('div','trow',card,'White glow · No remjet <span style="float:right">off</span>');css(wgRow,{top:'360px',width:'460px',fontSize:'22px',color:'#999'});
+
+/* ---- S6 loupe ---- */
+const loupe=el('div','',LFg);loupe.id='loupe';const loupeImg=el('img','',loupe);const loupeLbl=el('div','lbl',LFg,'2.5×  ·  65mm  ·  AMOUNT 40');
+
+/* ---- S8 every photo: four cells, the square develops each one ---- */
+const CELLS=[['train','lib'],['car','lib'],['sunset','sunset'],['lifebuoy','lib']];
+const cells=CELLS.map(([n])=>{const c=el('div','cell',LPaper);const a=el('img','',c),g=el('img','',c);a.src=IMG+n+'_raw.png';g.src=IMG+n+'_look.png';const s=el('div','abs',c);css(s,{background:RED});return{c,a,g,s}});
+const everyTxt=kt(LPaper,'Every photo. One tap.',96);
+
+/* ---- S9 raw vs film ---- */
+const split=el('div','abs',LFg);css(split,{width:'6px',height:'1080px',top:'0',background:'#fff',boxShadow:'0 0 20px rgba(0,0,0,.35)'});
+const lblRaw=el('div','lbl',LFg,'RAW'),lblFilm=el('div','lbl',LFg,'FILM');
+
+/* ---- S10 claims ---- */
+const CLAIMS=['Free.','Offline.','133 looks.','No subscription.'];
+const claimEls=CLAIMS.map(c=>kt(LPaper,c,230));
+const plat=kt(LPaper,'Mac · Windows · iOS · Android',84);
+
+/* the hero square (one element, every scene) */
+const sq=el('div','sq',LFg,PRISM);const sqPrism=sq.firstChild;
+function drawSq(x,y,s,o={}){show(sq,true);const h=s*(1+(45/43-1)*(o.prism||0));
+ css(sq,{width:s+'px',height:h+'px',background:o.col||RED,opacity:o.op==null?1:o.op,transform:`translate(${x-s/2}px,${y-h/2}px) rotate(${o.rot||0}deg) scale(${o.sx||1},${o.sy||1})`});sqPrism.style.opacity=o.prism||0}
+
+/* ======== RENDER ======== */
+const S={hook:0,brand:b(8),old:b(16),turn:b(28),looks:b(32),grain:b(44),hal:b(56),every:b(72),split:b(80),claims:b(88),end:b(92)};
+window.renderAt=function(t){
+ for(const L of [LFull,LPaper,LWorld])show(L,false);for(const e of [...LFg.children,...LPaper.children])show(e,false);
+ LFull.style.clipPath='';fbB.style.clipPath='';fbB.style.opacity=1;
+ const imgs=[];
+ /* ---------- S1 HOOK (bars 0-1) ---------- */
+ if(t<S.brand+b(1)){
+  show(LFull,true);const[w,h]=DIM.beach,s0=coverS(w,h)*lerp(1,1.06,seg(t,0,S.brand));
+  setSrc(fbA,'raw');place(fbA,w,h,s0,.5,.5);setSrc(fbB,'final');place(fbB,w,h,s0,.5,.5);imgs.push(fbA,fbB);
+  // the window: lands at b(3), opens at b(3.5), flips looks every eighth, then expands to the whole frame on b(7)->b(8)
+  const land=b(3),open=b(3.5),exp0=b(7),exp1=b(8);
+  if(t>=b(2)){const p=seg(t,b(2),land);let size=460,cx=900,cy=560;
+   const yy=lerp(-200,cy,p*p);let sy=1,sx=1;const d=t-land;if(d>=0&&d<.6){const q=.25*Math.exp(-d*9)*Math.cos(d*26);sy=1-q;sx=1+q}
+   const e=ioE(seg(t,exp0,exp1));const S2=lerp(size,2300,e);const X=lerp(cx,960,e),Y=lerp(d>=0?cy:yy,540,e);
+   show(hookWin,true);css(hookWin,{left:X-S2/2+'px',top:Y-S2/2*sy+'px',width:S2*sx+'px',height:S2*sy+'px'});
+   const li=Math.floor((t-open)/(B/2));const look=t<open?HOOK_LOOKS[0][0]:t>=exp0-B/2?'final':HOOK_LOOKS[clamp(li,0,6)][0];
+   setSrc(hookWinImg,look);place(hookWinImg,w,h,s0,.5,.5,W/2-(X-S2/2),H/2-(Y-S2/2*sy));imgs.push(hookWinImg);
+   hookRed.style.opacity=1-kE(seg(t,open-.05,open+.25));
+   // flat red edge while it is a window
+   hookWin.style.boxShadow=`0 0 0 ${8*(1-e)}px ${RED}, 0 30px 80px rgba(0,0,0,${.35*(1-e)})`;
+   if(t>=open&&t<exp0-B/2){show(hookLabel,true);hookLabel.textContent=HOOK_LOOKS[clamp(li,0,6)][1];css(hookLabel,{left:X-size/2+'px',top:Y+size/2+22+'px'})}
+   if(t>=exp1)show(hookWin,false);}
+  ktAnim(hookTxt1,t,.12,b(6.5));ktAnim(hookTxt2,t,b(8)+.05,S.brand+b(.6));
+ }
+ /* ---------- S2 BRAND (bars 2-3): film frame -> square -> red -> prism logo ---------- */
+ if(t>=S.brand&&t<S.old){
+  const lt=t-S.brand;show(LPaper,true);
+  const tw=lockTxt._w||0,k=LK.sq/43,gap=34,total=48*k-15*k+LK.sq-33*k+gap+tw,x0=960-(LK.sq+gap+tw)/2+12*k,base=500;
+  const redC=[x0+LK.sq/2,base-45*k/2];
+  // 1) full frame collapses to a square that carries the photo (b0-b2) 2) photo floods red (b2-b2.5) 3) docks (b2.5-b3.5)
+  const c=ioE(seg(lt,b(.3),b(2)));
+  if(lt<b(2.6)){show(LFull,true);const[w,h]=DIM.beach,s0=coverS(w,h)*1.06;setSrc(fbA,'final');imgs.push(fbA);
+   const S2=lerp(2300,420,c),X=lerp(960,960,c),Y=lerp(540,500,c);place(fbA,w,h,s0,.5,.5);
+   LFull.style.clipPath=`inset(${Y-S2/2}px ${W-X-S2/2}px ${H-Y-S2/2}px ${X-S2/2}px)`;
+   drawSq(X,Y,S2,{op:kE(seg(lt,b(2),b(2.6)))});}
+  else LFull.style.clipPath='';
+  if(lt>=b(2.6)){const d=kE(seg(lt,b(2.6),b(3.6)));const s=lerp(420,LK.sq,d);const X=lerp(960,redC[0],d),Y=lerp(500,redC[1],d);
+   drawSq(X,Y,s,{prism:seg(lt,b(3.5),b(3.9))});
+   const bo=kE(seg(lt,b(3.3),b(3.9)));show(lockBack,true);css(lockBack,{left:x0-15*k-60*(1-bo)+'px',top:redC[1]-45*k/2-11*k+'px',width:48*k+'px',height:44*k+'px',opacity:bo});
+   show(lockTxt,true);css(lockTxt,{left:x0+LK.sq+gap+'px',top:base-LK.size*.79+'px'});
+   lockLetters.forEach((l,i)=>{const p=kE(seg(lt,b(3.6)+i*.025,b(3.6)+i*.025+.45));l.style.transform=`translateX(${(1-p)*-120}%)`;l.style.opacity=p>0?1:0});}
+  ktAnim(brandSub,lt,b(4.6),b(7.4));css(brandSub,{left:960-brandSub.offsetWidth/2-60+'px',top:'640px'});
+  ktAnim(brandFree,lt,b(5.6),b(7.4));css(brandFree,{left:960+brandSub.offsetWidth/2-40+'px',top:'640px'});
+ }
+ /* ---------- S3 OLD WAY (bars 4-6): huge words on the beat, app windows pile onto the square ---------- */
+ if(t>=S.old&&t<S.turn){
+  const lt=t-S.old;show(LPaper,true);
+  OLD.forEach((w,i)=>{const t0=b(2*i),t1=b(2*i+2);ktAnim(oldWords[i],lt,t0,i<3?t1-.05:b(8),.04,.32);css(oldWords[i],{left:'110px',top:'120px'})});
+  const crush=seg(lt,0,b(12));
+  piles.forEach((p,i)=>{const t0=b(2*i)+B*.5;const vis=lt>=t0;show(p,vis);if(!vis)return;const d=seg(lt,t0,t0+.38);
+   const y=lerp(-700,0,d*d)+(d>=1?-14*Math.exp(-(lt-t0-.38)*10)*Math.cos((lt-t0-.38)*30):0);
+   css(p,{left:1180+[0,26,-18,12][i]+'px',top:300-i*58+y+'px',transform:`rotate(${[-3,2.5,-1.5,3][i]}deg)`})});
+  // the square is trapped under the pile, greying and flattening as each window lands
+  const g=Math.min(1,Math.floor(seg(lt,0,b(8))*4+.5)/4)*.8;
+  const flat=1-.12*Math.floor(lt/b(2)+.5)*(lt<b(8)?1:0)-(lt>=b(8)?.45:0);
+  drawSq(1500,920-90*flat/2+60,180,{col:`rgb(${lerp(255,150,g)|0},${lerp(59,146,g)|0},${lerp(31,140,g)|0})`,sy:Math.max(.5,flat),sx:1+(1-Math.max(.5,flat))*.4});
+  ktAnim(oldLines[0],lt,b(8),b(11.6));css(oldLines[0],{left:'110px',top:'520px'});
+  ktAnim(oldLines[1],lt,b(9),b(11.6));css(oldLines[1],{left:'110px',top:'690px'});
+ }
+ /* ---------- S4 TURN (bar 7): the square punches out, then we dive into it ---------- */
+ if(t>=S.turn&&t<S.looks+b(1.5)){
+  const lt=t-S.turn;
+  if(lt<b(4)){show(LPaper,true);
+   piles.forEach((p,i)=>{const d=inE(seg(lt,b(.5),b(1.6)));show(p,d<1);const dir=[-1,1,-1,1][i];
+    css(p,{left:1180+[0,26,-18,12][i]+dir*1400*d+'px',top:300-i*58-500*d+'px',transform:`rotate(${[-3,2.5,-1.5,3][i]+dir*40*d}deg)`})});
+   const pop=seg(lt,b(.5),b(.5)+.5);const y=lerp(920,560,kE(pop));const q=lt>b(.5)?.35*Math.exp(-(lt-b(.5))*6)*Math.cos((lt-b(.5))*22):0;
+   const one=kt._one||(kt._one=kt(LPaper,'One app.',230));ktAnim(one,lt,b(1),b(2.6));css(one,{left:'110px',top:'420px'});
+   // dive: the square grows past the frame (b3 -> b4)
+   const dz=Math.pow(seg(lt,b(2.6),b(4)),3);const s=lerp(180,180+4200*dz,dz>0?1:0)*(1+0*q);
+   drawSq(lerp(1500,960,ioE(seg(lt,b(2.6),b(3.6)))),lerp(y,540,ioE(seg(lt,b(2.6),b(3.6)))),dz>0?180+5000*dz:180,{sy:1+q,sx:1-q*.5});
+  }
+ }
+ /* ---------- S5 LOOKS (bars 8-10) + S6 grain UI part: the app, entered through its own logo ---------- */
+ if(t>=S.looks&&t<S.grain+b(4)){
+  const lt=t-S.looks;show(LWorld,true);LPaper.style.background='';
+  // camera: from deep inside the logo (z 120) out to the full app, then onto the look panel
+  let cx,cy,z;
+  const out=seg(lt,0,b(3));const ez=Math.pow(1-out,3);
+  if(t<S.grain){const toPanel=ioE(seg(lt,b(4),b(5)));
+   z=lerp(lerp(1,1.32,toPanel),25,ez);cx=lerp(lerp(960,1160,toPanel),APPLOGO[0],ez>0?Math.pow(ez,.15):0);cy=lerp(lerp(560,640,toPanel),APPLOGO[1],ez>0?Math.pow(ez,.15):0);}
+  else{const g=ioE(seg(t,S.grain,S.grain+b(1)));z=lerp(1.32,2.3,g);cx=lerp(1160,PX(190),g);cy=lerp(640,PY(250),g)}
+  world.style.transform=`translate(${W/2-cx*z}px,${H/2-cy*z}px) scale(${z})`;
+  const isTex=t>=S.grain;for(const k in views)views[k].style.opacity=(k==='tex')===isTex?1:0;tabEls.forEach((e,i)=>e.classList.toggle('on',i===(isTex?3:0)));
+  // looks: one per beat, hard cut, the square marks the selection
+  const picks=[1,2,3,4,5];let sel=0;picks.forEach((p,i)=>{if(lt>=b(6+i))sel=p});
+  const finalPick=lt>=b(11);
+  setSrc(pA,finalPick?'look_a_beach_preset':GRID[sel][0]);pB.style.opacity=0;imgs.push(pA);
+  if(isTex){const gv=kf(VAL.ga,t)/10;const i0=Math.min(3,Math.floor(gv));setSrc(pA,'grain_'+i0);setSrc(pB,'grain_'+(i0+1));pB.style.opacity=gv-i0;imgs.push(pB)}
+  paintSliders(t);paintToggles(t);
+  // the hero square: selection marker on the grid, then the grain slider thumb
+  const toScr=(x,y)=>[(x-cx)*z+W/2,(y-cy)*z+H/2];
+  if(lt<b(3)){const[lx,ly]=toScr(...APPLOGO);const big=2400*Math.pow(1-kE(seg(lt,0,b(1.2))),1.5);const sz=Math.max(16*z,big);if(sz>16*z+1||lt<b(2.8))drawSq(lx,ly,sz,{prism:big<16*z?1:0})}
+  if(!isTex&&lt>=b(5.5)){const[x,y]=thPos(Math.max(sel,0));const[sx,sy]=toScr(PX(x+152-9),PY(y+9));drawSq(sx,sy,18*z)}
+  if(isTex&&t>=S.grain+b(2)){const v=kf(VAL.ga,t);const[sx,sy]=toScr(PX(30+pct('ga',v)*320),PY(SL.ga.y+42));drawSq(sx,sy,16*z,{rot:roll('ga',v)});SL.ga.thm.style.opacity=0}else SL.ga.thm.style.opacity=1;
+  const lk=kt._lk||(kt._lk=kt(LFg,'133 looks. One tap each.',64,'chip'));ktAnim(lk,lt,b(5),b(11.5));css(lk,{left:'90px',top:'70px'});
+  const gr=kt._gr||(kt._gr=kt(LFg,'Grain from the app’s own engine.',64,'chip'));ktAnim(gr,t,S.grain+b(.5),S.grain+b(3.6));css(gr,{left:'90px',top:'70px'});
+ }
+ /* ---------- S6b grain loupe (bars 12-13): true pixels of the 2400 px render ---------- */
+ if(t>=S.grain+b(4)&&t<S.hal){
+  const lt=t-S.grain-b(4);show(LFull,true);LFull.style.clipPath='';const[w,h]=DIM.beach,s0=coverS(w,h);
+  setSrc(fbA,'grain_0');place(fbA,w,h,s0,.5,.5);fbB.style.opacity=0;imgs.push(fbA);
+  const p=ioE(seg(lt,0,b(8)));const fx=lerp(.40,.80,p),fy=lerp(.58,.45,p);const sz=lerp(380,460,kE(seg(lt,0,.5)));
+  const lx=W/2+(fx-.5)*w*s0,ly=H/2+(fy-.5)*h*s0;show(loupe,true);css(loupe,{left:lx-sz/2+'px',top:ly-sz/2+'px',width:sz+'px',height:sz+'px',transform:`scale(${kE(seg(lt,0,.45))})`});
+  setSrc(loupeImg,'grain_4');place(loupeImg,w,h,2.5*s0,fx,fy,sz/2,sz/2);imgs.push(loupeImg);
+  show(loupeLbl,true);css(loupeLbl,{left:lx-sz/2+'px',top:ly+sz/2+22+'px',opacity:seg(lt,.3,.6)});
+  const gt=kt._gt||(kt._gt=kt(LFg,'Real 65mm grain. Not an overlay.',84,'on-photo'));ktAnim(gt,lt,.2,b(7.5));css(gt,{left:'90px',top:'70px'});
+ }
+ /* ---------- S7 HALATION (bars 14-17): neon, the app's halation, then Extreme ---------- */
+ if(t>=S.hal&&t<S.every){
+  const lt=t-S.hal;show(LFull,true);LFull.style.clipPath='';const[w,h]=DIM.neon;const s0=coverS(w,h)*lerp(1.0,1.18,ioE(seg(lt,0,b(16))));
+  const fx=lerp(.5,.56,ioE(seg(lt,0,b(16)))),fy=lerp(.5,.6,ioE(seg(lt,0,b(16))));
+  const av=kf(VAL.ha,t)/25,i0=Math.min(3,Math.floor(av));
+  let A='neon_hal_'+i0,Bn='neon_hal_'+(i0+1),m=av-i0;
+  // Extreme on at b(119); then the A/B: Extreme flips off/on on the beat
+  const xOn=t>=b(63)&&!(t>=b(68)&&t<b(69))&&!(t>=b(70)&&t<b(71));
+  if(t>=b(63)){A='neon_hal_4';Bn='neon_hal_x';const on0=t<b(68)?b(63):t<b(70)?b(69):b(71);m=xOn?kE(seg(t,on0,on0+.25)):0}
+  setSrc(fbA,A);setSrc(fbB,Bn);place(fbA,w,h,s0,fx,fy);place(fbB,w,h,s0,fx,fy);fbB.style.opacity=m;imgs.push(fbA,fbB);
+  show(card,true);css(card,{transform:`translateY(${(1-kE(seg(lt,b(1),b(1)+.6)))*600}px)`});paintSliders(t);paintToggles(t);
+  xTog.lastChild.style.transform=`rotate(${xOn?90:0}deg)`;xTog.firstChild.style.opacity=xOn?1:0;
+  if(t>=b(58.5)&&t<b(62)){const v=kf(VAL.ha,t);const r=SL.ha;const x=1310+30+pct('ha',v)*460,y=560+110+42;drawSq(x,y,22,{rot:roll('ha',v)});r.thm.style.opacity=0}else SL.ha.thm.style.opacity=1;
+  const h1=kt._h1||(kt._h1=kt(LFg,'Halation.',200,'on-photo'));ktAnim(h1,lt,.1,b(8));css(h1,{left:'80px',top:'70px'});
+  const h2=kt._h2||(kt._h2=kt(LFg,'Light that bleeds like film.',84,'on-photo'));ktAnim(h2,lt,b(8.5),b(15.5));css(h2,{left:'90px',top:'90px'});
+ }
+ /* ---------- S8 EVERY PHOTO (bars 18-19) ---------- */
+ if(t>=S.every&&t<S.split){
+  const lt=t-S.every;show(LPaper,true);
+  const CW=420,CH=560,GAP=30,x0=(W-4*CW-3*GAP)/2,y0=380;
+  cells.forEach((c,i)=>{show(c.c,true);const t0=b(i*.5);const p=kE(seg(lt,t0,t0+.5));const x=x0+i*(CW+GAP),y=y0+(1-p)*80;
+   css(c.c,{left:x+'px',top:y+'px',width:CW+'px',height:CH+'px',opacity:p});
+   const[w,h]=CELLS[i][1]==='sunset'?DIM.sunset:DIM.lib,s=Math.max(CW/w,CH/h);for(const im of[c.a,c.g])css(im,{width:w*s+'px',height:h*s+'px',left:(CW-w*s)/2+'px',top:(CH-h*s)/2+'px'});
+   // the square sweeps across and develops the cell (on beats 3..6)
+   const d=ioE(seg(lt,b(3+i),b(3+i)+B*.9));const sx=lerp(-CH,CW,d);c.g.style.clipPath=`inset(0 ${CW-Math.max(0,sx+CH/2)}px 0 0)`;
+   css(c.s,{left:sx+'px',top:'0',width:CH+'px',height:CH+'px',opacity:d>0&&d<1?1:0,transform:`scale(${.35})`});imgs.push(c.a,c.g)});
+  ktAnim(everyTxt,lt,b(.5),b(7.6));css(everyTxt,{left:x0+'px',top:'190px'});
+ }
+ /* ---------- S9 RAW vs FILM (bars 20-21) ---------- */
+ if(t>=S.split&&t<S.claims){
+  const lt=t-S.split;show(LFull,true);LFull.style.clipPath='';const[w,h]=DIM.neon,s0=coverS(w,h);
+  setSrc(fbA,'neon_hal_x');setSrc(fbB,'neon_raw');place(fbA,w,h,s0,.5,.5);place(fbB,w,h,s0,.5,.5);fbB.style.opacity=1;imgs.push(fbA,fbB);
+  const X=kfS([[0,1920],[b(1),1920],[b(2),560],[b(4),1380],[b(6),760],[b(8),960]],lt);
+  fbB.style.clipPath=`inset(0 ${W-X}px 0 0)`;
+  show(split,true);split.style.left=X-3+'px';drawSq(X,540,64);
+  show(lblRaw,true);css(lblRaw,{left:'60px',top:'60px',opacity:seg(X,200,500)});show(lblFilm,true);css(lblFilm,{left:W-60-lblFilm.offsetWidth+'px',top:'60px',opacity:seg(W-X,200,500)});
+ }
+ /* ---------- S10 CLAIMS + END (bars 22-23) ---------- */
+ if(t>=S.claims){
+  const lt=t-S.claims;show(LPaper,true);
+  if(lt<b(5)){CLAIMS.forEach((c,i)=>{ktAnim(claimEls[i],lt,b(i),b(i+1)-.06,.04,.28);css(claimEls[i],{left:'110px',top:'330px'})});
+   const cw=claimEls[Math.min(3,Math.floor(lt/B))];const r=cw.getBoundingClientRect();if(lt<b(4))drawSq(r.right+70,330+230*.72,110);
+   ktAnim(plat,lt,b(4)+.25,b(5)-.08);css(plat,{left:'110px',top:'400px'});plat.style.color=RED}
+  if(lt>=b(5)){const et=lt-b(5);
+   const k=LK.sq/43,gap=34,tw=lockTxt._w||0,x0=960-(LK.sq+gap+tw)/2+12*k,base=560,redC=[x0+LK.sq/2,base-45*k/2];
+   const d=kE(seg(et,0,b(1)));drawSq(lerp(1100,redC[0],d),lerp(-200,redC[1],d),LK.sq,{prism:seg(et,b(1),b(1.4))});
+   show(lockBack,true);css(lockBack,{left:x0-15*k+'px',top:redC[1]-45*k/2-11*k+'px',width:48*k+'px',height:44*k+'px',opacity:kE(seg(et,b(.6),b(1.2)))});
+   show(lockTxt,true);css(lockTxt,{left:x0+LK.sq+gap+'px',top:base-LK.size*.79+'px'});
+   lockLetters.forEach((l,i)=>{const p=kE(seg(et,b(1.1)+i*.025,b(1.1)+i*.025+.45));l.style.transform=`translateX(${(1-p)*-120}%)`;l.style.opacity=p>0?1:0});
+   ktAnim(tag,et,b(2.2),99);css(tag,{left:960-tag.offsetWidth/2+'px',top:'700px'});}
+ }
+ return Promise.all(imgs.map(i=>i.decode().catch(()=>{})));
+};
+function kfS(keys,t){if(t<=keys[0][0])return keys[0][1];for(let i=1;i<keys.length;i++){const[a,va]=keys[i-1],[c,vc]=keys[i];if(t<=c)return lerp(va,vc,kE(seg(t,a,c)))}return keys[keys.length-1][1]}
+async function init(){
+ await document.fonts.load('700 96px G');await document.fonts.load('400 20px G');await document.fonts.ready;
+ show(lockTxt,true);lockTxt._w=lockTxt.offsetWidth;
+ const all=['raw','final',...HOOK_LOOKS.map(l=>l[0]),'look_a_beach_preset',...[0,1,2,3,4].flatMap(i=>['grain_'+i,'neon_hal_'+i]),'neon_hal_x','neon_raw'];
+ await Promise.all(all.map(n=>{const i=new Image();i.src=IMG+n+'.png';return i.decode()}));
+ await Promise.all([...document.images].map(i=>i.decode().catch(()=>{})));
+ window.renderAt(0);window.DUR=DUR;window.FPS=FPS;window.ready=true;
+}
+init();
+</script></body></html>
