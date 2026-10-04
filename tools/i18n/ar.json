@@ -559,7 +559,7 @@
     "Previous": "السابق",
     "Next": "التالي",
     "“I was too cheap to pay for subscriptions, too lazy to go through the whole multi-app workflow, and with too much free time, so I designed this app to turn my photos into masterpieces.”": "«كنت أبخل من أن أدفع اشتراكات، وأكسل من أن أتنقل بين كل هذه التطبيقات، وعندي وقت فراغ أكثر من اللازم، فصمّمت هذا التطبيق ليحوّل صوري إلى تحف فنية.»",
-    "Tareq Ameer · Dog father, pet photographer, and product manager": "طارق أمير · أبو كلب، ومصوّر حيوانات أليفة، ومدير منتجات",
+    "Tareq Ameer · Dog father, pet photographer, and product manager": "طارق أمير · أب لكلب، ومصوّر حيوانات أليفة، ومدير منتجات",
     "More": "المزيد",
     "English": "English",
     "Accessible version": "نسخة أسهل للقراءة",
@@ -588,6 +588,7 @@
     "Export at full resolution": "صدّر بالدقة الكاملة",
     "1 app. £0 subscriptions.": "تطبيق واحد. ‎£0‎ اشتراكات.",
     "1 app. £0 subscriptions. Fully offline.": "تطبيق واحد. ‎£0‎ اشتراكات. يعمل دون إنترنت بالكامل.",
-    "darkroom of features.": "كاملة بكل ميزاتها."
+    "darkroom of features.": "كاملة بكل ميزاتها.",
+    "1 app. $0 subscriptions. Fully offline.": "تطبيق واحد. ‎$0‎ اشتراكات. يعمل دون إنترنت بالكامل."
   }
 }
