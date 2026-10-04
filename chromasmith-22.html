@@ -6947,7 +6947,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1004F';
+const BUILD='1.1004G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -27464,9 +27464,11 @@ if(/[?&]catalog=1/.test(location.search)){
   ['pointerup','pointercancel'].forEach(function(n){document.addEventListener(n,function(){clearTimeout(lpT);lpT=null;},true);});
 
   // ---- tool strip at the top of the sheet: hop between tools without the Tools list
+  // Tools that live only in the Tools grid (or the bottom bar: Looks, Crop) — kept off the sheet's quick strip.
+  var STRIP_SKIP=['looks','inprint','curves','pointcolor','lens','retouch','crop','straighten','local','vig','style','versions'];
   function stripBuild(){
     var panel=document.querySelector('.fx-panel');if(!panel)return null;
-    var btns=[].slice.call(document.querySelectorAll('#fx-tool-grid .fx-sec-btn'));if(!btns.length)return null;
+    var btns=[].slice.call(document.querySelectorAll('#fx-tool-grid .fx-sec-btn')).filter(function(b){return STRIP_SKIP.indexOf(b.dataset.sec)<0;});if(!btns.length)return null;
     var st=document.getElementById('fx-sheet-strip');
     if(!st){st=document.createElement('div');st.id='fx-sheet-strip';var hd=document.getElementById('fx-sheet-handle');if(hd&&hd.parentElement===panel)hd.insertAdjacentElement('afterend',st);else panel.insertBefore(st,panel.firstChild);}
     if(st.children.length!==btns.length){st.innerHTML='';btns.forEach(function(b){var k=document.createElement('button');k.type='button';k.dataset.sec=b.dataset.sec;k.textContent=(b.querySelector('.fx-sec-lb')||b).textContent.trim();k.onclick=function(){if(k.classList.contains('on')&&document.body.classList.contains('sheet-open')){fxSheetClose();return;}fxSection(b.dataset.sec);};st.appendChild(k);});}
