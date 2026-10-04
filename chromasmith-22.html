@@ -1210,6 +1210,10 @@ body.mobile-fx.sheet-open.sheet-peek .fx-panel{height:150px;max-height:150px;ove
 #fx-sheet-strip{display:none}
 body.mobile-fx.sheet-open #fx-sheet-strip{display:flex;gap:20px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;position:sticky;top:0;z-index:8;background:var(--k-color-bg);padding:8px 2px 6px;margin:0 -2px 4px;border-bottom:1px solid var(--bdr)}
 #fx-sheet-strip::-webkit-scrollbar{display:none}
+/* One fixed height: the drag handle overlays the strip's top padding instead of being its own row
+   (scrolling used to slide the strip over the handle, so the bar jumped between two heights). */
+body.mobile-fx.sheet-open #fx-sheet-handle{height:12px;padding:0;margin-bottom:-12px;background:transparent!important;z-index:9;align-items:flex-start;padding-top:4px;box-sizing:border-box}
+body.mobile-fx.sheet-open #fx-sheet-strip{padding-top:12px}
 #fx-sheet-strip button{flex:0 0 auto;background:none;border:0;color:var(--k-color-muted);font:14px var(--sans);padding:4px 0;min-height:32px;cursor:pointer}
 #fx-sheet-strip button.on{color:var(--k-color-ink);box-shadow:inset 0 -2px 0 var(--k-color-accent-a)}
 body.mobile-fx #fx-mobile-nav #fx-nav-export{min-height:40px;padding:0 18px;font:600 14px var(--sans);align-self:center}
@@ -6953,7 +6957,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1004H';
+const BUILD='1.1004I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
