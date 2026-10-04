@@ -1407,6 +1407,8 @@
     /* Named list scrolls internally so Folders/Keywords never move as the count grows — the
        flat "Person 1..Person 40" flood this replaces (CLAUDE.md people-pets plan, failure 14). */
     .lib-people-scroll{max-height:150px;overflow-y:auto;margin:0 -4px;padding:0 4px}
+    /* Keywords reuse the same internal scroll so a big auto-tag list never pushes People/Albums off-screen. */
+    .lib-kw-scroll{max-height:220px}
     /* Review mode (people-pets wireframes screen C) — one unnamed cluster at a time, full-
        viewport, keyboard-driven. z-index above #lib-overlay's 4000, same pattern as
        #lib-quicklook (lazily created, appended to body, .on toggles display). */
@@ -9733,7 +9735,7 @@
           </div>${hasChildren && open ? `<div class="lib-tree-children">${renderLevel(n.id)}</div>` : ''}`;
       }).join('');
     };
-    const body = `<div class="lib-tree-node" id="lib-keyword-tree">${renderLevel('__root__')}</div>`;
+    const body = `<div class="lib-tree-node lib-people-scroll lib-kw-scroll" id="lib-keyword-tree">${renderLevel('__root__')}</div>`;
     return '<div class="lib-coll-sep"></div>' + sidebarSection('keywords', 'Keywords', body, { extraHeaderAttrs: ' data-kw-tree-toggle="1"' });
     // No trailing separator of its own — the next section (People & Pets) supplies its own
     // leading one. This used to double up into two adjacent dividers whenever both a keyword
