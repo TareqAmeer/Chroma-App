@@ -36,6 +36,10 @@
       "vendor/rtdetr/model_quantized.onnx": "vendor/rtdetr/model_quantized.onnx",
       "vendor/rawdenoise/model_linear.onnx": "vendor/rawdenoise/model_linear.onnx",
       "vendor/rawdenoise/model_bayer.onnx": "vendor/rawdenoise/model_bayer.onnx",
+      "vendor/clip/vision_model.onnx": "vendor/clip/vision_model.onnx",
+      "vendor/clip/text_model.onnx": "vendor/clip/text_model.onnx",
+      "vendor/clip/tokenizer.json": "vendor/clip/tokenizer.json",
+      "vendor/arcface/w600k_r50.onnx": "vendor/arcface/w600k_r50.onnx",
       "../dist": "dist"
     },
     "fileAssociations": [
