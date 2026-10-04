@@ -39,7 +39,7 @@
 html,body{background:var(--bg);color:var(--fg);font-family:Gramatika,'Noto Kufi Arabic',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 body{overflow-x:clip}
 a{color:inherit}
-.mono{font-family:Gramatika,'Noto Kufi Arabic',sans-serif;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.mono{font-family:Gramatika,'Noto Kufi Arabic',sans-serif;font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
 .k{font-size:clamp(40px,6vw,96px);font-weight:900;letter-spacing:-.01em;line-height:.9}
 .t{max-width:400px;font-size:18px;line-height:1.4;color:var(--mid);margin-top:20px}
 .btn{display:inline-flex;gap:8px;align-items:center;font-weight:600;font-size:15px;padding:14px 22px;border-radius:0;text-decoration:none;border:1px solid var(--fg);transition:background .2s,color .2s,border-color .2s}
@@ -56,17 +56,17 @@ a{color:inherit}
 .lead .cmp .after{clip-path:inset(0 0 0 var(--x))}
 .lead .cmp .bar{position:absolute;top:0;bottom:0;left:var(--x);width:2px;margin-left:-1px;background:#f2f0ea}
 .lead .cmp .bar b{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:38px;height:38px;display:grid;place-items:center;background:#f2f0ea!important;color:#0b0b0a!important;font-size:16px}
-.lead .cmp .l{position:absolute;bottom:10px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#fff;mix-blend-mode:difference}.lead .cmp .l.a{left:12px}.lead .cmp .l.b{right:12px}
+.lead .cmp .l{position:absolute;bottom:10px;font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:#fff;mix-blend-mode:difference}.lead .cmp .l.a{left:12px}.lead .cmp .l.b{right:12px}
 .lead .ba ol{list-style:none;margin:0;padding:0;counter-reset:s}
 .lead .ba li{counter-increment:s;display:flex;gap:14px;align-items:baseline;padding:11px 0;border-top:1px solid rgba(11,11,10,.3);font-size:clamp(17px,1.6vw,26px);font-weight:700}
-.lead .ba li::before{content:"0" counter(s);font-size:12px;letter-spacing:.12em}
+.lead .ba li::before{content:"0" counter(s);font-size:14px;letter-spacing:.12em}
 .lead .ba p{margin-top:14px;font-size:15px;font-weight:600}
 @media(max-width:760px){.lead .ba{grid-template-columns:1fr;gap:16px}.lead .cmp{max-height:none}}
 .lead .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}.lead .btn{border-color:#0b0b0a;color:#0b0b0a;border-width:2px;min-width:210px;justify-content:center}@media(max-width:760px){.lead .cta{display:grid;grid-template-columns:1fr 1fr;gap:10px}.lead .btn{min-width:0;padding:14px 10px}}.lead .btn.go{background:#0b0b0a;color:#f2f0ea}.lead .auto{position:fixed;right:5vw;bottom:14px;z-index:40;display:flex;background:rgba(11,11,10,.86);border:1px solid rgba(242,239,232,.25);backdrop-filter:blur(8px)}
 .auto button{font:600 12px/1 inherit;font-family:inherit;letter-spacing:.1em;text-transform:uppercase;color:#f2f0ea;background:none;border:0;padding:11px 14px;cursor:pointer;display:flex;gap:8px;align-items:center}
 .auto button+button{border-left:1px solid rgba(242,239,232,.2);min-width:46px;justify-content:center}
 .auto button:hover{background:var(--acc);color:#0b0b0a}.auto.on #autoPlay{background:var(--acc);color:#0b0b0a}
-.here{position:fixed;left:5vw;bottom:20px;z-index:40;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);opacity:0;transition:opacity .25s;pointer-events:none}.here.on{opacity:1}.here b{color:var(--acc);font-weight:600;margin-right:8px}
+.here{position:fixed;left:5vw;bottom:20px;z-index:40;font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);opacity:0;transition:opacity .25s;pointer-events:none}.here.on{opacity:1}.here b{color:var(--acc);font-weight:600;margin-right:8px}
 .auto{display:none!important}@media(max-width:760px){.auto{right:16px;bottom:12px}.here{left:16px;bottom:18px}}
 .btn:hover{background:#f2f0ea;border-color:#f2f0ea;color:#0b0b0a}
 .btn:hover{background:var(--fg);border-color:var(--fg);color:var(--bg)}
@@ -79,9 +79,9 @@ a{color:inherit}
 .word .t{margin:0;max-width:none}
 .word svg{width:34px;height:34px;transition:transform .4s var(--ease)}.word.fly svg{transition:none}.word:hover svg{transform:translate(-2px,-2px)}
 .top nav a:last-child{color:var(--acc);opacity:1}
-.sec{position:relative;font-size:14px;font-weight:500}.sec summary{list-style:none;cursor:pointer;opacity:.8;user-select:none}.sec summary::-webkit-details-marker{display:none}.sec summary:hover,.sec[open] summary{opacity:1}.sec summary i{font-style:normal;font-size:11px;display:inline-block;transition:transform .2s}.sec[open] summary i{transform:rotate(180deg)}
+.sec{position:relative;font-size:14px;font-weight:500}.sec summary{list-style:none;cursor:pointer;opacity:.8;user-select:none}.sec summary::-webkit-details-marker{display:none}.sec summary:hover,.sec[open] summary{opacity:1}.sec summary i{font-style:normal;font-size:14px;display:inline-block;transition:transform .2s}.sec[open] summary i{transform:rotate(180deg)}
 .sec .menu{position:absolute;top:calc(100% + 12px);left:-14px;min-width:190px;display:flex;flex-direction:column;gap:2px;padding:8px;background:rgba(11,11,10,.96);border:1px solid rgba(242,239,232,.14);backdrop-filter:blur(12px)}
-.sec .menu a{display:flex;gap:12px;padding:8px 10px;color:#f2f0ea;opacity:.85}.sec .menu small{font-size:10px;color:var(--acc);letter-spacing:.1em;padding-top:3px;min-width:16px}.sec .menu a:hover{opacity:1;background:rgba(242,239,232,.08)}
+.sec .menu a{display:flex;gap:12px;padding:8px 10px;color:#f2f0ea;opacity:.85}.sec .menu small{font-size:15px;color:var(--acc);letter-spacing:.1em;padding-top:3px;min-width:16px}.sec .menu a:hover{opacity:1;background:rgba(242,239,232,.08)}
 @media(max-width:700px){.top nav{gap:16px}.sec .menu{left:auto;right:-60px}}
 .top nav{display:flex;gap:22px;font-size:14px;font-weight:500}
 .top nav a{text-decoration:none;opacity:.8}.top nav a:hover{opacity:1}
@@ -110,7 +110,7 @@ a{color:inherit}
 .ph .shade{position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.65),transparent 55%);opacity:0}
 .hero-t{position:absolute;left:0;right:0;top:12vh;text-align:center;font-size:clamp(44px,8.5vw,150px);font-weight:900;letter-spacing:-.01em;line-height:.86;pointer-events:none;z-index:2;mix-blend-mode:difference}
 .hero-t sup{color:var(--acc);font-size:.35em;vertical-align:top;position:relative;top:.2em}
-.lb{position:absolute;top:58%;font-size:11px}.lb.l{left:5vw}.lb.r{right:5vw;text-align:right}
+.lb{position:absolute;top:58%;font-size:14px}.lb.l{left:5vw}.lb.r{right:5vw;text-align:right}
 .scrollcue{position:absolute;bottom:5vh;left:50%;transform:translateX(-50%)}
 .hovercue{position:absolute;top:92px;left:50%;transform:translateX(-50%);z-index:4;pointer-events:none;display:flex;align-items:center;gap:10px;padding:10px 16px;background:rgba(11,11,10,.72);border:1px solid rgba(242,239,232,.28);backdrop-filter:blur(8px);color:var(--fg);white-space:nowrap;transition:opacity .4s}
 .hovercue i{width:14px;height:14px;border:1.5px solid var(--acc);border-radius:50%;position:relative;animation:hcpulse 1.8s ease-in-out infinite}.hovercue i::after{content:"";position:absolute;width:6px;height:1.5px;background:var(--acc);right:-5px;bottom:-2px;transform:rotate(45deg)}
@@ -125,7 +125,7 @@ a{color:inherit}
 .p1{width:135vw;background:var(--paper);color:var(--ink);grid-template-columns:1fr 1fr;gap:4vw;align-items:center}
 .p1txt{position:relative;z-index:5;max-width:34vw}
 .p1 .k,.p1 .t,.p1 .lbar,.p1 #libcount{color:var(--ink)}.p1 .p1txt>.mono,.p1 #libcount{color:#55524b}
-.board{position:absolute;z-index:1;left:42vw;right:5vw;top:15vh;bottom:13vh}
+.board{position:absolute;z-index:1;left:5vw;right:42vw;top:15vh;bottom:13vh}
 .lbar{position:absolute;left:0;right:0;top:0;height:64px;display:flex;gap:20px;align-items:flex-end;padding-bottom:12px;border-bottom:1px solid var(--ink,#0b0b0a);opacity:0}
 .lbar .gt{font-size:clamp(38px,4.2vw,72px);font-weight:700;letter-spacing:-.01em;line-height:.8}
 .lbar #libcount{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:clamp(13px,1.2vw,18px);line-height:1;text-transform:none;letter-spacing:.01em}
@@ -155,7 +155,7 @@ a{color:inherit}
 .studiostack img+img{position:absolute;inset:0;height:100%;opacity:0}
 .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:24px}
 .tags span::before{content:"";display:inline-block;width:6px;height:6px;background:var(--acc);margin-right:8px;vertical-align:1px}
-.tags span{border:1px solid #33312c;border-radius:0;padding:7px 12px;font-size:13px;color:var(--mid)}
+.tags span{border:1px solid #33312c;border-radius:0;padding:7px 12px;font-size:15px;color:var(--mid)}
 .p3{width:100vw;grid-template-columns:1fr 1.25fr;gap:4vw;align-items:center}
 .big{font-size:20vw;font-weight:900;letter-spacing:-.01em;line-height:.78;color:transparent;-webkit-text-stroke:1.5px var(--acc)}
 .lensbox{position:relative;height:76vh;border-radius:0;overflow:hidden;cursor:crosshair}
@@ -326,12 +326,12 @@ section{position:relative}
 .paper.maker .por{border-color:#d9d5cc}
 .paper .sn{color:#8b877e}
 /* 7 captions as data */
-.dcap{display:grid;grid-template-columns:auto auto;gap:2px 14px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-top:10px}
+.dcap{display:grid;grid-template-columns:auto auto;gap:2px 14px;font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-top:10px}
 .dcap b{font-weight:400;color:var(--fg)}.paper .dcap b{color:var(--ink)}
 .ph .dcap{position:absolute;left:12px;bottom:10px;z-index:3;margin:0;opacity:.9}
 .p4 .dcap{position:absolute;right:5vw;bottom:12vh;z-index:3}
 /* 8 constellation on a grid */
-.colhead{position:absolute;top:-56px;background:none;border-width:1px 0 0;border-style:solid;border-radius:0;margin:0;text-align:left;font-family:inherit;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);border-top:1px solid #3a3833;padding-top:8px;width:calc(100%/8 - 16px);white-space:normal;cursor:pointer}
+.colhead{position:absolute;top:-56px;background:none;border-width:1px 0 0;border-style:solid;border-radius:0;margin:0;text-align:left;font-family:inherit;font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);border-top:1px solid #3a3833;padding-top:8px;width:calc(100%/8 - 16px);white-space:normal;cursor:pointer}
 .colhead:hover,.colhead.on{color:var(--acc);border-color:var(--acc)}
 .feat{transform:none;text-align:left;white-space:normal;max-width:calc(90vw/8.6);line-height:1.05}
 .feat::before{left:-9px}
@@ -352,7 +352,7 @@ section{position:relative}
 @media(max-width:760px){.sheet{left:5vw;width:auto}}
 /* 10 loupe */
 .loupe{position:fixed;z-index:70;width:170px;height:170px;border:1px solid var(--fg);pointer-events:none;background-repeat:no-repeat;opacity:0;transform:translate(-50%,-50%);transition:opacity .2s;box-shadow:0 20px 40px rgba(0,0,0,.5)}
-.loupe::after{content:"100%";position:absolute;left:6px;bottom:4px;font-size:9px;letter-spacing:.12em;color:#fff;mix-blend-mode:difference}
+.loupe::after{content:"100%";position:absolute;left:6px;bottom:4px;font-size:14px;letter-spacing:.12em;color:#fff;mix-blend-mode:difference}
 [data-loupe]{cursor:none}
 /* 11 look ticker */
 .ticker{padding:14vh 0 12vh;border-top:1px solid var(--line);overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr);gap:6vh}
@@ -370,11 +370,11 @@ section{position:relative}
 .split img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .split .af{clip-path:inset(0 0 0 50%)}
 .split .bar{position:absolute;top:0;bottom:0;width:2px;background:var(--acc);left:50%}
-.split .lab{position:absolute;top:92px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#fff;mix-blend-mode:difference}
+.split .lab{position:absolute;top:92px;font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:#fff;mix-blend-mode:difference}
 .split .lab.l{left:5vw}.split .lab.r{right:5vw}
 .split .k{position:absolute;left:5vw;bottom:10vh;color:#fff;mix-blend-mode:difference}
 /* 13 frame counter */
-.counter{display:none!important;position:fixed;right:14px;top:50%;z-index:45;transform:translateY(-50%);writing-mode:vertical-rl;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);mix-blend-mode:difference}
+.counter{display:none!important;position:fixed;right:14px;top:50%;z-index:45;transform:translateY(-50%);writing-mode:vertical-rl;font-size:15px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);mix-blend-mode:difference}
 .counter b{color:var(--acc);font-weight:400}
 /* 14 draggable while floating */
 .tile .f{touch-action:none;cursor:grab}.tile .f:active{cursor:grabbing}
@@ -388,7 +388,7 @@ section{position:relative}
 .nums .demo figure img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}
 .nums .demo .grain{opacity:0}
 .nums .ctl{grid-column:1/6;display:grid;gap:26px}
-.nums label{display:grid;grid-template-columns:110px 1fr 44px;gap:14px;align-items:center;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.nums label{display:grid;grid-template-columns:110px 1fr 44px;gap:14px;align-items:center;font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
 .nums input[type=range]{-webkit-appearance:none;appearance:none;height:1px;background:var(--fg)}
 .nums input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--acc);border:0}
 .nums input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--acc);border:0;border-radius:0}
@@ -424,7 +424,7 @@ section{position:relative}
 .cells{position:fixed;inset:0;z-index:200;display:grid;grid-template-columns:repeat(12,1fr);grid-template-rows:repeat(8,1fr);pointer-events:none}
 .cells i{background:var(--acc);transform:scale(0)}
 /* 19 status strip + 20 motion toggle */
-.strip{display:flex;gap:18px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.strip{display:flex;gap:18px;font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
 .strip b{font-weight:400;color:var(--fg)}
 .strip .dot{display:inline-block;width:6px;height:6px;background:var(--acc);margin-right:6px}
 .motion{background:none;border:1px solid #3a3833;color:var(--dim);font:10px Gramatika;letter-spacing:.12em;text-transform:uppercase;padding:5px 9px;cursor:pointer}
@@ -441,8 +441,8 @@ section{position:relative}
 .fl .k{font-size:clamp(32px,min(4.4vw,7vh),76px);line-height:.95}
 .steps{list-style:none;margin-top:3vh;border-top:1px solid var(--line)}
 .steps li{display:grid;grid-template-columns:34px 110px 1fr auto;gap:12px;align-items:baseline;padding:min(8px,.9vh) 0;border-bottom:1px solid var(--line);font-size:min(15px,2vh);color:#3a3833;transition:color .25s}
-.steps li .n,.steps li .app{font-size:10px;letter-spacing:.12em;text-transform:uppercase}
-.steps li em{font-style:normal;font-size:10px;letter-spacing:.12em;text-transform:uppercase;border:1px solid currentColor;padding:2px 6px}
+.steps li .n,.steps li .app{font-size:15px;letter-spacing:.12em;text-transform:uppercase}
+.steps li em{font-style:normal;font-size:15px;letter-spacing:.12em;text-transform:uppercase;border:1px solid currentColor;padding:2px 6px}
 .steps li.on{color:var(--fg)}.steps li.on .app{color:var(--dim)}.steps li.on em{color:var(--acc)}
 .steps li.cur{color:var(--acc)}
 .gen img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}
@@ -455,14 +455,14 @@ section{position:relative}
 .m .v small{font-size:.38em;margin-left:4px}
 .m i{display:block;height:3px;background:#24231f;margin-top:10px}
 .m i b{display:block;height:100%;background:var(--acc);transform-origin:left;transform:scaleX(0)}
-.note{font-size:9px}
+.note{font-size:14px}
 .now{position:absolute;inset:0;background:var(--acc);color:#0b0b0a;display:grid;align-items:center;padding:12vh 5vw 6vh;clip-path:inset(100% 0 0 0);z-index:3}
 .now>div{max-width:900px}
 .now .mono,.now .t{color:#0b0b0a}.now .k{margin:14px 0 5vh}
 .now .m{border-color:#0b0b0a}.now .m i{background:rgba(11,11,10,.2)}.now .m i b{background:#0b0b0a}.now .m .v{font-size:clamp(56px,7vw,120px)}
 @media(max-width:760px){
   .fin{padding:10vh 16px 4vh;row-gap:14px}.fl,.fr{grid-column:1/13}
-  .fl .k{font-size:min(30px,4.4vh)}.steps{margin-top:10px}.steps li{grid-template-columns:24px 78px 1fr auto;font-size:min(12px,1.75vh);padding:min(4px,.45vh) 0;gap:6px}.m .v{font-size:min(34px,5vh)}
+  .fl .k{font-size:min(30px,4.4vh)}.steps{margin-top:10px}.steps li{grid-template-columns:24px 78px 1fr auto;font-size:min(14px,1.75vh);padding:min(4px,.45vh) 0;gap:6px}.m .v{font-size:min(34px,5vh)}
   .gen{display:none}.m .v{font-size:34px}.note{display:none}
   .now{padding:10vh 16px}
 }
@@ -471,7 +471,7 @@ section{position:relative}
   .mob{display:inline}.dsk{display:none}
   .gridlines{grid-template-columns:repeat(4,1fr);inset:0 16px;column-gap:12px}.gridlines i:nth-child(n+5){display:none}
   .counter,.lb{display:none}
-  .top{padding:12px 16px}.word{font-size:13px}.word svg{width:28px;height:28px}
+  .top{padding:12px 16px}.word{font-size:15px}.word svg{width:28px;height:28px}
   .sn{top:70px;right:16px}
   .intro{padding:0 16px 24vh}.intro .cue{bottom:13vh}.sheet{left:16px;right:16px;top:17vh;width:auto;gap:4px}
   .hero-t{left:16px;top:12vh;font-size:13vw}
@@ -481,8 +481,8 @@ section{position:relative}
   .p1txt{max-width:100%}.p1txt .t{font-size:16px}
   .board{position:relative;left:auto;right:auto;top:auto;bottom:auto;height:calc(42vh + 12px);margin-top:3vh}
   .chips button{padding:5px 8px}.lbar{height:auto;flex-wrap:wrap;row-gap:8px;padding-bottom:8px}
-  .lbar #libcount{display:block;order:2;flex:1 1 100%;white-space:normal;overflow:visible;font-size:13px;line-height:1.3;min-height:2.6em}
-  .lbar i{display:none}.chips{order:3;flex:1 1 100%;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--ink)}.chips button{padding:9px 4px;font-size:9px;background:var(--paper);border-left:0}.chips button.on{background:var(--ink)}.lbar .gt{font-size:34px}
+  .lbar #libcount{display:block;order:2;flex:1 1 100%;white-space:normal;overflow:visible;font-size:15px;line-height:1.3;min-height:2.6em}
+  .lbar i{display:none}.chips{order:3;flex:1 1 100%;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--ink)}.chips button{padding:9px 4px;font-size:14px;background:var(--paper);border-left:0}.chips button.on{background:var(--ink)}.lbar .gt{font-size:34px}
   .k{font-size:clamp(34px,10vw,56px)}
   .t{font-size:16px}
   .p2 .img,.p3 .lensbox{width:100%}
@@ -515,12 +515,12 @@ section{position:relative}
 /* downloads: every platform card fits on one screen at any size */
 .plat{min-height:clamp(120px,24vh,230px)}
 @media(max-height:760px) and (min-width:761px){.outro .k{font-size:clamp(48px,min(13vw,17vh),230px)}.plat{padding:16px}.plat b{font-size:22px;margin-top:10px}}
-@media(max-width:760px){.plat{min-height:0;padding:12px;gap:4px}.plat svg{width:28px;height:28px}.plat b{font-size:19px;margin-top:6px}.plat span{font-size:13px}}
+@media(max-width:760px){.plat{min-height:0;padding:12px;gap:4px}.plat svg{width:28px;height:28px}.plat b{font-size:19px;margin-top:6px}.plat span{font-size:15px}}
 @media(max-width:760px) and (max-height:700px){.plat span{display:none}}
 
 .sec.more .menu{left:auto;right:auto;inset-inline-end:-14px;min-width:200px}html[lang=ar] [data-only=en]{display:none}
 .outro{grid-template-columns:minmax(0,1fr)}.outro>*{min-width:0}
-@media(max-height:520px){.plats{grid-template-columns:repeat(5,1fr)!important;gap:6px}.plat{min-height:0;padding:10px;gap:4px}.plat svg{width:24px;height:24px}.plat b{font-size:17px;margin-top:4px}.plat span{display:none}.plat em{font-size:12px}}
+@media(max-height:520px){.plats{grid-template-columns:repeat(5,1fr)!important;gap:6px}.plat{min-height:0;padding:10px;gap:4px}.plat svg{width:24px;height:24px}.plat b{font-size:17px;margin-top:4px}.plat span{display:none}.plat em{font-size:14px}}
 
 .lead button.btn{font:inherit;font-weight:600;font-size:15px;background:none;cursor:pointer}
 .top nav a.navlaunch{color:inherit;opacity:.8}
@@ -533,8 +533,8 @@ section{position:relative}
 .lead .ba{align-items:center}.lead .ba p.one{white-space:nowrap;font-size:clamp(18px,min(2.1vw,5.6vw),40px);font-weight:900;line-height:1.05;letter-spacing:-.005em;margin-top:22px}
 
 .top nav>a,.top .sec summary,.word .t{white-space:nowrap}
-@media(max-width:420px){.top nav{gap:12px;font-size:13px}.top .sec{font-size:13px}.word{gap:6px}.word .t{font-size:12px}}
-.top{gap:12px}@media(max-width:350px){.word .t{font-size:11px}.top nav,.top .sec{gap:9px;font-size:12px}.top{padding-left:12px;padding-right:12px}}
+@media(max-width:420px){.top nav{gap:12px;font-size:15px}.top .sec{font-size:15px}.word{gap:6px}.word .t{font-size:14px}}
+.top{gap:12px}@media(max-width:350px){.word .t{font-size:14px}.top nav,.top .sec{gap:9px;font-size:14px}.top{padding-left:12px;padding-right:12px}}
 
 .intro .name{white-space:nowrap}
 @media(max-width:760px){.lead .ba p.one{font-size:clamp(16px,5.4vw,30px)}}
@@ -564,6 +564,10 @@ html[lang=ar] .intro .name-en{font-size:clamp(14px,2.2vw,34px);font-weight:700;l
 /* scroll-driven tour positions things in JS with left-to-right maths: keep its frame LTR, text RTL */
 html[lang=ar] .pin{direction:ltr}
 html[lang=ar] .pin .panel{direction:rtl}
+/* Arabic reads right to left, so the sideways tour is mirrored: a wrapper round the track flips about the screen centre and each panel flips back, so the LTR maths still drives it but panels arrive from the left */
+html[lang=ar] .trflip{position:absolute;inset:0;z-index:1;pointer-events:none;scale:-1 1}html[lang=ar] .pin .panel{transform:scaleX(-1)}
+html[lang=ar] .lead .hero-t{text-align:right}
+html[lang=ar] .tape{direction:ltr}  /* look names stay English and the marquee maths is LTR */
 html[lang=ar] .langsw{font-family:Gramatika,system-ui,sans-serif}
 </style>
 </head>
@@ -601,7 +605,7 @@ html[lang=ar] .langsw{font-family:Gramatika,system-ui,sans-serif}
   </div>
   <div class="track">
     <div class="panel p0">
-      <div class="stagew" aria-hidden="true"><span>صورة خام</span><span>عدّلها</span><span>لوّنها</span><span>رشّ بعض الحبيبات</span><span>خلّها تتوهج</span><span>أطّرها مرتين</span></div>
+      <div class="stagew" aria-hidden="true"><span>صورة RAW</span><span>عدّلها</span><span>لوّنها</span><span>رشّ بعض الحبيبات</span><span>خلّها تتوهج</span><span>أطّرها مرتين</span></div>
       <span class="mono scrollcue">مرّر لتحميض الصورة</span>
       <span class="mono hovercue" id="hovercue"><i aria-hidden="true"></i>مرّر المؤشر فوق الصورة لترى التفاصيل</span>
       <div class="cap0">
@@ -856,7 +860,7 @@ window.__advance=()=>{
   const nextSection=()=>{const n=secs.map(secTop).find(t=>t>y+H*.25);const to=Math.min(maxY,n===undefined?y+H:Math.min(n,y+H));if(y>=maxY-4)return;glide(to,Math.max(.9,Math.min(1.8,.9+Math.abs(to-y)/H*.6)))};
   if(T&&y>=T.start-4&&y<T.end-4){
     const px=t=>T.start+t/T.dur*(T.end-T.start),gl=px(T.gallery),sh=px(T.studio);
-    const fr=px(3.75);                                                                        // 'أطّرها مرتين' is fully on screen here
+    const fr=px(4.0);                                                                         // 'أطّرها مرتين' is fully on screen here
     if(y<fr-H*.05){glide(fr,Math.max(6,Math.min(14,(fr-y)/H*1.6)),x=>x);return}               // raw -> develops step by step, stops on 'أطّرها مرتين'
     if(y<gl-H*.1){glide(gl,Math.max(3.5,Math.min(9,(gl-y)/H*.9)),x=>x);return}               // then the photo lands in the grid
     if(y<sh-H*.1){                                                                            // gallery: click the filters, then to the studio
@@ -891,19 +895,21 @@ window.__fadeTo=yOf=>{let cut=document.getElementById('jumpcut');if(!cut){cut=do
 document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',e=>{const h=a.getAttribute('href');e.preventDefault();window.__navClicked=true;if(a.dataset.tour&&window.__tourTo){window.__tourTo(a.dataset.tour);return}const tgt=h.length<2?0:h;if(!tgt){window.__fadeTo(()=>0);return}const el=document.querySelector(tgt);const yOf=()=>{let y=el.getBoundingClientRect().top+scrollY;const pl=tgt==='#yours'&&document.querySelector('.plats');if(pl){const r=pl.getBoundingClientRect();y=Math.max(y,r.bottom+scrollY-innerHeight+16)}return Math.max(0,Math.round(y))};/* land exactly on the section (no strip of the previous one); for downloads, make sure every platform card is on screen */window.__fadeTo(yOf)}));
 
 /* 1. stage */
-const tr=document.querySelector('.track'),pans=[...document.querySelectorAll('.panel[data-lab]')];
+const tr=document.querySelector('.track');if(document.documentElement.dir==='rtl'){const fl=document.createElement('div');fl.className='trflip';tr.before(fl);fl.append(tr)}
+const pans=[...document.querySelectorAll('.panel[data-lab]')];
 const dist=()=>tr.scrollWidth-innerWidth;
 const heroIn=()=>{};  // the raw photo is already in place when the section arrives; no fade-in
 /* intro: plays on load, holds (the light keeps breathing), scroll drives the vermilion curtain over it; scrolling back up returns to it */
 const reduce=still||matchMedia('(prefers-reduced-motion: reduce)').matches;
 if(!reduce){
   document.documentElement.classList.add('pinned');
-  gsap.set('.intro .name span',{yPercent:115});gsap.set('.intro .tag,.intro .cue',{opacity:0});gsap.set('.intro .expo',{svgOrigin:'69 32'});
+  const AR=document.documentElement.dir==='rtl';  // Arabic: the wordmark is simply shown, in the intro and the header, with no rise or flight
+  gsap.set('.intro .name span',{yPercent:AR?0:115});gsap.set('.intro .tag,.intro .cue',{opacity:0});gsap.set('.intro .expo',{svgOrigin:'69 32'});
   gsap.timeline({defaults:{ease:'expo.out'},delay:.2})
-    .from('.intro .ink',{x:-60,opacity:0,duration:1.1})                          // ink plate slides into register
-    .from('.intro .ver',{y:60,opacity:0,duration:1.1},.35)                        // vermilion plate lands on it
-    .from('.intro .expo',{scale:0,duration:1.2,ease:'power2.out'},1.1)            // light exposes the overlap from the corner
-    .from('.intro .seam',{attr:{'stroke-dashoffset':46.67},duration:.8},1.2)
+    .from(AR?[]:'.intro .ink',{x:-60,opacity:0,duration:1.1})                          // ink plate slides into register
+    .from(AR?[]:'.intro .ver',{y:60,opacity:0,duration:1.1},.35)                        // vermilion plate lands on it
+    .from(AR?[]:'.intro .expo',{scale:0,duration:1.2,ease:'power2.out'},1.1)            // light exposes the overlap from the corner
+    .from(AR?[]:'.intro .seam',{attr:{'stroke-dashoffset':46.67},duration:.8},1.2)
     .to('.intro .name span',{yPercent:0,stagger:.045,duration:1.1},1.3)         // name rises letter by letter
     .to('.intro .tag',{opacity:1,duration:.8},2.1)
     .to('.intro .cue',{opacity:1,duration:.8},2.6)
@@ -933,9 +939,9 @@ if(!reduce){
     K={dx:a0.left-b0.left,dy:a0.top-b0.top,ls,gx:b0.left-wr.left,gy:b0.top-wr.top,col:getComputedStyle(NM).color}};
   const k=()=>K||(cal(),K);
   const measure=()=>{W.classList.remove('fly');W.style.width=W.style.height='';gsap.set([ws,wt],{clearProps:'all'});const b=W.getBoundingClientRect(),a=ws.getBoundingClientRect(),c=wt.getBoundingClientRect(),q=document.createRange();q.setStart(wt.firstChild,0);q.setEnd(wt.firstChild,1);const g=q.getBoundingClientRect(),cs=getComputedStyle(wt);E={sx:a.left-b.left,sy:a.top-b.top,sw:a.width,tx:c.left-b.left,ty:c.top-b.top,tfs:parseFloat(cs.fontSize),th:c.height,gx:g.left-c.left,gy:g.top-c.top,ls:parseFloat(cs.letterSpacing)||0,col:cs.color};if(document.documentElement.dir==='rtl'){E.gx=0;E.ls=0}WB={w:b.width,h:b.height};W.style.width=b.width+'px';W.style.height=b.height+'px';W.classList.add('fly');docked=false;K=null};
-  measure();ScrollTrigger.addEventListener('refreshInit',measure);
+  if(!AR){measure();ScrollTrigger.addEventListener('refreshInit',measure)}
   document.fonts&&document.fonts.ready.then(()=>{K=null;ScrollTrigger.refresh()});
-  gsap.set('.word',{opacity:0});
+  if(!AR)gsap.set('.word',{opacity:0});
   /* the orange section sits over the intro while the curtain rises; clip it to the curtain so its dark text never covers the intro tagline */
   const LD=document.querySelector('.lead'),CU=document.querySelector('.intro .curtain');
   let LP=0;const clipLead=p=>{if(!LD)return;LP=p;if(p>=1){LD.style.clipPath='';return}LD.style.clipPath='inset('+Math.max(0,CU.getBoundingClientRect().top-LD.getBoundingClientRect().top+3)+'px 0 0 0)'};
@@ -943,24 +949,23 @@ if(!reduce){
   /* the flying copy never hands back to a separate docked layout: its last frame IS the top-bar position, so scrolling either
      way never swaps elements. Values that don't change during the flight are set here (a tween skips a from==to value). */
   const applyConst=()=>{const r=ir();gsap.set(ws,{x:0,y:0,width:r.s.width,height:r.s.width,transformOrigin:'0 0'});const L=k().ls;gsap.set(wt,{left:0,top:0,fontSize:r.fs,lineHeight:r.n.height+'px',transformOrigin:'0 0'});wt.style.letterSpacing=L+'px'};
-  ScrollTrigger.addEventListener('refresh',applyConst);
-  requestAnimationFrame(applyConst);
+  if(!AR){ScrollTrigger.addEventListener('refresh',applyConst);requestAnimationFrame(applyConst)}
   gsap.timeline({onUpdate(){clipLead(this.progress())},scrollTrigger:{trigger:'.intro',start:'top top',end:'+=70%',pin:true,scrub:.6,invalidateOnRefresh:true,onUpdate:self=>document.documentElement.classList.toggle('lead-on',self.progress>.95)}})
     .to('.intro .cue',{opacity:0,duration:.1})
-    .to('.intro .in svg,.intro .name,.intro .name-en',{opacity:0,duration:.001,ease:'none'},.01)
+    .to(AR?[]:'.intro .in svg,.intro .name,.intro .name-en',{opacity:0,duration:.001,ease:'none'},.01)
     .to('.word',{opacity:1,duration:.001,ease:'none'},.01)
     /* the flight is transform-only (scale down from the big size), measured glyph-for-glyph at both ends */
-    .fromTo(ws,{left:()=>ir().s.left-wb().l,top:()=>ir().s.top-wb().t,scale:1},
+    .fromTo(AR?[]:ws,{left:()=>ir().s.left-wb().l,top:()=>ir().s.top-wb().t,scale:1},
       {left:()=>E.sx,top:()=>E.sy,scale:()=>E.sw/ir().s.width,duration:.8,ease:'power3.inOut',immediateRender:true},0)
-    .fromTo(wt,{x:()=>ir().n.left-wb().l+k().dx,y:()=>ir().n.top-wb().t+k().dy,scale:1},
+    .fromTo(AR?[]:wt,{x:()=>ir().n.left-wb().l+k().dx,y:()=>ir().n.top-wb().t+k().dy,scale:1},
       {x:()=>E.tx+E.gx-k().gx*E.tfs/ir().fs,y:()=>E.ty+E.gy-k().gy*E.tfs/ir().fs,scale:()=>E.tfs/ir().fs,duration:.8,ease:'power3.inOut',immediateRender:true},0)
-    .fromTo(wt,{color:()=>k().col},{color:()=>E.col,duration:.8,ease:'none',immediateRender:true},0)  // colour settles evenly over the whole flight
+    .fromTo(AR?[]:wt,{color:()=>k().col},{color:()=>E.col,duration:.8,ease:'none',immediateRender:true},0)  // colour settles evenly over the whole flight
     .to('.intro .curtain',{scaleY:1,duration:.7,ease:'power2.inOut'},.2);
   ScrollTrigger.create({trigger:'.pin',start:'top 60%',once:true,onEnter:heroIn});
 }
 /* tour: each stage word rises letter by letter beside the photo as its effect lands; then the frame goes full-screen, gets a heart and stars, and shrinks into the library grid */
 document.querySelectorAll('.stagew span').forEach(w=>{w.innerHTML=w.textContent.split(' ').map(wd=>'<b>'+'<i>'+wd+'</i>'+'</b>').join('')});
-gsap.set('.stagew span i',{yPercent:115});gsap.set('.ph',{xPercent:-50,yPercent:-50});
+gsap.set('.stagew span i',{yPercent:160});gsap.set('.ph',{xPercent:-50,yPercent:-50});
 /* the photo flies to its slot in the library grid and becomes that tile */
 const ph=document.querySelector('.ph');let mid=null;
 const handoff=X=>{const t0=window.__tile0;if(!t0)return;
@@ -980,9 +985,10 @@ const Wf=()=>Math.min(innerWidth,innerHeight*AR6),Hf=()=>Wf()/AR6,Wz=()=>innerWi
 const STG=[0,.5,1.2,1.9,2.6,3.3];let stgLast=-1;
 const stageWindow=t=>{document.querySelector('.ph').style.zIndex=t>=6.2?'3':'';let c=0;STG.forEach((s0,i)=>{if(t>=s0)c=i});if(t>=4.2)c=6;if(c===stgLast)return;stgLast=c;
   document.querySelectorAll('.ph img').forEach((im,i)=>{im.style.display=(c===6?i===5:Math.abs(i-c)<=1)?'':'none'})};
+const RTL_=document.documentElement.dir==='rtl';
 const HOLD2=2.4,HOLD=.45,XH=()=>{const g=document.querySelector('.p1');return g.offsetLeft+Math.max(0,g.offsetWidth-innerWidth)};
 function slideUpd(){const X=-gsap.getProperty(tr,'x');
-  handoff(X);const g=panel0().getBoundingClientRect();document.body.classList.toggle('onpaper',g.left<120&&g.right>innerWidth*.4)}
+  handoff(X);const g=panel0().getBoundingClientRect();document.body.classList.toggle('onpaper',RTL_?(g.right>innerWidth-120&&g.left<innerWidth*.6):(g.left<120&&g.right>innerWidth*.4))}
 const tl=window.__tourTl=gsap.timeline({onUpdate(){stageWindow(this.time());if(this.time()>=tl.labels.slide+XH()/innerHeight*K()){ph.style.visibility='hidden';const t0=window.__tile0;if(t0)t0.style.visibility='visible'}},scrollTrigger:{trigger:'.pin',pin:true,start:'top top',end:()=>'+='+(innerHeight*(PRE+HOLD+HOLD2)+dist()*K()),scrub:1,invalidateOnRefresh:true}});
 const W_=document.querySelectorAll('.stagew span'),wIn=(k,at)=>tl.to(W_[k].querySelectorAll('i'),{yPercent:0,stagger:{amount:.12},duration:.2,ease:'power3.out'},at),wOut=(k,at)=>tl.to(W_[k],{yPercent:-30,opacity:0,duration:.12,ease:'power2.in'},at);
 const PI=[...document.querySelectorAll('.ph img')],RV=document.querySelector('.ph .rvf'),CLOSED='inset(0% 0% 100% 0%)',OPEN='inset(0% 0% 0% 0%)',EZ='power1.inOut';
@@ -1036,8 +1042,8 @@ const sPos=()=>tl.scrollTrigger.start+(tl.labels.slide/tl.duration())*(tl.scroll
 pans.forEach(p=>{
   const st=()=>xPos(Math.max(0,p.offsetLeft-innerWidth)),en=()=>xPos(p.offsetLeft+p.offsetWidth);
   const o=()=>({scrub:true,invalidateOnRefresh:true,start:st,end:en});
-  if(!p.classList.contains('p2'))gsap.fromTo(p.querySelectorAll('.k,.t,.p1txt .mono,.panel>div>.mono,.in>.mono,.tags,.looks,.terms'),{x:60},{x:-30,ease:'none',scrollTrigger:o()});
-    gsap.fromTo(p.querySelectorAll('.big'),{x:160},{x:-80,ease:'none',scrollTrigger:o()});
+  if(!p.classList.contains('p2'))gsap.fromTo(p.querySelectorAll('.k,.t,.p1txt .mono,.panel>div>.mono,.in>.mono,.tags,.looks,.terms'),{x:RTL_?-60:60},{x:RTL_?30:-30,ease:'none',scrollTrigger:o()});
+    gsap.fromTo(p.querySelectorAll('.big'),{x:RTL_?-160:160},{x:RTL_?80:-80,ease:'none',scrollTrigger:o()});
 });
 
 /* library: photos float in the air, then settle into the library grid as the chapter arrives */

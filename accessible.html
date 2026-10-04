@@ -860,7 +860,7 @@ window.__advance=()=>{
   const nextSection=()=>{const n=secs.map(secTop).find(t=>t>y+H*.25);const to=Math.min(maxY,n===undefined?y+H:Math.min(n,y+H));if(y>=maxY-4)return;glide(to,Math.max(.9,Math.min(1.8,.9+Math.abs(to-y)/H*.6)))};
   if(T&&y>=T.start-4&&y<T.end-4){
     const px=t=>T.start+t/T.dur*(T.end-T.start),gl=px(T.gallery),sh=px(T.studio);
-    const fr=px(3.75);                                                                        // 'Frame it twice' is fully on screen here
+    const fr=px(4.0);                                                                         // 'Frame it twice' is fully on screen here
     if(y<fr-H*.05){glide(fr,Math.max(6,Math.min(14,(fr-y)/H*1.6)),x=>x);return}               // raw -> develops step by step, stops on 'Frame it twice'
     if(y<gl-H*.1){glide(gl,Math.max(3.5,Math.min(9,(gl-y)/H*.9)),x=>x);return}               // then the photo lands in the grid
     if(y<sh-H*.1){                                                                            // gallery: click the filters, then to the studio
