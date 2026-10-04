@@ -215,10 +215,10 @@ window.renderAt=function(t){
   const st=Math.max(0,t+(SUB>1?(j/(SUB-1)-.5):0)*SHUTTER);
   sceneAt(st);composer.render();
   addMat.uniforms.tex.value=composer.readBuffer.texture;addMat.uniforms.w.value=1/SUB;
-  renderer.setRenderTarget(accum);renderer.render(addScene,quadCam);
+  renderer.setRenderTarget(accum);renderer.autoClear=false;renderer.render(addScene,quadCam);renderer.autoClear=true;
  }
  sceneAt(t);typeAt(t);
- outMat.uniforms.uExp.value=.38*smooth(0,.9,t);  // exposure tuned against the weight-correct accumulatoroutMat.uniforms.uSeed.value=(frameNo++%97)*1.37;
+ outMat.uniforms.uExp.value=smooth(0,.9,t);outMat.uniforms.uSeed.value=(frameNo++%97)*1.37;
  renderer.setRenderTarget(null);renderer.render(outScene,quadCam);
 };
 await document.fonts.ready;
