@@ -655,6 +655,8 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-no-img{color:var(--mut);font-size:12px;text-align:center;padding:var(--sp-8);position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:4px;z-index:var(--z-raise)}
 .ni-build{font-family:var(--mono);font-size:var(--fs-2);color:var(--mut);opacity:var(--op-5)}
 .ni-hint{font-size:12px;color:var(--mut);margin-top:14px}
+#fx-hist-flash{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:var(--z-sticky);pointer-events:none;padding:14px 26px;border-radius:14px;background:rgba(0,0,0,.6);color:#fff;font-family:var(--sans);font-size:15px;font-weight:500;white-space:nowrap;max-width:90%;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:opacity .18s}
+#fx-hist-flash.on{opacity:1}
 #fx-preview-tools{position:absolute;right:8px;top:8px;margin:0!important;z-index:var(--z-sticky)}
 /* multi-photo filmstrip — switch which loaded photo is previewed */
 #fx-filmstrip{display:none;gap:6px;overflow-x:auto;padding:2px 1px;margin-top:8px}
@@ -6942,7 +6944,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1004A';
+const BUILD='1.1004B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18118,18 +18120,29 @@ function fxUndoBtnClick(e){
   if(e.shiftKey){fxResetAll();return;}
   fxUndo();
 }
+// Brief centred "Undo : Exposure" label over the photo, so it is clear what an undo/redo changed.
+let _fxHistFlashT=0;
+function fxHistFlash(verb,label){
+  const wrap=document.getElementById('fx-wrap');if(!wrap)return;
+  let el=document.getElementById('fx-hist-flash');
+  if(!el){el=document.createElement('div');el.id='fx-hist-flash';wrap.appendChild(el);}
+  label=label&&label!=='Edit'?String(label).replace(/\s[+-]?[\d.]+ → .*$/,''):''; // "Exposure +1 → 1" → "Exposure"
+  el.textContent=verb+(label?' : '+label:'');
+  el.classList.add('on');clearTimeout(_fxHistFlashT);
+  _fxHistFlashT=setTimeout(()=>el.classList.remove('on'),900);
+}
 async function fxUndo(){
   if(fxHistIdx<=0){log('Nothing to undo','info');return;}
   fxHistIdx--;await _fxHistoryRestore(fxHistIdx);
   if(typeof hapt==='function')hapt();
-  log('Undo','info');
+  log('Undo','info');fxHistFlash('Undo',fxHistory[fxHistIdx+1]&&fxHistory[fxHistIdx+1].label);
   fxSyncTopbarDisabled();
 }
 async function fxRedo(){
   if(fxHistIdx>=fxHistory.length-1){log('Nothing to redo','info');return;}
   fxHistIdx++;await _fxHistoryRestore(fxHistIdx);
   if(typeof hapt==='function')hapt();
-  log('Redo','info');
+  log('Redo','info');fxHistFlash('Redo',fxHistory[fxHistIdx]&&fxHistory[fxHistIdx].label);
   fxSyncTopbarDisabled();
 }
 // 3.1.2: undo/redo greyed out and unclickable when there's nothing to undo/redo, matching the
