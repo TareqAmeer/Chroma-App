@@ -39,6 +39,7 @@
       "vendor/clip/vision_model.onnx": "vendor/clip/vision_model.onnx",
       "vendor/clip/text_model.onnx": "vendor/clip/text_model.onnx",
       "vendor/clip/tokenizer.json": "vendor/clip/tokenizer.json",
+      "vendor/dinov2/model.onnx": "vendor/dinov2/model.onnx",
       "vendor/arcface/w600k_r50.onnx": "vendor/arcface/w600k_r50.onnx",
       "../dist": "dist"
     },

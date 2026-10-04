@@ -49,6 +49,7 @@ mod library;
 mod raw_decode;
 mod arcface;
 mod clip;
+mod dino;
 mod faceparse;
 mod petdetect;
 mod depth;
@@ -2580,6 +2581,7 @@ fn main() {
                 PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(platform::ort_lib_dev_path())
             });
             petdetect::set_model_path(resolve_vendor("vendor/rtdetr/model_quantized.onnx"));
+            dino::set_model_path(resolve_vendor("vendor/dinov2/model.onnx"));
             arcface::set_model_path(resolve_vendor("vendor/arcface/w600k_r50.onnx"));
             clip::set_model_paths(
                 resolve_vendor("vendor/clip/vision_model.onnx"),
@@ -3299,6 +3301,7 @@ fn main() {
             // dev-fallback pattern as the SAM2 models above.
             faceparse::set_model_path(resolve_vendor("vendor/faceparse/model_quantized.onnx"));
             petdetect::set_model_path(resolve_vendor("vendor/rtdetr/model_quantized.onnx"));
+            dino::set_model_path(resolve_vendor("vendor/dinov2/model.onnx"));
             depth::set_model_path(resolve_vendor("vendor/depth/model_quantized.onnx"));
 
             // AI stack Phase B: ArcFace embedding (buffalo_l/w600k_r50, 174MB) — same bundled-

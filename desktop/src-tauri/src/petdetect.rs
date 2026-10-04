@@ -134,7 +134,24 @@ pub fn detect(rgb: &[u8], w: u32, h: u32) -> Result<Vec<PetDetection>, String> {
         out.push(PetDetection { species, score, x0, y0, x1, y1 });
     }
     out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-    Ok(out)
+    // RT-DETR is trained NMS-free, but in practice it still returns the same dog twice — a
+    // head-and-chest box and a whole-body box — which became two tags of one pet per photo.
+    // Keep the higher-scoring box whenever one mostly sits inside another.
+    let mut kept: Vec<PetDetection> = Vec::with_capacity(out.len());
+    for d in out {
+        if !kept.iter().any(|k| same_animal(k.x0, k.y0, k.x1, k.y1, d.x0, d.y0, d.x1, d.y1)) {
+            kept.push(d);
+        }
+    }
+    Ok(kept)
+}
+
+/// Two boxes are one animal when their overlap covers most of the smaller box.
+pub fn same_animal(ax0: f32, ay0: f32, ax1: f32, ay1: f32, bx0: f32, by0: f32, bx1: f32, by1: f32) -> bool {
+    let iw = (ax1.min(bx1) - ax0.max(bx0)).max(0.0);
+    let ih = (ay1.min(by1) - ay0.max(by0)).max(0.0);
+    let smaller = ((ax1 - ax0) * (ay1 - ay0)).min((bx1 - bx0) * (by1 - by0));
+    smaller > 0.0 && iw * ih / smaller >= 0.8
 }
 
 #[cfg(test)]

@@ -276,6 +276,7 @@ pub(crate) fn open_and_migrate(path: &Path) -> rusqlite::Result<Connection> {
     // guard against anyway.
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
     migrate(&conn)?;
+    one_time_passes(&conn)?;
     Ok(conn)
 }
 
@@ -284,6 +285,37 @@ pub(crate) fn open_and_migrate(path: &Path) -> rusqlite::Result<Connection> {
 /// (`thumbs/<id%256>/<id>.jpg`, added in a later commit) — any migration that reassigns ids
 /// orphans that entire cache tier. Idempotent: running it again with nothing new to do changes
 /// nothing, which is what `schema_migrates_and_is_idempotent` pins.
+/// One-time data passes keyed on a marker table, run on EVERY open — not inside `migrate`, which
+/// returns early once `user_version` is current and so would skip them on an up-to-date catalog.
+fn one_time_passes(conn: &Connection) -> rusqlite::Result<()> {
+    // Pets moved to DINOv2 identity embeddings: drop every pet-row vector (old CLIP crops, and
+    // HUMAN-face-model vectors on dog faces tagged as a pet) so pets_backfill_and_merge
+    // re-embeds them all with dino.rs, which also files the dog-face rows as pet rows.
+    let has_dino: bool = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pets_dino_v1'")?.exists([])?;
+    if !has_dino {
+        conn.execute_batch(
+            "CREATE TABLE pets_dino_v1 (done INTEGER);
+             UPDATE photo_faces SET embedding = NULL
+              WHERE species IS NOT NULL OR person_id IN (SELECT id FROM people WHERE kind = 'pet');
+             -- Unconfirmed sightings were filed into pets by the old CLIP match; let
+             -- group_orphan_pets re-file them with the new one.
+             UPDATE photo_faces SET person_id = NULL WHERE species IS NOT NULL AND confirmed = 0;
+             DELETE FROM people WHERE kind = 'pet' AND auto = 1
+               AND NOT EXISTS (SELECT 1 FROM photo_faces f WHERE f.person_id = people.id);",
+        )?;
+    }
+    // Breed tags arrived after the first auto-tag pass: re-tag every dog/cat photo once (pure
+    // math on stored embeddings).
+    let has_breeds: bool = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'auto_tag_breeds_v1'")?.exists([])?;
+    if !has_breeds {
+        conn.execute_batch(
+            "CREATE TABLE auto_tag_breeds_v1 (done INTEGER);
+             UPDATE photos SET auto_tagged_at = NULL WHERE id IN (SELECT photo_id FROM photo_auto_tags WHERE term IN ('dog', 'cat'));",
+        )?;
+    }
+    Ok(())
+}
+
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     if version >= SCHEMA_VERSION {
@@ -866,15 +898,6 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
         if !has_col("auto_tagged_at")? {
             conn.execute("ALTER TABLE photos ADD COLUMN auto_tagged_at INTEGER", [])?;
-        }
-        // Breed tags arrived after the first auto-tag pass: re-tag every dog/cat photo once (pure
-        // math on stored embeddings). Keyed on this marker table's presence, like `place` above.
-        let has_breeds: bool = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'auto_tag_breeds_v1'")?.exists([])?;
-        if !has_breeds {
-            conn.execute_batch(
-                "CREATE TABLE auto_tag_breeds_v1 (done INTEGER);
-                 UPDATE photos SET auto_tagged_at = NULL WHERE id IN (SELECT photo_id FROM photo_auto_tags WHERE term IN ('dog', 'cat'));",
-            )?;
         }
     }
 
@@ -3527,6 +3550,7 @@ fn pets_backfill_and_merge(conn: &Connection, cancel: &AtomicBool) -> Result<(),
         tx.commit().map_err(|e| e.to_string())?;
     }
 
+    absorb_pet_faces(conn)?;
     group_orphan_pets(conn)?;
     let groups = pet_groups(conn)?;
     let auto: std::collections::HashSet<i64> = {
@@ -3567,6 +3591,105 @@ fn pets_backfill_and_merge(conn: &Connection, cancel: &AtomicBool) -> Result<(),
     tx.commit().map_err(|e| e.to_string())?;
     eprintln!("pets: merged {} duplicate pet groups", into.len());
     Ok(())
+}
+
+/// One animal, one tag. A dog's FACE (found by the face detector, or placed by hand — species
+/// 'pet') inside that same dog's BODY box (found by the animal detector) were two rows, so a photo
+/// listed "Bala, Bala, Lucifer, Lucifer". The face row's tag moves onto the body row it sits in
+/// and the face row goes. A body row the user already confirmed as a DIFFERENT pet is left alone.
+fn absorb_pet_faces(conn: &Connection) -> Result<usize, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT f.id, f.photo_id, f.x0, f.y0, f.x1, f.y1, f.person_id, f.confirmed FROM photo_faces f
+             WHERE (f.species = 'pet' OR (f.species IS NULL AND f.person_id IN (SELECT id FROM people WHERE kind = 'pet')))
+               AND EXISTS (SELECT 1 FROM photo_faces a WHERE a.photo_id = f.photo_id AND a.species IS NOT NULL AND a.species != 'pet')",
+        )
+        .map_err(|e| e.to_string())?;
+    type Row = (i64, i64, f32, f32, f32, f32, Option<i64>, i64);
+    let faces: Vec<Row> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+    let mut bodies = conn
+        .prepare(
+            "SELECT a.id, a.x0, a.y0, a.x1, a.y1, a.person_id, a.confirmed, COALESCE(pp.auto, 1) FROM photo_faces a
+             LEFT JOIN people pp ON pp.id = a.person_id
+             WHERE a.photo_id = ?1 AND a.species IS NOT NULL AND a.species != 'pet'",
+        )
+        .map_err(|e| e.to_string())?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let mut n = 0;
+    for (fid, photo, x0, y0, x1, y1, fperson, fconf) in faces {
+        let (cx, cy) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+        let body: Option<(i64, Option<i64>, i64, i64)> = bodies
+            .query_map(params![photo], |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, f32>(1)?, r.get::<_, f32>(2)?, r.get::<_, f32>(3)?, r.get::<_, f32>(4)?, r.get(5)?, r.get(6)?, r.get(7)?))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .filter(|b| cx >= b.1 && cx <= b.3 && cy >= b.2 && cy <= b.4)
+            .min_by(|a, b| ((a.3 - a.1) * (a.4 - a.2)).partial_cmp(&((b.3 - b.1) * (b.4 - b.2))).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|b| (b.0, b.5, b.6, b.7));
+        let Some((bid, bperson, bconf, bauto)) = body else { continue };
+        let other_named_pet = bperson.is_some() && bperson != fperson && bauto == 0 && bconf == 1;
+        if other_named_pet {
+            continue;
+        }
+        // Strength of a tag: user-confirmed (1) > auto (2) > unconfirmed (0).
+        let rank = |c: i64| match c { 1 => 2, 2 => 1, _ => 0 };
+        if fperson.is_some() && (bperson != fperson || rank(fconf) > rank(bconf)) && (bconf != 1 || bperson == fperson) {
+            let conf = if bperson == fperson && rank(bconf) > rank(fconf) { bconf } else { fconf };
+            tx.execute("UPDATE photo_faces SET person_id = ?1, confirmed = ?2 WHERE id = ?3", params![fperson, conf, bid])
+                .map_err(|e| e.to_string())?;
+        }
+        tx.execute("UPDATE people SET cover_face_id = ?1 WHERE cover_face_id = ?2", params![bid, fid]).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM photo_faces WHERE id = ?1", params![fid]).map_err(|e| e.to_string())?;
+        n += 1;
+    }
+    drop(bodies);
+    // Then the same dog boxed twice by the animal detector (head-and-chest + whole body, from
+    // before petdetect::detect dropped such pairs): keep the stronger tag, then the higher score.
+    let mut st = tx
+        .prepare(
+            "SELECT a.id, b.id, a.x0,a.y0,a.x1,a.y1, b.x0,b.y0,b.x1,b.y1, a.person_id, b.person_id, a.confirmed, b.confirmed, a.score, b.score
+             FROM photo_faces a JOIN photo_faces b ON b.photo_id = a.photo_id AND b.id > a.id
+             WHERE a.species IS NOT NULL AND a.species != 'pet' AND b.species IS NOT NULL AND b.species != 'pet'",
+        )
+        .map_err(|e| e.to_string())?;
+    let pairs: Vec<(i64, i64, Option<i64>, Option<i64>, i64, i64, f32, f32)> = st
+        .query_map([], |r| {
+            let f = |i: usize| r.get::<_, f32>(i);
+            let same = crate::petdetect::same_animal(f(2)?, f(3)?, f(4)?, f(5)?, f(6)?, f(7)?, f(8)?, f(9)?);
+            Ok(same.then(|| -> rusqlite::Result<_> { Ok((r.get(0)?, r.get(1)?, r.get(10)?, r.get(11)?, r.get(12)?, r.get(13)?, f(14)?, f(15)?)) }))
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok().flatten().and_then(|x| x.ok()))
+        .collect();
+    drop(st);
+    let rank = |c: i64| match c { 1 => 2, 2 => 1, _ => 0 };
+    let mut gone = std::collections::HashSet::new();
+    for (a, b, pa, pb, ca, cb, sa, sb) in pairs {
+        if gone.contains(&a) || gone.contains(&b) {
+            continue;
+        }
+        // Both user-confirmed as different pets: two real animals, leave them.
+        if ca == 1 && cb == 1 && pa != pb {
+            continue;
+        }
+        let keep_a = (rank(ca), pa.is_some(), sa) >= (rank(cb), pb.is_some(), sb);
+        let (keep, drop_id) = if keep_a { (a, b) } else { (b, a) };
+        tx.execute("UPDATE people SET cover_face_id = ?1 WHERE cover_face_id = ?2", params![keep, drop_id]).map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM photo_faces WHERE id = ?1", params![drop_id]).map_err(|e| e.to_string())?;
+        gone.insert(drop_id);
+        n += 1;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    if n > 0 {
+        eprintln!("pets: folded {n} duplicate pet rows");
+    }
+    Ok(n)
 }
 
 fn species_match(a: &str, b: &str) -> bool {
@@ -3637,7 +3760,7 @@ fn group_orphan_pets(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-/// CLIP embedding of one animal's box, padded 10% so ears/tail context is included.
+/// DINOv2 identity embedding of one animal's box, padded 10% so ears/tail context is included.
 fn pet_crop_embedding(rgb: &[u8], w: u32, h: u32, x0: f32, y0: f32, x1: f32, y1: f32) -> Option<Vec<f32>> {
     let (px, py) = ((x1 - x0) * 0.1, (y1 - y0) * 0.1);
     let cx0 = (((x0 - px).max(0.0)) * w as f32) as u32;
@@ -3653,7 +3776,7 @@ fn pet_crop_embedding(rgb: &[u8], w: u32, h: u32, x0: f32, y0: f32, x1: f32, y1:
         let row = ((y * w + cx0) * 3) as usize;
         crop.extend_from_slice(&rgb[row..row + (cw * 3) as usize]);
     }
-    crate::clip::embed_image(&crop, cw, ch).map_err(|e| eprintln!("pets: embed crop: {e}")).ok()
+    crate::dino::embed_image(&crop, cw, ch).map_err(|e| eprintln!("pets: embed crop: {e}")).ok()
 }
 
 /// Every non-ignored pet group with its crop embeddings: (person_id, species, embeddings).
@@ -4712,11 +4835,14 @@ const FACE_SUGGEST_MARGIN: f32 = 0.05;
 const SAME_DAY_BOOST: f32 = 0.04;
 /// Pets are compared with CLIP image embeddings of the animal crop, not ArcFace — a much denser
 /// space (two different tabbies still score ~0.8), so the bars sit far higher.
-const PET_SUGGEST_SIM: f32 = 0.86;
-const PET_CLUSTER_SUGGEST_SIM: f32 = 0.88;
-const PET_SUGGEST_MARGIN: f32 = 0.02;
+/// DINOv2 bars, measured on the user's own 164 confirmed crops of three dogs (profile_sim, 5th/
+/// 95th percentiles): same dog >= 0.63, a different dog <= 0.47, web photos of other dogs <= 0.24.
+const PET_SUGGEST_SIM: f32 = 0.55;
+const PET_CLUSTER_SUGGEST_SIM: f32 = 0.6;
+const PET_SUGGEST_MARGIN: f32 = 0.05;
 /// pets_run files a new sighting straight into an existing pet group at/above this.
-const PET_AUTO_JOIN_SIM: f32 = 0.92;
+const PET_AUTO_JOIN_SIM: f32 = 0.78;
+const PET_OUTLIER_SIM: f32 = 0.35;
 /// Second, looser DBSCAN pass over faces the strict pass left alone ("maybe the same person"),
 /// eps 0.9 ≈ cosine 0.6. Only ever shown for review; never assigned on its own.
 const LOOSE_CLUSTER_EPS: f64 = 0.9;
@@ -5212,7 +5338,7 @@ fn person_profiles(conn: &Connection, kind: &str) -> Result<Vec<PersonProfile>, 
             "SELECT p.id, p.name, f.embedding, f.confirmed FROM people p
              JOIN photo_faces f ON f.person_id = p.id
              WHERE p.auto = 0 AND p.ignored = 0 AND length(f.embedding) > 0
-               AND ((?1 = 'pet') = (f.species IS NOT NULL))",
+               AND ((?1 = 'pet') = (f.species IS NOT NULL)) AND ((?1 = 'pet') = (p.kind = 'pet'))",
         )
         .map_err(|e| e.to_string())?;
     let rows: Vec<(i64, String, Vec<u8>, i64)> = stmt
@@ -5237,7 +5363,17 @@ fn person_profiles(conn: &Connection, kind: &str) -> Result<Vec<PersonProfile>, 
                 let step = exemplars.len() as f32 / MAX_EXEMPLARS as f32;
                 exemplars = (0..MAX_EXEMPLARS).map(|i| exemplars[(i as f32 * step) as usize].clone()).collect();
             }
-            let centroid = unit_mean(exemplars.iter().map(|v| v.as_slice()));
+            let mut centroid = unit_mean(exemplars.iter().map(|v| v.as_slice()));
+            // Pets: drop exemplars that don't look like the rest (an old wrong tag on sky or a
+            // passer-by) so one bad confirmation can't pull in more like it. Same-dog crops sit
+            // >= 0.6 from their centroid; such junk sits near 0.2.
+            if kind == "pet" && exemplars.len() >= 4 {
+                let kept: Vec<Vec<f32>> = exemplars.iter().filter(|e| dot(e, &centroid) >= PET_OUTLIER_SIM).cloned().collect();
+                if !kept.is_empty() && kept.len() < exemplars.len() {
+                    exemplars = kept;
+                    centroid = unit_mean(exemplars.iter().map(|v| v.as_slice()));
+                }
+            }
             PersonProfile { id, kind: kind.to_string(), name, centroid, exemplars }
         })
         .filter(|p| !p.exemplars.is_empty())
@@ -10429,6 +10565,60 @@ mod tests {
         }
         let r = auto_assign_run(&conn).unwrap();
         eprintln!("auto-assigned {} faces across {} people", r.assigned, r.people);
+    }
+
+    /// Real-library check of pet matching, on a COPY of a catalog (never the live one):
+    ///     PET_DB=/path/copy.db cargo test --release real_pet_suggestions -- --ignored --nocapture
+    /// Prints each named pet's suggestion face ids so their crops can be looked at.
+    #[test]
+    #[ignore]
+    fn real_pet_suggestions() {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        crate::sam::set_dylib_path(base.join(crate::platform::ort_lib_dev_path()));
+        crate::dino::set_model_path(base.join("vendor/dinov2/model.onnx"));
+        let conn = open_and_migrate(Path::new(&std::env::var("PET_DB").unwrap())).unwrap();
+        pets_backfill_and_merge(&conn, &AtomicBool::new(false)).unwrap();
+        let pets: Vec<(i64, String)> = conn
+            .prepare("SELECT id, name FROM people WHERE kind = 'pet' AND auto = 0").unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().collect::<Result<_, _>>().unwrap();
+        for (id, name) in pets {
+            let sug = person_suggestions_run(&conn, id, None, 300).unwrap();
+            let ids: Vec<i64> = sug.iter().map(|s| s.face_id).collect();
+            println!("PET {name} {}", serde_json::to_string(&ids).unwrap());
+        }
+        let dup: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM (SELECT photo_id, person_id FROM photo_faces f JOIN people p ON p.id = f.person_id
+              WHERE p.kind = 'pet' AND p.auto = 0 GROUP BY 1, 2 HAVING COUNT(*) > 1)", [], |r| r.get(0)).unwrap();
+        println!("DUP_PHOTO_PET_PAIRS {dup}");
+    }
+
+    #[test]
+    fn a_pet_face_inside_its_body_box_becomes_one_tag() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("absorb_pet_face");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &AtomicBool::new(false)).unwrap();
+        let photo: i64 = conn.query_row("SELECT id FROM photos", [], |r| r.get(0)).unwrap();
+        conn.execute("INSERT INTO people (name, created, auto, kind) VALUES ('Bala', 0, 0, 'pet')", []).unwrap();
+        let bala = conn.last_insert_rowid();
+        let row = |x0: f32, x1: f32, person: Option<i64>, confirmed: i64, species: Option<&str>| -> i64 {
+            conn.execute(
+                "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, person_id, confirmed, species) VALUES (?1,?2,0.1,?3,0.9,0.9,'[]',?4,?5,?6)",
+                params![photo, x0, x1, person, confirmed, species],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+        let body = row(0.2, 0.8, Some(bala), 2, Some("dog")); // animal detector, auto-tagged
+        let face = row(0.4, 0.6, Some(bala), 1, None); // face detector, user-confirmed Bala
+        let elsewhere = row(0.85, 0.95, Some(bala), 1, Some("pet")); // outside any body box: kept
+        assert_eq!(absorb_pet_faces(&conn).unwrap(), 1);
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM photo_faces WHERE id = ?1", params![face], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
+        assert_eq!(who0(&conn, body), (Some(bala), 1), "the body row carries the user's confirmation");
+        assert_eq!(who0(&conn, elsewhere), (Some(bala), 1));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     fn who0(conn: &Connection, f: i64) -> (Option<i64>, i64) {
