@@ -1,0 +1,356 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Chromasmith Ep1 v11</title>
+<style>
+@font-face{font-family:G;src:url('tex/GramatikaBold.otf');font-weight:700}
+@font-face{font-family:G;src:url('tex/GramatikaRegular.otf');font-weight:400}
+:root{--red:#ff3b1f;--ink:#111;--paper:#f2efe8}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--paper);font-family:G,sans-serif;color:var(--ink)}
+#stage{position:absolute;inset:0;overflow:hidden;background:var(--paper)}
+#world{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
+#screen{position:absolute;inset:0;pointer-events:none}
+.abs{position:absolute}
+.wm{font-weight:700;letter-spacing:-.01em;white-space:nowrap;line-height:1}
+.hl{position:absolute;font-weight:700;letter-spacing:-.025em;white-space:nowrap;line-height:1}
+.hl span{display:inline-block}
+.chip{position:absolute;background:var(--ink);color:var(--paper);font-weight:700;font-size:32px;padding:16px 24px 15px;border-radius:14px;white-space:nowrap;box-shadow:0 18px 40px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.12);letter-spacing:-.01em}
+.chip.light{background:#fff;color:var(--ink)}
+#sq{position:absolute;left:0;top:0;background:var(--red);transform-origin:50% 100%}
+.win{position:absolute;width:560px;height:420px;background:#e2dfd8;border-radius:10px;box-shadow:0 30px 60px rgba(0,0,0,.16),0 3px 8px rgba(0,0,0,.1);overflow:hidden}
+.win .tb{height:58px;background:#c8c4bb;display:flex;align-items:center;padding:0 22px;font-size:32px;font-weight:700;color:#4a4740;gap:14px}
+.win .tb i{width:13px;height:13px;border-radius:50%;background:#a9a59c;display:inline-block}
+.win .num{color:#8a867d}
+.box{position:absolute;background:#cfcbc2;border-radius:4px}
+.wtxt{position:absolute;font-size:24px;color:#6d6a63;font-weight:700;white-space:nowrap}
+.bar{position:absolute;height:14px;background:#cfcbc2;border-radius:7px;overflow:hidden}
+.bar b{display:block;height:100%;background:#8f8b82;width:0}
+#app{position:absolute;left:150px;top:170px;width:1620px;height:860px;background:#141414;border-radius:16px;overflow:hidden;box-shadow:0 50px 110px rgba(20,14,8,.28),0 8px 24px rgba(20,14,8,.18);transform-origin:810px 430px}
+#app .top{position:absolute;left:0;top:0;width:1620px;height:56px;border-bottom:1px solid #262626;color:#eee}
+#app .wm{position:absolute;left:56px;top:18px;font-size:21px;color:#f2efe8}
+#app .nav{position:absolute;left:300px;top:15px;font-size:24px;color:#777;font-weight:700;line-height:1}
+#app .nav em{font-style:normal;background:var(--red);color:#fff;padding:1px 8px 2px;margin-left:10px}
+#exportBtn{position:absolute;left:1478px;top:11px;width:118px;height:34px;background:var(--red);color:#fff;font-size:19px;font-weight:700;display:flex;align-items:center;justify-content:center;border-radius:2px}
+#viewer{position:absolute;left:0;top:57px;width:1120px;height:803px;background:#0d0d0d}
+#photo{position:absolute;left:50px;top:61px;width:1020px;height:680px;overflow:hidden;background:#000}
+#photo img{position:absolute;left:0;top:0;width:1020px;height:680px}
+#panel{position:absolute;left:1120px;top:57px;width:380px;height:803px;background:#161616}
+#rail{position:absolute;left:1500px;top:57px;width:120px;height:803px;background:#161616}
+.tab{position:absolute;left:20px;width:80px;height:74px;border:1.5px solid #555;border-radius:3px;color:#ddd;font-size:15px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:9px}
+.tab.on{border-color:#ddd}
+.tab svg{position:absolute;top:13px;left:27px}
+.pv{position:absolute;inset:0;color:#eee}
+.pv h2{position:absolute;left:30px;top:22px;font-size:60px;font-weight:400;letter-spacing:-.03em}
+.subs{position:absolute;left:30px;top:106px;font-size:18px;color:#8a8a8a;display:flex;gap:20px}
+.subs .on{color:#eee;border-bottom:2px solid var(--red);padding-bottom:6px}
+.sec{position:absolute;left:30px;width:320px;font-size:25px;color:#eee}
+.tog{position:absolute;width:44px;height:22px;border:1.5px solid #ddd;background:#ddd}
+.tog b{position:absolute;top:0;width:50%;height:100%;background:#161616}
+.tog.on{background:var(--red);border-color:var(--red)}
+.row{position:absolute;left:30px;width:320px;height:60px}
+.row .lab{position:absolute;left:0;top:0;font-size:21px;color:#ddd}
+.row .val{position:absolute;right:0;top:0;font-size:21px;color:#ddd}
+.row .trk{position:absolute;left:0;top:41px;width:320px;height:2px;background:#4a4a4a}
+.row .thm{position:absolute;top:34px;width:16px;height:16px;background:#9d9d9d;margin-left:-8px}
+.trow{position:absolute;left:30px;width:320px;font-size:21px;color:#ccc}
+.sel{position:absolute;left:120px;top:-6px;width:200px;height:38px;border:1.5px solid #555;font-size:19px;color:#eee;padding:8px 12px}
+.sel:after{content:'';position:absolute;right:12px;top:12px;width:8px;height:8px;border-right:2px solid #aaa;border-bottom:2px solid #aaa;transform:rotate(45deg)}
+#ddList{position:absolute;left:150px;width:200px;background:#232323;border:1px solid #444;box-shadow:0 14px 30px rgba(0,0,0,.5);font-size:19px;color:#ddd}
+#ddList div{height:38px;padding:9px 12px}
+.th{position:absolute;width:152px;height:101px;overflow:hidden}
+.th img{width:152px;height:101px;display:block}
+.thl{position:absolute;font-size:15px;color:#bbb;white-space:nowrap}
+#modal{position:absolute;left:250px;top:250px;width:520px;height:316px;background:#1d1d1d;border:1px solid #333;border-radius:12px;box-shadow:0 40px 90px rgba(0,0,0,.55);color:#eee;transform-origin:50% 50%}
+#modal h3{position:absolute;left:30px;top:24px;font-size:36px;font-weight:400}
+#modal .mr{position:absolute;left:30px;width:460px;font-size:21px;color:#aaa}
+#modal .mr b{position:absolute;right:0;color:#eee;font-weight:700}
+#mbar{position:absolute;left:30px;top:238px;width:460px;height:8px;background:#333}
+#mbar b{display:block;height:100%;width:0;background:var(--red)}
+#mdone{position:absolute;left:30px;top:262px;font-size:21px;color:#eee;font-weight:700}
+#divider{position:absolute;top:0;width:3px;height:680px;background:#fff;margin-left:-1.5px;box-shadow:0 0 8px rgba(0,0,0,.4)}
+#cur{position:absolute;left:0;top:0;width:34px;height:34px;transform-origin:3px 2px}
+#ring{position:absolute;left:0;top:0;width:60px;height:60px;border:3px solid var(--red);border-radius:50%;margin:-30px 0 0 -30px}
+.bl{position:absolute;font-weight:700;letter-spacing:-.025em;white-space:nowrap;line-height:1}
+</style></head>
+<body><div id="stage">
+<div id="world"></div>
+<div id="screen"></div>
+</div>
+<script>
+const W=1920,H=1080,FPS=24,DUR=82;
+const RED='#ff3b1f';
+const clamp=(x,a,b)=>Math.min(b,Math.max(a,x)),lerp=(a,b,p)=>a+(b-a)*p;
+const sm=(a,b,t)=>{const x=clamp((t-a)/(b-a),0,1);return x*x*(3-2*x)};
+const io=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const eo=p=>1-Math.pow(1-p,3);
+const back=p=>{const c=1.6;return 1+(c+1)*Math.pow(p-1,3)+c*Math.pow(p-1,2)};
+const seg=(t,a,b)=>clamp((t-a)/(b-a),0,1);
+// keyframes [[t,v...]], eased in-out between keys
+function kf(keys,t){if(t<=keys[0][0])return keys[0].slice(1);for(let i=1;i<keys.length;i++){const[a,...va]=keys[i-1],[b,...vb]=keys[i];if(t<=b){const p=io(seg(t,a,b));return va.map((v,j)=>lerp(v,vb[j],p))}}return keys[keys.length-1].slice(1)}
+const world=document.getElementById('world'),screen=document.getElementById('screen');
+const el=(tag,cls,parent,html)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;(parent||world).appendChild(e);return e};
+const css=(e,o)=>{for(const k in o)e.style[k]=o[k]};
+const img=n=>`bake/${n}.png`; // every photo frame is a real chromasmith-22.html render (bake.mjs)
+
+/* camera [t, x, y, zoom]: world point at screen centre. Smooth eased moves, no shake. */
+const CAM=[[0,960,540,1],[7.0,960,540,1],[8.6,1030,630,.78],[18.0,1030,630,.78],[19.8,960,540,1],
+ [26.3,960,540,1],[27.3,1180,600,1.3],[45.3,1180,600,1.3],[46.6,965,526,2],[48.5,965,526,2],[49.6,1180,600,1.3],
+ [54.7,1180,600,1.3],[55.9,1000,640,2],[57.9,1000,640,2],[59.0,1180,600,1.3],[59.1,1180,600,1.3],[60.1,960,600,1.05],
+ [63.6,960,600,1.05],[64.4,710,628,1.4],[68.0,710,628,1.4],[69.0,960,540,1],[82,960,540,1]];
+let cam={x:960,y:540,z:1};
+const proj=(x,y)=>[(x-cam.x)*cam.z+W/2,(y-cam.y)*cam.z+H/2];
+
+/* lockup: square + CHRO-MA-SMITH */
+const LK={size:96,sq:68,gap:24};
+const lock=el('div','abs');const lockTxt=el('div','wm',lock,'CHRO-MA-SMITH');css(lockTxt,{fontSize:LK.size+'px',position:'absolute',left:0,top:0});
+const lockSlot=el('div','abs');css(lockSlot,{width:LK.sq+'px',height:LK.sq+'px',border:'2px dashed rgba(17,17,17,.0)'});
+const tag=el('div','abs',null,'Shoot digital. Finish like film.');css(tag,{fontSize:'46px',fontWeight:700,letterSpacing:'-.02em',whiteSpace:'nowrap'});
+
+/* headlines: screen space, word by word */
+const HLS=[];
+function headline(text,x,y,size,tIn,tOut){const e=el('div','hl',screen);css(e,{fontSize:size+'px',top:y+'px'});
+ e.innerHTML=text.split(' ').map(w=>`<span>${w}</span>`).join(' ');HLS.push({e,x,tIn,tOut,words:[...e.children]});return e}
+headline('You shot something beautiful.',960,150,84,3.2,6.9);
+headline('The old way: four apps for one photo.',960,120,70,8.7,18.1);
+headline('Every change, another round trip.',960,120,70,18.5,20.8);
+const meet=headline('Meet Chromasmith',960,410,120,22.2,23.5);
+headline('One app. Raw file to finished film.',960,66,64,25.2,26.5);
+
+/* photo card (open + old way) */
+const card=el('div','abs');css(card,{overflow:'hidden',boxShadow:'0 30px 70px rgba(20,14,8,.22),0 4px 12px rgba(20,14,8,.12)',background:'#000'});
+const cardImg=el('img','',card);cardImg.src=img('raw');css(cardImg,{width:'100%',height:'100%',display:'block'});
+const CARD0=[585,380,750,500];
+
+/* the old way: four generic, unbranded windows */
+const WX=i=>100+620*i,WT=430;
+const wins=[],wbars=[];
+[['1','Import'],['2','Edit'],['3','Grain plugin'],['4','Export']].forEach(([n,t],i)=>{const w=el('div','win');css(w,{left:WX(i)-280+'px',top:WT+'px'});
+ w.innerHTML=`<div class="tb"><i></i><i></i><i></i>&nbsp;<span class="num">${n}</span> ${t}</div>`;wins.push(w);
+ const b=(x,y,ww,hh)=>{const q=el('div','box',w);css(q,{left:x+'px',top:y+'px',width:ww+'px',height:hh+'px'});return q};
+ const tx=(s,x,y,fs=24)=>{const q=el('div','wtxt',w,s);css(q,{left:x+'px',top:y+'px',fontSize:fs+'px'})};
+ if(i===0){for(let k=0;k<4;k++)b(340+(k%2)*100,90+Math.floor(k/2)*76,88,64);tx('Converting RAW…',24,300)}
+ if(i===1){b(24,82,280,186);for(let k=0;k<5;k++){const r=el('div','bar',w);css(r,{left:'330px',top:96+k*36+'px',width:'200px',height:'5px'});b(380+(k*37)%110,91+k*36,10,15).style.background='#8f8b82'}tx('Tweak. Save as TIFF.',24,300)}
+ if(i===2){b(24,82,512,186).style.background='repeating-linear-gradient(45deg,#cfcbc2 0 6px,#c6c2b9 6px 12px)';tx('Rendering preview…',24,300)}
+ if(i===3){for(let k=0;k<3;k++){b(24,82+k*58,46,46);tx(`IMG_04${12+k}.tif`,86,92+k*58,22)}tx('Exporting 3 of 12…',24,300)}
+ const bar=el('div','bar',w);css(bar,{left:'24px',top:'348px',width:'512px'});bar.innerHTML='<b></b>';wbars.push(bar.firstChild);
+});
+
+/* the app, rebuilt as vector UI after studio-1..6 */
+const app=el('div');app.id='app';
+app.innerHTML=`<div class="top"><div class="wm">CHRO-MA-SMITH</div><div class="nav">gallery<em>studio</em></div><div id="exportBtn">Export</div></div>
+<div id="viewer"><div id="photo"><img id="pA"><img id="pB"><div id="divider"></div></div></div><div id="panel"></div><div id="rail"></div>`;
+const AX=150,AY=170;
+const pA=app.querySelector('#pA'),pB=app.querySelector('#pB'),divider=app.querySelector('#divider');
+const PH={x:AX+50,y:AY+57+61,w:1020,h:680};
+const panel=app.querySelector('#panel'),rail=app.querySelector('#rail');
+const sv=(b)=>`<svg width="26" height="26" viewBox="0 0 26 26" stroke="#ddd" stroke-width="1.6" fill="none">${b}</svg>`;
+const ICON={Look:sv('<path d="M4 14L14 4M8 18L18 8M12 22L22 12"/>'),Light:sv('<path d="M3 9h20M3 17h20"/><rect x="9" y="6" width="5" height="6"/><rect x="13" y="14" width="5" height="6"/>'),
+ Colour:sv('<circle cx="13" cy="13" r="10"/><path d="M13 3v20M3 13h20M6 6l14 14M20 6L6 20"/>'),
+ Texture:'<svg width="26" height="26" viewBox="0 0 26 26" fill="#ddd">'+[[6,7],[13,5],[20,8],[9,13],[17,14],[5,19],[13,20],[21,20]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="1.3"/>`).join('')+'</svg>',
+ Output:sv('<path d="M4 8v14h14M10 16L22 4M14 4h8v8"/>')};
+const TABS=['Look','Light','Colour','Texture','Output'],TAB_Y=i=>60+i*96;
+const tabEls=TABS.map((n,i)=>{const t=el('div','tab',rail,ICON[n]+n);t.style.top=TAB_Y(i)+'px';return t});
+const marker=i=>[AX+1500+10,AY+57+TAB_Y(i)+44]; // the app's red active-tab marker = the square
+const views={};
+function view(name,title,subs,on){const v=el('div','pv',panel);v.innerHTML=`<h2>${title}</h2><div class="subs">${subs.map((s,i)=>`<span class="${i===on?'on':''}">${s}</span>`).join('')}</div>`;views[name]=v;return v}
+const PX=x=>AX+1120+x,PY=y=>AY+57+y;
+// Look
+const vLook=view('look','Look',['All','User Looks','C41 Still','Cinema'],0);
+const LOOKS=[['raw','Original'],['look_classic_neg','Classic Neg'],['look_portra_400_endura_premier','Portra 400'],['look_velvia','Velvia'],['look_eterna_bleach_bypass_composed','Eterna Bleach Bypass'],['look_a_beach_preset','A Beach Preset']];
+const thPos=i=>[30+(i%2)*168,170+Math.floor(i/2)*150];
+LOOKS.forEach(([f,n],i)=>{const[x,y]=thPos(i);const d=el('div','th',vLook,`<img src="${img(f)}">`);css(d,{left:x+'px',top:y+'px'});const l=el('div','thl',vLook,n);css(l,{left:x+'px',top:y+108+'px'})});
+const lc=el('div','thl',vLook,'+ 107 more looks');css(lc,{left:'30px',top:'636px',fontSize:'18px',color:'#888'});
+// sliders
+const SL={};
+function slider(v,key,label,y,min,max,val){const r=el('div','row',v,`<div class="lab">${label}</div><div class="val"></div><div class="trk"></div><div class="thm"></div>`);r.style.top=y+'px';
+ SL[key]={min,max,val,y,valEl:r.querySelector('.val'),thm:r.querySelector('.thm')}}
+const thumbWorld=(key,v)=>{const s=SL[key];return[PX(30+(v-s.min)/(s.max-s.min)*320),PY(s.y+50)]};
+function toggle(v,x,y){const t=el('div','tog',v,'<b></b>');css(t,{left:x+'px',top:y+'px'});return t}
+function section(v,title,y){const s=el('div','sec',v,title);s.style.top=y+'px';return toggle(v,306,y+4)}
+const vLight=view('light','Light',['Histogram','Basic','Curves','Halation'],1);
+const basicTog=section(vLight,'Basic',170);
+slider(vLight,'exp','Exposure',240,-100,100,0);slider(vLight,'con','Contrast',320,-100,100,0);
+slider(vLight,'hi','Highlights',400,-100,100,0);slider(vLight,'sh','Shadows',480,-100,100,0);
+const vTex=view('tex','Texture',['Noise','Sharpen','Lens','Grain'],3);
+const grainTog=section(vTex,'Grain',170);
+const gd=el('div','thl',vTex,'Film-style texture over the whole photo.');css(gd,{left:'30px',top:'210px',fontSize:'16px',color:'#888'});
+slider(vTex,'ga','Amount',250,0,100,0);slider(vTex,'gs','Size',330,1,20,3);
+const fmtRow=el('div','trow',vTex,'Film format<div class="sel">65mm — fine</div>');fmtRow.style.top='426px';const fmtSel=fmtRow.querySelector('.sel');
+const ddList=el('div','',vTex,['8mm — coarse','16mm','35mm — standard','65mm — fine'].map(s=>`<div>${s}</div>`).join(''));ddList.id='ddList';ddList.style.top='460px';
+const vHal=view('hal','Light',['Histogram','Basic','Curves','Halation'],3);
+const halTog=section(vHal,'Halation',170);
+slider(vHal,'ha','Amount',240,0,100,0);slider(vHal,'hr','Radius',320,2,40,30);slider(vHal,'hp','Shadow protect',400,0,100,20);
+['White glow','No remjet','Extreme'].forEach((n,i)=>{const r=el('div','trow',vHal,n);r.style.top=494+i*50+'px';const t=toggle(r,0,0);css(t,{left:'auto',right:'0',top:'-2px',transform:'scale(.85)',transformOrigin:'100% 0'})});
+// export dialog
+const modal=el('div','',app.querySelector('#viewer'));modal.id='modal';
+modal.innerHTML=`<h3>Export</h3><div class="mr" style="top:96px">Format<b>JPEG</b></div><div class="mr" style="top:136px">Size<b>Full resolution</b></div><div class="mr" style="top:176px">Look, grain, halation<b>Baked in</b></div><div id="mbar"><b></b></div><div id="mdone">Done.</div>`;
+const mbar=modal.querySelector('#mbar b'),mdone=modal.querySelector('#mdone');
+const MODAL={x:AX+250,y:AY+57+250};
+
+/* benefits */
+const BEN=['113 film looks.','Real grain and halation.','Offline. Nothing uploaded.','Full-resolution export.','Free · Mac · Windows · iOS · Android'];
+const BX=1000,BY=i=>290+i*104,BT=i=>69.4+1.25*i,BS=i=>i===4?42:56;
+const benEls=BEN.map((s,i)=>{const e=el('div','bl',null,s);css(e,{left:BX+44+'px',top:BY(i)+'px',fontSize:BS(i)+'px'});return e});
+
+/* the hero: a flat red square */
+const sq=el('div');sq.id='sq';
+const CHIPS=[];
+function chip(text,wx,wy,tIn,tOut,anchor='right',fixed=false,cls=''){const e=el('div','chip '+cls,screen,text);CHIPS.push({e,wx,wy,tIn,tOut,anchor,fixed})}
+const cur=el('div','',screen,'<svg width="34" height="34" viewBox="0 0 34 34"><path d="M3 2L3 27L10 20.5L15 31L19.5 29L14.5 18.8L24 18.8Z" fill="#111" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/></svg>');cur.id='cur';
+const ring=el('div','',screen);ring.id='ring';
+
+/* ======== TIMELINE ======== */
+const TABSW=[[0,0,'look'],[33.05,1,'light'],[38.9,3,'tex'],[49.75,1,'hal']];
+const VAL={exp:[[0,0],[35.0,0],[36.2,12]],con:[[0,0],[37.2,0],[38.4,10]],ga:[[0,0],[43.2,0],[45.0,30]],ha:[[0,0],[52.4,0],[54.4,100]]};
+const LOOKCLICK=[[28.2,1],[29.2,2],[30.2,3],[31.2,4],[32.3,5]];
+const TOGS=[[basicTog,0],[grainTog,40.4],[halTog,51.2]];
+const DD=[41.2,42.0];
+const WIPE=[[0,0],[65.0,0],[66.2,780],[67.3,560]];
+const thC=i=>{const[x,y]=thPos(i);return[PX(x+76),PY(y+50)]};
+const tabC=i=>[AX+1560,AY+57+TAB_Y(i)+37];
+const CUR=[[27.2,1700,1010],[27.9,...thC(1)],[28.2,...thC(1)],[28.9,...thC(2)],[29.2,...thC(2)],[29.9,...thC(3)],[30.2,...thC(3)],
+ [30.9,...thC(4)],[31.2,...thC(4)],[32.0,...thC(5)],[32.3,...thC(5)],[32.8,...tabC(1)],[33.05,...tabC(1)],
+ [34.5,...thumbWorld('exp',0)],[35.0,...thumbWorld('exp',0)],[36.2,...thumbWorld('exp',12)],[36.9,...thumbWorld('con',0)],[37.2,...thumbWorld('con',0)],[38.4,...thumbWorld('con',10)],
+ [38.7,...tabC(3)],[38.9,...tabC(3)],[40.1,PX(328),PY(185)],[40.4,PX(328),PY(185)],[41.0,PX(250),PY(439)],[41.2,PX(250),PY(439)],[41.7,PX(240),PY(460+2*38+19)],[42.0,PX(240),PY(460+2*38+19)],
+ [42.9,...thumbWorld('ga',0)],[43.2,...thumbWorld('ga',0)],[45.0,...thumbWorld('ga',30)],[45.4,1680,980],[49.0,1680,980],
+ [49.55,...tabC(1)],[49.75,...tabC(1)],[50.9,PX(328),PY(185)],[51.2,PX(328),PY(185)],[52.0,...thumbWorld('ha',0)],[52.4,...thumbWorld('ha',0)],[54.4,...thumbWorld('ha',100)],[54.8,1560,960],
+ [59.4,1500,1000],[60.2,AX+1537,AY+28],[60.5,AX+1537,AY+28],[61.4,MODAL.x+480,MODAL.y+420],[64.6,PH.x+40,PH.y+330],[65.0,PH.x,PH.y+340],[66.2,PH.x+780,PH.y+340],[67.3,PH.x+560,PH.y+340],[68.2,PH.x+620,PH.y+460]];
+const CLICKS=[28.2,29.2,30.2,31.2,32.3,33.05,35.0,37.2,38.9,40.4,41.2,42.0,43.2,49.75,51.2,52.4,60.5,65.0];
+const CUR_VIS=[[27.3,45.5],[49.0,54.8],[59.4,68.3]];
+
+const SEG=[];let LOCKSQ=[0,0],MEETDOT=[0,0];
+function cardRect(t){const p=io(seg(t,7.0,8.6));const tgt=[WX(0)-256,WT+82,300,200];
+ const r=CARD0.map((v,i)=>lerp(v,tgt[i],p));if(p>0)return r;
+ const s=lerp(.86,1,back(seg(t,4.3,4.85))),cx=r[0]+r[2]/2,cy=r[1]+r[3]/2;return[cx-r[2]*s/2,cy-r[3]*s/2,r[2]*s,r[3]*s]}
+const cardTR=t=>{const r=cardRect(t);return[r[0]+r[2]-44,r[1]]};
+function buildSegs(){
+ const hop=(t0,t1,to,h,s)=>SEG.push({k:'hop',t0,t1,to,h,s});
+ const fol=(t0,t1,fn,s)=>SEG.push({k:'fol',t0,t1,fn,s});
+ SEG.push({k:'set',to:LOCKSQ,s:LK.sq});
+ hop(1.95,2.6,[1520,930],170,56);
+ hop(5.0,5.6,()=>cardTR(5.6),260,56);
+ fol(5.6,8.6,cardTR,56);
+ hop(10.0,10.8,[WX(0)+200,WT],160,48);
+ hop(12.0,13.1,[WX(1)-280+380+37+5,WT+91+36+15],150,22); // squeezed into the tiny slider thumb
+ hop(14.2,15.5,[WX(2)+200,WT],120,40);
+ hop(16.4,17.9,[WX(3)-60,WT+348],90,30); // smeared onto the export bar
+ hop(18.4,19.3,[960,700],70,56);
+ hop(22.95,23.4,()=>MEETDOT,150,64); // the full stop of "Meet Chromasmith"
+ hop(24.3,25.0,[AX+33,AY+39],200,22); // the app's logo
+ hop(26.9,27.5,marker(0),160,14);
+ LOOKCLICK.forEach(([t,i])=>{const[x,y]=thPos(i);hop(t+.02,t+.38,[PX(x+152-7),PY(y+14)],40,14)});
+ hop(33.05,33.5,marker(1),70,14);
+ hop(34.1,34.55,thumbWorld('exp',0),60,16);fol(35.0,36.2,t=>thumbWorld('exp',kf(VAL.exp,t)[0]),16);
+ hop(36.4,36.85,thumbWorld('con',0),45,16);fol(37.2,38.4,t=>thumbWorld('con',kf(VAL.con,t)[0]),16);
+ hop(38.9,39.35,marker(3),80,14);
+ hop(42.3,42.8,thumbWorld('ga',0),70,16);fol(43.2,45.0,t=>thumbWorld('ga',kf(VAL.ga,t)[0]),16);
+ hop(49.75,50.2,marker(1),90,14);
+ hop(51.6,52.0,thumbWorld('ha',0),60,16);fol(52.4,54.4,t=>thumbWorld('ha',kf(VAL.ha,t)[0]),16);
+ hop(59.6,60.15,[AX+1537,AY+11],110,20);
+ hop(61.0,61.45,[MODAL.x+30,MODAL.y+238],80,18);fol(61.6,63.0,t=>[MODAL.x+30+460*io(seg(t,61.6,63.0)),MODAL.y+238],18);
+ hop(64.0,64.6,[PH.x,PH.y+340+15],120,30);fol(65.0,68.0,t=>[PH.x+kf(WIPE,t)[0],PH.y+340+15],30);
+ hop(68.25,69.0,[BX+15,BY(0)+BS(0)*.74],200,30);
+ for(let i=1;i<5;i++)hop(BT(i)-.5,BT(i)-.08,[BX+15,BY(i)+BS(i)*.74],60,30);
+ hop(77.3,78.1,LOCKSQ,240,LK.sq);
+}
+function squareAt(t){
+ let pos=SEG[0].to,size=SEG[0].s,land=-9,inAir=null,next=null;
+ const P=v=>typeof v==='function'?v():v;
+ for(const g of SEG){if(g.k==='set')continue;
+  if(t<g.t0){next=g;break}
+  if(g.k==='hop'){if(t<g.t1){inAir=g;break}pos=P(g.to);size=g.s;land=g.t1}
+  else{if(t<g.t1){pos=g.fn(t);size=g.s;break}pos=g.fn(g.t1);size=g.s}}
+ let x=pos[0],y=pos[1],sx=1,sy=1,rot=0,s=size;
+ if(inAir){const g=inAir,p=seg(t,g.t0,g.t1),to=P(g.to),e=io(p);
+  x=lerp(pos[0],to[0],e);y=lerp(pos[1],to[1],e)-4*g.h*p*(1-p);s=lerp(size,g.s,e);
+  const st=.22*Math.sin(Math.PI*p);sy=1+st;sx=1-st*.6;rot=Math.sign(to[0]-pos[0])*7*Math.sin(Math.PI*p)}
+ else{const dt=t-land;if(dt>=0&&dt<1.2){const q=.24*Math.exp(-dt*8)*Math.cos(dt*24);sy-=q;sx+=q}
+  if(next&&next.k==='hop'){const a=sm(next.t0-.16,next.t0,t);sy-=.2*a;sx+=.2*a}}
+ if(t>1.3&&t<1.9)rot+=4*Math.sin((t-1.3)*26)*Math.sin(Math.PI*seg(t,1.3,1.9)); // wiggle in its slot
+ rot-=12*Math.sin(Math.PI*seg(t,5.9,6.8)); // leans in to look at the photo
+ const slump=sm(19.4,19.9,t)*(1-sm(21.55,21.75,t));sy*=1-.5*slump;sx*=1+.25*slump;
+ rot+=6*Math.sin((t-21.0)*40)*Math.sin(Math.PI*seg(t,21.0,21.3)); // twitch
+ if(t>21.6&&t<22.8){const d=t-21.6,q=.35*Math.exp(-d*6)*Math.cos(d*22);sy+=q;sx-=q*.5} // snaps back
+ const grey=sm(10.6,18.0,t)*.8*(1-sm(21.55,21.65,t)),blur=sm(15.5,18,t)*1.6*(1-sm(21.55,21.65,t));
+ return{x,y,s,sx,sy,rot,grey,blur};
+}
+function ladder(prefix,n,v){const f=clamp(v,0,1)*n,i=Math.min(n-1,Math.floor(f));return[prefix+i,prefix+(i+1),f-i]}
+function photoState(t){
+ let base='raw';
+ for(const[tc,i]of LOOKCLICK){if(t>=tc){const prev=base;base=LOOKS[i][0];const p=seg(t,tc,tc+.3);if(p<1)return[prev,base,p]}}
+ if(t<37.2)return ladder('lightE_',6,kf(VAL.exp,t)[0]/12);
+ if(t<43.2)return ladder('lightC_',5,kf(VAL.con,t)[0]/10);
+ if(t<52.4)return ladder('grain_',6,kf(VAL.ga,t)[0]/30);
+ return ladder('hal_',6,kf(VAL.ha,t)[0]/100);
+}
+chip('113 film looks. One click each.',PX(-24),PY(232),27.6,32.9);
+chip('Light: exposure and contrast.',PX(-24),PY(282),33.7,38.6);
+chip('Film grain from the app’s own engine.',PX(-24),PY(232),39.6,45.2);
+chip('35mm grain, rendered by Chromasmith.',960,990,46.7,48.5,'center',true);
+chip('Halation: film’s red glow on highlights.',PX(-24),PY(232),50.4,54.6);
+chip('It glows only around bright edges.',960,990,56.0,57.8,'center',true);
+chip('Before',PH.x+24,PH.y+24,65.4,68.0,'left',false,'light');
+chip('After',PH.x+PH.w-24,PH.y+24,65.4,68.0,'right',false,'light');
+
+const lastSrc={};function setImg(e,k,src){if(lastSrc[k]!==src){e.src=img(src);lastSrc[k]=src}}
+
+window.renderAt=function(t){
+ const[cx,cy,cz]=kf(CAM,t);cam={x:cx,y:cy,z:cz};
+ world.style.transform=`translate(${W/2-cx*cz}px,${H/2-cy*cz}px) scale(${cz})`;
+ lock.style.opacity=Math.max(1-sm(2.6,3.1,t),sm(76.5,77.1,t));
+ const tg=sm(78.5,79.0,t)*(1-sm(80.5,81.0,t));tag.style.opacity=tg;tag.style.transform=`translateY(${(1-tg)*12}px)`;
+ for(const h of HLS){const vis=t>=h.tIn-.01&&t<h.tOut+.5;h.e.style.display=vis?'':'none';if(!vis)continue;
+  const out=sm(h.tOut,h.tOut+.4,t);h.words.forEach((w,i)=>{const p=eo(seg(t,h.tIn+i*.1,h.tIn+i*.1+.45));w.style.opacity=p*(1-out);w.style.transform=`translateY(${(1-p)*28-out*10}px)`});
+  h.e.style.left=h.x-h.e.offsetWidth/2+'px'}
+ const cv=t>=4.3&&t<11.2;card.style.display=cv?'':'none';
+ if(cv){const r=cardRect(t);css(card,{left:r[0]+'px',top:r[1]+'px',width:r[2]+'px',height:r[3]+'px',opacity:clamp(seg(t,4.3,4.5),0,1)*(1-sm(10.6,11.2,t)),filter:`saturate(${1-sm(9,11,t)})`})}
+ wins.forEach((w,i)=>{const show=t>=7.6&&t<19.8;w.style.display=show?'':'none';if(!show)return;
+  const p=back(seg(t,7.6+i*.15,8.15+i*.15)),pile=io(seg(t,18.2+i*.08,19.4+i*.08));
+  w.style.transform=`translate(${(960-WX(i))*pile}px,${120*pile}px) rotate(${pile*[-7,4,-3,6][i]}deg) scale(${lerp(.85,1,p)*lerp(1,.6,pile)})`;
+  w.style.opacity=clamp(seg(t,7.6+i*.15,7.85+i*.15),0,1)*(1-sm(19.0,19.7,t))});
+ wbars[0].style.width=lerp(4,37,seg(t,10.9,17.5))+'%';wbars[1].style.width=lerp(0,62,seg(t,12.5,18))+'%';wbars[2].style.width=lerp(0,18,seg(t,14.6,18))+'%';wbars[3].style.width=lerp(0,25,seg(t,16.8,18))+'%';
+ const ap=t>=24.0&&t<76.6;app.style.display=ap?'':'none';
+ if(ap){const pop=back(seg(t,24.0,24.6)),shr=io(seg(t,68.3,69.3));
+  app.style.transform=`translate(${-440*shr}px,${40*shr}px) scale(${lerp(.9,1,pop)*lerp(1,.5,shr)})`;app.style.opacity=seg(t,24.0,24.25)*(1-sm(76.0,76.5,t));
+  let c=TABSW[0];for(const s of TABSW)if(t>=s[0])c=s;
+  tabEls.forEach((e,i)=>e.classList.toggle('on',i===c[1]));for(const k in views)views[k].style.opacity=k===c[2]?1:0;
+  for(const[e,ton]of TOGS){const on=t>=ton;e.classList.toggle('on',on);e.firstChild.style.left=on?'50%':'0'}
+  for(const k in SL){const s=SL[k],v=VAL[k]?kf(VAL[k],t)[0]:s.val;s.valEl.textContent=Math.round(v);s.thm.style.left=(v-s.min)/(s.max-s.min)*320+'px'}
+  ddList.style.display=t>=DD[0]+.05&&t<DD[1]+.1?'':'none';ddList.children[2].style.background=t>=DD[0]+.4?'#3a3a3a':'';
+  fmtSel.textContent=t>=DD[1]?'35mm — standard':'65mm — fine';
+  const[a,b,m]=photoState(t);setImg(pA,'A',a);setImg(pB,'B',b);pB.style.opacity=m;pB.style.clipPath='';
+  const wp=t>=64.3&&t<68.6;divider.style.display=wp?'':'none';
+  if(wp){const dx=kf(WIPE,t)[0];css(divider,{left:dx+'px',opacity:seg(t,64.3,64.6)*(1-sm(68.2,68.6,t))});setImg(pA,'A','hal_6');setImg(pB,'B','raw');pB.style.opacity=1;pB.style.clipPath=`inset(0 ${1020-dx}px 0 0)`}
+  const mo=t>=60.6&&t<64.0;modal.style.display=mo?'':'none';
+  if(mo){const p=back(seg(t,60.6,61.0)),c2=sm(63.5,63.9,t);modal.style.transform=`scale(${lerp(.9,1,p)*(1-.05*c2)})`;modal.style.opacity=seg(t,60.6,60.8)*(1-c2);
+   mbar.style.width=io(seg(t,61.6,63.0))*100+'%';mdone.style.opacity=seg(t,63.0,63.2)}}
+ benEls.forEach((e,i)=>{const p=eo(seg(t,BT(i),BT(i)+.5));css(e,{opacity:p*(1-sm(76.0,76.5,t)),transform:`translateX(${(1-p)*30}px)`,color:i===4?RED:'#111'})});
+ const S=SEG.length?squareAt(t):{x:0,y:-500,s:1,sx:1,sy:1,rot:0,grey:0,blur:0},g=S.grey;
+ css(sq,{width:S.s+'px',height:S.s+'px',background:`rgb(${Math.round(lerp(255,150,g))},${Math.round(lerp(59,146,g))},${Math.round(lerp(31,140,g))})`,filter:S.blur>.05?`blur(${S.blur}px)`:'none',
+  transform:`translate(${S.x-S.s/2}px,${S.y-S.s}px) rotate(${S.rot}deg) scale(${S.sx},${S.sy})`});
+ for(const c of CHIPS){const vis=t>=c.tIn&&t<c.tOut+.35;c.e.style.display=vis?'':'none';if(!vis)continue;
+  const p=back(seg(t,c.tIn,c.tIn+.35)),o=seg(t,c.tIn,c.tIn+.2)*(1-sm(c.tOut,c.tOut+.3,t));
+  let[x,y]=c.fixed?[c.wx,c.wy]:proj(c.wx,c.wy);const w=c.e.offsetWidth,hh=c.e.offsetHeight;
+  if(c.anchor==='right')x-=w;else if(c.anchor==='center')x-=w/2;if(c.fixed)y-=hh/2;
+  css(c.e,{left:x+'px',top:y+'px',opacity:o,transform:`scale(${lerp(.92,1,p)})`,transformOrigin:c.anchor==='right'?'100% 50%':c.anchor==='left'?'0 50%':'50% 50%'})}
+ const win=CUR_VIS.find(([a,b])=>t>=a&&t<b);cur.style.display=win?'':'none';ring.style.display='none';
+ if(win){const[wx,wy]=kf(CUR,t),[x,y]=proj(wx,wy);let press=0;
+  for(const c of CLICKS){const d=t-c;if(d>-.08&&d<.1)press=1;if(d>=0&&d<.45){const p=d/.45;ring.style.display='';css(ring,{left:x+'px',top:y+'px',transform:`scale(${lerp(.3,1.2,eo(p))})`,opacity:(1-p)*.9})}}
+  css(cur,{transform:`translate(${x-3}px,${y-2}px) scale(${1-press*.12})`,opacity:Math.min(seg(t,win[0],win[0]+.3),1-seg(t,win[1]-.3,win[1]))})}
+ return Promise.all([pA,pB].map(i=>i.decode().catch(()=>{})));
+};
+async function init(){
+ await document.fonts.load('700 96px G');await document.fonts.load('400 20px G');await document.fonts.ready;
+ const tw=lockTxt.offsetWidth,x0=960-(LK.sq+LK.gap+tw)/2,top=540-LK.size/2;
+ css(lock,{left:x0+LK.sq+LK.gap+'px',top:top+'px'});
+ const base=top+LK.size*.79; // wordmark baseline: the square sits on it, cap-height tall
+ LOCKSQ=[x0+LK.sq/2,base];css(lockSlot,{left:x0+'px',top:base-LK.sq+'px'});
+ css(tag,{left:960-tag.offsetWidth/2+'px',top:'660px'});
+ window.renderAt(23.0);const r=meet.getBoundingClientRect();MEETDOT=[r.right+12+32,r.top+r.height*.79];
+ buildSegs();
+ const names=['raw',...LOOKS.map(l=>l[0]),...[0,1,2,3,4,5,6].flatMap(i=>['lightE_'+i,'grain_'+i,'hal_'+i]),...[0,1,2,3,4,5].map(i=>'lightC_'+i)];
+ await Promise.all(names.map(n=>{const i=new Image();i.src=img(n);return i.decode()}));
+ await Promise.all([...document.images].map(i=>i.decode().catch(()=>{})));
+ window.renderAt(0);window.DUR=DUR;window.FPS=FPS;window.ready=true;
+}
+init();
+</script></body></html>
