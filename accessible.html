@@ -584,6 +584,21 @@ body{letter-spacing:.012em}
 .lead .leadhead .cta{margin:0 0 .6em;display:flex;gap:14px}
 .lead .leadhead .btn{font-size:clamp(17px,1.35vw,22px);padding:20px 34px;min-width:clamp(200px,17vw,280px);border-width:2px}
 @media(max-width:760px){.lead .leadhead{display:block}.lead .leadhead .cta{margin:26px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:10px}.lead .leadhead .btn{min-width:0;font-size:16px;padding:16px 8px}}
+
+/* old workflow on phones: everything (title, 12 steps, 4 meters) fits one screen; sizes follow the screen height */
+@media(max-width:760px){
+ .flow .fin{padding:max(64px,8vh) 16px 2.5vh;row-gap:min(12px,1.4vh)}
+ .flow .fl>p.mono{font-size:min(13px,1.8vh)!important}
+ .flow .fl .k{font-size:min(32px,4.1vh,7.8vw);line-height:1.08;margin-top:.3em}
+ html[lang=ar] .flow .fl .k{line-height:1.25}
+ .flow .steps{margin-top:min(10px,1.2vh)}
+ .flow .steps li{font-size:min(16px,2.05vh,3.45vw);padding:min(8px,.95vh) 0;line-height:1.25;grid-template-columns:20px auto 1fr auto;gap:7px}.flow .steps li .app{white-space:nowrap}
+ .flow .steps li .n,.flow .steps li .app{font-size:min(11px,1.5vh,2.8vw)}
+ .flow .steps li em{font-size:min(11px,1.45vh);padding:1px 5px}
+ .flow .meters{grid-template-columns:repeat(4,1fr);gap:8px}
+ .flow .meters .m>p.mono{font-size:min(11px,1.45vh)!important;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .flow .meters .m .v{font-size:min(30px,3.7vh,7vw);margin-top:2px}
+}
 </style>
 <!-- Analytics: GoatCounter (cookieless). Set GC_CODE to your site code from goatcounter.com; blank = off. -->
 <script>(function(){var GC_CODE='tareqameer';if(!GC_CODE)return;var s=document.createElement('script');s.async=true;s.dataset.goatcounter='https://'+GC_CODE+'.goatcounter.com/count';s.src='vendor/goatcounter-count.js';document.head.appendChild(s)})()</script>
