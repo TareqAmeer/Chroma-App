@@ -2589,6 +2589,7 @@ fn main() {
                 resolve_vendor("vendor/clip/tokenizer.json"),
             );
         }
+        bgwork::disable_app_nap();
         std::process::exit(worker_fn(std::path::Path::new(db_path), photo_ids.as_deref()));
     }
     // ⚠️ The rayon cap above only bounds RAYON's own worker threads. Every `#[tauri::command]
@@ -2887,6 +2888,7 @@ fn main() {
                 .unwrap()
         })
         .setup(|app| {
+            bgwork::disable_app_nap();
             library::migrate_case_duplicate_keys();
             let handle = app.handle();
 

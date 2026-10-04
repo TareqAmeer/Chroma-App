@@ -6137,6 +6137,11 @@ pub fn clip_embed_run(
     const DECODE_LONG_EDGE: u32 = 384; // CLIP's own input is 224x224 (shortest-edge+crop) — well under this
     // See faces_run's comment: a scoped selection is a single bounded batch, no LIMIT/loop.
     let scoped = photo_ids.is_some();
+    // Id cursor for the unscoped pass: each batch starts after the last one, so a run of photos
+    // that can't be read right now (e.g. 32 DNGs in a row) is stepped over and retried on the next
+    // pass instead of being re-selected forever — that used to end the whole pass at the first
+    // all-unreadable batch, silently stopping tagging for the session.
+    let mut cursor: i64 = 0;
     loop {
         if cancel.load(Ordering::Relaxed) {
             break;
@@ -6173,13 +6178,14 @@ pub fn clip_embed_run(
                 .prepare(
                     "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
                      FROM photos p JOIN volumes v ON v.id = p.volume_id
-                     WHERE p.present = 1 AND p.kind != 'video'
+                     WHERE p.present = 1 AND p.kind != 'video' AND p.id > ?1
                        AND (p.clip_scanned_at IS NULL OR p.clip_scanned_at != p.mtime)
+                     ORDER BY p.id
                      LIMIT 32"
                 )
                 .map_err(|e| e.to_string())?;
             let rows = stmt
-                .query_map([], |r| {
+                .query_map([cursor], |r| {
                     let id: i64 = r.get(0)?;
                     let rel_path: String = r.get(1)?;
                     let mtime: i64 = r.get(2)?;
@@ -6193,10 +6199,26 @@ pub fn clip_embed_run(
                 .map_err(|e| e.to_string())?;
             rows
         };
-        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
         if batch.is_empty() {
             break;
         }
+        cursor = batch.iter().map(|(id, _, _)| *id).max().unwrap_or(cursor);
+        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
+        if batch.is_empty() {
+            if scoped {
+                break;
+            }
+            continue; // whole batch offline — move on
+        }
+        // Only a thumbnail this catalog says is current for the photo (never a stray file at the
+        // same id path from another catalog).
+        let has_thumb: std::collections::HashSet<i64> = {
+            let ids: Vec<String> = batch.iter().map(|(id, _, _)| id.to_string()).collect();
+            let sql = format!("SELECT id FROM photos WHERE id IN ({}) AND thumb_long_edge > 0 AND thumb_mtime >= mtime", ids.join(","));
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let r = stmt.query_map([], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+            r
+        };
         let total_in_batch = batch.len();
         let base_embedded = result.embedded;
         progress(ScanProgress { phase: "clip".into(), done: base_embedded, total: base_embedded + total_in_batch, current: String::new() });
@@ -6220,7 +6242,14 @@ pub fn clip_embed_run(
             let mut part: Vec<(i64, i64, Option<Vec<f32>>)> = chunk
                 .par_iter()
                 .map(|(id, abs, mtime)| {
-                    let emb = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok().and_then(|(rgb, w, h)| crate::clip::embed_image(&rgb, w, h).ok());
+                    // The library's own 800px thumbnail first: the model only sees 224x224, so a
+                    // full RAW decode buys nothing — and some RAWs (certain DNGs) the decoder
+                    // can't open at all still have a thumbnail. Original file as the fallback.
+                    let thumb = thumb_dir().join(id.rem_euclid(256).to_string()).join(format!("{id}.jpg"));
+                    let from_thumb = || has_thumb.contains(id).then(|| image::open(&thumb).ok()).flatten().map(|i| { let i = i.to_rgb8(); let (w, h) = i.dimensions(); (i.into_raw(), w, h) });
+                    let emb = from_thumb()
+                        .or_else(|| crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok())
+                        .and_then(|(rgb, w, h)| crate::clip::embed_image(&rgb, w, h).ok());
                     (*id, *mtime, emb)
                 })
                 .collect();
@@ -6239,7 +6268,7 @@ pub fn clip_embed_run(
         tx.commit().map_err(|e| e.to_string())?;
         result.embedded += embedded.iter().filter(|(_, _, e)| e.is_some()).count();
 
-        if embedded.iter().all(|(_, _, e)| e.is_none()) {
+        if scoped && embedded.iter().all(|(_, _, e)| e.is_none()) {
             break; // nothing in this batch could be embedded — avoid spinning on unreadable rows
         }
         if scoped {
@@ -7198,6 +7227,17 @@ pub fn catalog_counts_run(conn: &Connection) -> Result<std::collections::HashMap
     // all, unlike every other row in renderCollections() — there was no backend field to feed
     // one. `kind` already distinguishes 'raw'/'video' (see is_raw above, media_kind()), so this
     // reuses the same column rather than adding a new one.
+    // Auto-tag progress for the Keywords sidebar ("Tagged X of Y"): same predicate clip_embed_run
+    // uses to pick work (present, not video), so "done" here means exactly "nothing left to tag".
+    let (tag_done, tag_total): (i64, i64) = conn
+        .query_row(
+            "SELECT COUNT(CASE WHEN clip_embedding IS NOT NULL AND clip_scanned_at = mtime THEN 1 END), COUNT(*)
+             FROM photos WHERE present = 1 AND kind != 'video'",
+            [], |r| Ok((r.get(0)?, r.get(1)?))
+        )
+        .map_err(|e| e.to_string())?;
+    m.insert("tag_done".to_string(), tag_done as u64);
+    m.insert("tag_total".to_string(), tag_total as u64);
     let raw: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND kind = 'raw'", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     m.insert("raw".to_string(), raw as u64);
     let video: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND kind = 'video'", [], |r| r.get(0)).map_err(|e| e.to_string())?;

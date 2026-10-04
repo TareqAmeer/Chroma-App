@@ -92,6 +92,33 @@ pub fn mark_current_thread_background() {
 #[cfg(not(any(target_os = "macos", windows)))]
 pub fn mark_current_thread_background() {}
 
+/// Opts this process out of App Nap for its lifetime (still allowing idle system sleep), so
+/// background tagging/indexing runs at the same speed whether the window is in front, behind
+/// other apps, or minimized. Without it macOS may nap a hidden app — throttling its timers and
+/// I/O — which is the standard reason background work in Mac apps slows down when hidden.
+/// Same call Photos-style apps make (`NSProcessInfo.beginActivity(options:reason:)`); the
+/// returned token is retained and deliberately never released.
+#[cfg(target_os = "macos")]
+pub fn disable_app_nap() {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    // NSActivityUserInitiatedAllowingIdleSystemSleep = NSActivityUserInitiated & ~NSActivityIdleSystemSleepDisabled
+    const OPTIONS: u64 = 0x00FF_FFFF & !(1u64 << 20);
+    unsafe {
+        let info: *mut AnyObject = msg_send![class!(NSProcessInfo), processInfo];
+        if info.is_null() {
+            return;
+        }
+        let reason: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: c"Background photo indexing".as_ptr()];
+        let token: *mut AnyObject = msg_send![info, beginActivityWithOptions: OPTIONS, reason: reason];
+        if !token.is_null() {
+            let _: *mut AnyObject = msg_send![token, retain];
+        }
+    }
+}
+#[cfg(not(target_os = "macos"))]
+pub fn disable_app_nap() {}
+
 /// How long to pause before the NEXT unit of background work, given current system pressure.
 /// `None` means proceed immediately (the common case). Checked via `NSProcessInfo` (objc2 —
 /// already a dependency, used the same way gainmap.rs already talks to Core Image).

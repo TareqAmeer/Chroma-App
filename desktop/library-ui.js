@@ -1409,6 +1409,10 @@
     .lib-people-scroll{max-height:150px;overflow-y:auto;margin:0 -4px;padding:0 4px}
     /* Keywords reuse the same internal scroll so a big auto-tag list never pushes People/Albums off-screen. */
     .lib-kw-scroll{max-height:220px}
+    .lib-kw-progress{font-size:11px;color:var(--mut);padding:2px 0 8px;font-variant-numeric:tabular-nums}
+    .lib-kw-progress-bar{height:3px;border-radius:2px;background:var(--bdr);margin-top:5px;overflow:hidden}
+    .lib-kw-progress-bar span{display:block;height:100%;background:var(--acc,currentColor)}
+    .lib-kw-progress-pct{font-size:10px;color:var(--mut);font-family:var(--mono)}
     /* Review mode (people-pets wireframes screen C) — one unnamed cluster at a time, full-
        viewport, keyboard-driven. z-index above #lib-overlay's 4000, same pattern as
        #lib-quicklook (lazily created, appended to body, .on toggles display). */
@@ -9194,6 +9198,7 @@
   // stacking, keywords or offline-thumbnail UI yet; those build on this once the backend
   // supports them (see catalog.rs's own top-of-file scope comment).
   let catalogCounts = { all: 0, blurry: 0 };
+  let _tagProgressAt = 0;
   let catalogVolumes = [];
 
   const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -9735,8 +9740,16 @@
           </div>${hasChildren && open ? `<div class="lib-tree-children">${renderLevel(n.id)}</div>` : ''}`;
       }).join('');
     };
-    const body = `<div class="lib-tree-node lib-people-scroll lib-kw-scroll" id="lib-keyword-tree">${renderLevel('__root__')}</div>`;
-    return '<div class="lib-coll-sep"></div>' + sidebarSection('keywords', 'Keywords', body, { extraHeaderAttrs: ' data-kw-tree-toggle="1"' });
+    // Auto-tag progress: shown until every photo has been through the tagger, so a short "dog"
+    // count reads as "still tagging", not "missing" (catalog_counts' tag_done/tag_total).
+    const tDone = catalogCounts.tag_done || 0, tTotal = catalogCounts.tag_total || 0;
+    const tagging = tTotal > 0 && tDone < tTotal;
+    const progress = tagging
+      ? `<div class="lib-kw-progress" id="lib-kw-progress">Tagged ${fmtN(tDone)} of ${fmtN(tTotal)}${bgPaused() ? ' · paused' : ''}<div class="lib-kw-progress-bar"><span style="width:${(100 * tDone / tTotal).toFixed(1)}%"></span></div></div>`
+      : '';
+    const body = progress + `<div class="lib-tree-node lib-people-scroll lib-kw-scroll" id="lib-keyword-tree">${renderLevel('__root__')}</div>`;
+    const trail = tagging ? `<span class="lib-kw-progress-pct">${Math.floor(100 * tDone / tTotal)}%</span>` : '';
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('keywords', 'Keywords', body, { extraHeaderAttrs: ' data-kw-tree-toggle="1"', trail });
     // No trailing separator of its own — the next section (People & Pets) supplies its own
     // leading one. This used to double up into two adjacent dividers whenever both a keyword
     // tree AND named people existed (notes §2.3.14, "duplicated separators").
@@ -11079,6 +11092,13 @@
       }
       updateBootSplashProgress(p);
       if (p.phase === 'done') refreshCatalogCounts();
+      // While tagging runs, refresh the Keywords progress line and counts every 15s (not per
+      // event — the worker emits several per second).
+      if (p.phase === 'clip' && Date.now() - _tagProgressAt > 15000) {
+        _tagProgressAt = Date.now();
+        invoke('catalog_counts').then((c) => { catalogCounts = c; renderCollections(); }).catch(() => {});
+        invoke('catalog_keywords').then((n) => { keywordTree = n || []; renderCollections(); }).catch(() => {});
+      }
       // ⚠️ hq_offline is the LAST entry in STAGE_ORDER, and hq_offline_run (catalog.rs) emits
       // phase:"hq_offline" with total:0 specifically to mean "nothing in the last-100-edited/
       // added set is pending right now" — a legitimate terminal state, not a stage still running.
