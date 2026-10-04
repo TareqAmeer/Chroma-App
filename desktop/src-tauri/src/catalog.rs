@@ -5422,7 +5422,14 @@ struct PortableFace {
     /// Base64 of the raw little-endian f32x512 blob `photo_faces.embedding` already stores —
     /// reusing that exact encoding rather than JSON floats keeps the file a fraction of the size.
     embedding: Option<String>,
+    /// True ONLY for a user-confirmed face (`confirmed = 1`). An auto-tag (`confirmed = 2`) is
+    /// `auto` instead — collapsing both into `true` promoted every unseen auto-tag to
+    /// "user-confirmed" on import. Older files lack `auto`/`species` (serde default).
     confirmed: bool,
+    #[serde(default)]
+    auto: bool,
+    #[serde(default)]
+    species: Option<String>,
     person_name: String,
     person_kind: String,
 }
@@ -5477,7 +5484,7 @@ pub fn catalog_export_portable_people(state: tauri::State<CatalogState>, dest_di
 fn export_portable_people_run(conn: &Connection, dest_dir: &str) -> Result<PortablePeopleSummary, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT p.rel_path, f.x0, f.y0, f.x1, f.y1, f.score, f.kps, f.embedding, f.confirmed, pe.name, pe.kind
+            "SELECT p.rel_path, f.x0, f.y0, f.x1, f.y1, f.score, f.kps, f.embedding, f.confirmed, pe.name, pe.kind, f.species
              FROM photo_faces f
              JOIN photos p ON p.id = f.photo_id
              JOIN people pe ON pe.id = f.person_id
@@ -5500,7 +5507,9 @@ fn export_portable_people_run(conn: &Connection, dest_dir: &str) -> Result<Porta
                     use base64::Engine;
                     embedding.map(|b| base64::engine::general_purpose::STANDARD.encode(b))
                 },
-                confirmed: confirmed != 0,
+                confirmed: confirmed == 1,
+                auto: confirmed == 2,
+                species: r.get(11)?,
                 person_name: r.get(9)?,
                 person_kind: r.get(10)?,
             })
@@ -5636,7 +5645,7 @@ fn import_portable_people_run(conn: &Connection, dest_dir: &str) -> Result<Porta
             )
             .optional()
             .map_err(|e| e.to_string())?;
-        let confirmed = face.confirmed as i64;
+        let confirmed: i64 = if face.confirmed { 1 } else if face.auto { 2 } else { 0 };
         match existing_face {
             Some(fid) => {
                 tx.execute(
@@ -5647,9 +5656,9 @@ fn import_portable_people_run(conn: &Connection, dest_dir: &str) -> Result<Porta
             }
             None => {
                 tx.execute(
-                    "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps, embedding, person_id, confirmed)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                    params![photo_id, face.x0, face.y0, face.x1, face.y1, face.score, face.kps, embedding_blob, person_id, confirmed],
+                    "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps, embedding, person_id, confirmed, species)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    params![photo_id, face.x0, face.y0, face.x1, face.y1, face.score, face.kps, embedding_blob, person_id, confirmed, face.species],
                 )
                 .map_err(|e| e.to_string())?;
             }
@@ -10740,6 +10749,51 @@ mod tests {
         assert_eq!(confirmed, 1);
         assert_eq!(blob_to_f32_vec(&embedding), emb, "the embedding must survive the round trip, not just the name");
 
+        std::fs::remove_dir_all(&dest_dir).ok();
+    }
+
+    /// Regression: export wrote `confirmed != 0`, so an AUTO-assigned face (confirmed = 2 — the
+    /// low-bar burst/auto tags, never seen by the user) came back from import as confirmed = 1.
+    /// On the real catalog that turned junk SCRFD boxes auto-tagged to the pet "Lucifer" into
+    /// "user-confirmed" Lucifer faces that then trained his profile. Also: species was dropped.
+    #[test]
+    fn portable_people_round_trip_keeps_auto_tags_unconfirmed_and_species() {
+        let dest_dir = std::env::temp_dir().join(format!("cs_portable_auto_{}", std::process::id())).to_string_lossy().into_owned();
+        std::fs::create_dir_all(&dest_dir).unwrap();
+        let mk = |uuid: &str| {
+            let c = temp_db();
+            c.execute("INSERT INTO volumes (uuid, label, last_path, is_local) VALUES (?1, 'Drive', ?2, 1)", params![uuid, dest_dir]).unwrap();
+            let v = c.last_insert_rowid();
+            c.execute(
+                "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, present, added)
+                 VALUES (?1, 'a.jpg', '', 'a.jpg', 'a.jpg', 'jpg', 'photo', 1, 0, 1, 0)",
+                params![v],
+            )
+            .unwrap();
+            let p = c.last_insert_rowid();
+            (c, p)
+        };
+        let (src, photo) = mk("vol-src");
+        src.execute("INSERT INTO people (name, created, auto, kind) VALUES ('Lucifer', 0, 0, 'pet')", []).unwrap();
+        let pid = src.last_insert_rowid();
+        for (x0, confirmed, species) in [(0.1f32, 1i64, None::<&str>), (0.5, 2, None), (0.7, 1, Some("dog"))] {
+            src.execute(
+                "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, person_id, confirmed, species) VALUES (?1,?2,0.1,?2+0.1,0.2,0.9,'[]',?3,?4,?5)",
+                params![photo, x0, pid, confirmed, species],
+            )
+            .unwrap();
+        }
+        export_portable_people_run(&src, &dest_dir).unwrap();
+        let (dst, dphoto) = mk("vol-dst");
+        import_portable_people_run(&dst, &dest_dir).unwrap();
+        let got: Vec<(i64, Option<String>)> = dst
+            .prepare("SELECT confirmed, species FROM photo_faces WHERE photo_id = ?1 ORDER BY x0")
+            .unwrap()
+            .query_map(params![dphoto], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(got, vec![(1, None), (2, None), (1, Some("dog".to_string()))], "auto tag must stay auto (2), species must survive");
         std::fs::remove_dir_all(&dest_dir).ok();
     }
 
