@@ -1147,7 +1147,10 @@ body.mobile-fx #row-lut-mix{background:var(--k-color-bg)}
 #fx-more-menu .btn{border-radius:0}
 body.mobile-fx .fx-slider::-webkit-slider-thumb{border-radius:0}
 /* Phone trims: desk-only surfaces off, bigger targets, press-and-hold compare replaces the overlay row. */
-body.mobile-fx #fx-zoom-ctrl,body.mobile-fx #fx-preview-tools{display:none!important}
+body.mobile-fx #fx-zoom-ctrl{display:none!important}
+/* Phone keeps ONE overlay button: the eye (hold to see the original); the rest of the row stays off. */
+body.mobile-fx #fx-preview-tools,body.mobile-fx.tools-open #fx-preview-tools{display:flex!important}
+body.mobile-fx #fx-preview-tools>:not(#btn-before){display:none!important}
 body.mobile-fx #sk2-hist{display:none}
 body.mobile-fx #btn-gp-import,body.mobile-fx .sk2-more:has(#btn-lut-save),body.mobile-fx .ni-hint a{display:none!important}
 body.mobile-fx #fx-canvas,body.mobile-fx #fx-wrap{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
@@ -6939,7 +6942,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1004Y';
+const BUILD='1.1004Z';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
