@@ -528,6 +528,12 @@ section{position:relative}
 /* cards in a row share row tracks, so every title, description and action sits on the same line */
 @supports (grid-template-rows:subgrid){.plats{grid-auto-rows:auto}.plat{grid-row:span 5;grid-template-rows:subgrid;row-gap:8px}}
 .playic{width:.72em;height:.72em;margin-inline-start:.35em;vertical-align:-.02em}
+
+.lead .ba{align-items:start}.lead .ba p.one{font-size:clamp(26px,2.6vw,44px);font-weight:900;line-height:1.05;letter-spacing:-.005em;margin-top:22px}
+
+.top nav>a,.top .sec summary,.word .t{white-space:nowrap}
+@media(max-width:420px){.top nav{gap:12px;font-size:13px}.top .sec{font-size:13px}.word{gap:6px}.word .t{font-size:12px}}
+.top{gap:12px}@media(max-width:350px){.word .t{font-size:11px}.top nav,.top .sec{gap:9px;font-size:12px}.top{padding-left:12px;padding-right:12px}}
 </style>
 <!-- Analytics: GoatCounter (cookieless). Set GC_CODE to your site code from goatcounter.com; blank = off. -->
 <script>(function(){var GC_CODE='tareqameer';if(!GC_CODE)return;var s=document.createElement('script');s.async=true;s.dataset.goatcounter='https://'+GC_CODE+'.goatcounter.com/count';s.src='vendor/goatcounter-count.js';document.head.appendChild(s)})()</script>
@@ -548,10 +554,9 @@ section{position:relative}
 
 <section class="lead" aria-label="CHRO-MA-SMITH"><h1 class="hero-t">The app that<br>does it all<sup>*</sup><span class="vh"> — Chromasmith, the free offline photo editor for film looks, grain and RAW</span></h1>
   <div class="usp">
-    <div class="stats"><div><b>130+</b><span>film looks with real grain, halation &amp; bloom</span></div><div><b>0</b><span>uploads. Every photo stays on your device</span></div><div><b>£0</b><span>free and open source, forever</span></div><div><b>1</b><span>app for library, RAW, editing &amp; export</span></div></div>
     <div class="ba">
       <div class="cmp" id="cmp" role="slider" tabindex="0" aria-label="Drag to compare the original photo with the Chromasmith edit" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"><img src="site/assets/story/main1-1600.webp" alt="Original, unedited beach photo" decoding="async" loading="lazy"><img class="after" src="site/assets/story/main5-1600.webp" alt="The same photo with a film look, grain and glow from Chromasmith" decoding="async" loading="lazy"><i class="bar"><b>↔</b></i><span class="l a">Your photo</span><span class="l b">Chromasmith</span></div>
-      <div><ol><li>Import a RAW or JPEG</li><li>Pick a film look</li><li>Add grain &amp; glow</li><li>Export full-res</li></ol><p>Drag the photo to compare. Nothing leaves your device.</p></div>
+      <div><ol><li>Import RAW photos into your private gallery</li><li>Auto-cull and auto-tag them</li><li>Pick one of 130+ film looks</li><li>Add realistic grain, halation &amp; bloom</li><li>Export at full resolution</li></ol><p class="one">1 app. £0 subscriptions.</p><p>Drag the photo to compare. Nothing leaves your device.</p></div>
     </div>
   </div>
   <p class="mono foot">*ALMOST EVERYTHING. YOU STILL NEED TO TAKE THE PHOTOS.</p>
