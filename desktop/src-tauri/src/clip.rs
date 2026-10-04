@@ -1,4 +1,6 @@
-// Natural-language photo search (AI stack Phase D) — CLIP ViT-B/32, via the same raw ort-sys C
+// Natural-language photo search (AI stack Phase D) — Google SigLIP 2 ViT-B/16 (was OpenAI CLIP
+// ViT-B/32 until 2026-10; a benchmark on the user's own library scored 68% vs 44% correct top-20
+// picks — see vendor/clip/README.md), via the same raw ort-sys C
 // API wrapper the rest of the AI stack uses (sam.rs/faceparse.rs/scrfd.rs/arcface.rs), NOT
 // Candle. Candle's own `candle-transformers` CLIP module is genuinely turnkey (safetensors load
 // directly, no conversion), but it would be a SECOND inference runtime/dependency tree in a
@@ -7,7 +9,7 @@
 // choice; see CLAUDE.md's AI-stack briefing.
 //
 // Two SEPARATE graphs (an image encoder and a text encoder), each producing an independent
-// 512-dim embedding in the SAME shared space — a photo is embedded once at scan time, a search
+// 768-dim embedding in the SAME shared space — a photo is embedded once at scan time, a search
 // query is embedded on demand, and cosine similarity between the two ranks the library. This is
 // exactly why CLIP is useful for search and exactly why the two encoders must be run
 // independently rather than as one combined graph.
@@ -24,10 +26,35 @@ use std::sync::{Mutex, OnceLock};
 use tokenizers::Tokenizer;
 
 const IMAGE_SIZE: u32 = 224;
-const MEAN: [f32; 3] = [0.48145466, 0.4578275, 0.40821073];
-const STD: [f32; 3] = [0.26862954, 0.26130258, 0.27577711];
-const MAX_TOKENS: usize = 77; // CLIP's own model_max_length (tokenizer_config.json)
-const EOT_TOKEN_ID: u32 = 49407; // "<|endoftext|>" — also this tokenizer's pad_token, verified against tokenizer_config.json
+const MEAN: [f32; 3] = [0.5, 0.5, 0.5];
+const STD: [f32; 3] = [0.5, 0.5, 0.5];
+pub const EMBED_DIM: usize = 768;
+const MAX_TOKENS: usize = 64; // SigLIP 2's text context length (open_clip ViT-B-16-SigLIP2 config)
+const EOS_TOKEN_ID: i64 = 1; // Gemma tokenizer "<eos>", appended by tokenizer.json's post-processor
+const PAD_TOKEN_ID: i64 = 0;
+/// SigLIP's trained logit scale/bias (exp(t) and b from the checkpoint). SigLIP is trained with a
+/// per-pair sigmoid, so `sigmoid(cos * scale + bias)` is a real, independent probability that the
+/// text describes the image — unlike CLIP's cosine, which only ranks. Thresholds below are on it.
+pub const LOGIT_SCALE: f32 = 112.66890;
+pub const LOGIT_BIAS: f32 = -16.771725;
+
+pub fn match_prob(cos: f32) -> f32 {
+    1.0 / (1.0 + (-(cos * LOGIT_SCALE + LOGIT_BIAS)).exp())
+}
+
+/// SigLIP's own text cleaning (big_vision `canonicalize_text`, as open_clip applies it): drop
+/// ASCII punctuation, "_" to space, lowercase, collapse whitespace. Token ids match open_clip's
+/// tokenizer exactly with this applied first (verified on export).
+fn canonicalize(text: &str) -> String {
+    let t: String = text.replace('_', " ").chars().filter(|c| !c.is_ascii_punctuation()).collect();
+    t.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The prompt every fixed-vocabulary term is embedded with ("a photo of a dog.").
+fn photo_prompt(term: &str) -> String {
+    let article = if term.starts_with(|c: char| "aeiou".contains(c)) { "an" } else { "a" };
+    format!("a photo of {article} {term}.")
+}
 
 static VISION_PATH: OnceLock<PathBuf> = OnceLock::new();
 static TEXT_PATH: OnceLock<PathBuf> = OnceLock::new();
@@ -79,27 +106,11 @@ fn l2_normalize(v: &mut [f32]) {
     }
 }
 
-/// Resize-shortest-edge-to-224 then centre-crop 224x224 — the exact `do_resize`+`do_center_crop`
-/// sequence `preprocessor_config.json` declares (`resample: 3` = bicubic; `resize_rgb8`'s
-/// Triangle filter is a reasonable stand-in, same tradeoff every other model in this codebase
-/// already makes — none of them replicate PIL's bicubic exactly either).
-fn resize_and_center_crop(rgb: &[u8], w: u32, h: u32) -> Vec<u8> {
-    let scale = IMAGE_SIZE as f32 / w.min(h) as f32;
-    let (new_w, new_h) = ((w as f32 * scale).round().max(1.0) as u32, (h as f32 * scale).round().max(1.0) as u32);
-    let resized = crate::sam::resize_rgb8(rgb, w, h, new_w, new_h);
-    let x0 = (new_w.saturating_sub(IMAGE_SIZE)) / 2;
-    let y0 = (new_h.saturating_sub(IMAGE_SIZE)) / 2;
-    let mut out = vec![0u8; (IMAGE_SIZE * IMAGE_SIZE * 3) as usize];
-    for y in 0..IMAGE_SIZE {
-        for x in 0..IMAGE_SIZE {
-            let sx = (x0 + x).min(new_w - 1);
-            let sy = (y0 + y).min(new_h - 1);
-            let src = ((sy * new_w + sx) * 3) as usize;
-            let dst = ((y * IMAGE_SIZE + x) * 3) as usize;
-            out[dst..dst + 3].copy_from_slice(&resized[src..src + 3]);
-        }
-    }
-    out
+/// SigLIP squashes the whole frame to 224x224 (no crop — open_clip's transform is a plain
+/// bicubic Resize((224, 224))), so edges of wide panoramas still count. `resize_rgb8`'s Triangle
+/// filter stands in for bicubic, same tradeoff every other model in this codebase makes.
+fn resize_full_frame(rgb: &[u8], w: u32, h: u32) -> Vec<u8> {
+    crate::sam::resize_rgb8(rgb, w, h, IMAGE_SIZE, IMAGE_SIZE)
 }
 
 /// Embeds an already-decoded RGB8 image into CLIP's shared embedding space. Returns an
@@ -113,7 +124,7 @@ pub fn embed_image(rgb: &[u8], w: u32, h: u32) -> Result<Vec<f32>, String> {
     if rgb.len() != (w as usize) * (h as usize) * 3 {
         return Err(format!("clip: rgb length {} does not match {w}x{h}x3", rgb.len()));
     }
-    let cropped = resize_and_center_crop(rgb, w, h);
+    let cropped = resize_full_frame(rgb, w, h);
     let side = IMAGE_SIZE as usize;
     let mut pixels = vec![0f32; 3 * side * side];
     for y in 0..side {
@@ -129,33 +140,32 @@ pub fn embed_image(rgb: &[u8], w: u32, h: u32) -> Result<Vec<f32>, String> {
     let mut outputs =
         run_session(sess, vec![input("pixel_values", pixels, &[1, 3, IMAGE_SIZE as i64, IMAGE_SIZE as i64])], &["image_embeds"])?;
     let mut emb = outputs.remove(0);
-    if emb.len() != 512 {
-        return Err(format!("clip: unexpected image embedding length {} (expected 512)", emb.len()));
+    if emb.len() != EMBED_DIM {
+        return Err(format!("clip: unexpected image embedding length {} (expected {EMBED_DIM})", emb.len()));
     }
     l2_normalize(&mut emb);
     Ok(emb)
 }
 
-/// Embeds a search-query string into the SAME CLIP space as `embed_image`. Padded/truncated to
-/// `MAX_TOKENS` with the EOT token id, matching this tokenizer's own configured `pad_token`
-/// (verified against `tokenizer_config.json` — see vendor/clip/README.md) — the model's pooling
-/// finds the FIRST EOT position via argmax, so trailing pad-EOTs after the real one are inert.
+/// Embeds a search-query string into the SAME space as `embed_image`. Canonicalized, then
+/// padded with 0 to exactly `MAX_TOKENS` — SigLIP was trained on fixed-length padded text and
+/// pools the LAST position, so the padding is part of the input, not inert.
 pub fn embed_text(text: &str) -> Result<Vec<f32>, String> {
     let tok = tokenizer()?;
-    let encoding = tok.encode(text, true).map_err(|e| format!("clip tokenize: {e}"))?;
+    let encoding = tok.encode(canonicalize(text), true).map_err(|e| format!("clip tokenize: {e}"))?;
     let mut ids: Vec<i64> = encoding.get_ids().iter().map(|&id| id as i64).collect();
     if ids.len() > MAX_TOKENS {
         ids.truncate(MAX_TOKENS - 1);
-        ids.push(EOT_TOKEN_ID as i64); // truncation must still end on a real EOT for pooling to find one
+        ids.push(EOS_TOKEN_ID);
     } else {
-        ids.resize(MAX_TOKENS, EOT_TOKEN_ID as i64);
+        ids.resize(MAX_TOKENS, PAD_TOKEN_ID);
     }
 
     let sess = text_session()?;
     let mut outputs = run_session(sess, vec![input_i64("input_ids", ids, &[1, MAX_TOKENS as i64])], &["text_embeds"])?;
     let mut emb = outputs.remove(0);
-    if emb.len() != 512 {
-        return Err(format!("clip: unexpected text embedding length {} (expected 512)", emb.len()));
+    if emb.len() != EMBED_DIM {
+        return Err(format!("clip: unexpected text embedding length {} (expected {EMBED_DIM})", emb.len()));
     }
     l2_normalize(&mut emb);
     Ok(emb)
@@ -227,29 +237,25 @@ fn tag_vocab_embeddings() -> Result<&'static Vec<(String, Vec<f32>)>, String> {
     V.get_or_init(|| {
         TAG_VOCABULARY
             .iter()
-            .map(|term| embed_text(term).map(|emb| (term.to_string(), emb)))
+            .map(|term| embed_text(&photo_prompt(term)).map(|emb| (term.to_string(), emb)))
             .collect::<Result<Vec<_>, _>>()
     })
     .as_ref()
     .map_err(|e| e.clone())
 }
 
-/// The empirically-chosen cosine-similarity floor above which a vocabulary term is worth
-/// suggesting as a tag — see `catalog.rs`'s `clip_tag_suggestions_ranks_close_terms_above_far_ones`
-/// test and this crate's R10 verification notes for how it was picked (not guessed): real CLIP
-/// image-vs-unrelated-text cosine similarities sit in a narrow positive band (commonly ~0.15-0.20
-/// for OpenAI CLIP ViT-B/32), so a naive 0.2 guess risks admitting nothing. 0.22 cleared real
-/// correct-tag scores while rejecting real incorrect ones on a hand-checked test photo (see the
-/// README/ROADMAP note for the actual observed scores).
-pub const DEFAULT_TAG_THRESHOLD: f32 = 0.22;
+/// Minimum SigLIP match probability (`match_prob`) for an Info-panel suggestion. Calibrated on
+/// 800 photos from the real library: SigLIP's probabilities are deliberately low for short
+/// prompts (a clearly-present dog commonly scores 0.003-0.05), and wrong terms sat under ~0.002.
+pub const DEFAULT_TAG_THRESHOLD: f32 = 0.002;
 pub const DEFAULT_TAG_TOP_K: usize = 8;
 
 /// Ranks an already-computed image embedding against the cached vocabulary embeddings, returning
-/// the top-K terms whose cosine similarity clears `threshold`, sorted by score descending.
+/// the top-K terms whose match probability clears `threshold`, sorted by score descending.
 pub fn suggest_tags(image_embedding: &[f32], top_k: usize, threshold: f32) -> Result<Vec<(String, f32)>, String> {
     let vocab = tag_vocab_embeddings()?;
     let mut scored: Vec<(String, f32)> =
-        vocab.iter().map(|(term, emb)| (term.clone(), cosine_sim(image_embedding, emb))).filter(|(_, s)| *s >= threshold).collect();
+        vocab.iter().map(|(term, emb)| (term.clone(), match_prob(cosine_sim(image_embedding, emb)))).filter(|(_, s)| *s >= threshold).collect();
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     scored.truncate(top_k);
     Ok(scored)
@@ -258,9 +264,9 @@ pub fn suggest_tags(image_embedding: &[f32], top_k: usize, threshold: f32) -> Re
 /// Breed tags. The general vocabulary above only says "dog"/"cat"; once a photo already carries
 /// one of those, its breed is picked by CLIP's own zero-shot classifier: every breed of that
 /// species scored with the standard Oxford-IIIT Pets prompt ("a photo of a X, a type of pet."),
-/// softmaxed at CLIP's trained logit scale (100). Only a clear winner is kept — a mixed-breed dog
-/// or a blurry cat spreads its probability and gets no breed at all, never a wrong one. ViT-B/32
-/// scores ~85% top-1 on that benchmark, so the probability gate is what makes it safe to apply
+/// softmaxed at the model's trained logit scale. Only a clear winner is kept — a mixed-breed dog
+/// or a blurry cat spreads its probability and gets no breed at all, never a wrong one. The
+/// probability gate is what makes it safe to apply
 /// without the user looking.
 pub const DOG_BREEDS: &[&str] = &[
     "labrador retriever", "golden retriever", "german shepherd", "french bulldog", "english bulldog",
@@ -280,7 +286,6 @@ pub const CAT_BREEDS: &[&str] = &[
 ];
 /// Minimum softmax probability for the winning breed.
 pub const BREED_MIN_PROB: f32 = 0.6;
-const CLIP_LOGIT_SCALE: f32 = 100.0;
 
 fn breed_embeddings(species: &str) -> Result<&'static Vec<(String, Vec<f32>)>, String> {
     static DOGS: OnceLock<Result<Vec<(String, Vec<f32>)>, String>> = OnceLock::new();
@@ -297,7 +302,7 @@ fn breed_embeddings(species: &str) -> Result<&'static Vec<(String, Vec<f32>)>, S
 
 /// Softmax pick over `candidates`; `Some((name, prob))` only when the winner clears `min_prob`.
 pub fn pick_breed(image_embedding: &[f32], candidates: &[(String, Vec<f32>)], min_prob: f32) -> Option<(String, f32)> {
-    let logits: Vec<f32> = candidates.iter().map(|(_, e)| CLIP_LOGIT_SCALE * cosine_sim(image_embedding, e)).collect();
+    let logits: Vec<f32> = candidates.iter().map(|(_, e)| LOGIT_SCALE * cosine_sim(image_embedding, e)).collect();
     let max = logits.iter().cloned().fold(f32::MIN, f32::max);
     let exps: Vec<f32> = logits.iter().map(|l| (l - max).exp()).collect();
     let sum: f32 = exps.iter().sum();
@@ -324,6 +329,18 @@ mod tests {
         );
     }
 
+    /// Token ids must match open_clip's SigLIP 2 tokenizer exactly (ids recorded from it at export
+    /// time) — a mismatch here silently degrades every tag and search without failing anything.
+    #[test]
+    fn tokenizer_matches_open_clip_siglip2() {
+        setup_model();
+        let ids = tokenizer().unwrap().encode(canonicalize("A photo of a Dog."), true).unwrap().get_ids().to_vec();
+        // tokenizer.json carries its own pad-to-64 (pad id 0), same as open_clip's call.
+        assert_eq!(ids.len(), MAX_TOKENS);
+        assert_eq!(&ids[..7], &[235250, 2686, 576, 476, 5929, 1, 0]);
+        assert_eq!(photo_prompt("owl"), "a photo of an owl.");
+    }
+
     #[test]
     fn embed_image_returns_a_unit_vector() {
         setup_model();
@@ -333,7 +350,7 @@ mod tests {
             rgb[i] = ((i * 37) % 255) as u8;
         }
         let emb = embed_image(&rgb, w, h).expect("clip embed_image run");
-        assert_eq!(emb.len(), 512);
+        assert_eq!(emb.len(), EMBED_DIM);
         let norm: f32 = emb.iter().map(|v| v * v).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 1e-3, "image embedding should be L2-normalized, norm={norm}");
     }
@@ -377,7 +394,7 @@ mod tests {
     fn embed_text_returns_a_unit_vector_and_is_deterministic() {
         setup_model();
         let a = embed_text("a photo of a dog").expect("clip embed_text run");
-        assert_eq!(a.len(), 512);
+        assert_eq!(a.len(), EMBED_DIM);
         let norm: f32 = a.iter().map(|v| v * v).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 1e-3, "text embedding should be L2-normalized, norm={norm}");
         let b = embed_text("a photo of a dog").expect("clip embed_text run");

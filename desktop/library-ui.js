@@ -7323,7 +7323,7 @@
       + `</div>`
       + (aiShown.length
         ? `<div style="display:flex;flex-wrap:wrap;gap:4px">`
-          + aiShown.map((h) => `<span class="lib-kw-ai-chip" data-suggest="${esc(h.term)}" title="Detected automatically (${Math.round(h.score * 100)}%) — click to save as a keyword">${esc(h.term)}<span class="lib-kw-suggest-chip-add">+</span></span>`).join('')
+          + aiShown.map((h) => `<span class="lib-kw-ai-chip" data-suggest="${esc(h.term)}" title="Detected automatically — click to save as a keyword">${esc(h.term)}<span class="lib-kw-suggest-chip-add">+</span></span>`).join('')
           + `</div>`
         : `<div class="lib-info-hint">${clipState === 'loading' ? 'Checking…'
           : clipState === 'ready' ? 'All detected tags are saved as keywords.'

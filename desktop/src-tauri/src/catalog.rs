@@ -304,6 +304,18 @@ fn one_time_passes(conn: &Connection) -> rusqlite::Result<()> {
                AND NOT EXISTS (SELECT 1 FROM photo_faces f WHERE f.person_id = people.id);",
         )?;
     }
+    // CLIP ViT-B/32 -> SigLIP 2 (2026-10): the old 512-dim embeddings live in a different space,
+    // so every photo is re-embedded and re-tagged from scratch. Keywords already written to
+    // photos stay (they're the user's now); auto_keyword_applied keeps them from re-applying.
+    let has_siglip: bool = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'clip_siglip2_v1'")?.exists([])?;
+    if !has_siglip {
+        conn.execute_batch(
+            "CREATE TABLE clip_siglip2_v1 (done INTEGER);
+             UPDATE photos SET clip_embedding = NULL, clip_scanned_at = NULL, auto_tagged_at = NULL
+              WHERE clip_embedding IS NOT NULL OR clip_scanned_at IS NOT NULL OR auto_tagged_at IS NOT NULL;
+             DELETE FROM photo_auto_tags;",
+        )?;
+    }
     // Breed tags arrived after the first auto-tag pass: re-tag every dog/cat photo once (pure
     // math on stored embeddings).
     let has_breeds: bool = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'auto_tag_breeds_v1'")?.exists([])?;
@@ -5900,7 +5912,9 @@ pub struct ClipEmbedResult {
 
 /// Auto-tagging keeps a stricter bar than the Info panel's one-click suggestions: these are
 /// applied without the user looking, so a wrong "dog" costs more than a missing one.
-const AUTO_TAG_THRESHOLD: f32 = 0.235;
+/// SigLIP match probability; on 800 hand-checked library photos 0.004 kept the real subjects
+/// ("dog", "bridge", "boat", "lake") while the wrong guesses seen sat below it.
+const AUTO_TAG_THRESHOLD: f32 = 0.004;
 const AUTO_TAG_TOP_K: usize = 6;
 
 fn store_auto_tags(conn: &Connection, id: i64, mtime: i64, emb: &[f32]) -> Result<(), String> {
@@ -6259,28 +6273,11 @@ pub struct ClipSearchHit {
     pub score: f32,
 }
 
-/// Bug #1 fix (2026-08-31 user report): with a small scanned library (6 photos), a nonsense query
-/// like "fdsfsdfksj" still returned all 6 — ranking was correct, but there was no MINIMUM score
-/// below which a photo is excluded entirely, so every CLIP-scanned photo came back regardless of
-/// query relevance, just reordered. Real evidence, not a guessed number: `examples/
-/// clip_search_probe.rs` embedded 2 real photos in this repo (a dog photo each in `Best/` and
-/// `Lucifer/`) against 3 matching queries ("a dog", "a photo of a dog outdoors") and 3 nonsense/
-/// unrelated ones ("fdsfsdfksj", "asdkjqwoieuqwoiuz", "a spaceship in outer space") through this
-/// app's REAL CLIP model (not assumed from another model's numbers):
-///
-/// ```text
-/// match queries:    0.2309 – 0.2828   (4 samples)
-/// nonsense/unrelated: 0.1815 – 0.2045 (6 samples)
-/// ```
-///
-/// A clean gap sits between 0.2045 (nonsense ceiling) and 0.2309 (match floor) on this evidence.
-/// `MIN_SCORE = 0.21` sits in that gap — informed by, but not copy-pasted from, R10's unrelated
-/// `DEFAULT_TAG_THRESHOLD = 0.22` (a different embedding comparison, image-vs-tag not
-/// text-query-vs-image, see that constant's own doc comment) and the LAION-family ~0.2-0.3 "real
-/// vs noise" band (a different model, cited only as a sanity anchor). Small sample (2 photos) —
-/// revisit with more scanned/varied photos if real usage shows false negatives/positives at this
-/// cutoff, per this command's own doc comment's original callout to test with a bigger library.
-const CLIP_SEARCH_MIN_SCORE: f32 = 0.21;
+/// Search cutoff, as a SigLIP match probability (`clip::match_prob`) of the raw query text.
+/// Measured on 800 real library photos (2026-10-04): nonsense queries ("fdsfsdfksj", "asdf
+/// qwerty") had no photo at or above 0.001, while "dog" kept 402, "bridge" 59, "red car" 5 —
+/// so 0.001 removes the junk without hiding real matches.
+const CLIP_SEARCH_MIN_SCORE: f32 = 0.001;
 
 /// Embeds `text` and ranks every CLIP-embedded present photo by cosine similarity, highest
 /// first. A linear scan (see this section's own doc comment on why that's fine at this scale) —
@@ -6305,7 +6302,7 @@ pub async fn catalog_clip_search(app: tauri::AppHandle, text: String, limit: Opt
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?
             .into_iter()
-            .map(|(id, blob)| ClipSearchHit { id, score: crate::clip::cosine_sim(&query_emb, &blob_to_f32_vec(&blob)) })
+            .map(|(id, blob)| ClipSearchHit { id, score: crate::clip::match_prob(crate::clip::cosine_sim(&query_emb, &blob_to_f32_vec(&blob))) })
             .filter(|h| h.score >= CLIP_SEARCH_MIN_SCORE)
             .collect();
         hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
@@ -10264,7 +10261,7 @@ mod tests {
         assert_eq!(r1.embedded, 1);
         let blob: Vec<u8> = conn.query_row("SELECT clip_embedding FROM photos WHERE name='plain.jpg'", [], |r| r.get(0)).unwrap();
         let emb = blob_to_f32_vec(&blob);
-        assert_eq!(emb.len(), 512);
+        assert_eq!(emb.len(), crate::clip::EMBED_DIM);
         let norm: f32 = emb.iter().map(|v| v * v).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 1e-3, "stored embedding should be L2-normalized, norm={norm}");
 
@@ -10345,8 +10342,7 @@ mod tests {
         img[0] = 1.0;
         let img = unit(img);
 
-        // "Close" terms: small angular offset from axis 0 (cosine ~0.95-0.99, comfortably above
-        // the 0.22 threshold).
+        // "Close" terms: small angular offset from axis 0 (cosine ~0.95-0.99, match probability ~1).
         let mut close_a = vec![0f32; 512];
         close_a[0] = 0.99;
         close_a[3] = 0.14;
@@ -10378,7 +10374,7 @@ mod tests {
 
         let mut scored: Vec<(&str, f32)> = vocab
             .iter()
-            .map(|(term, emb)| (*term, crate::clip::cosine_sim(&img, emb)))
+            .map(|(term, emb)| (*term, crate::clip::match_prob(crate::clip::cosine_sim(&img, emb))))
             .filter(|(_, s)| *s >= crate::clip::DEFAULT_TAG_THRESHOLD)
             .collect();
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
