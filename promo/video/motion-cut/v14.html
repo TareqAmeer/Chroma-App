@@ -1,0 +1,408 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Chromasmith Ep1 v14</title>
+<style>
+@font-face{font-family:G;src:url('tex/GramatikaBold.otf');font-weight:700}
+@font-face{font-family:G;src:url('tex/GramatikaRegular.otf');font-weight:400}
+:root{--red:#ff3b1f;--ink:#111;--paper:#f2efe8}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--paper);font-family:G,sans-serif;color:var(--ink)}
+#stage{position:absolute;inset:0;overflow:hidden;background:var(--paper)}
+.L{position:absolute;inset:0;overflow:hidden}
+.abs{position:absolute}
+img{display:block}
+.cover{position:absolute;left:0;top:0;transform-origin:0 0}
+.kt{position:absolute;font-weight:700;letter-spacing:-.03em;line-height:1;white-space:nowrap}
+.kt .w{display:inline-block;overflow:hidden;vertical-align:top;padding:.06em .02em .14em}
+.kt .w i{display:inline-block;font-style:normal}
+.kt.photo{color:#fff;text-shadow:0 4px 30px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.3)}
+.kt.chip{background:var(--paper);color:var(--ink);padding:16px 28px 4px;border-radius:12px;box-shadow:0 22px 50px rgba(0,0,0,.4)}
+.sq{position:absolute;left:0;top:0;background:var(--red)}
+.sq svg,.mk svg{position:absolute;inset:0;width:100%;height:100%}
+/* old-way apps: plain, light, generic: the opposite of Chromasmith's dark studio */
+.ow{position:absolute;width:1100px;height:640px;background:#ecebe7;border-radius:14px;box-shadow:0 40px 90px rgba(20,14,8,.22),0 4px 14px rgba(20,14,8,.12);overflow:hidden;color:#4a4740}
+.ow .tb{position:absolute;left:0;top:0;right:0;height:70px;background:#d9d6cf;display:flex;align-items:center;padding:0 26px;gap:12px;font-size:32px;font-weight:700}
+.ow .tb i{width:15px;height:15px;border-radius:50%;background:#b3afa6;display:inline-block}
+.ow .tb .n{color:#8d897f;margin:0 6px 0 14px}
+.ow .ph{position:absolute;left:30px;top:100px;width:600px;height:400px;overflow:hidden;background:#000}
+.ow .ph img{width:600px;height:400px}
+.ow .rc{position:absolute;left:660px;top:100px;width:410px;font-size:27px}
+.ow .rw{height:56px;border-bottom:1px solid #d6d3cc;display:flex;align-items:center;justify-content:space-between}
+.ow .st{position:absolute;left:30px;right:30px;top:524px;font-size:34px;font-weight:700;color:#5b574f}
+.ow .bar{position:absolute;left:30px;right:30px;top:584px;height:16px;background:#d9d6cf;border-radius:8px;overflow:hidden}
+.ow .bar b{display:block;height:100%;width:0;background:#8f8b82}
+.ow .sl{position:relative;height:66px}
+.ow .sl span{position:absolute;left:0;top:6px;font-size:22px}
+.ow .sl s{position:absolute;left:0;right:0;top:44px;height:4px;background:#cfcbc2}
+.ow .sl u{position:absolute;top:36px;width:14px;height:20px;background:#8f8b82;border-radius:3px}
+.ow .tile{position:absolute;background:#9c988f}
+.ow .spin{position:absolute;width:30px;height:30px;border:4px solid #cfcbc2;border-top-color:#5b574f;border-radius:50%}
+/* the app (vector rebuild) */
+#world{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
+#app{position:absolute;left:150px;top:170px;width:1620px;height:860px;background:#141414;border-radius:16px;overflow:hidden;box-shadow:0 50px 110px rgba(20,14,8,.28),0 8px 24px rgba(20,14,8,.18)}
+#app .top{position:absolute;left:0;top:0;width:1620px;height:56px;border-bottom:1px solid #262626}
+#app .wm{position:absolute;left:58px;top:18px;font-size:21px;color:#f2efe8;font-weight:700;line-height:1}
+#app .nav{position:absolute;left:300px;top:15px;font-size:24px;color:#777;font-weight:700;line-height:1}
+#app .nav em{font-style:normal;background:var(--red);color:#fff;padding:1px 8px 2px;margin-left:10px}
+#exportBtn{position:absolute;left:1478px;top:11px;width:118px;height:34px;background:var(--red);color:#fff;font-size:19px;font-weight:700;display:flex;align-items:center;justify-content:center}
+#viewer{position:absolute;left:0;top:57px;width:1120px;height:803px;background:#0d0d0d}
+#photo{position:absolute;left:50px;top:61px;width:1020px;height:680px;overflow:hidden;background:#000}
+#photo img{position:absolute;left:0;top:0;width:1020px;height:680px}
+#panel{position:absolute;left:1120px;top:57px;width:380px;height:803px;background:#161616}
+#rail{position:absolute;left:1500px;top:57px;width:120px;height:803px;background:#161616}
+.tab{position:absolute;left:20px;width:80px;height:74px;border:1.5px solid #555;border-radius:3px;color:#ddd;font-size:15px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:9px}
+.tab.on{border-color:#ddd}
+.pv{position:absolute;inset:0;color:#eee}
+.pv h2{position:absolute;left:30px;top:22px;font-size:60px;font-weight:400;letter-spacing:-.03em}
+.subs{position:absolute;left:30px;top:106px;font-size:18px;color:#8a8a8a;display:flex;gap:20px}
+.subs .on{color:#eee;border-bottom:2px solid var(--red);padding-bottom:6px}
+.sec{position:absolute;left:30px;width:320px;font-size:25px;color:#eee}
+.tog{position:absolute;width:44px;height:22px;box-shadow:inset 0 0 0 1.5px #777}
+.tog u{position:absolute;inset:0;background:var(--red);opacity:0}
+.tog b{position:absolute;left:0;top:0;width:22px;height:22px;background:#eee;transform-origin:100% 100%}
+.row{position:absolute;left:30px;width:320px;height:60px}
+.row .lab{position:absolute;left:0;top:0;font-size:21px;color:#ddd}
+.row .val{position:absolute;right:0;top:0;font-size:21px;color:#ddd}
+.row .trk{position:absolute;left:0;top:41px;width:320px;height:2px;background:#3d3d3d}
+.row .fil{position:absolute;top:41px;height:2px;background:var(--red)}
+.row .dot{position:absolute;top:30px;width:5px;height:5px;border-radius:50%;background:#eee;margin-left:-2.5px}
+.row .thm{position:absolute;top:34px;width:16px;height:16px;background:#161616;box-shadow:inset 0 0 0 1.5px #eee;margin-left:-8px}
+.trow{position:absolute;left:30px;width:320px;font-size:21px;color:#ccc}
+.sel{position:absolute;left:120px;top:-6px;width:200px;height:38px;border:1.5px solid #555;font-size:19px;color:#eee;padding:8px 12px}
+.th{position:absolute;width:152px;height:101px;overflow:hidden}
+.th img{width:152px;height:101px}
+.th .hv{position:absolute;inset:0;box-shadow:inset 0 0 0 2px #eee;opacity:0}
+.thl{position:absolute;font-size:15px;color:#bbb;white-space:nowrap}
+#card{position:absolute;width:560px;height:440px;background:#161616;border-radius:14px;box-shadow:0 40px 90px rgba(0,0,0,.55),0 4px 14px rgba(0,0,0,.35);color:#eee}
+#card .ct{position:absolute;left:30px;top:26px;font-size:38px}
+#loupe{position:absolute;overflow:hidden;box-shadow:0 0 0 6px var(--red),0 30px 80px rgba(0,0,0,.45)}
+#loupe img{position:absolute;left:0;top:0;transform-origin:0 0}
+.lbl{position:absolute;font-size:40px;font-weight:700;color:#fff;background:rgba(17,17,17,.55);padding:10px 18px 9px;border-radius:6px;letter-spacing:.02em;white-space:nowrap}
+.cell{position:absolute;overflow:hidden;box-shadow:0 26px 60px rgba(20,14,8,.22)}
+.cell img{position:absolute}
+.bl{position:absolute;font-weight:700;letter-spacing:-.025em;white-space:nowrap;line-height:1}
+#cur{position:absolute;left:0;top:0;width:40px;height:40px;transform-origin:3px 2px}
+#ring{position:absolute;left:0;top:0;width:64px;height:64px;border:3px solid var(--red);border-radius:50%;margin:-32px 0 0 -32px}
+</style></head>
+<body><div id="stage"></div>
+<script>
+const W=1920,H=1080,FPS=24,BPM=112,BEAT=60/BPM,BAR=4*BEAT,NBARS=41,DUR=NBARS*BAR; // 87.86 s; scenes start on bar lines
+const bar=n=>n*BAR;
+const RED='#ff3b1f';
+const clamp=(x,a,c)=>Math.min(c,Math.max(a,x)),lerp=(a,c,p)=>a+(c-a)*p,seg=(t,a,c)=>clamp((t-a)/(c-a),0,1);
+function bez(x1,y1,x2,y2){const F=(a,c,u)=>3*a*u*(1-u)*(1-u)+3*c*u*u*(1-u)+u*u*u;return x=>{if(x<=0)return 0;if(x>=1)return 1;let lo=0,hi=1,u=x;for(let i=0;i<28;i++){u=(lo+hi)/2;if(F(x1,x2,u)<x)lo=u;else hi=u}return F(y1,y2,u)}}
+const kE=bez(.16,1,.3,1),inE=bez(.7,0,.84,0),ioE=bez(.65,0,.35,1);
+const stage=document.getElementById('stage');
+const el=(tag,cls,parent,html)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;(parent||stage).appendChild(e);return e};
+const css=(e,o)=>{for(const k in o)e.style[k]=o[k]};
+const show=(e,v)=>{e.style.display=v?'':'none';return v};
+const IMG='bake13/';
+const DIM={beach:[2400,1600],neon:[2400,1600],lib:[1600,1097],sunset:[1600,1063]};
+function place(im,w,h,s,fx,fy,cx=W/2,cy=H/2){css(im,{width:w+'px',height:h+'px',transform:`translate(${cx-fx*w*s}px,${cy-fy*h*s}px) scale(${s})`})}
+const coverS=(w,h)=>Math.max(W/w,H/h);
+function setSrc(im,n){if(im._n!==n){im.src=IMG+n+'.png';im._n=n}}
+/* The "Faithful prism" mark (design/logo/chromasmith-logo.svg). Every instance gets its OWN gradient ids:
+   v13 reused ids across copies, one of them inside a hidden layer, and Chromium painted the overlap flat. */
+let prismN=0;
+function PRISM(){const n=++prismN;return `<svg viewBox="36 32 43 45" preserveAspectRatio="none"><defs><radialGradient id="pa${n}" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".35" stop-color="#ff6a3a"/><stop offset=".7" stop-color="#b0200e"/><stop offset="1" stop-color="#7a1208"/></radialGradient><radialGradient id="pb${n}" cx="69" cy="32" r="41.25" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff1e0"/><stop offset=".4" stop-color="#ff7a4c"/><stop offset="1" stop-color="#ff2a10"/></radialGradient><clipPath id="pc${n}"><rect x="36" y="32" width="33" height="33"/></clipPath></defs><g clip-path="url(#pc${n})"><polygon points="36,32 69,32 36,65" fill="url(#pa${n})"/><polygon points="69,32 69,65 36,65" fill="url(#pb${n})"/><line x1="36" y1="65" x2="69" y2="32" stroke="#fff1e0" stroke-width=".35" opacity=".8"/></g></svg>`}
+
+/* ======== captions: one scheduler, one at a time, never overlapping, never shorter than 2.2 s ======== */
+const LFull=el('div','L');const fbA=el('img','cover',LFull),fbB=el('img','cover',LFull);
+const LPaper=el('div','L');
+const LWorld=el('div','L');const world=el('div',null,LWorld);world.id='world';
+const LFg=el('div','L');
+const LCap=el('div','L');
+function kt(parent,text,size,cls=''){const e=el('div','kt '+cls,parent);e.style.fontSize=size+'px';e.innerHTML=text.split(' ').map(w=>`<span class="w"><i>${w}</i></span>`).join(' ');e._w=[...e.querySelectorAll('i')];return e}
+function ktAnim(e,t,tIn,tOut,stag=.06,dur=.6){const vis=t>=tIn&&t<tOut+.45;show(e,vis);if(!vis)return;
+ e._w.forEach((w,i)=>{const p=kE(seg(t,tIn+i*stag,tIn+i*stag+dur)),q=inE(seg(t,tOut,tOut+.35));w.style.transform=`translateY(${(1-p)*115+q*115}%)`})}
+const CAPS=[
+ ['Your RAW photo.','photo',96,96,880,2.30,4.70],
+ ['133 film looks.','photo',96,96,880,5.15,7.40],
+ ['On film.','photo',200,90,800,7.90,10.10],
+ ['This used to take four apps.','paper',72,0,150,10.60,23.00],
+ ['And again, for every photo.','paper',72,0,150,23.60,25.90],
+ ['One app.','paper',200,110,440,26.50,28.80],
+ ['133 film looks. One tap each.','chip',52,80,70,32.60,40.20],
+ ['Real film grain, from the app’s own engine.','chip',52,80,70,41.40,46.80],
+ ['True pixels at 2.5×. Real 65mm grain.','photo',72,90,80,47.55,51.00],
+ ['Halation: the glow film gives light.','photo',72,90,80,51.80,56.40],
+ ['Extreme, for the full glow.','photo',72,90,80,57.20,61.60],
+ ['Works on every photo.','paper',80,0,170,62.40,68.10],
+ ['Raw Digital. Pure Film.','paper',64,0,690,84.00,86.30],
+].map(([text,style,size,x,y,a,z])=>({e:kt(LCap,text,size,style),x,y,a,z}));
+{const s=[...CAPS].sort((p,q)=>p.a-q.a);for(let i=0;i<s.length;i++){if(s[i].z-s[i].a<2.2-1e-6)throw new Error('caption too short: '+s[i].e.textContent);
+ if(i&&s[i].a<s[i-1].z+.45-1e-6)throw new Error('captions overlap: '+s[i-1].e.textContent+' / '+s[i].e.textContent)}}
+function drawCaps(t){for(const c of CAPS){ktAnim(c.e,t,c.a,c.z);if(c.e.style.display!=='none')css(c.e,{left:(c.x||(960-c.e.offsetWidth/2))+'px',top:c.y+'px'})}}
+
+/* ======== lockup (first frame == last frame) ======== */
+const LK={sq:120,size:120,gap:30};const LKk=LK.sq/43;
+const lockBack=el('div','abs',LFg);css(lockBack,{background:'#111'});
+const lockTxt=el('div','abs',LFg);css(lockTxt,{font:`700 ${LK.size}px G`,letterSpacing:'-.02em',whiteSpace:'nowrap',lineHeight:1,overflow:'hidden',padding:'0 0 .1em'});
+const lockWord=el('span','',lockTxt,'CHRO-MA-SMITH');css(lockWord,{display:'inline-block'});
+let LOCK; // {x0, base, red:[cx,cy]}
+function drawLock(t,build){ // build: 0 = packed (only the square), 1 = full lockup
+ show(lockBack,true);show(lockTxt,true);const k=LKk,{x0,base}=LOCK;
+ const bo=kE(seg(build,0,.35));css(lockBack,{left:x0-15*k-40*(1-bo)+'px',top:base-45*k-11*k+'px',width:48*k+'px',height:44*k+'px',opacity:bo});
+ css(lockTxt,{left:x0+LK.sq+LK.gap+'px',top:base-LK.size*.79+'px'});
+ const p=kE(seg(build,.3,.8));lockWord.style.transform=`translateX(${(1-p)*-105}%)`}
+
+/* ======== the hero square ======== */
+const sq=el('div','sq',null,PRISM());const sqPrism=sq.firstChild;
+function drawSq(x,y,s,o={}){show(sq,true);const h=s*(1+(45/43-1)*(o.prism||0));
+ css(sq,{width:s+'px',height:h+'px',background:o.col||RED,opacity:o.op==null?1:o.op,transform:`translate(${x-s/2}px,${y-h/2}px) rotate(${o.rot||0}deg) scale(${o.sx||1},${o.sy||1})`});sqPrism.style.opacity=o.prism||0}
+const greyCol=g=>`rgb(${lerp(255,150,g)|0},${lerp(59,146,g)|0},${lerp(31,140,g)|0})`;
+// a hop between two points: arc, stretch in flight, squash on landing
+function hop(t,t0,t1,from,to,h,s0,s1){const p=seg(t,t0,t1),e=ioE(p);const x=lerp(from[0],to[0],e),y=lerp(from[1],to[1],e)-4*h*p*(1-p);
+ let sx=1,sy=1;if(p>0&&p<1){const st=.2*Math.sin(Math.PI*p);sy=1+st;sx=1-st*.6}
+ const d=t-t1;if(d>=0&&d<1){const q=.22*Math.exp(-d*8)*Math.cos(d*24);sy-=q;sx+=q}
+ return{x,y,s:lerp(s0,s1,e),sx,sy}}
+
+/* ======== A: hook window ======== */
+const HOOK=[['look_trix_400_polymax_grade_3','TRI-X 400'],['look_vision3_500t_2383','VISION3 500T'],['look_velvia_50_ilfochrome_m','VELVIA 50'],['look_eterna_bleach_bypass_composed','BLEACH BYPASS']];
+const hookWin=el('div','abs',LFg);css(hookWin,{overflow:'hidden'});const hookImg=el('img','cover',hookWin);const hookRed=el('div','abs',hookWin);css(hookRed,{inset:'0',background:RED});
+const hookLbl=el('div','lbl',LFg);
+const WIN={cx:900,cy:540,s:460};
+
+/* ======== B: the old way, four concrete (unbranded) apps carrying the same photo ======== */
+const OW=[];
+function owWin(i,name){const w=el('div','ow',LPaper);w.innerHTML=`<div class="tb"><i></i><i></i><i></i><span class="n">${i+1}/4</span>${name}</div><div class="ph"><img src="${IMG}raw.png"></div><div class="rc"></div><div class="st"></div><div class="bar"><b></b></div>`;
+ const o={w,rc:w.querySelector('.rc'),st:w.querySelector('.st'),bar:w.querySelector('.bar b'),ph:w.querySelector('.ph')};OW.push(o);return o}
+{const o=owWin(0,'RAW Converter');o.rc.innerHTML=['IMG_0412.RW2','IMG_0413.RW2','IMG_0414.RW2','IMG_0415.RW2','IMG_0416.RW2'].map((f,i)=>`<div class="rw"><span>${f}</span><span style="color:#8d897f">${i?'waiting':'→ TIFF'}</span></div>`).join('')}
+{const o=owWin(1,'Photo Editor');o.rc.innerHTML=['Exposure','Contrast','Highlights','Shadows','Saturation'].map(n=>`<div class="sl"><span>${n}</span><s></s><u></u></div>`).join('');o.thumbs=[...o.rc.querySelectorAll('u')]}
+{const o=owWin(2,'Film Plugin');o.rc.innerHTML=['Grain','Halation','Bloom'].map(n=>`<div class="rw"><span>${n}</span><span style="width:26px;height:26px;border:3px solid #8f8b82;border-radius:4px;display:inline-block"></span></div>`).join('');
+ o.tiles=[];for(let r=0;r<4;r++)for(let c=0;c<6;c++){const tl=el('div','tile',o.ph);css(tl,{left:c*100+'px',top:r*100+'px',width:'100px',height:'100px'});o.tiles.push(tl)}
+ o.spin=el('div','spin',o.w);css(o.spin,{left:'30px',top:'530px'})}
+{const o=owWin(3,'Exporter');o.rc.innerHTML=['IMG_0412.jpg','IMG_0413.jpg','IMG_0414.jpg','IMG_0415.jpg','IMG_0416.jpg'].map((f,i)=>`<div class="rw"><span>${f}</span><span style="color:#8d897f">${i<2?'done':i===2?'…':''}</span></div>`).join('')}
+const OW_STATUS=['Converting 1 of 12 · 4 min left','Saving as TIFF · 148 MB…','Rendering preview…','Exporting 3 of 12…'];
+OW.forEach((o,i)=>{o.st.textContent=OW_STATUS[i];if(i===2)o.st.style.paddingLeft='50px'});
+const OWT=i=>bar(5)+i*1.5*BAR; // each app is on screen for 1.5 bars (3.2 s)
+const OWC=[960,630];
+
+/* ======== D: the app (vector rebuild) ======== */
+const app=el('div',null,world);app.id='app';
+app.innerHTML=`<div class="top"><div class="wm">CHRO-MA-SMITH</div><div class="nav">gallery<em>studio</em></div><div id="exportBtn">Export</div></div>
+<div id="viewer"><div id="photo"><img id="pA"><img id="pB"></div></div><div id="panel"></div><div id="rail"></div>`;
+const AX=150,AY=170,APPk=16/43;
+{const top=app.querySelector('.top'),k=APPk,b0=el('div','abs',top);css(b0,{left:26-15*k+'px',top:43-45*k-11*k+'px',width:48*k+'px',height:44*k+'px',background:'#f2f0ea'});
+ const r=el('div','mk abs',top,PRISM());css(r,{left:'26px',top:43-45*k+'px',width:'16px',height:45*k+'px',background:RED})}
+const APPLOGO=[AX+34,AY+43-45*APPk/2];
+const pA=app.querySelector('#pA'),pB=app.querySelector('#pB');
+const panel=app.querySelector('#panel'),rail=app.querySelector('#rail');
+const TABS=['Look','Light','Colour','Texture','Output'],TAB_Y=i=>60+i*96;
+const tabEls=TABS.map((n,i)=>{const t=el('div','tab',rail,n);t.style.top=TAB_Y(i)+'px';return t});
+const tabC=i=>[AX+1560,AY+57+TAB_Y(i)+37];
+const views={};
+function view(name,title,subs,on){const v=el('div','pv',panel);v.innerHTML=`<h2>${title}</h2><div class="subs">${subs.map((s,i)=>`<span class="${i===on?'on':''}">${s}</span>`).join('')}</div>`;views[name]=v;return v}
+const PX=x=>AX+1120+x,PY=y=>AY+57+y;
+const vLook=view('look','Look',['All','Film','B&W','Cinema'],0);
+const GRID=[['raw','Original'],['look_kodachrome_64_radiance_iii','Kodachrome 64'],['look_trix_400_polymax_grade_3','Tri-X 400'],['look_vision3_500t_2383','Vision3 500T'],['look_velvia_50_ilfochrome_m','Velvia 50'],['look_eterna_bleach_bypass_composed','Bleach Bypass']];
+const thPos=i=>[30+(i%2)*168,170+Math.floor(i/2)*134];
+const thHv=GRID.map(([f,n],i)=>{const[x,y]=thPos(i);const d=el('div','th',vLook,`<img src="${IMG+f}.png"><div class="hv"></div>`);css(d,{left:x+'px',top:y+'px'});const l=el('div','thl',vLook,n);css(l,{left:x+'px',top:y+106+'px'});return d.querySelector('.hv')});
+{const l=el('div','thl',vLook,'+ 128 more looks');css(l,{left:'30px',top:'580px',fontSize:'18px',color:'#888'})}
+const thC=i=>{const[x,y]=thPos(i);return[PX(x+76),PY(y+50)]};
+const SL={},TOG=[];
+function toggle(v,x,y,ton){const t=el('div','tog',v,'<u></u><b></b>');css(t,{left:x+'px',top:y+'px'});TOG.push({e:t,ton});return t}
+function slider(v,key,label,y,min,max,def,w=320){const r=el('div','row',v,`<div class="lab">${label}</div><div class="val"></div><div class="trk"></div><div class="fil"></div><div class="dot"></div><div class="thm"></div>`);css(r,{top:y+'px',width:w+'px'});r.querySelector('.trk').style.width=w+'px';
+ SL[key]={min,max,def,val:def,y,w,valEl:r.querySelector('.val'),fil:r.querySelector('.fil'),dot:r.querySelector('.dot'),thm:r.querySelector('.thm')}}
+const pct=(k,v)=>{const s=SL[k];return(v-s.min)/(s.max-s.min)};
+const roll=(k,v)=>{const s=SL[k];return(v-s.def)*6*200/(s.max-s.min)}; // fxPaintSlider's --sl-roll
+const vTex=view('tex','Texture',['Noise','Sharpen','Lens','Grain'],3);
+{const s=el('div','sec',vTex,'Grain');s.style.top='170px'}
+const T_GTOG=43.2;toggle(vTex,306,174,T_GTOG);
+slider(vTex,'ga','Amount',250,0,100,0);slider(vTex,'gs','Size',330,1,20,3);
+{const r=el('div','trow',vTex,'Film format<div class="sel">65mm — fine</div>');r.style.top='426px'}
+const VAL={ga:[[0,0],[44.3,0],[46.5,40]],ha:[[0,0],[54.0,0],[56.2,100]]};
+function kf(keys,t){if(t<=keys[0][0])return keys[0][1];for(let i=1;i<keys.length;i++){const[a,va]=keys[i-1],[c,vc]=keys[i];if(t<=c)return lerp(va,vc,ioE(seg(t,a,c)))}return keys[keys.length-1][1]}
+function paint(t){for(const k in SL){const s=SL[k],v=VAL[k]?kf(VAL[k],t):s.val,moved=Math.abs(v-s.def)>1e-3,drag=VAL[k]&&t>=VAL[k][1][0]&&t<VAL[k][2][0]+.3;
+  s.valEl.textContent=Math.round(v);s.valEl.style.color=drag?RED:'#ddd';
+  const a=pct(k,Math.min(v,s.def))*s.w,c=pct(k,Math.max(v,s.def))*s.w;css(s.fil,{left:a+'px',width:c-a+'px'});css(s.dot,{left:pct(k,s.def)*s.w+'px',opacity:moved?1:0});
+  css(s.thm,{left:pct(k,v)*s.w+'px',background:moved?RED:'#161616',boxShadow:moved?'none':'inset 0 0 0 1.5px #eee',transform:`rotate(${roll(k,v)}deg)`})}
+ for(const g of TOG){const p=kE(seg(t,g.ton,g.ton+.5));g.e.lastChild.style.transform=`rotate(${90*p}deg)`;g.e.firstChild.style.opacity=seg(t,g.ton,g.ton+.12)}}
+/* halation card (screen space) */
+const card=el('div','',LFg);card.id='card';const CARD={x:1290,y:560};css(card,{left:CARD.x+'px',top:CARD.y+'px'});
+card.innerHTML='<div class="ct">Halation</div>';toggle(card,476,38,53.3);
+slider(card,'ha','Amount',112,0,100,0,500);
+{const r=el('div','trow',card,'Extreme');css(r,{top:'214px',width:'500px',fontSize:'27px'});toggle(r,456,0,57.2)}
+[['Radius','30'],['Shadow protect','20'],['White glow · No remjet','off']].forEach(([n,v],i)=>{const r=el('div','trow',card,`${n}<span style="float:right">${v}</span>`);css(r,{top:280+i*46+'px',width:'500px',fontSize:'22px',color:'#999'})});
+/* loupe */
+const loupe=el('div','',LFg);loupe.id='loupe';const loupeImg=el('img','',loupe);const loupeLbl=el('div','lbl',LFg,'65mm · Amount 40');
+/* every photo */
+const CELLS=[['train','lib'],['car','lib'],['sunset','sunset'],['lifebuoy','lib']];
+const cells=CELLS.map(([n])=>{const c=el('div','cell',LPaper);const a=el('img','',c),g=el('img','',c);a.src=IMG+n+'_raw.png';g.src=IMG+n+'_look.png';const s=el('div','abs',c);css(s,{background:RED});return{c,a,g,s}});
+/* split */
+const split=el('div','abs',LFg);css(split,{width:'6px',height:'1080px',top:'0',background:'#fff',boxShadow:'0 0 20px rgba(0,0,0,.35)'});
+const lblRaw=el('div','lbl',LFg,'RAW'),lblFilm=el('div','lbl',LFg,'FILM');
+/* claims list, aligned to the photo beside it */
+const BEN=['Free.','Works offline.','133 film looks.','No subscription.','Mac · Windows · iOS · Android'];
+const benCard=el('div','cell',LPaper);const benImg=el('img','',benCard);benImg.src=IMG+'neon_hal_x.png';
+const BC={x:110,y:290,w:780,h:520};const BS=i=>i===4?46:64,CAP=.1,BASE=.79;
+const BTOP=i=>lerp(BC.y-CAP*BS(0),BC.y+BC.h-BASE*BS(4),i/4),BX=BC.x+BC.w+110,BT=i=>bar(35)+.4+i*2*BEAT;
+const benEls=BEN.map((s,i)=>{const e=el('div','bl',LPaper,s);css(e,{left:BX+40+'px',top:BTOP(i)+'px',fontSize:BS(i)+'px',color:i===4?RED:'#111'});return e});
+const bullet=i=>[BX,BTOP(i)+BASE*BS(i)-BS(i)*.33],bulletS=i=>Math.round(BS(i)*.6);
+const benDots=[0,1,2,3].map(i=>el('div','abs',LPaper));
+/* cursor */
+const cur=el('div','',LFg,'<svg width="40" height="40" viewBox="0 0 34 34"><path d="M3 2L3 27L10 20.5L15 31L19.5 29L14.5 18.8L24 18.8Z" fill="#111" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/></svg>');cur.id='cur';
+const ring=el('div','',LFg);ring.id='ring';
+function curPath(keys,t){if(t<=keys[0][0])return keys[0].slice(1,3);
+ for(let i=1;i<keys.length;i++){const a=keys[i-1],c=keys[i];if(t<=c[0]){const p=ioE(seg(t,a[0],c[0]));let x=lerp(a[1],c[1],p),y=lerp(a[2],c[2],p);
+  if(!c[3]){const dx=c[1]-a[1],dy=c[2]-a[2];if(Math.hypot(dx,dy)>40){const k=.12*Math.sin(Math.PI*p);x+=-dy*k;y+=dx*k}}return[x,y]}}
+ return keys[keys.length-1].slice(1,3)}
+function drawCur(x,y,t,clicks,vis){show(cur,true);let press=0;for(const c of clicks){const d=t-c;if(d>-.08&&d<.1)press=1;
+  if(d>=0&&d<.5){const p=d/.5;show(ring,true);css(ring,{left:x+'px',top:y+'px',transform:`scale(${lerp(.3,1.2,kE(p))})`,opacity:(1-p)*.9})}}
+ css(cur,{transform:`translate(${x-3}px,${y-2}px) scale(${1-press*.12})`,opacity:vis})}
+const thumbW=(k,v)=>[PX(30+pct(k,v)*SL[k].w),PY(SL[k].y+42)];
+const CURW=[[32.3,1640,1000],[33.1,...thC(2)],[33.4,...thC(2)],[35.2,...thC(3)],[35.5,...thC(3)],[37.3,...thC(4)],[37.6,...thC(4)],[39.4,...thC(1)],[39.7,...thC(1)],
+ [41.0,...tabC(3)],[41.3,...tabC(3)],[42.9,PX(328),PY(185)],[43.2,PX(328),PY(185)],[44.0,...thumbW('ga',0)],[44.3,...thumbW('ga',0)],[46.5,...thumbW('ga',40),1],[47.1,1750,1050]];
+const CLW=[33.4,35.5,37.6,39.7,41.3,43.2,44.3];
+const haThumb=v=>[CARD.x+30+pct('ha',v)*500,CARD.y+112+42];
+const CURS=[[52.4,1880,1060],[53.0,CARD.x+498,CARD.y+49],[53.3,CARD.x+498,CARD.y+49],[53.8,...haThumb(0)],[54.0,...haThumb(0)],[56.2,...haThumb(100),1],[56.9,CARD.x+478,CARD.y+225],[57.2,CARD.x+478,CARD.y+225],[58.2,1880,1060]];
+const CLS=[53.3,54.0,57.2];
+
+window.renderAt=function(t){
+ for(const L of [LFull,LPaper,LWorld])show(L,false);for(const e of [...LFg.children,...LPaper.children])show(e,false);show(sq,false);
+ LFull.style.clipPath='';LFull.style.transform='';LFull.style.opacity='';app.style.opacity='';fbB.style.clipPath='';fbB.style.opacity=0;
+ const imgs=[];const lt=x=>t-x;
+ /* ---------- A: OPEN + HOOK (bars 0-4.5) ---------- */
+ if(t<bar(4.5)){
+  // lockup: identical to the last frame until 0.7 s, then it packs away as the square leaves
+  if(t<1.5){show(LPaper,true);drawLock(t,1-seg(t,.75,1.4))}
+  // the raw photo rises under the square like a print lifted from the tray
+  if(t>=1.1){show(LFull,true);const[w,h]=DIM.beach,s0=coverS(w,h)*lerp(1,1.05,seg(t,1.1,bar(4.5)));
+   setSrc(fbA,'raw');place(fbA,w,h,s0,.5,.5);setSrc(fbB,'kfinal');place(fbB,w,h,s0,.5,.5);imgs.push(fbA);
+   LFull.style.transform=`translateY(${(1-kE(seg(t,1.1,2.1)))*1080}px)`;
+   const e=ioE(seg(t,7.3,8.4));
+   if(t>=2.7){const S2=lerp(WIN.s,2300,e),X=lerp(WIN.cx,960,e),Y=lerp(WIN.cy,540,e);
+    show(hookWin,true);css(hookWin,{left:X-S2/2+'px',top:Y-S2/2+'px',width:S2+'px',height:S2+'px',boxShadow:`0 0 0 ${8*(1-e)}px ${RED},0 30px 80px rgba(0,0,0,${.35*(1-e)})`});
+    const li=clamp(Math.floor((t-2.9)/(2*BEAT)),0,3);setSrc(hookImg,t>=7.3?'kfinal':HOOK[li][0]);place(hookImg,w,h,s0,.5,.5,W/2-(X-S2/2),H/2-(Y-S2/2));imgs.push(hookImg);
+    hookRed.style.opacity=1-kE(seg(t,2.7,3.0));
+    if(t>=2.95&&t<7.25){show(hookLbl,true);hookLbl.textContent=HOOK[li][0]&&HOOK[li][1];css(hookLbl,{left:WIN.cx-WIN.s/2+'px',top:WIN.cy+WIN.s/2+26+'px'})}
+    if(t>=8.4){setSrc(fbA,'kfinal');show(hookWin,false)}}
+  }
+  // the square: hops out of the logo, grows as it comes to the camera, lands, becomes the window
+  if(t<2.7){const from=LOCK.red;const H1=hop(t,.75,2.2,from,[WIN.cx,WIN.cy],260,LK.sq,WIN.s);
+   drawSq(H1.x,H1.y,H1.s,{sx:H1.sx,sy:H1.sy,prism:1-seg(t,.75,.95),rot:t>.6&&t<.75?4*Math.sin((t-.6)*60):0})}
+ }
+ /* ---------- B: THE OLD WAY (bars 4.5-12) ---------- */
+ if(t>=bar(4.5)&&t<bar(12)){
+  show(LPaper,true);
+  if(t<OWT(0)+.6){show(LFull,true);const[w,h]=DIM.beach,c=ioE(seg(t,bar(4.5),OWT(0)));setSrc(fbA,'kfinal');setSrc(fbB,'raw');
+   const s0=coverS(w,h)*1.05;place(fbA,w,h,s0,.5,.5);place(fbB,w,h,s0,.5,.5);fbB.style.opacity=seg(t,bar(4.5),bar(4.5)+.6);imgs.push(fbA,fbB);
+   // the full frame shrinks into window 1's photo slot
+   const tx=OWC[0]+(-550+30)*1.15,ty=OWC[1]+(-320+100)*1.15;LFull.style.clipPath=`inset(${lerp(0,ty,c)}px ${lerp(0,W-tx-690,c)}px ${lerp(0,H-ty-460,c)}px ${lerp(0,tx,c)}px)`;LFull.style.opacity=1-seg(t,OWT(0)+.3,OWT(0)+.6)}
+  OW.forEach((o,i)=>{const t0=OWT(i),t1=OWT(i+1);const vis=t>=t0-.5&&t<t1+.2&&t<bar(10.9);if(!show(o.w,vis))return;
+   const inP=kE(seg(t,t0-.5,t0)),outP=i<3?inE(seg(t,t1-.4,t1+.1)):0;
+   css(o.w,{left:OWC[0]-550+(1-inP)*900-outP*1100+'px',top:OWC[1]-320+'px',opacity:Math.min(inP*1.5,1-outP),transform:'scale(1.15)'});
+   const p=seg(t,t0,t1);o.bar.style.width=[18,55,30,25][i]*(Math.floor(p*5)/5+(p*5%1>.6?(p*5%1-.6)/.4/5:0))+'%';
+   if(i===1)o.thumbs.forEach((u,j)=>u.style.left=(40+25*j+60*Math.sin(t*1.4+j))%300+40+'px');
+   if(i===2){o.tiles.forEach((tl,j)=>tl.style.opacity=j<Math.floor(p*14)?0:1);o.spin.style.transform=`rotate(${t*400}deg)`}});
+  // the pile: all four apps fall onto the square
+  if(t>=bar(10.9)){OW.forEach((o,i)=>{const t0=bar(10.9)+i*.28,d=seg(t,t0,t0+.4);show(o.w,true);
+   const y=lerp(-900,0,d*d)+(d>=1?-12*Math.exp(-(t-t0-.4)*10)*Math.cos((t-t0-.4)*30):0);
+   css(o.w,{left:OWC[0]-550+[-30,24,-12,18][i]+'px',top:OWC[1]-320+80-i*24+y+'px',opacity:1,transform:`scale(.62) rotate(${[-4,3,-2,4][i]}deg)`})})}
+  // the square: hops from app to app, heavier and greyer each time, then pinned under the pile
+  let g=0,pos=[OWC[0]+470*1.15,OWC[1]-320*1.15],s=56,H2=null;
+  for(let i=0;i<4;i++){const ta=OWT(i)+.15,tb=ta+.75+i*.12;if(t>=ta){g=i/4*.8;const to=[OWC[0]+470*1.15,OWC[1]-320*1.15];
+    H2=hop(t,ta,tb,i?to:[WIN.cx,WIN.cy+400],to,i?80-i*12:300,i?56-i*4:120,56-(i+1)*4)}}
+  if(t>=bar(10.9)){g=.8;const p=seg(t,bar(10.9),bar(10.9)+1.2);H2={x:OWC[0],y:lerp(OWC[1]-320*1.15,920,ioE(p)),s:44,sx:1+.3*p,sy:1-.45*p}}
+  if(t>=OWT(0)-.2&&H2)drawSq(H2.x,H2.y,H2.s,{col:greyCol(g),sx:H2.sx,sy:H2.sy})
+ }
+ /* ---------- C: THE TURN (bars 12-14) ---------- */
+ if(t>=bar(12)&&t<bar(14)){
+  show(LPaper,true);const pt=bar(12)+.3;
+  OW.forEach((o,i)=>{const d=inE(seg(t,pt,pt+1.0));if(!show(o.w,d<1))return;const dir=[-1,1,-1,1][i];
+   css(o.w,{left:OWC[0]-550+[-30,24,-12,18][i]+dir*1500*d+'px',top:OWC[1]-320+80-i*24-600*d+'px',opacity:1,transform:`scale(.62) rotate(${[-4,3,-2,4][i]+dir*35*d}deg)`})});
+  const H3=hop(t,pt,pt+.8,[OWC[0],920],[1450,540],220,44,220);let col=greyCol(.8*(1-seg(t,pt,pt+.25)));
+  const dz=Math.pow(seg(t,28.9,bar(14)),3);
+  drawSq(lerp(H3.x,960,ioE(seg(t,28.9,29.7))),lerp(H3.y,540,ioE(seg(t,28.9,29.7))),H3.s+5200*dz,{col,sx:H3.sx,sy:H3.sy});
+ }
+ /* ---------- D: THE APP (bars 14-24) ---------- */
+ if(t>=bar(14)&&t<bar(22)){
+  show(LWorld,true);
+  let cx,cy,z;const ez=1-ioE(seg(t,bar(14),31.6));
+  if(t<41.4){const toP=ioE(seg(t,31.6,32.5));z=lerp(lerp(1,1.28,toP),6,ez);cx=lerp(lerp(960,1180,toP),APPLOGO[0],ez);cy=lerp(lerp(560,610,toP),APPLOGO[1],ez)}
+  else{const g=ioE(seg(t,41.4,42.4));z=lerp(1.28,1.7,g);cx=lerp(1180,1300,g);cy=lerp(610,450,g)}
+  world.style.transform=`translate(${W/2-cx*z}px,${H/2-cy*z}px) scale(${z})`;app.style.opacity=seg(t,bar(14)+.15,bar(14)+.7);
+  const toScr=(x,y)=>[(x-cx)*z+W/2,(y-cy)*z+H/2];
+  const isTex=t>=41.3;for(const k in views)views[k].style.opacity=(k==='tex')===isTex?1:0;tabEls.forEach((e,i)=>e.classList.toggle('on',i===(isTex?3:0)));
+  // looks: one click per bar; hard cut with a short dissolve
+  const PICKS=[[33.4,2],[35.5,3],[37.6,4],[39.7,1]];let sel=0,prev=0,tc=-9;for(const[c,i]of PICKS)if(t>=c){prev=sel;sel=i;tc=c}
+  if(!isTex){setSrc(pA,GRID[prev][0]);setSrc(pB,GRID[sel][0]);pB.style.opacity=seg(t,tc,tc+.25);imgs.push(pA,pB)}
+  else{const gv=kf(VAL.ga,t)/10,i0=Math.min(3,Math.floor(gv));setSrc(pA,'kgrain_'+i0);setSrc(pB,'kgrain_'+(i0+1));pB.style.opacity=gv-i0;imgs.push(pA,pB)}
+  paint(t);
+  const cp=curPath(CURW,t),[csx,csy]=toScr(...cp);
+  thHv.forEach((h,i)=>{const[x,y]=thPos(i);h.style.opacity=!isTex&&cp[0]>PX(x)&&cp[0]<PX(x+152)&&cp[1]>PY(y)&&cp[1]<PY(y+101)?1:0});
+  // the hero square: shrinks onto the app logo (infinite zoom), then marks the selected look, then IS the grain thumb
+  if(t<31.9){const[lx,ly]=toScr(...APPLOGO);const big=2400*Math.pow(1-kE(seg(t,bar(14),31.2)),1.6);const sz=Math.max(16*z,big);drawSq(lx,ly,sz,{prism:big<16*z?1:0})}
+  else if(!isTex){const[x,y]=thPos(sel);const tgt=toScr(PX(x+152-9),PY(y+9));let from=tgt;
+   if(tc>0){const[px,py]=thPos(prev);from=toScr(PX(px+152-9),PY(py+9))}const Hs=hop(t,tc+.05,tc+.45,from,tgt,40,18*z,18*z);
+   const[lx,ly]=toScr(...APPLOGO);const first=hop(t,31.9,32.6,[lx,ly],toScr(PX(30+152-9),PY(170+9)),120,16*z,18*z);
+   const S=t<32.6?first:Hs;drawSq(S.x,S.y,S.s,{sx:S.sx,sy:S.sy})}
+  else if(t>=43.4){const v=kf(VAL.ga,t);const[x,y]=toScr(...thumbW('ga',v));const H4=hop(t,43.4,44.0,toScr(PX(328),PY(185)),[x,y],60,18*z,16*z);
+   drawSq(t<44.0?H4.x:x,t<44.0?H4.y:y,t<44.0?H4.s:16*z,{rot:roll('ga',v),sx:H4.sx,sy:H4.sy});SL.ga.thm.style.opacity=0}
+  if(!(isTex&&t>=43.4))SL.ga.thm.style.opacity=1;
+  if(t>=32.3&&t<47.1)drawCur(csx,csy,t,CLW,Math.min(seg(t,32.3,32.6),1-seg(t,46.8,47.1)));
+ }
+ if(t>=bar(22)&&t<bar(24)){ // grain loupe: 2.5x of the 2400 px real render
+  show(LFull,true);const[w,h]=DIM.beach,s0=coverS(w,h);const u=t-bar(22);
+  setSrc(fbA,'kgrain_0');place(fbA,w,h,s0,.5,.5);imgs.push(fbA);
+  const p=ioE(seg(u,.3,bar(2)-.4));const fx=lerp(.40,.80,p),fy=lerp(.58,.45,p),sz=480;
+  const lx=W/2+(fx-.5)*w*s0,ly=H/2+(fy-.5)*h*s0;show(loupe,true);
+  css(loupe,{left:lx-sz/2+'px',top:ly-sz/2+'px',width:sz+'px',height:sz+'px',transform:`scale(${kE(seg(u,0,.5))})`});
+  setSrc(loupeImg,'kgrain_4');place(loupeImg,w,h,2.5*s0,fx,fy,sz/2,sz/2);imgs.push(loupeImg);
+  show(loupeLbl,true);css(loupeLbl,{left:lx-sz/2+'px',top:ly+sz/2+24+'px',opacity:seg(u,.4,.7)});
+ }
+ /* ---------- D4: HALATION (bars 24-29) ---------- */
+ if(t>=bar(24)&&t<bar(29)){
+  show(LFull,true);const u=t-bar(24),[w,h]=DIM.neon,P=ioE(seg(u,0,bar(5)));const s0=coverS(w,h)*lerp(1,1.06,P),fx=lerp(.5,.54,P),fy=lerp(.5,.55,P);
+  const av=kf(VAL.ha,t)/25,i0=Math.min(3,Math.floor(av));let A='neon_hal_'+i0,Bn='neon_hal_'+(i0+1),m=av-i0;
+  if(t>=57.2){A='neon_hal_4';Bn='neon_hal_x';m=kE(seg(t,57.2,57.6))}
+  setSrc(fbA,A);setSrc(fbB,Bn);place(fbA,w,h,s0,fx,fy);place(fbB,w,h,s0,fx,fy);fbB.style.opacity=m;imgs.push(fbA,fbB);
+  show(card,true);css(card,{transform:`translateY(${(1-kE(seg(t,51.9,52.6)))*620}px)`});paint(t);
+  if(t>=53.5&&t<57.0){const v=kf(VAL.ha,t);const[x,y]=haThumb(v);const H5=hop(t,53.5,53.95,[CARD.x+498,CARD.y+49],[x,y],60,22,22);
+   drawSq(t<53.95?H5.x:x,t<53.95?H5.y:y,22,{rot:roll('ha',v),sx:H5.sx,sy:H5.sy});SL.ha.thm.style.opacity=0}else SL.ha.thm.style.opacity=1;
+  if(t>=52.4&&t<58.2){const[x,y]=curPath(CURS,t);drawCur(x,y,t,CLS,Math.min(seg(t,52.4,52.7),1-seg(t,57.9,58.2)))}
+ }
+ /* ---------- E: EVERY PHOTO (bars 29-32) ---------- */
+ if(t>=bar(29)&&t<bar(32)){
+  show(LPaper,true);const u=t-bar(29);const CW=420,CH=560,GAP=30,x0=(W-4*CW-3*GAP)/2,y0=330;
+  cells.forEach((c,i)=>{show(c.c,true);const p=kE(seg(u,.2+i*.15,.8+i*.15));
+   css(c.c,{left:x0+i*(CW+GAP)+'px',top:y0+(1-p)*80+'px',width:CW+'px',height:CH+'px',opacity:p});
+   const[w,h]=CELLS[i][1]==='sunset'?DIM.sunset:DIM.lib,s=Math.max(CW/w,CH/h);for(const im of[c.a,c.g])css(im,{width:w*s+'px',height:h*s+'px',left:(CW-w*s)/2+'px',top:(CH-h*s)/2+'px'});
+   const d=ioE(seg(u,1.4+i*2*BEAT,1.4+i*2*BEAT+.8));const sx=lerp(-CH*.35,CW,d);c.g.style.clipPath=`inset(0 ${CW-Math.max(0,sx+CH*.35/2)}px 0 0)`;
+   css(c.s,{left:sx-CH*.35/2+CH*.35/2+'px',top:(CH-CH*.35)/2+'px',width:CH*.35+'px',height:CH*.35+'px',opacity:d>0&&d<1?1:0});imgs.push(c.a,c.g)});
+ }
+ /* ---------- F: RAW vs FILM (bars 32-35) ---------- */
+ if(t>=bar(32)&&t<bar(35)){
+  show(LFull,true);const u=t-bar(32),[w,h]=DIM.neon,s0=coverS(w,h);
+  setSrc(fbA,'neon_hal_x');setSrc(fbB,'neon_raw');place(fbA,w,h,s0,.5,.5);place(fbB,w,h,s0,.5,.5);fbB.style.opacity=1;imgs.push(fbA,fbB);
+  const K=[[0,1920],[1.0,1920],[2.8,420],[3.9,420],[5.3,960],[6.4,960]];let X=K[0][1];for(let i=1;i<K.length;i++)if(u>=K[i-1][0])X=lerp(K[i-1][1],K[i][1],kE(seg(u,K[i-1][0],K[i][0])));
+  fbB.style.clipPath=`inset(0 ${W-X}px 0 0)`;show(split,true);split.style.left=X-3+'px';drawSq(X,540,64);
+  show(lblRaw,true);css(lblRaw,{left:'60px',top:'60px',opacity:seg(X,260,520)});show(lblFilm,true);css(lblFilm,{left:W-60-lblFilm.offsetWidth+'px',top:'60px',opacity:seg(W-X,260,520)});
+ }
+ /* ---------- G: CLAIMS (bars 35-38) + H: END (bars 38-41) ---------- */
+ if(t>=bar(35)){
+  show(LPaper,true);const fade=1-seg(t,bar(38)+.15,bar(38)+.6);
+  if(fade>0){show(benCard,true);const p=kE(seg(t,bar(35),bar(35)+.7));css(benCard,{left:BC.x+'px',top:BC.y+(1-p)*60+'px',width:BC.w+'px',height:BC.h+'px',opacity:p*fade});
+   const[w,h]=DIM.neon,s=Math.max(BC.w/w,BC.h/h);css(benImg,{width:w*s+'px',height:h*s+'px',left:(BC.w-w*s)/2+'px',top:(BC.h-h*s)/2+'px'});imgs.push(benImg);
+   benEls.forEach((e,i)=>{const p=kE(seg(t,BT(i),BT(i)+.6));show(e,t>=BT(i));css(e,{opacity:Math.min(1,p*1.4)*fade,transform:`translateX(${(1-p)*24}px)`})});
+   benDots.forEach((d,i)=>{const z=bulletS(i),[x,y]=bullet(i);show(d,t>=BT(i+1)-.45);css(d,{left:x-z/2+'px',top:y-z/2+'px',width:z+'px',height:z+'px',background:RED,opacity:fade})});}
+  // the square: the bullet for each line, then home into the lockup
+  let S=null;
+  for(let i=0;i<5;i++){const ta=BT(i)-.5;if(t>=ta)S=hop(t,ta,BT(i)-.05,i?bullet(i-1):[X0,Y0],bullet(i),i?50:180,i?bulletS(i-1):64,bulletS(i))}
+  if(t>=bar(38)+.4){const H6=hop(t,bar(38)+.4,bar(38)+1.4,bullet(4),LOCK.red,220,bulletS(4),LK.sq);S=H6;drawLock(t,seg(t,bar(38)+1.2,bar(38)+2.4))}
+  if(S)drawSq(S.x,S.y,S.s,{sx:S.sx,sy:S.sy,prism:seg(t,bar(38)+1.4,bar(38)+1.7)});
+ }
+ drawCaps(t);
+ return Promise.all(imgs.map(i=>i.decode().catch(()=>{})));
+};
+const X0=960,Y0=540;
+async function init(){
+ await document.fonts.load('700 96px G');await document.fonts.load('400 20px G');await document.fonts.ready;
+ show(lockTxt,true);const tw=lockTxt.offsetWidth,k=LKk,left=-15*k,total=LK.sq+LK.gap+tw-left,x0=960-total/2-left,base=540+LK.size*.36;
+ LOCK={x0,base,red:[x0+LK.sq/2,base-45*k/2]};
+ const all=['raw','kfinal',...HOOK.map(l=>l[0]),...GRID.map(g=>g[0]),...[0,1,2,3,4].flatMap(i=>['kgrain_'+i,'neon_hal_'+i]),'neon_hal_x','neon_raw'];
+ await Promise.all(all.map(n=>{const i=new Image();i.src=IMG+n+'.png';return i.decode()}));
+ await Promise.all([...document.images].map(i=>i.decode().catch(()=>{})));
+ window.renderAt(0);window.DUR=DUR;window.FPS=FPS;window.ready=true;
+}
+init();
+</script></body></html>

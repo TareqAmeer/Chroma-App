@@ -43,6 +43,9 @@ const jobs = [['beach', 'raw', S()]];
 for (const k of [...HOOK_LOOKS, FINAL_LOOK]) jobs.push(['beach', 'look_' + k, S({selects: lut(k)})]);
 for (let i = 0; i <= 4; i++) jobs.push(['beach', 'grain_' + i, combo(FINAL_LOOK, 10 * i)]);       // 65mm, Amount 0..40
 jobs.push(['beach', 'final', combo(FINAL_LOOK, 40, 100)]);                                          // + halation 100
+// v14: the hero grade is Kodachrome 64 (punchier than a_beach_preset), used for the grain ladder and the final
+for (let i = 0; i <= 4; i++) jobs.push(['beach', 'kgrain_' + i, combo('kodachrome_64_radiance_iii', 10 * i)]);
+jobs.push(['beach', 'kfinal', combo('kodachrome_64_radiance_iii', 40, 100)]);
 jobs.push(['pier', 'pier_raw', S()]);
 for (let i = 0; i <= 4; i++) jobs.push(['pier', 'pier_hal_' + i, combo('portra_400_endura_premier', null, 25 * i)]);
 for (const [src, look] of [['train', 'kodachrome_64_radiance_iii'], ['car', 'vision3_500t_2383'], ['lifebuoy', 'trix_400_polymax_grade_3'], ['dog', 'instax_color_fujiflex_new']]) {
