@@ -6296,7 +6296,8 @@
     batch.items.forEach(i => { counts[i.status] = (counts[i.status] || 0) + 1; });
     const finished = batch.status !== 'running';
     activityUpdate('recipe-batch-' + batch.id, {
-      label: batch.label, stage: finished ? 'done' : 'working',
+      jobId: 'recipe-batch-' + batch.id, label: batch.label, stage: finished ? 'done' : 'working',
+      outcome: batch.status === 'cancelled' ? 'interrupted' : undefined,
       done: batch.items.length - (counts.pending || 0), total: batch.items.length,
       current: `${counts.applied || 0} applied · ${counts.failed || 0} failed · ${counts.pending || 0} pending · ${counts.skipped || 0} skipped · ${counts.conflict || 0} conflicts · ${counts.undone || 0} undone`,
       batchId: batch.id, failed: batch.items.filter(i => i.status === 'failed').map(i => i.path + ': ' + i.error),
@@ -10871,6 +10872,44 @@
   // via window._activityDebugSnapshot() (see its own comment) rather than guessing from the UI.
   const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'pets', 'embed', 'clip', 'hq_offline'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
+  // BEGIN LIBRARY_JOB_HISTORY_HELPERS
+  const ACTIVITY_HISTORY_KEY = 'chromasmith-job-history-v1';
+  const ACTIVITY_ACTIVE_KEY = 'chromasmith-active-jobs-v1';
+  const ACTIVITY_HISTORY_LIMIT = 40;
+  function activityIdentity(kind, patch) { return String(patch.jobId || patch.batchId || kind); }
+  function activityTerminalPatch(patch) {
+    if (!['failed', 'interrupted', 'cancelled'].includes(patch.stage)) return patch;
+    return { ...patch, outcome: patch.stage === 'failed' ? 'failed' : 'interrupted', stage: 'done' };
+  }
+  const activityHistory = (() => { try { const rows = JSON.parse(localStorage.getItem(ACTIVITY_HISTORY_KEY) || '[]'); return Array.isArray(rows) ? rows.filter(row => row && typeof row.id === 'string').slice(0, ACTIVITY_HISTORY_LIMIT) : []; } catch (e) { return []; } })();
+  function saveActivityHistory() { try { localStorage.setItem(ACTIVITY_HISTORY_KEY, JSON.stringify(activityHistory.slice(0, ACTIVITY_HISTORY_LIMIT))); } catch (e) {} }
+  function readActiveActivity() { try { const rows = JSON.parse(localStorage.getItem(ACTIVITY_ACTIVE_KEY) || '[]'); return Array.isArray(rows) ? rows.filter(row => row && typeof row.id === 'string') : []; } catch (e) { return []; } }
+  function saveActiveActivity(rows) { try { localStorage.setItem(ACTIVITY_ACTIVE_KEY, JSON.stringify(rows)); } catch (e) {} }
+  function persistActiveActivity(job) {
+    if (job.batchId) return; // SQLite recipe batches have their own authoritative restart recovery.
+    const active = readActiveActivity();
+    const id = String(job.jobId || job.id || job.kind || 'background-job');
+    const row = { id, kind: String(job.kind || ''), label: String(job.label || job.kind || 'Background job'), done: Number(job.done || 0), total: Number(job.total || 0), lastProgressAt: Date.now() };
+    const index = active.findIndex(item => item.id === id);
+    if (index >= 0) active[index] = row; else active.unshift(row);
+    saveActiveActivity(active.slice(0, ACTIVITY_HISTORY_LIMIT));
+  }
+  function clearActiveActivity(job) {
+    const id = String(job.jobId || job.batchId || job.id || job.kind || 'background-job');
+    saveActiveActivity(readActiveActivity().filter(item => item.id !== id));
+  }
+  function recordActivityHistory(job) {
+    const status = job.outcome === 'interrupted' || job.outcome === 'cancelled' || job.stage === 'interrupted' || job.stage === 'cancelled' ? 'Interrupted' : job.outcome === 'partial' ? 'Partial' : job.outcome === 'failed' || job.stage === 'failed' || (job.failed && job.failed.length) ? 'Failed' : 'Completed';
+    const id = String(job.jobId || job.batchId || job.id || job.kind || 'background-job');
+    const row = { id, label: String(job.label || job.kind || 'Background job'), status, finishedAt: Date.now(), done: Number(job.done || 0), total: Number(job.total || 0), failedCount: Number(job.failedCount || (Array.isArray(job.failed) ? job.failed.length : 0)), detail: String(job.current || '').slice(0, 160) };
+    const existing = activityHistory.findIndex(item => item.id === id);
+    if (existing >= 0) activityHistory.splice(existing, 1);
+    activityHistory.unshift(row); activityHistory.splice(ACTIVITY_HISTORY_LIMIT); saveActivityHistory();
+    clearActiveActivity(job);
+  }
+  for (const prior of readActiveActivity()) recordActivityHistory({ ...prior, stage: 'interrupted', outcome: 'interrupted', current: 'App restarted; recovery depends on this job type' });
+  saveActiveActivity([]);
+  // END LIBRARY_JOB_HISTORY_HELPERS
   // Debug hook — `activity`/`_activityQueue` are closure-private, so a stuck "Indexing library"
   // panel (every stage permanently "queued") was otherwise only diagnosable by reading the whole
   // module or adding a throwaway console.log + rebuild. window.__TAURI__.core.invoke calls made
@@ -10922,7 +10961,7 @@
   function renderActivity() {
     const el = document.getElementById('lib-activity');
     if (!el) return;
-    if (!activity.visible) { el.innerHTML = ''; syncPhotoWorkBadges(); return; }
+    if (!activity.visible) { el.innerHTML = renderActivityHistory(); syncPhotoWorkBadges(); return; }
     const pct = Math.round(activityFrac() * 100);
     // While the initial directory walk is still running, `total` is genuinely unknown (it's
     // only known once the whole tree has been enumerated — see walk_root's own comment) — so
@@ -10936,9 +10975,9 @@
     // without forcing every job through the catalog-scan-shaped stage list it doesn't have.
     const isGenericJob = activity.kind !== 'import' && activity.kind !== 'catalog';
     const label = _activityStalled
-      ? 'Not responding…'
+      ? 'No recent progress'
       : isGenericJob
-      ? (activity.stage === 'done' ? (activity.label || 'Job') + ' done' : (activity.label || 'Working') + '…')
+      ? (activity.stage === 'done' ? (activity.outcome === 'failed' || (activity.failed && activity.failed.length) ? (activity.label || 'Job') + ' failed' : activity.outcome === 'interrupted' ? (activity.label || 'Job') + ' interrupted' : (activity.label || 'Job') + ' done') : (activity.label || 'Working') + '…')
       : activity.stage === 'done'
       ? (activity.kind === 'import' ? 'Imported' : 'Indexed') + (activity.total ? ` ${activity.total}` : '')
       : activity.stage === 'walk' && !activity.total && activity.done
@@ -10975,7 +11014,9 @@
         <div class="lib-act-pop-body">
           ${activity.batchId ? `<button class="btn bgh" id="lib-act-batch-results">Results / retry / undo</button>` : ''}
           <div class="lib-act-stage active"><span style="width:12px;display:inline-block;text-align:center">${activity.stage === 'done' ? '✓' : '›'}</span><span>${esc(activity.current || activity.label || 'Working')}</span><span class="lib-act-stage-n">${activity.stage === 'done' ? '' : (activity.total ? `${activity.done} of ${activity.total}` : '')}</span></div>${bar}
-        </div>${queuedHtml}</div>`;
+          ${_activityStalled ? `<div class="lib-act-stage-n" role="status">No recent progress. The job has not been confirmed as failed; you can wait or cancel it.</div>` : ''}
+          ${activity.batchId && activity.stage !== 'done' ? `<div class="lib-act-stage-n">Cancelling a recipe batch keeps photos already applied and leaves remaining eligible photos available to resume.</div>` : ''}
+        </div>${queuedHtml}${renderActivityHistory()}</div>`;
     } else if (activity.expanded) {
       const stages = STAGE_ORDER.filter((s) => s === 'copy' ? activity.kind === 'import' : activity.kind === 'catalog');
       const activeIdx = stages.indexOf(activity.stage);
@@ -10988,7 +11029,7 @@
           <span class="lib-act-pop-cancel" id="lib-act-cancel">${activity.stage === 'done' ? 'Dismiss' : 'Cancel'}</span></div>
         <div class="lib-act-pop-body">`
         + (_activityStalled
-          ? `<div style="padding:8px 11px;font-size:11px;color:var(--mut)">No progress for over 25s — this may be stuck. You can wait, or cancel and it will resume where it left off.</div>`
+          ? `<div style="padding:8px 11px;font-size:11px;color:var(--mut)" role="status">No recent progress. This is a warning, not a confirmed failure. ${activity.kind === 'catalog' ? 'You can wait or cancel; indexing can continue on a later scan.' : 'You can wait or cancel; completed-work recovery depends on this job type.'}</div>`
           : '')
         + stages.map((s, i) => {
           const cls = activity.stage === 'done' || i < activeIdx ? '' : i === activeIdx ? 'active' : '';
@@ -11013,6 +11054,7 @@
             + `</div>`
           : '')
         + queuedHtml
+        + renderActivityHistory()
         + `</div>`;
     }
     html += `</span>`;
@@ -11073,6 +11115,14 @@
     }
   }
 
+  function renderActivityHistory() {
+    if (!activityHistory.length) return '';
+    return `<details class="lib-act-history" aria-label="Recent job history" ${activity.visible ? 'open' : ''} style="padding:8px 11px;border-top:1px solid var(--bdr)">
+      <summary style="font-size:11px;font-weight:600;margin-bottom:4px;cursor:pointer">Recent jobs (${activityHistory.length})</summary>${activityHistory.slice(0, 8).map(row =>
+        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span></div>`
+      ).join('')}</details>`;
+  }
+
   // Wireframe review item 24 (unified progress): activity used to be ONE slot — a second
   // concurrent job (export running while faces are still indexing, say) simply overwrote
   // whatever the pill was already showing, so the earlier job's progress silently vanished
@@ -11082,8 +11132,9 @@
   // cancel button and all — the moment the current one clears. Same-kind updates (the
   // overwhelmingly common case: one scan reporting its own repeated progress) are completely
   // unaffected — they still go straight to `activity` exactly as before.
-  const _activityQueue = new Map(); // kind -> last patch, for kinds waiting behind the visible one
+  const _activityQueue = new Map(); // stable job identity -> last patch, including same-kind jobs
   function activityUpdate(kind, patch) {
+    patch = activityTerminalPatch({ ...patch, jobId: activityIdentity(kind, patch) });
     if (typeof patch.current === 'string' && patch.current.startsWith('@photos:')) {
       let photoPaths = [];
       try {
@@ -11095,10 +11146,19 @@
       patch = { ...patch, photoPaths: [] };
     }
     const isDone = patch && patch.stage === 'done';
-    if (activity.visible && activity.stage !== 'done' && activity.kind && activity.kind !== kind) {
-      // A different job already owns the pill — queue this one instead of clobbering it.
-      if (isDone) _activityQueue.delete(kind);
-      else _activityQueue.set(kind, { ...(_activityQueue.get(kind) || {}), ...patch });
+    if (isDone && patch.failed && patch.failed.length && !patch.outcome) patch.outcome = 'failed';
+    const activeId = activity.jobId || activity.batchId || activity.kind;
+    if (activity.visible && activity.stage !== 'done' && activeId && activeId !== patch.jobId) {
+      // Keep independent jobs distinct, even when they share a lane such as export or catalog.
+      if (isDone) {
+        const queued = _activityQueue.get(patch.jobId);
+        if (queued) recordActivityHistory({ ...queued, ...patch, kind });
+        _activityQueue.delete(patch.jobId);
+      } else {
+        const queued = { ...(_activityQueue.get(patch.jobId) || {}), ...patch, kind };
+        _activityQueue.set(patch.jobId, queued);
+        persistActiveActivity(queued);
+      }
       renderActivity();
       return;
     }
@@ -11107,12 +11167,15 @@
     // pipeline is alive, so it always resets the stall clock and clears a stalled state.
     _activityLastProgressAt = Date.now();
     _activityStalled = false;
-    activity = { ...activity, ...(activity.kind !== kind ? { batchId: null, failed: [], cancelFn: null } : {}), kind, visible: true, ...patch };
+    activity = { ...activity, ...(activeId !== patch.jobId ? { batchId: null, failed: [], cancelFn: null } : {}), kind, visible: true, ...patch };
+    if (activity.stage === 'done') clearActiveActivity(activity);
+    else persistActiveActivity(activity);
     if (activity.visible && activity.stage !== 'done' && !_activityStallTimer) {
       _activityStallTimer = setInterval(_activityStallTick, 5000);
     }
     renderActivity();
     if (activity.stage === 'done') {
+      recordActivityHistory(activity);
       if (_activityStallTimer) { clearInterval(_activityStallTimer); _activityStallTimer = null; }
       // Failures (a nonempty failure list on the import side) don't auto-clear — the whole
       // point of surfacing this at all is so "3 files failed" isn't something only the console
@@ -11126,9 +11189,9 @@
           // instead of staying a second-class queued row forever.
           const next = _activityQueue.entries().next();
           if (!next.done) {
-            const [nextKind, nextPatch] = next.value;
-            _activityQueue.delete(nextKind);
-            activityUpdate(nextKind, nextPatch);
+            const [nextId, nextPatch] = next.value;
+            _activityQueue.delete(nextId);
+            activityUpdate(nextPatch.kind || nextId, nextPatch);
           } else {
             renderActivity();
           }
@@ -11307,7 +11370,7 @@
     // work without a new event per feature.
     window.__TAURI__.event.listen('job-progress', (ev) => {
       const p = ev.payload || {};
-      activityUpdate(p.job || 'job', { label: p.label || p.job, stage: p.phase || 'working', done: p.done || 0, total: p.total || 0, current: p.current || '' });
+      activityUpdate(p.job || 'job', { jobId: p.jobId || p.job, label: p.label || p.job, stage: p.phase || 'working', done: p.done || 0, total: p.total || 0, current: p.current || '' });
     }).catch(() => {});
   }
 
@@ -11929,26 +11992,32 @@
       $('imp-go').textContent = 'Importing…';
       $('imp-cancel').style.opacity = '.4';
       $('imp-prog').style.display = 'block';
+      const ingestJobId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `ingest-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      activityUpdate('import', { jobId: ingestJobId, label: 'Importing photos', stage: 'copy', done: 0, total: selected.size, current: 'Preparing import', cancelFn: () => invoke('ingest_cancel', { jobId: ingestJobId }).catch(() => {}) });
       let unlisten = null;
       try {
         unlisten = await window.__TAURI__.event.listen('ingest-progress', (ev) => {
           const p = ev.payload || {};
+          if (p.jobId && p.jobId !== ingestJobId) return;
           const frac = p.bytes_total ? p.bytes_done / p.bytes_total : (p.total ? p.done / p.total : 0);
           $('imp-bar').style.width = `${Math.round(frac * 100)}%`;
           $('imp-prog-txt').textContent = `${p.done} of ${p.total} · ${fmtBytes(p.bytes_done)} of ${fmtBytes(p.bytes_total)}${p.current ? ' · ' + p.current : ''}`;
+          activityUpdate('import', { jobId: ingestJobId, label: 'Importing photos', stage: 'copy', done: p.done || 0, total: p.total || selected.size, current: p.current || 'Copying files', cancelFn: () => invoke('ingest_cancel', { jobId: ingestJobId }).catch(() => {}) });
         });
         // ingest_run re-verifies duplicate flags against the CURRENT destination itself
         // (the user may have changed "Copy to" after the scan above), so it's safe to hand
         // back exactly what scan_card returned rather than re-scanning the card here too.
-        const res = await invoke('ingest_copy', { files, options: opts });
+        const res = await invoke('ingest_copy', { jobId: ingestJobId, files, options: opts });
         if (unlisten) unlisten();
         cardState.scanning = false;
         const failed = (res.failed || []).length;
         const dupNote = res.duplicates_skipped ? ` · ${res.duplicates_skipped} already imported, skipped` : '';
         if (typeof toast === 'function') {
-          toast(failed
+          toast(res.cancelled
+            ? `Import cancelled after ${res.copied} file${res.copied === 1 ? '' : 's'} copied — completed files remain in the destination${dupNote}`
+            : failed
             ? `Imported ${res.copied} of ${res.copied + failed} — ${failed} failed${dupNote}`
-            : `Imported ${res.copied} file${res.copied === 1 ? '' : 's'} (${fmtBytes(res.bytes)})${dupNote}`, !failed);
+            : `Imported ${res.copied} file${res.copied === 1 ? '' : 's'} (${fmtBytes(res.bytes)})${dupNote}`, !failed && !res.cancelled);
         }
         // Per-file failures are listed, not summarised away: a card that dropped three files is
         // exactly when the user needs to know WHICH three before formatting it. Surfaced in the
@@ -11956,7 +12025,7 @@
         // after the import modal itself has been closed, and is why activityUpdate's own
         // hasFailures check keys off this exact field instead of auto-clearing.
         if (failed) console.warn('import failures:', res.failed);
-        activityUpdate('import', { stage: 'done', done: res.copied, total: res.copied + failed, failed: res.failed || [] });
+        activityUpdate('import', { jobId: ingestJobId, label: 'Import photos', stage: 'done', outcome: res.cancelled ? 'interrupted' : failed && res.copied ? 'partial' : failed ? 'failed' : 'completed', done: res.copied, total: res.copied + failed, failed: res.failed || [], cancelFn: null });
         if ($('imp-eject') && $('imp-eject').checked) {
           try { await invoke('eject_volume', { path: cardPath }); refreshVolumes(); }
           catch (e) { if (typeof toast === 'function') toast('Import finished, but the card would not eject', false); }
@@ -11965,6 +12034,7 @@
         await importDroppedFolder(dest);
       } catch (e) {
         if (unlisten) unlisten();
+        activityUpdate('import', { jobId: ingestJobId, label: 'Import photos', stage: 'failed', current: String(e && e.message || e), failed: [String(e && e.message || e)], cancelFn: null });
         cardState.scanning = false;
         $('imp-go').disabled = false;
         $('imp-go').style.opacity = '';

@@ -22,7 +22,15 @@
 // whatever the camera's clock and the copy program felt like, while DateTimeOriginal is when the
 // photo was actually taken, which is what a date-based folder tree is meant to mean.
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
+/// Cancellation flags for active card-import jobs. Jobs are keyed so a late Cancel click can
+/// never accidentally cancel a subsequent import.
+#[derive(Default)]
+pub struct IngestState(pub Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>);
 
 /// A mounted volume that looks like a camera card.
 #[derive(Serialize)]
@@ -89,6 +97,8 @@ pub struct IngestOptions {
 
 #[derive(Serialize, Clone)]
 pub struct IngestProgress {
+    #[serde(rename = "jobId")]
+    pub job_id: String,
     pub done: usize,
     pub total: usize,
     pub current: String,
@@ -98,7 +108,13 @@ pub struct IngestProgress {
 
 #[derive(Serialize)]
 pub struct IngestResult {
+    /// True when cancellation stopped the import between files. The current file (including its
+    /// sidecars and requested backup) is always allowed to finish before this is observed.
+    pub cancelled: bool,
     pub copied: usize,
+    /// Destination paths for primary files that were completely copied and verified. These
+    /// remain valid if a later file is cancelled.
+    pub completed_files: Vec<String>,
     /// Files deliberately NOT copied because `skip_duplicates` was on and they matched the
     /// destination. Distinct from `failed` on purpose — a skip is a decision, a failure is a
     /// problem. (The old `skipped` field conflated the two: it was computed as
@@ -437,8 +453,19 @@ fn copy_verified(src: &Path, dest: &Path) -> Result<u64, String> {
         std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
     }
     let expect = std::fs::metadata(src).map_err(|e| format!("stat source: {e}"))?.len();
-    std::fs::copy(src, dest).map_err(|e| format!("copy: {e}"))?;
-    let got = std::fs::metadata(dest).map_err(|e| format!("stat copy: {e}"))?.len();
+    if let Err(e) = std::fs::copy(src, dest) {
+        // `copy` may have created/truncated the destination before the write failed (for example,
+        // a card was ejected mid-read). Never leave that partial file looking importable.
+        let _ = std::fs::remove_file(dest);
+        return Err(format!("copy: {e}"));
+    }
+    let got = match std::fs::metadata(dest) {
+        Ok(metadata) => metadata.len(),
+        Err(e) => {
+            let _ = std::fs::remove_file(dest);
+            return Err(format!("stat copy: {e}"));
+        }
+    };
     if got != expect {
         let _ = std::fs::remove_file(dest);
         return Err(format!("size mismatch after copy ({got} vs {expect} bytes)"));
@@ -483,13 +510,37 @@ fn sidecars_for(src: &Path) -> Vec<PathBuf> {
 // originally. `scan_card` right above already gets this right (see its own doc comment); this
 // mirrors the exact same async + spawn_blocking shape.
 #[tauri::command]
-pub async fn ingest_copy(app: tauri::AppHandle, files: Vec<CardFile>, options: IngestOptions) -> Result<IngestResult, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+pub async fn ingest_copy(app: tauri::AppHandle, state: tauri::State<'_, IngestState>, job_id: String, files: Vec<CardFile>, options: IngestOptions) -> Result<IngestResult, String> {
+    if job_id.is_empty() {
+        return Err("missing import job id".into());
+    }
+    let cancel = Arc::new(AtomicBool::new(false));
+    {
+        let mut jobs = state.0.lock().map_err(|_| "import state unavailable".to_string())?;
+        if jobs.contains_key(&job_id) {
+            return Err("import job id is already active".into());
+        }
+        jobs.insert(job_id.clone(), cancel.clone());
+    }
+    let registry = state.0.clone();
+    let worker_job_id = job_id.clone();
+    let joined = tauri::async_runtime::spawn_blocking(move || {
         use tauri::Emitter;
-        ingest_run(files, options, &mut |p| { let _ = app.emit("ingest-progress", p); })
-    })
-    .await
-    .map_err(|e| format!("ingest_copy task panicked: {e}"))?
+        ingest_run_cancellable(files, options, &worker_job_id, &cancel, &mut |p| { let _ = app.emit("ingest-progress", p); })
+    }).await;
+    if let Ok(mut jobs) = registry.lock() { jobs.remove(&job_id); }
+    match joined {
+        Ok(outcome) => outcome,
+        Err(e) => Err(format!("ingest_copy task panicked: {e}")),
+    }
+}
+
+/// Requests cancellation for an active import. Returns false when the job has already ended.
+#[tauri::command]
+pub fn ingest_cancel(state: tauri::State<'_, IngestState>, job_id: String) -> bool {
+    state.0.lock().ok().and_then(|jobs| jobs.get(&job_id).cloned())
+        .map(|flag| { flag.store(true, Ordering::Release); true })
+        .unwrap_or(false)
 }
 
 /// The whole import, minus the event emitting — split out for the same reason applyGeomTo was
@@ -499,6 +550,16 @@ pub async fn ingest_copy(app: tauri::AppHandle, files: Vec<CardFile>, options: I
 pub fn ingest_run(
     files: Vec<CardFile>,
     options: IngestOptions,
+    progress: &mut dyn FnMut(IngestProgress),
+) -> Result<IngestResult, String> {
+    ingest_run_cancellable(files, options, "", &AtomicBool::new(false), progress)
+}
+
+fn ingest_run_cancellable(
+    files: Vec<CardFile>,
+    options: IngestOptions,
+    job_id: &str,
+    cancel: &AtomicBool,
     progress: &mut dyn FnMut(IngestProgress),
 ) -> Result<IngestResult, String> {
     let dest_root = PathBuf::from(&options.dest_root);
@@ -531,21 +592,32 @@ pub fn ingest_run(
     let total = wanted.len();
 
     let mut result = IngestResult {
+        cancelled: false,
         copied: 0,
+        completed_files: Vec::new(),
         duplicates_skipped,
         failed: Vec::new(),
         dest_root: options.dest_root.clone(),
         bytes: 0,
     };
 
+    let mut processed = 0usize;
     for (i, f) in wanted.iter().enumerate() {
         progress(IngestProgress {
-            done: i,
+            job_id: job_id.to_string(),
+            done: processed,
             total,
             current: f.name.clone(),
             bytes_done: result.bytes,
             bytes_total,
         });
+
+        // Only observe cancellation between complete file transactions. A file already being
+        // copied, its sidecars, and the optional second copy are finished before the next check.
+        if cancel.load(Ordering::Acquire) {
+            result.cancelled = true;
+            break;
+        }
 
         let date = f.date.clone().unwrap_or_else(|| "0000-00-00".into());
         let src = Path::new(&f.path);
@@ -567,6 +639,7 @@ pub fn ingest_run(
             Ok(n) => {
                 result.copied += 1;
                 result.bytes += n;
+                result.completed_files.push(dest.to_string_lossy().into_owned());
                 // Sidecars follow their photo, under the photo's final (possibly renamed) stem so
                 // the pairing survives a rename template.
                 let dest_stem = dest.file_stem().and_then(|s| s.to_str()).unwrap_or(stem).to_string();
@@ -595,9 +668,10 @@ pub fn ingest_run(
             }
             Err(e) => result.failed.push(format!("{}: {e}", f.name)),
         }
+        processed += 1;
     }
 
-    progress(IngestProgress { done: total, total, current: String::new(), bytes_done: result.bytes, bytes_total });
+    progress(IngestProgress { job_id: job_id.to_string(), done: processed, total, current: String::new(), bytes_done: result.bytes, bytes_total });
     Ok(result)
 }
 
@@ -675,6 +749,49 @@ mod tests {
         assert!(!dir.join("out/b.jpg").exists(), "a failed copy must not leave a file behind");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn cancellation_stops_between_files_and_preserves_verified_copies() {
+        let root = std::env::temp_dir().join(format!("cs_ingest_cancel_{}", std::process::id()));
+        let card = root.join("card");
+        let dest = root.join("dest");
+        std::fs::create_dir_all(&card).unwrap();
+        let files: Vec<CardFile> = ["one.jpg", "two.jpg", "three.jpg"].iter().enumerate().map(|(i, name)| {
+            let path = card.join(name);
+            std::fs::write(&path, vec![(i + 1) as u8; 128]).unwrap();
+            CardFile {
+                path: path.to_string_lossy().into_owned(), name: (*name).into(), size: 128,
+                kind: "jpeg".into(), date: Some("2026-10-05".into()), duplicate: false,
+            }
+        }).collect();
+        let cancel = AtomicBool::new(false);
+        let mut progress_events = Vec::new();
+        let result = ingest_run_cancellable(
+            files,
+            IngestOptions {
+                dest_root: dest.to_string_lossy().into_owned(), backup_root: None,
+                folder_template: Some("{YYYY-MM-DD}".into()), filename_template: None,
+                skip_duplicates: false, only: Vec::new(),
+            },
+            "cancel-test", &cancel,
+            &mut |p| {
+                progress_events.push((p.done, p.job_id.clone()));
+                // The second progress tick is at the boundary between file one and file two.
+                if p.done == 1 { cancel.store(true, Ordering::Release); }
+            },
+        ).unwrap();
+
+        assert!(result.cancelled);
+        assert_eq!(result.copied, 1);
+        assert_eq!(result.completed_files.len(), 1);
+        assert!(result.completed_files[0].ends_with("one.jpg"));
+        assert!(dest.join("2026-10-05/one.jpg").is_file());
+        assert!(!dest.join("2026-10-05/two.jpg").exists(), "the next file must not start after cancellation");
+        assert_eq!(progress_events[1], (1, "cancel-test".into()));
+        // Cancellation is only observed between copies, so no destination is left half-written.
+        assert_eq!(std::fs::metadata(&result.completed_files[0]).unwrap().len(), 128);
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

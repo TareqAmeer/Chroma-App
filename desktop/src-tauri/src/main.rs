@@ -2624,6 +2624,7 @@ fn main() {
     let builder = with_single_instance_plugin(tauri::Builder::default())
         .manage(PendingOpen(Mutex::new(Vec::new())))
         .manage(PendingOAuth(Mutex::new(None)))
+        .manage(ingest::IngestState::default())
         .manage(catalog::CatalogState::new());
     let builder = builder
         .plugin(tauri_plugin_dialog::init())
@@ -2760,6 +2761,7 @@ fn main() {
             ingest::list_volumes,
             ingest::scan_card,
             ingest::ingest_copy,
+            ingest::ingest_cancel,
             ingest::eject_volume,
             catalog::catalog_volumes,
             catalog::queue_offline_edit,

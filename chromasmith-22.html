@@ -6957,7 +6957,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1005K';
+const BUILD='1.1005L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22377,6 +22377,7 @@ async function _exportFXRun(){
     }else{photoListEl.style.display='none';photoListEl.innerHTML='';}
   }
   let failed=0;
+  let activityOutcome='completed';
   // Google Photos upload is on → grab/refresh the token NOW, under this click's activation
   // (the sign-in popup would be blocked after a long multi-photo render).
   if(gpSaveEnabled()&&!gpTok()){
@@ -22408,7 +22409,7 @@ async function _exportFXRun(){
       const undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null; // CHR-193: this photo's own section values
       try{const p=getFXParams(it.adjustOverride||undefined);try{return structuredClone(p);}catch(e){return p;}}finally{fxState.masks=sm;if(undo)undo();}});
     for(let idx=0;idx<items.length;idx++){
-      if(fxExportCancel){log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
+      if(fxExportCancel){activityOutcome='interrupted';log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
       const it=items[idx];
       try{
         if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
@@ -22721,7 +22722,7 @@ async function _exportFXRun(){
     // already saved above must NOT be reported as an export error — only the refresh failed.
     try{updateWork();renderPreview();}catch(e){log('Preview refresh after export failed (exported files are unaffected): '+(e&&e.message||e),'warn');}
     if(results.length)fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
-    if(failed&&results.length)log(`Export finished: ${results.length} saved, ${failed} failed (see log above)`,'warn');
+    if(failed&&results.length){activityOutcome='partial';log(`Export finished: ${results.length} saved, ${failed} failed (see log above)`,'warn');}
     if(failed&&results.length)toast(`Exported ${results.length}/${N} — ${failed} failed, see log`,false);
     {const _p=(typeof sr!=='undefined'&&Array.isArray(sr))?sr.filter(x=>x&&x.ok&&x.path).map(x=>x.path):[];csExportResultKeep(results.length,failed,_p[0]);}
     if(failed&&results.length){}
@@ -22733,8 +22734,9 @@ async function _exportFXRun(){
     }
     // Every photo failed (render OR native save) — say so. Without this the run ended silently,
     // since both branches above are guarded on results.length.
-    else if(failed){log(`Export finished: 0 saved, ${failed} failed (see log above)`,'err');toast(`Export failed — ${failed} photo${failed>1?'s':''} not saved, see log`,false);}
+    else if(failed){activityOutcome='failed';log(`Export finished: 0 saved, ${failed} failed (see log above)`,'err');toast(`Export failed — ${failed} photo${failed>1?'s':''} not saved, see log`,false);}
   }catch(e){
+    activityOutcome=fxExportCancel?'interrupted':'failed';
     log('Export error: '+(e&&e.message||e),'err');console.error(e);
     toast('Export failed — see log');
   }finally{
@@ -22744,7 +22746,7 @@ async function _exportFXRun(){
     _expOverlay(false);
     if(capNative()&&typeof window.chromasmithShowMobileExportResult==='function')window.chromasmithShowMobileExportResult();
     fxExportCancel=false;
-    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting'});
+    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting',outcome:activityOutcome,failedCount:failed});
   }
 }
 // Same border+canvas-matte compositing exportFX/canvasCompose do for stills (see CLAUDE.md §12
@@ -22903,7 +22905,7 @@ async function fxVideoExportSmall(it){
   const fadeOutS=Math.max(0,parseFloat((document.getElementById('vid-fade-out')||{}).value)||0);
   const outDurationS=totalFrames/fps;
   const fname=`${it.name}_graded.mp4`;
-  let output=null,cancelled=false,streamTarget=null;
+  let output=null,cancelled=false,streamTarget=null,videoExportFailed=false;
   try{
     const target=canStream?(streamTarget=await window.chromasmithMakeVideoStreamTarget(MB,fname)):new MB.BufferTarget();
     output=new MB.Output({format:new MB.Mp4OutputFormat(),target});
@@ -23012,6 +23014,7 @@ async function fxVideoExportSmall(it){
       toast('Video exported ✓',true);
     }
   }catch(e){
+    videoExportFailed=true;
     log('Video export error: '+(e&&e.message||e),'err');console.error(e);
     toast('Video export failed — see log',false);
     if(output)try{await output.cancel();}catch(e2){}
@@ -23021,7 +23024,7 @@ async function fxVideoExportSmall(it){
     if(cancelBtn)cancelBtn.style.display='none';
     if(progBox)progBox.style.display='none';
     fxExportCancel=false;
-    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting video'});
+    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting video',outcome:cancelled||fxExportCancel?'interrupted':videoExportFailed?'failed':'completed',failedCount:videoExportFailed?1:0});
     // The export loop drove FX with EXPORT-resolution frames — restore the live preview to
     // whichever frame the transport bar is actually showing, same as exportFX's own final
     // preview-refresh call (kept separately try/caught there for the same reason: a failure
