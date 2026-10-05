@@ -606,6 +606,19 @@
   // items (Quit, Minimize, Cut/Copy/Paste, About…) are handled natively with zero JS.
   const { listen } = window.__TAURI__.event;
   const wire = (event, fn) => listen(event, () => { try { fn(); } catch (e) { console.error(event, e); } });
+  const bindShortcut = (id, fn) => window.chromasmithRegisterShortcut && window.chromasmithRegisterShortcut(id, fn);
+  bindShortcut('editor.save-session', () => typeof saveSession === 'function' ? saveSession() : false);
+  bindShortcut('editor.load-session', () => typeof loadSession === 'function' ? loadSession(true) : false);
+  bindShortcut('editor.reset-edit', () => typeof fxResetAll === 'function' ? fxResetAll() : false);
+  bindShortcut('editor.flip-h', () => typeof geomFlip === 'function' ? geomFlip('h') : false);
+  bindShortcut('editor.flip-v', () => typeof geomFlip === 'function' ? geomFlip('v') : false);
+  bindShortcut('editor.auto-enhance', () => typeof autoEnhance === 'function' ? autoEnhance() : false);
+  bindShortcut('editor.wb-eyedrop', () => typeof wbEyedropper === 'function' ? wbEyedropper() : false);
+  bindShortcut('editor.reshuffle-artifacts', () => typeof artReshuffle === 'function' ? artReshuffle() : false);
+  bindShortcut('editor.guide', () => typeof switchTab === 'function' ? switchTab('guide') : false);
+  bindShortcut('editor.whatsnew', () => typeof window.chromasmithShowWhatsNew === 'function' ? window.chromasmithShowWhatsNew() : false);
+  bindShortcut('editor.tour', () => typeof window.chromasmithShowTour === 'function' ? window.chromasmithShowTour() : false);
+  bindShortcut('library.expand', () => typeof window.chromasmithToggleExpandedView === 'function' ? window.chromasmithToggleExpandedView() : false);
   wire('menu-open', () => typeof fxPickPhotos === 'function' && fxPickPhotos());
   wire('menu-export', () => typeof exportFX === 'function' && exportFX());
   wire('menu-undo', () => typeof fxUndo === 'function' && fxUndo());

@@ -12865,6 +12865,90 @@
     }
   }
   window.chromasmithToggleLibrary = toggleLibrary; // called from the header button in desktop-native.js
+  // Shared CHR-266 shortcut registry adapters. Keep the public surface small and let the registry
+  // own key matching; these callbacks reuse the same targets and mutations as Library controls.
+  window.chromasmithLibraryIsOpen = () => state.open;
+  if (typeof window.chromasmithRegisterShortcut === 'function') {
+    const shortcutTargets = () => state.selected.size ? [...state.selected]
+      : (state._kbCursor ? [state._kbCursor] : (state.openedPath ? [state.openedPath] : []));
+    const withQuickLook = () => {
+      if (quicklook.active) return [quicklook.path];
+      if (state.source === 'lr') return [];
+      if (state.viewMode === 'compare' && compareState.active) return [comparePathForIdx(compareState[compareState.focus === 'A' ? 'paneA' : 'paneB'].idx)];
+      return shortcutTargets();
+    };
+    const applyShortcutLabel = (label) => { const ps = withQuickLook().filter(Boolean); if (!ps.length) return false;
+      if (!quicklook.active && state.viewMode === 'compare' && compareState.active) compareApplyLabel(ps[0], label);
+      else ps.forEach(p => setLabel(p, label)); };
+    window.chromasmithRegisterShortcut('library.reject', () => applyShortcutLabel('Red'));
+    window.chromasmithRegisterShortcut('library.pick', () => applyShortcutLabel('Green'));
+    window.chromasmithRegisterShortcut('library.clear-flag', () => applyShortcutLabel(''));
+    for (let rating = 0; rating <= 5; rating++) {
+      window.chromasmithRegisterShortcut(`library.rate-${rating}`, () => {
+        if (!STARS_ENABLED) return false;
+        const ps = withQuickLook().filter(Boolean); if (!ps.length) return false; ps.forEach(p => setRating(p, rating));
+      });
+    }
+    window.chromasmithRegisterShortcut('library.open', () => {
+      const path = state._kbCursor || (state.selected.size === 1 ? [...state.selected][0] : '');
+      if (quicklook.active) { const p = quicklook.path; hideQuickLook(); openInEditor(p); }
+      else if (path) openInEditor(path); else return false;
+    });
+    window.chromasmithRegisterShortcut('library.quicklook', () => {
+      const path = state._kbCursor || state.openedPath || (state.selected.size === 1 ? [...state.selected][0] : '');
+      if (quicklook.active) hideQuickLook(); else if (path) showQuickLook(path); else return false;
+    });
+    window.chromasmithRegisterShortcut('library.next', (e) => {
+      if (state.viewMode === 'compare' && compareState.active) { compareCycleB(1); return; }
+      if (quicklook.active) {
+        const shown = sortEntries(state.entries.filter(passesFilters));
+        const i = shown.findIndex(p => p.path === quicklook.path);
+        if (i >= 0 && i + 1 < shown.length) showQuickLook(shown[i + 1].path);
+      } else {
+        const shown = sortEntries(state.entries.filter(passesFilters));
+        const i = shown.findIndex(p => p.path === (state._kbCursor || state.openedPath));
+        if (shown.length) {
+          const next = Math.min(shown.length - 1, (i < 0 ? -1 : i) + 1);
+          state._kbCursor = shown[next].path;
+          if (e.shiftKey) {
+            if (selectAnchor < 0) selectAnchor = i >= 0 ? i : next;
+            const [lo, hi] = [selectAnchor, next].sort((a, b) => a - b);
+            state.selected.clear(); for (let n = lo; n <= hi; n++) state.selected.add(shown[n].path);
+          } else { selectAnchor = next; state.selected.clear(); state.selected.add(state._kbCursor); }
+          const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(state._kbCursor)}"]`);
+          if (card) card.scrollIntoView({ block: 'nearest' }); updateCardSelClasses();
+        } else return false;
+      }
+    });
+    window.chromasmithRegisterShortcut('library.previous', (e) => {
+      if (state.viewMode === 'compare' && compareState.active) { compareCycleB(-1); return; }
+      if (quicklook.active) {
+        const shown = sortEntries(state.entries.filter(passesFilters));
+        const i = shown.findIndex(p => p.path === quicklook.path);
+        if (i > 0) showQuickLook(shown[i - 1].path);
+      } else {
+        const shown = sortEntries(state.entries.filter(passesFilters));
+        const i = shown.findIndex(p => p.path === (state._kbCursor || state.openedPath));
+        if (shown.length) {
+          const next = Math.max(0, i < 0 ? 0 : i - 1);
+          state._kbCursor = shown[next].path;
+          if (e.shiftKey) {
+            if (selectAnchor < 0) selectAnchor = i >= 0 ? i : next;
+            const [lo, hi] = [selectAnchor, next].sort((a, b) => a - b);
+            state.selected.clear(); for (let n = lo; n <= hi; n++) state.selected.add(shown[n].path);
+          } else { selectAnchor = next; state.selected.clear(); state.selected.add(state._kbCursor); }
+          const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(state._kbCursor)}"]`);
+          if (card) card.scrollIntoView({ block: 'nearest' }); updateCardSelClasses();
+        } else return false;
+      }
+    });
+    window.chromasmithRegisterShortcut('editor.copy', () => libCopyEdit(shortcutTargets()));
+    window.chromasmithRegisterShortcut('editor.paste', () => libPasteEdit(shortcutTargets()));
+    window.chromasmithRegisterShortcut('library.open-recent', async () => {
+      if (!state.open) await toggleLibrary();
+      toggleRecentMenu({ stopPropagation() {} });
+    });
+  }
   // Unconditional (not LIBTEST-gated), same reasoning as window.__libInfo above: a real hook
   // for navigating the Library to an arbitrary folder without going through the folder-tree
   // click or the OS picker dialog — used by tools/diagnostics/raw_bench.py to drive scenarios against

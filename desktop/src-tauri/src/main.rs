@@ -3023,18 +3023,18 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
             let open_item =
-                MenuItem::with_id(handle, "menu-open", "Open Photo…", true, Some("CmdOrCtrl+O"))?;
+                MenuItem::with_id(handle, "menu-open", "Open Photo…", true, Option::<&str>::None)?;
             // library-ui.js already keeps a recents list (its own header "Recent" button,
             // getRecentFolders()/#lib-recent) with no native menu entry point — this reuses that
             // SAME dropdown rather than a parallel Rust-side mirror of the same folder list; see
             // the JS-side listener (library-ui.js, next to its "menu-library" one) for why.
             let open_recent_item = MenuItem::with_id(
-                handle, "menu-open-recent", "Open Recent…", true, Some("CmdOrCtrl+Shift+O"),
+                handle, "menu-open-recent", "Open Recent…", true, Option::<&str>::None,
             )?;
             let library_item =
-                MenuItem::with_id(handle, "menu-library", "Library…", true, Some("CmdOrCtrl+L"))?;
+                MenuItem::with_id(handle, "menu-library", "Library…", true, Option::<&str>::None)?;
             let export_item =
-                MenuItem::with_id(handle, "menu-export", "Export…", true, Some("CmdOrCtrl+E"))?;
+                MenuItem::with_id(handle, "menu-export", "Export…", true, Option::<&str>::None)?;
             // Session save/load already existed as buttons (saveSession()/loadSession(), also in
             // the ⌘K command palette) with no native menu entry point — grouped in their own
             // submenu rather than flattened into File, which was already 4 items deep before this.
@@ -3063,13 +3063,13 @@ fn main() {
                 ],
             )?;
 
-            let undo_item = MenuItem::with_id(handle, "menu-undo", "Undo", true, Some("CmdOrCtrl+Z"))?;
+            let undo_item = MenuItem::with_id(handle, "menu-undo", "Undo", true, Option::<&str>::None)?;
             let redo_item = MenuItem::with_id(
                 handle,
                 "menu-redo",
                 "Redo",
                 true,
-                Some("CmdOrCtrl+Shift+Z"),
+                Option::<&str>::None,
             )?;
             let edit_menu = Submenu::with_items(
                 handle,
@@ -3101,12 +3101,12 @@ fn main() {
             let pick_item = MenuItem::with_id(handle, "menu-pick", "Pick (Flag)", true, Option::<&str>::None)?;
             let clear_flag_item = MenuItem::with_id(handle, "menu-clear-flag", "Clear Flag", true, Option::<&str>::None)?;
             let reset_edit_item = MenuItem::with_id(handle, "menu-reset-edit", "Reset Edit", true, Option::<&str>::None)?;
-            let rotate_left_item = MenuItem::with_id(handle, "menu-rotate-left", "Rotate Left", true, Some("CmdOrCtrl+["))?;
-            let rotate_right_item = MenuItem::with_id(handle, "menu-rotate-right", "Rotate Right", true, Some("CmdOrCtrl+]"))?;
+            let rotate_left_item = MenuItem::with_id(handle, "menu-rotate-left", "Rotate Left", true, Option::<&str>::None)?;
+            let rotate_right_item = MenuItem::with_id(handle, "menu-rotate-right", "Rotate Right", true, Option::<&str>::None)?;
             let flip_h_item = MenuItem::with_id(handle, "menu-flip-h", "Flip Horizontal", true, Option::<&str>::None)?;
             let flip_v_item = MenuItem::with_id(handle, "menu-flip-v", "Flip Vertical", true, Option::<&str>::None)?;
-            let copy_edit_item = MenuItem::with_id(handle, "menu-copy-edit", "Copy Edit", true, Some("CmdOrCtrl+Shift+C"))?;
-            let paste_edit_item = MenuItem::with_id(handle, "menu-paste-edit", "Paste Edit", true, Some("CmdOrCtrl+Shift+V"))?;
+            let copy_edit_item = MenuItem::with_id(handle, "menu-copy-edit", "Copy Edit", true, Option::<&str>::None)?;
+            let paste_edit_item = MenuItem::with_id(handle, "menu-paste-edit", "Paste Edit", true, Option::<&str>::None)?;
             // Geometry grouped into its own submenu — crop/straighten (cropToggle()) is the same
             // on-canvas tool the crop button already opens, just with no prior menu path in.
             let crop_item = MenuItem::with_id(handle, "menu-crop", "Crop / Straighten", true, Option::<&str>::None)?;
@@ -3159,12 +3159,12 @@ fn main() {
             // on-screen buttons for most of these already exist (fx-wrap zoom controls, the ○/⇔/▦
             // preview-tools row, the ⛶ Library-expand button); this just gives them menu-bar
             // discoverability and real shortcuts, same idiom as darktable/RawTherapee/digiKam.
-            let zoom_in_item = MenuItem::with_id(handle, "menu-zoom-in", "Zoom In", true, Some("CmdOrCtrl+Plus"))?;
-            let zoom_out_item = MenuItem::with_id(handle, "menu-zoom-out", "Zoom Out", true, Some("CmdOrCtrl+-"))?;
-            let zoom_fit_item = MenuItem::with_id(handle, "menu-zoom-fit", "Zoom to Fit", true, Some("CmdOrCtrl+0"))?;
-            let zoom_100_item = MenuItem::with_id(handle, "menu-zoom-100", "Zoom to 100%", true, Some("CmdOrCtrl+1"))?;
-            let split_item = MenuItem::with_id(handle, "menu-split", "Toggle Before/After Split", true, Some("CmdOrCtrl+\\"))?;
-            let hist_item = MenuItem::with_id(handle, "menu-histogram", "Toggle Histogram", true, Some("CmdOrCtrl+H"))?;
+            let zoom_in_item = MenuItem::with_id(handle, "menu-zoom-in", "Zoom In", true, Option::<&str>::None)?;
+            let zoom_out_item = MenuItem::with_id(handle, "menu-zoom-out", "Zoom Out", true, Option::<&str>::None)?;
+            let zoom_fit_item = MenuItem::with_id(handle, "menu-zoom-fit", "Zoom to Fit", true, Option::<&str>::None)?;
+            let zoom_100_item = MenuItem::with_id(handle, "menu-zoom-100", "Zoom to 100%", true, Option::<&str>::None)?;
+            let split_item = MenuItem::with_id(handle, "menu-split", "Toggle Before/After Split", true, Option::<&str>::None)?;
+            let hist_item = MenuItem::with_id(handle, "menu-histogram", "Toggle Histogram", true, Option::<&str>::None)?;
             let expand_lib_item = MenuItem::with_id(handle, "menu-expand-library", "Toggle Full Library", true, Option::<&str>::None)?; // bare "G" is already the JS-side shortcut — see the Photo-menu comment above on why it can't ALSO be a native accelerator
             let zoom_menu = Submenu::with_items(
                 handle,
@@ -3201,12 +3201,10 @@ fn main() {
                 ],
             )?;
 
-            // Search opens the existing ⌘K command palette (cpOpen() — a fuzzy list over every
-            // tab/section/look/action already in the app, see chromasmith-22.html). The
-            // accelerator matches the app's own JS-side ⌘K keydown listener, so this menu item is
-            // a discoverable alias for a shortcut that already worked, not a new binding.
-            let search_item = MenuItem::with_id(handle, "menu-search", "Search…", true, Some("CmdOrCtrl+K"))?;
-            let shortcuts_item = MenuItem::with_id(handle, "menu-shortcuts", "Keyboard Shortcuts…", true, Some("CmdOrCtrl+/"))?;
+            // Search opens the existing command palette. Shortcut dispatch belongs to the
+            // shared registry in chromasmith-22.html so user keymaps and menu actions cannot race.
+            let search_item = MenuItem::with_id(handle, "menu-search", "Search…", true, Option::<&str>::None)?;
+            let shortcuts_item = MenuItem::with_id(handle, "menu-shortcuts", "Keyboard Shortcuts…", true, Option::<&str>::None)?;
             let guide_item = MenuItem::with_id(handle, "menu-guide", "Chromasmith Guide", true, Option::<&str>::None)?;
             let whatsnew_item = MenuItem::with_id(handle, "menu-whatsnew", "What's New", true, Option::<&str>::None)?;
             let tour_item = MenuItem::with_id(handle, "menu-tour", "Welcome Tour", true, Option::<&str>::None)?;
@@ -3227,10 +3225,10 @@ fn main() {
             // No dedicated preferences window exists yet, so this opens the same About panel
             // (csAbout(), chromasmith-22.html) the header's info button does — build/diagnostics
             // today, the natural home for real app-wide settings if any are added later. Still
-            // worth having: Cmd+, is where every macOS user's muscle memory reaches first, and
-            // before this it did nothing at all.
+            // worth having: Cmd+, is where every macOS user's muscle memory reaches first; the
+            // shared shortcut registry provides that default and keeps it user-remappable.
             let settings_item = MenuItem::with_id(
-                handle, "menu-settings", "Settings…", true, Some("CmdOrCtrl+,"),
+                handle, "menu-settings", "Settings…", true, Option::<&str>::None,
             )?;
             let app_menu = Submenu::with_items(
                 handle,

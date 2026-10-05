@@ -6957,7 +6957,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1005H';
+const BUILD='1.1005I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13675,15 +13675,16 @@ function toastProgress(msg){
 // Deliberately not a "framework": one dismissible glass panel, styled to match the app's
 // existing dark-glass surfaces (context menu, toast) rather than pulling in new CSS classes.
 function _csModal(title,bodyHtml){
+  if(window.__csShortcutCancelCapture)window.__csShortcutCancelCapture();
   const prev=document.getElementById('cs-modal-ov');if(prev)prev.remove();
   const ov=document.createElement('div');ov.id='cs-modal-ov';
   ov.style.cssText='position:fixed;inset:0;z-index:var(--z-modal);background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
-  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  ov.onclick=e=>{if(e.target===ov){if(window.__csShortcutCancelCapture)window.__csShortcutCancelCapture();ov.remove();}};
   const panel=document.createElement('div');panel.className='cs-modal';
   panel.style.cssText='max-width:560px;width:100%;max-height:80vh;overflow-y:auto;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;padding:20px;color:var(--txt);font-family:var(--sans);box-shadow:var(--lift-2)';
   panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:16px">${title}</h2><button id="cs-modal-x" aria-label="Close" style="background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center;margin:-6px -8px -6px 0">×</button></div>${bodyHtml}`;
   ov.appendChild(panel);document.body.appendChild(ov);
-  panel.querySelector('#cs-modal-x').onclick=()=>ov.remove();
+  panel.querySelector('#cs-modal-x').onclick=()=>{if(window.__csShortcutCancelCapture)window.__csShortcutCancelCapture();ov.remove();};
   document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){ov.remove();document.removeEventListener('keydown',esc);}});
 }
 // .fx-info-i's tooltip is a plain `title` attribute, which relies on the browser's native hover
@@ -13724,15 +13725,48 @@ if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',_fxInf
 // already wired elsewhere (desktop-native.js's menu-* wiring, library-ui.js's grid keydown
 // handler, or an on-page oninput/onclick); this is purely a discoverability surface, not new
 // behavior. Grouped to match the new Photo/View menus.
+// CHR-266: the registry is the single source of truth for editable app shortcuts. Contexts
+// intentionally overlap for actions usable in both Library and Editor; conflict checks run only
+// when two bindings share a context. CmdOrCtrl is resolved by the browser/platform.
+const CS_SHORTCUTS_KEY='chromasmith-shortcuts-v1',CS_SHORTCUTS_PREF='chromasmith-shortcuts-single-disabled-v1';
+const csShortcutDefs=[
+  ['editor.open','Open photo(s)','File','editor','CmdOrCtrl+O'],['editor.export','Export','File','editor','CmdOrCtrl+E'],
+  ['editor.undo','Undo','Edit','editor','CmdOrCtrl+Z'],['editor.redo','Redo','Edit','editor','CmdOrCtrl+Shift+Z'],
+  ['editor.copy','Copy edit settings','Edit','editor,library','CmdOrCtrl+Shift+C'],['editor.paste','Paste edit settings','Edit','editor,library','CmdOrCtrl+Shift+V'],
+  ['editor.rotate-left','Rotate left','Photo','editor','CmdOrCtrl+BracketLeft'],['editor.rotate-right','Rotate right','Photo','editor','CmdOrCtrl+BracketRight'],
+  ['editor.zoom-in','Zoom in','View','editor','CmdOrCtrl+Plus'],['editor.zoom-out','Zoom out','View','editor','CmdOrCtrl+Minus'],['editor.zoom-fit','Zoom to fit','View','editor','CmdOrCtrl+0'],['editor.zoom-100','Zoom to 100%','View','editor','CmdOrCtrl+1'],['editor.split','Toggle before / after split','View','editor','CmdOrCtrl+Backslash'],['editor.histogram','Toggle histogram','View','editor','CmdOrCtrl+H'],
+  ['editor.search','Command palette','Help','editor','CmdOrCtrl+K'],['editor.shortcuts','Keyboard shortcuts guide','Help','editor','CmdOrCtrl+Slash'],['editor.settings','Settings','Help','editor','CmdOrCtrl+Comma'],
+  ['editor.save-session','Save session','File','editor',null],['editor.load-session','Load session','File','editor',null],['editor.reset-edit','Reset edit','Photo','editor',null],['editor.flip-h','Flip horizontally','Photo','editor',null],['editor.flip-v','Flip vertically','Photo','editor',null],['editor.auto-enhance','Auto enhance','Photo','editor',null],['editor.wb-eyedrop','White balance eyedropper','Photo','editor',null],['editor.reshuffle-artifacts','Reshuffle film artifacts','Photo','editor',null],['editor.next-tool','Next tool section','Tools','editor',null],['editor.previous-tool','Previous tool section','Tools','editor',null],['editor.guide','Open guide','Help','editor',null],['editor.whatsnew',"What's new",'Help','editor',null],['editor.tour','Welcome tour','Help','editor',null],['library.expand','Toggle expanded Library','View','library',null],
+  ['editor.compare','Hold to compare before / after','View','editor','Space'],['editor.next','Next photo','Photo','editor','ArrowRight'],['editor.previous','Previous photo','Photo','editor','ArrowLeft'],
+  ['editor.crop','Toggle crop','Tools','editor','C'],['editor.loupe','Toggle loupe','View','editor','1'],['editor.mask-overlay','Cycle mask overlay','Tools','editor','O'],
+  ['library.toggle','Toggle Library','Navigation','editor,library','CmdOrCtrl+L'],['library.reject','Reject selected photo','Photo','library','X'],['library.pick','Pick selected photo','Photo','library','P'],['library.clear-flag','Clear selected photo flag','Photo','library','U'],
+  ['library.rate-0','Rate selected photo 0 stars','Photo','library','0'],['library.rate-1','Rate selected photo 1 star','Photo','library','1'],['library.rate-2','Rate selected photo 2 stars','Photo','library','2'],['library.rate-3','Rate selected photo 3 stars','Photo','library','3'],['library.rate-4','Rate selected photo 4 stars','Photo','library','4'],['library.rate-5','Rate selected photo 5 stars','Photo','library','5'],
+  ['library.open','Open selected photo','Photo','library','Enter'],['library.quicklook','Quick Look selected photo','Photo','library','Space'],['library.next','Next photo','Photo','library','ArrowRight'],['library.previous','Previous photo','Photo','library','ArrowLeft'],['library.open-recent','Open Recent','File','editor,library','CmdOrCtrl+Shift+O']
+].map(([id,label,group,contexts,defaultBinding])=>({id,label,group,contexts:contexts.split(','),defaultBinding}));
+const csShortcutHandlers=Object.create(null);
+function csShortcutBinding(id){try{const x=JSON.parse(localStorage.getItem(CS_SHORTCUTS_KEY)||'{}');return Object.prototype.hasOwnProperty.call(x,id)?x[id]:csShortcutDefs.find(a=>a.id===id)?.defaultBinding||null;}catch(_){return csShortcutDefs.find(a=>a.id===id)?.defaultBinding||null;}}
+function csShortcutParse(binding){if(!binding||typeof binding!=='string')return null;const parts=binding.split('+').map(x=>x.trim()),key=parts.pop(),allowed=['Cmd','Ctrl','CmdOrCtrl','Shift','Alt'];if(!key||parts.some(x=>!allowed.includes(x))||new Set(parts).size!==parts.length||['Cmd','Ctrl','CmdOrCtrl','Shift','Alt'].includes(key))return null;const mac=/Mac|iPhone|iPad/.test(navigator.platform),either=parts.includes('CmdOrCtrl');return{key,meta:parts.includes('Cmd')||(either&&mac),ctrl:parts.includes('Ctrl')||(either&&!mac),shift:parts.includes('Shift')||key==='Plus',alt:parts.includes('Alt')};}
+function csShortcutKeyId(k){return({BracketLeft:'[',BracketRight:']',Backslash:'\\',Slash:'/',Plus:'+',Minus:'-',Comma:','})[k]||String(k).toLowerCase();}
+function csShortcutSameBinding(a,b){const x=csShortcutParse(a),y=csShortcutParse(b);return!!x&&!!y&&csShortcutKeyId(x.key)===csShortcutKeyId(y.key)&&x.meta===y.meta&&x.ctrl===y.ctrl&&x.shift===y.shift&&x.alt===y.alt;}
+function csShortcutMatch(e,b){const x=csShortcutParse(b);if(!x)return false;return csShortcutKeyId(e.key)===csShortcutKeyId(x.key)&&!!e.metaKey===x.meta&&!!e.ctrlKey===x.ctrl&&!!e.shiftKey===x.shift&&!!e.altKey===x.alt;}
+function csShortcutLabel(b){return b?String(b).replace('CmdOrCtrl',/Mac|iPhone|iPad/.test(navigator.platform)?'⌘':'Ctrl').replaceAll('BracketLeft','[').replaceAll('BracketRight',']').replaceAll('Backslash','\\').replaceAll('Slash','/').replaceAll('Comma',',').replaceAll('Plus','+').replaceAll('Minus','−').replaceAll('Shift','⇧').replaceAll('Alt','⌥').replaceAll('Ctrl','Ctrl').replaceAll('Cmd','⌘'):'Unassigned';}
+function csShortcutContextsOverlap(a,b){return a.some(c=>b.includes(c)||(c==='editor'&&b.includes('library'))||(c==='library'&&b.includes('editor')));}
+function csShortcutSet(id,binding){const def=csShortcutDefs.find(x=>x.id===id);if(!def)throw Error('Unknown shortcut action');if(binding){const parsed=csShortcutParse(binding);if(!parsed)throw Error('Invalid shortcut');const isDefault=csShortcutSameBinding(binding,def.defaultBinding);if(!isDefault&&(parsed.meta||parsed.ctrl)&&'qwrtnpsdfgok01h+-'.includes(csShortcutKeyId(parsed.key)))throw Error('That shortcut is reserved by your browser or operating system');if(!isDefault)for(const other of csShortcutDefs){if(other.id===id||!csShortcutContextsOverlap(other.contexts,def.contexts))continue;const old=csShortcutParse(csShortcutBinding(other.id));if(old&&csShortcutKeyId(old.key)===csShortcutKeyId(parsed.key)&&old.meta===parsed.meta&&old.ctrl===parsed.ctrl&&old.shift===parsed.shift&&old.alt===parsed.alt)throw Error(`Already assigned to ${other.label}`);}}
+  let all={};try{all=JSON.parse(localStorage.getItem(CS_SHORTCUTS_KEY)||'{}');}catch(_){}if(!binding||csShortcutSameBinding(binding,def.defaultBinding))delete all[id];else all[id]=binding;localStorage.setItem(CS_SHORTCUTS_KEY,JSON.stringify(all));}
+function csShortcutRegister(id,handler){if(csShortcutDefs.some(x=>x.id===id)&&typeof handler==='function')csShortcutHandlers[id]=handler;}
+function csShortcutCapture(e){if(window.__csShortcutCapturing)return;const t=e.target;if(t&&t.closest&&t.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])'))return;if(e.isComposing||e.key==='Process')return;const singleDisabled=localStorage.getItem(CS_SHORTCUTS_PREF)==='1',libraryOpen=!!(window.chromasmithLibraryIsOpen&&window.chromasmithLibraryIsOpen()),libraryFull=libraryOpen&&!!(document.getElementById('lib-overlay')&&document.getElementById('lib-overlay').classList.contains('full')),contextActive=a=>a.contexts.some(c=>c==='editor'&&!libraryFull||c==='library'&&libraryOpen);for(const a of csShortcutDefs){if(!csShortcutHandlers[a.id]||!csShortcutMatch(e,csShortcutBinding(a.id)))continue;const b=csShortcutParse(csShortcutBinding(a.id));if(singleDisabled&&!b.meta&&!b.ctrl&&!b.alt)continue;if(!contextActive(a))continue;let result;try{result=csShortcutHandlers[a.id](e);}catch(err){console.error('shortcut '+a.id,err);}if(result===false)continue;e.preventDefault();e.stopImmediatePropagation();return;}for(const a of csShortcutDefs){if(!csShortcutHandlers[a.id]||!contextActive(a))continue;if(a.defaultBinding!==csShortcutBinding(a.id)&&csShortcutMatch(e,a.defaultBinding)){e.preventDefault();e.stopImmediatePropagation();return;}}}
+document.addEventListener('keydown',csShortcutCapture,true);
+window.chromasmithRegisterShortcut=csShortcutRegister;
+window.chromasmithShortcutRegistry={actions:()=>csShortcutDefs.map(a=>({...a,binding:csShortcutBinding(a.id)})),set:csShortcutSet,export:()=>JSON.stringify({version:1,bindings:Object.fromEntries(csShortcutDefs.map(a=>[a.id,csShortcutBinding(a.id)]))},null,2),import(raw){const data=JSON.parse(raw);if(!data||data.version!==1||!data.bindings||typeof data.bindings!=='object'||Array.isArray(data.bindings))throw Error('Unsupported shortcut file');for(const [id,b] of Object.entries(data.bindings)){if(!csShortcutDefs.some(a=>a.id===id))throw Error(`Unknown shortcut action: ${id}`);if(b!==null&&(!csShortcutParse(b)))throw Error(`Invalid shortcut for ${id}`);}const before=localStorage.getItem(CS_SHORTCUTS_KEY);try{localStorage.removeItem(CS_SHORTCUTS_KEY);for(const [id,b] of Object.entries(data.bindings))csShortcutSet(id,b);return true;}catch(e){if(before==null)localStorage.removeItem(CS_SHORTCUTS_KEY);else localStorage.setItem(CS_SHORTCUTS_KEY,before);throw e;}},disableSingles(on){localStorage.setItem(CS_SHORTCUTS_PREF,on?'1':'0');}};
+let csShortcutCompareHeld=false;
+function csShortcutReleaseCompare(){if(!csShortcutCompareHeld)return;csShortcutCompareHeld=false;if(typeof fxCompare!=='undefined'&&fxCompare){fxCompare=false;renderPreview();}}
+document.addEventListener('keyup',e=>{if(e.key===' '&&csShortcutCompareHeld){e.preventDefault();e.stopImmediatePropagation();csShortcutReleaseCompare();}},true);
+window.addEventListener('blur',csShortcutReleaseCompare);
 function shortcutsHtml(){
-  const rows=(pairs)=>pairs.map(([k,d])=>`<div style="display:flex;justify-content:space-between;gap:16px;padding:3px 0;font-size:13px"><span>${d}</span><kbd style="font-family:var(--mono);font-size:11px;color:var(--mut);background:var(--bdr);border-radius:4px;padding:2px 6px;white-space:nowrap">${k}</kbd></div>`).join('');
-  const group=(title,pairs)=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:var(--ls-2);margin-bottom:4px">${title}</div>${rows(pairs)}</div>`;
-  return group('File',[['⌘O','Open photo(s)'],['⌘L','Toggle Gallery'],['⌘E','Export']])
-    +group('Edit',[['⌘Z','Undo'],['⇧⌘Z','Redo'],['⇧⌘C','Copy edit'],['⇧⌘V','Paste edit']])
-    +group('Photo (Library grid)',[['X','Reject'],['P','Pick / flag'],['U','Clear flag'],['←/→','Move culling cursor'],['Enter','Open selected'],['⌘[ / ⌘]','Rotate left / right']])
-    +group('View',[['⌘+ / ⌘-','Zoom in / out'],['⌘0','Zoom to fit'],['⌘1','Zoom to 100%'],['⌘\\','Toggle before/after split'],['⌘H','Toggle histogram'],['G','Toggle full Gallery'],['Esc','Close full Gallery / dialogs']])
-    +group('Help',[['⌘/','This panel'],['⌘K','Command palette']]);
+  const rows=csShortcutDefs.map(a=>`<div data-shortcut-row data-search="${a.label.toLowerCase()} ${a.group.toLowerCase()} ${csShortcutLabel(csShortcutBinding(a.id)).toLowerCase()}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--bdr);font-size:13px"><span>${a.label}<small style="display:block;color:var(--mut)">${a.group}</small></span><span style="display:flex;align-items:center;gap:6px"><kbd data-binding="${a.id}" style="font-family:var(--mono);font-size:11px;color:var(--mut);background:var(--bdr);border-radius:4px;padding:3px 6px;white-space:nowrap">${csShortcutLabel(csShortcutBinding(a.id))}</kbd><button type="button" data-rebind="${a.id}" class="btn bgh" style="padding:3px 7px">Change</button><button type="button" data-reset="${a.id}" class="btn bgh" style="padding:3px 7px">Reset</button></span></div>`).join('');
+  return `<label style="display:block;margin:0 0 10px">Search shortcuts <input id="cs-shortcut-search" type="search" placeholder="Search actions" style="width:100%"></label><label style="display:block;margin-bottom:10px"><input id="cs-shortcut-single" type="checkbox"> Disable single-key shortcuts</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button id="cs-shortcut-reset" class="btn bgh">Reset all</button><button id="cs-shortcut-export" class="btn bgh">Export keymap file</button><button id="cs-shortcut-import" class="btn bgh">Import keymap file</button></div><textarea id="cs-shortcut-data" aria-label="Shortcut import or export data" placeholder="Exported shortcut JSON appears here" style="width:100%;min-height:64px;display:none"></textarea><div id="cs-shortcut-list">${rows}</div><p style="font-size:11px;color:var(--mut)">Changes are saved on this device. Browser and operating-system shortcuts keep their normal behavior.</p>`;
 }
+function csOpenShortcuts(){_csModal('Keyboard Shortcuts',shortcutsHtml());const ov=document.getElementById('cs-modal-ov'),q=ov.querySelector('#cs-shortcut-search'),box=ov.querySelector('#cs-shortcut-data');ov.querySelector('#cs-shortcut-single').checked=localStorage.getItem(CS_SHORTCUTS_PREF)==='1';q.oninput=()=>ov.querySelectorAll('[data-shortcut-row]').forEach(r=>r.style.display=r.dataset.search.includes(q.value.toLowerCase())?'flex':'none');ov.querySelector('#cs-shortcut-reset').onclick=()=>{localStorage.removeItem(CS_SHORTCUTS_KEY);csOpenShortcuts();};ov.querySelector('#cs-shortcut-export').onclick=()=>{const data=window.chromasmithShortcutRegistry.export();box.style.display='block';box.value=data;box.focus();box.select();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download='chromasmith-shortcuts.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};ov.querySelector('#cs-shortcut-import').onclick=()=>{box.style.display='block';const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.onchange=async()=>{if(!input.files||!input.files[0])return;try{window.chromasmithShortcutRegistry.import(await input.files[0].text());csOpenShortcuts();}catch(e){alert(e.message);}};input.click();};ov.querySelector('#cs-shortcut-single').onchange=e=>window.chromasmithShortcutRegistry.disableSingles(e.target.checked);ov.querySelectorAll('[data-reset]').forEach(btn=>btn.onclick=()=>{csShortcutSet(btn.dataset.reset,null);csOpenShortcuts();});ov.querySelectorAll('[data-rebind]').forEach(btn=>btn.onclick=()=>{const id=btn.dataset.rebind;btn.textContent='Press keys…';let done=false;const cleanup=()=>{if(done)return;done=true;window.__csShortcutCapturing=false;document.removeEventListener('keydown',capture,true);window.removeEventListener('blur',cleanup);window.__csShortcutCancelCapture=null;};const capture=e=>{e.preventDefault();e.stopPropagation();if(['Shift','Control','Alt','Meta'].includes(e.key))return;if(e.key==='Escape'){cleanup();csOpenShortcuts();return;}const parts=[];if(e.metaKey)parts.push('Cmd');else if(e.ctrlKey)parts.push('Ctrl');if(e.altKey)parts.push('Alt');if(e.shiftKey)parts.push('Shift');const key=e.key===' '?'Space':e.key==='+'?'Plus':e.key==='-'?'Minus':e.key===','?'Comma':e.key.length===1?e.key.toUpperCase():e.key;parts.push(key);try{csShortcutSet(id,parts.join('+'));cleanup();csOpenShortcuts();}catch(err){cleanup();alert(err.message);csOpenShortcuts();}};window.__csShortcutCapturing=true;window.__csShortcutCancelCapture=cleanup;window.addEventListener('blur',cleanup);document.addEventListener('keydown',capture,true);});}
 // First-run tour — a single short _csModal (not a per-element spotlight walkthrough: the app's
 // layout differs enough between mobile bottom-sheet, desktop deskx rail and plain desktop that
 // positioning a spotlight against a moving target was the fragile option; a 3-step "here's the
@@ -13764,7 +13798,7 @@ function tourMaybeShow(){
   _csModal('Welcome to <span class="cs-nowrap">CHRO-MA-SMITH</span>',tourHtml());
 }
 window.chromasmithShowTour=function(){_csModal('Welcome to <span class="cs-nowrap">CHRO-MA-SMITH</span>',tourHtml());}; // manual replay (Help menu / palette) — bypasses the once-only flag
-window.chromasmithShowShortcuts=function(){_csModal('Keyboard Shortcuts',shortcutsHtml());};
+window.chromasmithShowShortcuts=csOpenShortcuts;
 // ── First-timer aids ─────────────────────────────────────────────────────────────────────
 // (1) Advanced tabs (Match & Refine / Color Copy / Collage) stay hidden for a brand-new user until
 // their first export, or until they ask (tour link / Help). Returning users — anyone whose tour flag
@@ -26621,6 +26655,34 @@ document.addEventListener('keyup',e=>{
     fxCompare=false;renderPreview();
   }
 });
+// Shortcut callbacks stay thin adapters to existing application actions; registry dispatch
+// handles modifiers, contexts, persistence and text-entry protection in one place.
+csShortcutRegister('editor.undo',()=>fxUndo());
+csShortcutRegister('editor.redo',()=>fxRedo());
+csShortcutRegister('editor.open',()=>typeof fxPickPhotos==='function'?fxPickPhotos():false);
+csShortcutRegister('editor.copy',()=>window.chromasmithMenuCopyEdit?window.chromasmithMenuCopyEdit():false);
+csShortcutRegister('editor.paste',()=>window.chromasmithMenuPasteEdit?window.chromasmithMenuPasteEdit():false);
+csShortcutRegister('editor.compare',e=>{if(!fxImages.length)return false;if(e.repeat)return;csShortcutCompareHeld=true;if(!fxCompare){fxCompare=true;renderPreview();}});
+csShortcutRegister('editor.next',()=>{if(fxImages.length<=1)return false;fxSelectImage((fxCurIdx+1)%fxImages.length);});
+csShortcutRegister('editor.previous',()=>{if(fxImages.length<=1)return false;fxSelectImage((fxCurIdx-1+fxImages.length)%fxImages.length);});
+csShortcutRegister('editor.crop',()=>{if(typeof cropToggle!=='function'||cropMode)return false;cropToggle();});
+csShortcutRegister('editor.loupe',()=>{if(typeof toggleLoupe==='function'&&!fxLoupe)toggleLoupe();});
+csShortcutRegister('editor.mask-overlay',()=>{const ff=document.getElementById('ff-local');if(!ff||ff.offsetParent===null)return false;const next={overlay:'isolate',isolate:'select',select:'off',off:'overlay'}[mskPreviewMode]||'overlay';mskSetPreviewMode(next);});
+csShortcutRegister('editor.export',()=>exportFX());
+csShortcutRegister('editor.rotate-left',()=>geomRotate(-90));
+csShortcutRegister('editor.rotate-right',()=>geomRotate(90));
+csShortcutRegister('editor.zoom-in',()=>zoomBy(1.25));
+csShortcutRegister('editor.zoom-out',()=>zoomBy(0.8));
+csShortcutRegister('editor.zoom-fit',()=>_resetZoom(true));
+csShortcutRegister('editor.zoom-100',()=>zoomSet(1));
+csShortcutRegister('editor.split',()=>toggleSplit());
+csShortcutRegister('editor.histogram',()=>toggleHist());
+csShortcutRegister('editor.search',()=>cpOpen());
+csShortcutRegister('editor.shortcuts',()=>window.chromasmithShowShortcuts());
+csShortcutRegister('editor.settings',()=>window.csAbout());
+csShortcutRegister('editor.next-tool',()=>{const ids=[...document.querySelectorAll('.fx-ctrl[data-fxsec]')].map(x=>x.dataset.fxsec);if(!ids.length)return false;const at=ids.indexOf(typeof _activeSec==='function'?_activeSec():'');fxSection(ids[(at+1)%ids.length]);});
+csShortcutRegister('editor.previous-tool',()=>{const ids=[...document.querySelectorAll('.fx-ctrl[data-fxsec]')].map(x=>x.dataset.fxsec);if(!ids.length)return false;const at=ids.indexOf(typeof _activeSec==='function'?_activeSec():'');fxSection(ids[(at<=0?ids.length:at)-1]);});
+csShortcutRegister('library.toggle',()=>window.chromasmithToggleLibrary&&window.chromasmithToggleLibrary());
 log(`Chromasmith ready (v. ${BUILD}) — all processing runs locally in your browser`,'ok');
 // Warm the vendor/luts/ cache in the background, after first paint. Deliberately on 'load' and
 // then behind requestIdleCallback: this is the price of having taken 16 MB of LUT data out of

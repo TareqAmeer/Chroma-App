@@ -43,6 +43,7 @@
     "editor:self-reschedule-check": "node test/editor_self_reschedule_check.mjs",
     "editor:native-gate-check": "node test/editor_native_gate_check.mjs",
     "editor:keyboard-check": "node test/editor_keyboard_check.mjs",
+    "shortcut:registry-test": "node test/shortcut_registry.mjs",
     "editor:webkit-smoke": "node test/editor_webkit_smoke.mjs",
     "editor:undo-stress": "node test/editor_undo_stress.mjs",
     "editor:session-roundtrip": "node test/editor_session_roundtrip.mjs",
