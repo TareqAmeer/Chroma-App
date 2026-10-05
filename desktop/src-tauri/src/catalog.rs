@@ -3327,6 +3327,10 @@ pub fn pets_run(
 ) -> Result<PetsResult, String> {
     let mut result = PetsResult::default();
     let scoped = photo_ids.is_some();
+    // Keyset cursor for the unscoped scan: a photo that cannot be decoded (or is momentarily
+    // unreadable) must not be re-selected by the next LIMIT 32 query, or 32 such photos at the
+    // head of the queue spin the worker forever with zero commits (367 iPhone DNGs did exactly that).
+    let mut last_id: i64 = 0;
     loop {
         if cancel.load(Ordering::Relaxed) {
             break;
@@ -3365,11 +3369,12 @@ pub fn pets_run(
                      FROM photos p JOIN volumes v ON v.id = p.volume_id
                      WHERE p.present = 1 AND p.kind != 'video'
                        AND (p.pets_scanned_at IS NULL OR p.pets_scanned_at != p.mtime)
-                     LIMIT 32",
+                       AND p.id > ?1
+                     ORDER BY p.id LIMIT 32",
                 )
                 .map_err(|e| e.to_string())?;
             let rows = stmt
-                .query_map([], |r| {
+                .query_map(params![last_id], |r| {
                     let id: i64 = r.get(0)?;
                     let rel_path: String = r.get(1)?;
                     let mtime: i64 = r.get(2)?;
@@ -3386,6 +3391,9 @@ pub fn pets_run(
         let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
         if batch.is_empty() {
             break;
+        }
+        if !scoped {
+            last_id = batch.iter().map(|b| b.0).max().unwrap_or(last_id);
         }
         let total_in_batch = batch.len();
         let base_scanned = result.scanned;
@@ -3405,7 +3413,18 @@ pub fn pets_run(
             let mut part: Vec<(i64, i64, Option<Vec<PetHit>>)> = chunk
                 .par_iter()
                 .map(|(id, abs, mtime)| {
-                    let dets = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok().and_then(|(rgb, w, h)| {
+                    // RAW never full-decodes (decode_rgb8_capped uses the embedded preview). When that
+                    // yields nothing (e.g. iPhone ProRAW DNG), fall back to the library's own cached
+                    // thumbnail; a file that is present but undecodable either way is marked scanned
+                    // with no detections (permanent failure) rather than retried forever.
+                    let thumb = thumb_dir().join(id.rem_euclid(256).to_string()).join(format!("{id}.jpg"));
+                    let decoded = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok().or_else(|| {
+                        image::open(&thumb).ok().map(|i| { let i = i.to_rgb8(); let (w, h) = i.dimensions(); (i.into_raw(), w, h) })
+                    });
+                    if decoded.is_none() && Path::new(abs).is_file() {
+                        return (*id, *mtime, Some(Vec::new()));
+                    }
+                    let dets = decoded.and_then(|(rgb, w, h)| {
                         let dets = crate::petdetect::detect(&rgb, w, h).map_err(|e| eprintln!("pets: detect {abs}: {e}")).ok()?;
                         // Each animal also gets a CLIP embedding of its own crop — what lets two
                         // sightings of the same dog land in one group instead of "Pet 1..Pet 400".
@@ -12466,5 +12485,24 @@ mod tests {
         assert_eq!(crate::library::get_sidecar(path.clone()).recipe, "RECIPE_RESTART");
 
         std::fs::remove_dir_all(Path::new(&path).parent().unwrap()).ok();
+    }
+
+    #[test]
+    // Regression: >32 undecodable files at the head of the queue used to spin pets_run forever
+    // with zero commits (the batch re-selected the same failing 32). Must terminate and mark all.
+    fn pets_run_terminates_and_marks_undecodable_files_scanned() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("pets_bad");
+        for i in 0..40 {
+            std::fs::write(dir.join(format!("bad{i:02}.dng")), b"not a real dng").unwrap();
+        }
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let r = pets_run(&conn, None, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r.scanned, 40);
+        let left: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE pets_scanned_at IS NULL OR pets_scanned_at != mtime", [], |r| r.get(0)).unwrap();
+        assert_eq!(left, 0);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
