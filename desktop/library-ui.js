@@ -10557,9 +10557,9 @@
       .then(() => step('faces', async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_faces_scan', {}); if (!r || !r.scanned) break; } }))
       .then(() => step('embed', () => invoke('catalog_embed_faces', {})))
       .then(() => step('cluster', () => invoke('catalog_cluster_faces').then(() => refreshPeople())))
-      .then(() => step('clip', () => invoke('catalog_clip_embed', {})))
-      .then(() => step('autotag', () => invoke('catalog_auto_tag').then(() => { refreshAutoTags(); if (state.showInfo) { state.clipTags.clear(); renderInfoPanel(); } })))
-      .then(() => step('pets', async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_pets_scan', {}); if (!r || !r.scanned) break; } refreshPeople(); }))
+      .then(() => step('clip', () => invoke('catalog_clip_embed', {}).then(() => { refreshCatalogCounts(); })))
+      .then(() => step('autotag', () => invoke('catalog_auto_tag').then(() => { refreshAutoTags(); refreshCatalogCounts(); if (state.showInfo) { state.clipTags.clear(); renderInfoPanel(); } })))
+      .then(() => step('pets', async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_pets_scan', {}); refreshCatalogCounts(); if (!r || !r.scanned) break; } refreshPeople(); }))
       .catch((e) => console.error('catalog background phases', e))
       .finally(() => { _catalogBgRunning = false; refreshCatalogCounts(); });
   }
