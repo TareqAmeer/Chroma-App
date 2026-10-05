@@ -6957,7 +6957,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1005I';
+const BUILD='1.1005J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -26683,6 +26683,69 @@ csShortcutRegister('editor.settings',()=>window.csAbout());
 csShortcutRegister('editor.next-tool',()=>{const ids=[...document.querySelectorAll('.fx-ctrl[data-fxsec]')].map(x=>x.dataset.fxsec);if(!ids.length)return false;const at=ids.indexOf(typeof _activeSec==='function'?_activeSec():'');fxSection(ids[(at+1)%ids.length]);});
 csShortcutRegister('editor.previous-tool',()=>{const ids=[...document.querySelectorAll('.fx-ctrl[data-fxsec]')].map(x=>x.dataset.fxsec);if(!ids.length)return false;const at=ids.indexOf(typeof _activeSec==='function'?_activeSec():'');fxSection(ids[(at<=0?ids.length:at)-1]);});
 csShortcutRegister('library.toggle',()=>window.chromasmithToggleLibrary&&window.chromasmithToggleLibrary());
+// CHR-56: unit metadata is deliberately attached at the UI edge, leaving recipe values and
+// render math unchanged. Only controls with physical/percentage units are listed; relative
+// color and film-look controls remain unitless by design.
+const CS_CONTROL_UNIT_SPECS={
+  'cp-str':'%','cp-sh':'%','cp-md':'%','cp-hl':'%','sl-lut-mix':'%',
+  'sl-adj-exp':{unit:' EV',scale:.05,precision:2,sign:true},
+  'sl-adj-con':'%','sl-adj-hi':'%','sl-adj-sh':'%','sl-adj-wh':'%','sl-adj-bl':'%',
+  'sl-adj-vib':'%','sl-adj-sat':'%','sl-adj-skin':'%','sl-adj-clarity':'%','sl-adj-sharp':'%','sl-adj-dehaze':'%','sl-adj-texture':'%',
+  'sl-nr-high-strength':'%','sl-nr-lum':'%','sl-nr-col':'%','sl-nr-det':'%','sl-nr-hldesat':'%','sl-deconv-amt':'%',
+  'sl-deconv-rad':{unit:' px',map:'deconv-radius',precision:1},
+  'sl-crv-s':'%','sl-crv-d':'%','sl-crv-l':'%','sl-crv-h':'%',
+  'sl-hsl-h':'%','sl-hsl-s':'%','sl-hsl-l':'%','sl-wheel-lift-l':'%','sl-wheel-gamma-l':'%','sl-wheel-gain-l':'%',
+  'sl-pc-h':'%','sl-pc-s':'%','sl-pc-l':'%','sl-pc-r':'%',
+  'sl-msk-selview-opacity':'%',
+  'sl-lens-dist':'%','sl-lens-vig':'%','sl-lens-ca':'%','sl-lens-pv':'%','sl-lens-ph':'%',
+  'sl-lens-rot':{unit:'°',scale:.1,precision:1,sign:true},'sl-lens-scale':'%','sl-lens-defr':'%',
+  'sl-straighten':'°',
+  'sl-grain-a':'%','sl-grain-motion':'%','sl-gate-weave':'%','sl-film-breath':'%',
+  'sl-art-du':'%','sl-art-sc':'%','sl-art-lk':'%','sl-hal-a':'%','sl-hal-p':'%','sl-bloom-a':'%','sl-bloom-th':'%','sl-vig':'%',
+  'sl-hal-r':' px','sl-bloom-r':' px',
+  'sl-b1-t':'%','sl-b1-g':'%','sl-b1-pos':'%','sl-b1-glow':'%','sl-b2-t':'%','sl-b2-g':'%','sl-b2-pos':'%','sl-b2-glow':'%',
+  'sl-heal-size':'%','sl-heal-feather':'%','sl-heal-opacity':'%',
+  'sl-canvas-z':'%','sl-canvas-blur':'%','sl-exp-q':'%','sl-exp-wm-op':'%','sl-preset-str':'%',
+  'fx-zoom-slider':'%','cl-inner':' px','cl-outer':' px','cl-radius':' px','cl-titleSize':' px','cl-capSize':' px','cl-zoom':'%','cl-q':'%'
+};
+function csFormatControlUnit(id,value,display){
+  const rawSpec=CS_CONTROL_UNIT_SPECS[id];if(!rawSpec)return String(display==null?value:display);
+  const spec=typeof rawSpec==='string'?{unit:rawSpec}:rawSpec,unit=spec.unit,old=String(display==null?value:display).trim();
+  let base=old.endsWith(unit.trim())?old.slice(0,-unit.trim().length).trim():old;
+  if(spec.scale!=null||spec.map){let n=Number(value);if(spec.map==='deconv-radius')n=1.5+n*.065;if(spec.scale!=null)n*=spec.scale;
+    base=(spec.sign&&n>0?'+':'')+n.toFixed(spec.precision||0);}
+  return base+(unit.startsWith(' ')?' ':'')+unit.trim();
+}
+function csSyncControlUnit(input){
+  if(!input||!CS_CONTROL_UNIT_SPECS[input.id])return;
+  const row=input.closest('.fx-row,.vrow,.fx-row')||input.parentElement;
+  const outId=input.id==='fx-zoom-slider'?'fx-zoom-pct':input.id.startsWith('sl-')?'vl-'+input.id.slice(3):input.id+'-v';
+  const output=document.getElementById(outId)||(row&&row.querySelector('.fx-val'));
+  const formatted=csFormatControlUnit(input.id,input.value,output?output.textContent:input.value);
+  if(output&&output.textContent!==formatted)output.textContent=formatted;
+  const unit=(typeof CS_CONTROL_UNIT_SPECS[input.id]==='string'?CS_CONTROL_UNIT_SPECS[input.id]:CS_CONTROL_UNIT_SPECS[input.id].unit).trim();
+  const labelNode=row&&(row.querySelector('.fx-label')||row.querySelector('.vlb'));
+  let label=input.id==='fx-zoom-slider'?'Zoom':labelNode?labelNode.textContent.replace(/\s+/g,' ').trim():input.getAttribute('aria-label')||input.title||input.id;
+  label=label.replace(/\bi\s*$/,'').trim();
+  const name=label?`${label} (${unit})`:input.id;
+  if(input.getAttribute('aria-label')!==name)input.setAttribute('aria-label',name);
+  if(input.getAttribute('aria-valuetext')!==formatted)input.setAttribute('aria-valuetext',formatted);
+}
+function csSyncControlUnitTree(root){
+  if(root&&root.matches&&root.matches('input[type="range"]'))csSyncControlUnit(root);
+  if(root&&root.querySelectorAll)root.querySelectorAll('input[type="range"]').forEach(csSyncControlUnit);
+}
+csSyncControlUnitTree(document);
+document.addEventListener('input',e=>csSyncControlUnit(e.target));
+document.addEventListener('change',e=>csSyncControlUnit(e.target));
+new MutationObserver(records=>{
+  for(const r of records){
+    if(r.target.nodeType===1&&r.target.matches&&r.target.matches('.fx-val,.vlb')){
+      const row=r.target.closest('.fx-row,.vrow');const input=row&&row.querySelector('input[type="range"]');if(input)csSyncControlUnit(input);
+    }
+    for(const n of r.addedNodes)if(n.nodeType===1)csSyncControlUnitTree(n);
+  }
+}).observe(document.body,{childList:true,subtree:true});
 log(`Chromasmith ready (v. ${BUILD}) — all processing runs locally in your browser`,'ok');
 // Warm the vendor/luts/ cache in the background, after first paint. Deliberately on 'load' and
 // then behind requestIdleCallback: this is the price of having taken 16 MB of LUT data out of
