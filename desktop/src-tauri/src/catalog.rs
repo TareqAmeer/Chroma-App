@@ -2838,6 +2838,16 @@ pub fn faces_run(
     // (that machinery exists only to chunk an unbounded library-wide scan). Unscoped (`None`)
     // reproduces today's query byte-for-byte.
     let scoped = photo_ids.is_some();
+    // Whole-run total so the progress pill shows real overall progress, not "this 32-photo batch"
+    // (which read as a constant ~100% on a 50k backlog). Scoped runs use the selection size.
+    let grand_total: usize = if let Some(ids) = photo_ids {
+        ids.len()
+    } else {
+        conn.query_row(
+            "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND (faces_scanned_at IS NULL OR faces_scanned_at != mtime)",
+            [], |r| r.get::<_, i64>(0),
+        ).unwrap_or(0) as usize
+    };
     loop {
         if cancel.load(Ordering::Relaxed) {
             break;
@@ -2901,7 +2911,7 @@ pub fn faces_run(
         let total_in_batch = batch.len();
         let base_scanned = result.scanned;
         let mut attempted_in_batch: usize = 0;
-        progress(ScanProgress { phase: "faces".into(), done: base_scanned, total: base_scanned + total_in_batch, current: String::new() });
+        progress(ScanProgress { phase: "faces".into(), done: base_scanned, total: grand_total.max(base_scanned + total_in_batch), current: String::new() });
 
         // Chunked rather than one par_iter over the whole batch: progress() can only be called
         // from THIS thread (a rayon closure isn't Send-safe to call it from — see clip_embed_run's
@@ -2934,7 +2944,7 @@ pub fn faces_run(
             progress(ScanProgress {
                 phase: "faces".into(),
                 done: base_scanned + attempted_in_batch,
-                total: base_scanned + total_in_batch,
+                total: grand_total.max(base_scanned + total_in_batch),
                 current: photo_batch_current(chunk.iter().map(|(_, path, _)| path.clone())),
             });
             // System-state throttling (bgwork::throttle_pause): pause under thermal pressure or
@@ -3047,7 +3057,7 @@ pub fn faces_run(
                 }
             }
             tx.commit().map_err(|e| e.to_string())?;
-            progress(ScanProgress { phase: "faces".into(), done: base_scanned + attempted_in_batch, total: base_scanned + total_in_batch, current: String::new() });
+            progress(ScanProgress { phase: "faces".into(), done: base_scanned + attempted_in_batch, total: grand_total.max(base_scanned + total_in_batch), current: String::new() });
             // Adaptive backoff (bgwork::ChunkPacer): a chunk that ran unexpectedly slow is
             // itself evidence of system contention, whatever the root cause — back off
             // proportionally rather than immediately hammering the next chunk. A no-op on a
@@ -3327,6 +3337,16 @@ pub fn pets_run(
 ) -> Result<PetsResult, String> {
     let mut result = PetsResult::default();
     let scoped = photo_ids.is_some();
+    // Whole-run total so the progress pill shows real overall progress, not "this 32-photo batch"
+    // (which read as a constant ~100% on a 50k backlog). Scoped runs use the selection size.
+    let grand_total: usize = if let Some(ids) = photo_ids {
+        ids.len()
+    } else {
+        conn.query_row(
+            "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND (pets_scanned_at IS NULL OR pets_scanned_at != mtime)",
+            [], |r| r.get::<_, i64>(0),
+        ).unwrap_or(0) as usize
+    };
     // Keyset cursor for the unscoped scan: a photo that cannot be decoded (or is momentarily
     // unreadable) must not be re-selected by the next LIMIT 32 query, or 32 such photos at the
     // head of the queue spin the worker forever with zero commits (367 iPhone DNGs did exactly that).
@@ -3397,7 +3417,7 @@ pub fn pets_run(
         }
         let total_in_batch = batch.len();
         let base_scanned = result.scanned;
-        progress(ScanProgress { phase: "pets".into(), done: base_scanned, total: base_scanned + total_in_batch, current: String::new() });
+        progress(ScanProgress { phase: "pets".into(), done: base_scanned, total: grand_total.max(base_scanned + total_in_batch), current: String::new() });
 
         const DECODE_LONG_EDGE: u32 = 1600;
         const CHUNK: usize = 4; // same "stuck at 0%" fix faces_run's own comment explains
@@ -3407,7 +3427,7 @@ pub fn pets_run(
             progress(ScanProgress {
                 phase: "pets".into(),
                 done: base_scanned + detected.len(),
-                total: base_scanned + total_in_batch,
+                total: grand_total.max(base_scanned + total_in_batch),
                 current: photo_batch_current(chunk.iter().map(|(_, path, _)| path.clone())),
             });
             let mut part: Vec<(i64, i64, Option<Vec<PetHit>>)> = chunk
@@ -3437,7 +3457,7 @@ pub fn pets_run(
                 })
                 .collect();
             detected.append(&mut part);
-            progress(ScanProgress { phase: "pets".into(), done: base_scanned + detected.len(), total: base_scanned + total_in_batch, current: String::new() });
+            progress(ScanProgress { phase: "pets".into(), done: base_scanned + detected.len(), total: grand_total.max(base_scanned + total_in_batch), current: String::new() });
         }
 
         let now = now_secs() as i64;
@@ -6156,6 +6176,16 @@ pub fn clip_embed_run(
     const DECODE_LONG_EDGE: u32 = 384; // CLIP's own input is 224x224 (shortest-edge+crop) — well under this
     // See faces_run's comment: a scoped selection is a single bounded batch, no LIMIT/loop.
     let scoped = photo_ids.is_some();
+    // Whole-run total so the progress pill shows real overall progress, not "this 32-photo batch"
+    // (which read as a constant ~100% on a 50k backlog). Scoped runs use the selection size.
+    let grand_total: usize = if let Some(ids) = photo_ids {
+        ids.len()
+    } else {
+        conn.query_row(
+            "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND (clip_scanned_at IS NULL OR clip_scanned_at != mtime)",
+            [], |r| r.get::<_, i64>(0),
+        ).unwrap_or(0) as usize
+    };
     // Id cursor for the unscoped pass: each batch starts after the last one, so a run of photos
     // that can't be read right now (e.g. 32 DNGs in a row) is stepped over and retried on the next
     // pass instead of being re-selected forever — that used to end the whole pass at the first
@@ -6240,7 +6270,7 @@ pub fn clip_embed_run(
         };
         let total_in_batch = batch.len();
         let base_embedded = result.embedded;
-        progress(ScanProgress { phase: "clip".into(), done: base_embedded, total: base_embedded + total_in_batch, current: String::new() });
+        progress(ScanProgress { phase: "clip".into(), done: base_embedded, total: grand_total.max(base_embedded + total_in_batch), current: String::new() });
 
         // Chunked, not one par_iter over the whole batch — see faces_run's comment above for why:
         // a single par_iter().map() reports done=0 for the ENTIRE batch's runtime (progress() isn't
@@ -6255,7 +6285,7 @@ pub fn clip_embed_run(
             progress(ScanProgress {
                 phase: "clip".into(),
                 done: base_embedded + embedded.len(),
-                total: base_embedded + total_in_batch,
+                total: grand_total.max(base_embedded + total_in_batch),
                 current: photo_batch_current(chunk.iter().map(|(_, path, _)| path.clone())),
             });
             let mut part: Vec<(i64, i64, Option<Vec<f32>>)> = chunk
@@ -6273,7 +6303,7 @@ pub fn clip_embed_run(
                 })
                 .collect();
             embedded.append(&mut part);
-            progress(ScanProgress { phase: "clip".into(), done: base_embedded + embedded.len(), total: base_embedded + total_in_batch, current: String::new() });
+            progress(ScanProgress { phase: "clip".into(), done: base_embedded + embedded.len(), total: grand_total.max(base_embedded + total_in_batch), current: String::new() });
         }
 
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
