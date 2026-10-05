@@ -14,3 +14,9 @@
 - Added an optional, persisted Library + Editor workspace with an adjustable near-50/50 divider; Standard view remains the default, and opening a Library photo keeps both panes visible.
 - Added the Settings toggle, keyboard-operable divider, saved pane width, and a Chromium regression covering default mode, pane coexistence, photo selection, resizing, and reload restoration. Files: `chromasmith-22.html`, `desktop/library-ui.js`, `package.json`, `test/library_unified_view.mjs` (CHR-276).
 - Verification: desktop bundle build and targeted Chromium test pass. Existing `ui:test` retains two known audit failures (tap target and contrast); `editor:gates` and `lib:test` are blocked by Playwright resolution in the isolated worktree, with other existing baseline gate failures. Full R16 acceptance remains in progress.
+
+## 2026-10-05 — CHR-267 thumbnail prefetch handoff
+
+- Coalesced boot-prefetch and mounted-card thumbnail requests by path/mtime. If boot stops waiting on a slow native IPC, it stops dispatching additional background work while the visible card can reuse the original in-flight decode.
+- Added a delayed-request browser regression proving the thumbnail eventually paints from one native request. Files: `desktop/library-ui.js`, `test/library_perf.mjs` (CHR-267).
+- Verification: desktop build and syntax/whitespace checks pass; hung-request and handoff browser scenarios pass. Existing Library performance suite still fails three DOM-node budget cases (8,176 > 8,000 and 6,093 > 6,000 twice); remaining cull UI, reject/grouping, warm-RAW latency targets, and 50k performance criteria remain in progress.

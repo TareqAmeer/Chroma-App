@@ -63,7 +63,9 @@
   // already-cataloged folder must read from catalog_query, not re-walk via list_dir/
   // listDirRecursive — see Fix 1 of the catalog-backed-grid plan. Exposed on window below.
   let libtestListDirCalls = 0, libtestCatalogQueryCalls = 0;
+  const libtestThumbnailCalls = new Map();
   window.__libtestCallCounts = () => ({ listDir: libtestListDirCalls, catalogQuery: libtestCatalogQueryCalls });
+  window.__libtestThumbnailCalls = (suffix) => [...libtestThumbnailCalls].filter(([path]) => path.endsWith(suffix)).reduce((n, [, count]) => n + count, 0);
   // ?libshapes=1: odd-numbered photos are a 3:2 red landscape, even ones a 2:3 blue portrait
   // (white band across the top), so the photo-reveal test can check the frame reshaping and the
   // top-down fill on real pixels instead of the 1×1 stand-in every other test uses.
@@ -111,8 +113,14 @@
       // to stop this from ever stalling boot again — this mock is what proves it, rather than
       // trusting the fix by inspection.
       case 'get_thumbnail': case 'get_thumbnail_or_offline': {
+        if (cmd === 'get_thumbnail_or_offline') libtestThumbnailCalls.set(A.path, (libtestThumbnailCalls.get(A.path) || 0) + 1);
         const hang = (/[?&]libhangthumb=([\w,]+)/.exec(location.search) || [])[1];
         if (hang === 'all' || (hang && hang !== 'all' && new RegExp(hang.split(',').join('|')).test(A.path || ''))) return new Promise(() => {});
+        const slow = (/[?&]libslowthumb=([\w,]+)/.exec(location.search) || [])[1];
+        if (slow && new RegExp(slow.split(',').join('|')).test(A.path || '')) {
+          const delay = Math.max(0, parseInt((/[?&]libslowms=(\d+)/.exec(location.search) || [])[1] || '1800', 10));
+          return new Promise((resolve) => setTimeout(() => resolve(png.buffer), delay));
+        }
         return Promise.resolve(png.buffer);
       }
       case 'read_file_bytes': return Promise.resolve(png.buffer);
@@ -3493,6 +3501,7 @@
   // showing its old thumbnail forever.
   const THUMB_CACHE_MAX = 1200; // ~360px JPEGs, so roughly 25-50MB retained at the cap
   const _thumbCache = new Map(); // "path@mtime" -> objectURL (insertion-ordered = LRU order)
+  const _thumbFetches = new Map(); // key -> one native offline-capable thumbnail request shared by boot + mounted cards
   function thumbCacheGet(key) {
     const url = _thumbCache.get(key);
     if (url === undefined) return null;
@@ -3512,6 +3521,18 @@
       _thumbCache.delete(oldest);
       if (dead) URL.revokeObjectURL(dead);
     }
+  }
+  function requestThumbnail(path, key) {
+    const existing = _thumbFetches.get(key);
+    if (existing) return existing;
+    const request = invoke('get_thumbnail_or_offline', { path }).then((buf) => {
+      if (!thumbCacheGet(key)) thumbCachePut(key, URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' })));
+      return buf;
+    }).finally(() => {
+      if (_thumbFetches.get(key) === request) _thumbFetches.delete(key);
+    });
+    _thumbFetches.set(key, request);
+    return request;
   }
   /// Drops a path's cached thumbnail across every mtime it was cached under — called after an
   /// in-app edit writes a new render, so the grid picks the new pixels up.
@@ -3607,11 +3628,11 @@
           // is unplugged) — a plain folder photo that decodes fine takes the exact same path
           // it always did, this only changes behavior for a catalog entry whose file isn't
           // currently reachable.
-          return invoke('get_thumbnail_or_offline', { path: job.path });
+          return requestThumbnail(job.path, job.key);
         })
         .then((buf) => {
-          const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
-          thumbCachePut(job.key, url);
+          const url = thumbCacheGet(job.key) || URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+          if (!_thumbCache.has(job.key)) thumbCachePut(job.key, url);
           if (job.imgEl.isConnected) {
             job.imgEl.src = url;
             job.imgEl.classList.add('loaded');
@@ -5415,7 +5436,7 @@
   const PREFETCH_CALL_TIMEOUT_MS = 1200;
   function withTimeout(promise, ms) {
     return new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+      const t = setTimeout(() => { const error = new Error(`timed out after ${ms}ms`); error.code = 'PREFETCH_TIMEOUT'; reject(error); }, ms);
       promise.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
     });
   }
@@ -5431,17 +5452,23 @@
     // termination bookkeeping only; `onProgress` gets the honest number.
     let done = 0;
     let attempted = 0;
+    let stopPrefetch = false;
     const deadline = Date.now() + PREFETCH_BUDGET_MS;
     onProgress(0, total);
     let next = 0;
     async function worker() {
-      while (next < targets.length && Date.now() < deadline) {
+      while (!stopPrefetch && next < targets.length && Date.now() < deadline) {
         const e = targets[next++];
         try {
-          const buf = await withTimeout(invoke('get_thumbnail_or_offline', { path: e.path }), PREFETCH_CALL_TIMEOUT_MS);
-          thumbCachePut(e.path + '@' + (e.mtime || 0), URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' })));
+          const key = e.path + '@' + (e.mtime || 0);
+          await withTimeout(requestThumbnail(e.path, key), PREFETCH_CALL_TIMEOUT_MS);
           done++;
-        } catch (err) { /* left uncached — the ordinary lazy pump retries it once the card mounts */ }
+        } catch (err) {
+          // A timeout does not cancel native IPC. Stop this prefetch wave immediately so we do
+          // not dispatch more decodes behind work that is still running; mounted cards share the
+          // original promise through requestThumbnail instead of starting duplicate IPC.
+          if (err?.code === 'PREFETCH_TIMEOUT') stopPrefetch = true;
+        }
         attempted++;
         onProgress(done, total);
       }

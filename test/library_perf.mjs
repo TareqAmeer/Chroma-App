@@ -300,10 +300,8 @@ for (const n of [200,1000,5000]) {
 // nothing would ever settle. The splash's own watchdog then hid the splash after its grace period
 // (working as designed), revealing the app before the Library had actually finished loading —
 // exactly the "stuck on the empty editor" symptom. Runs it twice — one hung call, and EVERY
-// call hung — because the fix's actual claim is that the worst case is bounded by concurrency
-// (PREFETCH_BUDGET_MS + one PREFETCH_CALL_TIMEOUT_MS per worker), not multiplied by how many
-// items are stuck. If that claim were wrong, only the "all hung" run would show it — the
-// single-item case would look fine either way.
+// call hung — prefetch now stops dispatching as soon as any request times out, and the mounted
+// card shares that still-running native request rather than starting a duplicate.
 for (const [label, hangParam] of [['one', 'IMG_1003'], ['every', 'all']]) {
   const p=await b.newPage();
   p.on('pageerror',e=>console.log('[pageerror]',e.message));
@@ -319,6 +317,21 @@ for (const [label, hangParam] of [['one', 'IMG_1003'], ['every', 'all']]) {
   const ok = cards === 25 && elapsedMs <= BUDGET_MS;
   console.log(`${label} thumbnail call(s) hung permanently: grid rendered in ${elapsedMs}ms (<=${BUDGET_MS}ms), ${cards}/25 cards  ${ok?'PASS':'FAIL'}`);
   if(!ok) failures.push(`hangParam=${hangParam}: a hung get_thumbnail_or_offline call stalled boot: ${elapsedMs}ms elapsed, ${cards}/25 cards rendered`);
+  await p.close();
+}
+
+// A timeout only stops awaiting a native request; it cannot cancel the IPC/decode. The visible
+// card must adopt that in-flight promise after the grid mounts and paint its result once ready.
+{
+  const p=await b.newPage();
+  p.on('pageerror',e=>console.log('[pageerror]',e.message));
+  await p.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=25&libslowthumb=IMG_1001&libslowms=1800`,{waitUntil:'domcontentloaded',timeout:120000});
+  const selector='#lib-grid .lib-card[data-path$="IMG_1001.RW2"] img';
+  await p.waitForFunction((sel)=>document.querySelector(sel)?.classList.contains('loaded'),selector,{timeout:15000}).catch(()=>{});
+  const r=await p.evaluate((sel)=>({loaded:!!document.querySelector(sel)?.classList.contains('loaded'),calls:window.__libtestThumbnailCalls?.('IMG_1001.RW2')||0}),selector);
+  const ok=r.loaded&&r.calls===1;
+  console.log(`timed-out prefetch is shared with mounted card: ${r.calls} native fetch, loaded=${r.loaded}  ${ok?'PASS':'FAIL'}`);
+  if(!ok)failures.push(`thumbnail handoff duplicated or lost its native request: ${JSON.stringify(r)}`);
   await p.close();
 }
 
