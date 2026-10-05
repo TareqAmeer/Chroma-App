@@ -43,7 +43,10 @@ extern "C" {
 /// Decodes `path` to a JPEG thumbnail whose long edge is at most `long_edge`, using ImageIO.
 /// Returns None when ImageIO cannot handle the file, so the caller falls back.
 pub fn thumbnail_jpeg(path: &str, long_edge: u32) -> Option<Vec<u8>> {
-    unsafe {
+    // Own autorelease pool: this runs on rayon/worker threads that never drain one, and
+    // NSBitmapImageRep hands back autoreleased data plus raster buffers. Without it every call
+    // leaked the decoded bitmap (12 GB "CG raster data" in the pets worker, swap-thrashing an 8 GB Mac).
+    objc2::rc::autoreleasepool(|_| unsafe {
         let url = NSURL::fileURLWithPath(&NSString::from_str(path));
         let src = CGImageSourceCreateWithURL(&*url as *const _ as *const std::ffi::c_void, std::ptr::null());
         if src.is_null() {
@@ -95,7 +98,7 @@ pub fn thumbnail_jpeg(path: &str, long_edge: u32) -> Option<Vec<u8>> {
             return None;
         }
         Some((*data).to_vec())
-    }
+    })
 }
 
 #[cfg(test)]
