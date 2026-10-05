@@ -7008,6 +7008,23 @@
     // first-launch empty state, not replace it with "No photos in this folder".
     if (!state.root && state.source === 'folder' && !state.entries.length) { renderLibraryNoRoot(); return; }
     grid = document.getElementById('lib-grid');
+    // A virtual grid is a spacer plus a small mounted window. Clearing it during a harmless
+    // refresh (for example when background metadata finishes) collapses the spacer and makes
+    // the browser clamp scrollTop to zero. Remember the first visible photo so the rebuilt
+    // window can restore the user's place even if sorting moved that photo to another row.
+    let scrollAnchor = null;
+    if (state._virtOn && grid && state._virtMetrics) {
+      const scroller = grid.parentElement && grid.parentElement.scrollHeight > grid.parentElement.clientHeight
+        ? grid.parentElement : (grid.closest('#lib-overlay') || document.documentElement);
+      const viewportTop = scroller.getBoundingClientRect().top;
+      const cards = [...grid.querySelectorAll('.lib-card[data-path]')];
+      const anchor = cards.find((card) => card.getBoundingClientRect().bottom > viewportTop) || cards[0];
+      if (anchor) scrollAnchor = {
+        path: anchor.dataset.path,
+        viewportOffset: anchor.getBoundingClientRect().top - viewportTop,
+        scroller,
+      };
+    }
     grid.innerHTML = '';
     thumbQueueReset(); // drop queued thumbnail jobs from the previous grid/folder
     const overlayEl = document.getElementById('lib-overlay');
@@ -7062,8 +7079,14 @@
       _virtScrollBound = { el: scroller, fn };
       if (_virtRO) _virtRO.disconnect();
       let roW = -1;
-      _virtRO = new ResizeObserver(() => { const w = scroller.clientWidth; if (roW >= 0 && w !== roW && !document.body.classList.contains('lib-dock-dragging')) virtRemeasure(); roW = w; });
-      _virtRO.observe(scroller);
+      _virtRO = new ResizeObserver(() => {
+        const w = grid.clientWidth;
+        const live = virtMetrics(grid), measured = state._virtMetrics;
+        const geometryChanged = live && measured && (live.cols !== measured.cols || Math.abs(live.rowH - measured.rowH) > 0.5);
+        if (((roW >= 0 && w !== roW) || geometryChanged) && !document.body.classList.contains('lib-dock-dragging')) virtRemeasure();
+        roW = w;
+      });
+      _virtRO.observe(grid);
     } else if (_virtScrollBound) {
       _virtScrollBound.el.removeEventListener('scroll', _virtScrollBound.fn);
       _virtScrollBound = null;
@@ -7071,6 +7094,20 @@
     renderGridTail(shown);
     gridTitleIndex(shown);
     gridTitleUpdate();
+    if (scrollAnchor && state._virtOn && state._virtMetrics) {
+      const index = (state._virtAll || []).findIndex((entry) => entry.path === scrollAnchor.path);
+      if (index >= 0) {
+        // Reuse the Library's geometry-aware path scroll: a refresh can coincide with a dock
+        // or width change, so the old pixel-to-row conversion may no longer match this grid.
+        scrollLibraryToPath(scrollAnchor.path);
+        const card = grid.querySelector(`.lib-card[data-path="${CSS.escape(scrollAnchor.path)}"]`);
+        if (card) {
+          const actualOffset = card.getBoundingClientRect().top - scrollAnchor.scroller.getBoundingClientRect().top;
+          scrollAnchor.scroller.scrollTop += actualOffset - scrollAnchor.viewportOffset;
+          virtUpdate(true);
+        }
+      }
+    }
   }
 
   // ── Grid title (see #lib-grid-title) ──────────────────────────────────────────────────────

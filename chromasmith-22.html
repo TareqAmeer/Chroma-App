@@ -6957,12 +6957,15 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1005N';
+const BUILD='1.1005P';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
 const WHATSNEW=[
+  {date:'2026-10-05',items:[
+    'Library galleries keep the same photos in place while scrolling and updating.',
+  ]},
   {date:'2026-08-28',items:[
     'Desktop app now opens far more RAW formats (ARRIRAW, Canon CRW/CR2/CR3, Fuji RAF, Hasselblad 3FR/FFF, Kodak, Leaf/Phase One IIQ, Leica RWL, Mamiya MEF, Minolta MRW, Nikon NEF/NRW, Pentax PEF/PTX, Samsung SRW, Sigma X3F, Sony SRF/SR2, and more) alongside the existing Panasonic/Sony support.',
     'Desktop app now also opens EXR, HDR, TGA, DDS, QOI, JPEG XL, and Netpbm (PBM/PGM/PPM/PAM) stills, in the editor and the Library.',
