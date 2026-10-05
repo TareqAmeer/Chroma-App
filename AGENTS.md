@@ -34,10 +34,10 @@ When instructed to "run triage" or "triage linear":
 When instructed to "start work" or "next task":
 
 1. Fetch issues assigned to the user in `Todo` or `In Progress` status. Request ONLY `ID`, `Title`, and `Priority` fields with `limit: 3`.
-2. Select the highest priority issue, then fetch its full description in a separate targeted tool call.
+2. Select the highest priority issue, then fetch its full description in a separate targeted tool call. When the user authorizes work through the open repository queue and no assigned actionable issue exists, select from this team's open backlog by priority and dependency order. Keep issue list requests small and fetch descriptions only for selected work.
 3. Update status to `In Progress`.
 4. Output an `### Implementation Plan` detailing planned code changes.
-5. STOP GENERATING. Wait for explicit user approval ("LGTM" or "Approved") before modifying any code.
+5. Continue implementation after presenting the plan when the user has authorized execution. Authorization to work through a ticket queue carries across subsequent tickets; do not request approval for each ticket. Ask only when a material requirement is ambiguous, an action falls outside the authorized scope, or a destructive operation needs explicit approval.
 
 ### 3. Completion Protocol (Codebase -> Linear & DEVLOG)
 

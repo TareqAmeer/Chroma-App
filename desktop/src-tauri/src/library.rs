@@ -1843,6 +1843,46 @@ pub fn set_sidecar_run(
     favorite: Option<bool>,
     catalog_conn: Option<&rusqlite::Connection>,
 ) -> Result<(), String> {
+    set_sidecar_run_inner(
+        path,
+        rating,
+        label,
+        edited,
+        recipe,
+        favorite,
+        catalog_conn,
+        true,
+    )
+}
+/// Recipe jobs update the edited registry once at their boundary, avoiding quadratic JSON rewrites.
+pub(crate) fn set_recipe_batch_run(
+    path: String,
+    edited: bool,
+    recipe: String,
+    conn: &rusqlite::Connection,
+) -> Result<(), String> {
+    let sc = get_sidecar(path.clone());
+    set_sidecar_run_inner(
+        path,
+        sc.rating,
+        sc.label,
+        edited,
+        Some(recipe),
+        Some(sc.favorite),
+        Some(conn),
+        false,
+    )
+}
+fn set_sidecar_run_inner(
+    path: String,
+    rating: i32,
+    label: String,
+    edited: bool,
+    recipe: Option<String>,
+    favorite: Option<bool>,
+    catalog_conn: Option<&rusqlite::Connection>,
+    update_registry: bool,
+) -> Result<(), String> {
     let existing = get_sidecar(path.clone());
     let recipe = recipe.unwrap_or_else(|| existing.recipe.clone());
     let favorite = favorite.unwrap_or(existing.favorite);
@@ -1871,10 +1911,12 @@ pub fn set_sidecar_run(
     };
     let sc = Sidecar { rating, label: label.clone(), edited, recipe, favorite, versions, active: existing.active, keywords: existing.keywords, last_reset_recipe, last_reset_edited };
     write_sidecar(&path, &sc)?;
+    if update_registry {
     registry_set("edited", &path, edited);
     registry_set("favorites", &path, favorite);
     registry_set("flagged", &path, label == "Green");
     registry_set("rejected", &path, label == "Red");
+    }
     // Keeps the catalog's own rating/label/edited/favorite columns from going stale the moment
     // the user changes any of them — see sync_sidecar_fields_run's own doc comment for why this
     // has to happen HERE (synchronously, on every write) rather than waiting for the next scan.
@@ -2276,7 +2318,25 @@ fn write_sidecar_ex(path: &str, sc: &Sidecar, people: &[PersonRegion]) -> Result
     };
     let xmp = apply_keywords_to_xmp(xmp, &sc.keywords);
     let xmp = apply_people_to_xmp(xmp, people);
-    std::fs::write(sc_path, xmp).map_err(|e| format!("write sidecar: {e}"))?;
+    // Write and flush a unique sibling before atomic replacement.
+    use std::io::Write;
+    static SIDECAR_WRITE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let serial = SIDECAR_WRITE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = sc_path.with_extension(format!("xmp.{}.{}.tmp", std::process::id(), serial));
+    let result = (|| -> std::io::Result<()> {
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)?;
+        f.write_all(xmp.as_bytes())?;
+        f.sync_all()?;
+        drop(f);
+        std::fs::rename(&tmp, &sc_path)
+    })();
+    if let Err(e) = result {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("write sidecar: {e}"));
+    }
     Ok(())
 }
 
@@ -2354,12 +2414,30 @@ fn registry_set(name: &str, path: &str, present_target: bool) {
 /// ~29k-entry duplicates registry: 29,663 IPC calls, ~47GB of file reads, ~0.9 BILLION string
 /// comparisons — on every single folder open. This does one read, one HashSet, one write.
 #[tauri::command]
-pub fn registry_set_many(name: String, present: Vec<String>, absent: Vec<String>) -> Result<(), String> {
-    if !matches!(name.as_str(), "duplicates" | "gphotos") {
+pub fn registry_set_many(
+    name: String,
+    present: Vec<String>,
+    absent: Vec<String>,
+) -> Result<(), String> {
+    if !matches!(name.as_str(), "duplicates" | "gphotos" | "edited") {
         return Err(format!("registry_set_many: unknown registry '{name}'"));
     }
+    // Durable recipe completion must never treat an unreadable registry as an empty one.
+    if name == "edited" {
+        match std::fs::read_to_string(registry_path(&name)) {
+            Ok(text) => {
+                serde_json::from_str::<Vec<String>>(&text)
+                    .map_err(|e| format!("read registry: {e}"))?;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("read registry: {e}")),
+        }
+    }
     use crate::canon::canonical_key as ck;
-    let mut map: HashMap<String, String> = registry_read(&name).into_iter().map(|p| (ck(&p), p)).collect();
+    let mut map: HashMap<String, String> = registry_read(&name)
+        .into_iter()
+        .map(|p| (ck(&p), p))
+        .collect();
     let before: std::collections::HashSet<String> = map.keys().cloned().collect();
     for p in present {
         map.entry(ck(&p)).or_insert(p);
@@ -2372,7 +2450,31 @@ pub fn registry_set_many(name: String, present: Vec<String>, absent: Vec<String>
     }
     let mut list: Vec<String> = map.into_values().collect();
     list.sort();
-    registry_write(&name, &list);
+    let text = serde_json::to_string(&list).map_err(|e| format!("serialize registry: {e}"))?;
+    use std::io::Write;
+    let dest = registry_path(&name);
+    let tmp = dest.with_extension(format!(
+        "json.{}.{}.tmp",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    let result = (|| -> std::io::Result<()> {
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)?;
+        f.write_all(text.as_bytes())?;
+        f.sync_all()?;
+        drop(f);
+        std::fs::rename(&tmp, &dest)
+    })();
+    if let Err(e) = result {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("write registry: {e}"));
+    }
     Ok(())
 }
 

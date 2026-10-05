@@ -35,6 +35,11 @@
   // Virtual-copy state for the harness, so the version rows in the context menu are reachable
   // without a real sidecar on disk.
   let ltVersions = [], ltActive = 0;
+  const ltRecipeBatches = new Map(), ltBatchSidecars = new Map(), ltBatchFailures = new Set();
+  if (LIBTEST) {
+    window.libtestRecipeBatchFailNext = indices => { indices.forEach(i => ltBatchFailures.add(i)); };
+    window.libtestRecipeBatchInvoke = (command, args) => libtestInvoke(command, args);
+  }
   // Undo-reset mock state — mirrors the Rust one-slot buffer (last_reset_recipe/last_reset_edited)
   // so ?libtest=1 can exercise the "Reset edit" / "Undo last reset" context-menu pair without a
   // real Tauri backend.
@@ -72,6 +77,7 @@
   }
   function libtestInvoke(cmd, args) {
     const A = args || {};
+    if (LIBTEST && cmd.startsWith('recipe_batch_')) (window.__libtestRecipeBatchCalls ||= []).push({ command: cmd, args: structuredClone(A) });
     if (LT_SHAPES && (cmd === 'get_thumbnail' || cmd === 'get_thumbnail_or_offline' || cmd === 'read_file_bytes')) return ltShapePng(A.path);
     const px = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XBhAAAAABJRU5ErkJggg==';
     const png = Uint8Array.from(atob(px), (c) => c.charCodeAt(0));
@@ -110,7 +116,7 @@
         return Promise.resolve(png.buffer);
       }
       case 'read_file_bytes': return Promise.resolve(png.buffer);
-      case 'get_sidecar': return Promise.resolve({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
+      case 'get_sidecar': if (ltBatchSidecars.has(A.path)) return Promise.resolve(ltBatchSidecars.get(A.path)); return Promise.resolve({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
       case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map(() => ({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited })));
       // reset_edit/undo_reset_edit — see CLAUDE.md's Reset-edit-undo item: captures/restores the
       // one-slot undo buffer exactly like the real Rust commands, so the libtest harness can
@@ -139,9 +145,34 @@
         if (ltVersions.length <= 1) { ltVersions.length = 0; ltActive = 0; } else if (ltActive >= ltVersions.length) ltActive = ltVersions.length - 1;
         return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive });
       }
+      case 'recipe_batch_create': {
+        const batch = { id: Date.now(), label: A.label, status: 'running', createdAt: Date.now(), items: A.items.map((i,index) => ({ ...i, index, status: i.error ? 'failed' : 'pending', error: i.error || null, before: ltBatchSidecars.get(i.path) || { recipe: ltRecipe, edited: ltEdited, rating: 0, label: '' } })) };
+        ltRecipeBatches.set(batch.id,batch); return Promise.resolve(structuredClone(batch));
+      }
+      case 'recipe_batch_list': return Promise.resolve([...ltRecipeBatches.values()].map(b => ({ id: b.id, label: b.label, status: b.status, createdAt: b.createdAt, total: b.items.length, pending: b.items.filter(i => i.status === 'pending').length, failed: b.items.filter(i => i.status === 'failed').length, conflict: b.items.filter(i => i.status === 'conflict').length })));
+      case 'recipe_batch_get': return Promise.resolve(structuredClone(ltRecipeBatches.get(A.id)));
+      case 'recipe_batch_apply_item': {
+        const batch = ltRecipeBatches.get(A.id), item = batch.items[A.index];
+        if (batch.status !== 'running') return Promise.resolve(structuredClone(item));
+        if (ltBatchFailures.delete(item.index)) { item.status = 'failed'; item.error = 'Simulated sidecar write failure'; }
+        else { ltBatchSidecars.set(item.path, { ...item.before, recipe: item.recipe, edited: true }); item.status = 'applied'; item.error = null; }
+        if (!batch.items.some(i => i.status === 'pending')) batch.status = 'completed';
+        return Promise.resolve(structuredClone(item));
+      }
+      case 'recipe_batch_cancel': { const b = ltRecipeBatches.get(A.id); b.status = 'cancelled'; return Promise.resolve(structuredClone(b)); }
+      case 'recipe_batch_resume': { const b = ltRecipeBatches.get(A.id); b.status = 'running'; b.items.forEach(i => { if (i.status === 'failed') i.status = 'pending'; }); return Promise.resolve(structuredClone(b)); }
+      case 'recipe_batch_undo': {
+        const b = ltRecipeBatches.get(A.id);
+        b.items.filter(i => i.status === 'applied').forEach(i => {
+          if (ltBatchSidecars.get(i.path)?.recipe !== i.recipe) { i.status = 'conflict'; i.error = 'Photo changed after batch'; }
+          else { ltBatchSidecars.set(i.path,i.before); i.status = 'undone'; }
+        });
+        b.status = 'undone'; return Promise.resolve(structuredClone(b));
+      }
       case 'set_sidecar': {
         // Mirror the Rust command's undo-buffer-clearing rule: a genuine edit save (non-empty
         // recipe, edited:true) supersedes any pending reset-undo buffer.
+        if (ltBatchSidecars.has(A.path)) ltBatchSidecars.set(A.path, { ...ltBatchSidecars.get(A.path), ...A });
         if (A.edited && A.recipe) { ltRecipe = A.recipe; ltEdited = true; ltLastResetRecipe = null; ltLastResetEdited = false; }
         return Promise.resolve();
       }
@@ -1562,6 +1593,7 @@
     .lib-act-ring{width:13px;height:13px;border-radius:50%;flex:0 0 auto;
       background:conic-gradient(var(--acc2) var(--p,0%),var(--bdr) 0)}
     .lib-act-ring::after{content:'';position:absolute}
+    #lib-top:has(.lib-act-pop){position:relative;z-index:30}
     .lib-act-pop{position:absolute;bottom:28px;right:0;background:var(--sur2);border:1px solid var(--bdr);
       border-radius:10px;width:260px;box-shadow:var(--lift-2,0 12px 30px -12px rgba(0,0,0,.6));z-index:20;
       font-family:var(--sans)}
@@ -6217,18 +6249,146 @@
     window.__copiedRecipe = sc.recipe || snapshotToB64(getUISnapshot());
     toast('Edit copied', true);
   }
+  // BEGIN RECIPE_BATCH_HELPER
+  async function recipeBatchDrain(batch, api, onUpdate, shouldStop = () => false) {
+    let processed = 0;
+    for (const item of batch.items.filter(i => i.status === 'pending')) {
+      if (shouldStop() || batch.status !== 'running') break;
+      try {
+        const result = await api('recipe_batch_apply_item', { id: batch.id, index: item.index });
+        const position = batch.items.findIndex(i => i.index === result.index);
+        batch.items[position] = result;
+      }
+      catch (err) {
+        // The journal is authoritative even if IPC was interrupted after a successful write.
+        batch = await api('recipe_batch_get', { id: batch.id });
+        if (batch.items.find(i => i.index === item.index)?.status === 'pending') throw err;
+      }
+      await onUpdate(batch, item);
+      if (++processed % 25 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    return await api('recipe_batch_get', { id: batch.id });
+  }
+  // END RECIPE_BATCH_HELPER
+  const recipeBatches = new Map();
+  const recipeBatchRuns = new Set();
+  const recipeBatchCancellation = new Set();
+  const recipeBatchEditorBaseline = new Map();
+  async function refreshBatchPhoto(item) {
+    let sc;
+    if (item.status === 'applied') {
+      sc = { ...(state.sidecars.get(item.path) || {}), recipe: item.recipe, edited: true };
+      state.sidecars.set(item.path, sc);
+    } else {
+      state.sidecars.delete(item.path);
+      sc = await getSidecar(item.path);
+    }
+    if (sc.edited) markCardEdited(item.path);
+    else overlay.querySelector(`.lib-card[data-path="${CSS.escape(item.path)}"] .lib-edited-badge`)?.remove();
+    if (item.path === state.openedPath && recipeBatchEditorBaseline.get(item.path) === snapshotToB64(getUISnapshot())) {
+      applyUISnapshot(sc.recipe ? snapshotFromB64(sc.recipe) : window.chromasmithMergeSelectiveRecipe(null, {}, [])); fxUpdate();
+      recipeBatchEditorBaseline.set(item.path, snapshotToB64(getUISnapshot()));
+    }
+  }
+  function showRecipeBatch(batch) {
+    recipeBatches.set(batch.id, batch);
+    const counts = {};
+    batch.items.forEach(i => { counts[i.status] = (counts[i.status] || 0) + 1; });
+    const finished = batch.status !== 'running';
+    activityUpdate('recipe-batch-' + batch.id, {
+      label: batch.label, stage: finished ? 'done' : 'working',
+      done: batch.items.length - (counts.pending || 0), total: batch.items.length,
+      current: `${counts.applied || 0} applied · ${counts.failed || 0} failed · ${counts.pending || 0} pending · ${counts.skipped || 0} skipped · ${counts.conflict || 0} conflicts · ${counts.undone || 0} undone`,
+      batchId: batch.id, failed: batch.items.filter(i => i.status === 'failed').map(i => i.path + ': ' + i.error),
+      cancelFn: () => { recipeBatchCancellation.add(batch.id); invoke('recipe_batch_cancel', { id: batch.id }).then(showRecipeBatch).catch(e => { recipeBatchCancellation.delete(batch.id); toast(humanizeErr('cancel this batch', e), 'err'); }); },
+    });
+  }
+  async function runRecipeBatch(batch) {
+    if (recipeBatchRuns.has(batch.id)) return;
+    recipeBatchRuns.add(batch.id); recipeBatchCancellation.delete(batch.id); showRecipeBatch(batch);
+    try {
+      batch = await recipeBatchDrain(batch, invoke, async (next, item) => {
+        recipeBatches.set(next.id, next);
+        if (item.index % 25 === 0 || next.items.find(i => i.index === item.index)?.status !== 'applied') showRecipeBatch(next);
+        if (next.items.find(i => i.index === item.index)?.status === 'applied') await refreshBatchPhoto(next.items.find(i => i.index === item.index));
+      }, () => recipeBatchCancellation.has(batch.id) || recipeBatches.get(batch.id)?.status === 'cancelled');
+      showRecipeBatch(batch);
+    } catch (e) { toast(humanizeErr('continue this batch; open Results to resume', e), 'err'); }
+    finally { recipeBatchRuns.delete(batch.id); }
+  }
+  async function startRecipeBatch(label, paths, recipeForPhoto) {
+    if (!paths.length) return;
+    await flushPendingSave();
+    if (state.openedPath) recipeBatchEditorBaseline.set(state.openedPath, snapshotToB64(getUISnapshot()));
+    const items = [];
+    // Preparation is bounded too, so a large selection never floods the IPC bridge.
+    const uniquePaths = [...new Set(paths)];
+    let preparationCancelled = false;
+    for (const path of uniquePaths) {
+      if (preparationCancelled) break;
+      if (items.length % 25 === 0) {
+        activityUpdate('recipe-prepare', { label: label + ' — preparing', stage: 'working', batchId: null, done: items.length, total: uniquePaths.length, current: 'Preparing recipes', cancelFn: () => { preparationCancelled = true; } });
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      let cur;
+      try {
+        cur = await getSidecar(path);
+        items.push({ path, recipe: await recipeForPhoto(cur, path), expectedRecipe: cur.recipe || '', expectedActive: cur.active || 0 });
+      } catch (e) { items.push({ path, recipe: '', error: 'Preparation failed: ' + String(e.message || e) }); }
+    }
+    activityUpdate('recipe-prepare', { stage: 'done', batchId: null });
+    if (preparationCancelled) return;
+    const batch = await invoke('recipe_batch_create', { label, items });
+    await runRecipeBatch(batch);
+  }
   async function libPasteEdit(paths) {
     const recipe = window.__copiedRecipe;
-    if (!paths.length || !recipe) return;
-    await Promise.all(paths.map(async (p) => {
-      const cur = await getSidecar(p);
-      const updated = { ...cur, edited: true, recipe };
-      state.sidecars.set(p, updated);
-      await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe }).catch((e) => sidecarWriteFailed(p, cur, e));
-      markCardEdited(p);
-      if (p === state.openedPath) { try { applyUISnapshot(snapshotFromB64(recipe)); fxUpdate(); } catch (e) { console.error('paste edit', e); } }
-    }));
+    if (!recipe) return;
+    try { await startRecipeBatch('Paste edit', paths, () => recipe); }
+    catch (e) { toast(humanizeErr('paste edits', e), 'err'); }
   }
+  async function recipeBatchResults(id) {
+    let batch = await invoke('recipe_batch_get', { id });
+    recipeBatches.set(id, batch);
+    const d = document.createElement('dialog');
+    d.style.cssText = 'background:var(--bg);color:var(--txt);border:1px solid var(--bdr);border-radius:10px;padding:18px;width:620px;max-width:90vw';
+    d.setAttribute('aria-labelledby', 'recipe-batch-result-title-' + id);
+    const render = () => {
+      d.innerHTML = `<h3 id="recipe-batch-result-title-${id}" style="margin:0 0 12px">${esc(batch.label)} — results</h3><div style="max-height:50vh;overflow:auto"><table style="width:100%;font-size:12px"><thead><tr><th align="left">Photo</th><th align="left">Result</th></tr></thead><tbody>${batch.items.map(i => `<tr><td>${esc(i.path)}</td><td>${esc(i.status)}${i.error ? ': ' + esc(i.error) : ''}</td></tr>`).join('')}</tbody></table></div>${batch.items.some(i => String(i.error || '').startsWith('Preflight:')) ? '<p style="font-size:12px">Preparation failures need repair before applying again. Select failed photos, fix their source recipe or access, then repeat Paste.</p>' : ''}<div style="display:flex;gap:8px;margin-top:14px"><button class="btn bgh" data-action="resume">Resume / retry failed</button><button class="btn bgh" data-action="select">Select failed / skipped</button><button class="btn bgh" data-action="undo">Undo batch</button><button class="btn bgh" data-action="close">Close</button></div>`;
+      d.querySelector('[data-action="close"]').onclick = () => d.close();
+      d.querySelector('[data-action="select"]').onclick = () => {
+        state.selected = new Set(batch.items.filter(i => ['failed', 'skipped', 'conflict'].includes(i.status)).map(i => i.path));
+        syncSelCount(); renderGrid(); d.close();
+      };
+      d.querySelector('[data-action="resume"]').disabled = recipeBatchRuns.has(id) || !batch.items.some(i => (i.status === 'pending' || (i.status === 'failed' && !String(i.error || '').startsWith('Preflight:'))));
+      d.querySelector('[data-action="undo"]').disabled = recipeBatchRuns.has(id) || !batch.items.some(i => i.status === 'applied');
+      d.querySelector('[data-action="resume"]').onclick = async () => {
+        try { batch = await invoke('recipe_batch_resume', { id }); d.close(); await runRecipeBatch(batch); }
+        catch (e) { toast(humanizeErr('resume this batch', e), 'err'); }
+      };
+      d.querySelector('[data-action="undo"]').onclick = async () => {
+        try {
+          batch = await invoke('recipe_batch_undo', { id });
+          for (const item of batch.items.filter(i => i.status === 'undone')) await refreshBatchPhoto(item);
+          showRecipeBatch(batch); render();
+        } catch (e) { toast(humanizeErr('undo this batch', e), 'err'); }
+      };
+    };
+    render(); document.body.appendChild(d); d.addEventListener('close', () => d.remove()); d.showModal();
+  }
+  // Results remain accessible after the activity pill is dismissed and across app restarts.
+  window.chromasmithRecipeBatchHistory = async () => {
+    try {
+      const batches = await invoke('recipe_batch_list');
+      const d = document.createElement('dialog');
+      d.style.cssText = 'background:var(--bg);color:var(--txt);border:1px solid var(--bdr);border-radius:10px;padding:18px;max-width:90vw';
+      d.setAttribute('aria-labelledby', 'recipe-batch-history-title');
+      d.innerHTML = `<h3 id="recipe-batch-history-title">Batch edit history</h3>${batches.length ? batches.map(b => `<button class="btn bgh" data-batch="${esc(b.id)}" style="display:block;margin:6px 0">${esc(b.label)} · ${esc(b.status)} · ${b.total} photos</button>`).join('') : '<p>No batch edits yet.</p>'}<button class="btn bgh" data-close>Close</button>`;
+      d.querySelectorAll('[data-batch]').forEach(btn => { btn.onclick = () => { d.close(); recipeBatchResults(Number(btn.dataset.batch)).catch(e => toast(humanizeErr('open batch results', e), 'err')); }; });
+      d.querySelector('[data-close]').onclick = () => d.close();
+      document.body.appendChild(d); d.addEventListener('close', () => d.remove()); d.showModal();
+    } catch (e) { toast(humanizeErr('read batch history', e), 'err'); }
+  };
   // ── Rotate/flip on stored recipes (unopened photos). Pure mirror of chromasmith-22.html's
   // geomRotate/geomFlip + _cropRot90 + mskRemapForGeom, applied to a snapshot instead of the
   // live editor item. Keep the two in step if either changes.
@@ -6587,27 +6747,18 @@
       });
     }
     const pasteRow = verMenu.subItem('Paste edit', () => libPasteEdit(paths), kbd('shift', 'V'));
-    // Selective paste (darktable idiom): pick WHICH parts of the copied recipe to apply instead
-    // of all-or-nothing — e.g. paste just the grain+halation without also overwriting the LUT.
-    // chromasmithPasteEditSelective (chromasmith-22.html) shows the category picker and hands
-    // back one MERGED snapshot (current state + only the checked categories from the copy).
-    // Selective paste writes its own merged recipe via the same per-path write loop
-    // libPasteEdit uses, since libPasteEdit itself always reads window.__copiedRecipe verbatim
-    // and every other caller (menu + keyboard) wants exactly that behavior.
     const pasteSelRow = verMenu.subItem('Paste edit (selective)…', async () => {
       if (typeof window.chromasmithPasteEditSelective !== 'function') return;
-      window.chromasmithPasteEditSelective(window.__copiedRecipe, async (merged) => {
-        const recipe = snapshotToB64(merged);
-        await Promise.all(paths.map(async (p) => {
-          const cur = await getSidecar(p);
-          const updated = { ...cur, edited: true, recipe };
-          state.sidecars.set(p, updated);
-          await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe }).catch((e) => sidecarWriteFailed(p, cur, e));
-          markCardEdited(p);
-          if (p === state.openedPath) { try { applyUISnapshot(snapshotFromB64(recipe)); fxUpdate(); } catch (e) { console.error('paste edit (selective)', e); } }
-        }));
+      window.chromasmithPasteEditSelective(window.__copiedRecipe, async (_merged, selection) => {
+        try {
+          await startRecipeBatch('Selective paste', paths, cur => {
+            const base = cur.recipe ? snapshotFromB64(cur.recipe) : null;
+            return snapshotToB64(window.chromasmithMergeSelectiveRecipe(base, selection.source, selection.keys));
+          });
+        } catch (e) { toast(humanizeErr('paste selected settings', e), 'err'); }
       });
     });
+    verMenu.subItem('Batch edit history…', () => window.chromasmithRecipeBatchHistory());
     if (!window.__copiedRecipe) {
       pasteRow.style.opacity = '.4'; pasteRow.style.pointerEvents = 'none';
       pasteSelRow.style.opacity = '.4'; pasteSelRow.style.pointerEvents = 'none';
@@ -8053,15 +8204,7 @@
     if (!window.__copiedRecipe) { toast('Nothing copied yet', false); return; }
     const targets = state.openedPath ? [state.openedPath] : (state.openedPaths || []);
     if (!targets.length) { toast('No photo open', false); return; }
-    await Promise.all(targets.map(async (p) => {
-      const cur = await getSidecar(p);
-      const updated = { ...cur, edited: true, recipe: window.__copiedRecipe };
-      state.sidecars.set(p, updated);
-      await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe: window.__copiedRecipe }).catch((e) => sidecarWriteFailed(p, cur, e));
-      markCardEdited(p);
-    }));
-    try { applyUISnapshot(snapshotFromB64(window.__copiedRecipe)); fxUpdate(); } catch (e) { console.error('paste edit', e); }
-    toast('Edit pasted', true);
+    await libPasteEdit(targets);
   };
   // Column count of the CURRENT grid layout, read from the resolved CSS grid template rather
   // than recomputed from thumb size + container width — the auto-fill/minmax track count is
@@ -8765,18 +8908,12 @@
     const paths = cmKbTargets();
     if (!paths.length) { toast('Select photos to apply All FX to'); return; }
     if (typeof window.chromasmithAllFxApplyTo !== 'function') return;
-    await Promise.all(paths.map(async (p) => {
-      const cur = await getSidecar(p);
-      let base = null;
-      try { if (cur.recipe) base = snapshotFromB64(cur.recipe); } catch (e) {}
-      const recipe = snapshotToB64(window.chromasmithAllFxApplyTo(base));
-      const updated = { ...cur, edited: true, recipe };
-      state.sidecars.set(p, updated);
-      await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe }).catch((e) => sidecarWriteFailed(p, cur, e));
-      markCardEdited(p);
-      if (p === state.openedPath) { try { applyUISnapshot(snapshotFromB64(recipe)); fxUpdate(); if (typeof syncAllFxBtn === 'function') syncAllFxBtn(); } catch (e) { console.error('all fx', e); } }
-    }));
-    toast(`All FX applied to ${paths.length} photo${paths.length === 1 ? '' : 's'}`, true);
+    try {
+      await startRecipeBatch('Apply All FX', paths, cur => {
+        const base = cur.recipe ? snapshotFromB64(cur.recipe) : null;
+        return snapshotToB64(window.chromasmithAllFxApplyTo(base));
+      });
+    } catch (e) { toast(humanizeErr('apply All FX', e), 'err'); }
   };
   const exportBtn = overlay.querySelector('#lib-export-btn');
   if (exportBtn) exportBtn.onclick = () => libExportPaths(cmKbTargets());
@@ -10836,6 +10973,7 @@
         <div class="lib-act-pop-head"><span>${esc(activity.label || 'Job')}</span>
           <span class="lib-act-pop-cancel" id="lib-act-cancel">${activity.stage === 'done' ? 'Dismiss' : _activityStalled ? 'Cancel' : (activity.cancelFn ? 'Cancel' : '')}</span></div>
         <div class="lib-act-pop-body">
+          ${activity.batchId ? `<button class="btn bgh" id="lib-act-batch-results">Results / retry / undo</button>` : ''}
           <div class="lib-act-stage active"><span style="width:12px;display:inline-block;text-align:center">${activity.stage === 'done' ? '✓' : '›'}</span><span>${esc(activity.current || activity.label || 'Working')}</span><span class="lib-act-stage-n">${activity.stage === 'done' ? '' : (activity.total ? `${activity.done} of ${activity.total}` : '')}</span></div>${bar}
         </div>${queuedHtml}</div>`;
     } else if (activity.expanded) {
@@ -10898,7 +11036,17 @@
       desiredLeft = Math.max(margin, Math.min(desiredLeft, window.innerWidth - pw - margin));
       pop.style.left = (desiredLeft - pr.left) + 'px';
       pop.style.right = 'auto';
+      // The shared shell mounts this pill in the top bar; its old footer anchor
+      // opens above the viewport. Keep footer behavior and open header details below.
+      if (pill.closest('#sk2-act')) {
+        pop.style.top = (pr.height + 6) + 'px';
+        pop.style.bottom = 'auto';
+        pop.style.maxHeight = Math.max(120, window.innerHeight - pr.bottom - 20) + 'px';
+        pop.style.overflowY = 'auto';
+      }
     }
+    const resultsBtn = document.getElementById('lib-act-batch-results');
+    if (resultsBtn) resultsBtn.onclick = () => recipeBatchResults(activity.batchId).catch(e => toast(humanizeErr('open batch results', e), 'err'));
     const pauseBtn = document.getElementById('lib-act-pause');
     if (pauseBtn) {
       pauseBtn.onclick = (e) => { e.stopPropagation(); bgSetPaused(!bgPaused()); };
@@ -10959,7 +11107,7 @@
     // pipeline is alive, so it always resets the stall clock and clears a stalled state.
     _activityLastProgressAt = Date.now();
     _activityStalled = false;
-    activity = { ...activity, kind, visible: true, ...patch };
+    activity = { ...activity, ...(activity.kind !== kind ? { batchId: null, failed: [], cancelFn: null } : {}), kind, visible: true, ...patch };
     if (activity.visible && activity.stage !== 'done' && !_activityStallTimer) {
       _activityStallTimer = setInterval(_activityStallTick, 5000);
     }
@@ -10969,7 +11117,7 @@
       // Failures (a nonempty failure list on the import side) don't auto-clear — the whole
       // point of surfacing this at all is so "3 files failed" isn't something only the console
       // saw. A clean finish clears itself after a few seconds so it doesn't linger forever.
-      const hasFailures = kind === 'import' && activity.failed && activity.failed.length;
+      const hasFailures = !!activity.batchId || (activity.failed && activity.failed.length);
       if (!hasFailures) {
         _activityClearTimer = setTimeout(() => {
           activity.visible = false;
@@ -11171,6 +11319,17 @@
   /// pill), but now ALSO mirrors progress here so there's one consistent place showing "is
   /// anything running" regardless of which feature started it. `patch.cancelFn`, if given, wires
   /// the pill's own Cancel button; omit it for a job with no cancel path.
+  if (!LIBTEST) setTimeout(() => { invoke('recipe_batch_list').then(async batches => {
+    const unfinished = batches.find(b => ['running', 'undoing'].includes(b.status) || b.pending || b.failed);
+    if (unfinished) {
+      let batch = await invoke('recipe_batch_get', { id: unfinished.id });
+      // A renderer restart has no worker for this journal. Persist interruption so native
+      // undo and the report agree; Resume explicitly restarts its remaining items.
+      if (['running', 'undoing'].includes(batch.status)) batch = await invoke('recipe_batch_cancel', { id: batch.id });
+      showRecipeBatch(batch);
+      toast('Unfinished batch edits are available in Edit → Batch edit history');
+    }
+  }).catch(e => console.error('batch recovery', e)); }, 0);
   window.libActivityJob = function (job, patch) { activityUpdate(job, patch || {}); };
   window.libActivityJobDone = function (job, extra) { activityUpdate(job, { stage: 'done', ...(extra || {}) }); };
 

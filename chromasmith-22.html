@@ -2484,7 +2484,7 @@ body.sk2 #lib-overlay #sk2-act{display:none;align-items:center;gap:8px;backgroun
 body.sk2 #lib-overlay #sk2-act.busy{display:inline-flex}
 body.sk2 #lib-overlay .sk2-act-dot{width:8px;height:8px;background:var(--k-color-accent-a);flex:none;animation:sk2Pulse 1.4s ease-in-out infinite}
 @keyframes sk2Pulse{50%{opacity:.25}}
-body.sk2 #lib-overlay .sk2-act-body{display:none;align-items:center;gap:10px;overflow:hidden;white-space:nowrap}
+body.sk2 #lib-overlay .sk2-act-body{display:none;align-items:center;gap:10px;overflow:visible;white-space:nowrap}
 body.sk2 #lib-overlay #sk2-act.open .sk2-act-body,body.sk2 #lib-overlay #sk2-act:hover .sk2-act-body{display:inline-flex}
 @media (prefers-reduced-motion:reduce){body.sk2 #lib-overlay .sk2-act-dot{animation:none}}
 /* Sidebar */
@@ -6957,7 +6957,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1005G';
+const BUILD='1.1005H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17906,11 +17906,12 @@ function pasteEditSelectiveApply(base,src,checkedKeys){
   });
   return base;
 }
+window.chromasmithMergeSelectiveRecipe=(base,src,keys)=>pasteEditSelectiveApply(JSON.parse(JSON.stringify(base||_fxPristineDefault||{})),src,keys);
 // Shows the category picker, then calls onConfirm(mergedSnapshot) — the caller applies it to the
 // live editor AND/OR writes it to sidecar(s), since that differs between the single-photo
 // context-menu paste and the Photo-menu paste (see library-ui.js).
 window.chromasmithPasteEditSelective=function(recipeB64,onConfirm){
-  let src;try{src=snapshotFromB64(recipeB64);}catch(e){log('Could not read copied edit: '+e.message,'err');return;}
+  let src;try{src=JSON.parse(decodeURIComponent(escape(atob(recipeB64))));}catch(e){log('Could not read copied edit: '+e.message,'err');return;}
   const rows=PASTE_CATEGORIES.map(c=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="paste-cat-cb" value="${c.key}" checked>${c.label}</label>`).join('');
   _csModal('Paste Edit — choose what to apply',
     `<div>${rows}</div><div class="btn-row" style="margin-top:14px;justify-content:flex-end">`
@@ -17924,7 +17925,7 @@ window.chromasmithPasteEditSelective=function(recipeB64,onConfirm){
     if(!checked.length)return;
     const base=getUISnapshot();
     const merged=pasteEditSelectiveApply(base,src,checked);
-    onConfirm(merged);
+    onConfirm(merged,{source:src,keys:checked});
   };
 };
 // Returns the in-flight LUT-load promise (or undefined if the LUT selector didn't change) so
