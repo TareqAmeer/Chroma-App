@@ -818,6 +818,7 @@
   };
 
   const LS_ROOT = 'chromasmith_lib_root';
+  const initialUnifiedPreference = localStorage.getItem('chromasmith_lib_unified_view') === '1';
   // A relaunch must restore the last Library destination, not merely a filesystem root.  That
   // destination can be a folder, smart collection, date range, keyword/person catalog scope, or
   // a cloud album; the legacy key only represented a folder.
@@ -863,6 +864,7 @@
     search: '',
     open: false,
     expanded_view: false,  // full-window library grid (vs the docked 340px strip)
+    unified_view: false,
     openedPath: '',        // path of the photo currently loaded into the editor FROM the library
     openedPaths: [],       // paths of ALL photos currently loaded when opened as a multi-photo
                             // batch (openedPath stays '' for a batch — see the three call sites
@@ -897,6 +899,7 @@
     if (LIBTEST) return;
     try { localStorage.setItem(LS_LAST_VIEW, JSON.stringify(view)); } catch (e) {}
   }
+
 
   // ── styles ──────────────────────────────────────────────────────────────────
   const style = document.createElement('style');
@@ -1052,6 +1055,7 @@
     #lib-overlay.full #lib-viewbar{grid-column:2;grid-row:3}
     #lib-overlay.full #lib-main{grid-column:2;grid-row:4}
     #lib-overlay.full #lib-bottom{grid-column:1/3;grid-row:5}
+    #lib-unified-resizer{display:none}
     #lib-overlay.full.tree-collapsed{grid-template-columns:0 1fr;grid-template-rows:auto auto auto 1fr 28px}
     #lib-overlay.full #lib-grid{grid-template-columns:repeat(auto-fill,minmax(var(--lib-thumb,200px),1fr))}
     /* Sidebar collapse. Docked (non-full) mode zeroes the ROW (old vertical layout); full mode
@@ -2227,6 +2231,43 @@
     body.deskx.lib-dock-collapsed:not(.lib-full) #lib-dock-reopen{display:flex}
   `;
   document.head.appendChild(style);
+  const unifiedStyle = document.createElement('style');
+  unifiedStyle.textContent = `
+    body.deskx.lib-unified-view .fx-layout{grid-template-columns:minmax(300px,var(--unified-lib-w)) minmax(320px,1fr) var(--panel-w) var(--rail-w)}
+    body.deskx.lib-unified-view.lib-unified-dragging .fx-layout{transition:none!important}
+    body.deskx.lib-unified-view #lib-overlay{grid-column:1;grid-row:1;position:relative;inset:auto;top:auto;left:auto;bottom:auto;width:auto;height:100%;min-width:0;max-width:none;z-index:auto;display:grid;overflow:hidden;grid-template-columns:var(--lib-side-w,230px) minmax(0,1fr);grid-template-rows:auto auto auto minmax(0,1fr) 28px}
+    body.deskx.lib-unified-view #lib-overlay #lib-top{display:flex;grid-column:1/3;grid-row:1}
+    body.deskx.lib-unified-view #lib-overlay #lib-filters{display:flex;grid-column:2;grid-row:2}
+    body.deskx.lib-unified-view #lib-overlay #lib-viewbar{grid-column:2;grid-row:3}
+    body.deskx.lib-unified-view #lib-overlay #lib-side{display:block;grid-column:1;grid-row:2/5;min-width:0}
+    body.deskx.lib-unified-view #lib-overlay #lib-main{grid-column:2;grid-row:4;min-width:0;padding:16px}
+    body.deskx.lib-unified-view #lib-overlay #lib-bottom{display:flex;grid-column:1/3;grid-row:5}
+    body.deskx.lib-unified-view #lib-overlay .lib-fullview-only:not(#lib-top):not(#lib-filters):not(#lib-viewbar):not(#lib-bottom){display:block}
+    body.deskx.lib-unified-view #lib-overlay #lib-grid{grid-template-columns:repeat(auto-fill,minmax(var(--lib-thumb,140px),1fr))}
+    body.deskx.lib-unified-view #lib-overlay #lib-grid.aspect-view{display:flex;grid-template-columns:none}
+    body.deskx.lib-unified-view #lib-overlay:not(.full) .lib-stars{display:inline-flex}
+    body.deskx.lib-unified-view #lib-overlay:not(.full) .lib-card .lib-name{display:block}
+    body.deskx.lib-unified-view #lib-overlay:not(.full) .lib-tagrow{display:flex}
+    body.deskx.lib-unified-view #lib-overlay .lib-side-resizer{display:none}
+    body.deskx.lib-unified-view #lib-overlay .lib-dock-resizer{display:none}
+    body.deskx.lib-unified-view #lib-overlay #lib-unified-resizer{display:block;position:absolute;top:0;bottom:0;left:calc(var(--unified-lib-w) - 4px);width:8px;cursor:col-resize;z-index:20;touch-action:none}
+    body.deskx.lib-unified-view #lib-overlay #lib-unified-resizer::after{content:'';position:absolute;left:4px;top:0;bottom:0;width:1px;background:var(--bdr-panel)}
+    body.deskx.lib-unified-view #lib-overlay #lib-unified-resizer[hidden]{display:none}
+    body.deskx.lib-unified-view #lib-dock-reopen{display:none}
+    body.deskx.lib-unified-view .fx-preview-col{grid-column:2;min-width:0}
+    body.deskx.lib-unified-view:not(.panel-closed) .fx-panel{grid-column:3}
+    body.deskx.lib-unified-view #fx-toolrail{grid-column:4}
+    body.deskx.lib-unified-view #fx-panel-resizer{right:calc(var(--panel-w) + var(--rail-w) - 3px)}
+    body.deskx.lib-unified-view #fx-rail-resizer{right:calc(var(--rail-w) - 3px)}
+    body.deskx.lib-unified-view #fx-rail-show{right:0}
+    body.deskx.lib-unified-view #fx-deskbar{padding-left:calc(var(--unified-lib-w) + 16px)}
+    body.deskx.lib-unified-view.lib-dock-collapsed .fx-layout{--dock-w:var(--unified-lib-w)}
+    body.deskx.lib-unified-view.lib-dock-collapsed #lib-overlay{display:grid}
+    body.deskx.lib-unified-view.lib-dock-collapsed #lib-grid{visibility:hidden}
+    @media(max-width:1050px){body.deskx.lib-unified-view{--panel-w:0px;--rail-w:0px}body.deskx.lib-unified-view .fx-layout{grid-template-columns:minmax(280px,var(--unified-lib-w)) minmax(280px,1fr) 0 0}}
+    @media(prefers-reduced-motion:reduce){body.deskx.lib-unified-view .fx-layout{transition:none}}
+  `;
+  document.head.appendChild(unifiedStyle);
 
   // Menu-option checkmark, transplanted verbatim from Library View.html's own .opt .check
   // markup (a real per-row SVG, shown/hidden by .sel — not a CSS-generated dot).
@@ -2363,6 +2404,14 @@
              #fx-settings-menu at init (libSettingsAdopt) and shown as its gallery categories. -->
         <div id="lib-view-menu" hidden>
           <div class="fx-settings-pane lib-settings-pane" id="lib-pane-library">          
+          <div class="fx-ovf-grp-label">Workspace</div>
+          <label class="fx-ovf-item lib-unified-setting" for="lib-unified-toggle" title="Keep the Library and current photo editor visible side by side">
+            <span>Show Gallery + Studio together</span><input id="lib-unified-toggle" type="checkbox" aria-label="Show Gallery and Studio together">
+          </label>
+          <label class="fx-ovf-item lib-unified-setting" for="lib-stars-toggle" title="Show, filter and set star ratings while preserving ratings in photo sidecars">
+            <span>Show star ratings</span><input id="lib-stars-toggle" type="checkbox" aria-label="Show star ratings">
+          </label>
+          <div class="fx-ovf-sep"></div>
           <button class="fx-ovf-item opt-action" id="lib-pick" title="Choose root folder">${ic('library',15)}<span>Choose folder…</span></button>
           <button class="fx-ovf-item opt-action" id="lib-quickstart" title="Replay the quick-start tour: open, edit, export">${ic('info',15)}<span>Quick start tour</span></button>
           <button class="fx-ovf-item opt-action" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',15)}<span>Import from Google Photos…</span></button>
@@ -2508,6 +2557,8 @@
          chromasmith-22.html's .fx-layout (the actual grid track, not this element's own cosmetic
          width) — see that variable's own comment for why it's an indirection layer. -->
     <div class="lib-dock-resizer" id="lib-dock-resizer"></div>
+    <button id="lib-unified-resizer" type="button" role="separator" aria-orientation="vertical"
+      aria-label="Resize Gallery and Studio panes" aria-valuemin="300" aria-valuemax="900" aria-valuenow="50" tabindex="0" hidden></button>
     <div id="lib-side">
       <div class="lib-side-resizer" id="lib-side-resizer"></div>
       <div class="lib-side-tabs">
@@ -3235,6 +3286,7 @@
   if (LIBTEST) {
     window.__libState = () => ({ m: state._virtMetrics, on: state._virtOn, n: (state._virtAll || []).length, range: state._virtRange });
     window.__libRenderGrid = () => renderGrid();
+    window.__libToggleUnifiedView = (on) => setUnifiedView(on);
     window.__libSelect = (p) => { state.selected.add(p); };
     // Test-only trigger for showLibraryError()'s recovery state — its 4 real call sites (folder/
     // collection/exported/Lightroom-album load failures) all need a real IPC rejection, which
@@ -3835,7 +3887,7 @@
   // ⚠️ Switched off at the SURFACES, never in setRating or the sidecar schema. Ratings already
   // written to .xmp sidecars stay there and stay readable; turning the UI off must not silently
   // start dropping data the user recorded, or turning it back on would show an empty history.
-  const STARS_ENABLED = false;
+  let STARS_ENABLED = localStorage.getItem('chromasmith_lib_stars_enabled') !== '0';
   function starsHtml(n) {
     if (!STARS_ENABLED) return '';
     n = Math.max(0, Math.min(5, parseInt(n, 10) || 0));
@@ -4695,7 +4747,7 @@
       // over the image — the photo itself, not a chosen tool, should be the first thing you see.
       // Same mechanism a rail-icon click already uses to close the panel (fxSection,
       // chromasmith-22.html), so clicking any tool reopens it exactly like it always did.
-      if (document.body.classList.contains('deskx')) document.body.classList.add('panel-closed');
+      if (document.body.classList.contains('deskx') && !state.unified_view) document.body.classList.add('panel-closed');
       if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
       if (typeof syncLibActionButtons === 'function') syncLibActionButtons();
       // E5 fix (editor_ux_spec.json, 2026-09-09): this is the real "switching photos" path (a
@@ -4705,6 +4757,10 @@
       // fxSelectImage() fix (that one is for the separate drag-loaded multi-photo batch path).
       if (typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns();
       if (typeof syncSideTabs === 'function') syncSideTabs(); // opening a photo (docked) makes Develop the active tab — see that function's comment
+      if (state.unified_view) {
+        requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+        window.setTimeout(() => { if (state.unified_view) window.dispatchEvent(new Event('resize')); }, 250);
+      }
       if (!LIBTEST) { try { localStorage.setItem(LS_LAST_PATH, path); } catch (e) {} }
       // The editor needs the ORIGINAL file path to read its HDR gain map at export
       // time (see gainmap.rs) — loadFXImages only ever receives a File, which has none.
@@ -7028,7 +7084,7 @@
     grid.innerHTML = '';
     thumbQueueReset(); // drop queued thumbnail jobs from the previous grid/folder
     const overlayEl = document.getElementById('lib-overlay');
-    const docked = document.body.classList.contains('deskx') && overlayEl && !overlayEl.classList.contains('full');
+    const docked = document.body.classList.contains('deskx') && overlayEl && !overlayEl.classList.contains('full') && !document.body.classList.contains('lib-unified-view');
     const isList = state.viewMode === 'list' && !docked;
     grid.classList.toggle('list-view', isList);
     grid.classList.toggle('lib-mat', !!state.gridMat);
@@ -8138,6 +8194,39 @@
   overlay.querySelector('#lib-recent').onclick = toggleRecentMenu;
   // #lib-close removed: the top-bar Library button is the single control for this.
   overlay.querySelector('#lib-expand').onclick = () => toggleExpandedView();
+  const starsToggle = overlay.querySelector('#lib-stars-toggle');
+  if (starsToggle) {
+    starsToggle.checked = STARS_ENABLED;
+    starsToggle.onchange = () => {
+      const wasEnabled = STARS_ENABLED;
+      STARS_ENABLED = starsToggle.checked;
+      localStorage.setItem('chromasmith_lib_stars_enabled', STARS_ENABLED ? '1' : '0');
+      if (STARS_ENABLED && !wasEnabled) {
+        let sortOption = overlay.querySelector('#lib-sort option[value="rating"]');
+        if (!sortOption) {
+          sortOption = document.createElement('option');
+          sortOption.value = 'rating'; sortOption.textContent = 'Rating';
+          overlay.querySelector('#lib-sort').appendChild(sortOption);
+        }
+        overlay.querySelector('#lib-rating-filter-wrap').style.display = '';
+      } else if (!STARS_ENABLED && wasEnabled) {
+        const sortOption = overlay.querySelector('#lib-sort option[value="rating"]');
+        if (sortOption) sortOption.remove();
+        if (state.sortBy === 'rating') {
+          state.sortBy = 'date';
+          localStorage.setItem('chromasmith_lib_sort', 'date');
+        }
+        state.ratingFilter = 'all';
+        overlay.querySelector('#lib-rating-filter').value = 'all';
+        overlay.querySelector('#lib-rating-filter-wrap').style.display = 'none';
+      }
+      const sortLabel = overlay.querySelector('#lib-sort-label');
+      if (sortLabel) sortLabel.textContent = overlay.querySelector('#lib-sort').selectedOptions[0]?.textContent || 'Date taken';
+      renderGrid();
+      if (typeof syncFilterUI === 'function') syncFilterUI();
+    };
+  }
+  const storedUnifiedView = initialUnifiedPreference && document.body.classList.contains('deskx');
   // Bug #2 fix: discoverable Info-panel trigger — window.__libInfo(true) already existed and
   // worked, it just had no button anywhere pointing at it. Uses the same _kbCursor/openedPath/
   // selected fallback renderInfoPanel already reads, so no new "what's the target" logic needed.
@@ -8155,6 +8244,7 @@
     // numbers as LIB_DOCK_MIN/MAX and the #lib-side-resizer range below, since neither is in
     // scope yet at this point in the file (both are consts declared further down, resolved by
     // closure only once this function is actually CALLED, well after setup finishes).
+    if (state.unified_view) setUnifiedView(false);
     if (goingFull !== state.expanded_view) {
       // --dock-w-user lives on <body>: chromasmith-22.html resolves --dock-w on body, so a value
       // set on .fx-layout never reached the grid track (strip 188px wide, track 120px).
@@ -8176,6 +8266,10 @@
       }
     }
     state.expanded_view = goingFull;
+    state.unified_view = false;
+    document.body.classList.remove('lib-unified-view');
+    localStorage.removeItem('chromasmith_lib_unified_view');
+    if (unifiedToggle) unifiedToggle.checked = false;
     overlay.classList.toggle('full', state.expanded_view);
     document.body.classList.toggle('lib-full', state.expanded_view);
     syncDockPadding();
@@ -8198,7 +8292,7 @@
   function syncSideTabs() {
     const libTab = overlay.querySelector('#lib-side-tab-library'), devTab = overlay.querySelector('#lib-side-tab-develop');
     if (!libTab || !devTab) return;
-    const inDevelop = !state.expanded_view && !!state.openedPath;
+    const inDevelop = !state.expanded_view && !state.unified_view && !!state.openedPath;
     libTab.classList.toggle('on', !inDevelop);
     devTab.classList.toggle('on', inDevelop);
   }
@@ -8224,7 +8318,7 @@
       document.body.classList.add('lib-docked');
       syncDockPadding();
     }
-    if (!state.expanded_view) toggleExpandedView(true);
+    if (!state.expanded_view && !state.unified_view) toggleExpandedView(true);
   };
 
   // Standalone copy/paste-edit for the Photo menu (menu-copy-edit/menu-paste-edit in
@@ -8393,7 +8487,7 @@
     if (state.source === 'lr') {
       if (e.key === 'i' || e.key === 'I') { state.showInfo = !state.showInfo; renderInfoPanel(); return; }
     if (e.key === 'g' || e.key === 'G') toggleExpandedView();
-      else if (e.key === 'Escape' && state.expanded_view) toggleExpandedView(false);
+      else if (e.key === 'Escape' && (state.expanded_view || state.unified_view)) toggleExpandedView(false);
       return;
     }
     // ── Compare mode: ←/→ cycle pane B, ⏎ promotes B to A, Esc exits back to the previous
@@ -8483,7 +8577,7 @@
     if (e.key === 'u' || e.key === 'U') { kbTargets().forEach((p) => setLabel(p, '')); return; }
     if (e.key === 'i' || e.key === 'I') { state.showInfo = !state.showInfo; renderInfoPanel(); return; }
     if (e.key === 'g' || e.key === 'G') toggleExpandedView();
-    else if (e.key === 'Escape' && state.expanded_view) toggleExpandedView(false);
+    else if (e.key === 'Escape' && (state.expanded_view || state.unified_view)) toggleExpandedView(false);
     // Move to Trash — backs the "File ▸" context menu's Delete row. Bare Delete/Backspace,
     // same convention Photos.app and Finder use; the confirm dialog inside libDeletePaths is
     // what keeps a stray keypress from being destructive.
@@ -8534,7 +8628,7 @@
     // nothing displays.
     const so = overlay.querySelector('#lib-sort option[value="rating"]');
     if (so) so.remove();
-    if (state.sortBy === 'rating') { state.sortBy = 'name'; try { localStorage.setItem('chromasmith_lib_sort', 'name'); } catch {} }
+    if (state.sortBy === 'rating') { state.sortBy = 'date'; try { localStorage.setItem('chromasmith_lib_sort', 'date'); } catch {} }
   }
   const _rf = overlay.querySelector('#lib-rating-filter');
   if (_rf) {
@@ -8542,6 +8636,7 @@
     // Hide the control AND its label row, not just the <select> — a stray "Rating" label above an
     // invisible dropdown is worse than either.
     if (!STARS_ENABLED) { const row = _rf.closest('label') || _rf.parentElement; if (row) row.style.display = 'none'; }
+    else { const row = _rf.closest('label') || _rf.parentElement; if (row) row.style.display = ''; }
   }
   // ── Filters panel: toggle button, active-filter chips, clear-all ──────────────────────
   const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-faces-filter', 'lib-tag-filter', 'lib-rating-filter'];
@@ -8738,7 +8833,7 @@
   // strip really can't show a table) is correct — the bug was the BUTTON claiming an effect it
   // can't have. Disable it while docked instead of leaving it clickable-but-inert.
   function syncListViewAvailability() {
-    const docked = document.body.classList.contains('deskx') && !overlay.classList.contains('full');
+    const docked = document.body.classList.contains('deskx') && !overlay.classList.contains('full') && !state.unified_view;
     listViewBtn.disabled = docked;
     listViewBtn.title = docked ? 'List view (unavailable while docked — expand the Gallery first)' : 'List view';
   }
@@ -8984,7 +9079,7 @@
   // (above) still exists for the non-deskx/web layout — this only fires under deskx, and only
   // once the grid layout is active (.full), same guard as syncTopCompact.
   function syncTopTight() {
-    if (!document.body.classList.contains('deskx') || !overlay.classList.contains('full')) {
+    if (!document.body.classList.contains('deskx') || (!overlay.classList.contains('full') && !state.unified_view)) {
       libTop.classList.remove('lib-top-tight1', 'lib-top-tight2');
       return;
     }
@@ -8998,7 +9093,7 @@
   // own track). Each pass removes optional controls and re-measures until every live button is
   // inside its track with the 12px inter-group gap intact.
   function syncTopOverflow() {
-    if (!document.body.classList.contains('deskx') || !overlay.classList.contains('full')) {
+    if (!document.body.classList.contains('deskx') || (!overlay.classList.contains('full') && !state.unified_view)) {
       libTop.classList.remove('lib-top-overflow1','lib-top-overflow2','lib-top-overflow3');
       if (overlay.classList.contains('full')) {
         libTop.classList.remove('lib-top-compact');
@@ -9100,7 +9195,108 @@
   // now plain unconditional CSS rules (above), not something this resize handler decides.
   const LIB_DOCK_MIN = 90, LIB_DOCK_MAX = 420;
   const dockResizer = overlay.querySelector('#lib-dock-resizer');
+  dockResizer.addEventListener('mousedown', (event) => {
+    if (!state.unified_view) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startW = unifiedWidth();
+    document.body.classList.add('lib-unified-dragging');
+    const move = (e) => setUnifiedWidth(startW + e.clientX - startX);
+    const finish = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', finish);
+      document.body.classList.remove('lib-unified-dragging');
+      setUnifiedWidth(unifiedWidth(), true);
+      renderGrid();
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', finish, { once: true });
+  });
   const fxLayout = document.body; // --dock-w-user must sit where --dock-w is resolved (body), see above
+  const unifiedResizer = overlay.querySelector('#lib-unified-resizer');
+  const unifiedToggle = overlay.querySelector('#lib-unified-toggle');
+  let dockCollapsed = localStorage.getItem('chromasmith_lib_dock_collapsed') === '1';
+  const UNIFIED_MIN = 300;
+  const UNIFIED_MAX = 900;
+  const unifiedSaved = Number(localStorage.getItem('chromasmith_lib_unified_w'));
+  if (Number.isFinite(unifiedSaved) && unifiedSaved >= UNIFIED_MIN && unifiedSaved <= UNIFIED_MAX) {
+    document.body.style.setProperty('--unified-lib-w-user', `${unifiedSaved}px`);
+  }
+  function unifiedWidth() {
+    const value = getComputedStyle(document.body).getPropertyValue('--unified-lib-w-user').trim();
+    if (value.endsWith('%')) return window.innerWidth * parseFloat(value) / 100;
+    const pixels = parseFloat(value);
+    return Number.isFinite(pixels) && pixels > 0 ? pixels : Math.round(window.innerWidth * 0.5);
+  }
+  function setUnifiedWidth(width, persist = false) {
+    const max = Math.max(UNIFIED_MIN, Math.min(UNIFIED_MAX, window.innerWidth - 600));
+    const next = Math.round(Math.min(max, Math.max(UNIFIED_MIN, width)));
+    document.body.style.setProperty('--unified-lib-w-user', `${next}px`);
+    unifiedResizer.setAttribute('aria-valuenow', String(next));
+    if (persist) localStorage.setItem('chromasmith_lib_unified_w', String(next));
+    return next;
+  }
+  function setUnifiedView(on) {
+    state.unified_view = !!on;
+    if (unifiedToggle) unifiedToggle.checked = state.unified_view;
+    if (state.unified_view) {
+      state.expanded_view = false;
+      dockCollapsed = false;
+      document.body.classList.remove('lib-docked', 'lib-dock-collapsed', 'lib-full');
+      overlay.classList.remove('full');
+      document.body.classList.add('lib-unified-view');
+      localStorage.setItem('chromasmith_lib_unified_view', '1');
+      const saved = Number(localStorage.getItem('chromasmith_lib_unified_w'));
+      if (saved > 0) setUnifiedWidth(saved);
+    } else {
+      document.body.classList.remove('lib-unified-view', 'lib-unified-dragging');
+      localStorage.removeItem('chromasmith_lib_unified_view');
+    }
+    unifiedResizer.hidden = !state.unified_view;
+    syncSideTabs();
+    syncSideTabsCompact();
+    syncListViewAvailability();
+    syncViewSeg();
+    if (typeof syncTopOverflow === 'function') requestAnimationFrame(syncTopOverflow);
+    renderGrid();
+    renderBatchBar();
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  }
+  if (unifiedToggle) {
+    unifiedToggle.checked = localStorage.getItem('chromasmith_lib_unified_view') === '1';
+    unifiedToggle.onchange = () => setUnifiedView(unifiedToggle.checked);
+  }
+  unifiedResizer.addEventListener('pointerdown', (event) => {
+    if (!state.unified_view) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startW = unifiedWidth();
+    const move = (e) => setUnifiedWidth(startW + e.clientX - startX);
+    const finish = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      setUnifiedWidth(unifiedWidth(), true);
+      document.body.classList.remove('lib-unified-dragging');
+      renderGrid();
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish, { once: true });
+    window.addEventListener('pointercancel', finish, { once: true });
+    document.body.classList.add('lib-unified-dragging');
+  });
+  unifiedResizer.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const delta = event.key === 'ArrowLeft' ? -24 : 24;
+    setUnifiedWidth(unifiedWidth() + delta, true);
+    renderGrid();
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  });
+  unifiedResizer.hidden = !state.unified_view;
+  if (storedUnifiedView) state.unified_view = true;
   const savedDockW = parseInt(localStorage.getItem('chromasmith_lib_dock_w'), 10);
   if (fxLayout && savedDockW >= LIB_DOCK_MIN && savedDockW <= LIB_DOCK_MAX) fxLayout.style.setProperty('--dock-w-user', savedDockW + 'px');
 
@@ -9108,7 +9304,6 @@
   // body.deskx.lib-dock-collapsed. Applied as a body class so it composes with .full/.lib-full
   // for free (the reopen button's own CSS already excludes .lib-full) rather than needing its
   // own interaction with every mode this file has.
-  let dockCollapsed = localStorage.getItem('chromasmith_lib_dock_collapsed') === '1';
   function setDockCollapsed(v) {
     dockCollapsed = v;
     document.body.classList.toggle('lib-dock-collapsed', v);
@@ -9185,8 +9380,8 @@
   // (true) below), NOT toggleLibrary() — toggleLibrary() flips state.open and closes the WHOLE
   // library dock (filmstrip included), which is the "docked filmstrip disappears when switching
   // to Develop" bug: the tab is meant to narrow the view, not close it.
-  overlay.querySelector('#lib-side-tab-develop').onclick = () => { if (state.expanded_view) toggleExpandedView(false); };
-  overlay.querySelector('#lib-side-tab-library').onclick = () => { if (!state.expanded_view) toggleExpandedView(true); };
+  overlay.querySelector('#lib-side-tab-develop').onclick = () => { if (state.expanded_view || state.unified_view) toggleExpandedView(false); };
+  overlay.querySelector('#lib-side-tab-library').onclick = () => { if (state.unified_view) setUnifiedView(false); else if (!state.expanded_view) toggleExpandedView(true); };
   syncSideTabs(); // initial state — expanded_view/openedPath may already be set by boot restore
 
   // List-view table headers: clicking a header is just a shortcut for the #lib-sort dropdown +
@@ -13173,7 +13368,11 @@
     // live. Hidden here, right after the Library has actually settled into its final
     // full-window state, not a moment earlier.
     toggleLibrary({ prefetchThumbs: true }).then(async () => {
-      toggleExpandedView(true);
+      if (localStorage.getItem('chromasmith_lib_unified_view') === '1') {
+        state.unified_view = false; // startup helper reads the persisted preference below
+        setUnifiedView(true);
+      }
+      else toggleExpandedView(true);
       // ⚠️ Wait for the actual catalog SCAN (not just the folder listing toggleLibrary's own
       // promise already covers) before doing anything else. openFolder (called from inside
       // toggleLibrary, above) kicks off catalogRegisterFolder — historically fire-and-forget —

@@ -9,3 +9,8 @@
 - Re-anchored the first visible photo through virtual-grid refreshes and made restoration use the current grid geometry, preventing metadata refreshes and catalog paging from jumping the gallery.
 - Changed virtual-grid resize detection to observe the grid itself and remeasure missed initial column/row changes. Files: `chromasmith-22.html`, `desktop/library-ui.js`, `package.json`, `test/library_scroll_anchor.mjs`.
 - Added a Chromium regression for a 719-photo gallery; verified column metrics and the same photo/viewport offset across a full grid refresh.
+## 2026-10-05 — CHR-276 unified Library + Editor view (layout slice)
+
+- Added an optional, persisted Library + Editor workspace with an adjustable near-50/50 divider; Standard view remains the default, and opening a Library photo keeps both panes visible.
+- Added the Settings toggle, keyboard-operable divider, saved pane width, and a Chromium regression covering default mode, pane coexistence, photo selection, resizing, and reload restoration. Files: `chromasmith-22.html`, `desktop/library-ui.js`, `package.json`, `test/library_unified_view.mjs` (CHR-276).
+- Verification: desktop bundle build and targeted Chromium test pass. Existing `ui:test` retains two known audit failures (tap target and contrast); `editor:gates` and `lib:test` are blocked by Playwright resolution in the isolated worktree, with other existing baseline gate failures. Full R16 acceptance remains in progress.
