@@ -75,3 +75,7 @@ Agent-generated changelog of completed features and architectural decisions.
 - CHR-56: Added unit metadata and synchronized visible/read-aloud value labels for Editor technical controls, including percentage, EV, degree, and pixel units; normalized color/grain scales remain unitless.
 - Updated `chromasmith-22.html`, `package.json`, and `test/control_unit_labels.mjs`; dynamic controls and value resets are synchronized through input/change and mutation observation.
 - Verification: unit formatting and static control coverage pass (87/94 controls have units; remaining controls are relative or frame-based); all inline JavaScript parses, Library content lint and `git diff --check` pass. Browser control sweep could not launch Chromium in this managed worktree (`spawn EPERM`).
+
+- CHR-170: Added temporary hover/focus previews to the Editor history timeline; leaving a step restores the committed edit, while clicking commits the selected step and updates undo/redo position.
+- Updated `chromasmith-22.html`, `package.json`, and `test/history_hover_preview.mjs`; serialized async restores prevent stale preview work from overtaking a newer selection.
+- Verification: focused preview/exit/commit/race regression, Editor HTML interaction validity, inline JavaScript syntax, and `git diff --check` pass. Visual browser verification remains blocked by Chromium launch restrictions in this managed worktree (`spawn EPERM`).

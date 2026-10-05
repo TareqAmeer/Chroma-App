@@ -6957,7 +6957,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1005J';
+const BUILD='1.1005K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18356,8 +18356,33 @@ document.addEventListener('click',e=>{
 // one of two". Both buttons now open this SAME popover with ONE interleaved list.
 async function fxTimelineScrub(idx){
   idx=Math.max(0,Math.min(fxHistory.length-1,idx|0));
-  fxHistIdx=idx;
-  await _fxHistoryRestore(idx);   // shared rasters must be re-attached — see fxHistoryPush
+  await _fxTimelinePreviewEnd(idx);
+}
+// Hover previews never move fxHistIdx or create history entries. Serialize async restores and
+// invalidate queued previews on exit/commit so a slow LUT load cannot land after the selection.
+let _fxTimelinePreviewBase=-1,_fxTimelinePreviewToken=0,_fxTimelinePreviewQueue=Promise.resolve();
+function _fxTimelinePreview(idx){
+  if(_fxTimelinePreviewBase<0)_fxTimelinePreviewBase=fxHistIdx;
+  const token=++_fxTimelinePreviewToken;
+  _fxTimelinePreviewQueue=_fxTimelinePreviewQueue.then(async()=>{
+    if(token!==_fxTimelinePreviewToken)return;
+    await _fxHistoryRestore(idx);
+    if(token===_fxTimelinePreviewToken)fxSyncTopbarDisabled();
+  });
+  return _fxTimelinePreviewQueue;
+}
+function _fxTimelinePreviewEnd(commitIdx=-1){
+  const base=_fxTimelinePreviewBase;
+  if(base<0&&commitIdx<0)return _fxTimelinePreviewQueue;
+  _fxTimelinePreviewBase=-1;
+  const token=++_fxTimelinePreviewToken,target=commitIdx>=0?commitIdx:base;
+  if(commitIdx>=0)fxHistIdx=commitIdx;
+  _fxTimelinePreviewQueue=_fxTimelinePreviewQueue.then(async()=>{
+    if(token!==_fxTimelinePreviewToken)return;
+    await _fxHistoryRestore(target);
+    if(token===_fxTimelinePreviewToken)fxSyncTopbarDisabled();
+  });
+  return _fxTimelinePreviewQueue;
 }
 // 2026-09-09: same split as the split-compare menu above — content-building factored out of
 // fxToggleTimelinePopover so it can render into either the floating web/mobile popover
@@ -18370,8 +18395,8 @@ async function _fxTimelineListInto(container,closeFn,showReset){
   const rail=document.createElement('input');
   rail.type='range';rail.min=0;rail.max=Math.max(0,fxHistory.length-1);rail.value=fxHistIdx;
   rail.style.cssText='width:100%';
-  rail.oninput=()=>fxTimelineScrub(parseInt(rail.value,10));
-  rail.onchange=()=>_fxTimelineListInto(container,closeFn,showReset); // refresh the list below once a scrub settles
+  rail.oninput=()=>_fxTimelinePreview(parseInt(rail.value,10));
+  rail.onchange=()=>{_fxTimelinePreviewEnd(parseInt(rail.value,10));_fxTimelineListInto(container,closeFn,showReset);};
   container.appendChild(rail);
   const list=document.createElement('div');
   list.style.cssText='margin-top:6px';
@@ -18392,17 +18417,20 @@ async function _fxTimelineListInto(container,closeFn,showReset){
   }
   merged.forEach(row=>{
     const isCur=row.kind==='edit'&&row.i===fxHistIdx;
-    const el=document.createElement('div');
-    el.style.cssText='padding:6px 8px;font-size:11px;cursor:pointer;border-radius:5px;display:flex;justify-content:space-between;gap:8px'+(isCur?';background:var(--hov)':'');
-    el.onmouseenter=()=>el.style.background='var(--hov)';
-    el.onmouseleave=()=>el.style.background=isCur?'var(--hov)':'';
+    const el=document.createElement('button');
+    el.type='button';el.style.cssText='width:100%;text-align:left;color:inherit;background:transparent;border:0;padding:6px 8px;font:inherit;font-size:11px;cursor:pointer;border-radius:5px;display:flex;justify-content:space-between;gap:8px'+(isCur?';background:var(--hov)':'');
+    el.setAttribute('aria-current',isCur?'step':'false');
+    el.onmouseenter=()=>{el.style.background='var(--hov)';if(row.kind==='edit')_fxTimelinePreview(row.i);};
+    el.onmouseleave=()=>{if(row.kind==='edit')_fxTimelinePreviewEnd();el.style.background=isCur?'var(--hov)':'';};
+    el.onfocus=()=>{if(row.kind==='edit')_fxTimelinePreview(row.i);};
+    el.onblur=()=>{if(row.kind==='edit')_fxTimelinePreviewEnd();};
     const d=new Date(row.ts);
     const timeStr=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:row.kind==='edit'?'2-digit':undefined});
     const tag=row.kind==='export'?'<span style="color:var(--acc);margin-right:5px">⬆</span>':'';
     const escLbl=String(row.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); // matches log()'s own inline escape — no shared esc() helper in this file
     el.innerHTML=`<span>${tag}${row.kind==='edit'?row.i+': '+escLbl:escLbl}</span><span style="color:var(--mut)">${timeStr}</span>`;
     el.onclick=async()=>{
-      if(row.kind==='edit'){fxTimelineScrub(row.i);_fxTimelineListInto(container,closeFn,showReset);return;}
+      if(row.kind==='edit'){await _fxTimelinePreviewEnd(row.i);_fxTimelineListInto(container,closeFn,showReset);return;}
       try{const snap=JSON.parse(decodeURIComponent(escape(atob(row.entry.recipe))));await applyUISnapshot(snap);fxUpdate();log(`Restored v${row.entry.version} recipe`,'info');}
       catch(e){log('Failed to restore that version: '+(e&&e.message||e),'err');}
       closeFn();
