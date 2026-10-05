@@ -1198,7 +1198,14 @@ pub fn get_quicklook_preview(path: String) -> Result<tauri::ipc::Response, Strin
 pub(crate) fn decode_rgb8_capped(path: &str, long_edge: u32) -> Result<(Vec<u8>, u32, u32), String> {
     let ext = ext_lower(Path::new(path));
     if is_raw_ext(&ext) {
-        let img = rawler::analyze::extract_preview_pixels(path, &RawDecodeParams::default()).map_err(|e| format!("preview decode: {e}"))?;
+        // iPhone ProRAW DNGs keep their (4032x3024 JPEG) preview in IFD0 flagged
+        // NewSubFileType=1, with the only SubIFD "reduced" entries being a semantic mask — so
+        // rawler's preview_image/full_image find nothing and extract_preview_pixels errors for
+        // every one of them. thumbnail_image DOES read IFD0, so fall through to the
+        // thumbnail→preview→full chain before giving up. Still no RAW demosaic.
+        let img = rawler::analyze::extract_preview_pixels(path, &RawDecodeParams::default())
+            .or_else(|_| rawler::analyze::extract_thumbnail_pixels(path, &RawDecodeParams::default()))
+            .map_err(|e| format!("preview decode: {e}"))?;
         let img = apply_orientation_dynamic(img, raw_orientation(path));
         let (w, h) = (img.width(), img.height());
         let scale = long_edge as f32 / w.max(h) as f32;
@@ -4140,5 +4147,42 @@ mod case_canon_tests {
         e[0] = e[0].replace("P1.RW2", "p1.rw2");
         scan_folder_for_registry(d.to_str().unwrap(), &mut e, &mut f, &mut fl, &mut r);
         assert_eq!(e.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod decode_rgb8_probe {
+    use super::*;
+    /// Live probe: `PROBE_LIST=/path/to/list.txt cargo test --release probe_decode_list -- --ignored --nocapture`
+    /// decodes every listed file via `decode_rgb8_capped` (what all background scans use) and
+    /// prints OK/ERR per file. Fails if any file errors.
+    #[test]
+    #[ignore]
+    fn probe_decode_list() {
+        let list = std::fs::read_to_string(std::env::var("PROBE_LIST").expect("PROBE_LIST")).unwrap();
+        let mut bad = 0;
+        for p in list.lines().filter(|l| !l.is_empty()) {
+            let t = std::time::Instant::now();
+            match decode_rgb8_capped(p, 640) {
+                Ok((b, w, h)) => println!("OK  {:.2}s {w}x{h} len={} {p}", t.elapsed().as_secs_f64(), b.len()),
+                Err(e) => { bad += 1; println!("ERR {:.2}s {e} {p}", t.elapsed().as_secs_f64()) }
+            }
+        }
+        assert_eq!(bad, 0, "{bad} files failed decode_rgb8_capped");
+    }
+}
+
+#[cfg(test)]
+mod dng_ifd0_preview_tests {
+    use super::*;
+    /// iPhone ProRAW DNGs keep their only JPEG preview in IFD0 (NewSubFileType=1). rawler's
+    /// preview_image/full_image find nothing there, so every background scan used to fail
+    /// these (367 real files). Fixture is a minimal DNG-flagged TIFF with just that layout.
+    #[test]
+    fn decode_rgb8_capped_reads_ifd0_only_dng_preview() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/iphone_ifd0_preview.dng");
+        let (rgb, w, h) = decode_rgb8_capped(p, 640).expect("IFD0-only DNG must decode via thumbnail fallback");
+        assert_eq!((w, h), (64, 48));
+        assert_eq!(rgb.len(), 64 * 48 * 3);
     }
 }
