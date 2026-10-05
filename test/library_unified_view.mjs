@@ -65,16 +65,18 @@ try {
   const before = await page.locator('#lib-overlay').evaluate((el) => el.getBoundingClientRect().width);
   const separator = page.locator('#lib-unified-resizer');
   const bounds = await separator.boundingBox();
-  await page.evaluate(() => {
-    const handle = document.getElementById('lib-unified-resizer');
-    const rect = handle.getBoundingClientRect();
-    handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, pointerType: 'mouse', clientX: rect.x + rect.width / 2, clientY: 420 }));
-    for (const clientX of [rect.x + 50, rect.x + 20, rect.x - 10, rect.x - 40]) window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, pointerType: 'mouse', clientX, clientY: 420 }));
-    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, pointerType: 'mouse', clientX: rect.x - 40, clientY: 420 }));
-  });
+  if (!bounds) throw new Error('unified divider has no visible hit target');
+  const dragX = bounds.x + bounds.width / 2;
+  const dragY = bounds.y + bounds.height / 2;
+  await page.mouse.move(dragX, dragY);
+  await page.mouse.down();
+  await page.mouse.move(dragX - 24, dragY, { steps: 3 });
+  await page.mouse.move(dragX - 48, dragY, { steps: 3 });
+  await page.mouse.up();
   await page.waitForTimeout(150);
   const after = await page.locator('#lib-overlay').evaluate((el) => el.getBoundingClientRect().width);
-  if (Math.abs(after - before) < 30 || Number(await page.evaluate(() => localStorage.getItem('chromasmith_lib_unified_w'))) < 300) throw new Error(`unified divider did not resize the Gallery pane: ${before} -> ${after}`);
+  const savedWidth = Number(await page.evaluate(() => localStorage.getItem('chromasmith_lib_unified_w')));
+  if (Math.abs(after - before) < 30 || savedWidth < 300) throw new Error(`unified divider did not resize the Gallery pane: ${before} -> ${after}`);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
