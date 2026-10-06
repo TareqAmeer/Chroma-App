@@ -50,3 +50,9 @@
 - Updated AGENTS.md to permit task-owned feature-branch commits and require verified publication through a clean main integration checkout, with current-main conflict resolution and relevant checks.
 - Added remote-publication confirmation, explicit blocked-publication reports, and separation of unrelated drafts/promo assets; preserved the local checkout's existing instruction edits.
 - Verified both instruction copies and git diff whitespace; Linear issue ID unresolved because the targeted worktree search returned unrelated tickets, so no issue was guessed or updated. Documentation-only change.
+
+## 2026-10-06 — CHR-278 Recursive folder view
+
+- Migrated the old global Include Subfolders preference into a legacy default plus per-volume/folder overrides; folder navigation now applies its saved recursive scope before querying the catalog.
+- Added visible recursive status/count wording and `test/library_recursive_folders.mjs`; files: `desktop/library-ui.js`, `test/library_recursive_folders.mjs`, `DEVLOG.md`.
+- Verified JavaScript syntax, focused Chromium preference/query/status flow, and `git diff --check`; 50k catalog performance remains covered by catalog paging and needs a dedicated large-fixture measurement before claiming that criterion.
