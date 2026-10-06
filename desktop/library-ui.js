@@ -14384,6 +14384,15 @@
   const pvReduced = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   function pvOpen(path) { closePhotoPreview(); openInEditor(path); }
   function pvImg(p, css) { const im = document.createElement('img'); im.src = p.url; im.alt = ''; im.draggable = false; im.style.cssText = 'position:absolute;object-fit:cover;' + (css || ''); return im; }
+  // CHR-238: Lightroom-style playback options use a finite sequence by default. Keep this helper
+  // pure so the end-of-sequence/repeat contract is testable without booting a browser or renderer.
+  // CHR-238 playback helper begin
+  function slideshowAutoNextIndex(index, count, repeat) {
+    if (count <= 0 || index < 0 || index >= count) return -1;
+    if (index + 1 < count) return index + 1;
+    return repeat ? 0 : -1;
+  }
+  // CHR-238 playback helper end
   function pvMode(k) {
     if (!pv) return;
     cancelAnimationFrame(pv.raf); pv.stop.forEach((f) => f()); pv.stop = []; pv.keyHook = null; pv.stage.onclick = null;
@@ -14404,8 +14413,29 @@
     const flash = () => { if (pvReduced()) return; const x = Math.random() < 0.5 ? 0 : 100, y = Math.random() * 100, h = 10 + Math.random() * 30;
       leak.style.background = `radial-gradient(ellipse 70% 90% at ${x}% ${y}%, hsla(${h},100%,60%,.85), hsla(${h + 15},100%,50%,.35) 40%, transparent 70%)`;
       leak.style.opacity = '1'; setTimeout(() => { leak.style.opacity = '0'; }, 550); };
-    const cap = document.createElement('div'); cap.id = 'cs-pv-cap'; cap.style.cssText = 'position:absolute;left:20px;bottom:16px;z-index:3;font-size:12px;color:#bbb;text-shadow:0 1px 3px #000'; pv.stage.appendChild(cap);
+    const cap = document.createElement('div'); cap.id = 'cs-pv-cap'; cap.style.cssText = 'position:absolute;left:20px;bottom:62px;z-index:3;font-size:12px;color:#bbb;text-shadow:0 1px 3px #000'; pv.stage.appendChild(cap);
     let i = 0, top = 0, paused = false, timer = 0, urls = new Map(), gen = 0;
+    let slideSeconds = 5.5, fadeSeconds = 1, repeat = false;
+    const controls = document.createElement('div');
+    controls.setAttribute('aria-label', 'Slideshow playback settings');
+    controls.style.cssText = 'position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid rgba(255,255,255,.14);border-radius:8px;background:rgba(20,20,20,.78);backdrop-filter:blur(12px);font-size:12px;color:#ddd';
+    const selectSetting = (label, value, choices, onChange) => {
+      const wrap = document.createElement('label'); wrap.style.cssText = 'display:flex;align-items:center;gap:5px';
+      const text = document.createElement('span'); text.textContent = label; wrap.appendChild(text);
+      const select = document.createElement('select'); select.setAttribute('aria-label', label); select.style.cssText = 'color:#eee;background:#292929;border:1px solid #555;border-radius:4px;padding:4px';
+      choices.forEach(([v, title]) => { const option = document.createElement('option'); option.value = String(v); option.textContent = title; select.appendChild(option); });
+      select.value = String(value); select.addEventListener('change', () => onChange(Number(select.value))); wrap.appendChild(select); controls.appendChild(wrap); return select;
+    };
+    selectSetting('Slide length', slideSeconds, [[3, '3 sec'], [5.5, '5.5 sec'], [8, '8 sec'], [12, '12 sec']], (v) => { slideSeconds = v; schedule(); });
+    selectSetting('Crossfade', fadeSeconds, [[0, 'Off'], [0.5, '0.5 sec'], [1, '1 sec'], [1.5, '1.5 sec']], (v) => { fadeSeconds = v; });
+    const repeatButton = document.createElement('button'); repeatButton.type = 'button'; repeatButton.setAttribute('aria-pressed', 'false');
+    repeatButton.textContent = 'Repeat: Off'; repeatButton.style.cssText = 'color:#eee;background:#292929;border:1px solid #555;border-radius:4px;padding:5px 8px;cursor:pointer';
+    repeatButton.addEventListener('click', () => {
+      repeat = !repeat; repeatButton.textContent = `Repeat: ${repeat ? 'On' : 'Off'}`; repeatButton.setAttribute('aria-pressed', String(repeat));
+      if (repeat && paused && i === all.length - 1) { paused = false; label(); }
+      schedule();
+    });
+    controls.appendChild(repeatButton); pv.stage.appendChild(controls);
     // Edited photos are rendered with their saved edit through the editor's export pipeline
     // (chromasmithRenderCurrentGraded) — one at a time, since there is one renderer — and the
     // next slide is prefetched while the current one shows. Unedited photos use the camera
@@ -14430,24 +14460,32 @@
     const load = (k) => { const e = all[(k + all.length) % all.length]; if (urls.has(e.path)) return urls.get(e.path);
       const pr = graded(e.path); urls.set(e.path, pr); return pr; };
     const label = () => { const e = all[i], sc = state.sidecars.get(e.path) || {}; cap.textContent = `${i + 1} / ${all.length} · ${baseName(e.path)}${sc.label === 'Green' ? ' · Picked' : sc.label === 'Red' ? ' · Rejected' : ''}${sc.rating ? ' · ' + '★'.repeat(sc.rating) : ''}${paused ? ' · Paused' : ''}`; };
-    const show = async (k) => {
+    let show;
+    const schedule = () => {
+      clearTimeout(timer);
+      if (paused) return;
+      const next = slideshowAutoNextIndex(i, all.length, repeat);
+      if (next < 0) { paused = true; label(); return; }
+      timer = setTimeout(() => show(next), slideSeconds * 1000);
+    };
+    show = async (k) => {
       const g = ++gen; i = (k + all.length) % all.length; label(); cap.textContent += ' · rendering…';
       const url = await load(i).catch(() => null); if (g !== gen || !pv) return; label();
-      load(i + 1).catch(() => {});
+      const upcoming = slideshowAutoNextIndex(i, all.length, repeat); if (upcoming >= 0) load(upcoming).catch(() => {});
       const im = layers[top ^= 1], other = layers[top ^ 1];
       flash();
       if (url) im.src = url;
       const zx = (Math.random() - 0.5) * 6, zy = (Math.random() - 0.5) * 6, rm = pvReduced();
       im.style.transition = 'none'; im.style.transform = rm ? '' : `scale(1.02) translate(${-zx}%,${-zy}%)`; void im.offsetWidth;
-      im.style.transition = rm ? 'opacity 1s' : 'opacity 1s, transform 7s linear'; im.style.opacity = '1'; im.style.zIndex = 2; other.style.zIndex = 1;
+      im.style.transition = rm ? `opacity ${fadeSeconds}s` : `opacity ${fadeSeconds}s, transform 7s linear`; im.style.opacity = '1'; im.style.zIndex = 2; other.style.zIndex = 1;
       if (!rm) im.style.transform = `scale(1.12) translate(${zx}%,${zy}%)`;
       other.style.opacity = '0';
-      clearTimeout(timer); if (!paused) timer = setTimeout(() => show(i + 1), 5500);
+      schedule();
     };
     pv.keyHook = (e) => {
       const k = e.key, p = all[i] && all[i].path; let used = true;
       if (k === 'ArrowRight') show(i + 1); else if (k === 'ArrowLeft') show(i - 1);
-      else if (k === ' ') { paused = !paused; clearTimeout(timer); if (!paused) timer = setTimeout(() => show(i + 1), 2000); label(); }
+      else if (k === ' ') { paused = !paused; if (paused) clearTimeout(timer); else schedule(); label(); }
       else if (/^[pxu]$/i.test(k) && p) { setLabel(p, { p: 'Green', x: 'Red', u: '' }[k.toLowerCase()]); setTimeout(label, 50); }
       else if (/^[0-5]$/.test(k) && p) { setRating(p, +k); setTimeout(label, 50); }
       else used = false;
