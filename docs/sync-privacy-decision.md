@@ -1,6 +1,7 @@
 # CHR-242 — catalog sync and privacy decision
 
-**Status:** provisional product decision, 2026-10-06  
+**Status:** provisional product decision, 2026-10-06
+
 **Implementation status:** documentation only. This change adds no sync provider, transport, account flow, or network request.
 
 ## Decision
