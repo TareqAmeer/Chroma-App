@@ -1,4 +1,9 @@
 
+### 2026-10-06 — CHR-264 slider target and keyboard precision slice
+- Increased the full editor range-input hit area to the existing 24px spacing token. The native track/thumb remains visible inside that target; existing mobile sizing still wins. Added Alt+Arrow for a hundredth-point adjustment while preserving Arrow and Shift+Arrow steps.
+- Added `test/editor_slider_hit_target.mjs` to measure standard/gradient sliders across 820, 1280, 1440, and 1920px in light/dark themes and mobile mode, and exercise pointer, focus, and modifier behavior. Before the change, the desktop input measured 11px; the preview canvas area was 95,266px² at 820 and 159,252px² at the wider viewports; these areas remained unchanged after the CSS change.
+- Verification: focused Playwright regression passes using the existing cached Chromium. Measured visible photo area stayed at the pre-change baseline (95,266px² at 820px; 159,252px² at 1280/1440/1920px, 900px viewport height). The ticket's 10% area gain is still unverified and not achieved by this controls-only slice; focus/fullscreen and persistent panel resizing also remain open. Files: `chromasmith-22.html`, `test/editor_slider_hit_target.mjs`, `DEVLOG.md` (CHR-264).
+
 
 ### 2026-10-06 — CHR-206 guided relinking safety/design slice
 - Traced volume marker identity, last-seen mount paths, root/photo-relative paths, walk snapshots, ID-keyed edit queues/faces, and separate user path stores in albums, collection registries, export history, and adjacent XMP sidecars.
