@@ -438,7 +438,7 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
    Implemented with a background-image on the track rather than ::-moz-range-progress etc., so
    one rule covers WebKit and Gecko; --p is written by fxSliderPaint() on input. */
 .fx-slider{order:3;flex:1 1 100%;width:100%;cursor:pointer;margin-top:3px;-webkit-appearance:none;appearance:none;
-  height:var(--ctl-slider-thumb);background:transparent}
+  height:var(--ctl-slider-thumb);min-height:var(--sp-6);background:transparent}
 /* --sl-def-pct marks each slider's OWN starting/default value (not a fixed 50% midpoint —
    e.g. Deconv Radius defaults to 20%, RAW Sharpen to 40%) with a thin pointer, on top of the
    existing fill layer, so you can always see where "back to default" sits and how far a drag
@@ -7116,7 +7116,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006S';
+const BUILD='1.1006U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21071,7 +21071,9 @@ function initSliderErgonomics(){
     else if(e.key==='ArrowDown'||e.key==='ArrowLeft')d=-1;
     if(d){
       e.preventDefault();
-      const mul=e.shiftKey?10:1;
+      // Plain arrows stay fine enough for grading; Shift remains coarse and Alt adds a finer
+      // hundredth-point step for small corrections without changing the existing shortcuts.
+      const mul=e.altKey?0.1:(e.shiftKey?10:1);
       if(sl.dataset.fxStep0===undefined)sl.dataset.fxStep0=sl.step||'';
       if(sl.id==='sl-straighten'&&typeof geomStraighten==='function'){ // angle space, 0.01 deg per press
         const g=curGeom();if(!g)return;
