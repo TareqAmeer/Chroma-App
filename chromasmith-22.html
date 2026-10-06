@@ -2147,7 +2147,7 @@ body{--k-menu-bg:#2c2c2a;--k-menu-fg:var(--k-color-ink);--k-menu-line:color-mix(
 .fx-val.k-roll{position:relative;color:transparent!important}
 .fx-val.k-roll>.k-roll-strip{position:absolute;inset:0;display:flex;justify-content:flex-end;align-items:center;overflow:hidden;pointer-events:none;color:var(--k-color-ink);line-height:1.2em}
 .fx-row.fx-mod>.fx-val.k-roll>.k-roll-strip{color:var(--k-color-accent-a)}
-.k-roll-strip>i{display:block;font-style:normal;height:1.2em;overflow:hidden}
+.k-roll-strip>i{display:block;font-style:normal;height:1.2em;overflow:hidden;clip-path:inset(.12em 0)} /* trims the sliver of the neighbouring digit that sub-pixel rounding leaves at the cell edge */
 .k-roll-strip>i::before{content:attr(data-c);display:block;white-space:pre}
 .k-roll-strip>i.k-num::before{content:"0\A 1\A 2\A 3\A 4\A 5\A 6\A 7\A 8\A 9";transform:translateY(calc(var(--k-d,0) * -1.2em));
   transition:transform var(--k-motion-duration) var(--k-motion-easing)}
