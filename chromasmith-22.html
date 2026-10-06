@@ -4061,6 +4061,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-col">0</div></div>
         <div class="fx-row nr-gated" id="row-nr-det"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
         <div class="fx-row" title="Capture sharpening — RAW photos default to 40 on load/reset (moved here so it survives Reset independently of the general Adjust sliders)."><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp">0</div></div>
+        <div class="fx-row" title="Balances edge-only sharpening at lower values against fine texture at higher values. The default 50 preserves today's sharpening exactly."><div class="fx-label">Sharpen Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-adj-sharp-detail" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp-detail">50</div></div>
         <div class="fx-row nr-gated" id="row-nr-hldesat"><div class="fx-label">Highlight Desaturation <button class="fx-info-i" title="Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes. Since real highlight color is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real color in bright areas too at high amounts. Per-photo only, so it never touches other images.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="nr-gate-hint">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
         </div>
@@ -7120,7 +7121,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006Q';
+const BUILD='1.1006R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -7941,7 +7942,7 @@ vec2 vidUV(vec2 u){
 // Basic adjustments (applied AFTER the LUT, BEFORE film FX — so halation/bloom react to
 // the edited image, as real film would). adjOn gates the whole block (default 0 = bypass,
 // byte-identical to before). exposure in stops; contrast/temp/tint/tone/sat/vib in -1..1.
-uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjClarity,adjSkin,adjDehaze,adjTexture;
+uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjSharpDetail,adjClarity,adjSkin,adjDehaze,adjTexture;
 uniform float useVlog;   // input transform: 1 = source is Panasonic V-Log (convert to Rec.709 first)
 // ROADMAP.md R1: lets basicAdjust's exposure/contrast/tonal-zone clamps pass real >1.0 values
 // through to the (now-float, when this is on — see FXR._initBufs) "lut" FBO instead of clipping
@@ -8376,7 +8377,7 @@ if(vidBreath!=1.0)c.rgb*=vidBreath;
 // recomputed there) so the 4 extra taps are paid at most once per pixel — and skipped entirely
 // when nothing needs it, so the default path costs exactly what it did before.
 vec3 srcHP=vec3(0.0);
-bool needHP=(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.||adjTexture!=0.))||mskAnyTex>0.5;
+bool needHP=(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.||adjTexture!=0.||abs(adjSharpDetail-0.5)>0.001))||mskAnyTex>0.5;
 if(needHP){
   vec3 nb=(texture(img,vidUV(uv+vec2(0.,texSize.y)))+texture(img,vidUV(uv-vec2(0.,texSize.y)))
           +texture(img,vidUV(uv+vec2(texSize.x,0.)))+texture(img,vidUV(uv-vec2(texSize.x,0.)))).rgb*0.25;
@@ -8393,6 +8394,12 @@ if(mskAnyClarity>0.5){
   vec3 nbW=(texture(img,vidUV(uv+vec2(0.,texSize.y*rW)))+texture(img,vidUV(uv-vec2(0.,texSize.y*rW)))
            +texture(img,vidUV(uv+vec2(texSize.x*rW,0.)))+texture(img,vidUV(uv-vec2(texSize.x*rW,0.)))).rgb*0.25;
   srcHPW=c.rgb-nbW;
+}
+if(adjOn>.5&&adjSharp!=0.&&abs(adjSharpDetail-0.5)>0.001&&!mskAnyClarity){
+  float detailRadius=3.0;
+  vec3 nbDetail=(texture(img,vidUV(uv+vec2(0.,texSize.y*detailRadius)))+texture(img,vidUV(uv-vec2(0.,texSize.y*detailRadius)))
+                +texture(img,vidUV(uv+vec2(texSize.x*detailRadius,0.)))+texture(img,vidUV(uv-vec2(texSize.x*detailRadius,0.)))).rgb*0.25;
+  srcHPW=c.rgb-nbDetail;
 }
 // Per-mask Noise Reduction: a small, FIXED 3x3 bilateral filter (Tomasi & Manduchi 1998 — spatial
 // Gaussian x range Gaussian) on SOURCE pixels, same pre-grade/post-apply convention as Texture and
@@ -8421,9 +8428,10 @@ if(mskAnyNR>0.5){
   srcNR=(cc+s10*w10+s01*w01+s21*w21+s12*w12+s00*w00+s20*w20+s02*w02+s22*w22)/wsum;
 }
 // Sharpening / Clarity: unsharp mask on source pixels BEFORE LUT (smooth LUT preserves HP detail).
-// adjSharp boosts all frequencies; adjClarity weights by midtone mask (4*lum*(1-lum)).
+// adjSharp blends radius-1 edges with radius-3 texture; default detail 0.5 is radius-1 only.
+// adjClarity weights by midtone mask (4*lum*(1-lum)).
 if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.||adjTexture!=0.)){
-  vec3 hp=srcHP;
+  vec3 hp=mix(srcHP,srcHPW,clamp((adjSharpDetail-0.5)*2.0,0.0,1.0));
   float lv=dot(c.rgb,vec3(.2126,.7152,.0722));
   float cw=4.*lv*(1.-lv);
   c.rgb=clamp(c.rgb+hp*(adjSharp+adjClarity*cw+adjTexture),0.,1.);
@@ -9765,7 +9773,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // saturation/vibrance moved to the comp pass (applied AFTER the print stage, Dehancer
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
-      adjSharp:A.sharpness||0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
+      adjSharp:A.sharpness||0,adjSharpDetail:(A.sharpDetail==null?0.5:A.sharpDetail),adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
       texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false]]);
 
     // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
@@ -13020,7 +13028,7 @@ document.addEventListener('change',_ffAutoEnable,true);
 document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos',
-   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
+   'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-detail','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
@@ -13071,9 +13079,9 @@ function fxScheduleRender(){
     renderPreview();
   },180);
 }
-const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-skin'];
+const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp-detail','adj-skin'];
 function resetAdjust(){
-  ADJ_RESET_FIELDS.forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
+  ADJ_RESET_FIELDS.forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=parseFloat(sl.defaultValue||0);});
   fxPaintAllSliders(document.querySelector('.fx-ctrl[data-fxsec="adjust"]'));
   fxMarkModifiedSliders();
   fxUpdate();log('Adjustments reset','info');
@@ -13084,7 +13092,7 @@ function resetAdjust(){
 // the button's state never lags the sliders it controls.
 function syncAdjResetBtn(){
   const btn=document.getElementById('btn-adj-reset');if(!btn)return;
-  const allDefault=ADJ_RESET_FIELDS.every(id=>{const sl=document.getElementById('sl-'+id);return !sl||parseFloat(sl.value)===0;});
+  const allDefault=ADJ_RESET_FIELDS.every(id=>{const sl=document.getElementById('sl-'+id);return !sl||parseFloat(sl.value)===parseFloat(sl.defaultValue||0);});
   btn.disabled=allDefault;
 }
 // Basic Adjustments default to shared-across-the-batch (like every other FX section), but
@@ -18294,7 +18302,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   // against the DOM's real sl- ids found it 2026-09-10) — present in _SESS_SLIDERS (session
   // save/restore) but absent from the undo-history/copy-paste/.fx-mod snapshot, same class of
   // gap as deconv-amt/deconv-rad before DT1.
-  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat',
+  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-detail','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat',
   'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
   // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
   // header-reset mechanism — see resetDeconv() and _fxSectionResetOverride) — added 2026-09-10
@@ -19857,7 +19865,7 @@ function exportPresetListRefresh(selectName){
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
-  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
+  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-detail','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
   'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-b1-g','sl-b2-g','sl-b1-glow','sl-b2-glow','sl-b1-pos','sl-b2-pos','sl-canvas-z','sl-vig','sl-exp-q'];
@@ -20490,9 +20498,9 @@ function matchSeriesClear(){
   updateWork();renderPreview();buildLookGallery();fxHistoryPush();
   toast(n?`${n} photo(s) back to the shared grade`:'Nothing to clear',true);
 }
-const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','skin','dehaze','texture'];
+const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','sharp-detail','skin','dehaze','texture'];
 function domAdjustVals(){const o={};ADJ_FIELDS.forEach(f=>o[f]=adjVal('sl-adj-'+f));return o;}
-function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:0;if(sl)sl.value=val;if(vl)vl.textContent=val;});}
+function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:(f==='sharp-detail'?50:0);if(sl)sl.value=val;if(vl)vl.textContent=val;});}
 function computeAdjustBlock(v){
   v=v||domAdjustVals();
   return{enabled:(document.getElementById('tg-adjust')||{classList:{contains:()=>false}}).classList.contains('on'),
@@ -20502,7 +20510,7 @@ function computeAdjustBlock(v){
     whites:(v.wh||0)/100, blacks:(v.bl||0)/100,
     temp:(v.temp||0)/100, tint:(v.tint||0)/100,
     vibrance:(v.vib||0)/100, saturation:(v.sat||0)/100,
-    sharpness:(v.sharp||0)/500, clarity:(v.clarity||0)/500, texture:(v.texture||0)/500,
+    sharpness:(v.sharp||0)/500, sharpDetail:(v['sharp-detail']==null?0.5:(v['sharp-detail']/100)), clarity:(v.clarity||0)/500, texture:(v.texture||0)/500,
     skin:(v.skin||0)/100, dehaze:(v.dehaze||0)/100};
 }
 function getFXParams(adjValsOverride){return{
@@ -27588,7 +27596,7 @@ const CS_CONTROL_UNIT_SPECS={
   'cp-str':'%','cp-sh':'%','cp-md':'%','cp-hl':'%','sl-lut-mix':'%',
   'sl-adj-exp':{unit:' EV',scale:.05,precision:2,sign:true},
   'sl-adj-con':'%','sl-adj-hi':'%','sl-adj-sh':'%','sl-adj-wh':'%','sl-adj-bl':'%',
-  'sl-adj-vib':'%','sl-adj-sat':'%','sl-adj-skin':'%','sl-adj-clarity':'%','sl-adj-sharp':'%','sl-adj-dehaze':'%','sl-adj-texture':'%',
+  'sl-adj-vib':'%','sl-adj-sat':'%','sl-adj-skin':'%','sl-adj-clarity':'%','sl-adj-sharp':'%','sl-adj-sharp-detail':'%','sl-adj-dehaze':'%','sl-adj-texture':'%',
   'sl-nr-high-strength':'%','sl-nr-lum':'%','sl-nr-col':'%','sl-nr-det':'%','sl-nr-hldesat':'%','sl-deconv-amt':'%',
   'sl-deconv-rad':{unit:' px',map:'deconv-radius',precision:1},
   'sl-crv-s':'%','sl-crv-d':'%','sl-crv-l':'%','sl-crv-h':'%',
