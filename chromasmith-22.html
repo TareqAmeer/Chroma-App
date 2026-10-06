@@ -7018,7 +7018,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006Y';
+const BUILD='1.1006Z';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21578,6 +21578,10 @@ function healApply(img,ops){
       const auto=healAutoSource(data,w,h,cx,cy,r);
       if(!auto)continue;
       sx=auto.sx;sy=auto.sy;
+      // Recipes store donor coordinates in source-normalized space, just like the destination.
+      // Resolve a legacy/auto-sampled spot once so later preview sizes and exports reuse the
+      // same donor instead of rerunning the search against a different pixel grid.
+      op.sx=sx/w;op.sy=sy/h;
     }
     // The donor patch, cut to a soft-edged disc.
     const d=Math.ceil(r*2)+2;
@@ -21611,10 +21615,13 @@ function healApply(img,ops){
     // visible RING of the original showing through the feather — measured, and clearly visible
     // in test/output/heal_probe.png before this. Feather still reaches fully transparent at r,
     // so edges stay soft; there is just more solid coverage under it.
-    const g=tx.createRadialGradient(d/2,d/2,r*(1-0.65*fe),d/2,d/2,r);
-    g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');
     tx.globalCompositeOperation='destination-in';
-    tx.fillStyle=g;tx.beginPath();tx.arc(d/2,d/2,r,0,6.2832);tx.fill();
+    if(fe===0){tx.fillStyle='#000';tx.beginPath();tx.arc(d/2,d/2,r,0,6.2832);tx.fill();}
+    else{
+      const g=tx.createRadialGradient(d/2,d/2,r*(1-0.65*fe),d/2,d/2,r);
+      g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');
+      tx.fillStyle=g;tx.beginPath();tx.arc(d/2,d/2,r,0,6.2832);tx.fill();
+    }
     tx.globalCompositeOperation='source-over';
     x.save();
     x.globalAlpha=op.opacity!=null?op.opacity:1;
@@ -21969,11 +21976,12 @@ function healToggle(){
 }
 function healAdd(nx,ny,src){
   const ops=healOps();if(!ops)return;
+  const feather=parseFloat((document.getElementById('sl-heal-feather')||{}).value);
   ops.push({
     x:nx,y:ny,
     sx:src?src.nx:null,sy:src?src.ny:null,
     r:(parseFloat((document.getElementById('sl-heal-size')||{}).value)||4)/100,
-    feather:(parseFloat((document.getElementById('sl-heal-feather')||{}).value)||50)/100,
+    feather:Number.isFinite(feather)?feather/100:0.5,
     opacity:(parseFloat((document.getElementById('sl-heal-opacity')||{}).value)||100)/100,
     mode:(document.getElementById('sel-heal-mode')||{}).value||'heal',
   });
