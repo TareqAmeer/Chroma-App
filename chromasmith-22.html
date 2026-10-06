@@ -13472,7 +13472,7 @@ function drawCurveEditor(){
 function _crvPos(e){const cv=document.getElementById('cv-curve'),r=cv.getBoundingClientRect();
   return[Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,1-(e.clientY-r.top)/r.height))];}
 function _crvHit(px,py){let hit=-1;fxState.curves[curveCh].forEach((p,i)=>{if(Math.hypot(p[0]-px,p[1]-py)<0.06)hit=i;});return hit;}
-let _crvScroll=null;
+let _crvScroll=null,_crvTouchStart=null;
 function _crvInit(){
   const cv=document.getElementById('cv-curve');if(!cv)return;
   cv.addEventListener('pointerdown',e=>{
@@ -13490,7 +13490,7 @@ function _crvInit(){
     // Touch users cannot double-click a canvas point. A short hold removes only interior
     // points; any movement turns the same pointer into the existing drag gesture instead.
     if(e.pointerType==='touch'&&hit>0&&hit<pts.length-1){
-      clearTimeout(_crvTouchDeleteTimer);
+      clearTimeout(_crvTouchDeleteTimer);_crvTouchStart={x:e.clientX,y:e.clientY};
       _crvTouchDeleteTimer=setTimeout(()=>{
         if(_crvDrag!==hit)return;
         pts.splice(hit,1);_crvDrag=-1;_crvTouchDeleteTimer=0;curveChanged();
@@ -13501,7 +13501,11 @@ function _crvInit(){
   cv.addEventListener('pointermove',e=>{
     if(_crvScroll){_crvScroll.el.scrollTop=_crvScroll.top-(e.clientY-_crvScroll.y);return;}
     if(_crvDrag<0)return;
-    if(_crvTouchDeleteTimer){clearTimeout(_crvTouchDeleteTimer);_crvTouchDeleteTimer=0;}
+    if(_crvTouchDeleteTimer){
+      // A resting fingertip jitters a pixel or two; only real movement cancels the hold-to-delete.
+      if(_crvTouchStart&&Math.hypot(e.clientX-_crvTouchStart.x,e.clientY-_crvTouchStart.y)<6)return;
+      clearTimeout(_crvTouchDeleteTimer);_crvTouchDeleteTimer=0;
+    }
     const pts=fxState.curves[curveCh];let[px,py]=_crvPos(e);
     if(_crvDrag===0)px=0;else if(_crvDrag===pts.length-1)px=1;              // endpoints: x pinned, y free
     else px=Math.min(pts[_crvDrag+1][0]-0.01,Math.max(pts[_crvDrag-1][0]+0.01,px));
