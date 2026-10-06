@@ -4,6 +4,7 @@
 - Recorded a provisional no-hosted-sync/no-iCloud/no-shared-catalog-replication boundary; documented local source, sidecar, catalog, people/pets, cache/model, and preference categories and clarified that this slice adds no transport or request.
 - Added a provider re-entry checklist for data format, queues/conflicts, originals versus previews, affirmative opt-in and zero-network proof, sharing, recovery, and a platform/fixture matrix. Files: `docs/sync-privacy-decision.md`, `DEVLOG.md`.
 - Compared the decision with primary darktable, Apple CloudKit/Core Data, Syncthing, and Nextcloud documentation. This records a product decision only; no sync architecture or provider was implemented.
+- Publication verification: CHR-242 feature commits `4a46c3dc0ef3ae675b834360b012f00724bf84d5` and `9fd0d2efacc616f13ebb626072d8b4b0303b27b2` are contained in `origin/main` at `0a04be06f1e4264eb9eeada63095f7b29749c2bc`; `git ls-remote origin refs/heads/main` matched after push. The issue remains In Review pending any future provider implementation and user testing.
 
 ### 2026-10-05 — CHR-274 / CHR-247 mask refinement slice
 - Added non-destructive Feather and signed Edge settings for AI subject/skin/coat rasters, with a cached effective selection in the shared preview/tiled-export mask texture path and exact source reset; new SAM selections clear prior settings.
