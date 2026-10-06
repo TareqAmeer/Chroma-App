@@ -7163,7 +7163,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006K';
+const BUILD='1.1006L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23067,13 +23067,15 @@ function fxExportTileSize(P,src,halo,renderer){
   const viewport=gl.getParameter(gl.MAX_VIEWPORT_DIMS);
   const limit=Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE),gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),viewport[0],viewport[1],2560);
   const memory=navigator.deviceMemory;
-  const advanced=P.tonemap||src._sceneLinearPresent||P.debug
-    ||(P.halation&&P.halation.enabled)||(P.bloom&&P.bloom.enabled)
+  // Keep float, geometric and other unvalidated spatial pipelines on their existing tile
+  // layout. Larger tiles are validated here for point adjustments, grain, glow and skin masks.
+  const conservative=P.tonemap||src._sceneLinearPresent
     ||(P.nr&&(P.nr.luma>0||P.nr.color>0||P.nr.hlDesat>0))
     ||(P.deconv&&P.deconv.amount>0)||(P.depthBlur&&P.depthBlur.enabled)
     ||(P.lens&&(P.lens.dist||P.lens.vig||P.lens.ca||P.lens.defringe||P.lens.pv||P.lens.ph||P.lens.rot||(P.lens.scale!=null&&P.lens.scale!==1)))
-    ||(P.tiltShift&&P.tiltShift.enabled)||(P.masks||[]).some(m=>m.crOn);
-  const larger=/Android/i.test(navigator.userAgent)&&typeof memory==='number'&&memory>=(advanced?4:2);
+    ||(P.tiltShift&&P.tiltShift.enabled);
+  const advanced=P.debug||(P.halation&&P.halation.enabled)||(P.bloom&&P.bloom.enabled)||(P.masks||[]).some(m=>m.crOn);
+  const larger=!conservative&&/Android/i.test(navigator.userAgent)&&typeof memory==='number'&&memory>=(advanced?4:2);
   return Math.max(1,Math.min(larger?2048:1024,limit-2*halo));
 }
 async function renderTiled(P,src,iw,ih,onTile,renderer=FX){

@@ -80,6 +80,7 @@ try{
       Object.defineProperty(navigator,'deviceMemory',{value:2});const ordinary=oldSize(plain,src,100,fake),heavy=oldSize({...plain,tonemap:true},src,100,fake);
       Object.defineProperty(navigator,'deviceMemory',{value:1});const low=oldSize(plain,src,100,fake);
       Object.defineProperty(navigator,'deviceMemory',{value:4});const hugeHalo=oldSize(plain,src,400,fake);
+      const hdr=oldSize({...plain,tonemap:true},src,100,fake),lens=oldSize({...plain,lens:{dist:.1}},src,100,fake),nr=oldSize({...plain,nr:{luma:20}},src,100,fake);
       const limited={gl:{...fake.gl,getParameter:k=>k===1?[2048,2048]:4096}};
       const gpuLimited=oldSize(plain,src,100,limited);
       Object.defineProperty(navigator,'userAgent',{configurable:true,value:'iPhone'});const ios=oldSize(plain,src,100,fake);
@@ -87,7 +88,7 @@ try{
       let notice=null,prompts=0;
       await fxNotifyExportFinished({LocalNotifications:{checkPermissions:async()=>({display:'granted'}),requestPermissions:async()=>{prompts++;},schedule:async data=>{notice=data;}}},Date.now()-16000);
       await fxNotifyExportFinished({LocalNotifications:{checkPermissions:async()=>({display:'prompt'}),requestPermissions:async()=>{prompts++;},schedule:async()=>{prompts++;}}},Date.now()-16000);
-      return {records,cancelled,cleanup,ordinary,heavy,low,hugeHalo,gpuLimited,ios,unknownMemory,prompts,inexact:notice?.notifications[0].isExactNotification===false};
+      return {records,cancelled,cleanup,ordinary,heavy,low,hugeHalo,hdr,lens,nr,gpuLimited,ios,unknownMemory,prompts,inexact:notice?.notifications[0].isExactNotification===false};
     }finally{fxExportTileSize=oldSize;Math.random=oldRandom;}
   },skinMasks);
   console.log(JSON.stringify(results,null,2));
@@ -101,5 +102,6 @@ try{
   assert.equal(results.ordinary,2048);assert.equal(results.heavy,1024);assert.equal(results.low,1024);assert.equal(results.hugeHalo,1760);
   assert.equal(results.prompts,0);assert.equal(results.inexact,true);
   assert.equal(results.gpuLimited,1848);assert.equal(results.ios,1024);assert.equal(results.unknownMemory,1024);
+  assert.equal(results.hdr,1024);assert.equal(results.lens,1024);assert.equal(results.nr,1024);
   console.log('PASS Android tile pixels, seams, memory/GPU guards, cancellation and cleanup');
 }finally{await browser?.close();server.close();}

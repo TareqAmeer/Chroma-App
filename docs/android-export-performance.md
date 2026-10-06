@@ -2,7 +2,7 @@
 
 ## Changes
 
-- Ordinary Android JPEG exports use 2048px tile centers when reported memory is at least 2GB. Expensive effects require at least 4GB. Unknown/low memory and other platforms retain 1024px centers. Expanded tiles are bounded by texture, renderbuffer and viewport limits, with a 2560px working-side cap.
+- Ordinary Android JPEG exports use 2048px tile centers when reported memory is at least 2GB. Glow and skin masks require at least 4GB. Float/HDR, lens geometry, noise reduction, deconvolution and depth/tilt blur retain the existing tile layout pending separate pixel validation. Unknown/low memory and other platforms retain 1024px centers. Expanded tiles are bounded by texture, renderbuffer and viewport limits, with a 2560px working-side cap.
 - Reuse the two temporary tile canvases, resize only when needed, clear transparent source pixels, and release both canvases and incomplete output on cancellation/errors. Preserve full output resolution, quality, halo math, global grain coordinates and the separate export renderer.
 - Completion notifications check existing permission and use `isExactNotification:false`. They run without blocking export completion. Long exports previously requested notification permission and could open Android's Alarms & reminders settings after saving.
 
