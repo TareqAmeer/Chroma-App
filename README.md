@@ -69,12 +69,12 @@ Six tools, one editor: pick a look, shape the light and colour, add texture, the
 | | How | Notes |
 |---|---|---|
 | **Browser** | [Open the app](https://tareqameer.github.io/Chroma-App/app/) | Nothing to install. Works offline after the first visit. |
-| **Mac** | [Download the latest `.dmg`](https://github.com/TareqAmeer/Chroma-App/releases/latest) | Unsigned: **right-click → Open** the first time. Intel build; runs under Rosetta on Apple Silicon. Adds the photo library, card import, faces and local AI. |
-| **Windows** | [Download the latest `windows-x64-setup.exe`](https://github.com/TareqAmeer/Chroma-App/releases/latest) | Windows 10/11, 64-bit. Unsigned: if SmartScreen appears, choose **More info → Run anyway**. The same full desktop app as on Mac: library, card import, faces and local AI. |
+| **Mac** | [Download the latest `.dmg`](https://github.com/TareqAmeer/Chroma-App/releases/latest) | Unsigned: **right-click → Open** the first time. Intel build; runs under Rosetta on Apple Silicon. Adds the photo library, card import, faces and local AI. [Install, update and recovery guide](docs/desktop-install-and-update.md). |
+| **Windows** | [Download the latest `windows-x64-setup.exe`](https://github.com/TareqAmeer/Chroma-App/releases/latest) | Windows 10/11, 64-bit. Unsigned: if SmartScreen appears, choose **More info → Run anyway**. The same full desktop app as on Mac: library, card import, faces and local AI. [Install, update and recovery guide](docs/desktop-install-and-update.md). |
 | **iPhone / iPad** | Open in Safari → Share → **Add to Home Screen** | Or sideload the unsigned IPA from [Actions](https://github.com/TareqAmeer/Chroma-App/actions/workflows/ios-ipa.yml) with Flarestore / AltStore / Sideloadly. |
 | **Android** | [Download the latest `.apk`](https://tareqameer.github.io/Chroma-App/download/android.html) | Not on Google Play: allow **Install unknown apps** when asked. Or open in Chrome → menu → **Add to Home screen** for the same app without a download. |
 
-**Requirements:** any current Chrome, Edge, Firefox or Safari with WebGL2 · Mac: macOS on Intel, or Apple Silicon via Rosetta · Windows: 10/11, 64-bit (installer ~395 MB, includes the on-device AI models) · iPhone/iPad: iOS Safari · Android: Chrome, or the `.apk`.
+**Requirements:** any current Chrome, Edge, Firefox or Safari with WebGL2 · Mac: macOS on Intel, or Apple Silicon via Rosetta · Windows: 10/11, 64-bit (installer includes the on-device AI models; leave additional free space for installation) · iPhone/iPad: iOS Safari · Android: Chrome, or the `.apk`. See the [desktop install and recovery guide](docs/desktop-install-and-update.md).
 
 Step-by-step instructions for each platform, in plain English, are on the
 [product page](https://tareqameer.github.io/Chroma-App/#get).

@@ -111,20 +111,26 @@ jobs:
           cp -R "$APP" "$STAGE/"
           ln -s /Applications "$STAGE/Applications"
           hdiutil create -volname "Chromasmith" -srcfolder "$STAGE" -ov -format UDZO "$NAME"
+          node tools/scripts/write-sha256.mjs "$NAME"
           echo "dmg=$NAME" >> "$GITHUB_OUTPUT"
+          echo "checksum=$NAME.sha256" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           ls -lh "$NAME"
 
       - uses: actions/upload-artifact@v4
         with:
           name: Chromasmith-dmg
-          path: ${{ steps.pack.outputs.dmg }}
+          path: |
+            ${{ steps.pack.outputs.dmg }}
+            ${{ steps.pack.outputs.checksum }}
 
       - name: Publish the release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.pack.outputs.dmg }}
+          files: |
+            ${{ steps.pack.outputs.dmg }}
+            ${{ steps.pack.outputs.checksum }}
           append_body: true
           body: |
             ## Chromasmith ${{ steps.pack.outputs.version }}
@@ -157,6 +163,10 @@ jobs:
             Bundled on-device AI models keep their own licences, two of which are
             non-commercial/research — see
             [LICENSES-MODELS.md](https://github.com/TareqAmeer/Chroma-App/blob/main/LICENSES-MODELS.md).
+
+            A SHA-256 checksum file is published next to each installer. It can detect an
+            incomplete or corrupted download, but does not authenticate the publisher. See the
+            [desktop install and recovery guide](https://github.com/TareqAmeer/Chroma-App/blob/main/docs/desktop-install-and-update.md).
 
   nsis:
     # windows-latest ships WebView2 preinstalled, which is what the Tauri window renders with —
@@ -237,17 +247,25 @@ jobs:
           VERSION=$(python3 -c "import json;print(json.load(open('desktop/src-tauri/tauri.conf.json'))['version'])")
           NAME="Chromasmith-${VERSION}-windows-x64-setup.exe"
           cp "$EXE" "$NAME"
+          node tools/scripts/write-sha256.mjs "$NAME"
           echo "exe=$NAME" >> "$GITHUB_OUTPUT"
+          echo "checksum=$NAME.sha256" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           ls -lh "$NAME"
 
       - uses: actions/upload-artifact@v4
         with:
           name: Chromasmith-windows-setup
-          path: ${{ steps.pack.outputs.exe }}
+          path: |
+            ${{ steps.pack.outputs.exe }}
+            ${{ steps.pack.outputs.checksum }}
 
       - name: Publish the release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.pack.outputs.exe }}
+          files: |
+            ${{ steps.pack.outputs.exe }}
+            ${{ steps.pack.outputs.checksum }}
+          append_body: true
+          generate_release_notes: true
