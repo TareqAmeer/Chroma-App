@@ -7018,7 +7018,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006E';
+const BUILD='1.1006F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -7669,8 +7669,8 @@ function gpuContextOptions(){
   return{preserveDrawingBuffer:true,antialias:false,premultipliedAlpha:false,powerPreference:gpuPreference()};
 }
 class FXR{
-  constructor(){
-    this.cv=document.getElementById('fx-canvas')||document.createElement('canvas');
+  constructor(canvas){
+    this.cv=canvas||document.getElementById('fx-canvas')||document.createElement('canvas');
     const options=gpuContextOptions();
     this.gl=this.cv.getContext('webgl2',options)||this.cv.getContext('experimental-webgl2',options);
     this.ok=!!this.gl;if(!this.ok)return;
@@ -7683,6 +7683,10 @@ class FXR{
       }
     });
     this.progs={};this.fbs={};this.txs={};this.imgTx=null;this.lutTx=null;this.w=0;this.h=0;
+    // CPU shadows let a still export copy the exact active grade textures into its own FXR.
+    // These are private immutable snapshots, separate from UI state that can change mid-export.
+    this._lutSnapshot=null;this._printLutSnapshot=null;this._hslSnapshot=null;
+    this._curveSnapshot=null;this._depthSnapshot=null;this._stockShoulderSnapshot=null;
     this._setupQuad();this._compileAll();
   }
   _setupQuad(){const gl=this.gl,b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);this.qb=b}
@@ -9207,6 +9211,7 @@ void main(){
     this._ensureLutTx();
   }
   setLUT(lut){const gl=this.gl;if(this.lutTx)gl.deleteTexture(this.lutTx);
+    this._lutSnapshot=lut?new Float32Array(lut):null;
     const d=new Uint8Array(SZ*SZ*SZ*3);
     for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
       const s=li(r,g,b),ds=(b*S2+g*SZ+r)*3;
@@ -9226,6 +9231,7 @@ void main(){
   // Print-profile 3D LUT (Kodak/Fuji print), applied in the comp pass AFTER halation.
   // Pass null to clear. Mirrors setLUT's tight-packing fix.
   setPrintLUT(lut){const gl=this.gl;if(this.printTx){gl.deleteTexture(this.printTx);this.printTx=null;}
+    this._printLutSnapshot=lut?new Float32Array(lut):null;
     if(!lut)return;
     const d=new Uint8Array(SZ*SZ*SZ*3);
     for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
@@ -9240,7 +9246,7 @@ void main(){
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);
   }
   // HSL-mixer 3D LUT: takes PRE-PACKED bytes (SZ³·3, x=r fastest — same layout setLUT builds).
-  setHslLUT(d){const gl=this.gl;if(!this.hslTx)this.hslTx=gl.createTexture();
+  setHslLUT(d){const gl=this.gl;this._hslSnapshot=new Uint8Array(d);if(!this.hslTx)this.hslTx=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_3D,this.hslTx);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
     gl.texImage3D(gl.TEXTURE_3D,0,gl.RGB8,SZ,SZ,SZ,0,gl.RGB,gl.UNSIGNED_BYTE,d);
@@ -9248,7 +9254,7 @@ void main(){
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);}
   // Tone-curve table: 256x1 RGBA8 (R/G/B columns = the three baked per-channel curves).
-  setCurveTex(d){const gl=this.gl;if(!this.curveTx)this.curveTx=gl.createTexture();
+  setCurveTex(d){const gl=this.gl;this._curveSnapshot=new Uint8Array(d);if(!this.curveTx)this.curveTx=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D,this.curveTx);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,256,1,0,gl.RGBA,gl.UNSIGNED_BYTE,d);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
@@ -9260,7 +9266,7 @@ void main(){
   // upload reads garbage/throws (256*3=768 is div-by-4 actually, but keep this defensive since a
   // future stock could bake a non-256 width). Stored on this.txs.stockShoulder (generic bucket)
   // so the existing binding fallback (`this.txs[name]`) picks it up with no new special-case.
-  setStockShoulderTex(d){const gl=this.gl;if(!this.txs.stockShoulder)this.txs.stockShoulder=gl.createTexture();
+  setStockShoulderTex(d){const gl=this.gl;this._stockShoulderSnapshot=new Uint8Array(d);if(!this.txs.stockShoulder)this.txs.stockShoulder=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,256,1,0,gl.RGB,gl.UNSIGNED_BYTE,d);
@@ -9292,7 +9298,7 @@ void main(){
   // (like setMaskTex), never recomputed per mask/per frame — the same "compute once, reuse many"
   // rule CLAUDE.md §5b's `srcV` uniform already follows. R8 (single channel) keeps this a quarter
   // the bytes of an RGBA upload for the same resolution.
-  setDepthTex(data,w,h){const gl=this.gl;if(!this.depthTx)this.depthTx=gl.createTexture();
+  setDepthTex(data,w,h){const gl=this.gl;this._depthSnapshot={data:new Uint8Array(data),w,h};if(!this.depthTx)this.depthTx=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D,this.depthTx);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.R8,w,h,0,gl.RED,gl.UNSIGNED_BYTE,data);
@@ -9300,6 +9306,19 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
     this.hasDepthTx=true;}
+  clearDepthTex(){if(this.depthTx){this.gl.deleteTexture(this.depthTx);this.depthTx=null;}this._depthSnapshot=null;this.hasDepthTx=false;}
+  resetTextureSnapshotFrom(source){
+    if(source._lutSnapshot)this.setLUT(source._lutSnapshot);
+    else{if(this.lutTx)this.gl.deleteTexture(this.lutTx);this.lutTx=null;this._ensureLutTx();this._lutSnapshot=null;}
+    this.setPrintLUT(source._printLutSnapshot);
+    if(source._hslSnapshot)this.setHslLUT(source._hslSnapshot);
+    else{if(this.hslTx)this.gl.deleteTexture(this.hslTx);this.hslTx=null;this._hslSnapshot=null;}
+    if(source._curveSnapshot)this.setCurveTex(source._curveSnapshot);
+    else{if(this.curveTx)this.gl.deleteTexture(this.curveTx);this.curveTx=null;this._curveSnapshot=null;}
+    if(source._stockShoulderSnapshot)this.setStockShoulderTex(source._stockShoulderSnapshot);
+    else{if(this.txs.stockShoulder)this.gl.deleteTexture(this.txs.stockShoulder);this.txs.stockShoulder=null;this._stockShoulderSnapshot=null;}
+    this.clearDepthTex();
+  }
   _pass(prog,fb,uniforms,bindings,vp){
     const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
     bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
@@ -9469,7 +9488,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // Must be identical for preview, loupe and every export tile — re-measuring per tile would
       // make each tile converge to a different level and show as blocks.
       mI[o+3]=m.srcV!=null?m.srcV:tgt.v;});
-    if(MK.some(m=>m.type==='brush'))mskBuildTex();
+    if(MK.some(m=>m.type==='brush'))mskBuildTex(this,MK);
     const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
     // LENS CORRECTION: runs FIRST on the raw source into fbs.lens (manual distortion/vignette/
     // CA — see the lens shader). Chain: img -> [lens] -> [nr] -> lut, each stage conditionally
@@ -9853,13 +9872,28 @@ FXR.CAL={
                    '35mm':{cellPx:3.0,scale:1.00}, '65mm':{cellPx:3.0,scale:0.52} }}
 };
 const FX=new FXR();
-// CHR-183: renderer state the UI changes mid-export is queued, not applied, so the export keeps
-// rendering with the look it started with (setMaskTex is NOT here: render() rebuilds it per call
-// from the params, including the export's own).
-['setLUT','setPrintLUT','setHslLUT','setCurveTex','setDepthTex'].forEach(m=>{
-  if(typeof FX[m]!=='function')return;const f=FX[m].bind(FX);FX['_'+m]=f;
-  FX[m]=(...a)=>{if(window.__csExporting){(FX._deferred||(FX._deferred=[])).push([m,a]);return;}return f(...a);};
+// Video still renders through FX itself, so it retains the narrow texture-update queue needed
+// to keep an in-flight video grade coherent. Still exports never enter this lock: they render on
+// FXExport and leave the preview fully interactive.
+['setLUT','setPrintLUT','setHslLUT','setCurveTex','setStockShoulderTex','setDepthTex'].forEach(m=>{
+  const apply=FX[m].bind(FX);
+  FX[m]=(...args)=>{
+    if(window.__csVideoExporting){
+      const copy=args.map(a=>ArrayBuffer.isView(a)?new a.constructor(a):a);
+      (window.__csVideoTextureChanges||(window.__csVideoTextureChanges=[])).push([m,copy]);return;
+    }
+    return apply(...args);
+  };
 });
+// Still exports use a second WebGL context so live edits can keep updating the preview while
+// their immutable texture snapshot renders. Video stays on FX: its encoder owns a separate
+// streaming contract and never enters processToCanvas/renderTiled.
+let FXExport=null;
+function fxPrepareExportRenderer(){
+  if(!FXExport){FXExport=new FXR(document.createElement('canvas'));if(!FXExport.ok)throw new Error('Could not create the export WebGL renderer');}
+  FXExport.resetTextureSnapshotFrom(FX);
+  return FXExport;
+}
 
 // ═══════════════════════════
 // FX UI
@@ -16047,9 +16081,9 @@ function mskSourceData(w,h,img){
 // Painting/refining changes the MASK, never the photo, so the cache only has to drop when the
 // photo itself does. Called from installFXImages/fxSelectImage via fxInvalidateMaskSource.
 function fxInvalidateMaskSource(){_mskSrcCache=null;}
-function mskTexDims(){
+function mskTexDims(width,height){
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
-  const iw=(img&&(img.naturalWidth||img.width))||400,ih=(img&&(img.naturalHeight||img.height))||300;
+  const iw=width||(img&&(img.naturalWidth||img.width))||400,ih=height||(img&&(img.naturalHeight||img.height))||300;
   const MAXD=2048,s=Math.min(1,MAXD/Math.max(iw,ih));
   return{w:Math.max(2,Math.round(iw*s)),h:Math.max(2,Math.round(ih*s))};
 }
@@ -16061,8 +16095,8 @@ function samInputDims(){
   const MAXD=1024,s=Math.min(1,MAXD/Math.max(iw,ih));
   return{w:Math.max(2,Math.round(iw*s)),h:Math.max(2,Math.round(ih*s))};
 }
-function mskEnsureDims(m){
-  const{w,h}=mskTexDims();
+function mskEnsureDims(m,width,height){
+  const{w,h}=mskTexDims(width,height);
   if(m.mtW===w&&m.mtH===h&&m.px&&m.px.length===w*h)return;
   const nw=new Uint8ClampedArray(w*h);
   if(m.px&&m.mtW&&m.mtH){for(let y=0;y<h;y++){const sy=Math.min(m.mtH-1,(y/h*m.mtH)|0);
@@ -16070,8 +16104,9 @@ function mskEnsureDims(m){
   m.px=nw;m.mtW=w;m.mtH=h;
 }
 let _mskTexBufs=null;
-function mskBuildTex(){
-  const{w,h}=mskTexDims();
+function mskBuildTex(renderer=FX,masks=fxState.masks){
+  const ref=renderer._maskReferenceSize;
+  const{w,h}=mskTexDims(renderer===FX?undefined:(ref&&ref.w||renderer.imgW),renderer===FX?undefined:(ref&&ref.h||renderer.imgH));
   // Two w*h*4 staging buffers at 2048px are ~16MB each — reallocating both on every rebuild (a
   // brush stroke rebuilds constantly) churned 32MB per stroke sample. Cache and reuse; only
   // reallocate when the mask resolution itself changes, i.e. on a photo swap.
@@ -16080,14 +16115,14 @@ function mskBuildTex(){
   }
   const buf=_mskTexBufs.buf,buf2=_mskTexBufs.buf2;
   buf.fill(0);buf2.fill(0);   // reused buffers must be cleared — a deleted mask's channel would otherwise persist
-  fxState.masks.slice(0,MSK_MAX).forEach((m,i)=>{
+  masks.slice(0,MSK_MAX).forEach((m,i)=>{
     if(m.type!=='brush')return;
-    mskEnsureDims(m);
+    mskEnsureDims(m,w,h);
     const px=mskRefinedPixels(m),dst=i<4?buf:buf2,ch=i<4?i:i-4;
     for(let j=0;j<w*h;j++)dst[j*4+ch]=px[j];
   });
-  FX.setMaskTex(buf,w,h);
-  FX.setMaskTex2(buf2,w,h);
+  renderer.setMaskTex(buf,w,h);
+  renderer.setMaskTex2(buf2,w,h);
   _mskTexDirty=false;
 }
 // The authored mask remains in m.px. Feather and Edge always derive a cached effective
@@ -20565,10 +20600,8 @@ function resolveSplitSnapshot(src){
   return 'orig';
 }
 function renderPreview(){
-  // CHR-183: an export drives the SAME renderer (FX) and yields between tiles/photos — a preview
-  // render in that gap swapped FX's image and size under the export and corrupted tiles. While
-  // exporting, edits still apply; the preview just catches up once the export finishes.
-  if(window.__csExporting){if(!window.__csPreviewPending){window.__csPreviewPending=true;if(typeof toast==='function')toast('Exporting — the preview catches up when it finishes');}return;}
+  // Video export keeps the original main renderer because its encoder streams frames through FX.
+  if(window.__csVideoExporting)return;
   const work=fxWork||fxImg;
   if(!work||!FX.ok)return;
   if(cropMode)return;            // crop overlay owns the canvas while active
@@ -22548,15 +22581,25 @@ function fxPreviewGlowScale(){return _fxPreviewInteracting?Math.max(2,fxGlowScal
 // what was killing the tab on 24–48MP iPhone photos. Tiles keep peak memory small & constant.
 function shouldTile(w,h){return isMemoryConstrained()?w*h>16e6:w*h>80e6;}
 // Produce the processed FULL-RES image as a canvas (no borders). Picks tiled vs single-shot.
-async function processToCanvas(P,src,iw,ih,onTile){
-  if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih,onTile);
-  FX.setImage(src);
-  FX.render(P,iw,ih,{glowScale:fxGlowScale()});
-  const{px,w,h}=FX.getPixels();
-  const c=document.createElement('canvas');c.width=w;c.height=h;
-  // view over the SAME buffer (no full-size copy — getPixels already returns a fresh array)
-  c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),w,h),0,0);
-  return applyRedEyeCorrections(c,P.redEyeOps);
+function fxSetCapturedExportDepth(renderer,P){
+  if(!Object.prototype.hasOwnProperty.call(P,'_exportDepthMap'))return;
+  const d=P._exportDepthMap;
+  if(d&&d.data)renderer.setDepthTex(d.data,d.w,d.h);else renderer.clearDepthTex();
+}
+async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
+  const previousMaskSize=renderer._maskReferenceSize;
+  renderer._maskReferenceSize={w:iw,h:ih};
+  try{
+    if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih,onTile,renderer);
+    renderer.setImage(src);
+    fxSetCapturedExportDepth(renderer,P);
+    renderer.render(P,iw,ih,{glowScale:fxGlowScale()});
+    const{px,w,h}=renderer.getPixels();
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    // view over the SAME buffer (no full-size copy — getPixels already returns a fresh array)
+    c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),w,h),0,0);
+    return applyRedEyeCorrections(c,P.redEyeOps);
+  }finally{renderer._maskReferenceSize=previousMaskSize;}
 }
 // Port of GEGL's red-eye-removal point operation (GNOME commit 1870ad1d8c26be68be88e07ff2b56044dc417df8):
 // test adjusted channels using RED_FACTOR=.5133333, GREEN_FACTOR=1, BLUE_FACTOR=.1933333,
@@ -22609,7 +22652,7 @@ function drawRedEyePreview(P){
 // seamless by construction. (The old design did grain as a final FULL-RES FX pass over the
 // assembled image, which allocated ~4 full-res GPU buffers and was exactly what crashed the
 // tab on large iPhone photos — the very thing tiling exists to avoid.)
-async function renderTiled(P,src,iw,ih,onTile){
+async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
   const REF=FXR.CAL.refWidth,sc=iw/REF;
   const H=FXR.CAL.halation,B=FXR.CAL.bloom;
   let maxSig=Math.max((P.halation&&P.halation.radius||H.sigmaR)*sc,(P.bloom&&P.bloom.radius||B.sigma)*sc);
@@ -22622,6 +22665,7 @@ async function renderTiled(P,src,iw,ih,onTile){
   const TILE=1024;
   const out=document.createElement('canvas');out.width=iw;out.height=ih;const octx=out.getContext('2d');
   const seed=Math.random()*100; // ONE seed for every tile → continuous grain across seams
+  fxSetCapturedExportDepth(renderer,P);
   let tiles=0;const total=Math.ceil(iw/TILE)*Math.ceil(ih/TILE);
   for(let ty=0;ty<ih;ty+=TILE)for(let tx=0;tx<iw;tx+=TILE){
     const tw=Math.min(TILE,iw-tx),th=Math.min(TILE,ih-ty);
@@ -22629,12 +22673,12 @@ async function renderTiled(P,src,iw,ih,onTile){
     const rw=ex-sx,rh=ey-sy;
     const tileSrc=document.createElement('canvas');tileSrc.width=rw;tileSrc.height=rh;
     tileSrc.getContext('2d').drawImage(src,sx,sy,rw,rh,0,0,rw,rh);
-    FX.setImage(tileSrc);
+    renderer.setImage(tileSrc);
     // uv origin is bottom-left (texture uploaded flipped), so global v of this tile's bottom
     // row (image row ey-1) is (ih-ey)/ih.
-    FX.render(P,rw,rh,{glowScale:1,scOverride:sc,seed,
+    renderer.render(P,rw,rh,{glowScale:1,scOverride:sc,seed,
       uvOff:[sx/iw,(ih-ey)/ih],uvScale:[rw/iw,rh/ih]});
-    const{px}=FX.getPixels();
+    const{px}=renderer.getPixels();
     const rc=document.createElement('canvas');rc.width=rw;rc.height=rh;
     rc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),rw,rh),0,0);
     octx.drawImage(rc,tx-sx,ty-sy,tw,th,tx,ty,tw,th); // keep only the central (halo-free) region
@@ -22703,7 +22747,8 @@ window.chromasmithRenderCurrentGraded=async function(maxEdge){
   return bm;
 };
 async function exportFX(...a){
-  _fxExportRuns++;document.body.classList.add('fx-exporting');window.__csExporting=true;
+  if(_fxExportRuns){if(typeof toast==='function')toast('An export is already running');return;}
+  _fxExportRuns++;document.body.classList.add('fx-exporting');
   // Phone app: keep the screen awake for the whole export (a locked phone suspends the app and
   // the export with it), and if the app was in the background when it finished, say so with a
   // notification. Both plugins are optional — missing ones are simply skipped.
@@ -22711,11 +22756,6 @@ async function exportFX(...a){
   try{P.KeepAwake&&await P.KeepAwake.keepAwake();}catch(e){}
   try{return await _exportFXRun(...a);}
   finally{if(--_fxExportRuns<=0){_fxExportRuns=0;document.body.classList.remove('fx-exporting');
-      window.__csExporting=false;
-      // CHR-183: replay renderer changes the user made mid-export (look, print, curves, HSL,
-      // depth), then repaint the preview once with everything.
-      const q=FX._deferred||[];FX._deferred=[];q.forEach(([m,a])=>{try{FX['_'+m](...a);}catch(e){}});
-      if(window.__csPreviewPending||q.length){window.__csPreviewPending=false;try{renderPreview();}catch(e){}}
       try{P.KeepAwake&&P.KeepAwake.allowSleep();}catch(e){}
       if(P.LocalNotifications&&(document.hidden||Date.now()-t0>15000)){
         try{const perm=await P.LocalNotifications.requestPermissions();
@@ -22732,7 +22772,32 @@ async function _exportFXRun(){
   // photos and videos in one batch isn't a designed use case (Library integration explicitly
   // keeps video out for now, see CLAUDE.md §12), so route a single video item to its own export
   // function entirely rather than threading kind-checks through every step below.
-  if(items.length===1&&items[0].kind==='video'){await fxVideoExportSmall(items[0]);return;}
+  if(items.length===1&&items[0].kind==='video'){
+    window.__csVideoExporting=true;window.__csVideoTextureChanges=[];
+    try{await fxVideoExportSmall(items[0]);}
+    finally{
+      const changes=window.__csVideoTextureChanges||[];window.__csVideoTextureChanges=[];window.__csVideoExporting=false;
+      changes.forEach(([m,args])=>{try{FX[m](...args);}catch(e){}});
+      try{renderPreview();}catch(e){}
+    }
+    return;
+  }
+  // Freeze every still photo's renderer inputs before prompts, auth or per-photo processing can
+  // yield. The main FX stays live for the preview; this export owns a separate context and copies
+  // the active look/print/HSL/curve/stock textures exactly once here.
+  const exportRenderer=fxPrepareExportRenderer();
+  const exportRecipeNames=_exportRecipeNames();
+  const _expPs=items.map(it=>{
+    const sm=fxState.masks;fxState.masks=it.masks||[];
+    const undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null;
+    try{
+      const p=getFXParams(it.adjustOverride||undefined);p.redEyeOps=it.redeye||[];
+      let copy;try{copy=structuredClone(p);}catch(e){copy=p;}
+      const depth=it.img&&it.img._depthMap;
+      copy._exportDepthMap=depth&&depth.data?{data:new Uint8Array(depth.data),w:depth.w,h:depth.h}:null;
+      return copy;
+    }finally{fxState.masks=sm;if(undo)undo();}
+  });
   // High-tier neural NR is shared across the whole export the same way every other FX slider
   // is (see the per-item loop's own comment below on masks/adjustOverride being the ONLY truly
   // per-photo state) — window.chromasmithRawNr is the CURRENTLY active photo's setting, and
@@ -22813,11 +22878,6 @@ async function _exportFXRun(){
     // the outer catch and `saveFiles` was never called, so a whole export could vanish with only
     // an error logged. Now a per-image failure is logged and skipped; the rest of the batch and
     // whatever already succeeded still gets saved. ──
-    // CHR-183: every photo's parameters are captured BEFORE the first render, so sliders moved
-    // while the export runs can't leak into the photos still waiting in the queue.
-    const _expPs=items.map(it=>{const sm=fxState.masks;fxState.masks=it.masks||[];
-      const undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null; // CHR-193: this photo's own section values
-      try{const p=getFXParams(it.adjustOverride||undefined);p.redEyeOps=it.redeye||[];try{return structuredClone(p);}catch(e){return p;}}finally{fxState.masks=sm;if(undo)undo();}});
     for(let idx=0;idx<items.length;idx++){
       if(fxExportCancel){activityOutcome='interrupted';log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
       const it=items[idx];
@@ -22877,7 +22937,7 @@ async function _exportFXRun(){
         // Per-tile progress: a big tiled photo used to freeze the bar for its whole render
         // (setProg was image-granular only) — feed the tile fraction in as a fractional image.
         const proc=await processToCanvas(P,src,iw,ih,
-          (t,tot)=>setProg(idx+t/tot,`Rendering ${idx+1}/${N}: ${it.name} — tile ${t}/${tot}…`));
+          (t,tot)=>setProg(idx+t/tot,`Rendering ${idx+1}/${N}: ${it.name} — tile ${t}/${tot}…`),exportRenderer);
         const w=proc.width,h=proc.height;
         const{b1t,b2t}=borderLayerSizes(P,w);
         await filmEdgeReady(P);   // never export before the film strips have decoded
@@ -22953,7 +23013,7 @@ async function _exportFXRun(){
             // Item 1: record which look/print profile produced this export, since nothing else
             // in the exported file says so and export_history.json's own recipe record never
             // made it INTO the file itself.
-            const {look,print}=_exportRecipeNames();
+            const {look,print}=exportRecipeNames;
             out=injectRecipeXmp(out,outExt,look,print);
           }
         }

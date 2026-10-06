@@ -119,3 +119,8 @@
 - Added sourced distinctions between erase and diffusion model families, a re-entry checklist, and a non-legal-summary note in `docs/ai-inpainting-model-decision.md` and `LICENSES-MODELS.md`.
 - Verification: reviewed all six cited primary project/model pages and ran `git diff --check`; model selection, legal review, implementation, and product acceptance remain open.
 - Publication verification: CHR-263 documentation commits `982fbee8ea88eae32d1a28dbac471411ad989708` and `985b28a076fcc51adc160174126c8767878cccfe` are contained in `origin/main` at `e47520ba0943ddc35424bfac0fda64094e65faa6`; `git ls-remote origin refs/heads/main` matched after push. No model weights or runtime code were added.
+
+## 2026-10-06 — CHR-234 live preview during still export
+- Routed still and tiled exports through a dedicated second `FXR`, snapshotting look/print/HSL/curve/stock textures and each photo's depth map and masks before export yields. Live edits now repaint the main preview; video retains the main renderer with a video-only texture update lock. Files: `chromasmith-22.html`, `test/export_live_preview.mjs`.
+- `npm run export:test` passed 30 fixture/recipe renders; decoded pixel comparisons match all 18 available export goldens. The focused tiled race regression passes: preview pixels changed during the export while export pixels stayed identical. `node --check test/export_live_preview.mjs` and `git diff --check` pass.
+- `npm run video:test` passes video demux/seek/export checks but its documented photo byte-stream assertion still differs from the golden (5531 vs 5365 bytes); decoded 512×384 pixels are identical. Real WKWebView repeated-export memory and WebGL-context testing remains outstanding.
