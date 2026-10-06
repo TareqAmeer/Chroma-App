@@ -7121,7 +7121,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006R';
+const BUILD='1.1006S';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8377,7 +8377,7 @@ if(vidBreath!=1.0)c.rgb*=vidBreath;
 // recomputed there) so the 4 extra taps are paid at most once per pixel — and skipped entirely
 // when nothing needs it, so the default path costs exactly what it did before.
 vec3 srcHP=vec3(0.0);
-bool needHP=(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.||adjTexture!=0.||abs(adjSharpDetail-0.5)>0.001))||mskAnyTex>0.5;
+bool needHP=(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.||adjTexture!=0.))||mskAnyTex>0.5;
 if(needHP){
   vec3 nb=(texture(img,vidUV(uv+vec2(0.,texSize.y)))+texture(img,vidUV(uv-vec2(0.,texSize.y)))
           +texture(img,vidUV(uv+vec2(texSize.x,0.)))+texture(img,vidUV(uv-vec2(texSize.x,0.)))).rgb*0.25;
@@ -8395,7 +8395,7 @@ if(mskAnyClarity>0.5){
            +texture(img,vidUV(uv+vec2(texSize.x*rW,0.)))+texture(img,vidUV(uv-vec2(texSize.x*rW,0.)))).rgb*0.25;
   srcHPW=c.rgb-nbW;
 }
-if(adjOn>.5&&adjSharp!=0.&&abs(adjSharpDetail-0.5)>0.001&&!mskAnyClarity){
+if(adjOn>.5&&adjSharp!=0.&&abs(adjSharpDetail-0.5)>0.001&&(mskAnyClarity<0.5)){
   float detailRadius=3.0;
   vec3 nbDetail=(texture(img,vidUV(uv+vec2(0.,texSize.y*detailRadius)))+texture(img,vidUV(uv-vec2(0.,texSize.y*detailRadius)))
                 +texture(img,vidUV(uv+vec2(texSize.x*detailRadius,0.)))+texture(img,vidUV(uv-vec2(texSize.x*detailRadius,0.)))).rgb*0.25;
