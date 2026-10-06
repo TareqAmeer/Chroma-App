@@ -7120,7 +7120,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006M';
+const BUILD='1.1006N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14205,7 +14205,16 @@ function _cpCommands(){
   Object.entries(TABS).forEach(([k,label])=>add('Tab','Go to '+label,()=>switchTab(k)));
   // CHR-196: every tool card, named as it is everywhere else, with its aliases searchable.
   const SECTIONS={};document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(c=>{const k=c.dataset.fxsec;if(CS_NAMES[k]&&!SECTIONS[k])SECTIONS[k]=(['export','wm','exppreset','share'].includes(k)?'Export: ':'')+CS_NAMES[k];});
-  Object.entries(SECTIONS).forEach(([k,label])=>{add('Section',label,()=>{switchTab('fx');fxSection(k);});cmds[cmds.length-1].aliases=CS_ALIASES[k]||'';});
+  Object.entries(SECTIONS).forEach(([k,label])=>{add('Section',label,()=>{csWorkspaceRevealSection(k);switchTab('fx');fxSection(k);});cmds[cmds.length-1].aliases=CS_ALIASES[k]||'';});
+  // Hidden workspace rows remain discoverable by their normal control label. Running the result
+  // unhides the original row and opens its existing section; no shadow control is created.
+  const workspace=csWorkspaceLayoutGet(),hiddenRows=new Set(workspace.hiddenControls),hiddenSections=new Set(workspace.hiddenSections);
+  document.querySelectorAll('.fx-ctrl[data-fxsec] .fx-row').forEach(row=>{
+    const control=row.querySelector('input[id],select[id],textarea[id],button[id]'),card=row.closest('.fx-ctrl[data-fxsec]');if(!control||!card)return;
+    const id=control.id,key=card.dataset.fxsec;if(!hiddenRows.has(id)&&!hiddenSections.has(key))return;
+    const label=(row.querySelector('.fx-label')?.textContent||control.getAttribute('aria-label')||control.title||id).trim().replace(/\s+/g,' ');
+    add('Control','Show control: '+label,()=>csWorkspaceRevealControl(id));
+  });
   // Looks/LUTs and Print profiles are read live from their <select>s so a palette entry can never
   // point at a preset that doesn't actually exist in this build.
   const lutSel=document.getElementById('sel-lut');
@@ -25485,10 +25494,12 @@ function csLayoutMenuHtml(){let h='';
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();editorBgSet('#777777')"><span>Neutral grey surround</span></button>`;
   csLayoutsList().forEach((l,i)=>{h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutApply(${i})"><span>${String(l.name).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}</span></button>`;});
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutSave()"><span>Save current layout…</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csWorkspaceCustomizeOpen()"><span>Customize tools and controls…</span></button>`;
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutReset()"><span>Reset layout</span></button>`;
   return h;
 }
-const CS_LAYOUT_KEYS=['cs_panelw','cs_railmode','cs_rail_flat','chromasmith_fx_sec_collapsed','chromasmith_lib_side_w','chromasmith_lib_dock_w','chromasmith_lib_dock_collapsed','chromasmith_lib_sidebar','chromasmith_lib_info_pos','chromasmith_lib_thumbsize','chromasmith_lib_cols'];
+const CS_WORKSPACE_LAYOUT_KEY='cs_workspace_controls_v1';
+const CS_LAYOUT_KEYS=['cs_panelw','cs_railmode','cs_rail_flat','chromasmith_fx_sec_collapsed','chromasmith_lib_side_w','chromasmith_lib_dock_w','chromasmith_lib_dock_collapsed','chromasmith_lib_sidebar','chromasmith_lib_info_pos','chromasmith_lib_thumbsize','chromasmith_lib_cols','cs-tool-order-fx-quicknav','cs-tool-order-fx-tool-grid',CS_WORKSPACE_LAYOUT_KEY];
 function _csLayoutKeys(){return CS_LAYOUT_KEYS.concat(typeof LS_EDITOR_BG!=='undefined'?[LS_EDITOR_BG]:[]);}
 function csLayoutsList(){try{return JSON.parse(localStorage.getItem('cs_layouts')||'[]')}catch(e){return[]}}
 function csLayoutView(v){
@@ -25499,7 +25510,7 @@ function csLayoutView(v){
   if(v==='compare')setTimeout(()=>{const b=document.getElementById('lib-compare-btn');if(b)b.click();},300);
 }
 async function csLayoutSave(){
-  const name=(await askTextModal('Save layout','Saves panel sizes, open sections, the gallery sidebar and dock, and the studio background.')||'').trim();if(!name)return;
+  const name=(await askTextModal('Save layout','Saves tool and control order/visibility, panel sizes, open sections, the gallery sidebar and dock, and the studio background.')||'').trim();if(!name)return;
   const keys={};_csLayoutKeys().forEach(k=>{try{const v=localStorage.getItem(k);if(v!=null)keys[k]=v;}catch(e){}});
   const list=csLayoutsList().filter(l=>l.name!==name);list.push({name,keys});
   try{localStorage.setItem('cs_layouts',JSON.stringify(list));}catch(e){toast('Could not save the layout',false);return;}
@@ -25512,9 +25523,102 @@ async function csLayoutApply(i){
   location.reload();
 }
 async function csLayoutReset(){
-  if(!await confirmModal('Reset panel sizes, open sections, the gallery sidebar and dock, and the studio background to their defaults? The window reloads — your edits are already saved.','Reset'))return;
+  if(!await confirmModal('Reset tool and control order/visibility, panel sizes, open sections, the gallery sidebar and dock, and the studio background to their defaults? The window reloads — your edits are already saved.','Reset'))return;
   _csLayoutKeys().forEach(k=>{try{localStorage.removeItem(k);}catch(e){}});
   location.reload();
+}
+// Workspace layout customizations keep using the app's existing editor nodes. Visibility is a
+// `hidden` presentation flag and ordering moves the original nodes, so listeners, IDs, and values
+// remain attached to the controls that recipe snapshots and copy/paste already read.
+let _csWorkspaceDefaultSections=null;
+function csWorkspaceLayoutGet(){
+  let value={};try{value=JSON.parse(localStorage.getItem(CS_WORKSPACE_LAYOUT_KEY)||'{}')||{};}catch(_){}
+  return{sectionOrder:Array.isArray(value.sectionOrder)?value.sectionOrder:[],hiddenSections:Array.isArray(value.hiddenSections)?value.hiddenSections:[],
+    hiddenControls:Array.isArray(value.hiddenControls)?value.hiddenControls:[],controlOrder:value.controlOrder&&typeof value.controlOrder==='object'?value.controlOrder:{}};
+}
+function _csWorkspaceOrder(saved,known){const out=[],seen=new Set();(saved||[]).forEach(k=>{if(known.includes(k)&&!seen.has(k)){seen.add(k);out.push(k);}});known.forEach(k=>{if(!seen.has(k))out.push(k);});return out;}
+function _csWorkspaceRowId(row){const c=row&&row.querySelector('input[id],select[id],textarea[id],button[id]');return c&&c.id||'';}
+function _csWorkspaceRowLabel(row){const label=row&&row.querySelector('.fx-label'),value=label&&label.textContent.trim();if(value)return value.replace(/\s+/g,' ');const c=row&&row.querySelector('input[id],select[id],textarea[id],button[id]');return c&&(c.getAttribute('aria-label')||c.title||c.id)||'Control';}
+function _csWorkspaceRows(card){return card?[...card.querySelectorAll('.fx-row')].filter(row=>_csWorkspaceRowId(row)):[];}
+function _csWorkspaceApply(){
+  if(!Array.isArray(FX_SECTIONS)||!_csWorkspaceDefaultSections)return;
+  const state=csWorkspaceLayoutGet(),known=_csWorkspaceDefaultSections.map(x=>x[0]);
+  const order=_csWorkspaceOrder(state.sectionOrder,known),byKey=new Map(_csWorkspaceDefaultSections.map(x=>[x[0],x]));
+  FX_SECTIONS.splice(0,FX_SECTIONS.length,...order.map(k=>byKey.get(k)).filter(Boolean));
+  const hiddenSections=new Set(state.hiddenSections),hiddenControls=new Set(state.hiddenControls);
+  const cards=new Map(FX_SECTIONS.map(([key])=>[key,_fxSectionCard(key)]).filter(x=>x[1]));
+  // Put the same section nodes into their saved panel positions. Temporary markers keep
+  // subtitles/other panel children in place while the cards move around them.
+  const sectionParents=new Set([...cards.values()].map(card=>card.parentElement));
+  sectionParents.forEach(parent=>{
+    const present=[...parent.children].filter(child=>child.classList.contains('fx-ctrl')&&child.dataset.fxsec&&cards.get(child.dataset.fxsec)===child);
+    const ordered=FX_SECTIONS.map(([key])=>cards.get(key)).filter(card=>card&&card.parentElement===parent);
+    const markers=present.map(card=>{const marker=document.createComment('workspace section slot');card.replaceWith(marker);return marker;});
+    markers.forEach((marker,index)=>marker.replaceWith(ordered[index]));
+  });
+  cards.forEach((card,key)=>{card.hidden=hiddenSections.has(key);});
+  // Reorder only rows with the same existing parent. The order key is each row's stable first
+  // control ID; unrelated sub-groups and dynamic containers keep their own DOM ownership.
+  cards.forEach((card,key)=>{
+    const rows=_csWorkspaceRows(card),saved=state.controlOrder[key]||[],rank=new Map(_csWorkspaceOrder(saved,rows.map(_csWorkspaceRowId)).map((id,i)=>[id,i]));
+    const parents=new Set(rows.map(row=>row.parentElement));
+    parents.forEach(parent=>{
+      const present=[...parent.children].filter(child=>child.classList.contains('fx-row')&&_csWorkspaceRowId(child));
+      const ordered=present.slice().sort((a,b)=>(rank.get(_csWorkspaceRowId(a))??1e6)-(rank.get(_csWorkspaceRowId(b))??1e6));
+      const markers=present.map(row=>{const marker=document.createComment('workspace control slot');row.replaceWith(marker);return marker;});
+      markers.forEach((marker,index)=>marker.replaceWith(ordered[index]));
+    });
+    rows.forEach(row=>{row.hidden=hiddenControls.has(_csWorkspaceRowId(row));});
+  });
+  const active=document.querySelector('.fx-ctrl.sec-active[data-fxsec]');if(active&&active.hidden)active.classList.remove('sec-active');
+  if(document.body.classList.contains('mobile-fx'))buildSecNav();else if(document.body.classList.contains('deskx'))buildToolRail();
+}
+function _csWorkspaceSave(state){try{localStorage.setItem(CS_WORKSPACE_LAYOUT_KEY,JSON.stringify(state));}catch(_){toast('Could not save workspace controls',false);return false;}_csWorkspaceApply();return true;}
+function _csWorkspaceMove(list,index,delta){const target=index+delta;if(target<0||target>=list.length)return list;const next=list.slice();[next[index],next[target]]=[next[target],next[index]];return next;}
+function csWorkspaceCustomizeOpen(){
+  if(!Array.isArray(FX_SECTIONS)){toast('Workspace controls are not ready',false);return;}
+  const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const nameFor=key=>(CS_NAMES&&CS_NAMES[key])||key;
+  _csModal('Customize workspace','<p style="margin:0 0 10px;color:var(--mut);font-size:12px">Hide or reorder tools and control rows. Search the command palette (⌘K / Ctrl+K) to bring hidden controls back.</p>'
+    +'<input id="cs-workspace-search" type="search" placeholder="Find a tool or control…" aria-label="Find a tool or control" style="box-sizing:border-box;width:100%;padding:8px 10px;margin-bottom:8px;background:var(--bg);color:var(--txt);border:1px solid var(--bdr);font:inherit">'
+    +'<div id="cs-workspace-list" style="max-height:55vh;overflow:auto"></div>'
+    +'<div class="btn-row" style="justify-content:space-between;margin-top:12px"><button type="button" class="btn bgh" id="cs-workspace-reset">Reset control layout</button><button type="button" class="btn bpri" id="cs-workspace-close">Close</button></div>');
+  const ov=document.getElementById('cs-modal-ov'),list=ov&&ov.querySelector('#cs-workspace-list'),search=ov&&ov.querySelector('#cs-workspace-search');if(!list||!search)return;
+  const render=()=>{
+    const state=csWorkspaceLayoutGet(),query=search.value.trim().toLowerCase(),order=_csWorkspaceOrder(state.sectionOrder,FX_SECTIONS.map(x=>x[0]));
+    list.innerHTML=order.map((key,index)=>{
+      const card=_fxSectionCard(key),sectionName=nameFor(key),rows=_csWorkspaceRows(card),controls=rows.map(row=>{const siblings=rows.filter(x=>x.parentElement===row.parentElement);return{id:_csWorkspaceRowId(row),label:_csWorkspaceRowLabel(row),index:siblings.indexOf(row),count:siblings.length};});
+      if(query&&!sectionName.toLowerCase().includes(query)&&!controls.some(c=>c.label.toLowerCase().includes(query)))return'';
+      const hidden=state.hiddenSections.includes(key),controlRows=controls.map(c=>{
+        if(query&&!sectionName.toLowerCase().includes(query)&&!c.label.toLowerCase().includes(query))return'';
+        const off=state.hiddenControls.includes(c.id),disable=!!query;
+        return `<div data-ws-control="${esc(c.id)}" style="display:flex;align-items:center;gap:6px;padding:3px 0 3px 20px;font-size:12px"><label style="display:flex;align-items:center;gap:7px;flex:1;min-width:0;cursor:pointer"><input type="checkbox" data-ws-show-control="${esc(c.id)}"${off?'':' checked'}><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.label)}</span></label><button type="button" class="btn bgh" data-ws-control-move="-1" data-ws-control-id="${esc(c.id)}" aria-label="Move ${esc(c.label)} up"${disable||c.index===0?' disabled':''}>↑</button><button type="button" class="btn bgh" data-ws-control-move="1" data-ws-control-id="${esc(c.id)}" aria-label="Move ${esc(c.label)} down"${disable||c.index===c.count-1?' disabled':''}>↓</button></div>`;
+      }).join('');
+      return `<section data-ws-section="${esc(key)}" style="border-bottom:1px solid var(--bdr);padding:5px 0"><div style="display:flex;align-items:center;gap:6px"><label style="display:flex;align-items:center;gap:7px;flex:1;cursor:pointer"><input type="checkbox" data-ws-show-section="${esc(key)}"${hidden?'':' checked'}><strong>${esc(sectionName)}</strong></label><button type="button" class="btn bgh" data-ws-section-move="-1" data-ws-section-id="${esc(key)}" aria-label="Move ${esc(sectionName)} up"${query||index===0?' disabled':''}>↑</button><button type="button" class="btn bgh" data-ws-section-move="1" data-ws-section-id="${esc(key)}" aria-label="Move ${esc(sectionName)} down"${query||index===order.length-1?' disabled':''}>↓</button></div>${controlRows}</section>`;
+    }).join('')||'<div style="padding:12px;color:var(--mut)">No matching tools or controls</div>';
+  };
+  search.oninput=render;
+  list.addEventListener('change',e=>{
+    const input=e.target;if(!(input instanceof HTMLInputElement))return;const state=csWorkspaceLayoutGet();
+    if(input.dataset.wsShowSection){const key=input.dataset.wsShowSection;state.hiddenSections=state.hiddenSections.filter(x=>x!==key);if(!input.checked)state.hiddenSections.push(key);_csWorkspaceSave(state);}
+    if(input.dataset.wsShowControl){const id=input.dataset.wsShowControl;state.hiddenControls=state.hiddenControls.filter(x=>x!==id);if(!input.checked)state.hiddenControls.push(id);_csWorkspaceSave(state);}
+    render();
+  });
+  list.addEventListener('click',e=>{
+    const button=e.target.closest('button');if(!button)return;const state=csWorkspaceLayoutGet();
+    if(button.dataset.wsSectionMove){const ids=_csWorkspaceOrder(state.sectionOrder,FX_SECTIONS.map(x=>x[0]));state.sectionOrder=_csWorkspaceMove(ids,ids.indexOf(button.dataset.wsSectionId),Number(button.dataset.wsSectionMove));_csWorkspaceSave(state);render();return;}
+    if(button.dataset.wsControlMove){const id=button.dataset.wsControlId,container=button.closest('[data-ws-section]'),key=container&&container.dataset.wsSection,card=key&&_fxSectionCard(key),row=_csWorkspaceRows(card).find(x=>_csWorkspaceRowId(x)===id);if(!row)return;
+      const ids=_csWorkspaceRows(card).filter(x=>x.parentElement===row.parentElement).map(_csWorkspaceRowId),next=_csWorkspaceMove(ids,ids.indexOf(id),Number(button.dataset.wsControlMove));state.controlOrder[key]=[...new Set([...(state.controlOrder[key]||[]).filter(x=>!ids.includes(x)),...next])];_csWorkspaceSave(state);render();
+    }
+  });
+  ov.querySelector('#cs-workspace-reset').onclick=()=>{try{localStorage.removeItem(CS_WORKSPACE_LAYOUT_KEY);}catch(_){}location.reload();};
+  ov.querySelector('#cs-workspace-close').onclick=()=>ov.remove();render();
+}
+function csWorkspaceRevealSection(key){const state=csWorkspaceLayoutGet();if(state.hiddenSections.includes(key)){state.hiddenSections=state.hiddenSections.filter(x=>x!==key);_csWorkspaceSave(state);}}
+function csWorkspaceRevealControl(id){
+  const control=document.getElementById(id),row=control&&control.closest('.fx-row'),card=control&&control.closest('.fx-ctrl[data-fxsec]');if(!control||!row||!card)return;
+  const state=csWorkspaceLayoutGet(),key=card.dataset.fxsec;state.hiddenControls=state.hiddenControls.filter(x=>x!==id);state.hiddenSections=state.hiddenSections.filter(x=>x!==key);_csWorkspaceSave(state);
+  switchTab('fx');if(typeof fxSection==='function')fxSection(key,true);setTimeout(()=>{control.focus({preventScroll:true});control.scrollIntoView({block:'center',behavior:'smooth'});},0);
 }
 // Appearance: its own category so the gallery (which hides the Studio-only View pane) shows it too.
 function appearanceBuild(){
@@ -25873,6 +25977,7 @@ function _eachSection(cb){
     if(key==='diag'&&!diagOn)return;
     if(key==='image'&&window.__TAURI__)return; // folded into Looks on desktop — see fxDesktopFoldImageIntoLooks
     if(!_fxSectionCard(key))return;
+    if(csWorkspaceLayoutGet().hiddenSections.includes(key))return;
     cb(key,lb);
   });
 }
@@ -25920,6 +26025,7 @@ function fxSplitLooksCard(){
   FX_GROUPS.look.members.push('inprint');FX_GROUP_OF.inprint='look';
 }
 fxSplitLooksCard();
+_csWorkspaceDefaultSections=FX_SECTIONS.map(x=>x.slice());
 // deskx rail: draw a hairline BEFORE each of these, so the rail reads as bands rather than one
 // undifferentiated list. With the FX_SECTIONS order above that yields:
 //   [Image Looks] [Adjust] [Color] [Detail Retouch] [Crop] [Masks] [Film] [Frame] [Export Info]
@@ -27079,6 +27185,7 @@ initZoomPan();
 initEditableVals();
 initLookGalleryKeyNav();
 fxDesktopFoldImageIntoLooks(); // desktop app only: Image tab has no reason to exist there (see fn)
+_csWorkspaceApply(); // restore named tool/control order and visibility before drawing the tool nav
 applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail editor
 // Per-section reset (mobile bottom sheet only — see .fx-ctrl-title-reset CSS): resets just the
 // sliders/toggles inside ONE section back to their factory-default value (_fxPristineDefault,
