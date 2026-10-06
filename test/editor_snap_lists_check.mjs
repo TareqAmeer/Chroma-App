@@ -48,6 +48,8 @@ const KNOWN_EXCLUSIONS = {
     'heal-size': 'Retouch brush-tool setting, not persisted photo state — see healSyncUI\'s own comment on why brush settings are tracked separately from spots',
     'heal-feather': 'see heal-size',
     'heal-opacity': 'see heal-size',
+    'redeye-size': 'tracked per eye in s.redeye; the slider edits the selected eye operation, not a flat photo-wide value',
+    'redeye-dark': 'see redeye-size',
     'crop-custom-w': 'crop aspect-ratio custom input, not a range slider (type=number) and not part of the graded-effects snapshot',
     'crop-custom-h': 'see crop-custom-w',
     'lens-manual-focal': 'manual-lens metadata (type=number), not a graded slider',

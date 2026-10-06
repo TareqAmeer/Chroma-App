@@ -259,7 +259,8 @@ pub fn eject(path: &Path) -> Result<(), String> {
 /// Reveals a file in Explorer, selected — the Win32 analogue of `open -R`.
 pub fn reveal_in_file_manager(path: &str) -> Result<(), String> {
     std::process::Command::new("explorer")
-        .arg(format!("/select,{path}"))
+        // Explorer's /select, expects backslashes; a `/` path (duplicate_file returns mixed ones) may not select.
+        .arg(format!("/select,{}", path.replace('/', "\\")))
         .spawn()
         .map(|_| ())
         // explorer.exe returns a non-zero/odd status on success by convention; spawn succeeding
@@ -327,7 +328,13 @@ fn move_to_trash_sta(path: &Path) -> Result<(), String> {
                 CoCreateInstance(&FileOperation, None, CLSCTX_ALL).map_err(|e| format!("CoCreateInstance(FileOperation): {e}"))?;
             op.SetOperationFlags(FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT)
                 .map_err(|e| format!("SetOperationFlags: {e}"))?;
-            let wide = HSTRING::from(long_path(path).as_os_str());
+            // NOT long_path(): the shell namespace API rejects a `\\?\` verbatim path outright (E_INVALIDARG,
+            // 0x80070057 — verified live: trash_file failed for every file), and it also rejects `/`.
+            // Plain backslash-separated is what SHCreateItemFromParsingName wants; the shell handles
+            // long paths itself.
+            let plain = path.to_string_lossy().replace('/', "\\");
+            let plain = plain.strip_prefix(r"\\?\").unwrap_or(&plain).to_string();
+            let wide = HSTRING::from(plain.as_str());
             let item: IShellItem = SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None)
                 .map_err(|e| format!("SHCreateItemFromParsingName({}): {e}", path.display()))?;
             op.DeleteItem(&item, None).map_err(|e| format!("IFileOperation::DeleteItem: {e}"))?;

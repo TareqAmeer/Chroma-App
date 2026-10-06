@@ -16,6 +16,31 @@
   // Resolve through the current Tauri function at call time so the native diagnostics
   // wrapper installed by chromasmith-22.html can observe Library IPC too.
   const invoke = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
+  // Embedded JPEG previews are the fast culling tier used by Quick Look and Compare. Share
+  // native requests and retain only a small LRU window to avoid unbounded ArrayBuffer growth.
+  const QUICKLOOK_CACHE_MAX = 5;
+  const quicklookPreviews = new Map();
+  const quicklookRequests = new Map();
+  function quicklookPreview(path) {
+    if (!path) return Promise.reject(new Error('missing preview path'));
+    if (quicklookPreviews.has(path)) {
+      const bytes = quicklookPreviews.get(path);
+      quicklookPreviews.delete(path);
+      quicklookPreviews.set(path, bytes);
+      return Promise.resolve(bytes);
+    }
+    if (quicklookRequests.has(path)) return quicklookRequests.get(path);
+    const request = invoke('get_quicklook_preview', { path }).then((bytes) => {
+      quicklookPreviews.delete(path);
+      quicklookPreviews.set(path, bytes);
+      while (quicklookPreviews.size > QUICKLOOK_CACHE_MAX) quicklookPreviews.delete(quicklookPreviews.keys().next().value);
+      return bytes;
+    }).finally(() => {
+      if (quicklookRequests.get(path) === request) quicklookRequests.delete(path);
+    });
+    quicklookRequests.set(path, request);
+    return request;
+  }
   // Every Library-originated Editor load goes through here so loadFXImages can tell it apart
   // from a drag-drop / Open File load (see chromasmithForgetOpened).
   async function libLoadFX(files) {
@@ -327,7 +352,10 @@
         });
         return Promise.resolve(rows);
       }
-      case 'get_quicklook_preview': return Promise.resolve(png);
+      case 'get_quicklook_preview': {
+        (window.__libtestQuicklookCalls ||= []).push(A.path);
+        return Promise.resolve(png);
+      }
       case 'catalog_dismiss_review': return Promise.resolve((A.paths || []).length);
       // trash_file/duplicate_file: no catalog involvement, just the underlying file op — a
       // harmless no-op mock, matching every other pure-Rust-side mutation's mock in this file.
@@ -3322,6 +3350,7 @@
     // #lib-empty-retry has no reachable test path at all — surface_coverage_check.mjs flagged it
     // as a genuinely uncaptured surface (backlog #5 follow-up).
     window.__libForceLoadError = () => { showLibraryError('Couldn’t open this folder.', 'Choose another folder', () => {}); };
+    window.__libQuicklookCacheState = () => ({ cached: [...quicklookPreviews.keys()], pending: [...quicklookRequests.keys()] });
     window.__libScrollTo = (p) => scrollLibraryToPath(p);
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
     window.__libOpenFolder = (path) => openFolder(path);
@@ -6924,7 +6953,7 @@
       // CHR-221: send to Colour Copy. Uses the large preview (decodes for RAW too), not the file.
       const toCC = async (which) => {
         try {
-          const buf = await invoke('get_quicklook_preview', { path: paths[0] });
+          const buf = await quicklookPreview(paths[0]);
           const file = new File([buf], baseName(paths[0]).replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
           if (state.open) await toggleLibrary();
           window.chromasmithColourCopySet(which, file);
@@ -8492,7 +8521,27 @@
   // decode. Deliberately NEVER touches the real editor-open pipeline (openInEditorInner) —
   // leaving Quick Look, however you leave it, triggers no decode at all; only pressing Enter to
   // actually open the photo does, exactly like every other path into the editor already does.
-  const quicklook = { active: false, path: '', url: '' };
+  const quicklook = { active: false, path: '', url: '', generation: 0, prefetchQueue: [], prefetchActive: 0 };
+  function queueQuickLookNeighbors(path) {
+    if (!quicklook.active || quicklook.path !== path) return;
+    const shown = sortEntries(state.entries.filter(passesFilters));
+    const index = shown.findIndex((entry) => entry.path === path);
+    if (index < 0) return;
+    const generation = quicklook.generation;
+    quicklook.prefetchQueue = [shown[index - 1]?.path, shown[index + 1]?.path]
+      .filter((candidate) => candidate && candidate !== path && !quicklookPreviews.has(candidate) && !quicklookRequests.has(candidate));
+    const pump = () => {
+      if (quicklook.prefetchActive || !quicklook.active || quicklook.generation !== generation || !quicklook.prefetchQueue.length) return;
+      const next = quicklook.prefetchQueue.shift();
+      quicklook.prefetchActive++;
+      quicklookPreview(next).catch(() => {}).finally(() => {
+        quicklook.prefetchActive--;
+        if (quicklook.active && quicklook.generation === generation) pump();
+        else if (quicklook.active) queueQuickLookNeighbors(quicklook.path);
+      });
+    };
+    pump();
+  }
   function quicklookEl() {
     let el = document.getElementById('lib-quicklook');
     if (el) return el;
@@ -8505,6 +8554,8 @@
   }
   async function showQuickLook(path) {
     if (!path) return;
+    quicklook.generation++;
+    quicklook.prefetchQueue = [];
     quicklook.active = true;
     quicklook.path = path;
     const el = quicklookEl();
@@ -8514,18 +8565,21 @@
     caption.textContent = baseName(path) + ' — loading…';
     img.classList.remove('loaded');
     try {
-      const buf = await invoke('get_quicklook_preview', { path });
-      if (quicklook.path !== path) return; // superseded by a newer Quick Look photo
+      const buf = await quicklookPreview(path);
+      if (!quicklook.active || quicklook.path !== path) return; // superseded or closed
       if (quicklook.url) URL.revokeObjectURL(quicklook.url);
       quicklook.url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
       img.src = quicklook.url;
       img.classList.add('loaded');
       caption.textContent = baseName(path);
+      queueQuickLookNeighbors(path);
     } catch (e) {
-      caption.textContent = baseName(path) + ' — preview unavailable';
+      if (quicklook.active && quicklook.path === path) caption.textContent = baseName(path) + ' — preview unavailable';
     }
   }
   function hideQuickLook() {
+    quicklook.generation++;
+    quicklook.prefetchQueue = [];
     quicklook.active = false;
     quicklook.path = '';
     const el = document.getElementById('lib-quicklook');
@@ -8546,6 +8600,13 @@
       const gearMenuEl = document.getElementById('lib-view-menu');
       const filtersPanelEl = document.getElementById('lib-filters-panel');
       const filterRowEl = document.getElementById('lib-filter-row');
+      // The gear now opens the Studio's shared #fx-settings-menu (class "on"), not #lib-view-menu. The
+      // Studio's own Escape handler (chromasmith-22.html) runs first and closes it with preventDefault, so
+      // by the time we get here the menu already looks closed — bail on defaultPrevented, otherwise the
+      // same keypress also exits the full-window Library behind it.
+      if (e.defaultPrevented) return;
+      const settingsMenuEl = document.getElementById('fx-settings-menu');
+      if (settingsMenuEl && settingsMenuEl.classList.contains('on')) { if (window.settingsClose) window.settingsClose(); e.preventDefault(); return; }
       if (sortMenuEl && sortMenuEl.classList.contains('open')) { sortMenuEl.classList.remove('open'); e.preventDefault(); return; }
       if (gearMenuEl && gearMenuEl.classList.contains('open')) { gearMenuEl.classList.remove('open'); e.preventDefault(); return; }
       if (filtersPanelEl && filtersPanelEl.classList.contains('open')) {
