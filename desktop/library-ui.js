@@ -540,7 +540,9 @@
       }
       case 'catalog_auto_assign': return Promise.resolve({ assigned: 0, people: 0 });
       case 'catalog_untag_faces': return Promise.resolve((args.faceIds || []).length);
-      case 'catalog_faces_for_path': return Promise.resolve([
+      case 'catalog_faces_for_path':
+        (window.__libtestFacePathCalls ||= []).push(structuredClone(A));
+        return Promise.resolve([
         { face_id: 301, x0: .2, y0: .2, x1: .3, y1: .35, person_id: 3, name: 'Tareq', kind: 'person', confirmed: true, auto_tagged: true, person_auto: false },
         { face_id: 302, x0: .5, y0: .2, x1: .6, y1: .35, person_id: null, name: null, kind: null, confirmed: false, auto_tagged: false, person_auto: false },
       ]);
@@ -1560,6 +1562,12 @@
     .lib-review-face.desel{opacity:.35}
     #lib-people-edit .lib-pe-card{background:var(--sur2);border:1px solid var(--bdr);border-radius:10px;padding:16px;
       width:min(760px,92vw);max-height:80vh;overflow:auto}
+    #lib-people-edit.lib-face-closeups .lib-pe-card{width:min(1040px,96vw);max-height:88vh}
+    .lib-face-closeup-note{margin:0 0 14px;color:var(--mut);font-size:12px;line-height:1.45}
+    .lib-face-closeup-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(190px,40vw),1fr));gap:12px}
+    .lib-face-closeup-item{margin:0;min-width:0;overflow:hidden;border:1px solid var(--bdr);border-radius:8px;background:var(--sur)}
+    .lib-face-closeup-item img{display:block;width:100%;aspect-ratio:1;object-fit:cover;background:var(--sur);color:var(--mut)}
+    .lib-face-closeup-item figcaption{padding:7px 9px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .lib-pe-top{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;margin-bottom:12px}
     .lib-pe-group{margin-bottom:14px}
     .lib-pe-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px}
@@ -6947,6 +6955,7 @@
       });
       sep();
     }
+    if (n === 1) item('Face close-ups…', () => openPhotoPeopleEditor(paths, { closeups: true }));
     item(`People${n > 1 ? ` in ${n} photos` : ''}…`, () => openPhotoPeopleEditor(paths));
     const scopedPerson = /^person:(\d+)$/.exec(state.catalogScope || '');
     if (state.source === 'catalog' && scopedPerson) {
@@ -10702,15 +10711,18 @@
   // ── People editor for selected photos (grid right-click ▸ People…) ────────────────────────
   // Every face in the selection, grouped by person: rename a face, remove a wrong tag (remembered,
   // so auto-tagging never re-adds it), or remove one person from all selected photos at once.
-  async function openPhotoPeopleEditor(paths) {
+  async function openPhotoPeopleEditor(paths, { closeups = false } = {}) {
     const MAX = 200;
     const faces = [];
     for (const path of paths.slice(0, MAX)) {
-      const fs = await invoke('catalog_faces_for_path', { path, stack: true }).catch(() => []);
+      // A close-up panel means this exact photo; the separate People editor intentionally
+      // includes a collapsed stack so its bulk tag edits can reach every member.
+      const fs = await invoke('catalog_faces_for_path', { path, stack: !closeups }).catch(() => []);
       (fs || []).forEach((f) => faces.push(f));
     }
     const wrap = document.createElement('div');
     wrap.id = 'lib-people-edit';
+    if (closeups) wrap.classList.add('lib-face-closeups');
     wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(10,10,10,.6);display:flex;align-items:center;justify-content:center';
     const render = () => {
       const groups = new Map();
@@ -10719,23 +10731,31 @@
         if (!groups.has(key)) groups.set(key, { name: key === 'unnamed' ? 'Unnamed' : f.name, pid: key === 'unnamed' ? null : f.person_id, faces: [] });
         groups.get(key).faces.push(f);
       });
-      const tile = (f) => `<div class="lib-pe-face" data-face-id="${f.face_id}" title="Click to rename or remove">
-          <img alt="">${f.auto_tagged ? '<span class="lib-pe-auto">Auto</span>' : ''}</div>`;
-      const sections = [...groups.values()].sort((a, b) => (a.pid == null) - (b.pid == null) || b.faces.length - a.faces.length).map((g) => `
+      const tile = (f, i) => closeups
+        ? `<figure class="lib-face-closeup-item" data-face-id="${f.face_id}"><img alt="Face crop ${i + 1}${f.name ? `, ${esc(f.name)}` : ', unnamed'}"><figcaption>${esc(f.name || `Face ${i + 1} · unnamed`)}</figcaption></figure>`
+        : `<div class="lib-pe-face" data-face-id="${f.face_id}" title="Click to rename or remove">
+            <img alt="">${f.auto_tagged ? '<span class="lib-pe-auto">Auto</span>' : ''}</div>`;
+      const sections = closeups
+        ? `<section class="lib-face-closeup-grid" aria-label="Detected face close-ups">${faces.map((f, i) => tile(f, i)).join('')}</section>`
+        : [...groups.values()].sort((a, b) => (a.pid == null) - (b.pid == null) || b.faces.length - a.faces.length).map((g) => `
         <div class="lib-pe-group">
           <div class="lib-pe-head"><span class="lib-pe-name">${esc(g.name)}</span><span class="mut">${g.faces.length} face${g.faces.length === 1 ? '' : 's'}</span>
             ${g.pid ? `<span class="lib-btn" data-remove-person="${g.pid}">Remove ${esc(g.name)} from ${paths.length > 1 ? 'these photos' : 'this photo'}</span>` : ''}</div>
-          <div class="lib-pe-grid">${g.faces.map(tile).join('')}</div>
+          <div class="lib-pe-grid">${g.faces.map((f, i) => tile(f, i)).join('')}</div>
         </div>`).join('');
-      wrap.innerHTML = `<div class="lib-pe-card">
-          <div class="lib-pe-top"><span>People in ${paths.length > 1 ? `${paths.length} photos` : 'this photo'}</span><span class="lib-btn" data-close>Done</span></div>
-          ${faces.length ? sections : '<div class="mut" style="padding:20px 0">No faces found in the selected photos.</div>'}
+      wrap.innerHTML = `<div class="lib-pe-card" role="dialog" aria-modal="true" aria-label="${closeups ? 'Face close-ups' : 'People in selected photos'}">
+          <div class="lib-pe-top"><span>${closeups ? `Face close-ups — ${esc(baseName(paths[0]))}` : `People in ${paths.length > 1 ? `${paths.length} photos` : 'this photo'}`}</span><button type="button" class="lib-btn" data-close aria-label="${closeups ? 'Close face close-ups' : 'Close people editor'}">Done</button></div>
+          ${closeups ? '<p class="lib-face-closeup-note">Review the detected crops for yourself. Eye openness and face sharpness are not scored by Chroma.</p>' : ''}
+          ${faces.length ? sections : `<div class="mut" style="padding:20px 0">${closeups ? 'No faces have been scanned in this photo yet.' : 'No faces found in the selected photos.'}</div>`}
           ${paths.length > MAX ? `<div class="mut" style="font-size:11px">Showing the first ${MAX} photos.</div>` : ''}
         </div>`;
       wrap.querySelectorAll('.lib-pe-face').forEach((el) => {
         loadFaceCrop(parseInt(el.dataset.faceId, 10), el.querySelector('img'));
-        el.onclick = (ev) => faceMenu(ev, faces.find((f) => f.face_id === parseInt(el.dataset.faceId, 10)));
+        const openMenu = (ev) => faceMenu(ev, faces.find((f) => f.face_id === parseInt(el.dataset.faceId, 10)));
+        el.onclick = openMenu;
+        el.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openMenu(ev); } };
       });
+      wrap.querySelectorAll('.lib-face-closeup-item').forEach((el) => loadFaceCrop(parseInt(el.dataset.faceId, 10), el.querySelector('img')));
       wrap.querySelectorAll('[data-remove-person]').forEach((b) => {
         b.onclick = async () => {
           const pid = parseInt(b.dataset.removePerson, 10);
@@ -10745,7 +10765,7 @@
       });
       wrap.querySelector('[data-close]').onclick = close;
     };
-    const close = () => { wrap.remove(); refreshPeople(); refreshView(); };
+    const close = () => { wrap.remove(); if (!closeups) { refreshPeople(); refreshView(); } };
     const untag = async (ids) => {
       try {
         await invoke('catalog_untag_faces', { faceIds: ids });
