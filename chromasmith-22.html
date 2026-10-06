@@ -419,6 +419,7 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
    DOM order (label, slider, val) is unchanged, `order` just re-flows them visually so the
    existing contenteditable tap-to-type value div needs no markup changes. */
 .fx-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--sp-control-stack) 8px;margin-bottom:var(--sp-control-stack);min-height:20px}
+.fx-row[hidden]{display:none!important}
 .fx-row:last-child{margin-bottom:0}
 /* ⚠️ The `order` values below are a THREE-slot scheme (label · value · track) and every direct
    child must be assigned one. Without this base rule an unordered child keeps the flex default
@@ -25865,6 +25866,7 @@ function csLayoutMenuHtml(){let h='';
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();editorBgSet('#777777')"><span>Neutral grey surround</span></button>`;
   csLayoutsList().forEach((l,i)=>{h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutApply(${i})"><span>${String(l.name).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}</span></button>`;});
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutSave()"><span>Save current layout…</span></button>`;
+  csLayoutsList().forEach((l,i)=>{h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutDelete(${i})"><span>Delete layout: ${String(l.name).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}</span></button>`;});
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csWorkspaceCustomizeOpen()"><span>Customize tools and controls…</span></button>`;
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutReset()"><span>Reset layout</span></button>`;
   return h;
@@ -25892,6 +25894,13 @@ async function csLayoutApply(i){
   if(!await confirmModal(`Switch to "${l.name}"? The window reloads to apply it — your edits are already saved.`,'Switch'))return;
   _csLayoutKeys().forEach(k=>{try{if(k in l.keys)localStorage.setItem(k,l.keys[k]);else localStorage.removeItem(k);}catch(e){}});
   location.reload();
+}
+async function csLayoutDelete(i){
+  const list=csLayoutsList(),l=list[i];if(!l)return;
+  if(!await confirmModal(`Delete the saved layout "${l.name}"? Your current layout is not changed.`,'Delete'))return;
+  list.splice(i,1);
+  try{localStorage.setItem('cs_layouts',JSON.stringify(list));}catch(e){toast('Could not delete the layout',false);return;}
+  toast(`Layout "${l.name}" deleted`,true);
 }
 async function csLayoutReset(){
   if(!await confirmModal('Reset tool and control order/visibility, panel sizes, open sections, the gallery sidebar and dock, and the studio background to their defaults? The window reloads — your edits are already saved.','Reset'))return;
