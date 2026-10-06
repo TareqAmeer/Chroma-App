@@ -56,6 +56,7 @@ mod depth;
 mod scrfd;
 mod sam;
 mod rawdenoise;
+mod film_negative;
 mod tiff_meta;
 #[cfg(target_os = "macos")]
 mod gainmap;
