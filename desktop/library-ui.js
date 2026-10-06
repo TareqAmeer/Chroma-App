@@ -6243,6 +6243,42 @@
     }
     return { id: 'auto', label: `Auto grid (${cols}x${rows})`, n, aspect: (cols / rows) || 1, cells };
   }
+  // CHR-177: reuse the existing Library Collage selection and per-photo graded renderer, but
+  // lay the selected sequence out on a fixed A4-ratio page with room for filename/rating labels.
+  // CHR-177 contact-sheet geometry begin
+  const CONTACT_SHEET_MAX_PHOTOS = 12;
+  function contactSheetOrder(paths, entries) {
+    const unique = [...new Set(paths)];
+    const order = new Map((entries || []).map((entry, index) => [entry.path, index]));
+    return unique.map((path, index) => ({ path, index, rank: order.get(path) }))
+      .sort((a, b) => (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER) || a.index - b.index)
+      .map((item) => item.path);
+  }
+  function contactSheetLayout(count) {
+    if (!Number.isInteger(count) || count < 1 || count > CONTACT_SHEET_MAX_PHOTOS) throw new RangeError(`Select 1–${CONTACT_SHEET_MAX_PHOTOS} photos for one contact sheet`);
+    const width = 2480, height = 3508, margin = 120, header = 144, footer = 80, gutter = 36, caption = 76;
+    const bodyTop = margin + header, bodyHeight = height - bodyTop - margin - footer;
+    const usableWidth = width - margin * 2;
+    const columns = Math.max(1, Math.ceil(Math.sqrt(count * usableWidth / bodyHeight)));
+    const rows = Math.ceil(count / columns);
+    const cellWidth = (usableWidth - gutter * (columns - 1)) / columns;
+    const cellHeight = (bodyHeight - gutter * (rows - 1)) / rows;
+    const cells = Array.from({ length: count }, (_, index) => {
+      const x = margin + (index % columns) * (cellWidth + gutter);
+      const y = bodyTop + Math.floor(index / columns) * (cellHeight + gutter);
+      return { x, y, width: cellWidth, height: cellHeight,
+        image: { x: x + 16, y: y + 12, width: cellWidth - 32, height: cellHeight - caption - 24 },
+        caption: { x: x + 12, y: y + cellHeight - caption, width: cellWidth - 24, height: caption } };
+    });
+    return { width, height, margin, header, columns, rows, cells };
+  }
+  function contactSheetContainRect(sourceWidth, sourceHeight, box) {
+    if (!(sourceWidth > 0 && sourceHeight > 0 && box.width > 0 && box.height > 0)) throw new RangeError('Image and contact-sheet cell dimensions must be positive');
+    const scale = Math.min(box.width / sourceWidth, box.height / sourceHeight);
+    const width = sourceWidth * scale, height = sourceHeight * scale;
+    return { x: box.x + (box.width - width) / 2, y: box.y + (box.height - height) / 2, width, height };
+  }
+  // CHR-177 contact-sheet geometry end
   function collageTemplateModal(n) {
     return new Promise((res) => {
       let dlg = document.getElementById('lib-collage-modal');
@@ -6336,6 +6372,81 @@
       refreshView();
       openInEditor(outPath);
     } catch (e) { prog.fail(humanizeErr('create collage', e)); }
+  }
+
+  // A bounded, print-oriented contact-sheet export from the same Library selection action as
+  // Collage. Each saved edit is freshly parsed and rendered in isolation through the existing
+  // graded renderer; unlike a preview/thumb grid, the output page is composed only from those
+  // final pixels and has an explicit per-photo filename/rating caption.
+  async function createContactSheet(paths) {
+    const ordered = contactSheetOrder(paths, state.entries || []);
+    if (!ordered.length) return;
+    if (ordered.length > CONTACT_SHEET_MAX_PHOTOS) {
+      toast(`Contact sheets support up to ${CONTACT_SHEET_MAX_PHOTOS} photos per page`, false);
+      return;
+    }
+    const prog = toastProgress(`Building contact sheet from ${ordered.length} photos…`);
+    const previousOpen = state.openedPath;
+    let touchedEditor = false;
+    try {
+      const files = await readPathsAsFiles(ordered);
+      if (!files.length) { prog.fail('Could not read any selected photos'); return; }
+      const okPaths = files.okPaths || ordered;
+      await getSidecarsBatch(okPaths);
+      const layout = contactSheetLayout(okPaths.length);
+      const canvas = document.createElement('canvas'); canvas.width = layout.width; canvas.height = layout.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Could not create the contact-sheet canvas');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, layout.width, layout.height);
+      ctx.fillStyle = '#202124'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+      ctx.font = '600 46px system-ui, sans-serif'; ctx.fillText('Contact Sheet', layout.margin, layout.margin + 35);
+      ctx.fillStyle = '#666'; ctx.font = '26px system-ui, sans-serif';
+      ctx.fillText(`${okPaths.length} photos · A4 ratio · ${layout.width} × ${layout.height} px`, layout.margin, layout.margin + 92);
+
+      for (let i = 0; i < files.length; i++) {
+        const path = okPaths[i], sc = await getSidecar(path);
+        let bitmap = null;
+        try {
+          const needsRenderer = !!(sc && sc.recipe) || RAW_EXT_RE.test(path);
+          if (needsRenderer) {
+            if (typeof window.chromasmithRenderCurrentGraded !== 'function') throw new Error(`Cannot render ${baseName(path)} at full photo quality`);
+            prog.update && prog.update(`Rendering photo ${i + 1}/${files.length}…`);
+            touchedEditor = true;
+            await libLoadFX([files[i]]);
+            // Decode anew per path: a recipe snapshot is never allowed to leak to the next photo.
+            if (sc && sc.recipe) await applyUISnapshot(snapshotFromB64(sc.recipe));
+            if (typeof applyRawDefaults === 'function') applyRawDefaults();
+            bitmap = await window.chromasmithRenderCurrentGraded(1600);
+            if (!bitmap || !(bitmap.width > 0 && bitmap.height > 0)) throw new Error(`Photo render failed for ${baseName(path)}`);
+          } else {
+            bitmap = await createImageBitmap(files[i]);
+          }
+          const cell = layout.cells[i], image = contactSheetContainRect(bitmap.width, bitmap.height, cell.image);
+          ctx.fillStyle = '#f5f5f5'; ctx.fillRect(cell.x, cell.y, cell.width, cell.height);
+          ctx.drawImage(bitmap, image.x, image.y, image.width, image.height);
+          ctx.strokeStyle = '#d8dadd'; ctx.lineWidth = 2; ctx.strokeRect(cell.x + 1, cell.y + 1, cell.width - 2, cell.height - 2);
+          ctx.fillStyle = '#202124'; ctx.font = '24px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+          ctx.fillText(baseName(path), cell.caption.x, cell.caption.y + 24, cell.caption.width);
+          if (sc.rating > 0) {
+            ctx.fillStyle = '#9b6a00'; ctx.font = '24px system-ui, sans-serif';
+            ctx.fillText('★'.repeat(Math.min(5, sc.rating)), cell.caption.x, cell.caption.y + 56, cell.caption.width);
+          }
+        } finally {
+          if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+        }
+      }
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      canvas.width = canvas.height = 0;
+      if (!blob) throw new Error('Could not encode the contact-sheet PNG');
+      const stem = baseName(okPaths[0]).replace(/\.[^.]+$/, '') || 'photos';
+      const receipt = await saveFiles([{ content: new Uint8Array(await blob.arrayBuffer()), fname: `${stem}-contact-sheet.png`, mime: 'image/png' }]);
+      if (Array.isArray(receipt) && receipt.some((r) => !r.ok)) throw new Error(receipt.find((r) => !r.ok)?.err || 'Save failed');
+      prog.resolve('Contact sheet exported');
+    } catch (e) {
+      prog.fail(humanizeErr('export contact sheet', e));
+    } finally {
+      if (touchedEditor && previousOpen) openInEditor(previousOpen).catch((e) => console.error('restore editor after contact sheet', e));
+    }
   }
 
   // Shared batch-open: reads paths, loads them into the editor, and registers each in Recents
@@ -7287,6 +7398,7 @@
     // photo(s) in the editor and reveals the Export section instead of firing right away, so
     // quality/scope/etc can be changed first).
     const exportMenu = submenu(`Export${n > 1 ? ` (${n})` : ''}`);
+    exportMenu.subItem('Contact sheet…', () => createContactSheet(paths));
     exportMenu.subItem('Quick export', () => libExportPaths(paths), kbd([], 'E'));
     exportMenu.subItem('Export custom…', async () => {
       if (n <= 1) await openInEditor(paths[0]);
