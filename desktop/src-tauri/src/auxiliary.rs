@@ -33,24 +33,8 @@ mod macos {
     use objc2_foundation::{NSDictionary, NSNumber, NSString, NSURL};
     use std::io::Cursor;
 
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct CGPoint {
-        x: f64,
-        y: f64,
-    }
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct CGSize {
-        width: f64,
-        height: f64,
-    }
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct CGRect {
-        origin: CGPoint,
-        size: CGSize,
-    }
+    // NSRect is CGRect on 64-bit macOS and already implements objc2::Encode for msg_send!.
+    use objc2_foundation::NSRect as CGRect;
 
     #[link(name = "CoreGraphics", kind = "framework")]
     #[link(name = "CoreImage", kind = "framework")]
