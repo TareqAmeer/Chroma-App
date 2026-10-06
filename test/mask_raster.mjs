@@ -117,6 +117,26 @@ async function main() {
       mskPaintErase = false;
       m.px.set(original); mskBrushSize = 25; mskBrushFlow = 60; _mskTexDirty = true;
 
+      // Temporary Alt cursor feedback and an in-progress stroke cannot survive focus/tool exits.
+      const brushCursor = document.getElementById('msk-brush-cursor');
+      mskPaintMode = true; _mskStroke = m; brushCursor.classList.add('erase');
+      window.dispatchEvent(new Event('blur'));
+      ck('CHR-275 window blur ends the transient stroke', _mskStroke === null);
+      ck('CHR-275 window blur clears temporary erase cursor', !brushCursor.classList.contains('erase'));
+      mskPaintMode = true; _mskStroke = m; brushCursor.classList.add('erase');
+      const visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      document.dispatchEvent(new Event('visibilitychange'));
+      if (visibilityDescriptor) Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
+      else delete document.visibilityState;
+      ck('CHR-275 hidden document clears transient stroke and erase cursor', _mskStroke === null && !brushCursor.classList.contains('erase'));
+      mskPaintMode = true; _mskStroke = m; brushCursor.classList.add('erase');
+      mskPaintStop();
+      ck('CHR-275 leaving paint mode clears transient stroke', _mskStroke === null && !brushCursor.classList.contains('erase'));
+      mskPaintMode = true; _mskStroke = m; brushCursor.classList.add('erase');
+      document.getElementById('fx-canvas').dispatchEvent(new PointerEvent('pointercancel', { bubbles: true }));
+      ck('CHR-275 pointer cancellation clears stroke and temporary erase', _mskStroke === null && !brushCursor.classList.contains('erase'));
+
       ck('1. px is a Uint8ClampedArray', px instanceof Uint8ClampedArray, px.constructor.name);
       ck('1. px length matches mtW*mtH', px.length === m.mtW * m.mtH, `${px.length} vs ${m.mtW * m.mtH}`);
 
