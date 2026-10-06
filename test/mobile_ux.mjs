@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {expect as baseExpect} from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
-import { resolve, extname } from 'node:path';
+import { resolve, extname, sep } from 'node:path';
 import { chromium, webkit } from 'playwright';
 const expect=baseExpect.configure({timeout:30000});
 
@@ -12,7 +12,7 @@ const root = resolve('.');
 const mime = {'.html':'text/html','.js':'text/javascript','.css':'text/css','.wasm':'application/wasm','.png':'image/png','.woff2':'font/woff2'};
 const server = createServer(async (req, res) => {
   const path = resolve(root, '.' + new URL(req.url, 'http://localhost').pathname);
-  if (!path.startsWith(root + '/')) { res.writeHead(403).end(); return; }
+  if (!(path === root || path.startsWith(root + sep))) { res.writeHead(403).end(); return; }
   try {
     const bytes = await readFile(path);
     res.writeHead(200, {'Content-Type':mime[extname(path)] || 'application/octet-stream', 'Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp'}).end(bytes);
@@ -69,7 +69,7 @@ async function exercise(name, engine) {
       await page.locator('#phone-compare').click();assert.equal(await page.evaluate(()=>fxCompare),true);
       await page.locator('#phone-compare').click();assert.equal(await page.evaluate(()=>fxCompare),false);
       assert.equal(await page.evaluate(()=>csSwipeAdjust),false);
-      await page.locator('#vl-adj-exp').click();await page.locator('#phone-number').fill('20');await page.locator('[data-apply]').click();
+      await page.locator('#vl-adj-exp').click();await page.locator('#phone-number').fill('1');await page.locator('[data-apply]').click();
       assert.equal(await page.locator('#sl-adj-exp').inputValue(),'20');
     });
     await check('switching before debounce preserves the outgoing recipe and isolates the next',async()=>{

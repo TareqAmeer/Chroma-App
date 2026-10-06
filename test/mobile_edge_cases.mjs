@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {expect as baseExpect} from '@playwright/test';
 import {createServer} from 'node:http';
 import {readFile, mkdir, access} from 'node:fs/promises';
-import {resolve, extname} from 'node:path';
+import {resolve, extname, sep} from 'node:path';
 import {chromium, webkit} from 'playwright';
 const expect=baseExpect.configure({timeout:30000});
 
@@ -11,7 +11,7 @@ const root=resolve(process.env.CHROMA_MOBILE_WEB_ROOT||'.'),fixtures=resolve('te
 let entry='chromasmith-22.html';try{await access(resolve(root,entry));}catch{entry='index.html';}
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost');const path=url.pathname.startsWith('/test/fixtures/')?resolve(fixtures,url.pathname.slice('/test/fixtures/'.length)):resolve(root,'.'+url.pathname);
- if(!path.startsWith(root+'/')&&!path.startsWith(fixtures+'/')){res.writeHead(403).end();return;}
+ if(!path.startsWith(root+sep)&&!path.startsWith(fixtures+sep)){res.writeHead(403).end();return;}
  try{const bytes=await readFile(path);res.writeHead(200,{'Content-Type':({'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.wasm':'application/wasm'})[extname(path)]||'application/octet-stream','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp'}).end(bytes);}catch{res.writeHead(404).end();}
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));

@@ -30,6 +30,8 @@ function sheet(title,html,setup){
   };
   ov.onclick=e=>{if(e.target===ov||e.target.closest('.phone-close'))close();};ov.addEventListener('keydown',key);
   activeDialog={el:ov,close,closed};setup?.(ov,close);
+  // Keep keyboard focus inside the dialog, otherwise key events land on <body> and reach editor shortcuts (Undo) behind it.
+  if(!ov.contains(document.activeElement)){const sec=ov.querySelector('section');if(sec){sec.tabIndex=-1;sec.focus({preventScroll:true});}}
   if(!ov.contains(document.activeElement))// Focus the close button, never a select: focusing one pops its picker open on phones.
   (ov.querySelector('.phone-close')||ov.querySelector('.phone-dialog-content button')||ov.querySelector('button'))?.focus();
   return {el:ov,close,closed};
@@ -154,11 +156,15 @@ function precision(value){
   const title=row.querySelector('.fx-label')?.textContent.trim()||'Adjustment';
   // Values may be displayed in stops, percent or degrees. Preserve the editor's existing
   // conversion by editing its contenteditable value, rather than assuming the raw range units.
-  const angle=sl.id==='sl-straighten',step=angle ? 0.05 :(+sl.step||1),display=angle?_stS2A(sl.value):+sl.value;
-  sheet(title,'<label>'+esc(angle?'Angle in degrees':'Value')+'<input id="phone-number" type="number" inputmode="decimal" min="'+sl.min+'" max="'+sl.max+'" step="'+step+'" value="'+display+'"></label><p>Range '+sl.min+' to '+sl.max+(angle?' degrees':'')+'.</p><div class="phone-actions"><button data-step="-1" aria-label="Decrease one step">−</button><button data-step="1" aria-label="Increase one step">+</button><button data-reset>Reset</button><button data-apply>Apply</button></div>',(el,close)=>{
-    const i=el.querySelector('input');const apply=()=>{if(!i.checkValidity()||!Number.isFinite(+i.value)||!i.value)return;sl.value=angle?_stA2S(+i.value):i.value;sl.dispatchEvent(new Event('input',{bubbles:true}));sl.dispatchEvent(new Event('change',{bubbles:true}));fxHistoryPush();close();};
-    el.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>{i.value=Math.max(+sl.min,Math.min(+sl.max,+i.value+(+b.dataset.step)*step));});
-    el.querySelector('[data-reset]').onclick=()=>{const base=_fxPristineDefault?.sliders?.[sl.id.replace(/^sl-/,'')]??sl.defaultValue;i.value=angle?_stS2A(base):base;};el.querySelector('[data-apply]').onclick=apply;i.onkeydown=e=>{if(e.key==='Enter')apply();};i.focus();i.select();
+  const angle=sl.id==='sl-straighten';
+  // CHR-56 unit labels (EV, degrees...) are display scalings of the raw slider value; enter the number the label shows.
+  const uspec=(typeof CS_CONTROL_UNIT_SPECS!=='undefined'&&CS_CONTROL_UNIT_SPECS[sl.id])||null,uscale=uspec&&typeof uspec==='object'&&uspec.scale!=null&&!uspec.map?uspec.scale:1,uprec=uscale!==1?(uspec.precision??2):null;
+  const toDisp=v=>angle?_stS2A(v):(uprec!=null?+(+v*uscale).toFixed(uprec):+v),fromDisp=n=>angle?_stA2S(+n):(uprec!=null?+n/uscale:n);
+  const step=angle?0.05:(+sl.step||1)*uscale,display=toDisp(sl.value),dmin=toDisp(sl.min),dmax=toDisp(sl.max);
+  sheet(title,'<label>'+esc(angle?'Angle in degrees':'Value')+'<input id="phone-number" type="number" inputmode="decimal" min="'+dmin+'" max="'+dmax+'" step="'+step+'" value="'+display+'"></label><p>Range '+dmin+' to '+dmax+(angle?' degrees':'')+'.</p><div class="phone-actions"><button data-step="-1" aria-label="Decrease one step">−</button><button data-step="1" aria-label="Increase one step">+</button><button data-reset>Reset</button><button data-apply>Apply</button></div>',(el,close)=>{
+    const i=el.querySelector('input');const apply=()=>{if(!i.checkValidity()||!Number.isFinite(+i.value)||!i.value)return;sl.value=fromDisp(i.value);sl.dispatchEvent(new Event('input',{bubbles:true}));sl.dispatchEvent(new Event('change',{bubbles:true}));fxHistoryPush();close();};
+    el.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>{i.value=+Math.max(dmin,Math.min(dmax,+i.value+(+b.dataset.step)*step)).toFixed(4);});
+    el.querySelector('[data-reset]').onclick=()=>{const base=_fxPristineDefault?.sliders?.[sl.id.replace(/^sl-/,'')]??sl.defaultValue;i.value=toDisp(base);};el.querySelector('[data-apply]').onclick=apply;i.onkeydown=e=>{if(e.key==='Enter')apply();};i.focus();i.select();
   });
 }
 function maskWorkflow(){
