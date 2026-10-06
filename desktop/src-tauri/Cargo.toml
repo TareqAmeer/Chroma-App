@@ -114,7 +114,7 @@ dunce = "1"
 # system libsqlite3, avoiding macOS-version skew; the tree already needs a C toolchain for
 # ort-sys/objc2/libc, so this isn't a new build requirement, just a longer one (~1 min cold,
 # cached after).
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.32", features = ["bundled", "backup"] }
 # Catalog integrity checking: content hashes to detect silent file corruption (a file present
 # and readable but bit-rotted — the single most-requested photo-library feature that isn't
 # duplicate/missing-file detection, per the library-catalog plan's own research). BLAKE3, not

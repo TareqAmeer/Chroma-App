@@ -62,3 +62,9 @@
 - Migrated the old global Include Subfolders preference into a legacy default plus per-volume/folder overrides; folder navigation now applies its saved recursive scope before querying the catalog.
 - Added visible recursive status/count wording and `test/library_recursive_folders.mjs`; files: `desktop/library-ui.js`, `test/library_recursive_folders.mjs`, `DEVLOG.md`.
 - Verified JavaScript syntax, focused Chromium preference/query/status flow, and `git diff --check`; 50k catalog performance remains covered by catalog paging and needs a dedicated large-fixture measurement before claiming that criterion.
+
+## 2026-10-06 — CHR-205 verified catalog snapshot primitive
+
+- Added a versioned catalog snapshot directory using rusqlite's SQLite Online Backup API, with manifest version/schema/photo count, BLAKE3 checksum, integrity and foreign-key verification, staging, and atomic same-parent publication.
+- Scope explicitly excludes originals and regenerated caches; this is catalog-only and does not capture sidecars, preferences, other stores, or implement restore/activation. Files: `desktop/src-tauri/src/catalog_backup.rs`, `desktop/src-tauri/src/main.rs`, `desktop/src-tauri/Cargo.toml`.
+- Added focused WAL snapshot, verification, destination-collision, and corruption tests (`cargo test --manifest-path desktop/src-tauri/Cargo.toml --bin chromasmith catalog_backup::tests`: 2 passed). Lightroom's documented catalog-only backup policy and SQLite's official online backup API inform the design; full backup/restore acceptance remains outstanding.
