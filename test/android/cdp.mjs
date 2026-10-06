@@ -16,9 +16,9 @@ export function webviewPid() {
 }
 export async function connect(port = 9222) {
   adb('forward', `tcp:${port}`, `localabstract:webview_devtools_remote_${webviewPid()}`);
-  const pages = await (await fetch(`http://localhost:${port}/json`)).json();
+  const pages = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
   const pg = pages.find(p => p.type === 'page');
-  const ws = new WebSocket(pg.webSocketDebuggerUrl);
+  const ws = new WebSocket(pg.webSocketDebuggerUrl.replace("localhost", "127.0.0.1"));
   await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
   let id = 0; const pending = new Map(); const events = [];
   ws.onmessage = m => { const d = JSON.parse(m.data); if (d.id && pending.has(d.id)) { pending.get(d.id)(d); pending.delete(d.id); } else events.push(d); };

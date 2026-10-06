@@ -7163,7 +7163,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006Q';
+const BUILD='1.1006R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -7171,7 +7171,8 @@ const BUILD='1.1006Q';
 const WHATSNEW=[
   {date:'2026-10-06',items:[
     'Faster full-resolution JPEG exports on Android, with export quality preserved.',
-    'Export completion notifications no longer open Android notification or alarm settings.'
+    'Export completion notifications no longer open Android notification or alarm settings.',
+    'Android JPEG encoding and saving to Photos are faster; repeated exports preserve existing photos.'
   ]},
   {date:'2026-10-05',items:[
     'Library galleries keep the same photos in place while scrolling and updating.',
@@ -23225,6 +23226,47 @@ async function fxNotifyExportFinished(plugins,started){
     }]});
   }catch(e){}
 }
+// Android's canvas.toBlob can spend seconds waiting for idle encoding slots. Encode
+// ordinary JPEG exports on a worker, using the same browser codec and quality.
+// Keep a bounded working set and fall back to the existing encoder on unsupported
+// WebViews/errors. Metadata is still restored by the normal export pipeline.
+async function fxEncodeExportCanvas(canvas,mime,quality){
+  const memory=navigator.deviceMemory,pixels=canvas.width*canvas.height;
+  const workerLimit=memory>=4?32e6:24e6;
+  const useWorker=/Android/i.test(navigator.userAgent)&&mime==='image/jpeg'
+    &&typeof memory==='number'&&memory>=2&&pixels>1e6&&pixels<=workerLimit
+    &&typeof Worker==='function'&&typeof OffscreenCanvas==='function'&&typeof createImageBitmap==='function';
+  if(useWorker){
+    let bitmap=null,worker=null,url=null,timer=null;
+    try{
+      bitmap=await createImageBitmap(canvas);
+      url=URL.createObjectURL(new Blob([`onmessage=async e=>{
+        const bitmap=e.data.bitmap;let canvas=null;
+        try{
+          canvas=new OffscreenCanvas(bitmap.width,bitmap.height);
+          canvas.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
+          const blob=await canvas.convertToBlob({type:'image/jpeg',quality:e.data.quality});
+          postMessage({blob});
+        }catch(error){postMessage({error:String(error)});}
+        finally{bitmap.close();if(canvas)canvas.width=canvas.height=0;}
+      };`],{type:'application/javascript'}));
+      worker=new Worker(url);
+      const blob=await new Promise((resolve,reject)=>{
+        worker.onmessage=e=>e.data.blob?resolve(e.data.blob):reject(new Error(e.data.error||'JPEG worker failed'));
+        worker.onerror=()=>reject(new Error('JPEG worker unavailable'));
+        timer=setTimeout(()=>reject(new Error('JPEG worker timed out')),30000);
+        worker.postMessage({bitmap,quality},[bitmap]);bitmap=null;
+      });
+      if(blob.type!=='image/jpeg'||!blob.size)throw new Error('Invalid JPEG worker output');
+      return blob;
+    }catch(e){} // Preserve export availability if a WebView cannot use the worker.
+    finally{
+      if(timer)clearTimeout(timer);if(worker)worker.terminate();if(url)URL.revokeObjectURL(url);
+      if(bitmap)bitmap.close();
+    }
+  }
+  return new Promise(resolve=>canvas.toBlob(resolve,mime,quality));
+}
 async function exportFX(...a){
   if(_fxExportRuns){if(typeof toast==='function')toast('An export is already running');return;}
   _fxExportRuns++;document.body.classList.add('fx-exporting');
@@ -23480,7 +23522,7 @@ async function _exportFXRun(){
           // q=1.0 switches the encoder from 4:2:0 to 4:4:4 chroma (≈3× file size); iOS then
           // fails to save the result to Photos — cap at 0.99 on touch devices.
           if(!isPng&&q>=1&&isMemoryConstrained()){q=0.99;log('Quality capped at 99 on this device (100% produces files iOS cannot save to Photos)','warn');}
-          const blob=await new Promise(r=>ec.toBlob(r,mime,isPng?undefined:q)); // WebP reuses the same quality slider as JPG — no dedicated control, per scoping decision
+          const blob=await fxEncodeExportCanvas(ec,mime,isPng?undefined:q); // WebP reuses the same quality slider as JPG — no dedicated control, per scoping decision
           if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;continue;}
           out=new Uint8Array(await blob.arrayBuffer());
           if(!isWebp){ // metadata splicing below is JPEG/PNG-specific; WebP ships with no embedded metadata for now
