@@ -53,6 +53,7 @@ mod dino;
 mod faceparse;
 mod petdetect;
 mod depth;
+mod auxiliary;
 mod scrfd;
 mod sam;
 mod rawdenoise;
@@ -701,6 +702,14 @@ fn faceparse_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 // faceparse_run above: caller sends a decoded RGB8 photo (downsampled to a working size on the JS
 // side, the same "photo already resized before it reaches Rust" convention faceparse_run and
 // sam_encode use) + width/height; response is one width*height byte depth map (0=far, 255=near).
+/// Returns any embedded depth/matte maps carried by the selected HEIC/JPEG. Unlike `depth_run`,
+/// this reads the camera's own auxiliary data and never falls back to inferred depth.
+#[tauri::command]
+fn extract_embedded_auxiliary(path: String) -> Result<Vec<auxiliary::AuxiliaryMap>, String> {
+    if path.trim().is_empty() { return Err("extract_embedded_auxiliary: empty path".into()); }
+    auxiliary::extract(&path)
+}
+
 #[tauri::command]
 fn depth_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
@@ -2654,6 +2663,7 @@ fn main() {
             #[cfg(target_os = "macos")]
             write_gainmap_heic_from_map,
             write_gainmap_uhdr_from_map,
+            extract_embedded_auxiliary,
             #[cfg(target_os = "macos")]
             source_has_hdr,
             store_dcp_lut,
