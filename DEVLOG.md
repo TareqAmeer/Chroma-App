@@ -383,3 +383,8 @@
 - Replaced the separate Windows native menu/frame with File/Edit/Photo/View/Help beside minimize/maximize/close in one titlebar. Added existing folder, settings, photo, viewing, and help routes with contextual disabling and keyboard navigation; compared task groupings with Affinity Photo and Lightroom Classic.
 - Files: `desktop/header-menus.js`, `desktop/desktop-native.js`, `desktop/library-ui.js`, Windows Tauri config/capabilities and `main.rs`, frontend build staging, `test/header_menus.mjs`, and Windows menu documentation. Windows state restoration excludes decorations to prevent duplicate titlebars.
 - Verification: Windows Cargo build and focused Edge checks pass (40 dropdown routes, handlers, Gallery/Studio layout, themes, widths, keyboard and dismissal). Native Settings/Help, minimize, maximize/restore, fullscreen and Exit verified; real window screenshot confirms placement. Full editor gates are blocked by missing test dependencies; every image operation was not end-to-end tested. CHR-196 remains In Review; publication recorded after remote verification.
+
+### CHR-196 titlebar publication
+
+- Published task commit `e4e75057` through clean integration at `629fa3ceab1eaa538c4c370b1f0e0249a8af66dc`; fetched `origin/main` and confirmed the exact remote commit and ancestry. Newer main changes were preserved, and menu source files match the verified feature checkout.
+- Frontend staging, diff checks, and complete focused Edge menu checks pass on the integrated version. The commit hook additionally updates only the frontend BUILD marker. Native debug verification and full-suite limitations are recorded above; CHR-196 stays In Review for user testing.
