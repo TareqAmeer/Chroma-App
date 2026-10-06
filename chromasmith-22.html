@@ -4170,6 +4170,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-s" oninput="pcSlider('sat',this.value)"><div class="fx-val" id="vl-pc-s">0</div></div>
             <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-l" oninput="pcSlider('lum',this.value)"><div class="fx-val" id="vl-pc-l">0</div></div>
             <div class="fx-row" title="How wide a neighborhood of similar colors around the picked point is affected — low = only close matches, high = a broad spread of nearby hues/saturations"><div class="fx-label">Range</div><input class="fx-slider" type="range" min="0" max="100" value="35" id="sl-pc-r" oninput="pcSlider('range',this.value)"><div class="fx-val" id="vl-pc-r">35</div></div>
+            <div class="fx-row" title="How gradually the adjustment fades toward the edge of the selected color range"><div class="fx-label">Smoothness</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-pc-sm" oninput="pcSlider('smoothness',this.value)"><div class="fx-val" id="vl-pc-sm">50</div></div>
             <div class="btn-row" style="margin-top:4px">
               <button class="btn bgh" onclick="pcDelete()">Delete point</button>
             </div>
@@ -7117,7 +7118,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006A';
+const BUILD='1.1006B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -7247,9 +7248,14 @@ function applyHSL(r,g,b,hA,sA,lA){
 function pcWeight(h,s,pt){
   let df=Math.abs(h-pt.h);if(df>.5)df=1-df;
   const hHalf=0.03+(pt.range||0)/100*0.22;     // range 0-100 -> ±10.8°..90° hue half-width
-  const wh=Math.max(0,1-Math.pow(df/hHalf,2));
   const sHalf=0.15+(pt.range||0)/100*0.55;     // wider range also tolerates more saturation drift
-  const ws=Math.max(0,1-Math.pow((s-pt.s)/sHalf,2));
+  // Smoothness reshapes the existing compact selection kernel without changing its footprint.
+  // 50 keeps the shipped quadratic falloff exactly; lower values tighten the transition and
+  // higher values soften it. Missing values on older point-color records retain the old result.
+  const smooth=Math.max(0,Math.min(100,pt.smoothness==null?50:pt.smoothness));
+  const edgePower=Math.pow(2,(50-smooth)/50);
+  const wh=Math.pow(Math.max(0,1-Math.pow(df/hHalf,2)),edgePower);
+  const ws=Math.pow(Math.max(0,1-Math.pow((s-pt.s)/sHalf,2)),edgePower);
   return wh*ws*Math.min(1,s*3);
 }
 function applyPointColors(r,g,b,points){
@@ -13757,7 +13763,7 @@ function pcEyedropperClick(e){
   const avg=_pickAvgRGB(e,false);if(!avg)return;
   const[ar,ag,ab]=avg;
   const[h,s]=r2hsv(ar/255,ag/255,ab/255);
-  fxState.pointColors.push({h,s,rgb:[Math.round(ar),Math.round(ag),Math.round(ab)],hue:0,sat:0,lum:0,range:35});
+  fxState.pointColors.push({h,s,rgb:[Math.round(ar),Math.round(ag),Math.round(ab)],hue:0,sat:0,lum:0,range:35,smoothness:50});
   pcSel=fxState.pointColors.length-1;
   const tg=document.getElementById('tg-pointcolor');
   if(tg&&!tg.classList.contains('on'))toggleFX('pointcolor'); // also bakes+renders
@@ -13779,16 +13785,17 @@ function pcSyncUI(){
   const ctl=document.getElementById('pc-ctl');if(ctl)ctl.style.display=pt?'flex':'none';
   const hint=document.getElementById('pc-empty-hint');if(hint)hint.style.display=(fxState.pointColors&&fxState.pointColors.length)?'none':'block';
   if(!pt)return;
-  [['hue','h'],['sat','s'],['lum','l'],['range','r']].forEach(([k,sfx])=>{
+  [['hue','h'],['sat','s'],['lum','l'],['range','r'],['smoothness','sm']].forEach(([k,sfx])=>{
     const sl=document.getElementById('sl-pc-'+sfx),vl=document.getElementById('vl-pc-'+sfx);
-    const v=pt[k]!=null?pt[k]:0;
+    const v=pt[k]!=null?pt[k]:(k==='smoothness'?50:0);
     if(sl)sl.value=v;if(vl)vl.textContent=v;
   });
 }
 function pcSlider(key,v){
   const pt=fxState.pointColors[pcSel];if(!pt)return;
   pt[key]=parseFloat(v)||0;
-  const vl=document.getElementById('vl-pc-'+key[0]);if(vl)vl.textContent=pt[key];
+  const sfx={hue:'h',sat:'s',lum:'l',range:'r',smoothness:'sm'}[key];
+  const vl=document.getElementById('vl-pc-'+(sfx||key[0]));if(vl)vl.textContent=pt[key];
   bakeHsl();fxUpdate();
 }
 function pcDelete(){
@@ -27446,7 +27453,7 @@ const CS_CONTROL_UNIT_SPECS={
   'sl-deconv-rad':{unit:' px',map:'deconv-radius',precision:1},
   'sl-crv-s':'%','sl-crv-d':'%','sl-crv-l':'%','sl-crv-h':'%',
   'sl-hsl-h':'%','sl-hsl-s':'%','sl-hsl-l':'%','sl-wheel-lift-l':'%','sl-wheel-gamma-l':'%','sl-wheel-gain-l':'%',
-  'sl-pc-h':'%','sl-pc-s':'%','sl-pc-l':'%','sl-pc-r':'%',
+  'sl-pc-h':'%','sl-pc-s':'%','sl-pc-l':'%','sl-pc-r':'%','sl-pc-sm':'%',
   'sl-msk-selview-opacity':'%',
   'sl-lens-dist':'%','sl-lens-vig':'%','sl-lens-ca':'%','sl-lens-pv':'%','sl-lens-ph':'%',
   'sl-lens-rot':{unit:'°',scale:.1,precision:1,sign:true},'sl-lens-scale':'%','sl-lens-defr':'%',
