@@ -8285,7 +8285,7 @@
     const sidecar = state.sidecars.get(cell.path) || { rating: 0, label: '', favorite: false };
     return `<section class="lib-cmp-pane lib-survey-cell${idx === surveyState.focus ? ' cmp-focus' : ''}" data-survey-idx="${idx}" tabindex="0" role="group" aria-label="Photo ${idx + 1}: ${escAttr2(baseName(cell.path))}">
       <div class="lib-survey-head"><span>${idx + 1} / ${surveyState.cells.length}</span><span class="lib-survey-name">${esc2(baseName(cell.path))}</span>
-        <button type="button" data-survey-remove="${idx}" aria-label="Remove ${escAttr2(baseName(cell.path))} from Survey" title="Remove from Survey">×</button></div>
+        ${compareState.mode === 'cull' ? '' : `<button type="button" data-survey-remove="${idx}" aria-label="Remove ${escAttr2(baseName(cell.path))} from Survey" title="Remove from Survey">×</button>`}</div>
       <div class="lib-cmp-canvas-wrap"><canvas></canvas></div>
       <div class="lib-cmp-chrome">
         <div class="lib-flag${sidecar.label === 'Green' ? ' on' : ''}" data-survey-action="pick" title="Pick (P)">${ic('flagGreen',15)}</div>
@@ -8762,7 +8762,9 @@
     surveyHost()?.querySelector('.lib-survey-cell')?.focus({ preventScroll: true });
   }
   async function enterCullMode() {
-    const paths = [...state.selected]; if (paths.length < 2) return;
+    const selected = state.selected;
+    const paths = sortEntries(state.entries.filter(passesFilters)).filter((entry) => selected.has(entry.path)).map((entry) => entry.path);
+    if (paths.length < 2) return;
     if (state.viewMode !== 'compare' && state.viewMode !== 'survey') compareState.prevViewMode = state.viewMode;
     compareState.mode = 'cull'; compareState.totalSelected = paths.length; compareState.paths = paths;
     surveyState.cullPaths = paths; surveyState.cullOffset = 0; surveyState.focus = 0;

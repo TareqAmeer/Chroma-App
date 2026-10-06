@@ -25,10 +25,14 @@ try {
   await page.waitForFunction(() => typeof window.__libEnterSurvey === 'function' && typeof window.__libOpenFolder === 'function', { timeout: 30000 });
   await page.evaluate(() => document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); }));
   await page.evaluate(async () => { if (!window.chromasmithLibraryIsOpen()) await window.chromasmithToggleLibrary(); });
+  await page.locator('#cs-modal-ov button').filter({ hasText: /^Got it$/ }).click({ timeout: 3000 }).catch(() => {});
   await page.evaluate(() => window.__libOpenFolder('/test/Photos'));
   await page.waitForFunction(() => document.querySelectorAll('#lib-grid .lib-card').length >= 8, { timeout: 30000 });
   const paths = await page.locator('#lib-grid .lib-card').evaluateAll((cards) => cards.slice(0, 10).map((card) => card.dataset.path));
-  await page.evaluate((selected) => { selected.forEach((p) => window.__libSelect(p)); window.__libRenderGrid(); }, paths);
+  // Deliberately add them in reverse selection order: the shoot should still follow the
+  // Library's visible sort order, not whichever card was clicked first.
+  await page.evaluate((selected) => { selected.forEach((p) => window.__libSelect(p)); window.__libRenderGrid(); }, [...paths].reverse());
+  await page.locator('#cs-modal-ov button').filter({ hasText: /^Got it$/ }).click({ timeout: 3000 }).catch(() => {});
   await page.waitForSelector('#lib-batchbar [data-act="cull"]');
   assert.equal(await page.locator('#lib-batchbar [data-act="cull"]').textContent(), 'Cull selection');
   await page.locator('#lib-batchbar [data-act="cull"]').click();
@@ -44,8 +48,10 @@ try {
 
   for (let i = 0; i < 3; i++) await page.keyboard.press('Enter');
   await page.waitForFunction((expected) => window.__libSurveyState().offset === 4 && window.__libSurveyState().paths[0] === expected, paths[4]);
+  await page.waitForFunction(() => document.querySelectorAll('#lib-survey .lib-survey-cell').length === 4);
   state = await page.evaluate(() => window.__libSurveyState());
   assert.deepEqual(state.paths, paths.slice(4, 8), 'next page continues through the original full selection');
+  assert.equal(await page.locator('#lib-survey [data-survey-remove]').count(), 0, 'Culling hides Survey removal controls to keep the full shoot paging stable');
   await page.keyboard.press('Shift+X');
   await page.waitForFunction(() => document.querySelector('.lib-survey-cell[data-survey-idx="0"] [data-survey-action="reject"]')?.classList.contains('on') && window.__libSurveyState().focus === 1);
   await page.keyboard.press('Escape');
