@@ -3587,6 +3587,13 @@ fn pets_backfill_and_merge(conn: &Connection, cancel: &AtomicBool) -> Result<(),
     absorb_pet_faces(conn)?;
     prune_named_pets(conn)?;
     group_orphan_pets(conn)?;
+    // Auto "Pet N" groups left with no sightings (unfiled by merges/prunes) are just clutter.
+    conn.execute(
+        "DELETE FROM people WHERE kind = 'pet' AND auto = 1 AND ignored = 0
+         AND NOT EXISTS (SELECT 1 FROM photo_faces f WHERE f.person_id = people.id)",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
     let groups = pet_groups(conn)?;
     let profiles = person_profiles(conn, "pet")?;
     let auto: std::collections::HashSet<i64> = {
@@ -11026,6 +11033,23 @@ mod tests {
             println!("LOW {} {:?}", prof.name, sims.iter().take(40).map(|x| x.1).collect::<Vec<_>>());
             let mid: Vec<i64> = sims.iter().filter(|x| x.0 >= 0.5 && x.0 < 0.6).take(40).map(|x| x.1).collect();
             println!("MID {} {:?}", prof.name, mid);
+        }
+    }
+
+    /// Real-library check of the review queue and Find-more (COPY of a catalog):
+    ///     PET_DB=/path/copy.db cargo test --release real_review_queue -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn real_review_queue() {
+        let conn = open_and_migrate(Path::new(&std::env::var("PET_DB").unwrap())).unwrap();
+        let clusters = catalog_unnamed_clusters_run(&conn).unwrap();
+        let small = clusters.iter().filter(|c| distinct_photo_count(&conn, &c.face_ids).unwrap() < REVIEW_MIN_PHOTOS).count();
+        println!("REVIEW clusters={} under_min={} sizes={:?}", clusters.len(), small, clusters.iter().map(|c| c.face_count).take(30).collect::<Vec<_>>());
+        let named: Vec<(i64, String)> = conn.prepare("SELECT id, name FROM people WHERE auto = 0 AND ignored = 0").unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(|r| r.unwrap()).collect();
+        for (id, name) in named {
+            let sug = person_suggestions_run(&conn, id, None, 300).unwrap();
+            if !sug.is_empty() { println!("FINDMORE {name} {} top={:.2} low={:.2} ids={:?}", sug.len(), sug[0].similarity, sug.last().unwrap().similarity, sug.iter().take(24).map(|s| s.face_id).collect::<Vec<_>>()); }
         }
     }
 
