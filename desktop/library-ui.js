@@ -329,7 +329,12 @@
       // FALLBACK list_dir path (S6d chunk C: lib-empty-nofolder needed this — the primary
       // catalog_query({q.folder}) mock below always synthesises >=1 entries and cannot represent
       // a genuinely-empty registered folder).
-      case 'catalog_add_root': return /Folders only/.test(String(A.path || '')) ? Promise.resolve(null) : Promise.resolve({ id: 1, volume_id: 1, rel_path: '', kind: 'originals', abs_path: A.path, requested_rel_path: '' });
+      case 'catalog_add_root': {
+        if (/Folders only/.test(String(A.path || ''))) return Promise.resolve(null);
+        const path = String(A.path || '/test/Photos').replace(/\\/g, '/').replace(/\/$/, '');
+        const rel = path.replace(/^\/test\/Photos\/?/, '');
+        return Promise.resolve({ id: 1, volume_id: 1, rel_path: rel, kind: 'originals', abs_path: A.path, requested_rel_path: rel });
+      }
       case 'catalog_scan': return Promise.resolve({ scanned: 0, added: 0, marked_absent: 0 });
       case 'catalog_note_deleted': return Promise.resolve((A.paths || []).length);
       case 'catalog_rename_preview': case 'catalog_rename_apply': {
@@ -602,6 +607,7 @@
         // app, and so a test can assert list_dir/listDirRecursive are NOT called on this path.
         if (q.folder) {
           libtestCatalogQueryCalls++;
+          (window.__libtestFolderQueries ||= []).push(structuredClone(q.folder));
           const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
           // ?liboffline=1 exercises the disconnected-drive scenario: every entry still comes
           // back (catalog_query's own include_offline default), just flagged offline — the
@@ -949,7 +955,41 @@
     // showed nothing when the PARENT folder was selected, only when a leaf was. Real reported
     // confusion, not a hypothetical.
     includeSubfolders: localStorage.getItem('chromasmith_lib_subfolders') === '1',
+    _folderScope: null,
   };
+
+  // Keep the recursive-view choice with the catalog folder scope. Older versions used one
+  // application-wide checkbox; preserve that choice as the migrated default while allowing
+  // each folder (including folders on another volume) to remember its own override.
+  const LS_SUBFOLDER_SCOPES = 'chromasmith_lib_subfolders_v2';
+  function readSubfolderPrefs() {
+    const legacyDefault = localStorage.getItem('chromasmith_lib_subfolders') === '1';
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS_SUBFOLDER_SCOPES) || 'null');
+      if (saved && saved.version === 2 && saved.scopes && typeof saved.scopes === 'object') {
+        return { defaultValue: saved.defaultValue === true, scopes: saved.scopes };
+      }
+    } catch {}
+    return { defaultValue: legacyDefault, scopes: {} };
+  }
+  function folderScopeKey(scope) {
+    if (!scope) return '';
+    return `${encodeURIComponent(String(scope.volumeId ?? 'path'))}:${encodeURIComponent(String(scope.relDir ?? scope.path ?? ''))}`;
+  }
+  function subfoldersForScope(scope) {
+    const prefs = readSubfolderPrefs();
+    const key = folderScopeKey(scope);
+    return key && Object.prototype.hasOwnProperty.call(prefs.scopes, key)
+      ? prefs.scopes[key] === true
+      : prefs.defaultValue;
+  }
+  function saveSubfoldersForScope(scope, enabled) {
+    const prefs = readSubfolderPrefs();
+    const key = folderScopeKey(scope);
+    if (!key) return;
+    prefs.scopes[key] = !!enabled;
+    try { localStorage.setItem(LS_SUBFOLDER_SCOPES, JSON.stringify({ version: 2, defaultValue: prefs.defaultValue, scopes: prefs.scopes })); } catch {}
+  }
 
   function rememberLibraryView(view) {
     if (LIBTEST) return;
@@ -3354,6 +3394,11 @@
     window.__libScrollTo = (p) => scrollLibraryToPath(p);
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
     window.__libOpenFolder = (path) => openFolder(path);
+    window.__libSubfolderPreference = {
+      key: folderScopeKey,
+      read: subfoldersForScope,
+      save: saveSubfoldersForScope,
+    };
     window.__libHqOfflineDrain = () => hqOfflineDrainLoop();
     window.__libDrainThumbs = () => drainCatalogThumbnails();
     window.__libBgStopAll = () => bgStopAll();
@@ -5542,6 +5587,12 @@
       const regPromise = catalogRegisterFolder(path);
       window._lastCatalogRegisterPromise = regPromise;
       const reg = await regPromise;
+      state._folderScope = reg
+        ? { volumeId: reg.volumeId, relDir: reg.relDir }
+        : { path };
+      state.includeSubfolders = subfoldersForScope(state._folderScope);
+      const subfoldersCheckbox = document.getElementById('lib-subfolders');
+      if (subfoldersCheckbox) subfoldersCheckbox.checked = state.includeSubfolders;
       if (reg) {
         const q = { folder: { volumeId: reg.volumeId, relDir: reg.relDir, recursive: state.includeSubfolders },
           limit: CATALOG_PAGE_SIZE, offset: 0, ...catalogFilterFields() };
@@ -7972,9 +8023,10 @@
     // Paged catalog views load 4,000 at a time and filter server-side, so the loaded page size
     // is not the real count ("4,000 of 4,000" while the library holds 50,071) — use the total.
     const pagedTotal = state._catalogPaged && (state.source === 'catalog' || state.source === 'folder') && state._catalogTotal != null ? state._catalogTotal : null;
+    const recursiveNote = state.source === 'folder' && state.includeSubfolders ? ' · including subfolders' : '';
     document.getElementById('lib-count').textContent = pagedTotal != null
-      ? `${fmtN(pagedTotal)} ${pagedTotal === 1 ? 'photo' : 'photos'}`
-      : `${fmtN(shown.length)} of ${fmtN(state.entries.length)} ${state.entries.length === 1 ? 'photo' : 'photos'}`;
+      ? `${fmtN(shown.length)} of ${fmtN(pagedTotal)} ${pagedTotal === 1 ? 'photo' : 'photos'}${recursiveNote}`
+      : `${fmtN(shown.length)} of ${fmtN(state.entries.length)} ${state.entries.length === 1 ? 'photo' : 'photos'}${recursiveNote}`;
     if (typeof syncFilterUI === 'function') syncFilterUI();
   }
 
@@ -9671,7 +9723,7 @@
     subCb.checked = state.includeSubfolders;
     subCb.onchange = async () => {
       state.includeSubfolders = subCb.checked;
-      try { localStorage.setItem('chromasmith_lib_subfolders', state.includeSubfolders ? '1' : '0'); } catch {}
+      saveSubfoldersForScope(state._folderScope || { path: state.currentFolder }, state.includeSubfolders);
       if (state.source === 'folder' && state.currentFolder) await openFolder(state.currentFolder);
     };
   }
