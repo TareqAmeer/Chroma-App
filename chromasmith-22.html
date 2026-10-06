@@ -3699,12 +3699,20 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
     </div>
     <!-- CHR-223: live preview — drag the line: left is your photo as shot, right is the match -->
     <div id="cp-prev" style="display:none;margin:10px 0;gap:10px;align-items:flex-start">
-      <div style="position:relative;flex:0 1 auto;max-width:72%;cursor:ew-resize;touch-action:none" id="cp-prev-wrap">
+      <div style="position:relative;flex:0 1 auto;max-width:72%;cursor:crosshair;touch-action:none" id="cp-prev-wrap">
         <canvas id="cp-prev-after" style="display:block;max-width:100%;max-height:340px;width:auto;height:auto"></canvas>
         <canvas id="cp-prev-before" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
         <div id="cp-prev-line" style="position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 4px rgba(0,0,0,.6);pointer-events:none"></div>
       </div>
-      <div style="flex:0 1 200px;min-width:0"><div class="vlb" style="margin-bottom:4px">Reference</div><canvas id="cp-prev-ref" style="display:block;max-width:100%;max-height:200px;width:auto;height:auto"></canvas></div>
+      <div style="flex:0 1 200px;min-width:0"><div class="vlb" style="margin-bottom:4px">Reference — click a target colour</div><canvas id="cp-prev-ref" style="display:block;max-width:100%;max-height:200px;width:auto;height:auto;cursor:crosshair"></canvas></div>
+    </div>
+    <div id="cp-pairs" style="display:none;margin:8px 0;padding:9px;border:1px solid var(--line);border-radius:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <strong style="font-size:12px">Pinned colour pairs · this photo pair</strong>
+        <button type="button" class="btn bgh" id="cp-pairs-clear" onclick="cpPairsClear()" style="padding:3px 8px">Clear</button>
+      </div>
+      <div id="cp-pairs-hint" style="font-size:11px;color:var(--mut)">Click a colour in your photo, then its match in the reference. Pair capture is stored for this session; the existing automatic match still drives the LUT.</div>
+      <div id="cp-pairs-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:7px"></div>
     </div>
     <div class="vrow">
       <div class="vlb">Name</div>
@@ -7019,7 +7027,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006O';
+const BUILD='1.1006P';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -7573,15 +7581,61 @@ function cpOpts(){const v=id=>{const e=document.getElementById(id);return e?(+e.
 // CHR-223: small live preview of the match. The base histogram LUT is cached per photo pair;
 // slider moves only re-run cpAdjustLUT + the 640px apply, which is fast enough to track a drag.
 let _cpPrev=null,_cpSplit=0.5;
+// CHR-222 first slice: collect stable colour correspondences for the current image pair. The
+// automatic histogram LUT remains the exact default path; the paired control points are explicit
+// session data until a validated sparse-point LUT interpolation is selected for a later slice.
+let _cpPoints=[],_cpPending=null,_cpPairSrcFile=null,_cpPairRefFile=null;
+function cpPairPick(which,e){
+  if(!_cpPrev||!_cpPrev.s||!_cpPrev.r)return;
+  const cv=which==='source'?document.getElementById('cp-prev-before'):document.getElementById('cp-prev-ref');
+  const frame=which==='source'?_cpPrev.s:_cpPrev.r,rect=cv.getBoundingClientRect();
+  if(!rect.width||!rect.height)return;
+  const x=Math.max(0,Math.min(frame.w-1,Math.floor((e.clientX-rect.left)*frame.w/rect.width)));
+  const y=Math.max(0,Math.min(frame.h-1,Math.floor((e.clientY-rect.top)*frame.h/rect.height)));
+  const rgb=cpSampleAverage(frame,x,y),sample={x:(x+.5)/frame.w,y:(y+.5)/frame.h,rgb};
+  if(which==='source'){
+    _cpPending=sample;
+    document.getElementById('cp-pairs-hint').textContent='Source pinned. Now click the matching colour in the reference.';
+  }else if(!_cpPending){
+    document.getElementById('cp-pairs-hint').textContent='Choose a colour from the source photo first.';
+    return;
+  }else{
+    _cpPoints.push({source:_cpPending,reference:sample});_cpPending=null;
+    document.getElementById('cp-pairs-hint').textContent='Pair saved. Click another source colour to add one.';
+  }
+  cpPairsRender();
+}
+function cpSampleAverage(frame,x,y){
+  const {px,w,h}=frame;let r=0,g=0,b=0,n=0;
+  for(let yy=Math.max(0,y-2);yy<=Math.min(h-1,y+2);yy++)for(let xx=Math.max(0,x-2);xx<=Math.min(w-1,x+2);xx++){
+    const i=(yy*w+xx)*4;r+=px[i];g+=px[i+1];b+=px[i+2];n++;
+  }
+  return[Math.round(r/n),Math.round(g/n),Math.round(b/n)];
+}
+function cpPairsRender(){
+  const box=document.getElementById('cp-pairs'),list=document.getElementById('cp-pairs-list');if(!box||!list)return;
+  box.style.display=(_cpPoints.length||_cpPending)?'block':'none';list.innerHTML='';
+  _cpPoints.forEach((p,i)=>{
+    const item=document.createElement('span');item.style.cssText='display:inline-flex;align-items:center;gap:5px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;font-size:11px';
+    const swatch=(rgb)=>{const s=document.createElement('i');s.style.cssText=`width:15px;height:15px;border-radius:50%;background:rgb(${rgb.join(',')});border:1px solid rgba(128,128,128,.5)`;s.title=`RGB ${rgb.join(', ')}`;return s;};
+    item.append(`Pair ${i+1}`,swatch(p.source.rgb),document.createTextNode('→'),swatch(p.reference.rgb));
+    const rm=document.createElement('button');rm.type='button';rm.className='btn bgh';rm.textContent='×';rm.title=`Remove pair ${i+1}`;rm.setAttribute('aria-label',`Remove pair ${i+1}`);rm.style.cssText='padding:0 4px;min-width:0';rm.onclick=()=>{_cpPoints.splice(i,1);cpPairsRender();};item.appendChild(rm);list.appendChild(item);
+  });
+}
+function cpPairsClear(){_cpPoints=[];_cpPending=null;cpPairsRender();const h=document.getElementById('cp-pairs-hint');if(h)h.textContent='Click a colour in your photo, then its match in the reference.';}
 async function cpPreviewBuild(){
   const box=document.getElementById('cp-prev');if(!box)return;
   try{
     const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
     const s=getPx(sImg,640),r=getPx(rImg,640),rs=getPx(rImg,320);
-    _cpPrev={s,base:histMatch(s.px,r.px,s.w*s.h,r.w*r.h)};
+    if(_cpPairSrcFile!==ST.cpSrcFile||_cpPairRefFile!==ST.cpRefFile){_cpPoints=[];_cpPending=null;_cpPairSrcFile=ST.cpSrcFile;_cpPairRefFile=ST.cpRefFile;}
+    _cpPrev={s,r,base:histMatch(s.px,r.px,s.w*s.h,r.w*r.h)};
     const put=(id,o)=>{const c=document.getElementById(id);c.width=o.w;c.height=o.h;c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(o.px),o.w,o.h),0,0);};
     put('cp-prev-before',s);put('cp-prev-ref',rs);
-    box.style.display='flex';cpPreviewUpdate();
+    box.style.display='flex';cpPreviewUpdate();cpPairsRender();
+    const source=document.getElementById('cp-prev-before'),ref=document.getElementById('cp-prev-ref');
+    if(!source._cpPairPick){source._cpPairPick=true;source.addEventListener('click',e=>cpPairPick('source',e));}
+    if(!ref._cpPairPick){ref._cpPairPick=true;ref.addEventListener('click',e=>cpPairPick('reference',e));}
     const wrap=document.getElementById('cp-prev-wrap');
     if(!wrap._wired){wrap._wired=true;const set=e=>{const b=wrap.getBoundingClientRect();_cpSplit=Math.max(0,Math.min(1,(e.clientX-b.left)/b.width));cpPreviewSplit();};
       wrap.addEventListener('pointerdown',e=>{wrap.setPointerCapture(e.pointerId);set(e);});wrap.addEventListener('pointermove',e=>{if(e.buttons)set(e);});}
