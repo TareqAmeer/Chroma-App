@@ -6,6 +6,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[path = "session_names.rs"]
+mod names;
 #[path = "session_paths.rs"]
 mod paths;
 
@@ -55,36 +57,11 @@ pub(crate) struct CreatedSession {
     pub manifest: SessionManifest,
 }
 
-fn validate_name(name: &str) -> Result<&str, String> {
-    let name = name.trim();
-    if name.is_empty()
-        || name == "."
-        || name == ".."
-        || name.ends_with('.')
-        || !name
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, ' ' | '-' | '_' | '.'))
-    {
-        return Err("Session name may contain letters, numbers, spaces, dots, dashes and underscores; it cannot end in a dot or space".into());
-    }
-    let reserved = name.split('.').next().unwrap_or(name).to_ascii_uppercase();
-    if matches!(reserved.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-        || ["COM", "LPT"].iter().any(|prefix| {
-            reserved.strip_prefix(prefix).is_some_and(|suffix| {
-                suffix.len() == 1 && matches!(suffix.as_bytes()[0], b'1'..=b'9')
-            })
-        })
-    {
-        return Err("Session name is reserved by Windows".into());
-    }
-    Ok(name)
-}
-
 fn validate_manifest(manifest: &SessionManifest) -> Result<(), String> {
     if manifest.format != SESSION_FORMAT || manifest.format_version != SESSION_FORMAT_VERSION {
         return Err("Unsupported Chromasmith Session manifest format".into());
     }
-    validate_name(&manifest.name)?;
+    names::validate_name(&manifest.name)?;
     for relative in [
         manifest.folders.capture.as_str(),
         manifest.folders.selects.as_str(),
@@ -133,7 +110,7 @@ fn new_manifest(name: &str) -> SessionManifest {
 }
 
 fn create_session_at(parent: &Path, name: &str) -> Result<CreatedSession, String> {
-    let name = validate_name(name)?;
+    let name = names::validate_name(name)?;
     let parent = fs::canonicalize(parent).map_err(|e| format!("Open destination folder: {e}"))?;
     if !parent.is_dir() {
         return Err("Session destination must be a folder".into());
@@ -230,7 +207,16 @@ mod tests {
     fn rejects_unsafe_names_paths_and_manifest_entries() {
         let parent = temp_parent();
         fs::create_dir_all(&parent).unwrap();
-        for name in ["", "..", "../escape", "C:", "CON", "bad/name", "trailing."] {
+        for name in [
+            "",
+            "..",
+            "../escape",
+            "C:",
+            "CON",
+            "bad/name",
+            "trailing.",
+            "trailing ",
+        ] {
             assert!(
                 create_session_at(&parent, name).is_err(),
                 "accepted name {name:?}"

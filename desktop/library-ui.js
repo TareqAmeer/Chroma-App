@@ -3206,7 +3206,8 @@
       const chosen = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false } });
       const parentPath = Array.isArray(chosen) ? chosen[0] : chosen;
       if (!parentPath) return;
-      const name = window.prompt('Name this photo Session folder');
+      if (typeof window.askTextModal !== 'function') throw new Error('Session naming dialog is unavailable');
+      const name = await window.askTextModal('Name this photo Session folder', 'Creates the standard Capture, Selects, Output and Trash folders in the chosen location.', '');
       if (!name || !name.trim()) return;
       const created = await invoke('session_create', { parentPath, name });
       if (typeof toast === 'function') toast(`Session created: ${name.trim()}`, true);
