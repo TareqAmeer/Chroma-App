@@ -74,6 +74,7 @@ mod ingest;
 mod catalog;
 mod smart_albums;
 mod catalog_backup;
+mod session;
 mod recipe_batch;
 mod publish;
 mod lightroom_preset_import;
@@ -2751,6 +2752,7 @@ fn main() {
             ingest::ingest_copy,
             ingest::ingest_cancel,
             ingest::eject_volume,
+            session::session_create,
             catalog::catalog_volumes,
             catalog::queue_offline_edit,
             catalog::list_offline_queue,
