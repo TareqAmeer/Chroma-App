@@ -741,6 +741,7 @@ dependencies = [
  "ort-sys",
  "rawler",
  "rayon",
+ "roxmltree",
  "rusqlite",
  "serde",
  "serde_json",

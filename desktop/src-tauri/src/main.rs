@@ -75,6 +75,7 @@ mod catalog;
 mod smart_albums;
 mod catalog_backup;
 mod recipe_batch;
+mod lightroom_preset_import;
 mod geocode;
 mod dcp_store;
 mod diag;
@@ -2638,6 +2639,7 @@ fn main() {
         ;
     let builder = with_log_plugin(builder);
     builder.invoke_handler(tauri::generate_handler![
+            lightroom_preset_import::preview_lightroom_xmp_preset,
             recipe_batch::recipe_batch_create, recipe_batch::recipe_batch_get, recipe_batch::recipe_batch_list,
             recipe_batch::recipe_batch_apply_item, recipe_batch::recipe_batch_cancel, recipe_batch::recipe_batch_resume, recipe_batch::recipe_batch_undo,
             #[cfg(target_os = "macos")]
