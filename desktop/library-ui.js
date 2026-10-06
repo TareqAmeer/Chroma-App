@@ -507,6 +507,16 @@
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         return Promise.resolve(bytes);
       }
+      case 'catalog_face_preview': return Promise.resolve(png);
+      case 'catalog_person_face_ids': return Promise.resolve([]);
+      case 'catalog_set_person_cover': return Promise.resolve(null);
+      case 'ingest_cancel': return Promise.resolve(false);
+      case 'scrfd_detect': return Promise.resolve([]);
+      case 'session_create': {
+        const nm = String(A.name || 'Session');
+        return Promise.resolve({ path: `${A.parentPath || '/test'}/${nm}`, manifest: { format: 'chromasmith-session', formatVersion: 1, id: 'libtest-session', name: nm, createdUnixSecs: 1700000000, folders: {}, assets: [] } });
+      }
+      case 'preview_lightroom_xmp_preset': return Promise.resolve({ name: String(A.fileName || 'Preset').replace(/\.[^.]+$/, ''), recipe: {}, keys: [], settings: [], fidelityNote: 'libtest stand-in' });
       case 'catalog_faces_scan': return Promise.resolve({ scanned: 0, faces_found: 0 });
       case 'catalog_embed_faces': return Promise.resolve({ embedded: 0 });
       case 'catalog_cluster_faces': return Promise.resolve({ people: 0, clustered_faces: 0, unclustered_faces: 0 });
