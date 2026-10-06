@@ -26,6 +26,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime};
 
 /// Cancellation flags for active card-import jobs. Jobs are keyed so a late Cancel click can
 /// never accidentally cancel a subsequent import.
@@ -137,6 +138,74 @@ pub struct IngestResult {
 }
 
 const SIDECAR_EXTS: &[&str] = &["xmp", "rrdata"];
+
+/// A point-in-time observation used by watched-folder capture before handing a file to the
+/// existing ingest pipeline. Filesystem notifications are hints, not proof that a camera has
+/// finished writing: callers must observe the same size and modification time for the configured
+/// settling interval before treating a candidate as ready. This is transient in-process state;
+/// the durable watcher/job owner records completion identity separately. This value owns no queue.
+#[derive(Debug, Clone)]
+pub(crate) struct FileObservation {
+    pub size: u64,
+    pub modified: SystemTime,
+    observed_at: Instant,
+}
+
+/// Stable source identity for de-duplication across watcher events. Include the normalized full
+/// path as well as size and mtime: cameras commonly reuse names such as `IMG_0001.JPG`, and a
+/// name-only key would incorrectly suppress a later capture. Content hashing is intentionally
+/// left to the durable ingest job, where completed identity can be recorded atomically.
+pub(crate) fn source_identity(path: &Path, observation: &FileObservation) -> String {
+    let normalized = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    format!(
+        "{}\0{}\0{:?}",
+        normalized.to_string_lossy(),
+        observation.size,
+        observation.modified
+    )
+}
+
+/// True only when two successful metadata observations refer to the same file state.
+pub(crate) fn observation_is_stable(
+    previous: &FileObservation,
+    current: &FileObservation,
+    settle_for: Duration,
+) -> bool {
+    previous.size == current.size
+        && previous.modified == current.modified
+        && current
+            .observed_at
+            .saturating_duration_since(previous.observed_at)
+            >= settle_for
+}
+
+fn observe_file(path: &Path) -> std::io::Result<FileObservation> {
+    let metadata = std::fs::metadata(path)?;
+    if !metadata.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "watched candidate is not a regular file",
+        ));
+    }
+    Ok(FileObservation {
+        size: metadata.len(),
+        modified: metadata.modified()?,
+        observed_at: Instant::now(),
+    })
+}
+
+/// Capture the stable-file helper contract while keeping watcher orchestration in the durable
+/// job implementation. `None` means the path is absent, non-file, or not yet readable.
+pub(crate) fn stable_candidate(
+    path: &Path,
+    previous: Option<&FileObservation>,
+    settle_for: Duration,
+) -> Option<(FileObservation, String)> {
+    let current = observe_file(path).ok()?;
+    let prior = previous?;
+    observation_is_stable(prior, &current, settle_for)
+        .then(|| (current.clone(), source_identity(path, &current)))
+}
 
 fn ext_lower(p: &Path) -> String {
     p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase()
@@ -775,6 +844,53 @@ pub fn eject_volume(path: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn watched_file_candidate_requires_unchanged_size_and_mtime() {
+        let root = std::env::temp_dir().join(format!("cs_watch_stability_{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("IMG_0001.JPG");
+        std::fs::write(&path, b"partial").unwrap();
+        let mut first = observe_file(&path).unwrap();
+        assert!(
+            stable_candidate(&path, None, Duration::ZERO).is_none(),
+            "first event only starts observation"
+        );
+        assert!(
+            stable_candidate(&path, Some(&first), Duration::from_secs(1)).is_none(),
+            "matching metadata is insufficient before settling"
+        );
+        first.observed_at -= Duration::from_secs(2);
+        assert!(
+            stable_candidate(&path, Some(&first), Duration::from_secs(1)).is_some(),
+            "same size and mtime after settling is ready"
+        );
+        let id = stable_candidate(&path, Some(&first), Duration::from_secs(1)).unwrap().1;
+
+        std::fs::write(&path, b"finished camera write").unwrap();
+        let second = observe_file(&path).unwrap();
+        assert!(
+            !observation_is_stable(&first, &second, Duration::from_secs(1)),
+            "growth resets settling"
+        );
+        assert!(stable_candidate(&path, Some(&first), Duration::from_secs(1)).is_none());
+
+        let directory = root.join("directory");
+        std::fs::create_dir_all(&directory).unwrap();
+        assert!(stable_candidate(&directory, Some(&first), Duration::ZERO).is_none());
+
+        let other = root.join("other");
+        std::fs::create_dir_all(&other).unwrap();
+        let same_name = other.join("IMG_0001.JPG");
+        std::fs::write(&same_name, b"finished camera write").unwrap();
+        let other_observation = observe_file(&same_name).unwrap();
+        assert_ne!(
+            id,
+            source_identity(&same_name, &other_observation),
+            "same camera filename in another folder has another identity"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
 
     #[test]
     fn folder_and_filename_templates_expand() {
