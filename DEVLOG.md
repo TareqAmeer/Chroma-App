@@ -1,4 +1,9 @@
 
+### 2026-10-06 — CHR-176 watched-folder stability foundation
+- Added an ingest-owned helper that promotes a media candidate only after size and mtime match across observations separated by a caller-selected settling interval, plus a canonical-path/size/mtime identity to distinguish reused camera filenames. It introduces no second queue and does not yet run a watcher.
+- Verification: `git diff --check` passed. The focused Rust test was attempted twice, including a serial retry, but both builds stopped in dependency `onig_sys` when Windows `lib.exe` failed with LNK1114 (code 5); the generated worktree `target/` was removed afterward. No native watcher lifecycle test has been possible in this foundation slice. The full CHR-176 path remains staged behind CHR-200 durable job/checkpoint integration. Files: `desktop/src-tauri/src/ingest.rs`, `DEVLOG.md`.
+- Researched [Tauri's filesystem watch docs](https://v2.tauri.app/plugin/file-system/) and [Rust `notify` docs](https://docs.rs/notify/latest/notify/): watch events require reconciliation against current filesystem state, and event coverage can vary by platform/filesystem. Event backpressure, durable completed-file identity, and camera timing remain for the integrated watcher slice. CHR-176 remains In Progress.
+
 
 ### 2026-10-06 — CHR-206 guided relinking safety/design slice
 - Traced volume marker identity, last-seen mount paths, root/photo-relative paths, walk snapshots, ID-keyed edit queues/faces, and separate user path stores in albums, collection registries, export history, and adjacent XMP sidecars.
