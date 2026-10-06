@@ -1895,6 +1895,17 @@ body.light #lib-overlay,body.light #lib-main{background:var(--bg)}
 .cl-controls{display:flex;flex-direction:column;gap:var(--sp-2)}
 .cl-controls .fx-ctrl{margin-bottom:0}
 .cl-stage{position:relative;background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);height:calc(100vh - 170px);min-height:380px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:var(--sp-4);position:sticky;top:16px}
+.cl-book-review{position:absolute;inset:10px;z-index:4;display:none;flex-direction:column;gap:10px;background:var(--sur);min-height:0}
+.cl-book-review.on{display:flex}
+.cl-book-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 2px}
+.cl-book-head strong{font-size:var(--fs-2);margin-right:auto}
+.cl-book-pages{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px;align-content:start;overflow:auto;min-height:0;padding:2px}
+.cl-book-page{min-width:0;border:1px solid var(--bdr);border-radius:var(--r-sm);background:var(--sur2);padding:6px;display:flex;flex-direction:column;gap:5px}
+.cl-book-page img{display:block;width:100%;height:auto;aspect-ratio:var(--book-ar,4/5);object-fit:contain;background:#fff}
+.cl-book-page-label{display:flex;align-items:center;justify-content:space-between;color:var(--mut);font-size:var(--fs-1)}
+.cl-book-page-label button{padding:2px 6px;min-height:24px}
+body.mobile-cl .cl-book-review{inset:6px}
+body.mobile-cl .cl-book-pages{grid-template-columns:repeat(2,minmax(0,1fr))}
 .cl-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:var(--fs-2);pointer-events:none}
 #cl-frame{position:relative;box-shadow:none;display:none}
 .cl-cell{position:absolute;overflow:hidden;cursor:pointer;background:transparent}
@@ -5201,11 +5212,19 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="btn-row" style="margin-top:6px">
           <button class="btn bgh" onclick="clReset()">Start over</button>
         </div>
+        <div class="fx-hint" style="margin-top:10px">Book uses the assigned photos and current page style to create a multi-page print preview.</div>
+        <div class="fx-row"><div class="fx-label">Photos per page</div><select class="fx-select" id="cl-book-size"><option value="1">1 photo</option><option value="2">2 photos</option><option value="4" selected>4 photos</option></select></div>
+        <div class="btn-row"><button class="btn bsec" id="cl-book-build" onclick="clBookBuild()">Build book pages</button></div>
       </div>
     </div>
     <div class="cl-stage" id="cl-stage">
       <div class="cl-empty" id="cl-empty">Add photos to begin your collage</div>
       <div id="cl-frame"></div>
+      <section class="cl-book-review" id="cl-book-review" aria-label="Book page preview">
+        <div class="cl-book-head"><strong id="cl-book-count">Book preview</strong><button class="btn bgh" type="button" onclick="clBookClose()">Back to collage</button><button class="btn bpri" type="button" onclick="clBookPrint()">Print / Save PDF</button></div>
+        <div class="fx-hint">Move pages with the arrows. Print creates one page per spread at the selected Collage aspect ratio.</div>
+        <div class="cl-book-pages" id="cl-book-pages"></div>
+      </section>
     </div>
   </div>
 </div>
@@ -7126,7 +7145,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006Y';
+const BUILD='1.1006Z';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -28082,6 +28101,144 @@ function clExport(){
     await saveFiles(items);
     log(`Collage exported (${panels>1?panels+' panels of '+pw+'×'+H:W+'×'+H})`,'ok');
   })();
+}
+// CHR-237 bounded Book slice. It follows the static-browser approach in Spacerat/photobook:
+// keep photo order, paginate contiguous groups, and print one exact-ratio sheet per page
+// (https://github.com/Spacerat/photobook). The existing Collage tree, text geometry, frame,
+// caption and crop math are reused; book pages live only for this session until catalog linking
+// and reopen support are implemented.
+let CL_BOOK=null;
+function clBookPaginate(assign,pageSize){
+  const photos=(assign||[]).map((photoIndex,slot)=>({photoIndex,slot})).filter(x=>Number.isInteger(x.photoIndex)&&x.photoIndex>=0);
+  const size=Math.max(1,Math.min(4,Math.floor(+pageSize||4))),pages=[];
+  for(let i=0;i<photos.length;i+=size)pages.push(photos.slice(i,i+size));
+  return pages;
+}
+function clBookTree(count){
+  const templates=clTemplates(count); // first two are Collage's all-in-row/all-in-column primitives
+  const index=count<=2?0:2; // the first balanced split for 3–4 photos; 1 photo is a full page
+  return clClone(templates[index]||templates[0]);
+}
+function clBookReleasePreviews(book){
+  (book?.pages||[]).forEach(p=>{if(p.previewUrl)URL.revokeObjectURL(p.previewUrl);p.previewUrl=null;});
+}
+function clBookCapture(){
+  const assigned=CL.assign.slice(),pageSize=+(document.getElementById('cl-book-size')||{}).value||4;
+  const pages=clBookPaginate(assigned,pageSize).map(group=>({photos:group,tree:clBookTree(group.length),previewUrl:null}));
+  return{photos:CL.photos.slice(),pages,pageSize,aspect:CL.aspect,bg:CL.bg,inner:CL.inner,outer:CL.outer,radius:CL.radius,
+    frame:CL.frame,title:CL.title,titlePos:CL.titlePos,titleSize:CL.titleSize,capSize:CL.capSize,capAuto:CL.capAuto,
+    cells:CL.cells.map(c=>({...c}))};
+}
+function clBookCanvas(book,page,pageNo,longSide){
+  const old={photos:CL.photos,assign:CL.assign,cells:CL.cells,tree:CL.tree,aspect:CL.aspect,bg:CL.bg,inner:CL.inner,outer:CL.outer,
+    radius:CL.radius,frame:CL.frame,title:CL.title,titlePos:CL.titlePos,titleSize:CL.titleSize,capSize:CL.capSize,capAuto:CL.capAuto};
+  try{
+    CL.photos=book.photos;CL.assign=page.photos.map(x=>x.photoIndex);CL.cells=page.photos.map(x=>book.cells[x.slot]||{scale:1,ox:0,oy:0});CL.tree=page.tree;
+    Object.assign(CL,{aspect:book.aspect,bg:book.bg,inner:book.inner,outer:book.outer,radius:book.radius,frame:book.frame,
+      title:book.title,titlePos:book.titlePos,titleSize:book.titleSize,capSize:book.capSize,capAuto:book.capAuto});
+    const ar=book.aspect[1]/book.aspect[2],W=ar>=1?longSide:Math.round(longSide*ar),H=ar>=1?Math.round(longSide/ar):longSide;
+    const cv=document.createElement('canvas');cv.width=W;cv.height=H;const ctx=cv.getContext('2d');if(!ctx)throw new Error('Canvas is unavailable');
+    ctx.fillStyle=CL.bg;ctx.fillRect(0,0,W,H);
+    const base=Math.min(W,H),gap=CL.inner/1000*base,rad=CL.radius/1000*base,tg=clTextGeom(W,H);
+    const rects=clLayoutRects(page.tree,tg.lx,tg.ly,tg.lw,tg.lh,gap,null),fam=getComputedStyle(document.body).fontFamily||'sans-serif';
+    if(tg.band){ctx.save();ctx.fillStyle=clTextColor();ctx.font=`600 ${tg.tPx}px ${fam}`;ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(CL.title,W/2,tg.ty+tg.band/2,W-2*tg.outer);ctx.restore();}
+    rects.forEach((r,i)=>{
+      const photoIndex=CL.assign[i],photo=CL.photos[photoIndex];if(!photo||!photo.img)return;
+      const img=photo.img,c=CL.cells[i]||{scale:1,ox:0,oy:0},iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
+      if(!iw||!ih)return;
+      const fi=clFrameInset(r.w,r.h),R=r;let matCap=null;
+      if(fi){ctx.save();ctx.shadowColor='rgba(0,0,0,.28)';ctx.shadowBlur=base*.012;ctx.shadowOffsetY=base*.003;ctx.fillStyle=fi.col;
+        clRoundRect(ctx,R.x,R.y,R.w,R.h,rad);ctx.fill();ctx.restore();
+        if(CL.frame==='print')matCap={x:R.x+fi.l,y:R.y+R.h-fi.b,h:fi.b,w:R.w-fi.l-fi.r};
+        r={x:R.x+fi.l,y:R.y+fi.t,w:R.w-fi.l-fi.r,h:R.h-fi.t-fi.b};}
+      ctx.save();if(fi){ctx.beginPath();ctx.rect(r.x,r.y,r.w,r.h);}else clRoundRect(ctx,r.x,r.y,r.w,r.h,rad);ctx.clip();
+      const cover=Math.max(r.w/iw,r.h/ih)*c.scale,dw=iw*cover,dh=ih*cover,mx=Math.max(0,(dw-r.w)/(2*r.w)),my=Math.max(0,(dh-r.h)/(2*r.h));
+      const ox=Math.min(mx,Math.max(-mx,c.ox)),oy=Math.min(my,Math.max(-my,c.oy));
+      ctx.drawImage(img,r.x+(r.w-dw)/2+ox*r.w,r.y+(r.h-dh)/2+oy*r.h,dw,dh);
+      const cap=clCaption(i);
+      if(cap&&matCap){ctx.restore();ctx.save();ctx.fillStyle='#222';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='middle';ctx.textAlign='left';
+        ctx.fillText(cap,matCap.x+tg.capPx*.6,matCap.y+matCap.h/2,matCap.w-tg.capPx*1.2);}
+      else if(cap){const ch=tg.capPx*2.4,g=ctx.createLinearGradient(0,r.y+r.h-ch,0,r.y+r.h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.55)');
+        ctx.fillStyle=g;ctx.fillRect(r.x,r.y+r.h-ch,r.w,ch);ctx.fillStyle='#fff';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='alphabetic';ctx.textAlign='left';
+        ctx.fillText(cap,r.x+tg.capPx*.6,r.y+r.h-tg.capPx*.55,r.w-tg.capPx*1.2);}
+      ctx.restore();
+    });
+    const fs=Math.max(12,base*.018),pad=fs*.45,label=`Page ${pageNo} of ${book.pages.length}`;
+    ctx.save();ctx.font=`500 ${fs}px ${fam}`;ctx.textAlign='right';ctx.textBaseline='bottom';
+    const tw=ctx.measureText(label).width;ctx.fillStyle='rgba(0,0,0,.58)';ctx.fillRect(W-tw-pad*2,H-fs-pad*1.8,tw+pad*2,fs+pad*1.3);
+    ctx.fillStyle='#fff';ctx.fillText(label,W-pad,H-pad*.3);ctx.restore();
+    return cv;
+  }finally{Object.assign(CL,old);}
+}
+function clBookPaginateHtmlEscape(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function clBookCanvasBlob(cv){return new Promise((resolve,reject)=>cv.toBlob(b=>b?resolve(b):reject(new Error('A book page could not be encoded')),'image/jpeg',.94));}
+async function clBookBuild(){
+  if(!CL.photos.length||!CL.assign.some(x=>Number.isInteger(x)&&x>=0)){toast('Assign at least one photo before building a book');return;}
+  const b=document.getElementById('cl-book-build');if(b)b.disabled=true;
+  try{
+    const book=clBookCapture();if(!book.pages.length){toast('No assigned photos to paginate');return;}
+    clBookReleasePreviews(CL_BOOK);CL_BOOK=book;
+    const host=document.getElementById('cl-book-pages'),review=document.getElementById('cl-book-review'),frame=document.getElementById('cl-frame');
+    if(!host||!review||!frame)return;host.innerHTML='';
+    const ar=book.aspect[1]/book.aspect[2];host.style.setProperty('--book-ar',`${book.aspect[1]}/${book.aspect[2]}`);
+    const label=document.getElementById('cl-book-count');if(label)label.textContent=`Book preview · ${book.pages.length} page${book.pages.length===1?'':'s'} · ${book.pages.reduce((n,p)=>n+p.photos.length,0)} photos`;
+    review.classList.add('on');frame.style.display='none';
+    for(let i=0;i<book.pages.length;i++){
+      const page=book.pages[i],cv=clBookCanvas(book,page,i+1,420);
+      page.previewUrl=URL.createObjectURL(await clBookCanvasBlob(cv));cv.width=cv.height=0;
+      const card=document.createElement('article');card.className='cl-book-page';card.dataset.page=String(i);card.dataset.photoIndices=page.photos.map(x=>x.photoIndex).join(',');
+      const im=document.createElement('img');im.src=page.previewUrl;im.alt=`Book page ${i+1}`;im.style.aspectRatio=`${ar}`;card.appendChild(im);
+      const caption=document.createElement('div');caption.className='cl-book-page-label';caption.innerHTML=`<span>Page ${i+1} · ${page.photos.length} photo${page.photos.length===1?'':'s'}</span>`;
+      const controls=document.createElement('span');
+      const up=document.createElement('button');up.className='btn bgh';up.type='button';up.innerHTML=icon('chevron',12);up.firstElementChild.style.transform='rotate(180deg)';up.setAttribute('aria-label',`Move page ${i+1} earlier`);up.disabled=i===0;up.onclick=()=>clBookMove(i,-1);
+      const down=document.createElement('button');down.className='btn bgh';down.type='button';down.innerHTML=icon('chevron',12);down.setAttribute('aria-label',`Move page ${i+1} later`);down.disabled=i===book.pages.length-1;down.onclick=()=>clBookMove(i,1);
+      controls.append(up,down);caption.appendChild(controls);card.appendChild(caption);host.appendChild(card);
+    }
+    toast('Book pages ready to preview or print',true);
+  }catch(e){toast(`Could not build book: ${String(e?.message||e)}`,false);}
+  finally{if(b)b.disabled=false;}
+}
+async function clBookMove(index,delta){
+  if(!CL_BOOK)return;const next=index+delta;if(next<0||next>=CL_BOOK.pages.length)return;
+  [CL_BOOK.pages[index],CL_BOOK.pages[next]]=[CL_BOOK.pages[next],CL_BOOK.pages[index]];
+  // Re-render only the small preview to keep page numbering in sync with the final print output.
+  await clBookBuildFromState();
+}
+async function clBookBuildFromState(){
+  if(!CL_BOOK)return;const book=CL_BOOK,host=document.getElementById('cl-book-pages');if(!host)return;
+  clBookReleasePreviews(book);host.innerHTML='';const ar=book.aspect[1]/book.aspect[2];
+  for(let i=0;i<book.pages.length;i++){
+    const page=book.pages[i],cv=clBookCanvas(book,page,i+1,420);page.previewUrl=URL.createObjectURL(await clBookCanvasBlob(cv));cv.width=cv.height=0;
+    const card=document.createElement('article');card.className='cl-book-page';card.dataset.page=String(i);card.dataset.photoIndices=page.photos.map(x=>x.photoIndex).join(',');
+    const im=document.createElement('img');im.src=page.previewUrl;im.alt=`Book page ${i+1}`;im.style.aspectRatio=`${ar}`;card.appendChild(im);
+    const caption=document.createElement('div');caption.className='cl-book-page-label';caption.innerHTML=`<span>Page ${i+1} · ${page.photos.length} photo${page.photos.length===1?'':'s'}</span>`;
+    const controls=document.createElement('span');
+    const up=document.createElement('button');up.className='btn bgh';up.type='button';up.innerHTML=icon('chevron',12);up.firstElementChild.style.transform='rotate(180deg)';up.setAttribute('aria-label',`Move page ${i+1} earlier`);up.disabled=i===0;up.onclick=()=>clBookMove(i,-1);
+    const down=document.createElement('button');down.className='btn bgh';down.type='button';down.innerHTML=icon('chevron',12);down.setAttribute('aria-label',`Move page ${i+1} later`);down.disabled=i===book.pages.length-1;down.onclick=()=>clBookMove(i,1);
+    controls.append(up,down);caption.appendChild(controls);card.appendChild(caption);host.appendChild(card);
+  }
+}
+function clBookClose(){const review=document.getElementById('cl-book-review');if(review)review.classList.remove('on');clBookReleasePreviews(CL_BOOK);CL_BOOK=null;clRenderFrame();}
+async function clBookPrint(){
+  const book=CL_BOOK;if(!book||!book.pages.length){toast('Build book pages first');return;}
+  const win=window.open('about:blank','_blank');if(!win){toast('Allow pop-ups to open the print-ready book',false);return;}
+  win.document.open();win.document.write('<!doctype html><title>Preparing photo book</title><p style="font:16px sans-serif">Preparing print pages…</p>');win.document.close();
+  const urls=[];try{
+    const blobs=[];for(let i=0;i<book.pages.length;i++){const cv=clBookCanvas(book,book.pages[i],i+1,Math.min(2400,Math.max(1200,+((document.getElementById('cl-res')||{}).value||2400))));blobs.push(await clBookCanvasBlob(cv));cv.width=cv.height=0;}
+    blobs.forEach(b=>urls.push(URL.createObjectURL(b)));
+    const ar=book.aspect[1]/book.aspect[2],wide=ar>=1?8:8*ar,tall=ar>=1?8/ar:8;
+    const pages=urls.map((u,i)=>`<section class="page"><img src="${u}" alt="Page ${i+1}"></section>`).join('');
+    win.document.open();win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${clBookPaginateHtmlEscape(book.title||'Photo book')}</title><style>
+      @page{size:${wide.toFixed(3)}in ${tall.toFixed(3)}in;margin:0}
+      *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff}.page{width:${wide.toFixed(3)}in;height:${tall.toFixed(3)}in;overflow:hidden;break-after:page;page-break-after:always}.page:last-child{break-after:auto;page-break-after:auto}
+      .page img{display:block;width:100%;height:100%;object-fit:contain}
+      @media screen{body{background:#ddd;padding:24px}.page{margin:0 auto 20px;box-shadow:0 2px 12px #0004}.printbar{position:sticky;top:8px;z-index:1;width:max-content;margin:0 auto 20px;padding:10px;background:#fff;border:1px solid #aaa;border-radius:8px;font:14px sans-serif}.printbar button{padding:8px 14px}}
+      @media print{.printbar{display:none}}
+      </style></head><body><div class="printbar"><button onclick="window.print()">Print / Save PDF</button> ${book.pages.length} page${book.pages.length===1?'':'s'} · ${wide.toFixed(2)} × ${tall.toFixed(2)} in</div>${pages}</body></html>`);win.document.close();
+    win.addEventListener('beforeunload',()=>urls.forEach(u=>URL.revokeObjectURL(u)),{once:true});
+    const head=win.document.querySelector('.printbar');if(head)head.setAttribute('data-page-count',String(book.pages.length));
+  }catch(e){urls.forEach(u=>URL.revokeObjectURL(u));win.close();toast(`Could not prepare the print book: ${String(e?.message||e)}`,false);}
 }
 // ══ ?catalog=1 — component catalogue (docs/ui-workflow/STATE.md S1(d)) ══════════════════════
 // No refactor: reuses the real app's own <style> tag (already loaded) and clones REAL section
