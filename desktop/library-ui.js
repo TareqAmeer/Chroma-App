@@ -3466,7 +3466,7 @@
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
     window.__libOpenFolder = (path) => openFolder(path);
     window.__libEnterSurvey = enterSurveyMode;
-    window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && compareState.mode === 'survey' });
+    window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && (compareState.mode === 'survey' || compareState.mode === 'cull'), mode: compareState.mode, offset: surveyState.cullOffset, cullPaths: surveyState.cullPaths.slice() });
     window.__libOpenImportPanel = (path) => openImportPanel(path);
     window.__libSubfolderPreference = {
       key: folderScopeKey,
@@ -8122,6 +8122,7 @@
     const B = (act, lb, t) => `<button class="lib-btn" style="white-space:nowrap;flex:none" data-act="${act}"${t ? ` title="${t}"` : ''}>${lb}</button>`;
     bar.innerHTML = `<span class="sk2-bb-n" style="white-space:nowrap;flex:none">${n}<small> selected</small></span>`
       + B('pick', 'Pick') + B('reject', 'Reject') + B('fav', 'Favorite')
+      + (n > 1 ? B('cull', 'Cull selection', 'Review every selected photo in focused batches of four') : '')
       + `<button class="lib-btn sk2-bb-more-btn" style="white-space:nowrap;flex:none" aria-expanded="false">More</button>`
       + `<span class="sk2-bb-more" hidden>`
       + B('cache-raw', 'Cache selected RAWs', 'Build exact full-quality studio caches for the selected RAW photos')
@@ -8133,6 +8134,7 @@
     bar.querySelector('[data-act="pick"]').onclick = () => paths().forEach((p) => setLabel(p, 'Green'));
     bar.querySelector('[data-act="clear-label"]').onclick = () => paths().forEach((p) => setLabel(p, ''));
     bar.querySelector('[data-act="fav"]').onclick = () => paths().forEach((p) => setFavorite(p, true));
+    bar.querySelector('[data-act="cull"]')?.addEventListener('click', enterCullMode);
     bar.querySelector('[data-act="deselect"]').onclick = () => { state.selected.clear(); renderGrid(); };
   }
 
@@ -8248,7 +8250,7 @@
     zoom: 1, panX: 0, panY: 0,
     prevViewMode: 'grid',
   };
-  const surveyState = { cells: [], focus: 0, entryToken: 0 };
+  const surveyState = { cells: [], focus: 0, entryToken: 0, cullPaths: [], cullOffset: 0 };
   function compareSrcKeyToDescriptor(key) {
     if (!key || key === 'live') return null;
     if (key === 'orig') return 'orig';
@@ -8303,7 +8305,9 @@
     const bar = host.querySelector('#lib-compare-bar');
     if (bar) {
       const info = bar.querySelector('.survey-focus-note');
-      if (info) info.textContent = surveyState.cells.length ? `Photo ${surveyState.focus + 1} focused · arrows/Tab move · Delete removes · X/P/U flag · 0–5 rate` : '';
+      if (info) info.textContent = surveyState.cells.length ? (compareState.mode === 'cull'
+        ? `Culling · ${surveyState.cullOffset + surveyState.focus + 1} of ${surveyState.cullPaths.length} · arrows/Tab move · Enter pick and advance · Shift+P/X flag and advance · Esc exits`
+        : `Photo ${surveyState.focus + 1} focused · arrows/Tab move · Delete removes · X/P/U flag · 0–5 rate`) : '';
     }
   }
 
@@ -8347,7 +8351,10 @@
     host.style.setProperty('--survey-cols', String(surveyColumns(n)));
     host.style.setProperty('--survey-rows', String(Math.ceil(n / surveyColumns(n))));
     const capNote = compareState.totalSelected > n ? ` · showing first ${n} of ${compareState.totalSelected} selected` : '';
-    host.innerHTML = `<div id="lib-compare-bar"><span class="survey-count">Survey · ${n} photos${capNote}</span><span class="survey-focus-note" style="margin-left:auto;color:var(--acc)"></span></div>
+    const heading = compareState.mode === 'cull'
+      ? `Culling · ${surveyState.cullOffset + 1}–${surveyState.cullOffset + n} of ${surveyState.cullPaths.length}`
+      : `Survey · ${n} photos${capNote}`;
+    host.innerHTML = `<div id="lib-compare-bar"><span class="survey-count">${heading}</span><span class="survey-focus-note" style="margin-left:auto;color:var(--acc)"></span></div>
       <div id="lib-survey-grid">${surveyState.cells.map(surveyCellHtml).join('')}</div>`;
     host.querySelectorAll('.lib-survey-cell').forEach((el) => {
       el.addEventListener('focus', () => { surveyState.focus = Number(el.dataset.surveyIdx); surveySyncFocus(); });
@@ -8395,6 +8402,14 @@
 
   function surveyFocus(delta, focusDom = true) {
     if (!surveyState.cells.length) return;
+    if (compareState.mode === 'cull' && delta > 0 && surveyState.focus === surveyState.cells.length - 1) {
+      const next = surveyState.cullOffset + surveyState.cells.length;
+      if (next < surveyState.cullPaths.length) { showCullPage(next); return; }
+      return;
+    }
+    if (compareState.mode === 'cull' && delta < 0 && surveyState.focus === 0 && surveyState.cullOffset > 0) {
+      showCullPage(Math.max(0, surveyState.cullOffset - 4)); return;
+    }
     surveyState.focus = (surveyState.focus + delta + surveyState.cells.length) % surveyState.cells.length;
     surveySyncFocus();
     if (focusDom) surveyHost()?.querySelector(`.lib-survey-cell[data-survey-idx="${surveyState.focus}"]`)?.focus({ preventScroll: true });
@@ -8713,6 +8728,7 @@
     const survey = surveyHost();
     if (survey) { survey.classList.remove('on'); survey.innerHTML = ''; }
     surveyState.cells = []; surveyState.focus = 0;
+    surveyState.cullPaths = []; surveyState.cullOffset = 0;
     state.viewMode = compareState.prevViewMode || 'grid';
     localStorage.setItem('chromasmith_lib_view', state.viewMode);
     syncViewSeg();
@@ -8744,6 +8760,37 @@
     compareState.active = true;
     buildSurveyUI();
     surveyHost()?.querySelector('.lib-survey-cell')?.focus({ preventScroll: true });
+  }
+  async function enterCullMode() {
+    const paths = [...state.selected]; if (paths.length < 2) return;
+    if (state.viewMode !== 'compare' && state.viewMode !== 'survey') compareState.prevViewMode = state.viewMode;
+    compareState.mode = 'cull'; compareState.totalSelected = paths.length; compareState.paths = paths;
+    surveyState.cullPaths = paths; surveyState.cullOffset = 0; surveyState.focus = 0;
+    await showCullPage(0);
+  }
+  async function showCullPage(offset) {
+    const entryToken = ++compareState.entryToken;
+    surveyState.entryToken++;
+    surveyState.cullOffset = Math.max(0, Math.min(offset, Math.max(0, surveyState.cullPaths.length - 1)));
+    const paths = surveyState.cullPaths.slice(surveyState.cullOffset, surveyState.cullOffset + 4);
+    surveyState.cells = paths.map((path, fxIdx) => ({ path, fxIdx })); surveyState.focus = 0;
+    state.viewMode = 'survey'; syncViewSeg();
+    const compare = compareHost(); if (compare) { compare.classList.remove('on'); compare.innerHTML = ''; }
+    const host = surveyHost(); if (host) { host.classList.add('on'); host.innerHTML = '<div id="lib-empty">Loading…</div>'; }
+    try { await openPathsInEditor(paths); }
+    catch (e) { if (entryToken !== compareState.entryToken) return; console.error('cull openPathsInEditor', e); if (typeof toast === 'function') toast('Could not load photos for Culling', false); exitCompareMode(); return; }
+    if (entryToken !== compareState.entryToken || state.viewMode !== 'survey' || compareState.mode !== 'cull') return;
+    compareState.active = true; buildSurveyUI(); surveyHost()?.querySelector('.lib-survey-cell')?.focus({ preventScroll: true });
+  }
+  async function cullAdvance(label = 'Green') {
+    const path = surveyTargetPath(); if (!path) return;
+    const currentOffset = surveyState.cullOffset, currentFocus = surveyState.focus;
+    await setLabel(path, label); surveySyncPath(path);
+    if (compareState.mode !== 'cull' || state.viewMode !== 'survey') return;
+    const next = currentOffset + currentFocus + 1;
+    if (next >= surveyState.cullPaths.length) { exitCompareMode(); return; }
+    if (next >= currentOffset + surveyState.cells.length) await showCullPage(next);
+    else surveyFocus(1);
   }
   // ←/→ cycles pane B's photo through the rest of the current selection; ⏎ promotes B to A
   // (swap which photo/source is "the keeper"); handled from the shared keydown listener below.
@@ -9133,6 +9180,9 @@
       if (e.key === 'ArrowUp') { e.preventDefault(); surveyFocusVertical(-1); return; }
       if (e.key === 'Tab') { e.preventDefault(); surveyFocus(e.shiftKey ? -1 : 1); return; }
       if (e.key === 'Escape') { e.preventDefault(); exitCompareMode(); return; }
+      if (compareState.mode === 'cull' && e.key === 'Enter') { e.preventDefault(); cullAdvance('Green'); return; }
+      if (compareState.mode === 'cull' && e.shiftKey && (e.key === 'P' || e.key === 'p')) { e.preventDefault(); cullAdvance('Green'); return; }
+      if (compareState.mode === 'cull' && e.shiftKey && (e.key === 'X' || e.key === 'x')) { e.preventDefault(); cullAdvance('Red'); return; }
       if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); surveyRemove(); return; }
       const cell = surveyState.cells[surveyState.focus];
       if (!cell) return;
