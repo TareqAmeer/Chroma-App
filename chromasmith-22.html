@@ -2913,6 +2913,8 @@ body.sk2 #lib-overlay #lib-search::placeholder{color:var(--k-color-muted)!import
 /* Tiles: hover shows only the three flag icons in one quiet strip — no box round the card.
    One caption line under the print: file name left, RAW / +n / video length right. */
 body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-card:hover::after{opacity:0!important}
+/* CHR-160: photo hover is a true OFFSET outline — a real outline standing off the print by a spacing token, not an in-place ring. */
+body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-card:hover:not(.sel):not(.multi) .lib-thumb-wrap{outline:var(--bw-2) solid var(--k-color-ink);outline-offset:var(--sp-1)}
 body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flags{gap:0!important;background:var(--k-color-bg)}
 body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag:not(.on){width:24px;height:24px;background:transparent!important;color:var(--k-color-ink)}
 body.sk2 #lib-overlay #lib-grid:not(.list-view) .lib-flag:not(.on):hover{background:var(--k-color-ink)!important;color:var(--k-color-bg)}
