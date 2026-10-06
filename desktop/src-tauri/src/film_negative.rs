@@ -11,15 +11,16 @@
 //! a sampled reference point; the algorithm does **not** subtract a per-pixel film-base offset.
 //! For channel C, with positive exponent magnitude pC, the operation is
 //!
-//! `outC = refOutC * (max(inC, floor) / max(refInC, floor)) ^ -pC`
+//! `outC = refOutC * (inC / max(refInC, floor)) ^ -pC` for `inC > 0`
 //!
 //! where `pG = green_exponent`, `pR = green_exponent * red_ratio`, and
 //! `pB = green_exponent * blue_ratio`. This ratio form is algebraically equivalent to
 //! RawTherapee's `multiplier * pow(input, negative_exponent)` calculation, but avoids creating
 //! very large intermediate multipliers. The default floor of 1.0 follows RawTherapee's
 //! reference-input floor in its native signal scale; callers using another scale must choose a
-//! corresponding floor. A zero pixel sample reaches the singular limit of a negative power and
-//! is clipped to `max_output`, as it would be in a finite-range pipeline.
+//! corresponding floor. Positive pixel samples are never floored. A zero pixel sample reaches
+//! the singular limit of a negative power and is clipped to `max_output`, as it would be in a
+//! finite-range pipeline.
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rgb {
@@ -92,9 +93,11 @@ fn channel(
     if reference_output == 0.0 {
         return 0.0;
     }
-    let x = input.max(params.input_floor);
+    if input == 0.0 {
+        return params.max_output;
+    }
     let reference = reference_input.max(params.input_floor);
-    let ratio = x / reference;
+    let ratio = input / reference;
     let value = reference_output * (-exponent * ratio.ln()).exp();
     if !value.is_finite() || value >= params.max_output {
         params.max_output
@@ -275,6 +278,40 @@ mod tests {
             }
         );
         assert!(finite_rgb(output));
+    }
+
+    #[test]
+    fn input_floor_applies_only_to_the_reference_sample() {
+        let mut p = params();
+        p.max_output = 1_000_000.0;
+        p.reference_input = Rgb {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+        };
+        p.reference_output = Rgb {
+            r: 10.0,
+            g: 10.0,
+            b: 10.0,
+        };
+        let output = apply_pixel(
+            Rgb {
+                r: 0.5,
+                g: 0.5,
+                b: 0.5,
+            },
+            p,
+            true,
+        )
+        .unwrap();
+        assert_eq!(
+            output,
+            Rgb {
+                r: 40.0,
+                g: 40.0,
+                b: 40.0
+            }
+        );
     }
 
     #[test]
