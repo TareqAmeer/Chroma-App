@@ -4635,6 +4635,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="fx-row" id="row-preset-str" style="display:none"><div class="fx-label">Preset strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-preset-str" oninput="presetStrength(+this.value)" onchange="fxHistoryPush()"><div class="fx-val" id="vl-preset-str">100</div></div>
         <div class="btn-row" style="margin-top:0">
           <button class="btn bgh" onclick="styleSaveCurrent()" title="Choose settings for a named, reusable Style; crop and retouch are opt-in">Save as Style…</button>
+          <button class="btn bgh" onclick="styleExportBundle()" title="Export all Styles, folders and favorites as one portable JSON bundle">Export bundle…</button>
           <button class="btn bgh" onclick="styleImportClick()" title="Import a Style .json exported from CHRO-MA-SMITH">Import…</button>
           <button class="btn bgh" onclick="presetsManagerOpen('styles')" title="Rename, delete and review all Looks, Edit Styles and Export Recipes in one place">Manage…</button>
         </div>
@@ -19660,10 +19661,59 @@ function styleExport(name){
   a.download=name.replace(/[^\w.-]+/g,'_')+'.chromasmith-style.json';
   document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
 }
+// Share the editable recipe records in a versioned multi-Style package. Folder paths and
+// favorites are part of each record; LUT binaries live in a separate library and remain external.
+function _styleBundleCreate(styles,createdAt=Date.now()){
+  if(!Array.isArray(styles)||styles.length>500)throw new Error('A bundle can contain up to 500 Styles');
+  return{format:'chromasmith-style-bundle',version:1,createdAt,styles:styles.map(s=>{
+    if(!s||typeof s.name!=='string'||!s.name.trim()||s.name.length>200||!s.recipe||typeof s.recipe!=='object'||Array.isArray(s.recipe))throw new Error('A saved Style has invalid name or recipe data');
+    const metadata={...(s.metadata&&typeof s.metadata==='object'&&!Array.isArray(s.metadata)?_clone(s.metadata):{}),created:Number.isFinite(s.created)?s.created:null,favorite:!!s.favorite,sourceVersion:Number.isFinite(s.version)?s.version:null};
+    return{name:s.name,recipe:_clone(s.recipe),keys:Array.isArray(s.keys)?s.keys.slice():null,metadata};
+  })};
+}
+function _styleBundleInspect(bundle,currentStyles,supportedKeys,expandKeys,knownCategories){
+  if(!bundle||bundle.format!=='chromasmith-style-bundle'||bundle.version!==1||!Array.isArray(bundle.styles))throw new Error('Unsupported or malformed Style bundle');
+  if(bundle.styles.length>500)throw new Error('A bundle can contain up to 500 Styles');
+  const supported=new Set(supportedKeys),categories=new Set(knownCategories),used=new Set((currentStyles||[]).map(s=>s.name)),styles=[],duplicates=[],unsupported=[];
+  let lutReferences=0;
+  for(const [index,s] of bundle.styles.entries()){
+    if(!s||typeof s.name!=='string'||!s.name.trim()||s.name.length>200||!s.recipe||typeof s.recipe!=='object'||Array.isArray(s.recipe))throw new Error('Style '+(index+1)+' has invalid name or recipe data');
+    if(s.keys!==null&&s.keys!==undefined&&(!Array.isArray(s.keys)||s.keys.length>2048||s.keys.some(k=>typeof k!=='string'||k.length>200)))throw new Error('Style '+s.name+' has an invalid settings manifest');
+    const rawKeys=Array.isArray(s.keys)?s.keys:null,expanded=rawKeys?expandKeys(rawKeys):null;
+    if(rawKeys){const unknown=rawKeys.filter(k=>!supported.has(k)&&!categories.has(k));if(unknown.length)unsupported.push({name:s.name,keys:[...new Set(unknown)]});}
+    const recipeKeys=new Set(['sliders','toggles','selects','colors','curves','curveMode','curveParam','wheels','hsl','pointColors','artSeed','frameShuffle','dustMode','masks','canvas','ver','rawNr','rawNrHighStrength','nativeNr','demosaicAlgo','geom','heal','redeye','adjustIndependent']);
+    const extra=Object.keys(s.recipe).filter(k=>!recipeKeys.has(k));
+    if(extra.length)unsupported.push({name:s.name,keys:extra.map(k=>'recipe:'+k)});
+    if(s.recipe.selects&&s.recipe.selects['sel-lut'])lutReferences++;
+    let name=s.name.trim();
+    if(used.has(name)){
+      const slash=name.lastIndexOf('/'),folder=slash>=0?name.slice(0,slash+1):'',leaf=slash>=0?name.slice(slash+1):name,base=folder+leaf+' (imported)';
+      name=base;let n=2;while(used.has(name)){name=folder+leaf+' (imported '+n+')';n++;}
+      duplicates.push({from:s.name,to:name});
+    }
+    used.add(name);
+    const metadata=s.metadata&&typeof s.metadata==='object'&&!Array.isArray(s.metadata)?_clone(s.metadata):{};
+    const style={version:2,name,recipe:_clone(s.recipe),created:Number.isFinite(metadata.created)?metadata.created:(Number.isFinite(bundle.createdAt)?bundle.createdAt:Date.now()),favorite:metadata.favorite===true};
+    if(expanded)style.keys=expanded;
+    if(Number.isFinite(metadata.sourceVersion))style.version=metadata.sourceVersion;
+    const customMetadata={...metadata};delete customMetadata.created;delete customMetadata.favorite;delete customMetadata.sourceVersion;
+    if(Object.keys(customMetadata).length)style.metadata=customMetadata;
+    styles.push(style);
+  }
+  return{styles,duplicates,unsupported,lutReferences};
+}
+function styleExportBundle(){
+  try{
+    const styles=stylesList();if(!styles.length){toast('Save a Style before exporting a bundle',false);return;}
+    const blob=new Blob([JSON.stringify(_styleBundleCreate(styles),null,2)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='chromasmith-styles.chromasmith-bundle.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
+  }catch(e){log('Style bundle export failed: '+e.message,'err');toast('Could not export Style bundle',false);}
+}
 function styleImportClick(){const inp=document.getElementById('style-import-input');if(inp)inp.click();}
 async function styleImportFile(file){
   if(!file)return;
   try{
+    if(file.size>8*1024*1024)throw new Error('Style file exceeds the 8 MiB import limit');
     const ext=file.name.split('.').pop().toLowerCase();
     if(ext==='lrtemplate'){
       toast('Legacy .lrtemplate preview is not supported yet. The file was not evaluated or imported.',false);
@@ -19685,6 +19735,19 @@ async function styleImportFile(file){
       stylesSave(list);styleListRefresh();toast(`Style "${name}" imported`,true);return;
     }
     const s=JSON.parse(await file.text());
+    if(s?.format==='chromasmith-style-bundle'){
+      const list=stylesList();
+      const plan=_styleBundleInspect(s,list,_pasteAllFieldKeys(),_pasteExpandKeys,PASTE_CATEGORIES.map(c=>c.key));
+      if(!plan.styles.length){toast('This Style bundle is empty',false);return;}
+      const lines=[`Styles to import: ${plan.styles.length}`,`Name conflicts copied with a new name: ${plan.duplicates.length}`,`Unsupported settings reported: ${plan.unsupported.reduce((n,x)=>n+x.keys.length,0)}`,`Custom LUT references (assets are not embedded): ${plan.lutReferences}`];
+      for(const d of plan.duplicates.slice(0,8))lines.push(`• ${d.from} → ${d.to}`);
+      if(plan.duplicates.length>8)lines.push(`• …and ${plan.duplicates.length-8} more renamed copies`);
+      for(const item of plan.unsupported.slice(0,8))lines.push(`• ${item.name}: ${item.keys.join(', ')}`);
+      if(plan.unsupported.length>8)lines.push(`• …and ${plan.unsupported.length-8} more Styles with unsupported settings`);
+      lines.push('','Existing Styles will not be overwritten. Import these copies?');
+      if(!await confirmModal(lines.join('\n'),'Preview Style bundle'))return;
+      stylesSave([...list,...plan.styles]);styleListRefresh();toast(`${plan.styles.length} Styles imported`,true);return;
+    }
     if(!s||typeof s.recipe!=='object'||!s.recipe)throw new Error('not a Style file');
     let name=(s.name||file.name.replace(/\.json$/i,'')).trim()||'Imported style';
     const list=stylesList();
