@@ -20,3 +20,9 @@
 - Coalesced boot-prefetch and mounted-card thumbnail requests by path/mtime. If boot stops waiting on a slow native IPC, it stops dispatching additional background work while the visible card can reuse the original in-flight decode.
 - Added a delayed-request browser regression proving the thumbnail eventually paints from one native request. Files: `desktop/library-ui.js`, `test/library_perf.mjs` (CHR-267).
 - Verification: desktop build and syntax/whitespace checks pass; hung-request and handoff browser scenarios pass. Existing Library performance suite still fails three DOM-node budget cases (8,176 > 8,000 and 6,093 > 6,000 twice); remaining cull UI, reject/grouping, warm-RAW latency targets, and 50k performance criteria remain in progress.
+
+## 2026-10-06 — CHR-277 granular copy, styles, and preview
+
+- Added remembered per-control and group selections for selective paste, style save, and apply; v2 manifests remain compatible with older category-based styles, and RAW decode fields re-open the current RAW when an applied recipe changes decode-time settings.
+- Added searchable styles, Favorites and Recent filters, favorites and folder grouping, hover/focus preview with Escape restore and no history/recipe mutation, plus field-aware 0–100 strength blending. Crop and retouch remain opt-in when saving.
+- Files: `chromasmith-22.html`, `test/editor_snap_lists_check.mjs`, `test/editor_wireframe_behaviour.mjs`, `test/selective_styles.mjs`. Verification: selective fields/legacy manifests/strength unit test; editor snapshot and HTML gates; Chromium style picker and batch paste tests pass. Library performance audit retains the existing DOM-node budget failures (8,176/8,000 at 200 photos and 6,093/6,000 at 1,000/5,000); export throughput and relaunch scope checks pass.

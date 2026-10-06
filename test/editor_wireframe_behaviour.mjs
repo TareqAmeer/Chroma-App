@@ -766,17 +766,61 @@ test.describe('point color panel — dynamic #pc-list (T29)', () => {
 
 test.describe('export panel — dynamic #style-list (T29)', () => {
   test('Save as Style… adds an entry, deleting it removes it', async ({ editor: { page } }) => {
-    await page.click('#fx-toolrail [data-sec="export"]');
     const before = await page.locator('#style-list .btn-row').count();
 
-    await page.click('button:has-text("Save as Style…")');
+    await page.evaluate(() => { window.__saveStylePromise=styleSaveCurrent(); });
+    await page.click('#paste-confirm');
     await page.fill('#fx-ask-input', 'T29 smoke test style');
     await page.click('#fx-ask-ok');
+    await page.evaluate(async () => await window.__saveStylePromise);
     await expect(page.locator('#style-list .btn-row')).toHaveCount(before + 1);
 
-    await page.click('#style-list button[onclick*="styleDelete"]');
+    await page.evaluate(() => { window.__deleteStylePromise=styleDelete('T29 smoke test style'); });
     await page.click('#fx-confirm-ok');
+    await page.evaluate(async () => await window.__deleteStylePromise);
     await expect(page.locator('#style-list .btn-row')).toHaveCount(before);
+  });
+
+  test('search, favorites, hover preview restore, and picker close cancellation', async ({ editor: { page } }) => {
+    await page.evaluate(() => {
+      localStorage.setItem('chromasmith-styles-v1', JSON.stringify([
+        { version: 2, name: 'Portraits/Warm', favorite: false, keys: ['slider:adj-exp'], recipe: { sliders: { 'adj-exp': '0' } } },
+        { version: 2, name: 'Studio/Cool', favorite: false, keys: ['slider:adj-exp'], recipe: { sliders: { 'adj-exp': '20' } } },
+      ]));
+      styleListRefresh();
+    });
+    await expect(page.locator('#style-list .btn-row')).toHaveCount(2);
+    await page.evaluate(() => { const q=document.querySelector('#style-list input[type="search"]');q.value='warm';q.dispatchEvent(new Event('input',{bubbles:true})); });
+    await expect(page.locator('#style-list .btn-row')).toHaveCount(1);
+    await expect(page.locator('#style-list .btn-row').first()).toContainText('Warm');
+    await page.evaluate(() => { const q=document.querySelector('#style-list input[type="search"]');q.value='';q.dispatchEvent(new Event('input',{bubbles:true}));styleToggleFavorite('Portraits/Warm');const f=document.querySelector('#style-list select[aria-label="Filter styles"]');f.value='favorites';f.dispatchEvent(new Event('change',{bubbles:true})); });
+    await expect(page.locator('#style-list .btn-row')).toHaveCount(1);
+
+    await page.waitForTimeout(500); // let the fixture's initial photo load finish its debounced history push
+    const before = await page.evaluate(() => {
+      clearTimeout(_fxHistPushTimer);_fxHistPushTimer=null;
+      document.getElementById('sl-adj-exp').value = '55';
+      fxState.sharedAdjust = domAdjustVals();
+      const snap = getUISnapshot();
+      return { snap: JSON.stringify(snap), history: fxHistory.length, storage: localStorage.getItem('chromasmith-styles-v1') };
+    });
+    await page.evaluate(() => stylePreviewStart('Portraits/Warm'));
+    await expect.poll(() => page.evaluate(() => document.getElementById('sl-adj-exp').value)).toBe('0');
+    await page.keyboard.press('Escape');
+    await expect.poll(() => page.evaluate(() => document.getElementById('sl-adj-exp').value)).toBe('55');
+    const after = await page.evaluate(() => ({ snap: JSON.stringify(getUISnapshot()), history: fxHistory.length, storage: localStorage.getItem('chromasmith-styles-v1') }));
+    expect(after).toEqual(before);
+
+    const decodeReloads = await page.evaluate(() => {
+      const old=window.chromasmithReloadCurrentPhoto;let calls=0;window.chromasmithReloadCurrentPhoto=()=>{calls++;return false;};
+      const snap=getUISnapshot();snap.rawNr='off';applyUISnapshot(snap);snap.rawNr='fast';applyUISnapshot(snap);window.chromasmithReloadCurrentPhoto=old;return calls;
+    });
+    expect(decodeReloads).toBe(2);
+
+    await page.evaluate(() => { window.__fieldPicker = _pasteChooseFields('Cancel test', _pasteAllFieldKeys(), _pasteAllFieldKeys(), 'Apply'); });
+    await expect(page.locator('#cs-modal-ov')).toBeVisible();
+    await page.evaluate(() => document.querySelector('#cs-modal-x').click());
+    expect(await page.evaluate(async () => await window.__fieldPicker)).toBeNull();
   });
 });
 

@@ -4512,7 +4512,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="fx-ctrl-title">Presets</div>
         <div class="fx-row" id="row-preset-str" style="display:none"><div class="fx-label">Preset strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-preset-str" oninput="presetStrength(+this.value)" onchange="fxHistoryPush()"><div class="fx-val" id="vl-preset-str">100</div></div>
         <div class="btn-row" style="margin-top:0">
-          <button class="btn bgh" onclick="styleSaveCurrent()" title="Save the current recipe (everything except crop/geometry) as a named, reusable Style">Save as Style…</button>
+          <button class="btn bgh" onclick="styleSaveCurrent()" title="Choose settings for a named, reusable Style; crop and retouch are opt-in">Save as Style…</button>
           <button class="btn bgh" onclick="styleImportClick()" title="Import a Style .json exported from CHRO-MA-SMITH">Import…</button>
           <button class="btn bgh" onclick="presetsManagerOpen('styles')" title="Rename, delete and review all Looks, Edit Styles and Export Recipes in one place">Manage…</button>
         </div>
@@ -6999,7 +6999,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1005S';
+const BUILD='1.1006A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18039,7 +18039,7 @@ function getUISnapshot(opts){
 // were instead of being overwritten. Field lists mirror getFXParams'/_FX_SNAP_*'s own grouping.
 const PASTE_CATEGORIES=[
   {key:'lut',label:'Look (LUT + Print profile)',sliders:['lut-mix'],toggles:[],selects:['sel-lut','sel-print']},
-  {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','hsl','pointColors']},
+  {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','curveMode','curveParam','hsl','pointColors']},
   {key:'wheels',label:'Colour Wheels',sliders:[],toggles:['tg-wheels'],selects:[],extra:['wheels']},
   {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-hldesat'],toggles:[],selects:[]},
@@ -18050,45 +18050,88 @@ const PASTE_CATEGORIES=[
   {key:'bloom',label:'Bloom',sliders:['bloom-a','bloom-th','bloom-r'],toggles:['tg-bloom'],selects:[]},
   {key:'masks',label:'Local Adjustments (masks)',sliders:[],toggles:['tg-local'],selects:[],extra:['masks']},
   {key:'canvas',label:'Canvas / Borders / Vignette',sliders:['b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos','vig'],toggles:['tg-vig','tg-borders','tg-canvas'],selects:['sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src','sel-film-frame'],extra:['canvas','frameShuffle'],colors:['cl-b1','cl-b2']},
+  {key:'geometry',label:'Crop / Geometry',sliders:[],toggles:[],selects:[],extra:['geom']},
+  {key:'retouch',label:'Retouch / Healing',sliders:[],toggles:[],selects:[],extra:['heal']},
+  {key:'decode',label:'RAW Decode',sliders:[],toggles:[],selects:['sel-input','sel-tonemap'],extra:['rawNr','rawNrHighStrength','nativeNr','demosaicAlgo']},
 ];
+const _PASTE_SELECTION_KEY='chromasmith-paste-fields-v1';
+function _pasteFieldEntries(c){return[
+  ...c.sliders.map(id=>({key:'slider:'+id,label:_fxFieldLabel(id)})),
+  ...(c.toggles||[]).map(id=>({key:'toggle:'+id.replace(/^tg-/,''),label:_fxFieldLabel(id)})),
+  ...(c.selects||[]).map(id=>({key:'select:'+id,label:_fxFieldLabel(id)})),
+  ...(c.colors||[]).map(id=>({key:'color:'+id,label:_fxFieldLabel(id)})),
+  ...(c.extra||[]).map(id=>({key:'extra:'+id,label:({geom:'Crop / rotate / flip',heal:'Healing spots',curves:'Tone curve',curveMode:'Tone curve mode',curveParam:'Parametric curve',hsl:'Color mixer (HSL)',pointColors:'Point color selections',wheels:'Color wheels',canvas:'Canvas settings',frameShuffle:'Film frame variation',artSeed:'Film artifact seed',dustMode:'Dust color',masks:'Local masks',rawNr:'RAW noise reduction',rawNrHighStrength:'High-quality RAW NR strength',nativeNr:'Legacy RAW NR state',demosaicAlgo:'RAW demosaic algorithm'})[id]||id}))
+];}
+function _pasteAllFieldKeys(){return PASTE_CATEGORIES.flatMap(_pasteFieldEntries).map(f=>f.key);}
+function _pasteExpandKeys(keys){
+  const fields=new Set(_pasteAllFieldKeys()),expanded=[];
+  (keys||[]).forEach(k=>{const c=PASTE_CATEGORIES.find(o=>o.key===k);if(c)_pasteFieldEntries(c).forEach(f=>expanded.push(f.key));else if(fields.has(k))expanded.push(k);});
+  return [...new Set(expanded)];
+}
+function _pasteSelectionGet(allowed,fallback){
+  let saved;try{saved=JSON.parse(localStorage.getItem(_PASTE_SELECTION_KEY)||'null')}catch(e){}
+  const keys=Array.isArray(saved)?_pasteExpandKeys(saved):(fallback||_pasteAllFieldKeys());
+  return allowed?keys.filter(k=>allowed.includes(k)):keys;
+}
+function _pasteEscapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function pasteEditSelectiveApply(base,src,checkedKeys){
-  PASTE_CATEGORIES.filter(c=>checkedKeys.includes(c.key)).forEach(c=>{
-    c.sliders.forEach(id=>{if(src.sliders&&src.sliders[id]!==undefined){base.sliders=base.sliders||{};base.sliders[id]=src.sliders[id];}});
+  const chosen=new Set(checkedKeys||[]);
+  PASTE_CATEGORIES.forEach(c=>{
+    const has=(kind,id)=>chosen.has(c.key)||chosen.has(kind+':'+id);
+    c.sliders.forEach(id=>{if(has('slider',id)&&src.sliders&&src.sliders[id]!==undefined){base.sliders=base.sliders||{};base.sliders[id]=src.sliders[id];}});
     // Categories list DOM ids ("tg-grain"); snapshots key toggles without the prefix ("grain").
-    c.toggles.forEach(tid=>{const id=tid.replace(/^tg-/,'');if(src.toggles&&src.toggles[id]!==undefined){base.toggles=base.toggles||{};base.toggles[id]=src.toggles[id];}});
-    (c.selects||[]).forEach(id=>{if(src.selects&&src.selects[id]!==undefined){base.selects=base.selects||{};base.selects[id]=src.selects[id];}});
-    (c.colors||[]).forEach(id=>{if(src.colors&&src.colors[id]!==undefined){base.colors=base.colors||{};base.colors[id]=src.colors[id];}});
-    (c.extra||[]).forEach(k=>{if(src[k]!==undefined)base[k]=JSON.parse(JSON.stringify(src[k]));});
+    c.toggles.forEach(tid=>{const id=tid.replace(/^tg-/,'');if(has('toggle',id)&&src.toggles&&src.toggles[id]!==undefined){base.toggles=base.toggles||{};base.toggles[id]=src.toggles[id];}});
+    (c.selects||[]).forEach(id=>{if(has('select',id)&&src.selects&&src.selects[id]!==undefined){base.selects=base.selects||{};base.selects[id]=src.selects[id];}});
+    (c.colors||[]).forEach(id=>{if(has('color',id)&&src.colors&&src.colors[id]!==undefined){base.colors=base.colors||{};base.colors[id]=src.colors[id];}});
+    (c.extra||[]).forEach(k=>{if(has('extra',k)&&src[k]!==undefined)base[k]=JSON.parse(JSON.stringify(src[k]));});
   });
   return base;
 }
 window.chromasmithMergeSelectiveRecipe=(base,src,keys)=>pasteEditSelectiveApply(JSON.parse(JSON.stringify(base||_fxPristineDefault||{})),src,keys);
+async function _pasteChooseFields(title,initialKeys,allowedKeys,confirmLabel){
+  const allowed=new Set(allowedKeys||_pasteAllFieldKeys());
+  const initial=new Set((initialKeys||[]).filter(k=>allowed.has(k)));
+  const esc=_pasteEscapeHtml;
+  const rows=PASTE_CATEGORIES.map(c=>{
+    const fields=_pasteFieldEntries(c).filter(f=>allowed.has(f.key));if(!fields.length)return'';
+    const all=fields.every(f=>initial.has(f.key));
+    return `<details open style="padding:3px 0"><summary style="cursor:pointer;list-style:none"><label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-weight:600"><input type="checkbox" class="paste-group-cb paste-cat-cb" data-group="${c.key}" value="${c.key}"${all?' checked':''}>${esc(c.label)}</label></summary><div style="padding-left:22px">`
+      +fields.map(f=>`<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;cursor:pointer"><input type="checkbox" class="paste-field-cb" data-group="${c.key}" value="${esc(f.key)}"${initial.has(f.key)?' checked':''}>${esc(f.label)}</label>`).join('')+'</div></details>';
+  }).join('');
+  _csModal(title,`<div style="max-height:55vh;overflow:auto">${rows}</div><div class="btn-row" style="margin-top:14px;justify-content:flex-end"><button class="btn bgh" id="paste-cancel">Cancel</button><button class="btn bpri" id="paste-confirm">${esc(confirmLabel||'Continue')}</button></div>`);
+  const ov=document.getElementById('cs-modal-ov');
+  return new Promise(resolve=>{
+    let settled=false;const observer=new MutationObserver(()=>{if(!ov.isConnected)finish(null);});observer.observe(document.documentElement,{childList:true,subtree:true});
+    const finish=value=>{if(settled)return;settled=true;observer.disconnect();document.removeEventListener('keydown',onEsc,true);ov.removeEventListener('click',onBackdrop);resolve(value);};
+    const onEsc=e=>{if(e.key==='Escape'&&document.getElementById('cs-modal-ov')===ov){e.stopImmediatePropagation();ov.remove();finish(null);}};
+    const onBackdrop=e=>{if(e.target===ov)finish(null);};
+    document.addEventListener('keydown',onEsc,true);ov.addEventListener('click',onBackdrop);
+    const syncGroup=group=>{const groupBox=ov.querySelector('.paste-group-cb[data-group="'+group+'"]');const boxes=[...ov.querySelectorAll('.paste-field-cb[data-group="'+group+'"]')];if(groupBox){const count=boxes.filter(b=>b.checked).length;groupBox.checked=count===boxes.length;groupBox.indeterminate=count>0&&count<boxes.length;}};
+    ov.querySelectorAll('.paste-group-cb').forEach(box=>box.onchange=()=>{ov.querySelectorAll('.paste-field-cb[data-group="'+box.dataset.group+'"]')
+      .forEach(child=>{child.checked=box.checked;});box.indeterminate=false;});
+    ov.querySelectorAll('.paste-field-cb').forEach(box=>box.onchange=()=>syncGroup(box.dataset.group));
+    ov.querySelector('#paste-cancel').onclick=()=>{ov.remove();finish(null);};
+    ov.querySelector('#paste-confirm').onclick=()=>{const keys=[...ov.querySelectorAll('.paste-field-cb:checked')].map(cb=>cb.value);ov.remove();
+      try{localStorage.setItem(_PASTE_SELECTION_KEY,JSON.stringify(keys));}catch(e){}finish(keys);};
+  });
+}
 // Shows the category picker, then calls onConfirm(mergedSnapshot) — the caller applies it to the
 // live editor AND/OR writes it to sidecar(s), since that differs between the single-photo
 // context-menu paste and the Photo-menu paste (see library-ui.js).
 window.chromasmithPasteEditSelective=function(recipeB64,onConfirm){
   let src;try{src=JSON.parse(decodeURIComponent(escape(atob(recipeB64))));}catch(e){log('Could not read copied edit: '+e.message,'err');return;}
-  const rows=PASTE_CATEGORIES.map(c=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="paste-cat-cb" value="${c.key}" checked>${c.label}</label>`).join('');
-  _csModal('Paste Edit — choose what to apply',
-    `<div>${rows}</div><div class="btn-row" style="margin-top:14px;justify-content:flex-end">`
-    +`<button class="btn bgh" id="paste-cancel">Cancel</button>`
-    +`<button class="btn bpri" id="paste-confirm">Paste</button></div>`);
-  const ov=document.getElementById('cs-modal-ov');
-  ov.querySelector('#paste-cancel').onclick=()=>ov.remove();
-  ov.querySelector('#paste-confirm').onclick=()=>{
-    const checked=[...ov.querySelectorAll('.paste-cat-cb:checked')].map(cb=>cb.value);
-    ov.remove();
-    if(!checked.length)return;
-    const base=getUISnapshot();
-    const merged=pasteEditSelectiveApply(base,src,checked);
+  _pasteChooseFields('Paste Edit — choose what to apply',_pasteSelectionGet(),_pasteAllFieldKeys(),'Paste').then(checked=>{
+    if(!checked||!checked.length)return;
+    const base=getUISnapshot(),merged=pasteEditSelectiveApply(base,src,checked);
     onConfirm(merged,{source:src,keys:checked});
-  };
+  });
 };
 // Returns the in-flight LUT-load promise (or undefined if the LUT selector didn't change) so
 // callers that need the restore to be VISUALLY complete (undo/redo/reset/timeline) can await
 // it. Stays otherwise synchronous start-to-finish — renderSnapshotTo's split-compare path
 // depends on that (see its own comment) and must not be made to await anything here.
 function applyUISnapshot(s,opts){
+  const _decodeBefore={nr:window.chromasmithRawNr||'fast',strength:window.chromasmithRawNrHighStrength,demosaic:window.chromasmithDemosaicAlgo||''};
   // Pre-v2 recipes (undo history, XMP sidecar, session save) stored the exposure SLIDER value
   // under the old /50 (±2 stop) mapping; getFXParams now divides by /20 (±5 stops), so replaying
   // an old raw slider value unchanged would apply 2.5x the intended exposure shift. Rescale once.
@@ -18156,6 +18199,14 @@ function applyUISnapshot(s,opts){
   if(s.demosaicAlgo!==undefined){
     window.chromasmithDemosaicAlgo=s.demosaicAlgo;
     const tg=document.getElementById('tg-demosaic-ahd');if(tg)tg.classList.toggle('on',s.demosaicAlgo==='ahd');
+  }
+  if(s.rawNr!==undefined||s.rawNrHighStrength!==undefined||s.demosaicAlgo!==undefined){
+    const it=curItem();if(it&&(_decodeBefore.nr!==window.chromasmithRawNr||_decodeBefore.strength!==window.chromasmithRawNrHighStrength||_decodeBefore.demosaic!==window.chromasmithDemosaicAlgo))it._nrHighApplied=false;
+    const needsDecode=(_decodeBefore.nr!==window.chromasmithRawNr&&window.chromasmithRawNr!=='high')||_decodeBefore.demosaic!==window.chromasmithDemosaicAlgo;
+    // These options are baked into native RAW pixels, so re-open the current source after an
+    // applied recipe/undo changes them. High-tier NR remains opt-in; selecting it reveals the
+    // existing "Denoise now" action and never launches that expensive pass implicitly.
+    if(needsDecode&&window.chromasmithReloadCurrentPhoto){const reload=window.chromasmithReloadCurrentPhoto();if(reload&&typeof reload.catch==='function')reload.catch(e=>log('RAW settings changed, but re-decode failed: '+e.message,'err'));}
   }
   if(typeof nrSyncGate==='function')nrSyncGate();
   // A snapshot swap (session restore, recipe, undo/redo, style, selective paste) moves sliders
@@ -19197,36 +19248,77 @@ function autoEnhance(){
 
 // ── Styles: named, reusable, re-editable recipes (darktable-style "styles") ──────
 // A LUT preset is a baked 3D lookup table — global colour/tone only (see CLAUDE.md §8). A Style
-// is the OPPOSITE: the full editable recipe (curves/HSL/masks/grain/halation/bloom/adjust/LUT
-// selection/etc, via getUISnapshot — the same structure undo history and sidecars already use),
-// minus geometry (crop/rotate is per-photo and meaningless to carry between different photos)
-// and the per-photo "adjustIndependent" flag (meaningless outside a specific batch). Saved to
-// localStorage as a flat list; exportable/importable as .json so a Style can move between
+// is the OPPOSITE: a user-selected set of fields from the editable recipe (the same structure
+// undo history and sidecars already use). Crop/geometry and retouch are available but unchecked
+// by default because they are photo-specific; the per-photo "adjustIndependent" flag is omitted.
+// Saved to localStorage as a flat list; exportable/importable as .json so a Style can move between
 // devices or be shared with another Chromasmith user.
 const _STYLES_KEY='chromasmith-styles-v1';
 function stylesList(){try{return JSON.parse(localStorage.getItem(_STYLES_KEY)||'[]')}catch(e){return[]}}
 function stylesSave(list){try{localStorage.setItem(_STYLES_KEY,JSON.stringify(list))}catch(e){log('Could not save styles: '+e.message,'err')}}
 async function styleSaveCurrent(){
+  const defaults=_pasteAllFieldKeys().filter(k=>k!=='extra:geom'&&k!=='extra:heal');
+  const keys=await _pasteChooseFields('Save Style — choose included settings',_pasteSelectionGet(_pasteAllFieldKeys(),defaults),_pasteAllFieldKeys(),'Continue');
+  if(!keys||!keys.length)return;
   // askTextModal, never window.prompt — see saveLUTToLibrary.
   const name=(await askTextModal('Name this Style','Use "Folder/Name" to file it in a folder.')||'').trim();
   if(!name)return;
-  const snap=getUISnapshot();
-  delete snap.geom;delete snap.adjustIndependent; // not portable across photos — see comment above
+  const snap=getUISnapshot(),recipe=pasteEditSelectiveApply({sliders:{},toggles:{},selects:{},colors:{}},snap,keys);
+  delete recipe.adjustIndependent;
   const list=stylesList();
   const existing=list.findIndex(s=>s.name===name);
-  const entry={name,recipe:snap,created:Date.now()}; // stored as a plain object (localStorage.setItem below JSON.stringifies the whole list) — no base64 needed for a pure-JS/localStorage feature
+  const entry={version:2,name,recipe,keys,created:Date.now(),favorite:existing>=0?!!list[existing].favorite:false};
   if(existing>=0){if(!await confirmModal(`A Style named "${name}" already exists. Overwrite it?`,'Overwrite'))return;list[existing]=entry;}
   else list.push(entry);
   stylesSave(list);styleListRefresh();
   toast(`Style "${name}" saved`,true);
 }
 async function styleApply(name){
+  await stylePreviewCancel();
   const s=stylesList().find(x=>x.name===name);if(!s)return;
-  const pre=getUISnapshot({skipRaster:true});
-  try{await applyUISnapshot(JSON.parse(JSON.stringify(s.recipe)));fxUpdate();log(`Style applied: ${name}`,'ok');
-    _presetBlend={pre,post:getUISnapshot({skipRaster:true})};const r=document.getElementById('row-preset-str');if(r){r.style.display='';const sl=document.getElementById('sl-preset-str');sl.value=100;document.getElementById('vl-preset-str').textContent='100';}}
+  const available=_styleRecipeKeys(s),allowed=available;
+  if(!allowed.length){toast('This Style contains no applicable settings',false);return;}
+  const selected=await _pasteChooseFields('Apply Style — choose settings',_pasteSelectionGet(allowed,allowed),allowed,'Apply');
+  if(!selected||!selected.length)return;
+  const pre=getUISnapshot();
+  try{const post=pasteEditSelectiveApply(JSON.parse(JSON.stringify(pre)),s.recipe,selected);
+    await applyUISnapshot(post);fxUpdate();log(`Style applied: ${name}`,'ok');
+    _styleRecent(name);_presetBlend={pre,post:getUISnapshot(),keys:selected};
+    const r=document.getElementById('row-preset-str');if(r){r.style.display='';const sl=document.getElementById('sl-preset-str');sl.value=100;document.getElementById('vl-preset-str').textContent='100';}}
   catch(e){log('Could not apply style: '+e.message,'err');}
 }
+function _styleRecipeKeys(s){
+  const manifest=Array.isArray(s.keys)?_pasteExpandKeys(s.keys):_pasteAllFieldKeys();
+  return manifest.filter(key=>{
+    const [kind,id]=key.split(':');
+    if(kind==='slider')return s.recipe.sliders&&s.recipe.sliders[id]!==undefined;
+    if(kind==='toggle')return s.recipe.toggles&&s.recipe.toggles[id]!==undefined;
+    if(kind==='select')return s.recipe.selects&&s.recipe.selects[id]!==undefined;
+    if(kind==='color')return s.recipe.colors&&s.recipe.colors[id]!==undefined;
+    return kind==='extra'&&s.recipe[id]!==undefined;
+  });
+}
+const _STYLE_RECENT_KEY='chromasmith-styles-recent-v1';
+function _styleRecent(name){try{const old=JSON.parse(localStorage.getItem(_STYLE_RECENT_KEY)||'[]'),next=[name,...old.filter(n=>n!==name)].slice(0,12);localStorage.setItem(_STYLE_RECENT_KEY,JSON.stringify(next));}catch(e){}}
+function styleToggleFavorite(name){const list=stylesList(),s=list.find(x=>x.name===name);if(!s)return;s.favorite=!s.favorite;stylesSave(list);styleListRefresh();}
+let _stylePreview=null;
+async function stylePreviewCancel(){
+  const p=_stylePreview;if(!p)return;_stylePreview=null;++p.generation;
+  try{if(p.pending)await p.pending.catch(()=>{});await applyUISnapshot(_clone(p.base));if(p.item){p.item.adjustOverride=p.adjustOverride;p.item.geom=_clone(p.geom);p.item.heal=_clone(p.heal);}fxScheduleRender();}
+  catch(e){log('Could not restore style preview: '+e.message,'err');}
+  finally{clearTimeout(_fxHistPushTimer);_fxHistPushTimer=null;_fxHistLocked=p.historyLocked;}
+}
+async function stylePreviewStart(name){
+  const s=stylesList().find(x=>x.name===name);if(!s)return;
+  await stylePreviewCancel();const keys=_styleRecipeKeys(s).filter(k=>!['extra:geom','extra:heal','extra:masks','extra:rawNr','extra:rawNrHighStrength','extra:nativeNr','extra:demosaicAlgo'].includes(k));if(!keys.length)return;
+  if(_fxHistPushTimer){clearTimeout(_fxHistPushTimer);_fxHistPushTimer=null;fxHistoryPush();}
+  const item=curItem(),p={name,base:getUISnapshot(),item,adjustOverride:item&&item.adjustOverride?_clone(item.adjustOverride):null,geom:item&&item.geom?_clone(item.geom):null,heal:item&&item.heal?_clone(item.heal):null,historyLocked:_fxHistLocked,generation:0,pending:null};_stylePreview=p;_fxHistLocked=true;
+  const next=pasteEditSelectiveApply(_clone(p.base),s.recipe,keys),gen=++p.generation;
+  try{p.pending=Promise.resolve(applyUISnapshot(next));await p.pending;if(_stylePreview!==p||p.generation!==gen)return;renderPreview();}
+  catch(e){if(_stylePreview===p){log('Could not preview style: '+e.message,'err');await stylePreviewCancel();}}
+  finally{if(_stylePreview===p)p.pending=null;}
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&_stylePreview){e.stopImmediatePropagation();stylePreviewCancel();}},true);
 async function styleDelete(name){
   if(!await confirmModal(`Delete Style "${name}"? This cannot be undone.`,'Delete'))return;
   stylesSave(stylesList().filter(s=>s.name!==name));styleListRefresh();
@@ -19250,7 +19342,8 @@ async function styleImportFile(file){
       let n=2;while(list.some(x=>x.name===`${name} (${n})`))n++;
       name=`${name} (${n})`;
     }
-    list.push({name,recipe:s.recipe,created:Date.now()});
+    const keys=Array.isArray(s.keys)?_pasteExpandKeys(s.keys):undefined;
+    list.push({version:2,name,recipe:s.recipe,keys,created:Date.now(),favorite:!!s.favorite});
     stylesSave(list);styleListRefresh();
     toast(`Style "${name}" imported`,true);
   }catch(e){log('Style import failed: '+e.message,'err');toast('Not a valid Style file',false);}
@@ -19271,20 +19364,32 @@ function styleListRefresh(){
   const list=stylesList();
   el.textContent='';
   if(!list.length){const d=document.createElement('div');d.style.cssText='font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)';d.textContent='No styles saved yet. Tip: name one "Folder/Name" to group it.';el.appendChild(d);return;}
-  const groups=new Map();
-  list.forEach(s=>{const[f]=_styleSplit(s.name);if(!groups.has(f))groups.set(f,[]);groups.get(f).push(s);});
-  const keys=[...groups.keys()].sort((x,y)=>x===''?-1:y===''?1:x.localeCompare(y));
+  const recent=(()=>{try{return JSON.parse(localStorage.getItem(_STYLE_RECENT_KEY)||'[]')}catch(e){return[]}})();
+  const controls=document.createElement('div');controls.style.cssText='display:flex;gap:5px;align-items:center;margin-bottom:8px';
+  const search=document.createElement('input');search.type='search';search.placeholder='Search styles';search.setAttribute('aria-label','Search styles');search.style.cssText='min-width:70px;flex:1';
+  const filter=document.createElement('select');filter.setAttribute('aria-label','Filter styles');filter.innerHTML='<option value="all">All</option><option value="favorites">Favorites</option><option value="recent">Recent</option>';
+  controls.append(search,filter);el.appendChild(controls);const listHost=document.createElement('div');el.appendChild(listHost);
   const iconBtn=(ic,title,fn)=>{const b=document.createElement('button');b.className='btn-icon';b.title=title;b.innerHTML=icon(ic,16);b.onclick=fn;return b;};
-  keys.forEach(f=>{
-    if(f){const h=document.createElement('div');h.className='style-folder';h.style.cssText='margin-top:6px;font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);display:flex;align-items:center;gap:4px';h.innerHTML=icon('folder',14);h.appendChild(document.createTextNode(f));el.appendChild(h);}
-    groups.get(f).sort((x,y)=>x.name.localeCompare(y.name)).forEach(s=>{
+  const render=()=>{
+    listHost.textContent='';const query=search.value.trim().toLowerCase(),mode=filter.value;
+    const filtered=list.filter(s=>(!query||s.name.toLowerCase().includes(query))&&(mode==='all'||(mode==='favorites'?s.favorite:recent.includes(s.name))));
+    const sorted=mode==='recent'?filtered.sort((a,b)=>recent.indexOf(a.name)-recent.indexOf(b.name)):filtered.sort((a,b)=>a.name.localeCompare(b.name));
+    const groups=new Map();sorted.forEach(s=>{const[f]=_styleSplit(s.name);if(!groups.has(f))groups.set(f,[]);groups.get(f).push(s);});
+    [...groups.keys()].sort((x,y)=>x===''?-1:y===''?1:x.localeCompare(y)).forEach(f=>{
+      if(f){const h=document.createElement('div');h.className='style-folder';h.style.cssText='margin-top:6px;font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);display:flex;align-items:center;gap:4px';h.innerHTML=icon('folder',14);h.appendChild(document.createTextNode(f));listHost.appendChild(h);}
+      groups.get(f).forEach(s=>{
       const row=document.createElement('div');row.className='btn-row';row.style.cssText='margin:0;gap:4px';
       const ap=document.createElement('button');ap.className='btn bgh';ap.style.cssText='flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
       ap.title='Apply this style';ap.textContent=_styleSplit(s.name)[1];ap.onclick=()=>styleApply(s.name);
-      row.append(ap,iconBtn('rename','Rename / move to folder',()=>styleRename(s.name)),iconBtn('download','Export as .json',()=>styleExport(s.name)),iconBtn('close','Delete',()=>styleDelete(s.name)));
-      el.appendChild(row);
+      ap.onpointerenter=()=>stylePreviewStart(s.name);ap.onpointerleave=()=>stylePreviewCancel();ap.onfocus=()=>stylePreviewStart(s.name);ap.onblur=()=>stylePreviewCancel();
+      const fav=iconBtn('star',s.favorite?'Remove from favorites':'Add to favorites',()=>styleToggleFavorite(s.name));fav.setAttribute('aria-pressed',String(!!s.favorite));fav.style.color=s.favorite?'var(--acc)':'';
+      row.append(ap,fav,iconBtn('rename','Rename / move to folder',()=>styleRename(s.name)),iconBtn('download','Export as .json',()=>styleExport(s.name)),iconBtn('close','Delete',()=>styleDelete(s.name)));
+      listHost.appendChild(row);
+      });
     });
-  });
+    if(!filtered.length){const empty=document.createElement('div');empty.style.cssText='font-size:12px;color:var(--mut);padding:6px 0';empty.textContent=mode==='favorites'?'No favorite styles yet.':mode==='recent'?'No recently applied styles yet.':'No matching styles.';listHost.appendChild(empty);}
+  };
+  search.oninput=render;filter.onchange=render;render();
 }
 // ── Named export presets: just the 4 export-panel controls (format/quality/resize/sharpen),
 // saved/recalled by name. Same localStorage-flat-list shape as Styles above, deliberately not
@@ -19380,9 +19485,9 @@ function presetsManagerRender(){
     h+=`<div style="font-size:11px;color:var(--k-color-muted);margin:6px 0 2px">FAVOURITES</div>`+(favs.length?favs.map(k=>row(prettyLUT(k),'Look',b('Apply',`selectLUT('p:'+${q(k)});document.getElementById('cs-modal-ov').remove()`))).join(''):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet.</div>');
     h+=`<div style="font-size:11px;color:var(--k-color-muted);margin:12px 0 2px">YOUR SAVED LOOKS</div>`+(own.length?own.map(o=>row(o.textContent,'Your .cube look',b('Apply',`const s=document.getElementById('sel-lut');s.value=${q(o.value)};selectLUT(${q(o.value)});document.getElementById('cs-modal-ov').remove()`)+b('Delete',`(async()=>{if(!await confirmModal('Delete this saved look?','Delete'))return;await lutLibDel(${q(o.value.slice(2))});await refreshLUTSelect();presetsManagerOpen('looks');})()`))).join(''):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet — Colour Copy → Use in editor, or Look → Apply LUT → Save, adds one.</div>');
   }else if(_pmTab==='styles'){
-    h+=`<div style="font-size:12px;color:var(--k-color-muted);margin-bottom:8px">An <b>Edit Style</b> reapplies saved adjustments to any photo. It never changes crop or rotation.</div>`;
+    h+=`<div style="font-size:12px;color:var(--k-color-muted);margin-bottom:8px">An <b>Edit Style</b> reapplies its selected settings to any photo. Crop and retouch are opt-in when saving.</div>`;
     h+=(styles.length?styles.sort((x,y)=>x.name.localeCompare(y.name)).map(st=>row(st.name,_pmStyleSummary(st.recipe),
-      b('Apply',`styleApply(${q(st.name)});document.getElementById('cs-modal-ov').remove()`)+b('Rename',`styleRename(${q(st.name)}).then(()=>presetsManagerOpen('styles'))`)+b('Export',`styleExport(${q(st.name)})`)+b('Delete',`(async()=>{if(!await confirmModal('Delete this style?','Delete'))return;stylesSave(stylesList().filter(x=>x.name!==${q(st.name)}));styleListRefresh();presetsManagerOpen('styles');})()`))).join(''):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet.</div>');
+      b('Apply',`styleApply(${q(st.name)})`)+b('Rename',`styleRename(${q(st.name)}).then(()=>presetsManagerOpen('styles'))`)+b('Export',`styleExport(${q(st.name)})`)+b('Delete',`(async()=>{if(!await confirmModal('Delete this style?','Delete'))return;stylesSave(stylesList().filter(x=>x.name!==${q(st.name)}));styleListRefresh();presetsManagerOpen('styles');})()`))).join(''):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet.</div>');
     h+=`<div class="btn-row" style="margin-top:12px"><button class="btn bsec" onclick="document.getElementById('cs-modal-ov').remove();styleSaveCurrent()">Save current edit as style…</button><button class="btn bgh" onclick="document.getElementById('cs-modal-ov').remove();styleImportClick()">Import…</button></div>`;
   }else{
     h+=`<div style="font-size:12px;color:var(--k-color-muted);margin-bottom:8px">An <b>Export Recipe</b> only changes the files you export: format, quality, size and sharpening.</div>`;
@@ -25498,11 +25603,34 @@ function fxShowHistoryList(){
 // (4) Preset strength: after applying a saved Preset, blend every slider between the photo's
 // state before the preset and the preset itself.
 let _presetBlend=null;
+function _styleBlendTree(a,b,t){
+  if(typeof a==='number'&&typeof b==='number')return a+(b-a)*t;
+  if(Array.isArray(a)&&Array.isArray(b)&&a.length===b.length)return a.map((v,i)=>_styleBlendTree(v,b[i],t));
+  if(a&&b&&typeof a==='object'&&typeof b==='object'&&!Array.isArray(a)&&!Array.isArray(b)){
+    const ak=Object.keys(a),bk=Object.keys(b);if(ak.length!==bk.length||ak.some(k=>!Object.prototype.hasOwnProperty.call(b,k)))return _clone(b);
+    const out={};ak.forEach(k=>{out[k]=_styleBlendTree(a[k],b[k],t);});return out;
+  }
+  return _clone(b);
+}
+function _styleBlendSnapshot(pre,post,keys,percent){
+  const t=Math.max(0,Math.min(100,Number(percent)||0))/100,out=_clone(pre),chosen=new Set(keys||[]);
+  if(t===0)return out;
+  const has=(c,kind,id)=>chosen.has(c.key)||chosen.has(kind+':'+id);
+  for(const c of PASTE_CATEGORIES){
+    c.sliders.forEach(id=>{if(!has(c,'slider',id))return;const a=parseFloat(pre.sliders&&pre.sliders[id]),b=parseFloat(post.sliders&&post.sliders[id]);if(Number.isFinite(a)&&Number.isFinite(b)){out.sliders=out.sliders||{};out.sliders[id]=String(+(a+(b-a)*t).toFixed(4));}});
+    c.toggles.forEach(id=>{const key=id.replace(/^tg-/,'');if(has(c,'toggle',key)&&post.toggles&&post.toggles[key]!==undefined){out.toggles=out.toggles||{};out.toggles[key]=post.toggles[key];}});
+    (c.selects||[]).forEach(id=>{if(has(c,'select',id)&&post.selects&&post.selects[id]!==undefined){out.selects=out.selects||{};out.selects[id]=post.selects[id];}});
+    (c.colors||[]).forEach(id=>{if(has(c,'color',id)&&post.colors&&post.colors[id]!==undefined){out.colors=out.colors||{};out.colors[id]=post.colors[id];}});
+    (c.extra||[]).forEach(id=>{if(!has(c,'extra',id)||post[id]===undefined)return;
+      if(id==='rawNrHighStrength'&&Number.isFinite(Number(pre[id]))&&Number.isFinite(Number(post[id])))out[id]=Number((Number(pre[id])+(Number(post[id])-Number(pre[id]))*t).toFixed(3));
+      else out[id]=['curves','curveParam','hsl','wheels','canvas'].includes(id)&&pre[id]!==undefined?_styleBlendTree(pre[id],post[id],t):_clone(post[id]);});
+  }
+  return out;
+}
 function presetStrength(k){
-  if(!_presetBlend)return;const{pre,post}=_presetBlend;
-  Object.keys(post.sliders||{}).forEach(id=>{const el=document.getElementById('sl-'+id);if(!el)return;
-    const a=parseFloat((pre.sliders||{})[id]),b=parseFloat(post.sliders[id]);if(isNaN(a)||isNaN(b))return;
-    el.value=a+(b-a)*k/100;el.dispatchEvent(new Event('input',{bubbles:true}));});
+  if(!_presetBlend)return;
+  const snap=_styleBlendSnapshot(_presetBlend.pre,_presetBlend.post,_presetBlend.keys,k);
+  applyUISnapshot(snap);fxUpdate();
   const v=document.getElementById('vl-preset-str');if(v)v.textContent=Math.round(k);
 }
 // Press-and-hold a tool in the phone quick bar or Tools grid, then drag, to change its place.

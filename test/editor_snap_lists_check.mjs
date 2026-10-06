@@ -43,6 +43,8 @@ const KNOWN_EXCLUSIONS = {
     'nr-high-strength': 'desktop-native High-tier NR job parameter, not a graded/undoable value — travels via window.chromasmithRawNrHighStrength + localStorage instead',
     'straighten': 'geometry (crop/rotate/flip/straighten) has its own per-photo it.geom snapshot path, not the graded-effects snapshot',
     'canvas-z': 'canvas zoom is UI framing, not a graded value — intentionally not part of the undo/redo history',
+    'canvas-blur': 'tracked via s.canvas.blurAmt (fxState.canvas object), not the flat sliders map',
+    'preset-str': 'temporary strength control for the most recently applied style; the resulting photo settings are tracked by their own recipe fields',
     'heal-size': 'Retouch brush-tool setting, not persisted photo state — see healSyncUI\'s own comment on why brush settings are tracked separately from spots',
     'heal-feather': 'see heal-size',
     'heal-opacity': 'see heal-size',
