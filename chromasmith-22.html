@@ -3533,12 +3533,13 @@ ready(function(){
 // usable — 'paint' is the last slice and its own total is real mounted-card count, so filling it
 // means every visible card actually has pixels (see firstPaintReady, library-ui.js).
 window._bootSlices={walk:[0,12],subfolders:[12,18],metadata:[18,35],sidecar:[35,45],cache:[45,70],paint:[70,100]};
-window._bootShownPct=0;
+window._bootShownPct=0;window._bootMarks=[];
 window._bootTrickleRAF=null;window._bootTrickleT0=0;window._bootTrickleKey=null;
 function _bootPaintPct(pct){
   const bar=document.getElementById('boot-splash-bar');if(!bar)return;
   pct=Math.max(0,Math.min(100,pct));
   if(pct<window._bootShownPct)return; // monotonic guard — never regress the bar
+  if(Math.floor(pct/100*11+1e-4)>Math.floor(window._bootShownPct/100*11+1e-4))window._bootMarks.push(['bar',Math.round(performance.now()),Math.round(pct)]); // boot timeline, read by test/probe_boot_splash_progress.mjs
   window._bootShownPct=pct;
   const splash=document.querySelector('#boot-splash>div');if(splash)splash.style.setProperty('--boot-pct',Math.round(pct)+'%');
   const percent=document.getElementById('boot-splash-percent');if(percent){percent.textContent=Math.round(pct)+'%';percent.dataset.t=percent.textContent;}
@@ -3551,9 +3552,10 @@ window.bootProgressSet=function(phase,done,total){
     return;
   }
   const [lo,hi]=slice;
+  if(window._bootLastMarkPhase!==phase){window._bootLastMarkPhase=phase;window._bootMarks.push([phase,Math.round(performance.now())]);}
   const st=document.getElementById('boot-splash-stage');if(st&&window._bootStageLabelFor)st.textContent=window._bootStageLabelFor(phase);
   if(total>0){
-    if(window._bootTrickleRAF){cancelAnimationFrame(window._bootTrickleRAF);window._bootTrickleRAF=null;window._bootTrickleKey=null;}
+    if(window._bootTrickleRAF){clearInterval(window._bootTrickleRAF);window._bootTrickleRAF=null;window._bootTrickleKey=null;}
     _bootPaintPct(lo+(hi-lo)*Math.min(1,done/total));
     return;
   }
@@ -3566,15 +3568,15 @@ window.bootProgressSet=function(phase,done,total){
   const bar=document.getElementById('boot-splash-bar');if(!bar)return;
   bar.style.transition='none';
   if(window._bootTrickleRAF)return;
-  const step=(t)=>{
-    const el=t-window._bootTrickleT0;
-    _bootPaintPct(lo+(hi-lo)*0.92*(1-Math.exp(-el/2200)));
-    window._bootTrickleRAF=requestAnimationFrame(step);
+  // Timer, not rAF: WKWebView can pause rAF for this transparent splash window (see hideBootSplash).
+  const step=()=>{
+    const [l,h]=window._bootSlices[window._bootTrickleKey]||slice;
+    _bootPaintPct(l+(h-l)*0.92*(1-Math.exp(-(performance.now()-window._bootTrickleT0)/2200)));
   };
-  window._bootTrickleRAF=requestAnimationFrame(step);
+  window._bootTrickleRAF=setInterval(step,120);step();
 };
 window.bootTrickleStop=function(){
-  if(window._bootTrickleRAF){cancelAnimationFrame(window._bootTrickleRAF);window._bootTrickleRAF=null;}
+  if(window._bootTrickleRAF){clearInterval(window._bootTrickleRAF);window._bootTrickleRAF=null;}
   window._bootTrickleKey=null;
   const bar=document.getElementById('boot-splash-bar');if(bar)bar.style.transition='width .2s ease';
 };
@@ -3623,6 +3625,7 @@ window.hideBootSplash=function(){
   const reveal=(via)=>{
     if(revealed)return;revealed=true;
     console.log('[boot] splash reveal via '+via);
+    window._bootMarks.push(['reveal',Math.round(performance.now())]);
     html.classList.add('cs-reveal-go');
     html.classList.remove('cs-reveal-hold');
     s.classList.add('out');
@@ -3709,6 +3712,7 @@ window.bumpBootSplashWatchdog=function(graceMs){
   }
   if(window._bootSplashWatchdog)clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=setTimeout(()=>{
   const elapsed=performance.now()-(window._bootSplashArmedAt||performance.now());
+  window._bootMarks&&window._bootMarks.push(['watchdog',Math.round(performance.now())]);
   if(typeof window.chromasmithForceLibraryReady==='function'){try{window.chromasmithForceLibraryReady();}catch(e){}}
   window.hideBootSplash();
   // ⚠️ Banner call removed on the user's explicit instruction ("the notification at the top of
@@ -7122,7 +7126,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006W';
+const BUILD='1.1006X';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17804,7 +17808,11 @@ function mskRebuild(){
     // re-fired the .then(mskRebuild) chain on every rebuild regardless, which was the actual
     // infinite loop (confirmed live via CDP Debugger.pause sampling — 20+ recursive mskRebuild()
     // calls/second). One real attempt per image, full stop.
-    if(!hasMap&&!alreadyAttempted)fxEnsureDepthMap().then(()=>{if(typeof mskRebuild==='function')mskRebuild();});
+    // ⚠️ And on attemptedImg: with NO photo open (every desktop boot builds the mask panel before
+    // any photo loads) fxEnsureDepthMap() resolves null at once and nothing marks an attempt, so
+    // this chained mskRebuild() as an endless microtask loop that starved the page parser — the
+    // splash froze at 1-2% for a minute+ (test/probe_boot_splash_progress.mjs).
+    if(!hasMap&&attemptedImg&&!alreadyAttempted)fxEnsureDepthMap().then(()=>{if(typeof mskRebuild==='function')mskRebuild();});
   }
 
   // ── "+ Coat"'s two direct one-slider controls ─────────────────────────────────────────────

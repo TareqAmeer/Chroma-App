@@ -12528,7 +12528,9 @@
         year: dateParts ? dateParts[0] : null, month: dateParts ? (dateParts[1] || null) : null, day: dateParts ? (dateParts[2] || null) : null,
         noDate: scope === 'date-nodate', blurryOnly: scope === 'blurry', keywords: kwPath ? [kwPath] : [], personId, smartAlbumId,
         ...catalogFilterFields() };
+      updateBootSplashProgress({ phase: 'metadata', done: 0, total: 0 }); // a restored catalog view has no scan events — step the splash itself (no-op once it's gone)
       page = await invoke('catalog_query', { q });
+      updateBootSplashProgress({ phase: 'sidecar', done: 0, total: 0 });
       // Base shape for loadMoreCatalogEntries's later pages — offset is overwritten there per
       // call, everything else must stay identical to this page's own query or a "load more"
       // could silently start answering a different question than the page the user is looking
@@ -12585,6 +12587,7 @@
     {
       const paths = entries.filter((e) => !e.offline).map((e) => e.path);
       await getSidecarsBatch(paths);
+      updateBootSplashProgress({ phase: 'cache', done: 0, total: 0 });
       getMetaBatch(paths).then(() => {
         if (state._openToken !== openToken || state.source !== 'catalog') return; // user moved on
         refreshFacetSelects();
@@ -14196,9 +14199,12 @@
   }
   setupMarquee();
 
+  // Boot timeline (window._bootMarks, chromasmith-22.html) — read by test/probe_boot_splash_progress.mjs.
+  function bootMark(k) { try { if (window._bootMarks && !window._bootFilled) window._bootMarks.push([k, Math.round(performance.now())]); } catch (e) {} }
   async function restoreSavedLibraryView() {
     const view = initialLibraryView;
     if (!view) return false;
+    bootMark('restore:' + view.kind);
     if (view.kind === 'folder' && typeof view.path === 'string' && view.path) {
       await openFolder(view.path, { prefetchThumbs: true });
       return true;
@@ -14232,7 +14238,10 @@
     // poke a resize once the CSS has applied.
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
     if (state.open) {
+      bootMark('tree');
       await renderTree();
+      bootMark('tree:done');
+      updateBootSplashProgress({ phase: 'subfolders', done: 0, total: 0 });
       // If the currently-open photo came from a Lightroom album, return to that album instead
       // of the last local folder (chromasmith-22.html's lrImportAsset stamps the origin).
       const origin = window.chromasmithOpenedOrigin;
@@ -14482,7 +14491,9 @@
       // already looked ready — which is exactly what made it look "stuck" once you tried to use
       // it. The progress bar wired into updateBootSplashProgress (this file, wireActivityListeners)
       // is what the user sees while this await is in flight.
+      bootMark('lib:open');
       if (window._lastCatalogRegisterPromise) { try { await window._lastCatalogRegisterPromise; } catch (e) {} }
+      bootMark('register:done');
       // ⚠️ THE readiness fix. Everything above this line only guarantees CARDS exist in the DOM
       // — renderGrid() resolves once it has appended elements, not once their <img>s have pixels
       // (loadThumb queues each card's decode and returns immediately). Twelve prior attempts at
@@ -14500,6 +14511,7 @@
       // available, producing exactly the "bar reaches the end and restarts" flash this replaces.
       updateBootSplashProgress({ phase: 'paint', done: _thumbDoneCount, total: _thumbTotalCount, current: '' });
       await firstPaintReady(8000);
+      bootMark('firstpaint');
       // ⚠️ Deliberately does NOT auto-reopen the last-edited photo any more. It used to, right
       // here, via `openInEditor(lastPath)` — and that turned out to be actively harmful, not
       // just heavy: it has NO progress events wired to it (unlike the catalog scan above, which
