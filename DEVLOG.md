@@ -316,3 +316,6 @@
 ## 2026-10-06 — CHR-271 integration and publication verification
 - Integrated CHR-271 feature commit `161f857b415e3af815bf9650d6fd5aea5a06a6bc` onto fetched `origin/main` `b104b0129f52d39296c485568b4cd74664553b6c` as `40516f66` (`Clarify named history checkpoints`). DEVLOG conflict resolution retained the already-published CHR-257 foundation and publication records.
 - On the integrated tree, `node test/history_named_snapshot.mjs`, `node test/editor_html_validity_check.mjs`, `node --check test/history_named_snapshot.mjs`, and `git show --check HEAD` pass. Native desktop verification remains unperformed; destructive history flatten stays deferred pending safe persisted undo-boundary semantics.
+
+### CHR-271 remote publication confirmation (2026-10-06)
+- Post-push `git fetch origin main` and GitHub branch API both confirmed `origin/main` at `9688388eb49ccbbf6055313f1185ac1922e85f55`; this published history contains the CHR-271 integration commit `40516f66` and verification record `9688388e`.
