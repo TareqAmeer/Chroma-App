@@ -3547,7 +3547,9 @@ ready(function(){
 // the bar visibly regress. The bar reaching 100% is therefore the SAME moment the library becomes
 // usable — 'paint' is the last slice and its own total is real mounted-card count, so filling it
 // means every visible card actually has pixels (see firstPaintReady, library-ui.js).
-window._bootSlices={walk:[0,12],subfolders:[12,18],metadata:[18,35],sidecar:[35,45],cache:[45,70],paint:[70,100]};
+// Weighted by measured wall time on a real 50k library: sidecars (getSidecarsBatch) are the longest
+// pre-paint step, so they get the widest slice — the trickle there keeps lighting bars.
+window._bootSlices={walk:[0,8],subfolders:[8,14],metadata:[14,30],sidecar:[30,60],cache:[60,70],paint:[70,100]};
 window._bootShownPct=0;window._bootMarks=[];
 window._bootTrickleRAF=null;window._bootTrickleT0=0;window._bootTrickleKey=null;
 function _bootPaintPct(pct){

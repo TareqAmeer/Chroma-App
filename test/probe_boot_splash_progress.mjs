@@ -2,7 +2,7 @@
 // real library (user report 2026-10-06: "starts on zero bars, stuck ~a minute, then jumps").
 // Launches the built .app, polls the live splash via the automation channel, and FAILS if the
 // splash sat on one percentage for >8s, or hid having lit fewer than 3 of its 11 wedge bars
-// while boot took over 4s.  Usage: node test/probe_boot_splash_progress.mjs [runs=1]
+// while boot took over 4s, or if the watchdog (not a ready gallery) hid it.  Usage: node test/probe_boot_splash_progress.mjs [runs=1]
 import { readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os'; import path from 'node:path'; import { randomBytes } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -37,6 +37,8 @@ for(let r=0;r<runs;r++){
   const bars=pre.filter(x=>x[0]==='bar').length;
   console.log(`  reveal at ${rev[1]}ms, ${bars} bars lit, longest gap with no progress ${gap}ms`);
   if(gap>8000){console.log('  FAIL splash sat still for '+gap+'ms');fail=true;}
+  if(pre.some(x=>x[0]==='watchdog')){console.log('  FAIL watchdog hid the splash - the gallery was not ready');fail=true;}
+  if(!pre.some(x=>x[0]==='firstpaint')){console.log('  FAIL splash hid before the gallery\'s first paint');fail=true;}
   if(rev[1]>4000&&bars<3){console.log('  FAIL only '+bars+' bars lit before reveal');fail=true;}
 }
 process.exit(fail?1:0);
