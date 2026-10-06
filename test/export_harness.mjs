@@ -18,7 +18,7 @@
 // artifact placement (which chromasmith seeds from Math.random() at export time) is
 // reproducible across runs.
 
-import { chromium } from 'playwright';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 import { createServer } from 'node:http';
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
