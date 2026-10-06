@@ -1988,7 +1988,22 @@
     #lib-compare{display:none;height:100%;flex-direction:column;gap:8px}
     #lib-compare.on{display:flex}
     #lib-main:has(#lib-compare.on) #lib-grid{display:none}
+    #lib-main:has(#lib-survey.on) #lib-grid{display:none}
     #lib-compare-panes{display:flex;gap:8px;flex:1;min-height:0}
+    #lib-survey{display:none;flex:1;min-height:0;flex-direction:column;gap:8px}
+    #lib-survey.on{display:flex}
+    #lib-survey-grid{display:grid;grid-template-columns:repeat(var(--survey-cols,2),minmax(0,1fr));
+      grid-template-rows:repeat(var(--survey-rows,1),minmax(0,1fr));gap:8px;flex:1;min-height:0}
+    .lib-survey-cell{min-height:0;outline:none}
+    .lib-survey-cell:focus-visible,.lib-survey-cell.cmp-focus{outline:2px solid var(--acc2);outline-offset:-2px}
+    .lib-survey-head{display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--bdr);
+      font-size:11px;min-width:0}
+    .lib-survey-head .lib-survey-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+    .lib-survey-head button{border:0;background:transparent;color:var(--mut);font-size:16px;line-height:1;
+      padding:2px 6px;cursor:pointer;border-radius:4px}
+    .lib-survey-head button:hover{background:var(--bdr);color:var(--txt)}
+    @media(max-width:900px){#lib-survey-grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:none;grid-auto-rows:minmax(180px,1fr);overflow:auto}}
+    @media(max-width:560px){#lib-survey-grid{grid-template-columns:minmax(0,1fr);grid-auto-rows:minmax(220px,1fr)}}
     .lib-cmp-pane{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--sur2);
       border:1px solid var(--bdr);border-radius:8px;overflow:hidden}
     .lib-cmp-head{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--bdr);
@@ -2522,6 +2537,7 @@
           <button class="fx-ovf-item opt-action" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',15)}<span>Get Info</span></button>
           <button class="fx-ovf-item opt-action" id="lib-expand" title="Full-window view — G">${ic('fit',15)}<span>Full-window view</span></button>
           <button class="fx-ovf-item opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C">${ic('compare',15)}<span>Compare view</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-survey-btn" title="Survey selected photos side by side — N">${ic('compare',15)}<span>Survey view</span></button>
           <button class="fx-ovf-item opt-action" id="lib-preview-btn" title="Show photos from this view as a moving wall, drift, scattered prints or cursor trail">${ic('play',15)}<span>Photo preview</span></button>
           </div>
           <div class="fx-settings-pane lib-settings-pane" id="lib-pane-thumbnails">
@@ -2701,6 +2717,7 @@
       </div>
       <div id="lib-grid"></div>
       <div id="lib-compare"></div>
+      <div id="lib-survey"></div>
     </div>
     <div id="lib-bottom" class="lib-fullview-only">
       <span style="font-size:11px;color:var(--mut)" id="lib-thumb-progress"></span>
@@ -3400,6 +3417,8 @@
     window.__libScrollTo = (p) => scrollLibraryToPath(p);
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
     window.__libOpenFolder = (path) => openFolder(path);
+    window.__libEnterSurvey = enterSurveyMode;
+    window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && compareState.mode === 'survey' });
     window.__libSubfolderPreference = {
       key: folderScopeKey,
       read: subfoldersForScope,
@@ -8045,6 +8064,8 @@
   // Compare keeps its own tiny string<->descriptor mapping instead of touching that resolver).
   const compareState = {
     active: false,
+    mode: 'compare',
+    entryToken: 0,
     paths: [],                          // the ordered selection Compare was entered with
     paneA: { idx: 0, srcKey: 'live' },
     paneB: { idx: 0, srcKey: 'live' },
@@ -8054,6 +8075,7 @@
     zoom: 1, panX: 0, panY: 0,
     prevViewMode: 'grid',
   };
+  const surveyState = { cells: [], focus: 0, entryToken: 0 };
   function compareSrcKeyToDescriptor(key) {
     if (!key || key === 'live') return null;
     if (key === 'orig') return 'orig';
@@ -8079,7 +8101,150 @@
     return opts;
   }
   function compareHost() { return document.getElementById('lib-compare'); }
+  function surveyHost() { return document.getElementById('lib-survey'); }
+  function escAttr2(s) { return esc2(s).replace(/"/g, '&quot;'); }
   function comparePathForIdx(idx) { return compareState.paths[idx] || ''; }
+
+  function surveyColumns(count) { return count <= 2 ? 2 : count <= 4 ? 2 : count <= 6 ? 3 : 4; }
+  function surveyCellHtml(cell, idx) {
+    const sidecar = state.sidecars.get(cell.path) || { rating: 0, label: '', favorite: false };
+    return `<section class="lib-cmp-pane lib-survey-cell${idx === surveyState.focus ? ' cmp-focus' : ''}" data-survey-idx="${idx}" tabindex="0" role="group" aria-label="Photo ${idx + 1}: ${escAttr2(baseName(cell.path))}">
+      <div class="lib-survey-head"><span>${idx + 1} / ${surveyState.cells.length}</span><span class="lib-survey-name">${esc2(baseName(cell.path))}</span>
+        <button type="button" data-survey-remove="${idx}" aria-label="Remove ${escAttr2(baseName(cell.path))} from Survey" title="Remove from Survey">×</button></div>
+      <div class="lib-cmp-canvas-wrap"><canvas></canvas></div>
+      <div class="lib-cmp-chrome">
+        <div class="lib-flag${sidecar.label === 'Green' ? ' on' : ''}" data-survey-action="pick" title="Pick (P)">${ic('flagGreen',15)}</div>
+        <div class="lib-flag${sidecar.label === 'Red' ? ' on' : ''}" data-survey-action="reject" title="Reject (X)">${ic('close',12)}</div>
+        <div class="lib-flag${sidecar.favorite ? ' on' : ''}" data-survey-action="favorite" title="Favorite">${ic('heart',15)}</div>
+        <span style="margin-left:auto;color:var(--mut);font-size:10px">${STARS_ENABLED && sidecar.rating ? `${sidecar.rating}★` : ''}</span>
+      </div>
+    </section>`;
+  }
+
+  function surveySyncFocus() {
+    const host = surveyHost(); if (!host) return;
+    host.querySelectorAll('.lib-survey-cell').forEach((cell, i) => {
+      cell.classList.toggle('cmp-focus', i === surveyState.focus);
+      cell.setAttribute('aria-label', `Photo ${i + 1} of ${surveyState.cells.length}: ${baseName(surveyState.cells[i].path)}${i === surveyState.focus ? ', focused' : ''}`);
+    });
+    const bar = host.querySelector('#lib-compare-bar');
+    if (bar) {
+      const info = bar.querySelector('.survey-focus-note');
+      if (info) info.textContent = surveyState.cells.length ? `Photo ${surveyState.focus + 1} focused · arrows/Tab move · Delete removes · X/P/U flag · 0–5 rate` : '';
+    }
+  }
+
+  function renderSurveyCell(idx) {
+    const host = surveyHost(); const cellState = surveyState.cells[idx];
+    const cell = host && host.querySelector(`.lib-survey-cell[data-survey-idx="${idx}"]`);
+    const canvas = cell && cell.querySelector('canvas');
+    if (!canvas || !cellState) return;
+    if (typeof fxSelectImage === 'function' && typeof fxCurIdx !== 'undefined' && fxCurIdx !== cellState.fxIdx) fxSelectImage(cellState.fxIdx);
+    const it = (typeof fxImages !== 'undefined' && fxImages[cellState.fxIdx]) || null;
+    const img = it && it.img;
+    const iw = img ? (img.naturalWidth || img.width) : 1200, ih = img ? (img.naturalHeight || img.height) : 800;
+    const wrap = cell.querySelector('.lib-cmp-canvas-wrap');
+    const scale = Math.min(1, Math.max(100, wrap.clientWidth || 320) / iw, Math.max(100, wrap.clientHeight || 240) / ih);
+    const snap = typeof resolveSplitSnapshot === 'function' ? resolveSplitSnapshot(null) : 'orig';
+    try { if (typeof renderSnapshotTo === 'function') renderSnapshotTo(canvas, snap, Math.max(1, Math.round(iw * scale)), Math.max(1, Math.round(ih * scale)), {}); }
+    catch (e) { console.error('renderSurveyCell', idx, e); }
+  }
+
+  function surveySyncCell(idx) {
+    const host = surveyHost(), cell = host && host.querySelector(`.lib-survey-cell[data-survey-idx="${idx}"]`);
+    if (!cell || !surveyState.cells[idx]) return;
+    const sidecar = state.sidecars.get(surveyState.cells[idx].path) || { rating: 0, label: '', favorite: false };
+    cell.querySelector('[data-survey-action="pick"]')?.classList.toggle('on', sidecar.label === 'Green');
+    cell.querySelector('[data-survey-action="reject"]')?.classList.toggle('on', sidecar.label === 'Red');
+    cell.querySelector('[data-survey-action="favorite"]')?.classList.toggle('on', !!sidecar.favorite);
+    const rating = cell.querySelector('.lib-cmp-chrome span');
+    if (rating) rating.textContent = STARS_ENABLED && sidecar.rating ? `${sidecar.rating}★` : '';
+  }
+  function surveySyncPath(path) { const idx = surveyState.cells.findIndex((cell) => cell.path === path); if (idx >= 0) surveySyncCell(idx); }
+  function surveyTargetPath() { return surveyState.cells[surveyState.focus]?.path || ''; }
+  function surveyCellCleanup(el) {
+    const canvas = el && el.querySelector('canvas');
+    if (canvas) { canvas.width = 0; canvas.height = 0; }
+    if (el) el.remove();
+  }
+
+  function buildSurveyUI() {
+    const host = surveyHost(); if (!host) return;
+    const n = surveyState.cells.length;
+    host.style.setProperty('--survey-cols', String(surveyColumns(n)));
+    host.style.setProperty('--survey-rows', String(Math.ceil(n / surveyColumns(n))));
+    const capNote = compareState.totalSelected > n ? ` · showing first ${n} of ${compareState.totalSelected} selected` : '';
+    host.innerHTML = `<div id="lib-compare-bar"><span class="survey-count">Survey · ${n} photos${capNote}</span><span class="survey-focus-note" style="margin-left:auto;color:var(--acc)"></span></div>
+      <div id="lib-survey-grid">${surveyState.cells.map(surveyCellHtml).join('')}</div>`;
+    host.querySelectorAll('.lib-survey-cell').forEach((el) => {
+      el.addEventListener('focus', () => { surveyState.focus = Number(el.dataset.surveyIdx); surveySyncFocus(); });
+      el.addEventListener('click', () => { surveyState.focus = Number(el.dataset.surveyIdx); surveySyncFocus(); });
+    });
+    host.querySelectorAll('[data-survey-remove]').forEach((button) => button.addEventListener('click', (e) => {
+      e.stopPropagation(); surveyRemove(Number(button.dataset.surveyRemove));
+    }));
+    host.querySelectorAll('[data-survey-action]').forEach((button) => button.addEventListener('click', async (e) => {
+      e.stopPropagation(); const idx = Number(button.closest('.lib-survey-cell')?.dataset.surveyIdx);
+      const cell = surveyState.cells[idx]; if (!cell) return;
+      if (button.dataset.surveyAction === 'favorite') {
+        const current = state.sidecars.get(cell.path) || { favorite: false };
+        await setFavorite(cell.path, !current.favorite);
+      } else {
+        const label = button.dataset.surveyAction === 'pick' ? 'Green' : 'Red';
+        const current = state.sidecars.get(cell.path) || { label: '' };
+        await setLabel(cell.path, current.label === label ? '' : label);
+      }
+      surveySyncCell(idx);
+    }));
+    surveyCellsRender();
+    surveySyncFocus();
+  }
+
+  function surveySyncCells() {
+    const host = surveyHost(), grid = host && host.querySelector('#lib-survey-grid');
+    if (!host || !grid) return;
+    const n = surveyState.cells.length, cols = surveyColumns(n);
+    host.style.setProperty('--survey-cols', String(cols));
+    host.style.setProperty('--survey-rows', String(Math.ceil(n / cols)));
+    const capNote = compareState.totalSelected > n ? ` · showing first ${n} of ${compareState.totalSelected} selected` : '';
+    const count = host.querySelector('.survey-count'); if (count) count.textContent = `Survey · ${n} photos${capNote}`;
+    [...grid.querySelectorAll('.lib-survey-cell')].forEach((el, i) => {
+      el.dataset.surveyIdx = String(i);
+      el.querySelector('.lib-survey-head > span:first-child').textContent = `${i + 1} / ${n}`;
+      el.querySelector('[data-survey-remove]').dataset.surveyRemove = String(i);
+    });
+    surveySyncFocus();
+  }
+
+  function surveyCellsRender() {
+    for (let i = 0; i < surveyState.cells.length; i++) renderSurveyCell(i);
+  }
+
+  function surveyFocus(delta, focusDom = true) {
+    if (!surveyState.cells.length) return;
+    surveyState.focus = (surveyState.focus + delta + surveyState.cells.length) % surveyState.cells.length;
+    surveySyncFocus();
+    if (focusDom) surveyHost()?.querySelector(`.lib-survey-cell[data-survey-idx="${surveyState.focus}"]`)?.focus({ preventScroll: true });
+  }
+  function surveyFocusVertical(rowDelta) {
+    const n = surveyState.cells.length, cols = surveyColumns(n), rows = Math.ceil(n / cols);
+    if (!n) return;
+    const col = surveyState.focus % cols, row = Math.floor(surveyState.focus / cols);
+    const nextRow = (row + rowDelta + rows) % rows;
+    surveyState.focus = Math.min(nextRow * cols + col, n - 1);
+    surveySyncFocus();
+    surveyHost()?.querySelector(`.lib-survey-cell[data-survey-idx="${surveyState.focus}"]`)?.focus({ preventScroll: true });
+  }
+
+  function surveyRemove(idx = surveyState.focus) {
+    if (idx < 0 || idx >= surveyState.cells.length) return;
+    surveyCellCleanup(surveyHost()?.querySelector(`.lib-survey-cell[data-survey-idx="${idx}"]`));
+    surveyState.cells.splice(idx, 1);
+    if (surveyState.cells.length < 2) { exitCompareMode(); return; }
+    surveyState.focus = Math.min(idx, surveyState.cells.length - 1);
+    surveySyncCells();
+    surveyHost()?.querySelector(`.lib-survey-cell[data-survey-idx="${surveyState.focus}"]`)?.focus({ preventScroll: true });
+  }
 
   function buildCompareUI() {
     const host = compareHost();
@@ -8343,7 +8508,11 @@
     if (!canEnterCompare()) return;
     const paths = state.selected.size ? Array.from(state.selected) : (state.openedPath ? [state.openedPath] : []);
     if (!paths.length) { if (typeof toast === 'function') toast('Select at least one photo to compare', false); return; }
-    if (state.viewMode !== 'compare') compareState.prevViewMode = state.viewMode;
+    if (state.viewMode !== 'compare' && state.viewMode !== 'survey') compareState.prevViewMode = state.viewMode;
+    compareState.mode = 'compare'; compareState.totalSelected = paths.length;
+    const entryToken = ++compareState.entryToken;
+    surveyState.entryToken++;
+    surveyState.cells = [];
     compareState.paths = paths;
     compareState.paneA = { idx: 0, srcKey: 'live' };
     compareState.paneB = { idx: paths.length > 1 ? 1 : 0, srcKey: 'live' };
@@ -8351,22 +8520,57 @@
     state.viewMode = 'compare';
     syncViewSeg();
     const host = compareHost();
+    const survey = surveyHost(); if (survey) { survey.classList.remove('on'); survey.innerHTML = ''; }
     if (host) { host.classList.add('on'); host.innerHTML = '<div id="lib-empty">Loading…</div>'; }
     try { await openPathsInEditor(paths); }
-    catch (e) { console.error('compare openPathsInEditor', e); if (typeof toast === 'function') toast('Could not load photos for compare', false); exitCompareMode(); return; }
+    catch (e) { if (entryToken !== compareState.entryToken) return; console.error('compare openPathsInEditor', e); if (typeof toast === 'function') toast('Could not load photos for compare', false); exitCompareMode(); return; }
+    if (entryToken !== compareState.entryToken || state.viewMode !== 'compare') return;
     compareState.active = true;
     buildCompareUI();
     await renderComparePane('A');
+    if (entryToken !== compareState.entryToken || state.viewMode !== 'compare') return;
     await renderComparePane('B');
   }
   function exitCompareMode() {
+    compareState.entryToken++;
+    surveyState.entryToken++;
     compareState.active = false;
     const host = compareHost();
-    if (host) host.classList.remove('on');
+    if (host) { host.classList.remove('on'); host.innerHTML = ''; }
+    const survey = surveyHost();
+    if (survey) { survey.classList.remove('on'); survey.innerHTML = ''; }
+    surveyState.cells = []; surveyState.focus = 0;
     state.viewMode = compareState.prevViewMode || 'grid';
     localStorage.setItem('chromasmith_lib_view', state.viewMode);
     syncViewSeg();
     renderGrid();
+  }
+
+  async function enterSurveyMode() {
+    if (!canEnterCompare()) return;
+    const paths = state.selected.size ? Array.from(state.selected) : (state.openedPath ? [state.openedPath] : []);
+    if (paths.length < 2) { if (typeof toast === 'function') toast('Select at least two photos for Survey', false); return; }
+    if (state.viewMode !== 'compare' && state.viewMode !== 'survey') compareState.prevViewMode = state.viewMode;
+    compareState.mode = 'survey'; compareState.totalSelected = paths.length;
+    const entryToken = ++compareState.entryToken;
+    // Lightroom Survey is an 8-cell view. Make the cap visible in the toolbar instead of loading
+    // an unbounded batch that cannot fit or be meaningfully reviewed at once.
+    compareState.paths = paths.slice(0, 8);
+    surveyState.cells = compareState.paths.map((path, fxIdx) => ({ path, fxIdx }));
+    surveyState.focus = 0;
+    compareState.zoom = 1; compareState.panX = 0; compareState.panY = 0;
+    state.viewMode = 'survey';
+    surveyState.entryToken++;
+    syncViewSeg();
+    const compare = compareHost(); if (compare) { compare.classList.remove('on'); compare.innerHTML = ''; }
+    const host = surveyHost();
+    if (host) { host.classList.add('on'); host.innerHTML = '<div id="lib-empty">Loading…</div>'; }
+    try { await openPathsInEditor(compareState.paths); }
+    catch (e) { if (entryToken !== compareState.entryToken) return; console.error('survey openPathsInEditor', e); if (typeof toast === 'function') toast('Could not load photos for Survey', false); exitCompareMode(); return; }
+    if (entryToken !== compareState.entryToken || state.viewMode !== 'survey') return;
+    compareState.active = true;
+    buildSurveyUI();
+    surveyHost()?.querySelector('.lib-survey-cell')?.focus({ preventScroll: true });
   }
   // ←/→ cycles pane B's photo through the rest of the current selection; ⏎ promotes B to A
   // (swap which photo/source is "the keeper"); handled from the shared keydown listener below.
@@ -8662,7 +8866,10 @@
       // Studio's own Escape handler (chromasmith-22.html) runs first and closes it with preventDefault, so
       // by the time we get here the menu already looks closed — bail on defaultPrevented, otherwise the
       // same keypress also exits the full-window Library behind it.
-      if (e.defaultPrevented) return;
+      // The Editor's global Escape listener marks this key as handled even when its own menus
+      // are closed. Compare/Survey are Library-owned top-level views, so let their dedicated
+      // Escape branches run after checking the Library's transient menus below.
+      if (e.defaultPrevented && !(compareState.active && (state.viewMode === 'compare' || state.viewMode === 'survey'))) return;
       const settingsMenuEl = document.getElementById('fx-settings-menu');
       if (settingsMenuEl && settingsMenuEl.classList.contains('on')) { if (window.settingsClose) window.settingsClose(); e.preventDefault(); return; }
       if (sortMenuEl && sortMenuEl.classList.contains('open')) { sortMenuEl.classList.remove('open'); e.preventDefault(); return; }
@@ -8708,13 +8915,13 @@
     // Space opens Quick Look for whatever's currently highlighted — same target resolution
     // order kbTargets() below uses (cursor, then the open photo), so it's the photo you'd
     // expect it to be regardless of whether you got here by mouse or keyboard.
-    if (e.key === ' ' && state.source !== 'lr' && state.viewMode !== 'compare') {
+    if (e.key === ' ' && state.source !== 'lr' && state.viewMode !== 'compare' && state.viewMode !== 'survey') {
       const target = state._kbCursor || state.openedPath || (state.selected.size === 1 ? [...state.selected][0] : '');
       if (target) { e.preventDefault(); showQuickLook(target); return; }
     }
     // ⌘A/Ctrl+A select-all, ahead of the generic modifier-key bailout below (every other
     // shortcut here is unmodified).
-    if ((e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey) && !e.altKey && state.source !== 'lr' && state.viewMode !== 'compare') {
+    if ((e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey) && !e.altKey && state.source !== 'lr' && state.viewMode !== 'compare' && state.viewMode !== 'survey') {
       e.preventDefault();
       selectAllCatalogEntries();
       return;
@@ -8726,7 +8933,7 @@
     // meaningless in the LR cloud view or mid-compare — and every target comes from
     // cmKbTargets() (selection → keyboard cursor → the open photo), the same resolution the
     // context menu uses when it opens from a right-click instead of a key.
-    if (state.source !== 'lr' && state.viewMode !== 'compare' && (e.metaKey || e.ctrlKey) && !e.altKey) {
+    if (state.source !== 'lr' && state.viewMode !== 'compare' && state.viewMode !== 'survey' && (e.metaKey || e.ctrlKey) && !e.altKey) {
       const k = e.key.toLowerCase();
       if (k === 'c' && e.shiftKey) { e.preventDefault(); libCopyEdit(cmKbTargets()); return; }
       if (k === 'v' && e.shiftKey) { e.preventDefault(); libPasteEdit(cmKbTargets()); return; }
@@ -8743,6 +8950,25 @@
       if (e.key === 'i' || e.key === 'I') { state.showInfo = !state.showInfo; renderInfoPanel(); return; }
     if (e.key === 'g' || e.key === 'G') toggleExpandedView();
       else if (e.key === 'Escape' && (state.expanded_view || state.unified_view)) toggleExpandedView(false);
+      return;
+    }
+    // ── Survey mode: focus stays on one visible cell, so culling and rating always target it.
+    if (state.viewMode === 'survey' && compareState.active) {
+      if (e.key === 'ArrowRight') { e.preventDefault(); surveyFocus(1); return; }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); surveyFocus(-1); return; }
+      if (e.key === 'ArrowDown') { e.preventDefault(); surveyFocusVertical(1); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); surveyFocusVertical(-1); return; }
+      if (e.key === 'Tab') { e.preventDefault(); surveyFocus(e.shiftKey ? -1 : 1); return; }
+      if (e.key === 'Escape') { e.preventDefault(); exitCompareMode(); return; }
+      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); surveyRemove(); return; }
+      const cell = surveyState.cells[surveyState.focus];
+      if (!cell) return;
+      if (STARS_ENABLED && e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault(); setRating(cell.path, parseInt(e.key, 10)).then(() => surveySyncPath(cell.path)); return;
+      }
+      if (e.key === 'x' || e.key === 'X') { e.preventDefault(); setLabel(cell.path, 'Red').then(() => surveySyncPath(cell.path)); return; }
+      if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setLabel(cell.path, 'Green').then(() => surveySyncPath(cell.path)); return; }
+      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); setLabel(cell.path, '').then(() => surveySyncPath(cell.path)); return; }
       return;
     }
     // ── Compare mode: ←/→ cycle pane B, ⏎ promotes B to A, Esc exits back to the previous
@@ -8774,6 +9000,7 @@
       return;
     }
     if ((e.key === 'c' || e.key === 'C') && (state.selected.size >= 1 || state.openedPath)) { enterCompareMode(); return; }
+    if ((e.key === 'n' || e.key === 'N') && state.selected.size >= 2) { enterSurveyMode(); return; }
     // ── Grid keyboard culling (Lightroom idiom): arrows move a highlight through the CURRENT
     // sorted/filtered order, Enter opens it, X rejects / P picks / U clears the flag on it (or
     // on the multi-selection when one exists). The highlight rides on state.openedPath when a
@@ -9096,7 +9323,7 @@
   viewSeg.querySelectorAll('button').forEach((b) => {
     b.onclick = () => {
       if (b.disabled) return;
-      if (state.viewMode === 'compare') exitCompareMode();
+    if (state.viewMode === 'compare' || state.viewMode === 'survey') exitCompareMode();
       state.viewMode = b.dataset.v; localStorage.setItem('chromasmith_lib_view', state.viewMode); syncViewSeg(); renderGrid();
     };
   });
@@ -9104,11 +9331,12 @@
   // keyboard shortcut, still wired the same way elsewhere) — a real feature, just not one of
   // the two everyday view modes.
   overlay.querySelector('#lib-compare-btn')?.addEventListener('click', () => enterCompareMode());
+  overlay.querySelector('#lib-survey-btn')?.addEventListener('click', () => enterSurveyMode());
   overlay.querySelector('#lib-preview-btn')?.addEventListener('click', () => { if (window.settingsClose) settingsClose(); openPhotoPreview(); });
   // 'compare' was never a persisted-view default before this session — a stale localStorage
   // value from a crash mid-compare should fall back to grid on next load, not silently retry
   // entering compare with no selection.
-  if (state.viewMode === 'compare') state.viewMode = 'grid';
+  if (state.viewMode === 'compare' || state.viewMode === 'survey') state.viewMode = 'grid';
   syncViewSeg();
 
   const thumbSlider = overlay.querySelector('#lib-thumbsize');
@@ -13609,11 +13837,13 @@
     const withQuickLook = () => {
       if (quicklook.active) return [quicklook.path];
       if (state.source === 'lr') return [];
+      if (state.viewMode === 'survey' && compareState.active) return [surveyTargetPath()];
       if (state.viewMode === 'compare' && compareState.active) return [comparePathForIdx(compareState[compareState.focus === 'A' ? 'paneA' : 'paneB'].idx)];
       return shortcutTargets();
     };
     const applyShortcutLabel = (label) => { const ps = withQuickLook().filter(Boolean); if (!ps.length) return false;
-      if (!quicklook.active && state.viewMode === 'compare' && compareState.active) compareApplyLabel(ps[0], label);
+      if (!quicklook.active && state.viewMode === 'survey' && compareState.active) setLabel(ps[0], label).then(() => surveySyncPath(ps[0]));
+      else if (!quicklook.active && state.viewMode === 'compare' && compareState.active) compareApplyLabel(ps[0], label);
       else ps.forEach(p => setLabel(p, label)); };
     window.chromasmithRegisterShortcut('library.reject', () => applyShortcutLabel('Red'));
     window.chromasmithRegisterShortcut('library.pick', () => applyShortcutLabel('Green'));
@@ -13621,7 +13851,7 @@
     for (let rating = 0; rating <= 5; rating++) {
       window.chromasmithRegisterShortcut(`library.rate-${rating}`, () => {
         if (!STARS_ENABLED) return false;
-        const ps = withQuickLook().filter(Boolean); if (!ps.length) return false; ps.forEach(p => setRating(p, rating));
+        const ps = withQuickLook().filter(Boolean); if (!ps.length) return false; ps.forEach(p => setRating(p, rating).then(() => surveySyncPath(p)));
       });
     }
     window.chromasmithRegisterShortcut('library.open', () => {
@@ -13635,6 +13865,7 @@
     });
     window.chromasmithRegisterShortcut('library.next', (e) => {
       if (state.viewMode === 'compare' && compareState.active) { compareCycleB(1); return; }
+      if (state.viewMode === 'survey' && compareState.active) { surveyFocus(1); return; }
       if (quicklook.active) {
         const shown = sortEntries(state.entries.filter(passesFilters));
         const i = shown.findIndex(p => p.path === quicklook.path);
@@ -13657,6 +13888,7 @@
     });
     window.chromasmithRegisterShortcut('library.previous', (e) => {
       if (state.viewMode === 'compare' && compareState.active) { compareCycleB(-1); return; }
+      if (state.viewMode === 'survey' && compareState.active) { surveyFocus(-1); return; }
       if (quicklook.active) {
         const shown = sortEntries(state.entries.filter(passesFilters));
         const i = shown.findIndex(p => p.path === quicklook.path);
