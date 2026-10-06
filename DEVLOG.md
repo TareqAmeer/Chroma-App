@@ -32,3 +32,9 @@
 - Added Lightroom/darktable/digiKam-informed batch rename previews and apply, including RAW+JPEG pairs, sidecars, and album path updates. Files: `desktop/library-ui.js`, `desktop/src-tauri/src/catalog.rs`, `desktop/src-tauri/src/ingest.rs`, `desktop/src-tauri/src/library.rs`, `desktop/src-tauri/src/main.rs` (CHR-175).
 - Removed 19 unused Tauri command registrations after reviewing current `origin/main`; retained the OAuth callback fallback used for cold-launch handling. Audit: `docs/native-command-audit.md` (CHR-233).
 - Verification: source review only; no tests or build run.
+
+## 2026-10-06 — CHR-245 Red-eye and pet-eye correction
+
+- Added non-destructive manual human/pet eye corrections with movable/resizable regions, per-eye selection and toggles, Lightroom-style pupil/darken controls, undo/history, session restore, selective copy/paste, preview/loupe and still export support.
+- Added reviewable human eye proposals from the existing SCRFD landmarks; used the GEGL red-eye operation for human pixels and darktable's documented local channel-mixer approach for pet reflection modes. Files: `chromasmith-22.html`, `test/editor_snap_lists_check.mjs`.
+- Verification: `git diff --check`, editor HTML check, and WebKit smoke passed. Chromium-dependent editor gates could not run because the Playwright Chromium executable is missing; human/pet flash fixture verification remains outstanding.
