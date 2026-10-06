@@ -1,6 +1,6 @@
 # Build/install benchmark-only code. Never include this endpoint in a release APK.
 $ErrorActionPreference='Stop'
-$repo=Resolve-Path (Join-Path $PSScriptRoot '../..')
+$repo=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 Set-Location $repo
 $activity=Join-Path $repo 'android/app/src/main/java/com/tareq/chromasmith/MainActivity.java'
 $debug=Join-Path $repo 'android/app/src/debug'
@@ -27,6 +27,7 @@ try {
 } finally {
   [IO.File]::WriteAllText($activity,$before)
   # This exact directory was absent before staging and was created above.
-  if((Resolve-Path $debug).Path -ne (Join-Path $repo 'android/app/src/debug')){throw 'Unexpected debug path'}
+  $expectedDebug=[IO.Path]::GetFullPath((Join-Path $repo 'android/app/src/debug'))
+  if((Resolve-Path $debug).Path -ne $expectedDebug -or -not $expectedDebug.StartsWith($repo+[IO.Path]::DirectorySeparatorChar)){throw 'Unexpected debug path'}
   Remove-Item -LiteralPath $debug -Recurse -Force
 }

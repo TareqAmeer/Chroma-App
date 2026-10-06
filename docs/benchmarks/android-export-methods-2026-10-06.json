@@ -8682,5 +8682,69 @@
     "goldensExact": 23,
     "ordinaryAPKExcludesExperimentEndpoint": true,
     "delayedReceiptStatusRegression": "PASS"
+  },
+  "integrationVerification": {
+    "rendered": 35,
+    "allByteIdentical": true,
+    "baselineCommit": "eee20be81d9e03c77133dc9de3e92e1ff755b713",
+    "waveletGoldenMismatchesPreexisting": 5,
+    "goldensPassed": 18,
+    "goldensPreexistingMismatches": 5,
+    "exportFocusedRegressions": "PASS",
+    "androidBuild": "PASS"
+  },
+  "integratedNativeSaveTests": {
+    "receipts": [
+      {
+        "ok": true,
+        "fname": "binary-check-1791325364293.jpg",
+        "status": "saved",
+        "path": "Photos \u00e2\u20ac\u00ba Chromasmith",
+        "err": "",
+        "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/binary-check-1791325364293.jpg"
+      },
+      {
+        "ok": true,
+        "fname": "binary-check-1791325364293.jpg",
+        "status": "saved",
+        "path": "Photos \u00e2\u20ac\u00ba Chromasmith",
+        "err": "",
+        "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/binary-check-1791325364293%20(2).jpg"
+      }
+    ],
+    "invalid": {
+      "id": "invalid-test",
+      "status": "error",
+      "error": "Invalid JPEG export"
+    },
+    "statuses": [
+      {
+        "status": "saved",
+        "path": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/binary-check-1791325364293.jpg"
+      },
+      {
+        "status": "saved",
+        "path": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/binary-check-1791325364293%20(2).jpg"
+      }
+    ],
+    "duplicatePreserved": true,
+    "bytesExact": true,
+    "origin": "https://localhost"
+  },
+  "deliberatelyDroppedAcknowledgementTest": {
+    "receipts": [
+      {
+        "ok": true,
+        "fname": "delayed-receipt-1791325369263.jpg",
+        "status": "saved",
+        "path": "Photos \u00e2\u20ac\u00ba Chromasmith",
+        "err": "",
+        "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/delayed-receipt-1791325369263.jpg"
+      }
+    ],
+    "dropped": true,
+    "totalMs": 30301.400000000373,
+    "byteExact": true,
+    "condition": "Test drops normal acknowledgement; totalMs is induced timeout, not performance"
   }
 }
