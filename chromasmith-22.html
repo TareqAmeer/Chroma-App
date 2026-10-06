@@ -232,6 +232,8 @@ body.light *:hover,body.light *.fx-scrolling{scrollbar-color:rgba(0,0,0,.28) tra
 body.light :hover::-webkit-scrollbar-thumb,body.light .fx-scrolling::-webkit-scrollbar-thumb{background:rgba(0,0,0,.28)}
 body.light ::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.42)}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+/* The reset above zeroes the UA's margin:auto that centres a modal <dialog>; without this every showModal() dialog (batch rename, etc.) pins to the top-left corner. */
+dialog:modal{margin:auto}
 html,body{max-width:100%;overflow-x:clip}
 /* Mirrors of body.mobile-fx/body.mobile-cl, toggled onto <html> alongside <body> (see
    applyFxLayout()) — html has no overflow-y constraint otherwise, so it remains a second,
