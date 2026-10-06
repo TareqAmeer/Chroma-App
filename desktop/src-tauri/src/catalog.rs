@@ -8943,6 +8943,40 @@ pub async fn catalog_stack(app: tauri::AppHandle) -> Result<StackResult, String>
     .map_err(|e| format!("catalog_stack task panicked: {e}"))?
 }
 
+/// Smart-collection registries (Rejected/Flagged/…) are plain path lists that know nothing about
+/// library roots, so a removed folder's photos — or test fixtures and temp files written by the
+/// harnesses — kept showing there. A path is "outside the library" when it sits in a temp dir,
+/// or the catalog has it as a hidden row (`present = 0`, i.e. its root was removed). Paths the
+/// catalog never indexed are kept: a browse-only folder's flags must still show.
+pub fn registry_paths_outside_library(conn: &Connection, paths: &[String]) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    let vols: Vec<(i64, String)> = match conn.prepare("SELECT id, last_path FROM volumes") {
+        Ok(mut st) => st
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map(|it| it.filter_map(Result::ok).collect())
+            .unwrap_or_default(),
+        Err(_) => return out,
+    };
+    let Ok(mut st) = conn.prepare("SELECT present FROM photos WHERE volume_id = ?1 AND rel_path = ?2") else { return out };
+    for p in paths {
+        if p.starts_with("/var/folders/") || p.starts_with("/private/var/folders/") || p.starts_with("/tmp/") || p.starts_with("/private/tmp/") {
+            out.insert(p.clone());
+            continue;
+        }
+        // Firmlink alias: "/System/Volumes/Data/Users/…" is the same file as "/Users/…".
+        let norm = p.strip_prefix("/System/Volumes/Data").unwrap_or(p);
+        for (vid, last_path) in &vols {
+            let Ok(rel) = Path::new(norm).strip_prefix(Path::new(last_path.as_str())) else { continue };
+            let rel = rel.to_string_lossy().replace('\\', "/");
+            if let Ok(present) = st.query_row(params![vid, rel.as_str()], |r| r.get::<_, i64>(0)) {
+                if present == 0 { out.insert(p.clone()); }
+                break;
+            }
+        }
+    }
+    out
+}
+
 fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {
     let mut stmt = conn.prepare("SELECT id, last_path, is_local FROM volumes").ok()?;
     let mut volumes: Vec<(i64, String, bool)> = stmt

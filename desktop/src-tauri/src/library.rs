@@ -2728,8 +2728,8 @@ pub fn append_export_history(path: String, version: String, recipe: String, dest
 /// of silently vanishing or erroring the whole list. Sorted newest-mtime-first; the frontend
 /// re-sorts/filters same as a normal folder view.
 #[tauri::command(async)]
-pub fn list_collection(name: String) -> Vec<DirEntry> {
-    let mut out: Vec<DirEntry> = registry_read(&name)
+pub fn list_collection(name: String, cat: tauri::State<crate::catalog::CatalogState>) -> Vec<DirEntry> {
+    let mut out: Vec<DirEntry> = in_library(&cat, registry_read(&name))
         .into_iter()
         .map(|path| {
             // Heal registry entries written with a guessed-lowercase extension (see real_case_sibling).
@@ -2759,17 +2759,17 @@ pub fn list_collection(name: String) -> Vec<DirEntry> {
 /// Kept for backward compat with the frontend's original "All Edited" call site — equivalent
 /// to `list_collection("edited")`.
 #[tauri::command(async)]
-pub fn list_edited() -> Vec<DirEntry> {
-    list_collection("edited".to_string())
+pub fn list_edited(cat: tauri::State<crate::catalog::CatalogState>) -> Vec<DirEntry> {
+    list_collection("edited".to_string(), cat)
 }
 
 /// Photo paths that have at least one export-history entry (see append_export_history above) —
 /// the "Exported" smart collection. Reuses the same stat-fresh/missing-tolerant mapping as
 /// list_collection, just sourced from export_history.json's keys instead of a registry file.
 #[tauri::command(async)]
-pub fn list_exported() -> Vec<DirEntry> {
-    let mut out: Vec<DirEntry> = export_history_read_all()
-        .into_keys()
+pub fn list_exported(cat: tauri::State<crate::catalog::CatalogState>) -> Vec<DirEntry> {
+    let mut out: Vec<DirEntry> = in_library(&cat, export_history_read_all().into_keys().collect())
+        .into_iter()
         .map(|path| {
             let p = Path::new(&path);
             let file_name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
@@ -2800,17 +2800,21 @@ fn existing_path_count(paths: impl IntoIterator<Item = String>) -> usize {
 /// checking their paths keeps the badge aligned with the renderable collection without deleting
 /// a recoverable record.
 #[tauri::command(async)]
-pub fn collection_counts() -> std::collections::HashMap<String, usize> {
+pub fn collection_counts(cat: tauri::State<crate::catalog::CatalogState>) -> std::collections::HashMap<String, usize> {
     let mut m = std::collections::HashMap::new();
-    m.insert("edited".to_string(), existing_path_count(registry_read("edited")));
-    m.insert("favorites".to_string(), existing_path_count(registry_read("favorites")));
-    m.insert("flagged".to_string(), existing_path_count(registry_read("flagged")));
-    m.insert("rejected".to_string(), existing_path_count(registry_read("rejected")));
-    m.insert("exported".to_string(), existing_path_count(export_history_read_all().into_keys()));
-    m.insert("recents".to_string(), existing_path_count(registry_read("recents")));
-    m.insert("duplicates".to_string(), existing_path_count(registry_read("duplicates")));
-    m.insert("gphotos".to_string(), existing_path_count(registry_read("gphotos")));
+    for name in ["edited", "favorites", "flagged", "rejected", "recents", "duplicates", "gphotos"] {
+        m.insert(name.to_string(), existing_path_count(in_library(&cat, registry_read(name))));
+    }
+    m.insert("exported".to_string(), existing_path_count(in_library(&cat, export_history_read_all().into_keys().collect())));
     m
+}
+
+/// Drops registry paths that belong to a removed folder or a temp dir — see
+/// catalog::registry_paths_outside_library. A locked/busy catalog leaves the list unfiltered.
+fn in_library(cat: &crate::catalog::CatalogState, paths: Vec<String>) -> Vec<String> {
+    let Ok(conn) = cat.read_conn.lock() else { return paths };
+    let out = crate::catalog::registry_paths_outside_library(&conn, &paths);
+    paths.into_iter().filter(|p| !out.contains(p)).collect()
 }
 
 // ── Perceptual-hash duplicate detection (dHash, 8x8 grey -> 64-bit) ──────────────────────
