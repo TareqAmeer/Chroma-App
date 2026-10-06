@@ -109,6 +109,7 @@
   const _hashNums = (h, arr) => { for (let i = 0; i < arr.length; i++) { h = Math.imul(h ^ Math.round(arr[i] * 1e6), 16777619) >>> 0; } return h; };
   async function resolveRawLut(ident, profile, src) {
     ident = ident || {};
+    if (typeof rawProfileFor === 'function') profile = rawProfileFor(ident, profile); // "As Shot" → this photo's own Photo Style
     const dcpSource = (typeof resolveDcpSource === 'function') ? await resolveDcpSource(ident.make || '', ident.model || '') : null;
     const camPrefix = dcpSource ? dcpSource.prefix : null;
     if (camPrefix) {

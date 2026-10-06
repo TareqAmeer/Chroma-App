@@ -11917,7 +11917,21 @@ function dcpFit(iso,cameraPrefix){
 }
 const XYZ2PP=[1.3459433,-0.2556075,-0.0511118,-0.5445989,1.5081673,0.0205351,0,0,1.2118128];
 const PP2SRGB=[2.0340758,-0.7273341,-0.3067418,-0.2288131,1.2317301,-0.0029168,-0.0085698,-0.1532866,1.1618564];
-function rawProfile(){const v=localStorage.getItem('rawProfile');return v===null?'Standard':v}
+// "As Shot" (default): each RAW opens on the profile the camera itself recorded (Panasonic
+// PhotoStyle makernote, read natively by panasonic_photo_style). Codes per ExifTool; 22 =
+// Leica Monochrome verified in lens_correct.rs's photo_style_reads_real_files. Unknown, V-Log
+// (17 — handled by the V-Log input transform instead) or non-Panasonic falls back to Standard.
+const RAW_AS_SHOT='__asshot';
+// One-time move to As Shot: the old default was a fixed 'Standard' for every photo.
+try{if(!localStorage.getItem('rawProfileAsShotMigrated')){if(localStorage.getItem('rawProfile')==='Standard')localStorage.removeItem('rawProfile');localStorage.setItem('rawProfileAsShotMigrated','1');}}catch(e){}
+const PHOTO_STYLE_DCP={1:'Standard',2:'Vivid',3:'Natural',4:'Monochrome',5:'Landscape',6:'Portrait',8:'Cinelike D2',9:'Cinelike V2',11:'L Monochrome',15:'L Monochrome D',18:'Cinelike D2',22:'Leica Monochrome'};
+function rawProfileFor(ident,profile){
+  if(profile===undefined)profile=rawProfile();
+  if(profile!==RAW_AS_SHOT)return profile;
+  const ps=ident&&ident.photoStyle;
+  return (ps!=null&&PHOTO_STYLE_DCP[ps])||'Standard';
+}
+function rawProfile(){const v=localStorage.getItem('rawProfile');return v===null?RAW_AS_SHOT:v}
 function setRawProfile(v){localStorage.setItem('rawProfile',v);reloadRawProfileForCurrentPhoto(v)}
 try{window.chromasmithHdrPreview=localStorage.getItem('chromasmithHdrPreview')==='1';}catch(e){window.chromasmithHdrPreview=false;}
 function fxHdrPreviewSyncUI(){
@@ -11962,7 +11976,7 @@ if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',fxRawF
 // returned canvas replaces it.img in place so undo history / masks / geometry on the item
 // survive untouched — only the pixels change.
 async function reloadRawProfileForCurrentPhoto(v){
-  const label=v||'None (LibRaw sRGB)';
+  const label=v===RAW_AS_SHOT?'As Shot':(v||'None (LibRaw sRGB)');
   const it=typeof curItem==='function'?curItem():null;
   if(!it){log('RAW profile: '+label,'info');return}
   // Visible "this is happening" signal: reuse the SAME deskbar spinner the initial RAW decode
@@ -12005,7 +12019,7 @@ async function reloadRawProfileForCurrentPhoto(v){
   }
 }
 function initDcpSelect(){const s=document.getElementById('sel-dcp');if(!s)return;
-  s.innerHTML='<option value="">None (LibRaw sRGB)</option>'+DCP_PROFILES.map(n=>'<option value="'+n+'">'+n+'</option>').join('');
+  s.innerHTML='<option value="'+RAW_AS_SHOT+'">As Shot (camera Photo Style)</option><option value="">None (LibRaw sRGB)</option>'+DCP_PROFILES.map(n=>'<option value="'+n+'">'+n+'</option>').join('');
   s.value=rawProfile();}
 function parseDCP(buf,fname){
   fname=fname||'DCP profile';
@@ -12510,6 +12524,7 @@ async function loadRw2(file,opts){
       m=await raw.metadata();
       // libraw-wasm names these camera_make/camera_model; everything below (and the desktop shim) reads make/model. Without this the web build found no bundled profile for ANY camera and decoded every RAW a second time.
       if(m){if(m.make==null)m.make=m.camera_make;if(m.model==null)m.model=m.camera_model;}
+      if(profile)profile=rawProfileFor(m,profile);
       img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
       window.__pm&&window.__pm('loadRw2-imagedata');
     });
