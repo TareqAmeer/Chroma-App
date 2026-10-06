@@ -77,7 +77,9 @@ async function main() {
 
   const browser = await chromium.launch({
     args: [
-      '--use-gl=swiftshader',
+      // Windows Chromium selects SwiftShader through ANGLE; the direct GL backend loses
+      // every program/context before the first render on this platform.
+      process.platform === 'win32' ? '--use-gl=angle' : '--use-gl=swiftshader',
       '--use-angle=swiftshader',
       '--disable-gpu-sandbox',
       '--disable-dev-shm-usage',

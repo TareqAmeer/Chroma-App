@@ -459,10 +459,9 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
 /* Centre detent on bipolar rows, so the neutral point is findable by eye. */
 .fx-slider-bi{background-image:radial-gradient(circle,var(--mut) 0 2px,transparent 3px);background-size:5px 5px;
   background-position:center 0;background-repeat:no-repeat}
-/* Guards a vertical drag on the thumb from being captured by the bottom sheet's own vertical
-   scroll if a slider ever ends up inside that scrollable area — horizontal-only touch handling,
-   consistent with touch-action:none already used on the zoom/mask/curve drag surfaces. */
-body.mobile-fx .fx-slider{touch-action:pan-x}
+/* Let a vertical gesture over a slider scroll the mobile tool sheet. Horizontal gestures
+   remain available for adjusting the range control. */
+body.mobile-fx .fx-slider{touch-action:pan-y}
 .fx-val{order:2;font-family:var(--sans);font-size:var(--fs-2);font-variant-numeric:tabular-nums;color:var(--mut);text-align:right;flex-shrink:0}
 /* Accent is now an INFORMATION channel, not decoration: a value goes amber only when it differs
    from its factory default (see .fx-row.fx-mod), so a panel of 14 sliders at rest reads calm
@@ -621,8 +620,8 @@ body.light .fx-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='htt
 body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 /* padding here (not a bigger margin on the canvas/photo itself) gives the fit-to-window photo
    breathing room on every edge, including toward the docked filmstrip below it — the JS sizing
-   (renderPreview/fxLiveFit) reads wrap.clientWidth/clientHeight, which already excludes padding,
-   so the "fit" computation shrinks to match with no separate change needed there. Zooming past
+   (renderPreview/fxLiveFit) reads fxWrapInner(), which excludes padding,
+   so the "fit" computation shrinks to match. Zooming past
    100% still legitimately fills/overflows this box (clipped by overflow:hidden below) — the
    margin is only about the DEFAULT fit-to-window state touching every edge. */
 .fx-canvas-wrap{background:#000;border-radius:var(--r);overflow:hidden;position:relative;min-height:300px;display:flex;align-items:center;justify-content:center;padding:var(--sp-6)}
@@ -2382,7 +2381,10 @@ body.sk2 #cs-brand-name:hover .sk2-mk-l{opacity:1;stroke-width:1}
 body.sk2 #cs-brand-tog{margin-left:22px}
 body.sk2 #cs-brand-tog::after{background:var(--k-color-toggle-b)}
 body.sk2.deskx{--cs-brand-w:430px}
-@media(max-width:1000px){body.sk2.deskx{--cs-brand-w:190px}}
+/* Narrow window: keep the logo mark, drop the wordmark text (font-size:0 hides the text node but not the SVG),
+   and reserve logo(26) + toggle gap(22) + toggle(~170) so the toolbar icons never slide under the switch. The
+   plain max-width rule above hides #cs-brand-name entirely, but body.sk2's display:inline-flex outranks it. */
+@media(max-width:1000px){body.sk2 #cs-brand-name{font-size:0;gap:0}body.sk2.deskx{--cs-brand-w:240px}}
 /* Window buttons: invisible until the pointer is in the top-left corner; colour only on the
    button itself. The space stays reserved, so nothing shifts when they appear. */
 body.sk2 #cs-win{opacity:0;transition:opacity var(--k-motion-hover)}
@@ -2957,7 +2959,7 @@ body.mobile-fx .fx-slider::-moz-range-thumb{border:4px solid transparent!importa
 /* quick bar scrolls sideways to reach every tool */
 body.mobile-fx #fx-quicknav{justify-content:flex-start;overflow-x:auto;overflow-y:hidden;touch-action:pan-x;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 body.mobile-fx #fx-quicknav::-webkit-scrollbar{display:none}
-body.mobile-fx #fx-quicknav button{flex:0 0 auto;min-width:68px;padding:0 8px;white-space:nowrap}
+body.mobile-fx #fx-quicknav button{flex:0 0 auto;min-width:68px;height:100%;max-height:68px;padding:0 8px;white-space:nowrap}
 body.mobile-fx .fx-reordering{touch-action:none}
 body.mobile-fx .fx-dragging{opacity:.55;transform:scale(1.08);transition:transform .12s}
 body.mobile-fx #fx-quicknav button,body.mobile-fx #fx-tool-grid .fx-sec-btn{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -4348,6 +4350,20 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="btn-row" style="margin-top:6px"><button class="btn bgh" style="flex:1" onclick="healClear()">Clear all spots</button></div>
         </div>
       </div>
+      <!-- RED-EYE: source-coordinate pupil ellipses are corrected after the normal grade. -->
+      <div class="fx-ctrl" data-fxsec="redeye">
+        <div class="fx-ctrl-title">Red Eye</div>
+        <div class="fx-fields" id="ff-redeye">
+          <div class="fx-row"><div class="fx-label">Eye mode</div><select class="fx-select" id="sel-redeye-mode" onchange="redeyeModeChanged()"><option value="human">Human — red</option><option value="white">Pet — white</option><option value="green">Pet — green</option><option value="yellow">Pet — yellow</option></select></div>
+          <div class="fx-row"><div class="fx-label">Pupil size</div><input class="fx-slider" type="range" min="10" max="90" value="60" id="sl-redeye-size" oninput="redeyeControlChanged()"><div class="fx-val" id="vl-redeye-size">60%</div></div>
+          <div class="fx-row"><div class="fx-label">Darken</div><input class="fx-slider" type="range" min="0" max="100" value="75" id="sl-redeye-dark" oninput="redeyeControlChanged()"><div class="fx-val" id="vl-redeye-dark">75%</div></div>
+          <div class="btn-row" style="margin-top:2px"><button class="btn fx-btn-primary" id="btn-redeye-add" onclick="redeyeToggle()" style="flex:1">Add eye correction</button></div>
+          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" id="btn-redeye-auto" onclick="redeyeFixAll()" style="flex:1">Detect and fix all human eyes</button></div>
+          <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="redeye-count">No eye corrections — drag a circle over the eye.</div>
+          <div class="btn-row" style="margin-top:6px"><button class="btn bgh" style="flex:1" onclick="redeyeUndoLast()">Undo last</button><button class="btn bgh" style="flex:1" onclick="redeyeClear()">Clear all</button></div>
+          <div style="font-size:var(--fs-1);color:var(--mut);margin-top:6px">Auto-detect uses face eye landmarks and proposes red pupils for review. Pet modes are placed manually.</div>
+        </div>
+      </div>
       <!-- CANVAS (aspect-ratio matte around image + borders) -->
       <div class="fx-ctrl" data-fxsec="canvas">
         <div class="fx-ctrl-title">Canvas <div class="fx-toggle" id="tg-canvas" onclick="toggleFX('canvas')"></div></div>
@@ -4580,7 +4596,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <a href="#" class="ni-guide" onclick="switchTab('guide');return false">How it works</a>
           <div class="ni-hint">Click the button, or drag a photo anywhere onto this window. Your original is never changed · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none;cursor:pointer" title="Pick photos from your Google Photos library">Google Photos…</a></div>
         </div>
-        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
+        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas"></canvas><canvas id="fx-canvas-redeye" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><svg id="fx-redeye-overlay" viewBox="0 0 1 1" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;display:none;z-index:3"></svg><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
           <!-- Mask overlays live INSIDE fx-zoom-wrap (not fx-wrap) so they ride the exact same
                CSS transform as the canvas — glued to it by the compositor during zoom/pan with
                no per-event JS repositioning, instead of chasing getBoundingClientRect() a frame
@@ -6999,7 +7015,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006C';
+const BUILD='1.1006D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -12814,6 +12830,8 @@ function fxScheduleRender(){
 const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-skin'];
 function resetAdjust(){
   ADJ_RESET_FIELDS.forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
+  fxPaintAllSliders(document.querySelector('.fx-ctrl[data-fxsec="adjust"]'));
+  fxMarkModifiedSliders();
   fxUpdate();log('Adjustments reset','info');
 }
 // Disabled once every Basic Adjustments slider is already at its default (0) — clicking Reset
@@ -13727,7 +13745,7 @@ function _csModal(title,bodyHtml){
   ov.onclick=e=>{if(e.target===ov){if(window.__csShortcutCancelCapture)window.__csShortcutCancelCapture();ov.remove();}};
   const panel=document.createElement('div');panel.className='cs-modal';
   panel.style.cssText='max-width:560px;width:100%;max-height:80vh;overflow-y:auto;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;padding:20px;color:var(--txt);font-family:var(--sans);box-shadow:var(--lift-2)';
-  panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:16px">${title}</h2><button id="cs-modal-x" aria-label="Close" style="background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center;margin:-6px -8px -6px 0">×</button></div>${bodyHtml}`;
+  panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:16px">${title}</h2><button id="cs-modal-x" aria-label="Close" style="background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center;margin:-6px -8px -6px 0">×</button></div>${_kbdFix(bodyHtml)}`;
   ov.appendChild(panel);document.body.appendChild(ov);
   panel.querySelector('#cs-modal-x').onclick=()=>{if(window.__csShortcutCancelCapture)window.__csShortcutCancelCapture();ov.remove();};
   document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){ov.remove();document.removeEventListener('keydown',esc);}});
@@ -13770,6 +13788,25 @@ if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',_fxInf
 // already wired elsewhere (desktop-native.js's menu-* wiring, library-ui.js's grid keydown
 // handler, or an on-page oninput/onclick); this is purely a discoverability surface, not new
 // behavior. Grouped to match the new Photo/View menus.
+// Mac shortcut glyphs -> Windows/Linux wording ("⇧⌘Z" -> "Ctrl+Shift+Z"). Keydown handlers already accept
+// ctrlKey everywhere; only the LABELS were mac-only. Native desktop reports the real OS via CS_PLATFORM,
+// a plain browser falls back to navigator.platform.
+function _kbdFix(s){
+  const mac=(window.CS_PLATFORM?window.CS_PLATFORM.os==='macos':/Mac|iPhone|iPad/.test(navigator.platform||''));
+  if(mac||!s||s.indexOf('⌘')<0&&s.indexOf('⇧')<0&&s.indexOf('⌥')<0)return s;
+  return s.replace(/⇧⌘|⌘⇧/g,'Ctrl+Shift+').replace(/⌘/g,'Ctrl+').replace(/⇧/g,'Shift+').replace(/⌥/g,'Alt+');
+}
+function _kbdSweep(root){
+  root=root||document;
+  root.querySelectorAll('[title*="⌘"],[aria-label*="⌘"]').forEach(e=>{
+    ['title','aria-label'].forEach(a=>{const v=e.getAttribute(a);if(v)e.setAttribute(a,_kbdFix(v));});
+  });
+  root.querySelectorAll('kbd').forEach(e=>{if(e.textContent.indexOf('⌘')>=0)e.textContent=_kbdFix(e.textContent);});
+}
+if(typeof window!=='undefined'){
+  window.addEventListener('DOMContentLoaded',()=>_kbdSweep());
+  window.addEventListener('cs-platform-ready',()=>_kbdSweep());
+}
 // CHR-266: the registry is the single source of truth for editable app shortcuts. Contexts
 // intentionally overlap for actions usable in both Library and Editor; conflict checks run only
 // when two bindings share a context. CmdOrCtrl is resolved by the browser/platform.
@@ -18006,6 +18043,7 @@ function getUISnapshot(opts){
   // the push is skipped, and Cmd-Z silently does nothing to a repair. Plain numbers — no raster,
   // so `skipRaster` does not apply and history stays cheap.
   s.heal=(it&&it.heal&&it.heal.length)?_clone(it.heal):null;
+  s.redeye=(it&&it.redeye&&it.redeye.length)?_clone(it.redeye):null;
   s.adjustIndependent=!!(it&&it.adjustOverride); // whether THIS photo's Basic Adjustments are independent of the shared batch value — see adjToggleScope
   // structuredClone rather than four separate JSON round-trips: same deep copy, no intermediate
   // strings. (These hold only plain arrays/objects/numbers, all structured-cloneable.)
@@ -18049,6 +18087,7 @@ const PASTE_CATEGORIES=[
   {key:'halation',label:'Halation',sliders:['hal-a','hal-r','hal-p'],toggles:['tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme'],selects:[]},
   {key:'bloom',label:'Bloom',sliders:['bloom-a','bloom-th','bloom-r'],toggles:['tg-bloom'],selects:[]},
   {key:'masks',label:'Local Adjustments (masks)',sliders:[],toggles:['tg-local'],selects:[],extra:['masks']},
+  {key:'redeye',label:'Red-eye corrections',sliders:[],toggles:[],selects:[],extra:['redeye']},
   {key:'canvas',label:'Canvas / Borders / Vignette',sliders:['b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos','vig'],toggles:['tg-vig','tg-borders','tg-canvas'],selects:['sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src','sel-film-frame'],extra:['canvas','frameShuffle'],colors:['cl-b1','cl-b2']},
   {key:'geometry',label:'Crop / Geometry',sliders:[],toggles:[],selects:[],extra:['geom']},
   {key:'retouch',label:'Retouch / Healing',sliders:[],toggles:[],selects:[],extra:['heal']},
@@ -18146,6 +18185,7 @@ function applyUISnapshot(s,opts){
     if(hit)hit.heal=s.heal?_clone(s.heal):[];
     if(typeof healSyncUI==='function')healSyncUI();
   }
+  if(s.redeye!==undefined){const hit=curItem();if(hit)hit.redeye=s.redeye?_clone(s.redeye):[];if(typeof redeyeSyncUI==='function')redeyeSyncUI();}
   _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el&&s.sliders[id]!==undefined)el.value=s.sliders[id];});
   if(s.sliders&&s.sliders['lut-mix']!==undefined)fxState.lutMix=parseFloat(s.sliders['lut-mix'])/100;
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}}});
@@ -19551,6 +19591,8 @@ function saveSession(quiet){
   // would smear patches over whatever happened to load next. Plain numbers, so unlike mask
   // rasters this cannot blow the localStorage quota.
   s._heal=(git&&git.heal&&git.heal.length)?git.heal:null;
+  s._redeyeFor=git?git.name:null;
+  s._redeye=(git&&git.redeye&&git.redeye.length)?git.redeye:null;
   s._ver=2; // see applyUISnapshot's note — exposure slider mapping changed from /50 to /20
   // ⚠️ localStorage is a ~5MB quota. A photo carrying brush/AI masks can exceed it on its own
   // (each raster is base64'd), and the throw is a QuotaExceededError that used to be swallowed
@@ -19622,6 +19664,7 @@ function loadSessionGeomFor(){
     // Retouch is PER-PHOTO — a blemish belongs to one frame — so unlike geometry it is restored
     // only onto the photo it was recorded for, never broadcast across the batch.
     if(s._heal&&fxImages[0])fxImages[0].heal=JSON.parse(JSON.stringify(s._heal));
+    if(s._redeye&&fxImages[0])fxImages[0].redeye=JSON.parse(JSON.stringify(s._redeye));
     if(!s._geom)return;
     fxImages.forEach(it=>it.geom=JSON.parse(JSON.stringify(s._geom)));
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
@@ -20267,6 +20310,7 @@ function getFXParams(adjValsOverride){return{
   bordersEnabled:document.getElementById('tg-borders').classList.contains('on'),
   b1:_borderLayerParams('b1'),
   b2:_borderLayerParams('b2'),
+  redEyeOps:(typeof curItem==='function'&&curItem()&&curItem().redeye)||[],
   frameShuffle:fxState.frameShuffle||0,
 };}
 // One border layer (inner b1 / outer b2): plain colour band or real-scan film frame.
@@ -20320,6 +20364,8 @@ function renderLoupe(){
   // brings this to outW/outH's actual device-pixel size on screen, matching what was just
   // rendered 1:1 instead of double-applying zoom (once here, once via CSS).
   FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px';
+  const loupeOps=(P.redEyeOps||[]).map(o=>({...o,x:(o.x*fw-ox)/cropW,y:(o.y*fh-oy)/cropH,rx:o.rx*fw/cropW,ry:o.ry*fh/cropH}));
+  drawRedEyePreview({...P,redEyeOps:loupeOps});
   const orig=document.getElementById('fx-canvas-orig');if(orig){orig.style.display='none';orig.style.clipPath='';}
   const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
   document.getElementById('fx-no-img').style.display='none';
@@ -20340,7 +20386,7 @@ function fxWrapInner(){ // content box of #fx-wrap (clientWidth/Height include t
 function fxPreviewMaxH(){
   if(window.innerWidth<=700){
     const wrap=document.getElementById('fx-wrap');
-    const h=wrap?wrap.clientHeight:0;
+    const h=wrap?fxWrapInner().h:0;
     // fallback derives from --app-h (the JS-owned true visible height) so CSS and JS agree
     const appH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--app-h'))||window.innerHeight;
     return Math.max(220,h||appH*0.42);
@@ -20628,6 +20674,7 @@ function renderPreview(){
   // Compose from the actual backing-store render. Passing cw/ch here downsampled a 2k×3k
   // preview back to the ~500×750 fit footprint before the border was added, making bordered
   // previews visibly pixelated; CSS scales the finished canvas to the fit footprint below.
+  drawRedEyePreview(P);
   applyPreviewBorders(P,pw,ph);
   document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
     ?`Full res ${Math.round(fxZoom*100)}% — rendered ${pw}\u00d7${ph}`
@@ -21237,7 +21284,8 @@ function applyPreviewBorders(P,pw,ph){
   if(!bAny&&!cvOn&&!frameOn){if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;return;}
   if(!bd){bd=document.createElement('canvas');bd.id='fx-canvas-bd';bd.style.cssText='display:block;max-width:100%;height:auto';wrap.appendChild(bd);_fxCvListeners.forEach(([t,f,o])=>bd.addEventListener(t,f,o));}
   // stage 1: bordered image (or the bare render when borders are off)
-  let stage=FX.cv;
+  const redEyeCv=document.getElementById('fx-canvas-redeye'),baseStage=redEyeCv&&redEyeCv.style.display!=='none'?redEyeCv:FX.cv;
+  let stage=baseStage;
   if(bAny){
     const tw=pw+2*(b1t+b2t),th=ph+2*(b1t+b2t);
     stage=document.createElement('canvas');stage.width=tw;stage.height=th;
@@ -21257,7 +21305,7 @@ function applyPreviewBorders(P,pw,ph){
   if(stage!==FX.cv)stage.width=stage.height=0;
   if(framed!==stage&&framed!==FX.cv)framed.width=framed.height=0;
   if(fin!==framed&&fin!==stage&&fin!==FX.cv)fin.width=fin.height=0;
-  FX.cv.style.display='none';bd.style.display='block';
+  FX.cv.style.display='none';if(redEyeCv)redEyeCv.style.display='none';bd.style.display='block';
   // Where the photo itself sits inside the composited frame, so pointer handlers can undo it.
   // canvasCompose centres the bordered stage, so the matte inset is half the size difference.
   const inset=b1t+b2t;
@@ -21364,7 +21412,8 @@ function fxSelectImage(idx){
   if(typeof mskRebuild==='function')mskRebuild();
   if(typeof fxSyncVideoUI==='function')fxSyncVideoUI();
   if(cropMode)cropExit();
-  fxImg=it.img;updateWork();
+  redeyeMode=false;if(FX.cv)FX.cv.style.cursor='';
+  fxImg=it.img;updateWork();redeyeSyncUI();
   const ss=document.getElementById('sl-straighten');
   if(ss){const ang=(it.geom&&it.geom.angle)||0;ss.value=_stA2S(ang);fxPaintSlider(ss);document.getElementById('vl-straighten').textContent=ang.toFixed(2)+'°';}
   if(typeof ahRoiSyncUI==='function'){_ahRoiArmed=false;_ahRoiDrag=null;ahRoiSyncUI();}
@@ -21924,6 +21973,73 @@ function healClear(){
   const it=curItem();it.heal=[];updateWork();renderPreview();healSyncUI();fxHistoryPush();
   toast('Retouching cleared',true);
 }
+// Lightroom-style manual eye-area drag; values are normalized to the geometry-applied photo,
+// following the coordinate convention already used by Chroma's drawn radial masks.
+let redeyeMode=false,_redeyeDrag=null,redeyeSelected=-1;
+function redeyeOps(){const it=curItem();return it?(it.redeye||(it.redeye=[])):null;}
+function redeyeSelectedOp(ops){if(!ops||!ops.length)return null;if(redeyeSelected<0||redeyeSelected>=ops.length)redeyeSelected=ops.length-1;return ops[redeyeSelected];}
+function redeyeToggle(){redeyeMode=!redeyeMode;if(redeyeMode&&healMode)healToggle();if(FX.cv)FX.cv.style.cursor=redeyeMode?'crosshair':'';const b=document.getElementById('btn-redeye-add');if(b){b.classList.toggle('on',redeyeMode);b.textContent=redeyeMode?'Drag over an eye…':'Add eye correction';}redeyeOverlaySync();}
+function redeyeModeChanged(){const sel=document.getElementById('sel-redeye-mode'),mode=sel?sel.value:'human',op=redeyeSelectedOp(redeyeOps());redeyeSyncUI();if(op){op.mode=mode;fxHistoryPush();renderPreview();}}
+function redeyeSyncUI(){
+  const size=document.getElementById('sl-redeye-size'),dark=document.getElementById('sl-redeye-dark');
+  const sv=document.getElementById('vl-redeye-size'),dv=document.getElementById('vl-redeye-dark');
+  const ops=redeyeOps()||[],last=redeyeSelectedOp(ops),sel=document.getElementById('sel-redeye-mode');
+  if(last&&size&&document.activeElement!==size)size.value=last.pupilSize==null?60:last.pupilSize;
+  if(last&&dark&&document.activeElement!==dark)dark.value=last.darken==null?75:last.darken;
+  if(last&&sel&&document.activeElement!==sel)sel.value=last.mode||'human';
+  if(sv&&size)sv.textContent=size.value+'%';if(dv&&dark)dv.textContent=dark.value+'%';
+  const lbl=document.getElementById('redeye-count');if(lbl)lbl.textContent=ops.length?`${ops.length} eye correction${ops.length===1?'':'s'} · drag over another eye to add`:'No eye corrections — drag a circle over the eye.';
+  const card=document.querySelector('.fx-ctrl[data-fxsec="redeye"]');if(card)card.classList.toggle('fx-has-redeye',ops.length>0);
+  redeyeOverlaySync();
+}
+function redeyeControlChanged(){redeyeSyncUI();const op=redeyeSelectedOp(redeyeOps());if(!op)return;op.pupilSize=+document.getElementById('sl-redeye-size').value;op.darken=+document.getElementById('sl-redeye-dark').value;const sel=document.getElementById('sel-redeye-mode');op.mode=sel?sel.value:'human';clearTimeout(redeyeControlChanged._t);redeyeControlChanged._t=setTimeout(()=>{fxHistoryPush();renderPreview();},250);}
+async function redeyeFixAll(){
+  if(!window.__TAURI__||!fxWork){toast('Automatic eye detection requires the desktop face detector',false);return;}
+  const target=curItem(),btn=document.getElementById('btn-redeye-auto');if(btn)btn.disabled=true;
+  try{
+    const w=fxWork.naturalWidth||fxWork.width,h=fxWork.naturalHeight||fxWork.height;
+    const cv=document.createElement('canvas');cv.width=w;cv.height=h;const cx=cv.getContext('2d',{willReadFrequently:true});cx.drawImage(fxWork,0,0,w,h);
+    const rgba=cx.getImageData(0,0,w,h).data,rgb=new Uint8Array(w*h*3);for(let i=0,j=0;i<rgba.length;i+=4){rgb[j++]=rgba[i];rgb[j++]=rgba[i+1];rgb[j++]=rgba[i+2];}
+    const faces=await _samFramedInvoke('scrfd_detect',{width:w,height:h},rgb);if(curItem()!==target)return;const ops=redeyeOps()||[],known=new Set(ops.map(o=>`${Math.round(o.x*10000)}:${Math.round(o.y*10000)}`));let added=0;
+    for(const f of faces||[])for(const kp of (f.kps||[]).slice(0,2)){
+      const ex=kp[0]/w,ey=kp[1]/h,key=`${Math.round(ex*10000)}:${Math.round(ey*10000)}`;if(known.has(key))continue;
+      // Reuse SCRFD eye landmarks and the GEGL color gate during rendering; do not add a second,
+      // hand-tuned RGB classifier here. Lightroom's Fix All similarly proposes eye regions for
+      // review, while GEGL's tested red-eye operator decides which pixels actually change.
+      const rad=Math.max(2,Math.round(Math.min(f.x1-f.x0,f.y1-f.y0)*0.045));
+      ops.push({x:ex,y:ey,rx:rad/w,ry:rad/h,pupilSize:+document.getElementById('sl-redeye-size').value,darken:+document.getElementById('sl-redeye-dark').value,threshold:.4,mode:'human',enabled:true,source:'face-landmark'});known.add(key);added++;
+    }
+    const it=curItem();if(it)it.redeye=ops;if(added)redeyeSelected=ops.length-1;fxHistoryPush();redeyeSyncUI();renderPreview();toast(added?`Found ${added} red-eye candidate${added===1?'':'s'} — review the highlighted pupils`:'No red-eye candidates found',true);
+  }catch(e){console.warn('[red-eye detection]',e);toast('Automatic red-eye detection failed',false);}
+  finally{if(btn)btn.disabled=false;}
+}
+function redeyeOverlaySync(){
+  const svg=document.getElementById('fx-redeye-overlay');if(!svg)return;
+  const ops=redeyeOps(),active=!!(ops&&ops.length),box=mskOverlayBox();
+  if(!box||!fxWork||cropMode||fxLoupe||!active&&!_redeyeDrag){svg.style.display='none';svg.innerHTML='';return;}
+  svg.style.display='block';svg.style.left='0';svg.style.top='0';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
+  const w=fxWork.naturalWidth||fxWork.width,h=fxWork.naturalHeight||fxWork.height;
+  const shapes=(ops||[]).map((op,i)=>`<ellipse data-redeye-i="${i}" cx="${op.x}" cy="${op.y}" rx="${op.rx}" ry="${op.ry}" fill="rgba(232,74,65,.08)" stroke="${op.enabled===false?'#aaa':'#f06456'}" stroke-width=".003" vector-effect="non-scaling-stroke" style="pointer-events:all;cursor:move" onclick="redeyeToggleOne(${i})"/><circle data-redeye-resize="${i}" cx="${op.x+op.rx}" cy="${op.y+op.ry}" r=".008" fill="#f06456" stroke="#fff" stroke-width=".002" vector-effect="non-scaling-stroke" style="pointer-events:all;cursor:nwse-resize"/>`).join('');
+  const drag=_redeyeDrag?`<ellipse cx="${_redeyeDrag.cx}" cy="${_redeyeDrag.cy}" rx="${_redeyeDrag.rx}" ry="${_redeyeDrag.ry}" fill="rgba(232,74,65,.08)" stroke="#f06456" stroke-width=".003" vector-effect="non-scaling-stroke"/>`:'';
+  svg.setAttribute('viewBox','0 0 1 1');svg.innerHTML=shapes+drag;
+}
+function redeyeToggleOne(i){const ops=redeyeOps();if(!ops||!ops[i])return;ops[i].enabled=ops[i].enabled===false;fxHistoryPush();redeyeSyncUI();renderPreview();}
+function redeyeUndoLast(){const ops=redeyeOps();if(!ops||!ops.length)return;ops.pop();redeyeSelected=ops.length-1;fxHistoryPush();redeyeSyncUI();renderPreview();}
+function redeyeClear(){const ops=redeyeOps();if(!ops||!ops.length)return;const it=curItem();it.redeye=[];redeyeSelected=-1;fxHistoryPush();redeyeSyncUI();renderPreview();}
+(function initRedEye(){
+  const wrap=document.getElementById('fx-zoom-wrap');if(!wrap)return;
+  const svg=document.getElementById('fx-redeye-overlay');
+  if(svg){
+    svg.addEventListener('pointerdown',e=>{const move=e.target.closest('[data-redeye-i]'),resize=e.target.closest('[data-redeye-resize]');if(!move&&!resize)return;e.preventDefault();e.stopPropagation();const n=resize?+(resize.dataset.redeyeResize):+(move.dataset.redeyeI);redeyeSelected=n;const ops=redeyeOps(),op=ops&&ops[n],size=document.getElementById('sl-redeye-size'),dark=document.getElementById('sl-redeye-dark'),sel=document.getElementById('sel-redeye-mode');if(op){if(size)size.value=op.pupilSize==null?60:op.pupilSize;if(dark)dark.value=op.darken==null?75:op.darken;if(sel)sel.value=op.mode||'human';redeyeSyncUI();}_redeyeDrag={mode:resize?'resize':'move',i:n,last:_mskPointToUV(e)};if(!_redeyeDrag.last){_redeyeDrag=null;return;}_fxHistLocked=true;svg.setPointerCapture(e.pointerId);},true);
+    svg.addEventListener('pointermove',e=>{if(!_redeyeDrag||!['move','resize'].includes(_redeyeDrag.mode))return;const p=_mskPointToUV(e),op=redeyeOps()[_redeyeDrag.i];if(!p||!op)return;const dx=p.nx-_redeyeDrag.last.nx,dy=p.ny-_redeyeDrag.last.ny;if(_redeyeDrag.mode==='move'){op.x=Math.max(op.rx,Math.min(1-op.rx,op.x+dx));op.y=Math.max(op.ry,Math.min(1-op.ry,op.y+dy));}else{op.rx=Math.max(.002,Math.min(Math.min(op.x,1-op.x),op.rx+dx));op.ry=Math.max(.002,Math.min(Math.min(op.y,1-op.y),op.ry+dy));}_redeyeDrag.last=p;redeyeOverlaySync();renderPreview();},true);
+    const finish=e=>{if(!_redeyeDrag||!['move','resize'].includes(_redeyeDrag.mode))return;_redeyeDrag=null;_fxHistLocked=false;fxHistoryPush();redeyeSyncUI();};
+    svg.addEventListener('pointerup',finish,true);svg.addEventListener('pointercancel',finish,true);
+  }
+  wrap.addEventListener('pointerdown',e=>{if(!redeyeMode||!fxWork||cropMode||fxLoupe||!['fx-canvas','fx-canvas-bd'].includes(e.target.id))return;e.preventDefault();e.stopPropagation();const p=_mskPointToUV(e);if(!p)return;_redeyeDrag={sx:p.nx,sy:p.ny,cx:p.nx,cy:p.ny,rx:0.001,ry:0.001};try{e.target.setPointerCapture(e.pointerId);}catch(_){}redeyeOverlaySync();},true);
+  wrap.addEventListener('pointermove',e=>{if(!_redeyeDrag||_redeyeDrag.mode)return;const p=_mskPointToUV(e);if(!p)return;_redeyeDrag.cx=(_redeyeDrag.sx+p.nx)/2;_redeyeDrag.cy=(_redeyeDrag.sy+p.ny)/2;_redeyeDrag.rx=Math.max(.002,Math.abs(p.nx-_redeyeDrag.sx)/2);_redeyeDrag.ry=Math.max(.002,Math.abs(p.ny-_redeyeDrag.sy)/2);redeyeOverlaySync();},true);
+  const end=e=>{if(!_redeyeDrag||_redeyeDrag.mode)return;const d=_redeyeDrag;_redeyeDrag=null;if(d.rx>=.002&&d.ry>=.002){const sel=document.getElementById('sel-redeye-mode'),ops=redeyeOps();ops.push({x:d.cx,y:d.cy,rx:d.rx,ry:d.ry,pupilSize:+document.getElementById('sl-redeye-size').value,darken:+document.getElementById('sl-redeye-dark').value,threshold:.4,mode:sel?sel.value:'human',enabled:true});redeyeSelected=ops.length-1;fxHistoryPush();redeyeSyncUI();renderPreview();}else redeyeOverlaySync();};
+  wrap.addEventListener('pointerup',end,true);wrap.addEventListener('pointercancel',end,true);
+})();
 // Pointer coordinates arrive in the DISPLAYED canvas's space, but heal ops are normalised
 // against the ORIGINAL image (see healApply) — and geometry sits between the two. So a click is
 // mapped back through the crop/rotate the photo is currently showing, or every spot would land
@@ -22416,7 +22532,50 @@ async function processToCanvas(P,src,iw,ih,onTile){
   const c=document.createElement('canvas');c.width=w;c.height=h;
   // view over the SAME buffer (no full-size copy — getPixels already returns a fresh array)
   c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),w,h),0,0);
-  return c;
+  return applyRedEyeCorrections(c,P.redEyeOps);
+}
+// Port of GEGL's red-eye-removal point operation (GNOME commit 1870ad1d8c26be68be88e07ff2b56044dc417df8):
+// test adjusted channels using RED_FACTOR=.5133333, GREEN_FACTOR=1, BLUE_FACTOR=.1933333,
+// then replace red with (adjusted green + adjusted blue)/(2*RED_FACTOR). The drawn pupil mask
+// and darken blend follow Lightroom Classic's documented interface. The elliptical mask keeps
+// processing within the manually selected pupil; all coordinates use the working image.
+function applyRedEyeCorrections(canvas,ops){
+  if(!ops||!ops.length)return canvas;
+  const w=canvas.width,h=canvas.height,x=canvas.getContext('2d',{willReadFrequently:true});
+  for(const op of ops){
+    if(op.enabled===false)continue;
+    const cx=op.x*w,cy=op.y*h,rx=Math.max(1,(op.rx||0.02)*w),ry=Math.max(1,(op.ry||op.rx||0.02)*h);
+    const x0=Math.max(0,Math.floor(cx-rx)),x1=Math.min(w-1,Math.ceil(cx+rx)),y0=Math.max(0,Math.floor(cy-ry)),y1=Math.min(h-1,Math.ceil(cy+ry));
+    const iw=x1-x0+1,ih=y1-y0+1;if(iw<1||ih<1)continue;
+    const id=x.getImageData(x0,y0,iw,ih),d=id.data,pupil=Math.max(0.05,Math.min(0.95,(op.pupilSize==null?60:op.pupilSize)/100)),dark=Math.max(0,Math.min(1,(op.darken==null?75:op.darken)/100)),threshold=op.threshold==null?0.4:op.threshold,adjustedThreshold=(threshold-0.4)*2,prx=rx*pupil,pry=ry*pupil;
+    for(let py=0;py<ih;py++)for(let px=0;px<iw;px++){
+      const dx=(x0+px+0.5-cx)/prx,dy=(y0+py+0.5-cy)/pry,q=dx*dx+dy*dy;if(q>=1)continue;
+      const rad=Math.sqrt(q),t=Math.max(0,Math.min(1,(1-rad)/0.08)),edge=t*t*(3-2*t),i=(py*iw+px)*4,r=d[i],g=d[i+1],b=d[i+2],mode=op.mode||'human',ar=r*0.5133333,ag=g,ab=b*0.1933333;
+      if(mode==='human'){
+        if(ar>=ag-adjustedThreshold&&ar>=ab-adjustedThreshold){const corrected=Math.max(0,Math.min(255,(ag+ab)/(2*0.5133333)));d[i]=Math.round(r+(corrected-r)*dark*edge);}
+      }else{
+        // Pet Eye: follow the channel-mixer approach documented by darktable for local pupil
+        // correction. Neutralize only the selected reflection hue, retaining the pupil's local
+        // luminance and feather. White reflection uses the same weighted-gray coefficients as
+        // darktable's documented RGB-to-gray mixer.
+        let rr=r,gg=g,bb=b;
+        if(mode==='white')rr=gg=bb=0;
+        else if(mode==='green')gg=(r+b)*0.5;
+        else if(mode==='yellow'){rr=(g+b)*0.5;gg=(r+b)*0.5;}
+        else {const gray=.24*r+.68*g+.08*b;rr=gg=bb=gray;}
+        d[i]=Math.round(r+(rr-r)*dark*edge);d[i+1]=Math.round(g+(gg-g)*dark*edge);d[i+2]=Math.round(b+(bb-b)*dark*edge);
+      }
+    }
+    x.putImageData(id,x0,y0);
+  }
+  return canvas;
+}
+function drawRedEyePreview(P){
+  const cv=document.getElementById('fx-canvas-redeye');if(!cv)return;
+  if(fxCompare||!P.redEyeOps||!P.redEyeOps.some(o=>o.enabled!==false)){cv.dataset.active='0';cv.style.display='none';return;}
+  if(cv.width!==FX.cv.width||cv.height!==FX.cv.height){cv.width=FX.cv.width;cv.height=FX.cv.height;}
+  const x=cv.getContext('2d',{willReadFrequently:true});x.clearRect(0,0,cv.width,cv.height);x.drawImage(FX.cv,0,0);applyRedEyeCorrections(cv,P.redEyeOps);
+  ['width','height','left','top'].forEach(key=>cv.style[key]=FX.cv.style[key]);cv.dataset.active='1';cv.style.display='block';
 }
 // TILED full-res render: process the image in overlapping tiles so peak GPU memory stays tiny
 // and CONSTANT regardless of resolution. Each tile is processed with a halo wide enough for the
@@ -22465,7 +22624,7 @@ async function renderTiled(P,src,iw,ih,onTile){
     if(typeof fxExportCancel!=='undefined'&&fxExportCancel)throw new Error('export cancelled');
     await new Promise(r=>requestAnimationFrame(r));
   }
-  return out;
+  return applyRedEyeCorrections(out,P.redEyeOps);
 }
 // Export scope: 'all' processes every loaded photo, 'current' only the one being previewed
 // (the filmstrip selection). Only meaningful — and only shown — when >1 photo is loaded.
@@ -22634,7 +22793,7 @@ async function _exportFXRun(){
     // while the export runs can't leak into the photos still waiting in the queue.
     const _expPs=items.map(it=>{const sm=fxState.masks;fxState.masks=it.masks||[];
       const undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null; // CHR-193: this photo's own section values
-      try{const p=getFXParams(it.adjustOverride||undefined);try{return structuredClone(p);}catch(e){return p;}}finally{fxState.masks=sm;if(undo)undo();}});
+      try{const p=getFXParams(it.adjustOverride||undefined);p.redEyeOps=it.redeye||[];try{return structuredClone(p);}catch(e){return p;}}finally{fxState.masks=sm;if(undo)undo();}});
     for(let idx=0;idx<items.length;idx++){
       if(fxExportCancel){activityOutcome='interrupted';log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
       const it=items[idx];
@@ -23734,7 +23893,9 @@ async function fxSyncHdrOption(){
   row.style.display=has?'':'none';
   if(note){
     note.style.display=has?'':'none';
-    note.textContent=has?'This photo carries HDR highlight detail. Photos, Preview and iPhone show it; everything else sees the SDR version.':'';
+    const _uhdr=window.CS_PLATFORM&&window.CS_PLATFORM.hdrExport==='uhdr';
+    note.textContent=has?(_uhdr?'This photo carries HDR highlight detail. Chrome, Edge and Lightroom show it; everything else sees the SDR version.':'This photo carries HDR highlight detail. Photos, Preview and iPhone show it; everything else sees the SDR version.'):'';
+    if(_uhdr&&row)row.title='Writes an Ultra HDR JPEG whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.';
   }
   if(!has){const t=document.getElementById('tg-exp-hdr');if(t)t.checked=false;}
 }
@@ -25341,7 +25502,7 @@ const FX_SECTIONS=[['image','Image'],['looks','Looks'],['adjust','Light'],
   ['curves','Curves'],['hsl','Mixer'],['pointcolor','Point Color'],
   ['nr','Noise'],['lens','Lens'],['retouch','Retouch'],
   ['crop','Crop'],['rotate','Rotate'],['straighten','Straighten'],
-  ['local','Masks'],
+  ['local','Masks'],['redeye','Red Eye'],
   ['grain','Grain'],['hal','Halation'],['bloom','Bloom'],['art','Artifacts'],['vig','Effects'],
   ['borders','Borders'],['canvas','Canvas'],
   ['export','Output'],['wm','Watermark'],['exppreset','Export Presets'],['style','Presets'],['share','Sharing'],
@@ -25385,7 +25546,7 @@ function _eachSection(cb){
 const FX_GROUPS={look:{label:'Look',icon:'looks',members:['image','looks']},
   light:{label:'Light',icon:'adjust',members:['adjust','curves','hal','bloom']},
   colour:{label:'Colour',icon:'hsl',members:['hsl','wheels','pointcolor']},
-  texture:{label:'Texture',icon:'grain',members:['grain','nr','deconv','lens','art','vig','retouch','local']},
+  texture:{label:'Texture',icon:'grain',members:['grain','nr','deconv','lens','art','vig','retouch','redeye','local']},
   output:{label:'Crop',icon:'crop',members:['crop','rotate','straighten','borders','canvas','export','wm','exppreset','style','share']}};
 const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEach(k=>FX_GROUP_OF[k]=g));
 // Desktop/web panel: the Looks card is two tools, not one — the preset library ("Looks", with its
@@ -26377,7 +26538,7 @@ window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+errStr(e.
 // running a stale Rust binary and no amount of in-app reloading will pick up the fix.
 if(window.__TAURI__){
   window.__TAURI__.core.invoke('native_build_tag').then(tag=>{
-    log(`Native (Rust) build: ${tag} — if a native fix seems missing, fully quit (⌘Q) and relaunch, not just reload`,'info');
+    log(`Native (Rust) build: ${tag} — if a native fix seems missing, fully quit and relaunch, not just reload`,'info');
   }).catch(()=>{});
 }
 // tauri-plugin-log's attachConsole() (see main.rs's `.plugin(tauri_plugin_log::Builder...)`)

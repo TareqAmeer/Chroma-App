@@ -630,6 +630,28 @@ fn subject_merge(keep_id: String, other_id: String) -> Result<subject::Subject, 
     subject::merge_subjects(&keep_id, &other_id)
 }
 
+// ── Face detection (AI stack Phase A) — see scrfd.rs for the model and decode. Caller sends a
+// whole decoded RGB8 image (typically a downscaled preview, not full-res — SCRFD's own input is
+// letterboxed to 640x640 internally regardless) + its width/height; response is a JSON array of
+// detected faces in the ORIGINAL image's pixel coordinates.
+#[tauri::command]
+fn scrfd_detect(request: tauri::ipc::Request) -> Result<serde_json::Value, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let w = json["width"].as_u64().ok_or("missing width")? as u32;
+    let h = json["height"].as_u64().ok_or("missing height")? as u32;
+    if payload.len() != (w as usize) * (h as usize) * 3 {
+        return Err(format!("scrfd_detect: payload {} bytes, expected {}x{}x3", payload.len(), w, h));
+    }
+    let faces = scrfd::detect(payload, w, h)?;
+    #[derive(serde::Serialize)]
+    struct FaceOut { x0: f32, y0: f32, x1: f32, y1: f32, score: f32, kps: [(f32, f32); 5] }
+    let out: Vec<FaceOut> = faces
+        .into_iter()
+        .map(|f| FaceOut { x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1, score: f.score, kps: f.kps })
+        .collect();
+    serde_json::to_value(out).map_err(|e| format!("scrfd_detect: {e}"))
+}
+
 // ── Face-feature auto-exclusion + skin selector (ROADMAP item 16, plus item 4's remainder) — see
 // faceparse.rs for the model, the class mapping and why the originally-quoted class table was
 // wrong. Framed request/response, same idiom as sam_encode/sam_points: caller sends an
@@ -2694,6 +2716,7 @@ fn main() {
             library::get_lr_thumb,
             library::save_lr_thumb,
             sam_encode,
+            scrfd_detect,
             sam_points,
             subject_learn,
             subject_locate,
