@@ -100,6 +100,23 @@ async function main() {
       const original = Uint8ClampedArray.from(px);
       const origHash = digest(original);
 
+      // ── CHR-275: Alt/Option temporarily erases within brush-paint calls ──
+      const altProbe = (m.mtH >> 1) * m.mtW + (m.mtW >> 1);
+      m.px.fill(200);
+      const altBefore = m.px[altProbe];
+      mskPaintErase = false;
+      mskBrushSize = 1; mskBrushFlow = 60;
+      mskPaintAt(m, 0.5, 0.5, true); // same override used for an Alt/Option-modified brush sample
+      ck('CHR-275 Alt erase lowers painted pixels', m.px[altProbe] < altBefore,
+        `${altBefore} -> ${m.px[altProbe]}`);
+      ck('CHR-275 temporary erase leaves persistent erase mode off', mskPaintErase === false);
+      const altErased = m.px[altProbe];
+      mskPaintErase = true;
+      mskPaintAt(m, 0.5, 0.5); // persistent Erase button continues to erase without the modifier
+      ck('CHR-275 persistent erase mode still erases', m.px[altProbe] < altErased);
+      mskPaintErase = false;
+      m.px.set(original); mskBrushSize = 25; mskBrushFlow = 60; _mskTexDirty = true;
+
       ck('1. px is a Uint8ClampedArray', px instanceof Uint8ClampedArray, px.constructor.name);
       ck('1. px length matches mtW*mtH', px.length === m.mtW * m.mtH, `${px.length} vs ${m.mtW * m.mtH}`);
 

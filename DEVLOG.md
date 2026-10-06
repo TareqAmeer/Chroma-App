@@ -50,3 +50,9 @@
 - Updated AGENTS.md to permit task-owned feature-branch commits and require verified publication through a clean main integration checkout, with current-main conflict resolution and relevant checks.
 - Added remote-publication confirmation, explicit blocked-publication reports, and separation of unrelated drafts/promo assets; preserved the local checkout's existing instruction edits.
 - Verified both instruction copies and git diff whitespace; Linear issue ID unresolved because the targeted worktree search returned unrelated tickets, so no issue was guessed or updated. Documentation-only change.
+
+## 2026-10-06 — CHR-275 temporary brush erase
+
+- Added Lightroom Classic-style Alt/Option-drag erasing during mask brush painting, with live eraser cursor feedback; persistent Erase mode remains available.
+- Scoped the modifier to brush painting so AI scribble exclusion and color-range sampling retain their existing Alt behavior. Files: `chromasmith-22.html`, `test/mask_raster.mjs`.
+- Added raster regression checks for temporary erase and persistent Erase mode. `node --check test/mask_raster.mjs`, editor HTML validity, and `git diff --check` pass; browser raster test is blocked because the Playwright Chromium executable is missing.
