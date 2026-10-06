@@ -72,6 +72,7 @@ mod winvideothumb;
 mod subject;
 mod ingest;
 mod catalog;
+mod smart_albums;
 mod catalog_backup;
 mod recipe_batch;
 mod geocode;
@@ -2683,6 +2684,10 @@ fn main() {
             library::album_delete,
             library::album_add,
             library::list_album,
+            smart_albums::smart_album_sources,
+            smart_albums::smart_album_list,
+            smart_albums::smart_album_save,
+            smart_albums::smart_album_delete,
             library::get_quicklook_preview,
             library::get_meta,
             library::get_meta_batch,

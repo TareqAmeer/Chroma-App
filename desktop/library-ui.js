@@ -12,6 +12,7 @@
   // untouched: the flag only exists via URL and the Tauri path never evaluates the mocks.
   const LIBTEST = !window.__TAURI__ && /[?&]libtest=1/.test(location.search);
   let ltAlbums = [];
+  let ltSmartAlbums = [];
   if (!window.__TAURI__ && !LIBTEST) return;
   // Resolve through the current Tauri function at call time so the native diagnostics
   // wrapper installed by chromasmith-22.html can observe Library IPC too.
@@ -248,6 +249,16 @@
         return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0, duplicates: 2, gphotos: 1 });
       }
       case 'album_list': return Promise.resolve(ltAlbums);
+      case 'smart_album_sources': return Promise.resolve([{ id: 7, label: 'Sample library / Photos' }, { id: 8, label: 'Sample library / Scans' }]);
+      case 'smart_album_list': return Promise.resolve(ltSmartAlbums);
+      case 'smart_album_save': {
+        const input = A.input || {};
+        const item = { id: input.id || 'smart-' + (ltSmartAlbums.length + 1), name: input.name, sourceRootIds: input.sourceRootIds || [], sourceLabels: [], ruleSet: input.ruleSet, matchCount: 4 };
+        item.sourceLabels = item.sourceRootIds.map((id) => id === 7 ? 'Sample library / Photos' : 'Sample library / Scans');
+        const at = ltSmartAlbums.findIndex((x) => x.id === item.id); if (at >= 0) ltSmartAlbums[at] = item; else ltSmartAlbums.push(item);
+        return Promise.resolve(item);
+      }
+      case 'smart_album_delete': ltSmartAlbums = ltSmartAlbums.filter((x) => x.id !== A.id); return Promise.resolve();
       case 'album_create': {
         if (ltAlbums.some((a) => a.name.toLowerCase() === String(A.name).toLowerCase())) return Promise.reject(new Error('exists'));
         const al = { id: 'alb' + (ltAlbums.length + 1), name: A.name, paths: [], updated: Date.now() / 1000 };
@@ -600,6 +611,7 @@
       }
       case 'catalog_query': {
         const q = A.q || {};
+        if (q.smartAlbumId) (window.__libtestSmartAlbumQueries ||= []).push(structuredClone(q));
         // Ordinary folder browsing's own scope (Fix 1 of the catalog-backed-grid plan) — NOT
         // gated on ?libcat=1, since this is the everyday "open a folder" path every ?libtest=1
         // page already exercises, not just the opt-in Date/Search/catalog harness. Mirrors
@@ -10123,6 +10135,7 @@
     invoke('catalog_date_counts').then((counts) => { dateCounts = counts; renderCollections(); }).catch(() => {});
     invoke('catalog_volumes').then((vols) => { catalogVolumes = vols || []; renderCollections(); }).catch(() => {});
     invoke('catalog_keywords').then((nodes) => { keywordTree = nodes || []; renderCollections(); }).catch(() => {});
+    refreshSmartAlbums();
     refreshPlaces();
     refreshPeople();
     refreshCacheUsage();
@@ -12307,9 +12320,10 @@
       const dateParts = scope && scope.startsWith('date:') ? scope.slice(5).split(':').map(Number) : null;
       const kwPath = scope && scope.startsWith('kw:') ? scope.slice(3) : null;
       const personId = scope && scope.startsWith('person:') ? parseInt(scope.slice(7), 10) : null;
+      const smartAlbumId = scope && scope.startsWith('smart:') ? scope.slice(6) : null;
       const q = { text: null, includeOffline: true, limit: CATALOG_PAGE_SIZE, offset: 0,
         year: dateParts ? dateParts[0] : null, month: dateParts ? (dateParts[1] || null) : null, day: dateParts ? (dateParts[2] || null) : null,
-        noDate: scope === 'date-nodate', blurryOnly: scope === 'blurry', keywords: kwPath ? [kwPath] : [], personId,
+        noDate: scope === 'date-nodate', blurryOnly: scope === 'blurry', keywords: kwPath ? [kwPath] : [], personId, smartAlbumId,
         ...catalogFilterFields() };
       page = await invoke('catalog_query', { q });
       // Base shape for loadMoreCatalogEntries's later pages — offset is overwritten there per
@@ -13357,6 +13371,99 @@
     return '<div class="lib-coll-sep"></div>' + sidebarSection('albums', 'Albums',
       rows || '<div class="lib-coll-row" style="opacity:.5;cursor:default">No albums yet</div>', { trail: newBtn });
   }
+  // Saved live catalog queries are visually and behaviorally separate from manual path lists
+  // above and saved filter/sort snapshots elsewhere in the Library.
+  let smartAlbums = [];
+  const smartHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function smartRuleLabel(rule) {
+    if (!rule) return 'No rules';
+    if (rule.type === 'group') return `(${(rule.rules || []).map(smartRuleLabel).join(rule.matchMode === 'any' ? ' OR ' : ' AND ')})`;
+    const field = ({ rating: 'Rating', edited: 'Edited', favorite: 'Favorite', captureYear: 'Capture year', camera: 'Camera', mediaKind: 'Media type' })[rule.field] || rule.field;
+    const op = ({ equals: '=', atLeast: '≥', atMost: '≤' })[rule.operator] || '=';
+    return `${field} ${op} ${String(rule.value)}`;
+  }
+  function smartAlbumsSectionHtml() {
+    const rows = smartAlbums.map((a) => `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === `smart:${a.id}` ? ' on' : ''}" data-smart-album="${smartHtml(a.id)}" role="button" tabindex="0" title="${smartHtml(a.name)} — ${smartHtml(smartRuleLabel(a.ruleSet?.root))}; ${smartHtml((a.sourceLabels || []).join(', '))}">
+      <span class="lib-coll-ic">${ALBUM_SVG}</span><span class="lib-coll-lb">${smartHtml(a.name)}</span><span class="lib-coll-count">${fmtN(a.matchCount || 0)}</span>
+      <button type="button" data-smart-edit="${smartHtml(a.id)}" aria-label="Edit ${smartHtml(a.name)} rules" title="Edit rules" style="margin-left:4px">⋯</button></div>`).join('');
+    const add = '<span id="lib-smart-album-new" title="Create a rule-based smart album" style="cursor:pointer;padding:0 4px">+</span>';
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('smart-albums', 'Smart albums', rows || '<div class="lib-coll-row" style="opacity:.5;cursor:default">No smart albums yet</div>', { trail: add });
+  }
+  function smartRuleRowHtml(rule) {
+    const fields = [['rating','Rating'],['edited','Edited'],['favorite','Favorite'],['captureYear','Capture year'],['camera','Camera'],['mediaKind','Media type']];
+    const field = rule?.field || 'rating';
+    return `<div data-smart-rule-row style="display:grid;grid-template-columns:minmax(95px,1fr) minmax(82px,.8fr) minmax(85px,.8fr) auto;gap:6px;align-items:center;margin:6px 0">
+      <select data-smart-field aria-label="Rule field">${fields.map(([v,l]) => `<option value="${v}"${field===v?' selected':''}>${l}</option>`).join('')}</select>
+      <select data-smart-operator aria-label="Rule comparison"><option value="equals">is</option><option value="atLeast">at least</option><option value="atMost">at most</option></select><span data-smart-value-host></span><button type="button" data-smart-remove-rule aria-label="Remove condition">−</button></div>`;
+  }
+  async function smartAlbumBuilder(existing = null) {
+    const sources = await invoke('smart_album_sources').catch(() => []);
+    if (!sources.length) { toast('Add a catalog folder before creating a smart album.', false); return null; }
+    const current = existing?.ruleSet?.root;
+    const editable = current?.type === 'group' && (current.rules || []).every((r) => r.type === 'condition') ? current : null;
+    if (existing && !editable) { toast('This album has nested groups; the current editor only edits flat rules.', false); return null; }
+    const dlg = document.createElement('dialog'); dlg.id = 'lib-smart-album-dialog';
+    dlg.style.cssText = 'width:min(620px,calc(100vw - 28px));max-height:85vh;overflow:auto;padding:0;border:1px solid var(--bdr);border-radius:10px;background:var(--sur2);color:var(--txt);box-shadow:0 18px 60px rgba(0,0,0,.45)';
+    const selected = new Set(existing?.sourceRootIds || []);
+    dlg.innerHTML = `<form style="padding:18px;display:grid;gap:12px;font:inherit">
+      <h2 style="font-size:16px;margin:0">${existing ? 'Edit smart album' : 'New smart album'}</h2>
+      <label style="display:grid;gap:5px">Name<input name="name" maxlength="80" required value="${smartHtml(existing?.name || '')}" placeholder="e.g. Four-star edits"></label>
+      <fieldset style="border:1px solid var(--bdr);border-radius:7px;padding:9px"><legend>Catalog folders</legend><div style="display:grid;gap:4px;max-height:140px;overflow:auto">${sources.map((s) => `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-smart-source value="${Number(s.id)}"${selected.has(s.id)?' checked':''}>${smartHtml(s.label)}</label>`).join('')}</div></fieldset>
+      <label style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px">Match <select name="matchMode"><option value="all"${editable?.matchMode!=='any'?' selected':''}>all rules (AND)</option><option value="any"${editable?.matchMode==='any'?' selected':''}>any rule (OR)</option></select></label>
+      <div><strong>Rules</strong><div data-smart-rules></div><button type="button" data-smart-add-rule>Add condition</button></div>
+      <p style="font-size:11px;color:var(--mut);margin:0">Membership and counts use current catalog data. Exported state is not yet indexed for these rules.</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px"><button type="button" data-smart-cancel>Cancel</button><button type="submit">${existing?'Save changes':'Create smart album'}</button></div>
+    </form>`;
+    document.body.appendChild(dlg);
+    const ruleHost = dlg.querySelector('[data-smart-rules]');
+    const addRule = (rule = null) => {
+      if (ruleHost.children.length >= 12) return;
+      ruleHost.insertAdjacentHTML('beforeend', smartRuleRowHtml(rule));
+      const row = ruleHost.lastElementChild, field = row.querySelector('[data-smart-field]'), op = row.querySelector('[data-smart-operator]'), host = row.querySelector('[data-smart-value-host]');
+      const sync = () => {
+        const f = field.value, bool = f === 'edited' || f === 'favorite', text = f === 'camera' || f === 'mediaKind';
+        op.querySelectorAll('option').forEach((o) => { o.hidden = (bool || text) && o.value !== 'equals'; }); if (bool || text) op.value = 'equals';
+        host.innerHTML = bool ? '<select data-smart-value aria-label="Rule value"><option value="true">Yes</option><option value="false">No</option></select>'
+          : `<input data-smart-value aria-label="Rule value" ${text?'type="text" maxlength="160"':`type="number" min="${f==='rating'?-1:1}" max="${f==='rating'?5:9999}"`} value="${text?'':(f==='rating'?4:new Date().getFullYear())}" placeholder="${text?(f==='camera'?'Camera name':'raw / jpeg / video'):''}" style="width:100%;min-width:0">`;
+      };
+      field.addEventListener('change', sync); sync();
+      if (rule) { op.value = rule.operator; host.querySelector('[data-smart-value]').value = String(rule.value); }
+      row.querySelector('[data-smart-remove-rule]').onclick = () => { if (ruleHost.children.length > 1) row.remove(); };
+    };
+    if (editable?.rules?.length) editable.rules.forEach((r) => addRule(r)); else addRule();
+    dlg.querySelector('[data-smart-add-rule]').onclick = () => addRule();
+    dlg.querySelector('[data-smart-cancel]').onclick = () => dlg.close('cancel');
+    return new Promise((resolve) => {
+      dlg.addEventListener('close', () => {
+        if (dlg.returnValue !== 'save') { dlg.remove(); resolve(null); return; }
+        const form = dlg.querySelector('form');
+        const rules = [...ruleHost.querySelectorAll('[data-smart-rule-row]')].map((row) => {
+          const field = row.querySelector('[data-smart-field]').value, operator = row.querySelector('[data-smart-operator]').value, raw = row.querySelector('[data-smart-value]').value;
+          return { type:'condition', field, operator, value:['edited','favorite'].includes(field)?raw==='true':['rating','captureYear'].includes(field)?Number(raw):raw.trim() };
+        });
+        const input = { id:existing?.id, name:form.elements.name.value.trim(), sourceRootIds:[...dlg.querySelectorAll('[data-smart-source]:checked')].map((x)=>Number(x.value)), ruleSet:{version:1,root:{type:'group',matchMode:form.elements.matchMode.value,rules}} };
+        dlg.remove(); resolve(input);
+      });
+      dlg.querySelector('form').addEventListener('submit',(e)=>{e.preventDefault();dlg.returnValue='save';dlg.close('save');});
+      dlg.showModal();
+    });
+  }
+  async function refreshSmartAlbums() { smartAlbums=await invoke('smart_album_list').catch(()=>[]); renderCollections(); }
+  async function createOrEditSmartAlbum(existing=null) {
+    const input=await smartAlbumBuilder(existing); if(!input)return;
+    try { await invoke('smart_album_save',{input}); await refreshSmartAlbums(); toast(existing?'Smart album updated':'Smart album created',true); }
+    catch(err){toast(humanizeErr('save the smart album',err),'err');}
+  }
+  function wireSmartAlbumRows(host) {
+    const add=host.querySelector('#lib-smart-album-new'); if(add)add.onclick=(e)=>{e.stopPropagation();createOrEditSmartAlbum();};
+    host.querySelectorAll('.lib-coll-row[data-smart-album]').forEach((row)=>{
+      const id=row.dataset.smartAlbum, item=()=>smartAlbums.find((a)=>a.id===id);
+      row.onclick=(e)=>{if(e.target.closest('[data-smart-edit]'))return;openCatalogView(`smart:${id}`);};
+      row.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openCatalogView(`smart:${id}`);}};
+      row.querySelector('[data-smart-edit]').onclick=(e)=>{e.stopPropagation();createOrEditSmartAlbum(item());};
+      row.oncontextmenu=async(e)=>{e.preventDefault();const a=item();if(!a)return;if(await window.confirmModal(`Delete smart album “${a.name}”? Its matching photos stay untouched.`,'Delete')){await invoke('smart_album_delete',{id});await refreshSmartAlbums();}};
+    });
+  }
   const ALBUM_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H3z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 2"/></svg>';
   async function refreshAlbums() {
     _albums = await invoke('album_list').catch(() => []);
@@ -13580,7 +13687,7 @@
     const keepScroll = [...host.querySelectorAll('.lib-people-scroll')].map((el) => el.scrollTop);
     host.innerHTML = catalogSectionHtml() + (dateHtml ? '<div class="lib-coll-sep"></div>' + dateHtml : '')
       + '<div class="lib-coll-sep"></div>' + sidebarSection('collections', 'Collections', collectionsBody)
-      + keywordsSectionHtml() + peopleSectionHtml() + albumsSectionHtml() + drivesSectionHtml() + devicesSectionHtml();
+      + keywordsSectionHtml() + peopleSectionHtml() + albumsSectionHtml() + smartAlbumsSectionHtml() + drivesSectionHtml() + devicesSectionHtml();
     host.querySelectorAll('.lib-people-scroll').forEach((el, i) => { if (keepScroll[i]) el.scrollTop = keepScroll[i]; });
     const foldersHeaderEl = document.getElementById('lib-folders-header');
     if (foldersHeaderEl) foldersHeaderEl.innerHTML = '<div class="lib-coll-sep"></div>' + sidebarSection('folders', 'Folders', '');
@@ -13604,6 +13711,7 @@
       };
     });
     wireAlbumRows(host);
+    wireSmartAlbumRows(host);
     wirePeopleRows(host);
     host2.querySelectorAll('.lib-coll-row[data-catalog]').forEach((row) => {
       row.onclick = () => openCatalogView(row.dataset.catalog);
