@@ -7163,12 +7163,16 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006J';
+const BUILD='1.1006K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
 const WHATSNEW=[
+  {date:'2026-10-06',items:[
+    'Faster full-resolution JPEG exports on Android, with export quality preserved.',
+    'Export completion notifications no longer open Android notification or alarm settings.'
+  ]},
   {date:'2026-10-05',items:[
     'Library galleries keep the same photos in place while scrolling and updating.',
   ]},
@@ -23055,6 +23059,23 @@ function drawRedEyePreview(P){
 // seamless by construction. (The old design did grain as a final FULL-RES FX pass over the
 // assembled image, which allocated ~4 full-res GPU buffers and was exactly what crashed the
 // tab on large iPhone photos — the very thing tiling exists to avoid.)
+// Android's old 1024px tiles repeated uploads, readbacks and overlapping work 24 times for
+// a 24MP JPEG. Use 2048px for ordinary 8-bit exports when the expanded tile fits the GPU.
+// Keep the smaller working set for low-memory devices and expensive/float pipelines.
+function fxExportTileSize(P,src,halo,renderer){
+  const gl=renderer.gl;
+  const viewport=gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+  const limit=Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE),gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),viewport[0],viewport[1],2560);
+  const memory=navigator.deviceMemory;
+  const advanced=P.tonemap||src._sceneLinearPresent||P.debug
+    ||(P.halation&&P.halation.enabled)||(P.bloom&&P.bloom.enabled)
+    ||(P.nr&&(P.nr.luma>0||P.nr.color>0||P.nr.hlDesat>0))
+    ||(P.deconv&&P.deconv.amount>0)||(P.depthBlur&&P.depthBlur.enabled)
+    ||(P.lens&&(P.lens.dist||P.lens.vig||P.lens.ca||P.lens.defringe||P.lens.pv||P.lens.ph||P.lens.rot||(P.lens.scale!=null&&P.lens.scale!==1)))
+    ||(P.tiltShift&&P.tiltShift.enabled)||(P.masks||[]).some(m=>m.crOn);
+  const larger=/Android/i.test(navigator.userAgent)&&typeof memory==='number'&&memory>=(advanced?4:2);
+  return Math.max(1,Math.min(larger?2048:1024,limit-2*halo));
+}
 async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
   const REF=FXR.CAL.refWidth,sc=iw/REF;
   const H=FXR.CAL.halation,B=FXR.CAL.bloom;
@@ -23065,27 +23086,32 @@ async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
   if((P.masks||[]).some(m=>m.crOn&&m.uL&&m.crSamples&&m.crSamples.length))
     maxSig=Math.max(maxSig,FXR.CAL.skinBlurFrac*REF*sc);
   const halo=Math.ceil(maxSig*3)+16;                 // neighbourhood the blur needs on every side
-  const TILE=1024;
+  const TILE=fxExportTileSize(P,src,halo,renderer);
   const out=document.createElement('canvas');out.width=iw;out.height=ih;const octx=out.getContext('2d');
+  // Reuse backing stores for equal-sized tiles, rather than creating and destroying two
+  // canvases per tile. Resize only at the image edges; always clear transparent source pixels.
+  const tileSrc=document.createElement('canvas'),rc=document.createElement('canvas');
+  const tileCtx=tileSrc.getContext('2d'),rcCtx=rc.getContext('2d');
   const seed=Math.random()*100; // ONE seed for every tile → continuous grain across seams
+  let complete=false;
+  try{
   fxSetCapturedExportDepth(renderer,P);
   let tiles=0;const total=Math.ceil(iw/TILE)*Math.ceil(ih/TILE);
   for(let ty=0;ty<ih;ty+=TILE)for(let tx=0;tx<iw;tx+=TILE){
     const tw=Math.min(TILE,iw-tx),th=Math.min(TILE,ih-ty);
     const sx=Math.max(0,tx-halo),sy=Math.max(0,ty-halo),ex=Math.min(iw,tx+tw+halo),ey=Math.min(ih,ty+th+halo);
     const rw=ex-sx,rh=ey-sy;
-    const tileSrc=document.createElement('canvas');tileSrc.width=rw;tileSrc.height=rh;
-    tileSrc.getContext('2d').drawImage(src,sx,sy,rw,rh,0,0,rw,rh);
+    if(tileSrc.width!==rw)tileSrc.width=rw;if(tileSrc.height!==rh)tileSrc.height=rh;
+    tileCtx.clearRect(0,0,rw,rh);tileCtx.drawImage(src,sx,sy,rw,rh,0,0,rw,rh);
     renderer.setImage(tileSrc);
     // uv origin is bottom-left (texture uploaded flipped), so global v of this tile's bottom
     // row (image row ey-1) is (ih-ey)/ih.
     renderer.render(P,rw,rh,{glowScale:1,scOverride:sc,seed,
       uvOff:[sx/iw,(ih-ey)/ih],uvScale:[rw/iw,rh/ih]});
     const{px}=renderer.getPixels();
-    const rc=document.createElement('canvas');rc.width=rw;rc.height=rh;
-    rc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),rw,rh),0,0);
+    if(rc.width!==rw)rc.width=rw;if(rc.height!==rh)rc.height=rh;
+    rcCtx.putImageData(new ImageData(new Uint8ClampedArray(px.buffer),rw,rh),0,0);
     octx.drawImage(rc,tx-sx,ty-sy,tw,th,tx,ty,tw,th); // keep only the central (halo-free) region
-    tileSrc.width=tileSrc.height=rc.width=rc.height=0;
     tiles++;log(`  tile ${tiles}/${total}`,'info');
     if(onTile)onTile(tiles,total);
     // Cancel used to be checked only BETWEEN images in exportFX — a huge single-photo tiled
@@ -23095,7 +23121,11 @@ async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
     if(typeof fxExportCancel!=='undefined'&&fxExportCancel)throw new Error('export cancelled');
     await new Promise(r=>requestAnimationFrame(r));
   }
-  return applyRedEyeCorrections(out,P.redEyeOps);
+  const result=applyRedEyeCorrections(out,P.redEyeOps);complete=true;return result;
+  }finally{
+    tileSrc.width=tileSrc.height=rc.width=rc.height=0;
+    if(!complete)out.width=out.height=0;
+  }
 }
 // Export scope: 'all' processes every loaded photo, 'current' only the one being previewed
 // (the filmstrip selection). Only meaningful — and only shown — when >1 photo is loaded.
@@ -23149,6 +23179,17 @@ window.chromasmithRenderCurrentGraded=async function(maxEdge){
   proc.width=proc.height=0;
   return bm;
 };
+async function fxNotifyExportFinished(plugins,started){
+  if(!plugins.LocalNotifications||(!document.hidden&&Date.now()-started<=15000))return;
+  try{
+    // Completion notices are immediate, optional work. Never take a finished export into
+    // notification/Alarms settings or wait for that UI before resolving the export promise.
+    const permission=await plugins.LocalNotifications.checkPermissions();
+    if(permission&&permission.display==='granted')await plugins.LocalNotifications.schedule({notifications:[{
+      id:Date.now()%2147483647,title:'Export finished',body:'Open Chromasmith to check the export results and destination.',isExactNotification:false
+    }]});
+  }catch(e){}
+}
 async function exportFX(...a){
   if(_fxExportRuns){if(typeof toast==='function')toast('An export is already running');return;}
   _fxExportRuns++;document.body.classList.add('fx-exporting');
@@ -23160,9 +23201,7 @@ async function exportFX(...a){
   try{return await _exportFXRun(...a);}
   finally{if(--_fxExportRuns<=0){_fxExportRuns=0;document.body.classList.remove('fx-exporting');
       try{P.KeepAwake&&P.KeepAwake.allowSleep();}catch(e){}
-      if(P.LocalNotifications&&(document.hidden||Date.now()-t0>15000)){
-        try{const perm=await P.LocalNotifications.requestPermissions();
-          if(perm&&perm.display==='granted')await P.LocalNotifications.schedule({notifications:[{id:Date.now()%2147483647,title:'Export finished',body:'Open Chromasmith to check the export results and destination.'}]});}catch(e){}}}}
+      void fxNotifyExportFinished(P,t0);}}
 }
 async function _exportFXRun(){
   if(!fxImages.length){log('No image loaded','warn');return}
