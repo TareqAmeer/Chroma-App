@@ -4638,7 +4638,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <button class="btn bgh" onclick="presetsManagerOpen('styles')" title="Rename, delete and review all Looks, Edit Styles and Export Recipes in one place">Manage…</button>
         </div>
         <div id="style-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
-        <input type="file" id="style-import-input" accept="application/json,.json" style="display:none" onchange="styleImportFile(this.files[0])">
+        <input type="file" id="style-import-input" accept="application/json,.json,.xmp,.lrtemplate" style="display:none" onchange="styleImportFile(this.files[0])">
       </div>
       <!-- SHARING — Google Photos today; Lightroom cloud browsing moved into the desktop LIBRARY
            sidebar instead (see library-ui.js's Cloud section + window.lrCloud), so the old
@@ -19647,6 +19647,26 @@ function styleImportClick(){const inp=document.getElementById('style-import-inpu
 async function styleImportFile(file){
   if(!file)return;
   try{
+    const ext=file.name.split('.').pop().toLowerCase();
+    if(ext==='lrtemplate'){
+      toast('Legacy .lrtemplate preview is not supported yet. The file was not evaluated or imported.',false);
+      return;
+    }
+    if(ext==='xmp'){
+      const preview=await window.__TAURI__.core.invoke('preview_lightroom_xmp_preset',{fileName:file.name,xml:await file.text()});
+      const mapped=preview.settings.filter(x=>x.status==='mapped').length;
+      const approximated=preview.settings.filter(x=>x.status==='approximated').length;
+      const unsupported=preview.settings.filter(x=>x.status==='unsupported');
+      const lines=[`Preset: ${preview.name}`,`Mapped: ${mapped}`,`Approximated: ${approximated}`,`Unsupported: ${unsupported.length}`,'',...unsupported.slice(0,14).map(x=>`• ${x.property}: ${x.note||'not imported'}`)];
+      if(unsupported.length>14)lines.push(`• …and ${unsupported.length-14} more unsupported setting(s)`);
+      lines.push('',preview.fidelityNote,'','Save this read-only preview as an editable Style?');
+      if(!await confirmModal(lines.join('\n'),'Save Style'))return;
+      let name=(preview.name||file.name.replace(/\.xmp$/i,'')).trim()||'Imported Lightroom preset';
+      const list=stylesList();
+      if(list.some(x=>x.name===name)){let n=2;while(list.some(x=>x.name===`${name} (${n})`))n++;name=`${name} (${n})`;}
+      list.push({version:2,name,recipe:preview.recipe,keys:preview.keys,created:Date.now(),favorite:false});
+      stylesSave(list);styleListRefresh();toast(`Style "${name}" imported`,true);return;
+    }
     const s=JSON.parse(await file.text());
     if(!s||typeof s.recipe!=='object'||!s.recipe)throw new Error('not a Style file');
     let name=(s.name||file.name.replace(/\.json$/i,'')).trim()||'Imported style';
