@@ -80,6 +80,8 @@ mirrorDir(cd('mobile'), join(distDir, 'mobile')); // responsive editor + portabl
 mirrorDir(cd('assets', 'brand'), join(distDir, 'assets', 'brand')); // favicon + site.webmanifest linked from the page head
 copyIfChanged(cd('desktop', 'desktop-native.js'), join(distDir, 'desktop-native.js'));
 copyIfChanged(cd('desktop', 'library-ui.js'), join(distDir, 'library-ui.js'));
+copyIfChanged(cd('desktop', 'second-display.html'), join(distDir, 'second-display.html'));
+copyIfChanged(cd('desktop', 'second-display.js'), join(distDir, 'second-display.js'));
 
 // index.html is always regenerated from chromasmith-22.html — it's the injection step below
 // that makes it correct, and that step is cheap (one read, one write of a single file), so there
