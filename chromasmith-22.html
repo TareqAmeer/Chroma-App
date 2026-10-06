@@ -2729,7 +2729,9 @@ body.sk2 #btn-crop{background:var(--k-color-accent-a)!important;color:#fff!impor
 body.sk2.deskx #lib-overlay:not(.full) .lib-card{opacity:.45;transition:opacity .12s}
 body.sk2.deskx #lib-overlay:not(.full) .lib-card:hover,body.sk2.deskx #lib-overlay:not(.full) .lib-card:is(.sel,.multi,.cur,.current,.editing){opacity:1}
 body.sk2.deskx #lib-overlay:not(.full) .lib-strip-info,body.sk2.deskx #lib-overlay:not(.full) .lib-name{display:none!important}
-body.sk2.deskx #lib-overlay:not(.full) .lib-raw-badge{display:none!important}
+body.sk2.deskx #lib-overlay:not(.full) .lib-raw-badge:not(.lib-stack-badge){display:none!important}
+/* CHR-137: the stack badge is the only way to expand a stack in the docked filmstrip, so it stays (compact, top-right). */
+body.sk2.deskx #lib-overlay:not(.full) .lib-stack-badge{top:2px;right:2px;bottom:auto;left:auto;font-size:10px;line-height:14px;height:14px;min-width:14px;padding:0 3px}
 /* Looks: the chosen look is marked by the square, not a kicked-out frame. */
 body.sk2 .look-cell:hover{transform:none;box-shadow:none}
 body.sk2 .look-cell.sel{border-color:transparent;box-shadow:none;position:relative}
@@ -2936,7 +2938,7 @@ body.sk2 #lib-overlay #lib-filters-panel .lib-filter-field>select{border:0!impor
 body.sk2 #lib-overlay #lib-filters-panel .lib-filter-field>select.k-set{border-bottom-color:var(--k-color-accent-a)!important;box-shadow:none!important}
 body.sk2 #lib-overlay #lib-filters-panel .lib-filter-field>label{padding-left:0!important}
 /* Filmstrip stays pictures only — no captions or badges. */
-body.sk2.deskx #lib-overlay:not(.full) #lib-grid:not(.list-view) :is(.lib-raw-badge,.lib-video-badge,.lib-strip-info){display:none!important}
+body.sk2.deskx #lib-overlay:not(.full) #lib-grid:not(.list-view) :is(.lib-raw-badge:not(.lib-stack-badge),.lib-video-badge,.lib-strip-info){display:none!important}
 /* Light-stage histogram: folded by default, full panel width. */
 body.sk2 .sk2-hist{display:none;margin:4px 0 10px}
 body.sk2 .fx-panel:has(.fx-ctrl.sec-active[data-fxsec="adjust"]) .sk2-hist{display:block}
