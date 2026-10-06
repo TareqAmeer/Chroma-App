@@ -9339,19 +9339,42 @@ pub struct KeywordNode {
 }
 
 pub fn keywords_run(conn: &Connection) -> Result<Vec<KeywordNode>, String> {
+    // Count = distinct present photos tagged with the keyword itself OR any descendant
+    // ("Travel" counts "Travel|Iceland" but not "Travel2"). This used to be one correlated
+    // subquery per keyword with an OR'd prefix match no index can serve — 23s of pure CPU on the
+    // real 145k-tag catalog, all while holding read_conn, so the boot catalog_query queued behind
+    // it and the splash's watchdog fired (test/probe_boot_splash_progress.mjs). Now: one pass
+    // over the tag rows, crediting each photo to its keyword's path and every ancestor path.
+    let mut sets: std::collections::HashMap<String, std::collections::HashSet<i64>> = std::collections::HashMap::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT k2.path, pk.photo_id FROM photo_keywords pk JOIN keywords k2 ON k2.id = pk.keyword_id
+                 JOIN photos p ON p.id = pk.photo_id WHERE p.present = 1",
+            )
+            .map_err(|e| e.to_string())?;
+        let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
+        while let Some(r) = rows.next().map_err(|e| e.to_string())? {
+            let path: String = r.get(0).map_err(|e| e.to_string())?;
+            let photo: i64 = r.get(1).map_err(|e| e.to_string())?;
+            let mut end = path.len();
+            loop {
+                sets.entry(path[..end].to_string()).or_default().insert(photo);
+                match path[..end].rfind('|') {
+                    Some(i) => end = i,
+                    None => break,
+                }
+            }
+        }
+    }
     let mut stmt = conn
-        .prepare(
-            "SELECT k.id, k.path, k.leaf, k.parent_id,
-                (SELECT COUNT(DISTINCT pk.photo_id)
-                 FROM photo_keywords pk JOIN keywords k2 ON k2.id = pk.keyword_id
-                 JOIN photos p ON p.id = pk.photo_id
-                 WHERE p.present = 1 AND (k2.path = k.path OR substr(k2.path, 1, length(k.path) + 1) = k.path || '|'))
-             FROM keywords k ORDER BY k.path",
-        )
+        .prepare("SELECT k.id, k.path, k.leaf, k.parent_id FROM keywords k ORDER BY k.path")
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |r| {
-            Ok(KeywordNode { id: r.get(0)?, path: r.get(1)?, leaf: r.get(2)?, parent_id: r.get(3)?, n: r.get::<_, i64>(4)? as u64 })
+            let path: String = r.get(1)?;
+            let n = sets.get(&path).map_or(0, |s| s.len()) as u64;
+            Ok(KeywordNode { id: r.get(0)?, path, leaf: r.get(2)?, parent_id: r.get(3)?, n })
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
