@@ -1785,7 +1785,7 @@ fn source_has_hdr(path: String) -> Result<bool, String> {
     gainmap::source_has_hdr(&path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn write_file_bytes(path: String, data_b64: String) -> Result<(), String> {
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD

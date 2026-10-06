@@ -1115,7 +1115,7 @@ pub fn sync_sidecar_fields_run(conn: &Connection, path: &str, rating: i32, label
     );
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_volumes(state: tauri::State<CatalogState>) -> Result<Vec<VolumeRow>, String> {
     // Read-only — the dedicated read connection, so this never waits behind a running scan.
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
@@ -1309,13 +1309,13 @@ fn collapse_nested_roots(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_add_root(path: String, kind: Option<String>, state: tauri::State<CatalogState>) -> Result<CatalogRoot, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     add_root_run(&conn, &path, kind)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_remove_root(id: i64, state: tauri::State<CatalogState>) -> Result<u64, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     remove_root_run(&conn, id)
@@ -1350,7 +1350,7 @@ pub fn remove_root_run(conn: &Connection, id: i64) -> Result<u64, String> {
 }
 
 /// Makes a browsed root permanent (explicit "Keep in library").
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_keep_root(id: i64, state: tauri::State<CatalogState>) -> Result<(), String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     conn.execute("UPDATE roots SET kind = 'originals' WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
@@ -3931,7 +3931,7 @@ pub struct FaceBox {
     pub score: f32,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_photo_faces(state: tauri::State<CatalogState>, photo_id: i64) -> Result<Vec<FaceBox>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
@@ -3974,13 +3974,13 @@ pub struct PhotoFaceInfo {
 /// data yet" is a normal, common state, not a failure.
 /// Resolves absolute paths to catalog photo ids (unresolvable paths are skipped) — for actions
 /// on a selection that isn't in the currently loaded grid page.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_photo_ids_for_paths(state: tauri::State<CatalogState>, paths: Vec<String>) -> Result<Vec<i64>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     Ok(paths.iter().filter_map(|p| find_photo_by_abs_path(&conn, p)).collect())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_faces_for_path(state: tauri::State<CatalogState>, path: String, stack: Option<bool>) -> Result<Vec<PhotoFaceInfo>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     if stack.unwrap_or(false) { faces_for_stack_run(&conn, &path) } else { faces_for_path_run(&conn, &path) }
@@ -4054,7 +4054,7 @@ fn faces_for_photo_id(conn: &Connection, photo_id: i64) -> Result<Vec<PhotoFaceI
 /// sidebar's "Not Face-Scanned" collection (facesPendingRowHtml, library-ui.js) already agree on.
 /// Ok(None) for a path the catalog has no row for at all (not indexed / a bare file:// open) —
 /// distinct from Ok(Some(false)), a real catalogued photo genuinely still pending a scan.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_face_scan_status(state: tauri::State<CatalogState>, path: String) -> Result<Option<bool>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let Some(photo_id) = find_photo_by_abs_path(&conn, &path) else { return Ok(None) };
@@ -4083,7 +4083,7 @@ pub fn catalog_face_scan_status(state: tauri::State<CatalogState>, path: String)
 /// box for a pet, so the caller derives one (see `_subjBoxAroundPoint` in chromasmith-22.html).
 /// One row per (photo, person): a repeat sighting of the same pet in the same photo UPDATES
 /// its existing row rather than accumulating duplicates.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_record_pet_sighting(
     state: tauri::State<CatalogState>,
     path: String,
@@ -4660,7 +4660,7 @@ pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<Clu
     Ok(result)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_rename_person(state: tauri::State<CatalogState>, person_id: i64, name: String) -> Result<(), String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     // Renaming is exactly the "the user has touched this" signal that protects a person from
@@ -4672,7 +4672,7 @@ pub fn catalog_rename_person(state: tauri::State<CatalogState>, person_id: i64, 
 /// Folds `from_id` entirely into `into_id`: every face reassigned, `from_id` deleted, `into_id`
 /// marked named (a merge is exactly as deliberate a signal as a rename). The "inevitable cluster-
 /// merge UI" the AI-stack plan flagged from the start — clustering never lands perfectly.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_merge_people(state: tauri::State<CatalogState>, from_id: i64, into_id: i64) -> Result<(), String> {
     if from_id == into_id {
         return Err("cannot merge a person into themselves".into());
@@ -4689,7 +4689,7 @@ pub fn catalog_merge_people(state: tauri::State<CatalogState>, from_id: i64, int
 /// Deletes a person outright (e.g. a junk/misclustered group) — their faces are unassigned
 /// (`person_id = NULL`), never deleted or re-clustered automatically; a future `cluster_run`
 /// will freely re-group them since an unassigned face carries no "named" protection.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_set_person_cover(state: tauri::State<CatalogState>, person_id: i64, face_id: i64) -> Result<(), String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let n = conn
@@ -4702,7 +4702,7 @@ pub fn catalog_set_person_cover(state: tauri::State<CatalogState>, person_id: i6
 }
 
 /// A group's faces for the cover picker: confirmed first, then by detector score.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_person_face_ids(state: tauri::State<CatalogState>, person_id: i64, limit: Option<i64>) -> Result<Vec<i64>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let mut st = conn
@@ -4712,7 +4712,7 @@ pub fn catalog_person_face_ids(state: tauri::State<CatalogState>, person_id: i64
     Ok(ids)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_delete_person(state: tauri::State<CatalogState>, person_id: i64) -> Result<(), String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
@@ -4725,7 +4725,7 @@ pub fn catalog_delete_person(state: tauri::State<CatalogState>, person_id: i64) 
 /// Marks a person's faces as reviewed-and-accepted, without changing who they're assigned to.
 /// This is the "Confirm" side of screen B's permanent confirmed/suggested split, and it's what
 /// takes a face out of `cluster_run`'s reach for good (see that function's own comment).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_confirm_person(state: tauri::State<CatalogState>, person_id: i64, face_ids: Option<Vec<i64>>) -> Result<(), String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     match face_ids {
@@ -4755,7 +4755,7 @@ pub fn catalog_confirm_person(state: tauri::State<CatalogState>, person_id: i64,
 /// brand new person if `into_name` is given, into an existing one if `into_id` is given, or back
 /// to Unnamed (`person_id = NULL`, `confirmed = 0`) if neither is given — screen D's "Send back
 /// to Unnamed", the safest of its four options.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_split_faces(
     state: tauri::State<CatalogState>,
     face_ids: Vec<i64>,
@@ -4801,7 +4801,7 @@ pub fn catalog_split_faces(
 /// row). An ignored person's faces stay assigned to it — they're deliberately NOT unassigned the
 /// way `catalog_delete_person` does, so they don't resurface as a fresh unnamed cluster on the
 /// next scan.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_set_person_ignored(state: tauri::State<CatalogState>, person_id: i64, ignored: bool) -> Result<(), String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     conn.execute("UPDATE people SET ignored = ?1, auto = 0 WHERE id = ?2", params![ignored as i64, person_id])
@@ -4812,7 +4812,7 @@ pub fn catalog_set_person_ignored(state: tauri::State<CatalogState>, person_id: 
 /// Person / Pet toggle (screen B). No automatic pet detector exists yet — see this file's
 /// PetDetection note — so this is presently the only way a pet person gets created: by hand,
 /// from an existing (human-pipeline-detected — i.e. probably useless) or manually-taught entry.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_set_person_kind(state: tauri::State<CatalogState>, person_id: i64, kind: String) -> Result<(), String> {
     if kind != "person" && kind != "pet" {
         return Err(format!("unknown kind {kind:?} (expected \"person\" or \"pet\")"));
@@ -5260,7 +5260,7 @@ pub async fn catalog_auto_assign(app: tauri::AppHandle) -> Result<AutoAssignResu
 
 /// "Not this person" for specific faces (the photo right-click People editor): each face leaves
 /// its person and is remembered as rejected for them, so auto-tagging never puts it back.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_untag_faces(state: tauri::State<CatalogState>, face_ids: Vec<i64>) -> Result<usize, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
@@ -5279,7 +5279,7 @@ pub fn catalog_untag_faces(state: tauri::State<CatalogState>, face_ids: Vec<i64>
 
 /// Undo for auto-tagging: every face auto-assigned to this person goes back to Unnamed, and is
 /// remembered as "not them" so it isn't auto-assigned again.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_undo_auto_assign(state: tauri::State<CatalogState>, person_id: i64) -> Result<usize, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
@@ -5727,7 +5727,7 @@ fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: Option<f32
 
 /// Resolves a batch of suggestions in one go: `accept` faces move to the person as confirmed,
 /// `reject` faces are remembered as "not this person" and never offered to them again.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_resolve_suggestions(
     state: tauri::State<CatalogState>,
     person_id: i64,
@@ -6047,7 +6047,7 @@ pub struct PersonNode {
     pub ignored: bool,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_people(state: tauri::State<CatalogState>) -> Result<Vec<PersonNode>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
@@ -6237,7 +6237,7 @@ pub struct TagCount {
 }
 
 /// Every auto tag in the library with its photo count — the search box's "Things" suggestions.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_auto_tag_counts(state: tauri::State<CatalogState>) -> Result<Vec<TagCount>, String> {
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
@@ -6265,7 +6265,7 @@ pub struct PhotoTagInfo {
 /// Everything the Editor's Info panel needs for auto tags, keyed by file path (the Editor only
 /// knows the path). Self-healing: an analyzed photo whose tags were never stored (indexed before
 /// auto-tagging existed) is tagged right here instead of waiting for the background backfill.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_photo_tag_info(state: tauri::State<CatalogState>, path: String) -> Result<PhotoTagInfo, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let Some(id) = find_photo_by_abs_path(&conn, &path) else { return Ok(PhotoTagInfo::default()) };
@@ -6525,7 +6525,7 @@ pub struct PlaceCount {
 
 /// Every distinct place name in the catalog with its photo count, most photos first — feeds the
 /// Library search's suggestion list and the Info panel's location keyword suggestion.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_places(state: tauri::State<CatalogState>) -> Result<Vec<PlaceCount>, String> {
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
@@ -6765,7 +6765,7 @@ pub async fn catalog_verify(app: tauri::AppHandle) -> Result<VerifyResult, Strin
     .map_err(|e| format!("catalog_verify task panicked: {e}"))?
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_scan_cancel(state: tauri::State<CatalogState>) {
     state.cancel.store(true, Ordering::Relaxed);
     kill_ai_worker(&state);
@@ -6790,7 +6790,7 @@ pub(crate) fn kill_ai_worker(state: &CatalogState) {
 /// catalog_hq_offline), which — unlike the one-shot job commands — must NOT clear it per batch
 /// or the user's Cancel is erased by the next batch milliseconds later. Call once, before the
 /// first batch; never inside the loop.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_cancel_reset(state: tauri::State<CatalogState>) {
     state.cancel.store(false, Ordering::Relaxed);
 }
@@ -6802,7 +6802,7 @@ pub fn catalog_cancel_reset(state: tauri::State<CatalogState>) {
 /// background work short of quitting the app.
 static BG_PAUSED: AtomicBool = AtomicBool::new(false);
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_bg_set_paused(paused: bool, state: tauri::State<CatalogState>) {
     BG_PAUSED.store(paused, Ordering::Relaxed);
     // Every OTHER paced background loop already checks bg_is_paused() cooperatively between
@@ -7334,7 +7334,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
     Ok(CatalogPage { total: total as u64, capped, entries })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_counts(state: tauri::State<CatalogState>) -> Result<std::collections::HashMap<String, u64>, String> {
     // Read-only — the dedicated read connection, so this never waits behind a running scan.
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
@@ -7421,7 +7421,7 @@ pub struct DateCounts {
     pub no_date: u64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_date_counts(state: tauri::State<CatalogState>) -> Result<DateCounts, String> {
     // Read-only — the dedicated read connection, so this never waits behind a running scan.
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
@@ -7537,7 +7537,7 @@ pub struct CacheUsage {
     pub budget_bytes: u64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn cache_usage() -> CacheUsage {
     CacheUsage {
         offline_thumbs_bytes: dir_size_recursive(&thumb_dir()),
@@ -7563,7 +7563,7 @@ pub fn cache_usage() -> CacheUsage {
 /// button in the UI. `offline_thumbs`/`decode` hold no user data and keep the fast
 /// `remove_dir_all` path; only `working_thumbs` walks the directory and deletes file-by-file
 /// through `library::is_evictable_cache_file`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn clear_cache_tier(tier: String, state: tauri::State<CatalogState>) -> Result<u64, String> {
     let dir = match tier.as_str() {
         "offline_thumbs" => thumb_dir(),
@@ -7678,7 +7678,7 @@ pub fn cache_usage_by_root_run(conn: &Connection) -> Result<Vec<RootCacheUsage>,
     Ok(out)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_root_cache_usage(state: tauri::State<CatalogState>) -> Result<Vec<RootCacheUsage>, String> {
     // Read-only — the dedicated read connection, so this never waits behind a running scan.
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
@@ -7712,7 +7712,7 @@ pub fn clear_root_cache_run(conn: &Connection, root_id: i64) -> Result<u64, Stri
     Ok(freed)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn clear_root_cache(root_id: i64, state: tauri::State<CatalogState>) -> Result<u64, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     clear_root_cache_run(&conn, root_id)
@@ -7941,7 +7941,7 @@ pub struct HqOfflineEntry {
     pub reason: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_hq_offline_list(state: tauri::State<CatalogState>) -> Result<Vec<HqOfflineEntry>, String> {
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
@@ -8247,7 +8247,7 @@ pub async fn catalog_hq_offline(app: tauri::AppHandle) -> Result<HqOfflineResult
 /// caught up: a call returned nothing left to generate or evict) — see `hq_offline_active`'s own
 /// doc comment on `CatalogState` for why the flag can't just be derived from `catalog_hq_offline`
 /// itself. Read by main.rs's window-close handler.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_hq_offline_set_active(active: bool, state: tauri::State<CatalogState>) {
     state.hq_offline_active.store(active, Ordering::Relaxed);
 }
@@ -8544,7 +8544,7 @@ pub fn queue_offline_edit_run(conn: &Connection, path: &str, recipe: &str) -> Re
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn queue_offline_edit(path: String, recipe: String, state: tauri::State<CatalogState>) -> Result<(), String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     queue_offline_edit_run(&conn, &path, &recipe)
@@ -8570,7 +8570,7 @@ fn stat_says_conflict(path: &str, base_mtime: i64, base_size: i64) -> bool {
 /// just-reconnected volume" — a cheap enough scan (queue entries are rare) that re-checking
 /// everything online is simpler and can't miss a volume the caller didn't know had just come
 /// back. Entries on a still-offline volume are left untouched and simply not returned.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_offline_queue(state: tauri::State<CatalogState>) -> Result<Vec<QueuedEdit>, String> {
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     list_offline_queue_run(&conn)
@@ -8639,7 +8639,7 @@ pub fn apply_queued_edit_run(conn: &Connection, id: i64) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn apply_queued_edit(id: i64, state: tauri::State<CatalogState>) -> Result<(), String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     apply_queued_edit_run(&conn, id)
@@ -8652,7 +8652,7 @@ pub fn discard_queued_edit_run(conn: &Connection, id: i64) -> Result<(), String>
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn discard_queued_edit(id: i64, state: tauri::State<CatalogState>) -> Result<(), String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     discard_queued_edit_run(&conn, id)
@@ -9137,7 +9137,7 @@ fn rename_plan(conn: &Connection, paths: &[String], template: &str, sequence_sta
     Ok((rows,result))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_rename_preview(paths: Vec<String>, template: String, sequence_start: u32, state: tauri::State<CatalogState>) -> Result<Vec<RenamePreviewRow>, String> {
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     rename_plan(&conn, &paths, &template, sequence_start).map(|(rows,_)| rows)
@@ -9295,7 +9295,7 @@ fn promote_stack_leader(conn: &Connection, old_leader_id: i64) -> Result<(), Str
 /// frontend's own delete flow, mirroring `note_sidecar`'s posture: the real, recoverable action
 /// (moving the file to Trash) has already happened by the time this runs, so a failure here
 /// only means a stale catalog row until the next scan, never a lost file.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_note_deleted(paths: Vec<String>, state: tauri::State<CatalogState>) -> Result<usize, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     note_deleted_run(&conn, &paths)
@@ -9314,7 +9314,7 @@ pub fn dismiss_review_run(conn: &Connection, paths: &[String]) -> Result<usize, 
     Ok(updated)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_dismiss_review(paths: Vec<String>, state: tauri::State<CatalogState>) -> Result<usize, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     dismiss_review_run(&conn, &paths)
@@ -9359,7 +9359,7 @@ pub fn keywords_run(conn: &Connection) -> Result<Vec<KeywordNode>, String> {
     Ok(rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn catalog_keywords(state: tauri::State<CatalogState>) -> Result<Vec<KeywordNode>, String> {
     // Read-only — the dedicated read connection, so this never waits behind a running scan.
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;

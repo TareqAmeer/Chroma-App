@@ -92,7 +92,7 @@ fn edited_ts_of(photo_path: &str) -> u64 {
 
 /// One level of a folder (not recursive — the frontend expands the tree lazily, same UX as
 /// Finder/Lightroom's folder panel, and avoids walking a user's entire disk up front).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
     let mut out = Vec::new();
     let rd = std::fs::read_dir(&path).map_err(|e| format!("read_dir {path}: {e}"))?;
@@ -489,7 +489,7 @@ fn migrate_thumb_cache_v2_in(dir: &Path) {
 /// not a replacement. The frontend paints it immediately and upgrades to the real thumbnail on
 /// idle. Returns Err when a file has no embedded preview, which is the caller's signal to skip
 /// straight to tier 2 rather than show nothing.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_thumbnail_fast(path: String) -> Result<tauri::ipc::Response, String> {
     let ext = ext_lower(Path::new(&path));
     if !matches!(ext.as_str(), "jpg" | "jpeg" | "tif" | "tiff") {
@@ -529,7 +529,7 @@ fn find_embedded_soi(bytes: &[u8]) -> Option<usize> {
     bytes.windows(3).skip(3).position(|w| w == pat).map(|i| i + 3)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String> {
     // rawler's embedded-preview extraction and the `image` crate can both panic on malformed
     // input (a truncated/corrupt file, an unsupported internal variant, etc.) — an uncaught
@@ -561,7 +561,7 @@ pub fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String> {
 /// ⚠️ The catalog lookup only runs as a FALLBACK, after a real decode attempt — a mounted
 /// volume's photo must always show its true, current thumbnail, never a possibly-stale cached
 /// one, even if the catalog happens to have an offline copy on file from before an edit.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_thumbnail_or_offline(path: String, state: tauri::State<crate::catalog::CatalogState>) -> Result<tauri::ipc::Response, String> {
     // ⚠️ FAST PATH, checked first: on a large library this is what actually makes a warm relaunch
     // fast. The catalog's own bulk thumbnail pass (thumbnail_run) may have ALREADY decoded and
@@ -773,14 +773,14 @@ fn lr_thumb_path(asset_id: &str) -> PathBuf {
 }
 
 // Err = cache miss (JS falls back to the network fetch); Ok = cached JPEG bytes.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_lr_thumb(asset_id: String) -> Result<tauri::ipc::Response, String> {
     std::fs::read(lr_thumb_path(&asset_id))
         .map(tauri::ipc::Response::new)
         .map_err(|_| "miss".into())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_lr_thumb(asset_id: String, data_b64: String) -> Result<(), String> {
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD
@@ -1184,7 +1184,7 @@ pub(crate) const OFFLINE_REFERENCE_LONG_EDGE: u32 = 800;
 /// deliberately NEVER reached by opening a photo into the actual editor — that path keeps doing
 /// its normal full decode unchanged. This is a separate, non-destructive view: leaving Quick
 /// Look never triggers a decode, only actually opening the editor (an explicit action) does.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_quicklook_preview(path: String) -> Result<tauri::ipc::Response, String> {
     quicklook_preview_bytes(&path).map(tauri::ipc::Response::new)
 }
@@ -1473,7 +1473,7 @@ pub fn get_meta(path: String) -> PhotoMeta {
 // the whole RAW file for the lens fallback — negligible for get_sidecar's small XML read, but
 // harmless to parallelize either way). Order is preserved (rayon's into_par_iter().map().collect()
 // keeps input order), so the frontend can zip this 1:1 against its own `paths` array.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_meta_batch(paths: Vec<String>) -> Vec<PhotoMeta> {
     paths.into_par_iter().map(get_meta).collect()
 }
@@ -1706,7 +1706,7 @@ pub fn get_sidecar(path: String) -> Sidecar {
 
 // See get_meta_batch's comment — same one-round-trip rationale, used by openFolder's initial
 // sidecar pass (the one it awaits before first paint).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_sidecar_batch(paths: Vec<String>) -> Vec<Sidecar> {
     paths.into_par_iter().map(get_sidecar).collect()
 }
@@ -1727,7 +1727,7 @@ fn edit_sidecar<F: FnOnce(&mut Sidecar)>(path: &str, f: F) -> Result<Sidecar, St
 /// Adds a virtual copy carrying the CURRENT edits, and switches to it. Duplicating the current
 /// recipe (rather than starting blank) matches what "virtual copy" means everywhere else: a
 /// branch from where you are, not a reset.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sidecar_add_version(path: String, name: String) -> Result<Sidecar, String> {
     edit_sidecar(&path, |sc| {
         if sc.versions.is_empty() {
@@ -1742,7 +1742,7 @@ pub fn sidecar_add_version(path: String, name: String) -> Result<Sidecar, String
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sidecar_set_active_version(path: String, index: usize) -> Result<Sidecar, String> {
     edit_sidecar(&path, |sc| {
         if index < sc.versions.len() {
@@ -1751,7 +1751,7 @@ pub fn sidecar_set_active_version(path: String, index: usize) -> Result<Sidecar,
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sidecar_rename_version(path: String, index: usize, name: String) -> Result<Sidecar, String> {
     edit_sidecar(&path, |sc| {
         if let Some(v) = sc.versions.get_mut(index) {
@@ -1762,7 +1762,7 @@ pub fn sidecar_rename_version(path: String, index: usize, name: String) -> Resul
 
 /// Removes a virtual copy. Deleting down to one version collapses the list entirely, so a photo
 /// that is no longer virtual-copied looks exactly like one that never was.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sidecar_delete_version(path: String, index: usize) -> Result<Sidecar, String> {
     edit_sidecar(&path, |sc| {
         if index >= sc.versions.len() {
@@ -1790,7 +1790,7 @@ pub fn sidecar_delete_version(path: String, index: usize) -> Result<Sidecar, Str
 /// modify-write. That matters: capturing the old state and clearing it as two separate writes
 /// would leave a window where a crash/interrupt loses one half or the other (an undo buffer with
 /// no matching reset, or a reset with the undo buffer never written).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reset_edit(path: String) -> Result<Sidecar, String> {
     let sc = edit_sidecar(&path, |sc| {
         sc.last_reset_recipe = Some(sc.recipe.clone());
@@ -1811,7 +1811,7 @@ pub fn reset_edit(path: String) -> Result<Sidecar, String> {
 /// undo, not a history: a successful undo clears the buffer, and so does the next real edit (see
 /// `set_sidecar`'s own comment) or the next reset, so calling this twice in a row fails the
 /// second time.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn undo_reset_edit(path: String) -> Result<Sidecar, String> {
     let pending = get_sidecar(path.clone());
     let Some(recipe) = pending.last_reset_recipe.clone() else {
@@ -1834,7 +1834,7 @@ pub fn undo_reset_edit(path: String) -> Result<Sidecar, String> {
 /// Writes the whole sidecar in one shot. `recipe: None` keeps the existing recipe (so a
 /// rating/label click never clobbers stored edits); `Some("")` explicitly clears it.
 /// `favorite: None` likewise keeps whatever favorite state was already saved.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_sidecar(
     path: String,
     rating: i32,
@@ -2267,7 +2267,7 @@ fn apply_people_to_xmp(xmp: String, people: &[PersonRegion]) -> String {
 /// command is what makes there be something to read in the first place. Reuses `get_sidecar`/
 /// `write_sidecar` so a person write never clobbers rating/keywords/develop settings the way a
 /// from-scratch rebuild would (see `write_sidecar`'s own warning about that).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_people_regions(path: String, people: Vec<PersonRegion>) -> Result<(), String> {
     let sc = get_sidecar(path.clone());
     write_sidecar_with_people(&path, &sc, &people)
@@ -2484,7 +2484,7 @@ fn write_xmp_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 /// into `set_sidecar`'s parameter list — keywords are edited from a completely different UI
 /// surface (a tag tree/autocomplete, not the rating/flag controls) and don't need to travel
 /// alongside every rating click.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_keywords(path: String, keywords: Vec<String>) -> Result<(), String> {
     let mut sc = get_sidecar(path.clone());
     sc.keywords = keywords;
@@ -2524,7 +2524,7 @@ fn registry_write(name: &str, list: &[String]) {
 /// so a small fixed extra set of collection names can be set directly. `name` is not arbitrary
 /// user input from a network source — it's a small fixed set from our own frontend code — but
 /// validate anyway since this fn, unlike registry_set, is reachable directly from JS.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn registry_set_cmd(name: String, path: String, present: bool) -> Result<(), String> {
     if !matches!(name.as_str(), "duplicates" | "gphotos") {
         return Err(format!("registry_set_cmd: unknown registry '{name}'"));
@@ -2553,7 +2553,7 @@ fn registry_set(name: &str, path: &str, present_target: bool) {
 /// `.iter().any()` scan + a full registry_write. Measured on a real ~30k-photo library with a
 /// ~29k-entry duplicates registry: 29,663 IPC calls, ~47GB of file reads, ~0.9 BILLION string
 /// comparisons — on every single folder open. This does one read, one HashSet, one write.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn registry_set_many(
     name: String,
     present: Vec<String>,
@@ -2694,7 +2694,7 @@ fn export_history_write_all(map: &HashMap<String, Vec<ExportHistoryEntry>>) {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_export_history(path: String) -> Vec<ExportHistoryEntry> {
     {
         let mut all = export_history_read_all();
@@ -2705,7 +2705,7 @@ pub fn get_export_history(path: String) -> Vec<ExportHistoryEntry> {
 
 /// Capped at 30 entries per photo (newest last) — plenty of undo depth without the store
 /// growing unbounded for a photo re-exported hundreds of times.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn append_export_history(path: String, version: String, recipe: String, dest: Option<String>) -> Result<(), String> {
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -2727,7 +2727,7 @@ pub fn append_export_history(path: String, version: String, recipe: String, dest
 /// "rejected"/"recents") — stat'd fresh so renamed/deleted files are flagged `missing` instead
 /// of silently vanishing or erroring the whole list. Sorted newest-mtime-first; the frontend
 /// re-sorts/filters same as a normal folder view.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_collection(name: String) -> Vec<DirEntry> {
     let mut out: Vec<DirEntry> = registry_read(&name)
         .into_iter()
@@ -2758,7 +2758,7 @@ pub fn list_collection(name: String) -> Vec<DirEntry> {
 
 /// Kept for backward compat with the frontend's original "All Edited" call site — equivalent
 /// to `list_collection("edited")`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_edited() -> Vec<DirEntry> {
     list_collection("edited".to_string())
 }
@@ -2766,7 +2766,7 @@ pub fn list_edited() -> Vec<DirEntry> {
 /// Photo paths that have at least one export-history entry (see append_export_history above) —
 /// the "Exported" smart collection. Reuses the same stat-fresh/missing-tolerant mapping as
 /// list_collection, just sourced from export_history.json's keys instead of a registry file.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_exported() -> Vec<DirEntry> {
     let mut out: Vec<DirEntry> = export_history_read_all()
         .into_keys()
@@ -2799,7 +2799,7 @@ fn existing_path_count(paths: impl IntoIterator<Item = String>) -> usize {
 /// Counts for every smart collection's sidebar badge. The registries are small user-state lists;
 /// checking their paths keeps the badge aligned with the renderable collection without deleting
 /// a recoverable record.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn collection_counts() -> std::collections::HashMap<String, usize> {
     let mut m = std::collections::HashMap::new();
     m.insert("edited".to_string(), existing_path_count(registry_read("edited")));
@@ -2891,7 +2891,7 @@ fn phash_for_path(path: &str) -> Result<u64, String> {
 // state work get_thumbnail already runs concurrently from the frontend's 6-wide thumbnail pool.
 // A cold folder's worth of these run one-at-a-time before this change; on an N-core machine this
 // is roughly an N× wall-clock cut for the cold-cache case (the common one on first folder open).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn phash_batch(paths: Vec<String>) -> Result<Vec<(String, String)>, String> {
     let out: Vec<(String, String)> = paths
         .into_par_iter()
@@ -2908,7 +2908,7 @@ pub fn phash_batch(paths: Vec<String>) -> Result<Vec<(String, String)>, String> 
 /// Most-recently-opened photos, capped at 50 (oldest dropped first) — called once per photo
 /// open (see openInEditorInner in library-ui.js). A photo re-opened moves back to the front
 /// instead of appearing twice.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn touch_recent(path: String) {
     let mut list = registry_read("recents");
     let key = crate::canon::canonical_key(&path);
@@ -2975,7 +2975,7 @@ fn scan_folder_for_registry(
 /// browse. ⚠️ NON-recursive — a photo whose sidecar was edited (by this app or externally) in a
 /// SUBFOLDER never opened directly, and not in `recents`, is invisible to this scan. See
 /// `rescan_edited_registry_recursive` for the whole-tree version.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn backfill_edited_registry(folders: Vec<String>) -> usize {
     let mut edited = registry_read("edited");
     let mut favorites = registry_read("favorites");
@@ -3000,7 +3000,7 @@ pub fn backfill_edited_registry(folders: Vec<String>) -> usize {
 /// in-flight registry rescan or vice versa.
 static REGISTRY_RESCAN_CANCEL: AtomicBool = AtomicBool::new(false);
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn cancel_registry_rescan() {
     REGISTRY_RESCAN_CANCEL.store(true, Ordering::Relaxed);
 }
@@ -3123,7 +3123,7 @@ pub async fn rescan_edited_registry_recursive(app: tauri::AppHandle, root: Strin
 /// Duplicates a photo (and its .xmp sidecar, if any) alongside the original with a
 /// "-copy"/"-copy2"/... suffix before the extension. Returns the new file's path so the
 /// caller can refresh the grid and select it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn duplicate_file(path: String) -> Result<String, String> {
     let src = Path::new(&path);
     let dir = src.parent().ok_or("no parent directory")?;
@@ -3613,14 +3613,14 @@ fn now_secs() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn album_list() -> Vec<Album> {
     let mut v = albums_read();
     v.sort_by(|a, b| b.updated.cmp(&a.updated));
     v
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn album_create(name: String) -> Result<Album, String> {
     let name = name.trim().to_string();
     if name.is_empty() {
@@ -3637,7 +3637,7 @@ pub fn album_create(name: String) -> Result<Album, String> {
     Ok(album)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn album_rename(id: String, name: String) -> Result<(), String> {
     let name = name.trim().to_string();
     if name.is_empty() {
@@ -3651,7 +3651,7 @@ pub fn album_rename(id: String, name: String) -> Result<(), String> {
     albums_write(&all)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn album_delete(id: String) -> Result<(), String> {
     let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
     let mut all = albums_read();
@@ -3663,7 +3663,7 @@ pub fn album_delete(id: String) -> Result<(), String> {
 
 /// Adds photos to an album, skipping ones already in it. Returns how many were actually added so
 /// the UI can say "3 added, 2 already there" instead of a silent no-op on a re-drag.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn album_add(id: String, paths: Vec<String>) -> Result<usize, String> {
     let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
     let mut all = albums_read();
@@ -3680,7 +3680,7 @@ pub fn album_add(id: String, paths: Vec<String>) -> Result<usize, String> {
     Ok(added)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn album_remove(id: String, paths: Vec<String>) -> Result<(), String> {
     let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
     let mut all = albums_read();
@@ -3692,7 +3692,7 @@ pub fn album_remove(id: String, paths: Vec<String>) -> Result<(), String> {
 
 /// Reorders one album's contents wholesale — the drag-to-reorder gesture. Paths not currently in
 /// the album are ignored rather than added, so a stale drag can't quietly grow it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn album_set_order(id: String, paths: Vec<String>) -> Result<(), String> {
     let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
     let mut all = albums_read();
@@ -4257,7 +4257,7 @@ mod sidecar_preservation_tests {
 
 /// One album's photos as grid entries. Mirrors list_exported's stat-fresh/missing-tolerant
 /// mapping so an album renders through exactly the same grid path as a folder.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_album(id: String) -> Vec<DirEntry> {
     let all = albums_read();
     let Some(a) = all.into_iter().find(|a| a.id == id) else { return Vec::new() };
