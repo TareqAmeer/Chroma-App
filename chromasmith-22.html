@@ -8515,7 +8515,15 @@ if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.||adjTexture!=0.)){
   vec3 hp=mix(srcHP,srcHPW,clamp((adjSharpDetail-0.5)*2.0,0.0,1.0));
   float lv=dot(c.rgb,vec3(.2126,.7152,.0722));
   float cw=4.*lv*(1.-lv);
-  c.rgb=clamp(c.rgb+hp*(adjSharp+adjClarity*cw+adjTexture),0.,1.);
+  // Detail below 0.5 = edge-only: fade out small-amplitude high-pass (fine texture) for Sharpen only,
+  // so the lower half of the slider is not a dead zone. Detail 0.5 leaves hpS == hp exactly.
+  vec3 hpS=hp;
+  if(adjSharpDetail<0.499){
+    float edgeLo=(0.5-adjSharpDetail)*2.0;
+    float hpMag=max(abs(hp.r),max(abs(hp.g),abs(hp.b)));
+    hpS=hp*smoothstep(0.0,0.02+0.2*edgeLo,hpMag);
+  }
+  c.rgb=clamp(c.rgb+hpS*adjSharp+hp*(adjClarity*cw+adjTexture),0.,1.);
 }
 // Input transform BEFORE the look LUT (sharpen above runs on raw source values — consistent
 // for all 5 taps; log-space unsharp is fine). With V-Log in and no LUT the image is neutral Rec.709.
