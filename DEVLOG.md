@@ -1,5 +1,11 @@
 
 
+### 2026-10-06 — CHR-206 guided relinking safety/design slice
+- Traced volume marker identity, last-seen mount paths, root/photo-relative paths, walk snapshots, ID-keyed edit queues/faces, and separate user path stores in albums, collection registries, export history, and adjacent XMP sidecars.
+- Documented why a root/photo-only SQLite rewrite can strand user data, plus staged preview/apply guardrails: distinguish offline from missing/permission errors, require one-to-one content evidence, and keep ambiguous candidates in review. Files: `docs/library-guided-relink.md`, `DEVLOG.md`.
+- Researched Lightroom's explicit Locate + optional nearby-photo flow and digiKam's collection-root Update Path. This is a sourced design slice only; no path changes or reconnection behavior are implemented until JSON/XMP state can be rewritten recoverably. CHR-206 remains In Progress.
+
+
 ### 2026-10-06 — CHR-242 local-only sync decision (documentation slice)
 - Recorded a provisional no-hosted-sync/no-iCloud/no-shared-catalog-replication boundary; documented local source, sidecar, catalog, people/pets, cache/model, and preference categories and clarified that this slice adds no transport or request.
 - Added a provider re-entry checklist for data format, queues/conflicts, originals versus previews, affirmative opt-in and zero-network proof, sharing, recovery, and a platform/fixture matrix. Files: `docs/sync-privacy-decision.md`, `DEVLOG.md`.
