@@ -230,6 +230,12 @@ function boot(){
   document.addEventListener('click',e=>{if(!mob())return;const v=e.target.closest('.fx-val');if(v&&v.closest('.fx-panel')){e.preventDefault();e.stopImmediatePropagation();precision(v);}},true);
   document.addEventListener('keydown',e=>{if(!mob())return;if((e.key==='Enter'||e.key===' ')&&e.target.matches('.fx-val')){e.preventDefault();precision(e.target);}else if(e.key==='Escape'&&!activeDialog){e.preventDefault();back();}},true);
   document.addEventListener('input',e=>{if(mob()&&e.target.matches('input.fx-slider')){syncResets(e.target.closest('.fx-row')?.parentElement||document);const v=e.target.closest('.fx-row')?.querySelector('.fx-val');if(v)e.target.setAttribute('aria-valuetext',v.textContent.trim());}});
+  // Section/tool Reset writes slider values directly (no input event), so the "edited" marker, fill and
+  // knob stayed on after a reset (CHR-117). Re-sync once the reset handler has run, and again after
+  // any async follow-up.
+  document.addEventListener('click',e=>{if(!mob()||!e.target.closest('.fx-ctrl-title-reset,.phone-reset'))return;
+    const fix=()=>{syncResets();if(typeof fxPaintAllSliders==='function')fxPaintAllSliders(document.querySelector('.fx-panel')||document);};
+    setTimeout(fix,0);setTimeout(fix,250);},true);
   const app=window.Capacitor?.Plugins?.App;
   if(typeof capNative==='function'&&capNative()&&app){
     app.addListener('backButton',async()=>{if(!await back()){await window.MobileLibrary?.flush();await app.minimizeApp();}});

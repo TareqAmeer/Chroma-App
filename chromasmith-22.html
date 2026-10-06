@@ -13315,6 +13315,8 @@ function resetNR(){
   // Sharpen lives in this panel now; RAW photos default to 40 (matches applyRawDefaults), others to 0.
   {const s=document.getElementById('sl-adj-sharp'),vs=document.getElementById('vl-adj-sharp');
    if(s){const it=curItem();const isRaw=it&&RAW_FILE_EXT_RE.test('.'+(it.ext||''));s.value=isRaw?40:0;if(vs)vs.textContent=s.value;}}
+  {const sd=document.getElementById('sl-adj-sharp-detail'),vd=document.getElementById('vl-adj-sharp-detail');if(sd){sd.value=50;if(vd)vd.textContent='50';}}
+  fxPaintAllSliders(document.querySelector('.fx-ctrl[data-fxsec="nr"]'));
   fxUpdate();nrSyncGate();log('Noise reduction reset','info');
 }
 function resetDeconv(){
@@ -27620,6 +27622,9 @@ function fxResetSection(cardOrName){
   // click that visibly did nothing to the photo.
   if(card.dataset.fxsec==='retouch'&&typeof healClear==='function')healClear();
   if(typeof hapt==='function')hapt();
+  // Values were written straight to .value, which fires no input event: repaint the fill/knob and
+  // drop the phone "changed" marker, or reset sliders keep looking edited (CHR-117).
+  card.querySelectorAll('input[type=range]').forEach(sl=>{fxPaintSlider(sl);const row=sl.closest('.fx-row');if(row)row.classList.remove('phone-changed');});
   fxUpdate();
   log('Section reset','info');
 }
