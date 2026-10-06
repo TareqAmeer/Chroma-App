@@ -4460,7 +4460,14 @@ pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<Clu
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     // Only UNCONFIRMED assignments are cleared — a confirmed face keeps its person_id through
     // this wipe (it was never selected by the query above, so it can't be reassigned below either).
-    tx.execute("UPDATE photo_faces SET person_id = NULL WHERE confirmed = 0", []).map_err(|e| e.to_string())?;
+    // ⚠️ Human rows only (same scope as the query above): pet sightings are filed by pets_run, and
+    // clearing them here orphaned every unconfirmed pet sighting on each people re-cluster.
+    tx.execute(
+        "UPDATE photo_faces SET person_id = NULL WHERE confirmed = 0 AND species IS NULL
+         AND (person_id IS NULL OR person_id NOT IN (SELECT id FROM people WHERE kind = 'pet'))",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
     // Only AUTO people are cleared wholesale — a named (user-renamed/merged-into) person survives
     // even if this run assigns it zero faces, so a rename is never silently lost. ⚠️ Also spared:
     // any still-`auto` person who owns at least one CONFIRMED face — `photo_faces.person_id` is
@@ -11018,6 +11025,30 @@ mod tests {
     // which could silently move a face the user had already reviewed. A confirmed face's
     // person_id must survive re-clustering completely untouched, even when new/unconfirmed faces
     // are being clustered at the same time.
+    fn people_recluster_leaves_unconfirmed_pet_sightings_filed() {
+        // Regression: cluster_run's wipe cleared EVERY unconfirmed person_id, so each people
+        // re-cluster orphaned all ~28k auto-filed pet sightings.
+        let conn = temp_db();
+        let dir = scratch_photos_dir("cluster_keeps_pets");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &AtomicBool::new(false)).unwrap();
+        let photo_id: i64 = conn.query_row("SELECT id FROM photos LIMIT 1", [], |r| r.get(0)).unwrap();
+        conn.execute("INSERT INTO people (name, created, auto, kind) VALUES ('Pet 1', 0, 1, 'pet')", []).unwrap();
+        let pet = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, person_id, confirmed, species) VALUES (?1,0,0,1,1,0.9,'[]',?2,0,'dog')",
+            params![photo_id, pet],
+        )
+        .unwrap();
+        let fid = conn.last_insert_rowid();
+        cluster_run(&conn, 0.1, 2).unwrap();
+        let after: Option<i64> = conn.query_row("SELECT person_id FROM photo_faces WHERE id = ?1", params![fid], |r| r.get(0)).unwrap();
+        assert_eq!(after, Some(pet), "a people re-cluster must not unfile a pet sighting");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn confirmed_faces_survive_a_recluster_untouched() {
         let conn = temp_db();
         let dir = scratch_photos_dir("cluster_confirmed");

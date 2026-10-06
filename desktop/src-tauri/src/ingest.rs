@@ -825,7 +825,7 @@ mod tests {
             std::fs::write(&path, vec![(i + 1) as u8; 128]).unwrap();
             CardFile {
                 path: path.to_string_lossy().into_owned(), name: (*name).into(), size: 128,
-                kind: "jpeg".into(), date: Some("2026-10-05".into()), duplicate: false,
+                kind: "jpeg".into(), date: Some("2026-10-05".into()), duplicate: false, camera: None,
             }
         }).collect();
         let cancel = AtomicBool::new(false);
@@ -835,7 +835,7 @@ mod tests {
             IngestOptions {
                 dest_root: dest.to_string_lossy().into_owned(), backup_root: None,
                 folder_template: Some("{YYYY-MM-DD}".into()), filename_template: None,
-                skip_duplicates: false, only: Vec::new(),
+                skip_duplicates: false, only: Vec::new(), sequence_start: None,
             },
             "cancel-test", &cancel,
             &mut |p| {
