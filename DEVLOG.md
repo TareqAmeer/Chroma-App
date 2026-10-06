@@ -67,3 +67,9 @@
 
 - CHR-275 follow-up: published interrupted-stroke cleanup in `51bacef4` (feature commit `b51f55bb`); clears held erase/cursor state on blur, visibility changes, paint-mode exit and pointer cancellation. Modifier rebinding remains open because the shortcut registry lacks modifier-only hold actions; Chromium run remains unavailable.
 - CHR-250: published the source-derived format and profile inventory in `d0f2ea9c`; `git ls-remote origin refs/heads/main` confirmed publication. `npm run lint:formats` passes; camera sample decoding remains explicitly unknown, and focused Rust decoder-table execution is blocked by missing Windows build assets/locked Cargo artifacts.
+
+## 2026-10-06 — CHR-205 verified catalog snapshot primitive
+
+- Added a versioned catalog snapshot directory using rusqlite's SQLite Online Backup API, with manifest version/schema/photo count, BLAKE3 checksum, integrity and foreign-key verification, staging, and atomic same-parent publication.
+- Scope explicitly excludes originals and regenerated caches; this is catalog-only and does not capture sidecars, preferences, other stores, or implement restore/activation. Files: `desktop/src-tauri/src/catalog_backup.rs`, `desktop/src-tauri/src/main.rs`, `desktop/src-tauri/Cargo.toml`.
+- Added focused WAL snapshot, verification, destination-collision, and corruption tests (`cargo test --manifest-path desktop/src-tauri/Cargo.toml --bin chromasmith catalog_backup::tests`: 2 passed). Lightroom's documented catalog-only backup policy and SQLite's official online backup API inform the design; full backup/restore acceptance remains outstanding.

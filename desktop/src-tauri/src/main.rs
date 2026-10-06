@@ -71,6 +71,7 @@ mod winvideothumb;
 mod subject;
 mod ingest;
 mod catalog;
+mod catalog_backup;
 mod recipe_batch;
 mod geocode;
 mod dcp_store;
