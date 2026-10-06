@@ -631,7 +631,8 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 #fx-canvas{display:block;max-width:100%;height:auto}
 .fx-preview-col{position:sticky;top:16px;align-self:start}
 #fx-canvas-orig{display:none;position:absolute;top:0;left:0;pointer-events:none}
-.fx-split-line{display:none;position:absolute;top:0;bottom:0;width:3px;background:var(--scrim-w4);cursor:col-resize;z-index:var(--z-sticky)}
+.fx-split-line{display:none;position:absolute;top:0;bottom:0;width:3px;background:var(--scrim-w4);cursor:col-resize;z-index:var(--z-sticky);touch-action:none}
+.fx-split-line[data-axis="horizontal"]{top:auto;right:0;bottom:auto;height:3px;width:auto;cursor:row-resize}
 .fx-split-knob{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 2px 8px var(--scrim-b5);display:flex;align-items:center;justify-content:center;font-size:var(--fs-2);color:#000;user-select:none}
 #fx-hist{display:none;position:absolute;bottom:8px;right:8px;border-radius:4px;background:var(--scrim-b3);opacity:var(--op-8);pointer-events:none}
 .fx-zoom-wrap{transform-origin:0 0;cursor:grab;touch-action:none;will-change:transform;backface-visibility:hidden;-webkit-backface-visibility:hidden}
@@ -7116,7 +7117,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006U';
+const BUILD='1.1006V';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10499,7 +10500,7 @@ let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source
 // Compare (show original) strips only the LOOK; borders/canvas matte/film frame stay so the photo's size and position never move.
 function fxCompareParams(){return{...getFXParams(),lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},bloom:{enabled:false},masks:[],debug:0};}
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
-let fxSplit=false, fxSplitPos=0.5;       // split before/after view
+let fxSplit=false, fxSplitPos=0.5, fxSplitAxis='vertical'; // split before/after view
 // B3: what the split's "before" side renders. 'orig'|'pin'|{hist:N}|{style:name}|{export:v,recipe}
 // — default 'orig' means zero-interaction behaviour is byte-identical to the pre-B3 hardcoded original.
 let fxPinned=null, fxSplitSrc='orig';
@@ -18685,15 +18686,14 @@ function initSplitDrag(){
   const line=document.getElementById('fx-split-line');
   const wrap=document.getElementById('fx-wrap');
   if(!line||line._splitWired)return;line._splitWired=true;
-  const move=e=>{
-    const r=wrap.getBoundingClientRect();
-    const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
-    fxSplitPos=Math.max(0.05,Math.min(0.95,cx/r.width));
-    _applySplitPos();
-  };
-  const up=()=>{document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);document.removeEventListener('touchmove',move);document.removeEventListener('touchend',up);};
-  line.addEventListener('mousedown',e=>{e.preventDefault();document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);});
-  line.addEventListener('touchstart',e=>{e.preventDefault();document.addEventListener('touchmove',move);document.addEventListener('touchend',up);},{passive:false});
+  line.tabIndex=0;line.setAttribute('role','separator');line.setAttribute('aria-label','Before and after divider');
+  const point=e=>{const r=wrap.getBoundingClientRect(),horizontal=fxSplitAxis==='horizontal';const size=horizontal?r.height:r.width;if(!size)return;const coordinate=horizontal?e.clientY-r.top:e.clientX-r.left;fxSplitPos=Math.max(0.05,Math.min(0.95,coordinate/size));_applySplitPos();};
+  line.addEventListener('pointerdown',e=>{if(e.button!==undefined&&e.button!==0)return;e.preventDefault();line.setPointerCapture?.(e.pointerId);point(e);});
+  line.addEventListener('pointermove',e=>{if(line.hasPointerCapture?.(e.pointerId))point(e);});
+  const release=e=>{if(line.hasPointerCapture?.(e.pointerId))line.releasePointerCapture(e.pointerId);};
+  line.addEventListener('pointerup',release);line.addEventListener('pointercancel',release);
+  line.addEventListener('keydown',e=>{const horizontal=fxSplitAxis==='horizontal',negative=horizontal?'ArrowUp':'ArrowLeft',positive=horizontal?'ArrowDown':'ArrowRight';if(e.key!==negative&&e.key!==positive&&e.key!=='Home'&&e.key!=='End')return;e.preventDefault();if(e.key==='Home')fxSplitPos=.05;else if(e.key==='End')fxSplitPos=.95;else fxSplitPos=Math.max(.05,Math.min(.95,fxSplitPos+(e.key===positive?.01:-.01)*(e.shiftKey?5:1)));_applySplitPos();});
+  line.addEventListener('dblclick',()=>{fxSplitPos=.5;_applySplitPos();});
 }
 // ── B3: split-source menu (Original / Pinned / History / Styles / Exports) ────────────────────
 function _fxSplitSrcLabel(src){
@@ -18733,6 +18733,10 @@ function fxSetSplitSrc(src){
 async function _fxSplitListInto(container,closeFn){
   container.innerHTML='';
   const pick=(src)=>{fxSetSplitSrc(src);closeFn();};
+  container.appendChild(_fxSplitHead('Divider direction'));
+  container.appendChild(_fxSplitRow('Vertical',()=>{fxSplitAxis='vertical';_applySplitPos();},fxSplitAxis==='vertical'));
+  container.appendChild(_fxSplitRow('Horizontal',()=>{fxSplitAxis='horizontal';_applySplitPos();},fxSplitAxis==='horizontal'));
+  container.appendChild(_fxSplitHead('Compare against'));
   container.appendChild(_fxSplitRow('Original',()=>pick('orig'),fxSplitSrc==='orig'));
   container.appendChild(_fxSplitRow(fxPinned?'Pinned':'Pinned (none yet)',()=>{if(fxPinned)pick('pin');},fxSplitSrc==='pin'));
   container.appendChild(_fxSplitRow('Pin current state',()=>{fxPinned=getUISnapshot();pick('pin');}));
@@ -18931,11 +18935,11 @@ function _applySplitPos(){
   const line=document.getElementById('fx-split-line');
   const orig=document.getElementById('fx-canvas-orig');
   if(!wrap)return;
-  const pct=(fxSplitPos*100).toFixed(1)+'%';
-  if(line){line.style.left=pct;line.style.display='block';}
-  // orig shows left half (original), FX.cv shows right half (processed)
-  if(orig&&orig.style.display!=='none'){orig.style.clipPath=`inset(0 ${(100-fxSplitPos*100).toFixed(1)}% 0 0)`;}
-  if(FX&&FX.cv&&fxSplit){FX.cv.style.clipPath=`inset(0 0 0 ${pct})`;}
+  const pct=(fxSplitPos*100).toFixed(1)+'%',horizontal=fxSplitAxis==='horizontal';
+  if(line){line.dataset.axis=horizontal?'horizontal':'vertical';line.setAttribute('aria-orientation',horizontal?'horizontal':'vertical');line.style.left=horizontal?'0':pct;line.style.top=horizontal?pct:'0';line.style.display='block';}
+  // The before canvas occupies the leading side, the current canvas the trailing side.
+  if(orig&&orig.style.display!=='none'){orig.style.clipPath=horizontal?`inset(0 0 ${(100-fxSplitPos*100).toFixed(1)}% 0)`:`inset(0 ${(100-fxSplitPos*100).toFixed(1)}% 0 0)`;}
+  if(FX&&FX.cv&&fxSplit){FX.cv.style.clipPath=horizontal?`inset(${pct} 0 0 0)`:`inset(0 0 0 ${pct})`;}
 }
 
 // ══ LIVE HISTOGRAM ════════════════════════════════════════════════════════════
