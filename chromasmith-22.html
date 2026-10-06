@@ -19529,6 +19529,7 @@ function initEditableVals(){
     el.setAttribute('inputmode','text');        // full keyboard so the minus sign is available
     el.title='Tap to type a value';
     const commit=()=>{
+      if(document.body.classList.contains('mobile-fx'))return; // phone edits values in the precision sheet; a stray focus/blur here re-reads the unit-scaled readout ("+2.00 EV") as a raw slider value and clobbers the recipe
       const n=parseFloat((el.textContent||'').replace(/[^0-9.+-]/g,''));
       if(!isNaN(n))sl.value=(sl.id==='sl-straighten'&&typeof _stA2S==='function')?_stA2S(Math.max(-45,Math.min(45,n))):n; // straighten: typed value is an angle, slider is on a curved scale
       sl.dispatchEvent(new Event('input',{bubbles:true})); // runs the slider's own handler → updates display + render
