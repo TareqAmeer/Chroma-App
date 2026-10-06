@@ -3419,6 +3419,7 @@
     window.__libOpenFolder = (path) => openFolder(path);
     window.__libEnterSurvey = enterSurveyMode;
     window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && compareState.mode === 'survey' });
+    window.__libOpenImportPanel = (path) => openImportPanel(path);
     window.__libSubfolderPreference = {
       key: folderScopeKey,
       read: subfoldersForScope,
@@ -12533,11 +12534,67 @@
   }
 
   const IMPORT_PREFS_KEY = 'cs.import.prefs.v1';
+  const IMPORT_RECIPES_KEY = 'cs.import.recipes.v1';
   function importPrefs() {
     try { return JSON.parse(localStorage.getItem(IMPORT_PREFS_KEY)) || {}; } catch (e) { return {}; }
   }
   function saveImportPrefs(p) {
     try { localStorage.setItem(IMPORT_PREFS_KEY, JSON.stringify(p)); } catch (e) { /* quota — not worth failing an import over */ }
+  }
+  function importRecipes() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(IMPORT_RECIPES_KEY));
+      return Array.isArray(saved) ? saved.filter((r) => r && typeof r.id === 'string' && typeof r.name === 'string') : [];
+    } catch (e) { return []; }
+  }
+  function storeImportRecipe(recipe) {
+    const recipes = importRecipes();
+    const sameName = recipes.find((r) => r.name.toLocaleLowerCase() === recipe.name.toLocaleLowerCase());
+    const stored = { ...recipe, id: sameName?.id || recipe.id };
+    const next = sameName ? recipes.map((r) => r.id === sameName.id ? stored : r) : [...recipes, stored];
+    try { localStorage.setItem(IMPORT_RECIPES_KEY, JSON.stringify(next)); } catch (e) { /* quota — recipe saving is best-effort */ }
+    return stored;
+  }
+  function removeImportRecipe(id) {
+    const next = importRecipes().filter((r) => r.id !== id);
+    try { localStorage.setItem(IMPORT_RECIPES_KEY, JSON.stringify(next)); } catch (e) { /* ignore storage failures */ }
+    return next;
+  }
+  function importKeywordList(value) {
+    const found = new Set();
+    return String(value || '').split(/[\n,]/).map((s) => s.trim()).filter((s) => {
+      const key = s.toLocaleLowerCase();
+      if (!s || found.has(key)) return false;
+      found.add(key);
+      return true;
+    });
+  }
+  function currentImportRecipe(name, id) {
+    const $ = (field) => document.getElementById(field);
+    return {
+      id, name,
+      folderTemplate: $('imp-folder').value,
+      filenameTemplate: $('imp-name').value.trim(),
+      sequenceStart: Math.max(0, Math.trunc(Number($('imp-seq-start').value) || 0)),
+      creator: $('imp-creator').value.trim(),
+      copyright: $('imp-copyright').value.trim(),
+      caption: $('imp-caption').value.trim(),
+      jobProject: $('imp-job-project').value.trim(),
+      keywords: importKeywordList($('imp-keywords').value),
+    };
+  }
+  function applyImportRecipe(recipe) {
+    if (!recipe) return;
+    const $ = (field) => document.getElementById(field);
+    if (recipe.folderTemplate != null) $('imp-folder').value = recipe.folderTemplate;
+    $('imp-name').value = recipe.filenameTemplate || '';
+    $('imp-seq-start').value = String(recipe.sequenceStart ?? 1);
+    $('imp-creator').value = recipe.creator || '';
+    $('imp-copyright').value = recipe.copyright || '';
+    $('imp-caption').value = recipe.caption || '';
+    $('imp-job-project').value = recipe.jobProject || '';
+    $('imp-keywords').value = (recipe.keywords || []).join(', ');
+    $('imp-name').dispatchEvent(new Event('input'));
   }
 
   /// The import sheet. Scans first (so the user is choosing against what is actually on the card,
@@ -12807,8 +12864,14 @@
         <div style="font-size:11px;font-weight:600;color:var(--mut);margin-bottom:4px">${label}</div>
         ${html}${hint ? `<div style="font-size:11px;color:var(--mut);margin-top:3px">${hint}</div>` : ''}</div>`;
     const inputCss = 'width:100%;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:7px 9px;font-size:12px;font-family:var(--sans)';
+    const savedRecipes = importRecipes();
+    const recipeOptions = savedRecipes.map((recipe) => `<option value="${esc(recipe.id)}">${esc(recipe.name)}</option>`).join('');
     document.getElementById('imp-body').innerHTML =
-      row('Photos', `<div style="display:flex;gap:6px;margin-bottom:6px">
+      row('Saved import recipe', `<div style="display:flex;gap:6px"><select id="imp-recipe" style="${inputCss};flex:1"><option value="">Current settings</option>${recipeOptions}</select>
+          <button id="imp-recipe-save" type="button" style="white-space:nowrap;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:7px 10px;font-size:12px;cursor:pointer">Save as…</button>
+          <button id="imp-recipe-delete" type="button" title="Delete selected recipe" style="background:var(--sur2);border:1px solid var(--bdr);color:var(--mut);border-radius:7px;padding:7px 9px;cursor:pointer">${ic('close', 14)}</button></div>`,
+        'Recipes save naming, folder, and IPTC metadata fields. Destination, duplicate handling, and second-copy choices stay independent.')
+      + row('Photos', `<div style="display:flex;gap:6px;margin-bottom:6px">
           <button id="imp-select-all" type="button" style="background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer">Select all</button>
           <button id="imp-select-none" type="button" style="background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer">Deselect all</button>
         </div>
@@ -12826,6 +12889,12 @@
           <datalist id="imp-name-presets"><option value="{YYYY-MM-DD}_{name}"></option><option value="{YYYY-MM-DD}_{seq}"></option><option value="{date}_{camera}_{seq}"></option></datalist>
           <div id="imp-name-preview" style="font-size:11px;line-height:1.55;max-height:94px;overflow:auto;margin-top:5px;padding:5px 7px;background:var(--sur2);border-radius:6px"></div>`,
           'Tokens: {name}, {date}, {camera}, {seq}. File extensions are kept.')
+      + row('Creator', `<input id="imp-creator" style="${inputCss}" value="${esc(prefs.creator || '')}" placeholder="Photographer name">`)
+      + row('Copyright', `<input id="imp-copyright" style="${inputCss}" value="${esc(prefs.copyright || '')}" placeholder="Copyright notice">`)
+      + row('Caption', `<textarea id="imp-caption" rows="2" style="${inputCss};resize:vertical" placeholder="Description applied to imported photos">${esc(prefs.caption || '')}</textarea>`)
+      + row('Job / project ID', `<input id="imp-job-project" style="${inputCss}" value="${esc(prefs.jobProject || '')}" placeholder="IPTC job identifier">`)
+      + row('Keywords', `<input id="imp-keywords" style="${inputCss}" value="${esc((prefs.keywords || []).join(', '))}" placeholder="Comma-separated keywords">`,
+          'Keywords are added to existing sidecar keywords; blank metadata fields leave source values unchanged.')
       + row('Sequence starts at', `<input id="imp-seq-start" type="number" min="0" step="1" style="${inputCss}" value="${esc(prefs.sequenceStart ?? '1')}">`,
           'The sequence follows the card’s filename order and skips files excluded by “Skip files already imported”.')
       + row('Also copy to', `<div style="display:flex;gap:6px"><input id="imp-backup" style="${inputCss}" value="${esc(prefs.backup || '')}" placeholder="Optional second copy — another drive" readonly>
@@ -12845,6 +12914,32 @@
         </div>`;
 
     const $ = (id) => document.getElementById(id);
+    const recipeSelect = $('imp-recipe');
+    const refreshRecipeOptions = (selectedId = '') => {
+      recipeSelect.innerHTML = '<option value="">Current settings</option>'
+        + importRecipes().map((recipe) => `<option value="${esc(recipe.id)}">${esc(recipe.name)}</option>`).join('');
+      recipeSelect.value = selectedId;
+    };
+    if (prefs.recipeId && savedRecipes.some((recipe) => recipe.id === prefs.recipeId)) recipeSelect.value = prefs.recipeId;
+    recipeSelect.onchange = () => {
+      const selectedRecipe = importRecipes().find((recipe) => recipe.id === recipeSelect.value);
+      if (selectedRecipe) applyImportRecipe(selectedRecipe);
+    };
+    $('imp-recipe-save').onclick = async () => {
+      const name = (await window.askTextModal('Save import recipe as', '', '') || '').trim();
+      if (!name) return;
+      const existing = importRecipes().find((recipe) => recipe.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+      const currentId = existing?.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `import-${Date.now()}`);
+      const stored = storeImportRecipe(currentImportRecipe(name, currentId));
+      refreshRecipeOptions(stored.id);
+    };
+    $('imp-recipe-delete').onclick = () => {
+      const recipe = importRecipes().find((item) => item.id === recipeSelect.value);
+      if (!recipe) return;
+      if (!window.confirm(`Delete the “${recipe.name}” import recipe?`)) return;
+      removeImportRecipe(recipe.id);
+      refreshRecipeOptions('');
+    };
     $('imp-select-all').onclick = () => { for (const f of files) selected.add(f.path); renderTiles(); updateSelSummary(); };
     $('imp-select-none').onclick = () => { selected.clear(); renderTiles(); updateSelSummary(); };
     renderTiles();
@@ -12877,8 +12972,16 @@
         sequenceStart: Math.max(0, Math.trunc(Number($('imp-seq-start').value) || 0)),
         skipDuplicates: $('imp-skip').checked,
         only: selected.size === files.length ? [] : [...selected], // [] means "everything" server-side; only send a real allowlist when it's a genuine subset
+        metadata: {
+          creator: $('imp-creator').value.trim(),
+          copyright: $('imp-copyright').value.trim(),
+          caption: $('imp-caption').value.trim(),
+          jobProject: $('imp-job-project').value.trim(),
+          keywords: importKeywordList($('imp-keywords').value),
+        },
       };
-      saveImportPrefs({ dest, backup: opts.backupRoot || '', folder: opts.folderTemplate, name: opts.filenameTemplate, sequenceStart: String(opts.sequenceStart), skip: opts.skipDuplicates, eject: $('imp-eject').checked });
+      saveImportPrefs({ dest, backup: opts.backupRoot || '', folder: opts.folderTemplate, name: opts.filenameTemplate, sequenceStart: String(opts.sequenceStart), skip: opts.skipDuplicates, eject: $('imp-eject').checked, recipeId: recipeSelect.value,
+        creator: opts.metadata.creator, copyright: opts.metadata.copyright, caption: opts.metadata.caption, jobProject: opts.metadata.jobProject, keywords: opts.metadata.keywords });
       cardState.scanning = true;
       $('imp-go').disabled = true;
       $('imp-go').style.opacity = '.6';
