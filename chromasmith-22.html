@@ -2540,8 +2540,10 @@ body.sk2 .cs-ctx-it:hover>.cs-ctx-pop .cs-ctx-it:hover::before{content:''}
 body.sk2 .cs-ctx-sep{background:var(--bdr)!important;margin:6px 0!important}
 body.sk2 .cs-ctx-pop{margin-left:0!important;top:-7px!important}
 /* ── Gallery (Library) — concept view: word-list sidebar with the square marker, big title with
-   counts on the right, matted prints, square selection marker, no status bar. */
-body.sk2 #lib-overlay #lib-bottom{display:none!important}
+   counts on the right, matted prints, square selection marker. Background-work progress lives in
+   the bottom status bar (#lib-bottom), not the top bar: a top-bar indicator overcrowded it and its
+   appear/disappear made the collision-driven top-bar fold flip between full and compact. */
+body.sk2 #lib-overlay #lib-bottom{min-height:26px}
 body.sk2 #lib-overlay #lib-grid-title{flex-direction:row!important;align-items:flex-end;justify-content:space-between;gap:24px;padding:28px 24px 22px;margin-bottom:24px}
 body.sk2 #lib-overlay #lib-grid-title .lgt-l{display:flex;flex-direction:column;gap:6px;min-width:0}
 body.sk2 #lib-overlay #lib-grid-title .lgt-h{font-size:64px;letter-spacing:-.045em;line-height:.88;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -7161,7 +7163,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006I';
+const BUILD='1.1006J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as

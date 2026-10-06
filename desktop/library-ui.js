@@ -2772,16 +2772,10 @@
     new MutationObserver(mg).observe(overlay, { childList: true, subtree: true }); mg();
     // (The docked filmstrip's photo counter was removed — it repeated the total and never said
     // which photo was open.)
-    if (top && !overlay.querySelector('#sk2-act')) {
-      const w = document.createElement('button'); w.type = 'button'; w.id = 'sk2-act'; w.title = 'Background work — click for details';
-      w.innerHTML = '<span class="sk2-act-dot" aria-hidden="true"></span><span class="sk2-act-body"></span>';
-      const body = w.querySelector('.sk2-act-body');
-      ['lib-activity', 'lib-thumb-progress'].forEach((id) => { const e = overlay.querySelector('#' + id); if (e) body.appendChild(e); });
-      w.onclick = (ev) => { if (ev.target.closest('button:not(#sk2-act)')) return; w.classList.toggle('open'); };
-      top.prepend(w);
-      const sync = () => w.classList.toggle('busy', !!body.textContent.trim());
-      new MutationObserver(sync).observe(body, { childList: true, subtree: true, characterData: true }); sync();
-    }
+    // Background-work progress (#lib-activity, #lib-thumb-progress) stays in the #lib-bottom
+    // status bar. It used to be moved into a top-bar #sk2-act button that showed/hid as jobs
+    // ticked; being a <button> inside #lib-top, every appearance changed syncTopOverflow()'s
+    // collision measurement and flipped the bar between full and compact mid-session.
   })();
   // Make the dock a real grid-column sibling of the preview/panel/rail row instead of a
   // body-level overlay — see the big comment above the style block. .fx-layout already exists
