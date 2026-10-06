@@ -1,5 +1,10 @@
 
 
+### 2026-10-06 — CHR-242 local-only sync decision (documentation slice)
+- Recorded a provisional no-hosted-sync/no-iCloud/no-shared-catalog-replication boundary; documented local source, sidecar, catalog, people/pets, cache/model, and preference categories and clarified that this slice adds no transport or request.
+- Added a provider re-entry checklist for data format, queues/conflicts, originals versus previews, affirmative opt-in and zero-network proof, sharing, recovery, and a platform/fixture matrix. Files: `docs/sync-privacy-decision.md`, `DEVLOG.md`.
+- Compared the decision with primary darktable, Apple CloudKit/Core Data, Syncthing, and Nextcloud documentation. This records a product decision only; no sync architecture or provider was implemented.
+
 ### 2026-10-05 — CHR-274 / CHR-247 mask refinement slice
 - Added non-destructive Feather and signed Edge settings for AI subject/skin/coat rasters, with a cached effective selection in the shared preview/tiled-export mask texture path and exact source reset; new SAM selections clear prior settings.
 - Added the visible eight-mask capacity and blocks opening the Add Mask menu at renderer capacity. Files: `chromasmith-22.html`, `package.json`, `test/mask_refinement_math.mjs`.
