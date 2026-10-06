@@ -36,7 +36,7 @@ for (const [name, low, high] of [['adjWavelet1', 'c.rgb', 'low1'],
 for (const [low, radius] of [['low1', '1.0'], ['low2', '2.0'], ['low4', '4.0']]) {
   assert.ok(operator.includes(`${low}=waveletLow(uv,${radius})`), `${low} samples its source-pixel radius`);
 }
-assert.ok(operator.includes('(low4-vec3(0.5))*(adjWaveletResidual/100.0)'),
+assert.ok(operator.includes('(low4-vec3(0.5))*adjWaveletResidual'),
   'residual contrast is centered on the renderer working-value midpoint');
 assert.match(html, /working-value midpoint \(0\.5\)/, 'UI describes a domain-neutral midpoint');
 assert.match(html, /if\(this\.usingSceneLinear\)[\s\S]*gl\.texImage2D\(gl\.TEXTURE_2D,0,gl\.RGBA16F[\s\S]*gl\.texImage2D\(gl\.TEXTURE_2D,0,gl\.RGBA,gl\.RGBA,gl\.UNSIGNED_BYTE,img\)/,

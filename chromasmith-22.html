@@ -8485,6 +8485,7 @@ if(mskAnyNR>0.5){
 }
 // CHR-261: compact, zero-default multiscale detail contrast. Fine/Small/Medium bands are
 // differences between progressively wider low-pass scales. Residual adjusts the remaining
+// Uniforms are already normalised to -1..1 by the recipe builder (slider/100) - do NOT divide again.
 // low-frequency image around the working-value midpoint (0.5). Input may be display encoded or
 // extended-range scene-linear depending on setImage(); this control does not claim a linear-light
 // midpoint. All taps are skipped when controls are neutral.
@@ -8494,10 +8495,10 @@ if(adjOn>.5&&(adjWavelet1!=0.||adjWavelet2!=0.||adjWavelet3!=0.||adjWaveletResid
   if(adjWavelet1!=0.||adjWavelet2!=0.||adjWavelet3!=0.||adjWaveletResidual!=0.)low1=waveletLow(uv,1.0);
   if(adjWavelet2!=0.||adjWavelet3!=0.||adjWaveletResidual!=0.)low2=waveletLow(uv,2.0);
   if(adjWavelet3!=0.||adjWaveletResidual!=0.)low4=waveletLow(uv,4.0);
-  if(adjWavelet1!=0.)detailDelta+=(c.rgb-low1)*(adjWavelet1/100.0);
-  if(adjWavelet2!=0.)detailDelta+=(low1-low2)*(adjWavelet2/100.0);
-  if(adjWavelet3!=0.)detailDelta+=(low2-low4)*(adjWavelet3/100.0);
-  if(adjWaveletResidual!=0.)detailDelta+=(low4-vec3(0.5))*(adjWaveletResidual/100.0);
+  if(adjWavelet1!=0.)detailDelta+=(c.rgb-low1)*adjWavelet1;
+  if(adjWavelet2!=0.)detailDelta+=(low1-low2)*adjWavelet2;
+  if(adjWavelet3!=0.)detailDelta+=(low2-low4)*adjWavelet3;
+  if(adjWaveletResidual!=0.)detailDelta+=(low4-vec3(0.5))*adjWaveletResidual;
   c.rgb=clamp(c.rgb+detailDelta,0.0,1.0);
 }
 // Sharpening / Clarity: unsharp mask on source pixels BEFORE LUT (smooth LUT preserves HP detail).
@@ -18820,13 +18821,14 @@ function initSplitDrag(){
   const wrap=document.getElementById('fx-wrap');
   if(!line||line._splitWired)return;line._splitWired=true;
   line.tabIndex=0;line.setAttribute('role','separator');line.setAttribute('aria-label','Before and after divider');
-  const point=e=>{const r=wrap.getBoundingClientRect(),horizontal=fxSplitAxis==='horizontal';const size=horizontal?r.height:r.width;if(!size)return;const coordinate=horizontal?e.clientY-r.top:e.clientX-r.left;fxSplitPos=Math.max(0.05,Math.min(0.95,coordinate/size));_applySplitPos();};
+  const point=e=>{const r=_splitBox(wrap),horizontal=fxSplitAxis==='horizontal';const size=horizontal?r.height:r.width;if(!size)return;const coordinate=horizontal?e.clientY-r.top:e.clientX-r.left;fxSplitPos=Math.max(0.05,Math.min(0.95,coordinate/size));_applySplitPos();};
   line.addEventListener('pointerdown',e=>{if(e.button!==undefined&&e.button!==0)return;e.preventDefault();line.setPointerCapture?.(e.pointerId);point(e);});
   line.addEventListener('pointermove',e=>{if(line.hasPointerCapture?.(e.pointerId))point(e);});
   const release=e=>{if(line.hasPointerCapture?.(e.pointerId))line.releasePointerCapture(e.pointerId);};
   line.addEventListener('pointerup',release);line.addEventListener('pointercancel',release);
   line.addEventListener('keydown',e=>{const horizontal=fxSplitAxis==='horizontal',negative=horizontal?'ArrowUp':'ArrowLeft',positive=horizontal?'ArrowDown':'ArrowRight';if(e.key!==negative&&e.key!==positive&&e.key!=='Home'&&e.key!=='End')return;e.preventDefault();if(e.key==='Home')fxSplitPos=.05;else if(e.key==='End')fxSplitPos=.95;else fxSplitPos=Math.max(.05,Math.min(.95,fxSplitPos+(e.key===positive?.01:-.01)*(e.shiftKey?5:1)));_applySplitPos();});
   line.addEventListener('dblclick',()=>{fxSplitPos=.5;_applySplitPos();});
+  window.addEventListener('resize',()=>{if(fxSplit)_applySplitPos();});
 }
 // ── B3: split-source menu (Original / Pinned / History / Styles / Exports) ────────────────────
 function _fxSplitSrcLabel(src){
@@ -19063,13 +19065,29 @@ document.addEventListener('click',e=>{
   // re-closes the popover the hold just opened (see fxUndoMousedown/fxUndoBtnClick).
   if(wrap&&wrap.style.display!=='none'&&!wrap.contains(e.target)&&e.target.id!=='btn-history'&&e.target.id!=='btn-export-history'&&e.target.id!=='btn-undo-db'&&!e.target.closest('#btn-undo-db'))wrap.style.display='none';
 });
+// Screen-space rectangle of the photo being compared (the composed canvas when borders are on,
+// else the render canvas). The divider and the before/after clip both live in THIS box; anchoring
+// the line to the whole stage (as it was) made it stick out past the photo and, on the horizontal
+// axis, disagree with where the image was actually clipped.
+function _splitBox(wrap){
+  const w=wrap.getBoundingClientRect();
+  const bd=document.getElementById('fx-canvas-bd');
+  const cv=(bd&&bd.style.display!=='none'&&bd.width)?bd:(FX&&FX.cv);
+  if(!cv)return w;
+  const c=cv.getBoundingClientRect();
+  if(!c.width||!c.height)return w;
+  return{left:c.left,top:c.top,width:c.width,height:c.height,right:c.right,bottom:c.bottom};
+}
 function _applySplitPos(){
   const wrap=document.getElementById('fx-wrap');
   const line=document.getElementById('fx-split-line');
   const orig=document.getElementById('fx-canvas-orig');
   if(!wrap)return;
   const pct=(fxSplitPos*100).toFixed(1)+'%',horizontal=fxSplitAxis==='horizontal';
-  if(line){line.dataset.axis=horizontal?'horizontal':'vertical';line.setAttribute('aria-orientation',horizontal?'horizontal':'vertical');line.style.left=horizontal?'0':pct;line.style.top=horizontal?pct:'0';line.style.display='block';}
+  if(line){line.dataset.axis=horizontal?'horizontal':'vertical';line.setAttribute('aria-orientation',horizontal?'horizontal':'vertical');const w=wrap.getBoundingClientRect(),b=_splitBox(wrap);
+    if(horizontal){line.style.left=(b.left-w.left)+'px';line.style.width=b.width+'px';line.style.top=(b.top-w.top+b.height*fxSplitPos)+'px';line.style.height='';}
+    else{line.style.top=(b.top-w.top)+'px';line.style.height=b.height+'px';line.style.left=(b.left-w.left+b.width*fxSplitPos)+'px';line.style.width='';}
+    line.style.bottom='auto';line.style.display='block';}
   // The before canvas occupies the leading side, the current canvas the trailing side.
   if(orig&&orig.style.display!=='none'){orig.style.clipPath=horizontal?`inset(0 0 ${(100-fxSplitPos*100).toFixed(1)}% 0)`:`inset(0 ${(100-fxSplitPos*100).toFixed(1)}% 0 0)`;}
   if(FX&&FX.cv&&fxSplit){FX.cv.style.clipPath=horizontal?`inset(${pct} 0 0 0)`:`inset(0 0 0 ${pct})`;}
@@ -19287,6 +19305,7 @@ function _applyZoom(smooth){
   if(fxZoom>1)fxEnsureFullQuality('zoom');
   _updateZoomReadout();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
+  if(fxSplit&&typeof _applySplitPos==='function')_applySplitPos(); // divider follows the zoomed/panned photo rect
   if(typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
 }
 // The preview's on-screen size changed (tool sheet opened/resized, panel switched, re-render at a
@@ -23033,7 +23052,11 @@ function applyRedEyeCorrections(canvas,ops){
       const dx=(x0+px+0.5-cx)/prx,dy=(y0+py+0.5-cy)/pry,q=dx*dx+dy*dy;if(q>=1)continue;
       const rad=Math.sqrt(q),t=Math.max(0,Math.min(1,(1-rad)/0.08)),edge=t*t*(3-2*t),i=(py*iw+px)*4,r=d[i],g=d[i+1],b=d[i+2],mode=op.mode||'human',ar=r*0.5133333,ag=g,ab=b*0.1933333;
       if(mode==='human'){
-        if(ar>=ag-adjustedThreshold&&ar>=ab-adjustedThreshold){const corrected=Math.max(0,Math.min(255,(ag+ab)/(2*0.5133333)));d[i]=Math.round(r+(corrected-r)*dark*edge);}
+        if(ar>=ag-adjustedThreshold&&ar>=ab-adjustedThreshold){const corrected=Math.max(0,Math.min(255,(ag+ab)/(2*0.5133333)));
+          // The red is always removed; Darken is a separate, additional darkening of the pupil
+          // (Lightroom's model). Using Darken as the correction strength left a dark-red pupil at its default.
+          const fix=Math.round(r+(corrected-r)*edge),k=1-dark*edge;
+          d[i]=Math.round(fix*k);d[i+1]=Math.round(g*k);d[i+2]=Math.round(b*k);}
       }else{
         // Pet Eye: follow the channel-mixer approach documented by darktable for local pupil
         // correction. Neutralize only the selected reflection hue, retaining the pupil's local
@@ -23044,7 +23067,10 @@ function applyRedEyeCorrections(canvas,ops){
         else if(mode==='green')gg=(r+b)*0.5;
         else if(mode==='yellow'){rr=(g+b)*0.5;gg=(r+b)*0.5;}
         else {const gray=.24*r+.68*g+.08*b;rr=gg=bb=gray;}
-        d[i]=Math.round(r+(rr-r)*dark*edge);d[i+1]=Math.round(g+(gg-g)*dark*edge);d[i+2]=Math.round(b+(bb-b)*dark*edge);
+        // White reflection is already a darkening (target 0), so Darken scales its strength; the
+        // hue modes neutralise fully and Darken then darkens the pupil on top.
+        const wt=(mode==='white'?dark:1)*edge,k=mode==='white'?1:1-dark*edge;
+        d[i]=Math.round((r+(rr-r)*wt)*k);d[i+1]=Math.round((g+(gg-g)*wt)*k);d[i+2]=Math.round((b+(bb-b)*wt)*k);
       }
     }
     x.putImageData(id,x0,y0);
