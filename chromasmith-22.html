@@ -7015,7 +7015,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006H';
+const BUILD='1.1006I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16284,14 +16284,18 @@ function _skySeedPoints(m){
 // mask's pixel array. Coordinates are mapped CSS→canvas→normalized image fraction the same
 // way wbEyedropperClick does, then scaled into the mask's own (independent) resolution.
 let mskPaintMode=false,mskPaintErase=false,mskBrushSize=25,mskBrushFlow=60,_mskStroke=null;
+let _mskBrushTransientReset=()=>{};
+function mskPaintEndStroke(){if(!_mskStroke)return;_mskStroke=null;renderPreview();fxHistoryPush();}
+function mskPaintTransientReset(){_mskBrushTransientReset();mskPaintEndStroke();}
 function mskPaintToggle(){
   mskPaintMode=!mskPaintMode;
   if(mskPaintMode){_wbEyedropperActive=false;const b=document.getElementById('btn-wb-eye');if(b)b.classList.remove('on');}
+  else mskPaintTransientReset();
   const b=document.getElementById('btn-msk-paint');if(b)b.classList.toggle('on',mskPaintMode);
   if(FX.cv)FX.cv.style.cursor=mskPaintMode?'none':''; // 'none': the ring cursor (msk-brush-cursor) IS the pointer now
   if(!mskPaintMode){const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');}
 }
-function mskPaintStop(){mskPaintMode=false;const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
+function mskPaintStop(){mskPaintMode=false;mskPaintTransientReset();const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
   const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');}
 function mskPaintErase_toggle(){mskPaintErase=!mskPaintErase;const b=document.getElementById('btn-msk-erase');if(b)b.classList.toggle('on',mskPaintErase);}
 function mskPaintClear(){const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;m.px=new Uint8ClampedArray(m.mtW*m.mtH);_mskTexDirty=true;fxUpdate();}
@@ -16334,6 +16338,10 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   // box, so it tracks size/zoom without needing exact 1:1 buffer-to-screen pixel mapping.
   const cursorEl=document.getElementById('msk-brush-cursor');
   let lastBrushPointer=null;
+  const clearTransientErase=()=>{lastBrushPointer=null;if(cursorEl)cursorEl.classList.remove('erase');};
+  _mskBrushTransientReset=clearTransientErase;
+  window.addEventListener('blur',mskPaintTransientReset);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')mskPaintTransientReset();});
   function updateBrushCursor(e){
     if(!cursorEl)return;
     const m=fxState.masks[mskSel];
@@ -16374,7 +16382,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     const p=_mskPointToUV(e);if(p)mskPaintAt(_mskStroke,p.nx,p.ny,mskPaintErase||e.altKey);
     queueRender();
   });
-  const end=e=>{if(!_mskStroke)return;_mskStroke=null;renderPreview();fxHistoryPush();};
+  const end=e=>{if(!_mskStroke)return;if(e.type==='pointercancel')clearTransientErase();mskPaintEndStroke();};
   fxCanvasOn('pointerup',end);fxCanvasOn('pointercancel',end);
   // AI brush-select (desktop only — see main.rs's sam_encode/sam_points, backed by EdgeSAM).
   // Lightroom-style: drag a rough scribble over the object; points are sampled along the stroke
