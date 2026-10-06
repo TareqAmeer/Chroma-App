@@ -112,3 +112,4 @@
 - Recorded a provisional hold on remote generation, bundling/distributing models, and in-app generative inpainting until a prompt-capable artifact, locality/privacy, hardware/storage, and candidate-persistence contract are reviewed.
 - Added sourced distinctions between erase and diffusion model families, a re-entry checklist, and a non-legal-summary note in `docs/ai-inpainting-model-decision.md` and `LICENSES-MODELS.md`.
 - Verification: reviewed all six cited primary project/model pages and ran `git diff --check`; model selection, legal review, implementation, and product acceptance remain open.
+- Publication verification: CHR-263 documentation commits `982fbee8ea88eae32d1a28dbac471411ad989708` and `985b28a076fcc51adc160174126c8767878cccfe` are contained in `origin/main` at `e47520ba0943ddc35424bfac0fda64094e65faa6`; `git ls-remote origin refs/heads/main` matched after push. No model weights or runtime code were added.
