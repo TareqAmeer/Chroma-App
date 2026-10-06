@@ -22008,10 +22008,11 @@ function healApply(img,ops){
   const out=document.createElement('canvas');out.width=w;out.height=h;
   const x=out.getContext('2d',{willReadFrequently:true});
   x.drawImage(img,0,0);
-  let data=null;   // read lazily, and re-read per op so each repair sees the previous one
+  // Read the full image once; after each repair only the touched rectangle is re-read and copied
+  // back, so every spot still sees the previous one without an O(spots x pixels) full-frame readback.
+  let data=x.getImageData(0,0,w,h).data;
   for(const op of ops){
     const cx=op.x*w,cy=op.y*h,r=Math.max(2,op.r*Math.max(w,h));
-    data=x.getImageData(0,0,w,h).data;
     let sx,sy;
     if(op.sx!=null&&op.sy!=null){sx=op.sx*w;sy=op.sy*h;}
     else{
@@ -22068,6 +22069,12 @@ function healApply(img,ops){
     x.drawImage(t,cx-d/2,cy-d/2);
     x.restore();
     t.width=t.height=0;
+    const rx0=Math.max(0,Math.floor(cx-d/2)-1),ry0=Math.max(0,Math.floor(cy-d/2)-1);
+    const rx1=Math.min(w,Math.ceil(cx+d/2)+1),ry1=Math.min(h,Math.ceil(cy+d/2)+1);
+    if(rx1>rx0&&ry1>ry0){
+      const patch=x.getImageData(rx0,ry0,rx1-rx0,ry1-ry0).data,pw=(rx1-rx0)*4;
+      for(let yy=ry0;yy<ry1;yy++)data.set(patch.subarray((yy-ry0)*pw,(yy-ry0+1)*pw),(yy*w+rx0)*4);
+    }
   }
   return out;
 }
