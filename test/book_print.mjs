@@ -48,17 +48,30 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.cl-book-page').length === 3 && [...document.querySelectorAll('#cl-book-pages img')].every(i => i.complete && i.naturalWidth > 0));
   assert.deepEqual(await page.locator('.cl-book-page').evaluateAll(nodes => nodes.map(n => n.dataset.photoIndices)), ['4,5,6,7', '0,1,2,3', '8']);
 
+  await page.locator('#cl-book-paper').selectOption('letter');
+  await page.locator('#cl-book-margin').selectOption('0.5');
+  assert.deepEqual(await page.locator('.cl-book-page').first().evaluate(node => ({paper:node.dataset.paper,width:node.dataset.paperWidth,height:node.dataset.paperHeight,margin:node.dataset.margin})),
+    {paper:'letter',width:'8.500',height:'11.000',margin:'0.50'}, 'paper setup should update the visible page preview');
+
   const popupPromise = page.waitForEvent('popup');
   await page.getByRole('button', { name: 'Print / Save PDF' }).click();
   const printPage = await popupPromise;
   await printPage.waitForSelector('.page img');
   await printPage.waitForFunction(() => [...document.querySelectorAll('.page img')].length === 3 && [...document.querySelectorAll('.page img')].every(i => i.complete && i.naturalWidth > 0));
   assert.equal(await printPage.locator('.page').count(), 3, 'print document must contain one printable sheet per book page');
-  assert.match(await printPage.locator('style').textContent(), /@page\s*\{size:\s*6\.400in\s+8\.000in\s*;/);
+  assert.match(await printPage.locator('style').textContent(), /@page\s*\{size:\s*8\.500in\s+11\.000in;margin:0\}/);
+  assert.match(await printPage.locator('style').textContent(), /\.page\{width:8\.500in;height:11\.000in;padding:0\.50in/);
   assert.equal(await printPage.locator('.printbar').getAttribute('data-page-count'), '3');
+  assert.equal(await printPage.locator('.printbar').getAttribute('data-paper'), 'letter');
+  assert.equal(await printPage.locator('.printbar').getAttribute('data-margin-in'), '0.50');
+  const pdf = await printPage.pdf({ printBackground: true });
+  const pdfText = pdf.toString('latin1');
+  assert.ok(pdfText.startsWith('%PDF-'), 'print document should produce a PDF');
+  assert.equal((pdfText.match(/\/Type\s*\/Page\b/g) || []).length, 3, 'PDF should contain one physical page per book page');
+  assert.ok(pdfText.includes('/MediaBox [0 0 612 792]'), 'PDF page size should be US Letter (8.5 × 11 inches)');
   assert.deepEqual(errors, [], `unexpected source-app errors: ${errors.join('; ')}`);
   await printPage.close();
-  console.log('PASS: Book paginates, previews actual multi-photo pages, reorders pages, and opens an aspect-sized multi-page print document.');
+  console.log('PASS: Book paginates and reorders pages, previews selected paper/margins, and opens a matching multi-page print document.');
 } finally {
   await browser.close();
 }
