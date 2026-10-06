@@ -368,7 +368,7 @@ static SAM_EMBED: Mutex<Option<SamEmbedCache>> = Mutex::new(None);
 /// canvas) via the framed body — encoding works off whatever resolution the caller hands in
 /// (the model resizes internally to 1024 either way), so callers should downsample to a
 /// reasonable working size (a few hundred px) themselves rather than sending a full-res RAW.
-#[tauri::command]
+#[tauri::command(async)]
 fn sam_encode(request: tauri::ipc::Request) -> Result<(), String> {
     let (json, payload) = parse_framed(request.body())?;
     let token = json["token"].as_str().ok_or("missing token")?.to_string();
@@ -401,7 +401,7 @@ struct SamPointIn {
 /// row-major) as the raw response body, plus its dimensions as the JSON header — same
 /// framed-response idea as decode_raw_v2, just simpler since there's no variant body format to
 /// disambiguate.
-#[tauri::command]
+#[tauri::command(async)]
 fn sam_points(token: String, points: Vec<SamPointIn>) -> Result<tauri::ipc::Response, String> {
     let guard = SAM_EMBED.lock().unwrap();
     let cache = guard.as_ref().ok_or("sam_points: no photo encoded yet — call sam_encode first")?;
@@ -434,7 +434,7 @@ static SAM2_EMBED: Mutex<Option<Sam2EmbedCache>> = Mutex::new(None);
 /// Same contract as sam_encode, backed by SAM 2.1 instead of EdgeSAM — see sam.rs's
 /// sam2_encode/sam2_decode_points doc comments for why these need their own cache slot (3 cached
 /// tensors instead of 1, different preprocessing).
-#[tauri::command]
+#[tauri::command(async)]
 fn sam2_encode(request: tauri::ipc::Request) -> Result<(), String> {
     let (json, payload) = parse_framed(request.body())?;
     let token = json["token"].as_str().ok_or("missing token")?.to_string();
@@ -449,7 +449,7 @@ fn sam2_encode(request: tauri::ipc::Request) -> Result<(), String> {
 }
 
 /// Same contract as sam_points, against the SAM2_EMBED cache.
-#[tauri::command]
+#[tauri::command(async)]
 fn sam2_points(token: String, points: Vec<SamPointIn>) -> Result<tauri::ipc::Response, String> {
     let guard = SAM2_EMBED.lock().unwrap();
     let cache = guard.as_ref().ok_or("sam2_points: no photo encoded yet — call sam2_encode first")?;
@@ -510,7 +510,7 @@ struct SubjectLearnIn {
 /// Teaches (or reinforces) a subject from the CURRENT photo plus a mask of the subject in it —
 /// the same raster sam_points already returns for a scribble. Body is the mask, one byte per
 /// pixel of the encoded image; the JSON header carries the subject id/name/token.
-#[tauri::command]
+#[tauri::command(async)]
 fn subject_learn(request: tauri::ipc::Request) -> Result<subject::Subject, String> {
     let (json, payload) = parse_framed(request.body())?;
     let opts: SubjectLearnIn = serde_json::from_value(json).map_err(|e| format!("subject_learn args: {e}"))?;
@@ -535,7 +535,7 @@ struct SubjectLocateResult {
 /// Finds a taught subject in the current photo and segments it, returning the mask as the raw
 /// body and the point/score as the JSON header — the same framed shape as sam_points, so the
 /// frontend reuses that reader.
-#[tauri::command]
+#[tauri::command(async)]
 fn subject_locate(token: String, id: String) -> Result<tauri::ipc::Response, String> {
     let subjects = subject::load_subjects();
     let subj = subjects.iter().find(|s| s.id == id).ok_or_else(|| format!("no subject named {id}"))?;
@@ -577,7 +577,7 @@ struct SubjectMultiHit {
 /// frontend already has a well-tested single-point decoder (sam_points/sam2_points, the same one
 /// manual scribbling uses) and can hand any of these points straight to it, so this stays a plain
 /// JSON command rather than a second framed mask-response format to maintain.
-#[tauri::command]
+#[tauri::command(async)]
 fn subject_locate_multi(token: String, id: String, max_n: u32, min_cell_dist: Option<u32>) -> Result<Vec<SubjectMultiHit>, String> {
     let subjects = subject::load_subjects();
     let subj = subjects.iter().find(|s| s.id == id).ok_or_else(|| format!("no subject named {id}"))?;
@@ -594,7 +594,7 @@ fn subject_locate_multi(token: String, id: String, max_n: u32, min_cell_dist: Op
     Ok(hits.into_iter().map(|h| SubjectMultiHit { x: h.x, y: h.y, score: h.score }).collect())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn subject_list() -> Vec<subject::Subject> {
     subject::load_subjects()
 }
@@ -602,29 +602,29 @@ fn subject_list() -> Vec<subject::Subject> {
 /// Merges a previously-exported subject list (subject_list's own JSON shape) into the local store
 /// — for moving taught subjects to another machine or restoring a backup. Additive: see
 /// import_subjects's doc comment for why this can't delete anything.
-#[tauri::command]
+#[tauri::command(async)]
 fn subject_import(subjects: Vec<subject::Subject>) -> Result<Vec<subject::Subject>, String> {
     subject::import_subjects(subjects)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn subject_delete(id: String) -> Result<(), String> {
     subject::delete_subject(&id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn subject_rename(id: String, name: String) -> Result<(), String> {
     subject::rename_subject(&id, &name)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn subject_rename_ref(id: String, ref_id: String, label: String) -> Result<(), String> {
     subject::rename_reference(&id, &ref_id, &label)
 }
 
 /// Drops one reference photo from a subject and re-merges. Returns the updated subject, or null
 /// when that was its last reference (in which case the subject itself is gone).
-#[tauri::command]
+#[tauri::command(async)]
 fn subject_remove_ref(id: String, ref_id: String) -> Result<Option<subject::Subject>, String> {
     subject::remove_reference(&id, &ref_id)
 }
@@ -632,7 +632,7 @@ fn subject_remove_ref(id: String, ref_id: String) -> Result<Option<subject::Subj
 /// Merges `other_id`'s references into `keep_id` and deletes `other_id` — for the "taught the same
 /// dog twice under two names" case: subject_locate has no presence signal, so a user experimenting
 /// with Find is expected to sometimes duplicate a subject before noticing.
-#[tauri::command]
+#[tauri::command(async)]
 fn subject_merge(keep_id: String, other_id: String) -> Result<subject::Subject, String> {
     subject::merge_subjects(&keep_id, &other_id)
 }
@@ -641,7 +641,7 @@ fn subject_merge(keep_id: String, other_id: String) -> Result<subject::Subject, 
 // whole decoded RGB8 image (typically a downscaled preview, not full-res — SCRFD's own input is
 // letterboxed to 640x640 internally regardless) + its width/height; response is a JSON array of
 // detected faces in the ORIGINAL image's pixel coordinates.
-#[tauri::command]
+#[tauri::command(async)]
 fn scrfd_detect(request: tauri::ipc::Request) -> Result<serde_json::Value, String> {
     let (json, payload) = parse_framed(request.body())?;
     let w = json["width"].as_u64().ok_or("missing width")? as u32;
@@ -667,7 +667,7 @@ fn scrfd_detect(request: tauri::ipc::Request) -> Result<serde_json::Value, Strin
 // each width*height bytes, concatenated in that fixed order. `skin` was added for
 // mskFaceSelectSkin (a POSITIVE skin selector, unlike the first 4 groups which only ever feed an
 // eraser) — same struct, same call, no new command needed.
-#[tauri::command]
+#[tauri::command(async)]
 fn faceparse_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
     let w = json["width"].as_u64().ok_or("missing width")? as u32;
@@ -704,13 +704,13 @@ fn faceparse_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 // sam_encode use) + width/height; response is one width*height byte depth map (0=far, 255=near).
 /// Returns any embedded depth/matte maps carried by the selected HEIC/JPEG. Unlike `depth_run`,
 /// this reads the camera's own auxiliary data and never falls back to inferred depth.
-#[tauri::command]
+#[tauri::command(async)]
 fn extract_embedded_auxiliary(path: String) -> Result<Vec<auxiliary::AuxiliaryMap>, String> {
     if path.trim().is_empty() { return Err("extract_embedded_auxiliary: empty path".into()); }
     auxiliary::extract(&path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn depth_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
     let w = json["width"].as_u64().ok_or("missing width")? as u32;
@@ -871,7 +871,7 @@ async fn merge_panorama_photos(app: tauri::AppHandle, paths: Vec<String>) -> Res
 // a fixed-template layout), so the only Rust piece it needs is the same collision-safe output
 // path convention `merge_output_path` already gives HDR/focus/astro merges; `write_file_bytes`
 // (already registered below) then writes the composited PNG the JS side builds.
-#[tauri::command]
+#[tauri::command(async)]
 fn collage_output_path(first_source: String) -> String {
     merge_output_path(&first_source, "-collage")
 }
@@ -1238,7 +1238,7 @@ static NR_CANCEL_FLAGS: Mutex<Option<HashMap<String, std::sync::Arc<std::sync::a
 /// (desktop-native.js's NativeLibRawShim.denoiseHigh()) can swap the canvas through the exact
 /// mechanism refine() already uses. Emits "raw-nr-progress" ({token,done,total}) once per tile
 /// row (~15 events at 24MP, not per tile — see the denoiser design doc §A4).
-#[tauri::command]
+#[tauri::command(async)]
 fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
     let _raw_diag = diag::raw_op(format!("denoise_raw_high bytes={}", payload.len()));
@@ -1339,7 +1339,7 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
     Ok(tauri::ipc::Response::new(out))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn cancel_denoise_high(token: String) {
     if let Ok(guard) = NR_CANCEL_FLAGS.lock() {
         if let Some(map) = guard.as_ref() {
@@ -1350,7 +1350,7 @@ fn cancel_denoise_high(token: String) {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_lens_profiles() -> Vec<lens_correct::LensProfileEntry> {
     lens_correct::list_lens_profiles()
 }
@@ -1484,7 +1484,7 @@ fn platform_capabilities() -> PlatformCapabilities {
 // so an auth/scope problem (401/403) is distinguishable from the transport problem this fixes.
 // `headers`: optional extra request headers (e.g. Lightroom's X-API-Key) — existing callers
 // that don't pass it are unaffected (Tauri maps a missing invoke arg to None).
-#[tauri::command]
+#[tauri::command(async)]
 fn download_url_native(
     app: tauri::AppHandle,
     url: String,
@@ -1630,7 +1630,7 @@ fn read_file_head(path: String, len: u32) -> Result<tauri::ipc::Response, String
 // Returns false when the source has no HDR headroom, so the caller can fall back to a normal
 // export instead of writing a gain map that encodes nothing.
 #[cfg(target_os = "macos")]
-#[tauri::command]
+#[tauri::command(async)]
 fn write_gainmap_heic(request: tauri::ipc::Request<'_>) -> Result<Option<String>, String> {
     use base64::Engine;
     let hdr = |k: &str| -> Result<String, String> {
@@ -1676,7 +1676,7 @@ fn write_gainmap_heic(request: tauri::ipc::Request<'_>) -> Result<Option<String>
 // one — a 4-byte little-endian length prefix, then the headroom PNG, then the graded PNG — since
 // this is the one gainmap command that needs more than a single image.
 #[cfg(target_os = "macos")]
-#[tauri::command]
+#[tauri::command(async)]
 fn write_gainmap_heic_from_map(request: tauri::ipc::Request<'_>) -> Result<Option<String>, String> {
     use base64::Engine;
     let hdr = |k: &str| -> Result<String, String> {
@@ -1733,7 +1733,7 @@ fn write_gainmap_heic_from_map(request: tauri::ipc::Request<'_>) -> Result<Optio
 // headroom PNG + graded PNG body, x-filename/x-quality/x-max-stops headers) so the JS caller
 // only has to pick the command name, not rebuild the body — see chromasmith-22.html's
 // fxSaveGainMapHeic.
-#[tauri::command]
+#[tauri::command(async)]
 fn write_gainmap_uhdr_from_map(request: tauri::ipc::Request<'_>) -> Result<Option<String>, String> {
     use base64::Engine;
     let hdr = |k: &str| -> Result<String, String> {
@@ -1789,7 +1789,7 @@ fn write_gainmap_uhdr_from_map(request: tauri::ipc::Request<'_>) -> Result<Optio
 // Reports whether a file carries HDR headroom, so the UI can offer the HDR option only when it
 // would actually do something.
 #[cfg(target_os = "macos")]
-#[tauri::command]
+#[tauri::command(async)]
 fn source_has_hdr(path: String) -> Result<bool, String> {
     gainmap::source_has_hdr(&path)
 }
@@ -1809,7 +1809,7 @@ fn write_file_bytes(path: String, data_b64: String) -> Result<(), String> {
 // shows), GPS, XMP and IPTC into the rendered TIFF — see tiff_meta.rs. The read MUST happen
 // before the write: the command overwrites its own metadata source. A splice failure never
 // blocks the save — the rendered bytes are written unmodified, same as before this existed.
-#[tauri::command]
+#[tauri::command(async)]
 fn write_lightroom_tiff(app: tauri::AppHandle, path: String, data_b64: String) -> Result<(), String> {
     use base64::Engine;
     let rendered = base64::engine::general_purpose::STANDARD
@@ -1824,7 +1824,7 @@ fn write_lightroom_tiff(app: tauri::AppHandle, path: String, data_b64: String) -
 // built by _u8b64, the base64 std::string, and Tauri's own JSON-escaped copy of that string
 // crossing the IPC boundary) — for a full-res 16-bit TIFF (100s of MB) that's enough to OOM
 // on export. tauri::ipc::Request hands the bytes straight through with no re-encoding.
-#[tauri::command]
+#[tauri::command(async)]
 fn write_lightroom_tiff_raw(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), String> {
     let path = request
         .headers()
@@ -1885,7 +1885,7 @@ struct HttpNativeResult {
 // the Google Photos CDN). Non-2xx statuses are returned as data (status + body), NOT as an
 // Err — the JS callers need Adobe's JSON error bodies (error_description etc.) to drive their
 // own retry/secret-prompt logic; only a genuine transport failure errors.
-#[tauri::command]
+#[tauri::command(async)]
 fn http_native(
     method: String,
     url: String,
@@ -2032,7 +2032,7 @@ fn gphotos_downloads_path() -> Result<PathBuf, String> {
 // Resolves (and creates) the local Google Photos cache folder so the Library's pinned
 // "Google Photos Download" tree entry has a real path to open, even before any import has
 // run yet this session.
-#[tauri::command]
+#[tauri::command(async)]
 fn gphotos_downloads_dir() -> Result<String, String> {
     let dir = gphotos_downloads_path()?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("create download dir: {e}"))?;
@@ -2079,7 +2079,7 @@ struct GpSaveResult {
 // base64, not a raw-body+header invoke: this command is a low-frequency background write (a
 // handful of calls per Google Photos import session, not a hot decode path), so the ~33% size
 // overhead is worth it for a guaranteed-correct argument shape.
-#[tauri::command]
+#[tauri::command(async)]
 fn save_to_gphotos_downloads(filename: String, data_b64: String) -> Result<GpSaveResult, String> {
     save_to_download_dir(gphotos_downloads_path()?, filename, data_b64)
 }
@@ -2091,14 +2091,14 @@ fn lr_downloads_path() -> Result<PathBuf, String> {
     Ok(crate::platform::documents_dir()?.join("Lightroom Download"))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn lr_downloads_dir() -> Result<String, String> {
     let dir = lr_downloads_path()?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("create download dir: {e}"))?;
     Ok(dir.to_string_lossy().into_owned())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_to_lr_downloads(filename: String, data_b64: String) -> Result<GpSaveResult, String> {
     save_to_download_dir(lr_downloads_path()?, filename, data_b64)
 }
@@ -2170,7 +2170,7 @@ fn export_downloads_path() -> Result<PathBuf, String> {
 static EXPORT_DIR_OVERRIDE: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 /// Sets (or, with an empty string, clears) the export folder. Returns the folder now in effect.
-#[tauri::command]
+#[tauri::command(async)]
 fn set_export_dir(path: String) -> Result<String, String> {
     let p = path.trim();
     if p.is_empty() {
@@ -2214,7 +2214,7 @@ pub(crate) fn unique_dest_pub(dir: &Path, name: &str) -> PathBuf {
 // way the base64 path is (the same triple-copy that OOMed Lightroom TIFF saves — see
 // write_lightroom_tiff_raw's comment). The header carries the name BASE64-encoded because HTTP
 // headers are ASCII-only and export filenames routinely are not.
-#[tauri::command]
+#[tauri::command(async)]
 fn save_export_file_raw(request: tauri::ipc::Request<'_>) -> Result<GpSaveResult, String> {
     use base64::Engine;
     let name_b64 = request
@@ -2258,7 +2258,7 @@ struct StreamHandle {
 static STREAMS: Mutex<Option<HashMap<String, StreamHandle>>> = Mutex::new(None);
 static STREAM_TOKEN_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-#[tauri::command]
+#[tauri::command(async)]
 fn stream_open(filename: String) -> Result<serde_json::Value, String> {
     let safe_name = Path::new(&filename)
         .file_name()
@@ -2304,7 +2304,7 @@ fn stream_write_at(file: &mut std::fs::File, pos: u64, data: &[u8]) -> Result<()
 // Framed body: [u32 jsonLen][json {handle,pos}][raw chunk bytes]. `pos` is REQUIRED (see
 // stream_write_at's comment) — every write seeks there first, even ones that happen to be
 // sequential.
-#[tauri::command]
+#[tauri::command(async)]
 fn stream_write(request: tauri::ipc::Request) -> Result<(), String> {
     let (json, payload) = parse_framed(request.body())?;
     let handle = json["handle"].as_str().ok_or("missing handle")?;
@@ -2333,7 +2333,7 @@ fn stream_close_at(part_path: &Path, final_name: &str, commit: bool) -> Result<G
     Ok(GpSaveResult { path: dest.to_string_lossy().into_owned(), bytes, renamed: false })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn stream_close(handle: String, commit: bool) -> Result<GpSaveResult, String> {
     use std::io::Write;
     let removed = {

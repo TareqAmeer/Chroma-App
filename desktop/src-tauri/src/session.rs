@@ -160,7 +160,7 @@ fn create_session_at(parent: &Path, name: &str) -> Result<CreatedSession, String
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn session_create(parent_path: String, name: String) -> Result<CreatedSession, String> {
     create_session_at(Path::new(&parent_path), &name)
 }

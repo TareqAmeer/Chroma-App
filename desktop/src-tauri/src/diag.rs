@@ -106,7 +106,7 @@ pub struct DiagNativeState {
 /// is the portable fix — resolves to the real per-user temp dir on every platform (macOS:
 /// `$TMPDIR`, typically under `/var/folders/...`; Windows: `%TEMP%`), matched on the Python side
 /// by `tempfile.gettempdir()`, which resolves the same OS/user temp dir by the same mechanism.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn diag_state_path() -> String {
     std::env::temp_dir()
         .join("chromasmith_diag_state.json")
@@ -114,7 +114,7 @@ pub fn diag_state_path() -> String {
         .into_owned()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn diag_native_state() -> DiagNativeState {
     let exe = std::env::current_exe().ok();
     let binary_path = exe.as_ref().map(|p| p.display().to_string()).unwrap_or_default();

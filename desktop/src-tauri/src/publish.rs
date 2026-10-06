@@ -195,7 +195,7 @@ fn collection_mut<'a>(
         .ok_or_else(|| "published collection not found".into())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn publish_collection_list() -> Result<Vec<PublishCollection>, String> {
     let _guard = REGISTRY_LOCK
         .lock()
@@ -206,7 +206,7 @@ pub(crate) fn publish_collection_list() -> Result<Vec<PublishCollection>, String
         .collect())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn publish_collection_create(
     name: String,
     destination: String,
@@ -250,7 +250,7 @@ pub(crate) fn publish_collection_create(
     Ok(collection)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn publish_collection_sync_photos(
     collection_id: String,
     photos: Vec<PublishPhotoInput>,
@@ -438,7 +438,7 @@ pub(crate) fn publish_collection_write_output(
     Ok(result)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub(crate) fn publish_collection_apply_deletions(
     collection_id: String,
     photo_ids: Vec<i64>,

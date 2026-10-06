@@ -112,7 +112,7 @@ pub fn estimate(rgb: &[u8], w: u32, h: u32) -> Result<Vec<u8>, String> {
     Ok(up.iter().map(|&v| (v.clamp(0.0, 1.0) * 255.0).round() as u8).collect())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn depth_estimate(rgb: Vec<u8>, w: u32, h: u32) -> Result<Vec<u8>, String> {
     estimate(&rgb, w, h)
 }

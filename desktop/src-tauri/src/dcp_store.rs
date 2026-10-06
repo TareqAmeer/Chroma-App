@@ -130,7 +130,7 @@ pub fn list_dcp_profiles(make: String, model: String) -> Option<DcpProfileSet> {
 /// Reads one resolved `.dcp` file's raw bytes. `source`/`prefix`/`style` are exactly what a
 /// prior `list_dcp_profiles` call returned — re-validated here independently rather than
 /// trusted, since this command is reachable on its own over IPC.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_dcp_file(source: String, prefix: String, style: String) -> Result<Vec<u8>, String> {
     if !is_safe_path_component(&prefix) || !is_safe_path_component(&style) {
         return Err("invalid camera profile identifier".to_string());

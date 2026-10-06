@@ -228,7 +228,7 @@ fn media_kind(ext: &str) -> Option<&'static str> {
 /// Lists mounted volumes. macOS mounts everything removable under /Volumes; the boot disk is
 /// excluded by checking which volume "/" lives on rather than by name-matching "Macintosh HD",
 /// which is user-renameable and localised.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_volumes() -> Result<Vec<Volume>, String> {
     let mut out = Vec::new();
     for p in crate::platform::list_removable()? {

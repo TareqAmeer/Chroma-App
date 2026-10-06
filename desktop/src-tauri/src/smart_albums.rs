@@ -424,7 +424,7 @@ fn save_run(conn: &Connection, mut input: SmartAlbumInput) -> Result<SmartAlbumS
     summary_run(conn, &id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn smart_album_sources(
     state: tauri::State<'_, CatalogState>,
 ) -> Result<Vec<SmartAlbumSource>, String> {
@@ -432,7 +432,7 @@ pub fn smart_album_sources(
     source_rows(&conn)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn smart_album_list(
     state: tauri::State<'_, CatalogState>,
 ) -> Result<Vec<SmartAlbumSummary>, String> {
@@ -451,7 +451,7 @@ pub fn smart_album_list(
     ids.iter().map(|id| summary_run(&conn, id)).collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn smart_album_save(
     input: SmartAlbumInput,
     state: tauri::State<'_, CatalogState>,
@@ -460,7 +460,7 @@ pub fn smart_album_save(
     save_run(&conn, input)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn smart_album_delete(id: String, state: tauri::State<'_, CatalogState>) -> Result<(), String> {
     let removed = state
         .conn

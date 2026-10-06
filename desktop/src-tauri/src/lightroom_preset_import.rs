@@ -30,7 +30,7 @@ pub struct PresetPreview {
     pub fidelity_note: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn preview_lightroom_xmp_preset(
     file_name: String,
     xml: String,
