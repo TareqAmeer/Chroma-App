@@ -76,6 +76,7 @@ async function main() {
   const baseUrl = `http://127.0.0.1:${port}`;
 
   const browser = await chromium.launch({
+    ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {}),
     args: [
       // Windows Chromium selects SwiftShader through ANGLE; the direct GL backend loses
       // every program/context before the first render on this platform.
