@@ -102,3 +102,11 @@ table above (same key, same stock, same print).
 ## Bundled data: GeoNames cities
 
 `desktop/src-tauri/src/cities.tsv` is derived from GeoNames `cities15000` (https://www.geonames.org), licensed CC BY 4.0. Used offline for reverse-geocoding photo GPS to place names.
+
+## Prospective generative inpainting models (not bundled)
+
+No generative inpainting model is currently approved or bundled. The provisional engineering
+decision and research notes for CHR-263 are in [`docs/ai-inpainting-model-decision.md`](docs/ai-inpainting-model-decision.md).
+The model-specific statements there are sourced summaries, not legal conclusions or an approval
+to use or redistribute an artifact. In particular, an ONNX conversion's stated license does not
+by itself settle the provenance or terms of upstream pretrained weights.
