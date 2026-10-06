@@ -1,6 +1,12 @@
 # 📖 DEVLOG
 Agent-generated changelog of completed features and architectural decisions.
 
+## 2026-10-06 — CHR-284 Android JPEG export performance
+
+- Added memory/GPU-bounded 2048px Android tiles, reusable temporary canvases with cancellation cleanup, and nonblocking inexact completion notifications in `chromasmith-22.html`; preserve full resolution, JPEG quality and the separate export renderer.
+- Added `test/export_tiles.mjs`, `test/android/export_benchmark.mjs`, `docs/android-export-performance.md` and raw benchmark data. 24MP warm median fell 10.381s→7.397s (28.7%); alternating original/optimized functions confirmed 9.861s→7.246s (26.5%). No demonstrated 12MP speedup; timings are emulator evidence, not physical Pixel results.
+- Verification: tile pixels/seams/grain/glow/skin, memory/GPU/iOS guards, cancellation/cleanup and notification tests pass; live preview isolation passes; 35 fixture exports render and 23/23 checked-in goldens match exactly. All 22 benchmark JPEGs and a separate Photos JPEG decode at requested dimensions; Photos MediaStore save confirmed.
+
 - CHR-7: Centered shared ask/confirm dialogs used by delete photos, create album, and related pop-ups.
 - Updated `chromasmith-22.html`; focused editor HTML validation passed.
 - Full UI audit remains blocked by missing `test/fixtures/portrait.png` in the existing worktree.
