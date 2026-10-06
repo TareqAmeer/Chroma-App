@@ -2490,6 +2490,11 @@ body.sk2 .sk2x-close:hover{color:var(--k-color-ink)}
 body.sk2 .sk2x-body{flex:1;overflow-y:auto;padding:0 24px 24px}
 body.sk2 .sk2x-cap{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);margin:22px 0 8px}
 body.sk2 .sk2x-opts{display:flex}
+body.sk2 .sk2x-proof{margin-top:18px;border:1px solid var(--bdr);background:#090909}
+body.sk2 .sk2x-proof canvas{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:contain}
+body.sk2 .sk2x-proof-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:var(--k-color-bg);font-size:11px;color:var(--k-color-muted)}
+body.sk2 .sk2x-proof-toggle{border:0;padding:4px 8px;background:transparent;color:var(--k-color-ink);font:inherit;cursor:pointer}
+body.sk2 .sk2x-proof-toggle:focus-visible{outline:2px solid var(--k-color-accent-a);outline-offset:2px}
 body.sk2 .sk2x-scope{margin-top:18px}
 body.sk2 .sk2x-more{margin-top:26px}
 body.sk2 #sk2-export .fx-ctrl{display:block!important;margin-top:18px}
@@ -3132,12 +3137,93 @@ function sk2Spy(){
 <script>/* Swiss v2 — Export as a slide-over sheet (desktop layout): size + format presets and one big
    button up front; the full Output / Watermark / Presets / Styles / Sharing cards live under
    "More" inside the sheet (moved, not copied — every control and id is the original). */
+let FXSoftProof=null,_fxSoftProofTimer=0,_fxSoftProofRevision=0,_fxSoftProofQueue=Promise.resolve(),_fxSoftProofBefore=false;
+function fxSoftProofEstimate(sampleBytes,sampleW,sampleH,outputW,outputH){
+  if(!(sampleBytes>0&&sampleW>0&&sampleH>0&&outputW>0&&outputH>0))return 0;
+  return Math.round(sampleBytes*(outputW*outputH)/(sampleW*sampleH));
+}
+function fxSoftProofInvalidate(){
+  _fxSoftProofRevision++;clearTimeout(_fxSoftProofTimer);
+  _fxSoftProofQueue=_fxSoftProofQueue.catch(()=>{}).then(()=>{
+    if(document.body.classList.contains('sk2-exp-open')||!FXSoftProof)return;
+    try{FXSoftProof.gl.getExtension('WEBGL_lose_context')?.loseContext();}catch(_){}
+    FXSoftProof=null;
+  });
+}
+function fxSoftProofSchedule(){
+  if(!document.body.classList.contains('sk2-exp-open'))return;
+  clearTimeout(_fxSoftProofTimer);const revision=++_fxSoftProofRevision;
+  _fxSoftProofTimer=setTimeout(()=>{
+    _fxSoftProofQueue=_fxSoftProofQueue.catch(()=>{}).then(()=>fxSoftProofRender(revision));
+  },180);
+}
+async function fxSoftProofRender(revision){
+  const sh=document.getElementById('sk2-export'),canvas=sh&&sh.querySelector('.sk2x-proof canvas'),meta=sh&&sh.querySelector('.sk2x-proof-est');
+  const it=typeof curItem==='function'?curItem():null;
+  if(!canvas||revision!==_fxSoftProofRevision)return;
+  if(!it||it.kind==='video'||!fxWork){
+    if(meta)meta.textContent=it&&it.kind==='video'?'Still photos only':'Choose a still photo';
+    canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height);return;
+  }
+  const sizeEl=document.getElementById('sel-exp-size'),sharpEl=document.getElementById('sel-exp-sharp'),qualityEl=document.getElementById('sl-exp-q'),formatEl=document.getElementById('sel-exp-fmt');
+  const size=parseInt(sizeEl?.value||'0',10)||0,sharp=parseInt(sharpEl?.value||'0',10)||0;
+  const quality=Math.max(0,Math.min(1,(parseFloat(qualityEl?.value||'99')||99)/100));
+  const format=formatEl?.value||'auto',itemKey=`${fxCurIdx}:${it.name||''}:${size}:${sharp}:${quality}:${format}:${_fxSoftProofBefore}`;
+  const label=sh.querySelector('.sk2x-proof-toggle');if(label)label.textContent=_fxSoftProofBefore?'Show edited':'Show original';
+  if(meta)meta.textContent='Rendering export preview…';
+  let proofSource=null,proofOut=null;
+  try{
+    const source=geomCanvas(it),iw=source.naturalWidth||source.width,ih=source.naturalHeight||source.height;
+    const scale=Math.min(1,1000/Math.max(iw,ih),Math.sqrt(800000/(iw*ih)));
+    const pw=Math.max(1,Math.round(iw*scale)),ph=Math.max(1,Math.round(ih*scale));
+    proofSource=document.createElement('canvas');proofSource.width=pw;proofSource.height=ph;
+    proofSource.getContext('2d').drawImage(source,0,0,pw,ph);
+    const P=_fxSoftProofBefore?FX_ORIG_PARAMS:(()=>{const live=getFXParams(),copy=JSON.parse(JSON.stringify(live));
+      copy.redEyeOps=it.redeye||[];const depth=it.img&&it.img._depthMap;copy._exportDepthMap=depth&&depth.data?{data:new Uint8Array(depth.data),w:depth.w,h:depth.h}:null;return copy;})();
+    if(!FXSoftProof){FXSoftProof=new FXR(document.createElement('canvas'));if(!FXSoftProof.ok)throw new Error('Could not create the preview renderer');}
+    FXSoftProof.resetTextureSnapshotFrom(FX);
+    proofOut=await processToCanvas(P,proofSource,pw,ph,()=>{},FXSoftProof);
+    if(revision!==_fxSoftProofRevision)return;
+    if(!_fxSoftProofBefore){
+      const{b1t,b2t}=borderLayerSizes(P,proofOut.width,proofOut.height);
+      if(bordersAny(P,b1t,b2t)){const c=document.createElement('canvas');c.width=proofOut.width+2*(b1t+b2t);c.height=proofOut.height+2*(b1t+b2t);drawBorderLayers(c.getContext('2d'),proofOut,P,b1t,b2t,borderSeed(it,P));proofOut.width=proofOut.height=0;proofOut=c;}
+      if(P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none'){const c=filmFrameCompose(proofOut,P.filmFrame);if(c!==proofOut){proofOut.width=proofOut.height=0;proofOut=c;}}
+      if(P.canvas&&P.canvas.enabled&&P.canvas.ar){const c=canvasCompose(proofOut,P.canvas);if(c!==proofOut){proofOut.width=proofOut.height=0;proofOut=c;}}
+    }
+    proofOut=await exportResample(proofOut,{size,sharp});
+    if(revision!==_fxSoftProofRevision)return;
+    const lossless=it.ext==='png'||it.ext==='tif'||it.ext==='tiff'||RAW_FILE_EXT_RE.test('.'+it.ext)||RUST_ONLY_RE.test('.'+it.ext);
+    const mime=format==='png'?'image/png':format==='webp'?'image/webp':format==='jpg'?'image/jpeg':(lossless?'image/png':'image/jpeg');
+    const blob=await new Promise(resolve=>proofOut.toBlob(resolve,mime,mime==='image/png'?undefined:quality));
+    if(!blob)throw new Error('Could not encode preview');
+    if(revision!==_fxSoftProofRevision)return;
+    const decoded=await createImageBitmap(blob);
+    if(revision!==_fxSoftProofRevision){decoded.close?.();return;}
+    const ctx=canvas.getContext('2d');canvas.width=decoded.width;canvas.height=decoded.height;ctx.drawImage(decoded,0,0);decoded.close?.();
+    // Extrapolate from the downscaled sample to the full output dimensions. Export resize never
+    // enlarges, so an output size larger than the sample is reflected in the estimate only.
+    const sampleLong=Math.max(proofOut.width,proofOut.height);
+    const fullLong=sampleLong*(Math.max(iw,ih)/Math.max(pw,ph));
+    const desiredLong=size?Math.min(size,fullLong):fullLong;
+    const fullScale=desiredLong/sampleLong;
+    const outW=Math.max(1,Math.round(proofOut.width*fullScale)),outH=Math.max(1,Math.round(proofOut.height*fullScale));
+    const estimated=fxSoftProofEstimate(blob.size,proofOut.width,proofOut.height,outW,outH);
+    const fmt=mime==='image/png'?'PNG':mime==='image/webp'?'WebP':'JPEG';
+    const tiffFinal=!!(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath&&(it.ext==='tif'||it.ext==='tiff')&&format==='auto');
+    const kb=estimated>=1048576?(estimated/1048576).toFixed(1)+' MB':Math.max(1,Math.round(estimated/1024))+' KB';
+    if(meta)meta.textContent=`${outW} × ${outH} · ≈ ${kb} estimated ${fmt}${tiffFinal?' sample · final TIFF differs':' · preview based'}`;
+    canvas.setAttribute('aria-label',`${_fxSoftProofBefore?'Original':'Export'} preview, ${outW} by ${outH} pixels`);
+    canvas.dataset.previewKey=itemKey;canvas.dataset.estimateBytes=String(estimated);canvas.dataset.sampleBytes=String(blob.size);
+  }catch(e){if(revision===_fxSoftProofRevision&&meta)meta.textContent='Preview unavailable · '+String(e?.message||e);}
+  finally{if(proofSource){proofSource.width=proofSource.height=0;}if(proofOut&&proofOut!==canvas){proofOut.width=proofOut.height=0;}}
+}
 function sk2ExportBuild(){
   let sh=document.getElementById('sk2-export');if(sh)return sh;
   sh=document.createElement('aside');sh.id='sk2-export';sh.setAttribute('aria-label','Export');sh.setAttribute('aria-hidden','true');
   sh.innerHTML=`<div class="sk2x-hd"><h2>Export</h2><button type="button" class="sk2x-close" aria-label="Close export" title="Close (Esc)">×</button></div>
     <div class="sk2x-body"><div class="sk2x-cap">Size</div><div class="sk2x-opts chip-tap" data-sel="sel-exp-size"></div>
     <div class="sk2x-cap">Format</div><div class="sk2x-opts chip-tap" data-sel="sel-exp-fmt"></div>
+    <section class="sk2x-proof" aria-label="Export preview"><canvas width="600" height="400" aria-label="Export preview"></canvas><div class="sk2x-proof-meta"><span class="sk2x-proof-est" aria-live="polite">Choose a still photo</span><button type="button" class="sk2x-proof-toggle">Show original</button></div></section>
     <div class="sk2x-scope"></div>
     <details class="sk2-more sk2x-more"><summary>More</summary><div class="sk2x-cards"></div></details></div>
     <div class="sk2x-go"><button type="button" class="sk2x-btn">Export <span>→</span></button></div>`;
@@ -3150,7 +3236,9 @@ function sk2ExportBuild(){
   const cards=sh.querySelector('.sk2x-cards');
   ['export','wm','exppreset','style','share'].forEach(k=>{const c=document.querySelector(`.fx-ctrl[data-fxsec="${k}"]`);if(c)cards.appendChild(c);});
   sh.querySelector('.sk2x-close').onclick=sk2ExportClose;
+  sh.querySelector('.sk2x-proof-toggle').onclick=()=>{_fxSoftProofBefore=!_fxSoftProofBefore;fxSoftProofSchedule();};
   sh.querySelector('.sk2x-btn').onclick=()=>{const b=document.getElementById('btn-fx-export');if(b&&b.disabled&&!fxImages.length)return;exportFX();};
+  ['sel-exp-size','sel-exp-fmt','sel-exp-sharp','sl-exp-q'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener(id==='sl-exp-q'?'input':'change',fxSoftProofSchedule);});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('sk2-exp-open')){e.stopPropagation();sk2ExportClose();}},true);
   return sh;
 }
@@ -3160,9 +3248,10 @@ function sk2ExportOpen(){
   sh.querySelector('.sk2x-btn').firstChild.textContent=n>1&&(typeof fxExportScope==='undefined'||fxExportScope!=='current')?`Export ${n} photos `:'Export ';
   const sc=sh.querySelector('.sk2x-scope');if(scope&&sc&&scope.parentElement!==sc)sc.appendChild(scope);
   document.body.classList.add('sk2-exp-open');sh.setAttribute('aria-hidden','false');
+  _fxSoftProofBefore=false;fxSoftProofSchedule();
   setTimeout(()=>sh.querySelector('.sk2x-btn').focus(),50);
 }
-function sk2ExportClose(){const sh=document.getElementById('sk2-export');document.body.classList.remove('sk2-exp-open');if(sh)sh.setAttribute('aria-hidden','true');}
+function sk2ExportClose(){const sh=document.getElementById('sk2-export');document.body.classList.remove('sk2-exp-open');fxSoftProofInvalidate();if(sh)sh.setAttribute('aria-hidden','true');}
 function sk2ExportWire(){
   if(!document.body.classList.contains('deskx'))return;
   sk2ExportBuild();
@@ -20692,6 +20781,9 @@ function resolveSplitSnapshot(src){
   return 'orig';
 }
 function renderPreview(){
+  // Preview requests are also the app's central signal for recipe and photo changes. Debounce
+  // the export render and invalidate any in-flight result immediately while the sheet is open.
+  fxSoftProofSchedule();
   // Video export keeps the original main renderer because its encoder streams frames through FX.
   if(window.__csVideoExporting)return;
   const work=fxWork||fxImg;
@@ -21140,9 +21232,9 @@ function applyWatermark(cv){
   return cv;
 }
 // One entry point for the export path. Returns the same canvas when both are off.
-async function exportResample(cv){
-  const longEdge=parseInt((document.getElementById('sel-exp-size')||{}).value||'0',10)||0;
-  const level=parseInt((document.getElementById('sel-exp-sharp')||{}).value||'0',10)||0;
+async function exportResample(cv,settings){
+  const longEdge=settings&&settings.size!=null?settings.size:(parseInt((document.getElementById('sel-exp-size')||{}).value||'0',10)||0);
+  const level=settings&&settings.sharp!=null?settings.sharp:(parseInt((document.getElementById('sel-exp-sharp')||{}).value||'0',10)||0);
   if(!longEdge&&!level)return cv;
   const w0=cv.width,h0=cv.height;
   let out=exportResize(cv,longEdge);

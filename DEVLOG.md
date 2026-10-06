@@ -1,4 +1,8 @@
 
+### 2026-10-06 — CHR-173 export soft-proof preview (first implementation slice)
+- Added a sampled still-photo preview in the desktop export sheet with original/edited toggle, selected format/quality/resize/sharpening, dimensions, and a clearly approximate sample-based size estimate. It uses a private FXR snapshot, debounces recipe/photo changes, discards stale renders, and releases its WebGL context after closing.
+- Added a browser-free focused contract/math test; verified `node test/export_soft_proof.mjs`, `node --check test/export_soft_proof.mjs`, editor HTML nesting validation, and `git diff --check`. Browser parity, quality/content estimate-error matrix, large RAW memory behavior, and native WebView remain for follow-up.
+- Files: `chromasmith-22.html`, `test/export_soft_proof.mjs`, `DEVLOG.md`. This is a bounded first implementation slice; CHR-173 stays In Progress until the requested broader acceptance is verified.
 
 ### 2026-10-06 — CHR-206 guided relinking safety/design slice
 - Traced volume marker identity, last-seen mount paths, root/photo-relative paths, walk snapshots, ID-keyed edit queues/faces, and separate user path stores in albums, collection registries, export history, and adjacent XMP sidecars.
