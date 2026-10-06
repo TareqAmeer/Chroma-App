@@ -10540,6 +10540,8 @@ let fxExportCancel=false;                // set by the Cancel button to abort a 
 let fxHistory=[], fxHistIdx=-1, _fxHistLocked=false; // undo/redo
 let cropMode=false,cropN=null,cropAR=0,cropBase=null,_cropDrag=null; // interactive crop state
 let cropGrid='3x3'; try{cropGrid=localStorage.getItem('chromasmith_crop_grid')||'3x3';}catch(e){}
+const CROP_GRID_MODES=['3x3','4x4','9x9','golden','off'];
+function cropGridCycle(){const i=CROP_GRID_MODES.indexOf(cropGrid);cropSetGrid(CROP_GRID_MODES[(i+1+CROP_GRID_MODES.length)%CROP_GRID_MODES.length]);}
 function cropGridLinesHtml(){
   if(cropGrid==='off')return'';
   const stops=cropGrid==='9x9'?[1,2,3,4,5,6,7,8].map(i=>i*100/9):cropGrid==='4x4'?[25,50,75]:cropGrid==='golden'?[38.2,61.8]:[33.333,66.667]; // default 3x3 (rule of thirds)
@@ -10560,7 +10562,7 @@ function cropGridOverlaySync(){
   ov.innerHTML=`<g fill="none" vector-effect="non-scaling-stroke"><g stroke="rgba(0,0,0,.4)" stroke-width="3">${ls}</g><g stroke="rgba(255,255,255,.85)" stroke-width="1">${ls}</g></g>`;
   ov.querySelectorAll('line').forEach(l=>l.setAttribute('vector-effect','non-scaling-stroke'));
 }
-function cropSetGrid(v){cropGrid=v;try{localStorage.setItem('chromasmith_crop_grid',v);}catch(e){}
+function cropSetGrid(v){cropGrid=v;const sel=document.getElementById('sel-crop-grid');if(sel)sel.value=v;try{localStorage.setItem('chromasmith_crop_grid',v);}catch(e){}
   cropGridShown=v!=='off';cropGridOverlaySync();
   const r=document.getElementById('crop-rect');if(r){r.querySelectorAll('.crop-grid-v,.crop-grid-h').forEach(n=>n.remove());r.insertAdjacentHTML('beforeend',cropGridLinesHtml());}}
 // ── DPI read/write + metadata preservation (Exif/ICC/IPTC/XMP/pHYs) ─────────
@@ -14039,7 +14041,7 @@ const csShortcutDefs=[
   ['editor.search','Command palette','Help','editor','CmdOrCtrl+K'],['editor.shortcuts','Keyboard shortcuts guide','Help','editor','CmdOrCtrl+Slash'],['editor.settings','Settings','Help','editor','CmdOrCtrl+Comma'],
   ['editor.save-session','Save session','File','editor',null],['editor.load-session','Load session','File','editor',null],['editor.reset-edit','Reset edit','Photo','editor',null],['editor.flip-h','Flip horizontally','Photo','editor',null],['editor.flip-v','Flip vertically','Photo','editor',null],['editor.auto-enhance','Auto enhance','Photo','editor',null],['editor.wb-eyedrop','White balance eyedropper','Photo','editor',null],['editor.reshuffle-artifacts','Reshuffle film artifacts','Photo','editor',null],['editor.next-tool','Next tool section','Tools','editor',null],['editor.previous-tool','Previous tool section','Tools','editor',null],['editor.guide','Open guide','Help','editor',null],['editor.whatsnew',"What's new",'Help','editor',null],['editor.tour','Welcome tour','Help','editor',null],['library.expand','Toggle expanded Library','View','library',null],
   ['editor.compare','Hold to compare before / after','View','editor','Space'],['editor.next','Next photo','Photo','editor','ArrowRight'],['editor.previous','Previous photo','Photo','editor','ArrowLeft'],
-  ['editor.crop','Toggle crop','Tools','editor','C'],['editor.loupe','Toggle loupe','View','editor','1'],['editor.mask-overlay','Cycle mask overlay','Tools','editor','O'],
+  ['editor.crop','Toggle crop','Tools','editor','C'],['editor.loupe','Toggle loupe','View','editor','1'],['editor.mask-overlay','Cycle mask overlay','Tools','editor','O'],['editor.crop-grid','Cycle crop grid overlay','Tools','editor','Shift+G'],
   ['library.toggle','Toggle Library','Navigation','editor,library','CmdOrCtrl+L'],['library.reject','Reject selected photo','Photo','library','X'],['library.pick','Pick selected photo','Photo','library','P'],['library.clear-flag','Clear selected photo flag','Photo','library','U'],
   ['library.rate-0','Rate selected photo 0 stars','Photo','library','0'],['library.rate-1','Rate selected photo 1 star','Photo','library','1'],['library.rate-2','Rate selected photo 2 stars','Photo','library','2'],['library.rate-3','Rate selected photo 3 stars','Photo','library','3'],['library.rate-4','Rate selected photo 4 stars','Photo','library','4'],['library.rate-5','Rate selected photo 5 stars','Photo','library','5'],
   ['library.open','Open selected photo','Photo','library','Enter'],['library.quicklook','Quick Look selected photo','Photo','library','Space'],['library.next','Next photo','Photo','library','ArrowRight'],['library.previous','Previous photo','Photo','library','ArrowLeft'],['library.open-recent','Open Recent','File','editor,library','CmdOrCtrl+Shift+O']
@@ -27401,6 +27403,7 @@ csShortcutRegister('editor.previous',()=>{if(fxImages.length<=1)return false;fxS
 csShortcutRegister('editor.crop',()=>{if(typeof cropToggle!=='function'||cropMode)return false;cropToggle();});
 csShortcutRegister('editor.loupe',()=>{if(typeof toggleLoupe==='function'&&!fxLoupe)toggleLoupe();});
 csShortcutRegister('editor.mask-overlay',()=>{const ff=document.getElementById('ff-local');if(!ff||ff.offsetParent===null)return false;const next={overlay:'isolate',isolate:'select',select:'off',off:'overlay'}[mskPreviewMode]||'overlay';mskSetPreviewMode(next);});
+csShortcutRegister('editor.crop-grid',()=>{if(!fxImages.length)return false;cropGridCycle();});
 csShortcutRegister('editor.export',()=>exportFX());
 csShortcutRegister('editor.rotate-left',()=>geomRotate(-90));
 csShortcutRegister('editor.rotate-right',()=>geomRotate(90));
