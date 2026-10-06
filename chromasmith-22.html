@@ -4101,6 +4101,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
               <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
             </div>
             <canvas id="cv-curve" style="width:100%;max-width:280px;aspect-ratio:1;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);border-radius:8px;touch-action:none;cursor:crosshair;margin-top:2px"></canvas>
+            <div class="fx-hint" style="margin-top:5px">Touch: tap the curve to add a point, drag to shape it, or press and hold an interior point to remove it. Drag outside the curve to scroll.</div>
             <div style="max-width:280px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px;margin-bottom:4px">
               <span>Blacks</span><span>Midtones</span><span>Whites</span>
             </div>
@@ -7119,7 +7120,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006I';
+const BUILD='1.1006J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13249,7 +13250,7 @@ function applyRawDefaults(){
 }
 
 // ══ TONE CURVES — master + R/G/B point curves, monotone cubic, baked to a 256×1 LUT ══
-let curveCh='m',_crvDrag=-1;
+let curveCh='m',_crvDrag=-1,_crvTouchDeleteTimer=0;
 // 5 pre-seeded points at 0/25/50/75/100% (Blacks/Shadows/Midtones/Highlights/Whites), all on
 // the identity diagonal — Fritsch-Carlson through evenly-spaced collinear points reproduces
 // y=x exactly (matching slopes of 1 throughout), so this bakes byte-identical to the old
@@ -13384,17 +13385,28 @@ function _crvInit(){
     }
     if(hit<0){pts.push([px,py]);pts.sort((a,b)=>a[0]-b[0]);hit=pts.findIndex(p=>p[0]===px&&p[1]===py);}
     _crvDrag=hit;cv.setPointerCapture(e.pointerId);_crvEnsureOn();
+    // Touch users cannot double-click a canvas point. A short hold removes only interior
+    // points; any movement turns the same pointer into the existing drag gesture instead.
+    if(e.pointerType==='touch'&&hit>0&&hit<pts.length-1){
+      clearTimeout(_crvTouchDeleteTimer);
+      _crvTouchDeleteTimer=setTimeout(()=>{
+        if(_crvDrag!==hit)return;
+        pts.splice(hit,1);_crvDrag=-1;_crvTouchDeleteTimer=0;curveChanged();
+      },550);
+    }
     bakeCurves();drawCurveEditor();
   });
   cv.addEventListener('pointermove',e=>{
     if(_crvScroll){_crvScroll.el.scrollTop=_crvScroll.top-(e.clientY-_crvScroll.y);return;}
-    if(_crvDrag<0)return;const pts=fxState.curves[curveCh];let[px,py]=_crvPos(e);
+    if(_crvDrag<0)return;
+    if(_crvTouchDeleteTimer){clearTimeout(_crvTouchDeleteTimer);_crvTouchDeleteTimer=0;}
+    const pts=fxState.curves[curveCh];let[px,py]=_crvPos(e);
     if(_crvDrag===0)px=0;else if(_crvDrag===pts.length-1)px=1;              // endpoints: x pinned, y free
     else px=Math.min(pts[_crvDrag+1][0]-0.01,Math.max(pts[_crvDrag-1][0]+0.01,px));
     pts[_crvDrag]=[px,py];_crvEnsureOn();bakeCurves();drawCurveEditor();
     clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,120);           // live drag preview; history on release
   });
-  const up=()=>{_crvScroll=null;if(_crvDrag<0)return;_crvDrag=-1;curveChanged();};
+  const up=()=>{_crvScroll=null;if(_crvTouchDeleteTimer){clearTimeout(_crvTouchDeleteTimer);_crvTouchDeleteTimer=0;}if(_crvDrag<0)return;_crvDrag=-1;curveChanged();};
   cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
   cv.addEventListener('dblclick',e=>{
     const[px,py]=_crvPos(e),pts=fxState.curves[curveCh],hit=_crvHit(px,py);
