@@ -568,6 +568,8 @@
   document.head.appendChild(style);
   document.body.classList.add('tauri-native');
   document.body.classList.add('deskx');
+  const secondDisplayButton=document.getElementById('btn-second-display');
+  if(secondDisplayButton&&window.__TAURI__.webviewWindow?.WebviewWindow)secondDisplayButton.style.display='';
   if (window.CS_PLATFORM.os === 'macos') {
     document.body.classList.add('mac-titlebar-overlay');
     const deskbar = document.getElementById('fx-deskbar');

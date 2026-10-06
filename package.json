@@ -10,6 +10,7 @@
     "export:test": "node test/export_harness.mjs",
     "export:golden": "node test/export_harness.mjs --golden",
     "video:test": "node test/video_harness.mjs",
+    "second-display:test": "node test/second_display_receiver.mjs",
     "lint:ai": "node test/lint_ai_origin.mjs",
     "lint:formats": "node test/lint_formats.mjs",
     "lint:library-content": "node test/lint_library_content.mjs",
