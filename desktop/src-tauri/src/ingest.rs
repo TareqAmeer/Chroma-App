@@ -99,6 +99,9 @@ pub struct IngestOptions {
     /// Absolute paths (as returned by scan_card) to import. Empty means everything scanned.
     #[serde(default)]
     pub only: Vec<String>,
+    /// Optional IPTC/XMP fields from the selected saved import recipe.
+    #[serde(default)]
+    pub metadata: crate::library::ImportMetadata,
 }
 
 #[derive(Serialize, Clone)]
@@ -536,6 +539,29 @@ fn sidecars_for(src: &Path) -> Vec<PathBuf> {
     out
 }
 
+/// Copies the sidecars paired to `src` beside its final destination path. Reused for the primary
+/// and optional second copy so XMP/rrdata follow the photo consistently through renaming.
+fn copy_sidecars_to(src: &Path, dest: &Path) -> Vec<(String, String)> {
+    let Some(dir) = dest.parent() else { return Vec::new() };
+    let source_stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
+    let source_ext = src.extension().and_then(|s| s.to_str()).unwrap_or("");
+    let dest_stem = dest.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
+    let mut failures = Vec::new();
+    for side in sidecars_for(src) {
+        let side_ext = ext_lower(&side);
+        // Panasonic writes NAME.RW2.rrdata, so preserve the doubled form.
+        let side_name = if side.file_stem().and_then(|s| s.to_str()) == Some(&format!("{source_stem}.{source_ext}")) {
+            format!("{dest_stem}.{source_ext}.{side_ext}")
+        } else {
+            format!("{dest_stem}.{side_ext}")
+        };
+        if let Err(e) = copy_verified(&side, &dir.join(&side_name)) {
+            failures.push((side_name, e));
+        }
+    }
+    failures
+}
+
 /// Copies the selected files into a date-organised tree, optionally to a second volume too,
 /// emitting `ingest-progress` events as it goes.
 ///
@@ -690,7 +716,6 @@ fn ingest_run_cancellable(
             break;
         }
         let src = Path::new(&f.path);
-        let ext = src.extension().and_then(|s| s.to_str()).unwrap_or("");
         let out_name = &out_names[i];
         let dir = dest_root.join(expand_folder(&folder_tpl, &date));
         // ⚠️ unique_dest, not a bare join: two cameras (or two cards) routinely produce the same
@@ -702,20 +727,13 @@ fn ingest_run_cancellable(
                 result.copied += 1;
                 result.bytes += n;
                 result.completed_files.push(dest.to_string_lossy().into_owned());
-                // Sidecars follow their photo, under the photo's final (possibly renamed) stem so
-                // the pairing survives a rename template.
-                let dest_stem = dest.file_stem().and_then(|s| s.to_str()).unwrap_or("photo").to_string();
-                for side in sidecars_for(src) {
-                    let side_ext = ext_lower(&side);
-                    // Panasonic writes NAME.RW2.rrdata, so preserve the doubled form.
-                    let source_stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
-                    let side_name = if side.file_stem().and_then(|s| s.to_str()) == Some(&format!("{source_stem}.{ext}")) {
-                        format!("{dest_stem}.{ext}.{side_ext}")
-                    } else {
-                        format!("{dest_stem}.{side_ext}")
-                    };
-                    if let Err(e) = copy_verified(&side, &dir.join(&side_name)) {
-                        result.failed.push(format!("{side_name}: {e}"));
+                // Sidecars follow both copies under the final (possibly renamed) stem.
+                for (side_name, e) in copy_sidecars_to(src, &dest) {
+                    result.failed.push(format!("{side_name}: {e}"));
+                }
+                if !options.metadata.is_empty() {
+                    if let Err(e) = crate::library::apply_import_metadata(&dest.to_string_lossy(), &options.metadata) {
+                        result.failed.push(format!("{} (metadata): {e}", f.name));
                     }
                 }
                 if let Some(backup) = &backup_root {
@@ -726,6 +744,15 @@ fn ingest_run_cancellable(
                         // copy is already written and verified, and losing the whole import
                         // because a second disk filled up would be the wrong call.
                         result.failed.push(format!("{} (backup): {e}", f.name));
+                    } else {
+                        for (side_name, e) in copy_sidecars_to(src, &bdest) {
+                            result.failed.push(format!("{} (backup sidecar {side_name}): {e}", f.name));
+                        }
+                        if !options.metadata.is_empty() {
+                            if let Err(e) = crate::library::apply_import_metadata(&bdest.to_string_lossy(), &options.metadata) {
+                                result.failed.push(format!("{} (backup metadata): {e}", f.name));
+                            }
+                        }
                     }
                 }
             }
@@ -835,7 +862,7 @@ mod tests {
             IngestOptions {
                 dest_root: dest.to_string_lossy().into_owned(), backup_root: None,
                 folder_template: Some("{YYYY-MM-DD}".into()), filename_template: None,
-                skip_duplicates: false, only: Vec::new(), sequence_start: None,
+                skip_duplicates: false, only: Vec::new(), sequence_start: None, metadata: Default::default(),
             },
             "cancel-test", &cancel,
             &mut |p| {
@@ -941,6 +968,7 @@ mod tests {
                 sequence_start: None,
                 skip_duplicates: true,
                 only: Vec::new(),
+                metadata: Default::default(),
             },
             &mut |_p| ticks += 1,
         ).expect("import");
@@ -978,6 +1006,7 @@ mod tests {
                 sequence_start: None,
                 skip_duplicates: true,
                 only: Vec::new(),
+                metadata: Default::default(),
             },
             &mut |_p| {},
         ).expect("re-import");
@@ -1041,6 +1070,7 @@ mod tests {
                 sequence_start: None,
                 skip_duplicates: true,
                 only: Vec::new(),
+                metadata: Default::default(),
             },
             &mut |_p| {},
         ).expect("import");
@@ -1070,5 +1100,58 @@ mod tests {
         assert!(!names.contains(&"__TM4203.xmp".to_string()), "another photo's sidecar must not follow");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn import_recipe_metadata_merges_xmp_and_keeps_duplicate_and_backup_rules() {
+        let root = std::env::temp_dir().join(format!("cs_import_recipe_{}", std::process::id()));
+        let card = root.join("card");
+        let dest = root.join("dest");
+        let backup = root.join("backup");
+        std::fs::create_dir_all(&card).unwrap();
+        std::fs::create_dir_all(dest.join("2026-04-05")).unwrap();
+        std::fs::write(card.join("a.jpg"), b"new-photo-bytes").unwrap();
+        std::fs::write(card.join("a.xmp"), r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/" crs:Exposure2012="+0.35"><dc:subject><rdf:Bag><rdf:li>existing-keyword</rdf:li></rdf:Bag></dc:subject></rdf:Description></rdf:RDF></x:xmpmeta>"#).unwrap();
+        std::fs::write(card.join("b.jpg"), b"duplicate-bytes").unwrap();
+        std::fs::write(dest.join("2026-04-05/b.jpg"), b"duplicate-bytes").unwrap();
+
+        let files = vec![
+            CardFile { path: card.join("a.jpg").to_string_lossy().into_owned(), name: "a.jpg".into(), size: 15, kind: "jpeg".into(), date: Some("2026-04-05".into()), camera: None, duplicate: false },
+            CardFile { path: card.join("b.jpg").to_string_lossy().into_owned(), name: "b.jpg".into(), size: 15, kind: "jpeg".into(), date: Some("2026-04-05".into()), camera: None, duplicate: true },
+        ];
+        let mut progress = |_| {};
+        let result = ingest_run(files, IngestOptions {
+            dest_root: dest.to_string_lossy().into_owned(),
+            backup_root: Some(backup.to_string_lossy().into_owned()),
+            folder_template: Some("{YYYY-MM-DD}".into()),
+            filename_template: None,
+            sequence_start: None,
+            skip_duplicates: true,
+            only: Vec::new(),
+            metadata: crate::library::ImportMetadata {
+                creator: "A & B".into(),
+                copyright: "© 2026 Studio".into(),
+                caption: "An <important> shoot".into(),
+                job_project: "JOB-42".into(),
+                keywords: vec!["news".into(), "news".into()],
+            },
+        }, &mut progress).unwrap();
+
+        assert_eq!(result.copied, 1);
+        assert_eq!(result.duplicates_skipped, 1);
+        assert!(result.failed.is_empty(), "unexpected import failures: {:?}", result.failed);
+        let primary = std::fs::read_to_string(dest.join("2026-04-05/a.xmp")).unwrap();
+        let second = std::fs::read_to_string(backup.join("2026-04-05/a.xmp")).unwrap();
+        for xmp in [&primary, &second] {
+            assert!(xmp.contains("<dc:creator><rdf:Seq><rdf:li>A &amp; B</rdf:li>"), "creator missing/incorrect: {xmp}");
+            assert!(xmp.contains("© 2026 Studio"), "copyright missing: {xmp}");
+            assert!(xmp.contains("An &lt;important&gt; shoot"), "caption missing/incorrect: {xmp}");
+            assert!(xmp.contains("<photoshop:TransmissionReference>JOB-42</photoshop:TransmissionReference>"), "job identifier missing: {xmp}");
+            assert!(xmp.contains("crs:Exposure2012=\"+0.35\""), "unknown develop metadata was lost: {xmp}");
+            assert!(xmp.contains("existing-keyword"), "existing keyword was lost: {xmp}");
+            assert!(xmp.contains("<rdf:li>news</rdf:li>"), "recipe keyword missing: {xmp}");
+        }
+        assert!(!backup.join("2026-04-05/b.jpg").exists(), "duplicate skip must apply to the second copy too");
+        std::fs::remove_dir_all(&root).ok();
     }
 }

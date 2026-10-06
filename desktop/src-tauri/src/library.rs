@@ -1525,6 +1525,28 @@ pub struct Sidecar {
     pub last_reset_edited: bool,
 }
 
+/// Metadata fields supplied by a saved card-import recipe. Empty values are omitted so a
+/// template that only sets (for example) copyright never clears metadata already on the card.
+#[derive(Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ImportMetadata {
+    pub creator: String,
+    pub copyright: String,
+    pub caption: String,
+    pub job_project: String,
+    pub keywords: Vec<String>,
+}
+
+impl ImportMetadata {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.creator.trim().is_empty()
+            && self.copyright.trim().is_empty()
+            && self.caption.trim().is_empty()
+            && self.job_project.trim().is_empty()
+            && self.keywords.iter().all(|keyword| keyword.trim().is_empty())
+    }
+}
+
 /// One virtual copy: a name and its own full recipe. No pixels are duplicated — a virtual copy is
 /// a second set of edits over the same file, which is the whole point.
 #[derive(Serialize, serde::Deserialize, Default, Clone, PartialEq)]
@@ -2337,6 +2359,123 @@ fn write_sidecar_ex(path: &str, sc: &Sidecar, people: &[PersonRegion]) -> Result
     if let Err(e) = result {
         let _ = std::fs::remove_file(&tmp);
         return Err(format!("write sidecar: {e}"));
+    }
+    Ok(())
+}
+
+/// Applies an import recipe to a copied photo's XMP. Keyword additions use the existing
+/// sidecar read/modify/write path; the remaining standard IPTC fields replace only their own
+/// XMP properties. Foreign properties, including location and develop settings, stay byte-for-
+/// byte in the packet.
+pub(crate) fn apply_import_metadata(path: &str, metadata: &ImportMetadata) -> Result<(), String> {
+    if metadata.is_empty() { return Ok(()); }
+
+    let mut sc = get_sidecar(path.to_string());
+    for keyword in &metadata.keywords {
+        let keyword = keyword.trim();
+        if !keyword.is_empty() && !sc.keywords.iter().any(|old| old == keyword) {
+            sc.keywords.push(keyword.to_string());
+        }
+    }
+    write_sidecar(path, &sc)?;
+
+    let sc_path = sidecar_path(path);
+    let mut text = std::fs::read_to_string(&sc_path).map_err(|e| format!("read import sidecar: {e}"))?;
+    let mut fragments = String::new();
+    if !metadata.creator.trim().is_empty() {
+        text = strip_xmp_local_elements(&text, "creator");
+        fragments.push_str(&format!("<dc:creator><rdf:Seq><rdf:li>{}</rdf:li></rdf:Seq></dc:creator>", xml_escape(metadata.creator.trim())));
+    }
+    if !metadata.copyright.trim().is_empty() {
+        text = strip_xmp_local_elements(&text, "rights");
+        fragments.push_str(&format!("<dc:rights><rdf:Alt><rdf:li xml:lang=\"x-default\">{}</rdf:li></rdf:Alt></dc:rights>", xml_escape(metadata.copyright.trim())));
+    }
+    if !metadata.caption.trim().is_empty() {
+        text = strip_xmp_local_elements(&text, "description");
+        fragments.push_str(&format!("<dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">{}</rdf:li></rdf:Alt></dc:description>", xml_escape(metadata.caption.trim())));
+    }
+    if !metadata.job_project.trim().is_empty() {
+        text = strip_xmp_local_elements(&text, "TransmissionReference");
+        fragments.push_str(&format!("<photoshop:TransmissionReference>{}</photoshop:TransmissionReference>", xml_escape(metadata.job_project.trim())));
+    }
+    if fragments.is_empty() { return Ok(()); }
+
+    let Some((start, end, self_closing)) = find_description_attrs(&text) else {
+        return Err("could not locate XMP description for import metadata".into());
+    };
+    let mut attrs = text[start..end].to_string();
+    for (prefix, uri) in [
+        ("dc", "http://purl.org/dc/elements/1.1/"),
+        ("photoshop", "http://ns.adobe.com/photoshop/1.0/"),
+        ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
+    ] {
+        let name = format!("xmlns:{prefix}");
+        if !has_attr(&attrs, &name) { attrs = set_attr(&attrs, &name, Some(uri)); }
+    }
+    let text = if self_closing {
+        format!("{}{}>{fragments}</rdf:Description>{}", &text[..start], attrs, &text[end + 2..])
+    } else {
+        let Some(close_at) = text[end + 1..].find("</rdf:Description>").map(|i| end + 1 + i) else {
+            return Err("XMP description has no closing tag".into());
+        };
+        format!("{}{}{}{}{}", &text[..start], attrs, &text[end..close_at], fragments, &text[close_at..])
+    };
+    write_xmp_atomic(&sc_path, text.as_bytes())
+}
+
+/// Removes every element with the requested XML local name, including the common attributes-on-
+/// opening-tag form. XMP prefixes vary between writers, so match the local name and retain all
+/// unrelated packet content.
+fn strip_xmp_local_elements(text: &str, local_name: &str) -> String {
+    let mut out = text.to_string();
+    let marker = format!(":{local_name}");
+    let mut search = 0usize;
+    loop {
+        let Some(at) = out[search..].find(&marker).map(|i| search + i) else { break };
+        let name_end = at + marker.len();
+        if out.as_bytes().get(name_end).is_some_and(|b| !matches!(*b, b'>' | b'/' | b' ' | b'\t' | b'\r' | b'\n')) {
+            search = name_end;
+            continue;
+        }
+        let Some(tag_start) = out[..at].rfind('<') else { break };
+        if out.as_bytes().get(tag_start + 1) == Some(&b'/') {
+            search = name_end;
+            continue;
+        }
+        if out[tag_start + 1..at].contains(char::is_whitespace) {
+            search = name_end;
+            continue;
+        }
+        let Some(gt) = out[name_end..].find('>').map(|i| name_end + i) else { break };
+        let qualified = &out[tag_start + 1..name_end];
+        if out.as_bytes().get(gt.wrapping_sub(1)) == Some(&b'/') {
+            out.replace_range(tag_start..gt + 1, "");
+            search = tag_start;
+            continue;
+        }
+        let close = format!("</{qualified}>");
+        let Some(close_at) = out[gt + 1..].find(&close).map(|i| gt + 1 + i) else { break };
+        out.replace_range(tag_start..close_at + close.len(), "");
+        search = tag_start;
+    }
+    out
+}
+
+fn write_xmp_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    static IMPORT_XMP_WRITE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let serial = IMPORT_XMP_WRITE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = path.with_extension(format!("xmp.import.{}.{}.tmp", std::process::id(), serial));
+    let result = (|| -> std::io::Result<()> {
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        std::fs::rename(&tmp, path)
+    })();
+    if let Err(e) = result {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("write import sidecar: {e}"));
     }
     Ok(())
 }
