@@ -4665,7 +4665,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="fx-ctrl-title">Versions</div>
         <div id="ver-list" class="ver-list"></div>
         <div class="btn-row" style="margin-top:10px"><button class="btn bsec" id="btn-ver-new" onclick="verSaveNew()">Save as new version…</button><button class="btn bgh" onclick="if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover()">Edit history</button></div>
-        <div class="fx-hint" style="margin-top:12px;line-height:1.5">Undo history is lost when you close the photo. Versions are saved with the photo and survive restarts; the original file is never changed. Duplicating the file is a separate copy on disk.</div>
+        <div class="fx-hint" style="margin-top:12px;line-height:1.5">Save a named version as a checkpoint, then keep editing; <b>Compare</b> shows that saved edit against the current one, and <b>Make current</b> restores it. Session undo history clears when you close the photo. Versions survive restarts, and the original file is never changed. Duplicating the file is a separate copy on disk.</div>
       </div>
       <div class="fx-ctrl" data-fxsec="info">
         <div class="fx-ctrl-title">Preview Info &amp; Metadata</div>
@@ -7122,7 +7122,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006T';
+const BUILD='1.1006U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
