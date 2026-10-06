@@ -56,9 +56,11 @@
 - Added Lightroom Classic-style Alt/Option-drag erasing during mask brush painting, with live eraser cursor feedback; persistent Erase mode remains available.
 - Scoped the modifier to brush painting so AI scribble exclusion and color-range sampling retain their existing Alt behavior. Files: `chromasmith-22.html`, `test/mask_raster.mjs`.
 - Added raster regression checks for temporary erase and persistent Erase mode. `node --check test/mask_raster.mjs`, editor HTML validity, and `git diff --check` pass; browser raster test is blocked because the Playwright Chromium executable is missing.
+- Published in integration commit `243829061138566e0b0f499e225ac44fab676fdc`; `git ls-remote origin refs/heads/main` confirmed the same hash. Re-ran `node test/mask_raster.mjs` on main (24/24 PASS).
 
 ## 2026-10-06 — CHR-278 Recursive folder view
 
 - Migrated the old global Include Subfolders preference into a legacy default plus per-volume/folder overrides; folder navigation now applies its saved recursive scope before querying the catalog.
 - Added visible recursive status/count wording and `test/library_recursive_folders.mjs`; files: `desktop/library-ui.js`, `test/library_recursive_folders.mjs`, `DEVLOG.md`.
 - Verified JavaScript syntax, focused Chromium preference/query/status flow, and `git diff --check`; 50k catalog performance remains covered by catalog paging and needs a dedicated large-fixture measurement before claiming that criterion.
+- Published in integration commit `243829061138566e0b0f499e225ac44fab676fdc`; `git ls-remote origin refs/heads/main` confirmed the same hash. Focused Chromium regression and Library content lint passed on main.
