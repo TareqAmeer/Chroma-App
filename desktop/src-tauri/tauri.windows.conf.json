@@ -12,7 +12,7 @@
         "minWidth": 900,
         "minHeight": 600,
         "dragDropEnabled": true,
-        "decorations": true,
+        "decorations": false,
         "transparent": true,
         "backgroundColor": [0, 0, 0, 0]
       }

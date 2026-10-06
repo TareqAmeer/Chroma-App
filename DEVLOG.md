@@ -377,3 +377,9 @@
 - Published menu restoration at `a78e682707f65eaa584583cca2426c8bf715c6b3`; fetched remote main and confirmed commit ancestry plus identical menu-source/documentation content to the verified feature checkout.
 - Windows `cargo build --bin chromasmith --offline` passes. Launched rebuilt debug executable and queried its real HWND menu through Win32: File, Edit, Photo, View, Help and populated submenus verified. Screenshot capture failed; click-through and macOS runtime checks remain unverified. The commit hook also updated only the frontend BUILD marker in `chromasmith-22.html`.
 - Short native diagnostics reported zero freezes and unrelated missing `hq_offline`/`offline_edit_queue` tables; no clean-diagnostics claim. CHR-196 remains In Review.
+
+## 2026-10-06 — CHR-196 Windows titlebar menus
+
+- Replaced the separate Windows native menu/frame with File/Edit/Photo/View/Help beside minimize/maximize/close in one titlebar. Added existing folder, settings, photo, viewing, and help routes with contextual disabling and keyboard navigation; compared task groupings with Affinity Photo and Lightroom Classic.
+- Files: `desktop/header-menus.js`, `desktop/desktop-native.js`, `desktop/library-ui.js`, Windows Tauri config/capabilities and `main.rs`, frontend build staging, `test/header_menus.mjs`, and Windows menu documentation. Windows state restoration excludes decorations to prevent duplicate titlebars.
+- Verification: Windows Cargo build and focused Edge checks pass (40 dropdown routes, handlers, Gallery/Studio layout, themes, widths, keyboard and dismissal). Native Settings/Help, minimize, maximize/restore, fullscreen and Exit verified; real window screenshot confirms placement. Full editor gates are blocked by missing test dependencies; every image operation was not end-to-end tested. CHR-196 remains In Review; publication recorded after remote verification.

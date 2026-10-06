@@ -11,7 +11,7 @@
 // still show println!/log output in a console, matching Tauri's own project-template default.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::path::{Path, PathBuf};
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
 
@@ -2629,7 +2629,16 @@ fn main() {
         // Restores window position/size/maximized-state on launch, and saves it on resize/move/
         // close — the window otherwise always opened at tauri.conf.json's fixed 1440x900. Default
         // config (all flags) tracks every window the app creates, which today is just "main".
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_window_state::Builder::default()
+            // Windows frame decorations belong to the title-bar design, not saved geometry.
+            // Restoring an older decorated=true would add a second row above our controls.
+            .with_state_flags(if cfg!(target_os = "windows") {
+                tauri_plugin_window_state::StateFlags::all()
+                    & !tauri_plugin_window_state::StateFlags::DECORATIONS
+            } else {
+                tauri_plugin_window_state::StateFlags::all()
+            })
+            .build())
         // See Cargo.toml's comment on the dependency: a real log file replaces `log stream`,
         // which does not capture this app's own log output at all (confirmed live).
         // ⚠️ `file_name` below is NOT respected — verified live against a real running
@@ -3009,9 +3018,9 @@ fn main() {
                 library::prune_caches();
             });
 
-            // Shared desktop commands appear in the macOS system menu and the Windows
-            // window menu bar. Only the macOS Application/Window menus use Mac-only roles.
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            // macOS uses its system menu; Windows exposes these actions in the Gallery
+            // and Studio headers (header-menus.js), without a separate native menu row.
+            #[cfg(target_os = "macos")]
             {
             let open_item =
                 MenuItem::with_id(handle, "menu-open", "Open Photo…", true, Option::<&str>::None)?;
@@ -3180,7 +3189,6 @@ fn main() {
                 ],
             )?;
 
-            #[cfg(target_os = "macos")]
             let window_menu = Submenu::with_items(
                 handle,
                 "Window",
@@ -3222,7 +3230,6 @@ fn main() {
             let settings_item = MenuItem::with_id(
                 handle, "menu-settings", "Settings…", true, Option::<&str>::None,
             )?;
-            #[cfg(target_os = "macos")]
             let app_menu = Submenu::with_items(
                 handle,
                 "Chromasmith",
@@ -3240,25 +3247,9 @@ fn main() {
                 ],
             )?;
 
-            #[cfg(target_os = "windows")]
-            {
-                file_menu.append(&PredefinedMenuItem::separator(handle)?)?;
-                file_menu.append(&PredefinedMenuItem::quit(handle, Some("Exit"))?)?;
-                edit_menu.append(&PredefinedMenuItem::separator(handle)?)?;
-                edit_menu.append(&settings_item)?;
-                help_menu.append(&PredefinedMenuItem::separator(handle)?)?;
-                help_menu.append(&PredefinedMenuItem::about(handle, Some("About Chromasmith"), None)?)?;
-            }
-
-            #[cfg(target_os = "macos")]
             let menu = Menu::with_items(
                 handle,
                 &[&app_menu, &file_menu, &edit_menu, &photo_menu, &view_menu, &window_menu, &help_menu],
-            )?;
-            #[cfg(target_os = "windows")]
-            let menu = Menu::with_items(
-                handle,
-                &[&file_menu, &edit_menu, &photo_menu, &view_menu, &help_menu],
             )?;
             app.set_menu(menu)?;
 
