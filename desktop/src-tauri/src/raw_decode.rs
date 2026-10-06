@@ -133,6 +133,111 @@ fn demosaic_cache_key(bytes: &[u8], demosaic_algo: &str) -> u64 {
     h.finish()
 }
 
+/// Translate the explicit alternate-method selection into the algorithms supported by the
+/// pinned `demosaic` crate. PPG stays on rawler's existing default path; this deliberately does
+/// not accept RawTherapee methods that the pinned backend does not implement.
+fn alternate_demosaic_algorithm(choice: &str) -> Option<demosaic::Algorithm> {
+    use demosaic::Algorithm;
+    match choice {
+        "ahd" => Some(Algorithm::Ahd),
+        "vng" => Some(Algorithm::Vng),
+        "mhc" => Some(Algorithm::Mhc),
+        "markesteijn1" => Some(Algorithm::Markesteijn1),
+        "markesteijn3" => Some(Algorithm::Markesteijn3),
+        _ => None,
+    }
+}
+
+/// Map rawler's decoded CFA into the pinned demosaicer's CFA descriptor. Keep the existing
+/// explicit Bayer name mapping, and translate X-Trans from rawler's actual 6x6 color indices;
+/// guessing a generic Fuji pattern would produce wrong colors for shifted/variant CFAs.
+fn alternate_demosaic_cfa(cfa: &rawler::CFA, choice: &str) -> Result<demosaic::CfaPattern, String> {
+    use demosaic::{CfaPattern, Channel};
+    match (cfa.width, cfa.height) {
+        (2, 2) => match cfa.name.as_str() {
+            "RGGB" => Ok(CfaPattern::bayer_rggb()),
+            "BGGR" => Ok(CfaPattern::bayer_bggr()),
+            "GRBG" => Ok(CfaPattern::bayer_grbg()),
+            "GBRG" => Ok(CfaPattern::bayer_gbrg()),
+            other => Err(format!("unsupported Bayer CFA pattern '{other}' for {choice}")),
+        },
+        (6, 6) => {
+            let mut pattern = [Channel::Green; 36];
+            for row in 0..6 {
+                for col in 0..6 {
+                    pattern[row * 6 + col] = match cfa.color_at(row, col) {
+                        0 => Channel::Red,
+                        1 => Channel::Green,
+                        2 => Channel::Blue,
+                        other => return Err(format!(
+                            "unsupported X-Trans CFA color index {other} at ({row},{col}) for {choice}"
+                        )),
+                    };
+                }
+            }
+            Ok(CfaPattern::xtrans(pattern))
+        }
+        _ => Err(format!(
+            "{choice} supports only 2x2 Bayer or 6x6 X-Trans CFA, got {}x{}",
+            cfa.width, cfa.height
+        )),
+    }
+}
+
+#[cfg(test)]
+mod alternate_demosaic_backend_tests {
+    use super::{alternate_demosaic_algorithm, alternate_demosaic_cfa};
+    use demosaic::{Algorithm, CfaPattern, Channel};
+
+    #[test]
+    fn only_backend_implemented_choices_are_accepted() {
+        for (name, expected) in [
+            ("ahd", Algorithm::Ahd),
+            ("vng", Algorithm::Vng),
+            ("mhc", Algorithm::Mhc),
+            ("markesteijn1", Algorithm::Markesteijn1),
+            ("markesteijn3", Algorithm::Markesteijn3),
+        ] {
+            assert_eq!(alternate_demosaic_algorithm(name), Some(expected));
+        }
+        for unsupported in ["amaze", "rcd", "dcb", "lmmse", "vng4", "bilinear", ""] {
+            assert_eq!(alternate_demosaic_algorithm(unsupported), None, "{unsupported}");
+        }
+    }
+
+    #[test]
+    fn xtrans_mapping_uses_rawlers_real_6x6_cfa_pattern() {
+        let rawler_cfa = rawler::CFA::new("RGBGGRGBGGRGBGGRGBGGRGBGGRGBGGRGBGGR");
+        let expected = [
+            Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green, Channel::Red,
+            Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green, Channel::Red,
+            Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green, Channel::Red,
+            Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green, Channel::Red,
+            Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green, Channel::Red,
+            Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green, Channel::Red,
+        ];
+        assert_eq!(
+            alternate_demosaic_cfa(&rawler_cfa, "markesteijn3"),
+            Ok(CfaPattern::xtrans(expected))
+        );
+    }
+
+    #[test]
+    fn markesteijn_algorithms_render_xtrans_input() {
+        let cfa = CfaPattern::xtrans_default();
+        // The pinned Markesteijn implementation needs at least 64x64 input pixels.
+        let (width, height) = (64, 64);
+        let input = vec![0.5f32; width * height];
+        for algorithm in [Algorithm::Markesteijn1, Algorithm::Markesteijn3] {
+            let mut output = vec![0.0f32; 3 * width * height];
+            demosaic::demosaic(&input, width, height, &cfa, algorithm, &mut output)
+                .expect("supported X-Trans Markesteijn algorithm");
+            assert_eq!(output.len(), 3 * width * height);
+            assert!(output.iter().all(|value| value.is_finite()));
+        }
+    }
+}
+
 fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut, String> {
     let source = RawSource::new_from_slice(bytes);
     // Widening formats.rs::RAW_EXTS made this reachable in practice (bay/k25/ptx/some
@@ -321,7 +426,7 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
     }
 
     // 3) Demosaic. Default: PPG (rawler's own; internally SIMD/rayon-assisted). `demosaic_algo`
-    // ("" | "ahd" | "vng" | "mhc") is the real per-photo control — the desktop UI's "RAW
+    // ("" | "ahd" | "vng" | "mhc" | "markesteijn1" | "markesteijn3") is the real per-photo control — the desktop UI's "RAW
     // Processing: Standard / Sparkle-optimized" toggle passes "ahd" here for photos with dense
     // false-color speckle PPG can't fully avoid (measured 2026-07-13: AHD's homogeneity-
     // directed adaptive interpolation cuts __TM8159's sparkle speckle much further than PPG,
@@ -353,37 +458,22 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
             });
         (rgb.width, rgb.height, interleaved)
     } else {
-        use demosaic::{demosaic as demosaic_fn, Algorithm, CfaPattern};
-        // demosaic_choice normally only ever contains "", "ahd", "vng", "mhc" — main.rs validates
+        use demosaic::demosaic as demosaic_fn;
+        // demosaic_choice normally only ever contains "", "ahd", "vng", "mhc",
+        // "markesteijn1", or "markesteijn3" — main.rs validates
         // and defaults the UI-supplied demosaicAlgo before it reaches this function (see
         // decode_rw2 in main.rs). CS_DEMOSAIC is a diagnostics-only env var override, so an
         // unknown value here still shouldn't crash the whole process — return an Err instead.
-        let algo = match demosaic_choice.as_str() {
-            "ahd" => Algorithm::Ahd,
-            "vng" => Algorithm::Vng,
-            "mhc" => Algorithm::Mhc,
-            other => return Err(format!("unknown CS_DEMOSAIC={other} (expected ahd|vng|mhc)")),
-        };
+        let algo = alternate_demosaic_algorithm(&demosaic_choice).ok_or_else(|| {
+            format!("unknown demosaic choice {demosaic_choice:?} (expected ahd|vng|mhc|markesteijn1|markesteijn3)")
+        })?;
         // Was hardcoded to bayer_rggb() ("confirmed RGGB via dump_cfa on this camera") — safe
         // while this app only handled Panasonic Bayer sensors, but with formats.rs::RAW_EXTS
         // now covering ~30 makes that's silently wrong colour for any non-RGGB layout (most
-        // Fuji is GRBG/X-Trans, and BGGR/GBRG both exist). Derive from the file's OWN CFA
-        // (rawler's `cfa_config.cfa.name`, e.g. "RGGB"/"BGGR"/"GRBG"/"GBRG") instead of assuming.
-        // This diagnostic-only alternate path (CS_DEMOSAIC=ahd|vng|mhc) still can't do X-Trans —
-        // hard-error rather than silently demosaicing a 6x6 sensor as if it were 2x2 Bayer.
-        let cfa_pattern = match cfa_config.cfa.name.as_str() {
-            "RGGB" => CfaPattern::bayer_rggb(),
-            "BGGR" => CfaPattern::bayer_bggr(),
-            "GRBG" => CfaPattern::bayer_grbg(),
-            "GBRG" => CfaPattern::bayer_gbrg(),
-            other => {
-                return Err(format!(
-                    "CS_DEMOSAIC={demosaic_choice} doesn't support this sensor's CFA pattern \
-                     ('{other}') — only 2x2 Bayer RGGB/BGGR/GRBG/GBRG. Use the default PPG \
-                     demosaic (unset CS_DEMOSAIC) for this file."
-                ))
-            }
-        };
+        // Fuji is GRBG/X-Trans, and BGGR/GBRG both exist). Derive from the file's OWN CFA rather
+        // than assuming. The pinned crate supports Markesteijn 1/3-pass for X-Trans; Bayer
+        // algorithms remain Bayer-only and return a clear unsupported-algorithm error there.
+        let cfa_pattern = alternate_demosaic_cfa(&cfa_config.cfa, &demosaic_choice)?;
         let mut planar = vec![0f32; 3 * w * h]; // crate output is planar CHW (R,G,B planes)
         demosaic_fn(&pixels, w, h, &cfa_pattern, algo, &mut planar)
             .map_err(|e| format!("demosaic crate failed: {e}"))?;

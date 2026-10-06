@@ -904,12 +904,12 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     // Per-photo "RAW Processing" mode ("" = Standard/PPG, "ahd" = Sparkle-optimized) — see
     // raw_decode.rs's decode_rw2_bytes doc comment for why this is opt-in, not a global default.
     // Validate at the UI boundary: raw_decode.rs's decode_and_demosaic only accepts "" (PPG),
-    // "ahd", "vng", "mhc" — any other string used to reach a `panic!` deep inside the demosaic
+    // "ahd", "vng", "mhc", "markesteijn1", or "markesteijn3" — any other string used to reach a `panic!` deep inside the demosaic
     // branch and take down the whole process. An unrecognized value here (stale localStorage,
     // future JS typo, etc.) now silently falls back to the standard "" (PPG) algorithm instead.
     let demosaic_algo_raw = json["demosaicAlgo"].as_str().unwrap_or("");
     let demosaic_algo = match demosaic_algo_raw {
-        "" | "ahd" | "vng" | "mhc" => demosaic_algo_raw,
+        "" | "ahd" | "vng" | "mhc" | "markesteijn1" | "markesteijn3" => demosaic_algo_raw,
         other => {
             eprintln!("decode_raw_v2: unknown demosaicAlgo={other:?} — defaulting to standard (PPG)");
             ""
@@ -1082,7 +1082,7 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
         }
         return Ok("cached".into());
     }
-    let demosaic_algo = match demosaic_algo.as_str() { "" | "ahd" | "vng" | "mhc" => demosaic_algo.as_str(), _ => "" };
+    let demosaic_algo = match demosaic_algo.as_str() { "" | "ahd" | "vng" | "mhc" | "markesteijn1" | "markesteijn3" => demosaic_algo.as_str(), _ => "" };
     let lens_override = match (lens_override.is_empty(), lens_override_focal > 0.0) {
         (false, true) => Some((lens_override.as_str(), lens_override_focal as f32)), _ => None,
     };
@@ -1235,7 +1235,7 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
     let auto_lens = json["autoLens"].as_bool().unwrap_or(false);
     let demosaic_algo_raw = json["demosaicAlgo"].as_str().unwrap_or("");
     let demosaic_algo = match demosaic_algo_raw {
-        "" | "ahd" | "vng" | "mhc" => demosaic_algo_raw,
+        "" | "ahd" | "vng" | "mhc" | "markesteijn1" | "markesteijn3" => demosaic_algo_raw,
         other => {
             eprintln!("denoise_raw_high: unknown demosaicAlgo={other:?} — defaulting to standard (PPG)");
             ""
