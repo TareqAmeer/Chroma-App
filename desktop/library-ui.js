@@ -3473,8 +3473,12 @@
     let cols = 1;
     while (cols < cards.length && cards[cols].offsetTop === top0) cols++;
     // Row pitch from the first card that actually starts a new row.
-    const next = cards[cols];
-    const rowH = next ? (next.offsetTop - top0) : (cards[0].offsetHeight + 16);
+    // Averaged over every mounted row with fractional rects: offsetTop rounds, so a 192.5px pitch
+    // read as 193 and the spacers drifted half a pixel per row against the real rows.
+    const rows = Math.floor((cards.length - 1) / cols);
+    const rowH = rows > 0
+      ? (cards[rows * cols].getBoundingClientRect().top - cards[0].getBoundingClientRect().top) / rows
+      : (cards[0].offsetHeight + 16);
     return { cols, rowH: Math.max(1, rowH), cardH: cards[0].offsetHeight, cardW: cards[0].offsetWidth };
   }
 
@@ -3519,8 +3523,10 @@
     const from = firstRow * m.cols, to = Math.min(all.length, (lastRow + 1) * m.cols);
     renderCards(gridEl, all.slice(from, to), all, false, {
       offset: from,
-      padTop: firstRow * m.rowH,
-      padBot: Math.max(0, (totalRows - 1 - lastRow) * m.rowH),
+      // A spacer is itself a grid item, so it brings its own row-gap: subtract it, or content
+      // jumps one gap (16px) the moment the top spacer first appears mid-scroll.
+      padTop: firstRow > 0 ? Math.max(1, firstRow * m.rowH - (m.rowH - m.cardH)) : 0,
+      padBot: lastRow < totalRows - 1 ? Math.max(1, (totalRows - 1 - lastRow) * m.rowH - (m.rowH - m.cardH)) : 0,
     });
   }
 
@@ -3550,8 +3556,13 @@
       if (!g || !state._virtOn || !o) return;
       const raw = virtMetrics(g);
       if (!raw || !o.cardW) { if (raw) { state._virtMetrics = raw; state._virtRange = null; virtUpdate(true); } return; }
-      const cardH = o.cardH * raw.cardW / o.cardW;
-      const fresh = { cols: raw.cols, cardW: raw.cardW, cardH, rowH: Math.max(1, cardH + (raw.rowH - raw.cardH)) };
+      // Same card width = not a resize: the live row pitch IS the truth. Scaling the old height
+      // by a 1.0 ratio kept a stale first-mount measurement (184.75px vs a real 192.5px row)
+      // forever, so every window shift moved content against the spacers and the scroller
+      // jumped backwards mid-wheel (test/probe_gallery_scroll_jitter.mjs).
+      const sameW = Math.abs(raw.cardW - o.cardW) < 0.5 && raw.cols === o.cols;
+      const cardH = sameW ? raw.cardH : o.cardH * raw.cardW / o.cardW;
+      const fresh = sameW ? raw : { cols: raw.cols, cardW: raw.cardW, cardH, rowH: Math.max(1, cardH + (raw.rowH - raw.cardH)) };
       if (fresh.cols === o.cols && Math.abs(fresh.rowH - o.rowH) < 0.5) return;
       state._virtMetrics = fresh; state._virtRange = null;
       // Spacers first (right scrollHeight), then scroll, then re-window.
@@ -3581,7 +3592,7 @@
       // inRange always false, so opening a photo re-centred the strip on it (jump).
       const fresh = virtMetrics(gridEl);
       const o = state._virtMetrics;
-      if (fresh && (!o || o.cols !== fresh.cols || o.rowH !== fresh.rowH)) { state._virtMetrics = fresh; state._virtRange = null; }
+      if (fresh && (!o || o.cols !== fresh.cols || Math.abs(o.rowH - fresh.rowH) > 0.5)) { state._virtMetrics = fresh; state._virtRange = null; }
     }
     if (state._virtOn && state._virtMetrics) {
       const idx = (state._virtAll || []).findIndex((e) => e.path === path);
