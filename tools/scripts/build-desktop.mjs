@@ -79,6 +79,7 @@ mirrorDir(cd('vendor'), join(distDir, 'vendor'));
 mirrorDir(cd('mobile'), join(distDir, 'mobile')); // responsive editor + portable project handoff
 mirrorDir(cd('assets', 'brand'), join(distDir, 'assets', 'brand')); // favicon + site.webmanifest linked from the page head
 copyIfChanged(cd('desktop', 'desktop-native.js'), join(distDir, 'desktop-native.js'));
+copyIfChanged(cd('desktop', 'header-menus.js'), join(distDir, 'header-menus.js'));
 copyIfChanged(cd('desktop', 'library-ui.js'), join(distDir, 'library-ui.js'));
 copyIfChanged(cd('desktop', 'second-display.html'), join(distDir, 'second-display.html'));
 copyIfChanged(cd('desktop', 'second-display.js'), join(distDir, 'second-display.js'));
@@ -103,7 +104,7 @@ if (idx === -1) {
   console.error('index.html has no </body> to inject before');
   process.exit(1);
 }
-const tags = '<script src="desktop-native.js"></script>\n<script src="library-ui.js"></script>\n';
+const tags = '<script src="desktop-native.js"></script>\n<script src="library-ui.js"></script>\n<script src="header-menus.js"></script>\n';
 writeFileSync(join(distDir, 'index.html'), html.slice(0, idx) + tags + html.slice(idx), 'utf-8');
 
 const sizeMB = (dirSizeBytes(distDir) / (1024 * 1024)).toFixed(1);

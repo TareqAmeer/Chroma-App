@@ -8939,6 +8939,7 @@
     libTab.classList.toggle('on', !inDevelop);
     devTab.classList.toggle('on', inDevelop);
   }
+  window.chromasmithMenuContext = () => ({ galleryFull: state.open && state.expanded_view, selectionCount: cmKbTargets().length });
   window.chromasmithToggleExpandedView = () => { if (state.open) toggleExpandedView(); }; // menu-bar "Toggle Full Library" — no-op if the Library isn't even open
 
   // ⚠️ Boot-time safety valve (chromasmith-22.html's bumpBootSplashWatchdog) — the reported "blank

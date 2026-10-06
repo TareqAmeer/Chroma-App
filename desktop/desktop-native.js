@@ -576,7 +576,7 @@
     const deskbar = document.getElementById('fx-deskbar');
     if (deskbar) deskbar.setAttribute('data-tauri-drag-region', '');
     // Swiss Kinetic window squares replace the native traffic lights (hidden by main.rs
-    // hide_traffic_lights). Windows keeps its native frame, so this stays macOS-only.
+    // hide_traffic_lights). Windows controls live in header-menus.js.
     const winApi = window.__TAURI__.window && window.__TAURI__.window.getCurrentWindow && window.__TAURI__.window.getCurrentWindow();
     const sq = document.getElementById('cs-win');
     if (sq && winApi) {
@@ -608,7 +608,15 @@
   // Window) and emits these events for the items that need to call into the app; standard
   // items (Quit, Minimize, Cut/Copy/Paste, About…) are handled natively with zero JS.
   const { listen } = window.__TAURI__.event;
-  const wire = (event, fn) => listen(event, () => { try { fn(); } catch (e) { console.error(event, e); } });
+  const menuActions = new Map();
+  const wire = (event, fn) => {
+    menuActions.set(event, fn);
+    return listen(event, () => { Promise.resolve().then(fn).catch(e => console.error(event, e)); });
+  };
+  window.chromasmithRunMenuAction = (id) => {
+    const action = menuActions.get(id);
+    return action ? action() : window.__TAURI__.event.emit(id);
+  };
   const bindShortcut = (id, fn) => window.chromasmithRegisterShortcut && window.chromasmithRegisterShortcut(id, fn);
   bindShortcut('editor.save-session', () => typeof saveSession === 'function' ? saveSession() : false);
   bindShortcut('editor.load-session', () => typeof loadSession === 'function' ? loadSession(true) : false);
@@ -622,24 +630,27 @@
   bindShortcut('editor.whatsnew', () => typeof window.chromasmithShowWhatsNew === 'function' ? window.chromasmithShowWhatsNew() : false);
   bindShortcut('editor.tour', () => typeof window.chromasmithShowTour === 'function' ? window.chromasmithShowTour() : false);
   bindShortcut('library.expand', () => typeof window.chromasmithToggleExpandedView === 'function' ? window.chromasmithToggleExpandedView() : false);
+  wire('menu-open-folder', () => document.getElementById('lib-pick').click());
   wire('menu-open', () => typeof fxPickPhotos === 'function' && fxPickPhotos());
-  wire('menu-export', () => typeof exportFX === 'function' && exportFX());
+  const inGallery = () => !!window.chromasmithMenuContext?.().galleryFull;
+  const menuShortcut = id => typeof csShortcutHandlers !== 'undefined' && csShortcutHandlers[id]?.(new KeyboardEvent('keydown'));
+  wire('menu-export', () => inGallery() ? document.getElementById('lib-export-btn').click() : exportFX());
   wire('menu-undo', () => typeof fxUndo === 'function' && fxUndo());
   wire('menu-redo', () => typeof fxRedo === 'function' && fxRedo());
   // Photo menu — same actions as the Library's right-click menu / X-P-U culling keys, just
   // reachable from the menu bar. fxToggleFlag/fxResetAll/geomRotate/geomFlip are chromasmith-
   // 22.html globals; the copy/paste-edit pair lives in library-ui.js (Library-only, since it
   // needs the sidecar + clipboard state that only exists there).
-  wire('menu-reject', () => typeof fxToggleFlag === 'function' && fxToggleFlag('Red'));
-  wire('menu-pick', () => typeof fxToggleFlag === 'function' && fxToggleFlag('Green'));
-  wire('menu-clear-flag', () => typeof fxToggleFlag === 'function' && fxToggleFlag(''));
+  wire('menu-reject', () => inGallery() ? menuShortcut('library.reject') : fxToggleFlag('Red'));
+  wire('menu-pick', () => inGallery() ? menuShortcut('library.pick') : fxToggleFlag('Green'));
+  wire('menu-clear-flag', () => inGallery() ? menuShortcut('library.clear-flag') : fxToggleFlag(''));
   wire('menu-reset-edit', () => typeof fxResetAll === 'function' && fxResetAll());
   wire('menu-rotate-left', () => typeof geomRotate === 'function' && geomRotate(-90));
   wire('menu-rotate-right', () => typeof geomRotate === 'function' && geomRotate(90));
   wire('menu-flip-h', () => typeof geomFlip === 'function' && geomFlip('h'));
   wire('menu-flip-v', () => typeof geomFlip === 'function' && geomFlip('v'));
-  wire('menu-copy-edit', () => typeof window.chromasmithMenuCopyEdit === 'function' && window.chromasmithMenuCopyEdit());
-  wire('menu-paste-edit', () => typeof window.chromasmithMenuPasteEdit === 'function' && window.chromasmithMenuPasteEdit());
+  wire('menu-copy-edit', () => menuShortcut('editor.copy'));
+  wire('menu-paste-edit', () => menuShortcut('editor.paste'));
   // Photo > Geometry > Crop/Straighten and Photo > Adjustments/Reshuffle — same functions the
   // on-canvas crop button / header Auto-enhance & WB Eyedropper buttons / Film Artifacts panel's
   // Re-roll button already call, just newly reachable from the menu bar (see main.rs comments).
@@ -666,9 +677,8 @@
   wire('menu-guide', () => typeof switchTab === 'function' && switchTab('guide'));
   wire('menu-whatsnew', () => typeof window.chromasmithShowWhatsNew === 'function' && window.chromasmithShowWhatsNew());
   wire('menu-tour', () => typeof window.chromasmithShowTour === 'function' && window.chromasmithShowTour());
-  // Cmd+, / Chromasmith > Settings… — no dedicated preferences window exists yet, so this opens
-  // the same About panel the header info button does (build/diagnostics today; the natural home
-  // for real settings later). See main.rs's own comment on this menu item for why.
+  // Windows Edit > Settings opens preferences; the existing native Mac/About route is retained.
+  wire('menu-preferences', () => typeof settingsToggle === 'function' && settingsToggle());
   wire('menu-settings', () => typeof window.csAbout === 'function' && window.csAbout());
   // File > Open Recent — handled directly in library-ui.js (next to its own menu-library
   // listener), not here: it needs the SAME recents dropdown that file's Recent button builds,
