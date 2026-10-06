@@ -4538,7 +4538,8 @@ pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<Clu
     // face you had already confirmed belonged to someone. Now a confirmed face's `person_id` is
     // never touched by this function again — DBSCAN only ever proposes fresh/unconfirmed faces.
     let mut stmt = conn
-        .prepare("SELECT id, embedding, person_id FROM photo_faces WHERE embedding IS NOT NULL AND confirmed = 0 AND species IS NULL")
+        .prepare("SELECT id, embedding, person_id FROM photo_faces WHERE embedding IS NOT NULL AND confirmed = 0 AND species IS NULL
+                  AND (person_id IS NULL OR person_id NOT IN (SELECT id FROM people WHERE ignored = 1))")
         .map_err(|e| e.to_string())?;
     let rows: Vec<(i64, Vec<f32>, Option<i64>)> = stmt
         .query_map([], |r| {
@@ -4576,7 +4577,7 @@ pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<Clu
     // clearing them here orphaned every unconfirmed pet sighting on each people re-cluster.
     tx.execute(
         "UPDATE photo_faces SET person_id = NULL WHERE confirmed = 0 AND species IS NULL
-         AND (person_id IS NULL OR person_id NOT IN (SELECT id FROM people WHERE kind = 'pet'))",
+         AND (person_id IS NULL OR person_id NOT IN (SELECT id FROM people WHERE kind = 'pet' OR ignored = 1))",
         [],
     )
     .map_err(|e| e.to_string())?;
@@ -4592,7 +4593,9 @@ pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<Clu
     tx.execute(
         // ⚠️ `kind = 'person'`: pet groups are made by pets_run, not by this function — wiping
         // them here orphaned every pet sighting (person_id -> NULL) on each re-cluster.
-        "DELETE FROM people WHERE auto = 1 AND kind = 'person'
+        // ⚠️ `ignored = 0`: an ignored ("not someone I know") group keeps its faces so a rescan
+        // can't rebuild it and suggest those strangers again.
+        "DELETE FROM people WHERE auto = 1 AND kind = 'person' AND ignored = 0
          AND id NOT IN (SELECT DISTINCT person_id FROM photo_faces WHERE confirmed = 1 AND person_id IS NOT NULL)",
         [],
     )
@@ -4672,6 +4675,29 @@ pub fn catalog_merge_people(state: tauri::State<CatalogState>, from_id: i64, int
 /// Deletes a person outright (e.g. a junk/misclustered group) — their faces are unassigned
 /// (`person_id = NULL`), never deleted or re-clustered automatically; a future `cluster_run`
 /// will freely re-group them since an unassigned face carries no "named" protection.
+#[tauri::command]
+pub fn catalog_set_person_cover(state: tauri::State<CatalogState>, person_id: i64, face_id: i64) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let n = conn
+        .execute(
+            "UPDATE people SET cover_face_id = ?2 WHERE id = ?1 AND EXISTS (SELECT 1 FROM photo_faces WHERE id = ?2 AND person_id = ?1)",
+            params![person_id, face_id],
+        )
+        .map_err(|e| e.to_string())?;
+    if n == 0 { Err("that face isn't in this group".into()) } else { Ok(()) }
+}
+
+/// A group's faces for the cover picker: confirmed first, then by detector score.
+#[tauri::command]
+pub fn catalog_person_face_ids(state: tauri::State<CatalogState>, person_id: i64, limit: Option<i64>) -> Result<Vec<i64>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let mut st = conn
+        .prepare("SELECT id FROM photo_faces WHERE person_id = ?1 ORDER BY (confirmed = 1) DESC, score DESC LIMIT ?2")
+        .map_err(|e| e.to_string())?;
+    let ids = st.query_map(params![person_id, limit.unwrap_or(120)], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+    Ok(ids)
+}
+
 #[tauri::command]
 pub fn catalog_delete_person(state: tauri::State<CatalogState>, person_id: i64) -> Result<(), String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
@@ -4891,6 +4917,21 @@ pub async fn catalog_unnamed_clusters(app: tauri::AppHandle) -> Result<Vec<Unnam
     .map_err(|e| format!("catalog_unnamed_clusters task panicked: {e}"))?
 }
 
+/// Unnamed groups smaller than this (in distinct photos) are left out of review and the People
+/// & Pets page — they're almost always strangers in the background.
+pub(crate) const REVIEW_MIN_PHOTOS: usize = 20;
+
+fn distinct_photo_count(conn: &Connection, face_ids: &[i64]) -> Result<usize, String> {
+    let mut st = conn.prepare("SELECT photo_id FROM photo_faces WHERE id = ?1").map_err(|e| e.to_string())?;
+    let mut set = std::collections::HashSet::new();
+    for id in face_ids {
+        if let Some(p) = st.query_row(params![id], |r| r.get::<_, i64>(0)).optional().map_err(|e| e.to_string())? {
+            set.insert(p);
+        }
+    }
+    Ok(set.len())
+}
+
 fn catalog_unnamed_clusters_run(conn: &Connection) -> Result<Vec<UnnamedCluster>, String> {
     let mut pstmt = conn
         .prepare("SELECT id, cover_face_id FROM people WHERE auto = 1 AND ignored = 0 ORDER BY id")
@@ -4931,6 +4972,15 @@ fn catalog_unnamed_clusters_run(conn: &Connection) -> Result<Vec<UnnamedCluster>
         });
     }
     out.extend(loose_clusters(conn)?);
+    // Strangers in the background show up a handful of times; only someone in at least
+    // REVIEW_MIN_PHOTOS distinct photos is worth asking about.
+    let mut keep = Vec::with_capacity(out.len());
+    for c in out {
+        if distinct_photo_count(conn, &c.face_ids)? >= REVIEW_MIN_PHOTOS {
+            keep.push(c);
+        }
+    }
+    let mut out = keep;
     for c in out.iter_mut() {
         c.moments = moments_for_faces(conn, &c.face_ids)?;
     }
@@ -11209,6 +11259,31 @@ mod tests {
         group_orphan_pets(&conn).unwrap();
         let p: Option<i64> = conn.query_row("SELECT person_id FROM photo_faces WHERE id = ?1", params![auto_tagged], |r| r.get(0)).unwrap();
         assert_ne!(p, Some(lucy), "a rejected sighting must not be refiled into that pet");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_ignored_group_survives_a_recluster_with_its_faces() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("cluster_ignored");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &AtomicBool::new(false)).unwrap();
+        let photo: i64 = conn.query_row("SELECT id FROM photos", [], |r| r.get(0)).unwrap();
+        conn.execute("INSERT INTO people (name, created, auto, kind, ignored) VALUES ('Person 9', 0, 1, 'person', 1)", []).unwrap();
+        let pid = conn.last_insert_rowid();
+        let mut v = vec![0f32; 512];
+        v[0] = 1.0;
+        for _ in 0..3 {
+            conn.execute(
+                "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, person_id, embedding) VALUES (?1,0,0,1,1,0.9,'[]',?2,?3)",
+                params![photo, pid, f32_vec_to_blob(&v)],
+            )
+            .unwrap();
+        }
+        cluster_run(&conn, 0.1, 2).unwrap();
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM photo_faces WHERE person_id = ?1", params![pid], |r| r.get(0)).unwrap();
+        assert_eq!(n, 3, "an ignored group must keep its faces through a rescan, not come back as a new group");
         std::fs::remove_dir_all(&dir).ok();
     }
 

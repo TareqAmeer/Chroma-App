@@ -2761,6 +2761,8 @@ fn main() {
             catalog::catalog_record_pet_sighting,
             catalog::catalog_face_crop,
             catalog::catalog_face_preview,
+            catalog::catalog_set_person_cover,
+            catalog::catalog_person_face_ids,
             catalog::catalog_embed_faces,
             catalog::catalog_cluster_faces,
             catalog::catalog_people,

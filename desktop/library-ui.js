@@ -1580,6 +1580,12 @@
     .lib-pg-tile img.loaded{visibility:visible}
     .lib-pg-tile::after{content:'';position:absolute;inset:0;background:linear-gradient(transparent 60%,rgba(0,0,0,.6))}
     .lib-pg-name{position:absolute;left:0;right:0;bottom:10px;text-align:center;color:#fff;font-size:14px;font-weight:600;z-index:1}
+    .lib-pg-sub{font-size:13px;font-weight:600;margin:26px 0 10px;color:var(--mut)}
+    .lib-pg-tile.unnamed .lib-pg-nm{position:absolute;left:8px;right:8px;bottom:8px;z-index:2;font:inherit;font-size:12px;
+      padding:5px 7px;border-radius:5px;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.55);color:#fff}
+    .lib-pg-x{position:absolute;left:8px;top:8px;z-index:2;width:22px;height:22px;border-radius:11px;display:none;
+      align-items:center;justify-content:center;background:rgba(0,0,0,.6);color:#fff;font-size:13px;cursor:pointer}
+    .lib-pg-tile:hover .lib-pg-x{display:flex}
     .lib-pg-n{position:absolute;right:8px;top:8px;color:#fff;font-size:11px;background:rgba(0,0,0,.5);padding:1px 6px;border-radius:9px;z-index:1}
     .lib-sec-h[data-sec-toggle="people"] .lib-sec-label{cursor:pointer}
     .lib-sec-h[data-sec-toggle="people"] .lib-sec-label:hover{text-decoration:underline}
@@ -10571,12 +10577,22 @@
     }
     const named = peopleList.filter((p) => !p.auto && !p.ignored).sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
     const unnamed = peopleList.filter((p) => p.auto && !p.ignored).reduce((n, p) => n + (p.face_count || 0), 0);
+    // Unnamed groups big enough to be someone you know (REVIEW_MIN_PHOTOS in catalog.rs) —
+    // name one inline, or × to stop it being suggested.
+    const groups = peopleList.filter((p) => p.auto && !p.ignored && (p.face_count || 0) >= 20)
+      .sort((a, b) => b.face_count - a.face_count).slice(0, 300);
     el.innerHTML = `<div class="lib-pg-top"><span class="lib-pg-title">People &amp; Pets</span>
         ${unnamed ? `<span class="lib-btn" data-pg-review>Review ${fmtN(unnamed)} unnamed faces</span>` : ''}
         <span class="lib-btn" data-pg-close>Close</span></div>
       <div class="lib-pg-grid">${named.map((p) => `<div class="lib-pg-tile" data-person="${p.id}">
           <img alt=""><span class="lib-pg-name">${esc(p.name)}</span><span class="lib-pg-n">${fmtN(p.face_count || 0)}</span></div>`).join('')
-        || '<div class="mut" style="grid-column:1/-1">No one named yet — review unnamed faces to start.</div>'}</div>`;
+        || '<div class="mut" style="grid-column:1/-1">No one named yet — review unnamed faces to start.</div>'}</div>
+      ${groups.length ? `<div class="lib-pg-sub">Unnamed groups · ${groups.length}</div>
+      <div class="lib-pg-grid">${groups.map((p) => `<div class="lib-pg-tile unnamed" data-person="${p.id}">
+          <img alt=""><span class="lib-pg-x" data-pg-remove title="Not someone I know — stop suggesting">×</span>
+          <span class="lib-pg-n">${fmtN(p.face_count || 0)}</span>
+          <input class="lib-pg-nm" placeholder="${p.kind === 'pet' ? 'Name this pet…' : 'Name this person…'}" list="lib-pg-names"></div>`).join('')}</div>
+      <datalist id="lib-pg-names">${named.map((p) => `<option value="${esc(p.name)}">`).join('')}</datalist>` : ''}`;
     // #lib-main is itself the grid's scroller: pin the overlay to its visible window and stop it
     // scrolling underneath while open.
     el.style.top = main.scrollTop + 'px';
@@ -10586,8 +10602,27 @@
     el.querySelectorAll('.lib-pg-tile').forEach((t) => {
       const p = peopleList.find((x) => x.id === parseInt(t.dataset.person, 10));
       if (p && p.cover_face_id != null) loadFaceCrop(p.cover_face_id, t.querySelector('img'));
-      t.onclick = () => { closePeopleGrid(); openCatalogView(`person:${p.id}`); };
+      t.onclick = (e) => { if (e.target.closest('input,[data-pg-remove]')) return; closePeopleGrid(); openCatalogView(`person:${p.id}`); };
       t.oncontextmenu = (e) => { e.preventDefault(); showPersonMenu(e, p.id); };
+      const x = t.querySelector('[data-pg-remove]');
+      if (x) x.onclick = async () => {
+        try { await invoke('catalog_set_person_ignored', { personId: p.id, ignored: true }); t.remove(); await refreshPeople(); }
+        catch (err) { toast(humanizeErr('remove this group', err), 'err'); }
+      };
+      const nm = t.querySelector('.lib-pg-nm');
+      if (nm) nm.onkeydown = async (e) => {
+        if (e.key !== 'Enter') return;
+        const name = nm.value.trim();
+        if (!name) return;
+        try {
+          const existing = peopleList.find((q) => !q.auto && q.name.toLowerCase() === name.toLowerCase());
+          if (existing) await invoke('catalog_merge_people', { fromId: p.id, intoId: existing.id });
+          else { await invoke('catalog_rename_person', { personId: p.id, name }); await invoke('catalog_confirm_person', { personId: p.id, faceIds: null }); }
+          await refreshPeople();
+          toast(existing ? `Added to "${existing.name}"` : `Named "${name}"`, true);
+          openPeopleGrid();
+        } catch (err) { toast(humanizeErr('name this group', err), 'err'); }
+      };
     });
     el.querySelector('[data-pg-close]').onclick = closePeopleGrid;
     const rv = el.querySelector('[data-pg-review]');
@@ -10922,6 +10957,32 @@
       document.body.appendChild(wrap);
     });
   }
+  /// Grid of the group's faces; click one to make it the cover.
+  async function pickCoverModal(p) {
+    let ids;
+    try { ids = await invoke('catalog_person_face_ids', { personId: p.id, limit: 120 }); }
+    catch (err) { toast(humanizeErr('load this group', err), 'err'); return; }
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(10,10,10,.6);display:flex;align-items:center;justify-content:center';
+    wrap.id = 'lib-people-edit'; // borrows the People editor's card/grid styling
+    wrap.innerHTML = `<div class="lib-pe-card"><div class="lib-pe-top"><span>Choose a cover for ${esc(p.name)}</span><span class="lib-btn" data-close>Cancel</span></div>
+      <div class="lib-pe-grid">${ids.map((id) => `<div class="lib-pe-face" data-face-id="${id}" title="Use as cover"${id === p.cover_face_id ? ' style="outline:2px solid var(--acc2)"' : ''}><img alt=""></div>`).join('')}</div></div>`;
+    document.body.appendChild(wrap);
+    wrap.onclick = (e) => { if (e.target === wrap) wrap.remove(); };
+    wrap.querySelector('[data-close]').onclick = () => wrap.remove();
+    wrap.querySelectorAll('.lib-pe-face').forEach((el) => {
+      const fid = parseInt(el.dataset.faceId, 10);
+      loadFaceCrop(fid, el.querySelector('img'));
+      el.onclick = async () => {
+        try {
+          await invoke('catalog_set_person_cover', { personId: p.id, faceId: fid });
+          wrap.remove();
+          await refreshPeople();
+          if (document.getElementById('lib-people-grid')?.classList.contains('on')) openPeopleGrid();
+        } catch (err) { toast(humanizeErr('change the cover', err), 'err'); }
+      };
+    });
+  }
   function showPersonMenu(e, id) {
     const p = peopleList.find((x) => x.id === id);
     if (!p) return;
@@ -10936,6 +10997,7 @@
           toast(`Removed ${n} automatic tag${n === 1 ? '' : 's'} from "${p.name}"`, true);
         } catch (err) { toast(humanizeErr('undo automatic tags', err), 'err'); }
       }]] : []),
+      ['Change cover photo…', () => pickCoverModal(p)],
       ['Rename…', async () => {
         const name = await window.askTextModal('Rename person', '', p.name);
         if (!name) return;
@@ -10966,12 +11028,12 @@
           toast(`Ignored "${p.name}"`, true);
         } catch (err) { toast(humanizeErr('ignore this person', err), 'err'); }
       }],
-      [`Delete "${p.name}"`, async () => {
+      ...(p.auto ? [] : [[`Delete "${p.name}"`, async () => {
         if (!await window.confirmModal(`Delete "${p.name}"?\n\nTheir photos stay exactly where they are — only this person's grouping is removed. A future face scan may re-group them.`, 'Delete')) return;
         await invoke('catalog_delete_person', { personId: id }).catch((err) => toast(humanizeErr('delete this person', err), 'err'));
         if (state.catalogScope === `person:${id}`) { state.source = 'folder'; state.entries = []; renderGrid(); }
         await refreshPeople();
-      }],
+      }]]),
     ];
     const menu = document.createElement('div');
     menu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);'
