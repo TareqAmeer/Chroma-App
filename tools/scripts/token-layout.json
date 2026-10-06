@@ -201,6 +201,26 @@
       "hadSemi": true
     },
     {
+      "var": "--sp-control-stack",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--sp-panel-section",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--sp-control-stack-compact",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--sp-panel-section-compact",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
       "var": "--ease",
       "pre": "\n  ",
       "hadSemi": true

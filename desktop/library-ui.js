@@ -1673,7 +1673,7 @@
     #lib-ql-img.loaded{opacity:1}
     #lib-ql-caption{color:var(--mut);font-size:12px;font-family:var(--mono);letter-spacing:.02em}
     .lib-tree-node{font-size:12px;white-space:nowrap;user-select:none}
-    .lib-tree-row{display:flex;align-items:center;gap:4px;padding:5px 8px 5px 6px;border-radius:var(--radius-xs,5px);cursor:pointer}
+    .lib-tree-row{display:flex;align-items:center;gap:4px;padding:calc(var(--sp-control-stack)*.625) 8px calc(var(--sp-control-stack)*.625) 6px;border-radius:var(--radius-xs,5px);cursor:pointer;min-height:28px;box-sizing:border-box}
     /* Date-tree size hierarchy — Library View.html's .row.datehead/.monthhead/.sub (13/12/11px).
        Without an explicit size these inherited the sidebar's 16px base font. */
     .lib-tree-row-year{font-size:13px}
@@ -1741,7 +1741,7 @@
        fights the same "an inline style always wins the cascade" trap #lib-filters-pop hit. */
     #lib-filters-panel{grid-row:5;justify-self:end;align-self:stretch;position:relative;
       width:280px;max-width:82vw;background:var(--bg);border-left:1px solid var(--bdr);z-index:15;
-      overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;
+      overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:var(--sp-control-stack);
       box-shadow:none;transform:translateX(105%);transition:transform .18s ease,visibility 0s linear .18s;visibility:hidden}
     /* visibility:hidden while closed so Tab can't walk into the off-screen dropdowns. */
     #lib-filters-panel.open{transform:translateX(0);visibility:visible;transition:transform .18s ease}
@@ -1754,7 +1754,7 @@
     #lib-filters-panel-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600}
     #lib-filters-panel-close{cursor:pointer;color:var(--mut);display:inline-flex}
     #lib-filters-panel-close:hover{color:var(--txt)}
-    .lib-fp-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin-top:6px}
+    .lib-fp-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin-top:var(--sp-panel-section)}
     /* Reject/Pick still ride the sidecar's "label" field ("Red"/"Green") and get a frame
        highlight on the thumbnail — this is the reject/pick indicator, not a colour-label system. */
     .lib-card.lbl-red .lib-thumb-wrap{box-shadow:0 0 0 2px var(--red-oxide)}
