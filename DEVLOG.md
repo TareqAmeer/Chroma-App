@@ -354,4 +354,4 @@
 ### CHR-236 integration verification (2026-10-06)
 - Feature commit `033244ab` was cherry-picked to clean main as `2eb8a81c`, based on fetched `origin/main` `01de3c58`. Integrated source retains the newer main build marker.
 - On the integrated tree, Chrome created a three-page PDF with US Letter MediaBox and the selected 0.5-inch margins; Book page setup, wavelet detail regression, HTML validity, test syntax, and `git diff --check` passed. The PDF was inspected in-memory by checking its page objects and MediaBox.
-- Publishing/remote verification is the next step. Feature branch `codex/chr236-print-setup`; remaining CHR-236 acceptance is tracked above and no ICC/press-ready claim is made.
+- Publication verified: feature commit `2eb8a81c` is contained in fetched `origin/main` at `a0664cc05a1a425b8a20cd66944897b817be0b41`; `git ls-remote origin refs/heads/main` matched. This DEVLOG correction is committed and pushed afterward. Feature branch `codex/chr236-print-setup`; remaining CHR-236 acceptance is tracked above and no ICC/press-ready claim is made.
