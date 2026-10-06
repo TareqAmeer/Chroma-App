@@ -328,3 +328,9 @@
 ## 2026-10-06 — CHR-199 integration verification
 - Integrated CHR-199 feature commits `115cbc4f`, `3a1e7701`, and `3dd45dd7` onto fetched `origin/main` `8e33fe64` as `b0ea86ae`, `273124cb`, and `ebca193e`; the clean integration checkout preserved the existing main history.
 - Integrated verification passed: `node test/library_culling.mjs` (Chrome browser), `node --check desktop/library-ui.js`, `node --check test/library_culling.mjs`, `node test/editor_html_validity_check.mjs`, and `git show --check HEAD`. Native 1:1 loupe behavior remains for follow-up.
+
+## 2026-10-06 — CHR-237 bounded multi-page Book slice
+
+- Added a Collage-based Book preview that paginates assigned photos into 1, 2, or 4-photo pages, reuses existing layout, crop, frame, title, and caption behavior, permits page reordering, and prepares exact-aspect multi-page print sheets for browser Print → Save as PDF. Pagination follows the static browser flow in [Spacerat/photobook](https://github.com/Spacerat/photobook).
+- Files: `chromasmith-22.html`, `test/book_print.mjs`, and this log. Chrome regression verifies a 9-photo/4-per-page book makes three real preview images, page order changes, and the print document contains three loaded sheets with the expected 6.4 × 8 inch page box; `node --check test/book_print.mjs`, `node test/editor_html_validity_check.mjs`, and `git diff --check` pass.
+- Remaining CHR-237 acceptance includes catalog save/reopen with linked-photo refresh, per-page custom layouts and manual cell editing, bleed/safe-area and print color management, a standalone JPEG-page bundle, and print-dialog/native WebView validation. This slice stores its Book only in memory; it does not claim press-ready output.
