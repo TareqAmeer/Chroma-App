@@ -1837,6 +1837,23 @@
       "note": "Fills automatically as frames decode (fxVideoBuildThumbs, chromasmith-22.html:9134) once a video item is loaded -- no click needed. Longer settle wait than the other two video surfaces since thumbnails decode progressively."
     },
     {
+      "id": "fx-redeye-overlay",
+      "kind": "chrome",
+      "group": "A",
+      "selector": "#fx-redeye-overlay",
+      "label": "Red-eye correction ellipses",
+      "openSteps": [
+        { "eval": "(async()=>{const blob=await (await fetch('/test/fixtures/portrait.png')).blob();await loadFXImages([new File([blob],'portrait.png',{type:'image/png'})]);curItem().redeye=[{x:.5,y:.5,rx:.05,ry:.04,pupilSize:60,darken:75,mode:'human',enabled:true}];fxSection('redeye');renderPreview();redeyeSyncUI();})()" },
+        { "wait": 400 }
+      ],
+      "opened": true,
+      "states": { "rest": true },
+      "wireframe": false,
+      "wireframeFile": null,
+      "covers": ["fx-canvas-redeye"],
+      "note": "Per-photo eye ellipses share the preview footprint; the covered canvas displays the corrected preview."
+    },
+    {
       "id": "fx-mask-overlay",
       "kind": "chrome",
       "group": "A",

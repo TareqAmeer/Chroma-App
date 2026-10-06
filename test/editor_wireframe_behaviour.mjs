@@ -1017,6 +1017,50 @@ test.describe('quality (accessibility)', () => {
 // (same call the bottom action-bar's own onclick makes) rather than depending on exactly which
 // action-bar affordance is visible today, so this stays focused on the sheet's OWN behaviour.
 test.describe('phone bottom-sheet shell (T12)', () => {
+  test('quick-bar buttons fit vertically inside their scroll row', async ({ editorWeb: { page } }) => {
+    await page.evaluate(() => { fxSection('adjust'); fxSection('adjust'); });
+    await expect(page.locator('#fx-quicknav')).toBeVisible();
+    const clipped = await page.evaluate(() => {
+      const bar = document.getElementById('fx-quicknav').getBoundingClientRect();
+      return [...document.querySelectorAll('#fx-quicknav button')].filter(el => {
+        const r = el.getBoundingClientRect();
+        return r.top < bar.top - 1 || r.bottom > bar.bottom + 1;
+      }).map(el => el.textContent.trim());
+    });
+    expect(clipped).toEqual([]);
+  });
+  test('slider values stay plain, vertical gestures can scroll, and reset clears visual edit state', async ({ editorWeb: { page } }) => {
+    await page.evaluate(() => fxSection('adjust'));
+    const slider = page.locator('#sl-adj-exp');
+    const row = page.locator('.fx-ctrl[data-fxsec="adjust"] .fx-row:has(#sl-adj-exp)');
+    const value = row.locator('.fx-val');
+    await expect(slider).toHaveCSS('touch-action', 'pan-y');
+    await expect(value).toHaveCSS('border-bottom-width', '0px');
+    await slider.fill('30');
+    await waitForFxMod(page, '.fx-ctrl[data-fxsec="adjust"] .fx-row:has(#sl-adj-exp)');
+    await expect(slider).toHaveClass(/\bfx-knob-on\b/);
+    await page.locator('.fx-ctrl[data-fxsec="adjust"] > .fx-ctrl-title .fx-ctrl-title-reset').click();
+    await expect(slider).toHaveValue('0');
+    await expect(slider).not.toHaveClass(/\bfx-knob-on\b/);
+    await expect(row).not.toHaveClass(/\bfx-mod\b/);
+    const fill = await slider.evaluate(el => [el.style.getPropertyValue('--fillA'), el.style.getPropertyValue('--fillB')]);
+    expect(fill[0]).toBe(fill[1]);
+  });
+
+  test('switching phone tools preserves the photo aspect ratio', async ({ editorWeb: { page } }) => {
+    for (const section of ['adjust', 'curves', 'nr']) {
+      await page.evaluate(name => fxSection(name), section);
+      await page.waitForTimeout(450);
+      const ratio = await page.locator('#fx-canvas').evaluate(canvas => ({
+        display: canvas.getBoundingClientRect().width / canvas.getBoundingClientRect().height,
+        image: canvas.width / canvas.height,
+        style: [canvas.style.width, canvas.style.height],
+        box: [canvas.getBoundingClientRect().width, canvas.getBoundingClientRect().height],
+      }));
+      expect(ratio.display, `${section}: ${JSON.stringify(ratio)}`).toBeCloseTo(ratio.image, 2);
+    }
+  });
+
   test('opening a section opens the bottom sheet, and header Reset still works inside it', async ({ editorWeb: { page } }) => {
     await expect(page.locator('body')).toHaveClass(/\bmobile-fx\b/);
     // fxSection() only resolves a deskx-only GROUP key (e.g. 'detail') via FX_GROUPS on desktop —
