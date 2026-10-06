@@ -59,6 +59,9 @@ pub struct CardFile {
     pub kind: String,
     /// EXIF capture date as "YYYY-MM-DD", or None when the file carries no readable date.
     pub date: Option<String>,
+    /// Camera name for `{camera}` filename templates. Older payloads omit it.
+    #[serde(default)]
+    pub camera: Option<String>,
     /// Already present at the destination (same name and size) — pre-unchecked in the UI.
     /// Re-verified fresh in `ingest_run` against the destination chosen at import time, so a
     /// stale flag from the initial scan (if the user changed "Copy to" afterward) can't cause
@@ -85,9 +88,12 @@ pub struct IngestOptions {
     /// Defaults to "{YYYY}/{YYYY-MM-DD}" — the layout Lightroom's default import uses.
     #[serde(default)]
     pub folder_template: Option<String>,
-    /// Optional rename template. Tokens: {name} {YYYY} {MM} {DD} {n}. Empty keeps camera names.
+    /// Optional rename template. Tokens include {name} {date} {camera} {seq}; legacy date tokens remain.
     #[serde(default)]
     pub filename_template: Option<String>,
+    /// First value substituted for `{seq}` / legacy `{n}`. Zero is valid.
+    #[serde(default)]
+    pub sequence_start: Option<u32>,
     #[serde(default)]
     pub skip_duplicates: bool,
     /// Absolute paths (as returned by scan_card) to import. Empty means everything scanned.
@@ -380,7 +386,11 @@ pub fn scan_card_run(path: String, dest_root: Option<String>, progress: &mut dyn
             let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
             let ps = p.to_string_lossy().into_owned();
             let date = capture_date(&ps).or_else(|| mtime_date(&p));
-            files.push(CardFile { path: ps, name: name.clone(), size, kind: kind.to_string(), date, duplicate: false });
+            // Camera is loaded lazily by the import preview only when the user writes a
+            // `{camera}` token; parsing every RAW merely to fill an unused template token made
+            // the initial card scan needlessly expensive.
+            let camera = None;
+            files.push(CardFile { path: ps, name: name.clone(), size, kind: kind.to_string(), date, camera, duplicate: false });
             scanned += 1;
             // Every 20 files, not every file — this loop is already the bottleneck, so the
             // event-emit overhead itself shouldn't compete with it for a fast local folder.
@@ -435,10 +445,46 @@ fn expand_folder(template: &str, date: &str) -> String {
 
 /// Expands a filename template. `{name}` is the original stem, `{n}` a 1-based counter.
 /// The extension is always preserved — a rename that changes it would break the decoder choice.
-fn expand_filename(template: &str, stem: &str, date: &str, n: usize) -> String {
-    let (y, m, d) = (&date[0..4], &date[5..7], &date[8..10]);
+pub(crate) fn validate_filename_template(template: &str) -> Result<(), String> {
+    if template.contains('/') || template.contains('\\') || template.chars().any(|c| c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '|' | '?' | '*')) {
+        return Err("filename template must produce a single safe filename".into());
+    }
+    let supported = ["name", "date", "camera", "seq", "YYYY-MM-DD", "YYYY", "MM", "DD", "n"];
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        rest = &rest[open + 1..];
+        let close = rest.find('}').ok_or("filename template has an unclosed token")?;
+        let token = &rest[..close];
+        if !supported.contains(&token) { return Err(format!("unsupported filename token {{{token}}}")); }
+        rest = &rest[close + 1..];
+    }
+    if rest.contains('}') { return Err("filename template has a closing brace without an opening brace".into()); }
+    Ok(())
+}
+
+pub(crate) fn validate_generated_filename(name: &str) -> Result<(), String> {
+    if name.is_empty() || name == "." || name == ".." || name.contains('/') || name.contains('\\')
+        || name.chars().any(|c| c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '|' | '?' | '*')) {
+        return Err("template produces an invalid filename".into());
+    }
+    Ok(())
+}
+
+fn safe_filename_part(value: &str) -> String {
+    value.chars().map(|c| if c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') { '_' } else { c })
+        .collect::<String>().trim().trim_matches('.').to_string()
+}
+
+pub(crate) fn expand_filename(template: &str, stem: &str, date: &str, camera: &str, n: usize) -> String {
+    let parts: Vec<&str> = date.split('-').collect();
+    let y = parts.first().copied().unwrap_or("");
+    let m = parts.get(1).copied().unwrap_or("");
+    let d = parts.get(2).copied().unwrap_or("");
     template
         .replace("{name}", stem)
+        .replace("{date}", date)
+        .replace("{camera}", &safe_filename_part(camera))
+        .replace("{seq}", &format!("{n:04}"))
         .replace("{YYYY-MM-DD}", date)
         .replace("{YYYY}", y)
         .replace("{MM}", m)
@@ -566,6 +612,9 @@ fn ingest_run_cancellable(
     if options.dest_root.is_empty() {
         return Err("no destination chosen".into());
     }
+    if let Some(template) = options.filename_template.as_deref().filter(|t| !t.is_empty()) {
+        validate_filename_template(template)?;
+    }
     std::fs::create_dir_all(&dest_root).map_err(|e| format!("create destination: {e}"))?;
 
     // Duplicate flags are re-verified against the destination NOW, not trusted from whatever
@@ -590,6 +639,25 @@ fn ingest_run_cancellable(
     let backup_root = options.backup_root.clone().filter(|s| !s.is_empty()).map(PathBuf::from);
     let bytes_total: u64 = wanted.iter().map(|f| f.size).sum();
     let total = wanted.len();
+    // Expand and validate the whole selected batch before the first file is copied. A bad
+    // template must not leave a half-imported card merely because the invalid name came later.
+    let sequence_start = options.sequence_start.unwrap_or(1);
+    let out_names: Vec<String> = wanted.iter().enumerate().map(|(i, f)| {
+        let date = f.date.as_deref().unwrap_or("");
+        let src = Path::new(&f.path);
+        let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
+        let ext = src.extension().and_then(|s| s.to_str()).unwrap_or("");
+        let name = match options.filename_template.as_deref().filter(|t| !t.is_empty()) {
+            Some(tpl) => {
+                let sequence = sequence_start.saturating_add(i as u32) as usize;
+                let base = expand_filename(tpl, stem, &date, f.camera.as_deref().unwrap_or(""), sequence);
+                validate_generated_filename(&base)?;
+                if ext.is_empty() { base } else { format!("{base}.{ext}") }
+            }
+            None => f.name.clone(),
+        };
+        Ok(name)
+    }).collect::<Result<_, String>>()?;
 
     let mut result = IngestResult {
         cancelled: false,
@@ -603,6 +671,9 @@ fn ingest_run_cancellable(
 
     let mut processed = 0usize;
     for (i, f) in wanted.iter().enumerate() {
+        // The folder organizer keeps its existing no-date bucket; filename token expansion
+        // separately follows the established empty-substitution rule for missing metadata.
+        let date = f.date.clone().unwrap_or_else(|| "0000-00-00".into());
         progress(IngestProgress {
             job_id: job_id.to_string(),
             done: processed,
@@ -618,18 +689,9 @@ fn ingest_run_cancellable(
             result.cancelled = true;
             break;
         }
-
-        let date = f.date.clone().unwrap_or_else(|| "0000-00-00".into());
         let src = Path::new(&f.path);
-        let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
         let ext = src.extension().and_then(|s| s.to_str()).unwrap_or("");
-        let out_name = match options.filename_template.as_deref().filter(|t| !t.is_empty()) {
-            Some(tpl) => {
-                let base = expand_filename(tpl, stem, &date, i + 1);
-                if ext.is_empty() { base } else { format!("{base}.{ext}") }
-            }
-            None => f.name.clone(),
-        };
+        let out_name = &out_names[i];
         let dir = dest_root.join(expand_folder(&folder_tpl, &date));
         // ⚠️ unique_dest, not a bare join: two cameras (or two cards) routinely produce the same
         // DSC_0001.JPG, and silently overwriting one shoot with another is unrecoverable.
@@ -642,11 +704,12 @@ fn ingest_run_cancellable(
                 result.completed_files.push(dest.to_string_lossy().into_owned());
                 // Sidecars follow their photo, under the photo's final (possibly renamed) stem so
                 // the pairing survives a rename template.
-                let dest_stem = dest.file_stem().and_then(|s| s.to_str()).unwrap_or(stem).to_string();
+                let dest_stem = dest.file_stem().and_then(|s| s.to_str()).unwrap_or("photo").to_string();
                 for side in sidecars_for(src) {
                     let side_ext = ext_lower(&side);
                     // Panasonic writes NAME.RW2.rrdata, so preserve the doubled form.
-                    let side_name = if side.file_stem().and_then(|s| s.to_str()) == Some(&format!("{stem}.{ext}")) {
+                    let source_stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
+                    let side_name = if side.file_stem().and_then(|s| s.to_str()) == Some(&format!("{source_stem}.{ext}")) {
                         format!("{dest_stem}.{ext}.{side_ext}")
                     } else {
                         format!("{dest_stem}.{side_ext}")
@@ -690,8 +753,8 @@ mod tests {
     fn folder_and_filename_templates_expand() {
         assert_eq!(expand_folder("{YYYY}/{YYYY-MM-DD}", "2026-08-15"), "2026/2026-08-15");
         assert_eq!(expand_folder("{YYYY}/{MM}/{DD}", "2026-08-15"), "2026/08/15");
-        assert_eq!(expand_filename("{YYYY-MM-DD}_{name}", "__TM4202", "2026-08-15", 7), "2026-08-15___TM4202");
-        assert_eq!(expand_filename("shoot_{n}", "x", "2026-08-15", 7), "shoot_0007");
+        assert_eq!(expand_filename("{YYYY-MM-DD}_{name}", "__TM4202", "2026-08-15", "", 7), "2026-08-15___TM4202");
+        assert_eq!(expand_filename("shoot_{n}", "x", "2026-08-15", "", 7), "shoot_0007");
     }
 
     /// `raw_exif_date_fast` (seek+read) must agree with `library::read_meta_public` (rawler's own,
@@ -875,6 +938,7 @@ mod tests {
                 backup_root: Some(backup.to_string_lossy().into_owned()),
                 folder_template: None, // the "{YYYY}/{YYYY-MM-DD}" default
                 filename_template: None,
+                sequence_start: None,
                 skip_duplicates: true,
                 only: Vec::new(),
             },
@@ -911,6 +975,7 @@ mod tests {
                 backup_root: None,
                 folder_template: None,
                 filename_template: None,
+                sequence_start: None,
                 skip_duplicates: true,
                 only: Vec::new(),
             },
@@ -973,6 +1038,7 @@ mod tests {
                 backup_root: None,
                 folder_template: None,
                 filename_template: None,
+                sequence_start: None,
                 skip_duplicates: true,
                 only: Vec::new(),
             },

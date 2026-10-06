@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // Extension lists live in formats.rs (the single source of truth, mirrored against
@@ -3404,6 +3405,10 @@ fn albums_path() -> PathBuf {
     crate::platform::data_root().join("albums.json")
 }
 
+// Serialize every album read-modify-write operation so concurrent commands cannot overwrite
+// each other's updates or race through the shared albums.json.tmp path.
+static ALBUMS_MUTATION_LOCK: Mutex<()> = Mutex::new(());
+
 fn albums_read() -> Vec<Album> {
     std::fs::read_to_string(albums_path())
         .ok()
@@ -3417,7 +3422,52 @@ fn albums_write(v: &[Album]) -> Result<(), String> {
     // Write-then-rename, so an interrupted write cannot truncate the file every album lives in.
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, text).map_err(|e| format!("write albums: {e}"))?;
-    std::fs::rename(&tmp, &path).map_err(|e| format!("commit albums: {e}"))
+    replace_album_file(&tmp, &path).map_err(|e| format!("commit albums: {e}"))
+}
+
+#[cfg(not(windows))]
+fn replace_album_file(tmp: &Path, path: &Path) -> std::io::Result<()> {
+    std::fs::rename(tmp, path)
+}
+
+#[cfg(windows)]
+fn replace_album_file(tmp: &Path, path: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH};
+
+    let from: Vec<u16> = tmp.as_os_str().encode_wide().chain(Some(0)).collect();
+    let to: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    // MoveFileEx with REPLACE_EXISTING performs the replacement without first removing the
+    // current albums file. If it fails, Windows leaves that file in place and the temp remains
+    // available for diagnosis/retry.
+    unsafe {
+        MoveFileExW(
+            windows::core::PCWSTR(from.as_ptr()),
+            windows::core::PCWSTR(to.as_ptr()),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+    }
+}
+
+/// Keeps every persisted album path aligned when a catalogued file is renamed in place.
+/// This is deliberately narrow: membership and order are preserved exactly, only path strings
+/// present in the rename map are replaced.
+pub(crate) fn rewrite_album_paths(mapping: &[(String, String)]) -> Result<(), String> {
+    if mapping.is_empty() { return Ok(()); }
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
+    let mut all = albums_read();
+    let mut changed = false;
+    for album in &mut all {
+        for path in &mut album.paths {
+            if let Some((_, next)) = mapping.iter().find(|(old, _)| old == path) {
+                *path = next.clone();
+                changed = true;
+                album.updated = now_secs();
+            }
+        }
+    }
+    if changed { albums_write(&all) } else { Ok(()) }
 }
 
 fn now_secs() -> u64 {
@@ -3437,6 +3487,7 @@ pub fn album_create(name: String) -> Result<Album, String> {
     if name.is_empty() {
         return Err("an album needs a name".into());
     }
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
     let mut all = albums_read();
     if all.iter().any(|a| a.name.eq_ignore_ascii_case(&name)) {
         return Err(format!("an album called \"{name}\" already exists"));
@@ -3453,6 +3504,7 @@ pub fn album_rename(id: String, name: String) -> Result<(), String> {
     if name.is_empty() {
         return Err("an album needs a name".into());
     }
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
     let mut all = albums_read();
     let a = all.iter_mut().find(|a| a.id == id).ok_or("no such album")?;
     a.name = name;
@@ -3462,6 +3514,7 @@ pub fn album_rename(id: String, name: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn album_delete(id: String) -> Result<(), String> {
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
     let mut all = albums_read();
     all.retain(|a| a.id != id);
     // ⚠️ Deletes the LIST only. Nothing here touches a photo, which is what makes an album safe
@@ -3473,6 +3526,7 @@ pub fn album_delete(id: String) -> Result<(), String> {
 /// the UI can say "3 added, 2 already there" instead of a silent no-op on a re-drag.
 #[tauri::command]
 pub fn album_add(id: String, paths: Vec<String>) -> Result<usize, String> {
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
     let mut all = albums_read();
     let a = all.iter_mut().find(|a| a.id == id).ok_or("no such album")?;
     let before = a.paths.len();
@@ -3489,6 +3543,7 @@ pub fn album_add(id: String, paths: Vec<String>) -> Result<usize, String> {
 
 #[tauri::command]
 pub fn album_remove(id: String, paths: Vec<String>) -> Result<(), String> {
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
     let mut all = albums_read();
     let a = all.iter_mut().find(|a| a.id == id).ok_or("no such album")?;
     a.paths.retain(|p| !paths.iter().any(|q| q == p));
@@ -3500,6 +3555,7 @@ pub fn album_remove(id: String, paths: Vec<String>) -> Result<(), String> {
 /// the album are ignored rather than added, so a stale drag can't quietly grow it.
 #[tauri::command]
 pub fn album_set_order(id: String, paths: Vec<String>) -> Result<(), String> {
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
     let mut all = albums_read();
     let a = all.iter_mut().find(|a| a.id == id).ok_or("no such album")?;
     let existing: Vec<String> = a.paths.clone();

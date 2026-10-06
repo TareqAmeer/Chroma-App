@@ -26,3 +26,9 @@
 - Added remembered per-control and group selections for selective paste, style save, and apply; v2 manifests remain compatible with older category-based styles, and RAW decode fields re-open the current RAW when an applied recipe changes decode-time settings.
 - Added searchable styles, Favorites and Recent filters, favorites and folder grouping, hover/focus preview with Escape restore and no history/recipe mutation, plus field-aware 0–100 strength blending. Crop and retouch remain opt-in when saving.
 - Files: `chromasmith-22.html`, `test/editor_snap_lists_check.mjs`, `test/editor_wireframe_behaviour.mjs`, `test/selective_styles.mjs`. Verification: selective fields/legacy manifests/strength unit test; editor snapshot and HTML gates; Chromium style picker and batch paste tests pass. Library performance audit retains the existing DOM-node budget failures (8,176/8,000 at 200 photos and 6,093/6,000 at 1,000/5,000); export throughput and relaunch scope checks pass.
+
+## 2026-10-06 — CHR-175 / CHR-233
+
+- Added Lightroom/darktable/digiKam-informed batch rename previews and apply, including RAW+JPEG pairs, sidecars, and album path updates. Files: `desktop/library-ui.js`, `desktop/src-tauri/src/catalog.rs`, `desktop/src-tauri/src/ingest.rs`, `desktop/src-tauri/src/library.rs`, `desktop/src-tauri/src/main.rs` (CHR-175).
+- Removed 19 unused Tauri command registrations after reviewing current `origin/main`; retained the OAuth callback fallback used for cold-launch handling. Audit: `docs/native-command-audit.md` (CHR-233).
+- Verification: source review only; no tests or build run.

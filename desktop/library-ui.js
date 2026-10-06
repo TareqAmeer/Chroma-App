@@ -307,6 +307,26 @@
       case 'catalog_add_root': return /Folders only/.test(String(A.path || '')) ? Promise.resolve(null) : Promise.resolve({ id: 1, volume_id: 1, rel_path: '', kind: 'originals', abs_path: A.path, requested_rel_path: '' });
       case 'catalog_scan': return Promise.resolve({ scanned: 0, added: 0, marked_absent: 0 });
       case 'catalog_note_deleted': return Promise.resolve((A.paths || []).length);
+      case 'catalog_rename_preview': case 'catalog_rename_apply': {
+        const template = String(A.template || '{name}');
+        const start = Math.max(0, Number(A.sequenceStart) || 0);
+        const rows = (A.paths || []).map((oldPath, i) => {
+          const oldName = String(oldPath).split(/[\\/]/).pop() || '';
+          const dot = oldName.lastIndexOf('.');
+          const ext = dot > 0 ? oldName.slice(dot) : '';
+          const stem = dot > 0 ? oldName.slice(0, dot) : oldName;
+          const date = '2026-07-20';
+          const camera = 'DC-S9';
+          const base = template.replace(/\{name\}/g, stem).replace(/\{date\}|\{YYYY-MM-DD\}/g, date)
+            .replace(/\{camera\}/g, camera).replace(/\{seq\}|\{n\}/g, String(start + i).padStart(4, '0'))
+            .replace(/\{YYYY\}/g, '2026').replace(/\{MM\}/g, '07').replace(/\{DD\}/g, '20');
+          const slash = String(oldPath).lastIndexOf('/');
+          const backslash = String(oldPath).lastIndexOf('\\');
+          const cut = Math.max(slash, backslash);
+          return { oldPath, newPath: `${String(oldPath).slice(0, cut + 1)}${base}${ext}`, collision: false };
+        });
+        return Promise.resolve(rows);
+      }
       case 'get_quicklook_preview': return Promise.resolve(png);
       case 'catalog_dismiss_review': return Promise.resolve((A.paths || []).length);
       // trash_file/duplicate_file: no catalog involvement, just the underlying file op — a
@@ -6672,6 +6692,91 @@
     buildPathsMenu(e.clientX, e.clientY, Array.from(state.selected), { includeOpen: true });
   }
 
+  const LIB_RENAME_TEMPLATE_KEY = 'cs.library.rename-template.v1';
+  const LIB_RENAME_SEQUENCE_KEY = 'cs.library.rename-sequence-start.v1';
+  async function openBatchRename(paths) {
+    if (state.source !== 'catalog' || !paths.length) return;
+    const viewOrder = new Map((state.entries || []).map((entry, index) => [entry.path, index]));
+    paths = [...new Set(paths)].sort((a, b) => (viewOrder.get(a) ?? Number.MAX_SAFE_INTEGER) - (viewOrder.get(b) ?? Number.MAX_SAFE_INTEGER) || a.localeCompare(b));
+    const d = document.createElement('dialog');
+    d.style.cssText = 'width:min(620px,92vw);max-height:86vh;padding:18px;background:var(--bg);color:var(--txt);border:1px solid var(--bdr);border-radius:12px;box-shadow:var(--lift-2);font:12px var(--sans)';
+    d.innerHTML = `<h3 style="margin:0 0 4px;font-size:15px">Rename ${paths.length} selected photo${paths.length===1?'':'s'}</h3>
+      <div style="color:var(--mut);margin-bottom:10px">Tokens: {name}, {date}, {camera}, {seq}. Extensions and RAW/JPEG pairs are preserved.</div>
+      <div style="display:flex;gap:8px;align-items:center"><input data-template aria-label="Filename template" value="${esc(localStorage.getItem(LIB_RENAME_TEMPLATE_KEY) || '{date}_{camera}_{seq}')}" style="box-sizing:border-box;flex:1;min-width:0;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:8px;font:13px var(--mono)">
+      <label style="white-space:nowrap;color:var(--mut)">Start # <input data-sequence type="number" min="0" step="1" value="${esc(localStorage.getItem(LIB_RENAME_SEQUENCE_KEY) || '1')}" style="width:70px;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:6px;padding:7px"></label></div>
+      <div data-status style="min-height:20px;margin:8px 0;color:var(--mut)">Preparing preview…</div>
+      <div data-list style="max-height:45vh;overflow:auto;border:1px solid var(--bdr);border-radius:7px;padding:6px"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button data-cancel class="btn bgh">Cancel</button><button data-apply class="btn" disabled>Rename files</button></div>`;
+    document.body.appendChild(d);
+    const template = d.querySelector('[data-template]');
+    const sequence = d.querySelector('[data-sequence]');
+    const status = d.querySelector('[data-status]');
+    const list = d.querySelector('[data-list]');
+    const apply = d.querySelector('[data-apply]');
+    d.querySelector('[data-cancel]').onclick = () => d.close();
+    let revision = 0, previewRows = [];
+    const renderPreview = async () => {
+      const current = ++revision;
+      apply.disabled = true;
+      status.textContent = 'Updating preview…';
+      try {
+        const sequenceStart = Math.max(0, Math.trunc(Number(sequence.value) || 0));
+        const rows = await invoke('catalog_rename_preview', { paths, template: template.value, sequenceStart });
+        if (current !== revision) return;
+        previewRows = rows || [];
+        const collisions = previewRows.filter((r) => r.collision).length;
+        status.textContent = collisions ? `${collisions} target${collisions===1?'':'s'} already exist or collide. Change the template to continue.` : `${previewRows.length} files and companions will be renamed.`;
+        status.style.color = collisions ? 'var(--acc)' : 'var(--mut)';
+        list.innerHTML = previewRows.map((r) => `<div style="display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr);gap:6px;align-items:center;padding:4px 2px;color:${r.collision?'var(--acc)':'var(--txt)'}"><span title="${esc(r.oldPath)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(baseName(r.oldPath))}</span><span aria-hidden="true">→</span><strong title="${esc(r.newPath)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(baseName(r.newPath))}</strong></div>`).join('');
+        apply.disabled = !previewRows.length || collisions > 0;
+      } catch (e) {
+        if (current !== revision) return;
+        previewRows = [];
+        list.textContent = '';
+        status.textContent = humanizeErr('preview this rename', e);
+        status.style.color = 'var(--acc)';
+      }
+    };
+    let timer;
+    template.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(renderPreview, 160); });
+    sequence.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(renderPreview, 160); });
+    apply.onclick = async () => {
+      apply.disabled = true;
+      status.textContent = 'Renaming files…';
+      try {
+        const sequenceStart = Math.max(0, Math.trunc(Number(sequence.value) || 0));
+        const result = await invoke('catalog_rename_apply', { paths, template: template.value, sequenceStart });
+        localStorage.setItem(LIB_RENAME_TEMPLATE_KEY, template.value);
+        localStorage.setItem(LIB_RENAME_SEQUENCE_KEY, String(sequenceStart));
+        const mapping = new Map((result || []).map((r) => [r.oldPath, r.newPath]));
+        const wasOpen = mapping.has(state.openedPath);
+        const reopened = mapping.get(state.openedPath);
+        state.selected = new Set([...state.selected].map((p) => mapping.get(p) || p));
+        if (reopened) state.openedPath = reopened;
+        if (Array.isArray(state.openedPaths)) state.openedPaths = state.openedPaths.map((p) => mapping.get(p) || p);
+        for (const [oldPath, newPath] of mapping) {
+          if (state.sidecars.has(oldPath)) { state.sidecars.set(newPath, state.sidecars.get(oldPath)); state.sidecars.delete(oldPath); }
+          if (state.meta.has(oldPath)) { state.meta.set(newPath, state.meta.get(oldPath)); state.meta.delete(oldPath); }
+          imgCache.delete(oldPath);
+        }
+        d.close();
+        await refreshAlbums();
+        await refreshView();
+        if (wasOpen && reopened) await openInEditor(reopened);
+        toast(`Renamed ${mapping.size} files`, true);
+      } catch (e) {
+        status.textContent = humanizeErr('rename these files', e);
+        status.style.color = 'var(--acc)';
+        apply.disabled = false;
+      }
+    };
+    d.addEventListener('close', () => { clearTimeout(timer); d.remove(); });
+    d.showModal();
+    template.focus();
+    template.select();
+    renderPreview();
+  }
+
   // Shared right-click menu for a set of photo paths — used by the library grid cards
   // (with an "Open" item) AND the editor preview itself (the currently-opened photo, no
   // "Open"). One builder so the two menus never drift apart.
@@ -6756,6 +6861,10 @@
       });
     }
     sep();
+    if (state.source === 'catalog') {
+      item(`Rename ${n > 1 ? `${n} photos` : 'photo'}…`, () => openBatchRename(paths));
+      sep();
+    }
     // Persistent RAW caching must be reachable from the same right-click selection workflow
     // as the rest of the batch actions. The floating selection bar is easy to miss in a large
     // grid or when it is covered by the cursor/context menu.
@@ -12064,6 +12173,59 @@
       const go = document.getElementById('imp-go');
       if (go) go.disabled = selFiles.length === 0;
       if (go) go.style.opacity = selFiles.length === 0 ? '.5' : '';
+      updateImportRenamePreview(selFiles);
+    }
+    const cameraLoaded = new Set();
+    const cameraPending = new Set();
+    function updateImportRenamePreview(selFiles = files.filter((f) => selected.has(f.path))) {
+      const host = document.getElementById('imp-name-preview');
+      const input = document.getElementById('imp-name');
+      if (!host || !input) return;
+      const template = input.value.trim();
+      if (!template) { host.innerHTML = '<span style="color:var(--mut)">Original filenames will be kept.</span>'; return; }
+      const skipDuplicates = document.getElementById('imp-skip')?.checked;
+      const effectiveFiles = selFiles.filter((f) => !(skipDuplicates && f.duplicate));
+      if (template.includes('{camera}')) {
+        const need = effectiveFiles.filter((f) => f.camera == null && !cameraLoaded.has(f.path) && !cameraPending.has(f.path));
+        if (need.length) {
+          need.forEach((f) => cameraPending.add(f.path));
+          host.textContent = 'Reading camera metadata for the selected files…';
+          invoke('get_meta_batch', { paths: need.map((f) => f.path) }).then((metadata) => {
+            (metadata || []).forEach((m, i) => {
+              need[i].camera = m && m.camera || '';
+              cameraLoaded.add(need[i].path);
+            });
+          }).catch((e) => {
+            need.forEach((f) => { f.camera = ''; cameraLoaded.add(f.path); });
+            console.warn('read camera metadata for import naming', e);
+          }).finally(() => {
+            need.forEach((f) => cameraPending.delete(f.path));
+            updateImportRenamePreview(selFiles);
+          });
+          return;
+        }
+        if (effectiveFiles.some((f) => cameraPending.has(f.path))) { host.textContent = 'Reading camera metadata for the selected files…'; return; }
+      }
+      const ordered = [...effectiveFiles]; // scan_card's name order is also ingest_run's sequence order
+      const sequenceStart = Math.max(0, Math.trunc(Number(document.getElementById('imp-seq-start')?.value) || 0));
+      const rows = ordered.map((f, i) => {
+        const dot = f.name.lastIndexOf('.');
+        const stem = dot > 0 ? f.name.slice(0, dot) : f.name;
+        const ext = dot > 0 ? f.name.slice(dot) : '';
+        const date = f.date || '';
+        const [yyyy = '', mm = '', dd = ''] = date.split('-');
+        const seq = String(sequenceStart + i).padStart(4, '0');
+        const tokens = { name: stem, date, camera: f.camera || '', seq, n: seq, 'YYYY-MM-DD': date, YYYY: yyyy, MM: mm, DD: dd };
+        const base = template.replace(/\{([^{}]+)\}/g, (_m, key) => Object.hasOwn(tokens, key)
+          ? String(tokens[key]).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^\.+|\.+$/g, '') : `⟪${key}?⟫`);
+        return { old: f.name, next: base + ext };
+      });
+      const counts = new Map();
+      for (const row of rows) counts.set(row.next.toLocaleLowerCase(), (counts.get(row.next.toLocaleLowerCase()) || 0) + 1);
+      const collisions = [...counts.values()].filter((n) => n > 1).reduce((a, n) => a + n, 0);
+      host.innerHTML = `${collisions ? `<div style="color:var(--acc);margin-bottom:4px">${collisions} generated names collide; import will add a unique suffix.</div>` : ''}`
+        + rows.slice(0, 6).map((row) => `<div style="display:flex;gap:8px;min-width:0"><span style="color:var(--mut);overflow:hidden;text-overflow:ellipsis">${esc(row.old)}</span><span aria-hidden="true">→</span><strong style="overflow:hidden;text-overflow:ellipsis">${esc(row.next)}</strong></div>`).join('')
+        + (rows.length > 6 ? `<div style="color:var(--mut)">and ${rows.length - 6} more…</div>` : '');
     }
     function tileEl(f) {
       const path = f.path;
@@ -12194,10 +12356,12 @@
           <option value="{YYYY-MM-DD}">2026-08-15</option>
           <option value="">No subfolders</option></select>`,
         'Folders come from each photo\'s capture date, not the file date.')
-      + row('Rename', `<select id="imp-name" style="${inputCss}">
-          <option value="">Keep camera filenames</option>
-          <option value="{YYYY-MM-DD}_{name}">2026-08-15_P1000123</option>
-          <option value="{YYYY-MM-DD}_{n}">2026-08-15_0001</option></select>`)
+      + row('Rename', `<input id="imp-name" list="imp-name-presets" style="${inputCss}" value="${esc(prefs.name || '')}" placeholder="{date}_{camera}_{seq}">
+          <datalist id="imp-name-presets"><option value="{YYYY-MM-DD}_{name}"></option><option value="{YYYY-MM-DD}_{seq}"></option><option value="{date}_{camera}_{seq}"></option></datalist>
+          <div id="imp-name-preview" style="font-size:11px;line-height:1.55;max-height:94px;overflow:auto;margin-top:5px;padding:5px 7px;background:var(--sur2);border-radius:6px"></div>`,
+          'Tokens: {name}, {date}, {camera}, {seq}. File extensions are kept.')
+      + row('Sequence starts at', `<input id="imp-seq-start" type="number" min="0" step="1" style="${inputCss}" value="${esc(prefs.sequenceStart ?? '1')}">`,
+          'The sequence follows the card’s filename order and skips files excluded by “Skip files already imported”.')
       + row('Also copy to', `<div style="display:flex;gap:6px"><input id="imp-backup" style="${inputCss}" value="${esc(prefs.backup || '')}" placeholder="Optional second copy — another drive" readonly>
           <button id="imp-backup-pick" style="white-space:nowrap;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer">Choose…</button>
           <button id="imp-backup-clear" title="Clear" style="background:var(--sur2);border:1px solid var(--bdr);color:var(--mut);border-radius:7px;padding:7px 9px;cursor:pointer;display:inline-flex;align-items:center">${ic('close', 14)}</button></div>`,
@@ -12221,6 +12385,9 @@
     updateSelSummary();
     if (prefs.folder) $('imp-folder').value = prefs.folder;
     if (prefs.name) $('imp-name').value = prefs.name;
+    $('imp-name').addEventListener('input', () => updateImportRenamePreview());
+    $('imp-seq-start').addEventListener('input', () => updateImportRenamePreview());
+    $('imp-skip').addEventListener('change', () => updateImportRenamePreview());
     const pickFolder = async (target) => {
       try {
         const chosen = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false } });
@@ -12241,10 +12408,11 @@
         backupRoot: $('imp-backup').value.trim() || null,
         folderTemplate: $('imp-folder').value,
         filenameTemplate: $('imp-name').value,
+        sequenceStart: Math.max(0, Math.trunc(Number($('imp-seq-start').value) || 0)),
         skipDuplicates: $('imp-skip').checked,
         only: selected.size === files.length ? [] : [...selected], // [] means "everything" server-side; only send a real allowlist when it's a genuine subset
       };
-      saveImportPrefs({ dest, backup: opts.backupRoot || '', folder: opts.folderTemplate, name: opts.filenameTemplate, skip: opts.skipDuplicates, eject: $('imp-eject').checked });
+      saveImportPrefs({ dest, backup: opts.backupRoot || '', folder: opts.folderTemplate, name: opts.filenameTemplate, sequenceStart: String(opts.sequenceStart), skip: opts.skipDuplicates, eject: $('imp-eject').checked });
       cardState.scanning = true;
       $('imp-go').disabled = true;
       $('imp-go').style.opacity = '.6';

@@ -1350,35 +1350,6 @@ pub fn catalog_keep_root(id: i64, state: tauri::State<CatalogState>) -> Result<(
     Ok(())
 }
 
-#[tauri::command]
-pub fn catalog_roots(state: tauri::State<CatalogState>) -> Result<Vec<CatalogRoot>, String> {
-    // Read-only — the dedicated read connection, so this never waits behind a running scan.
-    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT r.id, r.volume_id, r.rel_path, r.kind, v.last_path, v.is_local
-             FROM roots r JOIN volumes v ON v.id = r.volume_id",
-        )
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map([], |r| {
-            let volume_id: i64 = r.get(1)?;
-            let rel_path: String = r.get(2)?;
-            let last_path: String = r.get(4)?;
-            let is_local: i64 = r.get(5)?;
-            Ok(CatalogRoot {
-                id: r.get(0)?,
-                volume_id,
-                rel_path: rel_path.clone(),
-                kind: r.get(3)?,
-                abs_path: abs_path(&last_path, is_local != 0, &rel_path),
-                requested_rel_path: rel_path,
-            })
-        })
-        .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
-}
-
 // ── Scan phase A: walk + stat + upsert, deletion tracking ──────────────────────────────────────
 
 /// Delegates to formats::media_kind (the single source of truth). formats.rs is deliberately
@@ -5604,11 +5575,10 @@ fn resolve_suggestions_run(conn: &Connection, person_id: i64, accept: &[i64], re
 // differs by OS/user). Plugging the drive into another Mac and adopting this file skips the
 // entire detect→embed→cluster pass, not just the naming.
 //
-// ⚠️ Deliberately NOT auto-merged on mount. `catalog_detect_portable_people` only REPORTS what's
-// there; only `catalog_import_portable_people`, an explicit user action (the wireframe's "Use
-// it" button), actually writes anything — silently merging two machines' people lists is how you
-// get duplicate "Sofia"s with no way back, exactly the failure mode CLAUDE.md warns adopt-on-
-// mount features away from elsewhere in this codebase.
+// ⚠️ Deliberately NOT auto-merged on mount. Portable people data is only read or written through
+// explicit operations; silently merging two machines' people lists is how you get duplicate
+// "Sofia"s with no way back, exactly the failure mode CLAUDE.md warns adopt-on-mount features
+// away from elsewhere in this codebase.
 
 #[derive(Serialize, Deserialize, Clone)]
 struct PortableFace {
@@ -5655,32 +5625,11 @@ pub struct PortablePeopleSummary {
     pub person_count: usize,
 }
 
-/// The wireframe's "This drive already has people data" banner check — read-only, cheap, safe
-/// to call every time a volume mounts. `None` when there's no file there yet.
-#[tauri::command]
-pub fn catalog_detect_portable_people(dest_dir: String) -> Result<Option<PortablePeopleSummary>, String> {
-    let path = portable_people_path(&dest_dir);
-    let Ok(text) = std::fs::read_to_string(&path) else { return Ok(None) };
-    let file: PortablePeopleFile = serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))?;
-    Ok(Some(PortablePeopleSummary {
-        written_at: file.written_at,
-        hostname: file.hostname,
-        face_count: file.face_count,
-        person_count: file.person_count,
-    }))
-}
-
 /// Writes every named/confirmed face to `<dest_dir>/.chromasmith/people.json`. Called explicitly
 /// (a "Save to drive" action), not on every rename — matching CLAUDE.md's own flagged concern
 /// about writing thousands of sidecars on every edit; one JSON file has no such cost, but keeping
 /// the trigger explicit keeps the mental model ("this is a deliberate backup/export") consistent
 /// with the XMP writer's own batched trigger.
-#[tauri::command]
-pub fn catalog_export_portable_people(state: tauri::State<CatalogState>, dest_dir: String) -> Result<PortablePeopleSummary, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    export_portable_people_run(&conn, &dest_dir)
-}
-
 fn export_portable_people_run(conn: &Connection, dest_dir: &str) -> Result<PortablePeopleSummary, String> {
     let mut stmt = conn
         .prepare(
@@ -5769,17 +5718,11 @@ pub struct PortableImportResult {
 
 /// The explicit "Use it" action — matches each portable face to a LOCAL photo by `rel_path`
 /// within the given volume (`dest_dir` must be a volume's own mount point, i.e. what
-/// `catalog_export_portable_people` was called with), finds-or-creates the named person, and
+/// `export_portable_people_run` was called with), finds-or-creates the named person, and
 /// writes the face row (inserting the face itself if this machine never ran its own detection
 /// pass over that photo — the whole point of adopting the file instead of rescanning).
 /// ⚠️ Never called implicitly — see this section's own header comment on why adopt-on-mount is
 /// deliberately not automatic.
-#[tauri::command]
-pub fn catalog_import_portable_people(state: tauri::State<CatalogState>, dest_dir: String) -> Result<PortableImportResult, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    import_portable_people_run(&conn, &dest_dir)
-}
-
 fn import_portable_people_run(conn: &Connection, dest_dir: &str) -> Result<PortableImportResult, String> {
     let path = portable_people_path(dest_dir);
     let text = std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
@@ -6151,21 +6094,6 @@ pub fn catalog_photo_tag_info(state: tauri::State<CatalogState>, path: String) -
     Ok(PhotoTagInfo { photo_id: Some(id), analyzed: emb.is_some(), tags, place, keywords_added: after > before })
 }
 
-/// One photo's stored auto tags, best first.
-#[tauri::command]
-pub fn catalog_photo_auto_tags(state: tauri::State<CatalogState>, photo_id: i64) -> Result<Vec<ClipTagHit>, String> {
-    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
-    let mut stmt = conn
-        .prepare("SELECT term, score FROM photo_auto_tags WHERE photo_id = ?1 ORDER BY score DESC")
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map(params![photo_id], |r| Ok(ClipTagHit { term: r.get(0)?, score: r.get(1)? }))
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string());
-    rows
-}
-
 pub fn clip_embed_run(
     conn: &Connection,
     photo_ids: Option<&[i64]>,
@@ -6417,24 +6345,6 @@ pub fn catalog_places(state: tauri::State<CatalogState>) -> Result<Vec<PlaceCoun
 pub struct ClipTagHit {
     pub term: String,
     pub score: f32,
-}
-
-/// R10: zero-shot tag suggestions for one photo, reusing its already-stored CLIP image embedding
-/// (no new inference beyond the one-time vocabulary text-embed — see `clip::suggest_tags`). Returns
-/// an empty vec, not an error, when the photo has no `clip_embedding` yet (not analyzed): the UI
-/// treats "no suggestions" as a normal silent state, not a failure.
-#[tauri::command]
-pub fn catalog_clip_tags(state: tauri::State<CatalogState>, photo_id: i64, top_k: Option<usize>) -> Result<Vec<ClipTagHit>, String> {
-    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
-    let blob: Option<Vec<u8>> = conn
-        .query_row("SELECT clip_embedding FROM photos WHERE id = ?1", params![photo_id], |r| r.get(0))
-        .optional()
-        .map_err(|e| e.to_string())?
-        .flatten();
-    let Some(blob) = blob else { return Ok(vec![]) };
-    let emb = blob_to_f32_vec(&blob);
-    let hits = crate::clip::suggest_tags(&emb, top_k.unwrap_or(crate::clip::DEFAULT_TAG_TOP_K), crate::clip::DEFAULT_TAG_THRESHOLD)?;
-    Ok(hits.into_iter().map(|(term, score)| ClipTagHit { term, score }).collect())
 }
 
 #[derive(Serialize, Clone)]
@@ -6708,20 +6618,8 @@ pub fn catalog_bg_set_paused(paused: bool, state: tauri::State<CatalogState>) {
     }
 }
 
-#[tauri::command]
-pub fn catalog_bg_paused() -> bool {
-    BG_PAUSED.load(Ordering::Relaxed)
-}
-
 pub(crate) fn bg_is_paused() -> bool {
     BG_PAUSED.load(Ordering::Relaxed)
-}
-
-/// Whether a cancel is currently pending — lets a JS drain loop stop issuing further batches
-/// instead of relying solely on each batch aborting itself.
-#[tauri::command]
-pub fn catalog_cancel_pending(state: tauri::State<CatalogState>) -> bool {
-    state.cancel.load(Ordering::Relaxed)
 }
 
 // ── Query ────────────────────────────────────────────────────────────────────────────────────
@@ -8570,19 +8468,6 @@ pub fn discard_queued_edit(id: i64, state: tauri::State<CatalogState>) -> Result
 // orphan the offline-thumbnail tier without the user ever knowing; a rebuild is a deliberate
 // action whose whole point is starting over.
 
-#[tauri::command]
-pub async fn catalog_rebuild(app: tauri::AppHandle) -> Result<ScanResult, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        use tauri::{Emitter, Manager};
-        let state = app.state::<CatalogState>();
-        state.cancel.store(false, Ordering::Relaxed);
-        let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        rebuild_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
-    })
-    .await
-    .map_err(|e| format!("catalog_rebuild task panicked: {e}"))?
-}
-
 pub fn rebuild_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ScanResult, String> {
     // ⚠️ Deliberately NOT re-locked per batch like verify_run_scoped/hash_run_scoped — this wipes
     // the whole catalog first (DELETE FROM photos/roots/volumes below), so a re-lock mid-rebuild
@@ -8885,6 +8770,266 @@ fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {
         }
     }
     None
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RenamePreviewRow {
+    pub old_path: String,
+    pub new_path: String,
+    pub collision: bool,
+}
+
+#[derive(Clone)]
+struct RenamePhoto {
+    id: i64,
+    volume_id: i64,
+    volume_root: String,
+    rel_dir: String,
+    rel_path: String,
+    name: String,
+    year: Option<i32>,
+    month: Option<i32>,
+    day: Option<i32>,
+    camera: Option<String>,
+}
+
+fn rename_photo_for_path(conn: &Connection, path: &str) -> Result<RenamePhoto, String> {
+    let id = find_photo_by_abs_path(conn, path).ok_or_else(|| format!("photo is not in the catalog: {path}"))?;
+    conn.query_row(
+        "SELECT p.id,p.volume_id,v.last_path,p.rel_dir,p.rel_path,p.name,p.cap_y,p.cap_m,p.cap_d,p.camera
+         FROM photos p JOIN volumes v ON v.id=p.volume_id WHERE p.id=?1 AND p.present=1",
+        params![id],
+        |r| Ok(RenamePhoto { id:r.get(0)?, volume_id:r.get(1)?, volume_root:r.get(2)?, rel_dir:r.get(3)?, rel_path:r.get(4)?, name:r.get(5)?, year:r.get(6)?, month:r.get(7)?, day:r.get(8)?, camera:r.get(9)? }),
+    ).map_err(|e| format!("read catalog photo for rename: {e}"))
+}
+
+fn rename_photo_abs(photo: &RenamePhoto) -> PathBuf { PathBuf::from(abs_path(&photo.volume_root, false, &photo.rel_path)) }
+
+fn rename_destination_name(photo: &RenamePhoto, template: &str, seq: usize) -> Result<String, String> {
+    let date = match (photo.year, photo.month, photo.day) {
+        (Some(y), Some(m), Some(d)) => format!("{y:04}-{m:02}-{d:02}"),
+        // Match import naming semantics: absent capture metadata contributes an empty token.
+        _ => String::new(),
+    };
+    let src = Path::new(&photo.name);
+    let stem = src.file_stem().and_then(|v| v.to_str()).unwrap_or("photo");
+    let ext = src.extension().and_then(|v| v.to_str()).unwrap_or("");
+    let base = crate::ingest::expand_filename(template, stem, &date, photo.camera.as_deref().unwrap_or(""), seq);
+    if base.is_empty() || base == "." || base == ".." || base.contains('/') || base.contains('\\') || base.chars().any(|c| c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '|' | '?' | '*')) {
+        return Err(format!("template produces an invalid filename for {}", photo.name));
+    }
+    Ok(if ext.is_empty() { base } else { format!("{base}.{ext}") })
+}
+
+fn rename_sidecars(old: &Path, new: &Path) -> Vec<(PathBuf, PathBuf)> {
+    let mut out = Vec::new();
+    let old_name = old.file_name().and_then(|v| v.to_str()).unwrap_or("");
+    let new_name = new.file_name().and_then(|v| v.to_str()).unwrap_or("");
+    let new_stem = new.file_stem().and_then(|v| v.to_str()).unwrap_or("");
+    let old_stem = old.file_stem().and_then(|v| v.to_str()).unwrap_or("");
+    let ext = old.extension().and_then(|v| v.to_str()).unwrap_or("");
+    for side in [old.with_extension("xmp"), old.with_extension("rrdata"), PathBuf::from(format!("{}.rrdata", old.to_string_lossy()))] {
+        if !side.is_file() { continue; }
+        let side_name = side.file_name().and_then(|v| v.to_str()).unwrap_or("");
+        let target_name = if side_name.starts_with(old_name) {
+            format!("{}{}", new_name, &side_name[old_name.len()..])
+        } else {
+            format!("{}.{}", new_stem, side.extension().and_then(|v| v.to_str()).unwrap_or("xmp"))
+        };
+        out.push((side.clone(), side.parent().unwrap_or(Path::new(".")).join(target_name)));
+    }
+    if let Some(dir) = old.parent() {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            let wanted_suffix = format!(".{}.xmp", ext);
+            let wanted_suffix_lower = wanted_suffix.to_lowercase();
+            for entry in entries.flatten() {
+                let side = entry.path();
+                if !side.is_file() || side.extension().and_then(|v| v.to_str()).map_or(true, |e| !e.eq_ignore_ascii_case("xmp")) { continue; }
+                let Some(side_name) = side.file_name().and_then(|v| v.to_str()) else { continue };
+                let lower = side_name.to_lowercase();
+                let target = if lower == format!("{}.xmp", old_name.to_lowercase()) {
+                    Some(format!("{new_name}.xmp")) // darktable <basename>.<ext>.xmp form
+                } else if lower.ends_with(&wanted_suffix_lower) {
+                    let prefix_len = side_name.len().saturating_sub(wanted_suffix.len());
+                    let prefix = &side_name[..prefix_len];
+                    let tail = prefix.get(old_stem.len()..).unwrap_or("");
+                    let numbered_version = prefix.get(..old_stem.len()).map_or(false, |p| p.eq_ignore_ascii_case(old_stem)) && tail.starts_with('_')
+                        && !tail[1..].is_empty() && tail[1..].chars().all(|c| c.is_ascii_digit());
+                    numbered_version.then(|| format!("{new_stem}{tail}{wanted_suffix}"))
+                } else { None };
+                if let Some(target) = target {
+                    let pair=(side.clone(),dir.join(target));
+                    if !out.iter().any(|(p,_)| p == &pair.0) { out.push(pair); }
+                }
+            }
+        }
+    }
+    out
+}
+
+fn rename_plan(conn: &Connection, paths: &[String], template: &str, sequence_start: u32) -> Result<(Vec<RenamePreviewRow>, Vec<(RenamePhoto, PathBuf)>), String> {
+    crate::ingest::validate_filename_template(template)?;
+    if paths.is_empty() { return Err("select at least one photo".into()); }
+    let mut selected = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for path in paths {
+        let photo = rename_photo_for_path(conn, path)?;
+        if seen.insert(photo.id) { selected.push(photo); }
+    }
+    let mut result: Vec<(RenamePhoto, PathBuf)> = Vec::new();
+    let mut groups = std::collections::HashSet::new();
+    let mut sequence = sequence_start;
+    for photo in selected {
+        let stem = Path::new(&photo.name).file_stem().and_then(|v| v.to_str()).unwrap_or("").to_lowercase();
+        let mut siblings = vec![photo.clone()];
+        let mut stmt = conn.prepare("SELECT id,rel_path,name FROM photos WHERE volume_id=?1 AND rel_dir=?2 AND present=1 AND id!=?3").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map(params![photo.volume_id, photo.rel_dir, photo.id], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?))).map_err(|e| e.to_string())?;
+        let photo_ext = Path::new(&photo.name).extension().and_then(|v| v.to_str()).unwrap_or("").to_lowercase();
+        for sibling in rows.flatten() {
+            let sibling_stem = Path::new(&sibling.2).file_stem().and_then(|v| v.to_str()).unwrap_or("").to_lowercase();
+            if sibling_stem != stem { continue; }
+            let sibling_ext = Path::new(&sibling.2).extension().and_then(|v| v.to_str()).unwrap_or("").to_lowercase();
+            let is_jpeg = |e: &str| matches!(e,"jpg"|"jpeg");
+            let is_raw_jpeg_pair = (crate::formats::is_raw_ext(&photo_ext) && is_jpeg(&sibling_ext))
+                || (crate::formats::is_raw_ext(&sibling_ext) && is_jpeg(&photo_ext));
+            if !is_raw_jpeg_pair { continue; }
+            if let Ok(p) = rename_photo_for_path(conn, &abs_path(&photo.volume_root, false, &sibling.1)) { siblings.push(p); }
+        }
+        let group_key = if siblings.len() > 1 { format!("{}:{}:{}", photo.volume_id, photo.rel_dir.to_lowercase(), stem) } else { format!("photo:{}", photo.id) };
+        if !groups.insert(group_key) { continue; }
+        let destination = rename_destination_name(&photo, template, sequence as usize)?;
+        for sibling in siblings {
+            let src = rename_photo_abs(&sibling);
+            let dst = src.parent().unwrap_or(Path::new("")).join(rename_destination_name(&sibling, template, sequence as usize)?);
+            // RAW/JPEG companions keep one shared basename and sequence.
+            let dst = if sibling.id == photo.id { dst } else {
+                let ext = Path::new(&sibling.name).extension().and_then(|v| v.to_str()).unwrap_or("");
+                src.parent().unwrap_or(Path::new("")).join(if ext.is_empty() { PathBuf::from(&destination) } else { PathBuf::from(format!("{}.{}", Path::new(&destination).file_stem().and_then(|v| v.to_str()).unwrap_or(""), ext)) })
+            };
+            if !result.iter().any(|(p,_)| p.id == sibling.id) { result.push((sibling,dst)); }
+        }
+        sequence = sequence.saturating_add(1);
+    }
+    let sources: std::collections::HashSet<String> = result.iter().map(|(p,_)| rename_photo_abs(p).to_string_lossy().to_lowercase()).collect();
+    let mut destinations = std::collections::HashSet::new();
+    let mut rows = Vec::new();
+    for (photo, dst) in &result {
+        let src = rename_photo_abs(photo);
+        let target_key = dst.to_string_lossy().to_lowercase();
+        let collision = !destinations.insert(target_key.clone()) || (dst.exists() && !sources.contains(&target_key));
+        rows.push(RenamePreviewRow { old_path: src.to_string_lossy().into_owned(), new_path: dst.to_string_lossy().into_owned(), collision });
+    }
+    let side_sources: std::collections::HashSet<String> = result.iter().flat_map(|(photo, dst)| rename_sidecars(&rename_photo_abs(photo), dst).into_iter().map(|(old,_)| old.to_string_lossy().to_lowercase())).collect();
+    for ((photo,dst), row) in result.iter().zip(rows.iter_mut()) {
+        for (_,side_dst) in rename_sidecars(&rename_photo_abs(photo),dst) {
+            let key=side_dst.to_string_lossy().to_lowercase();
+            if side_dst.exists() && !side_sources.contains(&key) { row.collision=true; }
+        }
+    }
+    Ok((rows,result))
+}
+
+#[tauri::command]
+pub fn catalog_rename_preview(paths: Vec<String>, template: String, sequence_start: u32, state: tauri::State<CatalogState>) -> Result<Vec<RenamePreviewRow>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    rename_plan(&conn, &paths, &template, sequence_start).map(|(rows,_)| rows)
+}
+
+#[tauri::command]
+pub async fn catalog_rename_apply(app: tauri::AppHandle, paths: Vec<String>, template: String, sequence_start: u32) -> Result<Vec<RenamePreviewRow>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let mut conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let (rows, photos) = rename_plan(&conn, &paths, &template, sequence_start)?;
+        if rows.iter().any(|r| r.collision) { return Err("one or more target filenames already exist or collide".into()); }
+        rename_apply_run(&mut conn, &photos, rows)
+    }).await.map_err(|e| format!("catalog_rename_apply task panicked: {e}"))?
+}
+
+struct RenameMove { old: PathBuf, temp: PathBuf, new: PathBuf }
+
+fn push_rename_move(moves: &mut Vec<RenameMove>, seen: &mut std::collections::HashSet<String>, old: PathBuf, new: PathBuf, id: i64) -> Result<(), String> {
+    if old == new { return Ok(()); }
+    let key = old.to_string_lossy().to_lowercase();
+    if !seen.insert(key) { return Ok(()); }
+    let parent = old.parent().unwrap_or(Path::new("."));
+    let suffix = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let temp = parent.join(format!(".chromasmith-rename-{id}-{suffix}.tmp"));
+    if temp.exists() { return Err("could not reserve a temporary rename path".into()); }
+    moves.push(RenameMove { old, temp, new });
+    Ok(())
+}
+
+fn rename_apply_run(conn: &mut Connection, photos: &[(RenamePhoto, PathBuf)], rows: Vec<RenamePreviewRow>) -> Result<Vec<RenamePreviewRow>, String> {
+    let mut moves = Vec::new();
+    let mut photo_map = Vec::new();
+    let mut seen_fs = std::collections::HashSet::new();
+    for ((photo, new), row) in photos.iter().zip(rows.iter()) {
+        let old = rename_photo_abs(photo);
+        if old != *new { push_rename_move(&mut moves, &mut seen_fs, old.clone(), new.clone(), photo.id)?; }
+        for (side, side_new) in rename_sidecars(&old,new) {
+            push_rename_move(&mut moves, &mut seen_fs, side, side_new, photo.id)?;
+        }
+        photo_map.push((photo.clone(), row.new_path.clone()));
+    }
+    // The complete destination set was preflighted before touching the filesystem.
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    // Free every original unique path inside this still-uncommitted transaction before writing
+    // any final name. This makes A↔B swaps valid while preserving the original photo IDs and all
+    // foreign-key relationships.
+    for (photo, _) in &photo_map {
+        tx.execute("UPDATE photos SET rel_path=?1 WHERE id=?2", params![format!(".chromasmith-rename-tmp-{}-{}", std::process::id(), photo.id), photo.id]).map_err(|e| e.to_string())?;
+    }
+    let mut staged = 0usize;
+    for m in &moves {
+        if let Err(e) = std::fs::rename(&m.old, &m.temp) {
+            for prior in moves[..staged].iter().rev() { let _ = std::fs::rename(&prior.temp, &prior.old); }
+            return Err(format!("stage {} for rename: {e}", m.old.display()));
+        }
+        staged += 1;
+    }
+    let mut installed = 0usize;
+    for m in &moves {
+        if let Err(e) = std::fs::rename(&m.temp, &m.new) {
+            for prior in moves[..installed].iter().rev() { let _ = std::fs::rename(&prior.new, &prior.old); }
+            for remaining in moves[installed..].iter().rev() { if remaining.temp.exists() { let _ = std::fs::rename(&remaining.temp, &remaining.old); } }
+            return Err(format!("install {}: {e}", m.new.display()));
+        }
+        installed += 1;
+    }
+    let mut album_map: Vec<(String,String)> = photo_map.iter().map(|(photo,new)| (rename_photo_abs(photo).to_string_lossy().into_owned(),new.clone())).collect();
+    let update_result: Result<(), String> = (|| {
+    for (photo, new_path) in &photo_map {
+        let path = PathBuf::from(new_path);
+        let rel = path.strip_prefix(&photo.volume_root).map_err(|e| e.to_string())?.to_string_lossy().replace('\\',"/");
+        let rel_dir = Path::new(&rel).parent().map(|p| p.to_string_lossy().replace('\\',"/")).unwrap_or_default();
+        let name = path.file_name().and_then(|v| v.to_str()).unwrap_or("");
+        let meta = std::fs::metadata(&path).map_err(|e| format!("stat renamed file: {e}"))?;
+        let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs() as i64).unwrap_or(0);
+        tx.execute("UPDATE photos SET rel_path=?1,rel_dir=?2,name=?3,name_lc=?4,size=?5,mtime=?6,sidecar_mtime=?7 WHERE id=?8",
+            params![rel,rel_dir,name,name.to_lowercase(),meta.len() as i64,mtime,sidecar_mtime_of(&path) as i64,photo.id]).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+    })();
+    if let Err(e) = update_result {
+        for m in moves.iter().rev() { let current = if m.new.exists() { &m.new } else { &m.temp }; if current.exists() { let _ = std::fs::rename(current, &m.old); } }
+        return Err(e);
+    }
+    if let Err(e) = crate::library::rewrite_album_paths(&album_map) {
+        for m in moves.iter().rev() { let _ = std::fs::rename(&m.new, &m.old); }
+        return Err(e);
+    }
+    match tx.commit() {
+        Ok(()) => Ok(rows),
+        Err(e) => {
+            let reverse: Vec<(String,String)> = album_map.iter().map(|(old,new)|(new.clone(),old.clone())).collect();
+            let _ = crate::library::rewrite_album_paths(&reverse);
+            for m in moves.iter().rev() { let _ = std::fs::rename(&m.new, &m.old); }
+            Err(format!("commit renamed catalog paths: {e}"))
+        }
+    }
 }
 
 pub fn note_deleted_run(conn: &Connection, paths: &[String]) -> Result<usize, String> {
