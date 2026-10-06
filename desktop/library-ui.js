@@ -10840,14 +10840,20 @@
   /// wireframes screen A ("no face thumbnails anywhere" was the #1 cited defect; this is the
   /// backend call that already existed — `catalog_photo_faces`'s sibling — and was never wired
   /// to anything on the frontend before this).
+  /// Crops are cached per face id (a face's crop never changes) so a sidebar re-render paints the
+  /// avatar synchronously — refetching each time left every rebuilt <img> hidden for one IPC
+  /// round trip, which is what made People & Pets flicker (test/probe_people_sidebar_flicker.mjs).
+  const faceCropUrls = new Map();
   function loadFaceCrop(faceId, imgEl) {
     if (faceId == null) return;
+    const cached = faceCropUrls.get(faceId);
+    if (cached) { if (imgEl.getAttribute('src') !== cached) imgEl.src = cached; imgEl.classList.add('loaded'); return; }
     invoke('catalog_face_crop', { faceId }).then((buf) => {
+      let url = faceCropUrls.get(faceId);
+      if (!url) { url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' })); faceCropUrls.set(faceId, url); }
       if (!imgEl.isConnected) return;
-      const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
       imgEl.src = url;
       imgEl.classList.add('loaded');
-      imgEl.onload = () => URL.revokeObjectURL(url);
     }).catch(() => {});
   }
   function faceAvaHtml(person, size) {
@@ -13890,17 +13896,21 @@
     // render after the tree). #lib-collections itself now holds everything BEFORE Folders.
     // Inner scrollers (the People list) are recreated by the rewrite below and would snap back to
     // the top on every background refresh — keep their scroll positions.
+    // Background refreshes (counts, keywords, activity, people) call this many times with
+    // nothing changed; rewriting identical HTML still recreates every node (face avatars
+    // included), which flickered. Only touch the DOM when the markup actually differs.
+    const setHtml = (el, html) => { if (el._renderedHtml !== html) { el.innerHTML = html; el._renderedHtml = html; } };
     const keepScroll = [...host.querySelectorAll('.lib-people-scroll')].map((el) => el.scrollTop);
-    host.innerHTML = catalogSectionHtml() + (dateHtml ? '<div class="lib-coll-sep"></div>' + dateHtml : '')
+    setHtml(host, catalogSectionHtml() + (dateHtml ? '<div class="lib-coll-sep"></div>' + dateHtml : '')
       + '<div class="lib-coll-sep"></div>' + sidebarSection('collections', 'Collections', collectionsBody)
-      + keywordsSectionHtml() + peopleSectionHtml() + albumsSectionHtml() + smartAlbumsSectionHtml() + drivesSectionHtml() + devicesSectionHtml();
+      + keywordsSectionHtml() + peopleSectionHtml() + albumsSectionHtml() + smartAlbumsSectionHtml() + drivesSectionHtml() + devicesSectionHtml());
     host.querySelectorAll('.lib-people-scroll').forEach((el, i) => { if (keepScroll[i]) el.scrollTop = keepScroll[i]; });
     const foldersHeaderEl = document.getElementById('lib-folders-header');
-    if (foldersHeaderEl) foldersHeaderEl.innerHTML = '<div class="lib-coll-sep"></div>' + sidebarSection('folders', 'Folders', '');
+    if (foldersHeaderEl) setHtml(foldersHeaderEl, '<div class="lib-coll-sep"></div>' + sidebarSection('folders', 'Folders', ''));
     const treeEl = document.getElementById('lib-tree');
     if (treeEl) treeEl.style.display = sidebarSecOpen.has('folders') ? '' : 'none';
     const postEl = document.getElementById('lib-collections-post');
-    if (postEl) postEl.innerHTML = cloudSectionHtml();
+    if (postEl) setHtml(postEl, cloudSectionHtml());
     // Every wiring call below used to query `host` (#lib-collections) alone, which was safe
     // when every section lived inside it. Now that Folders/Cloud are their own siblings, the
     // wiring scope is #lib-side — the real common ancestor of all four containers — so a row in
