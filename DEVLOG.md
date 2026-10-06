@@ -44,3 +44,9 @@
 - Integrated CHR-245 red-eye/pet-eye and its native detector, the CHR-267 Quick Look cache/prefetch slice, applicable CHR-113/115/116/117 mobile fixes, and unpublished Windows QA fixes; preserved newer main behavior and original local work.
 - Modified chromasmith-22.html, desktop/library-ui.js, desktop/src-tauri/src/{main,platform/windows,winvideothumb}.rs, design/surfaces.json and focused tests; recorded the 16-worktree audit in docs/worktree-integration-2026-10-06.md and corrected the Windows export-harness launch backend.
 - Verified Windows native compilation, 30 byte-identical baseline exports, focused feature/state/drag tests, unified layout, scroll anchoring and shortcut registry; broad gates retain baseline failures and real native/flash-photo acceptance remains for user review. Promo, homepage and packaging stays local.
+
+
+### 2026-10-06 — Prevent stranded feature worktrees
+- Updated AGENTS.md to permit task-owned feature-branch commits and require verified publication through a clean main integration checkout, with current-main conflict resolution and relevant checks.
+- Added remote-publication confirmation, explicit blocked-publication reports, and separation of unrelated drafts/promo assets; preserved the local checkout's existing instruction edits.
+- Verified both instruction copies and git diff whitespace; Linear issue ID unresolved because the targeted worktree search returned unrelated tickets, so no issue was guessed or updated. Documentation-only change.
