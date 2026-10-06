@@ -64,3 +64,6 @@
 - Added visible recursive status/count wording and `test/library_recursive_folders.mjs`; files: `desktop/library-ui.js`, `test/library_recursive_folders.mjs`, `DEVLOG.md`.
 - Verified JavaScript syntax, focused Chromium preference/query/status flow, and `git diff --check`; 50k catalog performance remains covered by catalog paging and needs a dedicated large-fixture measurement before claiming that criterion.
 - Published in integration commit `243829061138566e0b0f499e225ac44fab676fdc`; `git ls-remote origin refs/heads/main` confirmed the same hash. Focused Chromium regression and Library content lint passed on main.
+
+- CHR-275 follow-up: published interrupted-stroke cleanup in `51bacef4` (feature commit `b51f55bb`); clears held erase/cursor state on blur, visibility changes, paint-mode exit and pointer cancellation. Modifier rebinding remains open because the shortcut registry lacks modifier-only hold actions; Chromium run remains unavailable.
+- CHR-250: published the source-derived format and profile inventory in `d0f2ea9c`; `git ls-remote origin refs/heads/main` confirmed publication. `npm run lint:formats` passes; camera sample decoding remains explicitly unknown, and focused Rust decoder-table execution is blocked by missing Windows build assets/locked Cargo artifacts.
