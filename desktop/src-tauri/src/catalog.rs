@@ -3523,6 +3523,11 @@ pub fn pets_run(
 /// Pet sightings found before pets carried embeddings each became their own "Pet N". This embeds
 /// those old crops, then folds each unnamed pet group into an earlier group of the same species
 /// it clearly matches (`PET_AUTO_JOIN_SIM`) — named pets are never folded away, only into.
+/// A face-detector row the user tagged as a pet is a PET row: only DINOv2 embeds it (in
+/// pets_backfill_and_merge), never the human face model.
+const FACE_EMBED_NOT_PET: &str =
+    "pf.species IS NULL AND (pf.person_id IS NULL OR pf.person_id NOT IN (SELECT id FROM people WHERE kind = 'pet'))";
+
 fn pets_backfill_and_merge(conn: &Connection, cancel: &AtomicBool) -> Result<(), String> {
     const DECODE_LONG_EDGE: u32 = 1600;
     loop {
@@ -3533,8 +3538,11 @@ fn pets_backfill_and_merge(conn: &Connection, cancel: &AtomicBool) -> Result<(),
             .prepare(
                 "SELECT f.id, f.x0, f.y0, f.x1, f.y1, p.rel_path, v.last_path, v.is_local
                  FROM photo_faces f JOIN photos p ON p.id = f.photo_id JOIN volumes v ON v.id = p.volume_id
-                 WHERE f.embedding IS NULL AND p.present = 1
-                   AND (f.species IS NOT NULL OR f.person_id IN (SELECT id FROM people WHERE kind = 'pet'))
+                 WHERE p.present = 1
+                   AND ((f.embedding IS NULL AND f.species IS NOT NULL)
+                        -- species NULL on a pet person = a face-detector row whose vector (if
+                        -- any) came from the human face model: always re-embed with DINOv2.
+                        OR (f.species IS NULL AND f.person_id IN (SELECT id FROM people WHERE kind = 'pet')))
                  ORDER BY f.photo_id LIMIT 32",
             )
             .map_err(|e| e.to_string())?;
@@ -4193,8 +4201,9 @@ pub fn embed_run(
             let sql = format!(
                 "SELECT DISTINCT p.id, p.rel_path, v.last_path, v.is_local
                  FROM photo_faces pf JOIN photos p ON p.id = pf.photo_id JOIN volumes v ON v.id = p.volume_id
-                 WHERE p.present = 1 AND p.id IN ({}) AND pf.embedding IS NULL AND pf.kps != '[]'",
-                placeholders.join(",")
+                 WHERE p.present = 1 AND p.id IN ({}) AND pf.embedding IS NULL AND pf.kps != '[]' AND {}",
+                placeholders.join(","),
+                FACE_EMBED_NOT_PET
             );
             let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
             let rows = stmt
@@ -4212,12 +4221,12 @@ pub fn embed_run(
             rows
         } else {
             let mut stmt = conn
-                .prepare(
+                .prepare(&format!(
                     "SELECT DISTINCT p.id, p.rel_path, v.last_path, v.is_local
                      FROM photo_faces pf JOIN photos p ON p.id = pf.photo_id JOIN volumes v ON v.id = p.volume_id
-                     WHERE pf.embedding IS NULL AND pf.kps != '[]' AND p.present = 1
+                     WHERE pf.embedding IS NULL AND pf.kps != '[]' AND p.present = 1 AND {FACE_EMBED_NOT_PET}
                      LIMIT 16"
-                )
+                ))
                 .map_err(|e| e.to_string())?;
             let rows = stmt
                 .query_map([], |r| {
@@ -4242,7 +4251,7 @@ pub fn embed_run(
         let mut face_rows: Vec<(i64, i64, String)> = Vec::new(); // (photo_id, face_id, kps json)
         for (photo_id, _) in &photo_batch {
             let mut fstmt = conn
-                .prepare("SELECT id, kps FROM photo_faces WHERE photo_id = ?1 AND embedding IS NULL AND kps != '[]'")
+                .prepare(&format!("SELECT id, kps FROM photo_faces pf WHERE photo_id = ?1 AND embedding IS NULL AND kps != '[]' AND {FACE_EMBED_NOT_PET}"))
                 .map_err(|e| e.to_string())?;
             let rows: Vec<(i64, String)> = fstmt
                 .query_map(params![photo_id], |r| Ok((r.get(0)?, r.get(1)?)))
@@ -10848,6 +10857,41 @@ mod tests {
         assert_eq!(n, 0);
         assert_eq!(who0(&conn, body), (Some(bala), 1), "the body row carries the user's confirmation");
         assert_eq!(who0(&conn, elsewhere), (Some(bala), 1));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Regression: named pets' dog-face rows (species NULL, tagged to a kind='pet' person) were
+    /// re-embedded by the HUMAN face model after the DINOv2 switch, so pet_groups (species NOT
+    /// NULL only) never saw them and no new sighting could ever join a named pet.
+    #[test]
+    fn pet_face_rows_never_keep_a_human_face_vector() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("pet_face_arcface");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &AtomicBool::new(false)).unwrap();
+        let photo: i64 = conn.query_row("SELECT id FROM photos", [], |r| r.get(0)).unwrap();
+        conn.execute("INSERT INTO people (name, created, auto, kind) VALUES ('Lucifer', 0, 0, 'pet')", []).unwrap();
+        let luc = conn.last_insert_rowid();
+        let arcface = f32_vec_to_blob(&vec![0.0f32; 512]);
+        conn.execute(
+            "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, person_id, confirmed, species, embedding) VALUES (?1,0.1,0.1,0.5,0.5,0.9,'[[1,1]]',?2,1,NULL,?3)",
+            params![photo, luc, arcface],
+        )
+        .unwrap();
+        let fid = conn.last_insert_rowid();
+        // The face-embed pass must not pick a pet row up once its vector is cleared.
+        conn.execute("UPDATE photo_faces SET embedding = NULL WHERE id = ?1", params![fid]).unwrap();
+        let n: i64 = conn
+            .query_row(&format!("SELECT COUNT(*) FROM photo_faces pf WHERE pf.embedding IS NULL AND pf.kps != '[]' AND {FACE_EMBED_NOT_PET}"), [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 0, "face embedder must skip pet rows");
+        conn.execute("UPDATE photo_faces SET embedding = ?1 WHERE id = ?2", params![arcface, fid]).unwrap();
+        pets_backfill_and_merge(&conn, &AtomicBool::new(false)).unwrap();
+        let (sp, len): (Option<String>, i64) =
+            conn.query_row("SELECT species, length(embedding) FROM photo_faces WHERE id = ?1", params![fid], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(sp.as_deref(), Some("pet"), "pet face row must be re-embedded as a pet row");
+        assert_ne!(len, 2048, "human-face vector must be replaced");
         std::fs::remove_dir_all(&dir).ok();
     }
 
