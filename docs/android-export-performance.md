@@ -41,6 +41,8 @@ Raw timings, fixture SHA-256 hashes and settings: [benchmark data](benchmarks/an
 
 Verification passed: tile/notification regression and preview isolation; 35 fixture/recipe renders; all 23 checked-in goldens matched exactly (12 additional orientation combinations have no goldens). On Windows the scorecard needed `python -X utf8` for its console output. A separate optimized Photos export returned a successful receipt and MediaStore row; its pulled JPEG decoded as 6000×4000. This single Photos run took 8.876s, including 1.835s native saving; it is a destination correctness check, not a Photos before/after comparison.
 
+The suites passed again in the clean current-main integration checkout. The native inexact completion notice was also checked after denying exact-alarm permission: the app stayed foreground instead of opening settings. Implementation published to `origin/main` at `f41e82cd3e05b83458f7266e97330d9fb86c3bbc`, verified against `git ls-remote` after push. CHR-284 remains In Review for physical Pixel testing.
+
 ## Reproduce
 
 Build/stage/install the debug APK using the repository Android workflow. Grant emulator test permissions before timing. Generate `test/android/out/bench-4000x3000.jpg` and `bench-6000x4000.jpg` from `assets/brand/og-image.jpeg` with Pillow RGB/LANCZOS resize, `quality=92,optimize=True`. Keep identical fixture bytes across APKs.

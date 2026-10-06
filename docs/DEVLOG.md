@@ -7,6 +7,8 @@ Agent-generated changelog of completed features and architectural decisions.
 - Added `test/export_tiles.mjs`, `test/android/export_benchmark.mjs`, `docs/android-export-performance.md` and raw benchmark data. 24MP warm median fell 10.381s→7.397s (28.7%); alternating original/optimized functions confirmed 9.861s→7.246s (26.5%). No demonstrated 12MP speedup; timings are emulator evidence, not physical Pixel results.
 - Verification: tile pixels/seams/grain/glow/skin, memory/GPU/iOS guards, cancellation/cleanup and notification tests pass; live preview isolation passes; 35 fixture exports render and 23/23 checked-in goldens match exactly. All 22 benchmark JPEGs and a separate Photos JPEG decode at requested dimensions; Photos MediaStore save confirmed.
 
+Publication verified: integration commits `053f3757` and `f41e82cd` are published to `origin/main` at `f41e82cd3e05b83458f7266e97330d9fb86c3bbc`; `git ls-remote origin refs/heads/main` matched after the fast-forward push. Repeated the export fixture/golden suite in the clean integration checkout and reran tile/preview tests after the final HDR/lens/NR guards. Native completion notification also kept the emulator in the app with exact-alarm permission denied. CHR-284 remains In Review for physical-device testing.
+
 - CHR-7: Centered shared ask/confirm dialogs used by delete photos, create album, and related pop-ups.
 - Updated `chromasmith-22.html`; focused editor HTML validation passed.
 - Full UI audit remains blocked by missing `test/fixtures/portrait.png` in the existing worktree.
