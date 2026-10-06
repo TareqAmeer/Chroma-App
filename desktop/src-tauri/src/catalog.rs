@@ -288,6 +288,13 @@ pub(crate) fn open_and_migrate(path: &Path) -> rusqlite::Result<Connection> {
 /// One-time data passes keyed on a marker table, run on EVERY open — not inside `migrate`, which
 /// returns early once `user_version` is current and so would skip them on an up-to-date catalog.
 fn one_time_passes(conn: &Connection) -> rusqlite::Result<()> {
+    // Smart albums are user-authored rule ASTs stored beside the indexed catalog. Keep this
+    // additive table available even when an existing catalog is already at SCHEMA_VERSION;
+    // one_time_passes runs on each open specifically for idempotent additive work.
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS smart_albums (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, source_root_ids TEXT NOT NULL,
+        rule_set TEXT NOT NULL, updated_at INTEGER NOT NULL
+    ); CREATE UNIQUE INDEX IF NOT EXISTS ix_smart_albums_name ON smart_albums(lower(name));")?;
     // Pets moved to DINOv2 identity embeddings: drop every pet-row vector (old CLIP crops, and
     // HUMAN-face-model vectors on dog faces tagged as a pet) so pets_backfill_and_merge
     // re-embeds them all with dino.rs, which also files the dog-face rows as pet rows.
@@ -6870,6 +6877,10 @@ pub struct CatalogQuery {
     #[serde(default = "default_true")]
     pub include_offline: bool,
     pub limit: Option<u32>,
+    /// A live, saved user smart album. Its versioned allow-listed AST is resolved from the
+    /// catalog and compiled to fixed SQL fragments with bound values in query_run.
+    #[serde(default)]
+    pub smart_album_id: Option<String>,
     /// Date-browser scoping. `year` alone = that whole year; `year`+`month` = that month;
     /// all three = one day. `month`/`day` without `year` are ignored (not a valid scope).
     /// ⚠️ `#[serde(default)]` on all three: an older/simpler frontend payload (or a test) that
@@ -6983,7 +6994,7 @@ pub struct FolderScope {
 impl Default for CatalogQuery {
     fn default() -> Self {
         CatalogQuery {
-            kind: None, text: None, include_offline: true, limit: None, year: None, month: None, day: None,
+            kind: None, text: None, include_offline: true, limit: None, smart_album_id: None, year: None, month: None, day: None,
             no_date: false, blurry_only: false, expand_stack: None, keywords: Vec::new(), person_id: None, photo_ids: None,
             folder: None, camera: None, lens: None, iso: None, faces: None,
             rating: None, favorite: None, edited: None, label: None, offset: None,
@@ -7048,6 +7059,11 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
         // leader satisfies `stack_id = p.id` by construction (see the stacking module's own doc
         // comment: stack_id is always the CURRENT leader's own id).
         where_parts.push("(p.stack_id IS NULL OR p.stack_id = p.id)".to_string());
+
+        if let Some(id) = &q.smart_album_id {
+            let predicate = crate::smart_albums::append_query_scope(conn, id, &mut values)?;
+            where_parts.push(format!("({predicate})"));
+        }
 
         if let Some(f) = &q.folder {
             where_parts.push(format!("p.volume_id = ?{}", values.len() + 1));
