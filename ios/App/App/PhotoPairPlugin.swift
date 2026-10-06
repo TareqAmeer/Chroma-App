@@ -225,21 +225,57 @@ public class PhotoPairPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControlle
             // stores beside it. (Third-party RAW+JPEG pairs like RW2+JPEG still arrive as both files.)
             let dngs = picks.filter { $0.uniformTypeIdentifier == "com.adobe.raw-image" || $0.originalFilename.lowercased().hasSuffix(".dng") }
             let chosen = dngs.isEmpty ? picks : dngs
-            for (j, r) in chosen.enumerated() {
+            // A Live Photo is one PHAsset with a still resource and a `.pairedVideo` resource.
+            // Keep the MOV beside the imported still instead of flattening it into a second
+            // image (which the web importer would reject). Photos owns the pairing identity;
+            // carry its local identifier through with both resources.
+            let pairedVideo = asset.mediaSubtypes.contains(.photoLive)
+                ? res.first(where: { $0.type == .pairedVideo }) : nil
+            let resources = chosen.enumerated().map { ($0.offset, $0.element, false) } +
+                (pairedVideo.map { [(chosen.count, $0, true)] } ?? [])
+            let assetGroup = DispatchGroup()
+            let assetLock = NSLock()
+            var assetEntries: [[String: Any]] = []
+            group.enter()
+            for (j, r, isPairedVideo) in resources {
                 let url = dir.appendingPathComponent("\(i)-\(j)-\(r.originalFilename)")
-                group.enter()
+                assetGroup.enter()
                 PHAssetResourceManager.default().writeData(for: r, toFile: url, options: opts) { err in
-                    lock.lock()
-                    if err == nil {
+                    defer { assetGroup.leave() }
+                    guard err == nil else { return }
+                    assetLock.lock()
+                    defer { assetLock.unlock() }
+                    if isPairedVideo {
+                        assetEntries.append(["path": url.path, "name": r.originalFilename,
+                                             "uti": r.uniformTypeIdentifier, "pairedVideo": true])
+                    } else {
                         var entry: [String: Any] = ["path": url.path, "name": r.originalFilename, "uti": r.uniformTypeIdentifier,
                                     "photosAssetIdentifier": asset.localIdentifier,
                                     "raw": r.type == .alternatePhoto || r.uniformTypeIdentifier == "com.adobe.raw-image", "order": i * 10 + j]
+                        if pairedVideo != nil {
+                            entry["livePhoto"] = true
+                            entry["livePhotoIdentifier"] = asset.localIdentifier
+                        }
                         if PhotoPairPlugin.isDNG(name: r.originalFilename, uti: r.uniformTypeIdentifier), let dev = PhotoPairPlugin.developDNG(url) { entry["dev"] = dev.path }
-                        out.append(entry)
+                        assetEntries.append(entry)
                     }
-                    lock.unlock()
-                    group.leave()
                 }
+            }
+            assetGroup.notify(queue: .main) {
+                let companion = assetEntries.first(where: { $0["pairedVideo"] as? Bool == true })
+                let stills = assetEntries.filter { $0["pairedVideo"] == nil }.map { entry -> [String: Any] in
+                    var result = entry
+                    if let companion = companion {
+                        result["pairedVideoPath"] = companion["path"]
+                        result["pairedVideoName"] = companion["name"]
+                        result["pairedVideoUTI"] = companion["uti"]
+                    }
+                    return result
+                }
+                lock.lock()
+                out.append(contentsOf: stills)
+                lock.unlock()
+                group.leave()
             }
         }
         group.notify(queue: .main) {

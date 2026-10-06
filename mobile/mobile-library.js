@@ -34,6 +34,8 @@ async function patchPhoto(i,patch={},versions=[],exports=[]){
   };});
 }
 const getBlob=i=>tx('blobs','readonly',t=>t.objectStore('blobs').get(i)).then(p=>p?.bytes?new Blob([p.bytes],{type:p.type}):p?.blob);
+// A Live Photo's paired movie is stored as a companion to its still, never as a second gallery item.
+const getPairedVideo=i=>tx('blobs','readonly',t=>t.objectStore('blobs').get(i)).then(p=>p?.pairedVideoBytes?new Blob([p.pairedVideoBytes],{type:p.pairedVideoType||'video/quicktime'}):null);
 // The natively developed JPEG of a DNG/ProRAW (iOS), if the import made one.
 const getDev=i=>tx('blobs','readonly',t=>t.objectStore('blobs').get(i)).then(p=>p?.devBytes?new Blob([p.devBytes],{type:'image/jpeg'}):null);
 const safe=fn=>Promise.resolve().then(fn).catch(e=>{status(e.message,true);if(window.toast)toast(e.message);});
@@ -84,12 +86,12 @@ async function importFiles(files){
       // Legacy imports and origins without Web Crypto use a byte-verified fallback hash.
       if(!existing)for(const p of ps.filter(p=>p.size===f.size&&p.hash!==hash)){
         const original=await getBlob(p.id);if(original&&await fingerprint(original)===hash&&(!hash.startsWith('fnv:')||await identical(f,original))){p.hash=hash;await patchPhoto(p.id,{hash});existing=p;break;}}
-      if(existing){const changes={};if(f.__csPhotosAssetIdentifier&&(!existing.photosAssetIdentifier||existing.photosAssetIdentifier===f.__csPhotosAssetIdentifier)){changes.photosAssetIdentifier=f.__csPhotosAssetIdentifier;changes.photosAssetRaw=!!f.__csPhotosAssetRaw;}if(existing.trashed)changes.trashed=undefined;if(Object.keys(changes).length)await patchPhoto(existing.id,changes);ids.push(existing.id);duplicates++;continue;}
-      const i=id(),p={id:i,name:f.name,type:f.type,size:f.size,hash,added:Date.now(),edited:0,recipe:null,versions:[],exports:[],thumb:null,thumbEdited:null,flag:null,collection:'',...(f.__csPhotosAssetIdentifier?{photosAssetIdentifier:f.__csPhotosAssetIdentifier,photosAssetRaw:!!f.__csPhotosAssetRaw}:{})};
+      if(existing){const changes={},samePhotosAsset=!f.__csPhotosAssetIdentifier||!existing.photosAssetIdentifier||existing.photosAssetIdentifier===f.__csPhotosAssetIdentifier;if(f.__csPhotosAssetIdentifier&&samePhotosAsset){changes.photosAssetIdentifier=f.__csPhotosAssetIdentifier;changes.photosAssetRaw=!!f.__csPhotosAssetRaw;}if(f.__csLivePhotoIdentifier&&samePhotosAsset){changes.livePhoto=true;changes.livePhotoIdentifier=f.__csLivePhotoIdentifier;}if(existing.trashed)changes.trashed=undefined;if(Object.keys(changes).length)await patchPhoto(existing.id,changes);if(f.__csPairedVideo&&samePhotosAsset){const pairedVideoBytes=await f.__csPairedVideo.arrayBuffer();await tx('blobs','readwrite',t=>{const s=t.objectStore('blobs'),r=s.get(existing.id);r.onsuccess=()=>{if(r.result)s.put({...r.result,pairedVideoBytes,pairedVideoName:f.__csPairedVideoName,pairedVideoType:f.__csPairedVideoType||'video/quicktime'});};});}ids.push(existing.id);duplicates++;continue;}
+      const i=id(),p={id:i,name:f.name,type:f.type,size:f.size,hash,added:Date.now(),edited:0,recipe:null,versions:[],exports:[],thumb:null,thumbEdited:null,flag:null,collection:'',...(f.__csPhotosAssetIdentifier?{photosAssetIdentifier:f.__csPhotosAssetIdentifier,photosAssetRaw:!!f.__csPhotosAssetRaw}:{}),...(f.__csLivePhotoIdentifier?{livePhoto:true,livePhotoIdentifier:f.__csLivePhotoIdentifier}:{})};
       // Safari can reject a disk-backed File when IndexedDB clones it. Store its exact
       // bytes instead; getBlob also continues reading originals from the older Blob records.
-      const bytes=await f.arrayBuffer(),devBytes=f.__csDev?await f.__csDev.arrayBuffer():undefined;
-      await tx(['photos','blobs'],'readwrite',t=>{t.objectStore('photos').put(p);t.objectStore('blobs').put({id:i,bytes,name:f.name,type:f.type,devBytes});});
+      const bytes=await f.arrayBuffer(),devBytes=f.__csDev?await f.__csDev.arrayBuffer():undefined,pairedVideoBytes=f.__csPairedVideo?await f.__csPairedVideo.arrayBuffer():undefined;
+      await tx(['photos','blobs'],'readwrite',t=>{t.objectStore('photos').put(p);t.objectStore('blobs').put({id:i,bytes,name:f.name,type:f.type,devBytes,...(pairedVideoBytes?{pairedVideoBytes,pairedVideoName:f.__csPairedVideoName,pairedVideoType:f.__csPairedVideoType||'video/quicktime'}:{})});});
       ps.push(p);ids.push(i);status('Building thumbnail '+(n+1)+' of '+files.length);await patchPhoto(i,{thumb:await fileThumb(f.__csDev||f)});
     }catch(e){issues.push({name:f.name,message:e.message});}
   }
@@ -106,6 +108,8 @@ async function nativeFiles(list,cap){
     const blob=await (await fetch(cap.convertFileSrc(f.path))).blob(),file=new File([blob],f.name,{type:blob.type||''});
     if(f.photosAssetIdentifier)file.__csPhotosAssetIdentifier=f.photosAssetIdentifier;
     if(f.raw)file.__csPhotosAssetRaw=true;
+    if(f.livePhotoIdentifier)file.__csLivePhotoIdentifier=f.livePhotoIdentifier;
+    if(f.pairedVideoPath){try{file.__csPairedVideo=await (await fetch(cap.convertFileSrc(f.pairedVideoPath))).blob();file.__csPairedVideoName=f.pairedVideoName||'Live Photo.mov';file.__csPairedVideoType='video/quicktime';}catch(e){}}
     if(f.dev){try{file.__csDev=await (await fetch(cap.convertFileSrc(f.dev))).blob();}catch(e){}}
     files.push(file);
   }catch(e){}}
@@ -326,7 +330,7 @@ async function open(doFlush=true){if(doFlush){await flush();await refreshThumb()
 function closeGallery(){if(!openedId){toast('Open a photo first');return;}close();}
 function close(){root?.classList.remove('open');const layout=document.querySelector('.fx-layout');if(layout)layout.inert=!!UI().dialog;setSelecting(false);}
 window.chromasmithOpenGallery=()=>safe(()=>open());window.chromasmithToggleLibrary=()=>root?.classList.contains('open')?closeGallery():safe(()=>open());
-window.MobileLibrary={importPhotos:()=>safe(async()=>{if(!await importFromPhotos())root?.querySelector('.import-file')?.click();}),open,close,flush,isOpen:()=>!!root?.classList.contains('open'),cancelSelection:()=>{if(!selecting)return false;setSelecting(false);return true;},backup,restoreBackup,openPhoto,importFiles,getPhoto,allPhotos,getBlob,saveVersion,pasteTo,trash,restore,get isOpening(){return opening;},get currentId(){return openedId;},get queue(){return [...queue];}};
+window.MobileLibrary={importPhotos:()=>safe(async()=>{if(!await importFromPhotos())root?.querySelector('.import-file')?.click();}),open,close,flush,isOpen:()=>!!root?.classList.contains('open'),cancelSelection:()=>{if(!selecting)return false;setSelecting(false);return true;},backup,restoreBackup,openPhoto,importFiles,getPhoto,allPhotos,getBlob,getPairedVideo,saveVersion,pasteTo,trash,restore,get isOpening(){return opening;},get currentId(){return openedId;},get queue(){return [...queue];}};
 window.fxMobileBack=()=>safe(()=>UI().back());
 function saveLeaving(){if(openedId&&!restoring&&!opening){capture(getUISnapshot());flush(false).catch(()=>{});}}
 document.addEventListener('visibilitychange',()=>{if(document.hidden)saveLeaving();});window.addEventListener('pagehide',saveLeaving);
