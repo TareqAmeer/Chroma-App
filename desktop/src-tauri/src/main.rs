@@ -11,7 +11,7 @@
 // still show println!/log output in a console, matching Tauri's own project-template default.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::path::{Path, PathBuf};
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
 
@@ -3009,15 +3009,9 @@ fn main() {
                 library::prune_caches();
             });
 
-            // The native app menu bar is macOS-shaped: an "app name" first menu (App > About/
-            // Hide/Hide Others/Show All/Quit) is a macOS Application-menu convention with no
-            // Windows equivalent (PredefinedMenuItem::hide/hide_others/show_all are no-ops
-            // there), and the in-app UI (⌘K→Ctrl+K command palette, header buttons) already
-            // surfaces every one of these actions on every platform. Skipping it on Windows
-            // rather than porting its shape is a deliberate decision (docs/windows-port.md
-            // Phase 1b), not an oversight — cfg-gate the whole block rather than leave a
-            // half-native, half-nothing menu bar.
-            #[cfg(target_os = "macos")]
+            // Shared desktop commands appear in the macOS system menu and the Windows
+            // window menu bar. Only the macOS Application/Window menus use Mac-only roles.
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             {
             let open_item =
                 MenuItem::with_id(handle, "menu-open", "Open Photo…", true, Option::<&str>::None)?;
@@ -3186,6 +3180,7 @@ fn main() {
                 ],
             )?;
 
+            #[cfg(target_os = "macos")]
             let window_menu = Submenu::with_items(
                 handle,
                 "Window",
@@ -3227,6 +3222,7 @@ fn main() {
             let settings_item = MenuItem::with_id(
                 handle, "menu-settings", "Settings…", true, Option::<&str>::None,
             )?;
+            #[cfg(target_os = "macos")]
             let app_menu = Submenu::with_items(
                 handle,
                 "Chromasmith",
@@ -3244,9 +3240,25 @@ fn main() {
                 ],
             )?;
 
+            #[cfg(target_os = "windows")]
+            {
+                file_menu.append(&PredefinedMenuItem::separator(handle)?)?;
+                file_menu.append(&PredefinedMenuItem::quit(handle, Some("Exit"))?)?;
+                edit_menu.append(&PredefinedMenuItem::separator(handle)?)?;
+                edit_menu.append(&settings_item)?;
+                help_menu.append(&PredefinedMenuItem::separator(handle)?)?;
+                help_menu.append(&PredefinedMenuItem::about(handle, Some("About Chromasmith"), None)?)?;
+            }
+
+            #[cfg(target_os = "macos")]
             let menu = Menu::with_items(
                 handle,
                 &[&app_menu, &file_menu, &edit_menu, &photo_menu, &view_menu, &window_menu, &help_menu],
+            )?;
+            #[cfg(target_os = "windows")]
+            let menu = Menu::with_items(
+                handle,
+                &[&file_menu, &edit_menu, &photo_menu, &view_menu, &help_menu],
             )?;
             app.set_menu(menu)?;
 
@@ -3268,7 +3280,7 @@ fn main() {
                     let _ = handle2.emit(id, ());
                 }
             });
-            } // #[cfg(target_os = "macos")]
+            } // desktop native menus
 
             // AI tap-to-select's onnxruntime dylib (see sam.rs): a bundled RESOURCE (declared in
             // tauri.conf.json's bundle.resources), not embedded in the binary — `ort`'s

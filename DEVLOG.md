@@ -365,3 +365,9 @@
 - The iOS Photos picker now retrieves a Live Photo's `.pairedVideo` resource, carries the Photos asset identifier alongside its still, stores the MOV bytes with the gallery photo, and exposes `MobileLibrary.getPairedVideo(id)`. Saved one original iPhone 13 Pro 240 fps sample MOV locally under ignored `test/output/linear-samples/chr254`; it is not committed.
 - Files: `ios/App/App/PhotoPairPlugin.swift`, `mobile/mobile-library.js`. Node syntax and diff checks pass. The Playwright mobile test cannot start because `@playwright/test` is absent, and Swift/Xcode/device verification is unavailable on this Windows host. Playback, key-frame selection, trimming, saveback, and slow-motion editing remain open.
 - Feature commit `19f3b750` is integrated and published through `origin/main` at `b9d6d735bca28ed3038f895c301d0228efdf5f9b`. Only the two owned source files were integrated; CHR-254 remains In Review with remaining acceptance work open.
+
+## 2026-10-06 — CHR-196 Windows native menu restoration
+
+- Enabled the existing File, Edit, Photo, View, and Help native menus and event routing on Windows; placed Exit under File, Settings under Edit, and About under Help while preserving macOS-only Application/Window roles.
+- Files: `desktop/src-tauri/src/main.rs`, `docs/windows-port.md`; tracked against CHR-196’s Windows command/menu requirement. Other acceptance criteria remain outside this fix.
+- Verification: Windows `cargo check --bin chromasmith --offline`, frontend staging, and `git diff --check` pass. Native menu interaction and macOS runtime testing remain unverified. Publication commit recorded below after remote verification.
