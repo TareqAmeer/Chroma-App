@@ -11090,6 +11090,7 @@ async function selectLUT(v,skipFxDefaults){
     }
     if(!skipFxDefaults)_fxAmtTouched=false; // fresh look pick: allow its defaults to apply once
     renderPreview();log(`LUT applied: ${v.slice(2)}`,'ok');
+    if(typeof csFirstEditLookApplied==='function')csFirstEditLookApplied();
   }catch(e){log('LUT error: '+e.message,'err')}
 }
 // Print profile (Kodak/Fuji): a 2nd 3D LUT applied AFTER the film look + halation.
@@ -13058,6 +13059,7 @@ async function loadFXImages(fileList){
   if(entries.some(it=>RAW_FILE_EXT_RE.test('.'+it.ext)))applyRawDefaults();
   window.__pm&&window.__pm('lfx-pre-install');
   installFXImages(entries,loadKey);
+  if(typeof csFirstEditPhotoOpened==='function')csFirstEditPhotoOpened();
   window.__pm&&window.__pm('lfx-installed');
   return entries[0]; // callers that must know THEIR photo (not a stale/other one) is what's installed compare against fxImages[0]
 }
@@ -14012,13 +14014,13 @@ function csExportResultKeep(saved,failed,path){
   if(path&&window.__TAURI__){const b=document.createElement('button');b.type='button';b.className='btn bgh';b.style.cssText='margin-left:6px;padding:2px 8px;font-size:11px';
     b.textContent='Show in '+((window.CS_PLATFORM&&window.CS_PLATFORM.revealLabel)||'Finder');b.onclick=()=>{try{window.__TAURI__.core.invoke('reveal_in_finder',{path});}catch(e){}};el.appendChild(b);}
 }
-function csExportDone(n,path){
+function csExportDone(n,path,firstEdit){
   const old=document.getElementById('cs-export-done');if(old)old.remove();
   const d=document.createElement('div');d.id='cs-export-done';d.setAttribute('role','status');
   const dir=String(path).replace(/[\\/][^\\/]*$/,'');
   const lbl=(window.CS_PLATFORM&&window.CS_PLATFORM.revealLabel)||'Finder';
   d.innerHTML='<span></span><button type="button">Show in '+lbl+'</button><button type="button" aria-label="Dismiss" class="cs-x">×</button>';
-  d.firstChild.textContent='Exported '+n+' photo'+(n>1?'s':'')+' to '+(dir.split(/[\\/]/).pop()||dir);
+  d.firstChild.textContent=(firstEdit?'First edit saved to ':'Exported '+n+' photo'+(n>1?'s':'')+' to ')+(dir.split(/[\\/]/).pop()||dir);
   d.title=dir;
   const bs=d.querySelectorAll('button');
   bs[0].onclick=()=>{try{window.__TAURI__.core.invoke('reveal_in_finder',{path});}catch(e){}d.remove();};
@@ -14190,27 +14192,108 @@ function shortcutsHtml(){
   return `<label style="display:block;margin:0 0 10px">Search shortcuts <input id="cs-shortcut-search" type="search" placeholder="Search actions" style="width:100%"></label><label style="display:block;margin-bottom:10px"><input id="cs-shortcut-single" type="checkbox"> Disable single-key shortcuts</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button id="cs-shortcut-reset" class="btn bgh">Reset all</button><button id="cs-shortcut-export" class="btn bgh">Export keymap file</button><button id="cs-shortcut-import" class="btn bgh">Import keymap file</button></div><textarea id="cs-shortcut-data" aria-label="Shortcut import or export data" placeholder="Exported shortcut JSON appears here" style="width:100%;min-height:64px;display:none"></textarea><div id="cs-shortcut-list">${rows}</div><p style="font-size:11px;color:var(--mut)">Changes are saved on this device. Browser and operating-system shortcuts keep their normal behavior.</p>`;
 }
 function csOpenShortcuts(){_csModal('Keyboard Shortcuts',shortcutsHtml());const ov=document.getElementById('cs-modal-ov'),q=ov.querySelector('#cs-shortcut-search'),box=ov.querySelector('#cs-shortcut-data');ov.querySelector('#cs-shortcut-single').checked=localStorage.getItem(CS_SHORTCUTS_PREF)==='1';q.oninput=()=>ov.querySelectorAll('[data-shortcut-row]').forEach(r=>r.style.display=r.dataset.search.includes(q.value.toLowerCase())?'flex':'none');ov.querySelector('#cs-shortcut-reset').onclick=()=>{localStorage.removeItem(CS_SHORTCUTS_KEY);csOpenShortcuts();};ov.querySelector('#cs-shortcut-export').onclick=()=>{const data=window.chromasmithShortcutRegistry.export();box.style.display='block';box.value=data;box.focus();box.select();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download='chromasmith-shortcuts.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};ov.querySelector('#cs-shortcut-import').onclick=()=>{box.style.display='block';const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.onchange=async()=>{if(!input.files||!input.files[0])return;try{window.chromasmithShortcutRegistry.import(await input.files[0].text());csOpenShortcuts();}catch(e){alert(e.message);}};input.click();};ov.querySelector('#cs-shortcut-single').onchange=e=>window.chromasmithShortcutRegistry.disableSingles(e.target.checked);ov.querySelectorAll('[data-reset]').forEach(btn=>btn.onclick=()=>{csShortcutSet(btn.dataset.reset,null);csOpenShortcuts();});ov.querySelectorAll('[data-rebind]').forEach(btn=>btn.onclick=()=>{const id=btn.dataset.rebind;btn.textContent='Press keys…';let done=false;const cleanup=()=>{if(done)return;done=true;window.__csShortcutCapturing=false;document.removeEventListener('keydown',capture,true);window.removeEventListener('blur',cleanup);window.__csShortcutCancelCapture=null;};const capture=e=>{e.preventDefault();e.stopPropagation();if(['Shift','Control','Alt','Meta'].includes(e.key))return;if(e.key==='Escape'){cleanup();csOpenShortcuts();return;}const parts=[];if(e.metaKey)parts.push('Cmd');else if(e.ctrlKey)parts.push('Ctrl');if(e.altKey)parts.push('Alt');if(e.shiftKey)parts.push('Shift');const key=e.key===' '?'Space':e.key==='+'?'Plus':e.key==='-'?'Minus':e.key===','?'Comma':e.key.length===1?e.key.toUpperCase():e.key;parts.push(key);try{csShortcutSet(id,parts.join('+'));cleanup();csOpenShortcuts();}catch(err){cleanup();alert(err.message);csOpenShortcuts();}};window.__csShortcutCapturing=true;window.__csShortcutCancelCapture=cleanup;window.addEventListener('blur',cleanup);document.addEventListener('keydown',capture,true);});}
-// First-run tour — a single short _csModal (not a per-element spotlight walkthrough: the app's
-// layout differs enough between mobile bottom-sheet, desktop deskx rail and plain desktop that
-// positioning a spotlight against a moving target was the fragile option; a 3-step "here's the
-// golden path" panel is not). Shown once via a localStorage flag, and never if a photo is already
-// loaded when the app starts (that machine has clearly used it before — an import, a saved
-// session, or a returning tab reload, none of which should re-greet a new user).
+// First-run start card and event-driven first-edit guide. Use the existing photo picker and
+// Gallery rather than creating another import path; the steps advance on a loaded image, applied
+// look, visible original comparison, and successful export. The welcome card is replayable from
+// Help, while each guide step can be skipped.
 const _TOUR_KEY='chromasmith-tour-seen-v1';
+const _FIRST_EDIT_GUIDE_KEY='chromasmith-first-edit-guide-v1';
+const _FIRST_EDIT_STAGE_KEY='chromasmith-first-edit-stage-v1';
 function tourHtml(){
-  const step=(n,title,body)=>`<div class="cs-tour-step" data-n="${n}" style="margin-bottom:14px"><div class="cs-tour-k" style="font-family:var(--mono);font-size:11px;color:var(--acc);text-transform:uppercase;letter-spacing:var(--ls-2);margin-bottom:2px">Step ${n}</div><div style="font-size:14px;font-weight:600;margin-bottom:2px">${title}</div><div style="font-size:13px;color:var(--mut)">${body}</div></div>`;
-  const desk=!!window.__TAURI__,mob=document.body.classList.contains('mobile-fx');
-  const gal=typeof window.chromasmithOpenGallery==='function'; // phone app shell (mobile/mobile-library.js)
-  // A returning desktop user already has a Gallery folder — don't ask them to choose one again.
-  let hasRoot=false;try{hasRoot=!!localStorage.getItem('chromasmith_lib_root');}catch(e){}
-  return (desk&&hasRoot?'':desk
-      ?step(1,'Choose your photo folder','Click <b>Choose folder…</b> (or drop a folder onto the window). CHRO-MA-SMITH reads it in the background, so you can start editing straight away while it indexes. Your original files are never changed.')
-      :step(1,gal?'Import photos':'Open a photo',gal?'Tap <b>Import</b> in the Gallery. Your photos are kept in the app and the originals are never changed.':mob?'Tap <b>Open a photo</b>. Your original is never changed.':'Drag a photo (or RAW) anywhere onto the window, or click <b>Open a photo</b>. Your original is never changed.'))
-    +step(desk&&hasRoot?1:2,'Pick a look',(desk?'Double-click any photo to open it. ':'')+'Open <b>Look</b> and tap a film look. Everything else (grain, glow, curves, masks…) is optional fine-tuning on top of it. '+(mob?'Press and hold the photo to see the original.':'Use the before/after button to compare.'))
-    +step(desk&&hasRoot?2:3,'Export',gal?'When it looks right, hit <b>Export</b>. Full-resolution photos go to a <b>Chromasmith</b> album in Photos. Edits save automatically, and the Gallery keeps every version (press and hold a photo).':'When it looks right, hit <b>Export</b> for a full-resolution file. Edits save automatically and nothing ever uploads.')
-    +(mob?'':'<div style="font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:10px">The <b>Guide</b> (⋯ menu) explains every tool. ⌘K searches every tool. Advanced tabs (Match &amp; Refine, Color Copy, Collage) appear after your first export, or <a href="#" onclick="csShowAdvancedTabs(true);document.getElementById(\'cs-modal-ov\').remove();return false" style="color:var(--acc)">show them now</a>.</div>')
-    +'<div class="btn-row" style="margin-top:14px"><button class="btn bpri" onclick="document.getElementById(\'cs-modal-ov\').remove()">Got it</button></div>';
+  const browseLabel=window.chromasmithToggleLibrary?'Browse a folder':window.chromasmithOpenGallery?'Browse the Gallery':'';
+  const sampleCredit='Sample photo by Tareq Ameer'; // credited in design/prototypes/splash-v2/index.html
+  return `<p style="margin:0 0 14px;color:var(--mut);font-size:13px">Start with one photo. Your edits stay on this device; connecting Google Photos is optional and separate.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px">
+      <button type="button" class="btn bpri" data-tour-action="open">Open a photo</button>
+      ${browseLabel?`<button type="button" class="btn bgh" data-tour-action="folder">${browseLabel}</button>`:''}
+      <button type="button" class="btn bgh" data-tour-action="sample">Try a sample</button>
+    </div>
+    <p style="margin:8px 0 14px;color:var(--mut);font-size:11px">${sampleCredit}. The sample opens as a separate copy; exporting it never overwrites the bundled image.</p>
+    <div style="border-top:1px solid var(--bdr);padding-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="btn bgh" data-tour-action="guide">Guide my first edit</button>
+      <button type="button" class="btn bgh" data-tour-action="advanced">Show advanced tools</button>
+      <button type="button" class="btn bgh" data-tour-action="close">Skip for now</button>
+    </div>
+    <p style="margin:10px 0 0;color:var(--mut);font-size:11px">The Guide and ⌘K explain tools any time. Match &amp; Refine, Color Copy, and Collage stay hidden until you choose to show them.</p>`;
 }
+function tourBind(){
+  const ov=document.getElementById('cs-modal-ov');if(!ov)return;
+  const close=()=>ov.remove();
+  ov.querySelector('[data-tour-action="open"]').onclick=()=>{close();fxPickPhotos();};
+  ov.querySelector('[data-tour-action="sample"]').onclick=()=>csTourTrySample();
+  const folder=ov.querySelector('[data-tour-action="folder"]');
+  if(folder)folder.onclick=()=>csTourBrowseFolder();
+  ov.querySelector('[data-tour-action="guide"]').onclick=()=>{
+    try{localStorage.setItem(_FIRST_EDIT_GUIDE_KEY,'1');localStorage.removeItem(_FIRST_EDIT_STAGE_KEY);}catch(e){}
+    close();csFirstEditBegin();
+  };
+  ov.querySelector('[data-tour-action="advanced"]').onclick=()=>{close();csShowAdvancedTabs(true);};
+  ov.querySelector('[data-tour-action="close"]').onclick=()=>{close();csFirstEditSkip();};
+}
+function csTourTrySample(){
+  const ov=document.getElementById('cs-modal-ov');if(ov)ov.remove();
+  (async()=>{
+    try{
+      const url=new URL('vendor/splash/dog-sitting.webp',document.baseURI);
+      const response=await fetch(url);if(!response.ok)throw new Error(`Sample photo could not be loaded (${response.status})`);
+      const blob=await response.blob();const sample=new File([blob],'Chromasmith sample.webp',{type:blob.type||'image/webp',lastModified:0});
+      const loaded=await loadFXImages([sample]);if(!loaded)throw new Error('The sample photo did not open.');
+    }catch(e){if(typeof toast==='function')toast(`Could not open the sample photo — ${e.message||e}`,false);}
+  })();
+}
+async function csTourBrowseFolder(){
+  const ov=document.getElementById('cs-modal-ov');if(ov)ov.remove();
+  if(typeof window.chromasmithOpenGallery==='function'){window.chromasmithOpenGallery();return;}
+  if(typeof window.chromasmithToggleLibrary!=='function'){if(typeof toast==='function')toast('Folder browsing is available in the desktop Gallery. Open a photo here instead.');return;}
+  try{
+    if(!window.chromasmithLibraryIsOpen||!window.chromasmithLibraryIsOpen())await window.chromasmithToggleLibrary();
+    requestAnimationFrame(()=>{
+      const empty=document.getElementById('lib-empty-addfolder');
+      const choose=empty||document.getElementById('lib-pick');if(choose)choose.click();
+    });
+  }catch(e){if(typeof toast==='function')toast(`Could not open the Gallery — ${e.message||e}`,false);}
+}
+function csFirstEditSkip(){try{localStorage.setItem(_FIRST_EDIT_STAGE_KEY,'skipped');}catch(e){}}
+function csFirstEditStage(){try{return localStorage.getItem(_FIRST_EDIT_STAGE_KEY)||'';}catch(e){return ''}}
+function csFirstEditSetStage(stage){try{localStorage.setItem(_FIRST_EDIT_STAGE_KEY,stage);}catch(e){}}
+function csFirstEditGuideEnabled(){try{return localStorage.getItem('chromasmith-newuser-v2')==='1'||localStorage.getItem(_FIRST_EDIT_GUIDE_KEY)==='1';}catch(e){return false}}
+function csFirstEditBegin(){if(fxImages&&fxImages.length){csFirstEditPhotoOpened();return;}
+  _csModal('Your first edit',`<p style="margin:0 0 14px;color:var(--mut);font-size:13px">Open a local photo or try the included sample. You can cancel either action and come back whenever you are ready.</p><div class="btn-row"><button type="button" class="btn bpri" data-guide-open>Open a photo</button><button type="button" class="btn bgh" data-guide-sample>Try a sample</button><button type="button" class="btn bgh" data-guide-skip>Skip guide</button></div>`);
+  const ov=document.getElementById('cs-modal-ov');ov.querySelector('[data-guide-open]').onclick=()=>{ov.remove();fxPickPhotos();};ov.querySelector('[data-guide-sample]').onclick=()=>csTourTrySample();ov.querySelector('[data-guide-skip]').onclick=()=>{ov.remove();csFirstEditSkip();};
+}
+function csFirstEditCoach(stage){
+  const copy={
+    look:['Choose a film look','Open <b>Looks</b> and choose a film look. The look is an editable starting point; your source photo stays unchanged.','Show looks'],
+    compare:['Compare with the original','Press and hold <b>Show original</b> (or hold Space) to compare the unedited photo.','Show original'],
+    export:['Export your edit','Open <b>Output</b> and export a copy. On desktop the success message includes <b>Show in Finder/Explorer</b>; in a browser, the file goes to your browser downloads.','Show output options']
+  }[stage];
+  if(!copy)return;
+  const [title,body,action]=copy;
+  _csModal(`First edit · ${stage==='look'?'1':stage==='compare'?'2':'3'} of 3`,
+    `<p style="margin:0 0 14px;font-size:13px;color:var(--mut)">${body}</p><div class="btn-row" style="justify-content:flex-end;gap:8px"><button type="button" class="btn bgh" data-guide-skip>Skip guide</button><button type="button" class="btn bpri" data-guide-action>${action}</button></div>`);
+  const ov=document.getElementById('cs-modal-ov');
+  ov.querySelector('[data-guide-skip]').onclick=()=>{ov.remove();csFirstEditSkip();};
+  ov.querySelector('[data-guide-action]').onclick=()=>{
+    ov.remove();
+    if(stage==='look'){switchTab('fx');fxSection('looks');}
+    else if(stage==='compare')csFirstEditCompareDemo();
+    else{switchTab('fx');fxSection('export');}
+  };
+}
+function csFirstEditPhotoOpened(){
+  if(!csFirstEditGuideEnabled()||csFirstEditStage()==='skipped'||csFirstEditStage()==='complete')return;
+  csFirstEditSetStage('look');csFirstEditCoach('look');
+}
+function csFirstEditLookApplied(){if(csFirstEditGuideEnabled()&&csFirstEditStage()==='look'){csFirstEditSetStage('compare');csFirstEditCoach('compare');}}
+function csFirstEditCompareShown(){
+  if(!csFirstEditGuideEnabled()||csFirstEditStage()!=='compare')return;
+  csFirstEditSetStage('export');setTimeout(()=>csFirstEditCoach('export'),250);
+}
+function csFirstEditCompareDemo(){
+  if(!fxImages.length){csFirstEditSetStage('look');csFirstEditCoach('look');return;}
+  fxCompare=true;renderPreview();setTimeout(()=>{if(fxCompare){fxCompare=false;renderPreview();}},1400);
+}
+function csFirstEditFinish(){if(csFirstEditStage()!=='export')return false;csFirstEditSetStage('complete');return true;}
 function tourMaybeShow(){
   try{
     if(localStorage.getItem(_TOUR_KEY))return;
@@ -14219,13 +14302,14 @@ function tourMaybeShow(){
     document.body.classList.add('cs-adv-hidden');
   }catch(e){return;}
   _csModal('Welcome to <span class="cs-nowrap">CHRO-MA-SMITH</span>',tourHtml());
+  tourBind();
 }
-window.chromasmithShowTour=function(){_csModal('Welcome to <span class="cs-nowrap">CHRO-MA-SMITH</span>',tourHtml());}; // manual replay (Help menu / palette) — bypasses the once-only flag
+window.chromasmithShowTour=function(){_csModal('Welcome to <span class="cs-nowrap">CHRO-MA-SMITH</span>',tourHtml());tourBind();}; // manual replay (Help menu / palette) — bypasses the once-only flag
 window.chromasmithShowShortcuts=csOpenShortcuts;
 // ── First-timer aids ─────────────────────────────────────────────────────────────────────
 // (1) Advanced tabs (Match & Refine / Color Copy / Collage) stay hidden for a brand-new user until
-// their first export, or until they ask (tour link / Help). Returning users — anyone whose tour flag
-// is already set — keep everything visible. Hidden with a class, not removed: switchTab indexes the
+// they explicitly ask (welcome tour / Help). Export no longer unlocks them by surprise. Returning
+// users — anyone whose tour flag is already set — keep everything visible. Hidden with a class, not removed: switchTab indexes the
 // tab row by position, so the DOM order must not change.
 const _ADV_KEY='chromasmith-adv-tabs-v1';
 function csShowAdvancedTabs(on){
@@ -14322,6 +14406,7 @@ function _cpCommands(){
   add('Action','Edit history',()=>{if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover();});cmds[cmds.length-1].aliases='history undo steps versions';
   add('Action','Compare before / after',()=>{if(typeof toggleSplit==='function')toggleSplit();});cmds[cmds.length-1].aliases='split compare original';
   add('Action','Show welcome tour',()=>window.chromasmithShowTour());
+  add('Action','Show advanced tools',()=>csShowAdvancedTabs(true));
   return cmds;
 }
 function _cpFilter(cmds,q){
@@ -21021,6 +21106,7 @@ function resolveSplitSnapshot(src){
   return 'orig';
 }
 function renderPreview(){
+  if(typeof fxCompare!=='undefined'&&fxCompare&&typeof csFirstEditCompareShown==='function')csFirstEditCompareShown();
   // Preview requests are also the app's central signal for recipe and photo changes. Debounce
   // the export render and invalidate any in-flight result immediately while the sheet is open.
   fxSoftProofSchedule();
@@ -23291,7 +23377,6 @@ async function exportFX(...a){
 }
 async function _exportFXRun(){
   if(!fxImages.length){log('No image loaded','warn');return}
-  try{csShowAdvancedTabs(true);}catch(e){}
   await fxEnsureFullQuality(); // never export the display-tier stand-in
   if(window.chromasmithFullQualityReady===false){toast('Full-resolution photo could not be loaded — export cancelled. Reopen the photo and try again.',false);return}
   const scope=fxImages.length>1?fxExportScope:'all';
@@ -23726,9 +23811,10 @@ async function _exportFXRun(){
     if(failed&&results.length){}
     else if(results.length){
       const _paths=(typeof sr!=='undefined'&&Array.isArray(sr))?sr.filter(x=>x&&x.ok&&x.path).map(x=>x.path):[];
-      if(_paths.length&&window.__TAURI__)csExportDone(results.length,_paths[0]);
+      const firstEdit=csFirstEditStage()==='export';
+      if(_paths.length&&window.__TAURI__){if(firstEdit)csFirstEditFinish();csExportDone(results.length,_paths[0],firstEdit);}
       else if(capNative()&&Array.isArray(sr)&&sr.some(r=>r.status==='shared'))toast('Handed to share sheet — save not confirmed');
-      else toast(`Exported ${results.length} photo${results.length>1?'s':''} ✓`,true);
+      else{if(firstEdit)csFirstEditFinish();toast(firstEdit?'Your first edit is ready. Find the download in your browser.':`Exported ${results.length} photo${results.length>1?'s':''} ✓`,true);}
     }
     // Every photo failed (render OR native save) — say so. Without this the run ended silently,
     // since both branches above are guarded on results.length.
