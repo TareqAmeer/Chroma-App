@@ -7015,7 +7015,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006E';
+const BUILD='1.1006F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16302,7 +16302,7 @@ function _mskPointToUV(e){ // → {nx,ny} normalized 0..1, TOP-origin (matches m
   const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height;
   return{nx:Math.min(1,Math.max(0,cx*sw/FX.cv.width/sw)),ny:Math.min(1,Math.max(0,cy*sh/FX.cv.height/sh))};
 }
-function mskPaintAt(m,nx,ny){
+function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   // The ONE in-place raster mutation in the app, so the ONE place copy-on-write has to fire.
   // Undo history holds this array by reference (see fxHistoryPush); mskPxForWrite hands back a
   // private copy the first time we write after a push, and the same array on every subsequent
@@ -16319,7 +16319,7 @@ function mskPaintAt(m,nx,ny){
     const soft=1-dd*dd*(3-2*dd),add=flow*soft*255,idx=y*w+x,cur=px[idx];
     // Uint8ClampedArray clamps on store, but keep the explicit bounds: erase must floor at 0 and
     // add must ceil at 255 with the SAME arithmetic as before, so painted values are unchanged.
-    px[idx]=mskPaintErase?Math.max(0,cur-add):Math.min(255,cur+add);
+    px[idx]=erase?Math.max(0,cur-add):Math.min(255,cur+add);
   }
   _mskTexDirty=true;
 }
@@ -16333,6 +16333,7 @@ function mskPaintAt(m,nx,ny){
   // radius formula ((size/100)*0.25*max(bufferW,bufferH)) as a fraction of the photo's rendered
   // box, so it tracks size/zoom without needing exact 1:1 buffer-to-screen pixel mapping.
   const cursorEl=document.getElementById('msk-brush-cursor');
+  let lastBrushPointer=null;
   function updateBrushCursor(e){
     if(!cursorEl)return;
     const m=fxState.masks[mskSel];
@@ -16349,10 +16350,14 @@ function mskPaintAt(m,nx,ny){
     const diam=(mskBrushSize/100)*0.5*Math.max(pr.width,pr.height);
     cursorEl.style.width=diam+'px';cursorEl.style.height=diam+'px';
     cursorEl.style.left=(e.clientX-wr.left)+'px';cursorEl.style.top=(e.clientY-wr.top)+'px';
-    cursorEl.classList.toggle('erase',!!mskPaintErase);
+    cursorEl.classList.toggle('erase',!!(mskPaintErase||e.altKey));
     cursorEl.classList.add('on');
   }
-  fxCanvasOn('pointermove',updateBrushCursor);
+  fxCanvasOn('pointermove',e=>{lastBrushPointer=e;updateBrushCursor(e);});
+  // Lightroom Classic uses Alt/Option-drag as the temporary brush eraser. Keep it scoped to
+  // brush paint so AI scribbles and color-sampling gestures retain their existing Alt meaning.
+  document.addEventListener('keydown',e=>{if(e.key==='Alt'&&lastBrushPointer)updateBrushCursor({...lastBrushPointer,altKey:true});});
+  document.addEventListener('keyup',e=>{if(e.key==='Alt'&&lastBrushPointer)updateBrushCursor({...lastBrushPointer,altKey:false});});
   fxCanvasOn('pointerleave',()=>{if(cursorEl)cursorEl.classList.remove('on');});
   fxCanvasOn('pointerdown',e=>{
     if(!mskPaintMode)return;
@@ -16360,13 +16365,13 @@ function mskPaintAt(m,nx,ny){
     e.preventDefault();e.stopPropagation();
     try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
     _mskStroke=m;
-    const p=_mskPointToUV(e);if(p)mskPaintAt(m,p.nx,p.ny);
+    const p=_mskPointToUV(e);if(p)mskPaintAt(m,p.nx,p.ny,mskPaintErase||e.altKey);
     queueRender();
   });
   fxCanvasOn('pointermove',e=>{
     if(!mskPaintMode||!_mskStroke)return;
     e.preventDefault();e.stopPropagation();
-    const p=_mskPointToUV(e);if(p)mskPaintAt(_mskStroke,p.nx,p.ny);
+    const p=_mskPointToUV(e);if(p)mskPaintAt(_mskStroke,p.nx,p.ny,mskPaintErase||e.altKey);
     queueRender();
   });
   const end=e=>{if(!_mskStroke)return;_mskStroke=null;renderPreview();fxHistoryPush();};
@@ -17443,7 +17448,7 @@ function mskRebuild(){
     }
     shape+='<div class="btn-row">'
       +'<button class="btn '+(mskPaintMode?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintToggle()" title="Paint into this mask on the preview">'+icon('brush',14)+(mskPaintMode?' Painting':' Paint')+'</button>'
-      +'<button class="btn '+(mskPaintErase?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" title="Erase instead of add">'+icon('eraser',14)+' Erase</button></div>'
+      +'<button class="btn '+(mskPaintErase?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" title="Erase instead of add; hold Alt/Option while painting for temporary erase">'+icon('eraser',14)+' Erase</button></div>'
       +'<div class="fx-row"><div class="fx-label">Brush size</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushSize+'" oninput="mskBrushSize=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushSize+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
          +mskRefineControls(m)
