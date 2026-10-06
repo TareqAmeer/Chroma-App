@@ -2760,6 +2760,7 @@ fn main() {
             catalog::catalog_face_scan_status,
             catalog::catalog_record_pet_sighting,
             catalog::catalog_face_crop,
+            catalog::catalog_face_preview,
             catalog::catalog_embed_faces,
             catalog::catalog_cluster_faces,
             catalog::catalog_people,

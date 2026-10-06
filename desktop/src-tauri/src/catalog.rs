@@ -3447,6 +3447,7 @@ pub fn pets_run(
             max.unwrap_or(0) as usize + 1
         };
         let mut groups = pet_groups(&tx)?;
+        let profiles = person_profiles(&tx, "pet")?;
         for (id, mtime, dets) in &detected {
             let Some(dets) = dets else { continue }; // unreadable right now — leave unscanned, retried next pass
             for (d, emb) in dets {
@@ -3456,8 +3457,11 @@ pub fn pets_run(
                     groups
                         .iter()
                         .filter(|g| species_match(&g.1, d.species))
-                        .map(|g| (g.0, g.2.iter().map(|x| dot(e, x)).fold(f32::MIN, f32::max)))
-                        .filter(|(_, sim)| *sim >= PET_AUTO_JOIN_SIM)
+                        // Named pet: judged by its confirmed profile only (see PET_NAMED_JOIN_SIM).
+                        .filter_map(|g| match profiles.iter().any(|p| p.id == g.0) {
+                            true => best_profile_match(e, &profiles, Some(g.0)).filter(|(_, sim)| *sim >= PET_NAMED_JOIN_SIM).map(|(_, sim)| (g.0, sim)),
+                            false => Some((g.0, g.2.iter().map(|x| dot(e, x)).fold(f32::MIN, f32::max))).filter(|(_, sim)| *sim >= PET_AUTO_JOIN_SIM),
+                        })
                         .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
                         .map(|(pid, _)| pid)
                 });
@@ -3581,8 +3585,10 @@ fn pets_backfill_and_merge(conn: &Connection, cancel: &AtomicBool) -> Result<(),
     }
 
     absorb_pet_faces(conn)?;
+    prune_named_pets(conn)?;
     group_orphan_pets(conn)?;
     let groups = pet_groups(conn)?;
+    let profiles = person_profiles(conn, "pet")?;
     let auto: std::collections::HashSet<i64> = {
         let mut st = conn.prepare("SELECT id FROM people WHERE kind = 'pet' AND auto = 1").map_err(|e| e.to_string())?;
         let ids = st.query_map([], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
@@ -3603,7 +3609,8 @@ fn pets_backfill_and_merge(conn: &Connection, cancel: &AtomicBool) -> Result<(),
             .iter()
             .chain(centroids.iter().filter(|(p, _, _)| !auto.contains(p)))
             .filter(|(p, s, _)| p != pid && species_match(s, sp) && !into.contains_key(p))
-            .map(|(p, _, c2)| (*p, dot(c, c2)))
+            // A named target is judged by its confirmed profile, not its (auto-grown) centroid.
+            .map(|(p, _, c2)| (*p, profiles.iter().find(|pr| pr.id == *p).map_or(dot(c, c2), |pr| if profile_sim(c, pr) >= PET_NAMED_JOIN_SIM { profile_sim(c, pr).max(PET_AUTO_JOIN_SIM) } else { -1.0 })))
             .filter(|(_, sim)| *sim >= PET_AUTO_JOIN_SIM)
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         if let Some((t, _)) = target {
@@ -3611,6 +3618,8 @@ fn pets_backfill_and_merge(conn: &Connection, cancel: &AtomicBool) -> Result<(),
         }
     }
     if into.is_empty() {
+        drop_rejected_pet_rows(conn)?;
+        prune_named_pets(conn)?;
         return Ok(());
     }
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
@@ -3620,6 +3629,9 @@ fn pets_backfill_and_merge(conn: &Connection, cancel: &AtomicBool) -> Result<(),
     }
     tx.commit().map_err(|e| e.to_string())?;
     eprintln!("pets: merged {} duplicate pet groups", into.len());
+    drop_rejected_pet_rows(conn)?;
+    // A merged group is judged as a whole; each of its sightings still has to match on its own.
+    prune_named_pets(conn)?;
     Ok(())
 }
 
@@ -3726,6 +3738,47 @@ fn species_match(a: &str, b: &str) -> bool {
     a == b || a == "pet" || b == "pet"
 }
 
+fn face_rejection_set(conn: &Connection) -> Result<std::collections::HashSet<(i64, i64)>, String> {
+    let mut st = conn.prepare("SELECT face_id, person_id FROM face_rejections").map_err(|e| e.to_string())?;
+    let set = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+    Ok(set)
+}
+
+/// A "Not <pet>" is final: group merges move whole groups, so a sighting the user removed from a
+/// pet could ride back in with its group. Undo any such assignment.
+fn drop_rejected_pet_rows(conn: &Connection) -> Result<usize, String> {
+    conn.execute(
+        "UPDATE photo_faces SET person_id = NULL, confirmed = 0 WHERE confirmed != 1 AND species IS NOT NULL
+         AND EXISTS (SELECT 1 FROM face_rejections r WHERE r.face_id = photo_faces.id AND r.person_id = photo_faces.person_id)",
+        [],
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Unconfirmed sightings filed under a NAMED pet that don't look like its confirmed profile
+/// (old auto-tags on human faces/buildings, or drift from member-to-member matching) go back to
+/// the unfiled pool; Find-more still offers any that are a plausible match.
+fn prune_named_pets(conn: &Connection) -> Result<usize, String> {
+    let profiles = person_profiles(conn, "pet")?;
+    let mut drop_ids: Vec<i64> = Vec::new();
+    for prof in &profiles {
+        let mut st = conn
+            .prepare("SELECT id, embedding FROM photo_faces WHERE person_id = ?1 AND confirmed != 1 AND species IS NOT NULL AND length(embedding) > 0")
+            .map_err(|e| e.to_string())?;
+        let rows: Vec<(i64, Vec<u8>)> = st.query_map(params![prof.id], |r| Ok((r.get(0)?, r.get(1)?))).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+        drop_ids.extend(rows.into_iter().filter(|(_, b)| profile_sim(&blob_to_f32_vec(b), prof) < PET_NAMED_JOIN_SIM).map(|(id, _)| id));
+    }
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    for id in &drop_ids {
+        tx.execute("UPDATE photo_faces SET person_id = NULL, confirmed = 0 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    if !drop_ids.is_empty() {
+        eprintln!("pets: unfiled {} unconfirmed sightings that don't match their named pet", drop_ids.len());
+    }
+    Ok(drop_ids.len())
+}
+
 /// Pet sightings that belong to no group (older re-clusters deleted their "Pet N" rows) are
 /// filed into the best matching group, or grouped with each other into fresh "Pet N"s.
 fn group_orphan_pets(conn: &Connection) -> Result<(), String> {
@@ -3748,6 +3801,8 @@ fn group_orphan_pets(conn: &Connection) -> Result<(), String> {
         return Ok(());
     }
     let mut groups = pet_groups(conn)?;
+    let profiles = person_profiles(conn, "pet")?;
+    let rejected = face_rejection_set(conn)?;
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     let mut next_num: usize = tx
         .query_row("SELECT MAX(CAST(SUBSTR(name, 5) AS INTEGER)) FROM people WHERE kind = 'pet' AND name LIKE 'Pet %'", [], |r| r.get::<_, Option<i64>>(0))
@@ -3759,9 +3814,12 @@ fn group_orphan_pets(conn: &Connection) -> Result<(), String> {
         let best = groups
             .iter()
             .enumerate()
-            .filter(|(_, g)| species_match(&g.1, &sp))
-            .map(|(i, g)| (i, g.2.iter().map(|x| dot(&e, x)).fold(f32::MIN, f32::max)))
-            .filter(|(_, sim)| *sim >= PET_AUTO_JOIN_SIM)
+            .filter(|(_, g)| species_match(&g.1, &sp) && !rejected.contains(&(fid, g.0)))
+            .filter_map(|(i, g)| match profiles.iter().find(|p| p.id == g.0) {
+                // Named pet: its confirmed profile only, behind the same margin Find-more uses.
+                Some(_) => best_profile_match(&e, &profiles, Some(g.0)).filter(|(_, sim)| *sim >= PET_NAMED_JOIN_SIM).map(|(_, sim)| (i, sim)),
+                None => Some((i, g.2.iter().map(|x| dot(&e, x)).fold(f32::MIN, f32::max))).filter(|(_, sim)| *sim >= PET_AUTO_JOIN_SIM),
+            })
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         let idx = match best {
             Some((i, _)) => i,
@@ -3909,13 +3967,42 @@ pub fn catalog_photo_ids_for_paths(state: tauri::State<CatalogState>, paths: Vec
 }
 
 #[tauri::command]
-pub fn catalog_faces_for_path(state: tauri::State<CatalogState>, path: String) -> Result<Vec<PhotoFaceInfo>, String> {
+pub fn catalog_faces_for_path(state: tauri::State<CatalogState>, path: String, stack: Option<bool>) -> Result<Vec<PhotoFaceInfo>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    faces_for_path_run(&conn, &path)
+    if stack.unwrap_or(false) { faces_for_stack_run(&conn, &path) } else { faces_for_path_run(&conn, &path) }
+}
+
+/// Faces on a collapsed stack: the leader's own plus every member's. The Library shows a stack
+/// as its leader but its person filter matches faces on ANY member, so "Not <person>" / the
+/// People editor must reach those too — leader-only, untagging a stacked photo silently did
+/// nothing. (The Editor keeps faces_for_path_run: it draws boxes on that one concrete file.)
+fn faces_for_stack_run(conn: &Connection, path: &str) -> Result<Vec<PhotoFaceInfo>, String> {
+    let Some(photo_id) = find_photo_by_abs_path(conn, path) else { return Ok(Vec::new()) };
+    faces_for_stack_id(conn, photo_id)
+}
+
+fn faces_for_stack_id(conn: &Connection, photo_id: i64) -> Result<Vec<PhotoFaceInfo>, String> {
+    let mut ids: Vec<i64> = conn
+        .prepare("SELECT id FROM photos WHERE stack_id = ?1 AND id != ?1")
+        .map_err(|e| e.to_string())?
+        .query_map(params![photo_id], |r| r.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    ids.insert(0, photo_id);
+    let mut out = Vec::new();
+    for id in ids {
+        out.extend(faces_for_photo_id(conn, id)?);
+    }
+    Ok(out)
 }
 
 fn faces_for_path_run(conn: &Connection, path: &str) -> Result<Vec<PhotoFaceInfo>, String> {
     let Some(photo_id) = find_photo_by_abs_path(conn, path) else { return Ok(Vec::new()) };
+    faces_for_photo_id(conn, photo_id)
+}
+
+fn faces_for_photo_id(conn: &Connection, photo_id: i64) -> Result<Vec<PhotoFaceInfo>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT f.id, f.x0, f.y0, f.x1, f.y1, f.person_id, p.name, p.kind, f.confirmed, COALESCE(p.auto, 0)
@@ -4079,6 +4166,31 @@ pub async fn catalog_face_crop(app: tauri::AppHandle, face_id: i64) -> Result<ta
     })
     .await
     .map_err(|e| format!("catalog_face_crop task panicked: {e}"))?
+}
+
+/// The whole photo a face sits on (1600px Quick Look tier) — Space in the review grid previews
+/// it, since a tight crop often can't tell one curly brown dog from another.
+#[tauri::command]
+pub async fn catalog_face_preview(app: tauri::AppHandle, face_id: i64) -> Result<tauri::ipc::Response, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let path = {
+            let state = app.state::<CatalogState>();
+            let conn = state.conn.lock().map_err(|e| e.to_string())?;
+            let (rel_path, last_path, is_local): (String, String, i64) = conn
+                .query_row(
+                    "SELECT p.rel_path, v.last_path, v.is_local FROM photo_faces f JOIN photos p ON p.id = f.photo_id
+                     JOIN volumes v ON v.id = p.volume_id WHERE f.id = ?1",
+                    params![face_id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .map_err(|e| format!("face {face_id}: {e}"))?;
+            abs_path(&last_path, is_local != 0, &rel_path)
+        };
+        crate::library::quicklook_preview_bytes(&path).map(tauri::ipc::Response::new)
+    })
+    .await
+    .map_err(|e| format!("catalog_face_preview task panicked: {e}"))?
 }
 
 fn face_crop_run(state: &CatalogState, face_id: i64) -> Result<tauri::ipc::Response, String> {
@@ -4881,6 +4993,11 @@ const PET_SUGGEST_MARGIN: f32 = 0.05;
 /// pets_run files a new sighting straight into an existing pet group at/above this.
 const PET_AUTO_JOIN_SIM: f32 = 0.78;
 const PET_OUTLIER_SIM: f32 = 0.35;
+/// A sighting is filed into a NAMED pet without asking only at/above this against the pet's
+/// confirmed profile (never against its auto-filed members — matching those let each new
+/// sighting pull in the next one, drifting into other dogs and junk). Below it the sighting
+/// stays out and "Find more photos of" offers it for a yes/no instead.
+const PET_NAMED_JOIN_SIM: f32 = 0.7;
 /// Second, looser DBSCAN pass over faces the strict pass left alone ("maybe the same person"),
 /// eps 0.9 ≈ cosine 0.6. Only ever shown for review; never assigned on its own.
 const LOOSE_CLUSTER_EPS: f64 = 0.9;
@@ -5566,8 +5683,9 @@ fn resolve_suggestions_run(conn: &Connection, person_id: i64, accept: &[i64], re
     for fid in reject {
         tx.execute("INSERT OR IGNORE INTO face_rejections (face_id, person_id) VALUES (?1, ?2)", params![fid, person_id])
             .map_err(|e| e.to_string())?;
-        // A rejected face that was pending under this person goes back to Unnamed.
-        tx.execute("UPDATE photo_faces SET person_id = NULL WHERE id = ?1 AND person_id = ?2 AND confirmed = 0", params![fid, person_id])
+        // A rejected face under this person goes back to Unnamed — pending, auto-tagged (2) or,
+        // via the review page's Back, one the user had just accepted (1).
+        tx.execute("UPDATE photo_faces SET person_id = NULL, confirmed = 0 WHERE id = ?1 AND person_id = ?2", params![fid, person_id])
             .map_err(|e| e.to_string())?;
     }
     if !accept.is_empty() {
@@ -10838,6 +10956,29 @@ mod tests {
         println!("DUP_PHOTO_PET_PAIRS {dup}");
     }
 
+    /// Real-library precision probe (COPY of a catalog): for each named pet, histogram of its
+    /// members' similarity to the pet's confirmed profile, plus the lowest-scoring face ids.
+    ///     PET_DB=/path/copy.db cargo test --release real_pet_member_similarity -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn real_pet_member_similarity() {
+        let conn = open_and_migrate(Path::new(&std::env::var("PET_DB").unwrap())).unwrap();
+        let profiles = person_profiles(&conn, "pet").unwrap();
+        for prof in &profiles {
+            let mut st = conn.prepare("SELECT id, embedding FROM photo_faces WHERE person_id = ?1 AND confirmed != 1 AND length(embedding) > 0").unwrap();
+            let mut sims: Vec<(f32, i64)> = st
+                .query_map(params![prof.id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Vec<u8>>(1)?))).unwrap()
+                .map(|r| r.unwrap()).map(|(id, b)| (profile_sim(&blob_to_f32_vec(&b), prof), id)).collect();
+            sims.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+            let mut hist = [0usize; 10];
+            for (s, _) in &sims { hist[((s.max(0.0) * 10.0) as usize).min(9)] += 1; }
+            println!("PET {} n={} hist(0.0..1.0 by 0.1)={:?}", prof.name, sims.len(), hist);
+            println!("LOW {} {:?}", prof.name, sims.iter().take(40).map(|x| x.1).collect::<Vec<_>>());
+            let mid: Vec<i64> = sims.iter().filter(|x| x.0 >= 0.5 && x.0 < 0.6).take(40).map(|x| x.1).collect();
+            println!("MID {} {:?}", prof.name, mid);
+        }
+    }
+
     #[test]
     fn a_pet_face_inside_its_body_box_becomes_one_tag() {
         let conn = temp_db();
@@ -11021,10 +11162,57 @@ mod tests {
     }
 
     #[test]
-    // CLAUDE.md failure #5: a re-cluster used to null EVERY assignment and rebuild from scratch,
-    // which could silently move a face the user had already reviewed. A confirmed face's
-    // person_id must survive re-clustering completely untouched, even when new/unconfirmed faces
-    // are being clustered at the same time.
+    fn stacked_photo_faces_include_every_member_so_untag_reaches_them() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("stack_faces");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        std::fs::write(dir.join("b.jpg"), b"b").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &AtomicBool::new(false)).unwrap();
+        let ids: Vec<i64> = conn.prepare("SELECT id FROM photos ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect();
+        let (leader, member) = (ids[0], ids[1]);
+        conn.execute("UPDATE photos SET stack_id = ?1", params![leader]).unwrap();
+        conn.execute("INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps) VALUES (?1,0,0,1,1,0.9,'[]')", params![member]).unwrap();
+        let fid = conn.last_insert_rowid();
+        let faces = faces_for_stack_id(&conn, leader).unwrap();
+        assert!(faces.iter().any(|f| f.face_id == fid), "a stack's faces must include its members' faces");
+        assert!(faces_for_photo_id(&conn, leader).unwrap().is_empty(), "the per-file lookup stays per-file (Editor boxes)");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_rejected_pet_sighting_is_not_refiled_into_that_pet() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("pet_reject");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &AtomicBool::new(false)).unwrap();
+        let photo: i64 = conn.query_row("SELECT id FROM photos", [], |r| r.get(0)).unwrap();
+        conn.execute("INSERT INTO people (name, created, auto, kind) VALUES ('Lucy', 0, 0, 'pet')", []).unwrap();
+        let lucy = conn.last_insert_rowid();
+        let mut v = vec![0f32; 8];
+        v[0] = 1.0;
+        let blob = f32_vec_to_blob(&v);
+        let ins = |person: Option<i64>, confirmed: i64| {
+            conn.execute(
+                "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, person_id, confirmed, species, embedding) VALUES (?1,0,0,1,1,0.9,'[]',?2,?3,'dog',?4)",
+                params![photo, person, confirmed, blob],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+        ins(Some(lucy), 1);
+        let auto_tagged = ins(Some(lucy), 2);
+        resolve_suggestions_run(&conn, lucy, &[], &[auto_tagged]).unwrap();
+        let p: Option<i64> = conn.query_row("SELECT person_id FROM photo_faces WHERE id = ?1", params![auto_tagged], |r| r.get(0)).unwrap();
+        assert_eq!(p, None, "rejecting an auto-tagged face must untag it");
+        group_orphan_pets(&conn).unwrap();
+        let p: Option<i64> = conn.query_row("SELECT person_id FROM photo_faces WHERE id = ?1", params![auto_tagged], |r| r.get(0)).unwrap();
+        assert_ne!(p, Some(lucy), "a rejected sighting must not be refiled into that pet");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn people_recluster_leaves_unconfirmed_pet_sightings_filed() {
         // Regression: cluster_run's wipe cleared EVERY unconfirmed person_id, so each people
         // re-cluster orphaned all ~28k auto-filed pet sightings.
@@ -11049,6 +11237,10 @@ mod tests {
     }
 
     #[test]
+    // CLAUDE.md failure #5: a re-cluster used to null EVERY assignment and rebuild from scratch,
+    // which could silently move a face the user had already reviewed. A confirmed face's
+    // person_id must survive re-clustering completely untouched, even when new/unconfirmed faces
+    // are being clustered at the same time.
     fn confirmed_faces_survive_a_recluster_untouched() {
         let conn = temp_db();
         let dir = scratch_photos_dir("cluster_confirmed");

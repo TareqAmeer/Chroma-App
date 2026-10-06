@@ -6929,7 +6929,7 @@
       item(`Not ${esc(who)}${n > 1 ? ` (${n})` : ''}`, async () => {
         const ids = [];
         for (const path of paths) {
-          const faces = await invoke('catalog_faces_for_path', { path }).catch(() => []);
+          const faces = await invoke('catalog_faces_for_path', { path, stack: true }).catch(() => []);
           (faces || []).filter((f) => f.person_id === pid).forEach((f) => ids.push(f.face_id));
         }
         if (!ids.length) return;
@@ -10471,7 +10471,7 @@
     const MAX = 200;
     const faces = [];
     for (const path of paths.slice(0, MAX)) {
-      const fs = await invoke('catalog_faces_for_path', { path }).catch(() => []);
+      const fs = await invoke('catalog_faces_for_path', { path, stack: true }).catch(() => []);
       (fs || []).forEach((f) => faces.push(f));
     }
     const wrap = document.createElement('div');
@@ -10627,19 +10627,29 @@
           <span class="lib-btn" id="lib-review-confirm">Name &amp; next</span>
           <span class="lib-btn" id="lib-review-ignore">Ignore</span>
           <span class="lib-btn" id="lib-review-skip">Skip</span>
+          <span class="lib-btn" id="lib-review-none" style="margin-left:auto">Unselect all</span>
+          <span class="lib-btn" id="lib-review-back">← Back</span>
         </div>
         <div style="padding:0 18px 4px;display:flex;gap:14px;flex-wrap:wrap">
           <span class="lib-review-kbd">↵</span><span class="mut" style="font-size:11px">Name &amp; next</span>
           <span class="lib-review-kbd">X</span><span class="mut" style="font-size:11px">Ignore</span>
-          <span class="lib-review-kbd">Space</span><span class="mut" style="font-size:11px">Toggle face (excluded faces return to Unnamed)</span>
+          <span class="lib-review-kbd">Click</span><span class="mut" style="font-size:11px">Toggle face (excluded faces return to Unnamed)</span>
+          <span class="lib-review-kbd">Space</span><span class="mut" style="font-size:11px">Preview the photo under the pointer</span>
           <span class="lib-review-kbd">→</span><span class="mut" style="font-size:11px">Skip</span>
+          <span class="lib-review-kbd">←</span><span class="mut" style="font-size:11px">Back</span>
         </div>
+      </div>
+      <div id="lib-review-pv" style="display:none;position:absolute;inset:0;z-index:5;background:rgba(0,0,0,.92);align-items:center;justify-content:center;cursor:zoom-out">
+        <img alt="" style="max-width:94%;max-height:94%;object-fit:contain">
       </div>`;
     document.body.appendChild(el);
     el.querySelector('#lib-review-close').onclick = closeReviewFaces;
     el.querySelector('#lib-review-confirm').onclick = reviewConfirmCurrent;
     el.querySelector('#lib-review-ignore').onclick = reviewIgnoreCurrent;
     el.querySelector('#lib-review-skip').onclick = () => reviewGoTo(reviewState.idx + 1);
+    el.querySelector('#lib-review-back').onclick = reviewBack;
+    el.querySelector('#lib-review-none').onclick = reviewToggleAll;
+    el.querySelector('#lib-review-pv').onclick = reviewClosePreview;
     // ⚠️ Bound directly on the input, not just relied on via document-level bubbling below —
     // the input carries a `list=` (datalist) attribute, and at least one Chromium build was
     // observed swallowing the keydown entirely while its autocomplete popup was open, so Enter
@@ -10698,10 +10708,49 @@
     reviewState.idx = idx;
     reviewRenderCurrent();
   }
+  function reviewBack() {
+    if (reviewState.idx > 0) { reviewState.idx -= 1; reviewRenderCurrent(); }
+  }
+  /// "Unselect all" (every tile = not them), or "Select all" once nothing is selected.
+  function reviewToggleAll() {
+    const cells = [...document.querySelectorAll('#lib-review-grid .lib-review-face')];
+    const anySel = cells.some((c) => !reviewState.deselected.has(parseInt(c.dataset.faceId, 10)));
+    cells.forEach((cell) => {
+      const fid = parseInt(cell.dataset.faceId, 10);
+      if (anySel) reviewState.deselected.add(fid); else reviewState.deselected.delete(fid);
+      cell.classList.toggle('desel', anySel);
+      cell.classList.toggle('sel', !anySel);
+    });
+    reviewSyncToggleAll();
+  }
+  function reviewSyncToggleAll() {
+    const b = document.getElementById('lib-review-none');
+    const cells = [...document.querySelectorAll('#lib-review-grid .lib-review-face')];
+    if (b) b.textContent = cells.some((c) => !reviewState.deselected.has(parseInt(c.dataset.faceId, 10))) ? 'Unselect all' : 'Select all';
+  }
+  function reviewPreview(faceId) {
+    const pv = document.getElementById('lib-review-pv');
+    const img = pv.querySelector('img');
+    img.removeAttribute('src');
+    pv.style.display = 'flex';
+    pv.dataset.faceId = faceId;
+    invoke('catalog_face_preview', { faceId }).then((buf) => {
+      if (pv.dataset.faceId !== String(faceId)) return;
+      const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+      img.onload = () => URL.revokeObjectURL(url);
+      img.src = url;
+    }).catch((err) => { reviewClosePreview(); toast(humanizeErr('preview this photo', err), 'err'); });
+  }
+  function reviewClosePreview() {
+    const pv = document.getElementById('lib-review-pv');
+    if (pv) { pv.style.display = 'none'; delete pv.dataset.faceId; }
+  }
   function reviewRenderCurrent() {
     const c = reviewState.clusters[reviewState.idx];
     if (!c) { reviewGoTo(reviewState.idx + 1); return; }
     reviewState.deselected = new Set();
+    reviewClosePreview();
+    document.getElementById('lib-review-back').style.visibility = reviewState.idx > 0 ? '' : 'hidden';
     const sg = reviewState.suggest;
     const nameInput = document.getElementById('lib-review-name');
     const confirmBtn = document.getElementById('lib-review-confirm');
@@ -10733,8 +10782,10 @@
         else reviewState.deselected.add(fid);
         cell.classList.toggle('desel', reviewState.deselected.has(fid));
         cell.classList.toggle('sel', !reviewState.deselected.has(fid));
+        reviewSyncToggleAll();
       };
     });
+    reviewSyncToggleAll();
   }
   /// Every face excluded by the user — a deselected tile excludes its whole moment.
   function reviewExcluded(c) {
@@ -10817,13 +10868,25 @@
   document.addEventListener('keydown', (e) => {
     const el = document.getElementById('lib-review');
     if (!el || !el.classList.contains('on')) return;
+    const pv = document.getElementById('lib-review-pv');
+    const pvOpen = pv && pv.style.display !== 'none';
+    if (pvOpen && (e.key === 'Escape' || e.key === ' ')) { e.preventDefault(); reviewClosePreview(); return; }
     if (e.key === 'Escape') { closeReviewFaces(); return; }
     const t = e.target;
-    const inField = t && t.closest && t.closest('input,textarea');
+    // A read-only field ("Is this X?" pre-fills the name and focuses it) is no reason to swallow
+    // the review keys — otherwise Space/arrows never worked on that page.
+    const fld = t && t.closest && t.closest('input,textarea');
+    const inField = fld && !fld.readOnly;
     if (e.key === 'Enter' && inField) { e.preventDefault(); reviewConfirmCurrent(); return; }
     if (inField) return;
     if (e.key.toLowerCase() === 'x') { reviewIgnoreCurrent(); return; }
     if (e.key === 'ArrowRight') { reviewGoTo(reviewState.idx + 1); return; }
+    if (e.key === 'ArrowLeft') { reviewBack(); return; }
+    if (e.key === ' ') {
+      // The tile under the pointer (Quick Look style); none hovered = the first tile.
+      const hov = el.querySelector('.lib-review-face:hover') || el.querySelector('.lib-review-face');
+      if (hov) { e.preventDefault(); reviewPreview(parseInt(hov.dataset.faceId, 10)); }
+    }
   });
   /// Visual multi-candidate picker (people-pets wireframes screen D) — replaces the old
   /// "retype a name from this newline list" merge flow (failure #8), which failed outright on
