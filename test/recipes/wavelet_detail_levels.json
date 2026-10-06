@@ -1,0 +1,12 @@
+{
+  "_desc": "CHR-261 multiscale detail contrast at independently controlled source bands.",
+  "sliders": {
+    "adj-wavelet-1": "55",
+    "adj-wavelet-2": "35",
+    "adj-wavelet-3": "-25",
+    "adj-wavelet-res": "20"
+  },
+  "toggles": { "adjust": true },
+  "selects": {},
+  "colors": {}
+}
