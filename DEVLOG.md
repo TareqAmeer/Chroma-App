@@ -371,3 +371,9 @@
 - Enabled the existing File, Edit, Photo, View, and Help native menus and event routing on Windows; placed Exit under File, Settings under Edit, and About under Help while preserving macOS-only Application/Window roles.
 - Files: `desktop/src-tauri/src/main.rs`, `docs/windows-port.md`; tracked against CHR-196’s Windows command/menu requirement. Other acceptance criteria remain outside this fix.
 - Verification: Windows `cargo check --bin chromasmith --offline`, frontend staging, and `git diff --check` pass. Native menu interaction and macOS runtime testing remain unverified. Publication commit recorded below after remote verification.
+
+### CHR-196 publication and native verification
+
+- Published menu restoration at `a78e682707f65eaa584583cca2426c8bf715c6b3`; fetched remote main and confirmed commit ancestry plus identical menu-source/documentation content to the verified feature checkout.
+- Windows `cargo build --bin chromasmith --offline` passes. Launched rebuilt debug executable and queried its real HWND menu through Win32: File, Edit, Photo, View, Help and populated submenus verified. Screenshot capture failed; click-through and macOS runtime checks remain unverified. The commit hook also updated only the frontend BUILD marker in `chromasmith-22.html`.
+- Short native diagnostics reported zero freezes and unrelated missing `hq_offline`/`offline_edit_queue` tables; no clean-diagnostics claim. CHR-196 remains In Review.
