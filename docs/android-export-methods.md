@@ -82,3 +82,5 @@ The ordinary APK excludes ExportExperimentPlugin and its debug cleartext overrid
 Snapseed evidence: [settings](benchmarks/android-snapseed-settings.png), [24MP input details](benchmarks/android-snapseed-input.png), [Brightness +7 edit](benchmarks/android-snapseed-edit.png).
 
 Final integrated APK live checks pass: duplicate filenames preserve both byte-exact JPEGs and native status confirms each. Deliberately dropping the saved acknowledgement also returned a successful receipt through status lookup after the 30-second test timeout; its pulled JPEG matches exactly. This induced delay is a resilience test, not an export-speed measurement. The ordinary integrated APK has no experimental endpoint.
+
+Published implementation: `e27bde4d`; integration verification: `9ecef3ae382ec4310e234d6f44eb0d559b67e24c`, confirmed on remote main after fast-forward push. CHR-284 remains In Review for physical-device testing.
