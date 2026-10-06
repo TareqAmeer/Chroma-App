@@ -990,6 +990,16 @@ pub mod astro {
 // distortion, and was not tested against any of those. Validated against a KNOWN synthetic
 // transform in `tests::similarity_registration_recovers_known_transform` BEFORE this compositing
 // step was written, per the brief's explicit "validate before claiming it works" instruction.
+// CHR-244 research decision (2026-10-06): do not grow this pairwise similarity lane into an
+// N-frame stitcher by chaining accumulated composites. OpenCV's documented detailed stitching
+// components provide a concrete architecture: pairwise feature matching and camera estimation,
+// bundle adjustment, warping/projection, exposure compensation, seam finding, then multiband
+// blending. See https://docs.opencv.org/4.10.0/d9/dd8/samples_2cpp_2stitching_detailed_8cpp-example.html
+// and https://docs.opencv.org/4.10.0/d0/dff/group__stitching.html. This repository currently has no
+// OpenCV dependency or native runtime/build integration (Cargo.toml); adding one is a product/build
+// decision, not a safe Rust-only extension. OpenCV >=4.5 is Apache-2.0; <=4.4 is BSD-3-Clause, so a
+// future adoption must pin/audit the selected release and ship its notices: https://opencv.org/license/.
+// No OpenCV code or third-party implementation was copied here.
 pub mod pano {
     use super::pyramid::{self, Plane};
     use super::RgbImageF;
@@ -1440,6 +1450,16 @@ mod tests {
         0.5 + 0.15 * (x / 11.0).sin() + 0.15 * (y / 17.0).cos() + 0.1 * ((x + y) / 23.0).sin() + 0.08 * (x / 5.3).cos() * (y / 6.1).sin()
     }
 
+    #[test]
+    fn panorama_rejects_three_photos_before_decode() {
+        let paths = vec![
+            "missing-a.jpg".to_owned(),
+            "missing-b.jpg".to_owned(),
+            "missing-c.jpg".to_owned(),
+        ];
+        let err = super::merge_panorama(&paths).expect_err("3-photo stitching is not implemented");
+        assert!(err.contains("exactly 2 photos"), "unexpected error: {err}");
+    }
     #[test]
     fn similarity_registration_recovers_known_transform() {
         let (w, h) = (160usize, 160usize);
