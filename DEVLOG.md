@@ -111,4 +111,4 @@
 ## 2026-10-06 — CHR-263 inpainting model decision (research slice)
 - Recorded a provisional hold on remote generation, bundling/distributing models, and in-app generative inpainting until a prompt-capable artifact, locality/privacy, hardware/storage, and candidate-persistence contract are reviewed.
 - Added sourced distinctions between erase and diffusion model families, a re-entry checklist, and a non-legal-summary note in `docs/ai-inpainting-model-decision.md` and `LICENSES-MODELS.md`.
-- Verification: primary project/model pages were opened and reviewed; Markdown link and whitespace checks are pending. Model selection, legal review, implementation, and product acceptance remain open.
+- Verification: reviewed all six cited primary project/model pages and ran `git diff --check`; model selection, legal review, implementation, and product acceptance remain open.
