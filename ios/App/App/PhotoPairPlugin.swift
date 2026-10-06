@@ -15,9 +15,13 @@ public class PhotoPairPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControlle
     public let jsName = "PhotoPair"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "pick", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "takeShared", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "takeShared", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "readAdjustment", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "saveAdjustment", returnType: CAPPluginReturnPromise)
     ]
     private var pending: CAPPluginCall?
+    private static let adjustmentFormatIdentifier = "com.tareq.chromasmith.photos-recipe"
+    private static let adjustmentFormatVersion = "1"
 
     // Apple ProRAW / DNG at full size (48MP) can't be decoded by the web view's WASM RAW decoder: it holds the
     // whole frame several times over and iOS kills the page ("Opening…" then the gallery refreshes). Develop it
@@ -80,6 +84,119 @@ public class PhotoPairPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControlle
         call.resolve(["files": out])
     }
 
+    // Read only this app's versioned edit recipe from a Photos adjustment. Returning foreign or
+    // future-version data as if it were a Chromasmith recipe would silently corrupt an edit.
+    @objc func readAdjustment(_ call: CAPPluginCall) {
+        guard let identifier = call.getString("assetIdentifier"), !identifier.isEmpty else {
+            call.reject("A Photos asset identifier is required."); return
+        }
+        withReadablePhotoAccess(call) {
+            let fetched = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
+            guard let asset = fetched.firstObject, asset.mediaType == .image,
+                  !asset.mediaSubtypes.contains(.photoLive) else {
+                call.reject("This Photos asset is missing or is not a supported still image."); return
+            }
+            let options = PHContentEditingInputRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.canHandleAdjustmentData = { adjustment in
+                adjustment.formatIdentifier == Self.adjustmentFormatIdentifier &&
+                adjustment.formatVersion == Self.adjustmentFormatVersion
+            }
+            asset.requestContentEditingInput(with: options) { input, _ in
+                guard let data = input?.adjustmentData,
+                      data.formatIdentifier == Self.adjustmentFormatIdentifier,
+                      data.formatVersion == Self.adjustmentFormatVersion,
+                      let recipe = String(data: data.data, encoding: .utf8) else {
+                    call.resolve(["assetIdentifier": identifier, "recipeJSON": NSNull()]); return
+                }
+                call.resolve(["assetIdentifier": identifier, "recipeJSON": recipe])
+            }
+        }
+    }
+
+    // Save one already-rendered still-image export as a non-destructive Photos adjustment.
+    // The original Photos resource is never replaced; adjustmentData keeps the editable recipe.
+    @objc func saveAdjustment(_ call: CAPPluginCall) {
+        guard let identifier = call.getString("assetIdentifier"), !identifier.isEmpty,
+              let renderedPath = call.getString("renderedPath"),
+              let recipeJSON = call.getString("recipeJSON"),
+              let recipeData = recipeJSON.data(using: .utf8), recipeData.count <= 16 * 1024 * 1024,
+              (try? JSONSerialization.jsonObject(with: recipeData)) is [String: Any] else {
+            call.reject("A Photos asset, rendered image, and valid recipe are required."); return
+        }
+        let renderedURL: URL
+        if let url = URL(string: renderedPath), url.isFileURL {
+            renderedURL = url
+        } else {
+            renderedURL = URL(fileURLWithPath: renderedPath)
+        }
+        guard FileManager.default.fileExists(atPath: renderedURL.path),
+              let fileType = UTType(filenameExtension: renderedURL.pathExtension.lowercased()) else {
+            call.reject("The rendered still image is unavailable or has an unsupported file type."); return
+        }
+        withReadablePhotoAccess(call) {
+            let fetched = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
+            guard let asset = fetched.firstObject, asset.mediaType == .image,
+                  !asset.mediaSubtypes.contains(.photoLive), asset.canPerform(.content) else {
+                call.reject("This Photos asset cannot accept a still-image edit."); return
+            }
+            let resources = PHAssetResource.assetResources(for: asset)
+            let hasRawResource = resources.contains { resource in
+                resource.type == .alternatePhoto || resource.uniformTypeIdentifier == "com.adobe.raw-image" ||
+                resource.uniformTypeIdentifier == "public.camera-raw"
+            }
+            guard !hasRawResource else {
+                call.reject("Saving a rendered edit to RAW or RAW+JPEG Photos assets is not supported yet."); return
+            }
+            let options = PHContentEditingInputRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.canHandleAdjustmentData = { adjustment in
+                adjustment.formatIdentifier == Self.adjustmentFormatIdentifier &&
+                adjustment.formatVersion == Self.adjustmentFormatVersion
+            }
+            asset.requestContentEditingInput(with: options) { input, _ in
+                guard let input = input else {
+                    call.reject("Photos could not provide editing input for this asset."); return
+                }
+                let output = PHContentEditingOutput(contentEditingInput: input)
+                guard output.supportedRenderedContentTypes.contains(fileType) else {
+                    call.reject("Photos does not support the rendered export format for this asset."); return
+                }
+                do {
+                    let destination = try output.renderedContentURL(for: fileType)
+                    try FileManager.default.copyItem(at: renderedURL, to: destination)
+                    output.adjustmentData = PHAdjustmentData(
+                        formatIdentifier: Self.adjustmentFormatIdentifier,
+                        formatVersion: Self.adjustmentFormatVersion,
+                        data: recipeData
+                    )
+                } catch {
+                    call.reject("Could not prepare the non-destructive Photos edit: \(error.localizedDescription)"); return
+                }
+                PHPhotoLibrary.shared().performChanges({
+                    PHAssetChangeRequest(for: asset).contentEditingOutput = output
+                }) { saved, error in
+                    if let error = error {
+                        call.reject("Photos could not save the edit: \(error.localizedDescription)"); return
+                    }
+                    guard saved else { call.reject("Photos did not save the edit."); return }
+                    call.resolve(["assetIdentifier": identifier, "status": "updated-source"])
+                }
+            }
+        }
+    }
+
+    private func withReadablePhotoAccess(_ call: CAPPluginCall, action: @escaping () -> Void) {
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+            DispatchQueue.main.async {
+                guard status == .authorized || status == .limited else {
+                    call.reject("Photos access is required. Allow access in Settings, then try again."); return
+                }
+                action()
+            }
+        }
+    }
+
     public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         picker.dismiss(animated: true)
         guard let call = pending else { return }
@@ -115,6 +232,7 @@ public class PhotoPairPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControlle
                     lock.lock()
                     if err == nil {
                         var entry: [String: Any] = ["path": url.path, "name": r.originalFilename, "uti": r.uniformTypeIdentifier,
+                                    "photosAssetIdentifier": asset.localIdentifier,
                                     "raw": r.type == .alternatePhoto || r.uniformTypeIdentifier == "com.adobe.raw-image", "order": i * 10 + j]
                         if PhotoPairPlugin.isDNG(name: r.originalFilename, uti: r.uniformTypeIdentifier), let dev = PhotoPairPlugin.developDNG(url) { entry["dev"] = dev.path }
                         out.append(entry)

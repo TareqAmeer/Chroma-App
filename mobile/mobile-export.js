@@ -1,7 +1,7 @@
 /* Native save receipts. Sharing confirms handoff only, never a save to Photos. */
 (function(){
 'use strict';
-let last=[],retryItems=[],sheetPending=false,batch=false,batchReceipts=[],batchRetries=[];
+let last=[],retryItems=[],lastDestination='photos',sheetPending=false,batch=false,batchReceipts=[],batchRetries=[];
 const native=()=>typeof capNative==='function'&&capNative();
 function choose(){return new Promise(resolve=>{
   let value=null;const s=MobileUI.sheet('Export destination','<button data-dest="photos">Save to Photos · Chromasmith album</button><button data-dest="files">Save to Files · Documents/Chromasmith</button><button data-dest="share">Share · choose another app</button><p>Sharing hands files to another app. It does not confirm they were saved.</p>',(el,close)=>el.querySelectorAll('[data-dest]').forEach(b=>b.onclick=()=>{value=b.dataset.dest;close();}));
@@ -34,7 +34,16 @@ async function save(items,destination){
     try{
       const content=item.content instanceof Blob?await item.content.arrayBuffer():item.content;
       const data=typeof content==='string'?btoa(unescape(encodeURIComponent(content))):_u8b64(ArrayBuffer.isView(content)?new Uint8Array(content.buffer,content.byteOffset,content.byteLength):new Uint8Array(content));
-      if(destination==='files'){
+      if(destination==='photos-adjustment'){
+        const assetIdentifier=item.context?.photosAssetIdentifier,photoPair=window.Capacitor.Plugins.PhotoPair;
+        if(!assetIdentifier||!photoPair?.saveAdjustment)throw new Error('The Photos asset could not be identified. Re-import it from Photos and try again.');
+        const cachePath='export/'+String(item.fname).replace(/[\\/:*?"<>|\x00-\x1f]/g,'_');let tempUri='';
+        try{
+          const staged=await Filesystem.writeFile({path:cachePath,data,directory:'CACHE',recursive:true});tempUri=staged.uri;
+          await photoPair.saveAdjustment({assetIdentifier,renderedPath:tempUri,recipeJSON:JSON.stringify(item.context.snap)});
+          receipt.ok=true;receipt.status='updated-source';receipt.path='Photos · original preserved';
+        }finally{if(tempUri)try{await Filesystem.deleteFile({path:cachePath,directory:'CACHE'});}catch(_){}}
+      }else if(destination==='files'){
         const filename=String(item.fname).replace(/[\\/:*?"<>|\x00-\x1f]/g,'_'),dot=filename.lastIndexOf('.'),base=dot>0?filename.slice(0,dot):filename,ext=dot>0?filename.slice(dot):'';
         let path;
         // Filesystem.writeFile replaces an existing file. Choose a free name first, so
@@ -62,8 +71,9 @@ async function save(items,destination){
 }
 window.capShareFiles=async function(items){
   const destination=window.chromasmithMobileExportDestination||'photos';
-  const context={id:window.MobileLibrary?.currentId,snap:getUISnapshot(),version:fxVersion.toFixed(1)};
-  last=await save(items,destination);retryItems=items.filter((_,i)=>!last[i].ok).map(item=>({...item,context}));sheetPending=true;
+  lastDestination=destination;
+  const context={id:window.MobileLibrary?.currentId,snap:getUISnapshot(),version:fxVersion.toFixed(1),photosAssetIdentifier:window.chromasmithMobilePhotoAdjustmentAsset||null};
+  const contextualItems=items.map(item=>({...item,context}));last=await save(contextualItems,destination);retryItems=contextualItems.filter((_,i)=>!last[i].ok);sheetPending=true;
   if(batch){batchReceipts.push(...last);batchRetries.push(...retryItems);}
   window.chromasmithMobileSaveReceipt?.(last);return last;
 };
@@ -75,7 +85,7 @@ window.chromasmithShowMobileExportResult=function(){
     const retry=async destination=>{close();const items=[...retryItems];last=await save(items,destination);retryItems=items.filter((_,i)=>!last[i].ok);
       for(let i=0;i<items.length;i++){const c=items[i].context;if(last[i].ok&&c)await window.chromasmithRecordExport?.(c.version,c.snap,last[i].path,{id:c.id,receipts:[last[i]]});}
       window.chromasmithMobileSaveReceipt?.(last);sheetPending=true;window.chromasmithShowMobileExportResult();};
-    el.querySelector('[data-retry]')?.addEventListener('click',()=>retry(window.chromasmithMobileExportDestination||'photos').catch(e=>toast(e.message)));
+    el.querySelector('[data-retry]')?.addEventListener('click',()=>retry(lastDestination==='photos-adjustment'?lastDestination:(window.chromasmithMobileExportDestination||'photos')).catch(e=>toast(e.message)));
     el.querySelector('[data-files]')?.addEventListener('click',()=>retry('files').catch(e=>toast(e.message)));
   });
 };

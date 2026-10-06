@@ -50,9 +50,9 @@
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Chromasmith imports your photos, including both the RAW and JPEG of RAW+JPEG shots, and keeps your exports together in a Chromasmith album.</string>
+	<string>Chromasmith imports your photos and can save a non-destructive edit back to the selected original in Photos.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Chromasmith saves your exported photos to your photo library.</string>
+	<string>Chromasmith saves exported copies to your photo library when you choose Photos.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

@@ -84,8 +84,8 @@ async function importFiles(files){
       // Legacy imports and origins without Web Crypto use a byte-verified fallback hash.
       if(!existing)for(const p of ps.filter(p=>p.size===f.size&&p.hash!==hash)){
         const original=await getBlob(p.id);if(original&&await fingerprint(original)===hash&&(!hash.startsWith('fnv:')||await identical(f,original))){p.hash=hash;await patchPhoto(p.id,{hash});existing=p;break;}}
-      if(existing){if(existing.trashed){delete existing.trashed;await patchPhoto(existing.id,{trashed:undefined});}ids.push(existing.id);duplicates++;continue;}
-      const i=id(),p={id:i,name:f.name,type:f.type,size:f.size,hash,added:Date.now(),edited:0,recipe:null,versions:[],exports:[],thumb:null,thumbEdited:null,flag:null,collection:''};
+      if(existing){const changes={};if(f.__csPhotosAssetIdentifier&&(!existing.photosAssetIdentifier||existing.photosAssetIdentifier===f.__csPhotosAssetIdentifier)){changes.photosAssetIdentifier=f.__csPhotosAssetIdentifier;changes.photosAssetRaw=!!f.__csPhotosAssetRaw;}if(existing.trashed)changes.trashed=undefined;if(Object.keys(changes).length)await patchPhoto(existing.id,changes);ids.push(existing.id);duplicates++;continue;}
+      const i=id(),p={id:i,name:f.name,type:f.type,size:f.size,hash,added:Date.now(),edited:0,recipe:null,versions:[],exports:[],thumb:null,thumbEdited:null,flag:null,collection:'',...(f.__csPhotosAssetIdentifier?{photosAssetIdentifier:f.__csPhotosAssetIdentifier,photosAssetRaw:!!f.__csPhotosAssetRaw}:{})};
       // Safari can reject a disk-backed File when IndexedDB clones it. Store its exact
       // bytes instead; getBlob also continues reading originals from the older Blob records.
       const bytes=await f.arrayBuffer(),devBytes=f.__csDev?await f.__csDev.arrayBuffer():undefined;
@@ -104,6 +104,8 @@ async function nativeFiles(list,cap){
   const files=[];
   for(const f of list){try{
     const blob=await (await fetch(cap.convertFileSrc(f.path))).blob(),file=new File([blob],f.name,{type:blob.type||''});
+    if(f.photosAssetIdentifier)file.__csPhotosAssetIdentifier=f.photosAssetIdentifier;
+    if(f.raw)file.__csPhotosAssetRaw=true;
     if(f.dev){try{file.__csDev=await (await fetch(cap.convertFileSrc(f.dev))).blob();}catch(e){}}
     files.push(file);
   }catch(e){}}
@@ -147,7 +149,12 @@ async function openPhoto(i,{recipe,original=false}={}){
     try{const dev=await getDev(i);entry=await origLoad([dev?new File([dev],p.name.replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:p.added}):new File([blob],p.name,{type:p.type,lastModified:p.added})]);}finally{window.__mlibOpening=false;window.__csLibOpen=false;}
     if(!entry)throw new Error('Could not decode '+p.name+'. Try another format or retry importing.');
     openedId=i;if(!queue.includes(i))queue=[i];
-    const r=recipe??(!original&&p.recipe);
+    let r=recipe??(!original&&p.recipe);
+    if(!r&&!original&&p.photosAssetIdentifier){
+      try{const nativeRecipe=await window.Capacitor?.Plugins?.PhotoPair?.readAdjustment?.({assetIdentifier:p.photosAssetIdentifier});
+        if(nativeRecipe?.recipeJSON){const candidate=b64(JSON.parse(nativeRecipe.recipeJSON));unb64(candidate);r=candidate;await patchPhoto(i,{recipe:r,edited:Date.now()});}}
+      catch(_){/* An unreadable/foreign adjustment must not prevent opening the source photo. */}
+    }
     if(r)await applyUISnapshot(unb64(r));else await window.chromasmithApplyPristineDefault?.();
     if(!r&&RAW_FILE_EXT_RE.test('.'+entry.ext)&&typeof applyRawDefaults==='function')applyRawDefaults();fxUpdate();clearTimeout(_fxHistPushTimer);
     const snap=getUISnapshot();known.set(i,b64(snap));
@@ -251,7 +258,14 @@ function ensureEditorChrome(){
   const q=document.createElement('div');q.id='phone-queue';q.hidden=true;q.innerHTML='<button data-q="prev" aria-label="Previous photo">‹</button><span></span><button data-q="next" aria-label="Next photo">›</button><button data-q="actions" aria-label="Actions">⋯</button>';
   const ctx=$('#phone-context'),anchor=$('#fx-actionbar');if(ctx)ctx.appendChild(q);else if(anchor)anchor.after(q);else document.body.appendChild(q);
   const measure=()=>requestAnimationFrame(()=>{const height=q.hidden||q.parentElement?.id==='phone-context'?'0px':q.offsetHeight+'px';if(document.body.style.getPropertyValue('--phone-queue-height')!==height)document.body.style.setProperty('--phone-queue-height',height);});window.addEventListener('resize',measure);q._measure=measure;
-  q.onclick=e=>{const b=e.target.closest('button');if(!b)return;safe(async()=>{const index=queue.indexOf(openedId);if(b.dataset.q==='prev'&&index>0)await openPhoto(queue[index-1]);if(b.dataset.q==='next'&&index<queue.length-1)await openPhoto(queue[index+1]);if(b.dataset.q==='actions')UI().sheet('Selected photos','<p>Each photo keeps its own edits.</p><button data-queue-sync>Sync selected settings</button><button data-queue-export>Export selected photos</button>',(el,close)=>{el.querySelector('[data-queue-sync]').onclick=()=>{close();safe(async()=>{await flush();await pasteTo(queue.filter(i=>i!==openedId),b64(getUISnapshot()),'Sync');});};el.querySelector('[data-queue-export]').onclick=()=>{close();safe(exportQueue);};});});};
+  q.onclick=e=>{const b=e.target.closest('button');if(!b)return;safe(async()=>{const index=queue.indexOf(openedId);if(b.dataset.q==='prev'&&index>0)await openPhoto(queue[index-1]);if(b.dataset.q==='next'&&index<queue.length-1)await openPhoto(queue[index+1]);if(b.dataset.q==='actions'){const photo=await getPhoto(openedId),saveSource=photo?.photosAssetIdentifier&&!photo.photosAssetRaw?'<button data-queue-photos>Save edit to source in Photos</button>':'';UI().sheet('Selected photos','<p>Each photo keeps its own edits.</p><button data-queue-sync>Sync selected settings</button><button data-queue-export>Export selected photos</button>'+saveSource,(el,close)=>{el.querySelector('[data-queue-sync]').onclick=()=>{close();safe(async()=>{await flush();await pasteTo(queue.filter(i=>i!==openedId),b64(getUISnapshot()),'Sync');});};el.querySelector('[data-queue-export]').onclick=()=>{close();safe(exportQueue);};el.querySelector('[data-queue-photos]')?.addEventListener('click',()=>{close();safe(saveCurrentEditToPhotos);});});}});};
+}
+async function saveCurrentEditToPhotos(){
+  const photo=await getPhoto(openedId);if(!photo?.photosAssetIdentifier)throw new Error('This photo was not opened from Apple Photos.');if(photo.photosAssetRaw)throw new Error('Saving back to RAW or RAW+JPEG Photos assets is not supported yet.');
+  if(!await UI().ask('Save edit to Apple Photos?','This saves a non-destructive still-image adjustment to the source Photos asset. The original remains available with Revert to Original. RAW and Live Photos are not supported yet.','Save edit'))return;
+  await flush();const previous=window.chromasmithMobileExportDestination;
+  window.chromasmithMobilePhotoAdjustmentAsset=photo.photosAssetIdentifier;window.chromasmithMobileExportDestination='photos-adjustment';
+  try{await exportFX();}finally{window.chromasmithMobilePhotoAdjustmentAsset=null;window.chromasmithMobileExportDestination=previous||'photos';}
 }
 function syncQueue(){ensureEditorChrome();const q=$('#phone-queue');q.hidden=queue.length<2;const n=queue.indexOf(openedId);q.querySelector('span').textContent=(n+1)+' / '+queue.length;q.querySelector('span').setAttribute('aria-label','Photo '+(n+1)+' of '+queue.length);q.querySelector('[data-q=prev]').disabled=n<=0;q.querySelector('[data-q=next]').disabled=n>=queue.length-1;q._measure?.();}
 function setSelecting(on){selecting=on;selected.clear();root?.classList.toggle('selecting',on);if(root){root.querySelector('[data-a=select]')?.setAttribute('aria-pressed',String(on));root.querySelectorAll('.cell').forEach(c=>{c.classList.remove('sel');c.setAttribute('aria-pressed','false');});selectionCount();}}
