@@ -3200,6 +3200,23 @@
     await openFolder(path);
   }
 
+  async function createPhotoSession() {
+    if (!window.__TAURI__) return;
+    try {
+      const chosen = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false } });
+      const parentPath = Array.isArray(chosen) ? chosen[0] : chosen;
+      if (!parentPath) return;
+      const name = window.prompt('Name this photo Session folder');
+      if (!name || !name.trim()) return;
+      const created = await invoke('session_create', { parentPath, name });
+      if (typeof toast === 'function') toast(`Session created: ${name.trim()}`, true);
+      await openAsRoot(created.path);
+    } catch (error) {
+      console.error('create photo Session', error);
+      if (typeof toast === 'function') toast(`Could not create Session: ${error}`, false);
+    }
+  }
+
   // ── recent folders (MRU, capped) — a DRK-style quick-access list so re-opening a
   // folder you browsed earlier this session (or a prior one) doesn't need the OS picker
   // again. Kept separate from state.root/LS_ROOT (which only remembers the LAST folder). ────
@@ -3272,6 +3289,16 @@
       sep.style.cssText = 'height:1px;background:var(--bdr);margin:4px 0';
       recentMenu.appendChild(sep);
     };
+    if (window.__TAURI__) {
+      const createEl = document.createElement('div');
+      createEl.textContent = 'New Session…';
+      createEl.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;color:var(--txt);display:flex;align-items:center';
+      createEl.onmouseenter = () => { createEl.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
+      createEl.onmouseleave = () => { createEl.style.background = ''; };
+      createEl.onclick = async (ev) => { ev.stopPropagation(); closeRecentMenu(); await createPhotoSession(); };
+      recentMenu.appendChild(createEl);
+      menuSep();
+    }
     // Pinned folders: user-curated favorites that survive past the 8-slot recents MRU — the
     // recents list silently pushes out folders you ALWAYS come back to once you browse a few
     // others. Pin/unpin the current folder from this same menu.
