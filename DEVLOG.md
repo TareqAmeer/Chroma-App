@@ -324,3 +324,7 @@
 
 ### CHR-271 remote publication confirmation (2026-10-06)
 - Post-push `git fetch origin main` and GitHub branch API both confirmed `origin/main` at `9688388eb49ccbbf6055313f1185ac1922e85f55`; this published history contains the CHR-271 integration commit `40516f66` and verification record `9688388e`.
+
+## 2026-10-06 — CHR-199 integration verification
+- Integrated CHR-199 feature commits `115cbc4f`, `3a1e7701`, and `3dd45dd7` onto fetched `origin/main` `8e33fe64` as `b0ea86ae`, `273124cb`, and `ebca193e`; the clean integration checkout preserved the existing main history.
+- Integrated verification passed: `node test/library_culling.mjs` (Chrome browser), `node --check desktop/library-ui.js`, `node --check test/library_culling.mjs`, `node test/editor_html_validity_check.mjs`, and `git show --check HEAD`. Native 1:1 loupe behavior remains for follow-up.
