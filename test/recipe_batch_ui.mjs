@@ -55,9 +55,7 @@ try {
   });
   await page.evaluate(async () => { if (!document.querySelector('#lib-overlay').classList.contains('on')) await window.chromasmithToggleLibrary(); });
   if (!(await page.locator('#lib-overlay').evaluate(el => el.classList.contains('full')))) await page.keyboard.press('g');
-  await page.locator('#sk2-act').click();
   await page.locator('#lib-act-pill').click();
-  if (!(await page.locator('#lib-act-batch-results').isVisible())) await page.locator('#sk2-act').click();
   await page.screenshot({ path: "test/output/recipe-batch-" + theme + '-activity.png' });
   await page.locator('#lib-act-batch-results').click({ timeout: 5000 });
   await page.locator('dialog[open] table tbody tr').first().waitFor();
