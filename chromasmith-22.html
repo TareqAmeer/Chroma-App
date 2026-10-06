@@ -3052,7 +3052,7 @@ new MutationObserver(apply).observe(b,{attributes:true,attributeFilter:['class']
 // Deconvolution, Mixer/Color Mixer, "rotate" in lower case…). Change a name here only.
 const CS_NAMES={image:'Image',looks:'Looks',inprint:'Input & Prints',adjust:'Light',curves:'Curves',hsl:'Colour Mixer',wheels:'Colour Wheels',
   pointcolor:'Point Colour',nr:'Noise Reduction',deconv:'Sharpen',lens:'Lens',art:'Artifacts',grain:'Grain',hal:'Halation',bloom:'Bloom',vig:'Effects',
-  retouch:'Retouch',local:'Masks',crop:'Crop',rotate:'Rotate & Flip',straighten:'Straighten',borders:'Borders',canvas:'Canvas',
+  retouch:'Retouch',local:'Masks',crop:'Crop',rotate:'Rotate & Flip',straighten:'Transform',borders:'Borders',canvas:'Canvas',
   versions:'Versions',export:'Output',wm:'Watermark',exppreset:'Export Recipes',style:'Edit Styles',share:'Sharing',info:'Metadata',diag:'Diagnostics'};
 // Everyday words and old names that should find each tool in the command palette (⌘K).
 const CS_ALIASES={adjust:'basic tone exposure brightness contrast highlights shadows whites blacks white balance wb temperature tint vibrance saturation',
@@ -4241,10 +4241,6 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="fx-row" title="Straightens bowed lines. Positive fixes barrel distortion (lines bow outward), negative fixes pincushion (lines bow inward)."><div class="fx-label">Distortion</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-dist" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-dist">0</div></div>
         <div class="fx-row" title="Brightens the corners to counteract lens vignetting."><div class="fx-label">Vignette</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-vig">0</div></div>
         <div class="fx-row" title="Corrects red/blue fringing near high-contrast edges, worst in the corners."><div class="fx-label">Chromatic Aberration</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ca" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ca">0</div></div>
-        <div class="fx-row" title="Corrects converging verticals — the building-shot lean. A true perspective correction, so spacing stays right instead of just straightening the edges."><div class="fx-label">Vertical</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-pv" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-pv">0</div></div>
-        <div class="fx-row" title="Same correction on the horizontal axis, for a wall or facade shot from one side."><div class="fx-label">Horizontal</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ph" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ph">0</div></div>
-        <div class="fx-row" title="Fine rotation, in tenths of a degree — for levelling a horizon without leaving the panel."><div class="fx-label">Rotate</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-rot" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-rot">0</div></div>
-        <div class="fx-row" title="Zooms in to hide the empty wedges a perspective correction leaves at the frame edge."><div class="fx-label">Scale</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="sl-lens-scale" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-scale">0</div></div>
         <div class="fx-row" title="Removes purple/green color fringes on high-contrast edges — the local fringing that survives the geometric CA correction above, or that a fast lens makes wide open. Gated on edges, so flat purple or green subjects are left alone."><div class="fx-label">Defringe</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-lens-defr" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-defr">0</div></div>
       </div>
       <!-- CROP & ROTATE -->
@@ -4312,13 +4308,18 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
       </div>
       <!-- STRAIGHTEN — split out of Crop into its own tool -->
       <div class="fx-ctrl" data-fxsec="straighten">
-        <div class="fx-ctrl-title">Straighten</div>
+        <div class="fx-ctrl-title">Transform</div>
         <div class="fx-row"><div class="fx-label">Straighten</div><input class="fx-slider" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" oninput="geomStraightenSlider(this.value)"><div class="fx-val" id="vl-straighten">0°</div></div>
         <div class="btn-row fx-level-row" style="margin-top:6px">
           <button class="btn bgh" onclick="autoHorizon()" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button>
           <button class="btn bgh" id="btn-ah-roi" onclick="ahRoiArm()" title="Constrains where Auto level looks for a line — useful when a stronger false line elsewhere in the frame (a wave, a shoreline fragment) keeps outscoring the real horizon.">Set region…</button>
           <button class="btn" id="btn-ah-roi-clear" onclick="ahRoiClear()" style="display:none;margin-left:6px" title="Clear region — Auto level goes back to searching the whole frame"><span class="fx-db-ic" id="ic-ah-clear"></span></button>
         </div>
+        <div class="fx-sub">Perspective</div>
+        <div class="fx-row" title="Corrects converging verticals while preserving perspective spacing."><div class="fx-label">Vertical</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-pv" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-pv">0</div></div>
+        <div class="fx-row" title="Corrects horizontal perspective for a wall or facade photographed from one side."><div class="fx-label">Horizontal</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ph" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ph">0</div></div>
+        <div class="fx-row" title="Fine perspective rotation, in tenths of a degree."><div class="fx-label">Rotate</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-rot" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-rot">0</div></div>
+        <div class="fx-row" title="Scales the perspective-corrected photo to hide empty frame edges."><div class="fx-label">Scale</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="sl-lens-scale" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-scale">0</div></div>
       </div>
       <!-- GRAIN -->
       <div class="fx-ctrl" data-fxsec="grain">
@@ -7118,7 +7119,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006C';
+const BUILD='1.1006D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
