@@ -27,12 +27,55 @@ window.fxMobileExportSheet=function(){
     el.querySelector('[data-go]').onclick=async()=>{try{await window.MobileLibrary?.flush();close();await exportFX();}catch(e){toast(e.message);}};
   });return s;
 };
+let binaryPhotoBusy=false;
+async function binaryPhotoSave(content,fname){
+  const bridge=window.ChromaPhotoExport;
+  if(!bridge||typeof bridge.postMessage!=='function'||typeof content==='string')return null;
+  const bytes=ArrayBuffer.isView(content)?new Uint8Array(content.buffer,content.byteOffset,content.byteLength):new Uint8Array(content);
+  if(bytes.length<4||bytes.length>64*1024*1024||bytes[0]!==255||bytes[1]!==216||!(/\.jpe?g$/i.test(fname)))return null;
+  if(binaryPhotoBusy)throw new Error("A photo save is already running");
+  const buffer=bytes.byteOffset===0&&bytes.byteLength===bytes.buffer.byteLength?bytes.buffer:bytes.slice().buffer;
+  const id=typeof crypto.randomUUID==='function'?crypto.randomUUID():Date.now()+'-'+Math.random().toString(16).slice(2);
+  binaryPhotoBusy=true;
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(async()=>{
+      // A busy WebView can deliver its timer before an already completed native
+      // acknowledgement. Confirm that write before showing a retryable failure.
+      let checkTimer;
+      try{
+        const plugin=window.Capacitor?.Plugins?.PhotoExport;
+        if(plugin?.status){
+          const saved=await Promise.race([plugin.status({id}),new Promise((_,reject)=>{checkTimer=setTimeout(()=>reject(new Error('Save status unavailable')),2500);})]);
+          if(saved.status==='saved'){finish(null,saved.path);return;}
+          if(saved.status==='error'){finish(new Error(saved.error||'Photo save failed'));return;}
+        }
+      }catch(_){}finally{if(checkTimer)clearTimeout(checkTimer);}
+      finish(new Error('Photo save did not finish. Check the album before retrying.'));
+    },30000);
+    let finished=false;
+    const finish=(error,path)=>{if(finished)return;finished=true;clearTimeout(timer);binaryPhotoBusy=false;bridge.onmessage=null;error?reject(error):resolve({path});};
+    bridge.onmessage=event=>{
+      try{
+        const message=JSON.parse(event.data);if(message.id!==id)return;
+        if(message.status==='ready')bridge.postMessage(buffer);
+        else if(message.status==='saved')finish(null,message.path);
+        else if(message.status==='error')finish(new Error(message.error||'Photo save failed'));
+      }catch(error){finish(error);}
+    };
+    try{bridge.postMessage(JSON.stringify({id,name:String(fname).replace(/[\\/:*?"<>|\x00-\x1f]/g,'_'),size:bytes.length}));}
+    catch(error){finish(error);}
+  });
+}
 async function save(items,destination){
   const {Filesystem,Share,Media}=window.Capacitor.Plugins,receipts=[];
   for(const item of items){
     const receipt={ok:false,fname:item.fname,status:'failed',path:'',err:''};
     try{
       const content=item.content instanceof Blob?await item.content.arrayBuffer():item.content;
+      if(destination==='photos'){
+        const saved=await binaryPhotoSave(content,item.fname);
+        if(saved){receipt.ok=true;receipt.status='saved';receipt.path='Photos › Chromasmith';receipt.uri=saved.path;receipts.push(receipt);continue;}
+      }
       const data=typeof content==='string'?btoa(unescape(encodeURIComponent(content))):_u8b64(ArrayBuffer.isView(content)?new Uint8Array(content.buffer,content.byteOffset,content.byteLength):new Uint8Array(content));
       if(destination==='photos-adjustment'){
         const assetIdentifier=item.context?.photosAssetIdentifier,photoPair=window.Capacitor.Plugins.PhotoPair;
