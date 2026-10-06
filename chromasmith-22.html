@@ -22543,6 +22543,15 @@ function _healPointToSource(e){
   if(g){
     if(g.crop){nx=g.crop.x+nx*g.crop.w;ny=g.crop.y+ny*g.crop.h;}
     const rot=(((g.rot||0)%360)+360)%360;
+    if(g.angle&&it.img){
+      // Undo straightenCanvas: it drew the (rotated/flipped) source rotated by +a into an inscribed
+      // canvas of size w×h, so a displayed point maps back through a -a rotation about the centre.
+      let W=it.img.naturalWidth||it.img.width,H=it.img.naturalHeight||it.img.height;
+      if(rot===90||rot===270){const t=W;W=H;H=t;}
+      const a=g.angle*Math.PI/180,ins=inscribedSameAspect(W,H,a);
+      const ux=(nx-.5)*ins.w,uy=(ny-.5)*ins.h,c=Math.cos(a),s=Math.sin(a);
+      nx=(c*ux+s*uy)/W+.5;ny=(-s*ux+c*uy)/H+.5;
+    }
     if(rot===90){const t=nx;nx=ny;ny=1-t;}
     else if(rot===180){nx=1-nx;ny=1-ny;}
     else if(rot===270){const t=nx;nx=1-ny;ny=t;}
