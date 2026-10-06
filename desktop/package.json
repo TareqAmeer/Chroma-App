@@ -10,5 +10,8 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
+  },
+  "dependencies": {
+    "@crabnebula/tauri-plugin-drag": "^2.1.0"
   }
 }

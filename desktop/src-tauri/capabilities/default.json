@@ -20,6 +20,7 @@
     "core:window:allow-request-user-attention",
     "core:menu:default",
     "dialog:default",
+    "drag:default",
     "log:default",
     "fs:default",
     "fs:allow-read-file",

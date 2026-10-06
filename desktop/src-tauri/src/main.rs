@@ -2611,6 +2611,9 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
+        // OS-level file drag-out (Finder and compatible receivers). The caller must provide an
+        // already-closed file; export rendering/lifetime policy remains in the frontend workflow.
+        .plugin(tauri_plugin_drag::init())
         // Restores window position/size/maximized-state on launch, and saves it on resize/move/
         // close — the window otherwise always opened at tauri.conf.json's fixed 1440x900. Default
         // config (all flags) tracks every window the app creates, which today is just "main".
