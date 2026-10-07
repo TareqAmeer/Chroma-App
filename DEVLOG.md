@@ -508,3 +508,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-07 — CHR-246 native storage test follow-up
 
 - After publication, ran the focused integrated Windows Rust filter `inpaint::tests`: 3/3 pass in 0.04s (mask dilation edges, malformed mask/cancel rejection before runtime load, source-bound accepted assets and portable-copy/integrity errors). The test uses no downloaded model/photo files. It does not close the native UI job/Keep/export or photo-quality gates above.
+
+### 2026-10-07 — CHR-249 sharpening-mask slice (partial)
+
+- Added a per-photo 0–100 Sharpen Mask control with edge-aware protection and hold-Alt grayscale preview. The zero default preserves the old shader path; recipe snapshots, restore, reset and slider value labels include the control. Files: `chromasmith-22.html`, `test/sharpen_mask_ui.mjs`.
+- Focused browser pixel test passed on both the local CC0 Wikimedia street photo (temporary download deleted) and the checked-in chart fallback: on the real photo, sharpening changed 618,845 RGB channel samples; mask reduced total absolute delta 1,127,822→454,142, zero amount differed by 0, Alt preview was grayscale 0–255, and Alt release/recipe restore both had max pixel difference 0. `node test/export_harness.mjs` passed all 35 renders with no GLSL compile errors.
+- `npm run ui:test` is red on both unchanged main and this feature checkout (same token, narrow-panel fragment, touch-target and contrast findings; a first feature run's five missing topbar selectors did not recur). `npm run editor:gates` was stopped after its wireframe-diff retry produced no further output. CHR-249 stays In Progress; other Detail acceptance criteria, five-image Lightroom review, loupe/tile parity and full gate completion remain open.
