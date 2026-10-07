@@ -4081,6 +4081,8 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <input type="range" hidden min="0" max="1" step="0.0001" value="0" id="sl-fneg-bb">
           <input type="range" hidden min="-1" max="1" step="0.00001" value="-1" id="sl-fneg-bx">
           <input type="range" hidden min="-1" max="1" step="0.00001" value="-1" id="sl-fneg-by">
+          <input type="range" hidden min="0" max="1" step="1" value="0" id="sl-fneg-domain">
+          <input type="range" hidden min="0" max="4503599627370495" step="1" value="0" id="sl-fneg-source">
         </div>
       </div>
       <!-- BASIC ADJUSTMENTS -->
@@ -7253,7 +7255,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1007F';
+const BUILD='1.1007N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10145,7 +10147,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       adjSharp:A.sharpness||0,adjSharpDetail:(A.sharpDetail==null?0.5:A.sharpDetail),adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
       adjWavelet1:(A.wavelet&&A.wavelet.fine)||0,adjWavelet2:(A.wavelet&&A.wavelet.small)||0,
       adjWavelet3:(A.wavelet&&A.wavelet.medium)||0,adjWaveletResidual:(A.wavelet&&A.wavelet.residual)||0,
-      fnOn:(P.filmNeg&&P.filmNeg.enabled)?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
+      fnOn:(P.filmNeg&&P.filmNeg.enabled&&P.filmNeg.domain!=='camera-linear16-v1')?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
       fnRef:P.filmNeg?P.filmNeg.ref:[1,1,1],fnExp:P.filmNeg?P.filmNeg.exp:[1,1,1],
       texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false]]);
 
@@ -12891,6 +12893,7 @@ async function loadRw2(file,opts){
   // no demosaic and a quarter of the pixels through every JS pass below. Used for the on-screen
   // proxy; fxPromoteWebRaw decodes the full frame when zoom/loupe/export actually need it.
   const half=!!(opts&&opts.half)&&!window.__TAURI__;
+  const filmSource=!!(opts&&opts.filmSource);
   window.__pm&&window.__pm('loadRw2-enter');
   if(!rawSharedMemoryOk())throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
   let profile=rawProfile();
@@ -12905,8 +12908,8 @@ async function loadRw2(file,opts){
   const t0=performance.now();
   const raw=new LibRaw();
   let m,img;
-  const dcpSettings={halfSize:half,useCameraWb:true,outputColor:0,outputBps:16,gamm:[1,1],noAutoBright:true,userQual:3,userFlip:-1}; // linear 16-bit camera RGB (DCP input space)
-  const sdrSettings={halfSize:half,useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1};                               // sRGB, 8-bit, AHD, camera WB
+  const dcpSettings={halfSize:half,useCameraWb:true,outputColor:0,outputBps:16,gamm:[1,1],noAutoBright:true,userQual:3,userFlip:-1,filmSource}; // linear 16-bit camera RGB (DCP input space)
+  const sdrSettings={halfSize:half,useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1,filmSource};                               // sRGB, 8-bit, AHD, camera WB
   try{
     await withRawDecodeTimeout(raw,async()=>{
       await raw.open(bytes,srcPath?{...(profile?dcpSettings:sdrSettings),sourcePath:srcPath}:(profile?dcpSettings:sdrSettings));
@@ -13037,6 +13040,7 @@ async function loadRw2(file,opts){
     dt=Math.round(performance.now()-t0);
     c=document.createElement('canvas');c.width=w;c.height=h;
     c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
+    if(window.__TAURI__&&typeof raw.filmBase==='function'){c._filmRaw=raw;c._filmApplied=false;}
     // Stashed on the CANVAS object, not on the fxImages[] entry — installFXImages assigns
     // `img:c`, and this way the headroom data survives that indirection with zero extra
     // plumbing (mirrors the `refine()` background-swap above, which matches back on `it.img===c`
@@ -13418,6 +13422,7 @@ function fxUpdate(){
    if(it&&it.adjustOverride)it.adjustOverride=domAdjustVals();
    else fxState.sharedAdjust=domAdjustVals();}
   if(typeof secScopePersist==='function')secScopePersist();
+  if(window.__TAURI__&&typeof fnEnsureNative==='function')fnEnsureNative(curItem()).catch(e=>fnSetStatus(errStr(e),true));
   // History push is debounced here (unlike the curve editor/brush, which push explicitly on
   // pointerup) because every one of the ~35 sliders above calls fxUpdate() on `oninput` —
   // dozens of times per second while dragging. fxHistoryPush() stringifies the whole UI
@@ -18843,7 +18848,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   // save/restore) but absent from the undo-history/copy-paste/.fx-mod snapshot, same class of
   // gap as deconv-amt/deconv-rad before DT1.
   'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-detail','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat',
-  'fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by',
+  'fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source',
   'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
   // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
   // header-reset mechanism — see resetDeconv() and _fxSectionResetOverride) — added 2026-09-10
@@ -18908,7 +18913,7 @@ const PASTE_CATEGORIES=[
   {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','curveMode','curveParam','hsl','pointColors']},
   {key:'wheels',label:'Colour Wheels',sliders:[],toggles:['tg-wheels'],selects:[],extra:['wheels']},
   {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-detail','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
-  {key:'filmneg',label:'Film Negative',sliders:['fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by'],toggles:['tg-filmneg'],selects:['sel-fneg-mode']},
+  {key:'filmneg',label:'Film Negative',sliders:['fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source'],toggles:['tg-filmneg'],selects:['sel-fneg-mode']},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-hldesat'],toggles:['tg-nr'],selects:[]},
   {key:'deconv',label:'Deconvolution',sliders:['deconv-amt','deconv-rad'],toggles:['tg-deconv'],selects:[]},
   {key:'lens',label:'Lens Corrections',sliders:['lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale'],toggles:[],selects:[]},
@@ -19000,6 +19005,7 @@ window.chromasmithPasteEditSelective=function(recipeB64,onConfirm){
 // it. Stays otherwise synchronous start-to-finish — renderSnapshotTo's split-compare path
 // depends on that (see its own comment) and must not be made to await anything here.
 function applyUISnapshot(s,opts){
+  if(s.sliders&&s.sliders['fneg-br']!==undefined&&s.sliders['fneg-domain']===undefined){s.sliders={...s.sliders,'fneg-domain':0,'fneg-source':0};}
   const _decodeBefore={nr:window.chromasmithRawNr||'fast',strength:window.chromasmithRawNrHighStrength,demosaic:window.chromasmithDemosaicAlgo||''};
   // Pre-v2 recipes (undo history, XMP sidecar, session save) stored the exposure SLIDER value
   // under the old /50 (±2 stop) mapping; getFXParams now divides by /20 (±5 stops), so replaying
@@ -20089,6 +20095,75 @@ fxCanvasOn('click',()=>setTimeout(()=>{if(!_fxEyeArmed()){_fxEyeHide();const bd=
 // so the pick is reproducible and independent of crop, rotation, zoom and the live grade.
 // Math (shader fnConv == film_negative.rs): out = FN_OUT * (in / base)^-p, p = exponent * ratio.
 const FN_OUT=0.02;
+// Version 0 remains the existing display-domain recipe. Native version 1 is sampled and
+// developed in the decoder's camera-linear coordinates, bound to its source/profile signature.
+function fnNativeRecipe(it){
+  if(Object.prototype.hasOwnProperty.call(it||{},'_filmExportRecipe'))return it._filmExportRecipe;
+  let values;
+  if(it===curItem())values=secVals('filmneg');
+  else values=it?.secOverride?.filmneg||fxState.sharedSec?.filmneg;
+  if(!values||+values['sl-fneg-domain']!==1||!values.__on)return null;
+  const ref=['br','bg','bb'].map(c=>+values['sl-fneg-'+c]);
+  if(!fnHasBase(ref))return null;
+  const p=Math.max(.05,+values['sl-fneg-exp']||1.5),bw=values['sel-fneg-mode']==='bw';
+  const mean=ref.reduce((a,b)=>a+b)/3;
+  return{domain:'camera-linear16-v1',sourceKey:+values['sl-fneg-source'],ref:bw?[mean,mean,mean]:ref,exp:bw?[p,p,p]:[p*(+values['sl-fneg-red']||1.36),p,p*(+values['sl-fneg-blue']||.86)],out:FN_OUT,bw};
+}
+function fnNativeNeedsDevelop(it){
+  if(!it||!window.__TAURI__)return false;
+  const recipe=fnNativeRecipe(it);
+  const key=JSON.stringify(recipe);
+  return !!(recipe||it.img?._filmApplied)&&key!==it.img?._filmRecipeKey&&key!==it._filmFailedKey;
+}
+async function fnNativeSource(it){
+  if(it.img?._filmRaw)return it.img._filmRaw;
+  if(!it.rawFile)throw new Error('Native film calibration needs the original RAW; reopen it from its source.');
+  const r=await loadRw2(it.rawFile,{filmSource:true});
+  if(!r.canvas._filmRaw)throw new Error('Native film decoder is unavailable.');
+  return r.canvas._filmRaw;
+}
+async function fnEnsureNative(it){
+  if(it?._filmFailedKey===JSON.stringify(fnNativeRecipe(it)))throw new Error('Native film develop failed; repick the base or change the recipe before export.');
+  if(!fnNativeNeedsDevelop(it))return;
+  const recipe=fnNativeRecipe(it),key=JSON.stringify(recipe);
+  if(it._filmPending?.key===key)return it._filmPending.promise;
+  const generation=it._filmGen=(it._filmGen||0)+1,original=it.img;
+  const promise=(async()=>{
+    const decoder=await fnNativeSource(it),result=await decoder.filmDevelop(recipe);
+    if(it._filmGen!==generation||it.img!==original||JSON.stringify(fnNativeRecipe(it))!==key)return;
+    const c=document.createElement('canvas');c.width=result.width;c.height=result.height;
+    c.getContext('2d').putImageData(new ImageData(result.data,result.width,result.height),0,0);
+    c._filmRaw=decoder;c._filmApplied=!!recipe;c._filmRecipeKey=key;
+    it.img=c;delete it.fullImg;it._nrHighApplied=false;it._fullCleanupApplied=false;
+    if(it===curItem()){fxImg=c;updateWork();renderPreview();}
+  })();
+  it._filmPending={key,promise};
+  try{await promise;delete it._filmFailedKey;}catch(e){it._filmFailedKey=key;throw e;}finally{if(it._filmGen===generation)delete it._filmPending;}
+}
+async function fnNativeExportItem(it,recipe){
+  if(!recipe&&!it.img?._filmApplied)return it;
+  if(!window.__TAURI__)throw new Error('Native film calibration requires the desktop RAW decoder.');
+  const decoder=await fnNativeSource(it),result=await decoder.filmDevelop(recipe);
+  const c=document.createElement('canvas');c.width=result.width;c.height=result.height;
+  c.getContext('2d').putImageData(new ImageData(result.data,result.width,result.height),0,0);
+  c._filmRaw=decoder;c._filmApplied=!!recipe;c._filmRecipeKey=JSON.stringify(recipe);
+  const exported={...it,img:c,_filmExportRecipe:recipe,_nrHighApplied:false,_fullCleanupApplied:false};delete exported.fullImg;
+  return exported;
+}
+async function fnPickNativeBase(it,ox,oy){
+  const original=it.img,W=original.naturalWidth||original.width,H=original.naturalHeight||original.height;
+  try{
+    const decoder=await fnNativeSource(it),r=await decoder.filmBase(ox/W,oy/H);
+    if(it!==curItem()||it.img!==original)return{ok:false,reason:'photo-changed'};
+    for(const [id,value]of Object.entries({'br':r.rgb[0],'bg':r.rgb[1],'bb':r.rgb[2],'bx':r.nx,'by':r.ny,'domain':1,'source':r.sourceKey}))document.getElementById('sl-fneg-'+id).value=value;
+    // Native calibration is frame-owned: sharing across differently white-balanced RAWs is unsafe.
+    it.secOverride=it.secOverride||{};it.secOverride.filmneg=secVals('filmneg');
+    const tg=document.getElementById('tg-filmneg');if(!tg.classList.contains('on'))toggleFX('filmneg');else fxUpdate();
+    await fnEnsureNative(it);
+    fnSetStatus('Native camera-linear base set from '+r.n+' source pixels. Use manual ratios; source/profile changes require another pick.',false);
+    return{ok:true,...r};
+  }catch(e){fnSetStatus(errStr(e),true);return{ok:false,msg:errStr(e)};}
+}
 let _fnPickActive=false,_fnMsg='';
 function fnNum(id,d){const el=document.getElementById(id);const v=el?parseFloat(el.value):NaN;return isFinite(v)?v:d;}
 function fnBase(){return[fnNum('sl-fneg-br',0),fnNum('sl-fneg-bg',0),fnNum('sl-fneg-bb',0)];}
@@ -20101,9 +20176,9 @@ function computeFilmNeg(){
   const p=Math.max(0.05,fnNum('sl-fneg-exp',1.5));
   if(fnIsBW()){
     const m=(base[0]+base[1]+base[2])/3;
-    return{enabled:true,bw:true,out:FN_OUT,ref:[m,m,m],exp:[p,p,p]};
+    return{enabled:true,bw:true,out:FN_OUT,ref:[m,m,m],exp:[p,p,p],domain:fnNum('sl-fneg-domain',0)===1?'camera-linear16-v1':'display-v0'};
   }
-  return{enabled:true,bw:false,out:FN_OUT,ref:base,exp:[p*fnNum('sl-fneg-red',1.36),p,p*fnNum('sl-fneg-blue',0.86)]};
+  return{enabled:true,bw:false,out:FN_OUT,ref:base,exp:[p*fnNum('sl-fneg-red',1.36),p,p*fnNum('sl-fneg-blue',0.86)],domain:fnNum('sl-fneg-domain',0)===1?'camera-linear16-v1':'display-v0'};
 }
 function fnSetStatus(msg,warn){
   _fnMsg=msg;const el=document.getElementById('fneg-status');
@@ -20156,9 +20231,11 @@ function fnSampleBaseOrig(it,ox,oy){
   return{ok:true,rgb:mean,nx:ox/W,ny:oy/H,n};
 }
 function fnPickBaseAtOrig(ox,oy){
-  const it=curItem();const r=fnSampleBaseOrig(it,ox,oy);
+  const it=curItem();
+  if(window.__TAURI__&&it&&(it.rawFile||it.img?._filmRaw))return fnPickNativeBase(it,ox,oy);const r=fnSampleBaseOrig(it,ox,oy);
   if(!r.ok){fnSetStatus(r.msg,true);return r;}
   const set=(id,v)=>{const el=document.getElementById(id);if(el){el.value=v;}};
+  set('sl-fneg-domain',0);
   set('sl-fneg-br',r.rgb[0].toFixed(4));set('sl-fneg-bg',r.rgb[1].toFixed(4));set('sl-fneg-bb',r.rgb[2].toFixed(4));
   set('sl-fneg-bx',r.nx.toFixed(5));set('sl-fneg-by',r.ny.toFixed(5));
   const tg=document.getElementById('tg-filmneg');
@@ -20190,6 +20267,7 @@ function fnPickBaseClick(e){
 function fnAutoBalance(){
   const it=curItem();if(!it||!it.img){fnSetStatus('Load a photo first.',true);return{ok:false};}
   const base=fnBase();
+  if(fnNum('sl-fneg-domain',0)===1){fnSetStatus('Native RAW auto balance requires camera-linear scene samples; use manual ratios for this calibration.',true);return{ok:false,reason:'native-domain'};}
   if(!fnHasBase(base)){fnSetStatus('Auto balance needs a picked film base. It will not estimate the base from the scene average; use Pick film base on the rebate first.',true);return{ok:false,reason:'no-base'};}
   if(fnIsBW()){fnSetStatus('Auto balance only applies to colour negatives (Type is Black and white).',true);return{ok:false,reason:'bw'};}
   const img=it.img,W=img.naturalWidth||img.width,H=img.naturalHeight||img.height,k=Math.min(1,320/Math.max(W,H));
@@ -20222,6 +20300,7 @@ function fnAutoBalance(){
 // different base of their own (they were overridden, so review them).
 function fnApplyBaseToRoll(){
   const it=curItem(),b=fnBase();
+  if(fnNum('sl-fneg-domain',0)===1){fnSetStatus('Native camera-linear bases must be sampled per RAW frame because camera white balance and profiles may differ. Roll copying is available for display-domain scans.',true);return{ok:false,reason:'native-domain'};}
   if(!it||!fnHasBase(b)){fnSetStatus('Pick the film base on this photo first.',true);return{ok:false};}
   const cur=secVals('filmneg'),keys=['sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sel-fneg-mode','__on'];
   const flagged=[];let own=0;
@@ -20691,7 +20770,7 @@ function exportPresetListRefresh(selectName){
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
-  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-detail','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-bx','sl-fneg-by','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
+  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-detail','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-bx','sl-fneg-by','sl-fneg-domain','sl-fneg-source','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
   'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-b1-g','sl-b2-g','sl-b1-glow','sl-b2-glow','sl-b1-pos','sl-b2-pos','sl-canvas-z','sl-vig','sl-exp-q'];
@@ -21707,6 +21786,8 @@ function resolveSplitSnapshot(src){
   return 'orig';
 }
 function renderPreview(){
+  const nativeItem=typeof curItem==='function'?curItem():null;
+  if(window.__TAURI__&&nativeItem&&fnNativeNeedsDevelop(nativeItem)){fnEnsureNative(nativeItem).catch(e=>fnSetStatus(errStr(e),true));return;}
   if(typeof fxCompare!=='undefined'&&fxCompare&&typeof csFirstEditCompareShown==='function')csFirstEditCompareShown();
   // Preview requests are also the app's central signal for recipe and photo changes. Debounce
   // the export render and invalidate any in-flight result immediately while the sheet is open.
@@ -24355,6 +24436,7 @@ async function _exportFXRun(){
       const p=getFXParams(it.adjustOverride||undefined);p.redEyeOps=it.redeye||[];
       let copy;try{copy=structuredClone(p);}catch(e){copy=p;}
       const depth=it.img&&it.img._depthMap;
+      copy._nativeFilmRecipe=structuredClone(fnNativeRecipe(it));
       copy._exportDepthMap=depth&&depth.data?{data:new Uint8Array(depth.data),w:depth.w,h:depth.h}:null;
       return copy;
     }finally{fxState.masks=sm;if(undo)undo();}
@@ -24441,7 +24523,7 @@ async function _exportFXRun(){
     // whatever already succeeded still gets saved. ──
     for(let idx=0;idx<items.length;idx++){
       if(fxExportCancel){activityOutcome='interrupted';log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
-      const it=items[idx];let decodedJpeg=null,decodedGeometry=null;
+      const sourceItem=items[idx];let it=sourceItem;let decodedJpeg=null,decodedGeometry=null;
       try{
         if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
           setExportPhotoStatus(idx,'rendering','decoding…');
@@ -24453,11 +24535,13 @@ async function _exportFXRun(){
         // the pass on THIS photo's pixels before the render reads them. Skipped when High-tier NR
         // runs/ran (its own decode already includes the full pass). A failure logs and continues
         // with what is on the canvas rather than losing the export.
-        if(!window.chromasmithRawFullCleanup&&exportRawNr!=='high'&&!it._nrHighApplied&&!it._fullCleanupApplied&&!(window.__chromasmithFullCleanupPaths&&window.__chromasmithFullCleanupPaths.has(libPaths[fxImages.indexOf(it)]))&&(it.rawFile||libPaths[fxImages.indexOf(it)])&&typeof window.chromasmithApplyFullCleanup==='function'){
+        const filmRecipe=_expPs[idx]._nativeFilmRecipe;
+        it=await fnNativeExportItem(it,filmRecipe);
+        if(!window.chromasmithRawFullCleanup&&exportRawNr!=='high'&&!it._nrHighApplied&&!it._fullCleanupApplied&&!(window.__chromasmithFullCleanupPaths&&window.__chromasmithFullCleanupPaths.has(libPaths[fxImages.indexOf(sourceItem)]))&&(it.rawFile||libPaths[fxImages.indexOf(sourceItem)])&&typeof window.chromasmithApplyFullCleanup==='function'){
           setExportPhotoStatus(idx,'rendering','cleaning…');
           setProg(idx,`Cleaning ${idx+1}/${N}: ${it.name}…`);
           try{
-            const r=await window.chromasmithApplyFullCleanup(it,libPaths[fxImages.indexOf(it)]);
+            const r=await window.chromasmithApplyFullCleanup(it,libPaths[fxImages.indexOf(sourceItem)]);
             if(r&&r.applied)it._fullCleanupApplied=true;
           }catch(e){
             log(`Full cleanup failed for ${it.name} — exporting with the chroma-only cleanup: ${(e&&e.message)||e}`,'warn');

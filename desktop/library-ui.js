@@ -6657,6 +6657,7 @@
     if (!paths.length) return;
     const sc = await getSidecar(paths[0]);
     window.__copiedRecipe = sc.recipe || snapshotToB64(getUISnapshot());
+    window.__copiedRecipeOrigin = { path: paths[0], recipe: window.__copiedRecipe };
     toast('Edit copied', true);
   }
   // BEGIN RECIPE_BATCH_HELPER
@@ -6757,6 +6758,62 @@
     if (!recipe) return;
     try { await startRecipeBatch('Paste edit', paths, () => recipe); }
     catch (e) { toast(humanizeErr('paste edits', e), 'err'); }
+  }
+  // Dust sync is deliberately separate from paste: choose spots, then approve each photo.
+  async function libSyncDust(paths) {
+    const source = window.__copiedRecipe && snapshotFromB64(window.__copiedRecipe);
+    const spots = (source?.heal || []).filter(o => !o.pts?.length);
+    if (!spots.length) { toast('Copy an edit containing circular dust spots first'); return; }
+    await flushPendingSave();
+    const origin = window.__copiedRecipeOrigin;
+    const sourcePath = origin?.recipe === window.__copiedRecipe ? origin.path : null;
+    const sourceMeta = sourcePath ? await getMeta(sourcePath) : {};
+    const shoot = m => m.camera && m.date ? m.camera + '|' + String(m.date).slice(0, 10) : null;
+    const sourceShoot = shoot(sourceMeta);
+    const targets = [];
+    for (const path of [...new Set(paths)].filter(p => p !== sourcePath)) {
+      const sc = await getSidecar(path), meta = await getMeta(path);
+      targets.push({ path, sc, meta, mismatch: !!(sourceShoot && shoot(meta) && sourceShoot !== shoot(meta)) });
+    }
+    if (!targets.length) { toast('Select target photos other than the copied source'); return; }
+    const d = document.createElement('dialog');
+    d.id = 'dust-sync-review';
+    d.style.cssText = 'background:var(--bg);color:var(--txt);border:1px solid var(--bdr);padding:18px;width:680px;max-width:90vw;max-height:90vh;overflow:auto';
+    d.setAttribute('aria-labelledby', 'dust-sync-title');
+    d.innerHTML = `<h3 id="dust-sync-title">Review sensor-dust sync</h3><p>Select only sensor-dust spots. Existing target retouch and all other settings stay intact. Camera and capture day are a shoot check; unknown metadata requires your explicit approval.</p><fieldset><legend>Source spots (brush strokes excluded)</legend>${spots.map((o, i) => `<label style="display:block"><input type="checkbox" data-spot="${i}"> Spot ${i + 1} · ${esc(o.mode || 'heal')} · ${Math.round(o.x * 100)}%, ${Math.round(o.y * 100)}%</label>`).join('')}</fieldset><div data-photo></div><p data-count></p><div style="display:flex;gap:8px"><button class="btn bgh" data-prev>Previous</button><button class="btn bgh" data-next>Next</button><button class="btn bgh" data-apply disabled>Apply approved photos</button><button class="btn bgh" data-close>Cancel</button></div>`;
+    let index = 0;
+    const approved = new Set();
+    const selected = () => [...d.querySelectorAll('[data-spot]:checked')].map(e => spots[Number(e.dataset.spot)]);
+    const render = () => {
+      const t = targets[index], ops = selected();
+      d.querySelector('[data-photo]').innerHTML = `<h4>${index + 1}/${targets.length} · ${esc(t.path)}</h4><p>${esc(t.meta.camera || 'Unknown camera')} · ${esc(t.meta.date || 'Unknown capture date')}${t.mismatch ? ' · Different camera/day — excluded' : ''}</p><div style="position:relative;width:100%;height:260px;background:var(--bg2)"><img alt="Original photo for dust-position review" style="width:100%;height:100%;object-fit:contain"><svg viewBox="0 0 1 1" preserveAspectRatio="none" aria-label="Selected dust positions in original source coordinates" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none">${ops.map(o => `<ellipse cx="${Number(o.x)}" cy="${Number(o.y)}" data-radius="${Number(o.r)}" rx="${Number(o.r)}" ry="${Number(o.r)}" fill="none" stroke="#ff6464" stroke-width=".004"/>`).join('')}</svg></div><p>Positions use the uncropped source. Review the repair at 100% in the Editor after applying; Undo batch restores all approved photos.</p><label><input type="checkbox" data-approve ${approved.has(t.path) ? 'checked' : ''} ${t.mismatch || !ops.length ? 'disabled' : ''}> Reviewed marker positions on this original; apply these dust spots</label>`;
+      const img = d.querySelector('[data-photo] img');
+      loadThumb(t.path, img, false, 0);
+      // Fit the overlay to the actual thumbnail rectangle, excluding contain letterboxing.
+      img.onload = () => { const w=img.clientWidth,h=img.clientHeight,a=img.naturalWidth/img.naturalHeight,fw=Math.min(w,h*a),fh=fw/a;const svg=d.querySelector('[data-photo] svg');svg.querySelectorAll('[data-radius]').forEach(e=>{const r=Number(e.dataset.radius)*Math.max(img.naturalWidth,img.naturalHeight);e.setAttribute('rx',r/img.naturalWidth);e.setAttribute('ry',r/img.naturalHeight);});svg.style.cssText+=`;left:${(w-fw)/2}px;top:${(h-fh)/2}px;width:${fw}px;height:${fh}px`; };
+      d.querySelector('[data-approve]').onchange = e => { e.target.checked ? approved.add(t.path) : approved.delete(t.path); update(); };
+      d.querySelector('[data-prev]').disabled = index === 0;
+      d.querySelector('[data-next]').disabled = index === targets.length - 1;
+      update();
+    };
+    const update = () => { d.querySelector('[data-count]').textContent = `${approved.size} approved · ${targets.length - approved.size} excluded: ${targets.filter(t => !approved.has(t.path)).map(t => t.path + ' (' + (t.mismatch ? 'different camera/capture day' : 'not approved') + ')').join('; ')}`; d.querySelector('[data-apply]').disabled = !approved.size || !selected().length; };
+    d.querySelectorAll('[data-spot]').forEach(e => e.onchange = () => { approved.clear(); render(); });
+    d.querySelector('[data-prev]').onclick = () => { index--; render(); };
+    d.querySelector('[data-next]').onclick = () => { index++; render(); };
+    d.querySelector('[data-close]').onclick = () => d.close();
+    d.querySelector('[data-apply]').onclick = async () => {
+      const chosen = JSON.parse(JSON.stringify(selected()));
+      const reviewed = new Map(targets.filter(t => approved.has(t.path)).map(t => [t.path, t.sc]));
+      d.close();
+      try { await startRecipeBatch('Sensor-dust sync (reviewed)', [...reviewed.keys()], (cur, path) => {
+        const prior = reviewed.get(path);
+        if ((cur.recipe || '') !== (prior.recipe || '') || (cur.active || 0) !== (prior.active || 0)) throw new Error('Photo changed after review; review it again');
+        const snap = cur.recipe ? snapshotFromB64(cur.recipe) : window.chromasmithMergeSelectiveRecipe(null, {}, []);
+        snap.heal = [...(snap.heal || []), ...chosen.map((o, i) => ({ ...o, id: 'dust-' + Date.now() + '-' + i }))];
+        return snapshotToB64(snap);
+      }); } catch (e) { toast(humanizeErr('sync reviewed dust spots', e), 'err'); }
+    };
+    render(); document.body.appendChild(d); d.addEventListener('close', () => d.remove()); d.showModal();
   }
   async function recipeBatchResults(id) {
     let batch = await invoke('recipe_batch_get', { id });
@@ -7261,6 +7318,7 @@
       });
     });
     verMenu.subItem('Batch edit history…', () => window.chromasmithRecipeBatchHistory());
+    verMenu.subItem('Sync sensor dust (review each photo)…', () => libSyncDust(paths));
     if (!window.__copiedRecipe) {
       pasteRow.style.opacity = '.4'; pasteRow.style.pointerEvents = 'none';
       pasteSelRow.style.opacity = '.4'; pasteSelRow.style.pointerEvents = 'none';
