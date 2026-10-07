@@ -279,11 +279,16 @@ jobs:
     # One-time setup: a Partner Center Entra app (Manager role) and these repo secrets —
     # AZURE_AD_TENANT_ID, AZURE_AD_APPLICATION_CLIENT_ID, AZURE_AD_APPLICATION_SECRET, SELLER_ID.
     # The Store rejects a version it already has, so re-running a tag that was already submitted fails
-    # at the publish step; that is expected. If Partner Center already has a submission in progress the
-    # API refuses a second one — finish or delete it there first.
+    # at the publish step; that is expected. A submission still pending from an older tag is cancelled
+    # first (best effort — see the cancel step); if it cannot be, cancel it in Partner Center by hand.
     needs: nsis
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
+    # Two tags pushed close together must not race each other inside Partner Center: queue them
+    # (never cancel a run mid-upload), so each run's cancel-then-submit below happens in order.
+    concurrency:
+      group: microsoft-store-submit
+      cancel-in-progress: false
     env:
       STORE_PRODUCT_ID: 9N2KCJRFVF6F
     steps:
@@ -310,7 +315,7 @@ jobs:
 
       - uses: microsoft/microsoft-store-apppublisher@v1.1
 
-      - name: Submit to the Microsoft Store
+      - name: Configure the Store CLI
         shell: pwsh
         run: |
           msstore reconfigure `
@@ -318,4 +323,20 @@ jobs:
             --sellerId '${{ secrets.SELLER_ID }}' `
             --clientId '${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}' `
             --clientSecret '${{ secrets.AZURE_AD_APPLICATION_SECRET }}'
+
+      # A newer tag supersedes whatever is still pending in Partner Center. Best effort: the Store API
+      # answers 409 for a submission it cannot delete in its current state (e.g. deep in certification),
+      # and errors when nothing is pending — neither should stop the new submission, so the exit code is
+      # swallowed. If the old one really cannot be cancelled, the publish step below fails and says so.
+      - name: Cancel the pending submission, if any
+        shell: pwsh
+        run: |
+          msstore submission status $env:STORE_PRODUCT_ID
+          msstore submission delete $env:STORE_PRODUCT_ID --no-confirm
+          if ($LASTEXITCODE -ne 0) { Write-Warning "No pending submission was cancelled (exit $LASTEXITCODE)." }
+          exit 0
+
+      - name: Submit to the Microsoft Store
+        shell: pwsh
+        run: |
           msstore publish '${{ steps.msix.outputs.msix }}' -id $env:STORE_PRODUCT_ID
