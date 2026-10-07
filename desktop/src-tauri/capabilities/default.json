@@ -22,6 +22,7 @@
     "core:menu:default",
     "dialog:default",
     "drag:default",
+    "notification:default",
     "log:default",
     "fs:default",
     "fs:allow-read-file",

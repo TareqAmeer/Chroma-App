@@ -16,6 +16,7 @@ tokio = { version = "1.52", features = ["rt-multi-thread"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-deep-link = "2"
+tauri-plugin-notification = "2"
 # Native OS file drag-out from an existing, closed file path (Finder/other apps). The UI must
 # render a completed export before calling this plugin; see docs/native-drag-out.md.
 tauri-plugin-drag = "2.1.1"

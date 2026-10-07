@@ -7259,7 +7259,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008F';
+const BUILD='1.1008H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14415,6 +14415,7 @@ function csExportDone(n,path,firstEdit){
   bs[0].onclick=()=>{try{window.__TAURI__.core.invoke('reveal_in_finder',{path});}catch(e){}d.remove();};
   bs[1].onclick=()=>d.remove();
   document.body.appendChild(d);setTimeout(()=>d.remove(),9000);
+  if(typeof window.chromasmithNotifyExportDone==='function')window.chromasmithNotifyExportDone({count:n,path});
   // CHR-183: a long export is usually waited out in another app — if this window isn't focused
   // when it finishes, bounce the Dock icon once (Windows: flash the taskbar button).
   try{if(!document.hasFocus()&&window.__TAURI__&&window.__TAURI__.window)window.__TAURI__.window.getCurrentWindow().requestUserAttention(2);}catch(e){}
@@ -24454,6 +24455,7 @@ async function exportFX(...a){
   // the export with it), and if the app was in the background when it finished, say so with a
   // notification. Both plugins are optional — missing ones are simply skipped.
   const P=capNative()&&window.Capacitor.Plugins||{},t0=Date.now();
+  try{if(window.__TAURI__&&typeof window.chromasmithPrepareExportNotification==='function')await window.chromasmithPrepareExportNotification();}catch(e){}
   try{P.KeepAwake&&await P.KeepAwake.keepAwake();}catch(e){}
   try{return await _exportFXRun(...a);}
   finally{if(--_fxExportRuns<=0){_fxExportRuns=0;document.body.classList.remove('fx-exporting');

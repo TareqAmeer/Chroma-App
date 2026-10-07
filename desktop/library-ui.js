@@ -12546,6 +12546,10 @@
     renderActivity();
     if (activity.stage === 'done') {
       recordActivityHistory(activity);
+      // The first render above paints the terminal activity before its history row exists.
+      // Refresh the open jobs popover now so completion is visible immediately, without waiting
+      // for the auto-dismiss timer or another job to trigger a render.
+      renderActivity();
       if (_activityStallTimer) { clearInterval(_activityStallTimer); _activityStallTimer = null; }
       // Failures (a nonempty failure list on the import side) don't auto-clear — the whole
       // point of surfacing this at all is so "3 files failed" isn't something only the console
