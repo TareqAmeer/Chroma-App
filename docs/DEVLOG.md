@@ -150,3 +150,5 @@ Publication verified: integration commits `053f3757` and `f41e82cd` are publishe
 - CHR-285 remains In Progress until verified integration is published, then In Review for user testing.
 
 CHR-285 integration verification: safely integrated onto aa87c3a7 as 17b98648; rebuilt ordinary APK and repeated full Android 10 migration/save/uninstall/reinstall checks (eight additional media files byte-identical), plus all five mobile regression suites. Raw integration evidence and APK SHA-256 recorded in the persistence benchmark report.
+
+CHR-285 publication verified: implementation 17b98648 and integration evidence are published on origin/main at ff12e9930fe3ce2cb5a374d7c28c80260d4fd2cb; git ls-remote matched after the fast-forward push. Ordinary integrated APK and native uninstall/reinstall checks passed; CHR-285 moves to In Review for user acceptance.
