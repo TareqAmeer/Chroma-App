@@ -6,14 +6,14 @@ import { readFile, copyFile } from 'node:fs/promises';
 // Native staging omits the browser isolation shim. Supply the real shim to the
 // generated, ignored test staging so both script and worker requests succeed.
 await copyFile('coi-serviceworker.min.js','desktop/dist/coi-serviceworker.min.js');
-const server=createServer(async(req,res)=>{try{const pathname=decodeURIComponent(req.url.split('?')[0]);const body=await readFile(path.join(process.cwd(),pathname.slice(1)));const type={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.wasm':'application/wasm'}[path.extname(pathname)]||'application/octet-stream';res.writeHead(200,{'Content-Type':type,'Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp'});res.end(body);}catch{res.writeHead(404);res.end();}}).listen(0,'127.0.0.1');
+const server=createServer(async(req,res)=>{try{const pathname=decodeURIComponent(req.url.split('?')[0]);if(pathname.endsWith('/favicon.ico')){res.writeHead(204);res.end();return;}const body=await readFile(path.join(process.cwd(),pathname.slice(1)));const type={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.png':'image/png','.wasm':'application/wasm'}[path.extname(pathname)]||'application/octet-stream';res.writeHead(200,{'Content-Type':type,'Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp'});res.end(body);}catch{res.writeHead(404);res.end();}}).listen(0,'127.0.0.1');
 await new Promise(resolve=>server.on('listening',resolve));
 const port=server.address().port;
 const started = Date.now();
 async function waitJournal(page,ready){const deadline=Date.now()+15000;while(Date.now()<deadline){const list=await page.evaluate(()=>window.libtestRecipeBatchInvoke('recipe_batch_list',{}));if(ready(list))return;await new Promise(resolve=>setTimeout(resolve,20));}throw Error('batch journal did not reach expected state');}
 let browser;
 try {
-  browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+  browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH, args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const pageErrors=[];
   page.on('pageerror',e=>pageErrors.push(e.message));
