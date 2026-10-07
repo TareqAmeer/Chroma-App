@@ -425,3 +425,7 @@ CHR-285 publication verified: implementation 17b98648 and integration evidence a
 
 - User authorized a tagged release of the published photo-persistence fix. Bumped package versions to 1.2.9 and Android/iOS native versions to 1.2.9 build 12; added docs/releases/v1.2.9.md upgrade/migration notes.
 - Source and prior native evidence remain unchanged; JSON/native version consistency verified. Tag v1.2.9 will trigger the repository release builds; attachment status is checked separately before claiming an available APK.
+### 2026-10-07 — photo-ticket recovery: Windows splash probe
+
+- Fixed `test/probe_splash_reveal.mjs` to resolve Windows file URLs with `fileURLToPath`; reproduced the old malformed root and 30-second reveal timeout. Corrected the native startup mock and asserted unexpected commands/page errors instead of ignoring them. No uniquely matching Linear cleanup issue was found; no unrelated issue was updated.
+- Real Chromium verification: both normal and rejecting window-call modes report splash=false, hold=false, lastIgnore=false after 2,500 ms with frozen animation frames; zero page errors or unexpected native calls. The two mobile tests already use safe HTTP paths and were unchanged. Publication is pending verified main integration.
