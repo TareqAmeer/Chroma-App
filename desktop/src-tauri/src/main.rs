@@ -53,6 +53,7 @@ mod dino;
 mod faceparse;
 mod petdetect;
 mod depth;
+mod inpaint;
 mod auxiliary;
 mod scrfd;
 mod sam;
@@ -728,6 +729,25 @@ fn depth_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, Strin
     out.extend_from_slice(&header_bytes);
     out.extend_from_slice(&map);
     Ok(tauri::ipc::Response::new(out))
+}
+
+#[tauri::command(async)]
+fn inpaint_start(request: tauri::ipc::Request) -> Result<inpaint::Report, String> {
+    let (json,payload)=parse_framed(request.body())?;
+    let w=u32::try_from(json["width"].as_u64().ok_or("missing width")?).map_err(|_|"invalid width")?;
+    let h=u32::try_from(json["height"].as_u64().ok_or("missing height")?).map_err(|_|"invalid height")?;
+    let n=(w as usize).checked_mul(h as usize).ok_or("image dimensions overflow")?;
+    if n==0 || n>100_000_000 || payload.len()!=n*5{return Err("Expected full-resolution RGBA source plus binary mask".into());}
+    let source=PathBuf::from(json["sourcePath"].as_str().ok_or("missing source path")?);
+    let mut rgb=Vec::with_capacity(n*3);for pixel in payload[..n*4].chunks_exact(4){rgb.extend_from_slice(&pixel[..3]);}
+    inpaint::start(source,rgb,payload[n*4..].to_vec(),w,h)
+}
+#[tauri::command(async)]
+fn inpaint_export_bundle(source_path:String,patches:Vec<inpaint::PatchRef>,destination:String,recipe:String)->Result<String,String>{
+    let source=PathBuf::from(&source_path);let copied=inpaint::export_bundle_files(&source,&patches,Path::new(&destination))?;
+    let existing=canon::sidecar_path_for(&source);if existing.exists(){std::fs::copy(existing,canon::sidecar_path_for(&copied)).map_err(|e|e.to_string())?;}
+    let sc=library::get_sidecar(source_path);library::set_sidecar_run(copied.to_string_lossy().into_owned(),sc.rating,sc.label,true,Some(recipe),Some(sc.favorite),None)?;
+    Ok(copied.parent().unwrap().to_string_lossy().into_owned())
 }
 
 // ── HDR merge / focus stacking (ROADMAP R12) ────────────────────────────────────────────────
@@ -2918,6 +2938,14 @@ fn main() {
             sam2_points,
             faceparse_run,
             depth_run,
+            inpaint_start,
+            inpaint_export_bundle,
+            inpaint::inpaint_model_status,
+            inpaint::inpaint_model_install,
+            inpaint::inpaint_job,
+            inpaint::inpaint_cancel,
+            inpaint::inpaint_accept,
+            inpaint::inpaint_resolve,
             save_to_gphotos_downloads,
             gphotos_downloads_dir,
             save_to_lr_downloads,
@@ -3381,6 +3409,7 @@ fn main() {
             petdetect::set_model_path(resolve_vendor("vendor/rtdetr/model_quantized.onnx"));
             dino::set_model_path(resolve_vendor("vendor/dinov2/model.onnx"));
             depth::set_model_path(resolve_vendor("vendor/depth/model_quantized.onnx"));
+            inpaint::set_root(handle.path().app_data_dir()?.join("inpainting"));
 
             // AI stack Phase B: ArcFace embedding (buffalo_l/w600k_r50, 174MB) — same bundled-
             // resource-with-dev-fallback pattern; too large for include_bytes! like SAM2/

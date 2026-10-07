@@ -4546,6 +4546,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="btn-row" style="margin-top:6px"><button class="btn bgh" id="btn-heal-del" style="flex:1" onclick="healDeleteSel()" disabled>Delete spot</button><button class="btn bgh" style="flex:1" onclick="healClear()">Clear all spots</button></div>
         <div class="btn-row" style="margin-top:6px"><button class="btn bgh" id="btn-heal-dust" style="flex:1" onclick="healDustToggle()" aria-pressed="false" title="Preview-only overlay that highlights dust and small blemishes. Never exported.">Visualise spots</button></div>
         <div class="fx-row" id="row-heal-dust" style="display:none"><div class="fx-label">Sensitivity</div><input class="fx-slider" type="range" min="1" max="100" step="1" value="40" id="sl-heal-dust" oninput="healDustRender()"><div class="fx-val" id="vl-heal-dust">40</div></div>
+        <div style="margin-top:12px"><div class="fx-label">Local AI erase</div><p style="font-size:11px;line-height:1.5">Desktop · optional 28 MB model · photos stay local. Review candidates before keeping a repair.</p><div class="fx-row"><label class="fx-label" for="sl-inpaint-size">Brush size</label><input class="fx-slider" id="sl-inpaint-size" type="range" min="0.2" max="8" step="0.2" value="1"></div><div class="btn-row"><button class="btn bgh" id="btn-inpaint-draw" onclick="window.chromasmithInpaintDraw?chromasmithInpaintDraw():toast('Local AI erase requires the desktop app')">Brush object to erase</button><button class="btn bgh" id="btn-inpaint-generate" onclick="window.chromasmithInpaintGenerate&&chromasmithInpaintGenerate()" disabled>Generate candidates</button></div><div id="inpaint-accepted" aria-label="Accepted erase repairs"></div></div>
         </div>
       </div>
       <!-- RED-EYE: source-coordinate pupil ellipses are corrected after the normal grade. -->
@@ -7255,7 +7256,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1007O';
+const BUILD='1.1007P';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18876,6 +18877,7 @@ function getUISnapshot(opts){
   // the push is skipped, and Cmd-Z silently does nothing to a repair. Plain numbers — no raster,
   // so `skipRaster` does not apply and history stays cheap.
   s.heal=(it&&it.heal&&it.heal.length)?_clone(it.heal):null;
+  s.inpaint=(it&&it.inpaint&&it.inpaint.length)?_clone(it.inpaint):null;
   s.redeye=(it&&it.redeye&&it.redeye.length)?_clone(it.redeye):null;
   s.adjustIndependent=!!(it&&it.adjustOverride); // whether THIS photo's Basic Adjustments are independent of the shared batch value — see adjToggleScope
   // structuredClone rather than four separate JSON round-trips: same deep copy, no intermediate
@@ -19005,7 +19007,7 @@ window.chromasmithPasteEditSelective=function(recipeB64,onConfirm){
 // it. Stays otherwise synchronous start-to-finish — renderSnapshotTo's split-compare path
 // depends on that (see its own comment) and must not be made to await anything here.
 function applyUISnapshot(s,opts){
-  if(s.sliders&&s.sliders['fneg-br']!==undefined&&s.sliders['fneg-domain']===undefined){s.sliders={...s.sliders,'fneg-domain':0,'fneg-source':0};}
+  if(s.sliders&&s.sliders['fneg-br']!==undefined&&s.sliders['fneg-domain']===undefined){s.sliders={...s.sliders,'fneg-domain':0,'fneg-source':0};}`r`n  let _inpaintPromise=null;
   const _decodeBefore={nr:window.chromasmithRawNr||'fast',strength:window.chromasmithRawNrHighStrength,demosaic:window.chromasmithDemosaicAlgo||''};
   // Pre-v2 recipes (undo history, XMP sidecar, session save) stored the exposure SLIDER value
   // under the old /50 (±2 stop) mapping; getFXParams now divides by /20 (±5 stops), so replaying
@@ -19021,6 +19023,7 @@ function applyUISnapshot(s,opts){
     if(hit)hit.heal=s.heal?_clone(s.heal):[];
     if(typeof healSyncUI==='function')healSyncUI();
   }
+  if(s.inpaint!==undefined){const hit=curItem();if(hit){hit.inpaint=s.inpaint?_clone(s.inpaint):[];if(window.chromasmithInpaintRestore)_inpaintPromise=window.chromasmithInpaintRestore(hit);else if(hit.inpaint.some(p=>p.enabled!==false))hit._inpaintError='Accepted erase repairs need the desktop app and their asset folder';}}
   if(s.redeye!==undefined){const hit=curItem();if(hit)hit.redeye=s.redeye?_clone(s.redeye):[];if(typeof redeyeSyncUI==='function')redeyeSyncUI();}
   _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el&&s.sliders[id]!==undefined)el.value=s.sliders[id];});
   if(s.sliders&&s.sliders['lut-mix']!==undefined)fxState.lutMix=parseFloat(s.sliders['lut-mix'])/100;
@@ -19090,7 +19093,7 @@ function applyUISnapshot(s,opts){
   // rather than only on user interaction.
   if(typeof fxMarkModifiedSliders==='function')fxMarkModifiedSliders();
   if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();
-  return _lutPromise;
+  return _inpaintPromise?Promise.all([_lutPromise,_inpaintPromise]):_lutPromise;
 }
 // History entries are stored as JSON STRINGS, not parsed objects. Two reasons, both driven by
 // brush masks carrying full w*h pixel arrays in the snapshot: (1) the dedup check used to
@@ -20806,6 +20809,7 @@ function saveSession(quiet){
   // would smear patches over whatever happened to load next. Plain numbers, so unlike mask
   // rasters this cannot blow the localStorage quota.
   s._heal=(git&&git.heal&&git.heal.length)?git.heal:null;
+  s._inpaint=(git&&git.inpaint&&git.inpaint.length)?_clone(git.inpaint):null;
   s._redeyeFor=git?git.name:null;
   s._redeye=(git&&git.redeye&&git.redeye.length)?git.redeye:null;
   s._ver=2; // see applyUISnapshot's note — exposure slider mapping changed from /50 to /20
@@ -20879,6 +20883,7 @@ function loadSessionGeomFor(){
     // Retouch is PER-PHOTO — a blemish belongs to one frame — so unlike geometry it is restored
     // only onto the photo it was recorded for, never broadcast across the batch.
     if(s._heal&&fxImages[0])fxImages[0].heal=JSON.parse(JSON.stringify(s._heal));
+    if(s._inpaint&&fxImages[0]){fxImages[0].inpaint=_clone(s._inpaint);if(window.chromasmithInpaintRestore)window.chromasmithInpaintRestore(fxImages[0]).catch(()=>{});else fxImages[0]._inpaintError='Accepted erase repair assets require the desktop app';}
     if(s._redeye&&fxImages[0])fxImages[0].redeye=JSON.parse(JSON.stringify(s._redeye));
     if(!s._geom)return;
     fxImages.forEach(it=>it.geom=JSON.parse(JSON.stringify(s._geom)));
@@ -22918,12 +22923,18 @@ function healStrokeDabs(op,w,h,r){
 }
 function geomCanvas(item){
   const g=item.geom||defGeom();
-  const identity=!item.heal&&!g.crop&&!g.rot&&!g.flipH&&!g.flipV&&!g.angle;
-  return identity?item.img:applyGeomTo(healApply(item.img,item.heal),g);
+  const patches=(item.inpaint||[]).some(p=>p.enabled!==false);
+  if(patches&&!window.chromasmithInpaintApply)throw Error('Accepted erase repair assets require the desktop app');
+  const healed=healApply(item.img,item.heal);
+  const source=patches?window.chromasmithInpaintApply(healed,item):healed;
+  const identity=!item.heal&&!patches&&!g.crop&&!g.rot&&!g.flipH&&!g.flipV&&!g.angle;
+  return identity?item.img:applyGeomTo(source,g);
 }
 // Recompute the working image after any geometry change and upload it to the GL renderer.
 function updateWork(){
   const it=curItem();
+  if(window.chromasmithInpaintSync)window.chromasmithInpaintSync();
+  if(it&&(it._inpaintLoading||it._inpaintError)){fxWork=null;const message=it._inpaintError||'Loading accepted erase repair assets…';const status=document.getElementById('fx-no-img');if(status){status.textContent=message;status.style.display='block';}return;}
   fxWork=it?geomCanvas(it):null;
   if(fxWork)FX.setImage(fxWork);
   if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // coarse full-res underlay must re-render for the new image/geometry

@@ -41,8 +41,8 @@
 // real photo, in the same sandbox where the `ort` crate hangs) before writing this file. See
 // ensure_ort() below for the one-time setup and run_session() for the shared inference helper.
 use ort_sys::{
-    OrtAllocatorType, OrtApi, OrtApiBase, OrtEnv, OrtLoggingLevel, OrtMemType, OrtMemoryInfo, OrtSession, OrtSessionOptions,
-    OrtStatusPtr, OrtValue, ONNXTensorElementDataType
+    ONNXTensorElementDataType, OrtAllocatorType, OrtApi, OrtApiBase, OrtEnv, OrtLoggingLevel,
+    OrtMemType, OrtMemoryInfo, OrtSession, OrtSessionOptions, OrtStatusPtr, OrtValue,
 };
 use std::ffi::{CStr, CString};
 use std::path::PathBuf;
@@ -85,12 +85,16 @@ pub(crate) struct OrtHandle {
     pub(crate) api: *const OrtApi,
     pub(crate) env: *mut OrtEnv,
     #[allow(dead_code)] // kept only to hold the dylib open for the process lifetime
-    lib: libloading::Library
+    lib: libloading::Library,
 }
 unsafe impl Send for OrtHandle {}
 unsafe impl Sync for OrtHandle {}
 
-pub(crate) unsafe fn check(api: *const OrtApi, status: OrtStatusPtr, what: &str) -> Result<(), String> {
+pub(crate) unsafe fn check(
+    api: *const OrtApi,
+    status: OrtStatusPtr,
+    what: &str,
+) -> Result<(), String> {
     if !status.0.is_null() {
         let msg = ((*api).GetErrorMessage)(status.0);
         let s = CStr::from_ptr(msg).to_string_lossy().into_owned();
@@ -131,40 +135,62 @@ unsafe fn try_append_coreml(h: &OrtHandle, opts: *mut OrtSessionOptions) {
     if std::env::var_os("CS_COREML").is_none() {
         return;
     }
-    let sym: Result<libloading::Symbol<AppendCoreMlFn>, _> = h.lib.get(b"OrtSessionOptionsAppendExecutionProvider_CoreML");
+    let sym: Result<libloading::Symbol<AppendCoreMlFn>, _> = h
+        .lib
+        .get(b"OrtSessionOptionsAppendExecutionProvider_CoreML");
     match sym {
         Ok(append) => {
             let status = append(opts, COREML_FLAG_USE_NONE);
-            if let Err(e) = check(h.api, status, "OrtSessionOptionsAppendExecutionProvider_CoreML") {
+            if let Err(e) = check(
+                h.api,
+                status,
+                "OrtSessionOptionsAppendExecutionProvider_CoreML",
+            ) {
                 eprintln!("sam: CoreML EP append failed, continuing CPU-only: {e}");
             }
         }
-        Err(e) => eprintln!("sam: CoreML EP symbol not found in onnxruntime dylib, continuing CPU-only: {e}"),
+        Err(e) => eprintln!(
+            "sam: CoreML EP symbol not found in onnxruntime dylib, continuing CPU-only: {e}"
+        ),
     }
 }
 
 pub(crate) fn ort_handle() -> Result<&'static OrtHandle, String> {
     static H: OnceLock<Result<OrtHandle, String>> = OnceLock::new();
     H.get_or_init(|| unsafe {
-        let path = DYLIB_PATH.get().ok_or_else(|| "SAM dylib path not set — set_dylib_path() must run before any AI Select use".to_string())?;
+        let path = DYLIB_PATH.get().ok_or_else(|| {
+            "SAM dylib path not set — set_dylib_path() must run before any AI Select use"
+                .to_string()
+        })?;
         // crate::platform::load_dylib, not a bare libloading::Library::new — on Windows this
         // forces onnxruntime.dll's own dependent DLLs to resolve next to it rather than from
         // C:\Windows\System32, where Windows ML may already ship a same-named copy (see that
         // function's doc comment; docs/windows-port.md G5).
         let lib = crate::platform::load_dylib(path)?;
-        let base_getter: libloading::Symbol<unsafe extern "C" fn() -> *const OrtApiBase> =
-            lib.get(b"OrtGetApiBase").map_err(|e| format!("OrtGetApiBase symbol: {e}"))?;
+        let base_getter: libloading::Symbol<unsafe extern "C" fn() -> *const OrtApiBase> = lib
+            .get(b"OrtGetApiBase")
+            .map_err(|e| format!("OrtGetApiBase symbol: {e}"))?;
         let base = base_getter();
         if base.is_null() {
             return Err("OrtGetApiBase() returned null".into());
         }
         let api: *const OrtApi = ((*base).GetApi)(ORT_API_VERSION);
         if api.is_null() {
-            return Err(format!("GetApi({ORT_API_VERSION}) returned null — onnxruntime dylib too old"));
+            return Err(format!(
+                "GetApi({ORT_API_VERSION}) returned null — onnxruntime dylib too old"
+            ));
         }
         let logid = CString::new("chromasmith-sam").unwrap();
         let mut env: *mut OrtEnv = std::ptr::null_mut();
-        check(api, ((*api).CreateEnv)(OrtLoggingLevel::ORT_LOGGING_LEVEL_WARNING, logid.as_ptr(), &mut env), "CreateEnv")?;
+        check(
+            api,
+            ((*api).CreateEnv)(
+                OrtLoggingLevel::ORT_LOGGING_LEVEL_WARNING,
+                logid.as_ptr(),
+                &mut env,
+            ),
+            "CreateEnv",
+        )?;
         Ok(OrtHandle { api, env, lib })
     })
     .as_ref()
@@ -180,13 +206,23 @@ pub(crate) fn create_session(bytes: &'static [u8]) -> Result<SamSession, String>
     let h = ort_handle()?;
     unsafe {
         let mut opts: *mut OrtSessionOptions = std::ptr::null_mut();
-        check(h.api, ((*h.api).CreateSessionOptions)(&mut opts), "CreateSessionOptions")?;
+        check(
+            h.api,
+            ((*h.api).CreateSessionOptions)(&mut opts),
+            "CreateSessionOptions",
+        )?;
         try_append_coreml(h, opts);
         let mut session: *mut OrtSession = std::ptr::null_mut();
         let res = check(
             h.api,
-            ((*h.api).CreateSessionFromArray)(h.env, bytes.as_ptr() as *const _, bytes.len(), opts, &mut session),
-            "CreateSessionFromArray"
+            ((*h.api).CreateSessionFromArray)(
+                h.env,
+                bytes.as_ptr() as *const _,
+                bytes.len(),
+                opts,
+                &mut session,
+            ),
+            "CreateSessionFromArray",
         );
         ((*h.api).ReleaseSessionOptions)(opts);
         res?;
@@ -196,12 +232,16 @@ pub(crate) fn create_session(bytes: &'static [u8]) -> Result<SamSession, String>
 
 fn encoder() -> Result<&'static Mutex<SamSession>, String> {
     static S: OnceLock<Result<Mutex<SamSession>, String>> = OnceLock::new();
-    S.get_or_init(|| create_session(ENCODER_BYTES).map(Mutex::new)).as_ref().map_err(|e| e.clone())
+    S.get_or_init(|| create_session(ENCODER_BYTES).map(Mutex::new))
+        .as_ref()
+        .map_err(|e| e.clone())
 }
 
 fn decoder() -> Result<&'static Mutex<SamSession>, String> {
     static S: OnceLock<Result<Mutex<SamSession>, String>> = OnceLock::new();
-    S.get_or_init(|| create_session(DECODER_BYTES).map(Mutex::new)).as_ref().map_err(|e| e.clone())
+    S.get_or_init(|| create_session(DECODER_BYTES).map(Mutex::new))
+        .as_ref()
+        .map_err(|e| e.clone())
 }
 
 // ── SAM 2.1 Hiera-Tiny (Phase 3 background quality upgrade) — see vendor/sam2/README.md for the
@@ -226,23 +266,37 @@ pub(crate) fn create_session_from_path(path: &std::path::Path) -> Result<SamSess
     // is the right ABI on macOS; on Windows CreateSession instead wants a NUL-terminated UTF-16
     // buffer, built via `encode_wide()` and cast to `*const ort_sys::os_char` (== `*const u16`).
     #[cfg(not(windows))]
-    let path_c = CString::new(path.to_str().ok_or_else(|| format!("non-UTF8 model path: {}", path.display()))?)
-        .map_err(|e| format!("model path has embedded NUL: {e}"))?;
+    let path_c = CString::new(
+        path.to_str()
+            .ok_or_else(|| format!("non-UTF8 model path: {}", path.display()))?,
+    )
+    .map_err(|e| format!("model path has embedded NUL: {e}"))?;
     #[cfg(windows)]
     let path_w: Vec<u16> = {
         use std::os::windows::ffi::OsStrExt;
-        path.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
+        path.as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
     };
     unsafe {
         let mut opts: *mut OrtSessionOptions = std::ptr::null_mut();
-        check(h.api, ((*h.api).CreateSessionOptions)(&mut opts), "CreateSessionOptions")?;
+        check(
+            h.api,
+            ((*h.api).CreateSessionOptions)(&mut opts),
+            "CreateSessionOptions",
+        )?;
         try_append_coreml(h, opts);
         let mut session: *mut OrtSession = std::ptr::null_mut();
         #[cfg(not(windows))]
         let model_path_ptr = path_c.as_ptr();
         #[cfg(windows)]
         let model_path_ptr = path_w.as_ptr();
-        let res = check(h.api, ((*h.api).CreateSession)(h.env, model_path_ptr, opts, &mut session), "CreateSession");
+        let res = check(
+            h.api,
+            ((*h.api).CreateSession)(h.env, model_path_ptr, opts, &mut session),
+            "CreateSession",
+        );
         ((*h.api).ReleaseSessionOptions)(opts);
         res?;
         Ok(SamSession(session))
@@ -252,7 +306,9 @@ pub(crate) fn create_session_from_path(path: &std::path::Path) -> Result<SamSess
 fn sam2_encoder() -> Result<&'static Mutex<SamSession>, String> {
     static S: OnceLock<Result<Mutex<SamSession>, String>> = OnceLock::new();
     S.get_or_init(|| {
-        let path = SAM2_ENCODER_PATH.get().ok_or("SAM2 encoder path not set — set_sam2_model_paths() must run before any SAM2 use")?;
+        let path = SAM2_ENCODER_PATH.get().ok_or(
+            "SAM2 encoder path not set — set_sam2_model_paths() must run before any SAM2 use",
+        )?;
         create_session_from_path(path).map(Mutex::new)
     })
     .as_ref()
@@ -262,7 +318,9 @@ fn sam2_encoder() -> Result<&'static Mutex<SamSession>, String> {
 fn sam2_decoder() -> Result<&'static Mutex<SamSession>, String> {
     static S: OnceLock<Result<Mutex<SamSession>, String>> = OnceLock::new();
     S.get_or_init(|| {
-        let path = SAM2_DECODER_PATH.get().ok_or("SAM2 decoder path not set — set_sam2_model_paths() must run before any SAM2 use")?;
+        let path = SAM2_DECODER_PATH.get().ok_or(
+            "SAM2 decoder path not set — set_sam2_model_paths() must run before any SAM2 use",
+        )?;
         create_session_from_path(path).map(Mutex::new)
     })
     .as_ref()
@@ -284,39 +342,66 @@ fn sam2_decoder() -> Result<&'static Mutex<SamSession>, String> {
 // shared code path for both dtypes rather than a second near-duplicate function.
 pub(crate) enum InputData<'a> {
     F32(std::borrow::Cow<'a, [f32]>),
-    I64(std::borrow::Cow<'a, [i64]>)
+    I64(std::borrow::Cow<'a, [i64]>),
 }
 pub(crate) struct NamedInput<'a> {
     name: CString,
     data: InputData<'a>,
-    shape: Vec<i64>
+    shape: Vec<i64>,
 }
 pub(crate) fn input(name: &str, data: Vec<f32>, shape: &[i64]) -> NamedInput<'static> {
-    NamedInput { name: CString::new(name).unwrap(), data: InputData::F32(std::borrow::Cow::Owned(data)), shape: shape.to_vec() }
+    NamedInput {
+        name: CString::new(name).unwrap(),
+        data: InputData::F32(std::borrow::Cow::Owned(data)),
+        shape: shape.to_vec(),
+    }
 }
 
 /// Borrowing variant of `input` for large cached tensors (SAM embeddings) — no per-query copy.
 pub(crate) fn input_ref<'a>(name: &str, data: &'a [f32], shape: &[i64]) -> NamedInput<'a> {
-    NamedInput { name: CString::new(name).unwrap(), data: InputData::F32(std::borrow::Cow::Borrowed(data)), shape: shape.to_vec() }
+    NamedInput {
+        name: CString::new(name).unwrap(),
+        data: InputData::F32(std::borrow::Cow::Borrowed(data)),
+        shape: shape.to_vec(),
+    }
 }
 
 /// Int64 variant — CLIP's text encoder's `input_ids` (see clip.rs).
 pub(crate) fn input_i64(name: &str, data: Vec<i64>, shape: &[i64]) -> NamedInput<'static> {
-    NamedInput { name: CString::new(name).unwrap(), data: InputData::I64(std::borrow::Cow::Owned(data)), shape: shape.to_vec() }
+    NamedInput {
+        name: CString::new(name).unwrap(),
+        data: InputData::I64(std::borrow::Cow::Owned(data)),
+        shape: shape.to_vec(),
+    }
 }
 
 /// Runs a session with the given named f32 inputs, returning the named f32 outputs requested (in
 /// the same order as `output_names`). Shared by encode() and decode_point() — both this model
 /// family's I/O is entirely f32 tensors, so one helper covers both.
-pub(crate) fn run_session(sess: &Mutex<SamSession>, inputs: Vec<NamedInput>, output_names: &[&str]) -> Result<Vec<Vec<f32>>, String> {
+pub(crate) fn run_session(
+    sess: &Mutex<SamSession>,
+    inputs: Vec<NamedInput>,
+    output_names: &[&str],
+) -> Result<Vec<Vec<f32>>, String> {
     let h = ort_handle()?;
-    let sess = sess.lock().map_err(|_| "SAM session lock poisoned".to_string())?;
+    let sess = sess
+        .lock()
+        .map_err(|_| "SAM session lock poisoned".to_string())?;
     unsafe {
         let mut mem_info: *mut OrtMemoryInfo = std::ptr::null_mut();
-        check(h.api, ((*h.api).CreateCpuMemoryInfo)(OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeDefault, &mut mem_info), "CreateCpuMemoryInfo")?;
+        check(
+            h.api,
+            ((*h.api).CreateCpuMemoryInfo)(
+                OrtAllocatorType::OrtArenaAllocator,
+                OrtMemType::OrtMemTypeDefault,
+                &mut mem_info,
+            ),
+            "CreateCpuMemoryInfo",
+        )?;
 
         let mut input_values: Vec<*mut OrtValue> = Vec::with_capacity(inputs.len());
-        let mut input_name_ptrs: Vec<*const std::os::raw::c_char> = Vec::with_capacity(inputs.len());
+        let mut input_name_ptrs: Vec<*const std::os::raw::c_char> =
+            Vec::with_capacity(inputs.len());
         // Best-effort cleanup even on an early error — collect what we created so far and release
         // it before returning. Simpler than a scope-guard given the small, fixed set of resources.
         let cleanup = |mem_info: *mut OrtMemoryInfo, values: &[*mut OrtValue]| {
@@ -333,12 +418,16 @@ pub(crate) fn run_session(sess: &Mutex<SamSession>, inputs: Vec<NamedInput>, out
         for inp in inputs.iter() {
             let mut value: *mut OrtValue = std::ptr::null_mut();
             let (data_ptr, byte_len, elem_type) = match &inp.data {
-                InputData::F32(d) => {
-                    (d.as_ptr() as *mut std::ffi::c_void, d.len() * std::mem::size_of::<f32>(), ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT)
-                }
-                InputData::I64(d) => {
-                    (d.as_ptr() as *mut std::ffi::c_void, d.len() * std::mem::size_of::<i64>(), ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64)
-                }
+                InputData::F32(d) => (
+                    d.as_ptr() as *mut std::ffi::c_void,
+                    d.len() * std::mem::size_of::<f32>(),
+                    ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
+                ),
+                InputData::I64(d) => (
+                    d.as_ptr() as *mut std::ffi::c_void,
+                    d.len() * std::mem::size_of::<i64>(),
+                    ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64,
+                ),
             };
             let res = check(
                 h.api,
@@ -351,9 +440,9 @@ pub(crate) fn run_session(sess: &Mutex<SamSession>, inputs: Vec<NamedInput>, out
                     inp.shape.as_ptr(),
                     inp.shape.len(),
                     elem_type,
-                    &mut value
+                    &mut value,
                 ),
-                "CreateTensorWithDataAsOrtValue"
+                "CreateTensorWithDataAsOrtValue",
             );
             if let Err(e) = res {
                 cleanup(mem_info, &input_values);
@@ -363,8 +452,12 @@ pub(crate) fn run_session(sess: &Mutex<SamSession>, inputs: Vec<NamedInput>, out
             input_name_ptrs.push(inp.name.as_ptr());
         }
 
-        let output_name_cstrings: Vec<CString> = output_names.iter().map(|n| CString::new(*n).unwrap()).collect();
-        let output_name_ptrs: Vec<*const std::os::raw::c_char> = output_name_cstrings.iter().map(|c| c.as_ptr()).collect();
+        let output_name_cstrings: Vec<CString> = output_names
+            .iter()
+            .map(|n| CString::new(*n).unwrap())
+            .collect();
+        let output_name_ptrs: Vec<*const std::os::raw::c_char> =
+            output_name_cstrings.iter().map(|c| c.as_ptr()).collect();
         let mut output_values: Vec<*mut OrtValue> = vec![std::ptr::null_mut(); output_names.len()];
 
         let run_res = check(
@@ -377,9 +470,9 @@ pub(crate) fn run_session(sess: &Mutex<SamSession>, inputs: Vec<NamedInput>, out
                 input_values.len(),
                 output_name_ptrs.as_ptr(),
                 output_name_ptrs.len(),
-                output_values.as_mut_ptr()
+                output_values.as_mut_ptr(),
             ),
-            "Run"
+            "Run",
         );
         if let Err(e) = run_res {
             cleanup(mem_info, &input_values);
@@ -394,7 +487,11 @@ pub(crate) fn run_session(sess: &Mutex<SamSession>, inputs: Vec<NamedInput>, out
                 break;
             }
             let mut data_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
-            match check(h.api, ((*h.api).GetTensorMutableData)(ov, &mut data_ptr), "GetTensorMutableData") {
+            match check(
+                h.api,
+                ((*h.api).GetTensorMutableData)(ov, &mut data_ptr),
+                "GetTensorMutableData",
+            ) {
                 Ok(()) => {
                     let mut count_bytes: usize = 0;
                     // Element count via GetTensorShapeElementCount isn't in this minimal binding
@@ -403,15 +500,26 @@ pub(crate) fn run_session(sess: &Mutex<SamSession>, inputs: Vec<NamedInput>, out
                     // sizes ahead of time from the model's documented contract), so we just hand
                     // back the raw pointer's data reinterpreted for the caller-known length via a
                     // sentinel: read GetTensorTypeAndShape → GetTensorShapeElementCount.
-                    let mut shape_info: *mut ort_sys::OrtTensorTypeAndShapeInfo = std::ptr::null_mut();
-                    if check(h.api, ((*h.api).GetTensorTypeAndShape)(ov, &mut shape_info), "GetTensorTypeAndShape").is_ok() {
-                        let _ = check(h.api, ((*h.api).GetTensorShapeElementCount)(shape_info, &mut count_bytes), "GetTensorShapeElementCount");
+                    let mut shape_info: *mut ort_sys::OrtTensorTypeAndShapeInfo =
+                        std::ptr::null_mut();
+                    if check(
+                        h.api,
+                        ((*h.api).GetTensorTypeAndShape)(ov, &mut shape_info),
+                        "GetTensorTypeAndShape",
+                    )
+                    .is_ok()
+                    {
+                        let _ = check(
+                            h.api,
+                            ((*h.api).GetTensorShapeElementCount)(shape_info, &mut count_bytes),
+                            "GetTensorShapeElementCount",
+                        );
                         ((*h.api).ReleaseTensorTypeAndShapeInfo)(shape_info);
                     }
                     let slice = std::slice::from_raw_parts(data_ptr as *const f32, count_bytes);
                     results.push(slice.to_vec());
                 }
-                Err(e) => extract_err = Some(e)
+                Err(e) => extract_err = Some(e),
             }
         }
 
@@ -432,7 +540,7 @@ pub(crate) fn run_session(sess: &Mutex<SamSession>, inputs: Vec<NamedInput>, out
 pub struct Embedding {
     pub data: Vec<f32>, // [1,256,64,64], row-major
     pub orig_w: u32,
-    pub orig_h: u32
+    pub orig_h: u32,
 }
 
 pub(crate) fn resize_rgb8(rgb: &[u8], w: u32, h: u32, new_w: u32, new_h: u32) -> Vec<u8> {
@@ -479,8 +587,20 @@ pub fn encode(rgb: &[u8], w: u32, h: u32) -> Result<Embedding, String> {
     }
 
     let sess = encoder()?;
-    let mut outputs = run_session(sess, vec![input("image", pixels, &[1, 3, SAM_SIZE as i64, SAM_SIZE as i64])], &["image_embeddings"])?;
-    Ok(Embedding { data: outputs.remove(0), orig_w: w, orig_h: h })
+    let mut outputs = run_session(
+        sess,
+        vec![input(
+            "image",
+            pixels,
+            &[1, 3, SAM_SIZE as i64, SAM_SIZE as i64],
+        )],
+        &["image_embeddings"],
+    )?;
+    Ok(Embedding {
+        data: outputs.remove(0),
+        orig_w: w,
+        orig_h: h,
+    })
 }
 
 /// Converts a raw mask logit into a soft 0-255 alpha instead of a hard 0/255 threshold — the
@@ -499,7 +619,13 @@ fn logit_to_soft_alpha(v: f32) -> u8 {
 /// Bilinear-samples `src` (row-major, `src_w`x`src_h`) at floating-point pixel-center coordinates,
 /// using the same half-pixel convention as cv2.resize(INTER_LINEAR)/PIL — `src_x = (dst_x+0.5) *
 /// (src_w/dst_w) - 0.5` — so this matches EdgeSAM's own postprocess_masks() sample-for-sample.
-pub(crate) fn bilinear_resize(src: &[f32], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> Vec<f32> {
+pub(crate) fn bilinear_resize(
+    src: &[f32],
+    src_w: u32,
+    src_h: u32,
+    dst_w: u32,
+    dst_h: u32,
+) -> Vec<f32> {
     let (sw, sh) = (src_w as f32, src_h as f32);
     let (dw, dh) = (dst_w as f32, dst_h as f32);
     let mut out = vec![0f32; (dst_w as usize) * (dst_h as usize)];
@@ -561,20 +687,28 @@ pub fn decode_points(embed: &Embedding, points: &[(f32, f32, bool)]) -> Result<V
             input("point_coords", coords, &[1, n, 2]),
             input("point_labels", labels, &[1, n]),
         ],
-        &["scores", "masks"]
+        &["scores", "masks"],
     )?;
     let masks = outputs.remove(1);
     let scores = outputs.remove(0);
 
-    if scores.len() != NUM_MASK_CANDIDATES || masks.len() != NUM_MASK_CANDIDATES * (MASK_SIZE * MASK_SIZE) as usize {
+    if scores.len() != NUM_MASK_CANDIDATES
+        || masks.len() != NUM_MASK_CANDIDATES * (MASK_SIZE * MASK_SIZE) as usize
+    {
         return Err(format!(
             "SAM decoder output size mismatch: {} scores, {} mask values (expected {NUM_MASK_CANDIDATES} candidates of {MASK_SIZE}x{MASK_SIZE})",
             scores.len(),
             masks.len()
         ));
     }
-    let best = scores.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).map(|(i, _)| i).unwrap_or(0);
-    let low_res = &masks[best * (MASK_SIZE * MASK_SIZE) as usize..(best + 1) * (MASK_SIZE * MASK_SIZE) as usize];
+    let best = scores
+        .iter()
+        .enumerate()
+        .max_by(|a, b| a.1.total_cmp(b.1))
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    let low_res = &masks
+        [best * (MASK_SIZE * MASK_SIZE) as usize..(best + 1) * (MASK_SIZE * MASK_SIZE) as usize];
 
     // Two-stage upsample matching EdgeSAM's own postprocess_masks exactly: low-res → full padded
     // square → crop to the unpadded input region → original resolution. See the module doc
@@ -605,11 +739,11 @@ const SAM2_STD: [f32; 3] = [0.229, 0.224, 0.225];
 const NUM_SAM2_MASK_CANDIDATES: usize = 3;
 
 pub struct Sam2Embedding {
-    pub image_embed: Vec<f32>,     // [1,256,64,64]
+    pub image_embed: Vec<f32>,      // [1,256,64,64]
     pub high_res_feats_0: Vec<f32>, // [1,32,256,256]
     pub high_res_feats_1: Vec<f32>, // [1,64,128,128]
     pub orig_w: u32,
-    pub orig_h: u32
+    pub orig_h: u32,
 }
 
 /// Encodes a photo for SAM 2.1. Unlike EdgeSAM/MobileSAM's resize-longest-side-then-pad, SAM 2.1
@@ -637,21 +771,28 @@ pub fn sam2_encode(rgb: &[u8], w: u32, h: u32) -> Result<Sam2Embedding, String> 
     let sess = sam2_encoder()?;
     let mut outputs = run_session(
         sess,
-        vec![input("image", pixels, &[1, 3, SAM_SIZE as i64, SAM_SIZE as i64])],
-        &["image_embed", "high_res_feats_0", "high_res_feats_1"]
+        vec![input(
+            "image",
+            pixels,
+            &[1, 3, SAM_SIZE as i64, SAM_SIZE as i64],
+        )],
+        &["image_embed", "high_res_feats_0", "high_res_feats_1"],
     )?;
     Ok(Sam2Embedding {
         image_embed: outputs.remove(0),
         high_res_feats_0: outputs.remove(0),
         high_res_feats_1: outputs.remove(0),
         orig_w: w,
-        orig_h: h
+        orig_h: h,
     })
 }
 
 /// Same point-set query as decode_points(), against a SAM2Embedding. `points` are `(norm_x,
 /// norm_y, positive)` as 0..1 fractions of the ORIGINAL image, same convention as decode_points.
-pub fn sam2_decode_points(embed: &Sam2Embedding, points: &[(f32, f32, bool)]) -> Result<Vec<u8>, String> {
+pub fn sam2_decode_points(
+    embed: &Sam2Embedding,
+    points: &[(f32, f32, bool)],
+) -> Result<Vec<u8>, String> {
     if points.is_empty() {
         return Err("SAM2 decode: no points given".into());
     }
@@ -672,27 +813,47 @@ pub fn sam2_decode_points(embed: &Sam2Embedding, points: &[(f32, f32, bool)]) ->
         sess,
         vec![
             input_ref("image_embed", &embed.image_embed, &[1, 256, 64, 64]),
-            input_ref("high_res_feats_0", &embed.high_res_feats_0, &[1, 32, 256, 256]),
-            input_ref("high_res_feats_1", &embed.high_res_feats_1, &[1, 64, 128, 128]),
+            input_ref(
+                "high_res_feats_0",
+                &embed.high_res_feats_0,
+                &[1, 32, 256, 256],
+            ),
+            input_ref(
+                "high_res_feats_1",
+                &embed.high_res_feats_1,
+                &[1, 64, 128, 128],
+            ),
             input("point_coords", coords, &[1, n, 2]),
             input("point_labels", labels, &[1, n]),
-            input("mask_input", vec![0f32; (MASK_SIZE * MASK_SIZE) as usize], &[1, 1, MASK_SIZE as i64, MASK_SIZE as i64]),
+            input(
+                "mask_input",
+                vec![0f32; (MASK_SIZE * MASK_SIZE) as usize],
+                &[1, 1, MASK_SIZE as i64, MASK_SIZE as i64],
+            ),
             input("has_mask_input", vec![0.0], &[1]),
         ],
-        &["masks", "iou_predictions"]
+        &["masks", "iou_predictions"],
     )?;
     let masks = outputs.remove(0);
     let iou = outputs.remove(0);
 
-    if iou.len() != NUM_SAM2_MASK_CANDIDATES || masks.len() != NUM_SAM2_MASK_CANDIDATES * (MASK_SIZE * MASK_SIZE) as usize {
+    if iou.len() != NUM_SAM2_MASK_CANDIDATES
+        || masks.len() != NUM_SAM2_MASK_CANDIDATES * (MASK_SIZE * MASK_SIZE) as usize
+    {
         return Err(format!(
             "SAM2 decoder output size mismatch: {} iou scores, {} mask values (expected {NUM_SAM2_MASK_CANDIDATES} candidates of {MASK_SIZE}x{MASK_SIZE})",
             iou.len(),
             masks.len()
         ));
     }
-    let best = iou.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).map(|(i, _)| i).unwrap_or(0);
-    let low_res = &masks[best * (MASK_SIZE * MASK_SIZE) as usize..(best + 1) * (MASK_SIZE * MASK_SIZE) as usize];
+    let best = iou
+        .iter()
+        .enumerate()
+        .max_by(|a, b| a.1.total_cmp(b.1))
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    let low_res = &masks
+        [best * (MASK_SIZE * MASK_SIZE) as usize..(best + 1) * (MASK_SIZE * MASK_SIZE) as usize];
 
     // Single-stage resize is correct here (unlike decode_points' two-stage crop) — the encoder's
     // direct square resize has no padding to crop back out, so independently rescaling x/y
@@ -707,7 +868,8 @@ mod tests {
     use std::path::PathBuf;
 
     fn setup_models() {
-        let dylib = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::platform::ort_lib_dev_path());
+        let dylib =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::platform::ort_lib_dev_path());
         set_dylib_path(dylib);
         set_sam2_model_paths(
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/sam2/encoder.onnx"),
@@ -741,27 +903,43 @@ mod tests {
                 rgb[o + 2] = 255;
             }
         }
-        SyntheticImage { rgb, w, h, sq_x0, sq_y0, sq_x1, sq_y1 }
+        SyntheticImage {
+            rgb,
+            w,
+            h,
+            sq_x0,
+            sq_y0,
+            sq_x1,
+            sq_y1,
+        }
     }
     /// Fraction of `mask` (row-major, w*h, 0/255) that falls inside vs outside the square's true
     /// bounds — (inside_hit_rate, outside_false_positive_rate). A correct point-select on the
     /// square's center should score high inside, low outside.
     fn score_mask(mask: &[u8], img: &SyntheticImage) -> (f32, f32) {
-        let (mut inside_hit, mut inside_total, mut outside_hit, mut outside_total) = (0u32, 0u32, 0u32, 0u32);
+        let (mut inside_hit, mut inside_total, mut outside_hit, mut outside_total) =
+            (0u32, 0u32, 0u32, 0u32);
         for y in 0..img.h {
             for x in 0..img.w {
                 let inside = x >= img.sq_x0 && x < img.sq_x1 && y >= img.sq_y0 && y < img.sq_y1;
                 let on = mask[(y * img.w + x) as usize] > 0;
                 if inside {
                     inside_total += 1;
-                    if on { inside_hit += 1; }
+                    if on {
+                        inside_hit += 1;
+                    }
                 } else {
                     outside_total += 1;
-                    if on { outside_hit += 1; }
+                    if on {
+                        outside_hit += 1;
+                    }
                 }
             }
         }
-        (inside_hit as f32 / inside_total.max(1) as f32, outside_hit as f32 / outside_total.max(1) as f32)
+        (
+            inside_hit as f32 / inside_total.max(1) as f32,
+            outside_hit as f32 / outside_total.max(1) as f32,
+        )
     }
 
     #[test]
@@ -774,8 +952,14 @@ mod tests {
         let mask = decode_points(&embed, &[(cx, cy, true)]).expect("EdgeSAM decode failed");
         let (inside, outside) = score_mask(&mask, &img);
         println!("EdgeSAM: inside={inside:.3} outside={outside:.3}");
-        assert!(inside > 0.5, "EdgeSAM mask should cover most of the square (center-tapped), got inside={inside:.3}");
-        assert!(outside < 0.2, "EdgeSAM mask should mostly avoid the background, got outside={outside:.3}");
+        assert!(
+            inside > 0.5,
+            "EdgeSAM mask should cover most of the square (center-tapped), got inside={inside:.3}"
+        );
+        assert!(
+            outside < 0.2,
+            "EdgeSAM mask should mostly avoid the background, got outside={outside:.3}"
+        );
     }
 
     #[test]
@@ -788,7 +972,13 @@ mod tests {
         let mask = sam2_decode_points(&embed, &[(cx, cy, true)]).expect("SAM2 decode failed");
         let (inside, outside) = score_mask(&mask, &img);
         println!("SAM2: inside={inside:.3} outside={outside:.3}");
-        assert!(inside > 0.5, "SAM2 mask should cover most of the square (center-tapped), got inside={inside:.3}");
-        assert!(outside < 0.2, "SAM2 mask should mostly avoid the background, got outside={outside:.3}");
+        assert!(
+            inside > 0.5,
+            "SAM2 mask should cover most of the square (center-tapped), got inside={inside:.3}"
+        );
+        assert!(
+            outside < 0.2,
+            "SAM2 mask should mostly avoid the background, got outside={outside:.3}"
+        );
     }
 }

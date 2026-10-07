@@ -1,12 +1,20 @@
 # AI inpainting model decision (CHR-263)
 
-**Status: provisional implementation constraint, 2026-10-06.** This is a product and engineering
+**Status: local erase artifact selected, 2026-10-07; prompt generation remains deferred.** This is a product and engineering
 decision for the current work, not a legal opinion or a final model approval.
 
 ## Decision
 
-Do not add remote image generation, bundle or distribute an inpainting model, or expose in-app
-generative inpainting yet. A future proposal must first identify a prompt-capable artifact and
+CHR-246's mask-based local erase uses the authors' MI-GAN-512 Places2 ONNX Pipeline v2,
+with explicit MIT code and pretrained-weight licences, pinned revision/size/SHA-256 and
+an optional user-triggered 28 MB installation. See
+[the exact artifact and runtime contract](../desktop/src-tauri/vendor/inpainting/README.md).
+Real native CPU readiness inference confirmed three different mask-context candidates;
+quality varies and broad tower removal failed review. Accepted pixels persist as
+source-bound companion assets, rather than oversized recipe payloads.
+
+Do not add remote image generation or claim text-prompt replacement/editing is implemented.
+A future CHR-263 proposal must first identify a prompt-capable artifact and
 document its provenance and applicable terms, runtime and download behavior, target hardware and
 storage cost, image privacy/data flow, and how generated candidates are previewed, persisted,
 undone, and exported. Review those findings before selecting or shipping an artifact.
@@ -50,6 +58,9 @@ Before reopening implementation, record:
 
 ## References
 
+- [MI-GAN official source and ONNX pipeline](https://github.com/Picsart-AI-Research/MI-GAN)
+- [MI-GAN explicit MIT weights licence](https://github.com/Picsart-AI-Research/MI-GAN/blob/2b793c5ece43f4253e32d4afc257120a5deed6f5/LICENSE-WEIGHTS)
+- [Exact MI-GAN artifact](https://huggingface.co/andraniksargsyan/migan/blob/406830d0fa60666da0071c342ad2fbc8f30c5c64/migan_pipeline_v2.onnx)
 - [IOPaint model families](https://www.iopaint.com/models)
 - [IOPaint model download and storage behavior](https://www.iopaint.com/install/download_model)
 - [OpenCV Zoo LaMa ONNX directory and license statement](https://github.com/opencv/opencv_zoo/tree/main/models/inpainting_lama)
