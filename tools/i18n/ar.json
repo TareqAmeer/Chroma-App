@@ -588,9 +588,9 @@
     "1 app. $0 subscriptions. Fully offline.": "تطبيق واحد. ‎$0‎ اشتراكات. يعمل دون إنترنت بالكامل.",
     "Full desktop app · Microsoft Store or installer": "تطبيق سطح المكتب الكامل · Microsoft Store أو المثبّت",
     "Yes. Get it from the Microsoft Store, or download the installer published alongside each Mac release.": "نعم. احصل عليه من Microsoft Store، أو نزّل المثبّت المنشور مع كل إصدار لـ Mac.",
-    "Or download the installer ↓": "أو نزّل المثبّت ↓",
     "Get it from Microsoft Store ↗": "احصل عليه من Microsoft Store ↗",
-    "The Microsoft Store version installs and updates itself. The direct installer is not code-signed yet, so Windows SmartScreen may warn about an \"unknown publisher\".": "نسخة Microsoft Store تُثبَّت وتُحدَّث تلقائيًا. أما المثبّت المباشر فغير موقّع بعد، لذلك قد يحذّرك Windows SmartScreen من «ناشر غير معروف».",
-    "How to install the direct installer": "طريقة تثبيت المثبّت المباشر"
+    "Download from GitHub (.exe) ↓": "نزّل من GitHub ‎(.exe)‎ ↓",
+    "How to install from GitHub": "طريقة التثبيت من GitHub",
+    "Pick either one. The Microsoft Store version installs and updates itself. The GitHub installer is not code-signed yet, so Windows SmartScreen may warn about an \"unknown publisher\".": "اختر أيًّا منهما. نسخة Microsoft Store تُثبَّت وتُحدَّث تلقائيًا. أما مثبّت GitHub فغير موقّع بعد، لذلك قد يحذّرك Windows SmartScreen من «ناشر غير معروف»."
   }
 }
