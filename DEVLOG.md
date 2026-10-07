@@ -545,8 +545,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - `node test/film_negative_native.mjs` passed against Chrome: 6 mocked native bridge operations, source-domain route restored, latest async result exposure 2, and double conversion/tile/disabled diffs 0. This is not actual Rust IPC or native app evidence. CHR-262 stays In Progress pending known-good colour/B&W positive comparisons, real native Tauri RAW verification and iOS.
 - Publication verification: integration commit `f8208c5224f4491ab5bb93fbd88e501341566314` contains feature commit `5c8dfb251ac07fddde2dd01bce5c42761d589a00`. Both focused Chrome checks passed in the clean integration checkout before push; fresh post-push fetch matched `f8208c5224f4491ab5bb93fbd88e501341566314`, ancestry passed, and shipped `chromasmith-22.html` contains the per-frame warning state and badge.
 
-### 2026-10-07 — CHR-267 50k capture-group scale gate (partial)
+### 2026-10-08 — CHR-267 50k capture-group scale gate (partial)
 
 - Added `test/library_cull_50k.mjs` to exercise 50,000 synthetic catalog rows through the Library cull/grid and capture-time group picker. Rebuilt integration staging and Chromium measured initial open 2,357.3 ms, 112 of 240 cards mounted, 2,537 grid nodes, 189 cards after 50,000 px scroll, select-all 84.5 ms, 16,668 groups regrouped in 16.2 ms with 50 visible, and next-page paint in 97.9 ms; zero page/console errors.
 - This validates bounded DOM and browser interaction against synthetic catalog data only; native SQLite throughput, real-photo decode, prefetch latency on 45 MP RAW, and Tauri app behavior remain unverified. CHR-267 stays In Progress.
-- Feature commit `f0f9fe6651ed6dd1e5347fddfb195a80ab0ce789` is in the integration checkout as `f2367c6f`; publication evidence follows after the verified push.
+- Feature commit `f0f9fe6651ed6dd1e5347fddfb195a80ab0ce789` is integrated by `1f80356cbaaa890789460c5e1281e4b057fb3c06`. A fresh `git fetch origin main` and `git ls-remote origin refs/heads/main` both returned that SHA; ancestry checks passed and the remote test file contains the 50,000-row fixture. CHR-267 remains In Progress.
