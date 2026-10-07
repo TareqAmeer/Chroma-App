@@ -23,7 +23,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // auto_tagged_at) to run on catalogs already stamped v19 before those blocks existed; without it the Editor's Info
 // panel queried a photo_auto_tags table that was never created and every photo read as "not tagged".
 // v21: same trick for the auto_tag_breeds_v1 block (breed re-tag), which v20 catalogs skipped.
-const SCHEMA_VERSION: i64 = 21;
+// v22: repair schema-21 catalogs missing the offline queue; existing queued work is preserved.
+const SCHEMA_VERSION: i64 = 22;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -606,7 +607,9 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     // `base_size` are NOT re-stat'd at queue time (the file is offline) — they're copied from
     // this photo's own last-known `photos` row, i.e. whatever the last successful online scan
     // recorded, which is exactly the state the queued edit was made against.
-    if version < 10 {
+    // CHR-293: some existing v21 catalogs lack this additive table. Re-run its idempotent
+    // creation during v22 migration; never drop or replace an existing queue or its recipes.
+    if version < 22 {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS offline_edit_queue (
                 id         INTEGER PRIMARY KEY,
@@ -9703,6 +9706,44 @@ mod tests {
         assert_eq!(version2, SCHEMA_VERSION);
         let label: String = conn.query_row("SELECT label FROM volumes WHERE uuid='local'", [], |r| r.get(0)).unwrap();
         assert_eq!(label, "This Mac", "a second migrate() must not disturb existing data");
+    }
+
+    #[test]
+    fn offline_queue_migration_repairs_missing_table_in_v21_catalog() {
+        let (conn, _, _) = setup_one_photo("queue_schema_repair");
+        conn.execute("UPDATE photos SET rating = 4", []).unwrap();
+        conn.execute("DROP TABLE offline_edit_queue", []).unwrap();
+        conn.pragma_update(None, "user_version", 21i64).unwrap();
+        assert!(list_offline_queue_run(&conn).err().unwrap().contains("no such table"));
+
+        migrate(&conn).unwrap();
+        assert!(list_offline_queue_run(&conn).unwrap().is_empty());
+        let photo: (i64, i64) = conn.query_row("SELECT COUNT(*), MAX(rating) FROM photos", [],
+            |row| Ok((row.get(0)?, row.get(1)?))).unwrap();
+        assert_eq!(photo, (1, 4), "repair preserves catalog photos and metadata");
+        migrate(&conn).unwrap();
+        assert!(list_offline_queue_run(&conn).unwrap().is_empty());
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0)).unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn offline_queue_migration_preserves_existing_queued_recipe() {
+        let (conn, path, _) = setup_one_photo("queue_schema_preserve");
+        queue_offline_edit_run(&conn, &path, "USER_RECIPE").unwrap();
+        let before = list_offline_queue_run(&conn).unwrap();
+        assert_eq!(before.len(), 1);
+        conn.pragma_update(None, "user_version", 21i64).unwrap();
+
+        migrate(&conn).unwrap();
+        migrate(&conn).unwrap();
+        let after = list_offline_queue_run(&conn).unwrap();
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].id, before[0].id);
+        assert_eq!(after[0].photo_id, before[0].photo_id);
+        assert_eq!(after[0].recipe, "USER_RECIPE");
+        assert_eq!(after[0].queued_at, before[0].queued_at);
+        assert_eq!(after[0].path, before[0].path);
     }
 
     /// Regression for a real cross-OS catalog restore: a volume scanned once from macOS (`/`
