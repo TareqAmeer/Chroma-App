@@ -152,3 +152,8 @@ Publication verified: integration commits `053f3757` and `f41e82cd` are publishe
 CHR-285 integration verification: safely integrated onto aa87c3a7 as 17b98648; rebuilt ordinary APK and repeated full Android 10 migration/save/uninstall/reinstall checks (eight additional media files byte-identical), plus all five mobile regression suites. Raw integration evidence and APK SHA-256 recorded in the persistence benchmark report.
 
 CHR-285 publication verified: implementation 17b98648 and integration evidence are published on origin/main at ff12e9930fe3ce2cb5a374d7c28c80260d4fd2cb; git ls-remote matched after the fast-forward push. Ordinary integrated APK and native uninstall/reinstall checks passed; CHR-285 moves to In Review for user acceptance.
+
+### 2026-10-07 — CHR-285 release v1.2.9 preparation
+
+- User authorized a tagged release of the published photo-persistence fix. Bumped package versions to 1.2.9 and Android/iOS native versions to 1.2.9 build 12; added docs/releases/v1.2.9.md upgrade/migration notes.
+- Source and prior native evidence remain unchanged; JSON/native version consistency verified. Tag v1.2.9 will trigger the repository release builds; attachment status is checked separately before claiming an available APK.
