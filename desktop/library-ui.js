@@ -2022,7 +2022,7 @@
     #lib-main:has(#lib-compare.on) #lib-grid{display:none}
     #lib-main:has(#lib-survey.on) #lib-grid{display:none}
     #lib-compare-panes{display:flex;gap:8px;flex:1;min-height:0}
-    #lib-survey{display:none;flex:1;min-height:0;flex-direction:column;gap:8px}
+    #lib-survey{display:none;flex:1;height:100%;min-height:0;flex-direction:column;gap:8px}
     #lib-survey.on{display:flex}
     #lib-survey-grid{display:grid;grid-template-columns:repeat(var(--survey-cols,2),minmax(0,1fr));
       grid-template-rows:repeat(var(--survey-rows,1),minmax(0,1fr));gap:8px;flex:1;min-height:0}
@@ -2045,7 +2045,7 @@
        a dark panel — the one phantom-token site with a visible consequence. */
     .lib-cmp-head select{background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);
       border-radius:var(--r-sm);padding:3px 6px;font-size:10.5px;max-width:120px}
-    .lib-cmp-canvas-wrap{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000}
+    .lib-cmp-canvas-wrap{flex:1;min-height:0;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000}
     .lib-cmp-canvas-wrap canvas{max-width:100%;max-height:100%;transform-origin:center center}
     .lib-cmp-chrome{display:flex;align-items:center;gap:6px;padding:6px 8px;border-top:1px solid var(--bdr);font-size:12px}
     .lib-cmp-chrome .lib-flag{width:20px;height:20px;display:flex;align-items:center;justify-content:center;
@@ -8420,19 +8420,8 @@
   }
 
   function renderSurveyCell(idx) {
-    const host = surveyHost(); const cellState = surveyState.cells[idx];
-    const cell = host && host.querySelector(`.lib-survey-cell[data-survey-idx="${idx}"]`);
-    const canvas = cell && cell.querySelector('canvas');
-    if (!canvas || !cellState) return;
-    if (typeof fxSelectImage === 'function' && typeof fxCurIdx !== 'undefined' && fxCurIdx !== cellState.fxIdx) fxSelectImage(cellState.fxIdx);
-    const it = (typeof fxImages !== 'undefined' && fxImages[cellState.fxIdx]) || null;
-    const img = it && it.img;
-    const iw = img ? (img.naturalWidth || img.width) : 1200, ih = img ? (img.naturalHeight || img.height) : 800;
-    const wrap = cell.querySelector('.lib-cmp-canvas-wrap');
-    const scale = Math.min(1, Math.max(100, wrap.clientWidth || 320) / iw, Math.max(100, wrap.clientHeight || 240) / ih);
-    const snap = typeof resolveSplitSnapshot === 'function' ? resolveSplitSnapshot(null) : 'orig';
-    try { if (typeof renderSnapshotTo === 'function') renderSnapshotTo(canvas, snap, Math.max(1, Math.round(iw * scale)), Math.max(1, Math.round(ih * scale)), {}); }
-    catch (e) { console.error('renderSurveyCell', idx, e); }
+    const cell = surveyState.cells[idx], el = surveyHost()?.querySelector(`.lib-survey-cell[data-survey-idx="${idx}"]`);
+    if(cell&&el)return detailRender(el,cell,cell.fxIdx,'live',cell.path);
   }
 
   function surveySyncCell(idx) {
@@ -8486,6 +8475,7 @@
     }));
     const delBtn = host.querySelector('#lib-cull-del');
     if (delBtn) delBtn.onclick = () => cullDeleteRejected();
+    detailControls(host);
     surveyCellsRender();
     surveySyncFocus();
     cullSyncDeleteBtn();
@@ -8614,56 +8604,97 @@
     const nameEl = host.querySelector(`.lib-cmp-name[data-pane="${which}"]`);
     if (nameEl) nameEl.textContent = baseName(path);
   }
-  // Re-renders one pane: selects its photo (fxSelectImage, a no-op if already current),
-  // resolves its snapshotSrc via B3's resolveSplitSnapshot, then draws with B1's
-  // renderSnapshotTo. Only called on photo/source change — zoom/pan is a pure CSS transform
-  // (setupCompareZoomPan) so panning/zooming never re-renders.
+  // Source-detail renders use a private context and never select a photo in the Editor.
   async function renderComparePane(which) {
-    const host = compareHost(); if (!host) return;
-    const p = compareState[which === 'A' ? 'paneA' : 'paneB'];
-    const pane = host.querySelector(`.lib-cmp-pane[data-pane="${which}"]`);
-    const canvas = pane && pane.querySelector('canvas');
-    if (!canvas) return;
-    if (typeof fxSelectImage === 'function' && typeof fxCurIdx !== 'undefined' && fxCurIdx !== p.idx) fxSelectImage(p.idx);
-    const it = (typeof fxImages !== 'undefined' && fxImages[p.idx]) || null;
-    const img = it && it.img;
-    const iw = img ? (img.naturalWidth || img.width) : 1200, ih = img ? (img.naturalHeight || img.height) : 800;
-    const wrap = pane.querySelector('.lib-cmp-canvas-wrap');
-    const maxW = Math.max(200, (wrap.clientWidth || 500)), maxH = Math.max(200, (wrap.clientHeight || 400));
-    const sc = Math.min(1, maxW / iw, maxH / ih);
-    const pw = Math.max(1, Math.round(iw * sc)), ph = Math.max(1, Math.round(ih * sc));
-    try {
-      const snap = typeof resolveSplitSnapshot === 'function' ? resolveSplitSnapshot(compareSrcKeyToDescriptor(p.srcKey)) : 'orig';
-      if (typeof renderSnapshotTo === 'function') renderSnapshotTo(canvas, snap, pw, ph, {});
-    } catch (e) { console.error('renderComparePane', which, e); }
+    const p=compareState[which==='A'?'paneA':'paneB'];
+    const pane=compareHost()?.querySelector(`.lib-cmp-pane[data-pane="${which}"]`);
+    if(!pane)return;
+    await detailRender(pane,p,p.idx,p.srcKey,comparePathForIdx(p.idx));
     syncCompareChrome(which);
+    if(which==='B')detailPrefetch(p);
   }
-  function applyCompareTransform() {
-    const host = compareHost(); if (!host) return;
-    const t = `translate(${compareState.panX}px,${compareState.panY}px) scale(${compareState.zoom})`;
-    host.querySelectorAll('.lib-cmp-canvas-wrap canvas').forEach((c) => { c.style.transform = t; });
+  function detailPrefetch(p){
+    if(!compareState.active||state.viewMode!=='compare')return;
+    const host=compareHost(),wrap=host?.querySelector('[data-pane="B"] .lib-cmp-canvas-wrap');if(!wrap)return;
+    const idx=(p.idx+1)%compareState.paths.length;if(idx===p.idx)return;
+    const el=document.createElement('div');el.style.cssText='position:absolute;left:-10000px;visibility:hidden;pointer-events:none';
+    el.innerHTML='<div class="lib-cmp-canvas-wrap"><canvas></canvas></div>';el.firstChild.style.width=wrap.clientWidth+'px';el.firstChild.style.height=wrap.clientHeight+'px';host.appendChild(el);
+    const cell={detail:{...detailView(p)}};detailRender(el,cell,idx,p.srcKey,comparePathForIdx(idx)).finally(()=>{el.querySelector('canvas').width=0;el.remove();});
   }
-  function setupCompareZoomPan() {
-    const host = compareHost(); if (!host || host._zoomWired) return;
-    host._zoomWired = true;
-    let dragging = false, lx = 0, ly = 0;
-    host.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const delta = -e.deltaY * 0.0015;
-      compareState.zoom = Math.min(6, Math.max(1, compareState.zoom * (1 + delta)));
-      applyCompareTransform();
-    }, { passive: false });
-    host.addEventListener('pointerdown', (e) => {
-      if (compareState.zoom <= 1) return;
-      dragging = true; lx = e.clientX; ly = e.clientY;
+  const detailState={linked:true,metadata:false,renderer:null,queue:Promise.resolve(),cache:new Map()};
+  function detailView(cell){return cell.detail||(cell.detail={scale:0,cx:.5,cy:.5});}
+  function detailCells(){return state.viewMode==='compare'
+    ? ['A','B'].map(w=>({cell:compareState[w==='A'?'paneA':'paneB'],el:compareHost()?.querySelector(`[data-pane="${w}"].lib-cmp-pane`)}))
+    : surveyState.cells.map((cell,i)=>({cell,el:surveyHost()?.querySelector(`[data-survey-idx="${i}"].lib-survey-cell`)}));}
+  function detailRerender(){if(state.viewMode==='compare'){renderComparePane('A');renderComparePane('B');}else surveyCellsRender();}
+  function detailControls(host){
+    const bar=host?.querySelector('#lib-compare-bar');if(!bar)return;
+    bar.insertAdjacentHTML('beforeend','<button type="button" class="lib-btn" data-detail="fit">Fit</button><button type="button" class="lib-btn" data-detail="native">100%</button><button type="button" class="lib-btn" data-detail="link" aria-pressed="true">Linked</button><button type="button" class="lib-btn" data-detail="meta" aria-pressed="false">Metadata</button>');
+    const link=bar.querySelector('[data-detail="link"]'),metadata=bar.querySelector('[data-detail="meta"]');link.textContent=detailState.linked?'Linked':'Unlinked';link.setAttribute('aria-pressed',String(detailState.linked));metadata.setAttribute('aria-pressed',String(detailState.metadata));
+    bar.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>{
+      if(b.dataset.detail==='link'){detailState.linked=!detailState.linked;b.textContent=detailState.linked?'Linked':'Unlinked';b.setAttribute('aria-pressed',String(detailState.linked));return;}
+      if(b.dataset.detail==='meta'){detailState.metadata=!detailState.metadata;b.setAttribute('aria-pressed',String(detailState.metadata));host.querySelectorAll('.lib-detail-meta').forEach(m=>m.hidden=!detailState.metadata);detailRerender();return;}
+      for(const {cell} of detailCells())Object.assign(detailView(cell),{scale:b.dataset.detail==='native'?1:0,cx:.5,cy:.5});detailRerender();
     });
-    window.addEventListener('pointermove', (e) => {
-      if (!dragging) return;
-      compareState.panX += e.clientX - lx; compareState.panY += e.clientY - ly;
-      lx = e.clientX; ly = e.clientY;
-      applyCompareTransform();
-    });
-    window.addEventListener('pointerup', () => { dragging = false; });
+    let dragging=null,lx=0,ly=0;
+    const target=e=>e.target.closest('.lib-cmp-pane');
+    const cellFor=el=>el?.dataset.pane?compareState[el.dataset.pane==='A'?'paneA':'paneB']:surveyState.cells[+el?.dataset.surveyIdx];
+    const change=(el,scale,dx=0,dy=0)=>{
+      const cell=cellFor(el);if(!cell)return;const view=detailView(cell),w=+el.dataset.sourceWidth,h=+el.dataset.sourceHeight;if(!w||!h)return;
+      const fit=Math.min(1,el.querySelector('.lib-cmp-canvas-wrap').clientWidth/w,el.querySelector('.lib-cmp-canvas-wrap').clientHeight/h);
+      view.scale=scale??(view.scale||fit);view.cx=Math.max(0,Math.min(1,view.cx-dx/(w*view.scale)));view.cy=Math.max(0,Math.min(1,view.cy-dy/(h*view.scale)));
+      if(detailState.linked)for(const pair of detailCells())Object.assign(detailView(pair.cell),view);
+      detailRerender();
+    };
+    host.addEventListener('wheel',e=>{const el=target(e);if(!el||!e.target.closest('.lib-cmp-canvas-wrap'))return;e.preventDefault();const cell=cellFor(el),v=detailView(cell),w=+el.dataset.sourceWidth,h=+el.dataset.sourceHeight,wrap=el.querySelector('.lib-cmp-canvas-wrap');if(!w||!h)return;const fit=Math.min(1,wrap.clientWidth/w,wrap.clientHeight/h);change(el,Math.min(8,Math.max(fit,(v.scale||fit)*Math.exp(-e.deltaY*.0015))));},{passive:false});
+    host.addEventListener('pointerdown',e=>{const el=target(e);if(e.button!==0||!el||!e.target.closest('.lib-cmp-canvas-wrap'))return;dragging=el;lx=e.clientX;ly=e.clientY;el.setPointerCapture(e.pointerId);e.preventDefault();});
+    host.addEventListener('pointermove',e=>{if(!dragging)return;change(dragging,null,e.clientX-lx,e.clientY-ly);lx=e.clientX;ly=e.clientY;});
+    host.addEventListener('pointerup',()=>dragging=null);host.addEventListener('pointercancel',()=>dragging=null);
+  }
+  function setupCompareZoomPan(){detailControls(compareHost());}
+  async function detailRender(el,cell,idx,srcKey,path){
+    const revision=cell.detailRevision=(cell.detailRevision||0)+1,entry=compareState.entryToken;
+    // Serialize only this viewer's renders; source reads/metadata may finish in any order.
+    const job=async()=>{
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return;
+      const it=typeof fxImages!=='undefined'?fxImages[idx]:null;if(!it)return;
+      if(it._rawHalf&&typeof fxPromoteWebRaw==='function')await fxPromoteWebRaw(it);
+      if(typeof fnEnsureNative==='function')await fnEnsureNative(it);
+      const sc=await getSidecar(path),meta=await getMeta(path);
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return;
+      let strip=el.querySelector('.lib-detail-meta');if(!strip){strip=document.createElement('div');strip.className='lib-detail-meta';strip.style.cssText='padding:4px 8px;height:24px;box-sizing:border-box;flex:none;color:var(--mut);font-size:11px';el.appendChild(strip);}strip.hidden=!detailState.metadata;
+      let source=it.fullImg||it.img;
+      if(typeof geomCanvas==='function')source=geomCanvas({...it,img:source});
+      const iw=source.naturalWidth||source.width,ih=source.naturalHeight||source.height,wrap=el.querySelector('.lib-cmp-canvas-wrap'),view=detailView(cell);
+      const fit=Math.min(1,Math.max(1,wrap.clientWidth)/iw,Math.max(1,wrap.clientHeight)/ih),scale=view.scale||fit;
+      const sw=Math.max(1,Math.min(iw,Math.floor(wrap.clientWidth/scale))),sh=Math.max(1,Math.min(ih,Math.floor(wrap.clientHeight/scale)));
+      const x=Math.max(0,Math.min(iw-sw,Math.round(view.cx*iw-sw/2))),y=Math.max(0,Math.min(ih-sh,Math.round(view.cy*ih-sh/2)));
+      const dpr=Math.min(window.devicePixelRatio||1,2),pw=Math.max(1,Math.round(sw*scale*dpr)),ph=Math.max(1,Math.round(sh*scale*dpr));
+      // At most viewport pixels, never a fitted canvas enlarged to simulate native detail.
+      const cap=Math.min(1,Math.sqrt(1e6/(pw*ph))),ow=Math.max(1,Math.round(pw*cap)),oh=Math.max(1,Math.round(ph*cap));
+      const snap=srcKey==='live'?(sc.recipe?snapshotFromB64(sc.recipe):null):(typeof resolveSplitSnapshot==='function'?resolveSplitSnapshot(compareSrcKeyToDescriptor(srcKey)):'orig');
+      const key=JSON.stringify([path,srcKey,snap,x,y,sw,sh,ow,oh]);let rendered=detailState.cache.get(key);
+      if(!rendered){
+        const live=getUISnapshot(),locked=_fxHistLocked,undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null;
+        _fxHistLocked=true;
+        try{
+          if(snap&&snap!=='orig')applyUISnapshot(snap);
+          const P=snap==='orig'?FX_ORIG_PARAMS:getFXParams(it.adjustOverride||undefined);
+          if(!detailState.renderer){detailState.renderer=new FXR(document.createElement('canvas'));if(!detailState.renderer.ok)throw new Error('Compare renderer unavailable');}
+          const renderer=detailState.renderer;renderer.resetTextureSnapshotFrom(FX);
+          const crop=document.createElement('canvas'),cropScale=Math.min(1,Math.sqrt(2e6/(sw*sh)),ow*2/sw,oh*2/sh);crop.width=Math.max(1,Math.round(sw*cropScale));crop.height=Math.max(1,Math.round(sh*cropScale));crop.getContext('2d').drawImage(source,x,y,sw,sh,0,0,crop.width,crop.height);
+          renderer.setImage(crop);renderer.render(P,ow,oh,{glowScale:1,scOverride:iw/FXR.CAL.refWidth,uvOff:[x/iw,(ih-y-sh)/ih],uvScale:[sw/iw,sh/ih]});
+          rendered=document.createElement('canvas');rendered.width=ow;rendered.height=oh;rendered.getContext('2d').drawImage(renderer.cv,0,0);crop.width=crop.height=0;
+          detailState.cache.set(key,rendered);while(detailState.cache.size>4){const old=detailState.cache.keys().next().value,c=detailState.cache.get(old);detailState.cache.delete(old);c.width=c.height=0;}
+        }finally{if(snap&&snap!=='orig')applyUISnapshot(live);if(undo)undo();_fxHistLocked=locked;}
+      }
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return;
+      const canvas=el.querySelector('canvas');canvas.width=ow;canvas.height=oh;canvas.getContext('2d').drawImage(rendered,0,0);canvas.style.transform='';canvas.style.width=(sw*scale)+'px';canvas.style.height=(sh*scale)+'px';
+      Object.assign(el.dataset,{sourceWidth:String(iw),sourceHeight:String(ih),detailScale:String(scale),detailX:String(x),detailY:String(y),detailWidth:String(sw),detailHeight:String(sh)});
+
+      const row=state.entries.find(e=>e.path===path);strip.textContent=[meta.shutter,meta.aperture,meta.iso?'ISO '+meta.iso:'',row?.sharpness!=null?'Focus '+Math.round(row.sharpness):''].filter(Boolean).join(' · ')||'Exposure metadata unavailable';
+    };
+    detailState.queue=detailState.queue.catch(()=>{}).then(job);return detailState.queue.catch(e=>{console.error('compare detail',e);el.dataset.detailError=String(e.message||e);});
   }
 
   function canEnterCompare() {
@@ -8831,6 +8862,7 @@
   }
   function exitCompareMode() {
     compareState.entryToken++;
+    for(const c of detailState.cache.values())c.width=c.height=0;detailState.cache.clear();
     surveyState.entryToken++;
     compareState.active = false;
     const host = compareHost();
