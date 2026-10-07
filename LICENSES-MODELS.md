@@ -17,6 +17,7 @@ are not in git (they are ~1.1 GB); the desktop build fetches them from the sourc
 | **Depth Anything V2 Small** (`vendor/depth`) | Depth Range mask + depth blur/tilt-shift | Apache-2.0 |
 | **RT-DETR r18vd** (`vendor/rtdetr`) | Finds cats/dogs/birds/horses in a photo (pet detection) | Apache-2.0 |
 | **ONNX Runtime** (`vendor/onnxruntime`) | Runs all of the above | MIT |
+| **MI-GAN-512 Places2 ONNX Pipeline v2** (optional local AI erase download) | Reviewed object-removal candidates | **MIT**, including explicit upstream `LICENSE-WEIGHTS` |
 
 Two of these — **EdgeSAM** and the **face-parsing** model — carry non-commercial / research terms.
 They are included so the app is feature-complete for personal use, and this file exists so that is
