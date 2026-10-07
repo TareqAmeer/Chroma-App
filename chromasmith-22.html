@@ -3086,7 +3086,7 @@ new MutationObserver(apply).observe(b,{attributes:true,attributeFilter:['class']
 // CHR-196: ONE visible name per tool, used by the jump strip, the section headers, the rail
 // section list and the command palette (all four used to drift: Basic/Tone, Sharpen/
 // Deconvolution, Mixer/Color Mixer, "rotate" in lower case…). Change a name here only.
-const CS_NAMES={image:'Image',looks:'Looks',inprint:'Input & Prints',adjust:'Light',curves:'Curves',hsl:'Colour Mixer',wheels:'Colour Wheels',
+const CS_NAMES={image:'Image',looks:'Looks',filmneg:'Film Negative',inprint:'Input & Prints',adjust:'Light',curves:'Curves',hsl:'Colour Mixer',wheels:'Colour Wheels',
   pointcolor:'Point Colour',nr:'Noise Reduction',deconv:'Sharpen',lens:'Lens',art:'Artifacts',grain:'Grain',hal:'Halation',bloom:'Bloom',vig:'Effects',
   retouch:'Retouch',redeye:'Red Eye',local:'Masks',crop:'Crop',rotate:'Rotate & Flip',straighten:'Transform',borders:'Borders',canvas:'Canvas',
   versions:'Versions',export:'Output',wm:'Watermark',exppreset:'Export Recipes',style:'Edit Styles',share:'Sharing',info:'Metadata',diag:'Diagnostics'};
@@ -4056,6 +4056,32 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="btn-row chip-tap" id="chips-print" title="Dehancer-style print profile applied AFTER the film look (Kodak or Fuji print)."></div>
         <select class="fx-select" id="sel-lut" onchange="selectLUT(this.value)" style="display:none"><option value="">None</option></select>
         <div class="fx-row" id="row-lut-mix" style="display:none;margin-top:8px"><div class="fx-label">Strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-lut-mix" oninput="fxUpdate()" title="Blends the look LUT with the unfiltered image — 100 is the full look, lower values fade it toward the original."><div class="fx-val" id="vl-lut-mix">100</div></div>
+      </div>
+      <!-- FILM NEGATIVE (CHR-262): converts a scanned / camera-copied negative to a positive BEFORE
+           looks, grain and crop. Same operator as desktop/src-tauri/src/film_negative.rs, run in the
+           shared FX shader (fnConv) so preview, 1:1 loupe, full and tiled export agree. -->
+      <div class="fx-ctrl" data-fxsec="filmneg">
+        <div class="fx-ctrl-title">Film Negative <div class="fx-toggle" id="tg-filmneg" onclick="toggleFX('filmneg')"></div></div>
+        <div class="fx-fields ff-off" id="ff-filmneg">
+          <details class="fx-hint-x"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Inverts a negative using the RawTherapee method: each channel is raised to a negative power, anchored on the colour of the unexposed film base (the clear rebate between frames). Pick the rebate first. Auto balance assumes the picked base is the rebate and that the scene averages neutral, and reports when it cannot trust the result.</p></details>
+          <div class="fx-row" title="Colour negative: the orange mask is cancelled per channel. Black and white: one exponent for all channels and a neutral result."><div class="fx-label">Type</div><select class="fx-select" id="sel-fneg-mode" onchange="fxUpdate()"><option value="colour">Colour negative</option><option value="bw">Black and white</option></select></div>
+          <div class="btn-row" style="margin:4px 0 8px">
+            <button class="btn bgh" id="btn-fneg-pick" onclick="fnPickBase()" title="Click an unexposed film-base area (the clear rebate). The colour is averaged from the original image, so crop, rotation and zoom do not matter.">Pick film base</button>
+            <button class="btn bgh" id="btn-fneg-auto" onclick="fnAutoBalance()" title="Sets the red and blue ratios so the converted scene averages neutral. Needs a picked film base; it will not guess one.">Auto balance</button>
+          </div>
+          <div class="fx-hint" id="fneg-status" role="status" style="margin:0 0 8px">No film base picked.</div>
+          <div class="fx-row" title="Reference exponent (green). Higher gives more contrast. RawTherapee default 1.5."><div class="fx-label">Exponent</div><input class="fx-slider" type="range" min="0.5" max="4" step="0.01" value="1.5" id="sl-fneg-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-fneg-exp">1.5</div></div>
+          <div class="fx-row" title="Red exponent relative to green. RawTherapee default 1.36."><div class="fx-label">Red ratio</div><input class="fx-slider" type="range" min="0.3" max="3" step="0.01" value="1.36" id="sl-fneg-red" oninput="fxUpdate()"><div class="fx-val" id="vl-fneg-red">1.36</div></div>
+          <div class="fx-row" title="Blue exponent relative to green. RawTherapee default 0.86."><div class="fx-label">Blue ratio</div><input class="fx-slider" type="range" min="0.3" max="3" step="0.01" value="0.86" id="sl-fneg-blue" oninput="fxUpdate()"><div class="fx-val" id="vl-fneg-blue">0.86</div></div>
+          <div class="btn-row" style="margin:8px 0 0">
+            <button class="btn bgh" id="btn-fneg-roll" onclick="fnApplyBaseToRoll()" title="Copies this photo's film base and exponents onto every open photo, and flags photos whose own base differs.">Apply base to all selected photos</button>
+          </div>
+          <input type="range" hidden min="0" max="1" step="0.0001" value="0" id="sl-fneg-br">
+          <input type="range" hidden min="0" max="1" step="0.0001" value="0" id="sl-fneg-bg">
+          <input type="range" hidden min="0" max="1" step="0.0001" value="0" id="sl-fneg-bb">
+          <input type="range" hidden min="-1" max="1" step="0.00001" value="-1" id="sl-fneg-bx">
+          <input type="range" hidden min="-1" max="1" step="0.00001" value="-1" id="sl-fneg-by">
+        </div>
       </div>
       <!-- BASIC ADJUSTMENTS -->
       <div class="fx-ctrl" data-fxsec="adjust">
@@ -8202,6 +8228,10 @@ vec2 vidUV(vec2 u){
 uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjSharpDetail,adjClarity,adjSkin,adjDehaze,adjTexture;
 uniform float adjWavelet1,adjWavelet2,adjWavelet3,adjWaveletResidual;
 uniform float useVlog;   // input transform: 1 = source is Panasonic V-Log (convert to Rec.709 first)
+// CHR-262 film negative: out = fnOut * (in / base)^-p per channel, applied to every source tap (fnTex).
+// fnOn=0 (default) is an exact identity and never evaluates log/exp. fnBW=1 collapses the result to luma.
+uniform float fnOn,fnOut,fnBW;
+uniform vec3 fnRef,fnExp;
 // ROADMAP.md R1: lets basicAdjust's exposure/contrast/tonal-zone clamps pass real >1.0 values
 // through to the (now-float, when this is on — see FXR._initBufs) "lut" FBO instead of clipping
 // them here, so the comp shader's tonemapShoulder has genuine headroom to roll off. Deliberately
@@ -8628,16 +8658,33 @@ float nrRangeW(vec3 samp,vec3 center){
   float dl=dot(samp-center,vec3(.2126,.7152,.0722));
   return exp(-dl*dl*78.125);
 }
+// CHR-262: negative-to-positive conversion, the same math as desktop/src-tauri/src/film_negative.rs
+// (reference input -> reference output, per-channel negative power). A pure power is closed under a
+// gamma change, so the exponent means the same on display-encoded or linear working values. Samples
+// are floored at 0.001 so a black pixel reaches a large finite output instead of infinity.
+vec3 fnConv(vec3 v){
+  vec3 q=max(v,vec3(0.001))/max(fnRef,vec3(0.002));
+  vec3 o=fnOut*exp(-fnExp*log(q));
+  if(fnBW>.5)o=vec3(dot(o,vec3(.2126,.7152,.0722)));
+  return clamp(o,vec3(0.0),vec3(8.0));
+}
+// Every source-image tap used by the early detail operators goes through here so sharpen, wavelet and
+// noise taps see the converted positive rather than the negative.
+vec4 fnTex(vec2 p){
+  vec4 t=texture(img,p);
+  if(fnOn>.5)t.rgb=fnConv(t.rgb);
+  return t;
+}
 // Four-tap cross low-pass for a compact custom multiscale band control. This is not RawTherapee's
 // Haar Contrast-by-Detail-Levels implementation; radii are measured in source texture pixels.
 vec3 waveletLow(vec2 p,float radius){
   vec2 off=texSize*radius;
-  return (texture(img,vidUV(p+vec2(off.x,0.))+vidWeave).rgb+
-          texture(img,vidUV(p-vec2(off.x,0.))+vidWeave).rgb+
-          texture(img,vidUV(p+vec2(0.,off.y))+vidWeave).rgb+
-          texture(img,vidUV(p-vec2(0.,off.y))+vidWeave).rgb)*(0.25*vidBreath);
+  return (fnTex(vidUV(p+vec2(off.x,0.))+vidWeave).rgb+
+          fnTex(vidUV(p-vec2(off.x,0.))+vidWeave).rgb+
+          fnTex(vidUV(p+vec2(0.,off.y))+vidWeave).rgb+
+          fnTex(vidUV(p-vec2(0.,off.y))+vidWeave).rgb)*(0.25*vidBreath);
 }
-void main(){vec4 c=texture(img,vidUV(uv)+vidWeave);
+void main(){vec4 c=fnTex(vidUV(uv)+vidWeave);
 if(vidBreath!=1.0)c.rgb*=vidBreath;
 // Source-pixel high-pass, computed ONCE. Used by the global Sharpen/Clarity below and, when any
 // mask asks for it, by the per-mask Texture control in the mask loop. Hoisted (rather than
@@ -8646,8 +8693,8 @@ if(vidBreath!=1.0)c.rgb*=vidBreath;
 vec3 srcHP=vec3(0.0);
 bool needHP=(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.||adjTexture!=0.))||mskAnyTex>0.5;
 if(needHP){
-  vec3 nb=(texture(img,vidUV(uv+vec2(0.,texSize.y)))+texture(img,vidUV(uv-vec2(0.,texSize.y)))
-          +texture(img,vidUV(uv+vec2(texSize.x,0.)))+texture(img,vidUV(uv-vec2(texSize.x,0.)))).rgb*0.25;
+  vec3 nb=(fnTex(vidUV(uv+vec2(0.,texSize.y)))+fnTex(vidUV(uv-vec2(0.,texSize.y)))
+          +fnTex(vidUV(uv+vec2(texSize.x,0.)))+fnTex(vidUV(uv-vec2(texSize.x,0.)))).rgb*0.25;
   srcHP=c.rgb-nb;
 }
 // WIDE source high-pass, for per-mask Clarity. Deliberately a separate, larger radius rather
@@ -8658,14 +8705,14 @@ if(needHP){
 vec3 srcHPW=vec3(0.0);
 if(mskAnyClarity>0.5){
   float rW=3.0;
-  vec3 nbW=(texture(img,vidUV(uv+vec2(0.,texSize.y*rW)))+texture(img,vidUV(uv-vec2(0.,texSize.y*rW)))
-           +texture(img,vidUV(uv+vec2(texSize.x*rW,0.)))+texture(img,vidUV(uv-vec2(texSize.x*rW,0.)))).rgb*0.25;
+  vec3 nbW=(fnTex(vidUV(uv+vec2(0.,texSize.y*rW)))+fnTex(vidUV(uv-vec2(0.,texSize.y*rW)))
+           +fnTex(vidUV(uv+vec2(texSize.x*rW,0.)))+fnTex(vidUV(uv-vec2(texSize.x*rW,0.)))).rgb*0.25;
   srcHPW=c.rgb-nbW;
 }
 if(adjOn>.5&&adjSharp!=0.&&abs(adjSharpDetail-0.5)>0.001&&(mskAnyClarity<0.5)){
   float detailRadius=3.0;
-  vec3 nbDetail=(texture(img,vidUV(uv+vec2(0.,texSize.y*detailRadius)))+texture(img,vidUV(uv-vec2(0.,texSize.y*detailRadius)))
-                +texture(img,vidUV(uv+vec2(texSize.x*detailRadius,0.)))+texture(img,vidUV(uv-vec2(texSize.x*detailRadius,0.)))).rgb*0.25;
+  vec3 nbDetail=(fnTex(vidUV(uv+vec2(0.,texSize.y*detailRadius)))+fnTex(vidUV(uv-vec2(0.,texSize.y*detailRadius)))
+                +fnTex(vidUV(uv+vec2(texSize.x*detailRadius,0.)))+fnTex(vidUV(uv-vec2(texSize.x*detailRadius,0.)))).rgb*0.25;
   srcHPW=c.rgb-nbDetail;
 }
 // Per-mask Noise Reduction: a small, FIXED 3x3 bilateral filter (Tomasi & Manduchi 1998 — spatial
@@ -8681,14 +8728,14 @@ if(adjOn>.5&&adjSharp!=0.&&abs(adjSharpDetail-0.5)>0.001&&(mskAnyClarity<0.5)){
 vec3 srcNR=vec3(0.0);
 if(mskAnyNR>0.5){
   vec3 cc=c.rgb;
-  vec3 s10=texture(img,vidUV(uv+vec2(0.0,-texSize.y))).rgb;
-  vec3 s01=texture(img,vidUV(uv+vec2(-texSize.x,0.0))).rgb;
-  vec3 s21=texture(img,vidUV(uv+vec2(texSize.x,0.0))).rgb;
-  vec3 s12=texture(img,vidUV(uv+vec2(0.0,texSize.y))).rgb;
-  vec3 s00=texture(img,vidUV(uv+vec2(-texSize.x,-texSize.y))).rgb;
-  vec3 s20=texture(img,vidUV(uv+vec2(texSize.x,-texSize.y))).rgb;
-  vec3 s02=texture(img,vidUV(uv+vec2(-texSize.x,texSize.y))).rgb;
-  vec3 s22=texture(img,vidUV(uv+vec2(texSize.x,texSize.y))).rgb;
+  vec3 s10=fnTex(vidUV(uv+vec2(0.0,-texSize.y))).rgb;
+  vec3 s01=fnTex(vidUV(uv+vec2(-texSize.x,0.0))).rgb;
+  vec3 s21=fnTex(vidUV(uv+vec2(texSize.x,0.0))).rgb;
+  vec3 s12=fnTex(vidUV(uv+vec2(0.0,texSize.y))).rgb;
+  vec3 s00=fnTex(vidUV(uv+vec2(-texSize.x,-texSize.y))).rgb;
+  vec3 s20=fnTex(vidUV(uv+vec2(texSize.x,-texSize.y))).rgb;
+  vec3 s02=fnTex(vidUV(uv+vec2(-texSize.x,texSize.y))).rgb;
+  vec3 s22=fnTex(vidUV(uv+vec2(texSize.x,texSize.y))).rgb;
   float w10=0.540*nrRangeW(s10,cc),w01=0.540*nrRangeW(s01,cc),w21=0.540*nrRangeW(s21,cc),w12=0.540*nrRangeW(s12,cc);
   float w00=0.291*nrRangeW(s00,cc),w20=0.291*nrRangeW(s20,cc),w02=0.291*nrRangeW(s02,cc),w22=0.291*nrRangeW(s22,cc);
   float wsum=1.0+w10+w01+w21+w12+w00+w20+w02+w22;
@@ -10069,6 +10116,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       adjSharp:A.sharpness||0,adjSharpDetail:(A.sharpDetail==null?0.5:A.sharpDetail),adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
       adjWavelet1:(A.wavelet&&A.wavelet.fine)||0,adjWavelet2:(A.wavelet&&A.wavelet.small)||0,
       adjWavelet3:(A.wavelet&&A.wavelet.medium)||0,adjWaveletResidual:(A.wavelet&&A.wavelet.residual)||0,
+      fnOn:(P.filmNeg&&P.filmNeg.enabled)?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
+      fnRef:P.filmNeg?P.filmNeg.ref:[1,1,1],fnExp:P.filmNeg?P.filmNeg.exp:[1,1,1],
       texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false]]);
 
     // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
@@ -13325,12 +13374,13 @@ document.addEventListener('change',_ffAutoEnable,true);
 document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos',
-    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-detail','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
+    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-detail','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat','fneg-exp','fneg-red','fneg-blue','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
   {const slLM=document.getElementById('sl-lut-mix');if(slLM)fxState.lutMix=parseFloat(slLM.value)/100;}
   if(typeof nrSyncGate==='function')nrSyncGate();
+  if(typeof fnSyncStatus==='function')fnSyncStatus();
   // Persist the live Adjust sliders into whichever store the CURRENT photo actually reads at
   // render/export time: its own it.adjustOverride if it's been made independent (adjToggleScope),
   // else the shared batch-wide baseline — otherwise switching photos would lose whatever was
@@ -13417,7 +13467,7 @@ function adjToggleScope(){
 // that photo is shown or rendered. Geometry, masks and retouch are always per photo (locked);
 // the rest (looks, curves, colour tools…) keep internal state outside their inputs and stay
 // shared for now (locked).
-const SEC_SCOPE_DOM=['grain','art','hal','bloom','vig','nr','deconv'];
+const SEC_SCOPE_DOM=['filmneg','grain','art','hal','bloom','vig','nr','deconv'];
 // One photo vs a stack of photos — drawn here (no stock icon says "all open photos").
 const _SEC_ICON_ONE='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="6" width="14" height="12"/><path d="M5 15l4-4 4 4 2-2 4 4"/></svg>';
 const _SEC_ICON_ALL='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="9" width="12" height="10"/><path d="M7 9V6h11v9h-3"/><path d="M11 6V3h10v9h-3"/></svg>';
@@ -18717,6 +18767,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   // save/restore) but absent from the undo-history/copy-paste/.fx-mod snapshot, same class of
   // gap as deconv-amt/deconv-rad before DT1.
   'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-detail','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat',
+  'fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by',
   'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
   // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
   // header-reset mechanism — see resetDeconv() and _fxSectionResetOverride) — added 2026-09-10
@@ -18729,8 +18780,8 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
 // deconv-amt/deconv-rad sliders comment above describes: Noise Reduction and Deconvolution
 // predate the shared fx-mod/header-reset mechanism, so their toggle state was silently skipped
 // by reset/undo/session persistence.
-const _FX_SNAP_TOGGLES=['adjust','curves','hsl','wheels','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas','nr','deconv'];
-const _FX_SNAP_SELECTS=['sel-input','sel-tonemap','sel-lut','sel-print','sel-grain-fmt','sel-debug','sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src','sel-film-frame'];
+const _FX_SNAP_TOGGLES=['adjust','curves','hsl','wheels','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas','nr','deconv','filmneg'];
+const _FX_SNAP_SELECTS=['sel-fneg-mode','sel-input','sel-tonemap','sel-lut','sel-print','sel-grain-fmt','sel-debug','sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src','sel-film-frame'];
 const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
 function getUISnapshot(opts){
   const s={sliders:{},toggles:{},selects:{},colors:{}};
@@ -18781,6 +18832,7 @@ const PASTE_CATEGORIES=[
   {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','curveMode','curveParam','hsl','pointColors']},
   {key:'wheels',label:'Colour Wheels',sliders:[],toggles:['tg-wheels'],selects:[],extra:['wheels']},
   {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-detail','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
+  {key:'filmneg',label:'Film Negative',sliders:['fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by'],toggles:['tg-filmneg'],selects:['sel-fneg-mode']},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-hldesat'],toggles:['tg-nr'],selects:[]},
   {key:'deconv',label:'Deconvolution',sliders:['deconv-amt','deconv-rad'],toggles:['tg-deconv'],selects:[]},
   {key:'lens',label:'Lens Corrections',sliders:['lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale'],toggles:[],selects:[]},
@@ -19882,6 +19934,7 @@ function initZoomPan(){
 // currently armed — WB, Point Color, or a mask's Skin Tone colour range. All are
 // mutually-exclusive momentary "click to sample" modes, so at most one is ever active at a time.
 function fxCanvasClick(e){
+  if(_fnPickActive){fnPickBaseClick(e);return;}
   if(_wbEyedropperActive){wbEyedropperClick(e);return;}
   if(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive){pcEyedropperClick(e);return;}
   if(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive){mskCrEyedropperClick(e);return;}
@@ -19891,7 +19944,7 @@ function fxCanvasClick(e){
 // swatch follows it showing the colour under the tip (read from the canvas actually on screen,
 // i.e. what the user sees) with its hex — the way Photoshop/Lightroom/Figma pickers behave.
 function _fxEyeArmed(){
-  return !!(_wbEyedropperActive||(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive)
+  return !!(_wbEyedropperActive||_fnPickActive||(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive)
     ||(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive));
 }
 const _FX_EYE_CURSOR='url("data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linejoin="round" stroke-linecap="round"><path d="M4 20l1-4 9-9 3 3-9 9Z M13 4l7 7M17 3l4 4-3 3-4-4Z" stroke="#fff" stroke-width="3.5"/><path d="M4 20l1-4 9-9 3 3-9 9Z M13 4l7 7M17 3l4 4-3 3-4-4Z" stroke="#000" stroke-width="1.6"/></svg>')+'") 3 21, crosshair';
@@ -19931,6 +19984,163 @@ fxCanvasOn('pointermove',_fxEyeMove);
 fxCanvasOn('pointerleave',_fxEyeLeave);
 // hide the loupe as soon as the pick lands (the mode disarms on click)
 fxCanvasOn('click',()=>setTimeout(()=>{if(!_fxEyeArmed()){_fxEyeHide();const bd=document.getElementById('fx-canvas-bd');if(bd&&bd.style.cursor===_FX_EYE_CURSOR)bd.style.cursor='';}},0));
+// ── Film negative (CHR-262) ─────────────────────────────────────────────────────────────────
+// Recipe lives entirely in the section's own inputs (tg-filmneg, sel-fneg-mode, sl-fneg-*), so undo,
+// session, copy/paste, per-photo overrides and the snapshot lists carry it with no extra plumbing.
+// Base colour (br/bg/bb) is the mean of an ORIGINAL-image patch in the same 0..1 display-encoded
+// values the shader samples; bx/by are that patch's centre as a fraction of the original image, kept
+// so the pick is reproducible and independent of crop, rotation, zoom and the live grade.
+// Math (shader fnConv == film_negative.rs): out = FN_OUT * (in / base)^-p, p = exponent * ratio.
+const FN_OUT=0.02;
+let _fnPickActive=false,_fnMsg='';
+function fnNum(id,d){const el=document.getElementById(id);const v=el?parseFloat(el.value):NaN;return isFinite(v)?v:d;}
+function fnBase(){return[fnNum('sl-fneg-br',0),fnNum('sl-fneg-bg',0),fnNum('sl-fneg-bb',0)];}
+function fnHasBase(b){b=b||fnBase();return b.every(v=>v>0.002);}
+function fnIsBW(){return((document.getElementById('sel-fneg-mode')||{}).value)==='bw';}
+function computeFilmNeg(){
+  const tg=document.getElementById('tg-filmneg');
+  const base=fnBase();
+  if(!(tg&&tg.classList.contains('on'))||!fnHasBase(base))return{enabled:false,bw:false,out:FN_OUT,ref:[1,1,1],exp:[1,1,1]};
+  const p=Math.max(0.05,fnNum('sl-fneg-exp',1.5));
+  if(fnIsBW()){
+    const m=(base[0]+base[1]+base[2])/3;
+    return{enabled:true,bw:true,out:FN_OUT,ref:[m,m,m],exp:[p,p,p]};
+  }
+  return{enabled:true,bw:false,out:FN_OUT,ref:base,exp:[p*fnNum('sl-fneg-red',1.36),p,p*fnNum('sl-fneg-blue',0.86)]};
+}
+function fnSetStatus(msg,warn){
+  _fnMsg=msg;const el=document.getElementById('fneg-status');
+  if(el){el.textContent=msg;el.classList.toggle('fx-hint-warn',!!warn);}
+  if(warn)log('Film negative: '+msg,'warn');
+}
+function fnSyncStatus(){
+  const el=document.getElementById('fneg-status');if(!el)return;
+  const b=fnBase();
+  el.textContent=fnHasBase(b)?('Film base '+b.map(v=>Math.round(v*255)).join(' / ')+(fnNum('sl-fneg-bx',-1)>=0?' (picked at '+Math.round(fnNum('sl-fneg-bx',0)*100)+'%, '+Math.round(fnNum('sl-fneg-by',0)*100)+'%)':'')):'No film base picked: pick the clear rebate to enable the conversion.';
+  el.classList.remove('fx-hint-warn');
+}
+// Inverse of applyGeomTo: a pixel of the geometry-applied working image -> the original image.
+function fnWorkToOrig(it,wx,wy){
+  const g=it.geom||defGeom(),img=it.img;
+  const W0=img.naturalWidth||img.width,H0=img.naturalHeight||img.height;
+  const rot=((g.rot%360)+360)%360,swap=rot===90||rot===270;
+  const rw=swap?H0:W0,rh=swap?W0:H0;
+  let cw=rw,ch=rh;const ang=(g.angle||0)*Math.PI/180;
+  if(g.angle){const d=inscribedSameAspect(rw,rh,ang);cw=Math.max(1,Math.round(d.w));ch=Math.max(1,Math.round(d.h));}
+  let x=wx,y=wy;
+  if(g.crop){x+=Math.max(0,Math.round(g.crop.x*cw));y+=Math.max(0,Math.round(g.crop.y*ch));}
+  if(g.angle){const dx=x-cw/2,dy=y-ch/2,c=Math.cos(ang),s=Math.sin(ang);x=dx*c+dy*s+rw/2;y=-dx*s+dy*c+rh/2;}
+  if(g.rot||g.flipH||g.flipV){
+    const r=rot*Math.PI/180,c=Math.cos(r),s=Math.sin(r),ux=x-rw/2,uy=y-rh/2;
+    let qx=ux*c+uy*s,qy=-ux*s+uy*c;
+    if(g.flipH)qx=-qx;if(g.flipV)qy=-qy;
+    x=qx+W0/2;y=qy+H0/2;
+  }
+  return{x,y};
+}
+// Mean colour of a square ORIGINAL-image patch (display-encoded 0..1). Fails visibly on a clipped,
+// near-black or non-uniform patch instead of returning a number that looks plausible.
+function fnSampleBaseOrig(it,ox,oy){
+  const img=it&&it.img;if(!img)return{ok:false,msg:'No photo loaded.'};
+  const W=img.naturalWidth||img.width,H=img.naturalHeight||img.height;
+  const cx=Math.round(ox),cy=Math.round(oy);
+  if(!(cx>=0&&cy>=0&&cx<W&&cy<H))return{ok:false,msg:'That point is outside the original image.'};
+  const R=Math.max(4,Math.min(24,Math.round(Math.min(W,H)*0.01)));
+  const x0=Math.max(0,cx-R),y0=Math.max(0,cy-R),x1=Math.min(W,cx+R+1),y1=Math.min(H,cy+R+1),w=x1-x0,h=y1-y0;
+  const tc=document.createElement('canvas');tc.width=w;tc.height=h;
+  const cx2=tc.getContext('2d',{willReadFrequently:true});cx2.drawImage(img,x0,y0,w,h,0,0,w,h);
+  const d=cx2.getImageData(0,0,w,h).data,n=w*h;
+  const m=[0,0,0],q=[0,0,0];
+  for(let i=0;i<d.length;i+=4)for(let c=0;c<3;c++){const v=d[i+c]/255;m[c]+=v;q[c]+=v*v;}
+  const mean=m.map(v=>v/n),sd=q.map((v,c)=>Math.sqrt(Math.max(0,v/n-mean[c]*mean[c])));
+  if(Math.max(...mean)>0.985)return{ok:false,msg:'The picked area is clipped to white. A scan that clips the rebate cannot give a base colour; rescan with less exposure.'};
+  if(Math.min(...mean)<0.02)return{ok:false,msg:'The picked area is nearly black, so it is not clear film base. Click the lightest unexposed rebate.'};
+  if(Math.max(...sd.map((v,c)=>v/mean[c]))>0.12)return{ok:false,msg:'The picked area is not uniform (edge, dust or image content). Click a clean patch of rebate.'};
+  return{ok:true,rgb:mean,nx:ox/W,ny:oy/H,n};
+}
+function fnPickBaseAtOrig(ox,oy){
+  const it=curItem();const r=fnSampleBaseOrig(it,ox,oy);
+  if(!r.ok){fnSetStatus(r.msg,true);return r;}
+  const set=(id,v)=>{const el=document.getElementById(id);if(el){el.value=v;}};
+  set('sl-fneg-br',r.rgb[0].toFixed(4));set('sl-fneg-bg',r.rgb[1].toFixed(4));set('sl-fneg-bb',r.rgb[2].toFixed(4));
+  set('sl-fneg-bx',r.nx.toFixed(5));set('sl-fneg-by',r.ny.toFixed(5));
+  const tg=document.getElementById('tg-filmneg');
+  if(tg&&!tg.classList.contains('on'))toggleFX('filmneg');else fxUpdate();
+  fnSetStatus('Film base set from '+r.n+' original pixels. Auto balance can now tune the red and blue ratios.',false);
+  return r;
+}
+function fnPickBase(){
+  _fnPickActive=!_fnPickActive;
+  const btn=document.getElementById('btn-fneg-pick');if(btn)btn.classList.toggle('on',_fnPickActive);
+  if(FX.cv)FX.cv.style.cursor=_fnPickActive?'crosshair':'';
+  if(_fnPickActive)log('Click the unexposed film base (the clear rebate) to set the negative base colour','info');
+}
+function fnPickBaseClick(e){
+  _fnPickActive=false;
+  const btn=document.getElementById('btn-fneg-pick');if(btn)btn.classList.remove('on');
+  if(FX.cv)FX.cv.style.cursor='';
+  if(fxLoupe){fnSetStatus('Exit the 1:1 view (Fit) before picking the film base.',true);return;}
+  const it=curItem(),wk=fxWork||fxImg;if(!it||!wk)return;
+  const pt=fxPointerToCanvasPx(e);if(!pt)return;
+  const ww=wk.naturalWidth||wk.width,wh=wk.naturalHeight||wk.height;
+  const o=fnWorkToOrig(it,pt.x*ww/FX.cv.width,pt.y*wh/FX.cv.height);
+  fnPickBaseAtOrig(o.x,o.y);
+}
+// Auto balance: assumes (1) a base was picked from the rebate and is the lightest unexposed film,
+// and (2) the scene's geometric-mean colour is neutral. Solves p_R/p_G = mean(log G/base)/mean(log R/base)
+// over the exposed pixels. It NEVER derives the base from the scene, and refuses to apply a result
+// it cannot trust.
+function fnAutoBalance(){
+  const it=curItem();if(!it||!it.img){fnSetStatus('Load a photo first.',true);return{ok:false};}
+  const base=fnBase();
+  if(!fnHasBase(base)){fnSetStatus('Auto balance needs a picked film base. It will not estimate the base from the scene average; use Pick film base on the rebate first.',true);return{ok:false,reason:'no-base'};}
+  if(fnIsBW()){fnSetStatus('Auto balance only applies to colour negatives (Type is Black and white).',true);return{ok:false,reason:'bw'};}
+  const img=it.img,W=img.naturalWidth||img.width,H=img.naturalHeight||img.height,k=Math.min(1,320/Math.max(W,H));
+  const w=Math.max(1,Math.round(W*k)),h=Math.max(1,Math.round(H*k));
+  const tc=document.createElement('canvas');tc.width=w;tc.height=h;
+  const cx=tc.getContext('2d',{willReadFrequently:true});cx.drawImage(img,0,0,w,h);
+  const d=cx.getImageData(0,0,w,h).data;
+  const L=[0,0,0];let n=0;
+  for(let i=0;i<d.length;i+=4){
+    const v=[d[i]/255,d[i+1]/255,d[i+2]/255];
+    if(v.some(x=>x>0.985||x<0.01))continue;                 // clipped or crushed: no information
+    if(v.some((x,c)=>x>base[c]*1.02))continue;               // lighter than the base cannot be exposed film
+    if(v.every((x,c)=>x>=base[c]*0.9))continue;              // rebate / sprocket border, not scene
+    for(let c=0;c<3;c++)L[c]+=Math.log(v[c]/base[c]);
+    n++;
+  }
+  const frac=n/(w*h);
+  if(n<2000||frac<0.2){fnSetStatus('Auto balance is not reliable here: only '+Math.round(frac*100)+'% of the frame is usable exposed film (need 20%). Set the ratios by hand.',true);return{ok:false,reason:'coverage',frac};}
+  const m=L.map(v=>v/n);
+  if(m.some(v=>v>-0.03)){fnSetStatus('Auto balance is not reliable: the scene has almost no density above the picked base. Check that the base was picked on the rebate.',true);return{ok:false,reason:'no-density'};}
+  const red=m[1]/m[0],blue=m[1]/m[2];
+  if(!(red>=0.4&&red<=2.5&&blue>=0.4&&blue<=2.5)){fnSetStatus('Auto balance gave an implausible result (red '+red.toFixed(2)+', blue '+blue.toFixed(2)+') and was not applied. The film base is probably wrong, or the scene is strongly coloured; set the ratios by hand.',true);return{ok:false,reason:'implausible',red,blue};}
+  const set=(id,v)=>{const el=document.getElementById(id);if(el){el.value=v.toFixed(2);if(typeof fxPaintSlider==='function')fxPaintSlider(el);}};
+  set('sl-fneg-red',red);set('sl-fneg-blue',blue);
+  fxUpdate();
+  fnSetStatus('Auto balance set red '+red.toFixed(2)+', blue '+blue.toFixed(2)+' from '+Math.round(frac*100)+'% of the frame. Assumes the picked base is the rebate and the scene averages neutral.',false);
+  return{ok:true,red,blue,frac};
+}
+// Roll level: copy this photo's base + exponents to every open photo and flag the ones that had a
+// different base of their own (they were overridden, so review them).
+function fnApplyBaseToRoll(){
+  const it=curItem(),b=fnBase();
+  if(!it||!fnHasBase(b)){fnSetStatus('Pick the film base on this photo first.',true);return{ok:false};}
+  const cur=secVals('filmneg'),keys=['sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sel-fneg-mode','__on'];
+  const flagged=[];let own=0;
+  (fxImages||[]).forEach((o,i)=>{
+    const ov=o.secOverride&&o.secOverride.filmneg;if(!ov||o===it)return;
+    own++;
+    const ob=[parseFloat(ov['sl-fneg-br']),parseFloat(ov['sl-fneg-bg']),parseFloat(ov['sl-fneg-bb'])];
+    if(ob.every(v=>v>0.002)&&ob.some((v,c)=>Math.abs(v-b[c])/b[c]>0.08))flagged.push(o.name||('photo '+(i+1)));
+    keys.forEach(kk=>{ov[kk]=cur[kk];});ov['sl-fneg-bx']='-1';ov['sl-fneg-by']='-1';
+  });
+  if(own||(it.secOverride&&it.secOverride.filmneg)){fxState.sharedSec.filmneg=JSON.parse(JSON.stringify(cur));if(!(it.secOverride&&it.secOverride.filmneg)){fxState.sharedSec.filmneg['sl-fneg-bx']=cur['sl-fneg-bx'];}}
+  fxUpdate();
+  const n=(fxImages||[]).length;
+  fnSetStatus(own?('Base applied to '+own+' photo(s) that had their own. '+(flagged.length?flagged.length+' had a different base and may need review: '+flagged.slice(0,5).join(', ')+'.':'None had a different base.')):('All '+n+' open photo(s) follow this base already (Film Negative applies to all photos).'),flagged.length>0);
+  return{ok:true,own,flagged};
+}
 let _wbEyedropperActive=false;
 function wbEyedropper(){
   _wbEyedropperActive=!_wbEyedropperActive;
@@ -20367,12 +20577,12 @@ function exportPresetListRefresh(selectName){
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
-  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-detail','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
+  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-detail','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-bx','sl-fneg-by','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
   'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-b1-g','sl-b2-g','sl-b1-glow','sl-b2-glow','sl-b1-pos','sl-b2-pos','sl-canvas-z','sl-vig','sl-exp-q'];
-const _SESS_TOGGLES=['tg-adjust','tg-curves','tg-hsl','tg-wheels','tg-pointcolor','tg-local','tg-nr','tg-deconv','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
-const _SESS_SELECTS=['sel-input','sel-tonemap','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt','sel-exp-size','sel-exp-sharp','sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src'];
+const _SESS_TOGGLES=['tg-filmneg','tg-adjust','tg-curves','tg-hsl','tg-wheels','tg-pointcolor','tg-local','tg-nr','tg-deconv','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
+const _SESS_SELECTS=['sel-fneg-mode','sel-input','sel-tonemap','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt','sel-exp-size','sel-exp-sharp','sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src'];
 const _SESS_COLORS=['cl-b1','cl-b2'];
 function saveSession(quiet){
   const s={};
@@ -21070,6 +21280,7 @@ function getFXParams(adjValsOverride){return{
       (!!(document.getElementById('tg-pointcolor')||{classList:{contains:()=>false}}).classList.contains('on')&&!pointColorsIdentity()),
   masks:(document.getElementById('tg-local')||{classList:{contains:()=>false}}).classList.contains('on')?fxState.masks:[],
   adjust:computeAdjustBlock(adjValsOverride),
+  filmNeg:computeFilmNeg(),
   // Noise reduction runs on the RAW source before the LUT — independent of the Adjust toggle,
   // active whenever Luminance or Color > 0 (both default 0 → off → byte-identical default path).
   // tg-nr defaults to "on" in the markup, so this is unchanged for anyone who already had it
@@ -26719,7 +26930,7 @@ function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
 // Crop and Masks used to sit AFTER Borders and Canvas — i.e. you framed and matted the photo
 // before you cropped it. Film keeps the requested grain > halation > bloom > artifacts >
 // vignette order. Render order is unaffected by any of this; it is UI ordering only.
-const FX_SECTIONS=[['image','Image'],['looks','Looks'],['adjust','Light'],
+const FX_SECTIONS=[['image','Image'],['looks','Looks'],['filmneg','Film Negative'],['adjust','Light'],
   ['curves','Curves'],['hsl','Mixer'],['pointcolor','Point Color'],
   ['nr','Noise'],['lens','Lens'],['retouch','Retouch'],
   ['crop','Crop'],['rotate','Rotate'],['straighten','Straighten'],
@@ -26765,7 +26976,7 @@ function _eachSection(cb){
 // scrolling panel with sticky titles, and a sub-tab row (sk2SubTabs) jumps between them.
 // Crop / Masks / Retouch sit inside stages now; they are still button-driven, so stacking them
 // does not switch any tool on by itself. Old nine-group layout: git tag pre-swiss-v2.
-const FX_GROUPS={look:{label:'Look',icon:'looks',members:['image','looks']},
+const FX_GROUPS={look:{label:'Look',icon:'looks',members:['image','looks','filmneg']},
   light:{label:'Light',icon:'adjust',members:['adjust','curves','hal','bloom']},
   colour:{label:'Colour',icon:'hsl',members:['hsl','wheels','pointcolor']},
   texture:{label:'Texture',icon:'grain',members:['grain','nr','deconv','lens','art','vig','retouch','redeye','local']},
