@@ -504,3 +504,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Fast-forward published the inpainting implementation, self-contained regression and Compare/Survey source-detail slice in `origin/main` commit `06df445a4c06b1b3396873769498af728ad921dc`. Fresh fetch confirms ancestry plus `applyUISnapshot` repair hydration, the MI-GAN candidate UI, and `detailRender` in the shipped library. The Windows debug executable was built with a process-local `bundle.resources=[]` override and exercised from a separate temporary profile.
 - CHR-246 and CHR-268 remain In Progress. The partial implementations and measured evidence above are published; object-removal quality/real native job UI, natural-defect review, CHR-268 eager full-batch loading/50k scale, and final Editor full-gate rerun remain open. No ticket is marked Done.
+
+### 2026-10-07 — CHR-246 native storage test follow-up
+
+- After publication, ran the focused integrated Windows Rust filter `inpaint::tests`: 3/3 pass in 0.04s (mask dilation edges, malformed mask/cancel rejection before runtime load, source-bound accepted assets and portable-copy/integrity errors). The test uses no downloaded model/photo files. It does not close the native UI job/Keep/export or photo-quality gates above.
