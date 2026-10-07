@@ -240,7 +240,7 @@
       // EXIF detection as normal" — see raw_decode.rs's lens_override param.
       const lensOverride = window.chromasmithLensOverride || '';
       const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
-      const extra = { autoLens, rawNr, demosaicAlgo, lensOverride, lensOverrideFocal };
+      const extra = { autoLens, rawNr, demosaicAlgo, lensOverride, lensOverrideFocal, filmSource: !!settings.filmSource };
       // Two-phase decode ("RAW load takes 15s"): the FIRST decode always requests `fast:true`
       // — Rust skips the false-color-suppression / hue-defringe / native-NR passes (the serial
       // full-frame CPU work that dominates decode time), so this returns in roughly the time a
@@ -317,6 +317,23 @@
       return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 24, bodyLen), sceneLinear };
     }
     get worker() { return { terminate() {} }; }
+    async filmBase(nx, ny) {
+      const src = this._sourcePath ? { sourcePath: this._sourcePath } : {};
+      const req = { ...this._extra, ...src, mode: 'sampleFilmBase', fast: false, filmSource: true, nx, ny };
+      if (this._lutKey) req.lutKey = this._lutKey;
+      const result = await framedInvoke('decode_raw_v2', req, this._bytes);
+      return JSON.parse(new TextDecoder().decode(new Uint8Array(result)));
+    }
+    async filmDevelop(filmNegative) {
+      const src = this._sourcePath ? { sourcePath: this._sourcePath } : {};
+      // The original decode cache remains a negative; every develop starts from those pixels.
+      const req = { ...this._extra, ...src, mode: this._mode, fast: false, filmSource: !!filmNegative, filmNegative };
+      if (this._lutKey) req.lutKey = this._lutKey;
+      if (req.mode === 'linear16') req.mode = 'srgb';
+      const buf = await framedInvoke('decode_raw_v2', req, this._bytes);
+      const head = new Uint32Array(buf, 0, 6);
+      return { width: head[0], height: head[1], data: new Uint8ClampedArray(buf, 24, head[0] * head[1] * 4), rgba: true, filmApplied: !!filmNegative };
+    }
     // Second phase of the two-phase decode: re-decodes the SAME bytes at full quality
     // (fast:false — false-color suppression + hue defringe + native NR all run) and returns
     // pixels in the identical shape imageData() does, so loadRw2() can swap them into the
@@ -425,6 +442,8 @@
       const req = mode === 'lut'
         ? { mode, lutKey, wantExt: true, autoLens, demosaicAlgo, lensOverride, lensOverrideFocal, highStrength, token }
         : { mode, autoLens, demosaicAlgo, lensOverride, lensOverrideFocal, highStrength, token };
+      req.filmNegative = typeof fnNativeRecipe === 'function' ? fnNativeRecipe(it) : null;
+      req.filmSource = !!req.filmNegative;
       buf = await framedInvoke('denoise_raw_high', req, bytes);
     } finally {
       if (unlisten) unlisten();
@@ -503,6 +522,8 @@
       demosaicAlgo: window.chromasmithDemosaicAlgo || '',
       lensOverride: window.chromasmithLensOverride || '', lensOverrideFocal: window.chromasmithLensOverrideFocal || 0,
     };
+    req.filmNegative = typeof fnNativeRecipe === 'function' ? fnNativeRecipe(it) : null;
+    req.filmSource = !!req.filmNegative;
     if (mode === 'lut') { req.lutKey = lutKey; req.wantExt = !!window.chromasmithHdrPreview; }
     if (byPath) req.sourcePath = byPath;
     const buf = await framedInvoke('decode_raw_v2', req, bytes);

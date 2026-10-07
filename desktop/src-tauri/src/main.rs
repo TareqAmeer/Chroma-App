@@ -876,9 +876,56 @@ fn collage_output_path(first_source: String) -> String {
     merge_output_path(&first_source, "-collage")
 }
 
+fn film_negative_input<'a>(source: &'a [u16], json: &serde_json::Value) -> Result<std::borrow::Cow<'a, [u16]>, String> {
+    let recipe = &json["filmNegative"];
+    if recipe.is_null() { return Ok(std::borrow::Cow::Borrowed(source)); }
+    if recipe["domain"].as_str() != Some("camera-linear16-v1") { return Err("film negative: unsupported calibration domain; pick native film base again".into()); }
+    let read3 = |key: &str| -> Result<[f64; 3], String> {
+        let a = recipe[key].as_array().ok_or_else(|| format!("film negative: missing {key}"))?;
+        if a.len() != 3 { return Err(format!("film negative: invalid {key}")); }
+        Ok([a[0].as_f64().ok_or("invalid channel")?, a[1].as_f64().ok_or("invalid channel")?, a[2].as_f64().ok_or("invalid channel")?])
+    };
+    Ok(std::borrow::Cow::Owned(film_negative::convert_rgb16(source, read3("ref")?, read3("exp")?, recipe["out"].as_f64().ok_or("film negative: missing output reference")?, recipe["bw"].as_bool().unwrap_or(false))?))
+}
+
+fn film_source_key(payload: &[u8], json: &serde_json::Value) -> u64 {
+    // Persisted calibration identities must remain stable across Rust/app upgrades.
+    let mut h = blake3::Hasher::new();
+    h.update(payload);
+    for key in ["lutKey", "autoLens", "demosaicAlgo", "lensOverride", "lensOverrideFocal"] {
+        let value = json[key].to_string();
+        h.update(&(value.len() as u64).to_le_bytes());h.update(value.as_bytes());
+    }
+    u64::from_le_bytes(h.finalize().as_bytes()[..8].try_into().unwrap()) & ((1u64 << 52) - 1)
+}
+
+#[cfg(test)]
+mod film_negative_native_tests;
+
+fn check_film_source(payload: &[u8], json: &serde_json::Value) -> Result<(), String> {
+    if json["filmNegative"].is_object() && json["filmNegative"]["sourceKey"].as_u64() != Some(film_source_key(payload, json)) {
+        return Err("film negative: source/profile/geometry changed; pick native base again".into());
+    }
+    Ok(())
+}
+
+fn film_negative_bw(mut body: Vec<u8>, mode: &str, json: &serde_json::Value) -> Vec<u8> {
+    if matches!(mode, "lut" | "srgb") && json["filmNegative"]["bw"].as_bool() == Some(true) {
+        for pixel in body.chunks_exact_mut(4) {
+            let gray = (0.2126 * pixel[0] as f64 + 0.7152 * pixel[1] as f64 + 0.0722 * pixel[2] as f64).round() as u8;
+            pixel[0] = gray; pixel[1] = gray; pixel[2] = gray;
+        }
+    }
+    body
+}
+
 #[tauri::command(async)]
 fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
+    decode_raw_v2_payload(&json, payload)
+}
+
+fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tauri::ipc::Response, String> {
     // sourcePath + empty payload: read the RAW natively (Library opens) instead of receiving the
     // whole file over IPC. Same bytes either way, so the decode (and its memo key) is identical.
     let path_bytes;
@@ -890,6 +937,8 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
         _ => payload,
     };
     let mode = json["mode"].as_str().unwrap_or("linear16");
+    check_film_source(payload, &json)?;
+    let film_source = json["filmSource"].as_bool().unwrap_or(false) || mode == "sampleFilmBase" || json["filmNegative"].is_object();
     let auto_lens = json["autoLens"].as_bool().unwrap_or(false);
     // "off"|"fast" ONLY — decode_raw_v2 is also the Library's thumbnail-decode path, so it must
     // be STRUCTURALLY unable to trigger the ~25-90s neural High tier no matter what a caller
@@ -951,6 +1000,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     format!("{nr:?}").hash(&mut hasher);
     demosaic_algo.hash(&mut hasher);
     fast.hash(&mut hasher);
+    film_source.hash(&mut hasher);
     auto_lens.hash(&mut hasher);
     lens_override.map(|(l, f)| (l, f.to_bits())).hash(&mut hasher);
     let decode_key = hasher.finish();
@@ -963,7 +1013,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
             Some(d) => d,
             None => {
                 let interactive = json["lutKey"].as_str().is_some();
-                let run = || raw_decode::decode_rw2_bytes(payload, auto_lens, nr, demosaic_algo, fast, lens_override);
+                let run = || raw_decode::decode_rw2_bytes_film(payload, auto_lens, nr, demosaic_algo, fast, lens_override, 1.0, None, None, film_source);
                 let d = std::sync::Arc::new(if interactive { on_interactive_pool(run)? } else { run()? });
                 if let Ok(mut guard) = RAW_DECODE_CACHE.lock() {
                     *guard = Some(RawDecodeCacheEntry { key: decode_key, decoded: d.clone() });
@@ -972,6 +1022,13 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
             }
         }
     };
+    if mode == "sampleFilmBase" {
+        let nx = json["nx"].as_f64().ok_or("film base: missing x")?;
+        let ny = json["ny"].as_f64().ok_or("film base: missing y")?;
+        let source = match json["lutKey"].as_str() { Some(key) => lut_input_rgb16(key, payload, &decoded), None => std::borrow::Cow::Borrowed(decoded.rgb16.as_slice()) };
+        let (rgb, n) = film_negative::sample_rgb16(&source, decoded.width as usize, decoded.height as usize, nx, ny)?;
+        return Ok(tauri::ipc::Response::new(serde_json::to_vec(&serde_json::json!({"rgb":rgb,"n":n,"nx":nx,"ny":ny,"domain":"camera-linear16-v1","sourceKey":film_source_key(payload,&json)})).map_err(|e|e.to_string())?));
+    }
     // usedLut in the response header tells JS whether its requested mode was actually honored,
     // since the body FORMAT differs (RGBA8 for lut/srgb vs raw u16 for linear16) and it needs to
     // parse the right one. See effective_dcp_mode's doc comment for the "why a backstop" reasoning.
@@ -981,7 +1038,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
     // buffer only when it's actually going to use it (a real DCP LUT apply, not srgb/linear16 —
     // see desktop-native.js's open()). Kept fully opt-in so every existing caller/response shape
     // is untouched when absent — `ext` is None unless want_ext AND the lut branch is taken.
-    let want_ext = json["wantExt"].as_bool().unwrap_or(false);
+    let want_ext = json["wantExt"].as_bool().unwrap_or(false) && json["filmNegative"]["bw"].as_bool() != Some(true);
     let mut ext: Option<Vec<f32>> = None;
     let body: Vec<u8> = match effective_mode {
         "lut" => {
@@ -996,6 +1053,7 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
             let n = (lut.len() / 3) as f64;
             let n = n.cbrt().round() as usize;
             let src = on_interactive_pool(|| lut_input_rgb16(key, payload, &decoded));
+            let src = film_negative_input(&src, &json)?;
             if want_ext {
                 let (rgba, e) = on_interactive_pool(|| raw_decode::apply_lut_rgba_ext(&src, &lut, n))?;
                 ext = Some(e);
@@ -1004,9 +1062,10 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
                 on_interactive_pool(|| raw_decode::apply_lut_rgba(&src, &lut, n))?
             }
         }
-        "srgb" => raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam),
-        _ => decoded.rgb16.iter().flat_map(|v| v.to_le_bytes()).collect(),
+        "srgb" => raw_decode::srgb_rgba(&film_negative_input(&decoded.rgb16, &json)?, decoded.xyz_to_cam),
+        _ => film_negative_input(&decoded.rgb16, &json)?.iter().flat_map(|v| v.to_le_bytes()).collect(),
     };
+    let body = film_negative_bw(body, effective_mode, &json);
     // Persistent decode cache for an interactive open (desktop-native.js sends cachePath +
     // recipeKey only on the call whose pixels are FINAL, and only for a real on-disk source).
     // Only the RGBA8 display-referred body is cacheable — same shape cache_raw_decode writes; a
@@ -1241,6 +1300,7 @@ static NR_CANCEL_FLAGS: Mutex<Option<HashMap<String, std::sync::Arc<std::sync::a
 #[tauri::command(async)]
 fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;
+    check_film_source(payload, &json)?;
     let _raw_diag = diag::raw_op(format!("denoise_raw_high bytes={}", payload.len()));
     let token = json["token"].as_str().unwrap_or("").to_string();
     let mode = json["mode"].as_str().unwrap_or("linear16");
@@ -1272,7 +1332,7 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
         let _ = app_for_progress.emit("raw-nr-progress", &serde_json::json!({"token": token_for_progress, "done": done, "total": total}));
     };
 
-    let result = raw_decode::decode_rw2_bytes_ex(
+    let result = raw_decode::decode_rw2_bytes_film(
         payload,
         auto_lens,
         raw_decode::NrTier::High,
@@ -1281,7 +1341,8 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
         lens_override,
         high_strength,
         Some(&progress),
-        Some(&cancel)
+        Some(&cancel),
+        json["filmSource"].as_bool().unwrap_or(false) || json["filmNegative"].is_object()
     );
 
     if !token.is_empty() {
@@ -1298,7 +1359,7 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
     // docs/ROADMAP.md R1 — same opt-in extended-range companion as decode_raw_v2, same reasoning:
     // this IS the path a user actually views once NR finishes, so it matters at least as much
     // here.
-    let want_ext = json["wantExt"].as_bool().unwrap_or(false);
+    let want_ext = json["wantExt"].as_bool().unwrap_or(false) && json["filmNegative"]["bw"].as_bool() != Some(true);
     let mut ext: Option<Vec<f32>> = None;
     let body: Vec<u8> = match effective_mode {
         "lut" => {
@@ -1313,6 +1374,7 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
             let n = (lut.len() / 3) as f64;
             let n = n.cbrt().round() as usize;
             let src = lut_input_rgb16(key, payload, &decoded);
+            let src = film_negative_input(&src, &json)?;
             if want_ext {
                 let (rgba, e) = raw_decode::apply_lut_rgba_ext(&src, &lut, n)?;
                 ext = Some(e);
@@ -1321,9 +1383,10 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
                 raw_decode::apply_lut_rgba(&src, &lut, n)?
             }
         }
-        "srgb" => raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam),
-        _ => decoded.rgb16.iter().flat_map(|v| v.to_le_bytes()).collect()
+        "srgb" => raw_decode::srgb_rgba(&film_negative_input(&decoded.rgb16, &json)?, decoded.xyz_to_cam),
+        _ => film_negative_input(&decoded.rgb16, &json)?.iter().flat_map(|v| v.to_le_bytes()).collect()
     };
+    let body = film_negative_bw(body, effective_mode, &json);
     let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };
     let has_ext: u32 = if ext.is_some() { 1 } else { 0 };
     let ext_bytes = ext.map(|e| e.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap_or_default();
