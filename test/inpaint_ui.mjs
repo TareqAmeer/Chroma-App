@@ -4,9 +4,9 @@ import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 const root=process.cwd();
-const photo=process.env.CHROMA_INPAINT_FIXTURE||path.resolve('../photo-ticket-completion/test/output/reference-assets/power-lines.jpg');
-const output=process.env.CHROMA_INPAINT_NATIVE_OUTPUT||'test/output/inpaint-native';
-const server=createServer(async(req,res)=>{try{let file=req.url.split('?')[0].slice(1);if(file==='real-photo')file=photo;if(file.startsWith('candidate-'))file=path.join(output,file);const body=await readFile(path.isAbsolute(file)?file:path.join(root,file));res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':file.endsWith('.html')?'text/html':file.endsWith('.jpg')||file===photo?'image/jpeg':'image/png'});res.end(body);}catch{res.writeHead(404);res.end();}}).listen(0,'127.0.0.1');
+const photo=process.env.CHROMA_INPAINT_FIXTURE||path.join(root,'test/fixtures/chart.png');
+
+const server=createServer(async(req,res)=>{try{let file=req.url.split('?')[0].slice(1);if(file==='real-photo')file=photo;const body=await readFile(path.isAbsolute(file)?file:path.join(root,file));res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':file.endsWith('.html')?'text/html':file.endsWith('.jpg')||file===photo?'image/jpeg':'image/png'});res.end(body);}catch{res.writeHead(404);res.end();}}).listen(0,'127.0.0.1');
 await new Promise(r=>server.on('listening',r));let browser;
 try{
  browser=await chromium.launch({args:['--use-gl=swiftshader','--enable-unsafe-swiftshader']});const page=await browser.newPage({viewport:{width:1440,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',e=>{if(e.type()==='error')errors.push(e.text());});
@@ -16,7 +16,7 @@ try{
  // The native Rust probe generated these full-resolution real-image pixels.
  // The bridge is mocked here to exercise renderer/UI/storage independently of Tauri.
  await page.evaluate(async()=>{window.__inpaintCalls=[];window.__missing=false;const original=curItem().img,w=original.naturalWidth,h=original.naturalHeight;window.__patchUrls=[];
-  for(let n=0;n<3;n++){const im=new Image();im.src='/candidate-'+n+'.png';await im.decode();const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.drawImage(im,0,0);const d=x.getImageData(0,0,w,h);for(let y=0;y<h;y++)for(let px=0;px<w;px++)if(!(y>=Math.floor(h*.46)&&y<Math.floor(h*.79)&&px>=Math.floor(w*.30)&&px<Math.floor(w*.33)))d.data[(y*w+px)*4+3]=0;x.putImageData(d,0,0);window.__patchUrls.push(c.toDataURL());}
+  for(let n=0;n<3;n++){const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.drawImage(original,0,0);const left=Math.floor(w*.30),top=Math.floor(h*.46),rw=Math.max(1,Math.floor(w*.03)),rh=Math.max(1,Math.floor(h*.33));x.fillStyle=['#f08a48','#4796a6','#7d9b54'][n];x.fillRect(left,top,rw,rh);const d=x.getImageData(0,0,w,h);for(let y=0;y<h;y++)for(let px=0;px<w;px++)if(!(y>=top&&y<top+rh&&px>=left&&px<left+rw))d.data[(y*w+px)*4+3]=0;x.putImageData(d,0,0);window.__patchUrls.push(c.toDataURL());}
   window.__TAURI__={core:{convertFileSrc:p=>p,invoke:async(cmd,args)=>{window.__inpaintCalls.push(cmd);if(cmd==='inpaint_resolve'){if(window.__missing)throw Error('Accepted repair asset unavailable; restore the photo assets folder');return window.__patchUrls[Number(args.patch.asset.slice(-1))];}throw Error('Unexpected native request '+cmd);}}};
  });
  await page.addScriptTag({url:`http://127.0.0.1:${server.address().port}/desktop/inpaint-ui.js`});
@@ -32,7 +32,7 @@ try{
   await applyUISnapshot(snapshot);const restored=pixels(geomCanvas(it));let restoreDiff=0;for(let i=0;i<after.length;i++)restoreDiff=Math.max(restoreDiff,Math.abs(after[i]-restored[i]));
   return {w,h,changed,outside,hiddenSame,resetSame,restoreDiff,rotation,recipeBytes:JSON.stringify(snapshot.inpaint).length,calls:window.__inpaintCalls};
  });
- console.log('Inpaint real native pixels through Editor:',JSON.stringify(result));assert.ok(result.changed>0);assert.equal(result.outside,0);assert.equal(result.hiddenSame,true);assert.equal(result.resetSame,true);assert.equal(result.restoreDiff,0);assert.equal(result.rotation.width,result.h);assert.equal(result.rotation.height,result.w);assert.ok(result.recipeBytes<300);assert.ok(result.calls.every(c=>c==='inpaint_resolve'),'replay invoked inference');
+ console.log('Inpaint editor overlay pixels through Editor:',JSON.stringify(result));assert.ok(result.changed>0);assert.equal(result.outside,0);assert.equal(result.hiddenSame,true);assert.equal(result.resetSame,true);assert.equal(result.restoreDiff,0);assert.equal(result.rotation.width,result.h);assert.equal(result.rotation.height,result.w);assert.ok(result.recipeBytes<300);assert.ok(result.calls.every(c=>c==='inpaint_resolve'),'replay invoked inference');
  await page.evaluate(()=>{fxSection('retouch',true);const toggle=document.getElementById('tg-retouch');if(!toggle.classList.contains('on'))toggleFX('retouch');});const hide=page.locator('#inpaint-accepted button').first();await hide.waitFor({state:'visible',timeout:2000});assert.match(await hide.textContent(),/Hide repair 1/);await hide.click();const show=page.locator('#inpaint-accepted button').first();await show.waitFor({state:'visible'});assert.match(await show.textContent(),/Show repair 1/);await show.click();
  const missing=await page.evaluate(async()=>{window.__missing=true;try{await chromasmithInpaintHydrate(curItem());return 'no failure';}catch(e){return e.message;}});assert.match(missing,/restore/);
  const refuses=await page.evaluate(()=>{try{geomCanvas(curItem());return false;}catch{return true;}});assert.equal(refuses,true);assert.deepEqual(errors,[]);
