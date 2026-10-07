@@ -271,86 +271,12 @@ jobs:
           generate_release_notes: true
 
   store:
-    # Submits the same Windows build to the Microsoft Store (product 9N2KCJRFVF6F) as an MSIX.
-    # Runs only for a `v*` tag, after the NSIS job, and is a separate job so a Store/Partner Center
-    # problem never marks the GitHub Release itself as failed. Certification takes hours to days, so
-    # the Store version lags GitHub; the job ends when the submission is committed, not when live.
-    #
-    # One-time setup: a Partner Center Entra app (Manager role) and these repo secrets —
-    # AZURE_AD_TENANT_ID, AZURE_AD_APPLICATION_CLIENT_ID, AZURE_AD_APPLICATION_SECRET, SELLER_ID.
-    # The Store rejects a version it already has, so re-running a tag that was already submitted fails
-    # at the publish step; that is expected. A submission still pending from an older tag is cancelled
-    # first (best effort — see the cancel step); if it cannot be, cancel it in Partner Center by hand.
+    # Submits this tag's Windows build to the Microsoft Store as an MSIX — see store-submit.yml, which
+    # can also be run by hand to retry a submission without re-tagging. A separate workflow so a Store
+    # problem never marks this release as failed.
     needs: nsis
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: windows-latest
-    # Two tags pushed close together must not race each other inside Partner Center: queue them
-    # (never cancel a run mid-upload), so each run's cancel-then-submit below happens in order.
-    concurrency:
-      group: microsoft-store-submit
-      cancel-in-progress: false
-    env:
-      STORE_PRODUCT_ID: 9N2KCJRFVF6F
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: Chromasmith-windows-setup
-          path: setup
-
-      - name: Build the MSIX from the installer
-        id: msix
-        shell: pwsh
-        run: |
-          $version = '${{ github.ref_name }}'.TrimStart('v')
-          $exe = (Get-ChildItem setup -Filter '*-setup.exe' | Select-Object -First 1).FullName
-          ./tools/scripts/package-msix.ps1 -Installer $exe -Version $version -OutDir out
-          Get-ChildItem out | Format-Table Name, Length
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Chromasmith-windows-msix
-          path: out/*.msix
-
-      - uses: microsoft/microsoft-store-apppublisher@v1.1
-
-      # Secrets arrive through env vars (not inlined into the command line) and are trimmed: a stray
-      # space, newline or quote pasted with a value otherwise reaches msstore as a malformed GUID
-      # ("Cannot parse argument ... System.Guid"). Values are masked in the log, so a bad one is named, never shown.
-      - name: Configure the Store CLI
-        shell: pwsh
-        env:
-          MS_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
-          MS_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
-          MS_CLIENT_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
-          MS_SELLER_ID: ${{ secrets.SELLER_ID }}
-        run: |
-          $clean = { param($v) if ($null -eq $v) { '' } else { $v.Trim().Trim('"', "'").Trim() } }
-          $tenant = & $clean $env:MS_TENANT_ID; $client = & $clean $env:MS_CLIENT_ID
-          $secret = & $clean $env:MS_CLIENT_SECRET; $seller = & $clean $env:MS_SELLER_ID
-          $bad = @()
-          $g = [guid]::Empty
-          if (-not [guid]::TryParse($tenant, [ref]$g)) { $bad += "AZURE_AD_TENANT_ID is not a GUID (length $($tenant.Length))" }
-          if (-not [guid]::TryParse($client, [ref]$g)) { $bad += "AZURE_AD_APPLICATION_CLIENT_ID is not a GUID (length $($client.Length))" }
-          if (-not $secret) { $bad += 'AZURE_AD_APPLICATION_SECRET is empty' }
-          if (-not $seller) { $bad += 'SELLER_ID is empty' }
-          if ($bad) { $bad | ForEach-Object { Write-Error $_ }; exit 1 }
-          msstore reconfigure --tenantId $tenant --sellerId $seller --clientId $client --clientSecret $secret
-
-      # A newer tag supersedes whatever is still pending in Partner Center. Best effort: the Store API
-      # answers 409 for a submission it cannot delete in its current state (e.g. deep in certification),
-      # and errors when nothing is pending — neither should stop the new submission, so the exit code is
-      # swallowed. If the old one really cannot be cancelled, the publish step below fails and says so.
-      - name: Cancel the pending submission, if any
-        shell: pwsh
-        run: |
-          msstore submission status $env:STORE_PRODUCT_ID
-          msstore submission delete $env:STORE_PRODUCT_ID --no-confirm
-          if ($LASTEXITCODE -ne 0) { Write-Warning "No pending submission was cancelled (exit $LASTEXITCODE)." }
-          exit 0
-
-      - name: Submit to the Microsoft Store
-        shell: pwsh
-        run: |
-          msstore publish '${{ steps.msix.outputs.msix }}' -id $env:STORE_PRODUCT_ID
+    uses: ./.github/workflows/store-submit.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit
