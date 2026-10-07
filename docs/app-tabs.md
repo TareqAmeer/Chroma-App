@@ -57,8 +57,13 @@
   thousandths of the short side so preview and export scale identically) → **Selected photo** (zoom
   100–400%, drag to reframe, Replace / Reset / Clear slot) → **Export** (long side 1600–4000px,
   Shuffle, Start over).
-  - ⚠️ Collage is **2D canvas only — photos are placed as loaded, with no look/grain/grade applied**.
-    It does not go through `FXR`. To collage graded photos, export them from Effects first.
+  - Collage is a 2D canvas, but photos added with **Add photos from Effects** render through the
+    same `processToCanvas` as the export, with their look + per-photo adjust (`clGradeOne`, linked by
+    `photo.item`; originals kept in `photo.orig`). "Apply one look to all cells" grades every cell
+    with the current Effects look. Edits are re-applied on tab entry when `clEditSig()` changes.
+    Frames: none/keyline/mat/instant print/deckled/drop shadow; captions: font, colour, auto file
+    name/date/camera/look (EXIF via `readExifTags`, empty-safe); export presets via `clTargetSize()`
+    (social px, print inches x DPI, capped at 8000 px). Test: `node test/collage_edits.mjs [mobile]`.
   - Preview and export share one geometry: `clLayoutRects()` + the same cover-scale/clamped-offset
     maths, so what you frame is what exports.
   - ⚠️ `clExport()` saves via a plain `<a download>` JPEG (q 0.95), **not** `capShareFiles()` — unlike

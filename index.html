@@ -579,6 +579,14 @@ section{position:relative}
 }
 
 .steps6 li{pointer-events:auto;cursor:pointer}.steps6 li:hover{color:var(--fg)}.steps6 li:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+.plat{margin:18px 0 0;font-size:13px;letter-spacing:.02em;color:#0b0b0a}
+#totop{position:fixed;right:16px;bottom:16px;z-index:60;width:46px;height:46px;border:1px solid var(--fg);background:var(--bg);color:var(--fg);font:600 20px/1 system-ui,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .25s,transform .25s,background .2s,color .2s}
+#totop.on{opacity:1;transform:none;pointer-events:auto}
+#totop:hover,#totop:focus-visible{background:var(--acc);color:#0b0b0a;border-color:var(--acc)}
+#totop:focus-visible{outline:2px solid var(--fg);outline-offset:3px}
+html[dir=rtl] #totop{right:auto;left:16px}
+@media(prefers-reduced-motion:reduce){#totop{transition:none}}
 </style>
 <!-- Analytics: GoatCounter (cookieless). Set GC_CODE to your site code from goatcounter.com; blank = off. -->
 <script>(function(){var GC_CODE='tareqameer';if(!GC_CODE)return;var s=document.createElement('script');s.async=true;s.dataset.goatcounter='https://'+GC_CODE+'.goatcounter.com/count';s.src='vendor/goatcounter-count.js';document.head.appendChild(s)})()</script>
@@ -597,7 +605,7 @@ section{position:relative}
   <nav><details class="sec"><summary>Sections <i aria-hidden="true">▾</i></summary><div class="menu"><a href="#tour" data-tour="raw"><small>01</small>RAW Editing</a><a href="#tour" data-tour="gallery"><small>02</small>Gallery</a><a href="#tour" data-tour="studio"><small>03</small>Studio</a><a href="#looks"><small>04</small>Film Looks</a><a href="#flow"><small>05</small>Old Workflow</a><a href="#flow" data-tour="new"><small>06</small>New Workflow</a><a href="#maker"><small>07</small>The Designer</a><a href="#features"><small>08</small>Feature List</a><a href="#beta"><small>09</small>In Beta</a><a href="#faq"><small>10</small>FAQ</a><a href="#yours"><small>11</small>Download</a></div></details><a href="https://github.com/TareqAmeer/Chroma-App" target="_blank" rel="noopener" data-goatcounter-click="github-nav" data-goatcounter-title="github-nav">GitHub ↗</a><details class="sec more"><summary>More <i aria-hidden="true">▾</i></summary><div class="menu"><a href="#features">Features</a><a href="#faq">FAQ</a><a class="langsw" href="ar/" lang="ar" hreflang="ar">العربية · Arabic</a><a href="./" lang="en" aria-current="page" data-only="en">English</a><a href="accessible.html">Accessible version</a><a href="chromasmith-22.html">Launch the web app ↗</a></div></details><a class="navlaunch" href="chromasmith-22.html">Launch app ↗</a><a href="#yours">Download ↓</a></nav>
 </header>
 
-<section class="lead" aria-label="CHRO-MA-SMITH"><div class="leadhead"><h1 class="hero-t">The app that<br>does it all<sup>*</sup><span class="vh"> — Chromasmith, the free offline photo editor for film looks, grain and RAW</span></h1><p class="cta"><a class="btn go" href="#yours" data-goatcounter-click="hero-download" data-goatcounter-title="hero-download">Download ↓</a><button class="btn" type="button" id="tourbtn" data-goatcounter-click="hero-tour" data-goatcounter-title="hero-tour">Start the tour <svg class="playic" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.8v8.4L10 6z" fill="currentColor"/></svg></button></p></div>
+<section class="lead" aria-label="CHRO-MA-SMITH"><div class="leadhead"><h1 class="hero-t">The app that<br>does it all<sup>*</sup><span class="vh"> — Chromasmith, the free offline photo editor for film looks, grain and RAW</span></h1><p class="cta"><a class="btn go" href="#yours" data-goatcounter-click="hero-download" data-goatcounter-title="hero-download">Download ↓</a><button class="btn" type="button" id="tourbtn" data-goatcounter-click="hero-tour" data-goatcounter-title="hero-tour">Start the tour <svg class="playic" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.8v8.4L10 6z" fill="currentColor"/></svg></button></p></div><p class="plat" id="platforms">*Available on Mac, Windows, Browser and iOS (beta)</p>
   <div class="usp">
     <div class="ba">
       <div class="cmp" id="cmp" role="slider" tabindex="0" aria-label="Drag to compare the original photo with the Chromasmith edit" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"><img src="site/assets/story/main1-1600.webp" alt="Original, unedited beach photo" decoding="async" loading="lazy"><img class="after" src="site/assets/story/main5-1600.webp" alt="The same photo with a film look, grain and glow from Chromasmith" decoding="async" loading="lazy"><i class="bar"><b>↔</b></i><span class="l a">Your photo</span><span class="l b">Chromasmith</span></div>
@@ -1358,5 +1366,12 @@ gsap.from('.outro .k i',{yPercent:105,stagger:.12,duration:1.2,ease:'expo.out',s
 c.addEventListener('pointerdown',e=>{dn=true;c.setPointerCapture(e.pointerId);at(e)});c.addEventListener('pointermove',e=>{if(dn||e.pointerType==='mouse')at(e)});c.addEventListener('pointerup',()=>dn=false);c.addEventListener('pointercancel',()=>dn=false);
 c.addEventListener('keydown',e=>{const v=parseFloat(c.style.getPropertyValue('--x'))||50;if(e.key==='ArrowLeft'){set(v-5);e.preventDefault()}if(e.key==='ArrowRight'){set(v+5);e.preventDefault()}})}}
 </script>
+<button id="totop" type="button" aria-label="Back to top" title="Back to top">↑</button>
+<script>(function(){var b=document.getElementById('totop');if(!b)return;
+function sync(){var y=window.scrollY||document.documentElement.scrollTop||0;b.classList.toggle('on',y>innerHeight*.8)}
+addEventListener('scroll',sync,{passive:true});addEventListener('resize',sync);sync();
+b.addEventListener('click',function(){var L=(typeof lenis!=='undefined')&&lenis;var calm=matchMedia('(prefers-reduced-motion: reduce)').matches;
+if(L)L.scrollTo(0,{duration:calm?0:1.2,immediate:calm,force:true});else scrollTo({top:0,behavior:calm?'auto':'smooth'});
+var h=document.querySelector('h1');if(h){h.setAttribute('tabindex','-1');h.focus({preventScroll:true})}});})()</script>
 </body>
 </html>
