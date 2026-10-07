@@ -315,14 +315,28 @@ jobs:
 
       - uses: microsoft/microsoft-store-apppublisher@v1.1
 
+      # Secrets arrive through env vars (not inlined into the command line) and are trimmed: a stray
+      # space, newline or quote pasted with a value otherwise reaches msstore as a malformed GUID
+      # ("Cannot parse argument ... System.Guid"). Values are masked in the log, so a bad one is named, never shown.
       - name: Configure the Store CLI
         shell: pwsh
+        env:
+          MS_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          MS_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          MS_CLIENT_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          MS_SELLER_ID: ${{ secrets.SELLER_ID }}
         run: |
-          msstore reconfigure `
-            --tenantId '${{ secrets.AZURE_AD_TENANT_ID }}' `
-            --sellerId '${{ secrets.SELLER_ID }}' `
-            --clientId '${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}' `
-            --clientSecret '${{ secrets.AZURE_AD_APPLICATION_SECRET }}'
+          $clean = { param($v) if ($null -eq $v) { '' } else { $v.Trim().Trim('"', "'").Trim() } }
+          $tenant = & $clean $env:MS_TENANT_ID; $client = & $clean $env:MS_CLIENT_ID
+          $secret = & $clean $env:MS_CLIENT_SECRET; $seller = & $clean $env:MS_SELLER_ID
+          $bad = @()
+          $g = [guid]::Empty
+          if (-not [guid]::TryParse($tenant, [ref]$g)) { $bad += "AZURE_AD_TENANT_ID is not a GUID (length $($tenant.Length))" }
+          if (-not [guid]::TryParse($client, [ref]$g)) { $bad += "AZURE_AD_APPLICATION_CLIENT_ID is not a GUID (length $($client.Length))" }
+          if (-not $secret) { $bad += 'AZURE_AD_APPLICATION_SECRET is empty' }
+          if (-not $seller) { $bad += 'SELLER_ID is empty' }
+          if ($bad) { $bad | ForEach-Object { Write-Error $_ }; exit 1 }
+          msstore reconfigure --tenantId $tenant --sellerId $seller --clientId $client --clientSecret $secret
 
       # A newer tag supersedes whatever is still pending in Partner Center. Best effort: the Store API
       # answers 409 for a submission it cannot delete in its current state (e.g. deep in certification),
