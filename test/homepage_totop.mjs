@@ -1,4 +1,4 @@
-// CHR-108 (back-to-top button) + CHR-110 (platform line under the hero), on all three homepages.
+// CHR-108 (back-to-top button), on all three homepages; the CHR-110 platform line under the hero was removed.
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -14,10 +14,7 @@ try {
       await page.goto(pathToFileURL(path.join(root, page_)).href);
       await page.waitForLoadState('load');
       const tag = `${page_} ${name}`;
-      const plat = await page.locator('#platforms').innerText();
-      if (page_ !== 'ar/index.html') assert.equal(plat.trim(), '*Available on Mac, Windows, Browser and iOS (beta)', tag + ': platform line');
-      else assert.ok(/Mac/.test(plat) && /iOS/.test(plat), tag + ': arabic platform line');
-      assert.ok(await page.locator('#platforms').isVisible(), tag + ': platform line visible');
+      assert.equal(await page.locator('#platforms').count(), 0, tag + ': platform line removed');
       const btn = page.locator('#totop');
       assert.equal(await btn.evaluate(b => getComputedStyle(b).pointerEvents), 'none', tag + ': hidden at the top');
       await page.evaluate(() => { const y = Math.round(innerHeight * 3); typeof lenis !== 'undefined' && lenis ? lenis.scrollTo(y, { immediate: true, force: true }) : scrollTo(0, y); });
@@ -31,5 +28,5 @@ try {
       await ctx.close();
     }
   }
-  console.log('PASS homepage back-to-top + platform line (index, accessible, arabic; desktop, mobile, reduced motion)');
+  console.log('PASS homepage back-to-top (index, accessible, arabic; desktop, mobile, reduced motion)');
 } finally { await browser.close(); }
