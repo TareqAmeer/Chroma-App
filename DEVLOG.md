@@ -399,3 +399,8 @@
 
 - Integrated task commits onto main `5c5062c1` in the dedicated portable integration checkout, preserving newer shader/editor work. All 35 fixture PNGs match unmodified main exactly; existing five wavelet golden mismatches remain unchanged (18/23 exact). Focused tile, pixel, worker, protocol and live-preview regressions pass.
 - Ordinary BUILD 1.1007A APK builds with normal dependency paths. Native EXIF/ICC/transport/error checks pass on Android 10 and 15; four full 24 MP acceptance saves per OS verified exact within-device repeat bytes (6.489 s / 3.322 s warm medians). Archived/reset an unreadable Android 15 emulator database before that acceptance run; cause undetermined.
+
+### CHR-284 — publication verified
+
+- Published implementation `22ae96f4` and native parity record `b944c10f`; integrated verification commit **7c31e76223f9dfcef2d5e83cc61f2fe7a41e4deb** was fast-forward pushed to `origin/main`. `git ls-remote origin refs/heads/main` matched that exact hash, and a fresh fetch/ancestry check confirms main contains the implementation.
+- Verification: ordinary Android APK build; Android 29/35 full 24 MP native saves and native JPEG safeguards; 35/35 fixture exports byte-identical to unmodified current main; focused export regressions pass. Capability/memory fallback limits and the archived Android 35 database failure are documented. CHR-284 stays In Review for user acceptance; publication does not require a physical Pixel.
