@@ -3817,6 +3817,16 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="dz-sb">Photo with the look you want to copy</div><div class="dz-fn" id="fn-cp-ref"></div>
       </div>
     </div>
+    <!-- CHR-221: extra references (blended with the main one) and a reference taken from a video frame -->
+    <div id="cp-refx" style="margin:8px 0;padding:9px;border:1px solid var(--line);border-radius:8px">
+      <div class="vlb" style="margin-bottom:6px">More references (blended into one target look)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <label class="btn bgh" style="cursor:pointer;padding:3px 9px">Add photos<input type="file" accept="image/*" multiple id="cp-refx-in" style="display:none" onchange="cpRefExtraAdd([...this.files]);this.value=''"></label>
+        <label class="btn bgh" style="cursor:pointer;padding:3px 9px" title="Use a frame of a video as a reference">Video frame<input type="file" accept="video/*" id="cp-refvid-in" style="display:none" onchange="cpRefFromVideo(this.files[0],+document.getElementById('cp-refvid-at').value);this.value=''"></label>
+        <span class="vlb">at</span><input class="vinput" type="number" min="0" max="100" value="50" id="cp-refvid-at" style="width:56px"><span class="vlb">%</span>
+      </div>
+      <div id="cp-refx-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:7px"></div>
+    </div>
     <!-- CHR-223: live preview — drag the line: left is your photo as shot, right is the match -->
     <div id="cp-prev" style="display:none;margin:10px 0;gap:10px;align-items:flex-start">
       <div style="position:relative;flex:0 1 auto;max-width:72%;cursor:crosshair;touch-action:none" id="cp-prev-wrap">
@@ -3831,7 +3841,8 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <strong style="font-size:12px">Pinned colour pairs · this photo pair</strong>
         <button type="button" class="btn bgh" id="cp-pairs-clear" onclick="cpPairsClear()" style="padding:3px 8px">Clear</button>
       </div>
-      <div id="cp-pairs-hint" style="font-size:11px;color:var(--mut)">Click a colour in your photo, then its match in the reference. Pair capture is stored for this session; the existing automatic match still drives the LUT.</div>
+      <div id="cp-pairs-hint" style="font-size:11px;color:var(--mut)">Click a colour in your photo, then its match in the reference. Pairs steer the automatic match: a smooth correction is fitted around each pinned colour.</div>
+      <div id="cp-pairs-stat" style="font-size:11px;margin-top:5px"></div>
       <div id="cp-pairs-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:7px"></div>
     </div>
     <div class="vrow">
@@ -3848,9 +3859,11 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
     <div class="btn-row">
       <button class="btn bpri" id="btn-cp" disabled onclick="runColourCopy('lut')">Download .cube LUT</button>
       <button class="btn bsec" id="btn-cp-xmp" disabled onclick="runColourCopy('xmp')">Download .xmp Preset</button>
+      <button class="btn bsec" id="btn-cp-sliders" disabled onclick="cpUseSliders()" title="Express the match as ordinary Tone sliders (exposure, contrast, temperature, tint, saturation) and apply them in the editor, so you can fine-tune each one">Match with sliders</button>
       <button class="btn bsec" id="btn-cp-look" disabled onclick="runColourCopy('look')" title="Save the match as a look in the editor's LUT library and apply it — then fine-tune with the look's Strength and every other slider">Use in editor</button>
     </div>
     <div class="pb" id="pb-cp"><div class="pf" id="pf-cp"></div></div>
+    <div id="cp-fit" style="display:none;margin:8px 0;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:12px" role="status" aria-live="polite"></div>
     <div class="sum-box" id="cp-sum" style="display:none">
       <div class="sum-title">Grade characteristics copied</div>
       <ul class="sum-list" id="cp-sum-list"></ul>
@@ -7761,6 +7774,7 @@ function cpPairPick(which,e){
     document.getElementById('cp-pairs-hint').textContent='Pair saved. Click another source colour to add one.';
   }
   cpPairsRender();
+  if(typeof cpPairsApply==='function'){cpPairsApply();if(typeof cpPreviewUpdate==='function')cpPreviewUpdate();}
 }
 function cpSampleAverage(frame,x,y){
   const {px,w,h}=frame;let r=0,g=0,b=0,n=0;
@@ -7776,17 +7790,168 @@ function cpPairsRender(){
     const item=document.createElement('span');item.style.cssText='display:inline-flex;align-items:center;gap:5px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;font-size:11px';
     const swatch=(rgb)=>{const s=document.createElement('i');s.style.cssText=`width:15px;height:15px;border-radius:50%;background:rgb(${rgb.join(',')});border:1px solid rgba(128,128,128,.5)`;s.title=`RGB ${rgb.join(', ')}`;return s;};
     item.append(`Pair ${i+1}`,swatch(p.source.rgb),document.createTextNode('→'),swatch(p.reference.rgb));
-    const rm=document.createElement('button');rm.type='button';rm.className='btn bgh';rm.textContent='×';rm.title=`Remove pair ${i+1}`;rm.setAttribute('aria-label',`Remove pair ${i+1}`);rm.style.cssText='padding:0 4px;min-width:0';rm.onclick=()=>{_cpPoints.splice(i,1);cpPairsRender();};item.appendChild(rm);list.appendChild(item);
+    const rm=document.createElement('button');rm.type='button';rm.className='btn bgh';rm.textContent='×';rm.title=`Remove pair ${i+1}`;rm.setAttribute('aria-label',`Remove pair ${i+1}`);rm.style.cssText='padding:0 4px;min-width:0';rm.onclick=()=>{_cpPoints.splice(i,1);cpPairsRender();if(typeof cpPairsApply==='function'){cpPairsApply();if(typeof cpPreviewUpdate==='function')cpPreviewUpdate();}};item.appendChild(rm);list.appendChild(item);
   });
 }
-function cpPairsClear(){_cpPoints=[];_cpPending=null;cpPairsRender();const h=document.getElementById('cp-pairs-hint');if(h)h.textContent='Click a colour in your photo, then its match in the reference.';}
+// CHR-222: sparse pairs -> smooth LUT correction. The automatic LUT stays the default; with pairs
+// we add a Gaussian-weighted residual field (sigma 0.16 in RGB, ridge lambda so it fades to zero away
+// from the pins), iterated 3x so each pinned source colour lands close to its reference colour.
+function cpLutSample(lut,r,g,b){
+  const n=SZ-1,f=v=>Math.max(0,Math.min(n,v*n)),x=f(r),y=f(g),z=f(b),x0=Math.min(n-1,x|0),y0=Math.min(n-1,y|0),z0=Math.min(n-1,z|0),fx=x-x0,fy=y-y0,fz=z-z0,o=[0,0,0];
+  for(let dx=0;dx<2;dx++)for(let dy=0;dy<2;dy++)for(let dz=0;dz<2;dz++){
+    const w=(dx?fx:1-fx)*(dy?fy:1-fy)*(dz?fz:1-fz),i=li(x0+dx,y0+dy,z0+dz);
+    o[0]+=w*lut[i];o[1]+=w*lut[i+1];o[2]+=w*lut[i+2];}
+  return o;
+}
+function cpPairResidual(lut,pairs){
+  if(!pairs.length)return 0;let t=0;
+  for(const p of pairs){const a=cpLutSample(lut,p.source.rgb[0]/255,p.source.rgb[1]/255,p.source.rgb[2]/255);
+    for(let c=0;c<3;c++)t+=Math.abs(a[c]*255-p.reference.rgb[c]);}
+  return t/(pairs.length*3);
+}
+function cpPairCorrect(base,pairs){
+  if(!pairs||!pairs.length)return base;
+  const sig2=2*0.16*0.16,lam=0.1,S=pairs.map(p=>p.source.rgb.map(v=>v/255)),Rf=pairs.map(p=>p.reference.rgb.map(v=>v/255));
+  let lut=new Float32Array(base);
+  for(let it=0;it<3;it++){
+    const D=pairs.map((p,k)=>{const a=cpLutSample(lut,S[k][0],S[k][1],S[k][2]);return[Rf[k][0]-a[0],Rf[k][1]-a[1],Rf[k][2]-a[2]];});
+    const out=new Float32Array(lut);
+    for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
+      const i=li(r,g,b),x=r/(SZ-1),y=g/(SZ-1),z=b/(SZ-1);let ws=0,d0=0,d1=0,d2=0;
+      for(let k=0;k<S.length;k++){const dx=x-S[k][0],dy=y-S[k][1],dz=z-S[k][2],w=Math.exp(-(dx*dx+dy*dy+dz*dz)/sig2);ws+=w;d0+=w*D[k][0];d1+=w*D[k][1];d2+=w*D[k][2];}
+      const q=1/(lam+ws);out[i]=Math.max(0,Math.min(1,lut[i]+d0*q));out[i+1]=Math.max(0,Math.min(1,lut[i+1]+d1*q));out[i+2]=Math.max(0,Math.min(1,lut[i+2]+d2*q));
+    }
+    lut=out;
+  }
+  return lut;
+}
+function cpPairWarnings(base,pairs){
+  const w=[];
+  pairs.forEach((p,i)=>{
+    const a=cpLutSample(base,p.source.rgb[0]/255,p.source.rgb[1]/255,p.source.rgb[2]/255);
+    const e=Math.max(...[0,1,2].map(c=>Math.abs(a[c]*255-p.reference.rgb[c])));
+    if(e>110)w.push(`Pair ${i+1} asks for a very large shift (${Math.round(e)}/255) - check it is the same subject.`);
+    for(let j=i+1;j<pairs.length;j++){const q=pairs[j];
+      const ds=Math.max(...[0,1,2].map(c=>Math.abs(p.source.rgb[c]-q.source.rgb[c]))),dr=Math.max(...[0,1,2].map(c=>Math.abs(p.reference.rgb[c]-q.reference.rgb[c])));
+      if(ds<12&&dr>30)w.push(`Pairs ${i+1} and ${j+1} conflict: near-identical source colours map to different references.`);
+      else if(ds<12&&dr<=30)w.push(`Pairs ${i+1} and ${j+1} are near-duplicates.`);}
+  });
+  return w;
+}
+// Recompute the paired LUT + residual readout. Called whenever pairs or the automatic base change.
+function cpPairsApply(){
+  if(!_cpPrev)return;
+  _cpPrev.paired=_cpPoints.length?cpPairCorrect(_cpPrev.base,_cpPoints):null;
+  const el=document.getElementById('cp-pairs-stat');if(!el)return;
+  if(!_cpPoints.length){el.textContent='';return;}
+  const b=cpPairResidual(_cpPrev.base,_cpPoints),a=cpPairResidual(_cpPrev.paired,_cpPoints);
+  _cpPrev.pairStat={before:b,after:a};
+  el.textContent=`Pinned colours: mean error ${b.toFixed(1)} \u2192 ${a.toFixed(1)} (of 255). `+cpPairWarnings(_cpPrev.base,_cpPoints).join(' ');
+}
+function cpPairsClear(){_cpPoints=[];_cpPending=null;cpPairsRender();if(typeof cpPairsApply==='function'){cpPairsApply();if(typeof cpPreviewUpdate==='function')cpPreviewUpdate();}const h=document.getElementById('cp-pairs-hint');if(h)h.textContent='Click a colour in your photo, then its match in the reference.';}
+// CHR-221: extra references. Pixels from every reference are pooled with equal weight (strided to
+// the smallest sample) so the histogram target is the average of their tone distributions.
+async function cpRefPool(maxDim,primary){
+  const list=[primary];
+  for(const f of ST.cpRefExtra){try{list.push(getPx(await loadImg(f),maxDim));}catch(e){}}
+  if(list.length===1)return{px:primary.px,w:primary.w,h:primary.h,n:primary.w*primary.h};
+  const n=Math.min(...list.map(o=>o.w*o.h)),px=new Uint8ClampedArray(n*4*list.length);
+  list.forEach((o,k)=>{const N=o.w*o.h,st=N/n;for(let i=0;i<n;i++){const j=Math.floor(i*st)*4;px.set(o.px.subarray(j,j+4),(k*n+i)*4);}});
+  return{px,w:n*list.length,h:1,n:n*list.length};
+}
+function cpRefExtraRender(){
+  const el=document.getElementById('cp-refx-list');if(!el)return;el.innerHTML='';
+  ST.cpRefExtra.forEach((f,i)=>{const c=document.createElement('span');c.style.cssText='display:inline-flex;align-items:center;gap:5px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:11px';
+    c.append(f.name);const b=document.createElement('button');b.type='button';b.className='btn bgh';b.textContent='\u00d7';b.title='Remove reference '+f.name;b.setAttribute('aria-label','Remove reference '+f.name);b.style.cssText='padding:0 4px;min-width:0';
+    b.onclick=()=>{ST.cpRefExtra.splice(i,1);cpRefExtraRender();chkCP();};c.appendChild(b);el.appendChild(c);});
+}
+function cpRefExtraAdd(files){
+  const imgs=files.filter(f=>f&&(f.type.startsWith('image/')||/\.(jpe?g|png|webp|avif|gif|bmp)$/i.test(f.name)));
+  if(!imgs.length)return;ST.cpRefExtra.push(...imgs);cpRefExtraRender();chkCP();
+}
+async function cpRefFromVideo(file,pct){
+  if(!file)return;
+  try{
+    const url=URL.createObjectURL(file),v=document.createElement('video');v.muted=true;v.preload='auto';v.src=url;
+    await new Promise((res,rej)=>{v.onloadedmetadata=res;v.onerror=()=>rej(new Error('video not readable'));});
+    v.currentTime=Math.max(0,Math.min(1,(isFinite(pct)?pct:50)/100))*(v.duration||0);
+    await new Promise((res,rej)=>{v.onseeked=res;v.onerror=()=>rej(new Error('seek failed'));});
+    const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);URL.revokeObjectURL(url);
+    const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+    const f=new File([blob],file.name.replace(/\.[^.]+$/,'')+`_frame${Math.round(pct||50)}.png`,{type:'image/png'});
+    if(!ST.cpRefFile){ST.cpRefFile=f;setDZ('dz-cp-ref','fn-cp-ref',f.name);chkCP();}else cpRefExtraAdd([f]);
+    toast('Video frame added as a reference',true);
+  }catch(e){toast('Could not read a frame: '+e.message,false);}
+}
+// CHR-219: the match as ordinary Tone sliders. CPU model of the lut shader's basicAdjust
+// (exposure/temp/tint in linear light, contrast about mid-grey, saturation about luma), fitted
+// against the reference by minimising the per-channel quantile (1-D Wasserstein) distance.
+function cpSliderModel(px,n,P){
+  const out=new Float32Array(n*3),ex=Math.pow(2,P.exp/20),t=P.temp/100,ti=P.tint/100,cn=1+P.con/200,sa=1+P.sat/100;
+  const s2l=c=>c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4),l2s=c=>c<=0.0031308?c*12.92:1.055*Math.pow(Math.max(c,0),1/2.4)-0.055,cl=x=>x<0?0:x>1?1:x;
+  for(let i=0;i<n;i++){
+    let r=s2l(px[i*4]/255)*ex,g=s2l(px[i*4+1]/255)*ex,b=s2l(px[i*4+2]/255)*ex;
+    r*=1+0.22*t;b*=1-0.22*t;g*=1-0.14*ti;r*=1+0.05*ti;b*=1+0.05*ti;
+    r=cl(l2s(r));g=cl(l2s(g));b=cl(l2s(b));
+    r=cl((r-.5)*cn+.5);g=cl((g-.5)*cn+.5);b=cl((b-.5)*cn+.5);
+    const l=0.2126*r+0.7152*g+0.0722*b;
+    out[i*3]=cl(l+(r-l)*sa)*255;out[i*3+1]=cl(l+(g-l)*sa)*255;out[i*3+2]=cl(l+(b-l)*sa)*255;
+  }
+  return out;
+}
+function cpQuantiles(vals,n,ch,Q){
+  const a=new Float32Array(n);for(let i=0;i<n;i++)a[i]=vals[i*3+ch];a.sort();
+  const q=new Float32Array(Q);for(let k=0;k<Q;k++)q[k]=a[Math.min(n-1,Math.floor((k+.5)/Q*n))];return q;
+}
+function cpStatDistance(refQ,vals,n){
+  let d=0;for(let c=0;c<3;c++){const q=cpQuantiles(vals,n,c,refQ[c].length);for(let k=0;k<q.length;k++)d+=Math.abs(q[k]-refQ[c][k]);}
+  return d/(3*refQ[0].length);
+}
+function cpFitSliders(sPx,sN,rPx,rN){
+  const cap=6000,sub=(px,N)=>{const n=Math.min(N,cap),o=new Uint8ClampedArray(n*4),st=N/n;for(let i=0;i<n;i++)o.set(px.subarray(Math.floor(i*st)*4,Math.floor(i*st)*4+4),i*4);return{px:o,n};};
+  const S=sub(sPx,sN),R=sub(rPx,rN),rv=new Float32Array(R.n*3);
+  for(let i=0;i<R.n;i++){rv[i*3]=R.px[i*4];rv[i*3+1]=R.px[i*4+1];rv[i*3+2]=R.px[i*4+2];}
+  const Q=64,refQ=[0,1,2].map(c=>cpQuantiles(rv,R.n,c,Q));
+  const lim={exp:[-60,60],con:[-60,60],temp:[-100,100],tint:[-100,100],sat:[-100,100]};
+  const ev=P=>cpStatDistance(refQ,cpSliderModel(S.px,S.n,P),S.n);
+  let P={exp:0,con:0,temp:0,tint:0,sat:0};const before=ev(P);let best=before;
+  for(let step=32;step>=1;step=step/2){
+    let moved=true,guard=0;
+    while(moved&&guard++<12){moved=false;
+      for(const k of Object.keys(P)){for(const sg of[1,-1]){
+        const v=Math.max(lim[k][0],Math.min(lim[k][1],P[k]+sg*step));if(v===P[k])continue;
+        const T={...P,[k]:v},d=ev(T);if(d<best-1e-4){best=d;P=T;moved=true;}}}}
+  }
+  for(const k of Object.keys(P))P[k]=Math.round(P[k]);
+  return{values:P,before,after:ev(P)};
+}
+async function cpUseSliders(){
+  if(!ST.cpSrcFile||!ST.cpRefFile)return;
+  const box=document.getElementById('cp-fit');
+  try{
+    const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
+    const s=getPx(sImg,640),pool=await cpRefPool(640,getPx(rImg,640));
+    const fit=cpFitSliders(s.px,s.w*s.h,pool.px,pool.n);
+    // apply to the editor: make sure the matched photo is open, switch Tone on, set only these five
+    if(!fxImages.length&&typeof loadFXImages==='function')await loadFXImages([ST.cpSrcFile]);
+    const tg=document.getElementById('tg-adjust');if(tg&&!tg.classList.contains('on'))toggleFX('adjust');
+    for(const k of['exp','con','temp','tint','sat']){const sl=document.getElementById('sl-adj-'+k);if(sl)sl.value=fit.values[k];}
+    fxUpdate();
+    window._cpLastFit=fit;
+    const v=fit.values,pctDrop=fit.before>0?Math.round((1-fit.after/fit.before)*100):0;
+    box.style.display='block';
+    box.textContent=`Distance to reference (tone/colour, of 255): ${fit.before.toFixed(1)} \u2192 ${fit.after.toFixed(1)} (${pctDrop}% closer). Applied: Exposure ${v.exp}, Contrast ${v.con}, Temp ${v.temp}, Tint ${v.tint}, Saturation ${v.sat}. Edit them in the Tone section.`;
+    if(typeof switchTab==='function')switchTab('fx');
+    toast('Match applied as Tone sliders',true);
+  }catch(e){box.style.display='block';box.textContent='Could not fit sliders: '+e.message;console.error(e);}
+}
 async function cpPreviewBuild(){
   const box=document.getElementById('cp-prev');if(!box)return;
   try{
     const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
-    const s=getPx(sImg,640),r=getPx(rImg,640),rs=getPx(rImg,320);
+    const s=getPx(sImg,640),r=getPx(rImg,640),rs=getPx(rImg,320),pool=await cpRefPool(640,r);
     if(_cpPairSrcFile!==ST.cpSrcFile||_cpPairRefFile!==ST.cpRefFile){_cpPoints=[];_cpPending=null;_cpPairSrcFile=ST.cpSrcFile;_cpPairRefFile=ST.cpRefFile;}
-    _cpPrev={s,r,base:histMatch(s.px,r.px,s.w*s.h,r.w*r.h)};
+    _cpPrev={s,r,base:histMatch(s.px,pool.px,pool.n,pool.n)};cpPairsApply();
     const put=(id,o)=>{const c=document.getElementById(id);c.width=o.w;c.height=o.h;c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(o.px),o.w,o.h),0,0);};
     put('cp-prev-before',s);put('cp-prev-ref',rs);
     box.style.display='flex';cpPreviewUpdate();cpPairsRender();
@@ -7800,7 +7965,7 @@ async function cpPreviewBuild(){
 }
 function cpPreviewUpdate(){
   if(!_cpPrev)return;const{s,base}=_cpPrev;
-  const out=applyLUTtoPx(s.px,cpAdjustLUT(base,cpOpts()));
+  const out=applyLUTtoPx(s.px,cpAdjustLUT(_cpPrev.paired||base,cpOpts()));
   const c=document.getElementById('cp-prev-after');c.width=s.w;c.height=s.h;c.getContext('2d').putImageData(new ImageData(out,s.w,s.h),0,0);
   cpPreviewSplit();
 }
@@ -7814,11 +7979,11 @@ async function runColourCopy(type){
   showPB('pb-cp');log('Running color copy…','info');
   try{
     const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
-    const{px:sPx,w:sw,h:sh}=getPx(sImg);const{px:rPx,w:rw,h:rh}=getPx(rImg);
+    const{px:sPx,w:sw,h:sh}=getPx(sImg);const rPool=await cpRefPool(1800,getPx(rImg));const rPx=rPool.px,rw=rPool.w,rh=rPool.h;
     log('Matching histograms per channel…');setP('pf-cp',30);await yd();
     const opts=cpOpts();
-    const lut=cpAdjustLUT(histMatch(sPx,rPx,sw*sh,rw*rh),opts);
-    const adjusted=opts.str<1||opts.sh<1||opts.md<1||opts.hl<1||opts.skin;
+    const lut=cpAdjustLUT(cpPairCorrect(histMatch(sPx,rPx,sw*sh,rw*rh),_cpPoints),opts);
+    const adjusted=opts.str<1||opts.sh<1||opts.md<1||opts.hl<1||opts.skin||_cpPoints.length>0||ST.cpRefExtra.length>0;
     setP('pf-cp',70);
     const name=document.getElementById('cp-name').value||'colour_copy';
     const ver=`v${ST.cpVer.toFixed(1)}`;
@@ -24495,7 +24660,7 @@ class ImgSlider{
 // ═══════════════════════════
 // WORKFLOW STATE
 // ═══════════════════════════
-const ST={beforeFile:null,targetFile:null,startFile:null,startType:null,baseName:'my_look',beforeImg:null,targetImg:null,history:[],cpSrcFile:null,cpRefFile:null,cpVer:1.0};
+const ST={beforeFile:null,targetFile:null,startFile:null,startType:null,baseName:'my_look',beforeImg:null,targetImg:null,history:[],cpSrcFile:null,cpRefFile:null,cpRefExtra:[],cpVer:1.0};
 const SL={};
 function getNextVer(){return`v1.${ST.history.length}`}
 function getCurVer(){return ST.history.length>0?`v1.${ST.history.length-1}`:'—'}
@@ -25836,7 +26001,7 @@ async function hf(file,type){
   else if(type.startsWith('dev-')){const idx=parseInt(type.split('-')[1]);if(ST.history[idx]){ST.history[idx].deviceFile=file;setDZ(`dz-dev-${idx}`,`fn-dev-${idx}`,file.name);const btn=document.getElementById(`btn-ref-${idx}`);if(btn)btn.disabled=false}}
 }
 function chkStart(){document.getElementById('btn-start').disabled=!(ST.beforeFile&&ST.targetFile)}
-function chkCP(){const ok=ST.cpSrcFile&&ST.cpRefFile;if(ok)cpPreviewBuild();document.getElementById('btn-cp').disabled=!ok;document.getElementById('btn-cp-xmp').disabled=!ok;const lk=document.getElementById('btn-cp-look');if(lk)lk.disabled=!ok}
+function chkCP(){const ok=ST.cpSrcFile&&ST.cpRefFile;if(ok)cpPreviewBuild();document.getElementById('btn-cp').disabled=!ok;document.getElementById('btn-cp-xmp').disabled=!ok;const lk=document.getElementById('btn-cp-look');if(lk)lk.disabled=!ok;const sb=document.getElementById('btn-cp-sliders');if(sb)sb.disabled=!ok}
 // CHR-221: hand a photo to Colour Copy from elsewhere (desktop Library menu, or the editor's
 // current photo) instead of its file pickers. which: 'src' | 'ref'.
 window.chromasmithColourCopySet=function(which,file){
