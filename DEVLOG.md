@@ -584,3 +584,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - CHR-205 remains In Progress: restore is a safe copy and does not activate the library or relink source roots; cross-store snapshot consistency and several IndexedDB/editor collections are not captured, and no clean-install cross-machine fixture or live Tauri UI run is verified.
 
 - Integration follow-up: resolving the feature commit against newer `origin/main` had retained a stale second `BUILD` declaration, which prevented the desktop editor/Library scripts from initializing. Removed the stale declaration and aligned the backup UI harness with the supported Library fixture/server (mock catalog folder, worker/favicon routes); rebuilt and reran it successfully in dark and light themes at 1366×768. The test covers backup creation, preference credential exclusion, verify-before-restore, separate restore destination, and uncaught UI errors. This remains browser-side IPC-mocked evidence, not native activation or portability proof.
+
+#### Publication verification — CHR-205
+
+- Feature integration `9493f5c8` and test/build follow-up `ee57930decaad574dcb4cd2434eb7a364cb7236b` are on `origin/main`. Fresh `git fetch origin main` and `git ls-remote origin refs/heads/main` both returned `ee57930decaad574dcb4cd2434eb7a364cb7236b`; ancestry verification passed. Shipped tree contains backup bundle/verify/restore-copy commands, Library controls, scoped preferences, documentation and the corrected two-theme harness.
