@@ -31,7 +31,7 @@ try {
   const paths = [];
   for (let index = 0; index < 3; index++) {
     paths.push(await cards.nth(index).getAttribute('data-path'));
-    await cards.nth(index).click({ modifiers: index ? ['Meta'] : [] });
+    await cards.nth(index).click({ modifiers: index ? [process.platform === 'darwin' ? 'Meta' : 'Control'] : [] });
   }
   await cards.nth(1).click({ button: 'right' });
   await page.getByText('Edit (3)', { exact: true }).hover();
