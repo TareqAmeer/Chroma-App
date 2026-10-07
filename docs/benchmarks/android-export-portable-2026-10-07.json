@@ -1,0 +1,4624 @@
+{
+  "date": "2026-10-07",
+  "baseCommit": "243991b05e74b8caef20ceccf37996d592d86760",
+  "inputSha256": "7d3dbe7813ada9b972befd3cfdb65adea06f71e16476722eeff1af38475ead7a",
+  "batches": [
+    {
+      "name": "portable-methods-android29-reduced-invalid.json",
+      "valid24MP": false,
+      "complete": true,
+      "medians": {
+        "center": {
+          "count": 3,
+          "totalMs": 550.4000000000233,
+          "processMs": 17.400000000023283,
+          "encodeMs": 265.0999999999767,
+          "saveMs": 48
+        },
+        "old": {
+          "count": 3,
+          "totalMs": 434,
+          "processMs": 16.20000000001164,
+          "encodeMs": 177.5,
+          "saveMs": 34.399999999965075
+        }
+      },
+      "rows": [
+        {
+          "method": "old",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 39.70000000001164,
+          "bytes": 9641,
+          "encodeMs": 360.8999999999651,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-0.jpg"
+            }
+          ],
+          "saveMs": 628.7000000000116,
+          "totalMs": 1794.4000000000233,
+          "savedFile": "portable-android29_lowram-old-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 37.29999999998836,
+          "bytes": 9641,
+          "encodeMs": 187.29999999998836,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-1.jpg"
+            }
+          ],
+          "saveMs": 52.399999999965075,
+          "totalMs": 510.1000000000349,
+          "savedFile": "portable-android29_lowram-center-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 17.400000000023283,
+          "bytes": 9641,
+          "encodeMs": 196.90000000002328,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-2.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-2.jpg"
+            }
+          ],
+          "saveMs": 48,
+          "totalMs": 473.0999999999767,
+          "savedFile": "portable-android29_lowram-center-1.jpg"
+        },
+        {
+          "method": "old",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 18,
+          "bytes": 9641,
+          "encodeMs": 177.5,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-3.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-3.jpg"
+            }
+          ],
+          "saveMs": 33.100000000034925,
+          "totalMs": 434,
+          "savedFile": "portable-android29_lowram-old-1.jpg"
+        },
+        {
+          "method": "old",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 16.20000000001164,
+          "bytes": 9641,
+          "encodeMs": 176,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-4.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-4.jpg"
+            }
+          ],
+          "saveMs": 34.399999999965075,
+          "totalMs": 426.5,
+          "savedFile": "portable-android29_lowram-old-2.jpg"
+        },
+        {
+          "method": "center",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 19.79999999998836,
+          "bytes": 9641,
+          "encodeMs": 380.3999999999651,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-5.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-5.jpg"
+            }
+          ],
+          "saveMs": 39.800000000046566,
+          "totalMs": 665.9000000000233,
+          "savedFile": "portable-android29_lowram-center-2.jpg"
+        },
+        {
+          "method": "center",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 17.20000000001164,
+          "bytes": 9641,
+          "encodeMs": 265.0999999999767,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-6.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-6.jpg"
+            }
+          ],
+          "saveMs": 52.59999999997672,
+          "totalMs": 550.4000000000233,
+          "savedFile": "portable-android29_lowram-center-3.jpg"
+        },
+        {
+          "method": "old",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 15,
+          "bytes": 9641,
+          "encodeMs": 259.5999999999767,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-7.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-7.jpg"
+            }
+          ],
+          "saveMs": 46.699999999953434,
+          "totalMs": 523.1000000000349,
+          "savedFile": "portable-android29_lowram-old-3.jpg"
+        }
+      ]
+    },
+    {
+      "name": "portable-methods-android29_full.json",
+      "valid24MP": true,
+      "complete": false,
+      "medians": {
+        "center": {
+          "count": 2,
+          "totalMs": 24533.300000000047,
+          "processMs": 2157.6999999999534,
+          "decodeMs": 19684.800000000047,
+          "encodeMs": 1661.6499999999069,
+          "saveMs": 637.0500000000466
+        },
+        "old": {
+          "count": 2,
+          "totalMs": 28767.849999999977,
+          "processMs": 6847.199999999953,
+          "decodeMs": 18999.749999999884,
+          "encodeMs": 1915.4499999999534,
+          "saveMs": 541.0000000001164
+        }
+      },
+      "rows": [
+        {
+          "method": "old",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 20241.699999999953,
+          "yieldMs": 3359,
+          "processMs": 9743.900000000023,
+          "bytes": 2600747,
+          "encodeMs": 6079.5,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-0%20(2).jpg"
+            }
+          ],
+          "saveMs": 776.3000000000466,
+          "totalMs": 37873.19999999995,
+          "savedFile": "portable-android29_full-old-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 39914.30000000005,
+          "yieldMs": 1619.8999999999069,
+          "processMs": 4793.300000000047,
+          "bytes": 2600747,
+          "encodeMs": 2445.5,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-1%20(2).jpg"
+            }
+          ],
+          "saveMs": 478.9000000001397,
+          "totalMs": 48143.09999999998,
+          "savedFile": "portable-android29_full-center-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 20264.600000000093,
+          "yieldMs": 699.9000000003725,
+          "processMs": 1878.3000000000466,
+          "bytes": 2600747,
+          "encodeMs": 1603.1999999999534,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-2.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-2%20(2).jpg"
+            }
+          ],
+          "saveMs": 617.4000000001397,
+          "totalMs": 24749.199999999953,
+          "savedFile": "portable-android29_full-center-1.jpg"
+        },
+        {
+          "method": "old",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 20903.699999999953,
+          "yieldMs": 2286.899999999907,
+          "processMs": 6986.800000000047,
+          "bytes": 2600747,
+          "encodeMs": 2255,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-3.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-3%20(2).jpg"
+            }
+          ],
+          "saveMs": 578.9000000001397,
+          "totalMs": 31206.199999999953,
+          "savedFile": "portable-android29_full-old-1.jpg"
+        },
+        {
+          "method": "old",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 17095.799999999814,
+          "yieldMs": 2258.100000000093,
+          "processMs": 6707.59999999986,
+          "bytes": 2600747,
+          "encodeMs": 1575.8999999999069,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-4.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-4%20(2).jpg"
+            }
+          ],
+          "saveMs": 503.10000000009313,
+          "totalMs": 26329.5,
+          "savedFile": "portable-android29_full-old-2.jpg"
+        },
+        {
+          "method": "center",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 19105,
+          "yieldMs": 903.899999999674,
+          "processMs": 2437.0999999998603,
+          "bytes": 2600747,
+          "encodeMs": 1720.0999999998603,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-5.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-5%20(2).jpg"
+            }
+          ],
+          "saveMs": 656.6999999999534,
+          "totalMs": 24317.40000000014,
+          "savedFile": "portable-android29_full-center-2.jpg"
+        }
+      ]
+    },
+    {
+      "name": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "complete": true,
+      "medians": {
+        "center": {
+          "count": 3,
+          "totalMs": 6524.600000000093,
+          "processMs": 1707.9000000001397,
+          "decodeMs": 1425.5999999998603,
+          "encodeMs": 1616.3000000000466,
+          "saveMs": 547.5
+        },
+        "legacy": {
+          "count": 3,
+          "totalMs": 21390.5,
+          "processMs": 2093,
+          "decodeMs": 16396.5,
+          "encodeMs": 1570.6999999999534,
+          "saveMs": 473.89999999990687
+        },
+        "old": {
+          "count": 3,
+          "totalMs": 15240.199999999953,
+          "processMs": 8994.5,
+          "decodeMs": 1525.6000000000931,
+          "encodeMs": 3491,
+          "saveMs": 524.1999999999534
+        }
+      },
+      "rows": [
+        {
+          "method": "old",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 2288.5,
+          "yieldMs": 2544.200000000419,
+          "processMs": 7282,
+          "bytes": 2600747,
+          "encodeMs": 2405.600000000093,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-0%20(3).jpg"
+            }
+          ],
+          "saveMs": 945.2000000001863,
+          "totalMs": 13794.200000000186,
+          "savedFile": "portable-android29_safe-old-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 2703.100000000093,
+          "yieldMs": 930.2999999995809,
+          "processMs": 2596.4000000001397,
+          "bytes": 2600747,
+          "encodeMs": 3222.1999999999534,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-1%20(3).jpg"
+            }
+          ],
+          "saveMs": 484.80000000004657,
+          "totalMs": 9653.5,
+          "savedFile": "portable-android29_safe-center-0.jpg"
+        },
+        {
+          "method": "legacy",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 26928.199999999953,
+          "yieldMs": 2501.0000000004657,
+          "processMs": 5619.800000000047,
+          "bytes": 2600747,
+          "encodeMs": 5763.399999999907,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-2.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-2%20(3).jpg"
+            }
+          ],
+          "saveMs": 742.0999999998603,
+          "totalMs": 40014,
+          "savedFile": "portable-android29_safe-legacy-0.jpg"
+        },
+        {
+          "method": "legacy",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 22242.899999999907,
+          "yieldMs": 518.7999999998137,
+          "processMs": 1670.6999999999534,
+          "bytes": 2600747,
+          "encodeMs": 1570.6999999999534,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-3.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-3%20(3).jpg"
+            }
+          ],
+          "saveMs": 310,
+          "totalMs": 26245.5,
+          "savedFile": "portable-android29_safe-legacy-1.jpg"
+        },
+        {
+          "method": "center",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 1226.0999999998603,
+          "yieldMs": 553.2000000004191,
+          "processMs": 1658.6999999999534,
+          "bytes": 2600747,
+          "encodeMs": 1616.3000000000466,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-4.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-4%20(3).jpg"
+            }
+          ],
+          "saveMs": 571.2000000001863,
+          "totalMs": 5399.5,
+          "savedFile": "portable-android29_safe-center-1.jpg"
+        },
+        {
+          "method": "old",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 1604.5,
+          "yieldMs": 2761.4999999993015,
+          "processMs": 8994.5,
+          "bytes": 2600747,
+          "encodeMs": 3491,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-5.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-5%20(3).jpg"
+            }
+          ],
+          "saveMs": 470.80000000004657,
+          "totalMs": 15240.199999999953,
+          "savedFile": "portable-android29_safe-old-1.jpg"
+        },
+        {
+          "method": "old",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 1525.6000000000931,
+          "yieldMs": 2568.699999999255,
+          "processMs": 7902.800000000047,
+          "bytes": 2600747,
+          "encodeMs": 2091.4000000001397,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-6.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-6%20(2).jpg"
+            }
+          ],
+          "saveMs": 654.1000000000931,
+          "totalMs": 12653,
+          "savedFile": "portable-android29_safe-old-2.jpg"
+        },
+        {
+          "method": "center",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 2585.2999999998137,
+          "yieldMs": 614.6999999999534,
+          "processMs": 1707.9000000001397,
+          "bytes": 2600747,
+          "encodeMs": 1295.7999999998137,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-7.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-7%20(2).jpg"
+            }
+          ],
+          "saveMs": 547.5,
+          "totalMs": 6524.600000000093,
+          "savedFile": "portable-android29_safe-center-2.jpg"
+        },
+        {
+          "method": "legacy",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 16396.5,
+          "yieldMs": 704.8000000005122,
+          "processMs": 2093,
+          "bytes": 2600747,
+          "encodeMs": 1085.4000000001397,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-8.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-8.jpg"
+            }
+          ],
+          "saveMs": 473.89999999990687,
+          "totalMs": 20738.5,
+          "savedFile": "portable-android29_safe-legacy-2.jpg"
+        },
+        {
+          "method": "legacy",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 13301.399999999907,
+          "yieldMs": 1745.6000000000931,
+          "processMs": 3940.100000000093,
+          "bytes": 2600747,
+          "encodeMs": 2565.7000000001863,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-9.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-9.jpg"
+            }
+          ],
+          "saveMs": 796.5,
+          "totalMs": 21390.5,
+          "savedFile": "portable-android29_safe-legacy-3.jpg"
+        },
+        {
+          "method": "center",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 1425.5999999998603,
+          "yieldMs": 1218.4999999993015,
+          "processMs": 2857.6999999999534,
+          "bytes": 2600747,
+          "encodeMs": 2699.5,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v2-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v2-0.jpg"
+            }
+          ],
+          "saveMs": 527,
+          "totalMs": 8002.09999999986,
+          "savedFile": "portable-android29_safe-center-3.jpg"
+        },
+        {
+          "method": "old",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decodeMs": 1365.2999999998137,
+          "yieldMs": 3192.3999999992084,
+          "processMs": 9581.5,
+          "bytes": 2600747,
+          "encodeMs": 5160.699999999953,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v2-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v2-1.jpg"
+            }
+          ],
+          "saveMs": 524.1999999999534,
+          "totalMs": 17252.5,
+          "savedFile": "portable-android29_safe-old-3.jpg"
+        }
+      ]
+    },
+    {
+      "name": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "complete": true,
+      "medians": {
+        "center": {
+          "count": 3,
+          "totalMs": 4201.199999999255,
+          "processMs": 3264.2999999988824,
+          "encodeMs": 391,
+          "saveMs": 113.30000000074506
+        },
+        "old": {
+          "count": 3,
+          "totalMs": 4874.5,
+          "processMs": 4059.89999999851,
+          "encodeMs": 366.5,
+          "saveMs": 106.19999999925494
+        },
+        "soft": {
+          "count": 3,
+          "totalMs": 4189.699999999255,
+          "processMs": 3233.5,
+          "encodeMs": 416.59999999962747,
+          "saveMs": 129
+        },
+        "timer": {
+          "count": 3,
+          "totalMs": 4945.199999999255,
+          "processMs": 3935.0999999996275,
+          "encodeMs": 418.2999999988824,
+          "saveMs": 152.5
+        }
+      },
+      "rows": [
+        {
+          "method": "old",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 1303.0000000018626,
+          "processMs": 24815.300000000745,
+          "bytes": 2617789,
+          "encodeMs": 498.40000000037253,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-0%20(4).jpg"
+            }
+          ],
+          "saveMs": 299.09999999962747,
+          "totalMs": 26524.099999999627,
+          "savedFile": "portable-archive/android35_confirm/old-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 292.49999999813735,
+          "processMs": 3433.7999999988824,
+          "bytes": 2617789,
+          "encodeMs": 519.0999999996275,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-1%20(4).jpg"
+            }
+          ],
+          "saveMs": 122.69999999925494,
+          "totalMs": 4940.799999998882,
+          "savedFile": "portable-archive/android35_confirm/center-0.jpg"
+        },
+        {
+          "method": "soft",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 274.9000000022352,
+          "processMs": 3372.800000000745,
+          "bytes": 2617789,
+          "encodeMs": 516.2000000011176,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-2.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-2%20(5).jpg"
+            }
+          ],
+          "saveMs": 114.30000000074506,
+          "totalMs": 4637.5,
+          "savedFile": "portable-archive/android35_confirm/soft-0.jpg"
+        },
+        {
+          "method": "timer",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 703.6999999973923,
+          "processMs": 4768,
+          "bytes": 2617789,
+          "encodeMs": 431.5,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-3.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-3%20(4).jpg"
+            }
+          ],
+          "saveMs": 101.69999999925494,
+          "totalMs": 5958.5999999996275,
+          "savedFile": "portable-archive/android35_confirm/timer-0.jpg"
+        },
+        {
+          "method": "timer",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 695.7999999988824,
+          "processMs": 5047.9000000003725,
+          "bytes": 2617789,
+          "encodeMs": 455.5,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-4.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-4%20(4).jpg"
+            }
+          ],
+          "saveMs": 181.19999999925494,
+          "totalMs": 6743.299999998882,
+          "savedFile": "portable-archive/android35_confirm/timer-1.jpg"
+        },
+        {
+          "method": "soft",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 231.80000000074506,
+          "processMs": 3977.7999999988824,
+          "bytes": 2617789,
+          "encodeMs": 437,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-5.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-5%20(5).jpg"
+            }
+          ],
+          "saveMs": 118.5,
+          "totalMs": 6566.5999999996275,
+          "savedFile": "portable-archive/android35_confirm/soft-1.jpg"
+        },
+        {
+          "method": "center",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 836.5999999996275,
+          "processMs": 10615.60000000149,
+          "bytes": 2617789,
+          "encodeMs": 1426.4000000003725,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-6.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-6%20(4).jpg"
+            }
+          ],
+          "saveMs": 998.5999999996275,
+          "totalMs": 17458.099999999627,
+          "savedFile": "portable-archive/android35_confirm/center-1.jpg"
+        },
+        {
+          "method": "old",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 4090.3000000026077,
+          "processMs": 12867,
+          "bytes": 2617789,
+          "encodeMs": 1641.199999999255,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-7.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-7%20(4).jpg"
+            }
+          ],
+          "saveMs": 290.40000000037253,
+          "totalMs": 21375.200000001118,
+          "savedFile": "portable-archive/android35_confirm/old-1.jpg"
+        },
+        {
+          "method": "old",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 661.5999999977648,
+          "processMs": 4059.89999999851,
+          "bytes": 2617789,
+          "encodeMs": 366.5,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-8.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-8%20(4).jpg"
+            }
+          ],
+          "saveMs": 97.30000000074506,
+          "totalMs": 4874.5,
+          "savedFile": "portable-archive/android35_confirm/old-2.jpg"
+        },
+        {
+          "method": "center",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 185.50000000186265,
+          "processMs": 2925.9000000003725,
+          "bytes": 2617789,
+          "encodeMs": 391,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-9.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-9%20(3).jpg"
+            }
+          ],
+          "saveMs": 113.30000000074506,
+          "totalMs": 3755.0999999996275,
+          "savedFile": "portable-archive/android35_confirm/center-2.jpg"
+        },
+        {
+          "method": "soft",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 227.40000000037253,
+          "processMs": 3041.0999999996275,
+          "bytes": 2617789,
+          "encodeMs": 366.5,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v2-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v2-0%20(4).jpg"
+            }
+          ],
+          "saveMs": 144.40000000037253,
+          "totalMs": 3929.699999999255,
+          "savedFile": "portable-archive/android35_confirm/soft-2.jpg"
+        },
+        {
+          "method": "timer",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 643.9000000003725,
+          "processMs": 3935.0999999996275,
+          "bytes": 2617789,
+          "encodeMs": 418.2999999988824,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v2-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v2-1%20(3).jpg"
+            }
+          ],
+          "saveMs": 152.5,
+          "totalMs": 4945.199999999255,
+          "savedFile": "portable-archive/android35_confirm/timer-2.jpg"
+        },
+        {
+          "method": "timer",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 570.2000000011176,
+          "processMs": 3858.9000000003725,
+          "bytes": 2617789,
+          "encodeMs": 411.40000000037253,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v2-2.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v2-2.jpg"
+            }
+          ],
+          "saveMs": 122.90000000037253,
+          "totalMs": 4756.200000001118,
+          "savedFile": "portable-archive/android35_confirm/timer-3.jpg"
+        },
+        {
+          "method": "soft",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 185.00000000186265,
+          "processMs": 3233.5,
+          "bytes": 2617789,
+          "encodeMs": 416.59999999962747,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v2-3.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v2-3%20(2).jpg"
+            }
+          ],
+          "saveMs": 129,
+          "totalMs": 4189.699999999255,
+          "savedFile": "portable-archive/android35_confirm/soft-3.jpg"
+        },
+        {
+          "method": "center",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 254,
+          "processMs": 3264.2999999988824,
+          "bytes": 2617789,
+          "encodeMs": 382.2999999988824,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v2-4.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v2-4.jpg"
+            }
+          ],
+          "saveMs": 108.80000000074506,
+          "totalMs": 4201.199999999255,
+          "savedFile": "portable-archive/android35_confirm/center-3.jpg"
+        },
+        {
+          "method": "old",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "yieldMs": 617.6000000014901,
+          "processMs": 3800.0999999996275,
+          "bytes": 2617789,
+          "encodeMs": 359.90000000037253,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v2-5.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v2-5%20(2).jpg"
+            }
+          ],
+          "saveMs": 106.19999999925494,
+          "totalMs": 4649.199999999255,
+          "savedFile": "portable-archive/android35_confirm/old-3.jpg"
+        }
+      ]
+    },
+    {
+      "name": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "complete": true,
+      "medians": {
+        "center": {
+          "count": 3,
+          "totalMs": 9094.300000000745,
+          "processMs": 5914.60000000149,
+          "encodeMs": 956.8000000007451,
+          "saveMs": 203.2000000011176
+        },
+        "direct": {
+          "count": 3,
+          "totalMs": 8297,
+          "processMs": 3668.4000000003725,
+          "encodeMs": 1627.4000000003725,
+          "saveMs": 676.3000000007451
+        },
+        "old": {
+          "count": 3,
+          "totalMs": 6190.89999999851,
+          "processMs": 4702.800000000745,
+          "encodeMs": 461.40000000037253,
+          "saveMs": 252
+        }
+      },
+      "rows": [
+        {
+          "method": "old",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 23679.699999999255,
+          "bytes": 2617789,
+          "encodeMs": 468.3999999985099,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-0%20(2).jpg"
+            }
+          ],
+          "saveMs": 922.9000000003725,
+          "totalMs": 26078.300000000745,
+          "savedFile": "portable-archive/old_center_direct/old-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 3606.2000000011176,
+          "bytes": 2617789,
+          "encodeMs": 648.5,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-1%20(2).jpg"
+            }
+          ],
+          "saveMs": 347.5,
+          "totalMs": 5744.39999999851,
+          "savedFile": "portable-archive/old_center_direct/center-0.jpg"
+        },
+        {
+          "method": "direct",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 2835.699999999255,
+          "bytes": 2619155,
+          "encodeMs": 709.8000000007451,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-2.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-2%20(3).jpg"
+            }
+          ],
+          "saveMs": 227.19999999925494,
+          "totalMs": 5615.300000000745,
+          "savedFile": "portable-archive/old_center_direct/direct-0.jpg"
+        },
+        {
+          "method": "direct",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 3527.199999999255,
+          "bytes": 2619155,
+          "encodeMs": 3032.5999999996275,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-3.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-3%20(2).jpg"
+            }
+          ],
+          "saveMs": 676.3000000007451,
+          "totalMs": 8297,
+          "savedFile": "portable-archive/old_center_direct/direct-1.jpg"
+        },
+        {
+          "method": "center",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 5914.60000000149,
+          "bytes": 2617789,
+          "encodeMs": 1485.0999999996275,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-4.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-4%20(2).jpg"
+            }
+          ],
+          "saveMs": 281.59999999962747,
+          "totalMs": 11197.199999999255,
+          "savedFile": "portable-archive/old_center_direct/center-1.jpg"
+        },
+        {
+          "method": "old",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 4869.9000000003725,
+          "bytes": 2617789,
+          "encodeMs": 488.69999999925494,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-5.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-5%20(3).jpg"
+            }
+          ],
+          "saveMs": 252,
+          "totalMs": 6218.299999998882,
+          "savedFile": "portable-archive/old_center_direct/old-1.jpg"
+        },
+        {
+          "method": "old",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 4527,
+          "bytes": 2617789,
+          "encodeMs": 461.40000000037253,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-6.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-6%20(2).jpg"
+            }
+          ],
+          "saveMs": 599.1999999992549,
+          "totalMs": 6190.89999999851,
+          "savedFile": "portable-archive/old_center_direct/old-2.jpg"
+        },
+        {
+          "method": "center",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 3659.4000000003725,
+          "bytes": 2617789,
+          "encodeMs": 402.5,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-7.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-7%20(2).jpg"
+            }
+          ],
+          "saveMs": 154.30000000074506,
+          "totalMs": 4946.299999998882,
+          "savedFile": "portable-archive/old_center_direct/center-2.jpg"
+        },
+        {
+          "method": "direct",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 3668.4000000003725,
+          "bytes": 2619155,
+          "encodeMs": 720.2000000011176,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-8.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-8%20(2).jpg"
+            }
+          ],
+          "saveMs": 210.80000000074506,
+          "totalMs": 6005.4000000003725,
+          "savedFile": "portable-archive/old_center_direct/direct-2.jpg"
+        },
+        {
+          "method": "direct",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 3714.0999999996275,
+          "bytes": 2619155,
+          "encodeMs": 1627.4000000003725,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-9.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-9.jpg"
+            }
+          ],
+          "saveMs": 1410.9000000003725,
+          "totalMs": 8318,
+          "savedFile": "portable-archive/old_center_direct/direct-3.jpg"
+        },
+        {
+          "method": "center",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 6214,
+          "bytes": 2617789,
+          "encodeMs": 956.8000000007451,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v2-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v2-0%20(2).jpg"
+            }
+          ],
+          "saveMs": 203.2000000011176,
+          "totalMs": 9094.300000000745,
+          "savedFile": "portable-archive/old_center_direct/center-3.jpg"
+        },
+        {
+          "method": "old",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 4702.800000000745,
+          "bytes": 2617789,
+          "encodeMs": 445.1000000014901,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v2-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v2-1.jpg"
+            }
+          ],
+          "saveMs": 132.09999999962747,
+          "totalMs": 6038,
+          "savedFile": "portable-archive/old_center_direct/old-3.jpg"
+        }
+      ]
+    },
+    {
+      "name": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "complete": true,
+      "medians": {
+        "center": {
+          "count": 3,
+          "totalMs": 4404.39999999851,
+          "processMs": 3225.0999999996275,
+          "encodeMs": 478.90000000037253,
+          "saveMs": 109.59999999962747
+        },
+        "dirty": {
+          "count": 3,
+          "totalMs": 5438.4000000003725,
+          "processMs": 3927.800000000745,
+          "encodeMs": 479,
+          "saveMs": 114.80000000074506
+        },
+        "old": {
+          "count": 3,
+          "totalMs": 6099.700000001118,
+          "processMs": 4212.10000000149,
+          "encodeMs": 433.69999999925494,
+          "saveMs": 464.19999999925494
+        }
+      },
+      "rows": [
+        {
+          "method": "old",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 24069.5,
+          "bytes": 2617789,
+          "encodeMs": 624.3000000007451,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-0%20(3).jpg"
+            }
+          ],
+          "saveMs": 1094,
+          "totalMs": 26824.900000000373,
+          "savedFile": "portable-archive/old_center_dirty/old-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 5070,
+          "bytes": 2617789,
+          "encodeMs": 509.2999999988824,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-1%20(3).jpg"
+            }
+          ],
+          "saveMs": 143.5,
+          "totalMs": 7048.0999999996275,
+          "savedFile": "portable-archive/old_center_dirty/center-0.jpg"
+        },
+        {
+          "method": "dirty",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 3447.10000000149,
+          "bytes": 2617789,
+          "encodeMs": 548.6999999992549,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-2.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-2%20(4).jpg"
+            }
+          ],
+          "saveMs": 176.5,
+          "totalMs": 4711.5,
+          "savedFile": "portable-archive/old_center_dirty/dirty-0.jpg"
+        },
+        {
+          "method": "dirty",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 4210.299999998882,
+          "bytes": 2617789,
+          "encodeMs": 482.7999999988824,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-3.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-3%20(3).jpg"
+            }
+          ],
+          "saveMs": 114.80000000074506,
+          "totalMs": 5506.300000000745,
+          "savedFile": "portable-archive/old_center_dirty/dirty-1.jpg"
+        },
+        {
+          "method": "center",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 3225.0999999996275,
+          "bytes": 2617789,
+          "encodeMs": 461.7000000011176,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-4.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-4%20(3).jpg"
+            }
+          ],
+          "saveMs": 109.59999999962747,
+          "totalMs": 4404.39999999851,
+          "savedFile": "portable-archive/old_center_dirty/center-1.jpg"
+        },
+        {
+          "method": "old",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 4155.5999999996275,
+          "bytes": 2617789,
+          "encodeMs": 443.5,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-5.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-5%20(4).jpg"
+            }
+          ],
+          "saveMs": 154.5,
+          "totalMs": 5865.5,
+          "savedFile": "portable-archive/old_center_dirty/old-1.jpg"
+        },
+        {
+          "method": "old",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 4212.10000000149,
+          "bytes": 2617789,
+          "encodeMs": 433.69999999925494,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-6.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-6%20(3).jpg"
+            }
+          ],
+          "saveMs": 832.9000000003725,
+          "totalMs": 6247.60000000149,
+          "savedFile": "portable-archive/old_center_dirty/old-2.jpg"
+        },
+        {
+          "method": "center",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 3223.0999999996275,
+          "bytes": 2617789,
+          "encodeMs": 481.40000000037253,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-7.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-7%20(3).jpg"
+            }
+          ],
+          "saveMs": 111.5,
+          "totalMs": 4394.0999999996275,
+          "savedFile": "portable-archive/old_center_dirty/center-2.jpg"
+        },
+        {
+          "method": "dirty",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 3903.9000000003725,
+          "bytes": 2617789,
+          "encodeMs": 479,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-8.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-8%20(3).jpg"
+            }
+          ],
+          "saveMs": 286.59999999962747,
+          "totalMs": 5438.4000000003725,
+          "savedFile": "portable-archive/old_center_dirty/dirty-2.jpg"
+        },
+        {
+          "method": "dirty",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 3927.800000000745,
+          "bytes": 2617789,
+          "encodeMs": 385.59999999962747,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v1-9.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v1-9%20(2).jpg"
+            }
+          ],
+          "saveMs": 94.20000000111759,
+          "totalMs": 5389.5999999996275,
+          "savedFile": "portable-archive/old_center_dirty/dirty-3.jpg"
+        },
+        {
+          "method": "center",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 3285.699999999255,
+          "bytes": 2617789,
+          "encodeMs": 478.90000000037253,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v2-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v2-0%20(3).jpg"
+            }
+          ],
+          "saveMs": 106.90000000037253,
+          "totalMs": 4647.799999998882,
+          "savedFile": "portable-archive/old_center_dirty/center-3.jpg"
+        },
+        {
+          "method": "old",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "processMs": 4254.699999999255,
+          "bytes": 2617789,
+          "encodeMs": 426.7999999988824,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "bench-6000x4000_v2-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/bench-6000x4000_v2-1%20(2).jpg"
+            }
+          ],
+          "saveMs": 464.19999999925494,
+          "totalMs": 6099.700000001118,
+          "savedFile": "portable-archive/old_center_dirty/old-3.jpg"
+        }
+      ]
+    }
+  ],
+  "devices": {
+    "portable-device-android29_full.json": {
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; Android SDK built for x86_64 Build/QSR1.211112.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.6367.219 Mobile Safari/537.36",
+      "memory": 1,
+      "worker": "function",
+      "bridge": "object",
+      "api": 29,
+      "serial": "emulator-5556"
+    },
+    "portable-device-android29_lowram.json": {
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; Android SDK built for x86_64 Build/QSR1.211112.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.6367.219 Mobile Safari/537.36",
+      "memory": 1,
+      "worker": "function",
+      "bridge": "object",
+      "api": 29,
+      "serial": "emulator-5556"
+    },
+    "portable-device-android29_safe.json": {
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; Android SDK built for x86_64 Build/QSR1.211112.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.6367.219 Mobile Safari/537.36",
+      "memory": 1,
+      "worker": "function",
+      "bridge": "object",
+      "api": 29,
+      "serial": "emulator-5556"
+    }
+  },
+  "savedOutputChecks": [
+    {
+      "batch": "portable-methods-android29-reduced-invalid.json",
+      "valid24MP": false,
+      "method": "old",
+      "run": 0,
+      "size": [
+        1500,
+        1000
+      ],
+      "sha256": "4c982f698823eed9338d15b80cd3bacd4b611f3771fa0b89e16a8caa2c382336",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29-reduced-invalid.json",
+      "valid24MP": false,
+      "method": "center",
+      "run": 0,
+      "size": [
+        1500,
+        1000
+      ],
+      "sha256": "4c982f698823eed9338d15b80cd3bacd4b611f3771fa0b89e16a8caa2c382336",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29-reduced-invalid.json",
+      "valid24MP": false,
+      "method": "center",
+      "run": 1,
+      "size": [
+        1500,
+        1000
+      ],
+      "sha256": "4c982f698823eed9338d15b80cd3bacd4b611f3771fa0b89e16a8caa2c382336",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29-reduced-invalid.json",
+      "valid24MP": false,
+      "method": "old",
+      "run": 1,
+      "size": [
+        1500,
+        1000
+      ],
+      "sha256": "4c982f698823eed9338d15b80cd3bacd4b611f3771fa0b89e16a8caa2c382336",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29-reduced-invalid.json",
+      "valid24MP": false,
+      "method": "old",
+      "run": 2,
+      "size": [
+        1500,
+        1000
+      ],
+      "sha256": "4c982f698823eed9338d15b80cd3bacd4b611f3771fa0b89e16a8caa2c382336",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29-reduced-invalid.json",
+      "valid24MP": false,
+      "method": "center",
+      "run": 2,
+      "size": [
+        1500,
+        1000
+      ],
+      "sha256": "4c982f698823eed9338d15b80cd3bacd4b611f3771fa0b89e16a8caa2c382336",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29-reduced-invalid.json",
+      "valid24MP": false,
+      "method": "center",
+      "run": 3,
+      "size": [
+        1500,
+        1000
+      ],
+      "sha256": "4c982f698823eed9338d15b80cd3bacd4b611f3771fa0b89e16a8caa2c382336",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29-reduced-invalid.json",
+      "valid24MP": false,
+      "method": "old",
+      "run": 3,
+      "size": [
+        1500,
+        1000
+      ],
+      "sha256": "4c982f698823eed9338d15b80cd3bacd4b611f3771fa0b89e16a8caa2c382336",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_full.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_full.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_full.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_full.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_full.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_full.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "method": "legacy",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "method": "legacy",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "method": "legacy",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "method": "legacy",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android29_safe.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "soft",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "timer",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "timer",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "soft",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "soft",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "timer",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "timer",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "soft",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-android35_confirm.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "method": "direct",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "cba093cc5677fbee3791550c8cf56147dab6762366c34dc61db801700b1382e4",
+      "exact": false,
+      "maxRGB": 5,
+      "meanRGB": 0.003018125
+    },
+    {
+      "batch": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "method": "direct",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "cba093cc5677fbee3791550c8cf56147dab6762366c34dc61db801700b1382e4",
+      "exact": false,
+      "maxRGB": 5,
+      "meanRGB": 0.003018125
+    },
+    {
+      "batch": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "method": "direct",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "cba093cc5677fbee3791550c8cf56147dab6762366c34dc61db801700b1382e4",
+      "exact": false,
+      "maxRGB": 5,
+      "meanRGB": 0.003018125
+    },
+    {
+      "batch": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "method": "direct",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "cba093cc5677fbee3791550c8cf56147dab6762366c34dc61db801700b1382e4",
+      "exact": false,
+      "maxRGB": 5,
+      "meanRGB": 0.003018125
+    },
+    {
+      "batch": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_direct.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "method": "dirty",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "method": "dirty",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "method": "dirty",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "method": "dirty",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-old_center_dirty.json",
+      "valid24MP": true,
+      "method": "old",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    }
+  ],
+  "nativeDecoder": {
+    "records": [
+      {
+        "orientation": 1,
+        "mode": "binary",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 2,
+        "mode": "binary",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 3,
+        "mode": "binary",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 4,
+        "mode": "binary",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 5,
+        "mode": "binary",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 6,
+        "mode": "binary",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 7,
+        "mode": "binary",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 8,
+        "mode": "binary",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 1,
+        "mode": "legacy",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 2,
+        "mode": "legacy",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 3,
+        "mode": "legacy",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 4,
+        "mode": "legacy",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 5,
+        "mode": "legacy",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 6,
+        "mode": "legacy",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 7,
+        "mode": "legacy",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      },
+      {
+        "orientation": 8,
+        "mode": "legacy",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.03017791903050465
+      }
+    ],
+    "safeguards": {
+      "rejected": 7,
+      "reopened": true,
+      "guard": true
+    }
+  }
+}

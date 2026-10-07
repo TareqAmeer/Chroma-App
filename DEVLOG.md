@@ -388,3 +388,9 @@
 
 - Published task commit `e4e75057` through clean integration at `629fa3ceab1eaa538c4c370b1f0e0249a8af66dc`; fetched `origin/main` and confirmed the exact remote commit and ancestry. Newer main changes were preserved, and menu source files match the verified feature checkout.
 - Frontend staging, diff checks, and complete focused Edge menu checks pass on the integrated version. The commit hook additionally updates only the frontend BUILD marker. Native debug verification and full-suite limitations are recorded above; CHR-196 stays In Review for user testing.
+
+## 2026-10-07 — CHR-284 portable Android export
+
+- Read only tile centers; restore full JPEG pixels when low-memory WebView reduces the source, using bounded native rows, binary/base64 capability fallbacks and cleanup. Files: `chromasmith-22.html`, Android `MainActivity.java` / `JpegDecodePlugin.java`.
+- Added pixel/protocol/native orientation tests and portable benchmark harnesses/report. Android 35 confirmation: 4.875 → 4.201 s; actual 1 GB Android 29 full-resolution control: 15.240 → 6.525 s. Twelve consecutive final 24 MP exports completed with byte-identical output. No physical-device timing guarantee.
+- Focused export regressions pass. Publication and current-main integration verification are recorded below when complete; CHR-284 remains for user review.

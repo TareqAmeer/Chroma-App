@@ -7170,12 +7170,16 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1006R';
+const BUILD='1.1007A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
 const WHATSNEW=[
+  {date:'2026-10-07',items:[
+    'Android exports read fewer pixels while preserving the full image and edit quality.',
+    'Full-resolution JPEG export is restored when Android reduces a large photo during loading.'
+  ]},
   {date:'2026-10-06',items:[
     'Faster full-resolution JPEG exports on Android, with export quality preserved.',
     'Export completion notifications no longer open Android notification or alarm settings.',
@@ -23230,6 +23234,20 @@ function fxExportTileSize(P,src,halo,renderer){
   const larger=!conservative&&/Android/i.test(navigator.userAgent)&&typeof memory==='number'&&memory>=(advanced?4:2);
   return Math.max(1,Math.min(larger?2048:1024,limit-2*halo));
 }
+// Read only a tile's useful center; keep the existing shader/halo/global coordinates.
+// This removes the intermediate 2D canvas/upload and discarded halo readback on Android.
+function fxCanReadExportTile(renderer){
+  return /Android/i.test(navigator.userAgent)&&typeof renderer.gl?.readPixels==='function';
+}
+function fxReadExportTile(renderer,x,y,w,h){
+  const gl=renderer.gl,px=new Uint8Array(w*h*4),row=w*4,tmp=new Uint8Array(row);
+  gl.readPixels(x,renderer.h-y-h,w,h,gl.RGBA,gl.UNSIGNED_BYTE,px);
+  for(let top=0;top<h>>1;top++){
+    const bottom=h-1-top;tmp.set(px.subarray(top*row,top*row+row));
+    px.copyWithin(top*row,bottom*row,bottom*row+row);px.set(tmp,bottom*row);
+  }
+  return new ImageData(new Uint8ClampedArray(px.buffer),w,h);
+}
 async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
   const REF=FXR.CAL.refWidth,sc=iw/REF;
   const H=FXR.CAL.halation,B=FXR.CAL.bloom;
@@ -23241,11 +23259,13 @@ async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
     maxSig=Math.max(maxSig,FXR.CAL.skinBlurFrac*REF*sc);
   const halo=Math.ceil(maxSig*3)+16;                 // neighbourhood the blur needs on every side
   const TILE=fxExportTileSize(P,src,halo,renderer);
-  const out=document.createElement('canvas');out.width=iw;out.height=ih;const octx=out.getContext('2d');
+  const out=document.createElement('canvas');out.width=iw;out.height=ih;const software=!!src._nativeJpegFull;
+  const octx=out.getContext('2d',software?{willReadFrequently:true}:undefined);
   // Reuse backing stores for equal-sized tiles, rather than creating and destroying two
   // canvases per tile. Resize only at the image edges; always clear transparent source pixels.
-  const tileSrc=document.createElement('canvas'),rc=document.createElement('canvas');
-  const tileCtx=tileSrc.getContext('2d'),rcCtx=rc.getContext('2d');
+  const centerReadback=fxCanReadExportTile(renderer);
+  const tileSrc=document.createElement('canvas'),rc=centerReadback?null:document.createElement('canvas');
+  const tileCtx=tileSrc.getContext('2d',software?{willReadFrequently:true}:undefined),rcCtx=rc?.getContext('2d');
   const seed=Math.random()*100; // ONE seed for every tile → continuous grain across seams
   let complete=false;
   try{
@@ -23262,10 +23282,13 @@ async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
     // row (image row ey-1) is (ih-ey)/ih.
     renderer.render(P,rw,rh,{glowScale:1,scOverride:sc,seed,
       uvOff:[sx/iw,(ih-ey)/ih],uvScale:[rw/iw,rh/ih]});
-    const{px}=renderer.getPixels();
-    if(rc.width!==rw)rc.width=rw;if(rc.height!==rh)rc.height=rh;
-    rcCtx.putImageData(new ImageData(new Uint8ClampedArray(px.buffer),rw,rh),0,0);
-    octx.drawImage(rc,tx-sx,ty-sy,tw,th,tx,ty,tw,th); // keep only the central (halo-free) region
+    if(centerReadback)octx.putImageData(fxReadExportTile(renderer,tx-sx,ty-sy,tw,th),tx,ty);
+    else{
+      const{px}=renderer.getPixels();
+      if(rc.width!==rw)rc.width=rw;if(rc.height!==rh)rc.height=rh;
+      rcCtx.putImageData(new ImageData(new Uint8ClampedArray(px.buffer),rw,rh),0,0);
+      octx.drawImage(rc,tx-sx,ty-sy,tw,th,tx,ty,tw,th);
+    } // keep only the central (halo-free) region
     tiles++;log(`  tile ${tiles}/${total}`,'info');
     if(onTile)onTile(tiles,total);
     // Cancel used to be checked only BETWEEN images in exportFX — a huge single-photo tiled
@@ -23277,7 +23300,7 @@ async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
   }
   const result=applyRedEyeCorrections(out,P.redEyeOps);complete=true;return result;
   }finally{
-    tileSrc.width=tileSrc.height=rc.width=rc.height=0;
+    tileSrc.width=tileSrc.height=0;if(rc)rc.width=rc.height=0;
     if(!complete)out.width=out.height=0;
   }
 }
@@ -23348,6 +23371,86 @@ async function fxNotifyExportFinished(plugins,started){
 // ordinary JPEG exports on a worker, using the same browser codec and quality.
 // Keep a bounded working set and fall back to the existing encoder on unsupported
 // WebViews/errors. Metadata is still restored by the normal export pipeline.
+// JPEG SOF dimensions come from the encoded source, independent of WebView's decode budget.
+function fxJpegSize(bytes){
+  if(!bytes||bytes.length<4||bytes[0]!==255||bytes[1]!==216)return null;
+  for(let p=2;p+3<bytes.length;){
+    if(bytes[p++]!==255)return null;while(bytes[p]===255)p++;
+    const marker=bytes[p++];if(marker===217||marker===218)return null;
+    if(marker===1||(marker>=208&&marker<=215))continue;
+    const n=bytes[p]*256+bytes[p+1];if(n<2||p+n>bytes.length)return null;
+    if(marker>=192&&marker<=207&&![196,200,204].includes(marker)&&n>=8){
+      const width=bytes[p+5]*256+bytes[p+6],height=bytes[p+3]*256+bytes[p+4];return width&&height?{width,height}:null;
+    }
+    p+=n;
+  }
+  return null;
+}
+function fxNeedsFullAndroidJpeg(it){
+  if(!/Android/i.test(navigator.userAgent))return false;
+  const size=fxJpegSize(it.bytes),image=it.img;
+  return !!(size&&image&&size.width*size.height>(image.naturalWidth||image.width)*(image.naturalHeight||image.height));
+}
+function fxProtectJpegDecodeLogs(){
+  const cap=window.Capacitor;if(!cap||cap._csJpegLogGuard)return;
+  // Debug bridge logging retains entire pixel replies in DevTools' console and can
+  // exhaust a constrained renderer. Keep other plugin diagnostics, exclude image payloads.
+  for(const name of ['logToNative','logFromNative']){
+    const original=cap[name];if(typeof original==='function')cap[name]=function(info,...args){if(info?.pluginId!=='JpegDecode')return original.call(this,info,...args);};
+  }
+  cap._csJpegLogGuard=true;
+}
+async function fxFullJpegRows(plugin,info,y,height){
+  const bridge=window.ChromaJpegDecode;
+  if(!bridge?.postMessage){
+    const reply=await plugin.rows({token:info.token,y,height}),binary=atob(reply.data),rgba=new Uint8ClampedArray(binary.length);
+    for(let i=0;i<binary.length;i++)rgba[i]=binary.charCodeAt(i);return rgba;
+  }
+  return new Promise((resolve,reject)=>{
+    let done=false;const timer=setTimeout(()=>finish(new Error('JPEG pixel transfer timed out')),15000);
+    const finish=(error,rgba)=>{if(done)return;done=true;clearTimeout(timer);bridge.onmessage=null;error?reject(error):resolve(rgba);};
+    bridge.onmessage=event=>{
+      try{
+        if(typeof event.data==='string'){const error=JSON.parse(event.data);if(error.token===info.token&&error.y===y)finish(new Error(error.error||'JPEG pixel transfer failed'));return;}
+        const bytes=event.data;if(!(bytes instanceof ArrayBuffer)||bytes.byteLength<44)throw new Error('Invalid JPEG pixels');
+        if(new TextDecoder().decode(new Uint8Array(bytes,0,36))!==info.token)return;
+        const header=new DataView(bytes);if(header.getUint32(36,true)!==y||header.getUint32(40,true)!==height)throw new Error('Unexpected JPEG rows');
+        finish(null,new Uint8ClampedArray(bytes,44));
+      }catch(error){finish(error);}
+    };
+    try{bridge.postMessage(JSON.stringify({token:info.token,y,height}));}catch(error){finish(error);}
+  });
+}
+async function fxDecodeFullAndroidJpeg(it){
+  const plugin=window.Capacitor?.Plugins?.JpegDecode;
+  if(!plugin?.begin||!plugin.rows||!plugin.end)throw new Error('Full-resolution JPEG decoding is unavailable. Update the Android app before exporting this photo.');
+  fxProtectJpegDecodeLogs();
+  const canvas=document.createElement('canvas'),strip=document.createElement('canvas');let info,complete=false;
+  try{
+    if(fxExportCancel)throw new Error('export cancelled');
+    info=await plugin.begin({data:_u8b64(it.bytes)});
+    const {width:w,height:h,orientation:o}=info,swap=o>=5&&o<=8;
+    const expected=fxJpegSize(it.bytes);
+    if(!expected||w!==expected.width||h!==expected.height)throw new Error('The JPEG decoder returned a reduced image');
+    canvas.width=swap?h:w;canvas.height=swap?w:h;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true}),rows=Math.min(128,Math.floor(1048576/w));strip.width=w;strip.height=rows;
+    const transforms=[[1,0,0,1,0,0],[-1,0,0,1,w,0],[-1,0,0,-1,w,h],[1,0,0,-1,0,h],
+      [0,1,1,0,0,0],[0,1,-1,0,h,0],[0,-1,-1,0,h,w],[0,-1,1,0,0,w]];
+    ctx.setTransform(...transforms[(o>=1&&o<=8?o:1)-1]);
+    const sx=strip.getContext('2d',{willReadFrequently:true});
+    for(let y=0;y<h;y+=rows){
+      if(fxExportCancel)throw new Error('export cancelled');
+      const height=Math.min(rows,h-y),rgba=await fxFullJpegRows(plugin,info,y,height);
+      if(rgba.length!==w*height*4)throw new Error('Incomplete JPEG pixels');
+      if(strip.height!==height)strip.height=height;
+      sx.putImageData(new ImageData(rgba,w,height),0,0);ctx.drawImage(strip,0,y);
+    }
+    canvas._nativeJpegFull=true;complete=true;return canvas;
+  }finally{
+    strip.width=strip.height=0;if(!complete)canvas.width=canvas.height=0;
+    if(info?.token)try{await plugin.end({token:info.token});}catch(_){}
+  }
+}
 async function fxEncodeExportCanvas(canvas,mime,quality){
   const memory=navigator.deviceMemory,pixels=canvas.width*canvas.height;
   const workerLimit=memory>=4?32e6:24e6;
@@ -23516,7 +23619,7 @@ async function _exportFXRun(){
     // whatever already succeeded still gets saved. ──
     for(let idx=0;idx<items.length;idx++){
       if(fxExportCancel){activityOutcome='interrupted';log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
-      const it=items[idx];
+      const it=items[idx];let decodedJpeg=null,decodedGeometry=null;
       try{
         if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
           setExportPhotoStatus(idx,'rendering','decoding…');
@@ -23564,7 +23667,9 @@ async function _exportFXRun(){
         // this item's own override (or undefined to fall back to the shared DOM value) so an
         // independent exposure tweak on one photo doesn't leak into the rest of the export.
         const P=_expPs[idx];
-        const src=geomCanvas(it);   // apply this image's rotate/flip/straighten/crop first (now on the denoised pixels, if High ran above)
+        if(fxNeedsFullAndroidJpeg(it)){setExportPhotoStatus(idx,'rendering','preparing…');setProg(idx,`Preparing ${idx+1}/${N}: ${it.name}…`);decodedJpeg=await fxDecodeFullAndroidJpeg(it);}
+        const src=geomCanvas(decodedJpeg?{...it,img:decodedJpeg}:it);   // apply this image's rotate/flip/straighten/crop first
+        if(decodedJpeg){decodedGeometry=src;src._nativeJpegFull=true;}
         const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
         setExportPhotoStatus(idx,'rendering');
         setProg(idx,`Rendering ${idx+1}/${N}: ${it.name}…`);
@@ -23572,8 +23677,10 @@ async function _exportFXRun(){
         await new Promise(r=>requestAnimationFrame(r)); // let the log paint before the heavy GL work
         // Per-tile progress: a big tiled photo used to freeze the bar for its whole render
         // (setProg was image-granular only) — feed the tile fraction in as a fractional image.
-        const proc=await processToCanvas(P,src,iw,ih,
-          (t,tot)=>setProg(idx+t/tot,`Rendering ${idx+1}/${N}: ${it.name} — tile ${t}/${tot}…`),exportRenderer);
+        let proc;
+        try{proc=await processToCanvas(P,src,iw,ih,
+          (t,tot)=>setProg(idx+t/tot,`Rendering ${idx+1}/${N}: ${it.name} — tile ${t}/${tot}…`),exportRenderer);}
+        finally{if(decodedJpeg){if(decodedGeometry!==decodedJpeg)decodedGeometry.width=decodedGeometry.height=0;decodedJpeg.width=decodedJpeg.height=0;}}
         const w=proc.width,h=proc.height;
         const{b1t,b2t}=borderLayerSizes(P,w);
         await filmEdgeReady(P);   // never export before the film strips have decoded
@@ -23691,6 +23798,8 @@ async function _exportFXRun(){
         setExportPhotoStatus(idx,'failed',(e&&e.message||String(e)).slice(0,60));
         log(`Failed to render ${it.name}: ${e&&e.message||e} — skipping, continuing with the rest of the batch`,'err');
         console.error(e);
+      }finally{
+        if(decodedJpeg){if(decodedGeometry&&decodedGeometry!==decodedJpeg)decodedGeometry.width=decodedGeometry.height=0;decodedJpeg.width=decodedJpeg.height=0;}
       }
     }
     // Dedupe filenames before saving: without a custom {name}/{seq} pattern, batch items fall

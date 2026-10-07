@@ -119,3 +119,9 @@ Publication verified: integration commits `053f3757` and `f41e82cd` are publishe
 - Current-main integration: preserved newer desktop/menu/wavelet changes and advanced BUILD to 1.1006R. Worker/protocol/tile/preview checks pass; all 35 integration renders are byte-identical to unmodified main. Current main already has five wavelet golden mismatches (18/23 pass), while the task baseline passed 23/23; no goldens were rewritten. Android ordinary APK builds successfully.
 - Final integrated APK installed and checked on the emulator: duplicate names and native completed status pass; deliberately dropped acknowledgement recovers without a duplicate write, with exact JPEG bytes. The benchmark endpoint is absent from the APK.
 - Publication verified: Android export implementation `e27bde4d` and integration verification `9ecef3ae382ec4310e234d6f44eb0d559b67e24c` are on `origin/main`; `git ls-remote origin refs/heads/main` matched `9ecef3ae382ec4310e234d6f44eb0d559b67e24c` after the fast-forward push, and both commits passed remote ancestor checks. CHR-284 stays In Review.
+
+## 2026-10-07 — CHR-284 portable Android export
+
+- Read only tile centers; restore full JPEG pixels when low-memory WebView reduces the source, using bounded native rows, binary/base64 capability fallbacks and cleanup. Files: `chromasmith-22.html`, Android `MainActivity.java` / `JpegDecodePlugin.java`.
+- Added pixel/protocol/native orientation tests and portable benchmark harnesses/report. Android 35 confirmation: 4.875 → 4.201 s; actual 1 GB Android 29 full-resolution control: 15.240 → 6.525 s. Twelve consecutive final 24 MP exports completed with byte-identical output. No physical-device timing guarantee.
+- Focused export regressions pass. Publication and current-main integration verification are recorded below when complete; CHR-284 remains for user review.

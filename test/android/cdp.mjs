@@ -21,8 +21,13 @@ export async function connect(port = 9222) {
   const ws = new WebSocket(pg.webSocketDebuggerUrl.replace("localhost", "127.0.0.1"));
   await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
   let id = 0; const pending = new Map(); const events = [];
-  ws.onmessage = m => { const d = JSON.parse(m.data); if (d.id && pending.has(d.id)) { pending.get(d.id)(d); pending.delete(d.id); } else events.push(d); };
-  const send = (method, params = {}) => new Promise(res => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
+  ws.onmessage = m => { const d = JSON.parse(m.data); if (d.id && pending.has(d.id)) { pending.get(d.id).resolve(d); pending.delete(d.id); } else events.push(d); };
+  ws.onclose = () => { for (const p of pending.values()) p.reject(new Error('Android WebView disconnected')); pending.clear(); };
+  const send = (method, params = {}) => new Promise((resolve, reject) => {
+    if (ws.readyState !== WebSocket.OPEN) return reject(new Error('Android WebView is disconnected'));
+    const i = ++id; pending.set(i, {resolve, reject});
+    try { ws.send(JSON.stringify({ id: i, method, params })); } catch (error) { pending.delete(i); reject(error); }
+  });
   const ev = async (expression) => {
     const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
     if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text);

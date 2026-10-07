@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(SharedImportPlugin.class);
         registerPlugin(PhotoExportPlugin.class);
+        registerPlugin(JpegDecodePlugin.class);
         registerPlugin(BarBackgroundPlugin.class);
         super.onCreate(savedInstanceState);
         ingestShared(getIntent());
