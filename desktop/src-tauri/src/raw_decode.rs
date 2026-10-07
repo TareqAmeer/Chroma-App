@@ -125,11 +125,12 @@ impl NrTier {
 /// (no second full-frame copy), so a cache entry serves exactly one refine.
 static DEMOSAIC_CACHE: std::sync::Mutex<Option<(u64, DemosaicOut)>> = std::sync::Mutex::new(None);
 
-fn demosaic_cache_key(bytes: &[u8], demosaic_algo: &str) -> u64 {
+fn demosaic_cache_key(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     bytes.hash(&mut h); // full-bytes hash: tens of ms on a 30MB RW2, vs the seconds a demosaic costs
     demosaic_algo.hash(&mut h);
+    film_source.hash(&mut h);
     h.finish()
 }
 
@@ -242,7 +243,7 @@ mod alternate_demosaic_backend_tests {
     }
 }
 
-fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut, String> {
+fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> Result<DemosaicOut, String> {
     let source = RawSource::new_from_slice(bytes);
     // Widening formats.rs::RAW_EXTS made this reachable in practice (bay/k25/ptx/some
     // srf-sr2 variants aren't in rawler's decoder table at all — supported_extensions() is
@@ -405,7 +406,7 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str) -> Result<DemosaicOut,
     // gold-tag saturation gate (0.86, unchanged — the tag is bright but NOT clipped, so the
     // cell test never fires on it); sparkle-patch chroma smear (mean |chroma|) drops 26% with
     // NR on, and luma gradient energy slightly IMPROVES (whitened cells demosaic crisper).
-    if std::env::var_os("CS_NO_CLIP_WHITE").is_none() {
+    if !film_source && std::env::var_os("CS_NO_CLIP_WHITE").is_none() {
         const CLIP: f32 = 0.995; // post-WB clip threshold (pack clamps at 1.0)
         pixels.par_chunks_mut(2 * w).for_each(|rows| {
             // On an ODD image height, the final chunk from par_chunks_mut(2*w) is only `w`
@@ -613,6 +614,19 @@ pub fn decode_rw2_bytes_ex(
     progress: Option<&(dyn Fn(usize, usize) + Sync)>,
     cancel: Option<&std::sync::atomic::AtomicBool>
 ) -> Result<DecodedRaw, String> {
+    decode_rw2_bytes_film(bytes, auto_lens, nr, demosaic_algo, fast, lens_override, high_strength, progress, cancel, false)
+}
+
+/// Film calibration must preserve channel ratios: bypass photography-specific clip whitening.
+/// The linear camera RGB still has the decoder's finite u16 range; clipped scans are rejected
+/// by the sampler rather than represented as recovered highlights.
+#[allow(clippy::too_many_arguments)]
+pub fn decode_rw2_bytes_film(
+    bytes: &[u8], auto_lens: bool, nr: NrTier, demosaic_algo: &str, fast: bool,
+    lens_override: Option<(&str, f32)>, high_strength: f32,
+    progress: Option<&(dyn Fn(usize, usize) + Sync)>,
+    cancel: Option<&std::sync::atomic::AtomicBool>, film_source: bool,
+) -> Result<DecodedRaw, String> {
     let stage_timing = std::env::var_os("CS_DIAG_RAW_STAGES").is_some();
     let stage = |name: &str, started: &mut std::time::Instant| {
         if stage_timing {
@@ -622,7 +636,7 @@ pub fn decode_rw2_bytes_ex(
     };
     let mut stage_started = std::time::Instant::now();
     let nr = NrTier::resolve(nr); // CS_NR_TIER escape hatch, resolved once for the whole call
-    let key = demosaic_cache_key(bytes, demosaic_algo);
+    let key = demosaic_cache_key(bytes, demosaic_algo, film_source);
     // refine (fast=false) first tries to TAKE the fast pass's cached demosaic; anything else
     // (cold open with fast=false, cache holding a different photo) falls through to a full run.
     let dem = if !fast {
@@ -641,7 +655,7 @@ pub fn decode_rw2_bytes_ex(
     };
     let dem = match dem {
         Some(d) => d,
-        None => decode_and_demosaic(bytes, demosaic_algo)?,
+        None => decode_and_demosaic(bytes, demosaic_algo, film_source)?,
     };
     stage("demosaic_or_cache", &mut stage_started);
     if fast {
