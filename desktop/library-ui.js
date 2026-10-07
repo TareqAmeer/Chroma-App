@@ -14669,7 +14669,17 @@
     pv.photos.forEach((p) => URL.revokeObjectURL(p.url));
     pv.root.remove(); pv = null;
   }
-  const pvReduced = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // CHR-213: Reduce Motion = the OS setting OR the app's own (--k-motion-reduce-motion: "on" forces it,
+  // "off" ignores the OS, "system" follows it; localStorage chromasmith-reduce-motion=on also forces it).
+  // CHR-213 reduced begin
+  const pvReduced = () => {
+    let tok = ''; try { tok = getComputedStyle(document.body).getPropertyValue('--k-motion-reduce-motion').trim(); } catch (e) {}
+    let own = false; try { own = localStorage.getItem('chromasmith-reduce-motion') === 'on'; } catch (e) {}
+    if (tok === 'on' || own) return true;
+    if (tok === 'off') return false;
+    return !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  };
+  // CHR-213 reduced end
   function pvOpen(path) { closePhotoPreview(); openInEditor(path); }
   function pvImg(p, css) { const im = document.createElement('img'); im.src = p.url; im.alt = ''; im.draggable = false; im.style.cssText = 'position:absolute;object-fit:cover;' + (css || ''); return im; }
   // CHR-238: Lightroom-style playback options use a finite sequence by default. Keep this helper
@@ -14858,7 +14868,18 @@
   // Carousel (CHR-227 curved gallery / CHR-213 orbit): photos on a ring seen from inside its
   // front edge, so the strip bends away at the sides. Spins slowly; drag or scroll to turn,
   // momentum carries on; the front photo is largest; click opens it.
+  // CHR-213 carousel begin
   function pvCarousel() {
+    // Reduce Motion: no ring, no spin, no 3D — a plain static grid of the same photos, click to open.
+    if (pvReduced()) {
+      const grid = document.createElement('div'); grid.className = 'pv-static-grid'; grid.setAttribute('role', 'list');
+      grid.style.cssText = 'position:absolute;inset:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;padding:56px 20px 20px;align-content:start';
+      pv.photos.slice(0, 18).forEach((p) => {
+        const im = pvImg(p, 'position:static;width:100%;aspect-ratio:3/4;border-radius:6px;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.45)');
+        im.setAttribute('role', 'listitem'); im.onclick = () => pvOpen(p.path); grid.appendChild(im);
+      });
+      pv.stage.appendChild(grid); return;
+    }
     const P = pv.photos.slice(0, 18), n = P.length, w = 240, h = 320, R = Math.max(420, (w + 30) * n / (2 * Math.PI));
     const ring = document.createElement('div');
     ring.style.cssText = `position:absolute;left:50%;top:50%;width:0;height:0;transform-style:preserve-3d`;
@@ -14879,6 +14900,7 @@
     const tick = () => { if (!drag) { rot += v; if (Math.abs(v) > 0.08) v *= 0.96; else if (!pvReduced()) v = v < 0 ? -0.08 : 0.08; } place(); pv.raf = requestAnimationFrame(tick); };
     tick();
   }
+  // CHR-213 carousel end
   // Trail: moving the pointer drops photos under it that fade away.
   function pvTrail() {
     const P = pv.photos, pool = [];
