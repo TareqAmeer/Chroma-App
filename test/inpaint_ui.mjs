@@ -9,7 +9,7 @@ const photo=process.env.CHROMA_INPAINT_FIXTURE||path.join(root,'test/fixtures/ch
 const server=createServer(async(req,res)=>{try{let file=req.url.split('?')[0].slice(1);if(file==='real-photo')file=photo;const body=await readFile(path.isAbsolute(file)?file:path.join(root,file));res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':file.endsWith('.html')?'text/html':file.endsWith('.jpg')||file===photo?'image/jpeg':'image/png'});res.end(body);}catch{res.writeHead(404);res.end();}}).listen(0,'127.0.0.1');
 await new Promise(r=>server.on('listening',r));let browser;
 try{
- browser=await chromium.launch({args:['--use-gl=swiftshader','--enable-unsafe-swiftshader']});const page=await browser.newPage({viewport:{width:1440,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',e=>{if(e.type()==='error')errors.push(e.text());});
+ browser=await chromium.launch({executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH,args:['--use-gl=swiftshader','--enable-unsafe-swiftshader']});const page=await browser.newPage({viewport:{width:1440,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',e=>{if(e.type()==='error')errors.push(e.text());});
  await page.addInitScript(()=>localStorage.setItem('chromasmith-tour-seen-v1','1'));
  await page.goto(`http://127.0.0.1:${server.address().port}/chromasmith-22.html`);await page.waitForFunction(()=>typeof loadFXImages==='function');
  await page.evaluate(async()=>{const bytes=await(await fetch('/real-photo')).arrayBuffer();await loadFXImages([new File([bytes],'power-lines.jpg',{type:'image/jpeg'})]);curItem().path='native-fixture.jpg';});
