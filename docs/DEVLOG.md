@@ -157,3 +157,5 @@ CHR-285 publication verified: implementation 17b98648 and integration evidence a
 
 - User authorized a tagged release of the published photo-persistence fix. Bumped package versions to 1.2.9 and Android/iOS native versions to 1.2.9 build 12; added docs/releases/v1.2.9.md upgrade/migration notes.
 - Source and prior native evidence remain unchanged; JSON/native version consistency verified. Tag v1.2.9 will trigger the repository release builds; attachment status is checked separately before claiming an available APK.
+
+CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targets 4b2803cc608a03138745e75a33e05d232acaf2a0; remote annotated tag dereferenced to that commit. Android tag workflow 37610976418 completed successfully. GitHub release is published (not draft/prerelease) at https://github.com/TareqAmeer/Chroma-App/releases/tag/v1.2.9 with Chromasmith.apk (45,623,164 bytes) and build-1.1007C.txt (8 bytes). iOS tag workflow 37610976447 failed at Build Release app; desktop builds were still running when Android attachment was verified. Issue remains In Review.
