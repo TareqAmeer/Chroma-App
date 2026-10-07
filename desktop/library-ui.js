@@ -70,6 +70,7 @@
   // so ?libtest=1 can exercise the "Reset edit" / "Undo last reset" context-menu pair without a
   // real Tauri backend.
   let ltLastResetRecipe = null, ltLastResetEdited = false, ltRecipe = '', ltEdited = false;
+  const ltSidecars = new Map();
   let ltOfflineQueue = [], ltOfflineQueueNextId = 0;
   // ?libdates=1 spreads the mock capture dates (one photo every ~9h from 2026-03-01) so the
   // grid's scrolling date title can be exercised; without it every photo shares one date.
@@ -151,7 +152,7 @@
       }
       case 'read_file_bytes': return Promise.resolve(png.buffer);
       case 'get_sidecar': if (ltBatchSidecars.has(A.path)) return Promise.resolve(ltBatchSidecars.get(A.path)); return Promise.resolve({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
-      case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map(() => ({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited })));
+      case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map((path) => ({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited, ...(ltSidecars.get(path) || {}) })));
       // reset_edit/undo_reset_edit — see CLAUDE.md's Reset-edit-undo item: captures/restores the
       // one-slot undo buffer exactly like the real Rust commands, so the libtest harness can
       // click through "Reset edit" then "Undo last reset" and see the edited badge come back.
@@ -208,6 +209,7 @@
         // recipe, edited:true) supersedes any pending reset-undo buffer.
         if (ltBatchSidecars.has(A.path)) ltBatchSidecars.set(A.path, { ...ltBatchSidecars.get(A.path), ...A });
         if (A.edited && A.recipe) { ltRecipe = A.recipe; ltEdited = true; ltLastResetRecipe = null; ltLastResetEdited = false; }
+        ltSidecars.set(A.path, { rating: A.rating || 0, label: A.label || '', favorite: !!A.favorite });
         return Promise.resolve();
       }
       // N1a offline edit queue — mirrors catalog.rs's real conflict logic closely enough to
@@ -641,8 +643,8 @@
           for (let i = 1; i <= N; i++) {
             const isVid = i % 6 === 0;
             entries.push(isVid
-              ? { id: i, name: `P_TM${6000 + i}.MP4`, path: `/test/AllPhotos/P_TM${6000 + i}.MP4`, is_dir: false, is_image: false, is_video: true, kind: 'video', mtime: 1700000000 + i, size: 90000000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: null, blurry: false, stack_n: 0, thumb_path: null }
-              : { id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, size: 1000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: 400, blurry: false, stack_n: 0, thumb_path: null });
+              ? { id: i, name: `P_TM${6000 + i}.MP4`, path: `/test/AllPhotos/P_TM${6000 + i}.MP4`, is_dir: false, is_image: false, is_video: true, kind: 'video', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 : null, size: 90000000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: null, blurry: false, stack_n: 0, thumb_path: null }
+              : { id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 : null, size: 1000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: 400, blurry: false, stack_n: 0, thumb_path: null });
           }
           return Promise.resolve({ total: N, capped: false, entries });
         }
@@ -3480,7 +3482,8 @@
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
     window.__libOpenFolder = (path) => openFolder(path);
     window.__libEnterSurvey = enterSurveyMode;
-    window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && (compareState.mode === 'survey' || compareState.mode === 'cull'), mode: compareState.mode, offset: surveyState.cullOffset, cullPaths: surveyState.cullPaths.slice() });
+    window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && (compareState.mode === 'survey' || compareState.mode === 'cull'), mode: compareState.mode, offset: surveyState.cullOffset, cullPaths: surveyState.cullPaths.slice(), groupPicker: surveyState.cullGroupPicker });
+    window.__libCullTimeGroups = () => surveyState.cullGroups.map((g) => ({ label: cullGroupLabel(g), count: g.paths.length, paths: g.paths.slice(), unknown: !!g.unknown }));
     window.__libOpenImportPanel = (path) => openImportPanel(path);
     window.__libSubfolderPreference = {
       key: folderScopeKey,
@@ -8351,7 +8354,62 @@
     zoom: 1, panX: 0, panY: 0,
     prevViewMode: 'grid',
   };
-  const surveyState = { cells: [], focus: 0, entryToken: 0, cullPaths: [], cullOffset: 0 };
+  const surveyState = { cells: [], focus: 0, entryToken: 0, cullPaths: [], cullOffset: 0,
+    cullAllPaths: [], cullCaptureByPath: new Map(), cullGapSec: 60, cullGroups: [], cullSelected: new Set(), cullGroupPage: 0, cullGroupPicker: false };
+  const CULL_GAPS = [1, 5, 15, 30, 60, 120, 300, 600];
+  function cullCaptureGroups(paths, gapSec) {
+    const known = [], unknown = [];
+    paths.forEach((path, order) => {
+      const captured = surveyState.cullCaptureByPath.get(path);
+      if (Number.isFinite(captured)) known.push({ path, captured, order }); else unknown.push({ path, order });
+    });
+    known.sort((a, b) => a.captured - b.captured || a.order - b.order);
+    const groups = [];
+    for (const photo of known) {
+      const last = groups[groups.length - 1];
+      if (!last || photo.captured - last.lastCaptured > gapSec) {
+        groups.push({ key: `t:${photo.captured}:${photo.order}`, firstCaptured: photo.captured, lastCaptured: photo.captured, paths: [photo.path] });
+      } else { last.lastCaptured = photo.captured; last.paths.push(photo.path); }
+    }
+    if (unknown.length) groups.push({ key: 'unknown', unknown: true, firstCaptured: null, lastCaptured: null, paths: unknown.map((photo) => photo.path) });
+    return groups;
+  }
+  function cullGroupLabel(group) {
+    if (group.unknown) return 'No capture time';
+    const d = new Date(group.firstCaptured * 1000), e = new Date(group.lastCaptured * 1000);
+    const stamp = (x) => x.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return group.firstCaptured === group.lastCaptured ? stamp(d) : `${stamp(d)} – ${stamp(e)}`;
+  }
+  function cullGroupsRender() {
+    const host = surveyHost(); if (!host || !surveyState.cullGroupPicker) return;
+    const pageSize = 50, pages = Math.max(1, Math.ceil(surveyState.cullGroups.length / pageSize));
+    surveyState.cullGroupPage = Math.max(0, Math.min(surveyState.cullGroupPage, pages - 1));
+    const shown = surveyState.cullGroups.slice(surveyState.cullGroupPage * pageSize, (surveyState.cullGroupPage + 1) * pageSize);
+    const selectedCount = surveyState.cullAllPaths.reduce((n, path) => n + Number(surveyState.cullSelected.has(path)), 0);
+    host.innerHTML = `<section id="lib-cull-time-picker" aria-label="Group culling by capture time" style="height:100%;display:flex;flex-direction:column;gap:8px;overflow:hidden">
+      <header class="lib-cull-time-toolbar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><strong>Group by capture time</strong><label for="lib-cull-time-gap">New group after</label><select id="lib-cull-time-gap">${CULL_GAPS.map((s) => `<option value="${s}"${s === surveyState.cullGapSec ? ' selected' : ''}>${s < 60 ? `${s} sec` : `${s / 60} min`}</option>`).join('')}</select><button type="button" class="lib-btn" id="lib-cull-time-all">Select all</button><button type="button" class="lib-btn" id="lib-cull-time-none">Select none</button><span id="lib-cull-time-count" aria-live="polite">${selectedCount} selected</span><button type="button" class="lib-btn" id="lib-cull-time-start"${selectedCount < 2 ? ' disabled' : ''}>Cull selected groups</button></header>
+      <p class="lib-cull-time-note">Photos are grouped when adjacent capture times are within the threshold. Missing capture times stay in their own group; file dates are never used.</p>
+      <div class="lib-cull-time-page"><button type="button" class="lib-btn" data-group-page="-1"${surveyState.cullGroupPage === 0 ? ' disabled' : ''}>Previous groups</button><span>Groups ${surveyState.cullGroups.length ? surveyState.cullGroupPage * pageSize + 1 : 0}–${Math.min((surveyState.cullGroupPage + 1) * pageSize, surveyState.cullGroups.length)} of ${surveyState.cullGroups.length}</span><button type="button" class="lib-btn" data-group-page="1"${surveyState.cullGroupPage + 1 >= pages ? ' disabled' : ''}>Next groups</button></div>
+      <div id="lib-cull-time-groups" style="overflow:auto;min-height:0;flex:1">${shown.map((group, localIndex) => { const index = surveyState.cullGroupPage * pageSize + localIndex, checked = group.paths.every((path) => surveyState.cullSelected.has(path)); return `<details class="lib-cull-time-group" data-time-group="${index}"><summary><input type="checkbox" data-group-select="${index}"${checked ? ' checked' : ''} aria-label="Select group ${index + 1}"><span>${esc2(cullGroupLabel(group))}</span><span>${group.paths.length} photo${group.paths.length === 1 ? '' : 's'}</span></summary><div class="lib-cull-group-samples">${group.paths.slice(0, 12).map((path) => `<span>${esc2(baseName(path))}</span>`).join('')}${group.paths.length > 12 ? `<span>+${group.paths.length - 12} more</span>` : ''}</div></details>`; }).join('')}</div>
+    </section>`;
+    host.querySelector('#lib-cull-time-gap').onchange = (e) => {
+      surveyState.cullGapSec = Number(e.target.value); surveyState.cullGroups = cullCaptureGroups(surveyState.cullAllPaths, surveyState.cullGapSec); surveyState.cullGroupPage = 0; cullGroupsRender();
+    };
+    host.querySelector('#lib-cull-time-all').onclick = () => { surveyState.cullSelected = new Set(surveyState.cullAllPaths); cullGroupsRender(); };
+    host.querySelector('#lib-cull-time-none').onclick = () => { surveyState.cullSelected.clear(); cullGroupsRender(); };
+    host.querySelectorAll('[data-group-select]').forEach((input) => input.addEventListener('change', () => {
+      const group = surveyState.cullGroups[Number(input.dataset.groupSelect)]; if (!group) return;
+      for (const path of group.paths) input.checked ? surveyState.cullSelected.add(path) : surveyState.cullSelected.delete(path);
+      cullGroupsRender();
+    }));
+    host.querySelectorAll('[data-group-page]').forEach((button) => button.addEventListener('click', () => { surveyState.cullGroupPage += Number(button.dataset.groupPage); cullGroupsRender(); }));
+    host.querySelector('#lib-cull-time-start').onclick = () => {
+      const selected = surveyState.cullGroups.flatMap((group) => group.paths.filter((path) => surveyState.cullSelected.has(path)));
+      if (selected.length < 2) return;
+      surveyState.cullGroupPicker = false; surveyState.cullPaths = selected; surveyState.cullAllPaths = selected.slice();
+      surveyState.cullOffset = 0; compareState.paths = selected.slice(); compareState.totalSelected = selected.length; showCullPage(0);
+    };
+  }
   function compareSrcKeyToDescriptor(key) {
     if (!key || key === 'live') return null;
     if (key === 'orig') return 'orig';
@@ -8871,6 +8929,7 @@
     if (survey) { survey.classList.remove('on'); survey.innerHTML = ''; }
     surveyState.cells = []; surveyState.focus = 0;
     surveyState.cullPaths = []; surveyState.cullOffset = 0;
+    surveyState.cullAllPaths = []; surveyState.cullGroups = []; surveyState.cullSelected.clear(); surveyState.cullGroupPicker = false;
     state.viewMode = compareState.prevViewMode || 'grid';
     localStorage.setItem('chromasmith_lib_view', state.viewMode);
     syncViewSeg();
@@ -8909,8 +8968,14 @@
     if (paths.length < 2) return;
     if (state.viewMode !== 'compare' && state.viewMode !== 'survey') compareState.prevViewMode = state.viewMode;
     compareState.mode = 'cull'; compareState.totalSelected = paths.length; compareState.paths = paths;
-    surveyState.cullPaths = paths; surveyState.cullOffset = 0; surveyState.focus = 0;
-    await showCullPage(0);
+    surveyState.cullAllPaths = paths.slice(); surveyState.cullPaths = paths.slice(); surveyState.cullOffset = 0; surveyState.focus = 0;
+    surveyState.cullCaptureByPath = new Map(state.entries.map((entry) => [entry.path, Number.isFinite(entry.captured) ? entry.captured : null]));
+    surveyState.cullGapSec = 60; surveyState.cullGroups = cullCaptureGroups(paths, surveyState.cullGapSec);
+    surveyState.cullSelected = new Set(paths); surveyState.cullGroupPage = 0; surveyState.cullGroupPicker = true;
+    state.viewMode = 'survey'; syncViewSeg();
+    compareHost()?.classList.remove('on');
+    const host = surveyHost(); if (host) host.classList.add('on');
+    compareState.active = true; cullGroupsRender();
   }
   async function showCullPage(offset) {
     const entryToken = ++compareState.entryToken;
@@ -9384,6 +9449,10 @@
     }
     // ── Survey mode: focus stays on one visible cell, so culling and rating always target it.
     if (state.viewMode === 'survey' && compareState.active) {
+      if (surveyState.cullGroupPicker) {
+        if (e.key === 'Escape') { e.preventDefault(); exitCompareMode(); }
+        return;
+      }
       if (e.key === 'ArrowRight') { e.preventDefault(); surveyFocus(1); return; }
       if (e.key === 'ArrowLeft') { e.preventDefault(); surveyFocus(-1); return; }
       if (e.key === 'ArrowDown') { e.preventDefault(); surveyFocusVertical(1); return; }
