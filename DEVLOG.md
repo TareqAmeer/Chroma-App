@@ -588,3 +588,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-205
 
 - Feature integration `9493f5c8` and test/build follow-up `ee57930decaad574dcb4cd2434eb7a364cb7236b` are on `origin/main`. Fresh `git fetch origin main` and `git ls-remote origin refs/heads/main` both returned `ee57930decaad574dcb4cd2434eb7a364cb7236b`; ancestry verification passed. Shipped tree contains backup bundle/verify/restore-copy commands, Library controls, scoped preferences, documentation and the corrected two-theme harness.
+
+#### CHR-205 native verification follow-up — 2026-10-08
+
+- Temporarily supplied the ignored SAM2 model and ONNX Runtime DLL from the local primary checkout, ran `cargo test catalog_backup`, and removed the copies afterward. The native test build reaches `onig_sys` and fails at the existing MSVC `libonig.a` archive step (LNK1114, error 5) before the Rust tests can run in this clean integration checkout. The earlier four-test pass used temporary test runtime assets and does not remove this current native-build blocker.
