@@ -41,7 +41,7 @@ try {
   }));
   assert.equal(layout.count, 8);
   assert.equal(layout.columns, 4, `8 photos should fit in four columns at 1440px; got ${layout.columns}`);
-  assert.match(layout.label, /first 8 of 10 selected/);
+  assert.match(layout.label, /8 of 8 max · 2 more selected, not shown/);
   assert.equal(layout.gridDisplay, 'none');
 
   const survivorCanvases = await page.evaluate(() => {

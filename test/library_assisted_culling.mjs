@@ -8,7 +8,7 @@ const { server, port } = await startServer();
 const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  const errors = [];
+  const errors = []; await page.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch {} }); // first-run welcome card would intercept clicks
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=12&deskx=1`, { waitUntil: 'load', timeout: 60000 });
   await page.waitForTimeout(500);

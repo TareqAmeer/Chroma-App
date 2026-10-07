@@ -312,7 +312,8 @@
       }
       case 'ingest_copy': return new Promise((res) => setTimeout(() => res({ copied: 22, duplicates_skipped: 3, failed: [], dest_root: A.options.destRoot, bytes: 1.4e9 }), 900));
       case 'eject_volume': return Promise.resolve();
-      case 'trash_file': case 'duplicate_file': return Promise.resolve();
+      case 'trash_file': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve();
+      case 'duplicate_file': return Promise.resolve();
       case 'plugin:dialog|open': return Promise.resolve('/test/Pictures/2026');
       case 'lr_downloads_dir': return Promise.resolve('/test/Lightroom Download');
       case 'gphotos_downloads_dir': return Promise.resolve('/test/Google Photos Download');
@@ -374,8 +375,7 @@
       }
       case 'catalog_dismiss_review': return Promise.resolve((A.paths || []).length);
       // trash_file/duplicate_file: no catalog involvement, just the underlying file op — a
-      // harmless no-op mock, matching every other pure-Rust-side mutation's mock in this file.
-      case 'trash_file': return Promise.resolve();
+      // harmless no-op mock (trash_file is recorded above), like every other pure-Rust-side mutation mock here.
       case 'duplicate_file': return Promise.resolve(A.path ? A.path.replace(/(\.[^.]+)$/, ' copy$1') : '');
       case 'catalog_volumes': {
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
@@ -6917,11 +6917,11 @@
     for (const p of paths) { try { await invoke('duplicate_file', { path: p }); } catch (e) { console.error('duplicate_file', p, e); toast('Could not duplicate ' + baseName(p)); } }
     await refreshView();
   }
-  async function libDeletePaths(paths) {
-    if (!paths.length) return;
+  async function libDeletePaths(paths, opts = {}) {
+    if (!paths.length) return [];
     const n = paths.length;
     const label = n > 1 ? `these ${n} photos` : `"${baseName(paths[0])}"`;
-    if (!await window.confirmModal(`Move ${label} to the Trash?`, 'Move to Trash')) return;
+    if (!await window.confirmModal(opts.message || `Move ${label} to the Trash?`, opts.confirmLabel || 'Move to Trash')) return [];
     const trashed = [];
     let missing = 0;
     for (const p of paths) {
@@ -6944,6 +6944,7 @@
       try { await invoke('catalog_note_deleted', { paths: trashed }); } catch (e) { console.error('catalog_note_deleted', e); }
       if (missing) toast(`Removed ${missing} missing photo${missing === 1 ? '' : 's'} from the Gallery — file${missing === 1 ? ' was' : 's were'} not found on this machine`, false);
     }
+    return trashed;
   }
   async function libExportPaths(paths) {
     if (!paths.length) return;
@@ -8322,6 +8323,13 @@
   function escAttr2(s) { return esc2(s).replace(/"/g, '&quot;'); }
   function comparePathForIdx(idx) { return compareState.paths[idx] || ''; }
 
+  // CHR-268: one place for the Survey header so build and reflow can't drift apart. States the
+  // shown count against the cap ("6 of 8 max") and, when more were selected, how many were left out.
+  const SURVEY_MAX = 8;
+  function surveyCapNote(n) {
+    return compareState.totalSelected > n ? ` · ${compareState.totalSelected - n} more selected, not shown` : '';
+  }
+  function surveyHeading(n) { return `Survey · ${n} of ${SURVEY_MAX} max${surveyCapNote(n)}`; }
   function surveyColumns(count) { return count <= 2 ? 2 : count <= 4 ? 2 : count <= 6 ? 3 : 4; }
   function surveyCellHtml(cell, idx) {
     const sidecar = state.sidecars.get(cell.path) || { rating: 0, label: '', favorite: false };
@@ -8378,6 +8386,7 @@
     cell.querySelector('[data-survey-action="favorite"]')?.classList.toggle('on', !!sidecar.favorite);
     const rating = cell.querySelector('.lib-cmp-chrome span');
     if (rating) rating.textContent = STARS_ENABLED && sidecar.rating ? `${sidecar.rating}★` : '';
+    cullSyncDeleteBtn();
   }
   function surveySyncPath(path) { const idx = surveyState.cells.findIndex((cell) => cell.path === path); if (idx >= 0) surveySyncCell(idx); }
   function surveyTargetPath() { return surveyState.cells[surveyState.focus]?.path || ''; }
@@ -8392,11 +8401,10 @@
     const n = surveyState.cells.length;
     host.style.setProperty('--survey-cols', String(surveyColumns(n)));
     host.style.setProperty('--survey-rows', String(Math.ceil(n / surveyColumns(n))));
-    const capNote = compareState.totalSelected > n ? ` · showing first ${n} of ${compareState.totalSelected} selected` : '';
     const heading = compareState.mode === 'cull'
       ? `Culling · ${surveyState.cullOffset + 1}–${surveyState.cullOffset + n} of ${surveyState.cullPaths.length}`
-      : `Survey · ${n} photos${capNote}`;
-    host.innerHTML = `<div id="lib-compare-bar"><span class="survey-count">${heading}</span><span class="survey-focus-note" style="margin-left:auto;color:var(--acc)"></span></div>
+      : surveyHeading(n);
+    host.innerHTML = `<div id="lib-compare-bar"><span class="survey-count">${heading}</span><span class="survey-focus-note" style="margin-left:auto;color:var(--acc)"></span>${compareState.mode === 'cull' ? '<button type="button" id="lib-cull-del" class="lib-btn" title="Move every photo rejected in this cull to the system Trash (asks first)">Delete rejected (0)</button>' : ''}</div>
       <div id="lib-survey-grid">${surveyState.cells.map(surveyCellHtml).join('')}</div>`;
     host.querySelectorAll('.lib-survey-cell').forEach((el) => {
       el.addEventListener('focus', () => { surveyState.focus = Number(el.dataset.surveyIdx); surveySyncFocus(); });
@@ -8418,8 +8426,11 @@
       }
       surveySyncCell(idx);
     }));
+    const delBtn = host.querySelector('#lib-cull-del');
+    if (delBtn) delBtn.onclick = () => cullDeleteRejected();
     surveyCellsRender();
     surveySyncFocus();
+    cullSyncDeleteBtn();
   }
 
   function surveySyncCells() {
@@ -8428,8 +8439,7 @@
     const n = surveyState.cells.length, cols = surveyColumns(n);
     host.style.setProperty('--survey-cols', String(cols));
     host.style.setProperty('--survey-rows', String(Math.ceil(n / cols)));
-    const capNote = compareState.totalSelected > n ? ` · showing first ${n} of ${compareState.totalSelected} selected` : '';
-    const count = host.querySelector('.survey-count'); if (count) count.textContent = `Survey · ${n} photos${capNote}`;
+    const count = host.querySelector('.survey-count'); if (count) count.textContent = surveyHeading(n);
     [...grid.querySelectorAll('.lib-survey-cell')].forEach((el, i) => {
       el.dataset.surveyIdx = String(i);
       el.querySelector('.lib-survey-head > span:first-child').textContent = `${i + 1} / ${n}`;
@@ -8786,7 +8796,7 @@
     const entryToken = ++compareState.entryToken;
     // Lightroom Survey is an 8-cell view. Make the cap visible in the toolbar instead of loading
     // an unbounded batch that cannot fit or be meaningfully reviewed at once.
-    compareState.paths = paths.slice(0, 8);
+    compareState.paths = paths.slice(0, SURVEY_MAX);
     surveyState.cells = compareState.paths.map((path, fxIdx) => ({ path, fxIdx }));
     surveyState.focus = 0;
     compareState.zoom = 1; compareState.panX = 0; compareState.panY = 0;
@@ -8826,13 +8836,48 @@
     if (entryToken !== compareState.entryToken || state.viewMode !== 'survey' || compareState.mode !== 'cull') return;
     compareState.active = true; buildSurveyUI(); surveyHost()?.querySelector('.lib-survey-cell')?.focus({ preventScroll: true });
   }
+  // CHR-267: "Delete rejected (n)" after culling. Reject only ever sets the Red label; nothing is
+  // removed until this explicit step, which counts the rejects in THIS cull, asks once, and goes
+  // through libDeletePaths -> trash_file (system Trash, never a hard delete).
+  function cullRejectedPaths() {
+    return surveyState.cullPaths.filter((p) => (state.sidecars.get(p) || {}).label === 'Red');
+  }
+  function cullSyncDeleteBtn() {
+    const btn = document.getElementById('lib-cull-del');
+    if (!btn) return;
+    const n = cullRejectedPaths().length;
+    btn.textContent = `Delete rejected (${n})`;
+    btn.disabled = n === 0;
+  }
+  async function cullDeleteRejected(opts = {}) {
+    const paths = cullRejectedPaths();
+    if (!paths.length) { toast('No rejected photos in this cull'); return []; }
+    const n = paths.length;
+    const names = paths.slice(0, 5).map(baseName).join(', ') + (n > 5 ? `, and ${n - 5} more` : '');
+    const gone = await libDeletePaths(paths, {
+      message: `Delete ${n} rejected photo${n === 1 ? '' : 's'}? ${names}. They are moved to the system Trash, so you can still restore them from there.`,
+      confirmLabel: `Move ${n} to Trash`,
+    });
+    if (!gone.length || opts.exiting) return gone;
+    const goneSet = new Set(gone);
+    const keepFocusAt = surveyState.cullOffset;
+    surveyState.cullPaths = surveyState.cullPaths.filter((p) => !goneSet.has(p));
+    compareState.paths = surveyState.cullPaths.slice(); compareState.totalSelected = surveyState.cullPaths.length;
+    if (surveyState.cullPaths.length < 1) exitCompareMode(); else await showCullPage(keepFocusAt);
+    return gone;
+  }
   async function cullAdvance(label = 'Green') {
     const path = surveyTargetPath(); if (!path) return;
     const currentOffset = surveyState.cullOffset, currentFocus = surveyState.focus;
     await setLabel(path, label); surveySyncPath(path);
     if (compareState.mode !== 'cull' || state.viewMode !== 'survey') return;
     const next = currentOffset + currentFocus + 1;
-    if (next >= surveyState.cullPaths.length) { exitCompareMode(); return; }
+    if (next >= surveyState.cullPaths.length) {
+      // End of the shoot: offer the Delete rejected step (cancelling just leaves the rejects flagged).
+      if (cullRejectedPaths().length) await cullDeleteRejected({ exiting: true });
+      if (compareState.mode === 'cull' && state.viewMode === 'survey') exitCompareMode();
+      return;
+    }
     if (next >= currentOffset + surveyState.cells.length) await showCullPage(next);
     else surveyFocus(1);
   }
