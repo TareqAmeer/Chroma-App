@@ -1928,6 +1928,7 @@ body.mobile-cl .cl-book-pages{grid-template-columns:repeat(2,minmax(0,1fr))}
 /* CHR-178: floating reference photo over the editor canvas — drag the bar, resize the corner */
 #fx-ref-win{position:fixed;z-index:var(--z-dropdown,50);width:320px;min-width:140px;min-height:100px;resize:both;overflow:hidden;background:var(--sur2);border:1px solid var(--bdr);border-radius:var(--r-sm);box-shadow:var(--lift-2);display:flex;flex-direction:column}
 #fx-ref-win .ref-bar{display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:var(--fs-1);color:var(--mut);cursor:move;user-select:none}
+#fx-ref-win .ref-match{padding:2px 8px;min-height:0;font-size:var(--fs-1)}
 #fx-ref-win .ref-bar span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #fx-ref-win img{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
 /* CHR-215: collage title band + per-photo captions (geometry shared with clExport via clTextGeom) */
@@ -20933,9 +20934,9 @@ function fxRefShow(url,label){
   let w=document.getElementById('fx-ref-win');
   if(!w){
     w=document.createElement('div');w.id='fx-ref-win';
-    w.innerHTML='<div class="ref-bar"><span></span><button class="btn-icon" title="Change reference">'+icon('folder',14)+'</button><button class="btn-icon" title="Close reference">'+icon('close',14)+'</button></div><img alt="Reference photo">';
-    const[bChange,bClose]=w.querySelectorAll('button');
-    bChange.onclick=()=>fxRefPickFile();bClose.onclick=()=>fxRefClose();
+    w.innerHTML='<div class="ref-bar"><span></span><button class="btn bgh ref-match" title="Nudge this photo\'s exposure and white balance toward the reference">Match to this</button><button class="btn-icon" title="Change reference">'+icon('folder',14)+'</button><button class="btn-icon" title="Close reference">'+icon('close',14)+'</button></div><img alt="Reference photo">';
+    const[bMatch,bChange,bClose]=w.querySelectorAll('button');
+    bMatch.onclick=()=>fxRefMatchCurrent();bChange.onclick=()=>fxRefPickFile();bClose.onclick=()=>fxRefClose();
     const bar=w.querySelector('.ref-bar');
     bar.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;const r=w.getBoundingClientRect(),dx=e.clientX-r.left,dy=e.clientY-r.top;
       const mv=ev=>{w.style.left=Math.max(0,Math.min(innerWidth-60,ev.clientX-dx))+'px';w.style.top=Math.max(0,Math.min(innerHeight-30,ev.clientY-dy))+'px';};
@@ -20949,6 +20950,26 @@ function fxRefShow(url,label){
 }
 function fxRefClose(){const w=document.getElementById('fx-ref-win');if(w)w.remove();if(_fxRefUrl){URL.revokeObjectURL(_fxRefUrl);_fxRefUrl=null;}
   const b=document.getElementById('btn-fx-ref');if(b)b.classList.remove('on');}
+// "Match to this": solves the exposure / temp / tint offsets that carry what the CURRENT photo
+// looks like now (rendered preview) onto the reference, with the same _matchStats/_matchOffsets the
+// series match uses, and writes them into this photo's own adjust values. Repeating it converges.
+function fxRefMatchCurrent(){
+  const w=document.getElementById('fx-ref-win'),ref=w&&w.querySelector('img'),it=curItem();
+  if(!ref||!ref.complete||!ref.naturalWidth){toast('The reference is still loading',false);return;}
+  if(!it||!it.img||it.kind==='video'||!FX||!FX.cv||!FX.cv.width){toast('Open a photo to match first',false);return;}
+  renderPreview();
+  let cur=it.img;try{const{px,w,h}=FX.getPixels();if(px&&w&&h){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(px.buffer,px.byteOffset,px.length),w,h),0,0);cur=c;}}catch(e){}
+  let cs=_matchStats(cur);if(cs.lum<=0.001){cs=_matchStats(it.img);} // blank read-back: fall back to the source
+  const off=_matchOffsets(_matchStats(ref),cs);
+  const base=it.adjustOverride||domAdjustVals(),cl=v=>Math.max(-100,Math.min(100,v));
+  const v={...base,exp:cl((base.exp||0)+off.exp),temp:cl((base.temp||0)+off.temp),tint:cl((base.tint||0)+off.tint)};
+  it.adjustOverride=v;applyAdjustVals(v);
+  {const tg=document.getElementById("tg-adjust");if(tg&&!tg.classList.contains("on"))toggleFX("adjust");} // Tone must be on for exposure/temp to apply
+  updateWork();renderPreview();fxHistoryPush();
+  if(typeof syncAdjustScopeUI==='function')syncAdjustScopeUI();
+  toast(off.exp||off.temp||off.tint?`Matched toward the reference (exposure ${off.exp>=0?'+':''}${off.exp}, temp ${off.temp>=0?'+':''}${off.temp}, tint ${off.tint>=0?'+':''}${off.tint})`:'Already close to the reference',true);
+  return off;
+}
 function fxRefPickFile(){const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
   inp.onchange=()=>{const f=inp.files&&inp.files[0];if(f)fxRefShow(URL.createObjectURL(f),f.name);};inp.click();}
 function fxRefSnapshot(){
