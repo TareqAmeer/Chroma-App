@@ -6838,6 +6838,9 @@ pub struct CatalogEntry {
     pub is_video: bool,
     pub kind: String,
     pub mtime: u64,
+    /// EXIF/QuickTime capture timestamp in epoch seconds. Missing metadata stays `None`;
+    /// culling must never substitute file mtime for capture time.
+    pub captured: Option<i64>,
     pub size: u64,
     pub missing: bool,
     pub edited_ts: u64,
@@ -7250,7 +7253,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 (SELECT COUNT(*) FROM photos p3 WHERE p3.stack_id = p.id AND p3.present = 1),
                 (SELECT p2.rel_path FROM photos p2 WHERE p2.stack_id = p.id AND p2.present = 1 AND p2.id != p.id
                  ORDER BY p2.mtime DESC LIMIT 1),
-                p.stack_id, p.faces_scanned_at, p.place
+                p.stack_id, p.faces_scanned_at, p.place, p.captured
          FROM photos p JOIN volumes v ON v.id = p.volume_id
          WHERE {where_clause}
          {order_by}
@@ -7287,6 +7290,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             let stack_id: Option<i64> = r.get(14)?;
             let faces_scanned_at: Option<i64> = r.get(15)?;
             let place: Option<String> = r.get(16)?;
+            let captured: Option<i64> = r.get(17)?;
             let is_photo = kind != "video";
             let online = is_local != 0 || {
                 let mut cache = online_cache.borrow_mut();
@@ -7300,6 +7304,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 is_video: kind == "video",
                 kind,
                 mtime: mtime as u64,
+                captured,
                 size: size as u64,
                 missing: false,
                 edited_ts: sidecar_mtime as u64,
@@ -9686,6 +9691,20 @@ mod tests {
         for k in dir_keys {
             assert!(cat_obj.contains_key(k), "CatalogEntry is missing DirEntry field '{k}' — the frontend grid reads it");
         }
+        assert!(cat_obj.contains_key("captured"), "catalog rows expose the indexed capture time for culling groups");
+    }
+
+    #[test]
+    fn catalog_query_exposes_capture_time_without_using_file_mtime_as_fallback() {
+        let (conn, _, _) = setup_one_photo("catalog_capture_time");
+        let absent = query_run(&conn, CatalogQuery::default()).unwrap();
+        assert_eq!(absent.entries.len(), 1);
+        assert_eq!(absent.entries[0].captured, None, "missing capture metadata stays unknown");
+
+        let captured = 1_720_000_030i64;
+        conn.execute("UPDATE photos SET captured = ?1 WHERE id = 1", params![captured]).unwrap();
+        let present = query_run(&conn, CatalogQuery::default()).unwrap();
+        assert_eq!(present.entries[0].captured, Some(captured), "the indexed EXIF/QuickTime capture timestamp reaches the UI");
     }
 
     #[test]

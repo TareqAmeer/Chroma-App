@@ -21,7 +21,8 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = []; await page.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch {} }); // first-run welcome card would intercept clicks
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto(`http://127.0.0.1:${server.address().port}/desktop/dist/index.html?libtest=1&libn=12`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await page.goto(`http://127.0.0.1:${server.address().port}/desktop/dist/index.html?libtest=1&libn=10&libtime=1`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30000 });
   await page.waitForFunction(() => typeof window.__libEnterSurvey === 'function' && typeof window.__libOpenFolder === 'function', { timeout: 30000 });
   await page.evaluate(() => document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); }));
   await page.evaluate(async () => { if (!window.chromasmithLibraryIsOpen()) await window.chromasmithToggleLibrary(); });
@@ -36,21 +37,44 @@ try {
   await page.waitForSelector('#lib-batchbar [data-act="cull"]');
   assert.equal(await page.locator('#lib-batchbar [data-act="cull"]').textContent(), 'Cull selection');
   await page.locator('#lib-batchbar [data-act="cull"]').click();
-  await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().mode === 'cull', { timeout: 45000 });
+  await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().mode === 'cull' && window.__libSurveyState().groupPicker, { timeout: 45000 });
+
+  assert.equal((await page.evaluate(() => window.__libCullTimeGroups())).length, 2, '60-second threshold chains adjacent captures; missing time stays separate');
+  await page.selectOption('#lib-cull-time-gap', '15');
+  let groups = await page.evaluate(() => window.__libCullTimeGroups());
+  assert.equal(groups.length, 5, '15-second threshold splits the four capture bursts and keeps the unknown-time group');
+  assert.equal(groups.at(-1).unknown, true, 'unknown capture times form their own final group');
+  const firstGroup = page.locator('details[data-time-group="0"]');
+  assert.equal(await firstGroup.evaluate((el) => el.open), false, 'capture groups start collapsed');
+  await firstGroup.locator('summary').click();
+  assert.equal(await firstGroup.evaluate((el) => el.open), true, 'a group expands to show its photo names');
+  await firstGroup.locator('summary').click();
+  assert.equal(await firstGroup.evaluate((el) => el.open), false, 'the group collapses again');
+  await page.selectOption('#lib-cull-time-gap', '60');
+  assert.equal((await page.evaluate(() => window.__libCullTimeGroups())).length, 2, 'changing the threshold regroups immediately');
+  await page.selectOption('#lib-cull-time-gap', '15');
+  groups = await page.evaluate(() => window.__libCullTimeGroups());
+  await page.click('#lib-cull-time-all');
+  assert.equal(await page.textContent('#lib-cull-time-count'), '10 selected');
+  await page.click('#lib-cull-time-start');
+  await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().mode === 'cull' && !window.__libSurveyState().groupPicker, { timeout: 45000 });
+  await page.waitForFunction(() => document.querySelectorAll('#lib-survey .lib-survey-cell').length === 4, { timeout: 45000 });
 
   let state = await page.evaluate(() => window.__libSurveyState());
   assert.equal(state.paths.length, 4, 'culling keeps the visible batch bounded to four');
   assert.equal(state.cullPaths.length, 10, 'culling retains the full selected shoot');
+  const orderedPaths = groups.flatMap((g) => g.paths);
+  assert.deepEqual(state.cullPaths, orderedPaths, 'the cull follows capture-time groups, with unknown-time photos last');
   await page.keyboard.press('Enter');
-  await page.waitForFunction((p) => document.querySelector(`.lib-survey-cell[data-survey-idx="0"] [data-survey-action="pick"]`)?.classList.contains('on') && window.__libSurveyState().focus === 1, paths[0]);
+  await page.waitForFunction(() => document.querySelector(`.lib-survey-cell[data-survey-idx="0"] [data-survey-action="pick"]`)?.classList.contains('on') && window.__libSurveyState().focus === 1);
   state = await page.evaluate(() => window.__libSurveyState());
-  assert.equal(state.paths[1], paths[1], 'Enter flags the focused path then advances');
+  assert.equal(state.paths[1], orderedPaths[1], 'Enter flags the focused path then advances');
 
   for (let i = 0; i < 3; i++) await page.keyboard.press('Enter');
-  await page.waitForFunction((expected) => window.__libSurveyState().offset === 4 && window.__libSurveyState().paths[0] === expected, paths[4]);
+  await page.waitForFunction((expected) => window.__libSurveyState().offset === 4 && window.__libSurveyState().paths[0] === expected, orderedPaths[4]);
   await page.waitForFunction(() => document.querySelectorAll('#lib-survey .lib-survey-cell').length === 4);
   state = await page.evaluate(() => window.__libSurveyState());
-  assert.deepEqual(state.paths, paths.slice(4, 8), 'next page continues through the original full selection');
+  assert.deepEqual(state.paths, orderedPaths.slice(4, 8), 'next page continues through the original full selection');
   assert.equal(await page.locator('#lib-survey [data-survey-remove]').count(), 0, 'Culling hides Survey removal controls to keep the full shoot paging stable');
   await page.keyboard.press('Shift+X');
   await page.waitForFunction(() => document.querySelector('.lib-survey-cell[data-survey-idx="0"] [data-survey-action="reject"]')?.classList.contains('on') && window.__libSurveyState().focus === 1);
@@ -58,7 +82,7 @@ try {
   assert.equal(await page.evaluate(() => window.__libSurveyState().active), false, 'Escape exits Culling');
   assert.notEqual(await page.locator('#lib-grid').evaluate((el) => getComputedStyle(el).display), 'none');
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
-  console.log('PASS: Culling offers multi-selection entry, reviews all selections in four-photo pages, advances Pick/Reject through existing flags, and exits cleanly.');
+  console.log(`PASS: capture grouping 60s→2 groups, 15s→${groups.length} groups, unknown-time isolated; group collapse/expand; 10-photo cull in four-photo pages with capture-ordered Pick/Reject advance and clean exit.`);
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
