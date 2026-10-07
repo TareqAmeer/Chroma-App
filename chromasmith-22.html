@@ -1930,6 +1930,8 @@ body.mobile-cl .cl-book-pages{grid-template-columns:repeat(2,minmax(0,1fr))}
 #cs-save-state.err{color:var(--err)}
 #cs-save-state button{all:unset;cursor:pointer;text-decoration:underline;margin-left:4px}
 .cl-cell.cl-framed{box-shadow:0 2px 10px rgba(0,0,0,.28)}
+.cl-deck-sh{position:absolute;pointer-events:none;filter:drop-shadow(0 3px 5px rgba(0,0,0,.4))}
+.cl-cell.cl-deckle.sel{outline:none}.cl-cell.cl-deckle.sel .cl-in{outline:var(--bw-2) solid var(--acc);outline-offset:-2px}
 .cl-cap.cl-cap-mat{background:none;color:#222;padding:0 .6em;display:flex;align-items:center}
 .cl-cap{position:absolute;left:0;right:0;bottom:0;padding:1.2em .6em .45em;color:#fff;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:linear-gradient(transparent,rgba(0,0,0,.55));pointer-events:none}
 .cl-cell.sel{outline:var(--bw-2) solid var(--acc);outline-offset:-2px;z-index:var(--z-raise);touch-action:none}
@@ -5173,6 +5175,10 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <div class="dz-ic">＋</div><div class="dz-lb">Add photos</div>
         </div>
         <div class="cl-tray" id="cl-tray"></div>
+        <!-- CHR-214: pull the photos open in Effects, with their edits -->
+        <div class="btn-row" style="margin-top:8px"><button class="btn bsec" id="cl-pull" onclick="clAddFromEditor()" title="Add the photos open in Effects, shown with their look and adjustments">Add photos from Effects</button></div>
+        <label class="fx-row" style="cursor:pointer;gap:8px"><input type="checkbox" id="cl-edits" checked onchange="clSetEdits(this.checked)"> Show edits (look &amp; adjustments)</label>
+        <label class="fx-row" style="cursor:pointer;gap:8px" title="Grade every cell, including photos added here, with the look currently set in Effects"><input type="checkbox" id="cl-onelook" onchange="clSetOneLook(this.checked)"> Apply one look to all cells</label>
         <!-- Was a standing .fx-hint sentence — collapsed into the same tooltip/details pattern
              every other long explanation in the panel redesign already uses (see .fx-info-i /
              .fx-hint-x's own CSS comment). id="cl-tray-hint" kept on the <details> itself so
@@ -5202,7 +5208,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         </div>
         <div class="fx-row" style="margin-top:8px"><div class="fx-label">Spacing</div><input class="fx-slider" type="range" min="0" max="60" value="8" id="cl-inner" oninput="clSet('inner',+this.value)"><div class="fx-val" id="cl-inner-v">8</div></div>
         <div class="fx-row"><div class="fx-label">Outer margin</div><input class="fx-slider" type="range" min="0" max="80" value="0" id="cl-outer" oninput="clSet('outer',+this.value)"><div class="fx-val" id="cl-outer-v">0</div></div>
-        <div class="fx-row"><div class="fx-label">Photo frame</div><select class="fx-select" id="cl-frame-sel" onchange="CL.frame=this.value;clRenderFrame()"><option value="none">None</option><option value="keyline">Thin border</option><option value="mat">Paper mat</option><option value="print">Instant print</option></select></div>
+        <div class="fx-row"><div class="fx-label">Photo frame</div><select class="fx-select" id="cl-frame-sel" onchange="CL.frame=this.value;clRenderFrame()"><option value="none">None</option><option value="keyline">Thin border</option><option value="mat">Paper mat</option><option value="print">Instant print</option><option value="deckle">Deckled paper</option><option value="shadow">Drop shadow</option></select></div>
         <div class="fx-row"><div class="fx-label">Corner round</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="cl-radius" oninput="clSet('radius',+this.value)"><div class="fx-val" id="cl-radius-v">0</div></div>
       </div>
       <div class="fx-ctrl" data-clsec="text">
@@ -5211,7 +5217,14 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="fx-row"><div class="fx-label">Position</div><select class="fx-select" id="cl-titlepos" onchange="CL.titlePos=this.value;clRenderFrame()"><option value="bottom">Bottom</option><option value="top">Top</option></select></div>
         <div class="fx-row"><div class="fx-label">Title size</div><input class="fx-slider" type="range" min="20" max="120" value="45" id="cl-titleSize" oninput="clSet('titleSize',+this.value)"><div class="fx-val" id="cl-titleSize-v">45</div></div>
         <div class="fx-row" style="margin-top:8px"><div class="fx-label">Caption size</div><input class="fx-slider" type="range" min="12" max="70" value="28" id="cl-capSize" oninput="clSet('capSize',+this.value)"><div class="fx-val" id="cl-capSize-v">28</div></div>
-        <label class="fx-row" style="cursor:pointer;gap:8px"><input type="checkbox" id="cl-capAuto" onchange="CL.capAuto=this.checked;clRenderFrame()"> Show file names as captions</label>
+        <div class="fx-row"><div class="fx-label">Font</div><select class="fx-select" id="cl-font" onchange="CL.font=this.value;clRenderFrame()"><option value="">Default</option><option value="Georgia, 'Times New Roman', serif">Serif</option><option value="'Courier New', Courier, monospace">Typewriter</option><option value="'Trebuchet MS', Verdana, sans-serif">Humanist</option><option value="Impact, 'Arial Narrow', sans-serif">Poster</option><option value="'Brush Script MT', 'Segoe Script', cursive">Script</option></select></div>
+        <div class="fx-row"><div class="fx-label">Title colour</div><input type="color" class="fx-color" id="cl-titlecolor" value="#111111" oninput="CL.titleColor=this.value;clRenderFrame()"><button class="btn bgh" onclick="CL.titleColor='';clRenderFrame()" title="Pick black or white to suit the background">Auto</button></div>
+        <div class="fx-row"><div class="fx-label">Caption colour</div><input type="color" class="fx-color" id="cl-capcolor" value="#ffffff" oninput="CL.capColor=this.value;clRenderFrame()"><button class="btn bgh" onclick="CL.capColor='';clRenderFrame()" title="White over the photo, dark on a print border">Auto</button></div>
+        <div class="fx-sub">Automatic captions</div>
+        <label class="fx-row" style="cursor:pointer;gap:8px"><input type="checkbox" id="cl-capAuto" onchange="CL.capAuto=this.checked;clRenderFrame()"> File name</label>
+        <label class="fx-row" style="cursor:pointer;gap:8px"><input type="checkbox" id="cl-capDate" onchange="CL.capDate=this.checked;clRenderFrame()"> Date</label>
+        <label class="fx-row" style="cursor:pointer;gap:8px"><input type="checkbox" id="cl-capCam" onchange="CL.capCam=this.checked;clRenderFrame()"> Camera</label>
+        <label class="fx-row" style="cursor:pointer;gap:8px"><input type="checkbox" id="cl-capLook" onchange="CL.capLook=this.checked;clRenderFrame()"> Film look</label>
         <div class="fx-hint">Select a photo to write its own caption.</div>
       </div>
       <div class="fx-ctrl" id="cl-cellpanel" data-clsec="sel">
@@ -5227,7 +5240,17 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
       </div>
       <div class="fx-ctrl" data-clsec="export">
         <div class="ctitle" style="margin-bottom:10px">Export</div>
-        <div class="fx-row"><div class="fx-label">Long side</div>
+        <!-- CHR-218: exact-size presets; "Custom" keeps the long-side picker below -->
+        <div class="fx-row"><div class="fx-label">Size preset</div>
+          <select class="fx-select" id="cl-preset" onchange="clSetPreset(this.value)">
+            <option value="">Custom (long side)</option>
+            <optgroup label="Social (px)"><option value="px:1080x1080">Instagram square 1080 x 1080</option><option value="px:1080x1350">Instagram portrait 1080 x 1350</option><option value="px:1080x1920">Story / Reel 1080 x 1920</option><option value="px:1920x1080">Landscape 1920 x 1080</option><option value="px:2160x1080">Carousel 2 panels 2160 x 1080</option></optgroup>
+            <optgroup label="Print (inches)"><option value="in:6x4">6 x 4 in</option><option value="in:4x6">4 x 6 in</option><option value="in:8x10">8 x 10 in</option><option value="in:10x8">10 x 8 in</option><option value="in:8x8">8 x 8 in</option><option value="in:6x8">6 x 8 in</option><option value="in:12x18">12 x 18 in</option><option value="in:18x12">18 x 12 in</option></optgroup>
+          </select></div>
+        <div class="fx-row" id="cl-dpi-row" style="display:none"><div class="fx-label">Print DPI</div>
+          <select class="fx-select" id="cl-dpi" onchange="CL.dpi=+this.value;clSyncPresetNote()"><option value="150">150</option><option value="240">240</option><option value="300" selected>300</option><option value="600">600</option></select></div>
+        <div class="fx-hint" id="cl-preset-note" style="display:none"></div>
+        <div class="fx-row" id="cl-res-row"><div class="fx-label">Long side</div>
           <select class="fx-select" id="cl-res">
             <option value="1600">1600 px</option>
             <option value="2400" selected>2400 px</option>
@@ -13230,7 +13253,7 @@ async function loadFXImages(fileList){
       const img=await loadImg(file);
       // fileSize: without this, non-library JPEGs (drag-drop / Google Photos) showed no "Size"
       // row in the metadata panel at all — only photos opened via the desktop Library set it.
-      entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength});
+      entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength,mtime:file.lastModified||0});
     }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++;const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false)} // keep loading the rest of the batch
   }
   if(_loadFailCount>0&&typeof toast==='function')toast(`${_loadFailCount} of ${files.length+videoFiles.length+nonImageNonVideo.length} file(s) failed to load — see log`,false);
@@ -28323,7 +28346,7 @@ if(typeof document!=='undefined')document.addEventListener('visibilitychange',()
 // ════════════════════ COLLAGE TAB ════════════════════
 const CL_ASPECTS=[['1:1',1,1],['4:5',4,5],['5:4',5,4],['3:4',3,4],['4:3',4,3],['2:3',2,3],['3:2',3,2],['9:16',9,16],['16:9',16,9],['2:1 carousel',2,1],['3:1 carousel',3,1]];
 const CL_SWATCHES=['#ffffff','#000000','#f4f1ea','#e8d9c5','#171717','#c8553d','#2e4756','#a3b18a'];
-const CL={photos:[],aspect:CL_ASPECTS[0],tree:null,templates:[],templateIdx:0,assign:[],cells:[],dividers:[],bg:'#ffffff',inner:8,outer:0,radius:0,frame:'none',title:'',titlePos:'bottom',titleSize:45,capSize:28,capAuto:false,sel:-1,frameW:0,frameH:0,inited:false};
+const CL={photos:[],aspect:CL_ASPECTS[0],tree:null,templates:[],templateIdx:0,assign:[],cells:[],dividers:[],bg:'#ffffff',inner:8,outer:0,radius:0,frame:'none',title:'',titlePos:'bottom',titleSize:45,capSize:28,capAuto:false,capDate:false,capCam:false,capLook:false,font:'',capColor:'',titleColor:'',edits:true,oneLook:false,preset:'',dpi:300,sel:-1,frameW:0,frameH:0,inited:false};
 const _leaf=()=>({leaf:true,size:1});
 function _row(){return{dir:'row',size:1,children:[].slice.call(arguments)};}
 function _col(){return{dir:'col',size:1,children:[].slice.call(arguments)};}
@@ -28386,6 +28409,9 @@ function clInit(){
     CL.inited=true;
   }
   clRebuildShapes();clRenderFrame();applyClLayout();
+  // CHR-214: edits made in Effects since the last visit are re-applied to linked photos
+  try{const n=fxImages.filter(it=>it&&it.kind!=='video').length,pb=document.getElementById('cl-pull');
+    if(pb)pb.textContent=n?`Add photos from Effects (${n})`:'Add photos from Effects';clRegrade(false);}catch(e){}
 }
 // mobile: pinned stage + section strip (mirrors the FX editor)
 const CL_SECTIONS=[['photos','image','Photos'],['canvas','vig','Size'],['layout','borders','Layout'],['style','bloom','Style'],['text','rename','Text'],['sel','adjust','Photo'],['export','export','Export']];
@@ -28418,10 +28444,74 @@ function applyClLayout(){
 function clAddFiles(files){
   const arr=[].slice.call(files).filter(f=>f.type&&f.type.indexOf('image/')===0);if(!arr.length)return;
   let pending=arr.length;
+  const done=()=>{if(--pending===0){clPhotosChanged();if(CL.oneLook&&CL.edits)clRegrade(true);}};
   arr.forEach(f=>{const url=URL.createObjectURL(f),img=new Image();
-    img.onload=()=>{CL.photos.push({img,url,name:f.name});if(--pending===0)clPhotosChanged();};
-    img.onerror=()=>{if(--pending===0)clPhotosChanged();};img.src=url;});
+    img.onload=()=>{const p={img,url,name:f.name,orig:{img,url},mtime:f.lastModified||0,exif:null};CL.photos.push(p);
+      // Date / camera for the automatic caption info. Empty-safe: no EXIF just means no text.
+      try{f.slice(0,262144).arrayBuffer().then(b=>{if(typeof readExifTags==='function')p.exif=readExifTags(new Uint8Array(b))||{};clRenderFrame();}).catch(()=>{});}catch(e){}
+      done();};
+    img.onerror=done;img.src=url;});
 }
+// CHR-214: edited photos. A collage photo can be linked to a photo loaded in Effects (p.item);
+// its look/grade is rendered through the same processToCanvas the export uses and shown instead
+// of the original. "Apply one look to all cells" additionally grades photos that were added
+// straight into Collage with the look currently set in Effects. p.orig always keeps the untouched source.
+function clImgToUrl(src,type){return new Promise(res=>{const c=document.createElement('canvas');c.width=src.naturalWidth||src.width;c.height=src.naturalHeight||src.height;
+  c.getContext('2d').drawImage(src,0,0);c.toBlob(b=>res(b?URL.createObjectURL(b):null),type||'image/jpeg',.93);});}
+function clLoadImg(url){return new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>rej(new Error('image decode failed'));im.src=url;});}
+function clRevokePhoto(p){if(p.url&&p.url!==(p.orig&&p.orig.url))URL.revokeObjectURL(p.url);if(p.orig&&p.orig.url)URL.revokeObjectURL(p.orig.url);}
+async function clGradeOne(p){
+  const it=p.item&&fxImages.indexOf(p.item)>=0?p.item:null;
+  if(p.item&&!it)p.item=null; // the Effects photo was closed: keep what we have as a plain photo
+  if(!(CL.edits&&(it||CL.oneLook))){ // show the original
+    if(p.url!==p.orig.url){if(p.url)URL.revokeObjectURL(p.url);}
+    if(!p.orig.url)p.orig.url=await clImgToUrl(p.orig.img);
+    p.img=p.orig.img;p.url=p.orig.url;return;}
+  const src0=it?geomCanvas(it):p.orig.img;
+  const sm=fxState.masks;fxState.masks=(it&&it.masks)||[];let P;
+  try{P=getFXParams(it&&!CL.oneLook?(it.adjustOverride||undefined):undefined);}finally{fxState.masks=sm;}
+  const iw0=src0.naturalWidth||src0.width,ih0=src0.naturalHeight||src0.height,k=Math.min(1,2600/Math.max(iw0,ih0));
+  let src=src0,iw=iw0,ih=ih0;
+  if(k<1){iw=Math.max(1,Math.round(iw0*k));ih=Math.max(1,Math.round(ih0*k));src=document.createElement('canvas');src.width=iw;src.height=ih;src.getContext('2d').drawImage(src0,0,0,iw,ih);}
+  const proc=await processToCanvas(P,src,iw,ih,()=>{});
+  const url=await new Promise(res=>proc.toBlob(b=>res(b?URL.createObjectURL(b):null),'image/jpeg',.93));
+  proc.width=proc.height=0;if(!url)throw new Error('toBlob failed');
+  const im=await clLoadImg(url);
+  if(p.url&&p.url!==(p.orig&&p.orig.url))URL.revokeObjectURL(p.url);
+  p.img=im;p.url=url;
+}
+function clEditSig(){try{return JSON.stringify([CL.edits,CL.oneLook,getUISnapshot(),fxImages.map(it=>[it.adjustOverride,it.geom,it.masks&&it.masks.length])]);}catch(e){return String(Math.random());}}
+let _clGradeTok=0;
+async function clRegrade(force){
+  if(!CL.photos.length)return;
+  const sig=clEditSig();if(!force&&sig===CL._sig)return;
+  if(!CL.photos.some(p=>p.item||CL.oneLook)&&!CL.photos.some(p=>p.url!==(p.orig&&p.orig.url)))return;
+  const tok=++_clGradeTok;CL._sig=sig;let used=false;
+  for(const p of CL.photos.slice()){
+    if(tok!==_clGradeTok)return;
+    try{await clGradeOne(p);used=true;}catch(e){log('Collage: could not apply edits to '+(p.name||'a photo')+' — '+e.message,'warn');}
+  }
+  if(tok!==_clGradeTok)return;
+  if(used&&fxImages.length){try{updateWork();renderPreview();}catch(e){}}
+  clRenderTray();clRenderFrame();
+}
+function clAddFromEditor(){
+  const its=fxImages.filter(it=>it&&it.kind!=='video'&&it.img);
+  if(!its.length){toast('Open photos in Effects first');return;}
+  let n=0;
+  its.forEach(it=>{if(CL.photos.some(p=>p.item===it))return;
+    const img=it.img;
+    CL.photos.push({img,url:null,name:it.name||'photo',orig:{img,url:null},item:it,exif:it.exif||null,mtime:it.mtime||0});n++;});
+  if(!n){toast('Those photos are already in the collage');return;}
+  (async()=>{
+    for(const p of CL.photos){if(!p.url&&!p.orig.url){try{p.orig.url=await clImgToUrl(p.orig.img);p.url=p.orig.url;p.orig.img=p.img=await clLoadImg(p.url);}catch(e){}}}
+    clPhotosChanged();await clRegrade(true);
+    log(`Collage: added ${n} photo(s) from Effects${CL.edits?' with their edits':''}`,'ok');
+  })();
+}
+function clSetEdits(v){CL.edits=!!v;clRegrade(true);}
+function clSetOneLook(v){CL.oneLook=!!v;clRegrade(true);}
+function clLookName(){const s=document.getElementById('sel-lut');if(!s||!s.value)return'';const o=s.options[s.selectedIndex];return o?String(o.textContent||'').trim():'';}
 function clDropFiles(e){e.preventDefault();dzl(document.getElementById('cl-dz'));if(e.dataTransfer&&e.dataTransfer.files)clAddFiles(e.dataTransfer.files);}
 function clPhotosChanged(){
   const n=Math.max(1,CL.photos.length);
@@ -28467,7 +28557,7 @@ function clRenderTray(){
   });
 }
 function clRemovePhoto(i){
-  URL.revokeObjectURL(CL.photos[i].url);CL.photos.splice(i,1);
+  clRevokePhoto(CL.photos[i]);CL.photos.splice(i,1);
   CL.assign=CL.assign.map(a=>a==null?null:(a===i?null:(a>i?a-1:a)));
   clPhotosChanged();
 }
@@ -28480,7 +28570,7 @@ function clTextGeom(W,H){
     lx:outer,ly:outer+(CL.titlePos==='top'?band:0),lw:W-2*outer,lh:H-2*outer-band,
     ty:CL.titlePos==='top'?outer:H-outer-band};
 }
-function clTextColor(){const h=CL.bg.replace('#','');const n=parseInt(h.length===3?h.replace(/./g,'$&$&'):h,16)||0;
+function clTextColor(){if(CL.titleColor)return CL.titleColor;const h=CL.bg.replace('#','');const n=parseInt(h.length===3?h.replace(/./g,'$&$&'):h,16)||0;
   const l=(0.299*(n>>16&255)+0.587*(n>>8&255)+0.114*(n&255))/255;return l<0.55?'#ffffff':'#111111';}
 // CHR-217: per-cell photo frames. Returns the photo's inset inside its cell (px) and the mat
 // colour; "print" is the instant-print shape (thick bottom, where its caption is written).
@@ -28489,9 +28579,35 @@ function clFrameInset(w,h){
   if(CL.frame==='keyline'){const k=Math.max(2,m*0.015);return{t:k,r:k,b:k,l:k,col:'#ffffff'};}
   if(CL.frame==='mat'){const k=m*0.05;return{t:k,r:k,b:k,l:k,col:'#ffffff'};}
   if(CL.frame==='print'){const k=m*0.055;return{t:k,r:k,b:k*3.6,l:k,col:'#fbfaf6'};}
+  if(CL.frame==='deckle'){const k=m*0.07;return{t:k,r:k,b:k,l:k,col:'#f6f1e6',deckle:true};}
+  if(CL.frame==='shadow')return{t:0,r:0,b:0,l:0,col:'#ffffff',round:true,heavy:true};
   return null;
 }
-function clCaption(i){const p=CL.photos[CL.assign[i]];if(!p)return'';return(p.caption!=null&&p.caption!=='')?p.caption:(CL.capAuto?String(p.name||'').replace(/\.[^.]+$/,''):'');}
+// CHR-217: deckled paper edge. One deterministic outline (fractions of the cell, so the preview
+// polygon and the exported path are the same shape at any size); seeded per cell.
+function clDeckPts(w,h,seed){
+  const m=Math.min(w,h),amp=m*0.014,nx=Math.max(8,Math.round(w/m*46)),ny=Math.max(8,Math.round(h/m*46));
+  let a=(seed*2654435761+12345)>>>0;const rnd=()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;};
+  const j=()=>rnd()*amp,pts=[];
+  for(let i=0;i<nx;i++)pts.push([w*i/nx,j()]);
+  for(let i=0;i<ny;i++)pts.push([w-j(),h*i/ny]);
+  for(let i=0;i<nx;i++)pts.push([w-w*i/nx,h-j()]);
+  for(let i=0;i<ny;i++)pts.push([j(),h-h*i/ny]);
+  return pts;
+}
+function clFontFam(){return CL.font||getComputedStyle(document.body).fontFamily||'sans-serif';}
+// CHR-215: automatic caption info (file name, date, camera, film look). Each part is simply left
+// out when the file carries no such metadata, so a stripped photo gives an empty caption, never "undefined".
+function clPhotoDate(p){const e=p.exif&&p.exif.date;if(e&&/^\d{4}[:\-]\d\d[:\-]\d\d/.test(e))return e.slice(0,10).replace(/:/g,'-');
+  if(p.mtime>0){try{return new Date(p.mtime).toISOString().slice(0,10);}catch(x){}}return'';}
+function clAutoCaption(p){const parts=[];
+  if(CL.capAuto){const n=String(p.name||'').replace(/\.[^.]+$/,'');if(n)parts.push(n);}
+  if(CL.capDate){const d=clPhotoDate(p);if(d)parts.push(d);}
+  if(CL.capCam&&p.exif){const mk=String(p.exif.make||'').trim(),md=String(p.exif.model||'').trim();
+    const c=md?(mk&&md.toLowerCase().indexOf(mk.split(' ')[0].toLowerCase())!==0?mk+' '+md:md):mk;if(c)parts.push(c);}
+  if(CL.capLook&&CL.edits&&(p.item||CL.oneLook)){const l=clLookName();if(l)parts.push(l);}
+  return parts.join(' · ');}
+function clCaption(i){const p=CL.photos[CL.assign[i]];if(!p)return'';return(p.caption!=null&&p.caption!=='')?p.caption:clAutoCaption(p);}
 function clSetCaption(v){const p=CL.photos[CL.assign[CL.sel]];if(!p)return;p.caption=v;clRenderFrame();}
 function clRenderFrame(){
   const stage=document.getElementById('cl-stage'),frame=document.getElementById('cl-frame');if(!stage||!frame)return;
@@ -28507,7 +28623,7 @@ function clRenderFrame(){
   const rects=clLayoutRects(CL.tree,tg.lx,tg.ly,tg.lw,tg.lh,gap,CL.dividers);
   frame.innerHTML='';
   if(tg.band){const t=document.createElement('div');t.className='cl-title';t.textContent=CL.title;
-    t.style.cssText=`top:${tg.ty}px;height:${tg.band}px;font-size:${tg.tPx}px;color:${clTextColor()}`;frame.appendChild(t);}
+    t.style.cssText=`top:${tg.ty}px;height:${tg.band}px;font-size:${tg.tPx}px;color:${clTextColor()};${CL.font?'font-family:'+CL.font.replace(/;/g,'')+';':''}`;frame.appendChild(t);}
   rects.forEach((r,i)=>{
     const cell=document.createElement('div');cell.className='cl-cell'+(i===CL.sel?' sel':'');
     cell.style.cssText=`left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;border-radius:${rad}px`;
@@ -28516,12 +28632,19 @@ function clRenderFrame(){
     let im=null;
     const fi=hasPhoto&&clFrameInset(r.w,r.h);let host=cell;
     if(fi){cell.classList.add('cl-framed');cell.style.background=fi.col;host=document.createElement('div');host.className='cl-in';
+      if(fi.heavy)cell.style.boxShadow='0 8px 22px rgba(0,0,0,.45)';
+      if(fi.deckle){ // jagged paper edge: the shadow lives on a sibling because clip-path would cut a box-shadow off
+        const pts='polygon('+clDeckPts(r.w,r.h,i+1).map(q=>q[0].toFixed(1)+'px '+q[1].toFixed(1)+'px').join(',')+')';
+        cell.classList.add('cl-deckle');cell.style.clipPath=pts;cell.style.boxShadow='none';cell.style.borderRadius='0';
+        const sh=document.createElement('div');sh.className='cl-deck-sh';sh.style.cssText=`left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px`;
+        const pp=document.createElement('div');pp.style.cssText=`position:absolute;inset:0;background:${fi.col};clip-path:${pts}`;sh.appendChild(pp);frame.appendChild(sh);}
       host.style.cssText=`left:${fi.l}px;top:${fi.t}px;right:${fi.r}px;bottom:${fi.b}px`;cell.appendChild(host);}
     if(hasPhoto){im=document.createElement('img');im.alt='';im.src=CL.photos[pIdx].url;host.appendChild(im);cell.classList.add('has-photo');}
     else cell.innerHTML='<div class="cl-cell-empty">'+icon('plus',22)+'</div>';
     cell.dataset.i=i;cell.draggable=false; // assigned cells pan on drag; rearrange via the tray
     const cap=hasPhoto&&clCaption(i);
     if(cap){const c=document.createElement('div');c.className='cl-cap';c.textContent=cap;c.style.fontSize=tg.capPx+'px';
+      if(CL.font)c.style.fontFamily=CL.font;if(CL.capColor){c.style.color=CL.capColor;c.style.background='none';}
       if(CL.frame==='print'){c.classList.add('cl-cap-mat');c.style.height=fi.b+'px';c.style.left=fi.l+'px';cell.appendChild(c);}else host.appendChild(c);}
     clWireCell(cell,i,r);frame.appendChild(cell);
     if(im){ // cell is now in the DOM (real size) — position the photo (cover-fit + clamped offset)
@@ -28537,7 +28660,7 @@ function clRenderFrame(){
     clWireDivider(el,d);frame.appendChild(el);
   });
 }
-function clNat(i){const p=CL.photos[CL.assign[i]];return p?[p.img.naturalWidth||1,p.img.naturalHeight||1]:[1,1];}
+function clNat(i){const p=CL.photos[CL.assign[i]];return p?[p.img.naturalWidth||p.img.width||1,p.img.naturalHeight||p.img.height||1]:[1,1];}
 // Position the photo exactly like clExport (cover-scale + centred + offset), and CLAMP the
 // offset so the image always fully covers the cell — so dragging only reframes within the
 // photo and never reveals the cell background. ox/oy are stored as a fraction of the cell.
@@ -28602,55 +28725,86 @@ function clReplaceSelected(){
   if(CL.sel<0)return;
   const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
   inp.onchange=()=>{const f=inp.files[0];if(!f)return;const url=URL.createObjectURL(f),img=new Image();
-    img.onload=()=>{CL.photos.push({img,url,name:f.name});CL.assign[CL.sel]=CL.photos.length-1;CL.cells[CL.sel]={scale:1,ox:0,oy:0};clRenderTray();clRenderFrame();};img.src=url;};
+    img.onload=()=>{CL.photos.push({img,url,name:f.name,orig:{img,url},mtime:f.lastModified||0,exif:null});CL.assign[CL.sel]=CL.photos.length-1;CL.cells[CL.sel]={scale:1,ox:0,oy:0};if(CL.oneLook&&CL.edits)clRegrade(true);clRenderTray();clRenderFrame();};img.src=url;};
   inp.click();
 }
 function clSet(p,v){CL[p]=v;const el=document.getElementById('cl-'+p+'-v');if(el)el.textContent=v;if(p==='bg'){const b=document.getElementById('cl-bg');if(b)b.value=v;}clRenderFrame();}
-function clSetAspect(k){const a=CL_ASPECTS.find(x=>x[0]===k);if(a){CL.aspect=a;clRenderFrame();}}
+function clSetAspect(k){const a=CL_ASPECTS.find(x=>x[0]===k);if(a){CL.aspect=a;if(CL.preset){CL.preset='';const ps=document.getElementById('cl-preset');if(ps)ps.value='';clSyncPresetNote();}clRenderFrame();}}
+// CHR-218: export size. A preset fixes the pixel size exactly (social) or computes it from the
+// print size and DPI (capped at 8000 px a side so a 600 dpi A-size cannot exhaust memory);
+// otherwise the long-side picker applies.
+const CL_MAX_PX=8000;
+function clPresetDims(v){const m=/^(px|in):(\d+)x(\d+)$/.exec(v||'');if(!m)return null;const w=+m[2],h=+m[3];
+  if(m[1]==='px')return{w,h,px:true};const k=CL.dpi||300;let W=Math.round(w*k),H=Math.round(h*k),cap=1;
+  const big=Math.max(W,H);if(big>CL_MAX_PX){cap=CL_MAX_PX/big;W=Math.round(W*cap);H=Math.round(H*cap);}
+  return{w:W,h:H,inW:w,inH:h,capped:cap<1,px:false};}
+function clTargetSize(){
+  const pd=clPresetDims(CL.preset);if(pd)return{W:pd.w,H:pd.h};
+  const long=+document.getElementById('cl-res').value,ar=CL.aspect[1]/CL.aspect[2];
+  return ar>=1?{W:long,H:Math.round(long/ar)}:{H:long,W:Math.round(long*ar)};
+}
+function clSyncPresetNote(){
+  const note=document.getElementById('cl-preset-note'),dpiRow=document.getElementById('cl-dpi-row'),resRow=document.getElementById('cl-res-row');
+  const pd=clPresetDims(CL.preset);
+  if(dpiRow)dpiRow.style.display=pd&&!pd.px?'flex':'none';if(resRow)resRow.style.display=pd?'none':'flex';
+  if(note){note.style.display=pd?'block':'none';
+    if(pd)note.textContent=pd.px?`Exports exactly ${pd.w} x ${pd.h} px.`:`${pd.inW} x ${pd.inH} in at ${CL.dpi} dpi = ${pd.w} x ${pd.h} px${pd.capped?' (limited to '+CL_MAX_PX+' px on the long side)':''}.`;}
+}
+function clSetPreset(v){
+  CL.preset=v||'';const m=/^(?:px|in):(\d+)x(\d+)$/.exec(CL.preset);
+  if(m){const w=+m[1],h=+m[2];let a=CL_ASPECTS.find(x=>Math.abs(x[1]/x[2]-w/h)<1e-3);if(!a)a=[w+':'+h,w,h];CL.aspect=a;
+    const sel=document.getElementById('cl-aspect');if(sel)sel.value=a[0];
+    const sp=document.getElementById('cl-split');if(sp)sp.checked=a[0].indexOf('carousel')>=0&&CL.preset.indexOf('2160x')>=0;}
+  clSyncPresetNote();clRenderFrame();
+}
 function clShuffle(){
   const lc=CL.assign.length,idxs=CL.photos.map((_,i)=>i);
   for(let i=idxs.length-1;i>0;i--){const j=Math.random()*(i+1)|0;const t=idxs[i];idxs[i]=idxs[j];idxs[j]=t;}
   CL.assign=[];for(let i=0;i<lc;i++)CL.assign.push(i<idxs.length?idxs[i]:null);
   CL.cells=CL.cells.map(()=>({scale:1,ox:0,oy:0}));clRenderFrame();
 }
-function clReset(){CL.photos.forEach(p=>URL.revokeObjectURL(p.url));CL.photos=[];CL.assign=[];CL.cells=[];CL.sel=-1;CL.templateIdx=0;clHideCellPanel();clPhotosChanged();clRenderTray();}
+function clReset(){CL.photos.forEach(clRevokePhoto);CL.photos=[];CL.assign=[];CL.cells=[];CL.sel=-1;CL.templateIdx=0;clHideCellPanel();clPhotosChanged();clRenderTray();}
 function clRoundRect(ctx,x,y,w,h,r){r=Math.max(0,Math.min(r,w/2,h/2));ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+// One cell, drawn identically for the single-image export and the Book pages. Frame shapes come
+// from clFrameInset; the deckled outline from clDeckPts (same shape as the on-screen polygon).
+function clDrawCell(ctx,R,i,base,rad,tg,fam){
+  const pIdx=CL.assign[i],photo=pIdx!=null&&CL.photos[pIdx];if(!photo||!photo.img)return;
+  const img=photo.img,c=CL.cells[i]||{scale:1,ox:0,oy:0},iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;if(!iw||!ih)return;
+  const fi=clFrameInset(R.w,R.h);let matCap=null,r=R;
+  if(fi){ // mat + soft shadow first, then the photo clipped to the opening
+    ctx.save();ctx.shadowColor=fi.heavy?'rgba(0,0,0,.45)':'rgba(0,0,0,.28)';ctx.shadowBlur=base*(fi.heavy?0.025:0.012);ctx.shadowOffsetY=base*(fi.heavy?0.008:0.003);
+    ctx.fillStyle=fi.col;
+    if(fi.deckle){ctx.beginPath();clDeckPts(R.w,R.h,i+1).forEach((q,k)=>k?ctx.lineTo(R.x+q[0],R.y+q[1]):ctx.moveTo(R.x+q[0],R.y+q[1]));ctx.closePath();}
+    else clRoundRect(ctx,R.x,R.y,R.w,R.h,rad);
+    ctx.fill();ctx.restore();
+    if(CL.frame==='print')matCap={x:R.x+fi.l,y:R.y+R.h-fi.b,h:fi.b,w:R.w-fi.l-fi.r};
+    r={x:R.x+fi.l,y:R.y+fi.t,w:R.w-fi.l-fi.r,h:R.h-fi.t-fi.b};
+  }
+  ctx.save();if(fi&&!fi.round){ctx.beginPath();ctx.rect(r.x,r.y,r.w,r.h);}else clRoundRect(ctx,r.x,r.y,r.w,r.h,rad);ctx.clip();
+  const cover=Math.max(r.w/iw,r.h/ih)*c.scale,dw=iw*cover,dh=ih*cover;
+  const mx=Math.max(0,(dw-r.w)/(2*r.w)),my=Math.max(0,(dh-r.h)/(2*r.h)); // keep the image covering the cell
+  const ox=Math.min(mx,Math.max(-mx,c.ox)),oy=Math.min(my,Math.max(-my,c.oy));
+  ctx.drawImage(img,r.x+(r.w-dw)/2+ox*r.w,r.y+(r.h-dh)/2+oy*r.h,dw,dh);
+  const cap=clCaption(i);
+  if(cap&&matCap){ctx.restore();ctx.save();ctx.fillStyle=CL.capColor||'#222';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='middle';ctx.textAlign='left';
+    ctx.fillText(cap,matCap.x+tg.capPx*0.6,matCap.y+matCap.h/2,matCap.w-tg.capPx*1.2);}
+  else if(cap){if(!CL.capColor){const ch=tg.capPx*2.4,g=ctx.createLinearGradient(0,r.y+r.h-ch,0,r.y+r.h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.55)');
+      ctx.fillStyle=g;ctx.fillRect(r.x,r.y+r.h-ch,r.w,ch);}
+    ctx.fillStyle=CL.capColor||'#fff';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='alphabetic';ctx.textAlign='left';
+    ctx.fillText(cap,r.x+tg.capPx*0.6,r.y+r.h-tg.capPx*0.55,r.w-tg.capPx*1.2);}
+  ctx.restore();
+}
 function clExport(){
   if(!CL.photos.length){log('Add photos to the collage first','warn');return;}
-  const long=+document.getElementById('cl-res').value,ar=CL.aspect[1]/CL.aspect[2];
-  let W,H;if(ar>=1){W=long;H=Math.round(long/ar);}else{H=long;W=Math.round(long*ar);}
+  const{W,H}=clTargetSize();
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;const ctx=cv.getContext('2d');
   ctx.fillStyle=CL.bg;ctx.fillRect(0,0,W,H);
   const base=Math.min(W,H),gap=CL.inner/1000*base,rad=CL.radius/1000*base,tg=clTextGeom(W,H);
   const rects=clLayoutRects(CL.tree,tg.lx,tg.ly,tg.lw,tg.lh,gap,null);
-  const fam=getComputedStyle(document.body).fontFamily||'sans-serif';
+  const fam=clFontFam();
   if(tg.band){ctx.save();ctx.fillStyle=clTextColor();ctx.font=`600 ${tg.tPx}px ${fam}`;ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(CL.title,W/2,tg.ty+tg.band/2,W-2*tg.outer);ctx.restore();}
-  rects.forEach((r,i)=>{
-    const pIdx=CL.assign[i];if(pIdx==null||!CL.photos[pIdx])return;
-    const img=CL.photos[pIdx].img,c=CL.cells[i],iw=img.naturalWidth,ih=img.naturalHeight;
-    const fi=clFrameInset(r.w,r.h),R=r;let matCap=null;
-    if(fi){ // mat + soft shadow first, then the photo clipped to the opening
-      ctx.save();ctx.shadowColor='rgba(0,0,0,.28)';ctx.shadowBlur=base*0.012;ctx.shadowOffsetY=base*0.003;
-      ctx.fillStyle=fi.col;clRoundRect(ctx,R.x,R.y,R.w,R.h,rad);ctx.fill();ctx.restore();
-      if(CL.frame==='print')matCap={x:R.x+fi.l,y:R.y+R.h-fi.b,h:fi.b,w:R.w-fi.l-fi.r};
-      r={x:R.x+fi.l,y:R.y+fi.t,w:R.w-fi.l-fi.r,h:R.h-fi.t-fi.b};
-    }
-    ctx.save();if(fi){ctx.beginPath();ctx.rect(r.x,r.y,r.w,r.h);}else clRoundRect(ctx,r.x,r.y,r.w,r.h,rad);ctx.clip();
-    const cover=Math.max(r.w/iw,r.h/ih)*c.scale,dw=iw*cover,dh=ih*cover;
-    const mx=Math.max(0,(dw-r.w)/(2*r.w)),my=Math.max(0,(dh-r.h)/(2*r.h)); // keep the image covering the cell
-    const ox=Math.min(mx,Math.max(-mx,c.ox)),oy=Math.min(my,Math.max(-my,c.oy));
-    const dx=r.x+(r.w-dw)/2+ox*r.w,dy=r.y+(r.h-dh)/2+oy*r.h;
-    ctx.drawImage(img,dx,dy,dw,dh);
-    const cap=clCaption(i);
-    if(cap&&matCap){ctx.restore();ctx.save();ctx.fillStyle='#222';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='middle';ctx.textAlign='left';
-      ctx.fillText(cap,matCap.x+tg.capPx*0.6,matCap.y+matCap.h/2,matCap.w-tg.capPx*1.2);}
-    else if(cap){const ch=tg.capPx*2.4,g=ctx.createLinearGradient(0,r.y+r.h-ch,0,r.y+r.h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.55)');
-      ctx.fillStyle=g;ctx.fillRect(r.x,r.y+r.h-ch,r.w,ch);
-      ctx.fillStyle='#fff';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='alphabetic';ctx.textAlign='left';
-      ctx.fillText(cap,r.x+tg.capPx*0.6,r.y+r.h-tg.capPx*0.55,r.w-tg.capPx*1.2);}
-    ctx.restore();
-  });
+  rects.forEach((r,i)=>clDrawCell(ctx,r,i,base,rad,tg,fam));
   // CHR-218: format/quality choice, optional split into equal square panels for a swipeable
   // Instagram carousel, and saving through saveFiles() — the same path the Effects export uses —
   // so the desktop app's native save and the iOS share sheet work (was a plain <a download>).
@@ -28707,30 +28861,10 @@ function clBookCanvas(book,page,pageNo,longSide){
     const cv=document.createElement('canvas');cv.width=W;cv.height=H;const ctx=cv.getContext('2d');if(!ctx)throw new Error('Canvas is unavailable');
     ctx.fillStyle=CL.bg;ctx.fillRect(0,0,W,H);
     const base=Math.min(W,H),gap=CL.inner/1000*base,rad=CL.radius/1000*base,tg=clTextGeom(W,H);
-    const rects=clLayoutRects(page.tree,tg.lx,tg.ly,tg.lw,tg.lh,gap,null),fam=getComputedStyle(document.body).fontFamily||'sans-serif';
+    const rects=clLayoutRects(page.tree,tg.lx,tg.ly,tg.lw,tg.lh,gap,null),fam=clFontFam();
     if(tg.band){ctx.save();ctx.fillStyle=clTextColor();ctx.font=`600 ${tg.tPx}px ${fam}`;ctx.textAlign='center';ctx.textBaseline='middle';
       ctx.fillText(CL.title,W/2,tg.ty+tg.band/2,W-2*tg.outer);ctx.restore();}
-    rects.forEach((r,i)=>{
-      const photoIndex=CL.assign[i],photo=CL.photos[photoIndex];if(!photo||!photo.img)return;
-      const img=photo.img,c=CL.cells[i]||{scale:1,ox:0,oy:0},iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;
-      if(!iw||!ih)return;
-      const fi=clFrameInset(r.w,r.h),R=r;let matCap=null;
-      if(fi){ctx.save();ctx.shadowColor='rgba(0,0,0,.28)';ctx.shadowBlur=base*.012;ctx.shadowOffsetY=base*.003;ctx.fillStyle=fi.col;
-        clRoundRect(ctx,R.x,R.y,R.w,R.h,rad);ctx.fill();ctx.restore();
-        if(CL.frame==='print')matCap={x:R.x+fi.l,y:R.y+R.h-fi.b,h:fi.b,w:R.w-fi.l-fi.r};
-        r={x:R.x+fi.l,y:R.y+fi.t,w:R.w-fi.l-fi.r,h:R.h-fi.t-fi.b};}
-      ctx.save();if(fi){ctx.beginPath();ctx.rect(r.x,r.y,r.w,r.h);}else clRoundRect(ctx,r.x,r.y,r.w,r.h,rad);ctx.clip();
-      const cover=Math.max(r.w/iw,r.h/ih)*c.scale,dw=iw*cover,dh=ih*cover,mx=Math.max(0,(dw-r.w)/(2*r.w)),my=Math.max(0,(dh-r.h)/(2*r.h));
-      const ox=Math.min(mx,Math.max(-mx,c.ox)),oy=Math.min(my,Math.max(-my,c.oy));
-      ctx.drawImage(img,r.x+(r.w-dw)/2+ox*r.w,r.y+(r.h-dh)/2+oy*r.h,dw,dh);
-      const cap=clCaption(i);
-      if(cap&&matCap){ctx.restore();ctx.save();ctx.fillStyle='#222';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='middle';ctx.textAlign='left';
-        ctx.fillText(cap,matCap.x+tg.capPx*.6,matCap.y+matCap.h/2,matCap.w-tg.capPx*1.2);}
-      else if(cap){const ch=tg.capPx*2.4,g=ctx.createLinearGradient(0,r.y+r.h-ch,0,r.y+r.h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.55)');
-        ctx.fillStyle=g;ctx.fillRect(r.x,r.y+r.h-ch,r.w,ch);ctx.fillStyle='#fff';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='alphabetic';ctx.textAlign='left';
-        ctx.fillText(cap,r.x+tg.capPx*.6,r.y+r.h-tg.capPx*.55,r.w-tg.capPx*1.2);}
-      ctx.restore();
-    });
+    rects.forEach((r,i)=>clDrawCell(ctx,r,i,base,rad,tg,fam));
     const fs=Math.max(12,base*.018),pad=fs*.45,label=`Page ${pageNo} of ${book.pages.length}`;
     ctx.save();ctx.font=`500 ${fs}px ${fam}`;ctx.textAlign='right';ctx.textBaseline='bottom';
     const tw=ctx.measureText(label).width;ctx.fillStyle='rgba(0,0,0,.58)';ctx.fillRect(W-tw-pad*2,H-fs-pad*1.8,tw+pad*2,fs+pad*1.3);
