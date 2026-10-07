@@ -159,11 +159,21 @@ public class PhotoPairPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControlle
                     call.reject("Photos could not provide editing input for this asset."); return
                 }
                 let output = PHContentEditingOutput(contentEditingInput: input)
-                guard output.supportedRenderedContentTypes.contains(fileType) else {
-                    call.reject("Photos does not support the rendered export format for this asset."); return
-                }
                 do {
-                    let destination = try output.renderedContentURL(for: fileType)
+                    let destination: URL
+                    if #available(iOS 17.0, *) {
+                        guard output.supportedRenderedContentTypes.contains(fileType) else {
+                            call.reject("Photos does not support the rendered export format for this asset."); return
+                        }
+                        destination = try output.renderedContentURL(for: fileType)
+                    } else {
+                        // Before iOS 17, Photos requires a JPEG at the legacy output URL.
+                        // Reject other formats before committing any change to the asset.
+                        guard fileType == .jpeg else {
+                            call.reject("Updating a Photos edit on iOS 15 or 16 requires a JPEG export."); return
+                        }
+                        destination = output.renderedContentURL
+                    }
                     try FileManager.default.copyItem(at: renderedURL, to: destination)
                     output.adjustmentData = PHAdjustmentData(
                         formatIdentifier: Self.adjustmentFormatIdentifier,

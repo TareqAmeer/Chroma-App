@@ -159,3 +159,8 @@ CHR-285 publication verified: implementation 17b98648 and integration evidence a
 - Source and prior native evidence remain unchanged; JSON/native version consistency verified. Tag v1.2.9 will trigger the repository release builds; attachment status is checked separately before claiming an available APK.
 
 CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targets 4b2803cc608a03138745e75a33e05d232acaf2a0; remote annotated tag dereferenced to that commit. Android tag workflow 37610976418 completed successfully. GitHub release is published (not draft/prerelease) at https://github.com/TareqAmeer/Chroma-App/releases/tag/v1.2.9 with Chromasmith.apk (45,623,164 bytes) and build-1.1007C.txt (8 bytes). iOS tag workflow 37610976447 failed at Build Release app; desktop builds were still running when Android attachment was verified. Issue remains In Review.
+
+### 2026-10-07 — CHR-292 iOS release compatibility fix
+
+- Diagnosed v1.2.9 job 112757883398: two iOS 17-only Photos editing-output APIs were unguarded while deployment target is iOS 15. Added a version guard in ios/App/App/PhotoPairPlugin.swift, preserving modern validation and using the documented JPEG-only output on iOS 15–16 before any Photos commit.
+- Prepared patch release v1.2.10 build 13 in package/lock and Android/iOS version files; docs/releases/v1.2.10.md records cause and compatibility. Availability guard/version consistency and diff checks passed. Actual Xcode Release compilation and IPA packaging are pending CI; no device Photos-write claim yet.
