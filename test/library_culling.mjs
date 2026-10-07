@@ -8,18 +8,21 @@ const root = process.cwd();
 const server = createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).replace(/^\/+/, '');
+    if (pathname.endsWith('coi-serviceworker.min.js')) { res.writeHead(200, { 'Content-Type': 'text/javascript' }); res.end(''); return; }
+    if (pathname.endsWith('/favicon.ico')) { res.writeHead(204); res.end(); return; }
     const sourcePath = pathname === 'desktop/dist/library-ui.js' ? 'desktop/library-ui.js' : pathname;
     const body = await readFile(path.join(root, sourcePath));
-    const type = sourcePath.endsWith('.html') ? 'text/html' : sourcePath.endsWith('.js') ? 'text/javascript' : 'application/octet-stream';
+    const type = sourcePath.endsWith('.html') ? 'text/html' : /\.(?:m?js)$/.test(sourcePath) ? 'text/javascript' : sourcePath.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream';
     res.writeHead(200, { 'Content-Type': type }); res.end(body);
-  } catch { res.writeHead(404); res.end(); }
+  } catch { console.error('HARNESS_404', req.url); res.writeHead(404); res.end(); }
 }).listen(0, '127.0.0.1');
 await new Promise((resolve) => server.once('listening', resolve));
 
 const browser = await chromium.launch({ ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {}), args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  const errors = []; await page.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch {} }); // first-run welcome card would intercept clicks
+  const errors = [], consoleErrors = []; await page.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch {} }); // first-run welcome card would intercept clicks
+  page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/desktop/dist/index.html?libtest=1&libn=10&libtime=1`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30000 });
@@ -59,6 +62,15 @@ try {
   await page.click('#lib-cull-time-start');
   await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().mode === 'cull' && !window.__libSurveyState().groupPicker, { timeout: 45000 });
   await page.waitForFunction(() => document.querySelectorAll('#lib-survey .lib-survey-cell').length === 4, { timeout: 45000 });
+  assert.equal(await page.locator('#lib-survey .lib-survey-cell.cmp-focus').count(), 1, 'cull view has one prominent focused preview');
+  assert.equal(await page.locator('#lib-survey .lib-survey-cell:not(.cmp-focus)').count(), 3, 'the remaining loaded photos form the filmstrip');
+  const focusHeight = await page.locator('#lib-survey .lib-survey-cell.cmp-focus').evaluate((el) => el.getBoundingClientRect().height);
+  const stripHeight = await page.locator('#lib-survey .lib-survey-cell:not(.cmp-focus)').first().evaluate((el) => el.getBoundingClientRect().height);
+  assert.ok(focusHeight > stripHeight * 2, `focused preview (${focusHeight}px) is substantially larger than filmstrip (${stripHeight}px)`);
+  await page.click('#lib-cull-fullscreen');
+  await page.waitForFunction(() => document.fullscreenElement?.id === 'lib-survey');
+  await page.click('#lib-cull-fullscreen');
+  await page.waitForFunction(() => !document.fullscreenElement);
 
   let state = await page.evaluate(() => window.__libSurveyState());
   assert.equal(state.paths.length, 4, 'culling keeps the visible batch bounded to four');
@@ -82,7 +94,8 @@ try {
   assert.equal(await page.evaluate(() => window.__libSurveyState().active), false, 'Escape exits Culling');
   assert.notEqual(await page.locator('#lib-grid').evaluate((el) => getComputedStyle(el).display), 'none');
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
-  console.log(`PASS: capture grouping 60s→2 groups, 15s→${groups.length} groups, unknown-time isolated; group collapse/expand; 10-photo cull in four-photo pages with capture-ordered Pick/Reject advance and clean exit.`);
+  assert.deepEqual(consoleErrors, [], `console errors: ${consoleErrors.join('; ')}`);
+  console.log(`PASS: capture grouping 60s→2 groups, 15s→${groups.length} groups, unknown-time isolated; focus/filmstrip ${focusHeight}px/${stripHeight}px; fullscreen enter/exit; 10-photo cull in four-photo pages with capture-ordered Pick/Reject advance and clean exit.`);
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));

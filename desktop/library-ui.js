@@ -2028,6 +2028,12 @@
     #lib-survey.on{display:flex}
     #lib-survey-grid{display:grid;grid-template-columns:repeat(var(--survey-cols,2),minmax(0,1fr));
       grid-template-rows:repeat(var(--survey-rows,1),minmax(0,1fr));gap:8px;flex:1;min-height:0}
+    #lib-survey.lib-cull-presentation #lib-survey-grid{display:flex;flex-direction:column;gap:6px}
+    #lib-survey.lib-cull-presentation .lib-survey-cell{flex:0 0 78px;min-height:0;display:flex;flex-direction:row;cursor:pointer}
+    #lib-survey.lib-cull-presentation .lib-survey-cell.cmp-focus{flex:1 1 0;min-height:180px;flex-direction:column;cursor:default}
+    #lib-survey.lib-cull-presentation .lib-survey-cell:not(.cmp-focus) .lib-cmp-canvas-wrap{flex:1;min-width:0}
+    #lib-survey.lib-cull-presentation .lib-survey-cell:not(.cmp-focus) .lib-survey-head{width:180px;flex:0 0 180px;border:0;border-right:1px solid var(--bdr)}
+    #lib-survey.lib-cull-presentation .lib-survey-cell:not(.cmp-focus) .lib-cmp-chrome{display:none}
     .lib-survey-cell{min-height:0;outline:none}
     .lib-survey-cell:focus-visible,.lib-survey-cell.cmp-focus{outline:2px solid var(--acc2);outline-offset:-2px}
     .lib-survey-head{display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--bdr);
@@ -8509,7 +8515,9 @@
     const heading = compareState.mode === 'cull'
       ? `Culling · ${surveyState.cullOffset + 1}–${surveyState.cullOffset + n} of ${surveyState.cullPaths.length}`
       : surveyHeading(n);
-    host.innerHTML = `<div id="lib-compare-bar"><span class="survey-count">${heading}</span><span class="survey-focus-note" style="margin-left:auto;color:var(--acc)"></span>${compareState.mode === 'cull' ? '<button type="button" id="lib-cull-del" class="lib-btn" title="Move every photo rejected in this cull to the system Trash (asks first)">Delete rejected (0)</button>' : ''}</div>
+    const isCull = compareState.mode === 'cull';
+    host.classList.toggle('lib-cull-presentation', isCull);
+    host.innerHTML = `<div id="lib-compare-bar"><span class="survey-count">${heading}</span><span class="survey-focus-note" style="margin-left:auto;color:var(--acc)"></span>${isCull ? '<button type="button" id="lib-cull-fullscreen" class="lib-btn" title="Toggle full screen cull view">Full screen</button><button type="button" id="lib-cull-del" class="lib-btn" title="Move every photo rejected in this cull to the system Trash (asks first)">Delete rejected (0)</button>' : ''}</div>
       <div id="lib-survey-grid">${surveyState.cells.map(surveyCellHtml).join('')}</div>`;
     host.querySelectorAll('.lib-survey-cell').forEach((el) => {
       el.addEventListener('focus', () => { surveyState.focus = Number(el.dataset.surveyIdx); surveySyncFocus(); });
@@ -8533,6 +8541,14 @@
     }));
     const delBtn = host.querySelector('#lib-cull-del');
     if (delBtn) delBtn.onclick = () => cullDeleteRejected();
+    const fullscreenBtn = host.querySelector('#lib-cull-fullscreen');
+    if (fullscreenBtn) fullscreenBtn.onclick = async () => {
+      try {
+        if (document.fullscreenElement === host) await document.exitFullscreen();
+        else await host.requestFullscreen();
+      } catch (e) { if (typeof toast === 'function') toast(`Could not toggle full screen: ${e.message || e}`, false); }
+      fullscreenBtn.textContent = document.fullscreenElement === host ? 'Exit full screen' : 'Full screen';
+    };
     detailControls(host);
     surveyCellsRender();
     surveySyncFocus();
