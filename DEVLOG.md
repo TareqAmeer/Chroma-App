@@ -601,3 +601,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-272
 
 - Integration `bd5d90975b3a1e7ffabc18f47427644046aee6a9` containing feature `5d790aab3c0504d0cbc0b9a5428bce7e00b68862` was pushed by fast-forward after fetching `origin/main`. Fresh fetch and `git ls-remote` matched `bd5d90975b3a1e7ffabc18f47427644046aee6a9`, ancestry passed, and shipped source contains the workspace file exchange handlers.
+
+### 2026-10-08 — CHR-208 import preview and starting edit (partial)
+
+- Added an optional copied edit snapshot to saved import recipes and the ingest/XMP path; the import sheet previews populated IPTC metadata and starting-edit intent. Files: desktop/library-ui.js, desktop/src-tauri/src/library.rs, desktop/src-tauri/src/ingest.rs, and test/import_recipes.mjs.
+- node test/import_recipes.mjs passed in Chromium: recipe save/reload and IPC payload retained the starting edit; IPTC preview reflected creator/keywords; naming preview produced P106504.RW2 → 2026-08-13_0007.RW2 after duplicate filtering and warned that colliding names would receive unique suffixes. JavaScript syntax checks passed.
+- CHR-208 remains In Progress: the explicit GPS export policy and mixed-format exported-file round trip are still open. The focused Rust ingest test compiled through Rust code generation but could not link/run: link.exe failed with LNK1106, “invalid file or disk full: cannot seek to 0x6CDB002.” Temporary ignored model/runtime copies used to reach that stage were removed; native app behavior remains unverified.

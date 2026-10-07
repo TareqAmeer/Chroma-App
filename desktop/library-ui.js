@@ -312,7 +312,10 @@
         out.push({ path: '/Volumes/LUMIX/PRIVATE/M4ROOT/C0001.MP4', name: 'C0001.MP4', size: 810e6, kind: 'video', date: '2026-08-14', duplicate: false });
         return Promise.resolve(out);
       }
-      case 'ingest_copy': return new Promise((res) => setTimeout(() => res({ copied: 22, duplicates_skipped: 3, failed: [], dest_root: A.options.destRoot, bytes: 1.4e9 }), 900));
+      case 'ingest_copy': {
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        return new Promise((res) => setTimeout(() => res({ copied: 22, duplicates_skipped: 3, failed: [], dest_root: A.options.destRoot, bytes: 1.4e9 }), 900));
+      }
       case 'eject_volume': return Promise.resolve();
       case 'trash_file': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve();
       case 'duplicate_file': return Promise.resolve();
@@ -13179,10 +13182,11 @@
       return true;
     });
   }
-  function currentImportRecipe(name, id) {
+  function currentImportRecipe(name, id, startingEditRecipe = '') {
     const $ = (field) => document.getElementById(field);
     return {
       id, name,
+      startingEditRecipe,
       folderTemplate: $('imp-folder').value,
       filenameTemplate: $('imp-name').value.trim(),
       sequenceStart: Math.max(0, Math.trunc(Number($('imp-seq-start').value) || 0)),
@@ -13193,9 +13197,17 @@
       keywords: importKeywordList($('imp-keywords').value),
     };
   }
-  function applyImportRecipe(recipe) {
+  function setImportStartingEditOptions(select, copiedEdit, savedEdit = '') {
+    select.innerHTML = '<option value="">None</option>'
+      + (copiedEdit ? '<option value="copied">Use copied edit</option>' : '')
+      + (savedEdit ? '<option value="saved">Saved edit snapshot</option>' : '');
+    select.dataset.savedRecipe = savedEdit;
+    select.value = savedEdit ? 'saved' : '';
+  }
+  function applyImportRecipe(recipe, copiedEdit, startingEditSelect) {
     if (!recipe) return;
     const $ = (field) => document.getElementById(field);
+    setImportStartingEditOptions(startingEditSelect, copiedEdit, recipe.startingEditRecipe || '');
     if (recipe.folderTemplate != null) $('imp-folder').value = recipe.folderTemplate;
     $('imp-name').value = recipe.filenameTemplate || '';
     $('imp-seq-start').value = String(recipe.sequenceStart ?? 1);
@@ -13205,6 +13217,7 @@
     $('imp-job-project').value = recipe.jobProject || '';
     $('imp-keywords').value = (recipe.keywords || []).join(', ');
     $('imp-name').dispatchEvent(new Event('input'));
+    $('imp-keywords').dispatchEvent(new Event('input'));
   }
 
   /// The import sheet. Scans first (so the user is choosing against what is actually on the card,
@@ -13212,6 +13225,7 @@
   async function openImportPanel(cardPath) {
     if (cardState.scanning) return;
     const prefs = importPrefs();
+    const copiedStartingEdit = typeof window.__copiedRecipe === 'string' ? window.__copiedRecipe : '';
     const back = document.createElement('div');
     back.id = 'lib-import-back';
     back.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center';
@@ -13505,6 +13519,10 @@
       + row('Job / project ID', `<input id="imp-job-project" style="${inputCss}" value="${esc(prefs.jobProject || '')}" placeholder="IPTC job identifier">`)
       + row('Keywords', `<input id="imp-keywords" style="${inputCss}" value="${esc((prefs.keywords || []).join(', '))}" placeholder="Comma-separated keywords">`,
           'Keywords are added to existing sidecar keywords; blank metadata fields leave source values unchanged.')
+      + row('Starting edit', `<select id="imp-starting-edit" style="${inputCss}"><option value="">None</option></select>`,
+          'Optionally apply a copied Chromasmith edit to each imported photo.')
+      + row('Import preview', `<div id="imp-metadata-preview" aria-live="polite" style="font-size:11px;line-height:1.55;max-height:88px;overflow:auto;padding:5px 7px;background:var(--sur2);border-radius:6px"></div>`,
+          'Only populated metadata fields are written; existing unrelated XMP properties are preserved.')
       + row('Sequence starts at', `<input id="imp-seq-start" type="number" min="0" step="1" style="${inputCss}" value="${esc(prefs.sequenceStart ?? '1')}">`,
           'The sequence follows the card’s filename order and skips files excluded by “Skip files already imported”.')
       + row('Also copy to', `<div style="display:flex;gap:6px"><input id="imp-backup" style="${inputCss}" value="${esc(prefs.backup || '')}" placeholder="Optional second copy — another drive" readonly>
@@ -13525,6 +13543,8 @@
 
     const $ = (id) => document.getElementById(id);
     const recipeSelect = $('imp-recipe');
+    const startingEditSelect = $('imp-starting-edit');
+    setImportStartingEditOptions(startingEditSelect, copiedStartingEdit, prefs.startingEditRecipe || '');
     const refreshRecipeOptions = (selectedId = '') => {
       recipeSelect.innerHTML = '<option value="">Current settings</option>'
         + importRecipes().map((recipe) => `<option value="${esc(recipe.id)}">${esc(recipe.name)}</option>`).join('');
@@ -13533,14 +13553,17 @@
     if (prefs.recipeId && savedRecipes.some((recipe) => recipe.id === prefs.recipeId)) recipeSelect.value = prefs.recipeId;
     recipeSelect.onchange = () => {
       const selectedRecipe = importRecipes().find((recipe) => recipe.id === recipeSelect.value);
-      if (selectedRecipe) applyImportRecipe(selectedRecipe);
+      if (selectedRecipe) applyImportRecipe(selectedRecipe, copiedStartingEdit, startingEditSelect);
     };
     $('imp-recipe-save').onclick = async () => {
       const name = (await window.askTextModal('Save import recipe as', '', '') || '').trim();
       if (!name) return;
       const existing = importRecipes().find((recipe) => recipe.name.toLocaleLowerCase() === name.toLocaleLowerCase());
       const currentId = existing?.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `import-${Date.now()}`);
-      const stored = storeImportRecipe(currentImportRecipe(name, currentId));
+      const startingEditRecipe = startingEditSelect.value === 'saved'
+        ? startingEditSelect.dataset.savedRecipe || ''
+        : startingEditSelect.value === 'copied' ? copiedStartingEdit : '';
+      const stored = storeImportRecipe(currentImportRecipe(name, currentId, startingEditRecipe));
       refreshRecipeOptions(stored.id);
     };
     $('imp-recipe-delete').onclick = () => {
@@ -13559,6 +13582,23 @@
     $('imp-name').addEventListener('input', () => updateImportRenamePreview());
     $('imp-seq-start').addEventListener('input', () => updateImportRenamePreview());
     $('imp-skip').addEventListener('change', () => updateImportRenamePreview());
+    const updateImportMetadataPreview = () => {
+      const host = $('imp-metadata-preview');
+      const values = [
+        ['Creator', $('imp-creator').value.trim()],
+        ['Copyright', $('imp-copyright').value.trim()],
+        ['Caption', $('imp-caption').value.trim()],
+        ['Job / project', $('imp-job-project').value.trim()],
+        ['Keywords', importKeywordList($('imp-keywords').value).join(', ')],
+      ].filter(([, value]) => value);
+      if (startingEditSelect.value) values.push(['Starting edit', startingEditSelect.value === 'saved' ? 'Saved edit snapshot' : 'Copied edit']);
+      host.innerHTML = values.length
+        ? values.map(([label, value]) => `<div><strong>${esc(label)}:</strong> ${esc(value)}</div>`).join('')
+        : '<span style="color:var(--mut)">No metadata or edit changes selected.</span>';
+    };
+    ['imp-creator', 'imp-copyright', 'imp-caption', 'imp-job-project', 'imp-keywords'].forEach((id) => $(id).addEventListener('input', updateImportMetadataPreview));
+    startingEditSelect.addEventListener('change', updateImportMetadataPreview);
+    updateImportMetadataPreview();
     const pickFolder = async (target) => {
       try {
         const chosen = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false } });
@@ -13588,10 +13628,13 @@
           caption: $('imp-caption').value.trim(),
           jobProject: $('imp-job-project').value.trim(),
           keywords: importKeywordList($('imp-keywords').value),
+          startingEditRecipe: startingEditSelect.value === 'saved'
+            ? startingEditSelect.dataset.savedRecipe || ''
+            : startingEditSelect.value === 'copied' ? copiedStartingEdit : '',
         },
       };
       saveImportPrefs({ dest, backup: opts.backupRoot || '', folder: opts.folderTemplate, name: opts.filenameTemplate, sequenceStart: String(opts.sequenceStart), skip: opts.skipDuplicates, eject: $('imp-eject').checked, recipeId: recipeSelect.value,
-        creator: opts.metadata.creator, copyright: opts.metadata.copyright, caption: opts.metadata.caption, jobProject: opts.metadata.jobProject, keywords: opts.metadata.keywords });
+        creator: opts.metadata.creator, copyright: opts.metadata.copyright, caption: opts.metadata.caption, jobProject: opts.metadata.jobProject, keywords: opts.metadata.keywords, startingEditRecipe: opts.metadata.startingEditRecipe });
       cardState.scanning = true;
       $('imp-go').disabled = true;
       $('imp-go').style.opacity = '.6';

@@ -1535,6 +1535,9 @@ pub(crate) struct ImportMetadata {
     pub caption: String,
     pub job_project: String,
     pub keywords: Vec<String>,
+    /// Optional Chromasmith FX snapshot (base64 JSON) captured by an import recipe.
+    #[serde(default)]
+    pub starting_edit_recipe: String,
 }
 
 impl ImportMetadata {
@@ -1544,6 +1547,7 @@ impl ImportMetadata {
             && self.caption.trim().is_empty()
             && self.job_project.trim().is_empty()
             && self.keywords.iter().all(|keyword| keyword.trim().is_empty())
+            && self.starting_edit_recipe.trim().is_empty()
     }
 }
 
@@ -2371,6 +2375,10 @@ pub(crate) fn apply_import_metadata(path: &str, metadata: &ImportMetadata) -> Re
     if metadata.is_empty() { return Ok(()); }
 
     let mut sc = get_sidecar(path.to_string());
+    if !metadata.starting_edit_recipe.trim().is_empty() {
+        sc.recipe = metadata.starting_edit_recipe.trim().to_string();
+        sc.edited = true;
+    }
     for keyword in &metadata.keywords {
         let keyword = keyword.trim();
         if !keyword.is_empty() && !sc.keywords.iter().any(|old| old == keyword) {

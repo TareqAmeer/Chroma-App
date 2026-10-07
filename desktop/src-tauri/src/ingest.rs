@@ -1145,12 +1145,14 @@ mod tests {
             "folderTemplate": "{YYYY}/{YYYY-MM-DD}",
             "filenameTemplate": "",
             "skipDuplicates": true,
-            "only": []
+            "only": [],
+            "metadata": {"creator":"","copyright":"","caption":"","jobProject":"","keywords":[],"startingEditRecipe":"eyJleHBvc3VyZSI6MC4zfQ=="}
         }"#;
         let opts: IngestOptions = serde_json::from_str(json).expect("UI's exact camelCase JSON must deserialize");
         assert_eq!(opts.dest_root, "/Volumes/Archive/Originals");
         assert_eq!(opts.backup_root.as_deref(), Some("/Volumes/Backup"));
         assert!(opts.skip_duplicates);
+        assert_eq!(opts.metadata.starting_edit_recipe, "eyJleHBvc3VyZSI6MC4zfQ==");
 
         // And the minimal shape the modal sends when the optional fields are left at defaults —
         // `#[serde(default)]` covers everything but dest_root, which the UI always sets.
@@ -1250,12 +1252,16 @@ mod tests {
                 caption: "An <important> shoot".into(),
                 job_project: "JOB-42".into(),
                 keywords: vec!["news".into(), "news".into()],
+                starting_edit_recipe: "eyJleHBvc3VyZSI6MC4zfQ==".into(),
             },
         }, &mut progress).unwrap();
 
         assert_eq!(result.copied, 1);
         assert_eq!(result.duplicates_skipped, 1);
         assert!(result.failed.is_empty(), "unexpected import failures: {:?}", result.failed);
+        let imported_sidecar = crate::library::get_sidecar(result.completed_files[0].clone());
+        assert_eq!(imported_sidecar.recipe, "eyJleHBvc3VyZSI6MC4zfQ==", "the chosen starting edit must survive ingest");
+        assert!(imported_sidecar.edited, "a starting edit should mark the imported photo as edited");
         let primary = std::fs::read_to_string(dest.join("2026-04-05/a.xmp")).unwrap();
         let second = std::fs::read_to_string(backup.join("2026-04-05/a.xmp")).unwrap();
         for xmp in [&primary, &second] {
