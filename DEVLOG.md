@@ -562,3 +562,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - `node test/dust_sync_ui.mjs` passed on the checked-in 512×384 chart: 1,178 changed channels confined to the spot, outside/untouched identity difference 0, preview/loupe/four-tile differences 0, and reviewed two-photo sync, stale-approval invalidation, and whole-batch undo passed with no browser errors.
 - CHR-246 stays In Progress: a fresh native build still fails in `onig_sys` with MSVC LNK1114 (cannot overwrite generated `libonig.a`, error 5), preventing current Tauri job/accept/export smoke. Natural pole/tower trials show visible fill artifacts; real 100% dust/wire/person repeat-pattern and colour-shift acceptance is not met. No model quality completion claim.
 - Publication verified: test/DEVLOG integration `cb2fb40aa7c5dfef1a9bea69c485ec1d6c9496c2` is contained in freshly fetched `origin/main`; `git ls-remote` matched it and the shipped dust-sync favicon route and inpaint browser path are present. Existing CHR-246 dust-sync (`b65e401c`) and MI-GAN (`1eca56b2`) feature commits were already ancestors of main; this publication adds reproducible current-main browser checks, not new feature code.
+
+### 2026-10-08 — CHR-267 culling keyboard harness correction (partial)
+
+- Updated `test/library_culling.mjs` to focus the active survey cell after exiting fullscreen before asserting Enter-key culling behavior; the fullscreen button correctly retained browser focus, which had made the prior test assertion target the wrong element.
+- `node test/library_culling.mjs` passed in Chrome: 60s→2 capture groups, 15s→5, unknown-time isolation, fullscreen enter/exit, ten-photo capture order across four-photo pages, Pick/Reject advance, and clean exit; no page or console errors.
+- This corrects test focus only. Native SQLite/Tauri validation, real 45 MP timing, undo, and remaining CHR-267 acceptance criteria stay open. Publication record will follow after integration.

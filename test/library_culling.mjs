@@ -71,6 +71,8 @@ try {
   await page.waitForFunction(() => document.fullscreenElement?.id === 'lib-survey');
   await page.click('#lib-cull-fullscreen');
   await page.waitForFunction(() => !document.fullscreenElement);
+  // The fullscreen toggle keeps focus after native activation; return keyboard focus to the survey cell.
+  await page.locator('#lib-survey .lib-survey-cell.cmp-focus').focus();
 
   let state = await page.evaluate(() => window.__libSurveyState());
   assert.equal(state.paths.length, 4, 'culling keeps the visible batch bounded to four');
