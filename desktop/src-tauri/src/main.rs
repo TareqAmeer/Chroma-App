@@ -2240,6 +2240,11 @@ fn save_export_file_raw(request: tauri::ipc::Request<'_>) -> Result<GpSaveResult
     // CHR-201/202 collision policy from the Export panel: "suffix" (default: name (2).ext),
     // "skip" (leave the existing file; reported as bytes == 0) or "overwrite".
     let policy = request.headers().get("x-collision").and_then(|v| v.to_str().ok()).unwrap_or("suffix");
+    save_export_bytes(&dir, safe_name, bytes, policy)
+}
+
+// Keep the actual disk-write policy independently testable without a running WebView.
+fn save_export_bytes(dir: &Path, safe_name: &str, bytes: &[u8], policy: &str) -> Result<GpSaveResult, String> {
     let direct = dir.join(safe_name);
     if policy == "skip" && direct.exists() {
         return Ok(GpSaveResult { path: direct.to_string_lossy().into_owned(), bytes: 0, renamed: false });
@@ -3475,8 +3480,44 @@ mod effective_dcp_mode_tests {
 
 #[cfg(test)]
 mod export_save_tests {
-    use super::unique_dest;
+    use super::{save_export_bytes, unique_dest};
     use std::path::Path;
+
+    #[test]
+    fn collision_policies_write_reported_bytes_and_preserve_skipped_output() {
+        let dir = std::env::temp_dir().join(format!("cs_collision_{}_{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let original = dir.as_path().join("café.jpg");
+        std::fs::write(&original, b"original").unwrap();
+
+        let skipped = save_export_bytes(dir.as_path(), "café.jpg", b"replacement", "skip").unwrap();
+        assert_eq!(Path::new(&skipped.path), original);
+        assert_eq!(skipped.bytes, 0);
+        assert_eq!(std::fs::read(&original).unwrap(), b"original");
+        assert_eq!(std::fs::read_dir(dir.as_path()).unwrap().count(), 1);
+
+        for policy in ["suffix", "unknown"] {
+            let saved = save_export_bytes(dir.as_path(), "café.jpg", b"new bytes", policy).unwrap();
+            assert_ne!(Path::new(&saved.path), original);
+            assert_eq!(saved.bytes, 9);
+            assert_eq!(std::fs::read(&saved.path).unwrap(), b"new bytes");
+            assert_eq!(std::fs::read(&original).unwrap(), b"original");
+        }
+        assert!(dir.as_path().join("café (2).jpg").exists());
+        assert!(dir.as_path().join("café (3).jpg").exists());
+
+        let overwritten = save_export_bytes(dir.as_path(), "café.jpg", b"short", "overwrite").unwrap();
+        assert_eq!(Path::new(&overwritten.path), original);
+        assert_eq!(overwritten.bytes, 5);
+        assert_eq!(std::fs::read(&original).unwrap(), b"short");
+        assert_eq!(std::fs::read_dir(dir.as_path()).unwrap().count(), 3);
+
+        let fresh = save_export_bytes(dir.as_path(), "fresh.jpg", b"first", "skip").unwrap();
+        assert_eq!(fresh.bytes, 5);
+        assert_eq!(std::fs::read(&fresh.path).unwrap(), b"first");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     // A batch export must never silently overwrite an existing file — the whole point of the
     // native save path is that nothing disappears without the user hearing about it.

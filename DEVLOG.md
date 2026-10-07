@@ -425,3 +425,8 @@ CHR-285 publication verified: implementation 17b98648 and integration evidence a
 
 - Fixed `test/probe_splash_reveal.mjs` to resolve Windows file URLs with `fileURLToPath`; reproduced the old malformed root and 30-second reveal timeout. Corrected the native startup mock and asserted unexpected commands/page errors instead of ignoring them. No uniquely matching Linear cleanup issue was found; no unrelated issue was updated.
 - Real Chromium verification: both normal and rejecting window-call modes report splash=false, hold=false, lastIgnore=false after 2,500 ms with frozen animation frames; zero page errors or unexpected native calls. The two mobile tests already use safe HTTP paths and were unchanged. Publication is pending verified main integration.
+
+### 2026-10-07 — CHR-201 / CHR-202 native export collision verification; CHR-260 CFA fixture
+
+- Extracted the existing raw export file writer in `desktop/src-tauri/src/main.rs` and added native byte/file tests for suffix, skip, overwrite, unknown-policy fallback and reported sizes (2/2 pass, 0.04 s). Corrected the mismatched X-Trans expected CFA fixture in `raw_decode.rs` using distinct row-major rows; production mapping unchanged (CHR-260: 3/3 pass, 0.03 s).
+- Windows MSVC Cargo check passes (9.92 s); CHR-251 preset parser 3/3 and CHR-176 watched identity/stability 1/1 pass. Bundling resources were overridden only for compile/testing. A fresh debug executable linked, but Cargo could not replace the running app's locked executable (OS error 5). Latest-build WebView/IPC verification and publication remain pending; these test results do not complete the broader native tickets.

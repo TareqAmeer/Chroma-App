@@ -207,13 +207,17 @@ mod alternate_demosaic_backend_tests {
 
     #[test]
     fn xtrans_mapping_uses_rawlers_real_6x6_cfa_pattern() {
-        let rawler_cfa = rawler::CFA::new("RGBGGRGBGGRGBGGRGBGGRGBGGRGBGGRGBGGR");
+        // rawler concatenates rows, rather than repeating the first six characters.
+        // Distinct rows also catch swapped row/column indices in our mapping.
+        let rawler_cfa = rawler::CFA::new(concat!(
+            "RGBGGR", "BGGGRG", "BGGRGB", "GGRGBG", "GRGBGG", "RGBGGR"
+        ));
         let expected = [
             Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green, Channel::Red,
-            Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green, Channel::Red,
-            Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green, Channel::Red,
-            Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green, Channel::Red,
-            Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green, Channel::Red,
+            Channel::Blue, Channel::Green, Channel::Green, Channel::Green, Channel::Red, Channel::Green,
+            Channel::Blue, Channel::Green, Channel::Green, Channel::Red, Channel::Green, Channel::Blue,
+            Channel::Green, Channel::Green, Channel::Red, Channel::Green, Channel::Blue, Channel::Green,
+            Channel::Green, Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green,
             Channel::Red, Channel::Green, Channel::Blue, Channel::Green, Channel::Green, Channel::Red,
         ];
         assert_eq!(
