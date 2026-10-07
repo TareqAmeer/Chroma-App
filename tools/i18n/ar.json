@@ -85,7 +85,6 @@
     "Where can I see every feature in a list?": "أين أجد قائمة بكل الميزات؟",
     "Open the full feature list. Every tool, grouped by what it does, with a one-line description.": "افتح قائمة الميزات الكاملة. كل أداة مصنّفة حسب وظيفتها، مع وصف من سطر واحد.",
     "Is there a Windows version?": "هل توجد نسخة لـ Windows؟",
-    "Yes. A Windows installer is published alongside the Mac release.": "نعم. يُنشر مثبّت Windows مع كل إصدار لـ Mac.",
     "What is it made with?": "بماذا صُنع؟",
     "The whole editor is one HTML file with plain JavaScript and no framework or build step. Rendering runs on WebGL2, with GLSL shaders for the look, grain, halation, bloom and tiled full-resolution export. RAW files are decoded locally with LibRaw compiled to WebAssembly, plus Adobe DCP camera profiles. The desktop app is a Tauri shell with a Rust core and a local catalogue database, for Mac and Windows. On-device masks use ONNX Runtime models (EdgeSAM and SegFormer). Video uses mediabunny, the iPhone app is a Capacitor shell, and the film looks were calibrated with Python tooling. It works offline through a service worker, and the source is GPL-3.0.": "المحرّر كله ملف HTML واحد بلغة JavaScript بسيطة، دون إطار عمل أو خطوة بناء. العرض يعمل على WebGL2، مع مظلّلات GLSL للمظهر والحبيبات والهالة والتوهج والتصدير بالدقة الكاملة. ملفات RAW تُفك محليًا بمكتبة LibRaw المحوّلة إلى WebAssembly، مع ملفات تعريف الكاميرا DCP من Adobe. تطبيق سطح المكتب مبني على Tauri بنواة Rust وقاعدة بيانات محلية للمكتبة، لـ Mac وWindows. الأقنعة على الجهاز تستخدم نماذج ONNX Runtime ‏(EdgeSAM وSegFormer). الفيديو يستخدم mediabunny، وتطبيق iPhone مبني على Capacitor، ومظاهر الأفلام عويرت بأدوات Python. يعمل دون إنترنت عبر service worker، والشيفرة المصدرية بترخيص GPL-3.0.",
     "Auto-scroll": "تمرير تلقائي",
@@ -434,7 +433,6 @@
     "Mac": "Mac",
     "Full desktop app · .dmg": "تطبيق سطح المكتب الكامل · ‎.dmg‎",
     "Windows": "Windows",
-    "Full desktop app · installer": "تطبيق سطح المكتب الكامل · مثبّت",
     "Web": "الويب",
     "Any modern browser · nothing to install": "أي متصفح حديث · لا شيء للتثبيت",
     "iPhone": "iPhone",
@@ -549,8 +547,6 @@
     "Chromasmith for Windows is a free desktop photo editor and photo library: develop RAW files, apply 133 film looks with real grain and halation, and export at full resolution — all offline, no account.": "كروماسميث لـ Windows محرّر صور ومكتبة صور مجانية لسطح المكتب: حمّض ملفات RAW، وطبّق 133 مظهر فيلم بحبيبات وهالة حقيقية، وصدّر بالدقة الكاملة — كله دون إنترنت ودون حساب.",
     "Chromasmith for Windows": "كروماسميث لـ Windows",
     "Windows 10 or 11, 64-bit": "Windows 10 أو 11، بنظام 64 بت",
-    "The installer is not code-signed yet, so Windows SmartScreen may warn about an \"unknown publisher\".": "المثبّت غير موقّع بعد، لذلك قد يحذّرك Windows SmartScreen من «ناشر غير معروف».",
-    "Download for Windows ↓": "نزّل لـ Windows ↓",
     "installer and run it.": "وشغّله.",
     "If SmartScreen appears, click": "إذا ظهر SmartScreen، انقر",
     "More info": "مزيد من المعلومات",
@@ -589,6 +585,12 @@
     "1 app. £0 subscriptions.": "تطبيق واحد. ‎£0‎ اشتراكات.",
     "1 app. £0 subscriptions. Fully offline.": "تطبيق واحد. ‎£0‎ اشتراكات. يعمل دون إنترنت بالكامل.",
     "darkroom of features.": "كاملة بكل ميزاتها.",
-    "1 app. $0 subscriptions. Fully offline.": "تطبيق واحد. ‎$0‎ اشتراكات. يعمل دون إنترنت بالكامل."
+    "1 app. $0 subscriptions. Fully offline.": "تطبيق واحد. ‎$0‎ اشتراكات. يعمل دون إنترنت بالكامل.",
+    "Full desktop app · Microsoft Store or installer": "تطبيق سطح المكتب الكامل · Microsoft Store أو المثبّت",
+    "Yes. Get it from the Microsoft Store, or download the installer published alongside each Mac release.": "نعم. احصل عليه من Microsoft Store، أو نزّل المثبّت المنشور مع كل إصدار لـ Mac.",
+    "Or download the installer ↓": "أو نزّل المثبّت ↓",
+    "Get it from Microsoft Store ↗": "احصل عليه من Microsoft Store ↗",
+    "The Microsoft Store version installs and updates itself. The direct installer is not code-signed yet, so Windows SmartScreen may warn about an \"unknown publisher\".": "نسخة Microsoft Store تُثبَّت وتُحدَّث تلقائيًا. أما المثبّت المباشر فغير موقّع بعد، لذلك قد يحذّرك Windows SmartScreen من «ناشر غير معروف».",
+    "How to install the direct installer": "طريقة تثبيت المثبّت المباشر"
   }
 }

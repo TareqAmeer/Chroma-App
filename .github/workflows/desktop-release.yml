@@ -269,3 +269,53 @@ jobs:
             ${{ steps.pack.outputs.checksum }}
           append_body: true
           generate_release_notes: true
+
+  store:
+    # Submits the same Windows build to the Microsoft Store (product 9N2KCJRFVF6F) as an MSIX.
+    # Runs only for a `v*` tag, after the NSIS job, and is a separate job so a Store/Partner Center
+    # problem never marks the GitHub Release itself as failed. Certification takes hours to days, so
+    # the Store version lags GitHub; the job ends when the submission is committed, not when live.
+    #
+    # One-time setup: a Partner Center Entra app (Manager role) and these repo secrets —
+    # AZURE_AD_TENANT_ID, AZURE_AD_APPLICATION_CLIENT_ID, AZURE_AD_APPLICATION_SECRET, SELLER_ID.
+    # The Store rejects a version it already has, so re-running a tag that was already submitted fails
+    # at the publish step; that is expected. If Partner Center already has a submission in progress the
+    # API refuses a second one — finish or delete it there first.
+    needs: nsis
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    env:
+      STORE_PRODUCT_ID: 9N2KCJRFVF6F
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: Chromasmith-windows-setup
+          path: setup
+
+      - name: Build the MSIX from the installer
+        id: msix
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          $exe = (Get-ChildItem setup -Filter '*-setup.exe' | Select-Object -First 1).FullName
+          ./tools/scripts/package-msix.ps1 -Installer $exe -Version $version -OutDir out
+          Get-ChildItem out | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Chromasmith-windows-msix
+          path: out/*.msix
+
+      - uses: microsoft/microsoft-store-apppublisher@v1.1
+
+      - name: Submit to the Microsoft Store
+        shell: pwsh
+        run: |
+          msstore reconfigure `
+            --tenantId '${{ secrets.AZURE_AD_TENANT_ID }}' `
+            --sellerId '${{ secrets.SELLER_ID }}' `
+            --clientId '${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}' `
+            --clientSecret '${{ secrets.AZURE_AD_APPLICATION_SECRET }}'
+          msstore publish '${{ steps.msix.outputs.msix }}' -id $env:STORE_PRODUCT_ID
