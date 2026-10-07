@@ -19455,11 +19455,10 @@ let fxClipLo=false,fxClipHi=false;
 let fxPeakOn=false;
 function fxTogglePeak(){fxPeakOn=!fxPeakOn;if(fxPeakOn)fxPeakUpdate();else{const o=document.getElementById('fx-peak');if(o)o.remove();}
   toast(fxPeakOn?'Focus peaking on — red marks the sharpest edges':'Focus peaking off');}
-function fxPeakUpdate(){
-  const src=document.getElementById('fx-canvas');if(!src||!src.width||!src.offsetWidth)return;
-  let o=document.getElementById('fx-peak');
-  if(!o){o=document.createElement('canvas');o.id='fx-peak';o.style.cssText='position:absolute;pointer-events:none;image-rendering:auto';src.parentElement.appendChild(o);}
-  const k=Math.min(1,900/Math.max(src.width,src.height)),w=Math.max(2,src.width*k|0),h=Math.max(2,src.height*k|0);
+// Shared by the Editor and the Library Quick Look loupe: draws the peaking mask for `src` (a
+// canvas or loaded <img>, natural size sw x sh) into overlay canvas `o`, sized to the ≤900px working copy.
+function fxPeakRender(src,sw,sh,o){
+  const k=Math.min(1,900/Math.max(sw,sh)),w=Math.max(2,sw*k|0),h=Math.max(2,sh*k|0);
   const t=fxPeakUpdate._t||(fxPeakUpdate._t=document.createElement('canvas'));t.width=w;t.height=h;
   const tc=t.getContext('2d',{willReadFrequently:true});tc.drawImage(src,0,0,w,h);
   const d=tc.getImageData(0,0,w,h).data,L=new Float32Array(w*h);
@@ -19473,6 +19472,13 @@ function fxPeakUpdate(){
   o.width=w;o.height=h;const oc=o.getContext('2d'),od=oc.createImageData(w,h),p=od.data;
   for(let j=0;j<M.length;j++)if(M[j]>=thr){const q=j*4;p[q]=255;p[q+1]=40;p[q+2]=40;p[q+3]=230;}
   oc.putImageData(od,0,0);
+}
+window.fxPeakRender=fxPeakRender;
+function fxPeakUpdate(){
+  const src=document.getElementById('fx-canvas');if(!src||!src.width||!src.offsetWidth)return;
+  let o=document.getElementById('fx-peak');
+  if(!o){o=document.createElement('canvas');o.id='fx-peak';o.style.cssText='position:absolute;pointer-events:none;image-rendering:auto';src.parentElement.appendChild(o);}
+  fxPeakRender(src,src.width,src.height,o);
   o.style.left=src.offsetLeft+'px';o.style.top=src.offsetTop+'px';o.style.width=src.offsetWidth+'px';o.style.height=src.offsetHeight+'px';
   o.style.transform=src.style.transform||'';o.style.transformOrigin=src.style.transformOrigin||'';
 }

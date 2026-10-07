@@ -370,7 +370,7 @@
       }
       case 'get_quicklook_preview': {
         (window.__libtestQuicklookCalls ||= []).push(A.path);
-        return Promise.resolve(png);
+        return Promise.resolve(window.__libtestQuicklookBytes || png);
       }
       case 'catalog_dismiss_review': return Promise.resolve((A.paths || []).length);
       // trash_file/duplicate_file: no catalog involvement, just the underlying file op — a
@@ -1695,13 +1695,15 @@
     .lib-info-link:disabled{opacity:.5;cursor:default}
     /* Quick Look (Space bar) — a full-viewport overlay, never part of the editor's own DOM,
        so it stays trivially cheap to open/close: no shader, no canvas, just an <img>. */
-    #lib-quicklook{position:fixed;inset:0;z-index:500;background:rgba(10,10,10,.96);
+    #lib-quicklook{position:fixed;inset:0;z-index:4700;background:rgba(10,10,10,.96);
       display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px}
     #lib-quicklook.on{display:flex}
     #lib-ql-img{max-width:92vw;max-height:86vh;object-fit:contain;opacity:0;transition:opacity var(--duration-press,120ms) ease;
       border-radius:4px;box-shadow:none}
     #lib-ql-img.loaded{opacity:1}
     #lib-ql-caption{color:var(--mut);font-size:12px;font-family:var(--mono);letter-spacing:.02em}
+    #lib-ql-peak{position:absolute;top:14px;right:16px;height:28px;padding:0 12px;border:1px solid rgba(255,255,255,.35);border-radius:var(--r);background:transparent;color:#cfcfcf;font-size:12px;cursor:pointer}
+    #lib-ql-peak.on{color:#fff;border-color:#ff3b1f;background:rgba(255,59,31,.25)}
     .lib-tree-node{font-size:12px;white-space:nowrap;user-select:none}
     .lib-tree-row{display:flex;align-items:center;gap:4px;padding:calc(var(--sp-control-stack)*.625) 8px calc(var(--sp-control-stack)*.625) 6px;border-radius:var(--radius-xs,5px);cursor:pointer;min-height:28px;box-sizing:border-box}
     /* Date-tree size hierarchy — Library View.html's .row.datehead/.monthhead/.sub (13/12/11px).
@@ -3459,6 +3461,7 @@
     window.__libRenderGrid = () => renderGrid();
     window.__libToggleUnifiedView = (on) => setUnifiedView(on);
     window.__libSelect = (p) => { state.selected.add(p); };
+    window.__libShowQuickLook = (p) => showQuickLook(p);
     // CHR-184 test hooks: drive the real keyword/album write paths and read back what undo restored.
     window.__libAddKeyword = (p, kw) => addKeywordToPhoto(p, kw);
     window.__libRemoveKeyword = (p, kw) => removeKeywordFromPhoto(p, kw);
@@ -9072,9 +9075,38 @@
     el = document.createElement('div');
     el.id = 'lib-quicklook';
     el.innerHTML = `<img id="lib-ql-img" alt="">
-      <div id="lib-ql-caption"></div>`;
+      <div id="lib-ql-caption"></div>
+      <button id="lib-ql-peak" type="button" aria-pressed="false" title="Focus peaking (E) — red marks the sharpest edges">Focus peaking</button>`;
     document.body.appendChild(el);
+    el.querySelector('#lib-ql-peak').onclick = (ev) => { ev.stopPropagation(); toggleQuickLookPeak(); };
+    el.querySelector('#lib-ql-img').addEventListener('load', () => qlPeakSync());
+    window.addEventListener('resize', () => { if (quicklook.active) qlPeakSync(); });
     return el;
+  }
+  // CHR-172: focus peaking in the Quick Look loupe. Reuses the Editor's fxPeakRender (Sobel on a
+  // <=900px copy, strongest ~4% of edges in red) so both surfaces mark identical edges; the overlay
+  // is a separate canvas over the <img>, so toggling off removes it and leaves the photo untouched.
+  let qlPeakOn = false;
+  function qlPeakSync() {
+    const img = document.getElementById('lib-ql-img');
+    const btn = document.getElementById('lib-ql-peak');
+    if (btn) { btn.classList.toggle('on', qlPeakOn); btn.setAttribute('aria-pressed', String(qlPeakOn)); }
+    let o = document.getElementById('lib-ql-peakcv');
+    if (!qlPeakOn || !quicklook.active || !img || !img.complete || !img.naturalWidth || typeof window.fxPeakRender !== 'function') { if (o) o.remove(); return; }
+    if (!o) {
+      o = document.createElement('canvas');
+      o.id = 'lib-ql-peakcv';
+      o.style.cssText = 'position:fixed;pointer-events:none;z-index:4701;image-rendering:auto';
+      document.getElementById('lib-quicklook').appendChild(o);
+    }
+    window.fxPeakRender(img, img.naturalWidth, img.naturalHeight, o);
+    const r = img.getBoundingClientRect();
+    o.style.left = r.left + 'px'; o.style.top = r.top + 'px'; o.style.width = r.width + 'px'; o.style.height = r.height + 'px';
+  }
+  function toggleQuickLookPeak() {
+    qlPeakOn = !qlPeakOn;
+    qlPeakSync();
+    toast(qlPeakOn ? 'Focus peaking on — red marks the sharpest edges' : 'Focus peaking off');
   }
   async function showQuickLook(path) {
     if (!path) return;
@@ -9169,6 +9201,7 @@
       if (STARS_ENABLED && e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault(); setRating(quicklook.path, parseInt(e.key, 10)); toast(`Rated ${e.key} star${e.key === '1' ? '' : 's'}`); return;
       }
+      if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); toggleQuickLookPeak(); return; }
       if (e.key === 'x' || e.key === 'X') { e.preventDefault(); setLabel(quicklook.path, 'Red'); toast('Rejected'); return; }
       if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setLabel(quicklook.path, 'Green'); toast('Picked'); return; }
       if (e.key === 'u' || e.key === 'U') { e.preventDefault(); setLabel(quicklook.path, ''); toast('Flag cleared'); return; }
