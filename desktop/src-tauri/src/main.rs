@@ -2237,7 +2237,14 @@ fn save_export_file_raw(request: tauri::ipc::Request<'_>) -> Result<GpSaveResult
         .ok_or("empty filename")?;
     let dir = export_downloads_path()?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("create '{}': {e}", dir.display()))?;
-    let dest = unique_dest(&dir, safe_name);
+    // CHR-201/202 collision policy from the Export panel: "suffix" (default: name (2).ext),
+    // "skip" (leave the existing file; reported as bytes == 0) or "overwrite".
+    let policy = request.headers().get("x-collision").and_then(|v| v.to_str().ok()).unwrap_or("suffix");
+    let direct = dir.join(safe_name);
+    if policy == "skip" && direct.exists() {
+        return Ok(GpSaveResult { path: direct.to_string_lossy().into_owned(), bytes: 0, renamed: false });
+    }
+    let dest = if policy == "overwrite" { direct } else { unique_dest(&dir, safe_name) };
     std::fs::write(&dest, bytes).map_err(|e| format!("write {}: {e}", dest.display()))?;
     Ok(GpSaveResult { path: dest.to_string_lossy().into_owned(), bytes: bytes.len() as u64, renamed: false })
 }

@@ -4606,6 +4606,13 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <span id="fx-fname-spin" style="display:none;animation:fxspin 0.8s linear infinite;color:var(--mut)" title="Loading…">⟳</span>
           <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
         </div>
+        <div class="fx-row" style="margin-top:8px" title="What happens when a file with the same name is already in the destination. Overwrite needs the desktop app; a browser's download folder always adds a number."><div class="fx-label">If file exists</div>
+          <select class="fx-select" id="sel-exp-collide" onchange="expCollideSet(this.value)">
+            <option value="suffix">Add a number</option>
+            <option value="skip">Skip it</option>
+            <option value="overwrite">Overwrite it</option>
+          </select>
+        </div>
         <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" oninput="document.getElementById('vl-exp-q').textContent=this.value"><div class="fx-val" id="vl-exp-q">99</div></div>
         <div class="fx-row" style="margin-top:6px" title="JPG is never fully lossless, even at 100. PNG is lossless but files are much larger."><div class="fx-label">Format</div>
           <select class="fx-select" id="sel-exp-fmt">
@@ -14281,12 +14288,59 @@ function toast(msg,kind){
 // Export-finished pill with a "Show in Finder" action — says WHERE the file went, which a bare
 // "Exported ✓" never did. Desktop only (needs the real saved path); auto-dismisses after 9s.
 // CHR-201: the last export's outcome stays in the Output panel after the pill disappears.
+const _expSessionNames=new Set();
+function expCollidePolicy(){try{const v=localStorage.getItem('cs-export-collide');return v==='skip'||v==='overwrite'?v:'suffix';}catch(e){return'suffix';}}
+function expCollideSet(v){try{localStorage.setItem('cs-export-collide',v);}catch(e){}if(typeof expPlainRender==='function')expPlainRender();}
+function expDestLabel(){let d='';try{d=localStorage.getItem('cs-export-dir')||'';}catch(e){}return tauriNative()?(d?fxExportDirLabel(d):'Downloads folder'):"your browser's download folder";}
+function expPolicyLabel(){const p=expCollidePolicy();return p==='skip'?'skip existing files':p==='overwrite'?'overwrite existing files':'add a number to the name';}
 function csExportResultKeep(saved,failed,path){
   const el=document.getElementById('exp-last');if(!el)return;el.hidden=false;el.textContent='';
-  const t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  el.appendChild(document.createTextNode(`Last export (${t}): ${saved} saved${failed?`, ${failed} failed — see the log`:''}`));
+  window._expSavedSum=(window._expSavedSum||0)+saved;
+  const fails=window._expFail||[],t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),tot=window._expAccumulate?window._expSavedSum:saved;
+  el.appendChild(document.createTextNode(`Last export (${t}): ${tot} saved${fails.length?`, ${fails.length} failed`:failed?`, ${failed} failed — see the log`:''}${window._expPlanned?` of ${window._expPlanned} planned`:''}`));
   if(path&&window.__TAURI__){const b=document.createElement('button');b.type='button';b.className='btn bgh';b.style.cssText='margin-left:6px;padding:2px 8px;font-size:11px';
     b.textContent='Show in '+((window.CS_PLATFORM&&window.CS_PLATFORM.revealLabel)||'Finder');b.onclick=()=>{try{window.__TAURI__.core.invoke('reveal_in_finder',{path});}catch(e){}};el.appendChild(b);}
+  if(fails.length){
+    const list=document.createElement('div');list.id='exp-fail-list';list.style.cssText='margin-top:6px';
+    fails.forEach((f,i)=>{const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:6px;padding:2px 0';
+      const tx=document.createElement('span');tx.style.cssText='flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e05252';tx.textContent=`${f.name} — ${f.err||'failed'}`;
+      const b=document.createElement('button');b.type='button';b.className='btn bgh';b.style.cssText='padding:2px 8px;font-size:11px';b.textContent='Retry';b.setAttribute('aria-label','Retry '+f.name);b.onclick=()=>expRetry(i);
+      row.append(tx,b);list.appendChild(row);});
+    if(fails.length>1){const all=document.createElement('button');all.type='button';all.className='btn bsec';all.style.cssText='margin-top:4px;padding:2px 10px;font-size:11px';all.textContent=`Retry all ${fails.length} failed`;all.onclick=()=>expRetry('all');list.appendChild(all);}
+    el.appendChild(list);
+  }
+}
+// CHR-201/202: retry ONLY what failed. Failed saves keep their rendered bytes and are simply
+// saved again; failed renders are re-rendered alone (same recipe, same batch numbers, same
+// version tag), so nothing that already succeeded is written a second time.
+async function expRetry(which){
+  if(_fxExportRuns)return;
+  const all=window._expFail||[],pick=which==='all'?all.slice():[all[which]].filter(Boolean);if(!pick.length)return;
+  let saved=0,path;
+  const saves=pick.filter(f=>f.kind==='save');
+  if(saves.length){
+    const sr=await saveFiles(saves.map(f=>({content:f.content,fname:f.fname,mime:f.mime})));
+    saves.forEach((f,i)=>{const r=Array.isArray(sr)?sr[i]:{ok:true};if(r&&r.ok){window._expFail=window._expFail.filter(x=>x!==f);saved++;path=path||r.path;}else f.err=((r&&r.err)||'save failed').slice(0,80);});
+  }
+  const rend=pick.filter(f=>f.kind==='render'),groups=new Map();
+  rend.forEach(f=>{const k=f.recipe||'';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(f);});
+  for(const [recipe,fs] of groups){
+    const ids=['sel-exp-fmt','sl-exp-q','sel-exp-size','sel-exp-sharp','fx-fname'],keep=ids.map(id=>{const e=document.getElementById(id);return e?e.value:null;}),v0=fxVersion;
+    window._expFail=window._expFail.filter(x=>!fs.includes(x));
+    window._expAccumulate=true;window._expOnlyItems=fs.map(f=>f.item);window._expRecipe=recipe||null;
+    try{
+      if(recipe){exportPresetApply(recipe);const fn=document.getElementById('fx-fname');if(fn)fn.value=`{name}_${recipe.replace(/[^\w-]+/g,'-')}{nover}`;}
+      if(window._expVerUsed!=null)fxVersion=window._expVerUsed;
+      const before=window._expSavedSum||0;await exportFX();saved+=(window._expSavedSum||0)-before;
+    }finally{
+      window._expAccumulate=false;window._expOnlyItems=null;window._expRecipe=null;fxVersion=v0;
+      ids.forEach((id,i)=>{const e=document.getElementById(id);if(e&&keep[i]!=null)e.value=keep[i];});
+      const vl=document.getElementById('vl-exp-q'),q=document.getElementById('sl-exp-q');if(vl&&q)vl.textContent=q.value;
+      const ve=document.getElementById('fx-ver');if(ve)ve.textContent=`v${fxVersion.toFixed(1)}`;
+    }
+  }
+  window._expSavedSum=0;csExportResultKeep(saved,0,path);
+  toast(window._expFail.length?`Retried: ${saved} saved, ${window._expFail.length} still failing`:`Retry complete: ${saved} saved`,!window._expFail.length);
 }
 function csExportDone(n,path,firstEdit){
   const old=document.getElementById('cs-export-done');if(old)old.remove();
@@ -20518,11 +20572,17 @@ function exportMultiPresetOpen(){
   if(list.length<2){toast('Save at least two export presets first');return;}
   const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   _csModal('Export with several presets',list.map((p,i)=>`<label style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="emp-cb" value="${i}" checked> ${esc(p.name)}</label>`).join('')
-    +`<div style="margin-top:12px;font-size:12px;color:var(--mut)">Each preset saves its own copy of every photo in the current export scope, named "photo_&lt;preset&gt;".</div><div class="btn-row" style="margin-top:12px"><button class="btn bpri" id="emp-go">Export</button></div>`);
+    +`<div style="margin-top:12px;font-size:12px;color:var(--mut)">Each preset saves its own copy of every photo in the current export scope, named "photo_&lt;preset&gt;".</div><div id="emp-total" role="status" style="margin-top:8px;font-size:13px"></div><div class="btn-row" style="margin-top:12px"><button class="btn bpri" id="emp-go">Export</button></div>`);
+  const photos=(typeof fxExportScope!=='undefined'&&fxExportScope==='current')||fxImages.length<=1?Math.min(1,fxImages.length):fxImages.length;
+  const sync=()=>{const n=document.querySelectorAll('.emp-cb:checked').length,tot=photos*n;
+    document.getElementById('emp-total').textContent=`${photos} photo${photos===1?'':'s'} \u00d7 ${n} recipe${n===1?'':'s'} = ${tot} file${tot===1?'':'s'} \u00b7 saving to ${expDestLabel()} \u00b7 if a file exists: ${expPolicyLabel()}`;
+    document.getElementById('emp-go').disabled=!n||!photos;};
+  document.querySelectorAll('.emp-cb').forEach(c=>c.onchange=sync);sync();
   document.getElementById('emp-go').onclick=()=>{const idx=[...document.querySelectorAll('.emp-cb:checked')].map(c=>+c.value);
-    document.getElementById('cs-modal-ov').remove();if(idx.length)exportMultiPresetRun(idx.map(i=>list[i].name));};
+    document.getElementById('cs-modal-ov').remove();if(idx.length)exportMultiPresetRun(idx.map(i=>list[i].name),photos);};
 }
-async function exportMultiPresetRun(names){
+async function exportMultiPresetRun(names,photos){
+  window._expAccumulate=true;window._expFail=[];window._expSavedSum=0;window._expPlanned=(photos||fxImages.length)*names.length;
   const ids=['sel-exp-fmt','sl-exp-q','sel-exp-size','sel-exp-sharp','fx-fname'],saved=ids.map(id=>{const e=document.getElementById(id);return e?e.value:null;});
   try{
     for(let k=0;k<names.length;k++){
@@ -20530,10 +20590,11 @@ async function exportMultiPresetRun(names){
       const fn=document.getElementById('fx-fname'),tag=names[k].replace(/[^\w-]+/g,'-');
       if(fn)fn.value=`{name}_${tag}{nover}`;
       toast(`Exporting ${k+1}/${names.length}: ${names[k]}`);
+      window._expRecipe=names[k];
       await exportFX();
       if(typeof fxExportCancel!=='undefined'&&fxExportCancel)break;
     }
-  }finally{ids.forEach((id,i)=>{const e=document.getElementById(id);if(e&&saved[i]!=null)e.value=saved[i];});const vl=document.getElementById('vl-exp-q'),q=document.getElementById('sl-exp-q');if(vl&&q)vl.textContent=q.value;if(typeof expPlainRender==='function')expPlainRender();}
+  }finally{window._expAccumulate=false;window._expPlanned=0;window._expRecipe=null;ids.forEach((id,i)=>{const e=document.getElementById(id);if(e&&saved[i]!=null)e.value=saved[i];});const vl=document.getElementById('vl-exp-q'),q=document.getElementById('sl-exp-q');if(vl&&q)vl.textContent=q.value;if(typeof expPlainRender==='function')expPlainRender();}
 }
 // ── CHR-197: one Presets manager for the three kinds of saved recipe ───────────────────────
 // Looks = colour/film treatment (favourites + your own saved .cube looks); Edit Styles = saved
@@ -24002,6 +24063,7 @@ async function fxEncodeExportCanvas(canvas,mime,quality){
 async function exportFX(...a){
   if(_fxExportRuns){if(typeof toast==='function')toast('An export is already running');return;}
   _fxExportRuns++;document.body.classList.add('fx-exporting');
+  if(!window._expAccumulate){window._expFail=[];window._expSavedSum=0;if(!window._expOnlyItems)window._expVerUsed=fxVersion;}
   // Phone app: keep the screen awake for the whole export (a locked phone suspends the app and
   // the export with it), and if the app was in the background when it finished, say so with a
   // notification. Both plugins are optional — missing ones are simply skipped.
@@ -24017,7 +24079,7 @@ async function _exportFXRun(){
   await fxEnsureFullQuality(); // never export the display-tier stand-in
   if(window.chromasmithFullQualityReady===false){toast('Full-resolution photo could not be loaded — export cancelled. Reopen the photo and try again.',false);return}
   const scope=fxImages.length>1?fxExportScope:'all';
-  const items=scope==='current'?[fxImages[fxCurIdx]]:fxImages;
+  const items=window._expOnlyItems||(scope==='current'?[fxImages[fxCurIdx]]:fxImages);
   // Video export is a completely different pipeline (VideoEncoder/mux vs toBlob) — mixing
   // photos and videos in one batch isn't a designed use case (Library integration explicitly
   // keeps video out for now, see CLAUDE.md §12), so route a single video item to its own export
@@ -24258,7 +24320,7 @@ async function _exportFXRun(){
           // fails to save the result to Photos — cap at 0.99 on touch devices.
           if(!isPng&&q>=1&&isMemoryConstrained()){q=0.99;log('Quality capped at 99 on this device (100% produces files iOS cannot save to Photos)','warn');}
           const blob=await fxEncodeExportCanvas(ec,mime,isPng?undefined:q); // WebP reuses the same quality slider as JPG — no dedicated control, per scoping decision
-          if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;continue;}
+          if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:'too large to encode'});continue;}
           out=new Uint8Array(await blob.arrayBuffer());
           if(!isWebp){ // metadata splicing below is JPEG/PNG-specific; WebP ships with no embedded metadata for now
             if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
@@ -24283,9 +24345,10 @@ async function _exportFXRun(){
         const pat=fld.replace('{nover}','').trim();
         const usesPattern=pat&&pat!=='photo'&&(single||pat.includes('{')); // batch only honors real patterns, not a leftover single-photo rename
         let base;
+        const seqN=window._expOnlyItems?fxImages.indexOf(it)+1:idx+1; // a retry keeps each photo's original batch number
         if(usesPattern){
-          base=pat.replace(/\{name\}/g,it.name).replace(/\{seq\}/g,String(idx+1)).replace(/\{date\}/g,new Date().toISOString().slice(0,10));
-          if(!single&&!pat.includes('{name}')&&!pat.includes('{seq}'))base+='_'+(idx+1);
+          base=pat.replace(/\{name\}/g,it.name).replace(/\{seq\}/g,String(seqN)).replace(/\{date\}/g,new Date().toISOString().slice(0,10));
+          if(!single&&!pat.includes('{name}')&&!pat.includes('{seq}'))base+='_'+seqN;
         }else{
           base=single?(fld||it.name):it.name;
         }
@@ -24305,7 +24368,7 @@ async function _exportFXRun(){
         setExportPhotoStatus(idx,'rendered');
         log(`Rendered ${results[results.length-1].fname} (${it.dpi} DPI)`,'ok');
       }catch(e){
-        failed++;
+        failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:(e&&e.message||String(e)).slice(0,80)});
         setExportPhotoStatus(idx,'failed',(e&&e.message||String(e)).slice(0,60));
         log(`Failed to render ${it.name}: ${e&&e.message||e} — skipping, continuing with the rest of the batch`,'err');
         console.error(e);
@@ -24400,8 +24463,8 @@ async function _exportFXRun(){
         let saveFailed=0;
         results.forEach((r,i)=>{
           const s=sr[i];
-          if(s&&s.ok)setExportPhotoStatus(r.srcIdx,s.status==='shared'?'rendered':'saved',s.status==='shared'?'shared — save not confirmed':undefined);
-          else{saveFailed++;setExportPhotoStatus(r.srcIdx,'failed',((s&&s.err)||'save failed').slice(0,60));}
+          if(s&&s.ok)setExportPhotoStatus(r.srcIdx,s.status==='shared'?'rendered':'saved',s.status==='shared'?'shared — save not confirmed':(s.skipped?'already exists — skipped':undefined));
+          else{saveFailed++;setExportPhotoStatus(r.srcIdx,'failed',((s&&s.err)||'save failed').slice(0,60));(window._expFail=window._expFail||[]).push({kind:'save',name:r.fname,fname:r.fname,content:r.content,mime:r.mime,err:((s&&s.err)||'save failed').slice(0,80)});}
         });
         if(saveFailed){failed+=saveFailed;results=results.filter((r,i)=>sr[i]&&sr[i].ok);}
       }else{
@@ -24447,7 +24510,7 @@ async function _exportFXRun(){
     // throws (e.g. the currently-previewed photo is the one that just failed above), the files
     // already saved above must NOT be reported as an export error — only the refresh failed.
     try{updateWork();renderPreview();}catch(e){log('Preview refresh after export failed (exported files are unaffected): '+(e&&e.message||e),'warn');}
-    if(results.length)fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
+    if(results.length&&!window._expOnlyItems)fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
     if(failed&&results.length){activityOutcome='partial';log(`Export finished: ${results.length} saved, ${failed} failed (see log above)`,'warn');}
     if(failed&&results.length)toast(`Exported ${results.length}/${N} — ${failed} failed, see log`,false);
     {const _p=(typeof sr!=='undefined'&&Array.isArray(sr))?sr.filter(x=>x&&x.ok&&x.path).map(x=>x.path):[];csExportResultKeep(results.length,failed,_p[0]);}
@@ -25365,9 +25428,9 @@ async function saveFilesNative(items){
     const bytes=typeof it.content==='string'?new TextEncoder().encode(it.content)
       :(it.content instanceof Uint8Array?it.content:new Uint8Array(it.content));
     try{
-      const r=await window.__TAURI__.core.invoke('save_export_file_raw',bytes,{headers:{'x-filename':_u8b64(new TextEncoder().encode(it.fname))}});
-      out.push({ok:true,path:r&&r.path||it.fname});
-      log(`Saved ${r&&r.path||it.fname}`,'ok');
+      const r=await window.__TAURI__.core.invoke('save_export_file_raw',bytes,{headers:{'x-filename':_u8b64(new TextEncoder().encode(it.fname)),'x-collision':expCollidePolicy()}});
+      if(r&&r.bytes===0&&bytes.length>0){out.push({ok:true,path:r.path||it.fname,skipped:true});log(`Skipped ${it.fname} (already exists)`,'warn');}
+      else{out.push({ok:true,path:r&&r.path||it.fname});log(`Saved ${r&&r.path||it.fname}`,'ok');}
     }catch(e){
       const msg=e&&e.message||String(e);
       // Older native shell without the command compiled in: bail out entirely so the caller
@@ -25421,6 +25484,13 @@ async function saveFiles(items){ // items: [{content,fname,mime}]
     // Native saves report every file. Never silently fall back to browser downloads.
     return await capShareFiles(items);
   }
+  if(expCollidePolicy()==='skip'){
+    // A browser can't see the download folder, so "skip" means: don't write a name this session already wrote.
+    const keep=items.filter(it=>!_expSessionNames.has(it.fname)),n=items.length-keep.length;
+    if(n){log(`Skipped ${n} file(s) already exported this session`,'warn');toast(`${n} file(s) skipped — already exported`);}
+    items=keep;if(!items.length)return null;
+  }
+  items.forEach(it=>_expSessionNames.add(it.fname));
   const files=items.map(it=>new File([it.content],it.fname,{type:it.mime}));
   const canShare=useShareSheet()&&navigator.canShare&&navigator.canShare({files});
   if(canShare){
@@ -27137,6 +27207,7 @@ function expPlainRender(){
       if(sf){sf.value=fmt;sf.dispatchEvent(new Event('change',{bubbles:true}));}
       expPlainRender();};
     host.appendChild(b);});
+  {const cs=document.getElementById('sel-exp-collide');if(cs){cs.value=expCollidePolicy();const ow=[...cs.options].find(o=>o.value==='overwrite');if(ow){ow.disabled=!tauriNative();if(ow.disabled&&cs.value==='overwrite'){cs.value='suffix';}}}}
   const est=document.getElementById('exp-est'),d=_expDims(curE);
   if(est){est.textContent='';(d?_expPreflight(curE,curQ,curF):[]).forEach(l=>{const r=document.createElement('div');r.textContent=l;est.appendChild(r);});}
 }
@@ -27158,7 +27229,8 @@ function _expPreflight(edge,q,fmt){
   const ext=fmtOf(it0)==='WebP'?'webp':fmtOf(it0)==='PNG'?'png':'jpg';
   const lines=[`${items.length} photo${items.length>1?'s':''} · ${fmts}${fmt==='auto'?' (Auto: lossless sources stay PNG)':''}`,
     `${d[0]}×${d[1]}${items.length>1?' (first photo)':''} · about ${_mb(_expBytes(d,q,ext))}${ext==='png'?'':' · quality '+q}`,
-    `Saved as ${base}${ver}.${ext}${items.length>1?' …':''}`];
+    `Saved as ${base}${ver}.${ext}${items.length>1?' …':''}`,
+    `Saving to ${expDestLabel()} · if a file exists: ${expPolicyLabel()}`];
   return lines;
 }
 document.addEventListener('change',e=>{if(e.target&&/^(sel-exp-size|sel-exp-fmt)$/.test(e.target.id))expPlainRender();},true);
