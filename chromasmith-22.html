@@ -26963,6 +26963,8 @@ function csLayoutMenuHtml(){let h='';
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();editorBgSet('#777777')"><span>Neutral grey surround</span></button>`;
   csLayoutsList().forEach((l,i)=>{h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutApply(${i})"><span>${String(l.name).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}</span></button>`;});
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutSave()"><span>Save current layout…</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutExportFile()"><span>Export saved layouts…</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutImportClick()"><span>Import layouts…</span></button>`;
   csLayoutsList().forEach((l,i)=>{h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutDelete(${i})"><span>Delete layout: ${String(l.name).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}</span></button>`;});
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csWorkspaceCustomizeOpen()"><span>Customize tools and controls…</span></button>`;
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutReset()"><span>Reset layout</span></button>`;
@@ -26971,7 +26973,41 @@ function csLayoutMenuHtml(){let h='';
 const CS_WORKSPACE_LAYOUT_KEY='cs_workspace_controls_v1';
 const CS_LAYOUT_KEYS=['cs_panelw','cs_railmode','cs_rail_flat','chromasmith_fx_sec_collapsed','chromasmith_lib_side_w','chromasmith_lib_dock_w','chromasmith_lib_dock_collapsed','chromasmith_lib_sidebar','chromasmith_lib_info_pos','chromasmith_lib_thumbsize','chromasmith_lib_cols','cs-tool-order-fx-quicknav','cs-tool-order-fx-tool-grid',CS_WORKSPACE_LAYOUT_KEY];
 function _csLayoutKeys(){return CS_LAYOUT_KEYS.concat(typeof LS_EDITOR_BG!=='undefined'?[LS_EDITOR_BG]:[]);}
-function csLayoutsList(){try{return JSON.parse(localStorage.getItem('cs_layouts')||'[]')}catch(e){return[]}}
+function csLayoutsList(){try{const list=JSON.parse(localStorage.getItem('cs_layouts')||'[]');return Array.isArray(list)?list:[]}catch(e){return[]}}
+const CS_LAYOUT_FILE_FORMAT='chromasmith-workspaces';
+function csLayoutExportText(){
+  return JSON.stringify({format:CS_LAYOUT_FILE_FORMAT,version:1,layouts:csLayoutsList().map(l=>({name:l.name,keys:l.keys}))},null,2);
+}
+function csLayoutExportFile(){
+  const layouts=csLayoutsList();if(!layouts.length){toast('Save a layout before exporting',false);return;}
+  anchorDownload(csLayoutExportText(),'chromasmith-workspaces.json','application/json');
+}
+function csLayoutImportText(text){
+  if(typeof text!=='string'||text.length>512*1024)throw new Error('Layout file is too large or unreadable');
+  let data;try{data=JSON.parse(text);}catch(_){throw new Error('This is not a valid workspace JSON file');}
+  if(!data||data.format!==CS_LAYOUT_FILE_FORMAT||data.version!==1||!Array.isArray(data.layouts)||data.layouts.length<1||data.layouts.length>30)throw new Error('Unsupported workspace file format');
+  const allowed=new Set(_csLayoutKeys()),seen=new Set();let total=0;
+  const imported=data.layouts.map(layout=>{
+    if(!layout||typeof layout.name!=='string'||!layout.name.trim()||layout.name.trim().length>64||!layout.keys||typeof layout.keys!=='object'||Array.isArray(layout.keys))throw new Error('Each workspace needs a name and a valid settings map');
+    const name=layout.name.trim(),folded=name.toLocaleLowerCase();if(seen.has(folded))throw new Error(`Duplicate workspace name: ${name}`);seen.add(folded);
+    const keys={};for(const key of Object.keys(layout.keys)){
+      if(!allowed.has(key))throw new Error(`Unsupported workspace setting: ${key}`);
+      const value=layout.keys[key];if(typeof value!=='string'||value.length>32768)throw new Error(`Invalid value for workspace setting: ${key}`);
+      total+=key.length+value.length;if(total>256*1024)throw new Error('Workspace settings exceed the import limit');
+      if(key==='chromasmith_editor_bg'&&!/^#[0-9a-f]{6}$/i.test(value))throw new Error('Workspace background colour is invalid');
+      keys[key]=value;
+    }
+    return{name,keys};
+  });
+  const merged=csLayoutsList().filter(old=>!seen.has(String(old&&old.name||'').trim().toLocaleLowerCase()));merged.push(...imported);
+  try{localStorage.setItem('cs_layouts',JSON.stringify(merged));}catch(_){throw new Error('Could not save imported workspaces; storage may be full');}
+  return imported.length;
+}
+function csLayoutImportClick(){
+  const input=document.createElement('input');input.type='file';input.accept='.json,application/json';
+  input.onchange=async()=>{if(!input.files||!input.files[0])return;try{const count=csLayoutImportText(await input.files[0].text());toast(`Imported ${count} workspace${count===1?'':'s'}`,true);}catch(error){toast(error&&error.message||'Could not import workspace file',false);}};
+  input.click();
+}
 function csLayoutView(v){
   const lib=document.getElementById('cs-tog-lib'),studio=document.getElementById('cs-tog-studio');
   if(v==='edit'){studio&&studio.click();return;}
