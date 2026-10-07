@@ -7256,7 +7256,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1007Q';
+const BUILD='1.1007R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -19007,7 +19007,8 @@ window.chromasmithPasteEditSelective=function(recipeB64,onConfirm){
 // it. Stays otherwise synchronous start-to-finish — renderSnapshotTo's split-compare path
 // depends on that (see its own comment) and must not be made to await anything here.
 function applyUISnapshot(s,opts){
-  if(s.sliders&&s.sliders['fneg-br']!==undefined&&s.sliders['fneg-domain']===undefined){s.sliders={...s.sliders,'fneg-domain':0,'fneg-source':0};}`r`n  let _inpaintPromise=null;
+  if(s.sliders&&s.sliders['fneg-br']!==undefined&&s.sliders['fneg-domain']===undefined){s.sliders={...s.sliders,'fneg-domain':0,'fneg-source':0};}
+  let _inpaintPromise=null;
   const _decodeBefore={nr:window.chromasmithRawNr||'fast',strength:window.chromasmithRawNrHighStrength,demosaic:window.chromasmithDemosaicAlgo||''};
   // Pre-v2 recipes (undo history, XMP sidecar, session save) stored the exposure SLIDER value
   // under the old /50 (±2 stop) mapping; getFXParams now divides by /20 (±5 stops), so replaying
