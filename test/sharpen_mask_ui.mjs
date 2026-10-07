@@ -51,20 +51,31 @@ try {
   await page.evaluate(()=>renderPreview());
   await page.waitForTimeout(300);
   const mask = page.locator('#sl-adj-sharp-mask');
+  const radius = page.locator('#sl-adj-sharp-radius');
   assert.equal(await mask.count(), 1, 'real sharpening mask slider is present');
+  assert.equal(await radius.count(), 1, 'separate sharpening radius slider is present');
   const maskState=await mask.evaluate(el=>{const a=[];for(let n=el;n&&n!==document.documentElement;n=n.parentElement)a.push({id:n.id,cls:n.className,display:getComputedStyle(n).display,visibility:getComputedStyle(n).visibility,rect:n.getBoundingClientRect().toJSON()});return a;});
   assert.ok(await mask.isVisible(), `sharpening mask slider is visible in Detail: ${JSON.stringify(maskState)}`);
+  assert.ok(await radius.isVisible(), 'sharpening radius slider is visible in Detail');
   const set = async (id, value) => {
     await page.locator(`#sl-${id}`).evaluate((el,v)=>{el.value=String(v);el.dispatchEvent(new Event('input',{bubbles:true}));},value);
     await page.evaluate(()=>renderPreview());
     await page.waitForTimeout(80);
   };
   const capture = key => page.evaluate(k=>window.__sharpMaskCapture(k),key);
-  await set('adj-sharp',0); await set('adj-sharp-mask',0); await capture('zero');
+  await set('adj-sharp',0); await set('adj-sharp-radius',1); await set('adj-sharp-mask',0); await capture('zero');
+  await set('adj-sharp-radius',3); await capture('zeroWide');
+  const radiusIdentity = await page.evaluate(()=>window.__sharpMaskDiff('zero','zeroWide'));
+  assert.equal(radiusIdentity.max,0,'radius alone leaves zero sharpening byte-identical');
+  await set('adj-sharp-radius',1);
   await set('adj-sharp-mask',100); await capture('zeroMasked');
   const exactIdentity = await page.evaluate(()=>window.__sharpMaskDiff('zero','zeroMasked'));
   assert.equal(exactIdentity.max,0,'mask amount alone leaves sharpening at zero byte-identical');
   await set('adj-sharp-mask',0); await set('adj-sharp',100); await capture('sharp');
+  await set('adj-sharp-radius',3); await capture('radiusWide');
+  const radiusChange = await page.evaluate(()=>window.__sharpMaskDiff('sharp','radiusWide'));
+  assert.ok(radiusChange.changed>0,`independent radius changes ${radiusChange.changed} RGB channel samples`);
+  await set('adj-sharp-radius',1); await capture('sharp');
   await set('adj-sharp-mask',100); await capture('masked');
   assert.equal((await page.locator('#vl-adj-sharp-mask').textContent()).trim(),'100%','mask value label follows the live slider');
   const unmaskedChange = await page.evaluate(()=>window.__sharpMaskDiff('zero','sharp'));
@@ -80,6 +91,7 @@ try {
   assert.equal(previewRestore.max,0,'releasing Alt restores the edited photo exactly');
   const snapshot = await page.evaluate(()=>getUISnapshot());
   assert.equal(snapshot.sliders['adj-sharp-mask'],'100','per-photo snapshot includes the sharpening mask value');
+  assert.equal(snapshot.sliders['adj-sharp-radius'],'1','per-photo snapshot includes the sharpening radius');
   await set('adj-sharp-mask',0);
   await page.evaluate(s=>applyUISnapshot(s),snapshot);
   await page.evaluate(()=>renderPreview()); await page.waitForTimeout(80); await capture('recipeRestored');
@@ -88,5 +100,5 @@ try {
   assert.equal(recipeParity.max,0,'snapshot restore re-renders identical masked pixels');
   assert.deepEqual(pageErrors,[],`no browser runtime errors: ${pageErrors.join('; ')}`);
   assert.deepEqual(glErrors,[],`no shader compile errors: ${glErrors.join('; ')}`);
-  console.log(JSON.stringify({unmaskedChange,maskedChange,exactIdentity,preview,previewRestore,recipeParity,canvas:await capture('final')}));
+  console.log(JSON.stringify({unmaskedChange,maskedChange,radiusChange,exactIdentity,radiusIdentity,preview,previewRestore,recipeParity,canvas:await capture('final')}));
 } finally { await browser.close(); }

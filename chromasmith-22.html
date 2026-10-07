@@ -4150,6 +4150,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-col">0</div></div>
         <div class="fx-row nr-gated" id="row-nr-det"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
         <div class="fx-row" title="Capture sharpening — RAW photos default to 40 on load/reset (moved here so it survives Reset independently of the general Adjust sliders)."><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp">0</div></div>
+        <div class="fx-row" title="Source-pixel radius for the sharpening halo. The default 1.0 preserves today's sharpening exactly."><div class="fx-label">Sharpen Radius</div><input class="fx-slider" type="range" min="0.5" max="3" step="0.1" value="1" id="sl-adj-sharp-radius" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp-radius">1</div></div>
         <div class="fx-row" title="Balances edge-only sharpening at lower values against fine texture at higher values. The default 50 preserves today's sharpening exactly."><div class="fx-label">Sharpen Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-adj-sharp-detail" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp-detail">50</div></div>
         <div class="fx-row" title="Protect smooth areas from sharpening. Hold Alt to preview white sharpened edges and black protected areas."><div class="fx-label">Sharpen Mask</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp-mask" oninput="fxUpdate()" aria-label="Sharpen Mask; hold Alt to preview"><div class="fx-val" id="vl-adj-sharp-mask">0</div></div>
         <div class="fx-row nr-gated" id="row-nr-hldesat"><div class="fx-label">Highlight Desaturation <button class="fx-info-i" title="Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes. Since real highlight color is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real color in bright areas too at high amounts. Per-photo only, so it never touches other images.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
@@ -8243,7 +8244,7 @@ vec2 vidUV(vec2 u){
 // Basic adjustments (applied AFTER the LUT, BEFORE film FX — so halation/bloom react to
 // the edited image, as real film would). adjOn gates the whole block (default 0 = bypass,
 // byte-identical to before). exposure in stops; contrast/temp/tint/tone/sat/vib in -1..1.
-uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjSharpDetail,adjSharpMask,adjSharpMaskPreview,adjClarity,adjSkin,adjDehaze,adjTexture;
+uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjSharpDetail,adjSharpRadius,adjSharpMask,adjSharpMaskPreview,adjClarity,adjSkin,adjDehaze,adjTexture;
 uniform float adjWavelet1,adjWavelet2,adjWavelet3,adjWaveletResidual;
 uniform float useVlog;   // input transform: 1 = source is Panasonic V-Log (convert to Rec.709 first)
 // CHR-262 film negative: out = fnOut * (in / base)^-p per channel, applied to every source tap (fnTex).
@@ -8727,6 +8728,19 @@ if(mskAnyClarity>0.5){
            +fnTex(vidUV(uv+vec2(texSize.x*rW,0.)))+fnTex(vidUV(uv-vec2(texSize.x*rW,0.)))).rgb*0.25;
   srcHPW=c.rgb-nbW;
 }
+vec3 srcHPSharp=srcHP,srcHPWSharp=srcHPW;
+if(adjSharp!=0.0&&abs(adjSharpRadius-1.0)>0.001){
+  vec2 sharpOff=texSize*adjSharpRadius;
+  vec3 sharpNb=(fnTex(vidUV(uv+vec2(0.,sharpOff.y)))+fnTex(vidUV(uv-vec2(0.,sharpOff.y)))
+               +fnTex(vidUV(uv+vec2(sharpOff.x,0.)))+fnTex(vidUV(uv-vec2(sharpOff.x,0.)))).rgb*0.25;
+  srcHPSharp=c.rgb-sharpNb;
+  if(adjSharpDetail>0.5){
+    vec2 wideOff=sharpOff*3.0;
+    vec3 wideNb=(fnTex(vidUV(uv+vec2(0.,wideOff.y)))+fnTex(vidUV(uv-vec2(0.,wideOff.y)))
+                +fnTex(vidUV(uv+vec2(wideOff.x,0.)))+fnTex(vidUV(uv-vec2(wideOff.x,0.)))).rgb*0.25;
+    srcHPWSharp=c.rgb-wideNb;
+  }
+}
 float sharpKeep=1.0;
 bool showSharpMask=adjSharpMaskPreview>0.5;
 if(adjSharpMask>0.0&&(adjSharp!=0.0||showSharpMask)){
@@ -8793,7 +8807,7 @@ if(adjOn>.5&&(adjWavelet1!=0.||adjWavelet2!=0.||adjWavelet3!=0.||adjWaveletResid
 // adjSharp blends radius-1 edges with radius-3 texture; default detail 0.5 is radius-1 only.
 // adjClarity weights by midtone mask (4*lum*(1-lum)).
 if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.)){
-  vec3 hp=mix(srcHP,srcHPW,clamp((adjSharpDetail-0.5)*2.0,0.0,1.0));
+  vec3 hp=mix(srcHPSharp,srcHPWSharp,clamp((adjSharpDetail-0.5)*2.0,0.0,1.0));
   float lv=dot(c.rgb,vec3(.2126,.7152,.0722));
   float cw=4.*lv*(1.-lv);
   // Detail below 0.5 = edge-only: fade out small-amplitude high-pass (fine texture) for Sharpen only,
@@ -10159,7 +10173,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // saturation/vibrance moved to the comp pass (applied AFTER the print stage, Dehancer
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
-      adjSharp:A.sharpness||0,adjSharpDetail:(A.sharpDetail==null?0.5:A.sharpDetail),adjSharpMask:A.sharpMask||0,adjSharpMaskPreview:_adjSharpMaskPreview?1:0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
+      adjSharp:A.sharpness||0,adjSharpDetail:(A.sharpDetail==null?0.5:A.sharpDetail),adjSharpRadius:(A.sharpRadius==null?1:A.sharpRadius),adjSharpMask:A.sharpMask||0,adjSharpMaskPreview:_adjSharpMaskPreview?1:0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
       adjWavelet1:(A.wavelet&&A.wavelet.fine)||0,adjWavelet2:(A.wavelet&&A.wavelet.small)||0,
       adjWavelet3:(A.wavelet&&A.wavelet.medium)||0,adjWaveletResidual:(A.wavelet&&A.wavelet.residual)||0,
       fnOn:(P.filmNeg&&P.filmNeg.enabled&&P.filmNeg.domain!=='camera-linear16-v1')?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
@@ -13422,7 +13436,7 @@ document.addEventListener('change',_ffAutoEnable,true);
 document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos',
-    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat','fneg-exp','fneg-red','fneg-blue','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
+    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat','fneg-exp','fneg-red','fneg-blue','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
@@ -13479,7 +13493,7 @@ function fxScheduleRender(){
     renderPreview();
   },180);
 }
-const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin'];
+const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin'];
 function resetAdjust(){
   ADJ_RESET_FIELDS.forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=parseFloat(sl.defaultValue||0);});
   fxPaintAllSliders(document.querySelector('.fx-ctrl[data-fxsec="adjust"]'));
@@ -18866,7 +18880,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   // against the DOM's real sl- ids found it 2026-09-10) — present in _SESS_SLIDERS (session
   // save/restore) but absent from the undo-history/copy-paste/.fx-mod snapshot, same class of
   // gap as deconv-amt/deconv-rad before DT1.
-  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat',
+  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-hldesat',
   'fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source',
   'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
   // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
@@ -18932,7 +18946,7 @@ const PASTE_CATEGORIES=[
   {key:'lut',label:'Look (LUT + Print profile)',sliders:['lut-mix'],toggles:[],selects:['sel-lut','sel-print']},
   {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','curveMode','curveParam','hsl','pointColors']},
   {key:'wheels',label:'Colour Wheels',sliders:[],toggles:['tg-wheels'],selects:[],extra:['wheels']},
-  {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
+  {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
   {key:'filmneg',label:'Film Negative',sliders:['fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source'],toggles:['tg-filmneg'],selects:['sel-fneg-mode']},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-hldesat'],toggles:['tg-nr'],selects:[]},
   {key:'deconv',label:'Deconvolution',sliders:['deconv-amt','deconv-rad'],toggles:['tg-deconv'],selects:[]},
@@ -20792,7 +20806,7 @@ function exportPresetListRefresh(selectName){
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
-  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-detail','sl-adj-sharp-mask','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-bx','sl-fneg-by','sl-fneg-domain','sl-fneg-source','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
+  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-radius','sl-adj-sharp-detail','sl-adj-sharp-mask','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-bx','sl-fneg-by','sl-fneg-domain','sl-fneg-source','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
   'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-b1-g','sl-b2-g','sl-b1-glow','sl-b2-glow','sl-b1-pos','sl-b2-pos','sl-canvas-z','sl-vig','sl-exp-q'];
@@ -21448,9 +21462,9 @@ function matchSeriesClear(){
   toast(n?`${n} photo(s) back to the shared grade`:'Nothing to clear',true);
 }
 let _adjSharpMaskPreview=false;
-const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','sharp-detail','sharp-mask','wavelet-1','wavelet-2','wavelet-3','wavelet-res','skin','dehaze','texture'];
+const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','sharp-radius','sharp-detail','sharp-mask','wavelet-1','wavelet-2','wavelet-3','wavelet-res','skin','dehaze','texture'];
 function domAdjustVals(){const o={};ADJ_FIELDS.forEach(f=>o[f]=adjVal('sl-adj-'+f));return o;}
-function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:(f==='sharp-detail'?50:0);if(sl)sl.value=val;if(vl)vl.textContent=val;});}
+function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:(f==='sharp-detail'?50:(f==='sharp-radius'?1:0));if(sl)sl.value=val;if(vl)vl.textContent=val;});}
 function computeAdjustBlock(v){
   v=v||domAdjustVals();
   return{enabled:(document.getElementById('tg-adjust')||{classList:{contains:()=>false}}).classList.contains('on'),
@@ -21460,7 +21474,7 @@ function computeAdjustBlock(v){
     whites:(v.wh||0)/100, blacks:(v.bl||0)/100,
     temp:(v.temp||0)/100, tint:(v.tint||0)/100,
     vibrance:(v.vib||0)/100, saturation:(v.sat||0)/100,
-    sharpness:(v.sharp||0)/500, sharpDetail:(v['sharp-detail']==null?0.5:(v['sharp-detail']/100)), sharpMask:(v['sharp-mask']||0)/100, clarity:(v.clarity||0)/500, texture:(v.texture||0)/400,
+    sharpness:(v.sharp||0)/500, sharpDetail:(v['sharp-detail']==null?0.5:(v['sharp-detail']/100)), sharpRadius:(v['sharp-radius']==null?1:Math.max(0.5,Math.min(3,v['sharp-radius']))), sharpMask:(v['sharp-mask']||0)/100, clarity:(v.clarity||0)/500, texture:(v.texture||0)/400,
     wavelet:{fine:(v['wavelet-1']||0)/100,small:(v['wavelet-2']||0)/100,medium:(v['wavelet-3']||0)/100,residual:(v['wavelet-res']||0)/100},
     skin:(v.skin||0)/100, dehaze:(v.dehaze||0)/100};
 }
