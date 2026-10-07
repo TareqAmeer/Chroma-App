@@ -316,7 +316,7 @@
       case 'eject_volume': return Promise.resolve();
       case 'trash_file': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve();
       case 'duplicate_file': return Promise.resolve();
-      case 'plugin:dialog|open': return Promise.resolve('/test/Pictures/2026');
+      case 'plugin:dialog|open': return Promise.resolve((window.__libtestDialogResults || []).shift() || '/test/Pictures/2026');
       case 'lr_downloads_dir': return Promise.resolve('/test/Lightroom Download');
       case 'gphotos_downloads_dir': return Promise.resolve('/test/Google Photos Download');
       case 'get_lr_thumb': return Promise.reject(new Error('miss')); // always a miss → exercises the network+save path
@@ -757,6 +757,16 @@
         (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
         return Promise.resolve(null);
       case 'catalog_face_scan_status': return Promise.resolve(true);
+      case 'library_backup_last': return Promise.resolve(window.__libtestLastBackup || null);
+      case 'library_backup_create': case 'library_backup_verify': case 'library_backup_restore':
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        if (cmd === 'library_backup_create') {
+          const result = { path: A.destination, createdUnixSecs: 1700000000, photoCount: 3, sidecarsIncluded: 2, sidecarsMissing: 1, verified: true };
+          window.__libtestLastBackup = result;
+          return Promise.resolve(result);
+        }
+        if (cmd === 'library_backup_verify') return Promise.resolve({ photoCount: 3, sidecarsIncluded: 2, sidecarsMissing: 1, roots: [{ sourcePath: '/test/Photos' }] });
+        return Promise.resolve({ path: A.destination, createdUnixSecs: 1700000000, photoCount: 3, sidecarsIncluded: 2, sidecarsMissing: 1, verified: true });
       case 'catalog_photo_faces': return Promise.resolve([{ x0: 0.3, y0: 0.2, x1: 0.6, y1: 0.6, score: 0.97 }]);
       case 'diag_native_state': return Promise.resolve({ binary_path: '/libtest', binary_mtime: null, thumb_generated_session: 0, thumb_remaining: 0 });
       case 'diag_state_path': return Promise.resolve('/libtest/chromasmith_diag_state.json');
@@ -2574,6 +2584,11 @@
           <button class="fx-ovf-item opt-action" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',15)}<span>Import from Google Photos…</span></button>
           <button class="fx-ovf-item opt-action" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">${ic('history',15)}<span>Recent folders…</span></button>
           <button class="fx-ovf-item" id="lib-takeout-names" title="Use the people Google Photos already recognised — choose an unzipped Google Takeout folder">${ic('cloud',15)}<span>Import names from Google Photos…</span></button>
+          <div class="fx-ovf-sep"></div>
+          <div class="fx-ovf-grp-label">Library backup</div>
+          <button class="fx-ovf-item opt-action" id="lib-backup-create" title="Save a verified copy of library data, edits and organization">${ic('export',15)}<span>Create library backup…</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-backup-restore" title="Verify a backup and restore it to a separate folder">${ic('import',15)}<span>Verify / restore backup…</span></button>
+          <div id="lib-backup-last" class="fx-ovf-grp-label" aria-live="polite">Last backup: checking…</div>
           <button class="fx-ovf-item opt-action" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',15)}<span>Get Info</span></button>
           <button class="fx-ovf-item opt-action" id="lib-expand" title="Full-window view — G">${ic('fit',15)}<span>Full-window view</span></button>
           <button class="fx-ovf-item opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C">${ic('compare',15)}<span>Compare view</span></button>
@@ -9988,6 +10003,58 @@
     document.querySelectorAll('.fx-ovf-item[data-viewval]').forEach((o) => o.classList.toggle('on', o.dataset.viewval === state.viewMode));
     const lv = document.getElementById('lib-listview-opt'); if (lv) lv.classList.toggle('dis', !!viewSeg.querySelector('[data-v="list"]')?.disabled);
   }
+  // libSettingsAdopt() moved the Library panes into #fx-settings-page above, so resolve these
+  // actions from document after the move rather than from the now-empty holder.
+  const backupLastLabel = document.querySelector('#lib-backup-last');
+  const backupTimestamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').replace(/Z$/, '');
+  const backupJoin = (parent, name) => `${parent.replace(/[\\/]$/, '')}${parent.includes('\\') ? '\\' : '/'}${name}`;
+  async function refreshBackupStatus() {
+    if (!backupLastLabel) return;
+    try {
+      const last = await invoke('library_backup_last');
+      backupLastLabel.textContent = last?.verified ? `Last verified backup: ${last.path}` : 'Last backup: none yet';
+      backupLastLabel.title = last?.verified ? `${last.path} · ${new Date(last.createdUnixSecs * 1000).toLocaleString()}` : '';
+    } catch (e) { backupLastLabel.textContent = 'Last backup status unavailable'; }
+  }
+  function portablePreferences() {
+    const values = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !(/^(chromasmith_|csTheme$|cs[A-Z])/).test(key) || /(token|secret|oauth|auth|credential|client.?id|code.?verifier)/i.test(key)) continue;
+      values[key] = localStorage.getItem(key);
+    }
+    return { formatVersion: 1, source: 'Chromasmith desktop preferences', values };
+  }
+  const backupCreate = document.querySelector('#lib-backup-create');
+  if (backupCreate) backupCreate.onclick = async () => {
+    try {
+      const chosen = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Choose where to save the library backup' } });
+      const parent = Array.isArray(chosen) ? chosen[0] : chosen;
+      if (!parent) return;
+      const destination = backupJoin(parent, `Chromasmith Library Backup ${backupTimestamp()}`);
+      const result = await invoke('library_backup_create', { destination, preferencesJson: JSON.stringify(portablePreferences()) });
+      if (!result?.verified) throw new Error('The backup did not pass verification.');
+      toast(`Verified library backup saved. ${result.photoCount} catalog photos; ${result.sidecarsIncluded} edit sidecars included${result.sidecarsMissing ? `, ${result.sidecarsMissing} missing` : ''}. Originals and regenerated caches are excluded.`);
+      await refreshBackupStatus();
+    } catch (e) { toast(`Library backup failed: ${humanizeErr('create library backup', e)}`, 'err'); }
+  };
+  const backupRestore = document.querySelector('#lib-backup-restore');
+  if (backupRestore) backupRestore.onclick = async () => {
+    try {
+      const selected = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Choose a Chromasmith library backup to verify' } });
+      const source = Array.isArray(selected) ? selected[0] : selected;
+      if (!source) return;
+      const manifest = await invoke('library_backup_verify', { path: source });
+      const parentChoice = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Choose a separate folder for the verified restore' } });
+      const parent = Array.isArray(parentChoice) ? parentChoice[0] : parentChoice;
+      if (!parent) return;
+      const destination = backupJoin(parent, `Chromasmith Restored Library ${backupTimestamp()}`);
+      const result = await invoke('library_backup_restore', { path: source, destination });
+      if (!result?.verified) throw new Error('The restored copy did not pass verification.');
+      toast(`Verified restore copy created at ${result.path}. ${manifest.photoCount} catalog photos are preserved; reconnect original folders before editing.`);
+    } catch (e) { toast(`Library restore failed: ${humanizeErr('restore library backup', e)}`, 'err'); }
+  };
+  refreshBackupStatus();
   document.querySelectorAll('.fx-ovf-item[data-metaval]').forEach((opt) => {
     opt.onclick = () => { metaSel.value = opt.dataset.metaval; metaSel.onchange({ target: metaSel }); syncViewMenuChecks(); };
   });

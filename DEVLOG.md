@@ -577,3 +577,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-183
 
 - Integration commit `173065aad867b41fce6b6c22c557303d20aaa40f` was pushed by fast-forward after fetching `origin/main`; fresh fetch and `git ls-remote` both returned the same SHA, and `git merge-base --is-ancestor HEAD origin/main` passed. The published tree contains the notification bridge, Tauri permission/dependency, activity-history refresh, and focused test.
+### 2026-10-08 — CHR-205 library backup/restore (partial)
+
+- Added a staged, versioned, hash-verified library backup bundle for the SQLite catalog, selected app data and preferences, catalogued XMP sidecars, smart-collection registries, and export history. Original media and regenerable caches are explicitly excluded; Library settings can create, verify, and copy a verified bundle to a new destination, with last-success status.
+- Added `docs/library-backup.md` and focused dark/light Playwright coverage plus native Rust bundle tests. Validation: four `catalog_backup` Rust tests and the two-theme browser harness passed.
+- CHR-205 remains In Progress: restore is a safe copy and does not activate the library or relink source roots; cross-store snapshot consistency and several IndexedDB/editor collections are not captured, and no clean-install cross-machine fixture or live Tauri UI run is verified.
