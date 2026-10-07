@@ -6762,7 +6762,7 @@
   // Dust sync is deliberately separate from paste: choose spots, then approve each photo.
   async function libSyncDust(paths) {
     const source = window.__copiedRecipe && snapshotFromB64(window.__copiedRecipe);
-    const spots = (source?._heal || []).filter(o => !o.pts?.length);
+    const spots = (source?.heal || []).filter(o => !o.pts?.length);
     if (!spots.length) { toast('Copy an edit containing circular dust spots first'); return; }
     await flushPendingSave();
     const origin = window.__copiedRecipeOrigin;
@@ -6809,7 +6809,7 @@
         const prior = reviewed.get(path);
         if ((cur.recipe || '') !== (prior.recipe || '') || (cur.active || 0) !== (prior.active || 0)) throw new Error('Photo changed after review; review it again');
         const snap = cur.recipe ? snapshotFromB64(cur.recipe) : window.chromasmithMergeSelectiveRecipe(null, {}, []);
-        snap._heal = [...(snap._heal || []), ...chosen.map((o, i) => ({ ...o, id: 'dust-' + Date.now() + '-' + i }))];
+        snap.heal = [...(snap.heal || []), ...chosen.map((o, i) => ({ ...o, id: 'dust-' + Date.now() + '-' + i }))];
         return snapshotToB64(snap);
       }); } catch (e) { toast(humanizeErr('sync reviewed dust spots', e), 'err'); }
     };

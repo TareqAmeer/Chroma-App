@@ -27,7 +27,7 @@ try {
   // Seed real per-photo recipes through the ordinary UI path before syncing dust.
   await page.evaluate(() => {
     const snap=getUISnapshot();snap.sliders['adj-exp']=17;
-    snap._heal=[{id:'existing',x:.8,y:.2,r:.03,sx:.9,sy:.4,mode:'clone',feather:.5,opacity:.7}];
+    snap.heal=[{id:'existing',x:.8,y:.2,r:.03,sx:.9,sy:.4,mode:'clone',feather:.5,opacity:.7}];
     window.__copiedRecipe=btoa(unescape(encodeURIComponent(JSON.stringify(snap))));
   });
   for(let i=0;i<3;i++)await cards.nth(i).click({modifiers:['Control']});
@@ -38,7 +38,7 @@ try {
   const original=await page.evaluate(async()=>{const list=await window.libtestRecipeBatchInvoke('recipe_batch_list',{});const seed=await window.libtestRecipeBatchInvoke('recipe_batch_get',{id:(list.find(b=>b.label==='Paste edit')||list[0]).id});return {recipe:seed.items[0].recipe};});
   await page.evaluate(() => {
     const snap = getUISnapshot();
-    snap._heal = [{ id:'dust', x:.3,y:.4,r:.02,sx:.5,sy:.5,mode:'heal',feather:0,opacity:1 }, {id:'object',x:.6,y:.6,r:.05,pts:[[.6,.6],[.7,.7]]}];
+    snap.heal = [{ id:'dust', x:.3,y:.4,r:.02,sx:.5,sy:.5,mode:'heal',feather:0,opacity:1 }, {id:'object',x:.6,y:.6,r:.05,pts:[[.6,.6],[.7,.7]]}];
     window.__copiedRecipe = btoa(unescape(encodeURIComponent(JSON.stringify(snap))));
   });
   await cards.nth(1).click({button:'right'});
@@ -66,7 +66,7 @@ try {
   const batch=await page.evaluate(async()=>{const list=await window.libtestRecipeBatchInvoke('recipe_batch_list',{});return window.libtestRecipeBatchInvoke('recipe_batch_get',{id:list.find(b=>b.label==='Sensor-dust sync (reviewed)').id});});
   assert.deepEqual(batch.items.map(i=>i.path),paths.slice(0,2));
   assert.ok(batch.items.every(i=>i.status==='applied'));
-  for(const item of batch.items){const snap=JSON.parse(decodeURIComponent(escape(atob(item.recipe))));assert.equal(snap._heal.length,2);assert.equal(snap._heal[0].id,'existing');assert.equal(snap._heal[1].feather,0);const prior=JSON.parse(decodeURIComponent(escape(atob(original.recipe))));const appended=snap._heal.pop();assert.ok(appended.id.startsWith('dust-'));assert.deepEqual(snap,prior,'sync altered unrelated retouch/settings');}
+  for(const item of batch.items){const snap=JSON.parse(decodeURIComponent(escape(atob(item.recipe))));assert.equal(snap.heal.length,2);assert.equal(snap.heal[0].id,'existing');assert.equal(snap.heal[1].feather,0);const prior=JSON.parse(decodeURIComponent(escape(atob(original.recipe))));const appended=snap.heal.pop();assert.ok(appended.id.startsWith('dust-'));assert.deepEqual(snap,prior,'sync altered unrelated retouch/settings');}
   const untouched=await page.evaluate(path=>window.libtestRecipeBatchInvoke('get_sidecar',{path}),paths[2]);
   assert.equal(untouched.recipe,original.recipe,'unapproved photo changed');
   const fixture=(await readFile(process.env.CHROMA_DUST_FIXTURE || 'test/fixtures/chart.png')).toString('base64');
@@ -80,11 +80,11 @@ try {
     ctx.fillStyle='#000';ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill();
     const decode=r=>JSON.parse(decodeURIComponent(escape(atob(r))));
     const prior=decode(original.recipe),synced=decode(batch.items[0].recipe),notApproved=decode(untouched.recipe);
-    const selected={...synced._heal.at(-1)};
-    const before=healApply(c,structuredClone(prior._heal));
-    const after=healApply(c,structuredClone(synced._heal));
-    const expected=healApply(c,[...structuredClone(prior._heal),selected]);
-    const identity=healApply(c,structuredClone(notApproved._heal));
+    const selected={...synced.heal.at(-1)};
+    const before=healApply(c,structuredClone(prior.heal));
+    const after=healApply(c,structuredClone(synced.heal));
+    const expected=healApply(c,[...structuredClone(prior.heal),selected]);
+    const identity=healApply(c,structuredClone(notApproved.heal));
     const data=cv=>cv.getContext('2d').getImageData(0,0,c.width,c.height).data;
     const a=data(after),b=data(before),e=data(expected),u=data(identity);
     let changed=0,outside=0,parity=0,identityDiff=0;const outsideExamples=[];
@@ -93,7 +93,12 @@ try {
     const center=(y*c.width+x)*4,brightness=d=>(d[center]+d[center+1]+d[center+2])/3;
     // The real Editor working-source path must consume the transferred operations
     // before preview, native-detail loupe and tiled export render their pixels.
-    curItem().img=c;curItem().heal=structuredClone(synced._heal);curItem().geom={rot:0,flipH:false,flipV:false,angle:0,crop:null};
+    curItem().img=c;
+    // Apply the journal recipe through the real recipe consumer, never assign its
+    // retouch array directly: this fails if batch sync uses a session-only field.
+    applyUISnapshot(synced);
+    if(JSON.stringify(curItem().heal)!==JSON.stringify(synced.heal))throw Error('Recipe application did not restore synced healing');
+    if(JSON.stringify(getUISnapshot().heal)!==JSON.stringify(synced.heal))throw Error('Healing did not survive canonical snapshot roundtrip');
     updateWork();
     const work=fxWork,P=getFXParams(),oldParams=getFXParams,oldTileSize=fxExportTileSize;
     for(const key of ['grain','halation','bloom','artifacts'])if(P[key])P[key].enabled=false;
@@ -139,7 +144,7 @@ try {
   await page.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=6&libdates=1&deskx=1`);
   await page.locator('#lib-grid .lib-card[data-path]').first().waitFor();
   await page.waitForTimeout(1000);
-  await page.evaluate(()=>{const s=getUISnapshot();s._heal=[{x:.3,y:.4,r:.02,sx:.5,sy:.5,mode:'heal'}];window.__copiedRecipe=btoa(unescape(encodeURIComponent(JSON.stringify(s))));window.__copiedRecipeOrigin={path:'/mock/IMG_0999.jpg',recipe:window.__copiedRecipe};});
+  await page.evaluate(()=>{const s=getUISnapshot();s.heal=[{x:.3,y:.4,r:.02,sx:.5,sy:.5,mode:'heal'}];window.__copiedRecipe=btoa(unescape(encodeURIComponent(JSON.stringify(s))));window.__copiedRecipeOrigin={path:'/mock/IMG_0999.jpg',recipe:window.__copiedRecipe};});
   await page.locator('#lib-grid .lib-card[data-path]').first().click({button:'right'});
   await page.getByText('Edit',{exact:true}).last().hover();
   await page.getByText('Sync sensor dust (review each photo)…',{exact:true}).click();
