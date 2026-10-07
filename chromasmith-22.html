@@ -7253,12 +7253,16 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1007A';
+const BUILD='1.1007B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
 const WHATSNEW=[
+  {date:'2026-10-07',items:[
+    'Android photos now save in Pictures/Chromasmith and survive uninstalling the app.',
+    'Existing Android exports are moved to permanent photo storage after verification.'
+  ]},
   {date:'2026-10-07',items:[
     'Android exports read fewer pixels while preserving the full image and edit quality.',
     'Full-resolution JPEG export is restored when Android reduces a large photo during loading.'
@@ -25440,7 +25444,14 @@ async function capShareFiles(items){ // [{content:Uint8Array|string,fname,mime}]
     // Images go straight into a "Chromasmith" album in the phone's photo library (Media plugin);
     // LUTs/JSON and any album failure fall through to the share sheet / Documents below.
     if(/^image\//.test(it.mime||'')||/\.(jpe?g|png|webp|avif|tiff?|heic)$/i.test(it.fname)){
-      try{const album=await capAlbumId();
+      try{if(capAndroid()){
+          const plugin=window.Capacitor.Plugins.PhotoExport;const ready=await plugin.prepare();
+          if(!ready.persistent||ready.failed>0)throw new Error('Permanent Photos storage is unavailable or earlier exports need attention.');
+          const saved=await plugin.savePhoto({path:r.uri,name:it.fname});
+          if(!saved.persistent)throw new Error('Permanent Photos storage was not confirmed');
+          nAlbum++;try{await Filesystem.deleteFile({path:'export/'+it.fname,directory:'CACHE'});}catch(_){}continue;
+        }
+        const album=await capAlbumId();
         await window.Capacitor.Plugins.Media.savePhoto({path:r.uri,albumIdentifier:album,fileName:it.fname.replace(/\.[^.]+$/,'')});
         nAlbum++;continue;}
       catch(e){log('Save to Photos album failed ('+(e&&e.message||e)+')','warn');}
@@ -25458,6 +25469,7 @@ async function capShareFiles(items){ // [{content:Uint8Array|string,fname,mime}]
 }
 let _capAlbum=null;
 async function capAlbumId(){ // find-or-create the "Chromasmith" album; identifier is required on Android
+  if(capAndroid())throw new Error('Android Photos must use permanent shared storage.');
   if(_capAlbum)return _capAlbum;
   const M=window.Capacitor.Plugins.Media;if(!M)throw new Error('Media plugin missing');
   const find=async()=>{const r=await M.getAlbums();const a=(r.albums||[]).find(x=>x.name==='Chromasmith');return a&&a.identifier;};

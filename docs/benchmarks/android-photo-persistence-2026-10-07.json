@@ -1,0 +1,1050 @@
+{
+  "issue": "CHR-285",
+  "build": "1.1007B",
+  "date": "2026-10-07",
+  "native": {
+    "29": {
+      "api": 29,
+      "prefix": "persistence-29-1791369111318",
+      "serial": "emulator-5556",
+      "receipts": [
+        {
+          "ok": true,
+          "fname": "persistence-29-1791369111318-duplicate.jpg",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/images/media/80"
+        },
+        {
+          "ok": true,
+          "fname": "persistence-29-1791369111318-duplicate.jpg",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/images/media/81"
+        },
+        {
+          "ok": true,
+          "fname": "persistence-29-1791369111318-fallback.jpg",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/images/media/82"
+        },
+        {
+          "ok": true,
+          "fname": "persistence-29-1791369111318-photo.png",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/images/media/83"
+        },
+        {
+          "ok": true,
+          "fname": "persistence-29-1791369111318-movie.mp4",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/video/media/84"
+        }
+      ],
+      "checks": [
+        "migration verification, failure retention and idempotence",
+        "binary JPEG, fallback JPEG, PNG, video, GPS metadata and duplicate names",
+        "cache cleanup, invalid MIME and cache path containment",
+        "all eight files and gallery records survive actual uninstall",
+        "reinstall preserves existing public photos without duplicates"
+      ],
+      "before": [
+        {
+          "id": 46,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-29-1791369111318-legacy.jpg",
+          "name": "persistence-29-1791369111318-legacy.jpg",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "88ac5c1d993e2cfbc8e6d2ba84ed4ef1f234664d30398870e7b55fcad48262db"
+        },
+        {
+          "id": 77,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-29-1791369111318-legacy.png",
+          "name": "persistence-29-1791369111318-legacy.png",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "988ab45878e5f71711e190395635b92284bf6d22be90a0c220ac73f0af6f548f"
+        },
+        {
+          "id": 80,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-29-1791369111318-duplicate.jpg",
+          "name": "persistence-29-1791369111318-duplicate.jpg",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "88ac5c1d993e2cfbc8e6d2ba84ed4ef1f234664d30398870e7b55fcad48262db"
+        },
+        {
+          "id": 81,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-29-1791369111318-duplicate (1).jpg",
+          "name": "persistence-29-1791369111318-duplicate (1).jpg",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "24c8b5b83fb41abd5afdac05647c7c2ba8210b09763b0c06e100560a7efcb3ca"
+        },
+        {
+          "id": 82,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-29-1791369111318-fallback.jpg",
+          "name": "persistence-29-1791369111318-fallback.jpg",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "88ac5c1d993e2cfbc8e6d2ba84ed4ef1f234664d30398870e7b55fcad48262db"
+        },
+        {
+          "id": 83,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-29-1791369111318-photo.png",
+          "name": "persistence-29-1791369111318-photo.png",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "988ab45878e5f71711e190395635b92284bf6d22be90a0c220ac73f0af6f548f"
+        },
+        {
+          "id": 79,
+          "file": "/storage/emulated/0/Movies/Chromasmith/persistence-29-1791369111318-legacy.mp4",
+          "name": "persistence-29-1791369111318-legacy.mp4",
+          "relative": "Movies/Chromasmith/",
+          "pending": 0,
+          "sha256": "2e019fa954d760819323363567eae58d9c343bc96eb3d9a37728b4f512666ecd"
+        },
+        {
+          "id": 84,
+          "file": "/storage/emulated/0/Movies/Chromasmith/persistence-29-1791369111318-movie.mp4",
+          "name": "persistence-29-1791369111318-movie.mp4",
+          "relative": "Movies/Chromasmith/",
+          "pending": 0,
+          "sha256": "2e019fa954d760819323363567eae58d9c343bc96eb3d9a37728b4f512666ecd"
+        }
+      ],
+      "uninstalled": true,
+      "pass": true
+    },
+    "35": {
+      "api": 35,
+      "prefix": "persistence-35-1791368737211",
+      "serial": "emulator-5554",
+      "receipts": [
+        {
+          "ok": true,
+          "fname": "persistence-35-1791368737211-duplicate.jpg",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/images/media/1000001058"
+        },
+        {
+          "ok": true,
+          "fname": "persistence-35-1791368737211-duplicate.jpg",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/images/media/1000001059"
+        },
+        {
+          "ok": true,
+          "fname": "persistence-35-1791368737211-fallback.jpg",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/images/media/1000001060"
+        },
+        {
+          "ok": true,
+          "fname": "persistence-35-1791368737211-photo.png",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/images/media/1000001061"
+        },
+        {
+          "ok": true,
+          "fname": "persistence-35-1791368737211-movie.mp4",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/video/media/1000001062"
+        }
+      ],
+      "checks": [
+        "migration verification, failure retention and idempotence",
+        "binary JPEG, fallback JPEG, PNG, video, GPS metadata and duplicate names",
+        "cache cleanup, invalid MIME and cache path containment",
+        "all eight files and gallery records survive actual uninstall",
+        "reinstall preserves existing public photos without duplicates"
+      ],
+      "before": [
+        {
+          "id": 1000001054,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-35-1791368737211-legacy.jpg",
+          "name": "persistence-35-1791368737211-legacy.jpg",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "88ac5c1d993e2cfbc8e6d2ba84ed4ef1f234664d30398870e7b55fcad48262db"
+        },
+        {
+          "id": 1000001055,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-35-1791368737211-legacy.png",
+          "name": "persistence-35-1791368737211-legacy.png",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "988ab45878e5f71711e190395635b92284bf6d22be90a0c220ac73f0af6f548f"
+        },
+        {
+          "id": 1000001058,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-35-1791368737211-duplicate.jpg",
+          "name": "persistence-35-1791368737211-duplicate.jpg",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "88ac5c1d993e2cfbc8e6d2ba84ed4ef1f234664d30398870e7b55fcad48262db"
+        },
+        {
+          "id": 1000001059,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-35-1791368737211-duplicate (1).jpg",
+          "name": "persistence-35-1791368737211-duplicate (1).jpg",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "24c8b5b83fb41abd5afdac05647c7c2ba8210b09763b0c06e100560a7efcb3ca"
+        },
+        {
+          "id": 1000001060,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-35-1791368737211-fallback.jpg",
+          "name": "persistence-35-1791368737211-fallback.jpg",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "88ac5c1d993e2cfbc8e6d2ba84ed4ef1f234664d30398870e7b55fcad48262db"
+        },
+        {
+          "id": 1000001061,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-35-1791368737211-photo.png",
+          "name": "persistence-35-1791368737211-photo.png",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "988ab45878e5f71711e190395635b92284bf6d22be90a0c220ac73f0af6f548f"
+        },
+        {
+          "id": 1000001057,
+          "file": "/storage/emulated/0/Movies/Chromasmith/persistence-35-1791368737211-legacy.mp4",
+          "name": "persistence-35-1791368737211-legacy.mp4",
+          "relative": "Movies/Chromasmith/",
+          "pending": 0,
+          "sha256": "2e019fa954d760819323363567eae58d9c343bc96eb3d9a37728b4f512666ecd"
+        },
+        {
+          "id": 1000001062,
+          "file": "/storage/emulated/0/Movies/Chromasmith/persistence-35-1791368737211-movie.mp4",
+          "name": "persistence-35-1791368737211-movie.mp4",
+          "relative": "Movies/Chromasmith/",
+          "pending": 0,
+          "sha256": "2e019fa954d760819323363567eae58d9c343bc96eb3d9a37728b4f512666ecd"
+        }
+      ],
+      "uninstalled": true,
+      "pass": true
+    }
+  },
+  "exportBatches": {
+    "public_photos_android35": {
+      "rows": [
+        {
+          "method": "center",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "yieldMs": 593.3999999985099,
+          "processMs": 36439.19999999553,
+          "bytes": 2617789,
+          "encodeMs": 1642.8999999985099,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "content://media/external_primary/images/media/1000001031"
+            }
+          ],
+          "saveMs": 858,
+          "totalMs": 40904.79999999702,
+          "mediaStoreFile": "/storage/emulated/0/Pictures/Chromasmith/full-methods-6000x4000_v1-0 (1).jpg",
+          "savedFile": "portable-public_photos_android35-center-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "yieldMs": 226.10000000149012,
+          "processMs": 3226.60000000149,
+          "bytes": 2617789,
+          "encodeMs": 488.1000000014901,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "content://media/external_primary/images/media/1000001032"
+            }
+          ],
+          "saveMs": 759.5,
+          "totalMs": 5043.5999999940395,
+          "mediaStoreFile": "/storage/emulated/0/Pictures/Chromasmith/full-methods-6000x4000_v1-1 (1).jpg",
+          "savedFile": "portable-public_photos_android35-center-1.jpg"
+        },
+        {
+          "method": "center",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "yieldMs": 179.30000000447035,
+          "processMs": 2957.2999999970198,
+          "bytes": 2617789,
+          "encodeMs": 445.79999999701977,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-2.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "content://media/external_primary/images/media/1000001033"
+            }
+          ],
+          "saveMs": 211.80000000447035,
+          "totalMs": 4132,
+          "mediaStoreFile": "/storage/emulated/0/Pictures/Chromasmith/full-methods-6000x4000_v1-2 (1).jpg",
+          "savedFile": "portable-public_photos_android35-center-2.jpg"
+        },
+        {
+          "method": "center",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "yieldMs": 220.19999998807907,
+          "processMs": 3466.39999999851,
+          "bytes": 2617789,
+          "encodeMs": 459.1000000014901,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-3.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "content://media/external_primary/images/media/1000001034"
+            }
+          ],
+          "saveMs": 1023.3999999985099,
+          "totalMs": 6085.60000000149,
+          "mediaStoreFile": "/storage/emulated/0/Pictures/Chromasmith/full-methods-6000x4000_v1-3 (1).jpg",
+          "savedFile": "portable-public_photos_android35-center-3.jpg"
+        }
+      ],
+      "medians": {
+        "totalMs": 5043.5999999940395,
+        "processMs": 3226.60000000149,
+        "encodeMs": 459.1000000014901,
+        "saveMs": 759.5
+      },
+      "checks": [
+        {
+          "savedFile": "portable-public_photos_android35-center-0.jpg",
+          "size": [
+            6000,
+            4000
+          ],
+          "sha256": "c934cc3d8077dd1328e5c79f8ef39e477089eac68a43b573e2e07b904c5fa431",
+          "exact": true
+        },
+        {
+          "savedFile": "portable-public_photos_android35-center-1.jpg",
+          "size": [
+            6000,
+            4000
+          ],
+          "sha256": "c934cc3d8077dd1328e5c79f8ef39e477089eac68a43b573e2e07b904c5fa431",
+          "exact": true
+        },
+        {
+          "savedFile": "portable-public_photos_android35-center-2.jpg",
+          "size": [
+            6000,
+            4000
+          ],
+          "sha256": "c934cc3d8077dd1328e5c79f8ef39e477089eac68a43b573e2e07b904c5fa431",
+          "exact": true
+        },
+        {
+          "savedFile": "portable-public_photos_android35-center-3.jpg",
+          "size": [
+            6000,
+            4000
+          ],
+          "sha256": "c934cc3d8077dd1328e5c79f8ef39e477089eac68a43b573e2e07b904c5fa431",
+          "exact": true
+        }
+      ],
+      "device": {
+        "userAgent": "Mozilla/5.0 (Linux; Android 15; sdk_gphone64_x86_64 Build/AE3A.240806.043; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.6367.219 Mobile Safari/537.36",
+        "memory": 2,
+        "worker": "function",
+        "bridge": "object",
+        "api": 35,
+        "serial": "emulator-5554"
+      }
+    },
+    "public_photos_final_android35": {
+      "rows": [
+        {
+          "method": "center",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "yieldMs": 382.09999998658895,
+          "processMs": 27018.10000000149,
+          "bytes": 2617789,
+          "encodeMs": 1270.7999999970198,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "content://media/external_primary/images/media/1000001045"
+            }
+          ],
+          "saveMs": 2290.60000000149,
+          "totalMs": 33479.29999999702,
+          "mediaStoreFile": "/storage/emulated/0/Pictures/Chromasmith/full-methods-6000x4000_v1-0 (2).jpg",
+          "savedFile": "portable-public_photos_final_android35-center-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "yieldMs": 635.2000000029802,
+          "processMs": 9518.10000000149,
+          "bytes": 2617789,
+          "encodeMs": 1068.1999999955297,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "content://media/external_primary/images/media/1000001046"
+            }
+          ],
+          "saveMs": 2417,
+          "totalMs": 17588.90000000596,
+          "mediaStoreFile": "/storage/emulated/0/Pictures/Chromasmith/full-methods-6000x4000_v1-1 (2).jpg",
+          "savedFile": "portable-public_photos_final_android35-center-1.jpg"
+        },
+        {
+          "method": "center",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "yieldMs": 249.39999999850988,
+          "processMs": 3262.5999999940395,
+          "bytes": 2617789,
+          "encodeMs": 503.79999999701977,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-2.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "content://media/external_primary/images/media/1000001047"
+            }
+          ],
+          "saveMs": 204,
+          "totalMs": 4739,
+          "mediaStoreFile": "/storage/emulated/0/Pictures/Chromasmith/full-methods-6000x4000_v1-2 (2).jpg",
+          "savedFile": "portable-public_photos_final_android35-center-2.jpg"
+        },
+        {
+          "method": "center",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "yieldMs": 360.6000000014901,
+          "processMs": 4004.5,
+          "bytes": 2617789,
+          "encodeMs": 476.3999999985099,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-3.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "content://media/external_primary/images/media/1000001048"
+            }
+          ],
+          "saveMs": 251.5,
+          "totalMs": 6130.80000000447,
+          "mediaStoreFile": "/storage/emulated/0/Pictures/Chromasmith/full-methods-6000x4000_v1-3 (2).jpg",
+          "savedFile": "portable-public_photos_final_android35-center-3.jpg"
+        }
+      ],
+      "medians": {
+        "totalMs": 6130.80000000447,
+        "processMs": 4004.5,
+        "encodeMs": 503.79999999701977,
+        "saveMs": 251.5
+      },
+      "checks": [
+        {
+          "savedFile": "portable-public_photos_final_android35-center-0.jpg",
+          "size": [
+            6000,
+            4000
+          ],
+          "sha256": "c934cc3d8077dd1328e5c79f8ef39e477089eac68a43b573e2e07b904c5fa431",
+          "exact": true
+        },
+        {
+          "savedFile": "portable-public_photos_final_android35-center-1.jpg",
+          "size": [
+            6000,
+            4000
+          ],
+          "sha256": "c934cc3d8077dd1328e5c79f8ef39e477089eac68a43b573e2e07b904c5fa431",
+          "exact": true
+        },
+        {
+          "savedFile": "portable-public_photos_final_android35-center-2.jpg",
+          "size": [
+            6000,
+            4000
+          ],
+          "sha256": "c934cc3d8077dd1328e5c79f8ef39e477089eac68a43b573e2e07b904c5fa431",
+          "exact": true
+        },
+        {
+          "savedFile": "portable-public_photos_final_android35-center-3.jpg",
+          "size": [
+            6000,
+            4000
+          ],
+          "sha256": "c934cc3d8077dd1328e5c79f8ef39e477089eac68a43b573e2e07b904c5fa431",
+          "exact": true
+        }
+      ],
+      "device": {
+        "userAgent": "Mozilla/5.0 (Linux; Android 15; sdk_gphone64_x86_64 Build/AE3A.240806.043; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.6367.219 Mobile Safari/537.36",
+        "memory": 2,
+        "worker": "function",
+        "bridge": "object",
+        "api": 35,
+        "serial": "emulator-5554"
+      }
+    },
+    "public_photos_final_android29": {
+      "rows": [
+        {
+          "method": "center",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "decodeMs": 1537.2999999999884,
+          "yieldMs": 948.3000000000466,
+          "processMs": 2230.7000000000116,
+          "bytes": 2600747,
+          "encodeMs": 3977.3000000000466,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "content://media/external_primary/images/media/85"
+            }
+          ],
+          "saveMs": 534.7000000000116,
+          "totalMs": 8899.200000000012,
+          "mediaStoreFile": "/storage/emulated/0/Pictures/Chromasmith/full-methods-6000x4000_v1-0 (1).jpg",
+          "savedFile": "portable-public_photos_final_android29-center-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "decodeMs": 1532.2000000000116,
+          "yieldMs": 1421.200000000128,
+          "processMs": 3133.5,
+          "bytes": 2600747,
+          "encodeMs": 2235.9000000000233,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "content://media/external_primary/images/media/86"
+            }
+          ],
+          "saveMs": 508.6000000000349,
+          "totalMs": 7797.799999999988,
+          "mediaStoreFile": "/storage/emulated/0/Pictures/Chromasmith/full-methods-6000x4000_v1-1 (1).jpg",
+          "savedFile": "portable-public_photos_final_android29-center-1.jpg"
+        },
+        {
+          "method": "center",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "decodeMs": 1054.5,
+          "yieldMs": 582.7999999999884,
+          "processMs": 1561.5999999999767,
+          "bytes": 2600747,
+          "encodeMs": 547.7000000000116,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-2.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "content://media/external_primary/images/media/87"
+            }
+          ],
+          "saveMs": 559.7000000000116,
+          "totalMs": 4137.200000000012,
+          "mediaStoreFile": "/storage/emulated/0/Pictures/Chromasmith/full-methods-6000x4000_v1-2 (1).jpg",
+          "savedFile": "portable-public_photos_final_android29-center-2.jpg"
+        },
+        {
+          "method": "center",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "decodeMs": 1156,
+          "yieldMs": 572.5999999999767,
+          "processMs": 1575,
+          "bytes": 2600747,
+          "encodeMs": 601.0999999999767,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-3.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "content://media/external_primary/images/media/88"
+            }
+          ],
+          "saveMs": 128,
+          "totalMs": 3771.6999999999534,
+          "mediaStoreFile": "/storage/emulated/0/Pictures/Chromasmith/full-methods-6000x4000_v1-3 (1).jpg",
+          "savedFile": "portable-public_photos_final_android29-center-3.jpg"
+        }
+      ],
+      "medians": {
+        "totalMs": 4137.200000000012,
+        "processMs": 1575,
+        "encodeMs": 601.0999999999767,
+        "saveMs": 508.6000000000349
+      },
+      "checks": [
+        {
+          "savedFile": "portable-public_photos_final_android29-center-0.jpg",
+          "size": [
+            6000,
+            4000
+          ],
+          "sha256": "1056b5bc163ebb6824a37446d3206512c448a36f5418c08ff22e4d46fb38ad3f",
+          "exact": true
+        },
+        {
+          "savedFile": "portable-public_photos_final_android29-center-1.jpg",
+          "size": [
+            6000,
+            4000
+          ],
+          "sha256": "1056b5bc163ebb6824a37446d3206512c448a36f5418c08ff22e4d46fb38ad3f",
+          "exact": true
+        },
+        {
+          "savedFile": "portable-public_photos_final_android29-center-2.jpg",
+          "size": [
+            6000,
+            4000
+          ],
+          "sha256": "1056b5bc163ebb6824a37446d3206512c448a36f5418c08ff22e4d46fb38ad3f",
+          "exact": true
+        },
+        {
+          "savedFile": "portable-public_photos_final_android29-center-3.jpg",
+          "size": [
+            6000,
+            4000
+          ],
+          "sha256": "1056b5bc163ebb6824a37446d3206512c448a36f5418c08ff22e4d46fb38ad3f",
+          "exact": true
+        }
+      ],
+      "device": {
+        "userAgent": "Mozilla/5.0 (Linux; Android 10; Android SDK built for x86_64 Build/QSR1.211112.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.6367.219 Mobile Safari/537.36",
+        "memory": 1,
+        "worker": "function",
+        "bridge": "object",
+        "api": 29,
+        "serial": "emulator-5556"
+      }
+    }
+  },
+  "apkSha256": "49e97e5176c8d03a570b1b7e30122aef90b3b8f797626697d12c8c2ef513688f"
+}

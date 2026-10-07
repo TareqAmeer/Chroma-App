@@ -1,6 +1,10 @@
 package com.tareq.chromasmith;
 
-import android.media.MediaScannerConnection;
+import android.Manifest;
+import android.os.Build;
+import com.getcapacitor.PermissionState;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 import android.net.Uri;
 import android.webkit.WebView;
 import androidx.webkit.JavaScriptReplyProxy;
@@ -14,14 +18,14 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONObject;
 import java.io.File;
-import java.io.FileOutputStream;
+
 import java.util.Collections;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** JPEG-only binary save bridge, restricted to the app's main frame and Photos album. */
-@CapacitorPlugin(name="PhotoExport")
+@CapacitorPlugin(name="PhotoExport",permissions={@Permission(alias="publicPhotos",strings={Manifest.permission.WRITE_EXTERNAL_STORAGE})})
 public class PhotoExportPlugin extends Plugin {
     private final ExecutorService writer=Executors.newSingleThreadExecutor();
     private Request pending;
@@ -91,30 +95,40 @@ public class PhotoExportPlugin extends Plugin {
         if(result==null){result=new JSObject();result.put("status","unconfirmed");}
         call.resolve(result);
     }
+    @PluginMethod public void prepare(PluginCall call){
+        if(Build.VERSION.SDK_INT<29&&getPermissionState("publicPhotos")!=PermissionState.GRANTED){
+            if(Boolean.TRUE.equals(call.getBoolean("checkOnly",false))){JSObject result=new JSObject();result.put("persistent",false);result.put("needsPermission",new PublicPhotoStore(getContext()).hasExisting());call.resolve(result);}
+            else requestPermissionForAlias("publicPhotos",call,"publicPermission");
+            return;
+        }
+        writer.execute(()->{
+            int[] moved=new PublicPhotoStore(getContext()).migrateExisting();JSObject result=new JSObject();
+            result.put("persistent",true);result.put("migrated",moved[0]);result.put("failed",moved[1]);call.resolve(result);
+        });
+    }
+    @PermissionCallback private void publicPermission(PluginCall call){
+        if(getPermissionState("publicPhotos")==PermissionState.GRANTED)prepare(call);
+        else call.reject("Storage permission is required to save photos that survive uninstall");
+    }
+    @PluginMethod public void savePhoto(PluginCall call){
+        if(Build.VERSION.SDK_INT<29&&getPermissionState("publicPhotos")!=PermissionState.GRANTED){call.reject("Storage permission denied");return;}
+        writer.execute(()->{
+            try{
+                Uri source=Uri.parse(call.getString("path",""));
+                if(!"file".equals(source.getScheme())||source.getPath()==null)throw new IllegalArgumentException("Invalid cached photo path");
+                File file=new File(source.getPath()).getCanonicalFile();String cache=getContext().getCacheDir().getCanonicalPath()+File.separator;
+                if(!file.getPath().startsWith(cache)||!file.isFile())throw new IllegalArgumentException("Photo must be in the export cache");
+                Uri saved=new PublicPhotoStore(getContext()).saveFile(call.getString("name"),file);
+                JSObject result=new JSObject();result.put("path",saved.toString());result.put("persistent",true);call.resolve(result);
+            }catch(Exception error){call.reject(error.getMessage()==null?"Photo save failed":error.getMessage());}
+        });
+    }
     private void save(Request request,byte[] data,JavaScriptReplyProxy proxy) {
-        File temporary=null;
         try {
-            File[] roots=getContext().getExternalMediaDirs();
-            if(roots.length==0||roots[0]==null)throw new java.io.IOException("Photos storage unavailable");
-            // Same location as the existing Media plugin, preserving the user's album.
-            File album=new File(roots[0],"Chromasmith");
-            if(!album.isDirectory()&&!album.mkdirs())throw new java.io.IOException("Cannot create Photos album");
-            File target=new File(album,request.name);int dot=request.name.lastIndexOf('.');
-            String base=request.name.substring(0,dot),ext=request.name.substring(dot);
-            for(int n=2;target.exists();n++){
-                if(n>10000)throw new java.io.IOException("Too many exports use this filename");
-                target=new File(album,base+" ("+n+")"+ext);
-            }
-            temporary=new File(album,".chromasmith-export-"+UUID.randomUUID()+".tmp");
-            try(FileOutputStream stream=new FileOutputStream(temporary)){stream.write(data);}
-            // Publish a complete file; scanning never sees the partially written JPEG.
-            if(!temporary.renameTo(target))throw new java.io.IOException("Cannot publish exported photo");
-            String path=target.getAbsolutePath();
-            MediaScannerConnection.scanFile(getContext(),new String[]{path},new String[]{"image/jpeg"},
-                    (scanned,uri)->finish(proxy,request,uri==null?"error":"saved",
-                            uri==null?"Photo written but gallery registration failed":Uri.fromFile(new File(path)).toString()));
-        }catch(Exception e){finish(proxy,request,"error",e.getMessage()==null?"Photo save failed":e.getMessage());}
-        finally{if(temporary!=null&&temporary.exists())temporary.delete();}
+            if(Build.VERSION.SDK_INT<29&&getPermissionState("publicPhotos")!=PermissionState.GRANTED)throw new java.io.IOException("Storage permission denied");
+            Uri saved=new PublicPhotoStore(getContext()).saveBytes(request.name,data);
+            finish(proxy,request,"saved",saved.toString());
+        }catch(Exception error){finish(proxy,request,"error",error.getMessage()==null?"Photo save failed":error.getMessage());}
     }
     @Override protected void handleOnDestroy(){deadline.removeCallbacksAndMessages(null);writer.shutdown();}
 }

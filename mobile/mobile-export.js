@@ -27,6 +27,20 @@ window.fxMobileExportSheet=function(){
     el.querySelector('[data-go]').onclick=async()=>{try{await window.MobileLibrary?.flush();close();await exportFX();}catch(e){toast(e.message);}};
   });return s;
 };
+function androidPhotos(){return window.Capacitor?.getPlatform?.()==='android';}
+async function prepareAndroidPhotos(checkOnly=false){
+  const plugin=window.Capacitor?.Plugins?.PhotoExport;
+  if(!plugin?.prepare)throw new Error('Update the Android app to save photos in permanent storage.');
+  const result=await plugin.prepare({checkOnly});
+  if(!result.persistent&&!checkOnly)throw new Error('Permanent Photos storage is unavailable.');
+  if(result.failed>0&&!checkOnly)throw new Error('Some earlier exports could not be preserved. Check free storage and retry before uninstalling.');
+  return result;
+}
+// Preserve old app-folder exports on upgrade without asking for unrelated media access.
+if(androidPhotos())prepareAndroidPhotos(true).then(result=>{
+  if(result.failed>0||result.needsPermission)window.toast?.('Earlier exports need storage access or free space to be preserved. Export again before uninstalling.');
+  else if(result.migrated>0)window.toast?.('Earlier exports moved to permanent media storage.');
+}).catch(error=>console.warn('Earlier export preservation:',error.message));
 let binaryPhotoBusy=false;
 async function binaryPhotoSave(content,fname){
   const bridge=window.ChromaPhotoExport;
@@ -73,6 +87,7 @@ async function save(items,destination){
     try{
       const content=item.content instanceof Blob?await item.content.arrayBuffer():item.content;
       if(destination==='photos'){
+        if(androidPhotos())await prepareAndroidPhotos();
         const saved=await binaryPhotoSave(content,item.fname);
         if(saved){receipt.ok=true;receipt.status='saved';receipt.path='Photos › Chromasmith';receipt.uri=saved.path;receipts.push(receipt);continue;}
       }
@@ -99,13 +114,22 @@ async function save(items,destination){
         }
         const r=await Filesystem.writeFile({path,data,directory:'DOCUMENTS',recursive:true});receipt.ok=true;receipt.status='saved';receipt.path=r.uri;
       }else{
-        const r=await Filesystem.writeFile({path:'export/'+item.fname,data,directory:'CACHE',recursive:true});
-        if(destination==='share'){
-          await Share.share({files:[r.uri],title:'Chromasmith export'});receipt.ok=true;receipt.status='shared';receipt.path=r.uri;
-        }else{
-          if(!Media)throw new Error('Photos plugin is unavailable. Choose Files or Share.');
-          const album=await capAlbumId();await Media.savePhoto({path:r.uri,albumIdentifier:album,fileName:item.fname.replace(/\.[^.]+$/,'')});receipt.ok=true;receipt.status='saved';receipt.path='Photos › Chromasmith';
-        }
+        const cachePath='export/'+(typeof crypto.randomUUID==='function'?crypto.randomUUID():Date.now()+'-'+Math.random().toString(16).slice(2))+'-'+String(item.fname).replace(/[\\/:*?"<>|\x00-\x1f]/g,'_');
+        let staged=false;
+        try{
+          const r=await Filesystem.writeFile({path:cachePath,data,directory:'CACHE',recursive:true});staged=true;
+          if(destination==='share'){
+            await Share.share({files:[r.uri],title:'Chromasmith export'});receipt.ok=true;receipt.status='shared';receipt.path=r.uri;
+          }else if(androidPhotos()){
+            const saved=await window.Capacitor.Plugins.PhotoExport.savePhoto({path:r.uri,name:item.fname});
+            if(!saved.persistent)throw new Error('Permanent Photos storage was not confirmed.');
+            receipt.ok=true;receipt.status='saved';receipt.path='Photos › Chromasmith';receipt.uri=saved.path;
+          }else{
+            if(!Media)throw new Error('Photos plugin is unavailable. Choose Files or Share.');
+            const album=await capAlbumId();await Media.savePhoto({path:r.uri,albumIdentifier:album,fileName:item.fname.replace(/\.[^.]+$/,'')});receipt.ok=true;receipt.status='saved';receipt.path='Photos › Chromasmith';
+          }
+        }finally{if(staged&&destination!=='share')try{await Filesystem.deleteFile({path:cachePath,directory:'CACHE'});}catch(_){}}
+
       }
     }catch(e){receipt.err=/cancel|dismiss|abort/i.test(e.message||'')?(destination==='share'?'Sharing cancelled':'Save cancelled'):/permission|denied|authoriz/i.test(e.message||'')?(destination==='photos'?'Photos access was denied. Allow access in device Settings, or choose Files.':'Files access was denied. Choose another destination.'):String(e.message||e);}
     receipts.push(receipt);

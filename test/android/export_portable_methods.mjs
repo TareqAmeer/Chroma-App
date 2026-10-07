@@ -39,7 +39,9 @@ try{
     const row=await job(`(async()=>{const t=performance.now();await exportFX();__fullRow.totalMs=performance.now()-t;return __fullRow;})()`);
     if(row.error||row.receipts?.length!==1||!row.receipts[0].ok)throw Error('failed export '+JSON.stringify(row));
     let remote=row.receipts[0].uri||row.receipts[0].path;
-    if(remote.startsWith('Photos')){
+    if(remote.startsWith('content://')){
+      const query=adbText('shell','content','query','--uri',remote,'--projection','_data');remote=query.match(/_data=(.*)/)?.[1]?.trim();if(!remote)throw Error('missing public Photos file');row.mediaStoreFile=remote;
+    }else if(remote.startsWith('Photos')){
       const query=adbText('shell','content','query','--uri','content://media/external/images/media','--projection','_id:_data:_display_name');
       const fname=row.receipts[0].fname;
       const hits=query.split('\n').filter(l=>l.endsWith('_display_name='+fname)).map(l=>({id:Number(l.match(/_id=(\d+)/)?.[1]),path:l.match(/_data=(.*?), _display_name=/)?.[1]})).sort((a,b)=>b.id-a.id);

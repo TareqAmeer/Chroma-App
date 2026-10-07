@@ -410,3 +410,9 @@
 
 - Published implementation `22ae96f4` and native parity record `b944c10f`; integrated verification commit **7c31e76223f9dfcef2d5e83cc61f2fe7a41e4deb** was fast-forward pushed to `origin/main`. `git ls-remote origin refs/heads/main` matched that exact hash, and a fresh fetch/ancestry check confirms main contains the implementation.
 - Verification: ordinary Android APK build; Android 29/35 full 24 MP native saves and native JPEG safeguards; 35/35 fixture exports byte-identical to unmodified current main; focused export regressions pass. Capability/memory fallback limits and the archived Android 35 database failure are documented. CHR-284 stays In Review for user acceptance; publication does not require a physical Pixel.
+
+### 2026-10-07 — CHR-285 preserve Android exports after uninstall
+
+- Replaced app-owned export folders with shared MediaStore Pictures/Movies in PublicPhotoStore.java and PhotoExportPlugin.java; routed binary JPEG and staged mobile/HTML fallback saves through the persistent store. Verified migration before deleting originals, with recoverable failure and duplicate preservation.
+- Added native uninstall/reinstall fixtures and tests, updated mobile bridge and benchmark receipt tests, and recorded evidence in docs/android-photo-persistence.md and docs/benchmarks/android-photo-persistence-2026-10-07.json. Android 10/15 retained all 16 media files byte-exact; 12 full 24MP JPEG checks and mobile protocol/transport/preview/edge/UX tests passed. Legacy API 24–28 native behavior remains untested.
+- CHR-285 remains In Progress until verified integration is published, then In Review for user testing.
