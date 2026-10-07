@@ -481,7 +481,7 @@
           { id: 3, path: 'Portrait', leaf: 'Portrait', parent_id: null, n: 1 },
         ]);
       }
-      case 'set_keywords': return Promise.resolve();
+      case 'set_keywords': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve();
       // Stateful (failure 13, CLAUDE.md people-pets plan) — earlier this array was a hardcoded
       // literal returned fresh every call, so rename/merge/delete resolved without the sidebar
       // ever reflecting it and no People UI change could be seen working in this harness. Module
@@ -3459,6 +3459,13 @@
     window.__libRenderGrid = () => renderGrid();
     window.__libToggleUnifiedView = (on) => setUnifiedView(on);
     window.__libSelect = (p) => { state.selected.add(p); };
+    // CHR-184 test hooks: drive the real keyword/album write paths and read back what undo restored.
+    window.__libAddKeyword = (p, kw) => addKeywordToPhoto(p, kw);
+    window.__libRemoveKeyword = (p, kw) => removeKeywordFromPhoto(p, kw);
+    window.__libAlbumAdd = async (id, name, paths) => { const n = await albumAddUndoable(id, name, paths); await refreshAlbums(); return n; };
+    window.__libAlbums = () => _albums.map((a) => ({ id: a.id, name: a.name, paths: [...a.paths] }));
+    window.__libKeywords = (p) => [...((state.sidecars.get(p) || {}).keywords || [])];
+    window.__libCreateAlbum = async (name) => { const al = await invoke('album_create', { name }); await refreshAlbums(); return al; };
     // Test-only trigger for showLibraryError()'s recovery state — its 4 real call sites (folder/
     // collection/exported/Lightroom-album load failures) all need a real IPC rejection, which
     // libtestInvoke's list_dir mock never produces (it resolves for any path). Without this,
@@ -4120,6 +4127,16 @@
     }
     libMetaGroup.push(rec);
   }
+  // CHR-184: adding photos to an album (menu or drag) is undoable. Only the paths that were NOT
+  // already in the album are recorded, so undo never removes a photo that was there before.
+  async function albumAddUndoable(id, name, paths) {
+    const al = _albums.find((x) => x.id === id);
+    const had = new Set((al && al.paths) || []);
+    const fresh = [...new Set(paths)].filter((p) => !had.has(p));
+    const added = await invoke('album_add', { id, paths }).catch((e) => { toast(humanizeErr('add to the album', e), 'err'); return 0; });
+    if (added && fresh.length) libMetaRecord({ kind: 'album_add', id, name, paths: fresh });
+    return added;
+  }
   async function libUndoLast() {
     const g = libMetaUndo.pop();
     if (!g || !g.length) { toast('Nothing to undo'); return; }
@@ -4131,10 +4148,17 @@
         if (r.kind === 'rating') await setRating(r.path, r.prev);
         else if (r.kind === 'label') await setLabel(r.path, r.prev);
         else if (r.kind === 'favorite') await setFavorite(r.path, r.prev);
+        else if (r.kind === 'keywords') await restoreKeywords(r.path, r.prev);
+        else if (r.kind === 'album_add') {
+          await invoke('album_remove', { id: r.id, paths: r.paths }).catch((e) => toast(humanizeErr('undo the album add', e), 'err'));
+          await refreshAlbums();
+        }
       }
     } finally { libMetaUndoing = false; }
+    if (g[0].kind === 'album_add') { toast(`Undid add to "${g[0].name}"`); return; }
     const n = new Set(g.map((r) => r.path)).size;
-    toast(`Undid ${g[0].kind === 'label' ? 'flag' : g[0].kind} change${n > 1 ? ` on ${n} photos` : ''}`);
+    const noun = g[0].kind === 'label' ? 'flag' : g[0].kind === 'keywords' ? 'keyword' : g[0].kind;
+    toast(`Undid ${noun} change${n > 1 ? ` on ${n} photos` : ''}`);
   }
   async function setRating(path, rating) {
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
@@ -7371,7 +7395,7 @@
     // album…" row that creates one and adds the selection to it in the same action.
     const albumMenu = submenu('Add to album');
     const addToAlbum = async (id, name) => {
-      const added = await invoke('album_add', { id, paths }).catch((e) => { toast(humanizeErr('add to the album', e), 'err'); return 0; });
+      const added = await albumAddUndoable(id, name, paths);
       await refreshAlbums();
       const dup = n - added;
       toast(added ? `${added} added to "${name}"${dup ? `, ${dup} already there` : ''}` : `Already in "${name}"`, true);
@@ -8071,12 +8095,22 @@
   /// Full hierarchical paths this photo carries, tagged via the info panel or drag-to-tag. The
   /// merge (existing + new, deduped) happens here rather than in the caller so both entry
   /// points share one rule.
+  // CHR-184: keyword edits record the photo's previous list so undo restores it exactly.
+  async function restoreKeywords(path, prev) {
+    const sc = state.sidecars.get(path) || { keywords: [] };
+    try {
+      await invoke('set_keywords', { path, keywords: prev });
+      state.sidecars.set(path, { ...sc, keywords: prev });
+    } catch (e) { toast(humanizeErr('undo the keyword change', e), 'err'); }
+    renderInfoPanel();
+  }
   async function addKeywordToPhoto(path, keyword) {
     const paths = infoPanelTargetPaths(path);
     await Promise.all(paths.map(async (p) => {
       const sc = state.sidecars.get(p) || { keywords: [] };
       const current = sc.keywords || [];
       if (current.includes(keyword)) return;
+      libMetaRecord({ kind: 'keywords', path: p, prev: [...current] });
       const next = [...current, keyword];
       try {
         await invoke('set_keywords', { path: p, keywords: next });
@@ -8091,6 +8125,7 @@
     await Promise.all(paths.map(async (p) => {
       const sc = state.sidecars.get(p) || { keywords: [] };
       const next = (sc.keywords || []).filter((k) => k !== keyword);
+      if (next.length !== (sc.keywords || []).length) libMetaRecord({ kind: 'keywords', path: p, prev: [...(sc.keywords || [])] });
       try {
         await invoke('set_keywords', { path: p, keywords: next });
         state.sidecars.set(p, { ...sc, keywords: next });
@@ -13715,7 +13750,8 @@
         let paths = [];
         try { paths = JSON.parse(e.dataTransfer.getData('application/x-chromasmith-paths') || '[]'); } catch { /* ignore */ }
         if (!paths.length) return;
-        const added = await invoke('album_add', { id, paths }).catch((err) => { toast(humanizeErr('add to the album', err), 'err'); return 0; });
+        const al = _albums.find((x) => x.id === id);
+        const added = await albumAddUndoable(id, al ? al.name : 'album', paths);
         await refreshAlbums();
         // Says what actually happened: re-dragging photos already in an album is a common gesture
         // and reporting "3 added" when nothing changed would be a lie.
