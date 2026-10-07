@@ -670,6 +670,7 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fs-thumb:hover{border-color:var(--mut)}
 .fs-thumb.active{border-color:var(--acc)}
 .fs-thumb canvas{display:block;width:100%;height:100%}
+.fs-thumb .fs-base-review{position:absolute;right:2px;top:2px;display:grid;place-items:center;width:16px;height:16px;border-radius:50%;background:#b95138;color:#fff;font:700 11px/1 system-ui;box-shadow:0 1px 3px #0008}
 .fs-idx{position:absolute;bottom:1px;right:2px;font-size:var(--fs-2);font-family:var(--mono);color:#fff;background:var(--scrim-b5);border-radius:3px;padding:0 3px;line-height:var(--lh-base);pointer-events:none}
 /* one-tap looks */
 /* 3.4.9: max-height sized to fit exactly 2 rows (6 tiles at the 3-column layout below) with an
@@ -7258,7 +7259,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1007E';
+const BUILD='1.1007F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13548,7 +13549,7 @@ function secApply(sec,v){if(!v)return;_secInputs(sec).forEach(e=>{if(!(e.id in v
 function _secScoped(){const set=new Set();(fxImages||[]).forEach(it=>Object.keys(it.secOverride||{}).forEach(k=>set.add(k)));return[...set];}
 // Called from fxUpdate and before switching photos: file the live inputs under the right owner.
 function secScopePersist(){if(_secSwap)return;const it=curItem();_secScoped().forEach(sec=>{
-  if(it&&it.secOverride&&it.secOverride[sec])it.secOverride[sec]=secVals(sec);else fxState.sharedSec[sec]=secVals(sec);});}
+  if(it&&it.secOverride&&it.secOverride[sec]){const extras=Object.fromEntries(Object.entries(it.secOverride[sec]).filter(([k])=>k.startsWith('__')));it.secOverride[sec]={...secVals(sec),...extras};}else fxState.sharedSec[sec]=secVals(sec);});}
 function secScopeShowItem(it){_secSwap=true;try{_secScoped().forEach(sec=>secApply(sec,(it.secOverride&&it.secOverride[sec])||fxState.sharedSec[sec]));}finally{_secSwap=false;}secScopeSyncUI();}
 // Export: temporarily put item's own values in the DOM; returns a restore function.
 function secScopeSwapIn(it){const secs=_secScoped();if(!secs.length)return null;const cur=curItem();
@@ -20194,8 +20195,10 @@ async function fnPickNativeBase(it,ox,oy){
     for(const [id,value]of Object.entries({'br':r.rgb[0],'bg':r.rgb[1],'bb':r.rgb[2],'bx':r.nx,'by':r.ny,'domain':1,'source':r.sourceKey}))document.getElementById('sl-fneg-'+id).value=value;
     // Native calibration is frame-owned: sharing across differently white-balanced RAWs is unsafe.
     it.secOverride=it.secOverride||{};it.secOverride.filmneg=secVals('filmneg');
+    it.secOverride.filmneg.__needsBaseReview=false;
     const tg=document.getElementById('tg-filmneg');if(!tg.classList.contains('on'))toggleFX('filmneg');else fxUpdate();
     await fnEnsureNative(it);
+    buildFilmstrip();fnSyncStatus();
     fnSetStatus('Native camera-linear base set from '+r.n+' source pixels. Use manual ratios; source/profile changes require another pick.',false);
     return{ok:true,...r};
   }catch(e){fnSetStatus(errStr(e),true);return{ok:false,msg:errStr(e)};}
@@ -20224,8 +20227,9 @@ function fnSetStatus(msg,warn){
 function fnSyncStatus(){
   const el=document.getElementById('fneg-status');if(!el)return;
   const b=fnBase();
-  el.textContent=fnHasBase(b)?('Film base '+b.map(v=>Math.round(v*255)).join(' / ')+(fnNum('sl-fneg-bx',-1)>=0?' (picked at '+Math.round(fnNum('sl-fneg-bx',0)*100)+'%, '+Math.round(fnNum('sl-fneg-by',0)*100)+'%)':'')):'No film base picked: pick the clear rebate to enable the conversion.';
-  el.classList.remove('fx-hint-warn');
+  const needsReview=!!curItem()?.secOverride?.filmneg?.__needsBaseReview;
+  el.textContent=needsReview?'Review this frame: its film base differed from the roll base. Pick the rebate before export.':fnHasBase(b)?('Film base '+b.map(v=>Math.round(v*255)).join(' / ')+(fnNum('sl-fneg-bx',-1)>=0?' (picked at '+Math.round(fnNum('sl-fneg-bx',0)*100)+'%, '+Math.round(fnNum('sl-fneg-by',0)*100)+'%)':'')):'No film base picked: pick the clear rebate to enable the conversion.';
+  el.classList.toggle('fx-hint-warn',needsReview);
 }
 // Inverse of applyGeomTo: a pixel of the geometry-applied working image -> the original image.
 function fnWorkToOrig(it,wx,wy){
@@ -20276,6 +20280,8 @@ function fnPickBaseAtOrig(ox,oy){
   set('sl-fneg-bx',r.nx.toFixed(5));set('sl-fneg-by',r.ny.toFixed(5));
   const tg=document.getElementById('tg-filmneg');
   if(tg&&!tg.classList.contains('on'))toggleFX('filmneg');else fxUpdate();
+  if(it.secOverride?.filmneg)it.secOverride.filmneg.__needsBaseReview=false;
+  buildFilmstrip();
   fnSetStatus('Film base set from '+r.n+' original pixels. Auto balance can now tune the red and blue ratios.',false);
   return r;
 }
@@ -20344,11 +20350,14 @@ function fnApplyBaseToRoll(){
     const ov=o.secOverride&&o.secOverride.filmneg;if(!ov||o===it)return;
     own++;
     const ob=[parseFloat(ov['sl-fneg-br']),parseFloat(ov['sl-fneg-bg']),parseFloat(ov['sl-fneg-bb'])];
-    if(ob.every(v=>v>0.002)&&ob.some((v,c)=>Math.abs(v-b[c])/b[c]>0.08))flagged.push(o.name||('photo '+(i+1)));
+    const needsReview=ob.every(v=>v>0.002)&&ob.some((v,c)=>Math.abs(v-b[c])/b[c]>0.08);
+    if(needsReview)flagged.push(o.name||('photo '+(i+1)));
     keys.forEach(kk=>{ov[kk]=cur[kk];});ov['sl-fneg-bx']='-1';ov['sl-fneg-by']='-1';
+    ov.__needsBaseReview=needsReview;
   });
   if(own||(it.secOverride&&it.secOverride.filmneg)){fxState.sharedSec.filmneg=JSON.parse(JSON.stringify(cur));if(!(it.secOverride&&it.secOverride.filmneg)){fxState.sharedSec.filmneg['sl-fneg-bx']=cur['sl-fneg-bx'];}}
   fxUpdate();
+  buildFilmstrip();
   const n=(fxImages||[]).length;
   fnSetStatus(own?('Base applied to '+own+' photo(s) that had their own. '+(flagged.length?flagged.length+' had a different base and may need review: '+flagged.slice(0,5).join(', ')+'.':'None had a different base.')):('All '+n+' open photo(s) follow this base already (Film Negative applies to all photos).'),flagged.length>0);
   return{ok:true,own,flagged};
@@ -22669,7 +22678,9 @@ function buildFilmstrip(){
   fxImages.forEach((it,i)=>{
     const b=document.createElement('button');
     b.className='fs-thumb'+(i===fxCurIdx?' active':'');
-    b.title=it.name;
+    const needsReview=!!it.secOverride?.filmneg?.__needsBaseReview;
+    b.title=needsReview?`${it.name} — film base needs review`:it.name;
+    if(needsReview){b.dataset.fnegNeedsReview='true';const badge=document.createElement('span');badge.className='fs-base-review';badge.textContent='!';badge.setAttribute('aria-label','Film base needs review');b.appendChild(badge);}
     b.onclick=()=>fxSelectImage(i);
     const cv=document.createElement('canvas');cv.width=52;cv.height=52;
     const cx=cv.getContext('2d');
@@ -22740,7 +22751,7 @@ function fxSelectImage(idx){
   // flag/favorite buttons, so switching photos left them showing whichever photo's state
   // happened to be on screen before the switch — "flag stuck on the previous photo".
   fxUpdateFlagBtns();
-  renderPreview();buildLookGallery();buildFilmstrip();
+  renderPreview();buildLookGallery();buildFilmstrip();if(typeof fnSyncStatus==='function')fnSyncStatus();
 }
 function curGeom(){const it=curItem();if(!it)return null;return it.geom||(it.geom=defGeom());}
 // Largest centred axis-aligned rect of the SAME aspect ratio that fits a W×H image rotated by `a`.

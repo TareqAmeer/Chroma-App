@@ -283,7 +283,25 @@ try {
   check('snapshot restore brings back exponent, ratios, base and coordinates', persist.back.on && Math.abs(persist.back.exp - 2.1) < 1e-6 && Math.abs(persist.back.red - 1.2) < 1e-6 && Math.abs(persist.back.base[0] - 0.86) < 1e-3 && Math.abs(persist.back.bx - 0.0321) < 1e-4, JSON.stringify(persist.back));
   check('paste categories and session lists include it', persist.cat && persist.sess);
 
-  // ---- 8. shader health ----
+  // ---- 8. per-frame roll-base review flags ----
+  const review = await page.evaluate((S) => {
+    const first = curItem(), shared = secVals('filmneg');
+    first.secOverride = { ...(first.secOverride || {}), filmneg: { ...shared, __needsBaseReview: false } };
+    const second = { ...first, name: 'frame-two.png', secOverride: { filmneg: { ...shared, 'sl-fneg-br': '0.45', 'sl-fneg-bg': '0.45', 'sl-fneg-bb': '0.45', __needsBaseReview: false } } };
+    fxImages.push(second); buildFilmstrip();
+    const applied = fnApplyBaseToRoll();
+    const afterApply = { flagged: second.secOverride.filmneg.__needsBaseReview, badge: document.querySelector('.fs-thumb[data-fneg-needs-review="true"]')?.title || '' };
+    fxSelectImage(1);
+    const afterSwitch = { status: document.getElementById('fneg-status').textContent, warning: document.getElementById('fneg-status').classList.contains('fx-hint-warn'), badge: !!document.querySelector('.fs-thumb.active[data-fneg-needs-review="true"]') };
+    const picked = fnPickBaseAtOrig(S.REB / 2, S.CH / 2);
+    const afterPick = { picked: picked.ok, flagged: second.secOverride.filmneg.__needsBaseReview, badge: !!document.querySelector('.fs-thumb[data-fneg-needs-review="true"]'), warning: document.getElementById('fneg-status').classList.contains('fx-hint-warn') };
+    return { applied, afterApply, afterSwitch, afterPick };
+  }, await page.evaluate(() => ({ REB: __synth.REB, CH: __synth.CH })));
+  check('roll application marks differing frame in filmstrip', review.applied.flagged.includes('frame-two.png') && review.afterApply.flagged && review.afterApply.badge.includes('film base needs review'), JSON.stringify(review.afterApply));
+  check('frame review warning survives switching and persists', /Review this frame/.test(review.afterSwitch.status) && review.afterSwitch.warning && review.afterSwitch.badge, JSON.stringify(review.afterSwitch));
+  check('re-picking that frame rebate clears its review flag and badge', review.afterPick.picked && !review.afterPick.flagged && !review.afterPick.badge && !review.afterPick.warning, JSON.stringify(review.afterPick));
+
+  // ---- 9. shader health ----
   check('no GLSL compile/link error', glslErrors.length === 0, glslErrors[0] || '');
 } finally {
   await browser.close();
