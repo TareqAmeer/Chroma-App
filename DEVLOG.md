@@ -420,3 +420,8 @@
 CHR-285 integration verification: safely integrated onto aa87c3a7 as 17b98648; rebuilt ordinary APK and repeated full Android 10 migration/save/uninstall/reinstall checks (eight additional media files byte-identical), plus all five mobile regression suites. Raw integration evidence and APK SHA-256 recorded in the persistence benchmark report.
 
 CHR-285 publication verified: implementation 17b98648 and integration evidence are published on origin/main at ff12e9930fe3ce2cb5a374d7c28c80260d4fd2cb; git ls-remote matched after the fast-forward push. Ordinary integrated APK and native uninstall/reinstall checks passed; CHR-285 moves to In Review for user acceptance.
+
+### 2026-10-07 — photo-ticket recovery: Windows splash probe
+
+- Fixed `test/probe_splash_reveal.mjs` to resolve Windows file URLs with `fileURLToPath`; reproduced the old malformed root and 30-second reveal timeout. Corrected the native startup mock and asserted unexpected commands/page errors instead of ignoring them. No uniquely matching Linear cleanup issue was found; no unrelated issue was updated.
+- Real Chromium verification: both normal and rejecting window-call modes report splash=false, hold=false, lastIgnore=false after 2,500 ms with frozen animation frames; zero page errors or unexpected native calls. The two mobile tests already use safe HTTP paths and were unchanged. Publication is pending verified main integration.
