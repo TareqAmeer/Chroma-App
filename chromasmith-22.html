@@ -4524,12 +4524,12 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="fx-ctrl-title">Retouch <div class="fx-toggle" id="tg-retouch" onclick="toggleFX('retouch')"></div></div>
         <div class="fx-fields ff-off" id="ff-retouch">
         <div class="fx-row" style="align-items:flex-start"><div class="fx-label">Mode <button class="fx-info-i" type="button" title="Heal blends the copied area into the surrounding colour. Clone copies it exactly.">i</button></div>
-          <select class="fx-select" id="sel-heal-mode" style="display:none"><option value="heal" data-short="Heal">Heal (blend color)</option><option value="clone" data-short="Clone">Clone (copy exactly)</option></select>
+          <select class="fx-select" id="sel-heal-mode" style="display:none" onchange="healControlInput();healControlCommit()"><option value="heal" data-short="Heal">Heal (blend color)</option><option value="clone" data-short="Clone">Clone (copy exactly)</option></select>
           <div class="seg" id="seg-heal-mode" style="flex:1"></div>
         </div>
-        <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" step="0.5" value="4" id="sl-heal-size" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-size">4%</div></div>
-        <div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="50" id="sl-heal-feather" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-feather">50</div></div>
-        <div class="fx-row"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" step="1" value="100" id="sl-heal-opacity" oninput="healSyncUI()"><div class="fx-val" id="vl-heal-opacity">100</div></div>
+        <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" step="0.5" value="4" id="sl-heal-size" oninput="healControlInput()" onchange="healControlCommit()"><div class="fx-val" id="vl-heal-size">4%</div></div>
+        <div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="50" id="sl-heal-feather" oninput="healControlInput()" onchange="healControlCommit()"><div class="fx-val" id="vl-heal-feather">50</div></div>
+        <div class="fx-row"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" step="1" value="100" id="sl-heal-opacity" oninput="healControlInput()" onchange="healControlCommit()"><div class="fx-val" id="vl-heal-opacity">100</div></div>
         <!-- "Retouch" is the tool's actual primary action (arms paint mode), so it gets the
              filled/primary treatment and its own full-width row — panel redesign, feedback
              "kept" note in test/panel_proposals.mjs on why an earlier draft that dropped this
@@ -4539,8 +4539,11 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="btn-row" style="margin-top:2px">
           <button class="btn fx-btn-primary" id="btn-heal-paint" onclick="healToggle()" style="flex:1">Retouch</button>
         </div>
-        <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="heal-count">No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.</div>
-        <div class="btn-row" style="margin-top:6px"><button class="btn bgh" style="flex:1" onclick="healClear()">Clear all spots</button></div>
+        <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="heal-count">No spots yet — click a blemish to remove it, or drag to brush an area. Shift-click first to pick the source yourself.</div>
+        <div id="heal-list" role="listbox" aria-label="Retouch spots" style="display:flex;flex-direction:column;gap:2px;margin-top:4px;max-height:132px;overflow:auto"></div>
+        <div class="btn-row" style="margin-top:6px"><button class="btn bgh" id="btn-heal-del" style="flex:1" onclick="healDeleteSel()" disabled>Delete spot</button><button class="btn bgh" style="flex:1" onclick="healClear()">Clear all spots</button></div>
+        <div class="btn-row" style="margin-top:6px"><button class="btn bgh" id="btn-heal-dust" style="flex:1" onclick="healDustToggle()" aria-pressed="false" title="Preview-only overlay that highlights dust and small blemishes. Never exported.">Visualise spots</button></div>
+        <div class="fx-row" id="row-heal-dust" style="display:none"><div class="fx-label">Sensitivity</div><input class="fx-slider" type="range" min="1" max="100" step="1" value="40" id="sl-heal-dust" oninput="healDustRender()"><div class="fx-val" id="vl-heal-dust">40</div></div>
         </div>
       </div>
       <!-- RED-EYE: source-coordinate pupil ellipses are corrected after the normal grade. -->
@@ -4797,7 +4800,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <a href="#" class="ni-guide" onclick="switchTab('guide');return false">How it works</a>
           <div class="ni-hint">Click the button, or drag a photo anywhere onto this window. Your original is never changed · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none;cursor:pointer" title="Pick photos from your Google Photos library">Google Photos…</a></div>
         </div>
-        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas"></canvas><canvas id="fx-canvas-redeye" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><svg id="fx-redeye-overlay" viewBox="0 0 1 1" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;display:none;z-index:3"></svg><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
+        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas"></canvas><canvas id="fx-canvas-redeye" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas-dust" style="display:none;position:absolute;top:0;left:0;pointer-events:none;z-index:2"></canvas><svg id="fx-heal-overlay" viewBox="0 0 1 1" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;display:none;z-index:4"></svg><svg id="fx-redeye-overlay" viewBox="0 0 1 1" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;display:none;z-index:3"></svg><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
           <!-- Mask overlays live INSIDE fx-zoom-wrap (not fx-wrap) so they ride the exact same
                CSS transform as the canvas — glued to it by the compositor during zoom/pan with
                no per-event JS repositioning, instead of chasing getBoundingClientRect() a frame
@@ -8698,7 +8701,7 @@ if(vidBreath!=1.0)c.rgb*=vidBreath;
 // recomputed there) so the 4 extra taps are paid at most once per pixel — and skipped entirely
 // when nothing needs it, so the default path costs exactly what it did before.
 vec3 srcHP=vec3(0.0);
-bool needHP=(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.||adjTexture!=0.))||mskAnyTex>0.5;
+bool needHP=(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.))||mskAnyTex>0.5;
 if(needHP){
   vec3 nb=(fnTex(vidUV(uv+vec2(0.,texSize.y)))+fnTex(vidUV(uv-vec2(0.,texSize.y)))
           +fnTex(vidUV(uv+vec2(texSize.x,0.)))+fnTex(vidUV(uv-vec2(texSize.x,0.)))).rgb*0.25;
@@ -8769,7 +8772,7 @@ if(adjOn>.5&&(adjWavelet1!=0.||adjWavelet2!=0.||adjWavelet3!=0.||adjWaveletResid
 // Sharpening / Clarity: unsharp mask on source pixels BEFORE LUT (smooth LUT preserves HP detail).
 // adjSharp blends radius-1 edges with radius-3 texture; default detail 0.5 is radius-1 only.
 // adjClarity weights by midtone mask (4*lum*(1-lum)).
-if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.||adjTexture!=0.)){
+if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.)){
   vec3 hp=mix(srcHP,srcHPW,clamp((adjSharpDetail-0.5)*2.0,0.0,1.0));
   float lv=dot(c.rgb,vec3(.2126,.7152,.0722));
   float cw=4.*lv*(1.-lv);
@@ -8781,7 +8784,22 @@ if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.||adjTexture!=0.)){
     float hpMag=max(abs(hp.r),max(abs(hp.g),abs(hp.b)));
     hpS=hp*smoothstep(0.0,0.02+0.2*edgeLo,hpMag);
   }
-  c.rgb=clamp(c.rgb+hpS*adjSharp+hp*(adjClarity*cw+adjTexture),0.,1.);
+  c.rgb=clamp(c.rgb+hpS*adjSharp+hp*(adjClarity*cw),0.,1.);
+}
+// Texture (global): a MID-frequency, luminance-only, edge-protected detail move. Deliberately NOT
+// Sharpen's radius-1 high-pass: it measures against an 8-tap ring at radius 2.5 texels (so it picks
+// up pores, fabric and foliage rather than pixel-level edges), adds the result to luminance only
+// (no colour fringing), and fades out where the local difference is already large so hard edges
+// do not halo. Positive crisps surface detail, negative smooths it. Gated: zero cost at default.
+if(adjOn>.5&&adjTexture!=0.){
+  float rT=2.5,rD=rT*0.7071;
+  vec3 nbT=(texture(img,vidUV(uv+vec2(0.,texSize.y*rT)))+texture(img,vidUV(uv-vec2(0.,texSize.y*rT)))
+           +texture(img,vidUV(uv+vec2(texSize.x*rT,0.)))+texture(img,vidUV(uv-vec2(texSize.x*rT,0.)))
+           +texture(img,vidUV(uv+texSize*rD))+texture(img,vidUV(uv-texSize*rD))
+           +texture(img,vidUV(uv+vec2(texSize.x,-texSize.y)*rD))+texture(img,vidUV(uv+vec2(-texSize.x,texSize.y)*rD))).rgb*0.125;
+  float hlT=dot(c.rgb-nbT,vec3(.2126,.7152,.0722));
+  float protT=1.-smoothstep(0.05,0.22,abs(hlT));
+  c.rgb=clamp(c.rgb+vec3(hlT*adjTexture*4.0*protT),0.,1.);
 }
 // Input transform BEFORE the look LUT (sharpen above runs on raw source values — consistent
 // for all 5 taps; log-space unsharp is fine). With V-Log in and no LUT the image is neutral Rec.709.
@@ -18686,7 +18704,7 @@ function mskPaintOverlaySync(m,box,isolate){
   x.putImageData(id,0,0);
   cv.classList.add('on');
 }
-function mskOverlaySync(){
+function mskOverlaySync(){if(typeof healOverlaySync==='function')try{healOverlaySync();}catch(e){}
   const svg=document.getElementById('fx-mask-overlay');if(!svg)return;
   const paintCv=document.getElementById('msk-paint-overlay');
   // Only draw while the Masks card is actually visible on screen — ff-local's own
@@ -19887,11 +19905,14 @@ function initEditableVals(){
     el.title='Tap to type a value';
     const commit=()=>{
       if(document.body.classList.contains('mobile-fx'))return; // phone edits values in the precision sheet; a stray focus/blur here re-reads the unit-scaled readout ("+2.00 EV") as a raw slider value and clobbers the recipe
+      // An unedited focus/blur is a no-op: re-reading the unit-scaled readout as a raw value used to clobber the recipe.
+      if(el._textAtFocus!=null&&(el.textContent||'')===el._textAtFocus){el._textAtFocus=null;return;}
+      el._textAtFocus=null;
       const n=parseFloat((el.textContent||'').replace(/[^0-9.+-]/g,''));
-      if(!isNaN(n))sl.value=(sl.id==='sl-straighten'&&typeof _stA2S==='function')?_stA2S(Math.max(-45,Math.min(45,n))):n; // straighten: typed value is an angle, slider is on a curved scale
+      if(!isNaN(n))sl.value=(sl.id==='sl-straighten'&&typeof _stA2S==='function')?_stA2S(Math.max(-45,Math.min(45,n))):csTypedToRaw(sl.id,n); // typed display units (EV, deg, px...) map back to raw via CS_CONTROL_UNIT_SPECS; straighten: typed value is an angle, slider is on a curved scale
       sl.dispatchEvent(new Event('input',{bubbles:true})); // runs the slider's own handler → updates display + render
     };
-    el.addEventListener('focus',()=>{const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);});
+    el.addEventListener('focus',()=>{el._textAtFocus=el.textContent||'';const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);});
     el.addEventListener('keydown',e=>{
       if(e.key==='Enter'){e.preventDefault();el.blur();}
       else if(e.key==='Escape'){e.preventDefault();sl.dispatchEvent(new Event('input',{bubbles:true}));el.blur();}
@@ -21331,7 +21352,7 @@ function computeAdjustBlock(v){
     whites:(v.wh||0)/100, blacks:(v.bl||0)/100,
     temp:(v.temp||0)/100, tint:(v.tint||0)/100,
     vibrance:(v.vib||0)/100, saturation:(v.sat||0)/100,
-    sharpness:(v.sharp||0)/500, sharpDetail:(v['sharp-detail']==null?0.5:(v['sharp-detail']/100)), clarity:(v.clarity||0)/500, texture:(v.texture||0)/500,
+    sharpness:(v.sharp||0)/500, sharpDetail:(v['sharp-detail']==null?0.5:(v['sharp-detail']/100)), clarity:(v.clarity||0)/500, texture:(v.texture||0)/400,
     wavelet:{fine:(v['wavelet-1']||0)/100,small:(v['wavelet-2']||0)/100,medium:(v['wavelet-3']||0)/100,residual:(v['wavelet-res']||0)/100},
     skin:(v.skin||0)/100, dehaze:(v.dehaze||0)/100};
 }
@@ -22000,7 +22021,11 @@ function initSliderErgonomics(){
     v.contentEditable='false';
     const sl=_fxSliderOf(v);
     // Strip anything that isn't part of a number — the readouts carry suffixes like "°".
-    const n=parseFloat(String(v.textContent).replace(/[^0-9.+-]/g,''));
+    // An unedited focus/blur (or Escape) is a no-op: the readout shows unit-scaled text ("+2.00 EV" for raw 40).
+    if(v.dataset.fxPrev!=null&&String(v.textContent)===v.dataset.fxPrev){delete v.dataset.fxPrev;return;}
+    delete v.dataset.fxPrev;
+    // The typed number is in DISPLAY units; csTypedToRaw maps it back to the raw slider value via the unit table.
+    const n0=parseFloat(String(v.textContent).replace(/[^0-9.+-]/g,'')),n=(sl&&typeof csTypedToRaw==='function'&&sl.id!=='sl-straighten')?csTypedToRaw(sl.id,n0):n0;
     if(sl&&_fxSliderSet(sl,n))_fxFireInput(sl);
     else if(sl)_fxFireInput(sl);   // repaint the readout from the real value (rejects bad input)
   },true);
@@ -22717,11 +22742,11 @@ function healApply(img,ops){
   // back, so every spot still sees the previous one without an O(spots x pixels) full-frame readback.
   let data=x.getImageData(0,0,w,h).data;
   for(const op of ops){
-    const cx=op.x*w,cy=op.y*h,r=Math.max(2,op.r*Math.max(w,h));
+    const cx0=op.x*w,cy0=op.y*h,r=Math.max(2,op.r*Math.max(w,h));
     let sx,sy;
     if(op.sx!=null&&op.sy!=null){sx=op.sx*w;sy=op.sy*h;}
     else{
-      const auto=healAutoSource(data,w,h,cx,cy,r);
+      const auto=healAutoSource(data,w,h,cx0,cy0,r);
       if(!auto)continue;
       sx=auto.sx;sy=auto.sy;
       // Recipes store donor coordinates in source-normalized space, just like the destination.
@@ -22729,6 +22754,13 @@ function healApply(img,ops){
       // same donor instead of rerunning the search against a different pixel grid.
       op.sx=sx/w;op.sy=sy/h;
     }
+    // A brush stroke (op.pts, source-normalised) is a chain of dabs along the path sharing ONE donor
+    // offset; a plain spot is a single dab. Dab spacing is r/2, capped so a huge stroke stays bounded.
+    const dabs=healStrokeDabs(op,w,h,r);
+    const sox=sx-cx0,soy=sy-cy0;
+    for(const dp of dabs){
+    const cx=dp[0],cy=dp[1];
+    sx=cx+sox;sy=cy+soy;
     // The donor patch, cut to a soft-edged disc.
     const d=Math.ceil(r*2)+2;
     const t=document.createElement('canvas');t.width=t.height=d;
@@ -22780,6 +22812,22 @@ function healApply(img,ops){
       const patch=x.getImageData(rx0,ry0,rx1-rx0,ry1-ry0).data,pw=(rx1-rx0)*4;
       for(let yy=ry0;yy<ry1;yy++)data.set(patch.subarray((yy-ry0)*pw,(yy-ry0+1)*pw),(yy*w+rx0)*4);
     }
+    } // dabs
+  }
+  return out;
+}
+// Dab centres (image px) for one retouch op: just the spot centre, or a path resampled every r/2.
+function healStrokeDabs(op,w,h,r){
+  if(!op.pts||op.pts.length<2)return[[op.x*w,op.y*h]];
+  const step=Math.max(1,r*0.5),out=[[op.pts[0][0]*w,op.pts[0][1]*h]];
+  let acc=0;
+  for(let i=1;i<op.pts.length&&out.length<600;i++){
+    let ax=op.pts[i-1][0]*w,ay=op.pts[i-1][1]*h;const bx=op.pts[i][0]*w,by=op.pts[i][1]*h;
+    let seg=Math.hypot(bx-ax,by-ay);
+    while(acc+seg>=step&&out.length<600){
+      const t=(step-acc)/seg;ax+=(bx-ax)*t;ay+=(by-ay)*t;out.push([ax,ay]);seg=Math.hypot(bx-ax,by-ay);acc=0;
+    }
+    acc+=seg;
   }
   return out;
 }
@@ -23096,7 +23144,74 @@ function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeo
 
 // ── retouch interaction ───────────────────────────────────────────────────────────────────
 let healMode=false,_healShiftFrom=null;
-function healOps(){const it=curItem();if(!it)return null;return it.heal||(it.heal=[]);}
+let healSel=null,_healDrag=null,_healDraw=null,healDust=false,_healCtlRaf=0,_healCtlDirty=false;
+function healOps(){const it=curItem();if(!it)return null;const ops=it.heal||(it.heal=[]);for(const o of ops)if(!o.id)o.id=healNewId();return ops;}
+function healNewId(){return 'h'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function healSelIdx(){const it=curItem(),ops=it&&it.heal;if(!ops||healSel==null)return-1;return ops.findIndex(o=>o.id===healSel);}
+// Forward geometry map: source-normalised point -> displayed (geometry-applied) normalised point.
+// The exact inverse of _healPointToSource (flip, quarter-turn, straighten, crop applied in that order).
+function _healFwd(nx,ny){
+  const it=curItem(),g=it&&it.geom;if(!g)return{nx,ny};
+  if(g.flipV)ny=1-ny;
+  if(g.flipH)nx=1-nx;
+  const rot=(((g.rot||0)%360)+360)%360;
+  if(rot===90){const t=nx;nx=1-ny;ny=t;}
+  else if(rot===180){nx=1-nx;ny=1-ny;}
+  else if(rot===270){const t=nx;nx=ny;ny=1-t;}
+  if(g.angle&&it.img){
+    let W=it.img.naturalWidth||it.img.width,H=it.img.naturalHeight||it.img.height;
+    if(rot===90||rot===270){const t=W;W=H;H=t;}
+    const a=g.angle*Math.PI/180,ins=inscribedSameAspect(W,H,a),c=Math.cos(a),s=Math.sin(a);
+    const px=(nx-.5)*W,py=(ny-.5)*H;
+    nx=(c*px-s*py)/ins.w+.5;ny=(s*px+c*py)/ins.h+.5;
+  }
+  if(g.crop){nx=(nx-g.crop.x)/g.crop.w;ny=(ny-g.crop.y)/g.crop.h;}
+  return{nx,ny};
+}
+function healSelect(id){
+  healSel=id;const i=healSelIdx(),ops=healOps();
+  if(i>=0){
+    const o=ops[i],set=(k,v)=>{const e=document.getElementById(k);if(e)e.value=v;};
+    set('sl-heal-size',+(o.r*100).toFixed(1));set('sl-heal-feather',Math.round((o.feather!=null?o.feather:.5)*100));set('sl-heal-opacity',Math.round((o.opacity!=null?o.opacity:1)*100));
+    const m=document.getElementById('sel-heal-mode');if(m){m.value=o.mode==='clone'?'clone':'heal';if(m._chipsRender)m._chipsRender();}
+    ['sl-heal-size','sl-heal-feather','sl-heal-opacity'].forEach(k=>{const e=document.getElementById(k);if(e&&typeof fxPaintSlider==='function')fxPaintSlider(e);});
+  }
+  healSyncUI();
+}
+// Slider/mode edits apply to the selected spot (re-rendered on the next frame); with no selection they
+// just set the defaults for the next spot. The undo entry is pushed once, on release (healControlCommit).
+function healControlInput(){
+  healSyncUI();
+  const i=healSelIdx();if(i<0)return;
+  const o=healOps()[i],v=id=>{const e=document.getElementById(id);return e?parseFloat(e.value):NaN;};
+  const r=v('sl-heal-size')/100,f=v('sl-heal-feather')/100,op=v('sl-heal-opacity')/100,m=(document.getElementById('sel-heal-mode')||{}).value;
+  if(r>0)o.r=r;if(Number.isFinite(f))o.feather=f;if(op>0)o.opacity=op;if(m)o.mode=m;
+  _healCtlDirty=true;
+  if(!_healCtlRaf)_healCtlRaf=requestAnimationFrame(()=>{_healCtlRaf=0;updateWork();renderPreview();healSyncUI();});
+}
+function healControlCommit(){if(!_healCtlDirty)return;_healCtlDirty=false;if(_healCtlRaf){cancelAnimationFrame(_healCtlRaf);_healCtlRaf=0;updateWork();renderPreview();}fxHistoryPush();healSyncUI();}
+function healDelete(id){
+  const it=curItem(),ops=it&&it.heal;if(!ops)return;const i=ops.findIndex(o=>o.id===id);if(i<0)return;
+  ops.splice(i,1);if(healSel===id)healSel=null;
+  updateWork();renderPreview();healSyncUI();fxHistoryPush();
+}
+function healDeleteSel(){const i=healSelIdx();if(i>=0)healDelete(healOps()[i].id);}
+function healListRender(){
+  const box=document.getElementById('heal-list');if(!box)return;
+  const ops=(curItem()&&curItem().heal)||[];
+  box.innerHTML='';
+  ops.forEach((o,i)=>{
+    const row=document.createElement('div'),on=o.id===healSel;
+    row.style.cssText='display:flex;align-items:center;gap:4px';
+    const b=document.createElement('button');b.type='button';b.className='btn bgh'+(on?' on':'');b.dataset.healId=o.id;b.setAttribute('role','option');b.setAttribute('aria-selected',on?'true':'false');
+    b.style.cssText='flex:1;text-align:left;justify-content:flex-start';
+    b.textContent=`${i+1}. ${o.mode==='clone'?'Clone':'Heal'}${o.pts&&o.pts.length>1?' stroke':' spot'} · ${+(o.r*100).toFixed(1)}%`;
+    b.onclick=()=>healSelect(o.id);
+    const x=document.createElement('button');x.type='button';x.className='btn bgh';x.dataset.healDel=o.id;x.textContent='×';x.title='Delete this spot';x.setAttribute('aria-label',`Delete spot ${i+1}`);
+    x.onclick=()=>healDelete(o.id);
+    row.appendChild(b);row.appendChild(x);box.appendChild(row);
+  });
+}
 function healSyncUI(){
   const g=(id,f)=>{const e=document.getElementById(id);return e?(f?parseFloat(e.value):e.value):0;};
   const sv=(id,t)=>{const e=document.getElementById(id);if(e)e.textContent=t;};
@@ -23104,9 +23219,13 @@ function healSyncUI(){
   sv('vl-heal-feather',g('sl-heal-feather',1));
   sv('vl-heal-opacity',g('sl-heal-opacity',1));
   const ops=healOps(),n=ops?ops.length:0;
+  if(healSel!=null&&healSelIdx()<0)healSel=null;
   const lbl=document.getElementById('heal-count');
-  if(lbl)lbl.textContent=n?`${n} spot${n===1?'':'s'} removed${healMode?' · click to add another':''}`
-    :'No spots yet — click a blemish to remove it. Shift-drag to pick the source yourself.';
+  if(lbl)lbl.textContent=n?`${n} spot${n===1?'':'s'}${healSel!=null?' · 1 selected':''}${healMode?' · click to add another':''}`
+    :'No spots yet — click a blemish to remove it, or drag to brush an area. Shift-click first to pick the source yourself.';
+  healListRender();
+  const del=document.getElementById('btn-heal-del');if(del)del.disabled=healSel==null;
+  if(typeof healOverlaySync==='function')healOverlaySync();
   // Drives the desktop "Reset" visibility (panel redesign, feedback COLOR 1) for this section.
   // Size/Feather/Opacity are brush TOOL settings, not tracked in _FX_SNAP_SLIDERS (they aren't
   // part of the saved/undo photo state the way Basic Adjustments sliders are — see getUISnapshot's
@@ -23126,11 +23245,14 @@ function healToggle(){
   healSyncUI();
   toast(healMode?'Retouch on — click a spot to remove it':'Retouch off',true);
 }
-function healAdd(nx,ny,src){
+function healAdd(nx,ny,src,pts){
   const ops=healOps();if(!ops)return;
   const feather=parseFloat((document.getElementById('sl-heal-feather')||{}).value);
+  const nid=healNewId();healSel=nid;
   ops.push({
+    id:nid,
     x:nx,y:ny,
+    ...(pts&&pts.length>1?{pts:pts.map(q=>[q.nx,q.ny])}:{}),
     sx:src?src.nx:null,sy:src?src.ny:null,
     r:(parseFloat((document.getElementById('sl-heal-size')||{}).value)||4)/100,
     feather:Number.isFinite(feather)?feather/100:0.5,
@@ -23146,7 +23268,7 @@ function healUndoLast(){
 }
 function healClear(){
   const ops=healOps();if(!ops||!ops.length)return;
-  const it=curItem();it.heal=[];updateWork();renderPreview();healSyncUI();fxHistoryPush();
+  const it=curItem();it.heal=[];healSel=null;updateWork();renderPreview();healSyncUI();fxHistoryPush();
   toast('Retouching cleared',true);
 }
 // Lightroom-style manual eye-area drag; values are normalized to the geometry-applied photo,
@@ -23245,15 +23367,138 @@ function _healPointToSource(e){
   }
   return{nx:Math.min(1,Math.max(0,nx)),ny:Math.min(1,Math.max(0,ny))};
 }
+// Selection overlay: every spot's outline, plus for the selected one a linked SOURCE handle and DESTINATION
+// handle (both draggable). The SVG is in displayed-photo space, so source-space data goes through _healFwd.
+function healOverlaySync(){
+  const svg=document.getElementById('fx-heal-overlay');if(!svg)return;
+  const it=curItem(),ops=(it&&it.heal)||[],box=mskOverlayBox();
+  const ffR=document.getElementById('ff-retouch'),panelOn=!!(ffR&&ffR.offsetParent!==null);
+  const active=panelOn&&(healMode||healSel!=null||_healDraw);
+  if(typeof healDustSync==='function')healDustSync(box);
+  if(!box||!fxWork||!it||!it.img||cropMode||fxLoupe||!active||(!ops.length&&!_healDraw)){svg.style.display='none';svg.innerHTML='';return;}
+  svg.style.display='block';svg.style.left=(box.left||0)+'px';svg.style.top=(box.top||0)+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
+  svg.style.pointerEvents='none';
+  const W=it.img.naturalWidth||it.img.width,H=it.img.naturalHeight||it.img.height,dw=fxWork.naturalWidth||fxWork.width,dh=fxWork.naturalHeight||fxWork.height;
+  // displayed px per source px, measured through the geometry (rotation preserves length)
+  const a=_healFwd(.5,.5),b=_healFwd(.5+1/W,.5);const k=Math.hypot((b.nx-a.nx)*dw,(b.ny-a.ny)*dh)||1;
+  const z=(typeof fxZoom==='number'&&fxZoom>0)?fxZoom:1,hx=7/(box.width*z),hy=7/(box.height*z);
+  const f=n=>(+n).toFixed(5);
+  let out='';
+  ops.forEach(o=>{
+    const sel=o.id===healSel,c=_healFwd(o.x,o.y),rp=Math.max(2,o.r*Math.max(W,H))*k,rx=rp/dw,ry=rp/dh;
+    const col=sel?'#ffd24a':'#ffffff';
+    if(o.pts&&o.pts.length>1){
+      const pl=o.pts.map(q=>{const d=_healFwd(q[0],q[1]);return f(d.nx)+','+f(d.ny);}).join(' ');
+      out+=`<polyline data-heal-i="${o.id}" points="${pl}" fill="none" stroke="${col}" stroke-width="${sel?2:1.2}" vector-effect="non-scaling-stroke" style="pointer-events:stroke;stroke-opacity:.9" stroke-linecap="round"/>`;
+    }
+    out+=`<ellipse data-heal-i="${o.id}" cx="${f(c.nx)}" cy="${f(c.ny)}" rx="${f(rx)}" ry="${f(ry)}" fill="rgba(255,255,255,.02)" stroke="${col}" stroke-width="${sel?2:1.2}" vector-effect="non-scaling-stroke" style="pointer-events:all;cursor:move"/>`;
+    if(sel&&o.sx!=null&&o.sy!=null){
+      let sx=o.sx,sy=o.sy;const s=_healFwd(sx,sy);
+      out+=`<ellipse cx="${f(s.nx)}" cy="${f(s.ny)}" rx="${f(rx)}" ry="${f(ry)}" fill="none" stroke="#6fd3ff" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>`;
+      out+=`<line x1="${f(c.nx)}" y1="${f(c.ny)}" x2="${f(s.nx)}" y2="${f(s.ny)}" stroke="#ffd24a" stroke-width="1.2" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`;
+      out+=`<ellipse data-heal-src="${o.id}" cx="${f(s.nx)}" cy="${f(s.ny)}" rx="${f(hx)}" ry="${f(hy)}" fill="#6fd3ff" stroke="#0b2530" stroke-width="1.5" vector-effect="non-scaling-stroke" style="pointer-events:all;cursor:grab"/>`;
+      out+=`<ellipse data-heal-dst="${o.id}" cx="${f(c.nx)}" cy="${f(c.ny)}" rx="${f(hx)}" ry="${f(hy)}" fill="#ffd24a" stroke="#3a2a00" stroke-width="1.5" vector-effect="non-scaling-stroke" style="pointer-events:all;cursor:grab"/>`;
+    }
+  });
+  if(_healDraw&&_healDraw.pts.length>1){
+    out+=`<polyline points="${_healDraw.pts.map(q=>{const d=_healFwd(q.nx,q.ny);return f(d.nx)+','+f(d.ny);}).join(' ')}" fill="none" stroke="#ffd24a" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round"/>`;
+  }
+  svg.setAttribute('viewBox','0 0 1 1');svg.innerHTML=out;
+}
+// Visualise spots: a preview-only edge map (LR-style: white page, dark where fine local contrast is high)
+// drawn on its OWN canvas above the photo. It is never read by export/render paths.
+let _healDustKey='';
+function healDustToggle(){
+  healDust=!healDust;_healDustKey='';
+  const b=document.getElementById('btn-heal-dust');if(b){b.classList.toggle('on',healDust);b.setAttribute('aria-pressed',healDust?'true':'false');}
+  const r=document.getElementById('row-heal-dust');if(r)r.style.display=healDust?'':'none';
+  healOverlaySync();
+}
+function healDustRender(){_healDustKey='';const v=document.getElementById('vl-heal-dust'),s=document.getElementById('sl-heal-dust');if(v&&s)v.textContent=s.value;healOverlaySync();}
+function healDustSync(box){
+  const cv=document.getElementById('fx-canvas-dust');if(!cv)return;
+  const ffR=document.getElementById('ff-retouch');
+  if(!healDust||!box||!fxWork||cropMode||fxLoupe||!(ffR&&ffR.offsetParent!==null)){cv.style.display='none';return;}
+  cv.style.display='block';cv.style.left=(box.left||0)+'px';cv.style.top=(box.top||0)+'px';cv.style.width=box.width+'px';cv.style.height=box.height+'px';
+  const sens=parseFloat((document.getElementById('sl-heal-dust')||{}).value)||40;
+  const sw=fxWork.naturalWidth||fxWork.width,sh=fxWork.naturalHeight||fxWork.height;
+  const key=sw+'x'+sh+':'+sens+':'+(fxWork._dustId||(fxWork._dustId=++_healDustSeq));
+  if(key===_healDustKey)return;_healDustKey=key;
+  const sc=Math.min(1,1400/Math.max(sw,sh)),w=Math.max(1,Math.round(sw*sc)),h=Math.max(1,Math.round(sh*sc));
+  const t=document.createElement('canvas');t.width=w;t.height=h;const tx=t.getContext('2d',{willReadFrequently:true});tx.drawImage(fxWork,0,0,w,h);
+  const px=tx.getImageData(0,0,w,h).data,g=new Float32Array(w*h);
+  for(let i=0;i<w*h;i++)g[i]=px[i*4]*.2126+px[i*4+1]*.7152+px[i*4+2]*.0722;
+  const W1=w+1,I=new Float64Array(W1*(h+1));
+  for(let y=0;y<h;y++){let row=0;for(let x=0;x<w;x++){row+=g[y*w+x];I[(y+1)*W1+x+1]=I[y*W1+x+1]+row;}}
+  const R=Math.max(3,Math.round(Math.max(w,h)/300)),gain=1+sens*.3;
+  cv.width=w;cv.height=h;const cx=cv.getContext('2d'),im=cx.createImageData(w,h),o=im.data;
+  for(let y=0;y<h;y++){const y0=Math.max(0,y-R),y1=Math.min(h,y+R+1);
+    for(let x=0;x<w;x++){const x0=Math.max(0,x-R),x1=Math.min(w,x+R+1);
+      const m=(I[y1*W1+x1]-I[y0*W1+x1]-I[y1*W1+x0]+I[y0*W1+x0])/((x1-x0)*(y1-y0));
+      const v=255-Math.min(255,Math.abs(g[y*w+x]-m)*gain),i=(y*w+x)*4;o[i]=o[i+1]=o[i+2]=v;o[i+3]=255;}}
+  cx.putImageData(im,0,0);
+}
+let _healDustSeq=0;
 (function initHeal(){
   const cv=document.getElementById('fx-canvas');if(!cv)return;
+  const svg=document.getElementById('fx-heal-overlay');
+  const isEditable=t=>t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  // Draw: click = spot, drag = brush stroke; Shift-click picks the source for the next spot.
   fxCanvasOn('pointerdown',e=>{
     if(!healMode)return;
     e.preventDefault();e.stopPropagation();
     const p=_healPointToSource(e);if(!p)return;
     if(e.shiftKey){_healShiftFrom=p;toast('Source set — now click the spot to repair',true);return;}
-    healAdd(p.nx,p.ny,_healShiftFrom);
-    _healShiftFrom=null;
+    _healDraw={pts:[p],x0:e.clientX,y0:e.clientY,moved:false,id:e.pointerId};
+    const mv=ev=>{
+      if(!_healDraw)return;
+      if(!_healDraw.moved&&Math.hypot(ev.clientX-_healDraw.x0,ev.clientY-_healDraw.y0)<6)return;
+      _healDraw.moved=true;
+      const q=_healPointToSource(ev),l=_healDraw.pts[_healDraw.pts.length-1];
+      if(q&&Math.hypot(q.nx-l.nx,q.ny-l.ny)>0.002){_healDraw.pts.push(q);healOverlaySync();}
+    };
+    const up=ev=>{
+      window.removeEventListener('pointermove',mv,true);window.removeEventListener('pointerup',up,true);window.removeEventListener('pointercancel',up,true);
+      const d=_healDraw;_healDraw=null;if(!d)return;
+      if(ev.type==='pointercancel'){healOverlaySync();return;}
+      if(d.moved&&d.pts.length>1)healAdd(d.pts[0].nx,d.pts[0].ny,_healShiftFrom,d.pts);
+      else healAdd(d.pts[0].nx,d.pts[0].ny,_healShiftFrom);
+      _healShiftFrom=null;
+    };
+    window.addEventListener('pointermove',mv,true);window.addEventListener('pointerup',up,true);window.addEventListener('pointercancel',up,true);
+  },true);
+  // Select / drag: a spot's outline selects it and drags the destination; the blue handle drags the source.
+  if(svg)svg.addEventListener('pointerdown',e=>{
+    const el=e.target.closest&&e.target.closest('[data-heal-i],[data-heal-src],[data-heal-dst]');if(!el)return;
+    e.preventDefault();e.stopPropagation();
+    const id=el.dataset.healI||el.dataset.healSrc||el.dataset.healDst,mode=el.dataset.healSrc?'src':'dst';
+    const ops=healOps(),o=ops.find(q=>q.id===id);if(!o)return;
+    const p0=_healPointToSource(e);if(!p0)return;
+    if(healSel!==id)healSelect(id);
+    const orig={x:o.x,y:o.y,sx:o.sx,sy:o.sy,pts:o.pts?o.pts.map(q=>q.slice()):null};
+    _healDrag={id,mode,moved:false,x0:e.clientX,y0:e.clientY};
+    const mv=ev=>{
+      if(!_healDrag)return;
+      if(!_healDrag.moved&&Math.hypot(ev.clientX-_healDrag.x0,ev.clientY-_healDrag.y0)<3)return;
+      const p=_healPointToSource(ev);if(!p)return;_healDrag.moved=true;
+      const dx=p.nx-p0.nx,dy=p.ny-p0.ny,cl=v=>Math.min(1,Math.max(0,v));
+      if(mode==='src'&&orig.sx!=null){o.sx=cl(orig.sx+dx);o.sy=cl(orig.sy+dy);}
+      else{o.x=cl(orig.x+dx);o.y=cl(orig.y+dy);if(orig.pts)o.pts=orig.pts.map(q=>[cl(q[0]+dx),cl(q[1]+dy)]);}
+      healOverlaySync();
+    };
+    const up=()=>{
+      window.removeEventListener('pointermove',mv,true);window.removeEventListener('pointerup',up,true);window.removeEventListener('pointercancel',up,true);
+      const d=_healDrag;_healDrag=null;
+      if(d&&d.moved){updateWork();renderPreview();healSyncUI();fxHistoryPush();}
+    };
+    window.addEventListener('pointermove',mv,true);window.addEventListener('pointerup',up,true);window.addEventListener('pointercancel',up,true);
+  },true);
+  // Delete/Backspace removes the selected spot while its overlay is on screen.
+  document.addEventListener('keydown',e=>{
+    if((e.key!=='Delete'&&e.key!=='Backspace')||e.metaKey||e.ctrlKey||e.altKey||isEditable(e.target))return;
+    const sv=document.getElementById('fx-heal-overlay');
+    if(healSelIdx()<0||!sv||sv.style.display==='none')return;
+    e.preventDefault();e.stopPropagation();healDeleteSel();
   },true);
 })();
 
@@ -28708,6 +28953,13 @@ function csFormatControlUnit(id,value,display){
   if(spec.scale!=null||spec.map){let n=Number(value);if(spec.map==='deconv-radius')n=1.5+n*.065;if(spec.scale!=null)n*=spec.scale;
     base=(spec.sign&&n>0?'+':'')+n.toFixed(spec.precision||0);}
   return base+(unit.startsWith(' ')?' ':'')+unit.trim();
+}
+// Inverse of csFormatControlUnit: a number typed in DISPLAY units (EV, degrees, px...) back to the raw slider value.
+function csTypedToRaw(id,n){
+  const raw=CS_CONTROL_UNIT_SPECS[id];if(!raw||typeof raw==='string')return n;
+  if(raw.map==='deconv-radius')n=(n-1.5)/.065;
+  if(raw.scale!=null)n=n/raw.scale;
+  return n;
 }
 function csSyncControlUnit(input){
   if(!input||!CS_CONTROL_UNIT_SPECS[input.id])return;
