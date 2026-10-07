@@ -475,3 +475,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Published integration c5f94dfe563b74f3a7c29fbf8f31b626b5b6efc8 after transient GitHub server failures. Fresh fetch confirms ancestry and shipped canonical source.heal, schema22 repair, and native sampleFilmBase content. Includes ec28318f (CHR-246 correction),253c10fb (CHR-293),c5f94dfe (CHR-262). Earlier dust evidence is superseded by the canonical recipe correction entry above.
 - Integrated real dusty-photo test passes6.034s with1536x1024 source,8559channels repaired, outside/disabled/preview/loupe/24-tile differences0. Integrated native film11tests pass18.62s against real1368x1368 CC0 RAW,841sample pixels,stageerror0/disableddelta0; concurrent build load makes elapsed time unsuitable as a performance benchmark. Connected frontend checks pass frozen export,editor isolation,stale guards,and legacy domain routing. Full gates running; film quality oracle/iOS/autobalance/rollcopy and inpainting are not completed.
+
+### 2026-10-07 — final integrated gates and CHR-293 fresh-catalog validation
+
+- Integrated CHR-262 Editor gates completed:23pass and exactly10 existing design failures, with no additional failures. Prior running-gate note above is superseded; gate evidence is Chromium validation, not native film quality acceptance.
+- CHR-293 all acceptance criteria verified after publication: actual fixed WebView2 fresh catalog schema22/photos0/queue0 returns an empty queue, and graceful same-profile restart succeeds again. Queue preservation/idempotence tests preserve IDs,recipes,timestamps. Published253c10fbab60 source matches tested artifact; verified ancestry under origin/main efc56810287. Linear CHR-293 moved to In Review for user testing,never Done.
