@@ -39,6 +39,36 @@
     })
     .catch((e) => console.error('platform_capabilities', e));
 
+  // BEGIN CHR183_EXPORT_NOTIFICATIONS
+  // CHR-183: request macOS notification access only when the user starts an export. The
+  // completion notice is then ready if the user switches apps during a long render.
+  let _exportNotificationAllowed = false;
+  window.chromasmithPrepareExportNotification = async () => {
+    if (window.CS_PLATFORM.os !== 'macos') return false;
+    if (!window.Notification || typeof window.Notification.requestPermission !== 'function') return false;
+    try {
+      let granted = window.Notification.permission === 'granted';
+      if (!granted) granted = await invoke('plugin:notification|is_permission_granted');
+      if (!granted) granted = (await window.Notification.requestPermission()) === 'granted';
+      _exportNotificationAllowed = !!granted;
+    } catch (e) { _exportNotificationAllowed = false; }
+    return _exportNotificationAllowed;
+  };
+  window.chromasmithNotifyExportDone = ({ count, path }) => {
+    if (!_exportNotificationAllowed || !path || !window.Notification) return;
+    const directory = String(path).replace(/[\\/][^\\/]*$/, '').split(/[\\/]/).pop() || 'export folder';
+    try {
+      const notice = new window.Notification('Export complete', {
+        body: `${count} photo${count === 1 ? '' : 's'} saved to ${directory}. Select to Show in Finder.`,
+        tag: 'chromasmith-export-complete',
+      });
+      // Tauri's cross-platform notification actions are mobile-only. Clicking the macOS
+      // notification therefore performs the same reveal as the in-app Show in Finder button.
+      notice.onclick = () => { void invoke('reveal_in_finder', { path }).catch((e) => console.error('reveal_in_finder', e)); };
+    } catch (e) { console.error('export completion notification', e); }
+  };
+  // END CHR183_EXPORT_NOTIFICATIONS
+
   // `⌘⇧E`-style shortcut-hint strings, without every call site hand-picking ⌘ vs Ctrl. `mods` is
   // zero or more of 'shift'/'alt' (Ctrl/Cmd is always implied — every use here is a modified
   // shortcut); order matches the existing hand-written labels (⌘⇧C, not ⌘C⇧).

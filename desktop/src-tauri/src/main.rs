@@ -2718,6 +2718,8 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_deep_link::init())
+        // Native completion notices for exports that finish outside the foreground editor.
+        .plugin(tauri_plugin_notification::init())
         // OS-level file drag-out (Finder and compatible receivers). The caller must provide an
         // already-closed file; export rendering/lifetime policy remains in the frontend workflow.
         .plugin(tauri_plugin_drag::init())
