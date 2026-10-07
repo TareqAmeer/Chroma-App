@@ -164,3 +164,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Diagnosed v1.2.9 job 112757883398: two iOS 17-only Photos editing-output APIs were unguarded while deployment target is iOS 15. Added a version guard in ios/App/App/PhotoPairPlugin.swift, preserving modern validation and using the documented JPEG-only output on iOS 15–16 before any Photos commit.
 - Prepared patch release v1.2.10 build 13 in package/lock and Android/iOS version files; docs/releases/v1.2.10.md records cause and compatibility. Availability guard/version consistency and diff checks passed. Actual Xcode Release compilation and IPA packaging are pending CI; no device Photos-write claim yet.
+
+### 2026-10-07 — CHR-262 Windows browser-test portability
+
+- `test/film_negative_native.mjs` accepts `PLAYWRIGHT_EXECUTABLE_PATH`, allowing the connected-editor regression to run with installed Chrome when Playwright's browser cache is isolated per shell session.
+- Focused Chrome run: 6 native-bridge calls; conversion changed pixels; max tiled/export difference 0, max disabled-path difference 0, max double-inversion difference 0; no page/GLSL errors. Input was a temporary BlueNeg already-negated photo preview (not a negative scan); the real negative/native conversion and known-good comparison remain unverified. The temporary image was deleted after testing.
+- CHR-262 remains In Progress. Modified files: `chromasmith-22.html` (build marker), `test/film_negative_native.mjs`, and `docs/DEVLOG.md`.

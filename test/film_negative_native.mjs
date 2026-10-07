@@ -16,7 +16,7 @@ const server=createServer(async(req,res)=>{try{
   res.setHeader('Content-Type',name.endsWith('.html')?'text/html':name.endsWith('.js')?'text/javascript':'application/octet-stream');res.end(bytes);
 }catch{res.writeHead(404).end();}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-const browser=await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const browser=await chromium.launch({...(process.env.PLAYWRIGHT_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH}:{}),args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 const errors=[];
 try{
   const page=await browser.newPage({viewport:{width:1400,height:1000}});
