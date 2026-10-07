@@ -4636,5 +4636,982 @@
       "reopened": true,
       "guard": true
     }
-  }
+  },
+  "centerPixelChecks": {
+    "rows": [
+      {
+        "kind": "basic",
+        "memory": 2,
+        "max": 0
+      },
+      {
+        "kind": "transparent-low",
+        "memory": 1,
+        "max": 0
+      },
+      {
+        "kind": "unknown",
+        "memory": null,
+        "max": 0
+      },
+      {
+        "kind": "grain",
+        "memory": 2,
+        "max": 0
+      },
+      {
+        "kind": "glow",
+        "memory": 4,
+        "max": 0
+      },
+      {
+        "kind": "skin",
+        "memory": 4,
+        "max": 0
+      },
+      {
+        "kind": "detail",
+        "memory": 2,
+        "max": 0
+      },
+      {
+        "kind": "lens",
+        "memory": 2,
+        "max": 0
+      },
+      {
+        "kind": "nr",
+        "memory": 2,
+        "max": 0
+      },
+      {
+        "kind": "tonemap",
+        "memory": 2,
+        "max": 0
+      },
+      {
+        "kind": "red-eye",
+        "memory": 2,
+        "max": 0
+      }
+    ],
+    "ios": false,
+    "unavailable": false
+  },
+  "integrationExports": {
+    "mainBaseline": "5c5062c1089cb933af6f9e1112cf3425741102a0",
+    "count": 35,
+    "exact": true,
+    "hashes": {
+      "chart__basic_adjust.png": "b83d2bf89d4044595050e54c8d1782dbb117c0c7dd921c22fe7b4da2f9aa9a76",
+      "chart__grain.png": "a44c869d5687c005457a4df4dca403b16d08449b5da736522c5118c2438328d8",
+      "chart__halation_noremjet.png": "9f9157f04b082e83f7fc2f4a601b0ca1d7386d1bd17d8914ba590c1501f73645",
+      "chart__identity.png": "16c8909e8a98289925b857835c657865b5e2a504742921062ea634775be31d39",
+      "chart__lut_look.png": "adae72265c0bfefa4ce65e2a952ed0a25215ed6a0ead00a841cfc1f5cc855792",
+      "chart__skin_uniformity.png": "1631c33ef27f5d6168fa212af38871cd421c1050ff1b2cbe36fac62f1686398b",
+      "chart__wavelet_detail_levels.png": "0e7a16e166daa05e1ecbad3a6550ec826f1fc1653a352355d8e107297863301b",
+      "gradient__basic_adjust.png": "f7c72fce827e681082af699bdaf08dd1b4c197f3d821abb46ae787894a7ba820",
+      "gradient__grain.png": "e5ddf502342370d7563785bb7e2b95d26f712aa0595c0afc53fdbd23b202b7b7",
+      "gradient__halation_noremjet.png": "fbc57f505b405a376f5bef12634f9ee7585afca94b666e3479ab3ca954a56b49",
+      "gradient__identity.png": "3e04a9d32fe568cc2c81fbe54471c3293473f9278640b913818be19e0e9e1f69",
+      "gradient__lut_look.png": "629160f6e234662b321ac8ad34c931189b2881ca129bca8e1805f60adb850355",
+      "gradient__skin_uniformity.png": "4b682b0c504d0f69aa91b6d1bb3f498b738235f0ecf8e52fe30f5cc1df28bf57",
+      "gradient__wavelet_detail_levels.png": "ffb29d7544b66496eb7f570c99e218441ca550102bbbae79672051a29db52c53",
+      "orientation_panorama__basic_adjust.png": "c9cdb0f438970e1f5e7567233fc2c801fa9da1f5f28b2c1da7bf1ece2b4c4d77",
+      "orientation_panorama__grain.png": "3dc90e576b6dc956c1e4892f6635ad10fbf1b7828b098835b5674c90026c1e8a",
+      "orientation_panorama__halation_noremjet.png": "4fd89036de544f6a089ce2edbc77d3c0d14f565a3b78d15297e571d5d2442898",
+      "orientation_panorama__identity.png": "d0bcbab9a75ddb58765c7890f351ae9b863fbd3abef85281a18633bd86fd97e1",
+      "orientation_panorama__lut_look.png": "210758fe43e65ad89f9482353d8166be8be831875cd6063de05fd7c623e6a3ff",
+      "orientation_panorama__skin_uniformity.png": "39e7f68b1ab682e6b7d2eeaec4fb73a2f38b9e1d911a54911bdfeae62b0180d9",
+      "orientation_panorama__wavelet_detail_levels.png": "2a71c4da694430666a9fa7bb500ead6f44cc603c43fe896a22594fd79f44e1dc",
+      "orientation_portrait__basic_adjust.png": "92867b84a9601ee866516ce3f7ca0d72dcfa032b3c8e976e77a8996b88fc6e5a",
+      "orientation_portrait__grain.png": "25b2e70a29849ce7666bd8eb7551308cbda8e47c673a3a7b9afc4df3aa7a95a3",
+      "orientation_portrait__halation_noremjet.png": "ab89eea6257e157fa49d0a4344d01140d017c20078724f0494cc689c28ff4e34",
+      "orientation_portrait__identity.png": "644e7b4d1b2b706e3a1b82ab5c1c6bb097dd483968ed77e7bf751deaa51440d1",
+      "orientation_portrait__lut_look.png": "53b8ddcdfe04b99055daa748c9438898655fb281a08bf9493584c2aee77f25a4",
+      "orientation_portrait__skin_uniformity.png": "644e7b4d1b2b706e3a1b82ab5c1c6bb097dd483968ed77e7bf751deaa51440d1",
+      "orientation_portrait__wavelet_detail_levels.png": "5be18d57046e4a65a4c98a4b0241313749d3d181cf4476a484168db41ae0effd",
+      "portrait__basic_adjust.png": "2f1b8d61e30f57a5387b922cc350078dd246213882811964e826d9b5ff3f6a8f",
+      "portrait__grain.png": "5858e760801b056d44cf2c0e807e47c618f047be92e0c21d51bf6022edff66a3",
+      "portrait__halation_noremjet.png": "eb7863be98521c7b294b14f6aabf1c6b96a3f80c0f60fb2b7d8f11e0198f8b0b",
+      "portrait__identity.png": "2736fecb880d44536a13b702bb229a238e88cd7766047123d0222de0f170f952",
+      "portrait__lut_look.png": "b01670910f9c40c1ae9bcfa83f56a54974421e972d3686b0ef6ac7a5ddf7229b",
+      "portrait__skin_uniformity.png": "2736fecb880d44536a13b702bb229a238e88cd7766047123d0222de0f170f952",
+      "portrait__wavelet_detail_levels.png": "f0381d3b9057e07f01fedcad2e2437734111af28e44cb0b6a18a6baebf47b54c"
+    }
+  },
+  "integrationGoldens": [
+    {
+      "name": "chart__basic_adjust.png",
+      "exact": true
+    },
+    {
+      "name": "chart__grain.png",
+      "exact": true
+    },
+    {
+      "name": "chart__halation_noremjet.png",
+      "exact": true
+    },
+    {
+      "name": "chart__identity.png",
+      "exact": true
+    },
+    {
+      "name": "chart__lut_look.png",
+      "exact": true
+    },
+    {
+      "name": "chart__skin_uniformity.png",
+      "exact": true
+    },
+    {
+      "name": "chart__wavelet_detail_levels.png",
+      "exact": false
+    },
+    {
+      "name": "gradient__basic_adjust.png",
+      "exact": true
+    },
+    {
+      "name": "gradient__grain.png",
+      "exact": true
+    },
+    {
+      "name": "gradient__halation_noremjet.png",
+      "exact": true
+    },
+    {
+      "name": "gradient__identity.png",
+      "exact": true
+    },
+    {
+      "name": "gradient__lut_look.png",
+      "exact": true
+    },
+    {
+      "name": "gradient__skin_uniformity.png",
+      "exact": true
+    },
+    {
+      "name": "gradient__wavelet_detail_levels.png",
+      "exact": false
+    },
+    {
+      "name": "orientation_panorama__wavelet_detail_levels.png",
+      "exact": false
+    },
+    {
+      "name": "orientation_portrait__wavelet_detail_levels.png",
+      "exact": false
+    },
+    {
+      "name": "portrait__basic_adjust.png",
+      "exact": true
+    },
+    {
+      "name": "portrait__grain.png",
+      "exact": true
+    },
+    {
+      "name": "portrait__halation_noremjet.png",
+      "exact": true
+    },
+    {
+      "name": "portrait__identity.png",
+      "exact": true
+    },
+    {
+      "name": "portrait__lut_look.png",
+      "exact": true
+    },
+    {
+      "name": "portrait__skin_uniformity.png",
+      "exact": true
+    },
+    {
+      "name": "portrait__wavelet_detail_levels.png",
+      "exact": false
+    }
+  ],
+  "integrationNativeDecoderAndroid35": {
+    "records": [
+      {
+        "orientation": 1,
+        "mode": "binary",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "78053776c067b883db835791601c322c7adacdf9707f7fc766997ffa7b4a52ef"
+      },
+      {
+        "orientation": 2,
+        "mode": "binary",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "2cbb115febef0a31c7dcaf9b1f7e34f2ad49bf4213dbc506c5bdfc59f385dc20"
+      },
+      {
+        "orientation": 3,
+        "mode": "binary",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "2c1e81de697c6661cb744a12d71564fd494ad3641bcab52575072d57acf3566c"
+      },
+      {
+        "orientation": 4,
+        "mode": "binary",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "89f2aa45fb8e7761e7f2ef4e14919c2352a7fef418c87061a3fd239f1ae0d439"
+      },
+      {
+        "orientation": 5,
+        "mode": "binary",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "4a49975f3a80de374480f33fdb2fe0e7f127aa33c5e0868f611ec7990b5f84e6"
+      },
+      {
+        "orientation": 6,
+        "mode": "binary",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "96697028e8e892c6edd1e23b1e57279c7275d202d909801440ac08676edea684"
+      },
+      {
+        "orientation": 7,
+        "mode": "binary",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "5768efb4e913ba585f4e7664d49546df10a8e151be8eacd901e6c2a6fe488930"
+      },
+      {
+        "orientation": 8,
+        "mode": "binary",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "59e44716c832aede2c682bbf5203e206f41d00fc3a8e7061caa2cd1e977df4e8"
+      },
+      {
+        "orientation": 1,
+        "mode": "legacy",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "78053776c067b883db835791601c322c7adacdf9707f7fc766997ffa7b4a52ef"
+      },
+      {
+        "orientation": 2,
+        "mode": "legacy",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "2cbb115febef0a31c7dcaf9b1f7e34f2ad49bf4213dbc506c5bdfc59f385dc20"
+      },
+      {
+        "orientation": 3,
+        "mode": "legacy",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "2c1e81de697c6661cb744a12d71564fd494ad3641bcab52575072d57acf3566c"
+      },
+      {
+        "orientation": 4,
+        "mode": "legacy",
+        "width": 257,
+        "height": 131,
+        "reference": [
+          257,
+          131
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "89f2aa45fb8e7761e7f2ef4e14919c2352a7fef418c87061a3fd239f1ae0d439"
+      },
+      {
+        "orientation": 5,
+        "mode": "legacy",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "4a49975f3a80de374480f33fdb2fe0e7f127aa33c5e0868f611ec7990b5f84e6"
+      },
+      {
+        "orientation": 6,
+        "mode": "legacy",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "96697028e8e892c6edd1e23b1e57279c7275d202d909801440ac08676edea684"
+      },
+      {
+        "orientation": 7,
+        "mode": "legacy",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "5768efb4e913ba585f4e7664d49546df10a8e151be8eacd901e6c2a6fe488930"
+      },
+      {
+        "orientation": 8,
+        "mode": "legacy",
+        "width": 131,
+        "height": 257,
+        "reference": [
+          131,
+          257
+        ],
+        "max": 1,
+        "mean": 0.023918080019009712,
+        "digest": "59e44716c832aede2c682bbf5203e206f41d00fc3a8e7061caa2cd1e977df4e8"
+      }
+    ],
+    "safeguards": {
+      "rejected": 7,
+      "reopened": true,
+      "guard": true
+    }
+  },
+  "integrationSavedOutputChecks": [
+    {
+      "batch": "portable-methods-integration_android29.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-integration_android29.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-integration_android29.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-integration_android29.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "825ff617baa90309396ad27f73b70e8b056136b252115d4e71ae02794144bed2",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-integration_android35.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 0,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-integration_android35.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 1,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-integration_android35.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 2,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    },
+    {
+      "batch": "portable-methods-integration_android35.json",
+      "valid24MP": true,
+      "method": "center",
+      "run": 3,
+      "size": [
+        6000,
+        4000
+      ],
+      "sha256": "1a82f273310699b8966e3fc247a13988e0ab1ae83b7d219d4bafc5f3f6afcc65",
+      "exact": true,
+      "maxRGB": 0,
+      "meanRGB": 0.0
+    }
+  ],
+  "integrationAcceptance": {
+    "29": {
+      "rows": [
+        {
+          "method": "center",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "decodeMs": 2270.5,
+          "yieldMs": 2316.2999999998137,
+          "processMs": 4786.399999999907,
+          "bytes": 2600747,
+          "encodeMs": 3104.899999999907,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-0%20(4).jpg"
+            }
+          ],
+          "saveMs": 627.2999999998137,
+          "totalMs": 11664.5,
+          "savedFile": "portable-integration_android29-center-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "decodeMs": 1504.7000000001863,
+          "yieldMs": 693.6000000000931,
+          "processMs": 1910.2000000001863,
+          "bytes": 2600747,
+          "encodeMs": 1590.2999999998137,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-1%20(4).jpg"
+            }
+          ],
+          "saveMs": 875.6000000000931,
+          "totalMs": 6488.699999999721,
+          "savedFile": "portable-integration_android29-center-1.jpg"
+        },
+        {
+          "method": "center",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "decodeMs": 1708.2999999998137,
+          "yieldMs": 664.9000000003725,
+          "processMs": 1844.2000000001863,
+          "bytes": 2600747,
+          "encodeMs": 1819,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-2.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-2%20(4).jpg"
+            }
+          ],
+          "saveMs": 276.70000000018626,
+          "totalMs": 6473.899999999907,
+          "savedFile": "portable-integration_android29-center-2.jpg"
+        },
+        {
+          "method": "center",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "decodeMs": 1428,
+          "yieldMs": 684.1000000010245,
+          "processMs": 1849.2000000001863,
+          "bytes": 2600747,
+          "encodeMs": 2698.2000000001863,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-3.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-3%20(4).jpg"
+            }
+          ],
+          "saveMs": 467,
+          "totalMs": 7021.300000000279,
+          "savedFile": "portable-integration_android29-center-3.jpg"
+        }
+      ],
+      "device": {
+        "userAgent": "Mozilla/5.0 (Linux; Android 10; Android SDK built for x86_64 Build/QSR1.211112.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.6367.219 Mobile Safari/537.36",
+        "memory": 1,
+        "worker": "function",
+        "bridge": "object",
+        "api": 29,
+        "serial": "emulator-5556"
+      },
+      "warmMedianMs": 6488.699999999721
+    },
+    "35": {
+      "rows": [
+        {
+          "method": "center",
+          "run": 0,
+          "warmup": true,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "yieldMs": 174.5,
+          "processMs": 19791.899999999994,
+          "bytes": 2617789,
+          "encodeMs": 414.1000000000058,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-0.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-0.jpg"
+            }
+          ],
+          "saveMs": 179.60000000000582,
+          "totalMs": 20946.70000000001,
+          "savedFile": "portable-integration_android35-center-0.jpg"
+        },
+        {
+          "method": "center",
+          "run": 1,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "yieldMs": 203.10000000003492,
+          "processMs": 2690.7999999999884,
+          "bytes": 2617789,
+          "encodeMs": 528.3999999999942,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-1.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-1.jpg"
+            }
+          ],
+          "saveMs": 120.5,
+          "totalMs": 3607,
+          "savedFile": "portable-integration_android35-center-1.jpg"
+        },
+        {
+          "method": "center",
+          "run": 2,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "yieldMs": 191.60000000003492,
+          "processMs": 2650.100000000006,
+          "bytes": 2617789,
+          "encodeMs": 351.5,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-2.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-2.jpg"
+            }
+          ],
+          "saveMs": 76.5,
+          "totalMs": 3321.7999999999884,
+          "savedFile": "portable-integration_android35-center-2.jpg"
+        },
+        {
+          "method": "center",
+          "run": 3,
+          "warmup": false,
+          "width": 6000,
+          "height": 4000,
+          "quality": 99,
+          "adjust": {
+            "enabled": true,
+            "exposure": 0.25,
+            "contrast": 0,
+            "highlights": 0,
+            "shadows": 0,
+            "whites": 0,
+            "blacks": 0,
+            "temp": 0,
+            "tint": 0,
+            "vibrance": 0,
+            "saturation": 0,
+            "sharpness": 0,
+            "sharpDetail": 0.5,
+            "clarity": 0,
+            "texture": 0,
+            "wavelet": {
+              "fine": 0,
+              "small": 0,
+              "medium": 0,
+              "residual": 0
+            },
+            "skin": 0,
+            "dehaze": 0
+          },
+          "decoderTransport": "binary",
+          "yieldMs": 147.5,
+          "processMs": 2634.399999999994,
+          "bytes": 2617789,
+          "encodeMs": 302.69999999998254,
+          "receipts": [
+            {
+              "ok": true,
+              "fname": "full-methods-6000x4000_v1-3.jpg",
+              "status": "saved",
+              "path": "Photos \u203a Chromasmith",
+              "err": "",
+              "uri": "file:///storage/emulated/0/Android/media/com.tareq.chromasmith/Chromasmith/full-methods-6000x4000_v1-3.jpg"
+            }
+          ],
+          "saveMs": 76.89999999999418,
+          "totalMs": 3286.600000000006,
+          "savedFile": "portable-integration_android35-center-3.jpg"
+        }
+      ],
+      "device": {
+        "userAgent": "Mozilla/5.0 (Linux; Android 15; sdk_gphone64_x86_64 Build/AE3A.240806.043; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.6367.219 Mobile Safari/537.36",
+        "memory": 2,
+        "worker": "function",
+        "bridge": "object",
+        "api": 35,
+        "serial": "emulator-5554"
+      },
+      "warmMedianMs": 3321.7999999999884
+    }
+  },
+  "integrationProfileFailure": {
+    "android": 35,
+    "operation": "library import, before export",
+    "error": "IndexedDB DataError: Failed to read large IndexedDB value",
+    "freeDiskGB": 3.9,
+    "webViewProfileArchiveBytes": 40415744,
+    "resolution": "Archived existing emulator WebView profile and reset test app data; subsequent acceptance run passed. Cause undetermined; no production database repair claimed."
+  },
+  "apkSha256": "7e3c07859bebec406c676425adbeb79a8231d23fee80de274c22042f66629a0c"
 }

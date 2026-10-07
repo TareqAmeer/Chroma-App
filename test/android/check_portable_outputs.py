@@ -4,7 +4,7 @@ from PIL import Image
 import numpy as np
 p=Path(__file__).resolve().parent/'out'; checks=[]
 for f in p.glob('portable-methods-*.json'):
- rows=json.loads(f.read_text());invalid='reduced-invalid' in f.name;base=next(r for r in rows if r['method']=='old');ref=(p/base['savedFile']).read_bytes();ref_rgb=np.array(Image.open(p/base['savedFile']).convert('RGB'),dtype=np.int16)
+ rows=json.loads(f.read_text());invalid='reduced-invalid' in f.name;base=next((r for r in rows if r['method']=='old'),rows[0]);ref=(p/base['savedFile']).read_bytes();ref_rgb=np.array(Image.open(p/base['savedFile']).convert('RGB'),dtype=np.int16)
  for r in rows:
   q=p/r['savedFile'];b=q.read_bytes();im=Image.open(q);im.load();assert im.size==((1500,1000) if invalid else (6000,4000)); exact=b==ref
   if r['method']!='direct':assert exact,(f,r['method'],r['run'])

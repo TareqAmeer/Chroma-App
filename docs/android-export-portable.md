@@ -33,15 +33,19 @@ Direct GPU-canvas copying changed JPEG pixels (maximum RGB difference 5), so it 
 
 * The first Android 29 test loaded the 24 MP JPEG at 1500×1000 through HTML Image, createImageBitmap and ImageDecoder. Its eight quick exports are invalid as 24 MP performance evidence. This led to the source-dimension assertion and native restoration.
 * An initial full-resolution fallback with verbose base64 transfers completed six exports, then WebView terminated the renderer and the app exited. Android logged renderer termination under its OOM-or-update category; no update was performed during that run. Memory pressure is the diagnosis, not a uniquely proven cause. Binary transfers, bounded rows, cleanup, selective logging and software temporary canvases were added before the successful twelve-export stress run.
+* The final Android 35 integration check initially failed during library import with IndexedDB `DataError: Failed to read large IndexedDB value`, before export began. Storage had 3.9 GB free and usage was only 36 MB. The existing 40 MB emulator WebView profile was archived locally before resetting this test app's data. This is an observed profile/database failure with an undetermined cause, not an export speed result or a production database repair.
 * Cold starts and host scheduling caused large outliers, including 17–26 s in Android 35 batches. All measured rows and warmups are preserved. Three repeats establish useful direction, not universal phone timing.
 
 ## Verification
 
 * Eleven tile comparisons: exact raw RGBA parity for ordinary/unknown/constrained memory, odd dimensions, transparency, grain, glow, skin, detail, lens, NR, tonemap and red-eye. Independent readback rectangle/vertical-flip checks pass.
-* Native decode: all eight EXIF orientations through both binary and legacy transfers, odd final row count and embedded sRGB ICC. Maximum Android-versus-Chromium conversion difference is one 8-bit level, mean 0.03018; orientations and dimensions match. Invalid input, concurrency, token/range/expiry checks, cancellation and reopen pass.
+* Native decode: all eight EXIF orientations through both binary and legacy transfers, odd final row count and embedded sRGB ICC. Maximum Android-versus-Chromium conversion difference is one 8-bit level, mean 0.03018 on Android 29 and 0.02392 on Android 35; orientations and dimensions match. Invalid input, concurrency, token/range/expiry checks, cancellation and reopen pass.
 * Pure protocol tests cover source/platform gates, selective logs, binary token/coordinates, malformed messages, native errors, timeout, bridge exception, cleanup and legacy errors.
-* Existing tile/seam/cancellation, worker byte parity and fallbacks, binary Photos status recovery and live-preview isolation tests pass.
+* Existing tile/seam/cancellation, worker byte parity and fallbacks, binary Photos status recovery and live-preview isolation tests pass, including reruns on the clean current-main integration.
+* All 35 integrated fixture PNGs are byte-identical to unmodified main `5c5062c1`. The same five existing wavelet golden mismatches remain (18/23 exact); no goldens were regenerated.
 * Independently decoded 66 saved JPEGs: 58 were full 24 MP and eight were the explicitly excluded 1.5 MP discovery outputs. All 54 full-resolution outputs outside the rejected direct-copy variant were byte-identical to their same-batch control; all twelve final Android 29 outputs were exact.
+
+The ordinary integrated APK also completed four full-resolution saves on each configuration: warm medians 6.489 s on Android 29 and 3.322 s on Android 35. These are acceptance reruns without a paired control, not an additional before/after percentage. All eight JPEGs decoded at 6000×4000, with byte-identical repeats within each device. Native orientation/transport safeguards passed again on both OS versions.
 
 Raw rows, device records, hashes and pixel checks are in [the benchmark data](benchmarks/android-export-portable-2026-10-07.json). Reproduce with `test/android/export_portable_methods.mjs`, `test/android/create_jpeg_decode_fixtures.py`, `test/android/export_jpeg_decode.mjs`, `test/android/check_portable_outputs.py`, `test/export_center_readback.mjs` and `test/full_jpeg_transport.mjs`.
 

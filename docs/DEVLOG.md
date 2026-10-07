@@ -125,3 +125,8 @@ Publication verified: integration commits `053f3757` and `f41e82cd` are publishe
 - Read only tile centers; restore full JPEG pixels when low-memory WebView reduces the source, using bounded native rows, binary/base64 capability fallbacks and cleanup. Files: `chromasmith-22.html`, Android `MainActivity.java` / `JpegDecodePlugin.java`.
 - Added pixel/protocol/native orientation tests and portable benchmark harnesses/report. Android 35 confirmation: 4.875 → 4.201 s; actual 1 GB Android 29 full-resolution control: 15.240 → 6.525 s. Twelve consecutive final 24 MP exports completed with byte-identical output. No physical-device timing guarantee.
 - Focused export regressions pass. Publication and current-main integration verification are recorded below when complete; CHR-284 remains for user review.
+
+### CHR-284 — current-main integration verification
+
+- Integrated task commits onto main `5c5062c1` in the dedicated portable integration checkout, preserving newer shader/editor work. All 35 fixture PNGs match unmodified main exactly; existing five wavelet golden mismatches remain unchanged (18/23 exact). Focused tile, pixel, worker, protocol and live-preview regressions pass.
+- Ordinary BUILD 1.1007A APK builds with normal dependency paths. Native EXIF/ICC/transport/error checks pass on Android 10 and 15; four full 24 MP acceptance saves per OS verified exact within-device repeat bytes (6.489 s / 3.322 s warm medians). Archived/reset an unreadable Android 15 emulator database before that acceptance run; cause undetermined.
