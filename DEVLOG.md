@@ -499,3 +499,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-07 — reproducible CHR-246 editor regression
 
 - Made `test/inpaint_ui.mjs` self-contained with the repository chart fixture and deterministic transparent overlay variants. It no longer depends on downloaded photos or native-probe output files. The focused check passes: 5,670 changed channels, outside difference0, disabled identity true, recipe restore difference0, zero console errors. Native ONNX quality remains covered only by the separate real-photo probe; the editor test mocks Tauri.
+
+### 2026-10-07 — verified main publication of CHR-246 and CHR-268 partials
+
+- Fast-forward published the inpainting implementation, self-contained regression and Compare/Survey source-detail slice in `origin/main` commit `06df445a4c06b1b3396873769498af728ad921dc`. Fresh fetch confirms ancestry plus `applyUISnapshot` repair hydration, the MI-GAN candidate UI, and `detailRender` in the shipped library. The Windows debug executable was built with a process-local `bundle.resources=[]` override and exercised from a separate temporary profile.
+- CHR-246 and CHR-268 remain In Progress. The partial implementations and measured evidence above are published; object-removal quality/real native job UI, natural-defect review, CHR-268 eager full-batch loading/50k scale, and final Editor full-gate rerun remain open. No ticket is marked Done.
