@@ -46,6 +46,7 @@ const test = base.extend({
   docked: async ({ page, server }, use) => {
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
+    await page.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch {} }); // first-run welcome card would intercept clicks
     await page.goto(`${server}/desktop/dist/index.html?libtest=1&deskx=1`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
     await page.evaluate(() => {
@@ -76,6 +77,7 @@ const test = base.extend({
   libraryFolder: async ({ page, server }, use) => {
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
+    await page.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch {} }); // first-run welcome card would intercept clicks
     await page.goto(`${server}/desktop/dist/index.html?libtest=1&libn=12&deskx=1`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
     await page.evaluate(() => {
@@ -102,15 +104,22 @@ async function setDockWidth(page, px) {
   await page.waitForTimeout(100); // let the ResizeObserver-driven class sync settle
 }
 
-const EXPECTED = `
-- button "Gallery"
-- button "Develop"
+// Swiss v2 moved the Gallery/Studio switch out of #lib-side into the always-visible header pair
+// (#cs-brand-tog); body.deskx hides .lib-side-tabs (chromasmith-22.html). So the docked
+// #lib-side must expose NO navigation at all, and the header pair is the one switch.
+const EXPECTED_SWITCH = `
+- group "View":
+  - button "Gallery"
+  - button "Studio"
 `;
 
 for (const width of [90, 150, 280]) {
   test(`docked filmstrip at ${width}px shows only Library/Develop — no navigation tree`, async ({ docked: { page } }) => {
     await setDockWidth(page, width);
-    await expect(page.locator('#lib-side')).toMatchAriaSnapshot(EXPECTED);
+    await expect(page.locator('#cs-brand-tog')).toMatchAriaSnapshot(EXPECTED_SWITCH);
+    // #lib-side must hold no visible navigation (tabs hidden, tree/collections are full-view only)
+    expect(await page.evaluate(() => [...document.querySelectorAll('#lib-side button, #lib-side a, #lib-side [role=treeitem]')].filter((e) => e.offsetParent !== null).length)).toBe(0);
+    await expect(page.locator('#lib-side .lib-side-tabs')).toBeHidden();
   });
 }
 
@@ -163,18 +172,18 @@ test('Library <-> Develop round trip keeps the filmstrip and the open folder ali
 
   // Symptom 1: "filmstrip disappears when switching to Develop" — click Develop from docked
   // (a no-op per the handler's own `if (state.expanded_view)` guard, but must not close it).
-  await page.locator('#lib-side-tab-develop').click();
+  await page.locator('#cs-tog-studio').click();
   await expect(page.locator('#lib-overlay')).toHaveClass(/\bon\b/); // state.open must survive — this is the exact class toggleLibrary() used to clear
   await expect(page.locator('#lib-overlay')).toBeVisible();
   await expect(page.locator('#lib-overlay')).not.toHaveClass(/full/);
 
   // Round-trip through full view and back — Library tab, then Develop tab.
-  await page.locator('#lib-side-tab-library').click();
+  await page.locator('#cs-tog-lib').click();
   await page.waitForFunction(() => document.getElementById('lib-overlay').classList.contains('full'), { timeout: 5000 });
   // Symptom 3: "switching back to Library shows the folder as empty".
   await expect.poll(gridCards, { timeout: 5000 }).toBeGreaterThan(0);
 
-  await page.locator('#lib-side-tab-develop').click();
+  await page.locator('#cs-tog-studio').click();
   await page.waitForFunction(() => !document.getElementById('lib-overlay').classList.contains('full'), { timeout: 5000 });
   await expect(page.locator('#lib-overlay')).toBeVisible();
   // Symptom 2: "filmstrip doesn't show the actual thumbnails in the selected folder".
