@@ -22,3 +22,5 @@ Raw evidence: [benchmark and persistence data](benchmarks/android-photo-persiste
 ## Existing installations
 
 Install the updated APK over the existing app and open it before uninstalling, allowing migration to finish. Already deleted exports require originals or backups; this update cannot recover removed files.
+
+Integration verification: current main aa87c3a7 incorporated without conflicts; the integrated ordinary APK repeated the full Android 10 uninstall/reinstall test successfully (eight further media files), and all five mobile regression suites passed again.

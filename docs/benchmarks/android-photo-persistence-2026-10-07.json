@@ -1046,5 +1046,140 @@
       }
     }
   },
-  "apkSha256": "49e97e5176c8d03a570b1b7e30122aef90b3b8f797626697d12c8c2ef513688f"
+  "apkSha256": "49e97e5176c8d03a570b1b7e30122aef90b3b8f797626697d12c8c2ef513688f",
+  "integration": {
+    "base": "aa87c3a75f16e1e6b76f6ef7384fe581e23554be",
+    "implementation": "17b98648aeb3a960e4f123bba1b91e78838adafb",
+    "native29": {
+      "api": 29,
+      "prefix": "persistence-29-1791369707599",
+      "serial": "emulator-5556",
+      "receipts": [
+        {
+          "ok": true,
+          "fname": "persistence-29-1791369707599-duplicate.jpg",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/images/media/92"
+        },
+        {
+          "ok": true,
+          "fname": "persistence-29-1791369707599-duplicate.jpg",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/images/media/93"
+        },
+        {
+          "ok": true,
+          "fname": "persistence-29-1791369707599-fallback.jpg",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/images/media/94"
+        },
+        {
+          "ok": true,
+          "fname": "persistence-29-1791369707599-photo.png",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/images/media/95"
+        },
+        {
+          "ok": true,
+          "fname": "persistence-29-1791369707599-movie.mp4",
+          "status": "saved",
+          "path": "Photos \u203a Chromasmith",
+          "err": "",
+          "uri": "content://media/external_primary/video/media/96"
+        }
+      ],
+      "checks": [
+        "migration verification, failure retention and idempotence",
+        "binary JPEG, fallback JPEG, PNG, video, GPS metadata and duplicate names",
+        "cache cleanup, invalid MIME and cache path containment",
+        "all eight files and gallery records survive actual uninstall",
+        "reinstall preserves existing public photos without duplicates"
+      ],
+      "before": [
+        {
+          "id": 89,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-29-1791369707599-legacy.jpg",
+          "name": "persistence-29-1791369707599-legacy.jpg",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "88ac5c1d993e2cfbc8e6d2ba84ed4ef1f234664d30398870e7b55fcad48262db"
+        },
+        {
+          "id": 90,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-29-1791369707599-legacy.png",
+          "name": "persistence-29-1791369707599-legacy.png",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "988ab45878e5f71711e190395635b92284bf6d22be90a0c220ac73f0af6f548f"
+        },
+        {
+          "id": 92,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-29-1791369707599-duplicate.jpg",
+          "name": "persistence-29-1791369707599-duplicate.jpg",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "88ac5c1d993e2cfbc8e6d2ba84ed4ef1f234664d30398870e7b55fcad48262db"
+        },
+        {
+          "id": 93,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-29-1791369707599-duplicate (1).jpg",
+          "name": "persistence-29-1791369707599-duplicate (1).jpg",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "24c8b5b83fb41abd5afdac05647c7c2ba8210b09763b0c06e100560a7efcb3ca"
+        },
+        {
+          "id": 94,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-29-1791369707599-fallback.jpg",
+          "name": "persistence-29-1791369707599-fallback.jpg",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "88ac5c1d993e2cfbc8e6d2ba84ed4ef1f234664d30398870e7b55fcad48262db"
+        },
+        {
+          "id": 95,
+          "file": "/storage/emulated/0/Pictures/Chromasmith/persistence-29-1791369707599-photo.png",
+          "name": "persistence-29-1791369707599-photo.png",
+          "relative": "Pictures/Chromasmith/",
+          "pending": 0,
+          "sha256": "988ab45878e5f71711e190395635b92284bf6d22be90a0c220ac73f0af6f548f"
+        },
+        {
+          "id": 91,
+          "file": "/storage/emulated/0/Movies/Chromasmith/persistence-29-1791369707599-legacy.mp4",
+          "name": "persistence-29-1791369707599-legacy.mp4",
+          "relative": "Movies/Chromasmith/",
+          "pending": 0,
+          "sha256": "2e019fa954d760819323363567eae58d9c343bc96eb3d9a37728b4f512666ecd"
+        },
+        {
+          "id": 96,
+          "file": "/storage/emulated/0/Movies/Chromasmith/persistence-29-1791369707599-movie.mp4",
+          "name": "persistence-29-1791369707599-movie.mp4",
+          "relative": "Movies/Chromasmith/",
+          "pending": 0,
+          "sha256": "2e019fa954d760819323363567eae58d9c343bc96eb3d9a37728b4f512666ecd"
+        }
+      ],
+      "uninstalled": true,
+      "pass": true
+    },
+    "apkSha256": "4492a88d06c32184f60a99c7932575abb5d0a8d5c661caa37b72b34959512a4a",
+    "mobileTests": [
+      "mobile_export_binary",
+      "full_jpeg_transport",
+      "export_live_preview",
+      "mobile_edge_cases",
+      "mobile_ux"
+    ],
+    "pass": true
+  }
 }
