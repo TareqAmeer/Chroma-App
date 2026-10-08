@@ -25,6 +25,11 @@ foreign-key, schema-version, and photo-count checks. Restore copies a verified b
 non-existing destination through a staging directory and verifies that copy before publishing it;
 it never overwrites the current catalog.
 
+Before asking for a restore destination, the Library shows the verified photo/sidecar counts and
+the source volume paths recorded in the bundle. This helps identify folders that may need relinking
+on another computer. The prompt also states that originals and regenerated caches are excluded;
+canceling it leaves the destination untouched.
+
 ## Current restore limits
 
 The separate restore copy is a verified data bundle, not an activated library. The catalog and

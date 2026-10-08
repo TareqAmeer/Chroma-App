@@ -171,3 +171,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Focused Chrome run: 6 native-bridge calls; conversion changed pixels; max tiled/export difference 0, max disabled-path difference 0, max double-inversion difference 0; no page/GLSL errors. Input was a temporary BlueNeg already-negated photo preview (not a negative scan); the real negative/native conversion and known-good comparison remain unverified. The temporary image was deleted after testing.
 - CHR-262 remains In Progress. Modified files: `chromasmith-22.html` (build marker), `test/film_negative_native.mjs`, and `docs/DEVLOG.md`.
 - Implementation published in `origin/main` integration commit `2a0198fcc53285b30087b91d2edaed3591abd506`; a fresh fetch, ancestry check, `git ls-remote` match, and shipped-file grep confirmed it. The focused Chrome regression passed again on the integration checkout.
+
+### 2026-10-08 — CHR-205 restore preflight (partial)
+
+- The restore action now shows a verification preflight with catalog photo count, included/missing XMP sidecars, and the recorded source volume UUID/path mappings before the user chooses a destination. It explicitly says original media/caches are excluded and allows canceling before any restore copy is written.
+- Extended `test/library_backup_ui.mjs` to exercise both cancellation and continuation through the preflight and assert the displayed counts, root mapping, and exclusion policy. Updated `docs/library-backup.md` with the preview behavior.
+- CHR-205 remains In Progress: the preview does not relink source roots or activate a restored library. Native recovery-safety behavior and clean-install cross-machine fixture remain unverified.
