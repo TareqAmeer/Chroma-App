@@ -719,3 +719,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Integration commit `2133a06d` is ready for publication. It contains the task-owned export retry fix, 60-output browser test, and root DEVLOG summary; run verification passed on integrated source after cherry-pick.
 - CHR-202 remains In Progress: per-recipe metadata policy and native filesystem validation are still outstanding acceptance criteria.
+
+### 2026-10-08 — CHR-221 batch Color Copy (partial)
+
+- Added Library multi-selection → Colour Copy batch handoff and a visible apply action. The generated look is stored once and selectively merged into each target recipe through the journalled batch path, preserving each photo’s unrelated settings. Files: `chromasmith-22.html`, `desktop/library-ui.js`, `test/color_copy_batch.mjs`.
+- Real-photo Chromium UI test passed dark and light at 1366×768: zero-strength pixel identity (max RGB delta 0), histogram CDF distance 0.0818 → 0.0026, 3/3 selected recipes updated, grain/print settings preserved, unselected photo unchanged, and zero page errors. Existing recipe-batch retry/undo test also passed both themes.
+- CHR-221 remains In Progress pending verification through the native Tauri/WebView runtime; this browser test exercises the staged desktop UI with the recipe-batch bridge in test mode.

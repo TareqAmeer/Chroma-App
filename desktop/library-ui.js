@@ -65,6 +65,11 @@
   if (LIBTEST) {
     window.libtestRecipeBatchFailNext = indices => { indices.forEach(i => ltBatchFailures.add(i)); };
     window.libtestRecipeBatchInvoke = (command, args) => libtestInvoke(command, args);
+    window.__libtestSeedSidecar = (path, sidecar) => {
+      const value = { rating: 0, label: '', favorite: false, edited: false, recipe: '', ...(sidecar || {}) };
+      ltBatchSidecars.set(path, structuredClone(value));
+      state.sidecars.set(path, structuredClone(value));
+    };
   }
   // Undo-reset mock state — mirrors the Rust one-slot buffer (last_reset_recipe/last_reset_edited)
   // so ?libtest=1 can exercise the "Reset edit" / "Undo last reset" context-menu pair without a
@@ -7321,7 +7326,7 @@
           const buf = await quicklookPreview(paths[0]);
           const file = new File([buf], baseName(paths[0]).replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
           if (state.open) await toggleLibrary();
-          window.chromasmithColourCopySet(which, file);
+          window.chromasmithColourCopySet(which, file, which === 'src' ? paths : undefined);
         } catch (e) { toast(humanizeErr('load this photo for Colour Copy', e)); }
       };
       if (typeof window.chromasmithColourCopySet === 'function') {
@@ -7331,6 +7336,16 @@
       verMenu.subItem('Use as editor reference', async () => {
         try { const f = await readPathsAsFiles([paths[0]]); if (f[0]) window.chromasmithSetReference(f[0], f[0].name); }
         catch (e) { toast(humanizeErr('pin reference', e)); }
+      });
+    }
+    if (n > 1 && typeof window.chromasmithColourCopySet === 'function') {
+      verMenu.subItem(`Colour Copy: match selection (${n})…`, async () => {
+        try {
+          const buf = await quicklookPreview(paths[0]);
+          const file = new File([buf], baseName(paths[0]).replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+          if (state.open) await toggleLibrary();
+          window.chromasmithColourCopySet('src', file, paths);
+        } catch (e) { toast(humanizeErr('load selection for Colour Copy', e)); }
       });
     }
     const pasteRow = verMenu.subItem('Paste edit', () => libPasteEdit(paths), kbd('shift', 'V'));
@@ -14805,6 +14820,18 @@
   // for navigating the Library to an arbitrary folder without going through the folder-tree
   // click or the OS picker dialog — used by tools/diagnostics/raw_bench.py to drive scenarios against
   // real, already-cataloged photos in a single long-lived session (no relaunch between repeats).
+  window.chromasmithApplyColorCopyToSelection = async ({ lookId, name, lutMix = 100, targetPaths } = {}) => {
+    const paths = [...new Set((Array.isArray(targetPaths) ? targetPaths : []).filter(p => typeof p === 'string' && p))];
+    if (!paths.length) throw new Error('Select at least one Library photo');
+    if (typeof window.chromasmithMergeSelectiveRecipe !== 'function') throw new Error('Recipe merge is unavailable');
+    if (typeof lookId !== 'string' || !lookId.startsWith('l:')) throw new Error('Saved Color Copy look is missing');
+    const source = { selects: { 'sel-lut': lookId }, sliders: { 'lut-mix': String(lutMix) } };
+    await startRecipeBatch('Color Copy' + (name ? ': ' + name : ''), paths, cur => {
+      const base = cur.recipe ? snapshotFromB64(cur.recipe) : null;
+      return snapshotToB64(window.chromasmithMergeSelectiveRecipe(base, source, ['lut']));
+    });
+    return { submitted: paths.length };
+  };
   window.chromasmithOpenFolder = openFolder;
   // Same reasoning: lets tools/diagnostics/raw_open_bench.py time the REAL editor open (openInEditor,
   // the path a card click takes) by file path, without the Library grid having that folder open.

@@ -3874,6 +3874,8 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
       <button class="btn bsec" id="btn-cp-xmp" disabled onclick="runColourCopy('xmp')">Download .xmp Preset</button>
       <button class="btn bsec" id="btn-cp-sliders" disabled onclick="cpUseSliders()" title="Express the match as ordinary Tone sliders (exposure, contrast, temperature, tint, saturation) and apply them in the editor, so you can fine-tune each one">Match with sliders</button>
       <button class="btn bsec" id="btn-cp-look" disabled onclick="runColourCopy('look')" title="Save the match as a look in the editor's LUT library and apply it — then fine-tune with the look's Strength and every other slider">Use in editor</button>
+      <button class="btn bpri" id="btn-cp-batch" hidden disabled onclick="runColourCopy('batch')">Apply match to selected photos</button>
+      <div id="cp-batch-targets" hidden role="status" aria-live="polite" style="flex-basis:100%;font-size:11px;color:var(--mut)"></div>
     </div>
     <div class="pb" id="pb-cp"><div class="pf" id="pf-cp"></div></div>
     <div id="cp-fit" style="display:none;margin:8px 0;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:12px" role="status" aria-live="polite"></div>
@@ -7264,7 +7266,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008M';
+const BUILD='1.1008N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8060,7 +8062,8 @@ function cpPreviewSplit(){
 }
 async function runColourCopy(type){
   if(!ST.cpSrcFile||!ST.cpRefFile)return;
-  const btn=document.getElementById(type==='lut'?'btn-cp':type==='look'?'btn-cp-look':'btn-cp-xmp');btn.disabled=true;
+  const btnId={lut:'btn-cp',look:'btn-cp-look',batch:'btn-cp-batch',xmp:'btn-cp-xmp'}[type]||'btn-cp-xmp';
+  const btn=document.getElementById(btnId);if(!btn)return;btn.disabled=true;
   showPB('pb-cp');log('Running color copy…','info');
   try{
     const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
@@ -8072,15 +8075,24 @@ async function runColourCopy(type){
     setP('pf-cp',70);
     const name=document.getElementById('cp-name').value||'colour_copy';
     const ver=`v${ST.cpVer.toFixed(1)}`;
-    if(type==='look'){
-      // CHR-219: hand the match to the editor as an ordinary user look (same LUT library the
-      // "Load .cube → Save" path uses), so it stays editable: look Strength plus every slider.
+    if(type==='look'||type==='batch'){
+      // The batch path stores a reusable local look, then merges only its LUT selector/strength
+      // into each selected Library recipe through the journalled recipe-batch API.
       const lname=`${name} ${ver}`;
       await lutLibPut(lname,lutToBytes(lut));await refreshLUTSelect('l:'+lname);
-      const sel=document.getElementById('sel-lut');if(sel)sel.value='l:'+lname;
-      await selectLUT('l:'+lname);
-      if(typeof switchTab==='function')switchTab('fx');
-      toast(`"${lname}" added to your looks`,true);
+      if(type==='batch'){
+        if(typeof window.chromasmithApplyColorCopyToSelection!=='function')throw new Error('Library batch apply is unavailable');
+        const targets=ST.cpTargetPaths.slice();if(!targets.length)throw new Error('Choose target photos from the Library first');
+        const result=await window.chromasmithApplyColorCopyToSelection({lookId:'l:'+lname,name:lname,lutMix:100,targetPaths:targets});
+        const applied=result&&Number.isFinite(result.submitted)?result.submitted:targets.length;
+        toast(`"${lname}" applied to ${applied} selected photo${applied===1?'':'s'}`,true);
+        log(`Color Copy batch queued for ${applied} selected photo${applied===1?'':'s'}`,'ok');
+      }else{
+        const sel=document.getElementById('sel-lut');if(sel)sel.value='l:'+lname;
+        await selectLUT('l:'+lname);
+        if(typeof switchTab==='function')switchTab('fx');
+        toast(`"${lname}" added to your looks`,true);
+      }
     }else if(type==='lut'){
       dl(writeCube(lut,`${name} ${ver}`),`${name}_${ver}.cube`);
       log(`Downloaded ${name}_${ver}.cube`,'ok');
@@ -8099,7 +8111,7 @@ async function runColourCopy(type){
     ST.cpVer+=.1;document.getElementById('cp-ver').textContent=`v${ST.cpVer.toFixed(1)}`;
     setP('pf-cp',100);
   }catch(e){log('Error: '+e.message,'err');console.error(e)}
-  btn.disabled=false;setTimeout(()=>hidePB('pb-cp'),800);
+  if(type==='batch')cpUpdateBatchTargets();else btn.disabled=false;setTimeout(()=>hidePB('pb-cp'),800);
 }
 
 // ═══════════════════════════
@@ -25498,7 +25510,7 @@ class ImgSlider{
 // ═══════════════════════════
 // WORKFLOW STATE
 // ═══════════════════════════
-const ST={beforeFile:null,targetFile:null,startFile:null,startType:null,baseName:'my_look',beforeImg:null,targetImg:null,history:[],cpSrcFile:null,cpRefFile:null,cpRefExtra:[],cpVer:1.0};
+const ST={beforeFile:null,targetFile:null,startFile:null,startType:null,baseName:'my_look',beforeImg:null,targetImg:null,history:[],cpSrcFile:null,cpRefFile:null,cpRefExtra:[],cpTargetPaths:[],cpVer:1.0};
 const SL={};
 function getNextVer(){return`v1.${ST.history.length}`}
 function getCurVer(){return ST.history.length>0?`v1.${ST.history.length-1}`:'—'}
@@ -26854,14 +26866,21 @@ async function hf(file,type){
   else if(type.startsWith('dev-')){const idx=parseInt(type.split('-')[1]);if(ST.history[idx]){ST.history[idx].deviceFile=file;setDZ(`dz-dev-${idx}`,`fn-dev-${idx}`,file.name);const btn=document.getElementById(`btn-ref-${idx}`);if(btn)btn.disabled=false}}
 }
 function chkStart(){document.getElementById('btn-start').disabled=!(ST.beforeFile&&ST.targetFile)}
-function chkCP(){const ok=ST.cpSrcFile&&ST.cpRefFile;if(ok)cpPreviewBuild();document.getElementById('btn-cp').disabled=!ok;document.getElementById('btn-cp-xmp').disabled=!ok;const lk=document.getElementById('btn-cp-look');if(lk)lk.disabled=!ok;const sb=document.getElementById('btn-cp-sliders');if(sb)sb.disabled=!ok}
-// CHR-221: hand a photo to Colour Copy from elsewhere (desktop Library menu, or the editor's
-// current photo) instead of its file pickers. which: 'src' | 'ref'.
-window.chromasmithColourCopySet=function(which,file){
+function cpUpdateBatchTargets(){
+  const b=document.getElementById('btn-cp-batch'),note=document.getElementById('cp-batch-targets');if(!b)return;
+  const canApply=typeof window.chromasmithApplyColorCopyToSelection==='function',n=(ST.cpTargetPaths||[]).length,ready=!!(ST.cpSrcFile&&ST.cpRefFile);
+  b.hidden=!canApply;b.disabled=!(canApply&&n&&ready);
+  b.textContent=n?`Apply match to ${n} selected photo${n===1?'':'s'}`:'Apply match to selected photos';
+  if(note){note.hidden=!canApply;note.textContent=n?`The generated look will be applied to all ${n} selected Library photo${n===1?'':'s'}; their other edit settings are kept.`:'Choose “Colour Copy: match selection…” from the Library to set target photos.';}
+}
+function chkCP(){const ok=ST.cpSrcFile&&ST.cpRefFile;if(ok)cpPreviewBuild();document.getElementById('btn-cp').disabled=!ok;document.getElementById('btn-cp-xmp').disabled=!ok;const lk=document.getElementById('btn-cp-look');if(lk)lk.disabled=!ok;const sb=document.getElementById('btn-cp-sliders');if(sb)sb.disabled=!ok;cpUpdateBatchTargets()}
+// CHR-221: pass the Library selection through to the batch action so changing views cannot
+// silently change which photos receive the Color Copy look. which: 'src' | 'ref'.
+window.chromasmithColourCopySet=function(which,file,targetPaths){
   if(!file)return;
-  if(which==='ref'){ST.cpRefFile=file;setDZ('dz-cp-ref','fn-cp-ref',file.name);}else{ST.cpSrcFile=file;setDZ('dz-cp-src','fn-cp-src',file.name);}
+  if(which==='ref'){ST.cpRefFile=file;setDZ('dz-cp-ref','fn-cp-ref',file.name);}else{ST.cpSrcFile=file;setDZ('dz-cp-src','fn-cp-src',file.name);if(Array.isArray(targetPaths))ST.cpTargetPaths=[...new Set(targetPaths.filter(p=>typeof p==='string'&&p))];}
   chkCP();if(typeof switchTab==='function')switchTab('copy');
-  toast(which==='ref'?'Set as Colour Copy reference':'Set as Colour Copy photo',true);
+  const n=ST.cpTargetPaths.length;toast(which==='ref'?'Set as Colour Copy reference':n?`Set Color Copy photo and ${n} selected target${n===1?'':'s'}`:'Set as Colour Copy photo',true);
 };
 function setDZ(dzId,fnId,name){const dz=document.getElementById(dzId);if(dz)dz.classList.add('loaded');const fn=document.getElementById(fnId);if(fn)fn.textContent=name}
 
