@@ -579,6 +579,12 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - `node test/export_job_notification.mjs` passed in Chromium: the real Library activity UI showed 2/4 progress and a Completed history row; the notification permission flow, completion payload, notification click-to-reveal IPC, and in-app Finder action all passed with zero page/console errors. Tauri permission, `Notification`, and native IPC were mocked; macOS Notification Center delivery/click behavior is not verified.
 - `node test/library_job_history.mjs` passed 5/5 and JS syntax checks plus `cargo metadata --no-deps` passed. `cargo check` resolved and compiled `tauri-plugin-notification` v2.4.0 but Tauri build configuration stops because this clean worktree lacks the ignored `desktop/src-tauri/vendor/sam2/encoder.onnx`; a real native app build/run and macOS permission/notification validation remain outstanding. CHR-183 stays In Progress.
 
+### 2026-10-08 — CHR-183 keep export destination in Recent jobs
+
+- Completed still-export jobs now retain their first successful output path in Recent jobs and offer a persistent Show action that calls the existing `reveal_in_finder` IPC, including after the transient export pill is dismissed. Only the destination path is added to the existing local job-history record.
+- On current `origin/main` (`a23863d2`), the focused Chromium test passed with the real Library jobs panel and mocked reveal IPC: export progress 2/4, Completed history row, exact output path sent on Show, and the existing notification permission/click route. `node test/library_job_history.mjs` passed 5/5; desktop renderer build, JS syntax checks, and Cargo metadata passed.
+- The notification’s actual macOS OS delivery/click remains unverified; the fresh worktree still lacks ignored `desktop/src-tauri/vendor/sam2/encoder.onnx`, preventing a native build here. CHR-183 stays In Progress.
+
 #### Publication verification — CHR-183
 
 - Integration commit `173065aad867b41fce6b6c22c557303d20aaa40f` was pushed by fast-forward after fetching `origin/main`; fresh fetch and `git ls-remote` both returned the same SHA, and `git merge-base --is-ancestor HEAD origin/main` passed. The published tree contains the notification bridge, Tauri permission/dependency, activity-history refresh, and focused test.

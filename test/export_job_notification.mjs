@@ -46,9 +46,12 @@ try {
   });
   assert.match(await page.locator('.lib-act-pop').innerText(), /Rendering photo 3 of 4/);
   assert.match(await page.locator('.lib-act-pop').innerText(), /2 of 4/);
-  await page.evaluate(() => window.libActivityJobDone('export', { jobId: 'export-test-1', label: 'Exporting', outcome: 'completed' }));
+  await page.evaluate(() => window.libActivityJobDone('export', { jobId: 'export-test-1', label: 'Exporting', outcome: 'completed', revealPath: '/Users/tester/Pictures/Exports/portrait.jpg' }));
   await page.waitForSelector('.lib-act-pop [data-job-history-id="export-test-1"]');
   assert.match(await page.locator('.lib-act-pop [data-job-history-id="export-test-1"]').innerText(), /Completed[\s\S]*Exporting[\s\S]*2\/4/);
+  await page.locator('[data-job-reveal-id="export-test-1"]').click();
+  await page.waitForFunction(() => window.__libtestRevealCalls?.length === 1);
+  assert.deepEqual(await page.evaluate(() => window.__libtestRevealCalls[0]), { command: 'reveal_in_finder', args: { path: '/Users/tester/Pictures/Exports/portrait.jpg' } });
 
   // Exercise the exact native notification helper with a browser Notification/IPC mock. The
   // notification delivery and macOS permission sheet are OS-owned and are not simulated here.
