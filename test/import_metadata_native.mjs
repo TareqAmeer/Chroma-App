@@ -18,7 +18,7 @@ try {
     return Array.from(new Uint8Array(await (await new Promise(r => c.toBlob(r,'image/jpeg',.9))).arrayBuffer()));
   }, Array.from(png));
   await writeFile(path.join(card, 'portrait.jpg'), new Uint8Array(jpg));
-  const xmp = '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:custom="urn:chr208:fixture" custom:Keep="unrelated-value"/></rdf:RDF></x:xmpmeta>';
+  const xmp = '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:custom="urn:chr208:fixture" xmlns:exif="http://ns.adobe.com/exif/1.0/" custom:Keep="unrelated-value" exif:GPSLatitude="51,0N"><exif:GPSLongitude>0,1W</exif:GPSLongitude></rdf:Description></rdf:RDF></x:xmpmeta>';
   await writeFile(path.join(card, 'portrait.xmp'), xmp);
   const result = await page.evaluate(async ({card,primary,backup}) => {
     const invoke = window.__TAURI__.core.invoke;
@@ -49,8 +49,10 @@ try {
     window.chromasmithGetOpenedPaths=()=>files;
     fxExportScope='all'; document.getElementById('sel-exp-fmt').value='jpg';document.getElementById('fx-fname').value='{name}{nover}';
     await exportFX();
+    document.getElementById('tg-exp-gps').checked = false;
     document.getElementById('sel-exp-fmt').value='png';
     await exportFX();
+    document.getElementById('tg-exp-gps').checked = true;
     await __TAURI__.core.invoke('set_export_dir',{path:''});
   }, {files:result.first.completed_files,delivery});
   const outputs = (await readdir(delivery)).filter(n=>/\.(jpg|png)$/.test(n));
@@ -58,6 +60,8 @@ try {
   for (const name of outputs) {
     const text=(await readFile(path.join(delivery,name))).toString('utf8');
     for (const value of ['CHR208 Creator','CHR208 Copyright','CHR208 Caption','CHR208 Job','CHR208 Keyword','unrelated-value']) assert.ok(text.includes(value),`export ${name} lost ${value}`);
+    if (name.endsWith('.jpg')) assert.ok(text.includes('GPSLatitude') && text.includes('GPSLongitude'), `GPS keep policy failed for ${name}`);
+    if (name.endsWith('.png')) assert.ok(!text.includes('GPSLatitude') && !text.includes('GPSLongitude'), `GPS removal policy failed for ${name}`);
   }
   const policies = await page.evaluate(() => {
     const xml='<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:exif="http://ns.adobe.com/exif/1.0/" xmlns:custom="urn:test" exif:GPSLatitude="51,0N" custom:Keep="yes"><exif:GPSLongitude>0,1W</exif:GPSLongitude></rdf:Description></rdf:RDF></x:xmpmeta>';
