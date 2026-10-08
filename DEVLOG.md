@@ -957,3 +957,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Fixed `test/library_cull_delete.mjs`: load capture-time fixture data, select the group before entering cull view, confirm the cull-start dialog, and compare the rejected file against capture-time cull order. Chromium verification passes for reject-without-delete, count and confirmation text, cancel, and exactly-one `trash_file` IPC call; `node --check` passes.
 - The browser harness mocks `trash_file`, so this does not validate the Windows Recycle Bin handler or end-to-end Tauri IPC. CHR-267 acceptance criterion 3 remains unchecked pending native-app verification; no issue criterion was newly completed.
+
+#### Publication verification — CHR-267 cull-delete fixture repair
+
+- Test fix `ed8cee4d` is integrated as `527428258f8e32c646c0c73ece941378e3c4ee24` on `origin/main`. Fresh fetch and `git ls-remote` matched the remote tip; ancestry and source-content checks passed. Focused Chromium regression passes on integrated source. CHR-267 remains In Progress; native WebView2/Windows Recycle Bin proof and all other open criteria remain outstanding.
