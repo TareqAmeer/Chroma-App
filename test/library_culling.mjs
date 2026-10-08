@@ -22,8 +22,9 @@ const browser = await chromium.launch({ ...(process.env.PLAYWRIGHT_EXECUTABLE_PA
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [], consoleErrors = []; await page.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch {} }); // first-run welcome card would intercept clicks
-  page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+  page.on('console', (msg) => { if (msg.type() === 'error' && !msg.text().startsWith('set_sidecar failed')) consoleErrors.push(msg.text()); });
   page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => { localStorage.removeItem('chromasmith_lib_cull_auto_advance'); });
   await page.goto(`http://127.0.0.1:${server.address().port}/desktop/dist/index.html?libtest=1&libn=10&libtime=1`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30000 });
   await page.waitForFunction(() => typeof window.__libEnterSurvey === 'function' && typeof window.__libOpenFolder === 'function', { timeout: 30000 });
@@ -67,12 +68,43 @@ try {
   const focusHeight = await page.locator('#lib-survey .lib-survey-cell.cmp-focus').evaluate((el) => el.getBoundingClientRect().height);
   const stripHeight = await page.locator('#lib-survey .lib-survey-cell:not(.cmp-focus)').first().evaluate((el) => el.getBoundingClientRect().height);
   assert.ok(focusHeight > stripHeight * 2, `focused preview (${focusHeight}px) is substantially larger than filmstrip (${stripHeight}px)`);
+  assert.equal(await page.locator('#lib-cull-auto-advance').isChecked(), true, 'auto-advance defaults on to preserve the existing keyboard-first flow');
   await page.click('#lib-cull-fullscreen');
   await page.waitForFunction(() => document.fullscreenElement?.id === 'lib-survey');
   await page.click('#lib-cull-fullscreen');
   await page.waitForFunction(() => !document.fullscreenElement);
   // The fullscreen toggle keeps focus after native activation; return keyboard focus to the survey cell.
   await page.locator('#lib-survey .lib-survey-cell.cmp-focus').focus();
+
+  // The user can pause after each decision; undo still restores cull flags while the survey owns
+  // keyboard focus, and a failed persistence attempt leaves focus on the same photo.
+  await page.locator('#lib-cull-auto-advance').click();
+  assert.equal(await page.evaluate(() => localStorage.getItem('chromasmith_lib_cull_auto_advance')), '0');
+  await page.locator('#lib-survey .lib-survey-cell[data-survey-idx="0"]').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelector('.lib-survey-cell[data-survey-idx="0"] [data-survey-action="pick"]')?.classList.contains('on'));
+  assert.equal((await page.evaluate(() => window.__libSurveyState())).focus, 0, 'disabled auto-advance leaves the decision photo focused');
+  await page.keyboard.press('Control+Z');
+  await page.waitForFunction(() => !document.querySelector('.lib-survey-cell[data-survey-idx="0"] [data-survey-action="pick"]')?.classList.contains('on'));
+  assert.equal((await page.evaluate(() => window.__libSurveyState())).focus, 0, 'undo clears the pick without moving focus');
+  await page.evaluate(() => window.__libtestFailNextSidecarWrite());
+  await page.keyboard.press('Shift+X');
+  await page.waitForTimeout(100);
+  assert.equal((await page.evaluate(() => window.__libSurveyState())).focus, 0, 'failed reject write does not advance');
+  assert.equal(await page.locator('.lib-survey-cell[data-survey-idx="0"] [data-survey-action="reject"]').evaluate((el) => el.classList.contains('on')), false, 'failed reject is rolled back');
+  await page.locator('#lib-cull-auto-advance').click();
+  assert.equal(await page.evaluate(() => localStorage.getItem('chromasmith_lib_cull_auto_advance')), '1');
+  await page.locator('#lib-survey .lib-survey-cell[data-survey-idx="0"]').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelector('.lib-survey-cell[data-survey-idx="0"] [data-survey-action="pick"]')?.classList.contains('on') && window.__libSurveyState().focus === 1);
+  await page.evaluate(() => window.__libtestFailNextSidecarWrite());
+  await page.keyboard.press('Shift+X');
+  await page.waitForTimeout(100);
+  assert.equal((await page.evaluate(() => window.__libSurveyState())).focus, 1, 'failed write with auto-advance on still does not advance');
+  await page.keyboard.press('Shift+X');
+  await page.waitForFunction(() => document.querySelector('.lib-survey-cell[data-survey-idx="1"] [data-survey-action="reject"]')?.classList.contains('on') && window.__libSurveyState().focus === 2);
+  // Return to the beginning so the existing page-boundary assertions cover a full four-photo page.
+  await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft');
 
   let state = await page.evaluate(() => window.__libSurveyState());
   assert.equal(state.paths.length, 4, 'culling keeps the visible batch bounded to four');
@@ -94,10 +126,19 @@ try {
   await page.waitForFunction(() => document.querySelector('.lib-survey-cell[data-survey-idx="0"] [data-survey-action="reject"]')?.classList.contains('on') && window.__libSurveyState().focus === 1);
   await page.keyboard.press('Escape');
   assert.equal(await page.evaluate(() => window.__libSurveyState().active), false, 'Escape exits Culling');
+  assert.equal(await page.evaluate(() => localStorage.getItem('chromasmith_lib_cull_auto_advance')), '1', 'auto-advance preference survives cull exit');
   assert.notEqual(await page.locator('#lib-grid').evaluate((el) => getComputedStyle(el).display), 'none');
+  await page.evaluate((selected) => { selected.forEach((p) => window.__libSelect(p)); window.__libRenderGrid(); }, paths);
+  await page.waitForSelector('#lib-batchbar [data-act="cull"]');
+  await page.locator('#lib-batchbar [data-act="cull"]').click();
+  await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().groupPicker);
+  await page.click('#lib-cull-time-all'); await page.click('#lib-cull-time-start');
+  await page.waitForFunction(() => window.__libSurveyState()?.active && !window.__libSurveyState().groupPicker);
+  assert.equal(await page.locator('#lib-cull-auto-advance').isChecked(), true, 'preference is restored when cull mode is entered again');
+  await page.keyboard.press('Escape');
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
   assert.deepEqual(consoleErrors, [], `console errors: ${consoleErrors.join('; ')}`);
-  console.log(`PASS: capture grouping 60s→2 groups, 15s→${groups.length} groups, unknown-time isolated; focus/filmstrip ${focusHeight}px/${stripHeight}px; fullscreen enter/exit; 10-photo cull in four-photo pages with capture-ordered Pick/Reject advance and clean exit.`);
+  console.log(`PASS: capture grouping 60s→2 groups, 15s→${groups.length} groups, unknown-time isolated; focus/filmstrip ${focusHeight}px/${stripHeight}px; fullscreen enter/exit; auto-advance opt-out/persistence/undo/failure behavior; 10-photo cull in four-photo pages with capture-ordered Pick/Reject advance and clean exit.`);
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));

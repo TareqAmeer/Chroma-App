@@ -62,6 +62,7 @@
   // without a real sidecar on disk.
   let ltVersions = [], ltActive = 0;
   const ltRecipeBatches = new Map(), ltBatchSidecars = new Map(), ltBatchFailures = new Set();
+  let ltFailNextSidecarWrite = false;
   if (LIBTEST) {
     window.libtestRecipeBatchFailNext = indices => { indices.forEach(i => ltBatchFailures.add(i)); };
     window.libtestRecipeBatchInvoke = (command, args) => libtestInvoke(command, args);
@@ -70,6 +71,7 @@
       ltBatchSidecars.set(path, structuredClone(value));
       state.sidecars.set(path, structuredClone(value));
     };
+    window.__libtestFailNextSidecarWrite = () => { ltFailNextSidecarWrite = true; };
   }
   // Undo-reset mock state — mirrors the Rust one-slot buffer (last_reset_recipe/last_reset_edited)
   // so ?libtest=1 can exercise the "Reset edit" / "Undo last reset" context-menu pair without a
@@ -211,6 +213,7 @@
         b.status = 'undone'; return Promise.resolve(structuredClone(b));
       }
       case 'set_sidecar': {
+        if (ltFailNextSidecarWrite) { ltFailNextSidecarWrite = false; return Promise.reject(new Error('Simulated sidecar write failure')); }
         // Mirror the Rust command's undo-buffer-clearing rule: a genuine edit save (non-empty
         // recipe, edited:true) supersedes any pending reset-undo buffer.
         if (ltBatchSidecars.has(A.path)) ltBatchSidecars.set(A.path, { ...ltBatchSidecars.get(A.path), ...A });
@@ -3512,7 +3515,7 @@
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
     window.__libOpenFolder = (path) => openFolder(path);
     window.__libEnterSurvey = enterSurveyMode;
-    window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && (compareState.mode === 'survey' || compareState.mode === 'cull'), mode: compareState.mode, offset: surveyState.cullOffset, cullPaths: surveyState.cullPaths.slice(), groupPicker: surveyState.cullGroupPicker });
+    window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), labels: surveyState.cells.map((cell) => (state.sidecars.get(cell.path) || {}).label || ''), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && (compareState.mode === 'survey' || compareState.mode === 'cull'), mode: compareState.mode, offset: surveyState.cullOffset, cullPaths: surveyState.cullPaths.slice(), groupPicker: surveyState.cullGroupPicker, autoAdvance: cullAutoAdvanceEnabled() });
     window.__libCullTimeGroups = () => surveyState.cullGroups.map((g) => ({ label: cullGroupLabel(g), count: g.paths.length, paths: g.paths.slice(), unknown: !!g.unknown }));
     window.__libOpenImportPanel = (path) => openImportPanel(path);
     window.__libSubfolderPreference = {
@@ -4191,6 +4194,7 @@
         }
       }
     } finally { libMetaUndoing = false; }
+    if (state.viewMode === 'survey') surveyState.cells.forEach((cell, idx) => surveySyncCell(idx));
     if (g[0].kind === 'album_add') { toast(`Undid add to "${g[0].name}"`); return; }
     const n = new Set(g.map((r) => r.path)).size;
     const noun = g[0].kind === 'label' ? 'flag' : g[0].kind === 'keywords' ? 'keyword' : g[0].kind;
@@ -5968,8 +5972,9 @@
     libMetaRecord({ kind: 'label', path, prev: cur.label || '' });
     const updated = { ...cur, label };
     state.sidecars.set(path, updated);
+    let saved = true;
     await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited })
-      .catch((e) => sidecarWriteFailed(path, cur, e));
+      .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
     if (card) {
       card.querySelector('.lib-flags').innerHTML = flagsHtml(label, updated.favorite);
@@ -5991,6 +5996,7 @@
     // ("updates in the sidebar but not the top bar"). Fixing it here once covers every entry
     // point instead of patching each call site.
     if (path === state.openedPath && typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns();
+    return saved;
   }
   // Mirrors setLabel() above but for the favorite heart — same optimistic-update +
   // sidecar-write + rollback pattern, kept separate since favorite is independent of
@@ -8551,7 +8557,7 @@
       : surveyHeading(n);
     const isCull = compareState.mode === 'cull';
     host.classList.toggle('lib-cull-presentation', isCull);
-    host.innerHTML = `<div id="lib-compare-bar"><span class="survey-count">${heading}</span><span class="survey-focus-note" style="margin-left:auto;color:var(--acc)"></span>${isCull ? '<button type="button" id="lib-cull-fullscreen" class="lib-btn" title="Toggle full screen cull view">Full screen</button><button type="button" id="lib-cull-del" class="lib-btn" title="Move every photo rejected in this cull to the system Trash (asks first)">Delete rejected (0)</button>' : ''}</div>
+    host.innerHTML = `<div id="lib-compare-bar"><span class="survey-count">${heading}</span><span class="survey-focus-note" style="margin-left:auto;color:var(--acc)"></span>${isCull ? `<label class="lib-cull-auto-advance" title="Move to the next photo after a successful pick or reject"><input type="checkbox" id="lib-cull-auto-advance"${cullAutoAdvanceEnabled() ? ' checked' : ''}> Auto-advance</label><button type="button" id="lib-cull-fullscreen" class="lib-btn" title="Toggle full screen cull view">Full screen</button><button type="button" id="lib-cull-del" class="lib-btn" title="Move every photo rejected in this cull to the system Trash (asks first)">Delete rejected (0)</button>` : ''}</div>
       <div id="lib-survey-grid">${surveyState.cells.map(surveyCellHtml).join('')}</div>`;
     host.querySelectorAll('.lib-survey-cell').forEach((el) => {
       el.addEventListener('focus', () => { surveyState.focus = Number(el.dataset.surveyIdx); surveySyncFocus(); });
@@ -8569,12 +8575,18 @@
       } else {
         const label = button.dataset.surveyAction === 'pick' ? 'Green' : 'Red';
         const current = state.sidecars.get(cell.path) || { label: '' };
-        await setLabel(cell.path, current.label === label ? '' : label);
+        const nextLabel = current.label === label ? '' : label;
+        if (compareState.mode === 'cull' && idx === surveyState.focus && nextLabel && cullAutoAdvanceEnabled()) await cullAdvance(nextLabel, cell.path);
+        else await setLabel(cell.path, nextLabel);
       }
       surveySyncCell(idx);
     }));
     const delBtn = host.querySelector('#lib-cull-del');
     if (delBtn) delBtn.onclick = () => cullDeleteRejected();
+    const advanceToggle = host.querySelector('#lib-cull-auto-advance');
+    if (advanceToggle) advanceToggle.onchange = () => {
+      try { localStorage.setItem('chromasmith_lib_cull_auto_advance', advanceToggle.checked ? '1' : '0'); } catch (e) {}
+    };
     const fullscreenBtn = host.querySelector('#lib-cull-fullscreen');
     if (fullscreenBtn) fullscreenBtn.onclick = async () => {
       try {
@@ -8587,6 +8599,9 @@
     surveyCellsRender();
     surveySyncFocus();
     cullSyncDeleteBtn();
+  }
+  function cullAutoAdvanceEnabled() {
+    try { return localStorage.getItem('chromasmith_lib_cull_auto_advance') !== '0'; } catch (e) { return true; }
   }
 
   function surveySyncCells() {
@@ -9071,10 +9086,13 @@
     if (surveyState.cullPaths.length < 1) exitCompareMode(); else await showCullPage(keepFocusAt);
     return gone;
   }
-  async function cullAdvance(label = 'Green') {
-    const path = surveyTargetPath(); if (!path) return;
+  async function cullAdvance(label = 'Green', targetPath = surveyTargetPath()) {
+    const path = targetPath; if (!path) return;
     const currentOffset = surveyState.cullOffset, currentFocus = surveyState.focus;
-    await setLabel(path, label); surveySyncPath(path);
+    const saved = await setLabel(path, label); surveySyncPath(path);
+    // setLabel rolls back the optimistic state when sidecar persistence fails. Do not advance
+    // past an action that was not saved, or when the user opted into deliberate review pacing.
+    if (!saved || !cullAutoAdvanceEnabled() || (state.sidecars.get(path) || {}).label !== label) return;
     if (compareState.mode !== 'cull' || state.viewMode !== 'survey') return;
     const next = currentOffset + currentFocus + 1;
     if (next >= surveyState.cullPaths.length) {
@@ -9470,6 +9488,11 @@
       e.preventDefault();
       selectAllCatalogEntries();
       return;
+    }
+    // Culling labels use the same undo history as grid actions. Keep undo reachable while the
+    // survey owns arrow/key focus instead of silently disabling the ticket's undo contract.
+    if (state.source !== 'lr' && state.viewMode === 'survey' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
+      e.preventDefault(); libUndoLast(); return;
     }
     // Copy/Paste/Reset/Undo/Export/Duplicate — keyboard shortcuts backing the context menu's
     // grouped "Versions & edit"/"File" items (wireframe review item 27), borrowing Lightroom
