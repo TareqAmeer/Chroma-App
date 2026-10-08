@@ -7283,7 +7283,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008G';
+const BUILD='1.1008H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14742,16 +14742,18 @@ function tourBind(){
   ov.querySelector('[data-tour-action="advanced"]').onclick=()=>{close();csShowAdvancedTabs(true);};
   ov.querySelector('[data-tour-action="close"]').onclick=()=>{close();csFirstEditSkip();};
 }
-function csTourTrySample(){
+async function csTourTrySample(){
   const ov=document.getElementById('cs-modal-ov');if(ov)ov.remove();
-  (async()=>{
     try{
       const url=new URL('vendor/splash/dog-sitting.webp',document.baseURI);
       const response=await fetch(url);if(!response.ok)throw new Error(`Sample photo could not be loaded (${response.status})`);
       const blob=await response.blob();const sample=new File([blob],'Chromasmith sample.webp',{type:blob.type||'image/webp',lastModified:0});
       const loaded=await loadFXImages([sample]);if(!loaded)throw new Error('The sample photo did not open.');
+      // The welcome can be opened over the full Gallery. Reveal the loaded photo
+      // through its public toggle so Gallery state and layout stay in sync.
+      if(window.chromasmithLibraryIsOpen?.()&&typeof window.chromasmithToggleLibrary==='function')await window.chromasmithToggleLibrary();
+      switchTab('fx');
     }catch(e){if(typeof toast==='function')toast(`Could not open the sample photo — ${e.message||e}`,false);}
-  })();
 }
 async function csTourBrowseFolder(){
   const ov=document.getElementById('cs-modal-ov');if(ov)ov.remove();
