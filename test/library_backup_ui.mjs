@@ -47,12 +47,28 @@ try {
   await page.locator('#lib-view-menu-btn').click();
   const restore = page.locator('#lib-backup-restore');
   await restore.waitFor({ state: 'visible' });
-  await page.evaluate(() => { window.__libtestDialogResults = ['/test/Backup', '/test/Restores']; });
+  const restoreConfirmations = [];
+  page.on('dialog', async (dialog) => {
+    restoreConfirmations.push(dialog.message());
+    if (restoreConfirmations.length === 1) await dialog.dismiss();
+    else await dialog.accept();
+  });
+  await page.evaluate(() => { window.__libtestDialogResults = ['/test/Backup', '/test/Backup', '/test/Restores']; });
+  await restore.click();
+  await page.waitForFunction(() => (window.__libtestCalls || []).filter(([cmd]) => cmd === 'library_backup_verify').length === 1);
+  assert.equal((await page.evaluate(() => window.__libtestCalls.filter(([cmd]) => cmd === 'library_backup_restore').length)), 0, 'canceling the preflight must not write a restore copy');
+  assert.match(restoreConfirmations[0], /3\nEdit sidecars: 2 included; 1 unavailable/);
+  assert.match(restoreConfirmations[0], /\/test\/Photos \(test-volume\)/);
+  assert.match(restoreConfirmations[0], /Original photo\/video files and regenerated caches are not included/);
+
+  await page.locator('#lib-view-menu-btn').click();
+  await restore.waitFor({ state: 'visible' });
   await restore.click();
   await page.waitForFunction(() => (window.__libtestCalls || []).some(([cmd]) => cmd === 'library_backup_restore'));
   const restoreCalls = await page.evaluate(() => window.__libtestCalls.filter(([cmd]) => cmd === 'library_backup_verify' || cmd === 'library_backup_restore'));
-  assert.deepEqual(restoreCalls.map(([cmd]) => cmd), ['library_backup_verify', 'library_backup_restore'], 'restore verifies the source before writing a separate copy');
-  assert.match(restoreCalls[1][1].destination, /^\/test\/Restores\/Chromasmith Restored Library /);
+  assert.deepEqual(restoreCalls.map(([cmd]) => cmd), ['library_backup_verify', 'library_backup_verify', 'library_backup_restore'], 'restore verifies before preflight and again before writing a separate copy');
+  assert.equal(restoreConfirmations.length, 2, 'each restore attempt shows the verification summary');
+  assert.match(restoreCalls[2][1].destination, /^\/test\/Restores\/Chromasmith Restored Library /);
   assert.deepEqual(errors, [], 'backup actions produce no uncaught page errors');
     console.log(`PASS (${theme} theme, 1366x768): backup creation, credential exclusion, verify-before-restore, separate destination, no uncaught UI errors`);
     await page.close();

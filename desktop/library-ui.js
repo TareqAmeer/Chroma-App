@@ -769,7 +769,7 @@
           window.__libtestLastBackup = result;
           return Promise.resolve(result);
         }
-        if (cmd === 'library_backup_verify') return Promise.resolve({ photoCount: 3, sidecarsIncluded: 2, sidecarsMissing: 1, roots: [{ sourcePath: '/test/Photos' }] });
+        if (cmd === 'library_backup_verify') return Promise.resolve({ photoCount: 3, sidecarsIncluded: 2, sidecarsMissing: 1, roots: [{ sourcePath: '/test/Photos', volumeUuid: 'test-volume' }] });
         return Promise.resolve({ path: A.destination, createdUnixSecs: 1700000000, photoCount: 3, sidecarsIncluded: 2, sidecarsMissing: 1, verified: true });
       case 'catalog_photo_faces': return Promise.resolve([{ x0: 0.3, y0: 0.2, x1: 0.6, y1: 0.6, score: 0.97 }]);
       case 'diag_native_state': return Promise.resolve({ binary_path: '/libtest', binary_mtime: null, thumb_generated_session: 0, thumb_remaining: 0 });
@@ -10049,6 +10049,22 @@
       const source = Array.isArray(selected) ? selected[0] : selected;
       if (!source) return;
       const manifest = await invoke('library_backup_verify', { path: source });
+      const roots = Array.isArray(manifest.roots) && manifest.roots.length
+        ? manifest.roots.map((root) => `• ${root.sourcePath} (${root.volumeUuid})`).join('\n')
+        : '• No source folders were recorded';
+      const preflight = [
+        'This backup passed verification.',
+        '',
+        `Catalog photos: ${manifest.photoCount}`,
+        `Edit sidecars: ${manifest.sidecarsIncluded} included; ${manifest.sidecarsMissing} unavailable when backed up`,
+        'Original folders recorded in the backup:',
+        roots,
+        '',
+        'Original photo/video files and regenerated caches are not included. The next step creates a verified copy in a separate folder; it will not replace or activate the current library.',
+        '',
+        'Continue to choose a restore destination?'
+      ].join('\n');
+      if (!window.confirm(preflight)) return;
       const parentChoice = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Choose a separate folder for the verified restore' } });
       const parent = Array.isArray(parentChoice) ? parentChoice[0] : parentChoice;
       if (!parent) return;
