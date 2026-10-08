@@ -147,6 +147,8 @@ async function main() {
       // Exercise the real shortcut registry -> pointer-paint path, not just mskPaintAt's override.
       mskPaintMode = true; mskBrushFeather=42;mskBrushDensity=37;m.px.fill(200);
       const paintCanvas=document.getElementById('fx-canvas'),paintRect=paintCanvas.getBoundingClientRect();
+      // Synthetic PointerEvents are not active browser pointers; skip native capture in this event-routing test.
+      const realSetPointerCapture=Element.prototype.setPointerCapture;Element.prototype.setPointerCapture=function(){};
       const pointer=(type,altKey=false,pointerType='mouse')=>paintCanvas.dispatchEvent(new PointerEvent(type,{bubbles:true,clientX:paintRect.left+paintRect.width/2,clientY:paintRect.top+paintRect.height/2,pointerId:71,pointerType,buttons:type==='pointerup'?0:1,altKey}));
       pointer('pointermove');
       csShortcutSet('editor.mask-erase','Shift');
@@ -169,6 +171,32 @@ async function main() {
       m.px.fill(200);mskPaintErase=true;mskRebuild();
       const rebuiltEraseButton=document.getElementById('btn-msk-erase');
       ck('CHR-275 rebuilt erase button retains current pressed state',rebuiltEraseButton.getAttribute('aria-pressed')==='true');
+      // Every AI/raster mask origin uses the same brush-type pointer path.
+      const eraseOrigins=['paint','ai','sky','skin','coat','faceauto'];
+      const originalMask=fxState.masks[0];mskPaintMode=true;mskPaintErase=false;csShortcutSet('editor.mask-erase','Shift');
+      for(const origin of eraseOrigins){
+        const trial={...originalMask,origin,type:'brush',px:new Uint8ClampedArray(originalMask.mtW*originalMask.mtH).fill(200),ai:origin!=='paint'};
+        fxState.masks[0]=trial;mskSel=0;fxHistory=[];fxHistIdx=-1;_fxHistLocked=false;fxHistoryPush();
+        document.dispatchEvent(new KeyboardEvent('keydown',{key:'Shift',shiftKey:true,bubbles:true}));
+        pointer('pointerdown');pointer('pointerup');
+        document.dispatchEvent(new KeyboardEvent('keyup',{key:'Shift',bubbles:true}));
+        ck('CHR-275 '+origin+' brush mask erases through the shared pointer path',trial.px.some(v=>v<200));
+      }
+      fxState.masks[0]=originalMask;mskPaintMode=false;mskPaintErase=false;mskRebuild();
+      // The rebound erase modifier is inert outside brush-paint/heal modes, leaving Alt's
+      // negative AI-scribble and WB eyedropper gestures available.
+      csShortcutSet('editor.mask-erase','Alt');mskAiTapMode=true;originalMask.origin='ai';originalMask.ai=true;originalMask.aiPoints=[];
+      mskPaintMode=false;mskBrushEraseHeld=false;window.samRunPoints=()=>{};
+      document.dispatchEvent(new KeyboardEvent('keydown',{key:'Alt',altKey:true,bubbles:true}));
+      pointer('pointerdown',true);pointer('pointerup',true);
+      document.dispatchEvent(new KeyboardEvent('keyup',{key:'Alt',bubbles:true}));
+      ck('CHR-275 Alt AI-exclusion scribble stays negative outside Paint',originalMask.aiPoints.some(p=>p.positive===false)&&!mskBrushEraseHeld);
+      mskAiTapToggle(false);wbEyedropper();
+      document.dispatchEvent(new KeyboardEvent('keydown',{key:'Alt',altKey:true,bubbles:true}));
+      paintCanvas.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:paintRect.left+paintRect.width/2,clientY:paintRect.top+paintRect.height/2,altKey:true}));
+      document.dispatchEvent(new KeyboardEvent('keyup',{key:'Alt',bubbles:true}));
+      ck('CHR-275 Alt white-balance sample remains available outside Paint',!_wbEyedropperActive&&!mskBrushEraseHeld);
+      csShortcutSet('editor.mask-erase',null);
       mskPaintErase=false;mskRebuild();
       m.px.fill(200);pointer('pointerdown',true);pointer('pointerup',true);
       ck('CHR-275 old Alt binding does not erase after rebinding',!m.px.some(v=>v<200));
@@ -268,7 +296,7 @@ async function main() {
       ck('CHR-275 second undo removes the first stroke',same(untouched,fxState.masks[0].px));
       await fxRedo();await fxRedo();
       ck('CHR-275 two redos restore both separate strokes',same(secondStroke,fxState.masks[0].px));
-      mskPaintStop();mskPaintErase=false;mskRebuild();
+      mskPaintStop();mskPaintErase=false;mskRebuild();Element.prototype.setPointerCapture=realSetPointerCapture;
 
       // ── 6. mskCopyToAll gives each photo its OWN raster ──
       if (fxImages.length === 1) {

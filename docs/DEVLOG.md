@@ -204,3 +204,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Extended `test/mask_raster.mjs` to drive two real brush pointer strokes through the canvas handler and verify each creates a separate history step; undo restores the first stroke, a second undo restores the blank raster, and two redos restore both strokes.
 - Focused Chrome raster suite passed 53/53; `node --check` and `git diff --check` passed. CHR-275 AC5 remains open because Alt-conflict behavior in AI scribble and color sampling still needs separate verification. Issue remains In Progress.
+
+### 2026-10-08 — CHR-275 mask coverage and Alt isolation
+
+- Expanded `test/mask_raster.mjs` to exercise erase through paint, AI, sky, skin, coat and face-auto raster-mask origins, preserve Alt-negative AI scribbles and WB sampling outside Paint, and verify two independent undoable pointer strokes.
+- Focused Chrome validation passed `test/mask_raster.mjs` 61/61 and `test/heal_erase.mjs` 7/7; test syntax and whitespace checks pass. AC4/AC5 have browser evidence; AC2 remains open for physical Apple Pencil/touch validation. CHR-275 stays In Progress.
