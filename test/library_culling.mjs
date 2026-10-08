@@ -25,7 +25,7 @@ try {
   page.on('console', (msg) => { if (msg.type() === 'error' && !msg.text().startsWith('set_sidecar failed')) consoleErrors.push(msg.text()); });
   page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript(() => { localStorage.removeItem('chromasmith_lib_cull_auto_advance'); });
-  await page.goto(`http://127.0.0.1:${server.address().port}/desktop/dist/index.html?libtest=1&libn=10&libtime=1`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await page.goto(`http://127.0.0.1:${server.address().port}/desktop/dist/index.html?libtest=1&libn=10&libtime=1&libdupes=1`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30000 });
   await page.waitForFunction(() => typeof window.__libEnterSurvey === 'function' && typeof window.__libOpenFolder === 'function', { timeout: 30000 });
   await page.evaluate(() => document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); }));
@@ -46,7 +46,7 @@ try {
   assert.equal((await page.evaluate(() => window.__libCullTimeGroups())).length, 2, '60-second threshold chains adjacent captures; missing time stays separate');
   await page.selectOption('#lib-cull-time-gap', '15');
   let groups = await page.evaluate(() => window.__libCullTimeGroups());
-  assert.equal(groups.length, 5, '15-second threshold splits the four capture bursts and keeps the unknown-time group');
+  assert.equal(groups.length, 6, '15-second threshold splits five capture bursts and keeps the unknown-time group');
   assert.equal(groups.at(-1).unknown, true, 'unknown capture times form their own final group');
   const firstGroup = page.locator('details[data-time-group="0"]');
   assert.equal(await firstGroup.evaluate((el) => el.open), false, 'capture groups start collapsed');
@@ -60,13 +60,18 @@ try {
   groups = await page.evaluate(() => window.__libCullTimeGroups());
   await page.click('#lib-cull-time-all');
   assert.equal(await page.textContent('#lib-cull-time-count'), '10 photos selected · 3 suggestions');
+  await page.click('#lib-cull-dupes');
+  await page.waitForFunction(() => document.querySelector('#lib-cull-dupes')?.textContent.includes('Found 1 near-duplicate group'), { timeout: 30000 });
+  groups = await page.evaluate(() => window.__libCullTimeGroups());
+  const matched = groups.find((group) => group.duplicate && group.paths.some((p) => /IMG_1001\./.test(p)) && group.paths.some((p) => /IMG_1002\./.test(p)));
+  assert.ok(matched, 'near-duplicate hashes join photos from separate capture-time bursts');
   await firstGroup.locator('summary').click();
   let recommendations = await page.evaluate(() => window.__libCullRecommendations());
-  assert.equal(recommendations[0].path, groups[0].paths.at(-1), 'highest catalog focus score is suggested for the first burst');
-  assert.match(recommendations[0].reason, /Highest available focus score/, 'the suggestion explains its ranking');
+  assert.match(recommendations[0].path, /IMG_1003\.RW2$/, 'highest catalog focus score is suggested across the joined duplicate/burst group');
+  assert.match(recommendations[0].reason, /Highest available focus score.*near-duplicate cluster/, 'the suggestion explains focus ranking and duplicate evidence');
   await page.locator('[data-best-prev="0"]').click();
   recommendations = await page.evaluate(() => window.__libCullRecommendations());
-  assert.equal(recommendations[0].path, groups[0].paths.at(-2), 'reviewer can override the suggested keeper');
+  assert.match(recommendations[0].path, /IMG_1001\.RW2$/, 'reviewer can override the suggested keeper');
   assert.equal(recommendations[0].manual, true, 'override is recorded as manual');
   assert.match(recommendations[0].reason, /Manual override/, 'override reason is shown');
   await page.click('#lib-cull-time-start');
@@ -82,7 +87,7 @@ try {
   await page.click('#fx-confirm-ok');
   await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().mode === 'cull' && !window.__libSurveyState().groupPicker, { timeout: 45000 });
   const orderedCullPaths = await page.evaluate(() => window.__libSurveyState().cullPaths);
-  assert.equal(orderedCullPaths[0], groups[0].paths.at(-2), 'confirmed culling begins with the manually preferred frame');
+  assert.match(orderedCullPaths[0], /IMG_1001\.RW2$/, 'confirmed culling begins with the manually preferred frame');
   await page.waitForFunction(() => document.querySelectorAll('#lib-survey .lib-survey-cell').length === 4, { timeout: 45000 });
   assert.equal(await page.locator('#lib-survey .lib-survey-cell.cmp-focus').count(), 1, 'cull view has one prominent focused preview');
   assert.equal(await page.locator('#lib-survey .lib-survey-cell:not(.cmp-focus)').count(), 3, 'the remaining loaded photos form the filmstrip');
@@ -161,7 +166,7 @@ try {
   await page.keyboard.press('Escape');
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
   assert.deepEqual(consoleErrors, [], `console errors: ${consoleErrors.join('; ')}`);
-  console.log(`PASS: capture grouping 60s→2 groups, 15s→${groups.length} groups, unknown-time isolated; focus/filmstrip ${focusHeight}px/${stripHeight}px; fullscreen enter/exit; auto-advance opt-out/persistence/undo/failure behavior; 10-photo cull in four-photo pages with capture-ordered Pick/Reject advance and clean exit.`);
+  console.log(`PASS: capture grouping 60s→2 and 15s→6 groups; mocked dHash joins two captures 120s apart (6→${groups.length}); focus-ranked reason/override; focus/filmstrip ${focusHeight}px/${stripHeight}px; fullscreen, auto-advance/undo, and 10-photo cull pass.`);
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
