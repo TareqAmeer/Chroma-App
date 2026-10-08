@@ -1013,3 +1013,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-208 sidecar metadata export
 
 - Feature `f7e25397` is published as `8af4b0654bfad103f6a5086ae18bf0364ea89af6`; fresh fetch and `git ls-remote origin refs/heads/main` matched, and ancestry verification passed. Integrated-source native fixture passed again with four metadata-bearing JPEG/PNG outputs, exact backup XMP, and two duplicate skips. CHR-208 remains In Progress; open criteria are not checked from this bounded fixture.
+
+### 2026-10-08 — CHR-201/CHR-202 real native failure/retry acceptance
+
+- Added `test/export_recovery_native.mjs`: actual WebView2 render and Rust filesystem writes for 20 photos x Archive/Proof/Social recipes. A directory at one explicitly-overwrite output filename causes a real write failure; 59 files succeed, the result persists after the completion pill expires, and retry after removing only that directory produces 60 files with exactly 20 per destination.
+- SHA-256 checks prove all 59 successful outputs remain byte-identical after failed-only retry; native suffix/skip preserve an existing sentinel, prior destination restoration is confirmed by a subsequent real write, and `reveal_in_finder` succeeds on the recovered file. Two focused native runs passed. No export IPC was mocked; the native validation build excluded unrelated AI resource bundles.
+- CHR-202 AC5 is now demonstrated; CHR-201 native recovery/path command blocker is resolved by this bounded test. Keep both In Review, never Done. Files: `test/export_recovery_native.mjs`, `DEVLOG.md`; no product behavior changed in this slice.
