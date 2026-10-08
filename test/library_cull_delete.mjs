@@ -55,6 +55,8 @@ try {
   await page.waitForSelector('#lib-batchbar [data-act="cull"]');
   await page.locator('#lib-batchbar [data-act="cull"]').click();
   await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().mode === 'cull', { timeout: 45000 });
+  await page.locator('#lib-cull-time-start').click(); // confirm the selected capture-time groups before opening cull mode
+  await page.waitForSelector('#lib-cull-del');
   assert.equal(await page.locator('#lib-cull-del').textContent(), 'Delete rejected (0)');
   assert.equal(await page.locator('#lib-cull-del').isDisabled(), true, 'nothing rejected: button disabled');
 
@@ -75,6 +77,8 @@ try {
   await page.waitForSelector('#lib-batchbar [data-act="cull"]');
   await page.locator('#lib-batchbar [data-act="cull"]').click();
   await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().mode === 'cull', { timeout: 45000 });
+  await page.locator('#lib-cull-time-start').click();
+  await page.waitForSelector('#lib-cull-del');
   assert.equal(await page.locator('#lib-cull-del').textContent(), 'Delete rejected (1)');
   await page.locator('#lib-cull-del').click();
   await modalButton(/^Move 1 to Trash$/).click();
