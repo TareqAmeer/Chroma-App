@@ -1110,3 +1110,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-08 — CHR-275 brush-settings publication verification
 - Feature babb7a0e published as e32a14ac9a9a9410d769d7207abc61b9ebf37b1a; remote main matched after push. Integrated native raster suite 43/43 and affected-control UI check pass. Conflicts were limited to append-only DEVLOG and BUILD; newer CHR-208 behavior was preserved.
 - CHR-275 AC1 checked from mouse/native evidence; device, Heal/Spot and complete modifier conflict criteria remain open. Updated runtime frontend retains native renamed-import fix and full AI resources.
+
+### 2026-10-08 — CHR-275 Heal/Clone erase targeting
+- Added temporary rebound-modifier and on-screen repair erase. Source-space gesture intersections remove stored Heal/Clone circles and strokes, retain untouched operations, cancel on blur, and commit one undo snapshot per gesture; donor selection remains available outside erase.
+- Files: chromasmith-22.html, test/heal_erase.mjs. Focused Chrome and native WebView2 tests pass 7/7: target/stroke geometry, multi-repair gesture, one undo, rebound Shift, old Alt paint, blur cancellation, rotated/cropped target. Native harness waits for the actual visible editor pointer target after Gallery startup. HTML validity and whitespace pass.
+- CHR-275 remains In Progress: physical Pencil/touch and exhaustive mask/context conflict verification remain open. This validates Heal/Clone behavior without inferring those broader criteria.

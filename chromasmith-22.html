@@ -4557,6 +4557,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
              design, not a layout change — ⌘Z still undoes a spot in the meantime. -->
         <div class="btn-row" style="margin-top:2px">
           <button class="btn fx-btn-primary" id="btn-heal-paint" onclick="healToggle()" style="flex:1">Retouch</button>
+          <button class="btn bgh" id="btn-heal-erase" onclick="healEraseToggle()" aria-pressed="false" title="Erase intersected repair operations; hold the brush erase shortcut for temporary erase">Erase repairs</button>
         </div>
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="heal-count">No spots yet — click a blemish to remove it, or drag to brush an area. Shift-click first to pick the source yourself.</div>
         <div id="heal-list" role="listbox" aria-label="Retouch spots" style="display:flex;flex-direction:column;gap:2px;margin-top:4px;max-height:132px;overflow:auto"></div>
@@ -7283,7 +7284,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008P';
+const BUILD='1.1008Q';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -23445,7 +23446,11 @@ function geomResetRotate(){const it=curItem();if(!it||!it.geom)return;it.geom.ro
 function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeof hapt==='function')hapt();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss){ss.value=0;fxPaintSlider(ss);}document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset','info');}
 
 // ── retouch interaction ───────────────────────────────────────────────────────────────────
-let healMode=false,_healShiftFrom=null;
+let healMode=false,healEraseMode=false,healEraseHeld=false,_healShiftFrom=null;
+function healEraseActive(){return healMode&&(healEraseMode||healEraseHeld);}
+function healEraseSync(){const b=document.getElementById('btn-heal-erase');if(b){b.classList.toggle('on',healEraseActive());b.setAttribute('aria-pressed',String(healEraseActive()));}if(healMode&&FX.cv)FX.cv.style.cursor=healEraseActive()?'cell':'crosshair';}
+function healEraseToggle(){healEraseMode=!healEraseMode;healEraseSync();}
+function healEraseSetHeld(on){healEraseHeld=!!on;healEraseSync();}
 let healSel=null,_healDrag=null,_healDraw=null,healDust=false,_healCtlRaf=0,_healCtlDirty=false;
 function healOps(){const it=curItem();if(!it)return null;const ops=it.heal||(it.heal=[]);for(const o of ops)if(!o.id)o.id=healNewId();return ops;}
 function healNewId(){return 'h'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
@@ -23540,12 +23545,31 @@ function healSyncUI(){
 function healToggle(){
   healMode=!healMode;
   const b=document.getElementById('btn-heal-paint');if(b)b.classList.toggle('on',healMode);
+  if(!healMode)healEraseHeld=false;
   if(FX.cv)FX.cv.style.cursor=healMode?'crosshair':'';
+  healEraseSync();
   // Retouch and mask painting both want the pointer; arming one disarms the other rather than
   // letting a click do two things at once.
   if(healMode&&typeof mskPaintStop==='function')mskPaintStop();
   healSyncUI();
   toast(healMode?'Retouch on — click a spot to remove it':'Retouch off',true);
+}
+// Remove stored repair operations, never subtract repaired image pixels. Distances
+// are measured in source pixels so crop/rotation and non-square photos stay correct.
+function healEraseIntersected(a,b){
+  const item=curItem(),ops=healOps();if(!item||!ops)return [];
+  const W=item.img.naturalWidth||item.img.width,H=item.img.naturalHeight||item.img.height,M=Math.max(W,H);
+  const point=p=>[p.nx*W,p.ny*H],A=point(a),B=point(b);
+  const distance=(p,u,v)=>{const dx=v[0]-u[0],dy=v[1]-u[1],d=dx*dx+dy*dy,t=d?Math.max(0,Math.min(1,((p[0]-u[0])*dx+(p[1]-u[1])*dy)/d)):0;return Math.hypot(p[0]-u[0]-t*dx,p[1]-u[1]-t*dy);};
+  const near=(c,d,r)=>{
+    const cross=(x,y)=>x[0]*y[1]-x[1]*y[0],ab=[B[0]-A[0],B[1]-A[1]],cd=[d[0]-c[0],d[1]-c[1]],ac=[c[0]-A[0],c[1]-A[1]],den=cross(ab,cd);
+    if(Math.abs(den)>1e-9){const t=cross(ac,cd)/den,u=cross(ac,ab)/den;if(t>=0&&t<=1&&u>=0&&u<=1)return true;}
+    return Math.min(distance(A,c,d),distance(B,c,d),distance(c,A,B),distance(d,A,B))<=r;
+  };
+  const brush=Math.max(.001,(parseFloat(document.getElementById('sl-heal-size')?.value)||2)/100)*M;
+  return ops.filter(o=>{const pts=o.pts&&o.pts.length?o.pts:[[o.x,o.y]],radius=brush+o.r*M;
+    for(let i=0;i<pts.length;i++){const q=pts[i],r=pts[Math.min(i+1,pts.length-1)];if(near([q[0]*W,q[1]*H],[r[0]*W,r[1]*H],radius))return true;}return false;
+  }).map(o=>o.id);
 }
 function healAdd(nx,ny,src,pts){
   const ops=healOps();if(!ops)return;
@@ -23745,11 +23769,32 @@ let _healDustSeq=0;
   const cv=document.getElementById('fx-canvas');if(!cv)return;
   const svg=document.getElementById('fx-heal-overlay');
   const isEditable=t=>t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  let eraseGesture=false;
+  const startErase=e=>{
+    if(eraseGesture)return;
+    const first=_healPointToSource(e);if(!first)return;
+    const item=curItem(),hits=new Set(healEraseIntersected(first,first));let last=first;
+    eraseGesture=true;e.preventDefault();e.stopPropagation();
+    const move=ev=>{if(ev.pointerId!==e.pointerId||!healEraseActive()||curItem()!==item)return;const p=_healPointToSource(ev);if(!p)return;for(const id of healEraseIntersected(last,p))hits.add(id);last=p;};
+    const cancel=()=>up({type:'pointercancel'});
+    const visibility=()=>{if(document.visibilityState==='hidden')cancel();};
+    const up=ev=>{
+      if(ev.type!=='pointercancel'&&ev.pointerId!==e.pointerId)return;
+      if(ev.type==='pointerup')move(ev);
+      eraseGesture=false;
+      window.removeEventListener('pointermove',move,true);window.removeEventListener('pointerup',up,true);window.removeEventListener('pointercancel',up,true);window.removeEventListener('blur',cancel);document.removeEventListener('visibilitychange',visibility);
+      if(ev.type==='pointercancel'||!healMode||curItem()!==item||!hits.size)return;
+      item.heal=item.heal.filter(o=>!hits.has(o.id));if(hits.has(healSel))healSel=null;
+      updateWork();renderPreview();healSyncUI();fxHistoryPush();
+    };
+    window.addEventListener('pointermove',move,true);window.addEventListener('pointerup',up,true);window.addEventListener('pointercancel',up,true);window.addEventListener('blur',cancel);document.addEventListener('visibilitychange',visibility);
+  };
   // Draw: click = spot, drag = brush stroke; Shift-click picks the source for the next spot.
   fxCanvasOn('pointerdown',e=>{
     if(!healMode)return;
     e.preventDefault();e.stopPropagation();
     const p=_healPointToSource(e);if(!p)return;
+    if(healEraseActive()){startErase(e);return;}
     if(e.shiftKey){_healShiftFrom=p;toast('Source set — now click the spot to repair',true);return;}
     _healDraw={pts:[p],x0:e.clientX,y0:e.clientY,moved:false,id:e.pointerId};
     const mv=ev=>{
@@ -23771,6 +23816,7 @@ let _healDustSeq=0;
   },true);
   // Select / drag: a spot's outline selects it and drags the destination; the blue handle drags the source.
   if(svg)svg.addEventListener('pointerdown',e=>{
+    if(healEraseActive()){startErase(e);return;}
     const el=e.target.closest&&e.target.closest('[data-heal-i],[data-heal-src],[data-heal-dst]');if(!el)return;
     e.preventDefault();e.stopPropagation();
     const id=el.dataset.healI||el.dataset.healSrc||el.dataset.healDst,mode=el.dataset.healSrc?'src':'dst';
@@ -29282,7 +29328,7 @@ document.addEventListener('keyup',e=>{
 });
 // Shortcut callbacks stay thin adapters to existing application actions; registry dispatch
 // handles modifiers, contexts, persistence and text-entry protection in one place.
-csShortcutRegister('editor.mask-erase',e=>{if(e.phase==='start'){if(!mskPaintMode||!fxState.masks[mskSel]||fxState.masks[mskSel].type!=='brush')return false;window.chromasmithBrushEraseHeld(true);}else window.chromasmithBrushEraseHeld(false);});
+csShortcutRegister('editor.mask-erase',e=>{if(e.phase==='start'){if(healMode){healEraseSetHeld(true);return;}if(!mskPaintMode||!fxState.masks[mskSel]||fxState.masks[mskSel].type!=='brush')return false;window.chromasmithBrushEraseHeld(true);}else{window.chromasmithBrushEraseHeld(false);healEraseSetHeld(false);}});
 csShortcutRegister('editor.undo',()=>fxUndo());
 csShortcutRegister('editor.redo',()=>fxRedo());
 csShortcutRegister('editor.open',()=>typeof fxPickPhotos==='function'?fxPickPhotos():false);
