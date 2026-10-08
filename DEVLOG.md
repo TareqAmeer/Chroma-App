@@ -831,3 +831,13 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-272 live control reachability sweep
 
 - Integration commit `03a426e941d5d0c4918a7682b04662634045e165` was pushed to `origin/main`. A fresh fetch, `git ls-remote`, and `git merge-base --is-ancestor` verified the remote SHA and ancestry; `git show origin/main:test/workspace_controls.mjs` confirmed the sweep is shipped. The post-integration Chromium rerun passed with 124 controls across 33 sections in 9,570 ms.
+### 2026-10-08 — CHR-262 film-negative behavioral revalidation (partial)
+
+- Re-ran `node test/film_negative_conversion.mjs` in Chromium against the locally served app: all 20 behavioral checks passed, including disabled/no-base identity (0 byte difference), color conversion MAE 3.32/255 (mid-tones 3.27), shader-vs-float model 0.331 levels, tiled-vs-full max difference 0, B&W channel spread 0, orange-mask spread 122.6 to 4.1 after auto-balance, transformed rebate picks, recipe persistence, and per-frame base-review flags. No GLSL compile/link error.
+- A temporary natural scan pair probe was not valid: the app rendered a transparent-black canvas (all sampled RGBA bytes 0) despite decoded source dimensions and active Film Negative params. The probe and downloaded assets were deleted; no natural-scan quality claim is made from it.
+- CHR-262 remains In Progress. Open: repeat natural known-good colour/B&W scan comparison with a correct browser load path; native RAW camera-linear16 integration/build validation; real multi-frame roll behavior; and iOS/WebView validation. No production source changed in this validation slice. Issue ID: CHR-262.
+
+### 2026-10-08 — CHR-246 natural-removal quality blocker
+
+- Reviewed the latest CHR-246 acceptance gap against the available probe/model artifacts. No runnable `inpaint_probe.exe` or MI-GAN weights are present in the current checkout, and the required fresh Windows native build remains blocked at `onig_sys` MSVC LNK1114 with disk pressure. Existing natural-image trials report visible artifacts on pole/tower removals and seams on all three person-removal candidates; these predate the latest feather change, so no post-change quality conclusion is claimed.
+- No code changed. CHR-246 remains In Progress until the current model/probe can be run and dust, wire/pole, and person candidates are reviewed at 100% for smearing, repeat patterns, and color shift.
