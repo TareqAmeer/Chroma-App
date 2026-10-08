@@ -633,3 +633,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added a per-photo luminance-noise Contrast control that restores local luminance residual as its amount rises; default zero preserves existing output. Wired it through reset, session and undo/recipe snapshots, and the Detail panel's noise-reduction gate. Files: `chromasmith-22.html`, `test/noise_contrast_ui.mjs`.
 - The real Chrome test on `test/fixtures/portrait.png` measured a 4,304 absolute RGB delta from source at 90% luminance NR / 0% Contrast, 2,388 at 50%, and exact source pixels at 100%; snapshot restore was pixel-identical and reset returned Contrast to zero. `node test/export_harness.mjs` rendered all 35 fixture/recipe pairs without GLSL compile/link errors, and `npm run editor:html-check` passed.
 - CHR-249 remains In Progress: other Lightroom Detail/Noise controls, Super Resolution and Raw Details model/license validation, batch apply, masked-control parity, five-photo 100% review, native app behavior and full editor gates remain open.
+
+#### Publication verification — CHR-249 luminance NR Contrast
+
+- Feature commit `750f8ae93eddba84d39aa6740deffe207f2cf2f3` is published to `origin/main`; it preserves the CHR-208 GPS UI and uses build `1.1008U`. The focused feature tests ran in its task worktree; the merged-checkout `node test/export_harness.mjs` rerun was blocked before rendering because Chromium reports `spawn UNKNOWN` in this host. The standalone HTML validity and JS syntax checks passed.
+- The change remains a partial slice; see the CHR-249 entry above for measured pixels and remaining criteria. Do not move CHR-249 to In Review.
