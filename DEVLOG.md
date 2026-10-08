@@ -791,3 +791,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Integration commit `c1716fff158fbc00ceb2556a3ded1ac03fa83479` was pushed to `origin/main`; a fresh fetch and `git ls-remote` matched exactly, and ancestry verification passed.
 - On integrated source, focused Chromium export/editor pixels passed (6,528 changed, 858 feather-edge pixels, 0 outside the halo), and the standalone Rust alpha test passed 1/1. The browser test uses synthetic candidate pixels and a mocked native bridge. Full Tauri binary linking and native post-feather image review remain outstanding; CHR-246 stays In Progress.
+
+### 2026-10-08 — CHR-200 durable job history recovery slice (partial)
+
+- Persistent activity history now retains up to 20 bounded failed-item names per job and the durable numeric SQLite batch ID. Historical recipe batches expose a Results / resume action that opens the existing journal-backed dialog; retry still uses the journal to skip already-applied items. Generic history does not claim restart-safe resume for job types without durable inputs.
+- `node --test test/library_job_history.mjs` passes (5/5), including failed-item and batch-ID persistence. `node test/recipe_batch_ui.mjs` passes in dark and light themes, including an injected failed item, safe resume of that item, undo, and no repeat of successful work. JavaScript syntax and `git diff --check` pass.
+- CHR-200 remains In Progress: the app UI path was validated in the browser harness, but native Tauri/WebView2 restart recovery, broad import/index/export resumability, and foreground editing responsiveness have not yet been established.

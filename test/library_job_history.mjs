@@ -32,11 +32,13 @@ test('confirmed failures and cancellations become terminal outcomes; a stall is 
 
 test('history persists, deduplicates job IDs, classifies partial failures, and caps retention', () => {
   const history = createHistory();
-  history.recordActivityHistory({ kind: 'recipe-batch-1', jobId: 'batch-1', label: 'Recipe batch', stage: 'done', failed: ['a.jpg: conflict'], done: 4, total: 5 });
+  history.recordActivityHistory({ kind: 'recipe-batch-1', jobId: 'recipe-batch-1', batchId: 1, label: 'Recipe batch', stage: 'done', failed: ['a.jpg: conflict'], done: 4, total: 5 });
   history.recordActivityHistory({ kind: 'catalog', jobId: 'scan-1', label: 'Library scan', stage: 'done', outcome: 'interrupted', done: 2, total: 9 });
   history.recordActivityHistory({ kind: 'export', jobId: 'export-1', label: 'Export', stage: 'done', outcome: 'partial', failedCount: 1, done: 4, total: 5 });
   assert.equal(history.activityHistory[0].status, 'Partial');
   assert.equal(history.activityHistory[0].failedCount, 1);
+  assert.deepEqual([...history.activityHistory[2].failedItems], ['a.jpg: conflict']);
+  assert.equal(history.activityHistory[2].batchId, 1, 'retry must retain the numeric durable recipe batch ID');
   assert.equal(history.activityHistory[1].status, 'Interrupted');
   assert.equal(history.activityHistory[2].status, 'Failed');
   assert.equal(history.activityHistory[2].failedCount, 1);
@@ -66,6 +68,9 @@ test('history view remains mounted without a current activity and stalled copy a
   assert.match(source, /if \(!activity\.visible\) \{ el\.innerHTML = renderActivityHistory\(\)/);
   assert.match(source, /No recent progress\. This is a warning, not a confirmed failure\./);
   assert.match(source, /data-job-history-id=/);
+  assert.match(source, /Failed items/);
+  assert.match(source, /data-job-batch-results-id=/);
+  assert.match(source, /recipeBatchResults\(row\.batchId\)/);
   assert.match(source, /invoke\('ingest_copy', \{ jobId: ingestJobId, files, options: opts \}\)/);
   assert.match(source, /invoke\('ingest_cancel', \{ jobId: ingestJobId \}\)/);
   assert.match(source, /completed files remain in the destination/);

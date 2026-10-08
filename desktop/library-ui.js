@@ -12434,7 +12434,8 @@
   function recordActivityHistory(job) {
     const status = job.outcome === 'interrupted' || job.outcome === 'cancelled' || job.stage === 'interrupted' || job.stage === 'cancelled' ? 'Interrupted' : job.outcome === 'partial' ? 'Partial' : job.outcome === 'failed' || job.stage === 'failed' || (job.failed && job.failed.length) ? 'Failed' : 'Completed';
     const id = String(job.jobId || job.batchId || job.id || job.kind || 'background-job');
-    const row = { id, label: String(job.label || job.kind || 'Background job'), status, finishedAt: Date.now(), done: Number(job.done || 0), total: Number(job.total || 0), failedCount: Number(job.failedCount || (Array.isArray(job.failed) ? job.failed.length : 0)), detail: String(job.current || '').slice(0, 160), revealPath: typeof job.revealPath === 'string' ? job.revealPath : '' };
+    const failedItems = Array.isArray(job.failed) ? job.failed.filter(item => typeof item === 'string').slice(0, 20).map(item => item.slice(0, 240)) : [];
+    const row = { id, label: String(job.label || job.kind || 'Background job'), status, finishedAt: Date.now(), done: Number(job.done || 0), total: Number(job.total || 0), failedCount: Number(job.failedCount || (Array.isArray(job.failed) ? job.failed.length : 0)), failedItems, batchId: Number.isSafeInteger(Number(job.batchId)) && Number(job.batchId) > 0 ? Number(job.batchId) : null, detail: String(job.current || '').slice(0, 160), revealPath: typeof job.revealPath === 'string' ? job.revealPath : '' };
     const existing = activityHistory.findIndex(item => item.id === id);
     if (existing >= 0) activityHistory.splice(existing, 1);
     activityHistory.unshift(row); activityHistory.splice(ACTIVITY_HISTORY_LIMIT); saveActivityHistory();
@@ -12600,6 +12601,13 @@
         if (row && row.revealPath) invoke('reveal_in_finder', { path: row.revealPath }).catch((err) => toast(humanizeErr('show exported file', err), 'err'));
       };
     });
+    el.querySelectorAll('[data-job-batch-results-id]').forEach((button) => {
+      button.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const row = activityHistory.find((item) => item.id === button.dataset.jobBatchResultsId);
+        if (row?.batchId) recipeBatchResults(row.batchId).catch((err) => toast(humanizeErr('open batch results', err), 'err'));
+      };
+    });
     const pill = document.getElementById('lib-act-pill');
     if (pill) pill.onclick = (e) => { e.stopPropagation(); activity.expanded = !activity.expanded; renderActivity(); };
     // The pill sits near the LEFT of the bottom bar (lib-count/thumb-progress/status-labels all
@@ -12659,7 +12667,7 @@
     if (!activityHistory.length) return '';
     return `<details class="lib-act-history" aria-label="Recent job history" ${activity.visible ? 'open' : ''} style="padding:8px 11px;border-top:1px solid var(--bdr)">
       <summary style="font-size:11px;font-weight:600;margin-bottom:4px;cursor:pointer">Recent jobs (${activityHistory.length})</summary>${activityHistory.slice(0, 8).map(row =>
-        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
+        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}${row.failedItems?.length ? `<details style="margin-top:3px"><summary style="cursor:pointer">Failed items</summary>${row.failedItems.map(item => `<div style="font-size:10px;color:var(--mut);padding:1px 0;overflow-wrap:anywhere">${esc(item)}</div>`).join('')}${row.failedCount > row.failedItems.length ? `<div style="font-size:10px;color:var(--mut)">…and ${row.failedCount - row.failedItems.length} more</div>` : ''}</details>` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.batchId ? `<button type="button" class="btn bgh" data-job-batch-results-id="${esc(row.id)}">Results / resume</button>` : ''}${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
       ).join('')}</details>`;
   }
 
