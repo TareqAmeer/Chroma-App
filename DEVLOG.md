@@ -830,6 +830,11 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Exported both imported files to JPEG with GPS enabled and PNG with GPS disabled. On-disk checks confirmed the saved edit recipe, creator/copyright/caption/job/keyword metadata, unrelated XMP, GPS keep/remove behavior, and exact primary/secondary sidecar equality. Four output files were verified.
 - CHR-208 AC5 is now demonstrated alongside the prior four criteria; `test/import_metadata_native.mjs`, `node --check`, installed-Chrome `test/import_recipes.mjs`, and `git diff --check` pass. Files: `test/import_metadata_native.mjs`, `DEVLOG.md`.
 
+#### Publication verification — CHR-208 saved-recipe native round trip
+
+- Feature commit `5404528d6025088383682ed76a0f74be65243fca` was pushed as a fast-forward to `origin/main`. At verification `git ls-remote` returned the same hash, and ancestry confirmed the feature commit is contained in remote main.
+- Integrated-source installed-Chrome recipe UI test and the WebView2 import-panel → native ingest → JPEG/PNG export fixture passed. Linear AC5 is checked; CHR-208 remains In Review for user testing, not Done.
+
 #### Publication verification — CHR-208 GPS export-policy follow-up
 
 - Feature/test commit `47a961085e17acd80ab63ea19bb1094f65592da9` was pushed as a fast-forward. At verification, `git ls-remote origin refs/heads/main` returned the same hash and ancestry confirmed the feature commit is contained in remote main.
