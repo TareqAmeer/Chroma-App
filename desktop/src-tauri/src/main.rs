@@ -53,6 +53,7 @@ mod dino;
 mod faceparse;
 mod petdetect;
 mod depth;
+mod inpaint_alpha;
 mod inpaint;
 mod auxiliary;
 mod scrfd;

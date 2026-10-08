@@ -1,6 +1,9 @@
 //! Local MI-GAN erase jobs. Photos never leave this machine. Accepted assets live
 //! beside their source and recipes hold hashes, not encoded image payloads.
-use crate::sam::{check, create_session_from_path, ort_handle, SamSession};
+use crate::{
+    inpaint_alpha::candidate_alpha,
+    sam::{check, create_session_from_path, ort_handle, SamSession},
+};
 use image::{ImageBuffer, Rgba};
 use ort_sys::{ONNXTensorElementDataType as DType, OrtAllocatorType, OrtMemType, OrtValue};
 use serde::{Deserialize, Serialize};
@@ -284,6 +287,7 @@ fn dilate(mask: &[u8], w: u32, h: u32, r: u32) -> Vec<u8> {
     }
     out
 }
+
 pub fn generate(
     rgb: &[u8],
     mask: &[u8],
@@ -307,13 +311,9 @@ pub fn generate(
         if cancel.load(Ordering::Relaxed) {
             return Err("Cancelled after current inference".into());
         }
-        let radius = if index == 0 {
-            0
-        } else {
-            ((w.max(h) as f64 / 512.0) * 4.0 * index as f64)
-                .round()
-                .max(1.0) as u32
-        };
+        let radius = ((w.max(h) as f64 / 512.0) * 4.0 * (index + 1) as f64)
+            .round()
+            .max(1.0) as u32;
         let mut context = dilate(mask, w, h, radius);
         let mut planar = vec![0; n * 3];
         for i in 0..n {
@@ -325,13 +325,20 @@ pub fn generate(
         if cancel.load(Ordering::Relaxed) {
             return Err("Cancelled after current inference".into());
         }
+        let alpha = candidate_alpha(
+            mask,
+            context,
+            w,
+            h,
+            ((w.max(h) as f64 / 512.0 * 3.0).round().max(2.0) as u32).min(radius),
+        );
         let mut rgba = vec![0; n * 4];
         for i in 0..n {
-            if mask[i] == 0 {
+            if alpha[i] != 0 {
                 for c in 0..3 {
                     rgba[i * 4 + c] = predicted[c * n + i];
                 }
-                rgba[i * 4 + 3] = 255;
+                rgba[i * 4 + 3] = alpha[i];
             }
         }
         let hash = digest(&rgba);
