@@ -1088,3 +1088,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added a reproducible native regression generating WebP/TIFF sources alongside JPEG/PNG; all four ingest with metadata, paired backup XMP matches, and unchanged re-import skips all four.
 - Eight real JPEG/PNG exports retain creator/copyright/caption/job/keywords and an unrelated custom XMP field. Existing GPS merge/removal and invalid-XMP checks pass. Files: test/import_metadata_mixed_native.mjs.
 - This is direct native IPC/export evidence, not saved-job UI or sensor RAW coverage; renamed re-import duplicate handling remains open. CHR-208 stays In Progress; no broader acceptance checkbox inferred.
+
+### 2026-10-08 — CHR-249 / CHR-208 publication verification
+- CHR-249 fixture generator/protocol published at 7b4bdbd796259dacef07feb21346ae122a908dbc; CHR-208 mixed-format regression published at ccd5a8d9fa20a698e4c089e39091a6700290dc2a. Remote main hash matched after each fast-forward push; integrated generator and mixed-format native regression pass.
+- Lightroom kit and reference ZIP remain preserved in root test/output; native fixtures remain ignored in their test worktrees. Neither ticket is Done; Lightroom quality evidence, RAW/saved-recipe coverage and renamed duplicates remain open.
