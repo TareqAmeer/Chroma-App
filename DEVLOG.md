@@ -1106,3 +1106,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added independent Feather and Density controls to raster-mask paint; the same falloff and coverage limit apply to temporary erase. Defaults preserve legacy pixels exactly; zero density/flow is inert and lower density does not weaken stronger existing coverage.
 - Files: chromasmith-22.html, test/mask_raster.mjs, test/brush_settings_ui_native.mjs. Native raster suite 43/43 passes including non-default modifier release, repeated density bounds, undo/snapshot/render identity. Focused native new-control layout/wiring passes at 1440/1024 in both themes; targets are at least 28px. HTML validity/syntax/whitespace pass; broad Editor gates intentionally omitted per user instruction.
 - CHR-275 AC1 now has mouse/native brush evidence; Pencil/touch, Heal/Spot targeting and complete conflict coverage remain open. Keep In Progress and do not infer the device criteria.
+
+### 2026-10-08 — CHR-275 brush-settings publication verification
+- Feature babb7a0e published as e32a14ac9a9a9410d769d7207abc61b9ebf37b1a; remote main matched after push. Integrated native raster suite 43/43 and affected-control UI check pass. Conflicts were limited to append-only DEVLOG and BUILD; newer CHR-208 behavior was preserved.
+- CHR-275 AC1 checked from mouse/native evidence; device, Heal/Spot and complete modifier conflict criteria remain open. Updated runtime frontend retains native renamed-import fix and full AI resources.
