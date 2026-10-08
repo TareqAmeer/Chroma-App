@@ -7264,7 +7264,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008F';
+const BUILD='1.1008G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24577,6 +24577,7 @@ async function _exportFXRun(){
   }
   let failed=0;
   let activityOutcome='completed';
+  let exportRevealPath='';
   // Google Photos upload is on → grab/refresh the token NOW, under this click's activation
   // (the sign-in popup would be blocked after a long multi-photo render).
   if(gpSaveEnabled()&&!gpTok()){
@@ -24928,7 +24929,7 @@ async function _exportFXRun(){
     if(results.length&&!window._expOnlyItems)fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
     if(failed&&results.length){activityOutcome='partial';log(`Export finished: ${results.length} saved, ${failed} failed (see log above)`,'warn');}
     if(failed&&results.length)toast(`Exported ${results.length}/${N} — ${failed} failed, see log`,false);
-    {const _p=(typeof sr!=='undefined'&&Array.isArray(sr))?sr.filter(x=>x&&x.ok&&x.path).map(x=>x.path):[];csExportResultKeep(results.length,failed,_p[0]);}
+    {const _p=(typeof sr!=='undefined'&&Array.isArray(sr))?sr.filter(x=>x&&x.ok&&x.path).map(x=>x.path):[];if(_p.length)exportRevealPath=_p[0];csExportResultKeep(results.length,failed,_p[0]);}
     if(failed&&results.length){}
     else if(results.length){
       const _paths=(typeof sr!=='undefined'&&Array.isArray(sr))?sr.filter(x=>x&&x.ok&&x.path).map(x=>x.path):[];
@@ -24951,7 +24952,7 @@ async function _exportFXRun(){
     _expOverlay(false);
     if(capNative()&&typeof window.chromasmithShowMobileExportResult==='function')window.chromasmithShowMobileExportResult();
     fxExportCancel=false;
-    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting',outcome:activityOutcome,failedCount:failed});
+    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting',outcome:activityOutcome,failedCount:failed,revealPath:exportRevealPath});
   }
 }
 // Same border+canvas-matte compositing exportFX/canvasCompose do for stills (see CLAUDE.md §12

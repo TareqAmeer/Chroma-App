@@ -107,6 +107,7 @@
   function libtestInvoke(cmd, args) {
     const A = args || {};
     if (LIBTEST && cmd.startsWith('recipe_batch_')) (window.__libtestRecipeBatchCalls ||= []).push({ command: cmd, args: structuredClone(A) });
+    if (LIBTEST && cmd === 'reveal_in_finder') (window.__libtestRevealCalls ||= []).push({ command: cmd, args: structuredClone(A) });
     if (LT_SHAPES && (cmd === 'get_thumbnail' || cmd === 'get_thumbnail_or_offline' || cmd === 'read_file_bytes')) return ltShapePng(A.path);
     const px = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XBhAAAAABJRU5ErkJggg==';
     const png = Uint8Array.from(atob(px), (c) => c.charCodeAt(0));
@@ -12341,7 +12342,7 @@
   function recordActivityHistory(job) {
     const status = job.outcome === 'interrupted' || job.outcome === 'cancelled' || job.stage === 'interrupted' || job.stage === 'cancelled' ? 'Interrupted' : job.outcome === 'partial' ? 'Partial' : job.outcome === 'failed' || job.stage === 'failed' || (job.failed && job.failed.length) ? 'Failed' : 'Completed';
     const id = String(job.jobId || job.batchId || job.id || job.kind || 'background-job');
-    const row = { id, label: String(job.label || job.kind || 'Background job'), status, finishedAt: Date.now(), done: Number(job.done || 0), total: Number(job.total || 0), failedCount: Number(job.failedCount || (Array.isArray(job.failed) ? job.failed.length : 0)), detail: String(job.current || '').slice(0, 160) };
+    const row = { id, label: String(job.label || job.kind || 'Background job'), status, finishedAt: Date.now(), done: Number(job.done || 0), total: Number(job.total || 0), failedCount: Number(job.failedCount || (Array.isArray(job.failed) ? job.failed.length : 0)), detail: String(job.current || '').slice(0, 160), revealPath: typeof job.revealPath === 'string' ? job.revealPath : '' };
     const existing = activityHistory.findIndex(item => item.id === id);
     if (existing >= 0) activityHistory.splice(existing, 1);
     activityHistory.unshift(row); activityHistory.splice(ACTIVITY_HISTORY_LIMIT); saveActivityHistory();
@@ -12500,6 +12501,13 @@
     html += `</span>`;
     el.innerHTML = html;
     syncPhotoWorkBadges();
+    el.querySelectorAll('[data-job-reveal-id]').forEach((button) => {
+      button.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const row = activityHistory.find((item) => item.id === button.dataset.jobRevealId);
+        if (row && row.revealPath) invoke('reveal_in_finder', { path: row.revealPath }).catch((err) => toast(humanizeErr('show exported file', err), 'err'));
+      };
+    });
     const pill = document.getElementById('lib-act-pill');
     if (pill) pill.onclick = (e) => { e.stopPropagation(); activity.expanded = !activity.expanded; renderActivity(); };
     // The pill sits near the LEFT of the bottom bar (lib-count/thumb-progress/status-labels all
@@ -12559,7 +12567,7 @@
     if (!activityHistory.length) return '';
     return `<details class="lib-act-history" aria-label="Recent job history" ${activity.visible ? 'open' : ''} style="padding:8px 11px;border-top:1px solid var(--bdr)">
       <summary style="font-size:11px;font-weight:600;margin-bottom:4px;cursor:pointer">Recent jobs (${activityHistory.length})</summary>${activityHistory.slice(0, 8).map(row =>
-        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span></div>`
+        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
       ).join('')}</details>`;
   }
 
