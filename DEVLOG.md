@@ -648,6 +648,11 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Feature commit `35ae44f7f111f16c4700c33e32f014490d36638a` is on `origin/main`; its destination routing is present in the shipped export flow. The worker’s focused Chromium test exported 2 photos × 2 recipes to two distinct folders and restored the previous destination; merged source JS/HTML checks passed.
 - Native 20×3 output/failure/retry behavior and full preflight/result-retention criteria remain open. Both Linear issues stay In Progress.
 
+### 2026-10-08 — CHR-272 named workspace flow verification (partial)
+
+- Added `test/workspace_named_flow.mjs` to exercise naming/saving, switching away, applying the saved workspace through the confirmation dialog, deleting it, and verifying exposure remains in the session and recipe snapshot after reload.
+- Focused Chromium flow passed on latest `origin/main` at 1366×768. Remaining blocker: no live app completeness check cross-references all default and hidden/dynamic controls to search recovery; the existing `control_sweep` only crawls its configured visible surfaces/depth, and does not run across workspace profiles. Native Tauri workspace/file workflow also remains unverified; prior clean integration native test build stopped at MSVC `onig_sys` archive error LNK1114 before Rust tests.
+
 ### 2026-10-08 — CHR-287 sensor-stage capture sharpening (blocked before implementation)
 
 - Inspected the current native RAW pipeline: `decode_and_demosaic` scales and white-balances the CFA buffer, then demosaics; the reusable `DemosaicOut` cache and public `DecodedRaw` expose only interleaved RGB16. There is no downstream sensor-stage hook or UI/recipe operator contract to attach Richardson–Lucy to. A post-demosaic RGB implementation would contradict CHR-287 and is intentionally not substituted.
