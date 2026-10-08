@@ -1965,6 +1965,15 @@ body.mobile-cl .cl-book-pages{grid-template-columns:repeat(2,minmax(0,1fr))}
 .cl-thumb img{width:100%;height:100%;object-fit:cover;pointer-events:none}
 .cl-thumb .cl-thumb-x{position:absolute;top:0;right:0;width:var(--sp-4);height:var(--sp-4);background:var(--scrim-b5);color:#fff;font-size:var(--fs-2);line-height:var(--sp-4);text-align:center;cursor:pointer;border-radius:0 0 0 4px}
 .cl-shapes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.cl-mode-row{display:flex;gap:6px;margin:0 0 8px}.cl-mode-row .btn{flex:1}
+.cl-free-item{position:absolute;box-sizing:border-box;transform:translate(-50%,-50%);transform-origin:center;cursor:move;touch-action:none;user-select:none;box-shadow:0 5px 16px rgba(0,0,0,.28);border:2px solid rgba(255,255,255,.82);background:#fff}
+.cl-free-item img{display:block;width:100%;height:100%;object-fit:cover;pointer-events:none;-webkit-user-drag:none}
+.cl-free-item.sel{outline:2px solid var(--acc);outline-offset:2px}
+.cl-free-item .cl-free-resize,.cl-free-item .cl-free-order{display:none}
+.cl-free-item.sel .cl-free-resize,.cl-free-item.sel .cl-free-order{display:block}
+.cl-free-item .cl-free-resize{position:absolute;right:-8px;bottom:-8px;width:18px;height:18px;border:2px solid #fff;border-radius:50%;background:var(--acc);cursor:nwse-resize;touch-action:none}
+.cl-free-item .cl-free-order{position:absolute;top:-12px;left:-12px;width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:var(--acc);color:#fff;font:12px/18px sans-serif;text-align:center;cursor:pointer}
+.cl-free-controls{display:none}#panel-collage.cl-freeform .cl-shapes,#panel-collage.cl-freeform #cl-shape-hint,#panel-collage.cl-freeform #cl-save-layout,#panel-collage.cl-freeform #cl-zoom-row,#panel-collage.cl-freeform #cl-caption-row,#panel-collage.cl-freeform #cl-cellpanel>.btn-row,#panel-collage.cl-freeform #cl-cellpanel>.fx-hint-x{display:none}#panel-collage.cl-freeform .cl-free-controls{display:block}
 .cl-shape{aspect-ratio:1;border:1px solid var(--bdr);border-radius:var(--r-sm);background:var(--sur2);cursor:pointer;padding:var(--sp-1);transition:border-color var(--dur-1)}
 .cl-shape:hover{border-color:var(--mut)}
 .cl-shape.on{border-color:var(--acc);background:var(--tint-2)}
@@ -5253,8 +5262,10 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
       </div>
       <div class="fx-ctrl" data-clsec="layout">
         <div class="ctitle" style="margin-bottom:10px">Layout</div>
+        <div class="cl-mode-row" role="group" aria-label="Collage arrangement mode"><button class="btn bpri" id="cl-mode-grid" aria-pressed="true" onclick="clSetMode('grid')">Grid</button><button class="btn bsec" id="cl-mode-free" aria-pressed="false" onclick="clSetMode('freeform')">Scrapbook</button></div>
+        <div class="fx-hint" id="cl-free-hint" style="display:none">Drag photos to place them; overlap order follows the layer buttons. Drag the corner to resize.</div>
         <div class="cl-shapes" id="cl-shapes"></div>
-        <div class="btn-row" style="margin-top:6px"><button class="btn bgh" onclick="clSaveLayout()" title="Save this arrangement (including dragged dividers) and the page style, to reuse with the same number of photos">Save layout…</button></div>
+        <div class="btn-row" id="cl-save-layout" style="margin-top:6px"><button class="btn bgh" onclick="clSaveLayout()" title="Save this arrangement (including dragged dividers) and the page style, to reuse with the same number of photos">Save layout…</button></div>
         <!-- NOT converted to an info tooltip like its siblings — clRebuildShapes() rewrites this
              element's textContent with a live photo count ("3 photos — pick an arrangement."),
              so it's a status readout, not standing explanatory prose. -->
@@ -5289,8 +5300,12 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
       </div>
       <div class="fx-ctrl" id="cl-cellpanel" data-clsec="sel">
         <div class="ctitle" style="margin-bottom:10px">Selected photo</div>
-        <div class="fx-row"><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="100" max="400" value="100" id="cl-zoom" oninput="clCellZoom(+this.value)"><div class="fx-val" id="cl-zoom-v">100</div></div>
-        <div class="fx-row"><div class="fx-label">Caption</div><input class="vinput" id="cl-caption" type="text" placeholder="None" oninput="clSetCaption(this.value)"></div>
+        <div class="fx-row" id="cl-zoom-row"><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="100" max="400" value="100" id="cl-zoom" oninput="clCellZoom(+this.value)"><div class="fx-val" id="cl-zoom-v">100</div></div>
+        <div class="cl-free-controls" id="cl-free-controls">
+          <div class="fx-row"><div class="fx-label">Rotation</div><input class="fx-slider" type="range" min="-180" max="180" value="0" id="cl-free-rotation" oninput="clFreeRotate(+this.value)"><div class="fx-val" id="cl-free-rotation-v">0°</div></div>
+          <div class="btn-row"><button class="btn bgh" id="cl-free-forward" onclick="clFreeLayer(1)">Bring forward</button><button class="btn bgh" id="cl-free-back" onclick="clFreeLayer(-1)">Send backward</button></div>
+        </div>
+        <div class="fx-row" id="cl-caption-row"><div class="fx-label">Caption</div><input class="vinput" id="cl-caption" type="text" placeholder="None" oninput="clSetCaption(this.value)"></div>
         <details class="fx-hint-x"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Drag inside the photo to reposition it. Scroll over a photo to zoom.</p></details>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bsec" onclick="clReplaceSelected()">Replace</button>
@@ -29286,7 +29301,7 @@ if(typeof document!=='undefined')document.addEventListener('visibilitychange',()
 // ════════════════════ COLLAGE TAB ════════════════════
 const CL_ASPECTS=[['1:1',1,1],['4:5',4,5],['5:4',5,4],['3:4',3,4],['4:3',4,3],['2:3',2,3],['3:2',3,2],['9:16',9,16],['16:9',16,9],['2:1 carousel',2,1],['3:1 carousel',3,1]];
 const CL_SWATCHES=['#ffffff','#000000','#f4f1ea','#e8d9c5','#171717','#c8553d','#2e4756','#a3b18a'];
-const CL={photos:[],aspect:CL_ASPECTS[0],tree:null,templates:[],templateIdx:0,assign:[],cells:[],dividers:[],bg:'#ffffff',inner:8,outer:0,radius:0,frame:'none',title:'',titlePos:'bottom',titleSize:45,capSize:28,capAuto:false,capDate:false,capCam:false,capLook:false,font:'',capColor:'',titleColor:'',edits:true,oneLook:false,preset:'',dpi:300,sel:-1,frameW:0,frameH:0,inited:false};
+const CL={photos:[],aspect:CL_ASPECTS[0],tree:null,templates:[],templateIdx:0,assign:[],cells:[],dividers:[],mode:'grid',freeItems:[],freeSel:-1,bg:'#ffffff',inner:8,outer:0,radius:0,frame:'none',title:'',titlePos:'bottom',titleSize:45,capSize:28,capAuto:false,capDate:false,capCam:false,capLook:false,font:'',capColor:'',titleColor:'',edits:true,oneLook:false,preset:'',dpi:300,sel:-1,frameW:0,frameH:0,inited:false};
 const _leaf=()=>({leaf:true,size:1});
 function _row(){return{dir:'row',size:1,children:[].slice.call(arguments)};}
 function _col(){return{dir:'col',size:1,children:[].slice.call(arguments)};}
@@ -29489,16 +29504,21 @@ function clMarkShapes(){document.querySelectorAll('#cl-shapes .cl-shape').forEac
 function clRenderTray(){
   const tray=document.getElementById('cl-tray');if(!tray)return;tray.innerHTML='';
   CL.photos.forEach((p,i)=>{
-    const t=document.createElement('div');t.className='cl-thumb';t.draggable=true;
+    const t=document.createElement('div');t.className='cl-thumb';t.draggable=true;t.setAttribute('role','button');t.tabIndex=0;t.setAttribute('aria-label',`Add ${p.name||'photo'} to scrapbook`);
     t.innerHTML=`<img src="${p.url}" alt=""><div class="cl-thumb-x" title="Remove">${icon('close',12)}</div>`;
     t.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain','photo:'+i);e.dataTransfer.effectAllowed='copy';});
+    t.addEventListener('click',e=>{if(e.target.closest('.cl-thumb-x'))return;if(CL.mode==='freeform')clFreeAddPhoto(i);});
+    t.addEventListener('keydown',e=>{if(CL.mode==='freeform'&&(e.key==='Enter'||e.key===' ')){e.preventDefault();clFreeAddPhoto(i);}});
     t.querySelector('.cl-thumb-x').onclick=e=>{e.stopPropagation();clRemovePhoto(i);};
     tray.appendChild(t);
   });
 }
 function clRemovePhoto(i){
+  const selectedPhoto=CL.freeItems[CL.freeSel]?.photo;
   clRevokePhoto(CL.photos[i]);CL.photos.splice(i,1);
   CL.assign=CL.assign.map(a=>a==null?null:(a===i?null:(a>i?a-1:a)));
+  CL.freeItems=CL.freeItems.filter(a=>a.photo!==i).map(a=>({...a,photo:a.photo>i?a.photo-1:a.photo}));
+  CL.freeSel=selectedPhoto==null||selectedPhoto===i?-1:CL.freeItems.findIndex(a=>a.photo===(selectedPhoto>i?selectedPhoto-1:selectedPhoto));
   clPhotosChanged();
 }
 // CHR-215: one place decides where the title band goes and how big text is, in units of the
@@ -29558,6 +29578,8 @@ function clRenderFrame(){
   let fw=availW,fh=fw/ar;if(fh>availH){fh=availH;fw=fh*ar;}
   CL.frameW=fw;CL.frameH=fh;
   frame.style.width=fw+'px';frame.style.height=fh+'px';frame.style.background=CL.bg;
+  if(CL.mode==='freeform'){clEnsureFreeItems(fw,fh);clRenderFreeform(frame,fw,fh);return;}
+  frame.style.overflow='';frame.ondrop=null;frame.ondragover=null;
   const base=Math.min(fw,fh),gap=CL.inner/1000*base,rad=CL.radius/1000*base,tg=clTextGeom(fw,fh);
   CL.dividers=[];
   const rects=clLayoutRects(CL.tree,tg.lx,tg.ly,tg.lw,tg.lh,gap,CL.dividers);
@@ -29600,6 +29622,72 @@ function clRenderFrame(){
     clWireDivider(el,d);frame.appendChild(el);
   });
 }
+function clEnsureFreeItems(fw,fh){
+  const have=new Set(CL.freeItems.map(x=>x.photo));
+  CL.photos.forEach((p,i)=>{if(have.has(i))return;const iw=p.img.naturalWidth||p.img.width||1,ih=p.img.naturalHeight||p.img.height||1;
+    const w=40,h=w*(fw/fh)/(iw/ih),col=CL.freeItems.length%2,row=Math.floor(CL.freeItems.length/2);
+    CL.freeItems.push({photo:i,x:28+col*44,y:38+row*24,w,h,rotation:0});});
+}
+function clSetMode(mode){
+  if(mode!=='grid'&&mode!=='freeform')return;CL.mode=mode;
+  const panel=document.getElementById('panel-collage');if(panel)panel.classList.toggle('cl-freeform',mode==='freeform');
+  const grid=document.getElementById('cl-mode-grid'),free=document.getElementById('cl-mode-free'),hint=document.getElementById('cl-free-hint');
+  if(grid){grid.setAttribute('aria-pressed',String(mode==='grid'));grid.className='btn '+(mode==='grid'?'bpri':'bsec');}
+  if(free){free.setAttribute('aria-pressed',String(mode==='freeform'));free.className='btn '+(mode==='freeform'?'bpri':'bsec');}
+  if(hint)hint.style.display=mode==='freeform'?'block':'none';
+  if(mode==='freeform'){clEnsureFreeItems(CL.frameW||1,CL.frameH||1);if(CL.freeSel<0&&CL.freeItems.length)CL.freeSel=0;clUpdateFreeSelection();}
+  else if(CL.sel<0)clHideCellPanel();
+  clRenderFrame();
+}
+function clRenderFreeform(frame,fw,fh){
+  frame.innerHTML='';frame.style.overflow='hidden';frame.ondragover=e=>e.preventDefault();frame.ondrop=clFreeDrop;
+  CL.freeItems.forEach((it,i)=>{
+    const p=CL.photos[it.photo];if(!p||!p.img)return;
+    const box=document.createElement('div');box.className='cl-free-item'+(i===CL.freeSel?' sel':'');box.dataset.i=i;
+    box.setAttribute('role','button');box.setAttribute('aria-label',`${p.name||'Photo '+(it.photo+1)}, scrapbook layer ${i+1}`);box.setAttribute('aria-pressed',String(i===CL.freeSel));
+    box.style.cssText=`left:${it.x}%;top:${it.y}%;width:${it.w}%;height:${it.h}%;z-index:${i+1};transform:translate(-50%,-50%) rotate(${it.rotation}deg)`;
+    const im=document.createElement('img');im.alt=p.name||'';im.src=p.url;box.appendChild(im);
+    const layer=document.createElement('button');layer.type='button';layer.className='cl-free-order';layer.title='Select scrapbook photo';layer.setAttribute('aria-label','Select scrapbook photo');layer.textContent=String(i+1);box.appendChild(layer);
+    const resize=document.createElement('div');resize.className='cl-free-resize';resize.setAttribute('role','separator');resize.setAttribute('aria-label','Resize photo');box.appendChild(resize);
+    clWireFreeItem(box,resize,i,fw,fh);frame.appendChild(box);
+  });
+  clUpdateFreeSelection();
+}
+function clUpdateFreeSelection(){
+  document.querySelectorAll('#cl-frame .cl-free-item').forEach((el,i)=>{el.classList.toggle('sel',i===CL.freeSel);el.setAttribute('aria-pressed',String(i===CL.freeSel));});
+  const panel=document.getElementById('cl-cellpanel');if(!panel)return;
+  panel.classList.toggle('cl-has-sel',CL.mode==='freeform'?CL.freeSel>=0:CL.sel>=0);
+  const controls=document.getElementById('cl-free-controls');if(controls)controls.style.display=CL.mode==='freeform'&&CL.freeSel>=0?'block':'none';
+  if(CL.mode==='freeform'&&CL.freeSel>=0){const it=CL.freeItems[CL.freeSel],rot=document.getElementById('cl-free-rotation'),val=document.getElementById('cl-free-rotation-v');
+    if(rot)rot.value=it.rotation;if(val)val.textContent=it.rotation+'°';
+    const cap=document.getElementById('cl-caption'),p=CL.photos[it.photo];if(cap)cap.value=(p&&p.caption)||'';}
+  if(document.body.classList.contains('mobile-cl')&&CL.mode==='freeform'&&CL.freeSel>=0){clBuildNav();clSection('sel');}
+}
+function clFreeSelect(i){CL.freeSel=i;clUpdateFreeSelection();}
+function clFreeRotate(v){const it=CL.freeItems[CL.freeSel];if(!it)return;it.rotation=Math.max(-180,Math.min(180,+v||0));const val=document.getElementById('cl-free-rotation-v');if(val)val.textContent=it.rotation+'°';const box=document.querySelector(`#cl-frame .cl-free-item[data-i="${CL.freeSel}"]`);if(box)box.style.transform=`translate(-50%,-50%) rotate(${it.rotation}deg)`;}
+function clFreeLayer(step){const i=CL.freeSel,j=i+step;if(i<0||j<0||j>=CL.freeItems.length)return;const a=CL.freeItems[i];CL.freeItems[i]=CL.freeItems[j];CL.freeItems[j]=a;CL.freeSel=j;clRenderFrame();}
+function clWireFreeItem(box,resize,i,fw,fh){
+  box.addEventListener('pointerdown',e=>{if(e.target===resize||e.target.classList.contains('cl-free-order'))return;e.preventDefault();e.stopPropagation();clFreeSelect(i);
+    const it=CL.freeItems[i],sx=e.clientX,sy=e.clientY,ox=it.x,oy=it.y,r=box.parentElement.getBoundingClientRect();try{box.setPointerCapture(e.pointerId)}catch(_){}
+    const mv=ev=>{it.x=Math.max(-20,Math.min(120,ox+(ev.clientX-sx)/r.width*100));it.y=Math.max(-20,Math.min(120,oy+(ev.clientY-sy)/r.height*100));box.style.left=it.x+'%';box.style.top=it.y+'%';};
+    const up=()=>{box.removeEventListener('pointermove',mv);box.removeEventListener('pointerup',up);clRenderFrame();};box.addEventListener('pointermove',mv);box.addEventListener('pointerup',up);
+  });
+  box.addEventListener('click',e=>{e.stopPropagation();clFreeSelect(i);});
+  box.querySelector('.cl-free-order').onclick=e=>{e.stopPropagation();clFreeSelect(i);};
+  resize.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();clFreeSelect(i);const it=CL.freeItems[i],sx=e.clientX,w0=it.w,r=box.parentElement.getBoundingClientRect();
+    const mv=ev=>{it.w=Math.max(10,Math.min(120,w0+(ev.clientX-sx)/r.width*100));const p=CL.photos[it.photo],iw=p.img.naturalWidth||p.img.width||1,ih=p.img.naturalHeight||p.img.height||1;it.h=it.w*(r.width/r.height)/(iw/ih);box.style.width=it.w+'%';box.style.height=it.h+'%';};
+    const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);clRenderFrame();};document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up);
+  });
+}
+function clFreeAddPhoto(photo,x,y){
+  let i=CL.freeItems.findIndex(a=>a.photo===photo);
+  if(i<0){const p=CL.photos[photo];if(!p)return;const iw=p.img.naturalWidth||p.img.width||1,ih=p.img.naturalHeight||p.img.height||1,w=42;
+    CL.freeItems.push({photo,x:x==null?50:x,y:y==null?50:y,w,h:w*(CL.frameW/CL.frameH)/(iw/ih),rotation:0});i=CL.freeItems.length-1;}
+  else if(x!=null&&y!=null){CL.freeItems[i].x=x;CL.freeItems[i].y=y;}
+  CL.freeSel=i;clRenderFrame();
+}
+function clFreeDrop(e){e.preventDefault();const d=e.dataTransfer&&e.dataTransfer.getData('text/plain');if(!d||d.indexOf('photo:')!==0)return;
+  const r=document.getElementById('cl-frame').getBoundingClientRect(),x=(e.clientX-r.left)/r.width*100,y=(e.clientY-r.top)/r.height*100;clFreeAddPhoto(+d.slice(6),Math.max(-20,Math.min(120,x)),Math.max(-20,Math.min(120,y)));}
 function clNat(i){const p=CL.photos[CL.assign[i]];return p?[p.img.naturalWidth||p.img.width||1,p.img.naturalHeight||p.img.height||1]:[1,1];}
 // Position the photo exactly like clExport (cover-scale + centred + offset), and CLAMP the
 // offset so the image always fully covers the cell — so dragging only reframes within the
@@ -29703,8 +29791,12 @@ function clShuffle(){
   CL.assign=[];for(let i=0;i<lc;i++)CL.assign.push(i<idxs.length?idxs[i]:null);
   CL.cells=CL.cells.map(()=>({scale:1,ox:0,oy:0}));clRenderFrame();
 }
-function clReset(){CL.photos.forEach(clRevokePhoto);CL.photos=[];CL.assign=[];CL.cells=[];CL.sel=-1;CL.templateIdx=0;clHideCellPanel();clPhotosChanged();clRenderTray();}
+function clReset(){CL.photos.forEach(clRevokePhoto);CL.photos=[];CL.assign=[];CL.cells=[];CL.freeItems=[];CL.freeSel=-1;CL.sel=-1;CL.templateIdx=0;clHideCellPanel();clPhotosChanged();clRenderTray();}
 function clRoundRect(ctx,x,y,w,h,r){r=Math.max(0,Math.min(r,w/2,h/2));ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function clDrawFreeform(ctx,W,H){
+  CL.freeItems.forEach(it=>{const p=CL.photos[it.photo];if(!p||!p.img)return;const w=it.w/100*W,h=it.h/100*H;
+    ctx.save();ctx.translate(it.x/100*W,it.y/100*H);ctx.rotate((it.rotation||0)*Math.PI/180);ctx.drawImage(p.img,-w/2,-h/2,w,h);ctx.restore();});
+}
 // One cell, drawn identically for the single-image export and the Book pages. Frame shapes come
 // from clFrameInset; the deckled outline from clDeckPts (same shape as the on-screen polygon).
 function clDrawCell(ctx,R,i,base,rad,tg,fam){
@@ -29739,12 +29831,15 @@ function clExport(){
   const{W,H}=clTargetSize();
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;const ctx=cv.getContext('2d');
   ctx.fillStyle=CL.bg;ctx.fillRect(0,0,W,H);
-  const base=Math.min(W,H),gap=CL.inner/1000*base,rad=CL.radius/1000*base,tg=clTextGeom(W,H);
-  const rects=clLayoutRects(CL.tree,tg.lx,tg.ly,tg.lw,tg.lh,gap,null);
-  const fam=clFontFam();
-  if(tg.band){ctx.save();ctx.fillStyle=clTextColor();ctx.font=`600 ${tg.tPx}px ${fam}`;ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(CL.title,W/2,tg.ty+tg.band/2,W-2*tg.outer);ctx.restore();}
-  rects.forEach((r,i)=>clDrawCell(ctx,r,i,base,rad,tg,fam));
+  if(CL.mode==='freeform')clDrawFreeform(ctx,W,H);
+  else{
+    const base=Math.min(W,H),gap=CL.inner/1000*base,rad=CL.radius/1000*base,tg=clTextGeom(W,H);
+    const rects=clLayoutRects(CL.tree,tg.lx,tg.ly,tg.lw,tg.lh,gap,null);
+    const fam=clFontFam();
+    if(tg.band){ctx.save();ctx.fillStyle=clTextColor();ctx.font=`600 ${tg.tPx}px ${fam}`;ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(CL.title,W/2,tg.ty+tg.band/2,W-2*tg.outer);ctx.restore();}
+    rects.forEach((r,i)=>clDrawCell(ctx,r,i,base,rad,tg,fam));
+  }
   // CHR-218: format/quality choice, optional split into equal square panels for a swipeable
   // Instagram carousel, and saving through saveFiles() — the same path the Effects export uses —
   // so the desktop app's native save and the iOS share sheet work (was a plain <a download>).
