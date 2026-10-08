@@ -11,7 +11,13 @@ const browser=await chromium.connectOverCDP(process.env.DETAIL_CDP||'http://127.
 const context=browser.contexts()[0],pages=context.pages(),page=pages.find(p=>!p.url().includes('devtools'))||pages[0];
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
 const cdp=await context.newCDPSession(page);
-const source=await readFile(path.join(root,'desktop/library-ui.js'),'utf8');
+let source=await readFile(path.join(root,'desktop/library-ui.js'),'utf8');
+const transitions=process.env.DETAIL_TRANSITIONS==='1';
+if(transitions){
+ assert.equal(process.env.DETAIL_OVERRIDE,'1','transition observation requires the explicit source override');
+ // Expose existing viewer state only in the intercepted test script, never production assets.
+ source=source.replace('function detailView(cell){','window.__detailTransitionState=detailState; function detailView(cell){');
+}
 try{
 await page.reload({waitUntil:'domcontentloaded'});
 if(process.env.DETAIL_SYNTHETIC==='1'){
@@ -45,6 +51,27 @@ await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.dow
 const linked=await read();assert.notEqual(linked[0].detailX,native[0].detailX);assert.notEqual(linked[1].detailX,native[1].detailX);
 await page.locator('#lib-compare [data-detail="link"]').click();const frozenB=(await read())[1];await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2-45,box.y+box.height/2);await page.mouse.up();await page.waitForTimeout(600);assert.equal((await read())[1].detailX,frozenB.detailX);
 assert.equal(await page.evaluate(()=>fxCurIdx),editorIndex,'detail inspection must preserve Editor selection');
+if(transitions){
+ await page.waitForFunction(()=>[...window.__detailTransitionState.cache.keys()].some(k=>JSON.parse(k)[0].includes('3-person-photo')));
+ const before=await page.evaluate(()=>{
+  const e=document.querySelector('#lib-compare [data-pane="B"].lib-cmp-pane'),c=e.querySelector('canvas');
+  window.__transitionCanvas=c;
+  const pixels=Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data);
+  window.__transitionRelease=null;
+  window.__detailTransitionState.queue=window.__detailTransitionState.queue.then(()=>new Promise(r=>window.__transitionRelease=r));
+  return{pixels,width:c.width,height:c.height};
+ });
+ await page.waitForFunction(()=>typeof window.__transitionRelease==='function');
+ await page.locator('#lib-compare .lib-cmp-photo-sel[data-pane="B"]').evaluate(el=>{for(const v of ['0','2','3']){el.value=v;el.dispatchEvent(new Event('change',{bubbles:true}));}});
+ const pending=await page.evaluate(()=>{const c=document.querySelector('#lib-compare [data-pane="B"] canvas');return{same:c===window.__transitionCanvas,width:c.width,height:c.height,pixels:Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data)};});
+ assert.equal(pending.same,true);assert.equal(pending.width,before.width);assert.equal(pending.height,before.height);assert.deepEqual(pending.pixels,before.pixels,'pending replacement retains every displayed pixel');
+ await page.evaluate(()=>window.__transitionRelease());
+ await page.waitForFunction(()=>document.querySelector('.lib-cmp-name[data-pane="B"]').textContent==='4-power-lines.jpg');
+ await page.waitForFunction(()=>[...window.__detailTransitionState.cache.keys()].some(k=>JSON.parse(k)[0].includes('1-color-negative')));
+ const bounds=await page.evaluate(()=>({entries:window.__detailTransitionState.cache.size,pixels:[...window.__detailTransitionState.cache.values()].reduce((n,c)=>n+c.width*c.height,0)}));
+ assert.ok(bounds.entries<=4&&bounds.pixels<=4e6,JSON.stringify(bounds));
+ console.log('PASS CHR-268 next-image prefetch, rapid replacement pixel retention, final selection and bounded cache',bounds);
+}
 await page.locator('#lib-compare .lib-cmp-photo-sel[data-pane="B"]').evaluate(el=>{el.value='2';el.dispatchEvent(new Event('change',{bubbles:true}));el.value='3';el.dispatchEvent(new Event('change',{bubbles:true}));});
 await page.waitForFunction(()=>document.querySelector('#lib-compare .lib-cmp-pane[data-pane="B"]').dataset.sourceWidth==='1280');
 await page.locator('#lib-compare [data-detail="meta"]').click();assert.equal(await page.locator('#lib-compare .lib-detail-meta:visible').count(),2);
@@ -64,6 +91,15 @@ await page.keyboard.press('Escape');for(let i=0;i<8;i++)await cards.nth(i).click
 await page.locator('#lib-survey [data-detail="native"]').click();await page.waitForFunction(()=>[...document.querySelectorAll('#lib-survey .lib-survey-cell')].every(e=>e.dataset.detailScale==='1'));
 const survey=await page.evaluate(()=>[...document.querySelectorAll('#lib-survey .lib-survey-cell')].map(e=>({width:e.querySelector('canvas').width,height:e.querySelector('canvas').height,sourceWidth:+e.dataset.sourceWidth,sourceHeight:+e.dataset.sourceHeight,scale:+e.dataset.detailScale})));
 assert.equal(survey.length,8);assert.ok(survey.every(p=>p.width*p.height<=1e6));assert.deepEqual(errors,[]);
+if(transitions){
+ const prior=await page.evaluate(()=>{window.__surveyTransitionCanvases=[...document.querySelectorAll('#lib-survey canvas')];window.__surveyTransitionRelease=null;window.__detailTransitionState.queue=window.__detailTransitionState.queue.then(()=>new Promise(r=>window.__surveyTransitionRelease=r));return window.__surveyTransitionCanvases.map(c=>Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data));});
+ await page.waitForFunction(()=>typeof window.__surveyTransitionRelease==='function');
+ await page.locator('#lib-survey [data-detail="fit"]').click();
+ const pending=await page.evaluate(()=>[...document.querySelectorAll('#lib-survey canvas')].map((c,i)=>({same:c===window.__surveyTransitionCanvases[i],pixels:Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data)})));
+ assert.ok(pending.every(p=>p.same));assert.deepEqual(pending.map(p=>p.pixels),prior,'all eight Survey cells retain pixels during queued replacement');
+ await page.evaluate(()=>window.__surveyTransitionRelease());await page.waitForFunction(()=>[...document.querySelectorAll('#lib-survey .lib-survey-cell')].every(e=>+e.dataset.detailScale<1));
+ console.log('PASS CHR-268 all eight Survey cells retain canvases and pixels during replacement');
+}
 const layout=await page.evaluate(()=>{const main=document.querySelector('#lib-main'),bounds=main.getBoundingClientRect(),cells=[...document.querySelectorAll('#lib-survey .lib-survey-cell')];const content=cells.map(e=>{const r=e.getBoundingClientRect();return{bottom:r.bottom,contentBottom:bounds.top+main.scrollHeight,right:r.right,maxRight:bounds.right};});main.scrollTop=main.scrollHeight;const last=cells.at(-1).getBoundingClientRect();return{content,scrollHeight:main.scrollHeight,clientHeight:main.clientHeight,scrollTop:main.scrollTop,last:{top:last.top,bottom:last.bottom,mainBottom:bounds.bottom}};});assert.ok(layout.content.every(r=>r.bottom<=r.contentBottom+1&&r.right<=r.maxRight+1),JSON.stringify(layout));assert.ok(layout.scrollHeight>layout.clientHeight&&layout.scrollTop>0&&layout.last.bottom<=layout.last.mainBottom+1,JSON.stringify(layout));
 
 await page.screenshot({path:path.join(root,'test/output/detail-native-8.png')});

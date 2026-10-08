@@ -1119,3 +1119,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-08 — CHR-275 repair-erase publication verification
 - Feature 2ff427f1 published as 3bbd694e46b1bf8227c8de3e89e35a3fdd2ac420; remote main hash matches and ancestry verified. Integrated native repair test passes 7/7 and HTML validity passes.
 - Linear evidence comment records the repair behavior while device/every-mask/exhaustive conflict boxes remain open; issue stays In Progress. Runtime frontend updated without replacing AI resources.
+
+### 2026-10-08 — CHR-268 native prefetch/transition validation
+- Extended test/library_detail_native.mjs with explicit observation-only CDP source interception: inspect existing prefetch/cache and pause its queue to demonstrate exact visible pixel retention during three rapid Compare replacements and all eight Survey rerenders. No production viewer behavior changed.
+- Native WebView2 synthetic mixed-resolution fixture passes: next-image prefetch, final replacement wins, identical pending pixels/canvas identities, cache 4 entries / 1,488,928 pixels (<4M cap), linked/unlinked detail, source ROI MAE ~0.312/max1 and eight-photo layout; no page errors.
+- CHR-268 final prefetch criterion is supported by this evidence. Keep In Review after verified publication, never Done; physical RAW timing and user visual sign-off are not inferred from these synthetic JPEG fixtures.
