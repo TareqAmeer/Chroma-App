@@ -986,3 +986,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 
 - Final publication correction: git fetch and git ls-remote origin refs/heads/main both verified 7aed89174a9c59680d16995dbf98e025c6d42883 contains CHR-272 reset feature commit 904b829437449cbbcbcd07e4e1254e2507126cdf and localhost test commit c2ae41cd (squash/abbreviated integration record above). Linear reset criterion checked; issue moved to In Review; not Done.
+
+### 2026-10-08 — CHR-249 Detail/Noise Reduction batch-apply evidence
+
+- Extended `test/recipe_batch_ui.mjs` to exercise the real Library selective-paste UI for three selected photos. Sharpen Radius/Mask and Noise Reduction Luminance/Contrast/Color Detail were applied; each target retained its distinct Grain/Lens values, a fourth photo stayed byte-identical, retry completed the failed target, and batch undo restored each original recipe. Dark and light Chromium runs passed with zero page/console errors and zero failed resource responses; the test uses mocked native IPC.
+- `npm run library:batch-test` passed 7/7 journal/unit cases plus the dark/light browser flow. `node test/editor_gates.mjs --jobs=8` completed 21/33 PASS; 12 existing failures: inventory, responsive, wireframe-diff (2 attempts), snap-check, token-check, axe-check, icon-check, motion-token-check, hover-focus-matrix, surface-coverage, components-check and catalog-visual. Zoom-check passed. `node --check test/recipe_batch_ui.mjs` and `git diff --check` passed.
+- Issue ID: CHR-249. AC6 batch apply is now demonstrated for Detail and rendered Noise Reduction settings; AI model jobs, licensed Super Resolution, RAW refinement, Lightroom parity references and five-photo review remain open. Status remains In Progress. Files: `test/recipe_batch_ui.mjs`, `DEVLOG.md`.
