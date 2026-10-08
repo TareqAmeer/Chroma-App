@@ -7264,7 +7264,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008Z';
+const BUILD='1.1008A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -26985,6 +26985,10 @@ function csLayoutMenuHtml(){let h='';
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutView('edit')"><span>Edit — studio</span></button>`;
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutView('compare')"><span>Compare — two-up</span></button>`;
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();editorBgSet('#777777')"><span>Neutral grey surround</span></button>`;
+  h+='<div class="fx-ovf-grp-label">Starter workspaces</div>';
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csWorkspacePresetApply('film-look')"><span>Film look</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csWorkspacePresetApply('colour-grade')"><span>Colour grade</span></button>`;
+  h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csWorkspacePresetApply('quick-edit')"><span>Quick edit</span></button>`;
   csLayoutsList().forEach((l,i)=>{h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutApply(${i})"><span>${String(l.name).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}</span></button>`;});
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutSave()"><span>Save current layout…</span></button>`;
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();csLayoutExportFile()"><span>Export saved layouts…</span></button>`;
@@ -27072,6 +27076,21 @@ function csWorkspaceLayoutGet(){
   let value={};try{value=JSON.parse(localStorage.getItem(CS_WORKSPACE_LAYOUT_KEY)||'{}')||{};}catch(_){}
   return{sectionOrder:Array.isArray(value.sectionOrder)?value.sectionOrder:[],hiddenSections:Array.isArray(value.hiddenSections)?value.hiddenSections:[],
     hiddenControls:Array.isArray(value.hiddenControls)?value.hiddenControls:[],controlOrder:value.controlOrder&&typeof value.controlOrder==='object'?value.controlOrder:{}};
+}
+const CS_WORKSPACE_PRESETS={
+  'film-look':{name:'Film look',sections:['image','looks','inprint','filmneg','adjust','grain','hal','bloom','art','vig','borders']},
+  'colour-grade':{name:'Colour grade',sections:['image','looks','inprint','adjust','curves','hsl','pointcolor','wheels']},
+  'quick-edit':{name:'Quick edit',sections:['image','looks','adjust','curves','crop','rotate','straighten','lens','nr']},
+};
+function csWorkspacePresetApply(id){
+  const preset=CS_WORKSPACE_PRESETS[id];if(!preset||!Array.isArray(FX_SECTIONS)||!_csWorkspaceDefaultSections)return false;
+  const known=_csWorkspaceDefaultSections.map(([key])=>key),shown=new Set(preset.sections.filter(key=>known.includes(key)));
+  const state={...csWorkspaceLayoutGet(),sectionOrder:_csWorkspaceOrder(preset.sections,known),
+    hiddenSections:known.filter(key=>!shown.has(key)),hiddenControls:[],controlOrder:{}};
+  if(!_csWorkspaceSave(state))return false;
+  const firstVisible=preset.sections.find(key=>shown.has(key));if(firstVisible&&typeof fxSection==='function')fxSection(firstVisible,true);
+  if(typeof toast==='function')toast(`${preset.name} workspace applied`,true);
+  return true;
 }
 function _csWorkspaceOrder(saved,known){const out=[],seen=new Set();(saved||[]).forEach(k=>{if(known.includes(k)&&!seen.has(k)){seen.add(k);out.push(k);}});known.forEach(k=>{if(!seen.has(k))out.push(k);});return out;}
 function _csWorkspaceRowId(row){const c=row&&row.querySelector('input[id],select[id],textarea[id],button[id]');return c&&c.id||'';}

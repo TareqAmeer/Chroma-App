@@ -657,3 +657,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-287 blocker record
 
 - Blocker documentation commit `18c6655924bd81e47ff1908757ce6ac7839305a7` is published to `origin/main`; fresh fetch and `git ls-remote` matched, and the commit contains the CFA/RGB16 pipeline findings above. No source behavior changed; CHR-287 remains In Progress pending upstream references, performance budgets, and sensor-stage contracts.
+
+### 2026-10-08 — CHR-272 starter workspace presets (partial)
+
+- Added built-in Film look, Colour grade, and Quick edit workspace actions using the existing persisted section visibility/order store. Applying a starter profile resets layout-only control hiding/order while keeping photo edit values and snapshots intact. Files: `chromasmith-22.html`, `test/workspace_presets.mjs`.
+- The focused Chromium test passed at 1280×800 dark and 1440×900 light: all three menu actions applied, persisted after reload, exposed controls, and retained the exposure value in the live recipe snapshot. CHR-272 still needs full control-reachability/completeness scans, responsive extrema, and native workflow validation.
