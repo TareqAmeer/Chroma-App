@@ -627,3 +627,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Extended 	est/inpaint_ui.mjs to prove an accepted local inpaint repair reaches tiled export. Focused Chrome run measured 5,670 changed channels in the repair and 0 changed channels outside the mask; JS syntax and git diff --check passed. Feature commit: $feature.
 - The fixture validates patch persistence/export with mocked accepted repair pixels; it does not validate model quality for person/wire/tower removals, three distinct inference candidates, sensor-dust batch review, 100% real-photo repeat-pattern/color-shift fixtures, or live Tauri behavior. CHR-246 remains In Progress.
+
+### 2026-10-08 — CHR-249 luminance NR Contrast slice (partial)
+
+- Added a per-photo luminance-noise Contrast control that restores local luminance residual as its amount rises; default zero preserves existing output. Wired it through reset, session and undo/recipe snapshots, and the Detail panel's noise-reduction gate. Files: `chromasmith-22.html`, `test/noise_contrast_ui.mjs`.
+- The real Chrome test on `test/fixtures/portrait.png` measured a 4,304 absolute RGB delta from source at 90% luminance NR / 0% Contrast, 2,388 at 50%, and exact source pixels at 100%; snapshot restore was pixel-identical and reset returned Contrast to zero. `node test/export_harness.mjs` rendered all 35 fixture/recipe pairs without GLSL compile/link errors, and `npm run editor:html-check` passed.
+- CHR-249 remains In Progress: other Lightroom Detail/Noise controls, Super Resolution and Raw Details model/license validation, batch apply, masked-control parity, five-photo 100% review, native app behavior and full editor gates remain open.
