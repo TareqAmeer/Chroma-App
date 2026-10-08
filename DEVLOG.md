@@ -972,3 +972,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commit `9ddeb259` is integrated on `origin/main` as `62f37117f151b5eabe1bd642862852d42e601c57`. A fresh fetch and `git ls-remote` matched this tip; ancestry and shipped-source checks passed. Integrated-source Chromium cull test passed with 2→6 capture groups, 120-second near-duplicate join to 5, manual override, 496/78 px preview/filmstrip, and zero browser errors.
 - AC1 is checked in Linear; CHR-269 remains In Progress. The UI regression uses mocked perceptual hashes; labelled precision/recall and real-catalog/native Tauri behavior are not claimed.
+
+### 2026-10-08 — CHR-272 always-available reset-to-default (partial)
+
+- Added a separate “Reset default layout” action to the Workspace Customize dialog, with confirmation through the existing full `csLayoutReset()` path; named workspace save also snapshots the current section-collapse map. Reset clears panel width, section collapse, and control layout overrides while retaining photo edits.
+- Chromium behavior passed in `test/workspace_named_flow.mjs`: save a named layout, switch/apply after reload, preserve exposure at 27 in both live control and recipe snapshot, delete the layout, expose/click reset, clear the three custom layout keys, and retain exposure at 27. `test/workspace_presets.mjs`, `test/workspace_layout_files.mjs`, Editor HTML validity, syntax and whitespace checks passed.
+- `npm run editor:gates` completed 20/33 PASS; the same 13 design/catalog gates fail (inventory, responsive, wireframe-diff, snap-check, token-check, axe-check, icon-check, motion-token-check, hover-focus-matrix, zoom-check, surface-coverage, components-check, catalog-visual). No native Tauri run was made. CHR-272 stays In Progress pending publication and reconciliation of any remaining workspace acceptance evidence.
