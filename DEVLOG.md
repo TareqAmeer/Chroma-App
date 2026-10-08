@@ -672,3 +672,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Resolve the project root for `test/mobile_ux.mjs` and `test/mobile_edge_cases.mjs` from the test module URL through shared `test/lib/repo-paths.mjs`; make fixture, screenshot, and output paths absolute and separator-safe. `test/probe_splash_reveal.mjs` now uses the same helper. No unique Linear ticket matches this test-harness portability cleanup.
 - From `C:\Windows\Temp`, the file-URL root regression passed; the full focused Chromium mobile UX and edge-case suites passed, and the splash probe passed both native-call success/rejection states. JS syntax/diff checks passed; generated screenshots were deleted.
+
+#### Publication verification — Windows mobile test paths
+
+- Integration commit `e99c1ce00cda015eb7bf371cb15aa86388d2c54e` is published to `origin/main`; fresh `git ls-remote` matched and the commit is the remote tip at verification. It contains the path helper and updated mobile/probe harnesses.
+- Focused browser suites were run from `C:\Windows\Temp` with Chromium: mobile UX and mobile edge cases passed; the splash probe passed success and native-call rejection cases. The generated screenshot directory was removed. No Linear issue is linked to this repo-level test portability cleanup.
