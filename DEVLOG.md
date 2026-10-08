@@ -1083,3 +1083,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added a seeded generator for five 2048×1536 16-bit sRGB TIFF fixtures: edges/frequencies, luminance/chroma noise, fibres/texture, atmospheric veil and colour ramps. Exact TIFF reread assertions, ICC tags, source hashes and a contact sheet make comparisons reproducible.
 - Added a 20-export isolated-control protocol and filename matrix covering neutral baselines, sharpening detail/radius/masking, manual NR, Texture/Clarity/Dehaze and two Super Resolution runs. Generated kit is preserved in root test/output/chr249-lightroom-kit and its ZIP.
 - Synthetic TIFFs do not establish natural-photo quality, RAW AI denoise or demosaic refinement. Lightroom exports/user review are pending; CHR-249 remains In Progress with acceptance unchanged.
+
+### 2026-10-08 — CHR-208 mixed-format native metadata evidence
+- Added a reproducible native regression generating WebP/TIFF sources alongside JPEG/PNG; all four ingest with metadata, paired backup XMP matches, and unchanged re-import skips all four.
+- Eight real JPEG/PNG exports retain creator/copyright/caption/job/keywords and an unrelated custom XMP field. Existing GPS merge/removal and invalid-XMP checks pass. Files: test/import_metadata_mixed_native.mjs.
+- This is direct native IPC/export evidence, not saved-job UI or sensor RAW coverage; renamed re-import duplicate handling remains open. CHR-208 stays In Progress; no broader acceptance checkbox inferred.
