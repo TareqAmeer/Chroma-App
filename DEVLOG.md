@@ -662,3 +662,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Added built-in Film look, Colour grade, and Quick edit workspace actions using the existing persisted section visibility/order store. Applying a starter profile resets layout-only control hiding/order while keeping photo edit values and snapshots intact. Files: `chromasmith-22.html`, `test/workspace_presets.mjs`.
 - The focused Chromium test passed at 1280×800 dark and 1440×900 light: all three menu actions applied, persisted after reload, exposed controls, and retained the exposure value in the live recipe snapshot. CHR-272 still needs full control-reachability/completeness scans, responsive extrema, and native workflow validation.
+
+#### Publication verification — CHR-272 starter workspaces
+
+- Feature commit `a99c40f2ace581d781c18c77f4dbe8417ecd839b` is published on `origin/main`; `git ls-remote` and ancestry verification matched. Focused worker Chromium checks covered all three profiles, persistence across reload, and unchanged exposure values; merged-source syntax/HTML checks passed.
+- CHR-272 stays In Progress for complete hidden-control reachability, responsive extremes, full default-workspace scan, and native file/workspace workflow validation.
