@@ -204,3 +204,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Extended `test/mask_raster.mjs` to drive two real brush pointer strokes through the canvas handler and verify each creates a separate history step; undo restores the first stroke, a second undo restores the blank raster, and two redos restore both strokes.
 - Focused Chrome raster suite passed 53/53; `node --check` and `git diff --check` passed. CHR-275 AC5 remains open because Alt-conflict behavior in AI scribble and color sampling still needs separate verification. Issue remains In Progress.
+
+### CHR-275 — stroke undo publication verified
+
+- Two-pointer-stroke undo coverage is published in `origin/main` integration commit `9474b8a7e3c9e078a66a04a65dcebea150517392`; fetched remote ref and ancestry verification passed.
+- The integrated `test/mask_raster.mjs` suite passed 53/53. AC5 remains open until Alt behavior is checked alongside AI scribble and color sampling; issue stays In Progress.
