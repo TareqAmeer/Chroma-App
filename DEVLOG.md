@@ -818,6 +818,12 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Current integration checkout has no runnable `chromasmith.exe` or live Tauri process, and C: has about 1.09 GB free. A full native link is not feasible at this headroom (earlier Tauri links exhausted disk); no native build was attempted in this audit. Prior CHR-208 native `ingest_preview` evidence remains valid but does not cover export.
 - CHR-208 remains In Progress until a mixed-format fixture is imported and exported through a current native app and the saved recipe metadata plus unrelated sidecar fields are checked on disk; also re-run the native GPS keep/remove test.
 
+### 2026-10-08 — CHR-208 native GPS export-policy follow-up
+
+- Extended the real Windows WebView2 import/export fixture with source GPS coordinates. Actual JPEG export with “Keep location” enabled retained GPS; actual PNG export with it disabled removed GPS while preserving creator, copyright, caption, job, keywords, and unrelated XMP. Native primary/secondary metadata equality and duplicate skip also passed.
+- `test/import_recipes.mjs` passed in installed Chrome: naming collision preview, metadata preview, saved recipe save/reload, starting-edit IPC, and independent second-copy settings. `test/import_metadata_native.mjs` passed through native IPC/filesystem; `node --check` and `git diff --check` passed.
+- CHR-208 AC5 remains open: the native mixed-format import used the same job metadata directly in the ingest options, while saved-recipe selection was verified separately in the UI test. A single native UI-to-export saved-recipe journey is still needed. Files: `test/import_metadata_native.mjs`, `DEVLOG.md`.
+
 ### 2026-10-08 — CHR-272 live control reachability sweep
 
 - `test/workspace_controls.mjs` now derives its editor control set from the live DOM and drives the actual Ctrl+K palette search plus Enter for every hidden row. Current source exposed 124 unique controls across 33 sections; every result restored its original row and section. Sweep time was 9,211 ms. The existing preset, named-workspace and JSON file-flow checks also passed in Chromium.
