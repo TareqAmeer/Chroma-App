@@ -7283,7 +7283,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008N';
+const BUILD='1.1008O';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17243,7 +17243,7 @@ function _skySeedPoints(m){
 // ── Brush painting: pointer-drag stamps a soft circular falloff into the selected brush
 // mask's pixel array. Coordinates are mapped CSS→canvas→normalized image fraction the same
 // way wbEyedropperClick does, then scaled into the mask's own (independent) resolution.
-let mskPaintMode=false,mskPaintErase=false,mskBrushEraseHeld=false,mskBrushSize=25,mskBrushFlow=60,_mskStroke=null;
+let mskPaintMode=false,mskPaintErase=false,mskBrushEraseHeld=false,mskBrushSize=25,mskBrushFlow=60,mskBrushFeather=100,mskBrushDensity=100,_mskStroke=null;
 let _mskBrushTransientReset=()=>{};
 function mskPaintEndStroke(){if(!_mskStroke)return;_mskStroke=null;renderPreview();fxHistoryPush();}
 function mskPaintTransientReset(){_mskBrushTransientReset();mskPaintEndStroke();}
@@ -17275,15 +17275,17 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   const px=mskPxForWrite(m);
   const w=m.mtW,h=m.mtH,cx=nx*w,cy=ny*h;
   const rad=Math.max(2,(mskBrushSize/100)*0.25*Math.max(w,h));
-  const flow=Math.max(0.02,mskBrushFlow/100);
+  const flow=Math.max(0,Math.min(1,mskBrushFlow/100));
+  const feather=Math.max(0,Math.min(1,mskBrushFeather/100)),density=Math.max(0,Math.min(1,mskBrushDensity/100));
   const x0=Math.max(0,Math.floor(cx-rad)),x1=Math.min(w-1,Math.ceil(cx+rad));
   const y0=Math.max(0,Math.floor(cy-rad)),y1=Math.min(h-1,Math.ceil(cy+rad));
   for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
     const dd=Math.hypot(x-cx,y-cy)/rad;if(dd>1)continue;
-    const soft=1-dd*dd*(3-2*dd),add=flow*soft*255,idx=y*w+x,cur=px[idx];
-    // Uint8ClampedArray clamps on store, but keep the explicit bounds: erase must floor at 0 and
-    // add must ceil at 255 with the SAME arithmetic as before, so painted values are unchanged.
-    px[idx]=erase?Math.max(0,cur-add):Math.min(255,cur+add);
+    const edge=feather===0?0:Math.max(0,(dd-(1-feather))/feather);
+    const soft=1-edge*edge*(3-2*edge),add=flow*soft*255,idx=y*w+x,cur=px[idx];
+    // Density bounds the paint/erase coverage. Never weaken existing stronger coverage
+    // simply because the newly selected density is lower. Defaults preserve prior pixels.
+    px[idx]=erase?Math.min(cur,Math.max(255*(1-density),cur-add)):Math.max(cur,Math.min(255*density,cur+add));
   }
   _mskTexDirty=true;
 }
@@ -18418,6 +18420,8 @@ function mskRebuild(){
       +'<button class="btn '+(mskPaintErase?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" title="Erase instead of add; hold Alt/Option while painting for temporary erase">'+icon('eraser',14)+' Erase</button></div>'
       +'<div class="fx-row"><div class="fx-label">Brush size</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushSize+'" oninput="mskBrushSize=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushSize+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
+      +'<div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushFeather+'" oninput="mskBrushFeather=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFeather+'</div></div>'
+      +'<div class="fx-row"><div class="fx-label">Density</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushDensity+'" oninput="mskBrushDensity=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushDensity+'</div></div>'
          +mskRefineControls(m)
        +'<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()">Clear paint</button>'
       +(caps.sky?'<button class="btn bgh" onclick="mskGenerateSky(fxState.masks['+mskSel+']);fxUpdate()">Re-detect sky</button>':'')

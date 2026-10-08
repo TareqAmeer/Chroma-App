@@ -104,6 +104,31 @@ async function main() {
       const original = Uint8ClampedArray.from(px);
       const origHash = digest(original);
 
+      // Feather and density are independent of flow, shared by paint and erase.
+      const centre=(m.mtH>>1)*m.mtW+(m.mtW>>1);
+      const edgeProbe=centre+Math.round(.8*.125*Math.max(m.mtW,m.mtH));
+      mskBrushSize=50;mskBrushFlow=100;mskBrushDensity=100;mskBrushFeather=0;m.px.fill(0);
+      mskPaintAt(m,.5,.5,false);const hard=m.px[edgeProbe];
+      mskBrushFeather=100;m.px.fill(0);mskPaintAt(m,.5,.5,false);const soft=m.px[edgeProbe];
+      ck('CHR-275 feather zero is hard and full feather tapers',hard===255&&soft>0&&soft<hard,`${hard}/${soft}`);
+      mskBrushFeather=0;mskBrushDensity=25;m.px.fill(0);
+      for(let i=0;i<8;i++)mskPaintAt(m,.5,.5,false);
+      ck('CHR-275 repeated paint respects density cap',m.px[centre]===64);
+      m.px.fill(255);for(let i=0;i<8;i++)mskPaintAt(m,.5,.5,true);
+      ck('CHR-275 erase uses same density',m.px[centre]===191);
+      m.px.fill(200);mskPaintAt(m,.5,.5,false);ck('CHR-275 reduced density preserves existing stronger mask',m.px[centre]===200);
+      mskBrushDensity=0;m.px.fill(100);mskPaintAt(m,.5,.5,false);mskPaintAt(m,.5,.5,true);
+      ck('CHR-275 zero density does not alter coverage',m.px.every(v=>v===100));
+      mskBrushDensity=100;mskBrushFeather=100;mskBrushFlow=0;mskPaintAt(m,.5,.5,false);
+      ck('CHR-275 zero flow does not alter coverage',m.px.every(v=>v===100));
+      mskBrushFlow=60;mskBrushSize=25;mskRebuild();
+      const controls=[...document.querySelectorAll('.fx-row')].filter(r=>['Feather','Density'].includes(r.querySelector('.fx-label')?.textContent)&&r.querySelector('input[oninput*="mskBrush"]'));
+      ck('CHR-275 separate feather/density controls exposed',controls.length===2);
+      m.px.set(original);
+      const legacyPixels=Uint8ClampedArray.from(original),radius=Math.max(2,.25*.25*Math.max(m.mtW,m.mtH));
+      for(let y=0;y<m.mtH;y++)for(let x=0;x<m.mtW;x++){const d=Math.hypot(x-m.mtW/2,y-m.mtH/2)/radius;if(d<=1){const idx=y*m.mtW+x;legacyPixels[idx]=Math.min(255,legacyPixels[idx]+.6*(1-d*d*(3-2*d))*255)}}
+      mskPaintAt(m,.5,.5,false);ck('CHR-275 defaults preserve legacyPixels brush pixels exactly',same(m.px,legacyPixels));m.px.set(original);
+
       // ── CHR-275: Alt/Option temporarily erases within brush-paint calls ──
       const altProbe = (m.mtH >> 1) * m.mtW + (m.mtW >> 1);
       m.px.fill(200);
@@ -120,7 +145,7 @@ async function main() {
       ck('CHR-275 persistent erase mode still erases', m.px[altProbe] < altErased);
       mskPaintErase = false;
       // Exercise the real shortcut registry -> pointer-paint path, not just mskPaintAt's override.
-      mskPaintMode = true; m.px.fill(200);
+      mskPaintMode = true; mskBrushFeather=42;mskBrushDensity=37;m.px.fill(200);
       const paintCanvas=document.getElementById('fx-canvas'),paintRect=paintCanvas.getBoundingClientRect();
       const pointer=(type,altKey=false)=>paintCanvas.dispatchEvent(new PointerEvent(type,{bubbles:true,clientX:paintRect.left+paintRect.width/2,clientY:paintRect.top+paintRect.height/2,pointerId:71,buttons:type==='pointerup'?0:1,altKey}));
       pointer('pointermove');
@@ -131,12 +156,12 @@ async function main() {
       pointer('pointerdown'); pointer('pointerup');
       ck('CHR-275 rebound Shift erases through actual pointer handler',m.px.some(v=>v<200));
       document.dispatchEvent(new KeyboardEvent('keyup',{key:'Shift',bubbles:true}));
-      ck('CHR-275 release restores paint without changing size/flow',!mskBrushEraseHeld&&mskBrushSize===1&&mskBrushFlow===60);
+      ck('CHR-275 release restores paint without changing size/flow',!mskBrushEraseHeld&&mskBrushSize===1&&mskBrushFlow===60&&mskBrushFeather===42&&mskBrushDensity===37);
       ck('CHR-275 stationary cursor returns to paint',!document.getElementById('msk-brush-cursor').classList.contains('erase'));
       m.px.fill(200);pointer('pointerdown',true);pointer('pointerup',true);
       ck('CHR-275 old Alt binding does not erase after rebinding',!m.px.some(v=>v<200));
       csShortcutSet('editor.mask-erase',null);mskPaintMode=false;
-      m.px.set(original); mskBrushSize = 25; mskBrushFlow = 60; _mskTexDirty = true;
+      m.px.set(original); mskBrushSize = 25; mskBrushFlow = 60;mskBrushFeather=100;mskBrushDensity=100; _mskTexDirty = true;
 
       // Temporary Alt cursor feedback and an in-progress stroke cannot survive focus/tool exits.
       const brushCursor = document.getElementById('msk-brush-cursor');

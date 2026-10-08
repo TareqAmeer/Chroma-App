@@ -1101,3 +1101,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-08 — CHR-208 saved-job publication verification
 - Renamed-duplicate feature 24637b43 is published as 0e96431b2390ba4e285c1eb7e270743f7e620daf; remote main matched after push. Integrated native saved/reselected mixed-format job test passes with 8 outputs and 4/4 renamed skips.
 - Linear AC3/AC5 checked from this evidence and status In Review (not Done). Four-format fixture coverage is explicit; genuine RAW breadth is not claimed. Existing AI-enabled native executable and integrated runtime frontend are preserved.
+
+### 2026-10-08 — CHR-275 shared brush feather and density
+- Added independent Feather and Density controls to raster-mask paint; the same falloff and coverage limit apply to temporary erase. Defaults preserve legacy pixels exactly; zero density/flow is inert and lower density does not weaken stronger existing coverage.
+- Files: chromasmith-22.html, test/mask_raster.mjs, test/brush_settings_ui_native.mjs. Native raster suite 43/43 passes including non-default modifier release, repeated density bounds, undo/snapshot/render identity. Focused native new-control layout/wiring passes at 1440/1024 in both themes; targets are at least 28px. HTML validity/syntax/whitespace pass; broad Editor gates intentionally omitted per user instruction.
+- CHR-275 AC1 now has mouse/native brush evidence; Pencil/touch, Heal/Spot targeting and complete conflict coverage remain open. Keep In Progress and do not infer the device criteria.
