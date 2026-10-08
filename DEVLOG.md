@@ -1055,3 +1055,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Made `test/library_detail_native.mjs` reproducible with deterministic mixed-size local JPEG fixtures and installed-Playwright override; harness now dismisses the first-edit guide and explicitly enters full Library. Both Compare panes are measured against independently decoded original source crops, rather than fitted-canvas enlargement.
 - Native WebView2 passed at 1440x900: 1024x768 and 1280x960 sources at scale 1; original crop MAE A=0.3115257/B=0.3120605, max error 1; linked pan, independent unlinked pane, rapid reassignment, metadata strips, Editor-selection preservation and eight Survey cells with bounded native canvases/scrollable layout. No page errors. Fixtures are synthetic, not natural-photo quality sign-off.
 - CHR-199 native source-resolution criterion is now demonstrated; In Progress for remaining linked/source/rating/winner and advisory-focus criteria. CHR-268 selection prefetch/no-flash remains open; no checkbox newly checked there. Files: `test/library_detail_native.mjs`, `DEVLOG.md`; no product source changed in this slice.
+
+#### Publication verification — CHR-199/CHR-268 source detail
+
+- Feature `d964d520` integrated as `93c874aaaecf0b8cd84c9afa059ede6037bf605e`; fresh fetch, remote ls-remote and ancestry passed. Integrated test syntax/whitespace checks passed; native product source matches the measured test run apart from BUILD. CHR-199 source-resolution AC checked; CHR-268 prefetch/no-flash remains open. Both In Progress.
