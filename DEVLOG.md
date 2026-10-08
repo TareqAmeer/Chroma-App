@@ -861,3 +861,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - `node test/onboarding_first_edit.mjs` passes in current Chromium: actionable welcome content and sample attribution, existing photo picker action, sample load, look, original compare, explicit advanced-tools choice, and dialog fit in dark 1280×820 and light 980×720 viewports.
 - Corrected CHR-195 from In Review to In Progress. The test stubs the desktop platform for export reveal; actual native folder picker and export location/reveal, clean-profile migration, cancel/failure paths, and keyboard/focus remain unverified because no runnable current Tauri app is available. Issue ID: CHR-195.
+
+### 2026-10-08 — CHR-261 wavelet test replaced with live pixel behavior
+
+- Replaced the source-string/standalone-math check in `test/wavelet_detail_levels.mjs` with a Chromium test that loads `test/fixtures/portrait.png`, drives the actual wavelet range inputs, and reads production renderer pixels. All four controls measurably affect the photo: fine 3,072 channels changed (max 45, mean 0.073); small 3,840 (45, 0.080); medium 7,680 (45, 0.159); residual 589,824 (57, 12.276). Zero settings are byte-exact. Per-band live preview and 1:1 loupe match full render exactly; 128px tiled export differs by at most 1 output level (residual).
+- `node test/wavelet_detail_levels.mjs`, `node --check`, `git diff --check`, and `npm run editor:gates -- --only=editor:html-check` pass. The full 32-gate browser run was attempted but stopped producing output with no Node/Chromium child processes; it was terminated, so no full-suite result is claimed. This is test-only; no UI/shader source changed.
+- CHR-261 remains In Progress. The six planned algorithm children CHR-286–CHR-291, five-photo RawTherapee comparison, pipeline-stage capture sharpening, RAW corrections/reconstruction, and perf/memory budgets remain open as listed in Linear. Issue ID: CHR-261.
