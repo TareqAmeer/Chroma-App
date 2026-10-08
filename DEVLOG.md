@@ -841,3 +841,13 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Reviewed the latest CHR-246 acceptance gap against the available probe/model artifacts. No runnable `inpaint_probe.exe` or MI-GAN weights are present in the current checkout, and the required fresh Windows native build remains blocked at `onig_sys` MSVC LNK1114 with disk pressure. Existing natural-image trials report visible artifacts on pole/tower removals and seams on all three person-removal candidates; these predate the latest feather change, so no post-change quality conclusion is claimed.
 - No code changed. CHR-246 remains In Progress until the current model/probe can be run and dust, wire/pole, and person candidates are reviewed at 100% for smearing, repeat patterns, and color shift.
+
+### 2026-10-08 — CHR-208 native validation attempt (blocked)
+
+- `cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml` stopped inside the MSVC `ring` dependency at `lib.exe`: `LNK1114` / Windows error 5 while overwriting `libring_core_0_17_14_.a`. It emitted no application-crate diagnostics, so it neither confirms nor disproves the native application code. C: free space fell from about 1.14 GB to 196 MB; no process remained, and the build was not retried.
+- CHR-208 stays In Progress. Open acceptance includes starting editor recipe, pre-import metadata/name preview and collision resolution, explicit GPS export policy, and mixed-format export round-trip. Native verification remains pending a stable MSVC build environment.
+
+### 2026-10-08 — CHR-275 browser Alt-erase revalidation (partial)
+
+- `node test/mask_raster.mjs` passes 29/29 in Chromium. Alt erase changes the painted sample 200→47 while persistent erase stays off; persistent erase still works; transient stroke and cursor clear on blur, hidden document, leaving paint mode, and pointercancel. Raster round-trip, undo/redo, copy separation, and render identity also pass.
+- CHR-275 remains In Progress: native WebView2 menu-bar focus was not testable without a runnable current app; rebinding depends on CHR-266 and healing on CHR-246. Touch/Pencil, same-settings/feather/density, AI Alt isolation, shortcut conflict, and one-undo stroke semantics remain open. Issue ID: CHR-275.
