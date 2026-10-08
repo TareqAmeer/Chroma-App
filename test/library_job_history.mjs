@@ -25,9 +25,11 @@ test('same-kind jobs remain distinct when callers provide stable identities', ()
 test('confirmed failures and cancellations become terminal outcomes; a stall is not a failure', () => {
   const history = createHistory();
   assert.deepEqual({ ...history.activityTerminalPatch({ stage: 'failed' }) }, { outcome: 'failed', stage: 'done' });
-  assert.deepEqual({ ...history.activityTerminalPatch({ stage: 'cancelled' }) }, { outcome: 'interrupted', stage: 'done' });
+  assert.deepEqual({ ...history.activityTerminalPatch({ stage: 'cancelled' }) }, { outcome: 'cancelled', stage: 'done' });
   assert.deepEqual({ ...history.activityTerminalPatch({ stage: 'working' }) }, { stage: 'working' });
   assert.equal(history.activityTerminalPatch({ stage: 'working' }).outcome, undefined);
+  history.recordActivityHistory({jobId:'cancel-test',kind:'export',stage:'done',outcome:'cancelled'});
+  assert.equal(history.persisted()[0].status,'Cancelled');
 });
 
 test('history persists, deduplicates job IDs, classifies partial failures, and caps retention', () => {
@@ -75,5 +77,23 @@ test('history view remains mounted without a current activity and stalled copy a
   assert.match(source, /invoke\('ingest_cancel', \{ jobId: ingestJobId \}\)/);
   assert.match(source, /completed files remain in the destination/);
   assert.match(editor, /outcome:activityOutcome/);
-  assert.match(editor, /outcome:cancelled\|\|fxExportCancel\?'interrupted':videoExportFailed\?'failed':'completed'/);
+  assert.match(editor, /outcome:cancelled\|\|fxExportCancel\?'cancelled':videoExportFailed\?'failed':'completed'/);
+});
+
+const progressHelpers = source.split('// BEGIN LIBRARY_JOB_PROGRESS_HELPERS')[1]?.split('// END LIBRARY_JOB_PROGRESS_HELPERS')[0];
+const progress = vm.runInNewContext(`(() => { const ACTIVITY_STALL_MS=90000; ${progressHelpers}; return {activityNoRecentProgress,activityRecoveryCopy}; })()`);
+test('each job ages independently and terminal jobs never trigger a warning', () => {
+  assert.equal(progress.activityNoRecentProgress({stage:'working',lastProgressAt:1},100000),true);
+  assert.equal(progress.activityNoRecentProgress({stage:'working',lastProgressAt:99000},100000),false);
+  assert.equal(progress.activityNoRecentProgress({stage:'done',lastProgressAt:1},100000),false);
+  const history=createHistory();
+  history.persistActiveActivity({jobId:'old',kind:'export',stage:'working',lastProgressAt:17});
+  assert.equal(history.active()[0].lastProgressAt,17);
+  assert.equal(history.persisted().length,0);
+});
+test('cancellation guidance explains preservation and actual restart limits',()=>{
+  assert.match(progress.activityRecoveryCopy({kind:'export'}),/Restart continuation is unavailable/);
+  assert.match(progress.activityRecoveryCopy({kind:'import'}),/existing files are checked for duplicates/);
+  assert.match(progress.activityRecoveryCopy({kind:'catalog'}),/results already saved/);
+  assert.match(progress.activityRecoveryCopy({batchId:3}),/remaining eligible photos/);
 });

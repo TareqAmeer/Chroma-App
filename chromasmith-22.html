@@ -7284,7 +7284,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008A';
+const BUILD='1.1008B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24803,7 +24803,7 @@ async function _exportFXRun(){
     // an error logged. Now a per-image failure is logged and skipped; the rest of the batch and
     // whatever already succeeded still gets saved. ──
     for(let idx=0;idx<items.length;idx++){
-      if(fxExportCancel){activityOutcome='interrupted';log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
+      if(fxExportCancel){activityOutcome='cancelled';log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
       const sourceItem=items[idx];let it=sourceItem;let decodedJpeg=null,decodedGeometry=null;
       try{
         if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
@@ -25143,7 +25143,7 @@ async function _exportFXRun(){
     // since both branches above are guarded on results.length.
     else if(failed){activityOutcome='failed';log(`Export finished: 0 saved, ${failed} failed (see log above)`,'err');toast(`Export failed — ${failed} photo${failed>1?'s':''} not saved, see log`,false);}
   }catch(e){
-    activityOutcome=fxExportCancel?'interrupted':'failed';
+    activityOutcome=fxExportCancel?'cancelled':'failed';
     log('Export error: '+(e&&e.message||e),'err');console.error(e);
     toast('Export failed — see log');
   }finally{
@@ -25431,7 +25431,7 @@ async function fxVideoExportSmall(it){
     if(cancelBtn)cancelBtn.style.display='none';
     if(progBox)progBox.style.display='none';
     fxExportCancel=false;
-    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting video',outcome:cancelled||fxExportCancel?'interrupted':videoExportFailed?'failed':'completed',failedCount:videoExportFailed?1:0});
+    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting video',outcome:cancelled||fxExportCancel?'cancelled':videoExportFailed?'failed':'completed',failedCount:videoExportFailed?1:0});
     // The export loop drove FX with EXPORT-resolution frames — restore the live preview to
     // whichever frame the transport bar is actually showing, same as exportFX's own final
     // preview-refresh call (kept separately try/caught there for the same reason: a failure

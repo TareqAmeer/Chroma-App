@@ -1160,3 +1160,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-08 — CHR-267 saved-action publication verification
 - Feature 49d686d7 published as f76e7b085db44ac6c8b5401a5df2e9f367f7cc21; remote hash/ancestry verified. Integrated native rebound/paused/old-binding/real-failed-write/stale-response/Trash checks pass; focused Chrome culling test passed before integration.
 - Linear evidence updated with remaining colour-decision, 45MP timing and every-action undo scope; no aggregate checkbox inferred, issue stays In Progress.
+
+### 2026-10-08 — CHR-200 independent progress warnings and cancellation
+- Gave active and queued jobs individual event timestamps; promotion retains the queued age, and terminal queued jobs clear restart snapshots. Warning text explicitly avoids a failure claim. Cancelled, Interrupted, Partial and Failed remain distinct across import, recipe batch and export paths.
+- Files: desktop/library-ui.js, chromasmith-22.html, test/library_job_history.mjs and test/library_job_watchdog_native.mjs. Seven focused helper/history tests, HTML interaction validity and JavaScript syntax pass; native two-theme laptop coverage exercises independent clocks, promotion and cancellation snapshots.
+- CHR-200 remains In Progress: durable import/index/export replay and real foreground responsiveness measurements remain open. Job-specific cancellation copy states completed-work retention and export restart limitations without claiming an export journal.
