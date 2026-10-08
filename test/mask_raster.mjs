@@ -55,7 +55,8 @@ function startServer(root) {
 async function main() {
   const server = await startServer(ROOT);
   const { port } = server.address();
-  const browser = await chromium.launch({
+  const nativeCdp=process.env.NATIVE_CDP;
+  const browser = nativeCdp?await chromium.connectOverCDP(nativeCdp):await chromium.launch({
     executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe',
     args: ['--use-gl=swiftshader', '--use-angle=swiftshader', '--disable-gpu-sandbox',
       '--disable-dev-shm-usage', '--enable-unsafe-swiftshader'],
@@ -63,12 +64,14 @@ async function main() {
 
   let checks;
   try {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+    const page = nativeCdp?browser.contexts()[0].pages().find(p=>!p.url().includes('devtools')):await browser.newPage({ viewport: { width: 1400, height: 1000 } });
     page.on('pageerror', (e) => console.error('  [pageerror]', e.message));
     page.on('console', (m) => { if (m.type() === 'error') console.error('  [console.error]', m.text()); });
-    await page.goto(`http://127.0.0.1:${port}/chromasmith-22.html`, { waitUntil: 'load' });
+    if(nativeCdp)await page.reload({waitUntil:'load'});
+    else await page.goto(`http://127.0.0.1:${port}/chromasmith-22.html`, { waitUntil: 'load' });
     await page.waitForFunction(() => typeof window.loadFXImages === 'function'
       && typeof window.getUISnapshot === 'function', null, { timeout: 30000 });
+    if(nativeCdp)await page.evaluate(async()=>{if(window.chromasmithLibraryIsOpen?.())await window.chromasmithToggleLibrary();});
 
     const fixture = (await readFile(path.join(__dirname, 'fixtures', 'portrait.png'))).toString('base64');
     await page.evaluate(async (b64) => {
@@ -116,6 +119,23 @@ async function main() {
       mskPaintAt(m, 0.5, 0.5); // persistent Erase button continues to erase without the modifier
       ck('CHR-275 persistent erase mode still erases', m.px[altProbe] < altErased);
       mskPaintErase = false;
+      // Exercise the real shortcut registry -> pointer-paint path, not just mskPaintAt's override.
+      mskPaintMode = true; m.px.fill(200);
+      const paintCanvas=document.getElementById('fx-canvas'),paintRect=paintCanvas.getBoundingClientRect();
+      const pointer=(type,altKey=false)=>paintCanvas.dispatchEvent(new PointerEvent(type,{bubbles:true,clientX:paintRect.left+paintRect.width/2,clientY:paintRect.top+paintRect.height/2,pointerId:71,buttons:type==='pointerup'?0:1,altKey}));
+      pointer('pointermove');
+      csShortcutSet('editor.mask-erase','Shift');
+      document.dispatchEvent(new KeyboardEvent('keydown',{key:'Shift',shiftKey:true,bubbles:true}));
+      ck('CHR-275 rebound modifier reaches held erase state',mskBrushEraseHeld);
+      ck('CHR-275 stationary cursor reflects rebound erase',document.getElementById('msk-brush-cursor').classList.contains('erase'));
+      pointer('pointerdown'); pointer('pointerup');
+      ck('CHR-275 rebound Shift erases through actual pointer handler',m.px.some(v=>v<200));
+      document.dispatchEvent(new KeyboardEvent('keyup',{key:'Shift',bubbles:true}));
+      ck('CHR-275 release restores paint without changing size/flow',!mskBrushEraseHeld&&mskBrushSize===1&&mskBrushFlow===60);
+      ck('CHR-275 stationary cursor returns to paint',!document.getElementById('msk-brush-cursor').classList.contains('erase'));
+      m.px.fill(200);pointer('pointerdown',true);pointer('pointerup',true);
+      ck('CHR-275 old Alt binding does not erase after rebinding',!m.px.some(v=>v<200));
+      csShortcutSet('editor.mask-erase',null);mskPaintMode=false;
       m.px.set(original); mskBrushSize = 25; mskBrushFlow = 60; _mskTexDirty = true;
 
       // Temporary Alt cursor feedback and an in-progress stroke cannot survive focus/tool exits.

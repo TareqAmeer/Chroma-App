@@ -7283,7 +7283,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008A';
+const BUILD='1.1008B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17317,14 +17317,12 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     const diam=(mskBrushSize/100)*0.5*Math.max(pr.width,pr.height);
     cursorEl.style.width=diam+'px';cursorEl.style.height=diam+'px';
     cursorEl.style.left=(e.clientX-wr.left)+'px';cursorEl.style.top=(e.clientY-wr.top)+'px';
-    cursorEl.classList.toggle('erase',!!(mskPaintErase||mskBrushEraseHeld||e.altKey));
+    cursorEl.classList.toggle('erase',!!(mskPaintErase||mskBrushEraseHeld));
     cursorEl.classList.add('on');
   }
   fxCanvasOn('pointermove',e=>{lastBrushPointer=e;updateBrushCursor(e);});
-  // Lightroom Classic uses Alt/Option-drag as the temporary brush eraser. Keep it scoped to
-  // brush paint so AI scribbles and color-sampling gestures retain their existing Alt meaning.
-  document.addEventListener('keydown',e=>{if(e.key==='Alt'&&lastBrushPointer)updateBrushCursor({...lastBrushPointer,altKey:true});});
-  document.addEventListener('keyup',e=>{if(e.key==='Alt'&&lastBrushPointer)updateBrushCursor({...lastBrushPointer,altKey:false});});
+  // The shared held-modifier registry updates erase state and the stationary cursor, including
+  // rebound modifiers. AI scribbles and color sampling retain their separate Alt meanings.
   fxCanvasOn('pointerleave',()=>{if(cursorEl)cursorEl.classList.remove('on');});
   fxCanvasOn('pointerdown',e=>{
     if(!mskPaintMode)return;
@@ -17332,13 +17330,13 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     e.preventDefault();e.stopPropagation();
     try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
     _mskStroke=m;
-    const p=_mskPointToUV(e);if(p)mskPaintAt(m,p.nx,p.ny,mskPaintErase||e.altKey);
+    const p=_mskPointToUV(e);if(p)mskPaintAt(m,p.nx,p.ny,mskPaintErase||mskBrushEraseHeld);
     queueRender();
   });
   fxCanvasOn('pointermove',e=>{
     if(!mskPaintMode||!_mskStroke)return;
     e.preventDefault();e.stopPropagation();
-    const p=_mskPointToUV(e);if(p)mskPaintAt(_mskStroke,p.nx,p.ny,mskPaintErase||e.altKey);
+    const p=_mskPointToUV(e);if(p)mskPaintAt(_mskStroke,p.nx,p.ny,mskPaintErase||mskBrushEraseHeld);
     queueRender();
   });
   const end=e=>{if(!_mskStroke)return;if(e.type==='pointercancel')clearTransientErase();mskPaintEndStroke();};
