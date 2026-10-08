@@ -1128,3 +1128,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-08 — CHR-268 transition-test publication verification
 - Feature 795ca1be published as ee00338f266a68725000ae66d1eee451d4665cac; remote hash and ancestry verified. Integrated test syntax passes; production viewer unchanged, native transition/source-detail test passed before integration.
 - Linear AC5 checked and issue In Review (all 6 criteria), never Done. Feature checkout moved outside the integration checkout with Git worktree move, preserving its native fixture/results and commit.
+
+### 2026-10-08 — CHR-267 confirmed native Trash evidence
+- Added test/library_cull_trash_native.mjs using four generated JPEG fixtures and actual native cull/sidecar/system-trash IPC. Reject preserves originals; undo clears the reject; count/name confirmation cancels without deletion; confirm removes only the rejected photo.
+- Native Windows test passes: exact original and XMP SHA-256 bytes found in Windows Recycle Bin via Shell namespace, three survivors unchanged. Observed hidden known-file extensions handled without assuming unsupported OriginalFileName property. Fixtures are disposable and recoverable; no existing photos were targeted.
+- Supports CHR-267 AC3; keep In Progress with RAW timing, rebindable auto-advance coverage and every-action/in-app trash undo open. Found rebound Pick/Reject and rating keys bypass the cull advance path; continuing implementation. Colour-label requirement conflicts with current explicitly removed colour UI and awaits user direction.
