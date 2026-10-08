@@ -7283,7 +7283,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008V';
+const BUILD='1.1008W';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11266,9 +11266,27 @@ function _exportRecipeNames(){
   const print=(printOpt&&printOpt.value)?printOpt.textContent.trim():'';
   return {look,print};
 }
-function injectRecipeXmp(out,ext,lookName,printProfile){
+function mergeExportSidecarXmp(recipeXml,sidecarXml,keepGps){
+  if(!sidecarXml)return recipeXml;
+  const parser=new DOMParser(),source=parser.parseFromString(sidecarXml,'application/xml'),target=parser.parseFromString(recipeXml,'application/xml');
+  if(source.getElementsByTagName('parsererror').length)throw Error('Source XMP is invalid; export metadata was not discarded');
+  const ns='http://www.w3.org/1999/02/22-rdf-syntax-ns#',rdf=target.getElementsByTagNameNS(ns,'RDF')[0];
+  const sourceRdf=source.getElementsByTagNameNS(ns,'RDF')[0];
+  if(!sourceRdf)throw Error('Source XMP has no RDF metadata');
+  // Preserve whole source descriptions, including namespaces and fields unknown to this app.
+  for(const child of [...sourceRdf.children])rdf.appendChild(target.importNode(child,true));
+  if(!keepGps){
+    for(const node of [...rdf.getElementsByTagName('*')]){
+      if(/^GPS/i.test(node.localName)){node.remove();continue;}
+      for(const attr of [...node.attributes])if(/^GPS/i.test(attr.localName))node.removeAttributeNode(attr);
+    }
+  }
+  return new XMLSerializer().serializeToString(target);
+}
+function injectRecipeXmp(out,ext,lookName,printProfile,sidecarXml,keepGps=true){
+  const xml=mergeExportSidecarXmp(buildRecipeXmp(lookName,printProfile),sidecarXml,keepGps);
   try{
-    const xmp=new TextEncoder().encode(buildRecipeXmp(lookName,printProfile));
+    const xmp=new TextEncoder().encode(xml);
     if(ext==='png'){
       const kw=new TextEncoder().encode('XML:com.adobe.xmp');
       const data=new Uint8Array(kw.length+1+2+2+xmp.length); // keyword\0 + comp(1) + method(1) + lang\0 + xkw\0 + text
@@ -11282,6 +11300,7 @@ function injectRecipeXmp(out,ext,lookName,printProfile){
     }else{ // JPEG: separate APP1 segment from Exif's, identified by its own signature
       const sig=new TextEncoder().encode('http://ns.adobe.com/xap/1.0/\0');
       const segLen=2+sig.length+xmp.length; // length field covers everything after the FF E1 marker
+      if(segLen>65535)throw Error('Source XMP exceeds JPEG metadata segment size');
       const seg=new Uint8Array(2+segLen);
       seg[0]=0xFF;seg[1]=0xE1;seg[2]=(segLen>>8)&0xFF;seg[3]=segLen&0xFF;
       seg.set(sig,4);seg.set(xmp,4+sig.length);
@@ -11290,7 +11309,7 @@ function injectRecipeXmp(out,ext,lookName,printProfile){
       res.set(out.subarray(0,2),0);res.set(seg,2);res.set(out.subarray(2),2+seg.length);
       return res;
     }
-  }catch(e){return out}
+  }catch(e){if(sidecarXml)throw e;return out}
 }
 // ═══════════════════════════
 // LUT PRESETS + LIBRARY
@@ -24859,7 +24878,9 @@ async function _exportFXRun(){
             // in the exported file says so and export_history.json's own recipe record never
             // made it INTO the file itself.
             const {look,print}=exportRecipeNames;
-            out=injectRecipeXmp(out,outExt,look,print);
+            const metadataPath=libPaths[fxImages.indexOf(sourceItem)];
+            const sidecarXml=metadataPath&&window.__TAURI__?.core?await window.__TAURI__.core.invoke('read_export_sidecar',{path:metadataPath}):null;
+            out=injectRecipeXmp(out,outExt,look,print,sidecarXml,document.getElementById('tg-exp-gps')?.checked!==false);
           }
         }
         // Filename pattern: the rename field now applies to BATCH exports too (it used to be

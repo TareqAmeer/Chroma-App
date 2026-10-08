@@ -1683,6 +1683,16 @@ fn read_file_bytes(path: String) -> Result<tauri::ipc::Response, String> {
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+// Export reads the authoritative sidecar, including metadata added during ingest.
+// Missing sidecars are normal; unreadable existing sidecars must not silently lose metadata.
+#[tauri::command(async)]
+fn read_export_sidecar(path: String) -> Result<Option<String>, String> {
+    let Some(sidecar) = canon::find_sidecar(Path::new(&path)) else { return Ok(None); };
+    std::fs::read_to_string(&sidecar)
+        .map(Some)
+        .map_err(|e| format!("read export metadata {}: {e}", sidecar.display()))
+}
+
 /// The first `len` bytes of a file plus its real size: [u64 LE size][head bytes]. A Library RAW
 /// open only needs the header in the WebView (format sniffing) — the native decode reads the
 /// file by path (decode_raw_v2's sourcePath), so the full ~30MB never crosses IPC.
@@ -2800,6 +2810,7 @@ fn main() {
             platform_capabilities,
             peek_raw_camera,
             read_file_bytes,
+            read_export_sidecar,
             read_file_head,
             peek_raw_camera_path,
             write_file_bytes,
