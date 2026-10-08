@@ -880,6 +880,10 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - `node test/export_harness.mjs` rendered 35/35 fixture/recipe pairs with no GLSL errors. `node test/noise_contrast_ui.mjs` and `node test/sharpen_mask_ui.mjs` pass. `npm run ui:test` reports four existing unrelated Library/phone audit findings (token, narrow Library fragmentation, one small phone button, and phone contrast); the full editor gate run stopped at the wireframe-diff retry with no completion output. Snapshot-list cross-check reports only the two previously existing omissions `inpaint-size` and `exp-gps`; new controls are included.
 - CHR-249 remains In Progress: AI denoise requires native model/job review; no verified Super Resolution model or Raw Details backend is present; remaining noise-control breadth, batch, masked parity, five-photo Lightroom 100% review, and native runtime/performance acceptance remain. Feature commit `9def3dbecfac944dd1510bfb064228323181bedb` is published on `origin/main`; fresh fetch, ancestry, remote SHA, and shipped-source grep verified. Issue ID: CHR-249.
 
+#### Publication verification — CHR-249 noise-control gate hint
+
+- Feature commit `8ac4e033` was integrated as `ccc2a2d2` and pushed to `origin/main` as a fast-forward. Focused browser test, `node --check`, `git diff --check`, and `npm run editor:gates -- --only=editor:html-check` passed in the integration checkout. CHR-249 stays In Progress for the broader acceptance gaps above.
+
 ### 2026-10-08 — CHR-249 noise-control gate hint
 
 - Updated the zero-NR hint to name all five disabled dependent controls (Detail, Contrast, Color Detail, Smoothness and Highlight Desaturation). The Chromium behavior test now asserts the five rows are gated and every control is named.
