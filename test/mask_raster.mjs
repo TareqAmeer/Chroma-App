@@ -252,6 +252,24 @@ async function main() {
       await fxRedo();
       ck('4. redo restores the painted raster', same(painted, fxState.masks[0].px));
 
+      // Two real pointer strokes must become two independent history steps.
+      fxHistory=[];fxHistIdx=-1;_fxHistLocked=false;mskPaintErase=false;mskPaintMode=true;
+      fxState.masks[0].px.fill(0);_mskTexDirty=true;mskRebuild();fxHistoryPush();
+      const untouched=Uint8ClampedArray.from(fxState.masks[0].px);
+      pointer('pointerdown');pointer('pointerup');
+      const firstStroke=Uint8ClampedArray.from(fxState.masks[0].px),firstHistoryLength=fxHistory.length;
+      pointer('pointerdown');pointer('pointerup');
+      const secondStroke=Uint8ClampedArray.from(fxState.masks[0].px);
+      ck('CHR-275 each pointer stroke commits its own undo entry',firstHistoryLength===2&&fxHistory.length===3);
+      ck('CHR-275 separate strokes each change the raster',!same(untouched,firstStroke)&&!same(firstStroke,secondStroke));
+      await fxUndo();
+      ck('CHR-275 first undo removes only the second stroke',same(firstStroke,fxState.masks[0].px));
+      await fxUndo();
+      ck('CHR-275 second undo removes the first stroke',same(untouched,fxState.masks[0].px));
+      await fxRedo();await fxRedo();
+      ck('CHR-275 two redos restore both separate strokes',same(secondStroke,fxState.masks[0].px));
+      mskPaintStop();mskPaintErase=false;mskRebuild();
+
       // ── 6. mskCopyToAll gives each photo its OWN raster ──
       if (fxImages.length === 1) {
         fxImages.push({ ...fxImages[0], masks: [] });   // a second photo, enough for the copy path
