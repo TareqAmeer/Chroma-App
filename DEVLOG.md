@@ -979,3 +979,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Chromium behavior passed in `test/workspace_named_flow.mjs`: save a named layout, switch/apply after reload, preserve exposure at 27 in both live control and recipe snapshot, delete the layout, expose/click reset, clear the three custom layout keys, and retain exposure at 27. `test/workspace_presets.mjs`, `test/workspace_layout_files.mjs`, Editor HTML validity, syntax and whitespace checks passed.
 - `npm run editor:gates` completed 20/33 PASS; the same 13 design/catalog gates fail (inventory, responsive, wireframe-diff, snap-check, token-check, axe-check, icon-check, motion-token-check, hover-focus-matrix, zoom-check, surface-coverage, components-check, catalog-visual). No native Tauri run was made. CHR-272 stays In Progress pending publication and reconciliation of any remaining workspace acceptance evidence.
 - Follow-up: served the focused flow over localhost and retained strict page/console error checks; named save/switch/delete/reset plus edit preservation passed.
+
+#### Publication verification — CHR-272 localhost test follow-up
+
+- Follow-up feature commit 8d14be236a279b947490064d62c1e19a56113941 integrated on origin/main as c2ae41cd (pending push). On the integration checkout, localhost Chromium named workspace flow and Editor HTML validity passed; strict browser page/console checks reported no errors.
+
