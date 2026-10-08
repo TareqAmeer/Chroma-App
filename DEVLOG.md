@@ -906,3 +906,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-08 — CHR-270 divider pointer-drag regression
 - Extended `test/before_after_divider.mjs` to perform real pointer drags on vertical and horizontal split dividers and assert that before/after canvas clipping follows the measured split position. The test loads the repository portrait photo and still verifies keyboard nudges, limits, double-click centering, orientation, and recipe isolation.
 - Live Chromium test passed: vertical split moved 0.500→0.694, horizontal split 0.510→0.624; both canvas clips tracked the final divider position. This closes CHR-270 criterion 1 alongside the already validated previous-step hold. The other four criteria remain open; issue stays In Progress.
+
+#### Publication verification — CHR-270 divider pointer-drag
+- Feature commit `b96df15c637e7e5cd0f204fd8d648b66f365af8c` is on verified `origin/main` at the same SHA; ancestry check passed.
+- Integration-checkout rerun passed: vertical split moved 0.500→0.734, horizontal split 0.510→0.615, and clipping followed both positions. Test syntax, Editor HTML validity, and whitespace checks pass. CHR-270 remains In Progress with criteria 1 and 2 checked; criteria 3–6 remain open.
