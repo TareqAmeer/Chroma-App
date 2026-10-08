@@ -984,3 +984,5 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Follow-up feature commit 8d14be236a279b947490064d62c1e19a56113941 integrated on origin/main as c2ae41cd (pending push). On the integration checkout, localhost Chromium named workspace flow and Editor HTML validity passed; strict browser page/console checks reported no errors.
 
+
+- Final publication correction: git fetch and git ls-remote origin refs/heads/main both verified 7aed89174a9c59680d16995dbf98e025c6d42883 contains CHR-272 reset feature commit 904b829437449cbbcbcd07e4e1254e2507126cdf and localhost test commit c2ae41cd (squash/abbreviated integration record above). Linear reset criterion checked; issue moved to In Review; not Done.
