@@ -714,3 +714,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Fixed retry routing so failed outputs are retried in their original recipe destination and the user's prior destination is restored. Added `test/export_60_output_recipes.mjs` to exercise 20 photos × 3 recipes, 60 unique PNG/JPG/WebP outputs, dimensions/naming, a single injected failed output, retry, and zero page errors.
 - Browser test passed on real app UI: all 60 outputs were verified and the failed output landed in its intended recipe folder after retry. CHR-202 remains In Progress for per-recipe metadata policy independence and native filesystem validation.
+
+#### Publication verification — CHR-202 60-output recipe retry
+
+- Integration commit `2133a06d` is ready for publication. It contains the task-owned export retry fix, 60-output browser test, and root DEVLOG summary; run verification passed on integrated source after cherry-pick.
+- CHR-202 remains In Progress: per-recipe metadata policy and native filesystem validation are still outstanding acceptance criteria.
