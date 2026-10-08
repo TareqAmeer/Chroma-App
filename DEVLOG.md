@@ -797,3 +797,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Persistent activity history now retains up to 20 bounded failed-item names per job and the durable numeric SQLite batch ID. Historical recipe batches expose a Results / resume action that opens the existing journal-backed dialog; retry still uses the journal to skip already-applied items. Generic history does not claim restart-safe resume for job types without durable inputs.
 - `node --test test/library_job_history.mjs` passes (5/5), including failed-item and batch-ID persistence. `node test/recipe_batch_ui.mjs` passes in dark and light themes, including an injected failed item, safe resume of that item, undo, and no repeat of successful work. JavaScript syntax and `git diff --check` pass.
 - CHR-200 remains In Progress: the app UI path was validated in the browser harness, but native Tauri/WebView2 restart recovery, broad import/index/export resumability, and foreground editing responsiveness have not yet been established.
+
+#### Publication verification — CHR-200 durable job history recovery slice
+
+- Commit `9f17dc0d0061e878dd21ee2ca90e76c00f1b0b45` was published to `origin/main`. A fresh remote ref check matched that SHA, and ancestry verification passed. Browser history and recipe-batch UI checks passed as recorded above; CHR-200 remains In Progress pending native recovery, wider job-type restartability, and responsiveness evidence.
