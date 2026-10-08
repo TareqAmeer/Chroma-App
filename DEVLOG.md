@@ -828,3 +828,6 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - The pasted priority groups identify 37 unique issue IDs; adding the five additional named issues (CHR-245, CHR-270, CHR-195, CHR-200 and CHR-275) gives a practical 42-ID execution scope. Linear history does not prove this is the exact historical set reopened on October 7: only 27 of those 42 have the literal move comment, while the broader audit finds 43 move comments but 32 direct In Review→In Progress transitions; CHR-272 was separately reopened later.
 - Continue against the 42 narrative IDs, use each issue's latest comment as its remaining-work spec, and keep any partially verified issue In Progress. Do not infer or report a more precise historical set without supporting records.
+#### Publication verification — CHR-272 live control reachability sweep
+
+- Integration commit `03a426e941d5d0c4918a7682b04662634045e165` was pushed to `origin/main`. A fresh fetch, `git ls-remote`, and `git merge-base --is-ancestor` verified the remote SHA and ancestry; `git show origin/main:test/workspace_controls.mjs` confirmed the sweep is shipped. The post-integration Chromium rerun passed with 124 controls across 33 sections in 9,570 ms.
