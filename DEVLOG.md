@@ -622,3 +622,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Integrated GPS export policy commit `bf4155511243a87bf5b3be36c90d13fb2770e42f` into `origin/main`; fresh `git ls-remote` matched the published main SHA, and ancestry/content checks confirmed the GPS policy is present in `desktop/src-tauri/src/main.rs` and `tiff_meta.rs`.
 - On this host `node test/import_recipes.mjs` could not launch Chromium (`spawn UNKNOWN`); the focused worker run passed the recipe/browser checks. Local `node --check`, Rust source parsing, and `git diff --check` passed. Native Rust and mixed-format import-to-export validation remain open; CHR-208 stays In Progress.
+
+### 2026-10-08 — CHR-246 accepted repair export regression (partial)
+
+- Extended 	est/inpaint_ui.mjs to prove an accepted local inpaint repair reaches tiled export. Focused Chrome run measured 5,670 changed channels in the repair and 0 changed channels outside the mask; JS syntax and git diff --check passed. Feature commit: $feature.
+- The fixture validates patch persistence/export with mocked accepted repair pixels; it does not validate model quality for person/wire/tower removals, three distinct inference candidates, sensor-dust batch review, 100% real-photo repeat-pattern/color-shift fixtures, or live Tauri behavior. CHR-246 remains In Progress.
