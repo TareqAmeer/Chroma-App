@@ -7264,7 +7264,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008V';
+const BUILD='1.1008W';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20696,6 +20696,7 @@ function _exportPresetRead(){
     q:(document.getElementById('sl-exp-q')||{}).value||'99',
     size:(document.getElementById('sel-exp-size')||{}).value||'0',
     sharp:(document.getElementById('sel-exp-sharp')||{}).value||'0',
+    dest:(()=>{try{return localStorage.getItem('cs-export-dir')||''}catch(e){return''}})(),
   };
 }
 async function exportPresetSaveCurrent(){
@@ -20710,7 +20711,7 @@ async function exportPresetSaveCurrent(){
   exportPresetsSave(list);exportPresetListRefresh(name);
   toast(`Export preset "${name}" saved`,true);
 }
-function exportPresetApply(name){
+async function exportPresetApply(name){
   const p=exportPresetsList().find(x=>x.name===name);if(!p)return;
   const s=p.settings;
   const fmtEl=document.getElementById('sel-exp-fmt'),qEl=document.getElementById('sl-exp-q'),
@@ -20719,8 +20720,16 @@ function exportPresetApply(name){
   if(qEl&&s.q!=null){qEl.value=s.q;const vl=document.getElementById('vl-exp-q');if(vl)vl.textContent=s.q;}
   if(sizeEl&&s.size!=null)sizeEl.value=s.size;
   if(sharpEl&&s.sharp!=null)sharpEl.value=s.sharp;
+  if(s.dest!=null&&tauriNative()){
+    try{
+      await window.__TAURI__.core.invoke('set_export_dir',{path:s.dest||''});
+      try{localStorage.setItem('cs-export-dir',s.dest||'')}catch(e){}
+      fxExportDirUI(s.dest||'');
+    }catch(e){const msg=`Could not set the destination for "${name}": ${e&&e.message||e}`;log(msg,'err');toast(msg);return false;}
+  }
   const delBtn=document.getElementById('btn-exp-preset-del');if(delBtn)delBtn.disabled=false;
   log(`Export preset applied: ${name}`,'ok');
+  return true;
 }
 // CHR-202: run one export per chosen preset, back to back. Each run's files get the preset name
 // appended ({name}_<preset>) so the deliveries never overwrite each other; the panel's own
@@ -20729,11 +20738,11 @@ function exportMultiPresetOpen(){
   const list=exportPresetsList();
   if(list.length<2){toast('Save at least two export presets first');return;}
   const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  _csModal('Export with several presets',list.map((p,i)=>`<label style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="emp-cb" value="${i}" checked> ${esc(p.name)}</label>`).join('')
+  _csModal('Export with several presets',list.map((p,i)=>{const dest=p.settings&&p.settings.dest||'';const destLabel=tauriNative()?(dest||'Downloads folder'):'Browser downloads folder';return `<label style="display:flex;gap:8px;align-items:center;padding:5px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="emp-cb" value="${i}" checked> <span>${esc(p.name)}</span><span class="emp-dest" title="${esc(destLabel)}" style="margin-left:auto;font-size:11px;color:var(--mut)">${esc(destLabel)}</span></label>`}).join('')
     +`<div style="margin-top:12px;font-size:12px;color:var(--mut)">Each preset saves its own copy of every photo in the current export scope, named "photo_&lt;preset&gt;".</div><div id="emp-total" role="status" style="margin-top:8px;font-size:13px"></div><div class="btn-row" style="margin-top:12px"><button class="btn bpri" id="emp-go">Export</button></div>`);
   const photos=(typeof fxExportScope!=='undefined'&&fxExportScope==='current')||fxImages.length<=1?Math.min(1,fxImages.length):fxImages.length;
   const sync=()=>{const n=document.querySelectorAll('.emp-cb:checked').length,tot=photos*n;
-    document.getElementById('emp-total').textContent=`${photos} photo${photos===1?'':'s'} \u00d7 ${n} recipe${n===1?'':'s'} = ${tot} file${tot===1?'':'s'} \u00b7 saving to ${expDestLabel()} \u00b7 if a file exists: ${expPolicyLabel()}`;
+    document.getElementById('emp-total').textContent=`${photos} photo${photos===1?'':'s'} \u00d7 ${n} recipe${n===1?'':'s'} = ${tot} file${tot===1?'':'s'} \u00b7 each recipe uses its listed destination \u00b7 if a file exists: ${expPolicyLabel()}`;
     document.getElementById('emp-go').disabled=!n||!photos;};
   document.querySelectorAll('.emp-cb').forEach(c=>c.onchange=sync);sync();
   document.getElementById('emp-go').onclick=()=>{const idx=[...document.querySelectorAll('.emp-cb:checked')].map(c=>+c.value);
@@ -20742,9 +20751,10 @@ function exportMultiPresetOpen(){
 async function exportMultiPresetRun(names,photos){
   window._expAccumulate=true;window._expFail=[];window._expSavedSum=0;window._expPlanned=(photos||fxImages.length)*names.length;
   const ids=['sel-exp-fmt','sl-exp-q','sel-exp-size','sel-exp-sharp','fx-fname'],saved=ids.map(id=>{const e=document.getElementById(id);return e?e.value:null;});
+  let savedDest='';try{savedDest=localStorage.getItem('cs-export-dir')||''}catch(e){}
   try{
     for(let k=0;k<names.length;k++){
-      exportPresetApply(names[k]);
+      if(await exportPresetApply(names[k])===false)break;
       const fn=document.getElementById('fx-fname'),tag=names[k].replace(/[^\w-]+/g,'-');
       if(fn)fn.value=`{name}_${tag}{nover}`;
       toast(`Exporting ${k+1}/${names.length}: ${names[k]}`);
@@ -20752,7 +20762,12 @@ async function exportMultiPresetRun(names,photos){
       await exportFX();
       if(typeof fxExportCancel!=='undefined'&&fxExportCancel)break;
     }
-  }finally{window._expAccumulate=false;window._expPlanned=0;window._expRecipe=null;ids.forEach((id,i)=>{const e=document.getElementById(id);if(e&&saved[i]!=null)e.value=saved[i];});const vl=document.getElementById('vl-exp-q'),q=document.getElementById('sl-exp-q');if(vl&&q)vl.textContent=q.value;if(typeof expPlainRender==='function')expPlainRender();}
+  }finally{
+    if(tauriNative())try{await window.__TAURI__.core.invoke('set_export_dir',{path:savedDest})}catch(e){log('Could not restore the previous export destination: '+(e&&e.message||e),'err')}
+    try{localStorage.setItem('cs-export-dir',savedDest)}catch(e){}
+    if(tauriNative())fxExportDirUI(savedDest);
+    window._expAccumulate=false;window._expPlanned=0;window._expRecipe=null;ids.forEach((id,i)=>{const e=document.getElementById(id);if(e&&saved[i]!=null)e.value=saved[i];});const vl=document.getElementById('vl-exp-q'),q=document.getElementById('sl-exp-q');if(vl&&q)vl.textContent=q.value;if(typeof expPlainRender==='function')expPlainRender();
+  }
 }
 // ── CHR-197: one Presets manager for the three kinds of saved recipe ───────────────────────
 // Looks = colour/film treatment (favourites + your own saved .cube looks); Edit Styles = saved

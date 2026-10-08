@@ -625,9 +625,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 ### 2026-10-08 — CHR-246 accepted repair export regression (partial)
 
-- Extended 	est/inpaint_ui.mjs to prove an accepted local inpaint repair reaches tiled export. Focused Chrome run measured 5,670 changed channels in the repair and 0 changed channels outside the mask; JS syntax and git diff --check passed. Feature commit: $feature.
+- Extended `test/inpaint_ui.mjs` to prove an accepted local inpaint repair reaches tiled export. Focused Chrome run measured 5,670 changed channels in the repair and 0 changed channels outside the mask; JS syntax and `git diff --check` passed. Integrated feature commit: `e9e88a00394b5636dbfc45f5f62a1c557ec1e1f1`.
 - The fixture validates patch persistence/export with mocked accepted repair pixels; it does not validate model quality for person/wire/tower removals, three distinct inference candidates, sensor-dust batch review, 100% real-photo repeat-pattern/color-shift fixtures, or live Tauri behavior. CHR-246 remains In Progress.
-
 ### 2026-10-08 — CHR-249 luminance NR Contrast slice (partial)
 
 - Added a per-photo luminance-noise Contrast control that restores local luminance residual as its amount rises; default zero preserves existing output. Wired it through reset, session and undo/recipe snapshots, and the Detail panel's noise-reduction gate. Files: `chromasmith-22.html`, `test/noise_contrast_ui.mjs`.
@@ -638,3 +637,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commit `750f8ae93eddba84d39aa6740deffe207f2cf2f3` is published to `origin/main`; it preserves the CHR-208 GPS UI and uses build `1.1008U`. The focused feature tests ran in its task worktree; the merged-checkout `node test/export_harness.mjs` rerun was blocked before rendering because Chromium reports `spawn UNKNOWN` in this host. The standalone HTML validity and JS syntax checks passed.
 - The change remains a partial slice; see the CHR-249 entry above for measured pixels and remaining criteria. Do not move CHR-249 to In Review.
+
+### 2026-10-08 — CHR-201/202 per-recipe destinations (partial)
+
+- Saved export recipes now retain their destination folder; multi-recipe review lists each folder, routes every recipe to its own native destination, then restores the folder that was active before the batch. Files: `chromasmith-22.html` and `test/export_collision_retry.mjs`.
+- Focused Chromium test exported two real fixture photos for Archive and Proof, observed two writes in each distinct destination with recipe-tagged names, confirmed the prior destination was restored, and retained collision/retry/total-count checks. CHR-201 still lacks metadata/offline/collision-policy review and persistent failed-output recovery; CHR-202 still lacks independent failure reporting across 20×3 and retry-without-duplicate proof against native output.
