@@ -158,7 +158,7 @@
         }
         return Promise.resolve(png.buffer);
       }
-      case 'read_file_bytes': return Promise.resolve(png.buffer);
+      case 'read_file_bytes': return Promise.resolve(window.__libtestFileBytes?.[A.path] || png.buffer);
       case 'get_sidecar': if (ltBatchSidecars.has(A.path)) return Promise.resolve(ltBatchSidecars.get(A.path)); return Promise.resolve({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
       case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map((path) => ({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited, ...(ltSidecars.get(path) || {}) })));
       // reset_edit/undo_reset_edit — see CLAUDE.md's Reset-edit-undo item: captures/restores the
