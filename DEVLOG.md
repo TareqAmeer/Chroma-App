@@ -910,3 +910,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-270 divider pointer-drag
 - Feature commit `b96df15c637e7e5cd0f204fd8d648b66f365af8c` is on verified `origin/main` at the same SHA; ancestry check passed.
 - Integration-checkout rerun passed: vertical split moved 0.500→0.734, horizontal split 0.510→0.615, and clipping followed both positions. Test syntax, Editor HTML validity, and whitespace checks pass. CHR-270 remains In Progress with criteria 1 and 2 checked; criteria 3–6 remain open.
+
+### 2026-10-08 — CHR-246 heal workload capacity
+- Added `test/heal_capacity_ui.mjs`, which loads the repository's real portrait fixture in the editor and creates 128 healing spots through actual pointer input. It verifies 128 visible entries with unique IDs, edits and deletes spot 73, retains the other 127 spots, and records 3,169 ms for the 128 UI clicks with zero browser/page errors.
+- The live Chromium capacity check, `node --check test/heal_capacity_ui.mjs`, `node test/editor_html_validity_check.mjs`, and `git diff --check` pass. Full `npm run editor:gates` completed: 21/33 pass and 12 existing design/inventory gates fail; no full-suite pass is claimed. CHR-246 remains In Progress; only the 128-spot workload criterion is newly evidenced here. Image-quality acceptance, tiled-export parity, and 100% review remain open. Files: `test/heal_capacity_ui.mjs`, `DEVLOG.md`.
