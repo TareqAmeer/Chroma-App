@@ -1092,3 +1092,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-08 — CHR-249 / CHR-208 publication verification
 - CHR-249 fixture generator/protocol published at 7b4bdbd796259dacef07feb21346ae122a908dbc; CHR-208 mixed-format regression published at ccd5a8d9fa20a698e4c089e39091a6700290dc2a. Remote main hash matched after each fast-forward push; integrated generator and mixed-format native regression pass.
 - Lightroom kit and reference ZIP remain preserved in root test/output; native fixtures remain ignored in their test worktrees. Neither ticket is Done; Lightroom quality evidence, RAW/saved-recipe coverage and renamed duplicates remain open.
+
+### 2026-10-08 — CHR-275 shared brush feather and density
+- Added independent Feather and Density controls to raster-mask paint; the same falloff and coverage limit apply to temporary erase. Defaults preserve legacy pixels exactly; zero density/flow is inert and lower density does not weaken stronger existing coverage.
+- Files: chromasmith-22.html, test/mask_raster.mjs, test/brush_settings_ui_native.mjs. Native raster suite 43/43 passes including non-default modifier release, repeated density bounds, undo/snapshot/render identity. Focused native new-control layout/wiring passes at 1440/1024 in both themes; targets are at least 28px. HTML validity/syntax/whitespace pass; broad Editor gates intentionally omitted per user instruction.
+- CHR-275 AC1 now has mouse/native brush evidence; Pencil/touch, Heal/Spot targeting and complete conflict coverage remain open. Keep In Progress and do not infer the device criteria.
