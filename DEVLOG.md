@@ -622,3 +622,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Integrated GPS export policy commit `bf4155511243a87bf5b3be36c90d13fb2770e42f` into `origin/main`; fresh `git ls-remote` matched the published main SHA, and ancestry/content checks confirmed the GPS policy is present in `desktop/src-tauri/src/main.rs` and `tiff_meta.rs`.
 - On this host `node test/import_recipes.mjs` could not launch Chromium (`spawn UNKNOWN`); the focused worker run passed the recipe/browser checks. Local `node --check`, Rust source parsing, and `git diff --check` passed. Native Rust and mixed-format import-to-export validation remain open; CHR-208 stays In Progress.
+
+### 2026-10-08 — CHR-201/202 per-recipe destinations (partial)
+
+- Saved export recipes now retain their destination folder; multi-recipe review lists each folder, routes every recipe to its own native destination, then restores the folder that was active before the batch. Files: chromasmith-22.html and test/export_collision_retry.mjs.
+- Focused Chromium test exported two real fixture photos for Archive and Proof, observed two writes in each distinct destination with recipe-tagged names, confirmed the prior destination was restored, and retained collision/retry/total-count checks. CHR-201 still lacks metadata/offline/collision-policy review and persistent failed-output recovery; CHR-202 still lacks independent failure reporting across 20×3 and retry-without-duplicate proof against native output.

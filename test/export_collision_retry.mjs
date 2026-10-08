@@ -26,11 +26,37 @@ try{
   assert.equal(r.skip.skipped,true);assert.equal(r.skip.a,10,'skip leaves the existing file untouched');
   assert.equal(r.overwrite.a,99,'overwrite replaces it');assert(r.suffix.names.includes('a (2).jpg'),'suffix adds a number');
   const dlg=await page.evaluate(async()=>{
-    delete window.__TAURI__;localStorage.removeItem('cs-export-collide');
+    window.__TAURI__={core:{invoke:async()=>undefined}};localStorage.removeItem('cs-export-collide');
     const f=async n=>new File([await (await fetch('/test/fixtures/'+n)).blob()],n,{type:'image/png'});
     await loadFXImages([await f('portrait.png'),await f('gradient.png')]);
-    exportPresetsSave([{name:'A',settings:{fmt:'png',q:100,size:0,sharp:0}},{name:'B',settings:{fmt:'jpg',q:90,size:1600,sharp:1}},{name:'C',settings:{fmt:'jpg',q:85,size:1080,sharp:2}}]);
-    exportMultiPresetOpen();const t=[document.getElementById('emp-total').textContent];document.querySelectorAll('.emp-cb')[0].click();t.push(document.getElementById('emp-total').textContent);return t;});
-  assert(/2 photos . 3 recipes = 6 files/.test(dlg[0]),dlg[0]);assert(/2 photos . 2 recipes = 4 files/.test(dlg[1]),dlg[1]);
-  console.log('PASS: collision policies honoured, per-file retry without duplicates, multi-recipe total count');
+    exportPresetsSave([{name:'A',settings:{fmt:'png',q:100,size:0,sharp:0,dest:'/delivery/archive'}},{name:'B',settings:{fmt:'jpg',q:90,size:1600,sharp:1,dest:'/delivery/proofs'}},{name:'C',settings:{fmt:'jpg',q:85,size:1080,sharp:2,dest:'/delivery/social'}}]);
+    exportMultiPresetOpen();const t=[document.getElementById('emp-total').textContent];
+    t.push([...document.querySelectorAll('.emp-dest')].map(n=>n.textContent));
+    document.querySelectorAll('.emp-cb')[0].click();t.push(document.getElementById('emp-total').textContent);return t;});
+  assert(/2 photos . 3 recipes = 6 files/.test(dlg[0]),dlg[0]);assert(/2 photos . 2 recipes = 4 files/.test(dlg[2]),dlg[2]);
+  assert.deepEqual(dlg[1],['/delivery/archive','/delivery/proofs','/delivery/social'],'the selected-recipe dialog names each recipe folder');
+  const routed=await page.evaluate(async()=>{
+    let active='',calls=0;const writes=[];
+    window.__TAURI__={core:{invoke:async(cmd,body,opts)=>{
+      if(cmd==='set_export_dir'){active=body.path;return body.path;}
+      if(cmd==='save_export_file_raw'){
+        calls++;const name=atob(opts.headers['x-filename']);writes.push({dest:active,name});
+        return{path:`${active}/${name}`,bytes:body.length};
+      }
+      return undefined;
+    }}};
+    localStorage.setItem('cs-export-dir','/delivery/keep');
+    exportPresetsSave([
+      {name:'Archive',settings:{fmt:'png',q:100,size:0,sharp:0,dest:'/delivery/archive'}},
+      {name:'Proof',settings:{fmt:'jpg',q:90,size:1600,sharp:1,dest:'/delivery/proofs'}}
+    ]);
+    await exportMultiPresetRun(['Archive','Proof'],2);
+    return{writes,calls,restored:localStorage.getItem('cs-export-dir'),active};
+  });
+  assert.equal(routed.calls,4,'two real fixture photos are exported for each of two recipes');
+  assert.deepEqual(routed.writes.map(x=>x.dest),['/delivery/archive','/delivery/archive','/delivery/proofs','/delivery/proofs']);
+  assert(routed.writes.slice(0,2).every(x=>x.name.includes('_Archive')),'archive outputs keep the recipe name');
+  assert(routed.writes.slice(2).every(x=>x.name.includes('_Proof')),'proof outputs keep the recipe name');
+  assert.equal(routed.restored,'/delivery/keep');assert.equal(routed.active,'/delivery/keep','the pre-run destination is restored after all recipes');
+  console.log('PASS: collision/retry safety, multi-recipe count, per-recipe destinations and folder restoration');
 }finally{await browser?.close();await new Promise(r=>server.close(r));}
