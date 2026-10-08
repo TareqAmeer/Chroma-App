@@ -694,7 +694,7 @@
             const isVid = i % 6 === 0;
             entries.push(isVid
               ? { id: i, name: `P_TM${6000 + i}.MP4`, path: `/test/AllPhotos/P_TM${6000 + i}.MP4`, is_dir: false, is_image: false, is_video: true, kind: 'video', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 : null, size: 90000000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: null, blurry: false, stack_n: 0, thumb_path: null }
-              : { id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 : null, size: 1000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: 400, blurry: false, stack_n: 0, thumb_path: null });
+              : { id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 : null, size: 1000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: /[?&]libtime=1/.test(location.search) ? 100 + i * 10 : 400, blurry: false, stack_n: 0, thumb_path: null });
           }
           return Promise.resolve({ total: N, capped: false, entries });
         }
@@ -3553,8 +3553,9 @@
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
     window.__libOpenFolder = (path) => openFolder(path);
     window.__libEnterSurvey = enterSurveyMode;
-    window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), labels: surveyState.cells.map((cell) => (state.sidecars.get(cell.path) || {}).label || ''), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && (compareState.mode === 'survey' || compareState.mode === 'cull'), mode: compareState.mode, offset: surveyState.cullOffset, cullPaths: surveyState.cullPaths.slice(), groupPicker: surveyState.cullGroupPicker, autoAdvance: cullAutoAdvanceEnabled() });
+    window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), labels: surveyState.cells.map((cell) => (state.sidecars.get(cell.path) || {}).label || ''), cullLabels: surveyState.cullAllPaths.map((path) => (state.sidecars.get(path) || {}).label || ''), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && (compareState.mode === 'survey' || compareState.mode === 'cull'), mode: compareState.mode, offset: surveyState.cullOffset, cullPaths: surveyState.cullPaths.slice(), groupPicker: surveyState.cullGroupPicker, autoAdvance: cullAutoAdvanceEnabled() });
     window.__libCullTimeGroups = () => surveyState.cullGroups.map((g) => ({ label: cullGroupLabel(g), count: g.paths.length, paths: g.paths.slice(), unknown: !!g.unknown }));
+    window.__libCullRecommendations = () => surveyState.cullGroups.map((group) => ({ key: group.key, paths: group.paths.slice(), ...cullGroupPreference(group) }));
     window.__libOpenImportPanel = (path) => openImportPanel(path);
     window.__libSubfolderPreference = {
       key: folderScopeKey,
@@ -8439,7 +8440,7 @@
     prevViewMode: 'grid',
   };
   const surveyState = { cells: [], focus: 0, entryToken: 0, cullPaths: [], cullOffset: 0,
-    cullAllPaths: [], cullCaptureByPath: new Map(), cullGapSec: 60, cullGroups: [], cullSelected: new Set(), cullGroupPage: 0, cullGroupPicker: false };
+    cullAllPaths: [], cullCaptureByPath: new Map(), cullEntryByPath: new Map(), cullPreferredByGroup: new Map(), cullGapSec: 60, cullGroups: [], cullSelected: new Set(), cullGroupPage: 0, cullGroupPicker: false };
   const CULL_GAPS = [1, 5, 15, 30, 60, 120, 300, 600];
   function cullCaptureGroups(paths, gapSec) {
     const known = [], unknown = [];
@@ -8464,17 +8465,63 @@
     const stamp = (x) => x.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
     return group.firstCaptured === group.lastCaptured ? stamp(d) : `${stamp(d)} – ${stamp(e)}`;
   }
+  // A cull recommendation is an advisory review hint; it never mutates photo labels.
+  function cullGroupBest(group) {
+    let bestPath = '', bestScore = -Infinity, compared = 0;
+    for (const path of group.paths) {
+      const entry = surveyState.cullEntryByPath.get(path), score = entry?.sharpness;
+      if (typeof score !== 'number' || !Number.isFinite(score)) continue;
+      compared++;
+      const bestCaptured = bestPath ? (surveyState.cullCaptureByPath.get(bestPath) ?? Infinity) : Infinity;
+      const captured = surveyState.cullCaptureByPath.get(path) ?? Infinity;
+      if (score > bestScore || (score === bestScore && (captured < bestCaptured || (captured === bestCaptured && path.localeCompare(bestPath) < 0)))) {
+        bestPath = path; bestScore = score;
+      }
+    }
+    if (bestPath) return { path: bestPath, reason: `Highest available focus score (${bestScore}); ${Math.max(0, compared - 1)} other photo${compared === 2 ? '' : 's'} compared.` };
+    return { path: group.paths[0] || '', reason: 'No focus scores are available; this is a neutral starting point.' };
+  }
+  function cullGroupPreference(group) {
+    const best = cullGroupBest(group);
+    let path = surveyState.cullPreferredByGroup.get(group.key);
+    if (!group.paths.includes(path)) { path = best.path; surveyState.cullPreferredByGroup.set(group.key, path); }
+    return path === best.path ? { ...best, manual: false } : { path, manual: true, reason: 'Manual override; selected as the preferred frame for review.' };
+  }
+  function cullSelectedPhotoCount() { return surveyState.cullAllPaths.reduce((n, path) => n + Number(surveyState.cullSelected.has(path)), 0); }
+  function cullSelectedGroupCount() { return surveyState.cullGroups.filter((group) => group.paths.length > 1 && group.paths.some((path) => surveyState.cullSelected.has(path))).length; }
+  function cullMoveRecommendation(group, delta) {
+    if (!group || group.paths.length < 2) return;
+    const current = cullGroupPreference(group).path, index = Math.max(0, group.paths.indexOf(current));
+    surveyState.cullPreferredByGroup.set(group.key, group.paths[(index + delta + group.paths.length) % group.paths.length]);
+    cullGroupsRender();
+  }
+  async function cullStartSelected() {
+    const selectedCount = cullSelectedPhotoCount(), groupCount = cullSelectedGroupCount();
+    if (selectedCount < 2) return;
+    const approved = await window.confirmModal(
+      `Start culling ${selectedCount} photos${groupCount ? ` across ${groupCount} groups with a suggested best frame` : ''}? Suggestions are review aids only; no flags or ratings will change until you choose a culling action.`,
+      `Review ${selectedCount} photos`);
+    if (!approved || !surveyState.cullGroupPicker) return;
+    const selected = surveyState.cullGroups.flatMap((group) => {
+      const included = group.paths.filter((path) => surveyState.cullSelected.has(path));
+      if (!included.length) return [];
+      const preferred = cullGroupPreference(group).path;
+      return included.includes(preferred) ? [preferred, ...included.filter((path) => path !== preferred)] : included;
+    });
+    surveyState.cullGroupPicker = false; surveyState.cullPaths = selected; surveyState.cullAllPaths = selected.slice();
+    surveyState.cullOffset = 0; compareState.paths = selected.slice(); compareState.totalSelected = selected.length; showCullPage(0);
+  }
   function cullGroupsRender() {
     const host = surveyHost(); if (!host || !surveyState.cullGroupPicker) return;
     const pageSize = 50, pages = Math.max(1, Math.ceil(surveyState.cullGroups.length / pageSize));
     surveyState.cullGroupPage = Math.max(0, Math.min(surveyState.cullGroupPage, pages - 1));
     const shown = surveyState.cullGroups.slice(surveyState.cullGroupPage * pageSize, (surveyState.cullGroupPage + 1) * pageSize);
-    const selectedCount = surveyState.cullAllPaths.reduce((n, path) => n + Number(surveyState.cullSelected.has(path)), 0);
+    const selectedCount = cullSelectedPhotoCount(), suggestedCount = cullSelectedGroupCount();
     host.innerHTML = `<section id="lib-cull-time-picker" aria-label="Group culling by capture time" style="height:100%;display:flex;flex-direction:column;gap:8px;overflow:hidden">
-      <header class="lib-cull-time-toolbar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><strong>Group by capture time</strong><label for="lib-cull-time-gap">New group after</label><select id="lib-cull-time-gap">${CULL_GAPS.map((s) => `<option value="${s}"${s === surveyState.cullGapSec ? ' selected' : ''}>${s < 60 ? `${s} sec` : `${s / 60} min`}</option>`).join('')}</select><button type="button" class="lib-btn" id="lib-cull-time-all">Select all</button><button type="button" class="lib-btn" id="lib-cull-time-none">Select none</button><span id="lib-cull-time-count" aria-live="polite">${selectedCount} selected</span><button type="button" class="lib-btn" id="lib-cull-time-start"${selectedCount < 2 ? ' disabled' : ''}>Cull selected groups</button></header>
-      <p class="lib-cull-time-note">Photos are grouped when adjacent capture times are within the threshold. Missing capture times stay in their own group; file dates are never used.</p>
+      <header class="lib-cull-time-toolbar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><strong>Group by capture time</strong><label for="lib-cull-time-gap">New group after</label><select id="lib-cull-time-gap">${CULL_GAPS.map((s) => `<option value="${s}"${s === surveyState.cullGapSec ? ' selected' : ''}>${s < 60 ? `${s} sec` : `${s / 60} min`}</option>`).join('')}</select><button type="button" class="lib-btn" id="lib-cull-time-all">Select all</button><button type="button" class="lib-btn" id="lib-cull-time-none">Select none</button><span id="lib-cull-time-count" aria-live="polite">${selectedCount} photos selected · ${suggestedCount} ${suggestedCount === 1 ? 'suggestion' : 'suggestions'}</span><button type="button" class="lib-btn" id="lib-cull-time-start"${selectedCount < 2 ? ' disabled' : ''}>Review ${selectedCount} photos</button></header>
+      <p class="lib-cull-time-note">Photos are grouped when adjacent capture times are within the threshold. Missing capture times stay in their own group; file dates are never used. Best-frame suggestions use the catalog focus score when available. They never change flags or ratings; review or override each suggestion before culling.</p>
       <div class="lib-cull-time-page"><button type="button" class="lib-btn" data-group-page="-1"${surveyState.cullGroupPage === 0 ? ' disabled' : ''}>Previous groups</button><span>Groups ${surveyState.cullGroups.length ? surveyState.cullGroupPage * pageSize + 1 : 0}–${Math.min((surveyState.cullGroupPage + 1) * pageSize, surveyState.cullGroups.length)} of ${surveyState.cullGroups.length}</span><button type="button" class="lib-btn" data-group-page="1"${surveyState.cullGroupPage + 1 >= pages ? ' disabled' : ''}>Next groups</button></div>
-      <div id="lib-cull-time-groups" style="overflow:auto;min-height:0;flex:1">${shown.map((group, localIndex) => { const index = surveyState.cullGroupPage * pageSize + localIndex, checked = group.paths.every((path) => surveyState.cullSelected.has(path)); return `<details class="lib-cull-time-group" data-time-group="${index}"><summary><input type="checkbox" data-group-select="${index}"${checked ? ' checked' : ''} aria-label="Select group ${index + 1}"><span>${esc2(cullGroupLabel(group))}</span><span>${group.paths.length} photo${group.paths.length === 1 ? '' : 's'}</span></summary><div class="lib-cull-group-samples">${group.paths.slice(0, 12).map((path) => `<span>${esc2(baseName(path))}</span>`).join('')}${group.paths.length > 12 ? `<span>+${group.paths.length - 12} more</span>` : ''}</div></details>`; }).join('')}</div>
+      <div id="lib-cull-time-groups" style="overflow:auto;min-height:0;flex:1">${shown.map((group, localIndex) => { const index = surveyState.cullGroupPage * pageSize + localIndex, checked = group.paths.every((path) => surveyState.cullSelected.has(path)), recommendation = group.paths.length > 1 ? cullGroupPreference(group) : null; const preferredIndex = recommendation ? group.paths.indexOf(recommendation.path) : -1; return `<details class="lib-cull-time-group" data-time-group="${index}"><summary><input type="checkbox" data-group-select="${index}"${checked ? ' checked' : ''} aria-label="Select group ${index + 1}"><span>${esc2(cullGroupLabel(group))}</span><span>${group.paths.length} photo${group.paths.length === 1 ? '' : 's'}</span></summary><div class="lib-cull-group-samples">${group.paths.slice(0, 12).map((path) => `<span>${esc2(baseName(path))}</span>`).join('')}${group.paths.length > 12 ? `<span>+${group.paths.length - 12} more</span>` : ''}</div>${recommendation ? `<div class="lib-cull-best-review" data-best-review="${index}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border-top:1px solid var(--bdr)"><strong>Suggested best for review:</strong><span data-best-path>${esc2(baseName(recommendation.path))} (${preferredIndex + 1} of ${group.paths.length})</span><span data-best-reason style="color:var(--mut)">${esc2(recommendation.reason)}</span><button type="button" class="lib-btn" data-best-prev="${index}" aria-label="Choose previous candidate for group ${index + 1}">Previous</button><button type="button" class="lib-btn" data-best-next="${index}" aria-label="Choose next candidate for group ${index + 1}">Next candidate</button></div>` : ''}</details>`; }).join('')}</div>
     </section>`;
     host.querySelector('#lib-cull-time-gap').onchange = (e) => {
       surveyState.cullGapSec = Number(e.target.value); surveyState.cullGroups = cullCaptureGroups(surveyState.cullAllPaths, surveyState.cullGapSec); surveyState.cullGroupPage = 0; cullGroupsRender();
@@ -8487,12 +8534,9 @@
       cullGroupsRender();
     }));
     host.querySelectorAll('[data-group-page]').forEach((button) => button.addEventListener('click', () => { surveyState.cullGroupPage += Number(button.dataset.groupPage); cullGroupsRender(); }));
-    host.querySelector('#lib-cull-time-start').onclick = () => {
-      const selected = surveyState.cullGroups.flatMap((group) => group.paths.filter((path) => surveyState.cullSelected.has(path)));
-      if (selected.length < 2) return;
-      surveyState.cullGroupPicker = false; surveyState.cullPaths = selected; surveyState.cullAllPaths = selected.slice();
-      surveyState.cullOffset = 0; compareState.paths = selected.slice(); compareState.totalSelected = selected.length; showCullPage(0);
-    };
+    host.querySelectorAll('[data-best-prev]').forEach((button) => button.addEventListener('click', () => cullMoveRecommendation(surveyState.cullGroups[Number(button.dataset.bestPrev)], -1)));
+    host.querySelectorAll('[data-best-next]').forEach((button) => button.addEventListener('click', () => cullMoveRecommendation(surveyState.cullGroups[Number(button.dataset.bestNext)], 1)));
+    host.querySelector('#lib-cull-time-start').onclick = () => cullStartSelected();
   }
   function compareSrcKeyToDescriptor(key) {
     if (!key || key === 'live') return null;
@@ -9032,7 +9076,7 @@
     if (survey) { survey.classList.remove('on'); survey.innerHTML = ''; }
     surveyState.cells = []; surveyState.focus = 0;
     surveyState.cullPaths = []; surveyState.cullOffset = 0;
-    surveyState.cullAllPaths = []; surveyState.cullGroups = []; surveyState.cullSelected.clear(); surveyState.cullGroupPicker = false;
+    surveyState.cullAllPaths = []; surveyState.cullGroups = []; surveyState.cullSelected.clear(); surveyState.cullPreferredByGroup.clear(); surveyState.cullEntryByPath.clear(); surveyState.cullCaptureByPath.clear(); surveyState.cullGroupPicker = false;
     state.viewMode = compareState.prevViewMode || 'grid';
     localStorage.setItem('chromasmith_lib_view', state.viewMode);
     syncViewSeg();
@@ -9073,6 +9117,8 @@
     compareState.mode = 'cull'; compareState.totalSelected = paths.length; compareState.paths = paths;
     surveyState.cullAllPaths = paths.slice(); surveyState.cullPaths = paths.slice(); surveyState.cullOffset = 0; surveyState.focus = 0;
     surveyState.cullCaptureByPath = new Map(state.entries.map((entry) => [entry.path, Number.isFinite(entry.captured) ? entry.captured : null]));
+    surveyState.cullEntryByPath = new Map(state.entries.filter((entry) => selected.has(entry.path)).map((entry) => [entry.path, entry]));
+    surveyState.cullPreferredByGroup.clear();
     surveyState.cullGapSec = 60; surveyState.cullGroups = cullCaptureGroups(paths, surveyState.cullGapSec);
     surveyState.cullSelected = new Set(paths); surveyState.cullGroupPage = 0; surveyState.cullGroupPicker = true;
     state.viewMode = 'survey'; syncViewSeg();

@@ -84,7 +84,7 @@ try {
     selected: document.getElementById('lib-cull-time-count')?.textContent?.trim(),
     text: document.querySelector('.lib-cull-time-page span')?.textContent?.trim(),
   }));
-  assert.equal(picker.selected, '50000 selected');
+  assert.equal(picker.selected, '50000 photos selected · 1 suggestion');
   assert.equal(picker.groups, 2, '60-second threshold chains known capture times and isolates missing time');
   assert.equal(picker.shown, 2);
   assert.ok(picker.groupNodes < 600, `group picker subtree stays bounded (got ${picker.groupNodes} nodes)`);
@@ -117,7 +117,7 @@ try {
   }));
   assert.equal(page2.first, '50', 'Next groups advances to the next 50 groups');
   assert.equal(page2.count, 50);
-  assert.ok(page2.groupNodes < 600, `second group page subtree stays bounded (got ${page2.groupNodes} nodes)`);
+  assert.ok(page2.groupNodes < 900, `second group page with recommendation controls stays bounded (got ${page2.groupNodes} nodes)`);
   assert.ok(nextPageMs < 1000, `group-page button click paints within one second (got ${nextPageMs}ms)`);
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
   console.log(`PASS CHR-267 50k synthetic Library/cull scale gate: open=${openMs}ms cards=${opened.cards}/240 gridNodes=${opened.gridNodes} pageDOM=${opened.dom}; scroll=${scroll.after}px mounted=${scroll.cards}; select=${selectMs}ms; groups=${picker.groups}→${fine.groups}, regroup=${regroupMs}ms, visible=${fine.shown}/50; next-page=${nextPageMs}ms; errors=0.`);
