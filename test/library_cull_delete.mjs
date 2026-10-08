@@ -23,7 +23,7 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch {} });
-  await page.goto(`http://127.0.0.1:${server.address().port}/desktop/dist/index.html?libtest=1&libn=12`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await page.goto(`http://127.0.0.1:${server.address().port}/desktop/dist/index.html?libtest=1&libn=12&libtime=1`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction(() => typeof window.__libEnterSurvey === 'function' && typeof window.__libOpenFolder === 'function', { timeout: 30000 });
   await page.evaluate(async () => { if (!window.chromasmithLibraryIsOpen()) await window.chromasmithToggleLibrary(); });
   await page.evaluate(() => window.__libOpenFolder('/test/Photos'));
@@ -55,8 +55,11 @@ try {
   await page.waitForSelector('#lib-batchbar [data-act="cull"]');
   await page.locator('#lib-batchbar [data-act="cull"]').click();
   await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().mode === 'cull', { timeout: 45000 });
+  await page.locator('#lib-cull-time-all').click();
   await page.locator('#lib-cull-time-start').click(); // confirm the selected capture-time groups before opening cull mode
+  await page.locator('#fx-confirm-ok').click();
   await page.waitForSelector('#lib-cull-del');
+  const rejectedPath = (await page.evaluate(() => window.__libSurveyState().cullPaths))[0];
   assert.equal(await page.locator('#lib-cull-del').textContent(), 'Delete rejected (0)');
   assert.equal(await page.locator('#lib-cull-del').isDisabled(), true, 'nothing rejected: button disabled');
 
@@ -67,7 +70,8 @@ try {
   for (let i = 0; i < 3; i++) { await page.keyboard.press('Enter'); await page.waitForTimeout(250); } // pick the rest; last one ends the shoot
   await modalButton(/^Move 1 to Trash$/).waitFor({ timeout: 5000 });
   const prompt = await page.locator('#fx-confirm-msg').innerText();
-  assert(prompt.includes('Delete 1 rejected photo') && prompt.includes(four[0].split('/').pop()) && /Trash/.test(prompt), `prompt lists count and name: ${prompt}`);
+  const rejectedName = path.win32.basename(rejectedPath);
+  assert(prompt.includes('Delete 1 rejected photo') && prompt.includes(rejectedName) && /Trash/.test(prompt), `prompt lists count and name (${rejectedName}): ${prompt}`);
   await modalButton(/^Cancel$/).click();
   await page.waitForFunction(() => !window.__libSurveyState().active);
   assert.deepEqual(await trashCalls(), [], 'cancel trashes nothing');
@@ -77,15 +81,17 @@ try {
   await page.waitForSelector('#lib-batchbar [data-act="cull"]');
   await page.locator('#lib-batchbar [data-act="cull"]').click();
   await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().mode === 'cull', { timeout: 45000 });
+  await page.locator('#lib-cull-time-all').click();
   await page.locator('#lib-cull-time-start').click();
+  await page.locator('#fx-confirm-ok').click();
   await page.waitForSelector('#lib-cull-del');
   assert.equal(await page.locator('#lib-cull-del').textContent(), 'Delete rejected (1)');
   await page.locator('#lib-cull-del').click();
   await modalButton(/^Move 1 to Trash$/).click();
   await page.waitForFunction(() => window.__libSurveyState().cullPaths.length === 3, { timeout: 10000 });
-  assert.deepEqual(await trashCalls(), [four[0]], 'exactly the rejected photo went to trash_file');
+  assert.deepEqual(await trashCalls(), [rejectedPath], 'exactly the rejected photo went to trash_file');
   const st = await page.evaluate(() => window.__libSurveyState());
-  assert(!st.cullPaths.includes(four[0]) && st.paths.length === 3, 'cull continues with the survivors');
+  assert(!st.cullPaths.includes(rejectedPath) && st.paths.length === 3, 'cull continues with the survivors');
   assert.equal(await page.locator('#lib-cull-del').textContent(), 'Delete rejected (0)');
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
   console.log('PASS: Delete rejected counts, confirms, cancels cleanly and trashes only the rejects; Survey header shows count vs cap.');

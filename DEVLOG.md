@@ -952,3 +952,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 #### CHR-269 publication verification
 - Feature commit `930c3bde` is integrated on `origin/main` as `36e5b15a3e0b368610c39ff3896e5f08db1baace`. After push, `git fetch origin main` and `git ls-remote origin refs/heads/main` both returned `36e5b15a3e0b368610c39ff3896e5f08db1baace`; `git merge-base --is-ancestor 36e5b15a origin/main` passed and `git grep` found the shipped score-ranking implementation. The two focused browser tests were rebuilt and rerun on the clean integration tree: culling flow passed; 50k gate passed (regroup 18.8ms, page paint 98.3ms, 0 browser errors).
+
+### 2026-10-08 — CHR-267 delete-to-trash regression fixture repair (partial)
+
+- Fixed `test/library_cull_delete.mjs`: load capture-time fixture data, select the group before entering cull view, confirm the cull-start dialog, and compare the rejected file against capture-time cull order. Chromium verification passes for reject-without-delete, count and confirmation text, cancel, and exactly-one `trash_file` IPC call; `node --check` passes.
+- The browser harness mocks `trash_file`, so this does not validate the Windows Recycle Bin handler or end-to-end Tauri IPC. CHR-267 acceptance criterion 3 remains unchecked pending native-app verification; no issue criterion was newly completed.
