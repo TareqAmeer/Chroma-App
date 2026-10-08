@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {createServer} from 'node:http';
-import {chromium} from 'playwright';
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?new URL(`file:///${process.env.PLAYWRIGHT_MODULE.replaceAll('\\','/')}`).href:'playwright');
 
 const root=path.resolve(import.meta.dirname,'..');
 const server=createServer((req,res)=>{
@@ -11,7 +11,7 @@ const server=createServer((req,res)=>{
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;
 try{
-  browser=await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--disable-gpu-sandbox']});
+  browser=await chromium.launch({...(process.env.PLAYWRIGHT_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH}:{}),args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--disable-gpu-sandbox']});
   const page=await browser.newPage({viewport:{width:1366,height:768}}),pageErrors=[];page.on('pageerror',e=>pageErrors.push(String(e)));
   await page.goto('http://127.0.0.1:'+server.address().port+'/chromasmith-22.html');
   await page.waitForFunction(()=>typeof exportMultiPresetOpen==='function'&&typeof saveFiles==='function');
@@ -27,17 +27,18 @@ try{
     window.__TAURI__={core:{invoke:async(cmd,args,opts)=>{
       if(cmd==='set_export_dir'){active=args.path;return active;}if(cmd!=='save_export_file_raw')return undefined;
       const name=atob(opts.headers['x-filename']),bytes=new Uint8Array(args),dest=active,key=dest+'/'+name,fmt=format(bytes);
-      attempts.push({destination:dest,name,format:fmt});
+      attempts.push({destination:dest,name,format:fmt,gpsPolicy:document.getElementById('tg-exp-gps')?.checked===false?'remove':'preserve'});
       if(failOnce&&name.includes('Photo-07_Social')){failOnce=false;throw Error('synthetic disk-full');}
       if(!saved.has(key))saved.set(key,{destination:dest,name,format:fmt});
       if(!dimensions[dest]){const bm=await createImageBitmap(new Blob([bytes]));dimensions[dest]=[bm.width,bm.height];bm.close();}
       return{path:key,bytes:bytes.length};
     }}};
     localStorage.setItem('cs-export-dir','/delivery/original');
+    localStorage.setItem('cs.export.keepGps','1');
     exportPresetsSave([
-      {name:'Archive',settings:{fmt:'png',q:100,size:0,sharp:0,dest:'/delivery/archive'}},
-      {name:'Proof',settings:{fmt:'jpg',q:90,size:1600,sharp:1,dest:'/delivery/proofs'}},
-      {name:'Social',settings:{fmt:'webp',q:82,size:1080,sharp:2,dest:'/delivery/social'}}
+      {name:'Archive',settings:{fmt:'png',q:100,size:0,sharp:0,keepGps:true,dest:'/delivery/archive'}},
+      {name:'Proof',settings:{fmt:'jpg',q:90,size:1600,sharp:1,keepGps:false,dest:'/delivery/proofs'}},
+      {name:'Social',settings:{fmt:'webp',q:82,size:1080,sharp:2,keepGps:true,dest:'/delivery/social'}}
     ]);
     sk2ExportOpen();
   });
@@ -55,12 +56,15 @@ try{
   if(await outputTitle.evaluate(el=>el.closest('.fx-ctrl').classList.contains('fx-sec-collapsed')))await outputTitle.click();
   const retry=page.locator('#exp-fail-list button[aria-label^="Retry "]');assert.equal(await retry.isVisible(),true,'failed-output recovery visible after reopening Output');
   await retry.click();await page.waitForFunction(()=>window._expFail.length===0,{timeout:30000});
-  const r=await page.evaluate(()=>({attempts:window.testAttempts,entries:[...window.testSaved.entries()],dims:window.testDimensions,restored:localStorage.getItem('cs-export-dir'),active:window.testActive(),failed:window._expFail.length}));
-  assert.equal(r.entries.length,60);assert.equal(r.attempts.length,61);assert.equal(r.failed,0);assert.equal(r.restored,'/delivery/original');assert.equal(r.active,'/delivery/original');assert.equal(new Set(r.entries.map(([p])=>p)).size,60);
+  const r=await page.evaluate(()=>({attempts:window.testAttempts,entries:[...window.testSaved.entries()],dims:window.testDimensions,restored:localStorage.getItem('cs-export-dir'),active:window.testActive(),keepGps:localStorage.getItem('cs.export.keepGps'),controlKeepGps:document.getElementById('tg-exp-gps')?.checked,failed:window._expFail.length}));
+  assert.equal(r.entries.length,60);assert.equal(r.attempts.length,61);assert.equal(r.failed,0);assert.equal(r.restored,'/delivery/original');assert.equal(r.active,'/delivery/original');assert.equal(r.keepGps,'1');assert.equal(r.controlKeepGps,true);assert.equal(new Set(r.entries.map(([p])=>p)).size,60);
   for(const[dest,fmt,file]of[['/delivery/archive','PNG','Photo-01_Archive.png'],['/delivery/proofs','JPG','Photo-01_Proof.jpg'],['/delivery/social','WebP','Photo-01_Social.webp']]){
     const rows=r.entries.filter(([,v])=>v.destination===dest);assert.equal(rows.length,20,dest);assert(rows.every(([,v])=>v.format===fmt),dest);assert(r.entries.some(([p])=>p===dest+'/'+file),file);
   }
+  for(const[dest,policy,count]of[['/delivery/archive','preserve',20],['/delivery/proofs','remove',20],['/delivery/social','preserve',21]]){
+    const rows=r.attempts.filter(a=>a.destination===dest);assert.equal(rows.length,count,dest);assert(rows.every(a=>a.gpsPolicy===policy),`${dest} should apply ${policy} GPS metadata policy`);
+  }
   assert.deepEqual(r.dims['/delivery/archive'],[2048,1536]);assert.deepEqual(r.dims['/delivery/proofs'],[1600,1200]);assert.deepEqual(r.dims['/delivery/social'],[1080,810]);
   const retried=r.attempts.filter(a=>a.name.includes('Photo-07_Social'));assert.equal(retried.length,2);assert(retried.every(a=>a.destination==='/delivery/social'));assert.deepEqual(pageErrors,[]);
-  console.log('PASS CHR-202: 20 photos × 3 recipes = 60 unique outputs; PNG/JPG/WebP; dimensions 2048×1536, 1600×1200, 1080×810; one failed target retried once in its recipe folder, destination restored, zero page errors.');
+  console.log('PASS CHR-202: 20 photos × 3 recipes = 60 unique outputs; PNG/JPG/WebP; dimensions 2048×1536, 1600×1200, 1080×810; per-recipe GPS metadata policy independently applied; prior policy/destination restored; one failed target retried once in its recipe folder; zero page errors.');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

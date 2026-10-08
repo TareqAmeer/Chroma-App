@@ -177,3 +177,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - The restore action now shows a verification preflight with catalog photo count, included/missing XMP sidecars, and the recorded source volume UUID/path mappings before the user chooses a destination. It explicitly says original media/caches are excluded and allows canceling before any restore copy is written.
 - Extended `test/library_backup_ui.mjs` to exercise both cancellation and continuation through the preflight and assert the displayed counts, root mapping, and exclusion policy. Updated `docs/library-backup.md` with the preview behavior.
 - CHR-205 remains In Progress: the preview does not relink source roots or activate a restored library. Native recovery-safety behavior and clean-install cross-machine fixture remain unverified.
+
+### 2026-10-08 — CHR-202 per-recipe metadata policy
+
+- Saved export recipes now include an independent GPS preserve/remove policy. Multi-recipe export applies it for each recipe and restores the user's previous policy with the other export controls.
+- Extended `test/export_60_output_recipes.mjs`; Chromium verified 20 photos × 3 recipes produce 60 unique outputs across PNG/JPG/WebP and three dimensions, each recipe's GPS policy, one failed output retried without duplicating successful outputs, restored destination/policy, and zero page errors.
+- CHR-202 remains In Progress: the test mocks native export IPC; native Tauri filesystem retry and no-duplicate behavior still need a runnable app. Modified files: `chromasmith-22.html`, `test/export_60_output_recipes.mjs`.

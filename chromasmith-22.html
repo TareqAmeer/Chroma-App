@@ -7283,7 +7283,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008T';
+const BUILD='1.1008U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20765,7 +20765,7 @@ function styleListRefresh(){
   };
   search.oninput=render;filter.onchange=render;render();
 }
-// ── Named export presets: just the 4 export-panel controls (format/quality/resize/sharpen),
+// ── Named export presets: file encoding controls plus metadata policy,
 // saved/recalled by name. Same localStorage-flat-list shape as Styles above, deliberately not
 // merged with it — a Style is the whole edit recipe (portable across photos); this is only
 // "how do I want the FILE encoded", the thing you actually re-pick per destination (web vs print).
@@ -20778,6 +20778,7 @@ function _exportPresetRead(){
     q:(document.getElementById('sl-exp-q')||{}).value||'99',
     size:(document.getElementById('sel-exp-size')||{}).value||'0',
     sharp:(document.getElementById('sel-exp-sharp')||{}).value||'0',
+    keepGps:document.getElementById('tg-exp-gps')?.checked!==false,
     dest:(()=>{try{return localStorage.getItem('cs-export-dir')||''}catch(e){return''}})(),
   };
 }
@@ -20802,6 +20803,8 @@ async function exportPresetApply(name){
   if(qEl&&s.q!=null){qEl.value=s.q;const vl=document.getElementById('vl-exp-q');if(vl)vl.textContent=s.q;}
   if(sizeEl&&s.size!=null)sizeEl.value=s.size;
   if(sharpEl&&s.sharp!=null)sharpEl.value=s.sharp;
+  const gpsEl=document.getElementById('tg-exp-gps');
+  if(gpsEl&&s.keepGps!=null){gpsEl.checked=!!s.keepGps;try{localStorage.setItem('cs.export.keepGps',gpsEl.checked?'1':'0')}catch(e){}}
   if(s.dest!=null&&tauriNative()){
     try{
       await window.__TAURI__.core.invoke('set_export_dir',{path:s.dest||''});
@@ -20815,7 +20818,7 @@ async function exportPresetApply(name){
 }
 // CHR-202: run one export per chosen preset, back to back. Each run's files get the preset name
 // appended ({name}_<preset>) so the deliveries never overwrite each other; the panel's own
-// format/quality/size/sharpening and filename are put back afterwards.
+// format/quality/size/sharpening, GPS metadata policy and filename are put back afterwards.
 function exportMultiPresetOpen(){
   const list=exportPresetsList();
   if(list.length<2){toast('Save at least two export presets first');return;}
@@ -20833,6 +20836,7 @@ function exportMultiPresetOpen(){
 async function exportMultiPresetRun(names,photos){
   window._expAccumulate=true;window._expFail=[];window._expSavedSum=0;window._expPlanned=(photos||fxImages.length)*names.length;
   const ids=['sel-exp-fmt','sl-exp-q','sel-exp-size','sel-exp-sharp','fx-fname'],saved=ids.map(id=>{const e=document.getElementById(id);return e?e.value:null;});
+  const gpsEl=document.getElementById('tg-exp-gps'),savedKeepGps=gpsEl?gpsEl.checked:null;
   let savedDest='';try{savedDest=localStorage.getItem('cs-export-dir')||''}catch(e){}
   try{
     for(let k=0;k<names.length;k++){
@@ -20849,6 +20853,7 @@ async function exportMultiPresetRun(names,photos){
     try{localStorage.setItem('cs-export-dir',savedDest)}catch(e){}
     if(tauriNative())fxExportDirUI(savedDest);
     window._expAccumulate=false;window._expPlanned=0;window._expRecipe=null;ids.forEach((id,i)=>{const e=document.getElementById(id);if(e&&saved[i]!=null)e.value=saved[i];});const vl=document.getElementById('vl-exp-q'),q=document.getElementById('sl-exp-q');if(vl&&q)vl.textContent=q.value;if(typeof expPlainRender==='function')expPlainRender();
+    if(gpsEl&&savedKeepGps!=null){gpsEl.checked=savedKeepGps;try{localStorage.setItem('cs.export.keepGps',savedKeepGps?'1':'0')}catch(e){}}
   }
 }
 // ── CHR-197: one Presets manager for the three kinds of saved recipe ───────────────────────
