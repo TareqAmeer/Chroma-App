@@ -1115,3 +1115,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added temporary rebound-modifier and on-screen repair erase. Source-space gesture intersections remove stored Heal/Clone circles and strokes, retain untouched operations, cancel on blur, and commit one undo snapshot per gesture; donor selection remains available outside erase.
 - Files: chromasmith-22.html, test/heal_erase.mjs. Focused Chrome and native WebView2 tests pass 7/7: target/stroke geometry, multi-repair gesture, one undo, rebound Shift, old Alt paint, blur cancellation, rotated/cropped target. Native harness waits for the actual visible editor pointer target after Gallery startup. HTML validity and whitespace pass.
 - CHR-275 remains In Progress: physical Pencil/touch and exhaustive mask/context conflict verification remain open. This validates Heal/Clone behavior without inferring those broader criteria.
+
+### 2026-10-08 — CHR-275 repair-erase publication verification
+- Feature 2ff427f1 published as 3bbd694e46b1bf8227c8de3e89e35a3fdd2ac420; remote main hash matches and ancestry verified. Integrated native repair test passes 7/7 and HTML validity passes.
+- Linear evidence comment records the repair behavior while device/every-mask/exhaustive conflict boxes remain open; issue stays In Progress. Runtime frontend updated without replacing AI resources.
