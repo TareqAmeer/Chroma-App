@@ -673,6 +673,11 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Feature commit `a99c40f2ace581d781c18c77f4dbe8417ecd839b` is published on `origin/main`; `git ls-remote` and ancestry verification matched. Focused worker Chromium checks covered all three profiles, persistence across reload, and unchanged exposure values; merged-source syntax/HTML checks passed.
 - CHR-272 stays In Progress for complete hidden-control reachability, responsive extremes, full default-workspace scan, and native file/workspace workflow validation.
 
+#### Publication verification — CHR-272 named workspace flow
+
+- Integration commit `95e7fbff82055c58c8c7336ebc7d187e22214f46` is published to `origin/main`; post-push fetch and `git ls-remote` matched, and the commit is an ancestor of the remote tip. It contains `test/workspace_named_flow.mjs` and the partial result above.
+- The focused named-workspace flow passed on the integrated source: save/name, switch, confirm and restore with exposure preserved in session and recipe snapshot, delete, and no page errors. CHR-272 remains In Progress for complete control reachability, responsive extremes, and native Tauri workflow validation.
+
 ### 2026-10-08 — Windows browser-test path cleanup (repo-level maintenance)
 
 - Resolve the project root for `test/mobile_ux.mjs` and `test/mobile_edge_cases.mjs` from the test module URL through shared `test/lib/repo-paths.mjs`; make fixture, screenshot, and output paths absolute and separator-safe. `test/probe_splash_reveal.mjs` now uses the same helper. No unique Linear ticket matches this test-harness portability cleanup.
