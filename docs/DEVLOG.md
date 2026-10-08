@@ -209,3 +209,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Two-pointer-stroke undo coverage is published in `origin/main` integration commit `9474b8a7e3c9e078a66a04a65dcebea150517392`; fetched remote ref and ancestry verification passed.
 - The integrated `test/mask_raster.mjs` suite passed 53/53. AC5 remains open until Alt behavior is checked alongside AI scribble and color sampling; issue stays In Progress.
+
+### 2026-10-08 — CHR-275 mask coverage and Alt isolation
+
+- Expanded `test/mask_raster.mjs` to exercise erase through paint, AI, sky, skin, coat and face-auto raster-mask origins, preserve Alt-negative AI scribbles and WB sampling outside Paint, and verify two independent undoable pointer strokes.
+- Focused Chrome validation passed `test/mask_raster.mjs` 61/61 and `test/heal_erase.mjs` 7/7; test syntax and whitespace checks pass. AC4/AC5 have browser evidence; AC2 remains open for physical Apple Pencil/touch validation. CHR-275 stays In Progress.
