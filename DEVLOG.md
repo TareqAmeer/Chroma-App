@@ -647,3 +647,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commit `35ae44f7f111f16c4700c33e32f014490d36638a` is on `origin/main`; its destination routing is present in the shipped export flow. The worker’s focused Chromium test exported 2 photos × 2 recipes to two distinct folders and restored the previous destination; merged source JS/HTML checks passed.
 - Native 20×3 output/failure/retry behavior and full preflight/result-retention criteria remain open. Both Linear issues stay In Progress.
+
+### 2026-10-08 — CHR-272 starter workspace presets (partial)
+
+- Added built-in Film look, Colour grade, and Quick edit workspace actions using the existing persisted section visibility/order store. Applying a starter profile resets layout-only control hiding/order while keeping photo edit values and snapshots intact. Files: `chromasmith-22.html`, `test/workspace_presets.mjs`.
+- The focused Chromium test passed at 1280×800 dark and 1440×900 light: all three menu actions applied, persisted after reload, exposed controls, and retained the exposure value in the live recipe snapshot. CHR-272 still needs full control-reachability/completeness scans, responsive extrema, and native workflow validation.
