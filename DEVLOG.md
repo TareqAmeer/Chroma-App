@@ -698,3 +698,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - CHR-183 merged source retains the completed export reveal action in job history; CHR-205 adds a restore preflight before destination selection. Focused Chrome tests passed: export notification flow (native OS delivery mocked), 5/5 job-history tests, and CHR-205 dark-theme 1366×768 backup UI flow. Files include `chromasmith-22.html`, `desktop/library-ui.js`, `docs/library-backup.md`, and focused tests `test/export_job_notification.mjs`, `test/library_job_history.mjs`, `test/library_backup_ui.mjs`.
 - CHR-183 remains In Progress pending native macOS notification delivery. CHR-205 remains In Progress pending root relinking/activation rollback, clean-install cross-machine coverage, and native recovery validation.
+
+### 2026-10-08 — CHR-201 export metadata preflight (partial)
+
+- The Output preflight now states that photo metadata is preserved, with the live policy control selecting whether GPS location is preserved or removed. Toggling the existing GPS policy immediately refreshes the visible summary. Files: `chromasmith-22.html`, `test/export_collision_retry.mjs`.
+- The focused real-photo Chromium test passed at 1366×768 in dark and light themes: 2 loaded photos (512×384 current preview) showed the correct policy text in both states; collision handling, failed-only retry, 2-photo × 2-recipe routing and destination restoration also passed. `node --check` and `git diff --check` passed. `npm run editor:gates`: 22 passed, 12 baseline design-drift gates failed (inventory, responsive, wireframe-diff, snap-check, token-check, axe, icon, motion, hover/focus, surface coverage, components and catalog visual).
+- CHR-201 remains In Progress for native Tauri validation and any additional destination/result edge cases in its acceptance criteria.

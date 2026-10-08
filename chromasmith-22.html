@@ -7264,7 +7264,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008I';
+const BUILD='1.1008J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -27706,10 +27706,12 @@ function _expPreflight(edge,q,fmt){
   let base=(pat&&pat!=='photo'&&(single||pat.includes('{')))?pat.replace(/\{name\}/g,it0.name||'photo').replace(/\{seq\}/g,'1').replace(/\{date\}/g,new Date().toISOString().slice(0,10))+(!single&&!pat.includes('{name}')&&!pat.includes('{seq}')?'_1':''):(single?(fld||it0.name):it0.name);
   const ver=noVer||typeof fxVersion==='undefined'?'':'_v'+fxVersion.toFixed(1).replace('.','-');
   const ext=fmtOf(it0)==='WebP'?'webp':fmtOf(it0)==='PNG'?'png':'jpg';
+  const keepGps=document.getElementById('tg-exp-gps')?.checked!==false;
   const lines=[`${items.length} photo${items.length>1?'s':''} · ${fmts}${fmt==='auto'?' (Auto: lossless sources stay PNG)':''}`,
     `${d[0]}×${d[1]}${items.length>1?' (first photo)':''} · about ${_mb(_expBytes(d,q,ext))}${ext==='png'?'':' · quality '+q}`,
     `Saved as ${base}${ver}.${ext}${items.length>1?' …':''}`,
-    `Saving to ${expDestLabel()} · if a file exists: ${expPolicyLabel()}`];
+    `Saving to ${expDestLabel()} · if a file exists: ${expPolicyLabel()}`,
+    `Metadata: photo metadata ${keepGps?'preserved':'preserved except GPS location'}`];
   return lines;
 }
 document.addEventListener('change',e=>{if(e.target&&/^(sel-exp-size|sel-exp-fmt)$/.test(e.target.id))expPlainRender();},true);
@@ -28743,7 +28745,7 @@ try{
   const gpsExport=document.getElementById('tg-exp-gps');
   const savedGpsPolicy=localStorage.getItem('cs.export.keepGps');
   if(gpsExport&&savedGpsPolicy!==null)gpsExport.checked=savedGpsPolicy!=='0';
-  gpsExport?.addEventListener('change',()=>localStorage.setItem('cs.export.keepGps',gpsExport.checked?'1':'0'));
+  gpsExport?.addEventListener('change',()=>{localStorage.setItem('cs.export.keepGps',gpsExport.checked?'1':'0');if(typeof expPlainRender==='function')expPlainRender();});
 }catch(_){/* privacy settings can be unavailable in restricted webviews */}
 setTimeout(tourMaybeShow,400); // first-run tour — after layout settles, only for a genuinely empty/new session
 initZoomPan();

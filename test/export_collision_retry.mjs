@@ -6,7 +6,7 @@ const server=createServer((req,res)=>{try{const p=path.resolve(root,'.'+decodeUR
 await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
 try{
   browser=await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--disable-gpu-sandbox']});
-  const page=await browser.newPage();
+  const page=await browser.newPage({viewport:{width:1366,height:768}});
   await page.goto(`http://127.0.0.1:${server.address().port}/chromasmith-22.html`);await page.waitForFunction(()=>typeof expRetry==='function'&&typeof saveFiles==='function');
   const r=await page.evaluate(async()=>{
     const disk=new Map(),calls=[];let failOnce='b.jpg';
@@ -29,12 +29,23 @@ try{
     window.__TAURI__={core:{invoke:async()=>undefined}};localStorage.removeItem('cs-export-collide');
     const f=async n=>new File([await (await fetch('/test/fixtures/'+n)).blob()],n,{type:'image/png'});
     await loadFXImages([await f('portrait.png'),await f('gradient.png')]);
+    await new Promise(resolve=>{const poll=()=>fxImages.length===2&&(curItem()?.img?.naturalWidth||curItem()?.fullImg?.naturalWidth)?resolve():setTimeout(poll,25);poll();});
+    switchTab('fx');fxSection('export');document.querySelector('.fx-ctrl[data-fxsec="export"] .fx-ctrl-title').click();expPlainRender();const gps=document.getElementById('tg-exp-gps');
+    const host=document.getElementById('exp-est'),metaBefore=host.textContent,visible=host.offsetParent!==null,darkColor=getComputedStyle(host).color;
+    gps.click();const metaRemoved=host.textContent;
+    gps.click();const metaKept=host.textContent;
+    document.body.classList.add('light');const lightColor=getComputedStyle(host).color,lightVisible=host.offsetParent!==null;document.body.classList.remove('light');
     exportPresetsSave([{name:'A',settings:{fmt:'png',q:100,size:0,sharp:0,dest:'/delivery/archive'}},{name:'B',settings:{fmt:'jpg',q:90,size:1600,sharp:1,dest:'/delivery/proofs'}},{name:'C',settings:{fmt:'jpg',q:85,size:1080,sharp:2,dest:'/delivery/social'}}]);
     exportMultiPresetOpen();const t=[document.getElementById('emp-total').textContent];
     t.push([...document.querySelectorAll('.emp-dest')].map(n=>n.textContent));
-    document.querySelectorAll('.emp-cb')[0].click();t.push(document.getElementById('emp-total').textContent);return t;});
-  assert(/2 photos . 3 recipes = 6 files/.test(dlg[0]),dlg[0]);assert(/2 photos . 2 recipes = 4 files/.test(dlg[2]),dlg[2]);
-  assert.deepEqual(dlg[1],['/delivery/archive','/delivery/proofs','/delivery/social'],'the selected-recipe dialog names each recipe folder');
+    document.querySelectorAll('.emp-cb')[0].click();t.push(document.getElementById('emp-total').textContent);return{t,metaBefore,metaRemoved,metaKept,visible,darkColor,lightColor,lightVisible};});
+  assert.equal(dlg.visible,true,'preflight is visible with the Output section open');
+  assert.equal(dlg.lightVisible,true,'preflight remains visible in light theme');assert.notEqual(dlg.darkColor,dlg.lightColor,'preflight uses the active theme color');
+  assert.match(dlg.metaBefore,/Metadata: photo metadata preserved/);
+  assert.match(dlg.metaRemoved,/Metadata: photo metadata preserved except GPS location/);
+  assert.match(dlg.metaKept,/Metadata: photo metadata preserved/);
+  assert(/2 photos . 3 recipes = 6 files/.test(dlg.t[0]),dlg.t[0]);assert(/2 photos . 2 recipes = 4 files/.test(dlg.t[2]),dlg.t[2]);
+  assert.deepEqual(dlg.t[1],['/delivery/archive','/delivery/proofs','/delivery/social'],'the selected-recipe dialog names each recipe folder');
   const routed=await page.evaluate(async()=>{
     let active='',calls=0;const writes=[];
     window.__TAURI__={core:{invoke:async(cmd,body,opts)=>{
