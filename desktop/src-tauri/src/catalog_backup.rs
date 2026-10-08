@@ -1,5 +1,6 @@
 use crate::catalog::{self, CatalogState};
 use crate::{library, platform};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use rusqlite::{backup::Progress, Connection, DatabaseName};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -10,6 +11,36 @@ use tauri::State;
 
 const SNAPSHOT_FORMAT_VERSION: u32 = 1;
 const LIBRARY_BACKUP_VERSION: u32 = 1;
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct UserAssets {
+    format_version: u32,
+    luts: Vec<UserLut>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct UserLut {
+    name: String,
+    bytes_base64: String,
+}
+fn validate_user_assets(assets: &UserAssets) -> Result<(), String> {
+    if assets.format_version != 1 {
+        return Err("Unsupported user asset format".into());
+    }
+    let mut names = std::collections::HashSet::new();
+    for lut in &assets.luts {
+        if lut.name.is_empty() || !names.insert(&lut.name) {
+            return Err("User LUT names must be nonempty and unique".into());
+        }
+        let bytes = STANDARD
+            .decode(&lut.bytes_base64)
+            .map_err(|e| format!("Invalid user LUT {}: {e}", lut.name))?;
+        if bytes.len() != 33 * 33 * 33 * 3 {
+            return Err(format!("Invalid user LUT byte count: {}", lut.name));
+        }
+    }
+    Ok(())
+}
 const REGISTRY_FILES: &[&str] = &[
     "edited_registry.json",
     "favorites_registry.json",
@@ -96,10 +127,20 @@ pub(crate) fn library_backup_create(
     state: State<'_, CatalogState>,
     destination: String,
     preferences_json: String,
+    user_assets_json: Option<String>,
 ) -> Result<BackupResult, String> {
     let destination = PathBuf::from(destination);
     let preferences: serde_json::Value = serde_json::from_str(&preferences_json)
         .map_err(|e| format!("Read exported preferences: {e}"))?;
+    let assets = user_assets_json
+        .map(|text| {
+            serde_json::from_str::<UserAssets>(&text)
+                .map_err(|e| format!("Read exported user assets: {e}"))
+        })
+        .transpose()?;
+    if let Some(assets) = &assets {
+        validate_user_assets(assets)?;
+    }
     let conn = state
         .conn
         .lock()
@@ -110,6 +151,7 @@ pub(crate) fn library_backup_create(
         &catalog::catalog_dir(),
         &library::cache_dir(),
         &preferences,
+        assets.as_ref(),
     )?;
     let last = LastBackup {
         path: report.path.clone(),
@@ -148,6 +190,7 @@ fn create_library_backup(
     data_dir: &Path,
     cache_dir: &Path,
     preferences: &serde_json::Value,
+    user_assets: Option<&UserAssets>,
 ) -> Result<BackupResult, String> {
     if destination.exists() {
         return Err("Backup destination already exists".into());
@@ -187,6 +230,10 @@ fn create_library_backup(
             }
         }
         write_json_atomic(&staging.join("preferences.json"), preferences)?;
+        if let Some(assets) = user_assets {
+            validate_user_assets(assets)?;
+            write_json_atomic(&staging.join("user-assets.json"), assets)?;
+        }
 
         let roots = backup_roots(source)?;
         let photos = photo_sidecar_sources(source)?;
@@ -322,6 +369,14 @@ fn verify_library_backup(directory: &Path) -> Result<LibraryBackupManifest, Stri
         {
             return Err(format!("Backup file failed verification: {}", file.path));
         }
+    }
+    let assets_path = directory.join("user-assets.json");
+    if assets_path.is_file() {
+        let assets: UserAssets = serde_json::from_slice(
+            &fs::read(&assets_path).map_err(|e| format!("Read user assets: {e}"))?,
+        )
+        .map_err(|e| format!("Parse user assets: {e}"))?;
+        validate_user_assets(&assets)?;
     }
     Ok(manifest)
 }
@@ -688,12 +743,20 @@ mod tests {
             )
             .unwrap();
         let backup = root.join("portable-backup");
+        let assets = UserAssets {
+            format_version: 1,
+            luts: vec![UserLut {
+                name: "Fixture user look".into(),
+                bytes_base64: STANDARD.encode(vec![123u8; 33 * 33 * 33 * 3]),
+            }],
+        };
         let report = create_library_backup(
             &source,
             &backup,
             &data,
             &cache,
             &serde_json::json!({"csTheme":"dark"}),
+            Some(&assets),
         )
         .unwrap();
         assert!(report.verified);
@@ -710,11 +773,16 @@ mod tests {
         assert!(backup.join("sidecars/volume-1/one.xmp").is_file());
         assert!(!backup.join("sidecars/volume-1/one.jpg").exists());
         assert!(manifest.roots.iter().any(|r| r.volume_uuid == "volume-a"));
+        assert!(manifest.files.iter().any(|f| f.path == "user-assets.json"));
 
         let restored = root.join("restored-library");
         let restored_report = restore_library_backup(&backup, &restored).unwrap();
         assert!(restored_report.verified);
         assert_eq!(verify_library_backup(&restored).unwrap().photo_count, 2);
+        assert_eq!(
+            fs::read(restored.join("user-assets.json")).unwrap(),
+            fs::read(backup.join("user-assets.json")).unwrap()
+        );
         assert_eq!(
             fs::read(restored.join("sidecars/volume-1/one.xmp")).unwrap(),
             b"<xmp recipe='saved'/>"
@@ -748,6 +816,7 @@ mod tests {
             &root.join("data"),
             &root.join("cache"),
             &serde_json::json!({}),
+            None,
         )
         .unwrap();
         fs::write(backup.join("preferences.json"), b"tampered").unwrap();
@@ -757,6 +826,31 @@ mod tests {
         assert!(safe_relative(Path::new("../escape.json")).is_err());
         drop(source);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn user_assets_reject_corrupt_future_and_duplicate_records() {
+        let mut assets = UserAssets {
+            format_version: 1,
+            luts: vec![UserLut {
+                name: "Test".into(),
+                bytes_base64: STANDARD.encode(vec![31u8; 33 * 33 * 33 * 3]),
+            }],
+        };
+        assert!(validate_user_assets(&assets).is_ok());
+        assets.format_version = 2;
+        assert!(validate_user_assets(&assets).is_err());
+        assets.format_version = 1;
+        assets.luts.push(UserLut {
+            name: "Test".into(),
+            bytes_base64: assets.luts[0].bytes_base64.clone(),
+        });
+        assert!(validate_user_assets(&assets).is_err());
+        assets.luts.pop();
+        assets.luts[0].bytes_base64 = "not base64".into();
+        assert!(validate_user_assets(&assets).is_err());
+        assets.luts[0].bytes_base64 = STANDARD.encode([1, 2, 3]);
+        assert!(validate_user_assets(&assets).is_err());
     }
 
     #[test]

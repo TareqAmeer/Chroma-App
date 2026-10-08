@@ -7284,7 +7284,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008T';
+const BUILD='1.1008U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11394,6 +11394,22 @@ const lutLibList=()=>lutTx('readonly',s=>s.getAllKeys());
 const lutLibGet=n=>lutTx('readonly',s=>s.get(n));
 const lutLibPut=(n,d)=>lutTx('readwrite',s=>s.put({name:n,data:d}));
 const lutLibDel=n=>lutTx('readwrite',s=>s.delete(n));
+// A single readonly transaction captures user-owned LUTs; built-in lutcache is regenerable.
+async function csBackupUserAssets(){
+  const db=await lutDB();
+  try{return await new Promise((resolve,reject)=>{
+    const tx=db.transaction('luts','readonly'),rq=tx.objectStore('luts').getAll();let records;
+    rq.onsuccess=()=>{records=rq.result;};
+    tx.onerror=()=>reject(tx.error||new Error('Could not read user LUTs'));
+    tx.onabort=()=>reject(tx.error||new Error('User LUT snapshot was interrupted'));
+    tx.oncomplete=()=>{try{resolve({formatVersion:1,luts:records.map(rec=>{
+      const bytes=rec.data instanceof ArrayBuffer?new Uint8Array(rec.data):new Uint8Array(rec.data);
+      if(!rec.name||bytes.length!==LUT_BYTE_LEN)throw new Error(`Invalid user LUT: ${rec.name||'unnamed'}`);
+      let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+      return{name:rec.name,bytesBase64:btoa(binary)};
+    })});}catch(e){reject(e);}};
+  });}finally{db.close();}
+}
 // ── Built-in preset bytes: inline (core looks) → IndexedDB → vendor/luts/<key>.bin ──────────
 // Only the User Looks category still ships as base64 inside this file; the other ~102 presets
 // are raw 33³ RGB bytes in vendor/luts/, fetched once and cached. That took 16.3 MB out of the

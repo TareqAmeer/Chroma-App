@@ -29,6 +29,13 @@ try {
   await page.waitForFunction(() => typeof window.__libOpenFolder === 'function', { timeout: 30000 });
   await page.evaluate(() => window.__libOpenFolder('/test/Photos'));
   await page.waitForSelector('#lib-grid .lib-card');
+  await page.evaluate(async()=>{
+    for(const key of ['chromasmith-styles-v1','chromasmith-session-v1','chromasmith-export-presets-v1','cs.import.recipes.v1','cs.export.keepGps','cs_panelw','chromasmith-shortcuts-v1'])localStorage.setItem(key,'fixture saved value');
+    localStorage.setItem('cs.oauth.token','must-not-export');localStorage.setItem('chromasmith-active-jobs-v1','transient');
+    const bytes=Uint8Array.from({length:33*33*33*3},(_,i)=>(i*17+3)%256);
+    await lutLibPut('Portable fixture look',bytes);
+    await lutTx('readwrite',s=>s.put({name:'built-in-cache-fixture',data:bytes}),'lutcache');
+  });
   await page.locator('#lib-view-menu-btn').click();
   const create = page.locator('#lib-backup-create');
   await create.waitFor({ state: 'visible' });
@@ -41,6 +48,12 @@ try {
   const prefs = JSON.parse(backupCall[1].preferencesJson);
   assert.equal(prefs.values.chromasmith_test_preference, 'saved');
   assert.equal(Object.keys(prefs.values).some((key) => /oauth_access_token/i.test(key)), false, 'credential-like preferences are excluded');
+  for(const key of ['chromasmith-styles-v1','chromasmith-session-v1','chromasmith-export-presets-v1','cs.import.recipes.v1','cs.export.keepGps','cs_panelw','chromasmith-shortcuts-v1'])assert.equal(prefs.values[key],'fixture saved value',key);
+  assert.equal(prefs.values['cs.oauth.token'],undefined);assert.equal(prefs.values['chromasmith-active-jobs-v1'],undefined);
+  const assets=JSON.parse(backupCall[1].userAssetsJson);
+  assert.equal(assets.formatVersion,1);assert.deepEqual(assets.luts.map(l=>l.name),['Portable fixture look']);
+  const bytes=Buffer.from(assets.luts[0].bytesBase64,'base64');
+  assert.equal(bytes.length,33*33*33*3);assert.ok(bytes.every((v,i)=>v===(i*17+3)%256),'every user LUT byte is preserved; built-in cache excluded');
   assert.match(backupCall[1].destination, /^\/test\/Backups\/Chromasmith Library Backup /);
   await page.waitForFunction(() => document.querySelector('#lib-backup-last')?.textContent.includes('/test/Backups/Chromasmith Library Backup'));
 

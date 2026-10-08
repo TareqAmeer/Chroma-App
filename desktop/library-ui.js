@@ -10199,9 +10199,16 @@
   }
   function portablePreferences() {
     const values = {};
+    const portableKeys=new Set([
+      'chromasmith-styles-v1','chromasmith-styles-recent-v1','chromasmith-export-presets-v1','chromasmith-session-v1',
+      'chromasmith-shortcuts-v1','chromasmith-shortcuts-single-disabled-v1','chromasmith-paste-fields-v1',
+      'chromasmith-collage-layouts-v1','chromasmith-adv-tabs-v1','chromasmith-tour-seen-v1',
+      'chromasmith-first-edit-guide-v1','chromasmith-first-edit-stage-v1','chromasmithGpuPreference',
+      'chromasmithPhotoTransitions','chromasmithRevealLab','chromasmith.allfx.v1','chromasmith.prevfx.v1'
+    ]);
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (!key || !(/^(chromasmith_|csTheme$|cs[A-Z])/).test(key) || /(token|secret|oauth|auth|credential|client.?id|code.?verifier)/i.test(key)) continue;
+      if (!key || !(portableKeys.has(key)||(/^(chromasmith_|csTheme$|cs[A-Z]|cs[._-])/).test(key)) || /(token|secret|oauth|auth|credential|client.?id|code.?verifier)/i.test(key)) continue;
       values[key] = localStorage.getItem(key);
     }
     return { formatVersion: 1, source: 'Chromasmith desktop preferences', values };
@@ -10213,7 +10220,9 @@
       const parent = Array.isArray(chosen) ? chosen[0] : chosen;
       if (!parent) return;
       const destination = backupJoin(parent, `Chromasmith Library Backup ${backupTimestamp()}`);
-      const result = await invoke('library_backup_create', { destination, preferencesJson: JSON.stringify(portablePreferences()) });
+      if(typeof csBackupUserAssets!=='function')throw new Error('User asset backup is unavailable. Reopen the app before backing up.');
+      const userAssets=await csBackupUserAssets();
+      const result = await invoke('library_backup_create', { destination, preferencesJson: JSON.stringify(portablePreferences()), userAssetsJson: JSON.stringify(userAssets) });
       if (!result?.verified) throw new Error('The backup did not pass verification.');
       toast(`Verified library backup saved. ${result.photoCount} catalog photos; ${result.sidecarsIncluded} edit sidecars included${result.sidecarsMissing ? `, ${result.sidecarsMissing} missing` : ''}. Originals and regenerated caches are excluded.`);
       await refreshBackupStatus();
