@@ -1165,3 +1165,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Gave active and queued jobs individual event timestamps; promotion retains the queued age, and terminal queued jobs clear restart snapshots. Warning text explicitly avoids a failure claim. Cancelled, Interrupted, Partial and Failed remain distinct across import, recipe batch and export paths.
 - Files: desktop/library-ui.js, chromasmith-22.html, test/library_job_history.mjs and test/library_job_watchdog_native.mjs. Seven focused helper/history tests, HTML interaction validity and JavaScript syntax pass; native two-theme laptop coverage exercises independent clocks, promotion and cancellation snapshots.
 - CHR-200 remains In Progress: durable import/index/export replay and real foreground responsiveness measurements remain open. Job-specific cancellation copy states completed-work retention and export restart limitations without claiming an export journal.
+
+### 2026-10-08 — CHR-200 progress-warning publication verification
+- Feature d8ced7af published as f1388e82b01fc2c9893d6d446940b6e478f092e6; remote main hash and ancestry verified. Integrated seven focused history tests and native independent-warning/promotion/queued-terminal checks pass in actual dark/light laptop themes.
+- CHR-200 AC4 is supported by demonstrated warning/cancellation UI evidence; issue remains In Progress for durable adapters, interruption validity across all job types and responsiveness measurements.
