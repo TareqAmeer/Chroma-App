@@ -99,7 +99,58 @@ try {
   await page.reload({ waitUntil: 'load' });
   await page.waitForFunction(() => typeof csWorkspaceLayoutGet === 'function' && document.getElementById('sl-adj-exp'), null, { timeout: 30000 });
   assert.equal(await page.locator('#sl-adj-exp').evaluate(control => control.closest('.fx-row').hidden), false, 'the revealed workspace persists across reload');
-  console.log('workspace controls: node identity, reorder, hide, search recovery, recipe snapshot, selective paste, and persistence passed');
+
+  // Project rule 8: derive the control set from the live editor DOM, then prove each one remains
+  // discoverable through the actual command-palette search after its row and section are hidden.
+  const liveScan = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('.fx-ctrl[data-fxsec]')];
+    const sections = [...new Set(cards.map(card => card.dataset.fxsec))];
+    const controls = cards.flatMap(card => [...card.querySelectorAll('.fx-row')].map(row => {
+      const control = row.querySelector('input[id],select[id],textarea[id],button[id]');
+      if (!control) return null;
+      const label = (row.querySelector('.fx-label')?.textContent || control.getAttribute('aria-label') || control.title || control.id).trim().replace(/\s+/g, ' ');
+      return { id: control.id, label, section: card.dataset.fxsec };
+    }).filter(Boolean));
+    const ids = controls.map(control => control.id);
+    const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+    const hidden = csWorkspaceLayoutGet();
+    hidden.hiddenControls = [...new Set(ids)];
+    hidden.hiddenSections = sections;
+    _csWorkspaceSave(hidden);
+    const searchable = new Set(_cpCommands().filter(command => command.group === 'Control').map(command => command.label));
+    const missing = controls.filter(control => !searchable.has(`Show control: ${control.label}`)).map(control => control.id);
+    return { controls, ids: [...new Set(ids)], sections, duplicateIds, missing };
+  });
+  assert.ok(liveScan.controls.length > 0, 'the live scan discovers editor controls');
+  assert.equal(liveScan.duplicateIds.length, 0, `live control IDs are unique (${liveScan.duplicateIds.join(', ')})`);
+  assert.deepEqual(liveScan.missing, [], 'every live control has a command-palette search entry while its workspace row is hidden');
+
+  const labelOccurrences = new Map();
+  const started = Date.now();
+  for (const control of liveScan.controls) {
+    const expectedLabel = `Show control: ${control.label}`;
+    const occurrence = labelOccurrences.get(expectedLabel) || 0;
+    labelOccurrences.set(expectedLabel, occurrence + 1);
+    await page.keyboard.press('Control+k');
+    await page.locator('#cp-input').fill(expectedLabel);
+    const matches = await page.locator('#cp-list .cp-row').evaluateAll((rows, label) => rows
+      .map((row, index) => row.firstElementChild?.textContent === label ? index : -1)
+      .filter(index => index >= 0), expectedLabel);
+    assert.ok(matches.length > occurrence, `palette search returns control ${control.id}`);
+    for (let step = 0; step < matches[occurrence]; step++) await page.locator('#cp-input').press('ArrowDown');
+    await page.locator('#cp-input').press('Enter');
+    await page.waitForFunction(id => {
+      const element = document.getElementById(id), row = element?.closest('.fx-row'), card = element?.closest('.fx-ctrl[data-fxsec]');
+      return !!row && !!card && !row.hidden && !card.hidden;
+    }, control.id, { timeout: 5000 });
+    await page.evaluate(({ ids, sections }) => {
+      const hidden = csWorkspaceLayoutGet();
+      hidden.hiddenControls = ids;
+      hidden.hiddenSections = sections;
+      _csWorkspaceSave(hidden);
+    }, { ids: liveScan.ids, sections: liveScan.sections });
+  }
+  console.log(`workspace controls: node identity, reorder, hide, search recovery, recipe snapshot, selective paste, and persistence passed; live completeness sweep ${liveScan.controls.length} controls/${liveScan.sections.length} sections in ${Date.now() - started} ms`);
 } finally {
   await browser.close();
 }
