@@ -902,3 +902,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-270 previous-step comparison
 - Feature commit `70bf3e3fdbc28da4742f0b6331062daae24c36a3` is on verified `origin/main` at the same SHA. `git merge-base --is-ancestor` passed, and the shipped shortcut registration and compare-render handler were confirmed in `chromasmith-22.html`.
 - Integration-checkout Playwright rerun passed with the repository portrait photo: 196,608 sampled pixels changed (MAE 101.86), export SHA `bbbe0ae6eb6f` unchanged while held, recipe/history unchanged, keyup restored the current image, and zero page/console errors. HTML validity, test syntax, and whitespace checks pass. The full 33-gate suite remains red as recorded above. Issue CHR-270 remains In Progress with only the previous-step criterion checked.
+
+### 2026-10-08 — CHR-270 divider pointer-drag regression
+- Extended `test/before_after_divider.mjs` to perform real pointer drags on vertical and horizontal split dividers and assert that before/after canvas clipping follows the measured split position. The test loads the repository portrait photo and still verifies keyboard nudges, limits, double-click centering, orientation, and recipe isolation.
+- Live Chromium test passed: vertical split moved 0.500→0.694, horizontal split 0.510→0.624; both canvas clips tracked the final divider position. This closes CHR-270 criterion 1 alongside the already validated previous-step hold. The other four criteria remain open; issue stays In Progress.
