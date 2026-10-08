@@ -4245,12 +4245,14 @@
     const n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
     const updated = { ...cur, rating: n };
     state.sidecars.set(path, updated);
+    let saved = true;
     await invoke('set_sidecar', { path, rating: n, label: updated.label, edited: updated.edited, favorite: updated.favorite })
-      .catch((e) => sidecarWriteFailed(path, cur, e));
+      .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
     const holder = card && card.querySelector('.lib-stars');
-    if (holder) holder.outerHTML = starsHtml(n);
+    if (holder) holder.outerHTML = starsHtml((state.sidecars.get(path) || cur).rating || 0);
     if (typeof renderCollectionCounts === 'function') renderCollectionCounts();
+    return saved;
   }
 
   // ── options for a <select> populated with the distinct values present in this folder ─────
@@ -9225,14 +9227,15 @@
     if (surveyState.cullPaths.length < 1) exitCompareMode(); else await showCullPage(keepFocusAt);
     return gone;
   }
-  async function cullAdvance(label = 'Green', targetPath = surveyTargetPath()) {
+  async function cullCommitAndAdvance(targetPath, write, stillSaved) {
     const path = targetPath; if (!path) return;
-    const currentOffset = surveyState.cullOffset, currentFocus = surveyState.focus;
-    const saved = await setLabel(path, label); surveySyncPath(path);
-    // setLabel rolls back the optimistic state when sidecar persistence fails. Do not advance
-    // past an action that was not saved, or when the user opted into deliberate review pacing.
-    if (!saved || !cullAutoAdvanceEnabled() || (state.sidecars.get(path) || {}).label !== label) return;
+    const currentOffset = surveyState.cullOffset, currentFocus = surveyState.focus, entry = compareState.entryToken;
+    const saved = await write(); surveySyncPath(path);
+    // A rebound command and a button use the same saved-write boundary. Moving away while
+    // IPC is pending must not advance an unrelated photo when the old decision completes.
+    if (!saved || !cullAutoAdvanceEnabled() || !stillSaved()) return;
     if (compareState.mode !== 'cull' || state.viewMode !== 'survey') return;
+    if (entry !== compareState.entryToken || surveyState.cullOffset !== currentOffset || surveyState.focus !== currentFocus || surveyTargetPath() !== path) return;
     const next = currentOffset + currentFocus + 1;
     if (next >= surveyState.cullPaths.length) {
       // End of the shoot: offer the Delete rejected step (cancelling just leaves the rejects flagged).
@@ -9242,6 +9245,12 @@
     }
     if (next >= currentOffset + surveyState.cells.length) await showCullPage(next);
     else surveyFocus(1);
+  }
+  function cullAdvance(label = 'Green', path = surveyTargetPath()) {
+    return cullCommitAndAdvance(path, () => setLabel(path, label), () => (state.sidecars.get(path) || {}).label === label);
+  }
+  function cullRateAndAdvance(rating, path = surveyTargetPath()) {
+    return cullCommitAndAdvance(path, () => setRating(path, rating), () => (state.sidecars.get(path) || {}).rating === rating);
   }
   // ←/→ cycles pane B's photo through the rest of the current selection; ⏎ promotes B to A
   // (swap which photo/source is "the keeper"); handled from the shared keydown listener below.
@@ -14962,6 +14971,7 @@
       return shortcutTargets();
     };
     const applyShortcutLabel = (label) => { const ps = withQuickLook().filter(Boolean); if (!ps.length) return false;
+      if (!quicklook.active && state.viewMode === 'survey' && compareState.active && compareState.mode === 'cull' && label) return cullAdvance(label, ps[0]);
       if (!quicklook.active && state.viewMode === 'survey' && compareState.active) setLabel(ps[0], label).then(() => surveySyncPath(ps[0]));
       else if (!quicklook.active && state.viewMode === 'compare' && compareState.active) compareApplyLabel(ps[0], label);
       else ps.forEach(p => setLabel(p, label)); };
@@ -14971,7 +14981,9 @@
     for (let rating = 0; rating <= 5; rating++) {
       window.chromasmithRegisterShortcut(`library.rate-${rating}`, () => {
         if (!STARS_ENABLED) return false;
-        const ps = withQuickLook().filter(Boolean); if (!ps.length) return false; ps.forEach(p => setRating(p, rating).then(() => surveySyncPath(p)));
+        const ps = withQuickLook().filter(Boolean); if (!ps.length) return false;
+        if (!quicklook.active && state.viewMode === 'survey' && compareState.active && compareState.mode === 'cull') return cullRateAndAdvance(rating, ps[0]);
+        ps.forEach(p => setRating(p, rating).then(() => surveySyncPath(p)));
       });
     }
     window.chromasmithRegisterShortcut('library.open', () => {

@@ -24,7 +24,7 @@ try {
   const errors = [], consoleErrors = []; await page.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch {} }); // first-run welcome card would intercept clicks
   page.on('console', (msg) => { if (msg.type() === 'error' && !msg.text().startsWith('set_sidecar failed')) consoleErrors.push(msg.text()); });
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.addInitScript(() => { localStorage.removeItem('chromasmith_lib_cull_auto_advance'); });
+  await page.addInitScript(() => { localStorage.removeItem('chromasmith_lib_cull_auto_advance'); localStorage.setItem('chromasmith_lib_stars_enabled','1'); });
   await page.goto(`http://127.0.0.1:${server.address().port}/desktop/dist/index.html?libtest=1&libn=10&libtime=1&libdupes=1`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30000 });
   await page.waitForFunction(() => typeof window.__libEnterSurvey === 'function' && typeof window.__libOpenFolder === 'function', { timeout: 30000 });
@@ -132,6 +132,21 @@ try {
   // Return to the beginning so the existing page-boundary assertions cover a full four-photo page.
   await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft');
 
+  // Rebound registry actions must use the same cull advance path as legacy Enter/Shift+X.
+  await page.evaluate(()=>{csShortcutSet('library.pick','F7');csShortcutSet('library.reject','F8');csShortcutSet('library.rate-5','F9');});
+  await page.keyboard.press('F7');await page.waitForFunction(()=>window.__libSurveyState().focus===1);
+  await page.keyboard.press('F8');await page.waitForFunction(()=>window.__libSurveyState().focus===2);
+  await page.evaluate(()=>window.__libtestFailNextSidecarWrite());await page.keyboard.press('F9');await page.waitForTimeout(100);
+  assert.equal((await page.evaluate(()=>window.__libSurveyState())).focus,2,'failed rebound rating stays on decision photo');
+  assert.notEqual(await page.locator('.lib-survey-cell[data-survey-idx="2"] .lib-cmp-chrome span').textContent(),'5★','failed rating is rolled back');
+  await page.keyboard.press('F9');await page.waitForFunction(()=>window.__libSurveyState().focus===3);
+  assert.equal(await page.locator('.lib-survey-cell[data-survey-idx="2"] .lib-cmp-chrome span').textContent(),'5★');
+  await page.locator('#lib-cull-auto-advance').click();await page.locator('.lib-survey-cell[data-survey-idx="3"]').focus();await page.keyboard.press('F9');await page.waitForTimeout(100);
+  assert.equal((await page.evaluate(()=>window.__libSurveyState())).focus,3,'rebound rating respects paused advance');
+  await page.evaluate(()=>{for(const id of ['library.pick','library.reject','library.rate-5'])csShortcutSet(id,null);});
+  await page.locator('#lib-cull-auto-advance').click();
+  await page.locator('.lib-survey-cell[data-survey-idx="0"]').focus();
+
   let state = await page.evaluate(() => window.__libSurveyState());
   assert.equal(state.paths.length, 4, 'culling keeps the visible batch bounded to four');
   assert.equal(state.cullPaths.length, 10, 'culling retains the full selected shoot');
@@ -142,7 +157,7 @@ try {
   state = await page.evaluate(() => window.__libSurveyState());
   assert.equal(state.paths[1], orderedPaths[1], 'Enter flags the focused path then advances');
 
-  for (let i = 0; i < 3; i++) await page.keyboard.press('Enter');
+  for (let i = 0; i < 3; i++) { await page.keyboard.press('Enter'); await page.waitForFunction(position=>window.__libSurveyState().offset+window.__libSurveyState().focus===position,i+2); }
   await page.waitForFunction((expected) => window.__libSurveyState().offset === 4 && window.__libSurveyState().paths[0] === expected, orderedPaths[4]);
   await page.waitForFunction(() => document.querySelectorAll('#lib-survey .lib-survey-cell').length === 4);
   state = await page.evaluate(() => window.__libSurveyState());
