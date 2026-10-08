@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile,writeFile,mkdir,rm} from 'node:fs/promises';
 import path from 'node:path';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
-const root=process.cwd(),output=path.join(root,'test/output/backup-assets-native',String(Date.now()));
+const root=process.cwd(),output=path.join(process.env.BACKUP_OUTPUT||path.join(root,'test/output/backup-assets-native'),String(Date.now()));
 await mkdir(output,{recursive:true});
 const lastFile=path.join(process.env.APPDATA,'Chromasmith/library-backup-last.json');
 let previousLast;try{previousLast=await readFile(lastFile);}catch(e){if(e.code!=='ENOENT')throw e;}
@@ -18,16 +18,17 @@ try{
   await lutTx('readwrite',s=>s.put({name:'CHR205 built-in cache sentinel',data:new Uint8Array(33*33*33*3)}),'lutcache');
   if(!chromasmithLibraryIsOpen())await chromasmithToggleLibrary();
   const core=__TAURI__.core;
-  window.__backupNativeCore=core;window.__backupNativeResult=null;
+  window.__backupNativeCore=core;window.__backupNativeResult=null;window.__backupNativeError=null;
   __TAURI__.core={...core,invoke:async(command,args,options)=>{
    if(command==='plugin:dialog|open')return output;
-   const result=await core.invoke(command,args,options);
+   let result;try{result=await core.invoke(command,args,options);}catch(e){if(command==='library_backup_create')window.__backupNativeError=String(e);throw e;}
    if(command==='library_backup_create')window.__backupNativeResult=result;
    return result;
   }};
  },{name,output});
  await page.locator('#lib-view-menu-btn').click();await page.locator('#lib-backup-create').click();
- await page.waitForFunction(()=>!!window.__backupNativeResult,null,{timeout:60000});
+ await page.waitForFunction(()=>!!window.__backupNativeResult||!!window.__backupNativeError,null,{timeout:60000});
+ assert.equal(await page.evaluate(()=>window.__backupNativeError),null);
  const result=await page.evaluate(()=>window.__backupNativeResult);assert.equal(result.verified,true);
  await page.waitForFunction(p=>document.querySelector('#lib-backup-last')?.textContent.includes(p),result.path);
  const assets=JSON.parse(await readFile(path.join(result.path,'user-assets.json'),'utf8'));

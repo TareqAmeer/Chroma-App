@@ -558,7 +558,7 @@ pub(crate) fn create_catalog_snapshot(
     let staged_catalog = staging.join("catalog.db");
 
     let result = (|| {
-        let mut target = Connection::open(&staged_catalog)?;
+        let mut target = open_backup_database(&staged_catalog)?;
         let backup = rusqlite::backup::Backup::new_with_names(
             source,
             DatabaseName::Main,
@@ -571,13 +571,13 @@ pub(crate) fn create_catalog_snapshot(
 
         verify_database(&staged_catalog)?;
         let catalog_blake3 = checksum_file(&staged_catalog)?;
-        let photo_count = Connection::open(&staged_catalog)?.query_row(
+        let photo_count = open_backup_database(&staged_catalog)?.query_row(
             "SELECT COUNT(*) FROM photos",
             [],
             |row| row.get::<_, u64>(0),
         )?;
         let catalog_schema_version =
-            Connection::open(&staged_catalog)?
+            open_backup_database(&staged_catalog)?
                 .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))?;
         let created_unix_secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -627,7 +627,7 @@ pub(crate) fn verify_catalog_snapshot(directory: &Path) -> rusqlite::Result<Snap
         return Err(rusqlite::Error::InvalidQuery);
     }
     verify_database(&catalog_path)?;
-    let conn = Connection::open(catalog_path)?;
+    let conn = open_backup_database(&catalog_path)?;
     let photos = conn.query_row("SELECT COUNT(*) FROM photos", [], |row| {
         row.get::<_, u64>(0)
     })?;
@@ -656,8 +656,16 @@ fn checksum_file(path: &Path) -> rusqlite::Result<String> {
     Ok(hasher.finalize().to_hex().to_string())
 }
 
+fn open_backup_database(path: &Path) -> rusqlite::Result<Connection> {
+    // Rust filesystem operations already handle long paths; SQLite's Win32 VFS also needs
+    // the verbatim prefix when nested staging directories cross MAX_PATH.
+    #[cfg(windows)]
+    let path = platform::long_path(path);
+    Connection::open(path)
+}
+
 fn verify_database(path: &Path) -> rusqlite::Result<()> {
-    let conn = Connection::open(path)?;
+    let conn = open_backup_database(path)?;
     let integrity: String = conn.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
     if integrity != "ok" {
         return Err(rusqlite::Error::InvalidQuery);
@@ -869,6 +877,29 @@ mod tests {
         assert!(!report.manifest.regenerated_caches_included);
         assert_eq!(
             verify_catalog_snapshot(&dest).unwrap().catalog_blake3,
+            report.manifest.catalog_blake3
+        );
+        drop(source);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn snapshots_and_verifies_catalog_beyond_windows_max_path() {
+        let root = temp_path("long-snapshot");
+        fs::create_dir_all(&root).unwrap();
+        let source = Connection::open(root.join("source.db")).unwrap();
+        source.execute_batch("CREATE TABLE photos(id INTEGER PRIMARY KEY); INSERT INTO photos VALUES(1); PRAGMA user_version=7;").unwrap();
+        let mut nested = root.clone();
+        while nested.to_string_lossy().len() < 300 {
+            nested = nested.join("deep-backup-destination");
+        }
+        let destination = nested.join("verified-snapshot");
+        let report = create_catalog_snapshot(&source, &destination).unwrap();
+        assert_eq!(
+            verify_catalog_snapshot(&destination)
+                .unwrap()
+                .catalog_blake3,
             report.manifest.catalog_blake3
         );
         drop(source);
