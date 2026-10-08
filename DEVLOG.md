@@ -1069,3 +1069,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — consolidated photo-ticket handoff
 
 - Handoff feature `983ac91d` is published as `d07ed5f0c18a54adc12605895a62755c0dfd463c`; fresh fetch and remote ls-remote matched. Ancestry checks confirmed CHR-208 `8af4b065`, CHR-201/202 `7b396b48`, CHR-275 `ea3a56c7` and CHR-199/268 `93c874aa` remain on main. Integration is clean; root tracked dirty state is unchanged. Validation-only app closed; retained worktrees preserve commits and ignored evidence.
+
+### 2026-10-08 — CHR-195 tutorial sample visibility
+- Fixed the native welcome/first-edit sample action leaving the full Gallery over a successfully loaded sample. The action now awaits loading, closes the Gallery through its public toggle, and selects Studio.
+- Files: chromasmith-22.html and test/onboarding_sample_native.mjs. Real WebView2 validation passes from full Gallery in both themes through sample visibility, look, comparison, and output navigation; failed fetch preserves Gallery/stage and the bundled sample hash stays unchanged.
+- Focused HTML validity, test syntax, and whitespace checks pass. Native picker cancellation, actual first-edit export/reveal, migration, and accessibility remain outside this regression; CHR-195 remains In Progress with acceptance boxes unchanged.
