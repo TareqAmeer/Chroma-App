@@ -1059,3 +1059,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-199/CHR-268 source detail
 
 - Feature `d964d520` integrated as `93c874aaaecf0b8cd84c9afa059ede6037bf605e`; fresh fetch, remote ls-remote and ancestry passed. Integrated test syntax/whitespace checks passed; native product source matches the measured test run apart from BUILD. CHR-199 source-resolution AC checked; CHR-268 prefetch/no-flash remains open. Both In Progress.
+
+### 2026-10-08 — photo-ticket continuation handoff
+
+- Added `docs/photo-ticket-continuation-2026-10-08.md` with verified publication/evidence for CHR-201/202, CHR-208, CHR-275, CHR-199/268, CHR-205 and CHR-262; 201/202 In Review, all other incomplete tickets In Progress, none Done.
+- Recorded significant remaining implementation/validation boundaries for CHR-200/205/208/244/246/249/262/267/268/269/271/275/199 in the handoff and matching Linear comments. Missing model/reference/platform evidence is separate from substantial unfinished backend work; earlier general native build blockers are superseded by passing focused native runs.
+- Preserved dirty root tracked files, exact-file task commits, clean integration and remote publication verification. Old CHR-202 checkout removed only after publication/preservation checks; new worktrees and ignored evidence retained. Files: `docs/photo-ticket-continuation-2026-10-08.md`, `DEVLOG.md`.
