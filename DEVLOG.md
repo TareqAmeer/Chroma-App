@@ -1147,3 +1147,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added test/library_cull_trash_native.mjs using four generated JPEG fixtures and actual native cull/sidecar/system-trash IPC. Reject preserves originals; undo clears the reject; count/name confirmation cancels without deletion; confirm removes only the rejected photo.
 - Native Windows test passes: exact original and XMP SHA-256 bytes found in Windows Recycle Bin via Shell namespace, three survivors unchanged. Observed hidden known-file extensions handled without assuming unsupported OriginalFileName property. Fixtures are disposable and recoverable; no existing photos were targeted.
 - Supports CHR-267 AC3; keep In Progress with RAW timing, rebindable auto-advance coverage and every-action/in-app trash undo open. Found rebound Pick/Reject and rating keys bypass the cull advance path; continuing implementation. Colour-label requirement conflicts with current explicitly removed colour UI and awaits user direction.
+
+### 2026-10-08 — CHR-267 native Trash publication verification
+- Feature ee8278a9 published as 346ff891e93b6c1a359e072fbe48fe2ac2e42d14; remote hash/ancestry verified. Integration conflicts were append-only DEVLOG/BUILD; newer CHR-205 backup behavior retained.
+- Linear AC3 checked from actual Windows Recycle Bin byte evidence; issue remains In Progress for remaining keyboard/RAW/undo scope. Test fixtures stay recoverable and root changes are preserved.
