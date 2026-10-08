@@ -811,3 +811,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-267 cull-delete picker test
 
 - Feature/test commit `5b3aba26836761f95d9f076901319a0eca3b36d9` was published to `origin/main`; the freshly fetched remote ref matched and the commit is an ancestor of remote main. CHR-267 stays In Progress for native SQLite/WebView2 and actual 45MP warm-preview/100% latency evidence.
+
+### 2026-10-08 — CHR-208 round-trip acceptance audit
+
+- Re-ran `node test/import_recipes.mjs` on integrated source: collision-aware naming, IPTC preview, recipe save/reload, starting-edit IPC, and second-copy options passed. The attempted isolated mixed-format round-trip slice added no test because the available browser import/export harnesses mock both native filesystem boundaries; combining them would not prove the ticket's actual ingest-to-export requirement.
+- Current integration checkout has no runnable `chromasmith.exe` or live Tauri process, and C: has about 1.09 GB free. A full native link is not feasible at this headroom (earlier Tauri links exhausted disk); no native build was attempted in this audit. Prior CHR-208 native `ingest_preview` evidence remains valid but does not cover export.
+- CHR-208 remains In Progress until a mixed-format fixture is imported and exported through a current native app and the saved recipe metadata plus unrelated sidecar fields are checked on disk; also re-run the native GPS keep/remove test.
