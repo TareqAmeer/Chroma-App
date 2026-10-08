@@ -611,3 +611,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-208
 
 - Feature commit `9372c908fea945d26c1876e114e234e966260986` is integrated by `c6f449cbe9b02f09a0ae82f3f30b18d96db7e16c`. Fresh fetch and `git ls-remote origin refs/heads/main` matched the integration SHA and ancestry passed. The focused `node test/import_recipes.mjs` rerun passed on current integration staging.
+
+### 2026-10-08 — CHR-249 luminance NR Contrast slice
+
+- Added a per-photo luminance-noise Contrast slider that restores local luminance residual as its amount rises; default zero preserves existing output. Wired it through reset, session and undo/recipe snapshots, and the Detail panel's noise-reduction gate. Files: `chromasmith-22.html`, `test/noise_contrast_ui.mjs`, `DEVLOG.md`.
+- The real Chrome test on `test/fixtures/portrait.png` measured a 4,304 absolute RGB delta from source at 90% luminance NR / 0% Contrast, 2,388 at 50%, and exact source pixels at 100%; snapshot restore was pixel-identical and reset returned Contrast to zero. `node test/export_harness.mjs` rendered all 35 fixture/recipe pairs without GLSL compile/link errors, and `npm run editor:html-check` passed.
+- CHR-249 remains In Progress: other Lightroom Detail/Noise controls, Super Resolution and Raw Details model/license validation, batch apply, masked-control parity, five-photo 100% review, native app behavior and full editor gates remain open.
