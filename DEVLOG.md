@@ -1039,3 +1039,13 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Reproduced the actual app-level bug: rebinding temporary erase to Shift changed held state/cursor, but pointer painting still read hard-coded Alt; the old Alt binding continued erasing. Pointer-down/move and cursor now share the registered held state, with hard-coded Alt cursor listeners removed.
 - Extended `test/mask_raster.mjs` to exercise shortcut registry -> pointer painting and stationary cursor press/release, retained size/flow, old-binding removal, cleanup, undo/redo and raster round trips. Browser checks passed; real native WebView2 ran 35/35 PASS. Shortcut registry (56 actions), HTML validity, test syntax and whitespace passed. Native test mode explicitly enters Editor before dispatching shortcuts.
 - CHR-275 rebinding criterion is now demonstrated; keep In Progress for full feather/density parity, pen/touch acceptance, Heal/Spot erase targeting and full stroke/conflict coverage. Files: `chromasmith-22.html`, `test/mask_raster.mjs`, `DEVLOG.md`. Old CHR-202 checkout removed only after clean-status, exact published-source/test comparison and preservation-branch verification; branch `codex/chr202-metadata-policy` retains `962f6a3d`.
+
+#### Publication verification — CHR-275 rebound erase
+
+- Feature `b0103a2c` integrated as `ea3a56c7d3f9cfebc21c913ead0a2a23aeecb7fc`; fresh fetch/ls-remote matched and ancestry passed. Integrated native WebView2 test passed 35/35. Rebinding AC checked in Linear; remaining criteria stay open and status In Progress.
+
+### 2026-10-08 — CHR-262 native backend blocker correction
+
+- The native test binary built for the focused backup validation passed all 9 `film_negative::tests` (scalar/table identity, channel ratios, reference mapping, range/finite validation and original-coordinate sampler). The same binary passed `import_recipe_metadata_merges_xmp_and_keeps_duplicate_and_backup_rules` 1/1 for CHR-208. These focused tests run actual Rust; no model backend was used.
+- Earlier `onig_sys`/missing-resource compilation blockers are superseded for these tests by the unsandboxed MSVC setup and resource-free validation configuration. This is not a RAW/TIFF negative shoot or photographic reference comparison; checked acceptance is unchanged.
+- CHR-262 significant remaining validation: real colour and B&W negative RAW/TIFFs paired with accepted known-good conversions and tolerances, normal-grade/export integration on those files, and iOS/WebView testing unavailable on this Windows host. In Progress; no criterion newly checked. Evidence files: `DEVLOG.md` and Linear comments.
