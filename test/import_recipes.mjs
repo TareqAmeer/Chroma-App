@@ -56,7 +56,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#imp-name-preview')?.innerText.includes('/tmp/Imports/2026-08-13/collision (3).RW2'));
   namingPreview = await page.locator('#imp-name-preview').innerText();
   assert.match(namingPreview, /collision \(3\)\.RW2/);
-  assert.match(namingPreview, /skipped \(same name and size already imported\)/);
+  assert.match(namingPreview, /skipped \(already imported\)/);
   await page.locator('#imp-name').fill('{YYYY-MM-DD}_{seq}');
   await page.locator('#imp-creator').fill('A. Photographer');
   await page.locator('#imp-copyright').fill('© Studio 2026');

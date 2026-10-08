@@ -484,36 +484,61 @@ pub fn scan_card_run(path: String, dest_root: Option<String>, progress: &mut dyn
     }
     files.sort_by(|a, b| a.name.cmp(&b.name));
 
-    // Mark files already imported. Matching on name+size (not a content hash) is the same
-    // trade-off every importer makes: a hash of 400 RAWs would take longer than the import.
+    // Preserve the name/size fast path; renamed copies use bounded content matching.
     if let Some(dest) = dest_root.filter(|d| !d.is_empty()) {
-        let existing = index_destination(Path::new(&dest));
+        let mut existing = index_destination(Path::new(&dest));
         for f in files.iter_mut() {
-            f.duplicate = existing.get(&f.name.to_lowercase()).is_some_and(|&s| s == f.size);
+            f.duplicate = existing.is_duplicate(f);
         }
     }
     progress(ScanProgress { scanned, current: String::new() });
     Ok(files)
 }
 
-/// lowercased name -> size for every media file under `dest`, used for duplicate detection. Walks once and
-/// caches nothing: an import is rare enough that a stale index would be a worse trade than a walk.
-fn index_destination(dest: &Path) -> std::collections::HashMap<String, u64> {
-    let mut map = std::collections::HashMap::new();
+/// Preserve name/size lookup; detect renamed copies with cached streaming hashes of
+/// only same-size, same-extension candidates. Symlinks do not expand this scan.
+#[derive(Default)]
+struct DestinationIndex {
+    names: std::collections::HashMap<String, u64>,
+    candidates: std::collections::HashMap<(u64, String), Vec<PathBuf>>,
+    hashes: std::collections::HashMap<PathBuf, Option<blake3::Hash>>,
+}
+fn media_hash(path: &Path) -> Option<blake3::Hash> {
+    let mut file = std::fs::File::open(path).ok()?;
+    let mut hash = blake3::Hasher::new();
+    hash.update_reader(&mut file).ok()?;
+    Some(hash.finalize())
+}
+impl DestinationIndex {
+    fn is_duplicate(&mut self, file: &CardFile) -> bool {
+        if self.names.get(&file.name.to_lowercase()).is_some_and(|&size| size == file.size) { return true; }
+        let key = (file.size, ext_lower(Path::new(&file.name)));
+        let Some(paths) = self.candidates.get(&key) else { return false };
+        let Some(source_hash) = media_hash(Path::new(&file.path)) else { return false };
+        paths.iter().any(|path| {
+            let digest = self.hashes.entry(path.clone()).or_insert_with(|| media_hash(path));
+            *digest == Some(source_hash)
+        })
+    }
+}
+fn index_destination(dest: &Path) -> DestinationIndex {
+    let mut index = DestinationIndex::default();
     let mut stack = vec![dest.to_path_buf()];
     while let Some(dir) = stack.pop() {
         let Ok(rd) = std::fs::read_dir(&dir) else { continue };
         for entry in rd.flatten() {
             let p = entry.path();
-            if p.is_dir() {
-                stack.push(p);
-            } else if media_kind(&ext_lower(&p)).is_some() {
+            let Ok(kind) = entry.file_type() else { continue };
+            if kind.is_dir() { stack.push(p); }
+            else if kind.is_file() && media_kind(&ext_lower(&p)).is_some() {
+                let Ok(metadata) = entry.metadata() else { continue };
                 let name = entry.file_name().to_string_lossy().into_owned();
-                map.insert(name.to_lowercase(), entry.metadata().map(|m| m.len()).unwrap_or(0));
+                index.names.insert(name.to_lowercase(), metadata.len());
+                index.candidates.entry((metadata.len(), ext_lower(&p))).or_default().push(p);
             }
         }
     }
-    map
+    index
 }
 
 /// Expands {YYYY} {MM} {DD} {YYYY-MM-DD} against a "YYYY-MM-DD" date.
@@ -615,7 +640,7 @@ fn preview_names(files: Vec<CardFile>, options: IngestOptions, duplicate_root: O
     let primary_root = PathBuf::from(&options.dest_root);
     if options.dest_root.is_empty() { return Err("no destination chosen".into()); }
     let trust_duplicate_flags = duplicate_root.as_deref() == Some(options.dest_root.as_str());
-    let duplicate_index = if trust_duplicate_flags { None } else { Some(index_destination(&primary_root)) };
+    let mut duplicate_index = if trust_duplicate_flags { None } else { Some(index_destination(&primary_root)) };
     let backup_root = options.backup_root.clone().filter(|s| !s.is_empty()).map(PathBuf::from);
     let folder_tpl = options.folder_template.as_deref().unwrap_or("{YYYY}/{YYYY-MM-DD}");
     let mut primary_reserved = std::collections::HashSet::new();
@@ -629,7 +654,7 @@ fn preview_names(files: Vec<CardFile>, options: IngestOptions, duplicate_root: O
         let duplicate = if trust_duplicate_flags {
             f.duplicate
         } else {
-            duplicate_index.as_ref().and_then(|index| index.get(&f.name.to_lowercase())).is_some_and(|&size| size == f.size)
+            duplicate_index.as_mut().is_some_and(|index| index.is_duplicate(&f))
         };
         let skipped = options.skip_duplicates && duplicate;
         if skipped {
@@ -808,10 +833,10 @@ fn ingest_run_cancellable(
 
     // Duplicate flags are re-verified against the destination NOW, not trusted from whatever
     // scan produced `files` — see the doc comment above.
-    let existing = index_destination(&dest_root);
+    let mut existing = index_destination(&dest_root);
     let mut all = files;
     for f in all.iter_mut() {
-        f.duplicate = existing.get(&f.name.to_lowercase()).is_some_and(|&s| s == f.size);
+        f.duplicate = existing.is_duplicate(f);
     }
 
     let after_only: Vec<CardFile> = all
@@ -926,6 +951,33 @@ pub fn eject_volume(path: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn renamed_import_duplicates_use_content_and_preview_agrees() {
+        let root = std::env::temp_dir().join(format!("cs_renamed_duplicate_{}", std::process::id()));
+        let card = root.join("card");
+        let dest = root.join("dest");
+        let backup = root.join("backup");
+        std::fs::create_dir_all(&card).unwrap();
+        let source = card.join("original.jpg");
+        std::fs::write(&source, b"first photo content").unwrap();
+        let files = vec![CardFile { path: source.to_string_lossy().into_owned(), name: "original.jpg".into(), size: 19, kind: "jpeg".into(), date: Some("2026-10-08".into()), camera: None, duplicate: false }];
+        let options = || IngestOptions { dest_root: dest.to_string_lossy().into_owned(), backup_root: Some(backup.to_string_lossy().into_owned()), folder_template: Some("{YYYY-MM-DD}".into()), filename_template: Some("job_{seq}".into()), sequence_start: Some(1), skip_duplicates: true, only: Vec::new(), metadata: Default::default() };
+        let first = ingest_run(files.clone(), options(), &mut |_| {}).unwrap();
+        assert_eq!(first.copied, 1);
+        assert!(backup.join("2026-10-08/job_0001.jpg").is_file());
+        let preview = preview_names(files.clone(), options(), None).unwrap();
+        assert!(preview[0].skipped);
+        let repeat = ingest_run(files.clone(), options(), &mut |_| {}).unwrap();
+        assert_eq!(repeat.copied, 0);
+        assert_eq!(repeat.duplicates_skipped, 1);
+        std::fs::write(&source, b"other photo content").unwrap();
+        assert!(!preview_names(files.clone(), options(), None).unwrap()[0].skipped, "same-size different content must import");
+        std::fs::remove_file(&first.completed_files[0]).unwrap();
+        std::fs::write(&source, b"first photo content").unwrap();
+        assert!(!preview_names(files.clone(), options(), None).unwrap()[0].skipped, "missing primary cannot suppress import");
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn watched_file_candidate_requires_unchanged_size_and_mtime() {
@@ -1369,12 +1421,13 @@ mod tests {
         std::fs::create_dir_all(&card).unwrap();
         std::fs::create_dir_all(dest.join(day)).unwrap();
         std::fs::create_dir_all(backup.join(day)).unwrap();
-        for name in ["a.jpg", "b.jpg", "duplicate.jpg"] {
-            std::fs::write(card.join(name), b"photo").unwrap();
+        // Distinct images of equal size exercise filename collisions without content duplicates.
+        for (name, bytes) in [("a.jpg", b"photo"), ("b.jpg", b"other"), ("duplicate.jpg", b"saved")] {
+            std::fs::write(card.join(name), bytes).unwrap();
         }
         std::fs::write(dest.join(day).join("collision.jpg"), b"old").unwrap();
         std::fs::write(dest.join(day).join("collision (2).jpg"), b"old").unwrap();
-        std::fs::write(dest.join(day).join("duplicate.jpg"), b"photo").unwrap();
+        std::fs::write(dest.join(day).join("duplicate.jpg"), b"saved").unwrap();
         std::fs::write(backup.join(day).join("collision.jpg"), b"old").unwrap();
         let files = ["a.jpg", "b.jpg", "duplicate.jpg"].iter().map(|name| CardFile {
             path: card.join(name).to_string_lossy().into_owned(), name: (*name).into(), size: 5,

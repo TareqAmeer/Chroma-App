@@ -1092,3 +1092,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-08 — CHR-249 / CHR-208 publication verification
 - CHR-249 fixture generator/protocol published at 7b4bdbd796259dacef07feb21346ae122a908dbc; CHR-208 mixed-format regression published at ccd5a8d9fa20a698e4c089e39091a6700290dc2a. Remote main hash matched after each fast-forward push; integrated generator and mixed-format native regression pass.
 - Lightroom kit and reference ZIP remain preserved in root test/output; native fixtures remain ignored in their test worktrees. Neither ticket is Done; Lightroom quality evidence, RAW/saved-recipe coverage and renamed duplicates remain open.
+
+### 2026-10-08 — CHR-208 renamed duplicates and native saved-job acceptance
+- Added streaming content matching for same-size/same-extension renamed destinations, retaining the existing name/size fast path and caching destination hashes per scan. Scan, preview and import agree; unrelated same-size bytes and missing destinations are not skipped. Preview wording describes both paths.
+- Files: desktop/src-tauri/src/ingest.rs, desktop/library-ui.js, test/import_recipes.mjs, test/import_recipe_ui_native.mjs. Focused Rust ingest suite 14/14 and installed-Chrome recipe regression pass. Real native saved/reselected recipe imports JPEG/PNG/WebP/TIFF under job names, verifies media/XMP backups, skips renamed repeat 4/4 and exports eight metadata-preserving outputs.
+- The test supplies the folder chooser result and observes real IPC (including unchanged binary headers); native scan/copy/preview/export are not mocked. CHR-208 AC3/AC5 now supported for this four-format fixture; no sensor RAW breadth inferred. Move to In Review after verified publication, never Done.

@@ -13611,7 +13611,7 @@
           if (requestId !== namePreviewRequest || !host.isConnected) return;
           const shown = (rows || []).slice(0, 6);
           host.innerHTML = shown.map((row) => {
-            if (row.skipped) return `<div style="min-width:0;color:var(--mut)"><strong>${esc(row.sourceName)}</strong> · skipped (same name and size already imported)</div>`;
+            if (row.skipped) return `<div style="min-width:0;color:var(--mut)"><strong>${esc(row.sourceName)}</strong> · skipped (already imported)</div>`;
             const primary = row.primaryPath || 'Unavailable';
             const backup = row.backupPath ? `<div style="padding-left:12px;color:var(--mut)">Second copy → ${esc(row.backupPath)}</div>` : '';
             return `<div style="min-width:0"><div style="display:flex;gap:8px;min-width:0"><span style="color:var(--mut);overflow:hidden;text-overflow:ellipsis">${esc(row.sourceName)}</span><span aria-hidden="true">→</span><strong style="overflow:hidden;text-overflow:ellipsis">${esc(primary)}</strong></div>${backup}</div>`;
