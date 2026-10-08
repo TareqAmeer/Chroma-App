@@ -1074,3 +1074,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Fixed the native welcome/first-edit sample action leaving the full Gallery over a successfully loaded sample. The action now awaits loading, closes the Gallery through its public toggle, and selects Studio.
 - Files: chromasmith-22.html and test/onboarding_sample_native.mjs. Real WebView2 validation passes from full Gallery in both themes through sample visibility, look, comparison, and output navigation; failed fetch preserves Gallery/stage and the bundled sample hash stays unchanged.
 - Focused HTML validity, test syntax, and whitespace checks pass. Native picker cancellation, actual first-edit export/reveal, migration, and accessibility remain outside this regression; CHR-195 remains In Progress with acceptance boxes unchanged.
+
+### 2026-10-08 — CHR-195 sample fix publication verification
+- Published feature 8250148d as 893c568b35de48bcbfc362c8b394e84a5c062ded on origin/main; git ls-remote matched the integration HEAD after the fast-forward push. Integrated native sample regression and HTML validity checks pass.
+- Updated the existing debug EXE's adjacent dist with the published frontend; all AI model resources are retained. Diagnostics captured the live Gallery obstruction with no freezes; an unrelated catalog_hq_offline_list missing-table error was also recorded and is not treated as tutorial validation.
