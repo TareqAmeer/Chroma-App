@@ -23,7 +23,7 @@
 //                           snapshot round trip
 //   6. per-photo copies   — mskCopyToAll gives each photo its own raster, not a shared reference
 
-import { chromium } from 'playwright';
+const { chromium } = await import(process.env.CHROMASMITH_PLAYWRIGHT_MODULE || 'playwright');
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -56,6 +56,7 @@ async function main() {
   const server = await startServer(ROOT);
   const { port } = server.address();
   const browser = await chromium.launch({
+    executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe',
     args: ['--use-gl=swiftshader', '--use-angle=swiftshader', '--disable-gpu-sandbox',
       '--disable-dev-shm-usage', '--enable-unsafe-swiftshader'],
   });

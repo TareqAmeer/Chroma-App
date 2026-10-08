@@ -9,7 +9,8 @@ const end = html.indexOf('function shortcutsHtml(){', start);
 assert(start >= 0 && end > start, 'registry source section exists');
 const values = new Map(), listeners = {};
 const localStorage = { getItem:k=>values.has(k)?values.get(k):null, setItem:(k,v)=>values.set(k,String(v)), removeItem:k=>values.delete(k) };
-const window = { chromasmithLibraryIsOpen:()=>false, addEventListener:()=>{} };
+const windowListeners={};
+const window = { chromasmithLibraryIsOpen:()=>false, addEventListener:(name,fn)=>{(windowListeners[name] ||= []).push(fn);} };
 const document = { addEventListener:(name,fn,capture)=>{(listeners[name] ||= []).push({fn,capture});}, getElementById:()=>null };
 vm.runInNewContext(html.slice(start,end), { window, document, localStorage, navigator:{platform:'Win32'}, console });
 const api = window.chromasmithShortcutRegistry;
@@ -20,6 +21,12 @@ function key(key, target={closest:()=>null}, mods={}) {
   const event={key,target,isComposing:false,repeat:false,metaKey:false,ctrlKey:false,shiftKey:false,altKey:false,...mods,defaultPrevented:false,stopped:false,
     preventDefault(){this.defaultPrevented=true;},stopImmediatePropagation(){this.stopped=true;}};
   for(const l of listeners.keydown||[])l.fn(event);
+  return event;
+}
+function keyUp(key, mods={}) {
+  const event={key,target:{closest:()=>null},isComposing:false,repeat:false,metaKey:false,ctrlKey:false,shiftKey:false,altKey:false,...mods,defaultPrevented:false,stopped:false,
+    preventDefault(){this.defaultPrevented=true;},stopImmediatePropagation(){this.stopped=true;}};
+  for(const l of listeners.keyup||[])l.fn(event);
   return event;
 }
 api.set('editor.undo','F2');
@@ -47,14 +54,31 @@ assert.throws(()=>api.import(JSON.stringify({version:1,bindings:{'no.such.action
 const afterRejectedImport=api.export();
 assert.throws(()=>api.import(JSON.stringify({version:1,bindings:{'editor.undo':'Ctrl+Unknown+F4'}})),/Invalid shortcut/);
 assert.equal(api.export(),afterRejectedImport,'invalid imports leave the prior keymap intact');
+let erasePhases=[];
+window.chromasmithRegisterShortcut('editor.mask-erase',e=>{erasePhases.push(e.phase);});
+assert.equal(api.actions().find(a=>a.id==='editor.mask-erase').binding,'Alt','held brush erase is listed in the editable shortcut registry');
+key('Alt',undefined,{altKey:true});
+keyUp('Alt',{target:{closest:s=>s.includes('input')?{}:null}});
+assert.deepEqual(erasePhases,['start','end'],'modifier press and release dispatch distinct phases');
+erasePhases=[];
+key('Alt',undefined,{altKey:true});
+for(const fn of windowListeners.blur||[])fn();
+keyUp('Alt');
+assert.deepEqual(erasePhases,['start','end'],'focus loss releases a held modifier even before its keyup');
+api.set('editor.mask-erase','Shift');
+key('Shift',undefined,{shiftKey:true}); keyUp('Shift');
+assert.deepEqual(erasePhases,['start','end','start','end'],'held modifier can be rebound and released');
+assert.throws(()=>api.set('editor.undo','Shift'),/Invalid shortcut/,'ordinary actions cannot take modifier-only bindings');
+assert.throws(()=>api.set('editor.mask-erase','Ctrl+F2'),/Invalid shortcut/,'held actions require a modifier-only binding');
+api.set('editor.mask-erase',null);
 values.delete('chromasmith-shortcuts-v1');
 const exercised=new Set(), all=api.actions();
 for(let i=0;i<all.length;i++){
-  const a=all[i],binding=`F${13+i}`;
+  const a=all[i],binding=a.held?'Alt':`F${13+i}`;
   window.chromasmithRegisterShortcut(a.id,()=>{exercised.add(a.id);});
   api.set(a.id,binding);
   window.chromasmithLibraryIsOpen=()=>a.contexts.includes('library')&&!a.contexts.includes('editor');
-  const event=key(binding);
+  const event=a.held?key('Alt',undefined,{altKey:true}):key(binding);
   assert(event.defaultPrevented,`${a.id} binding is dispatched`);
   assert(exercised.has(a.id),`${a.id} callback fired`);
 }
