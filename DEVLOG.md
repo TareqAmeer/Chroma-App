@@ -732,13 +732,21 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-08 — CHR-201 export review and CHR-216 freeform collage (local integration)
 - CHR-201: Added concrete mixed-source export review, visible selected recipes, durable per-file results and retry/location recovery. Focused Playwright collision/retry check passed; 20 photos × 3 recipes produced 60 unique PNG/JPG/WebP outputs (2048×1536, 1600×1200, 1080×810), with one failed target retried into its recipe folder and zero page errors.
 - CHR-216: Added freeform scrapbook placement, overlap, resize, rotate and layer order while retaining saved-grid behavior. Playwright verified a 1080×1080 PNG pixel match, existing collage edit regressions, and zero runtime errors.
-- Local integration commits: `8b559061` (CHR-201), `fff6da89` (CHR-216). Native Tauri UI verification and final publication are pending; full editor gates had 21 passes and 12 failures, largely pre-existing design drift. Native Rust test binary: 327 passed, 4 failed, 7 ignored; failures were model-fixture setup, an album expectation, publish sync Option unwrap and Windows filesystem access denial.
+- Feature commits `8b559061` (CHR-201) and `fff6da89` (CHR-216) are included in published `origin/main`. Native Tauri UI verification remains open; the earlier full editor-gate run had 21 passes and 12 failures, largely pre-existing design drift. Native Rust test binary: 327 passed, 4 failed, 7 ignored; failures were model-fixture setup, an album expectation, publish sync Option unwrap and Windows filesystem access denial.
 
 - CHR-202 validation follow-up: `test/export_60_output_recipes.mjs` passed against the integrated app: 20 photos × 3 recipes produced 60 unique PNG/JPG/WebP outputs (2048×1536, 1600×1200, 1080×810); retry recovered one failed target under its recipe destination without repeating successful outputs. Chromium behavior is verified; native Tauri execution remains open alongside CHR-201.
 
 - CHR-201 follow-up: reran `node test/export_collision_retry.mjs` successfully against current main. Also ran `cargo test --locked --bin chromasmith -j1 collision_policies_write_reported_bytes_and_preserve_skipped_output` on the Windows MSVC target (1/1 passed), covering the native Rust writer's suffix/skip/overwrite policy and byte counts. Temporary ignored model/runtime build assets were removed. CHR-201 remains In Progress because the actual Tauri/WebView2 invocation and native destination/result path were not exercised.
 
+#### Publication verification — CHR-201 native writer test evidence
+
+- The browser/Rust validation record above is included in `6b168c6ff9b05c16e2b364e582c5fbf1c9d905d3`, which is an ancestor of `origin/main`; `git ls-remote` confirmed that SHA as the remote tip immediately after integration. CHR-201 remains In Progress for actual Tauri/WebView2 invocation and filesystem behavior.
+
 - CHR-267 follow-up: added a persisted Cull auto-advance preference, kept Ctrl+Z available in Cull, and synchronized visible flag state after undo. Browser verification passed for opt-out/opt-in, successful and failed sidecar writes, undo, exit/re-entry persistence, and capture-ordered culling. The 50k synthetic gate remained within budget (open 2,154.6ms; select 93.6ms; regroup 16.8ms; next-page 97.8ms; 189 mounted rows; 0 errors). The full editor gates completed with 22 passes and 12 known design-drift failures; focused snap-list gate confirms the existing `inpaint-size` and `exp-gps` omissions. CHR-267 remains In Progress pending native SQLite/WebView2 behavior and real 45MP latency measurements.
+
+#### Publication verification — CHR-267 cull auto-advance and undo
+
+- Integration commit `6b168c6ff9b05c16e2b364e582c5fbf1c9d905d3` is published to `origin/main`; `git fetch`, `git ls-remote`, and `git merge-base --is-ancestor` verified the commit and exact remote tip. Integrated-source cull behavior and 50k scale gates passed. CHR-267 stays In Progress pending native SQLite/WebView2 behavior and real 45MP timing evidence.
 
 ### 2026-10-08 — CHR-272 workspace flow validation follow-up
 - Verified Film look, Colour grade and Quick edit workspace presets in both themes; named save/switch/delete survives browser reload without losing the active edit; file export/import merges by name, rejects unsupported keys atomically, and runs at laptop widths in dark/light themes.
