@@ -1078,3 +1078,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-08 — CHR-195 sample fix publication verification
 - Published feature 8250148d as 893c568b35de48bcbfc362c8b394e84a5c062ded on origin/main; git ls-remote matched the integration HEAD after the fast-forward push. Integrated native sample regression and HTML validity checks pass.
 - Updated the existing debug EXE's adjacent dist with the published frontend; all AI model resources are retained. Diagnostics captured the live Gallery obstruction with no freezes; an unrelated catalog_hq_offline_list missing-table error was also recorded and is not treated as tutorial validation.
+
+### 2026-10-08 — CHR-249 reproducible Lightroom comparison kit
+- Added a seeded generator for five 2048×1536 16-bit sRGB TIFF fixtures: edges/frequencies, luminance/chroma noise, fibres/texture, atmospheric veil and colour ramps. Exact TIFF reread assertions, ICC tags, source hashes and a contact sheet make comparisons reproducible.
+- Added a 20-export isolated-control protocol and filename matrix covering neutral baselines, sharpening detail/radius/masking, manual NR, Texture/Clarity/Dehaze and two Super Resolution runs. Generated kit is preserved in root test/output/chr249-lightroom-kit and its ZIP.
+- Synthetic TIFFs do not establish natural-photo quality, RAW AI denoise or demosaic refinement. Lightroom exports/user review are pending; CHR-249 remains In Progress with acceptance unchanged.
