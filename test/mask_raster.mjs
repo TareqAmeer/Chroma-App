@@ -147,7 +147,7 @@ async function main() {
       // Exercise the real shortcut registry -> pointer-paint path, not just mskPaintAt's override.
       mskPaintMode = true; mskBrushFeather=42;mskBrushDensity=37;m.px.fill(200);
       const paintCanvas=document.getElementById('fx-canvas'),paintRect=paintCanvas.getBoundingClientRect();
-      const pointer=(type,altKey=false)=>paintCanvas.dispatchEvent(new PointerEvent(type,{bubbles:true,clientX:paintRect.left+paintRect.width/2,clientY:paintRect.top+paintRect.height/2,pointerId:71,buttons:type==='pointerup'?0:1,altKey}));
+      const pointer=(type,altKey=false,pointerType='mouse')=>paintCanvas.dispatchEvent(new PointerEvent(type,{bubbles:true,clientX:paintRect.left+paintRect.width/2,clientY:paintRect.top+paintRect.height/2,pointerId:71,pointerType,buttons:type==='pointerup'?0:1,altKey}));
       pointer('pointermove');
       csShortcutSet('editor.mask-erase','Shift');
       document.dispatchEvent(new KeyboardEvent('keydown',{key:'Shift',shiftKey:true,bubbles:true}));
@@ -157,7 +157,19 @@ async function main() {
       ck('CHR-275 rebound Shift erases through actual pointer handler',m.px.some(v=>v<200));
       document.dispatchEvent(new KeyboardEvent('keyup',{key:'Shift',bubbles:true}));
       ck('CHR-275 release restores paint without changing size/flow',!mskBrushEraseHeld&&mskBrushSize===1&&mskBrushFlow===60&&mskBrushFeather===42&&mskBrushDensity===37);
-      ck('CHR-275 stationary cursor returns to paint',!document.getElementById('msk-brush-cursor').classList.contains('erase'));
+            ck('CHR-275 stationary cursor returns to paint',!document.getElementById('msk-brush-cursor').classList.contains('erase'));
+      const eraseButton=document.getElementById('btn-msk-erase'),touchBrushCursor=document.getElementById('msk-brush-cursor');
+      m.px.fill(200);eraseButton.click();
+      ck('CHR-275 on-screen erase exposes pressed state',eraseButton.getAttribute('aria-pressed')==='true'&&eraseButton.classList.contains('on'));
+      ck('CHR-275 on-screen erase immediately updates cursor feedback',touchBrushCursor.classList.contains('erase'));
+      pointer('pointerdown',false,'touch');pointer('pointerup',false,'touch');
+      ck('CHR-275 touch pointer erases through visible toggle',m.px.some(v=>v<200));
+      eraseButton.click();
+      ck('CHR-275 on-screen erase returns accessible state and cursor to paint',eraseButton.getAttribute('aria-pressed')==='false'&&!eraseButton.classList.contains('on')&&!touchBrushCursor.classList.contains('erase'));
+      m.px.fill(200);mskPaintErase=true;mskRebuild();
+      const rebuiltEraseButton=document.getElementById('btn-msk-erase');
+      ck('CHR-275 rebuilt erase button retains current pressed state',rebuiltEraseButton.getAttribute('aria-pressed')==='true');
+      mskPaintErase=false;mskRebuild();
       m.px.fill(200);pointer('pointerdown',true);pointer('pointerup',true);
       ck('CHR-275 old Alt binding does not erase after rebinding',!m.px.some(v=>v<200));
       csShortcutSet('editor.mask-erase',null);mskPaintMode=false;

@@ -188,3 +188,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Integrated CHR-202 at `e5064d933b814f28f9f74b417716f81846c16fe5`; current `origin/main` fetch and `git ls-remote` both match this hash, and ancestry verification confirms publication.
 - Post-integration `test/export_60_output_recipes.mjs` passed on the integrated checkout. CHR-202 AC2 is checked; AC5 remains open for native failed-write/retry/no-duplicate behavior. Issue stays In Progress for user review and native verification.
+
+### 2026-10-08 — CHR-275 on-screen erase feedback
+
+- The persistent Erase control now exposes `aria-pressed`, keeps its accessible/styled state in sync when toggled or rebuilt, and updates the brush cursor feedback immediately.
+- Extended `test/mask_raster.mjs`; focused Chrome raster suite passed 48/48, including an on-screen-toggle touch-pointer stroke. This simulates Pointer Events and does not validate physical touch or Apple Pencil hardware.
+- CHR-275 remains In Progress. Heal repair targeting and native input/undo validation remain open. Modified files: `chromasmith-22.html`, `test/mask_raster.mjs`.

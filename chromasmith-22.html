@@ -7285,7 +7285,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008H';
+const BUILD='1.1008I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17275,7 +17275,8 @@ function mskPaintToggle(){
 }
 function mskPaintStop(){mskPaintMode=false;mskPaintTransientReset();const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
   const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');}
-function mskPaintErase_toggle(){mskPaintErase=!mskPaintErase;const b=document.getElementById('btn-msk-erase');if(b)b.classList.toggle('on',mskPaintErase);}
+function mskPaintErase_sync(){const b=document.getElementById('btn-msk-erase');if(b){b.classList.toggle('on',mskPaintErase);b.setAttribute('aria-pressed',String(mskPaintErase));}const c=document.getElementById('msk-brush-cursor');if(c)c.classList.toggle('erase',!!(mskPaintErase||mskBrushEraseHeld));}
+function mskPaintErase_toggle(){mskPaintErase=!mskPaintErase;mskPaintErase_sync();}
 function mskPaintClear(){const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;m.px=new Uint8ClampedArray(m.mtW*m.mtH);_mskTexDirty=true;fxUpdate();}
 function _mskPointToUV(e){ // → {nx,ny} normalized 0..1, TOP-origin (matches m.px row-major convention)
   const src=fxWork||fxImg;if(!src||!FX.cv)return null;
@@ -18435,7 +18436,7 @@ function mskRebuild(){
     }
     shape+='<div class="btn-row">'
       +'<button class="btn '+(mskPaintMode?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintToggle()" title="Paint into this mask on the preview">'+icon('brush',14)+(mskPaintMode?' Painting':' Paint')+'</button>'
-      +'<button class="btn '+(mskPaintErase?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" title="Erase instead of add; hold Alt/Option while painting for temporary erase">'+icon('eraser',14)+' Erase</button></div>'
+      +'<button class="btn '+(mskPaintErase?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" aria-pressed="'+String(mskPaintErase)+'" title="Erase instead of add; hold Alt/Option while painting for temporary erase">'+icon('eraser',14)+' Erase</button></div>'
       +'<div class="fx-row"><div class="fx-label">Brush size</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushSize+'" oninput="mskBrushSize=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushSize+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushFeather+'" oninput="mskBrushFeather=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFeather+'</div></div>'
