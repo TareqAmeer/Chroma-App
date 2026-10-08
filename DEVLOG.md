@@ -1124,3 +1124,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Extended test/library_detail_native.mjs with explicit observation-only CDP source interception: inspect existing prefetch/cache and pause its queue to demonstrate exact visible pixel retention during three rapid Compare replacements and all eight Survey rerenders. No production viewer behavior changed.
 - Native WebView2 synthetic mixed-resolution fixture passes: next-image prefetch, final replacement wins, identical pending pixels/canvas identities, cache 4 entries / 1,488,928 pixels (<4M cap), linked/unlinked detail, source ROI MAE ~0.312/max1 and eight-photo layout; no page errors.
 - CHR-268 final prefetch criterion is supported by this evidence. Keep In Review after verified publication, never Done; physical RAW timing and user visual sign-off are not inferred from these synthetic JPEG fixtures.
+
+### 2026-10-08 — CHR-268 transition-test publication verification
+- Feature 795ca1be published as ee00338f266a68725000ae66d1eee451d4665cac; remote hash and ancestry verified. Integrated test syntax passes; production viewer unchanged, native transition/source-detail test passed before integration.
+- Linear AC5 checked and issue In Review (all 6 criteria), never Done. Feature checkout moved outside the integration checkout with Git worktree move, preserving its native fixture/results and commit.
