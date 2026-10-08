@@ -7283,7 +7283,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008T';
+const BUILD='1.1008U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10985,6 +10985,7 @@ let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source
 // Compare (show original) strips only the LOOK; borders/canvas matte/film frame stay so the photo's size and position never move.
 function fxCompareParams(){return{...getFXParams(),lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},bloom:{enabled:false},masks:[],debug:0};}
 let fxCompare=false;    // true while "hold to compare" shows the untouched original
+let fxComparePreviousSnapshot=null,fxComparePreviousCode=''; // transient CHR-270 history hold; never serialized
 let fxSplit=false, fxSplitPos=0.5, fxSplitAxis='vertical'; // split before/after view
 // B3: what the split's "before" side renders. 'orig'|'pin'|{hist:N}|{style:name}|{export:v,recipe}
 // — default 'orig' means zero-interaction behaviour is byte-identical to the pre-B3 hardcoded original.
@@ -14630,7 +14631,7 @@ const csShortcutDefs=[
   ['editor.zoom-in','Zoom in','View','editor','CmdOrCtrl+Plus'],['editor.zoom-out','Zoom out','View','editor','CmdOrCtrl+Minus'],['editor.zoom-fit','Zoom to fit','View','editor','CmdOrCtrl+0'],['editor.zoom-100','Zoom to 100%','View','editor','CmdOrCtrl+1'],['editor.split','Toggle before / after split','View','editor','CmdOrCtrl+Backslash'],['editor.histogram','Toggle histogram','View','editor','CmdOrCtrl+H'],['editor.focus-mode','Focus mode (hide panels and bars)','View','editor','Shift+F'],
   ['editor.search','Command palette','Help','editor','CmdOrCtrl+K'],['editor.shortcuts','Keyboard shortcuts guide','Help','editor','CmdOrCtrl+Slash'],['editor.settings','Settings','Help','editor','CmdOrCtrl+Comma'],
   ['editor.save-session','Save session','File','editor',null],['editor.load-session','Load session','File','editor',null],['editor.reset-edit','Reset edit','Photo','editor',null],['editor.flip-h','Flip horizontally','Photo','editor',null],['editor.flip-v','Flip vertically','Photo','editor',null],['editor.auto-enhance','Auto enhance','Photo','editor',null],['editor.wb-eyedrop','White balance eyedropper','Photo','editor',null],['editor.reshuffle-artifacts','Reshuffle film artifacts','Photo','editor',null],['editor.next-tool','Next tool section','Tools','editor',null],['editor.previous-tool','Previous tool section','Tools','editor',null],['editor.guide','Open guide','Help','editor',null],['editor.whatsnew',"What's new",'Help','editor',null],['editor.tour','Welcome tour','Help','editor',null],['library.expand','Toggle expanded Library','View','library',null],
-  ['editor.compare','Hold to compare before / after','View','editor','Space'],['editor.next','Next photo','Photo','editor','ArrowRight'],['editor.previous','Previous photo','Photo','editor','ArrowLeft'],
+  ['editor.compare','Hold to compare before / after','View','editor','Space'],['editor.compare-previous','Hold to compare to previous step','View','editor','Shift+Space'],['editor.next','Next photo','Photo','editor','ArrowRight'],['editor.previous','Previous photo','Photo','editor','ArrowLeft'],
   ['editor.crop','Crop tool (toggle)','Tools','editor','C'],['editor.loupe','Toggle loupe','View','editor','1'],['editor.mask-overlay','Masks: cycle overlay','Tools','editor','O'],['editor.crop-grid','Cycle crop grid overlay','Tools','editor','Shift+G'],
   ['library.toggle','Toggle Library','Navigation','editor,library','CmdOrCtrl+L'],['library.reject','Reject selected photo','Photo','library','X'],['library.pick','Pick selected photo','Photo','library','P'],['library.clear-flag','Clear selected photo flag','Photo','library','U'],
   ['library.rate-0','Rate selected photo 0 stars','Photo','library','0'],['library.rate-1','Rate selected photo 1 star','Photo','library','1'],['library.rate-2','Rate selected photo 2 stars','Photo','library','2'],['library.rate-3','Rate selected photo 3 stars','Photo','library','3'],['library.rate-4','Rate selected photo 4 stars','Photo','library','4'],['library.rate-5','Rate selected photo 5 stars','Photo','library','5'],
@@ -19142,7 +19143,7 @@ function applyUISnapshot(s,opts){
   if(s.sliders&&s.sliders['lut-mix']!==undefined)fxState.lutMix=parseFloat(s.sliders['lut-mix'])/100;
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}}});
   let _lutPromise;
-  _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){el.value=s.selects[id];el._chipsRender&&el._chipsRender();if(id==='sel-lut')_lutPromise=selectLUT(el.value,true);if(id==='sel-print')selectPrint(el.value);}});
+  _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){const next=String(s.selects[id]??''),changed=el.value!==next;el.value=next;el._chipsRender&&el._chipsRender();if(id==='sel-lut'&&changed)_lutPromise=selectLUT(el.value,true);if(id==='sel-print'&&changed)selectPrint(el.value);}});
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s.colors[id]!==undefined)el.value=s.colors[id];});
   if(s.curves){fxState.curves=JSON.parse(JSON.stringify(s.curves));bakeCurves();drawCurveEditor();}
   if(s.curveParam)fxState.curveParam=JSON.parse(JSON.stringify(s.curveParam));
@@ -21929,6 +21930,24 @@ function resolveSplitSnapshot(src){
   }
   return 'orig';
 }
+function fxComparePreviousBegin(e){
+  if(!fxImages.length||fxCompare||fxComparePreviousSnapshot!==null||fxHistIdx<=0)return false;
+  // Freeze the previous committed recipe at keydown; rehydrate its brush rasters via the
+  // same history resolver as split compare. Rendering this snapshot never applies it to the edit.
+  fxComparePreviousSnapshot=resolveSplitSnapshot({hist:fxHistIdx-1});
+  fxComparePreviousCode=e?.code||'Space';
+  renderPreview();
+  return true;
+}
+function fxComparePreviousEnd(){
+  if(fxComparePreviousSnapshot===null)return;
+  fxComparePreviousSnapshot=null;fxComparePreviousCode='';renderPreview();
+}
+window.addEventListener('blur',fxComparePreviousEnd);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')fxComparePreviousEnd();});
+document.addEventListener('keyup',e=>{
+  if(fxComparePreviousSnapshot!==null&&(e.code||'')===fxComparePreviousCode){e.preventDefault();fxComparePreviousEnd();}
+},true);
 function renderPreview(){
   const nativeItem=typeof curItem==='function'?curItem():null;
   if(window.__TAURI__&&nativeItem&&fnNativeNeedsDevelop(nativeItem)){fnEnsureNative(nativeItem).catch(e=>fnSetStatus(errStr(e),true));return;}
@@ -21959,7 +21978,7 @@ function renderPreview(){
   // Full-res + zoomed in: visible-crop render (see renderFullResCrop). Falls through to the
   // normal full-frame path for framed/matted images, whose composition must span the whole
   // image rather than be rebuilt from only the visible source tile.
-  if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&!_previewComposition){
+  if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&!_previewComposition&&fxComparePreviousSnapshot===null){
     const Pc=fxCompare?fxCompareParams():getFXParams();
     _fxShowFullBase(iw,ih,cw,ch);                       // coarse underlay behind the crisp crop (smooth panning)
     if(renderFullResCrop(Pc,iw,ih,cw,ch)){
@@ -22037,7 +22056,7 @@ function renderPreview(){
   // "before" snapshot, so the processed frame has to be drawn again afterwards. Rendering it
   // here as well meant split view paid for the graded frame TWICE on every single preview
   // update. Only render it up front when we are not about to throw it away.
-  if(!fxSplit)FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),...seedOpt});
+  if(fxComparePreviousSnapshot===null&&!fxSplit)FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),...seedOpt});
   const _oldFootW=_fxZoomFootprint().w;
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   // The centring offset AND the pan are derived from this footprint — re-fit at any zoom (it used
@@ -22045,7 +22064,14 @@ function renderPreview(){
   _zoomRefit(_oldFootW);
   document.getElementById('fx-no-img').style.display='none';
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
-  if(fxSplit){
+  if(fxComparePreviousSnapshot!==null){
+    const origCv=document.getElementById('fx-canvas-orig');
+    renderSnapshotTo(origCv,fxComparePreviousSnapshot,pw,ph,{showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),...seedOpt});
+    if(origCv){origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';origCv.style.clipPath='';}
+    FX.render(getFXParams(),pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),...seedOpt});
+    const splitLine=document.getElementById('fx-split-line');if(splitLine)splitLine.style.display='none';
+    FX.cv.style.clipPath='';
+  }else if(fxSplit){
     const origCv=document.getElementById('fx-canvas-orig');
     renderSnapshotTo(origCv,resolveSplitSnapshot(fxSplitSrc),pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
@@ -22059,7 +22085,7 @@ function renderPreview(){
   // Compose from the actual backing-store render. Passing cw/ch here downsampled a 2k×3k
   // preview back to the ~500×750 fit footprint before the border was added, making bordered
   // previews visibly pixelated; CSS scales the finished canvas to the fit footprint below.
-  drawRedEyePreview(P);
+  if(fxComparePreviousSnapshot===null)drawRedEyePreview(P);
   applyPreviewBorders(P,pw,ph);
   document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
     ?`Full res ${Math.round(fxZoom*100)}% — rendered ${pw}\u00d7${ph}`
@@ -29195,7 +29221,10 @@ document.addEventListener('keydown',e=>{
   }
   if(e.key==='ArrowLeft'&&fxImages.length>1){e.preventDefault();fxSelectImage((fxCurIdx-1+fxImages.length)%fxImages.length);return;}
   if(e.key==='ArrowRight'&&fxImages.length>1){e.preventDefault();fxSelectImage((fxCurIdx+1)%fxImages.length);return;}
-  if(e.key===' '&&!e.repeat){ // hold Space = before/after compare (keyup releases below)
+  if(e.key===' '&&e.shiftKey&&!e.repeat){ // Shift+Space = hold the previous committed step
+    e.preventDefault();fxComparePreviousBegin(e);return;
+  }
+  if(e.key===' '&&!e.shiftKey&&!e.repeat){ // hold Space = original before/after compare
     e.preventDefault();if(!fxCompare){fxCompare=true;renderPreview();}return;
   }
   if((e.key==='c'||e.key==='C')&&typeof cropToggle==='function'&&!cropMode){e.preventDefault();cropToggle();return;}
@@ -29216,6 +29245,7 @@ csShortcutRegister('editor.open',()=>typeof fxPickPhotos==='function'?fxPickPhot
 csShortcutRegister('editor.copy',()=>window.chromasmithMenuCopyEdit?window.chromasmithMenuCopyEdit():false);
 csShortcutRegister('editor.paste',()=>window.chromasmithMenuPasteEdit?window.chromasmithMenuPasteEdit():false);
 csShortcutRegister('editor.compare',e=>{if(!fxImages.length)return false;if(e.repeat)return;csShortcutCompareHeld=true;if(!fxCompare){fxCompare=true;renderPreview();}});
+csShortcutRegister('editor.compare-previous',e=>fxComparePreviousBegin(e));
 csShortcutRegister('editor.next',()=>{if(fxImages.length<=1)return false;fxSelectImage((fxCurIdx+1)%fxImages.length);});
 csShortcutRegister('editor.previous',()=>{if(fxImages.length<=1)return false;fxSelectImage((fxCurIdx-1+fxImages.length)%fxImages.length);});
 csShortcutRegister('editor.crop',()=>{if(typeof cropToggle!=='function'||cropMode)return false;cropToggle();});
