@@ -7283,7 +7283,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008Q';
+const BUILD='1.1008R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13710,15 +13710,15 @@ function resetDeconv(){
   {const r=document.getElementById('sl-deconv-rad');if(r)r.value=20;}
   fxUpdate();log('Deconvolution reset','info');
 }
-// Detail/Highlight-Desat only have an effect while Luminance or Color is >0 (the shader NR pass
-// is skipped entirely otherwise — see the comment above the NR shader). Dim them + show a hint
-// when both gate sliders are 0, so "moving the slider does nothing" is visible, not silent.
+// Detail, Contrast, Color Detail, Smoothness and Highlight-Desat only have an effect while
+// Luminance or Color is >0 (the shader NR pass is skipped entirely otherwise — see the comment
+// above the NR shader). Dim them + show a hint when both gate sliders are 0.
 function nrSyncGate(){
   const on=adjVal('sl-nr-lum')>0||adjVal('sl-nr-col')>0;
   ['row-nr-det','row-nr-con','row-nr-color-detail','row-nr-smooth','row-nr-hldesat','hint-nr-hldesat'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.toggle('gate-off',!on);});
   const hint=document.getElementById('nr-gate-hint');
   if(hint)hint.textContent=on?'Tames RAW sensor noise (esp. high ISO) before the film look.':
-    'Detail & Highlight Desaturation are inactive — raise Luminance or Color to enable noise reduction.';
+    'Detail, Contrast, Color Detail, Smoothness and Highlight Desaturation are inactive — raise Luminance or Color to enable noise reduction.';
   if(typeof fxRawNrSyncUI==='function')fxRawNrSyncUI(); // same refresh points cover the RAW-NR tier select/Denoise-now button too
 }
 function adjVal(id){return parseFloat((document.getElementById(id)||{value:0}).value)||0;}

@@ -61,6 +61,15 @@ try {
   assert.deepEqual(defaultState, { colorDetail: '50', smooth: '50', paste: ['nr-lum', 'nr-col', 'nr-det', 'nr-con', 'nr-color-detail', 'nr-smooth', 'nr-hldesat'] });
 
   await set('lum', 0); await set('col', 0); await set('color-detail', 50); await set('smooth', 50);
+  const gate = await page.evaluate(() => ({
+    hint: document.getElementById('nr-gate-hint')?.textContent || '',
+    rows: ['row-nr-det', 'row-nr-con', 'row-nr-color-detail', 'row-nr-smooth', 'row-nr-hldesat']
+      .map(id => document.getElementById(id)?.classList.contains('gate-off') || false),
+  }));
+  for (const control of ['Detail', 'Contrast', 'Color Detail', 'Smoothness', 'Highlight Desaturation']) {
+    assert.ok(gate.hint.includes(control), `zero-NR hint names inactive ${control}`);
+  }
+  assert.deepEqual(gate.rows, [true, true, true, true, true], 'all dependent controls show their gated state');
   await page.evaluate(() => window.__noiseCapture('nr-off-default'));
   await set('color-detail', 100); await page.evaluate(() => window.__noiseCapture('nr-off-high-detail'));
   const disabledIdentity = await page.evaluate(() => window.__noiseDiff('nr-off-default', 'nr-off-high-detail'));
