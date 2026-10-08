@@ -1156,3 +1156,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Routed rebound Pick/Reject and star ratings through one saved-write cull advance boundary. Rating writes report success and restore rendered stars on failure; failed or superseded metadata does not advance. Completing a write after navigating/re-entering cull cannot move the newly focused photo.
 - Files: desktop/library-ui.js, test/library_culling.mjs, test/library_cull_trash_native.mjs. Focused Chrome cull/group/fullscreen test passes. Native rebound F7/F8/F9, paused advance, old-binding suppression, actual XMP-directory collision rollback and delayed-real-response navigation pass; native Trash byte identity still passes.
 - CHR-267 stays In Progress. Colour-key criterion awaits decision because colour UI was explicitly removed; 45MP RAW performance and every-action/in-app Trash undo remain unverified/unfinished. No unchecked aggregate criterion inferred from this keyboard slice.
+
+### 2026-10-08 — CHR-267 saved-action publication verification
+- Feature 49d686d7 published as f76e7b085db44ac6c8b5401a5df2e9f367f7cc21; remote hash/ancestry verified. Integrated native rebound/paused/old-binding/real-failed-write/stale-response/Trash checks pass; focused Chrome culling test passed before integration.
+- Linear evidence updated with remaining colour-decision, 45MP timing and every-action undo scope; no aggregate checkbox inferred, issue stays In Progress.
