@@ -1174,3 +1174,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Routed first-edit Show output options to the current desktop export sheet rather than the hidden legacy panel. Refresh native destination visibility when opening the sheet so late bridge initialization does not leave Save to hidden.
 - Files: chromasmith-22.html and test/onboarding_sample_native.mjs. Real WebView2 1366×768 dark/light tests use visible sheet controls, save full-size 665×448 PNG files, invoke real Explorer reveal, preserve the bundled sample and restore destination/collision preferences; only the folder-dialog selection is a controlled fixture.
 - Actual directory collision at the same export version leaves the guide at export with no success message; failed sample fetch preserves Gallery. HTML interaction validity and test syntax pass. CHR-195 remains In Progress pending native photo/folder entry cancellation, existing-user migration and accessibility checks.
+
+### 2026-10-08 — CHR-195 native guide-export publication verification
+- Feature 426c3e61 published as 5207a3d650af00ce96c0dd8505a800baef67011d; remote main hash and ancestry verified. Integrated HTML validity and actual dark/light WebView2 sheet-controls/full-size PNG/failed-write/Explorer-reveal checks pass.
+- CHR-195 stays In Progress. Native OS picker interaction, returning-user migration and keyboard/focus accessibility remain open; controlled fixture folder-dialog selection is not claimed as OS picker validation.
