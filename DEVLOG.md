@@ -693,3 +693,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Integration commit `e99c1ce00cda015eb7bf371cb15aa86388d2c54e` is published to `origin/main`; fresh `git ls-remote` matched and the commit is the remote tip at verification. It contains the path helper and updated mobile/probe harnesses.
 - Focused browser suites were run from `C:\Windows\Temp` with Chromium: mobile UX and mobile edge cases passed; the splash probe passed success and native-call rejection cases. The generated screenshot directory was removed. No Linear issue is linked to this repo-level test portability cleanup.
+
+### 2026-10-08 — CHR-183 and CHR-205 focused integration verification (partial)
+
+- CHR-183 merged source retains the completed export reveal action in job history; CHR-205 adds a restore preflight before destination selection. Focused Chrome tests passed: export notification flow (native OS delivery mocked), 5/5 job-history tests, and CHR-205 dark-theme 1366×768 backup UI flow. Files include `chromasmith-22.html`, `desktop/library-ui.js`, `docs/library-backup.md`, and focused tests `test/export_job_notification.mjs`, `test/library_job_history.mjs`, `test/library_backup_ui.mjs`.
+- CHR-183 remains In Progress pending native macOS notification delivery. CHR-205 remains In Progress pending root relinking/activation rollback, clean-install cross-machine coverage, and native recovery validation.
