@@ -6,12 +6,16 @@ import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { chromium, webkit } from 'playwright';
+import { repositoryRootFromTestUrl } from './lib/repo-paths.mjs';
 const expect=baseExpect.configure({timeout:30000});
 
-const root = resolve('.');
+const root = repositoryRootFromTestUrl(import.meta.url);
+const fixtures = resolve(root, 'test', 'fixtures');
+const outputDir = resolve(root, 'test', 'output', 'mobile');
 const mime = {'.html':'text/html','.js':'text/javascript','.css':'text/css','.wasm':'application/wasm','.png':'image/png','.woff2':'font/woff2'};
 const server = createServer(async (req, res) => {
-  const path = resolve(root, '.' + new URL(req.url, 'http://localhost').pathname);
+  const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).split('/').join(sep);
+  const path = resolve(root, '.' + pathname);
   if (!(path === root || path.startsWith(root + sep))) { res.writeHead(403).end(); return; }
   try {
     const bytes = await readFile(path);
@@ -21,7 +25,7 @@ const server = createServer(async (req, res) => {
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const url = `http://127.0.0.1:${server.address().port}/chromasmith-22.html?mlib=1`;
 const engines = process.argv.includes('--webkit') ? [['WebKit', webkit]] : process.argv.includes('--all') ? [['Chromium', chromium], ['WebKit', webkit]] : [['Chromium', chromium]];
-await mkdir('test/output/mobile', { recursive:true });
+await mkdir(outputDir, { recursive:true });
 let failures = 0;
 
 async function exercise(name, engine) {
@@ -51,7 +55,7 @@ async function exercise(name, engine) {
       assert(bounds.every(([x,right,h,w])=>x>=0&&right<=360&&h>=48&&w>=48));
       assert.equal(await page.locator('#mlib .mh').evaluate(e=>e.scrollWidth<=e.clientWidth),true);
     });
-    await page.locator('#mlib .import-file').setInputFiles(['test/fixtures/portrait.png','test/fixtures/gradient.png']);
+await page.locator('#mlib .import-file').setInputFiles([resolve(fixtures,'portrait.png'),resolve(fixtures,'gradient.png')]);
     await page.waitForFunction(()=>fxImages.length===1&&!MobileLibrary.isOpen()&&MobileLibrary.queue.length===2);
     let ids = await page.evaluate(()=>MobileLibrary.queue);
     await check('multiple imports form an explicit per-photo queue',async()=>{
@@ -62,7 +66,7 @@ async function exercise(name, engine) {
       const result=await page.evaluate(async id=>{const blob=await MobileLibrary.getBlob(id),d=Object.getOwnPropertyDescriptor(crypto,'subtle');Object.defineProperty(crypto,'subtle',{value:undefined,configurable:true});try{return await MobileLibrary.importFiles([new File([blob],'renamed.png',{type:'image/png'})]);}finally{if(d)Object.defineProperty(crypto,'subtle',d);else delete crypto.subtle;}},ids[0]);assert.deepEqual(result,[ids[0]]);
     });
     await page.evaluate(()=>fxSection('adjust'));
-    await page.screenshot({path:`test/output/mobile/${name}-adjust.png`});
+await page.screenshot({path:resolve(outputDir,`${name}-adjust.png`)});
     await check('range targets, exact values, compare and switch are accessible',async()=>{
       const rects=await page.locator('#sl-adj-exp, #vl-adj-exp, .fx-ctrl[data-fxsec=adjust]>.fx-ctrl-title, #phone-compare').evaluateAll(a=>a.map(e=>{const r=e.getBoundingClientRect();return {id:e.id,w:r.width,h:r.height,name:e.getAttribute('aria-label')||e.textContent};}));
       assert(rects.every(r=>r.w>=48&&r.h>=48&&r.name));
@@ -88,7 +92,7 @@ async function exercise(name, engine) {
       await page.locator('#mlib .photo-menu').dispatchEvent('click');await page.locator('[data-act=collection]').click();await page.locator('#phone-name').fill('Trip');await page.locator('[data-save]').click();
       await page.waitForFunction(()=>document.querySelector('#mlib .collections option[value="Trip"]'));
       await page.locator('#mlib [data-a=settings]').click();await page.locator('[data-pref=textSize]').selectOption('1.3');await page.locator('.phone-close').click();
-      await page.screenshot({path:`test/output/mobile/${name}-gallery-large-text.png`});
+await page.screenshot({path:resolve(outputDir,`${name}-gallery-large-text.png`)});
       assert.equal(await page.locator('#mlib .mh').evaluate(e=>e.scrollWidth<=e.clientWidth),true);
       await page.locator('#mlib input[type=search]').fill('');
     });
@@ -183,7 +187,7 @@ async function exercise(name, engine) {
     await check('landscape and tablet controls stay within viewport',async()=>{
       await page.evaluate(id=>MobileLibrary.openPhoto(id),ids[0]);await page.evaluate(()=>fxSection('adjust'));
       for (const viewport of [{width:780,height:360},{width:1024,height:768}]) {
-        await page.setViewportSize(viewport);await page.screenshot({path:`test/output/mobile/${name}-${viewport.width}x${viewport.height}.png`});
+await page.setViewportSize(viewport);await page.screenshot({path:resolve(outputDir,`${name}-${viewport.width}x${viewport.height}.png`)});
         assert(await page.locator('#cs-rotate').evaluate(e=>!e||getComputedStyle(e).display==='none').catch(()=>true));
         const nav=await page.locator('#fx-mobile-nav').boundingBox();assert(nav.y>=0&&nav.y+nav.height<=viewport.height+2);
         const panel=await page.locator('.fx-panel').boundingBox();assert(panel.x+panel.width<=viewport.width+2);
@@ -193,7 +197,7 @@ async function exercise(name, engine) {
     console.log(`PASS [${name}] no uncaught page errors`);
   } catch (error) {
     console.error('Mobile failure state:',await page.evaluate(()=>({status:document.querySelector('#mlib .status')?.textContent,queue:window.MobileLibrary?.queue,chrome:[...document.querySelectorAll('#phone-context,#phone-save-status,#phone-queue,#fx-actionbar')].map(e=>[e.id,e.parentElement?.id,e.outerHTML.slice(0,300)]),photos:typeof fxImages==='undefined'?null:fxImages.length,dialog:document.querySelector('.phone-dialog')?.textContent,body:document.body.className})).catch(()=>null),errors);
-    await page.screenshot({path:`test/output/mobile/${name}-failure.png`}).catch(()=>{});throw error;
+await page.screenshot({path:resolve(outputDir,`${name}-failure.png`)}).catch(()=>{});throw error;
   } finally { await browser.close(); }
 }
 function MobileRecipe(recipe) { return JSON.parse(Buffer.from(recipe,'base64').toString('utf8')); }

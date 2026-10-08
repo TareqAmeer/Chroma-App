@@ -5,17 +5,19 @@ import {createServer} from 'node:http';
 import {readFile, mkdir, access} from 'node:fs/promises';
 import {resolve, extname, sep} from 'node:path';
 import {chromium, webkit} from 'playwright';
+import {repositoryRootFromTestUrl} from './lib/repo-paths.mjs';
 const expect=baseExpect.configure({timeout:30000});
 
-const root=resolve(process.env.CHROMA_MOBILE_WEB_ROOT||'.'),fixtures=resolve('test/fixtures');
+const root=resolve(process.env.CHROMA_MOBILE_WEB_ROOT||repositoryRootFromTestUrl(import.meta.url));
+const fixtures=resolve(root,'test','fixtures'),outputDir=resolve(root,'test','output','mobile');
 let entry='chromasmith-22.html';try{await access(resolve(root,entry));}catch{entry='index.html';}
 const server=createServer(async(req,res)=>{
- const url=new URL(req.url,'http://localhost');const path=url.pathname.startsWith('/test/fixtures/')?resolve(fixtures,url.pathname.slice('/test/fixtures/'.length)):resolve(root,'.'+url.pathname);
+ const url=new URL(req.url,'http://localhost');const pathname=decodeURIComponent(url.pathname).split('/').join(sep);const path=pathname.startsWith(`${sep}test${sep}fixtures${sep}`)?resolve(fixtures,pathname.slice(`${sep}test${sep}fixtures${sep}`.length)):resolve(root,'.'+pathname);
  if(!path.startsWith(root+sep)&&!path.startsWith(fixtures+sep)){res.writeHead(403).end();return;}
  try{const bytes=await readFile(path);res.writeHead(200,{'Content-Type':({'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.wasm':'application/wasm'})[extname(path)]||'application/octet-stream','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp'}).end(bytes);}catch{res.writeHead(404).end();}
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
-await mkdir('test/output/mobile',{recursive:true});
+await mkdir(outputDir,{recursive:true});
 let failures=0;
 const engines=process.argv.includes('--all')?[['Chromium',chromium],['WebKit',webkit]]:process.argv.includes('--webkit')?[['WebKit',webkit]]:[['Chromium',chromium]];
 async function exercise(name,engine){
@@ -32,7 +34,7 @@ async function exercise(name,engine){
    Media:{getAlbums:async()=>({albums:[{name:'Chromasmith',identifier:'album'}]}),savePhoto:async()=>{if(window.denyPhotos)throw Error('Permission denied');return {};}}
   }};
  });
- const check=async(label,fn)=>{if(process.env.CHROMA_EDGE_CASE&&!label.includes(process.env.CHROMA_EDGE_CASE))return;try{await page.evaluate(()=>MobileUI.dialog?.close());await fn();console.log(`PASS [${name}] ${label}`);}catch(e){failures++;console.error(`FAIL [${name}] ${label}: ${e.stack}`);await page.screenshot({path:`test/output/mobile/${name}-edge-${label.replace(/\W+/g,'-')}.png`}).catch(()=>{});}};
+const check=async(label,fn)=>{if(process.env.CHROMA_EDGE_CASE&&!label.includes(process.env.CHROMA_EDGE_CASE))return;try{await page.evaluate(()=>MobileUI.dialog?.close());await fn();console.log(`PASS [${name}] ${label}`);}catch(e){failures++;console.error(`FAIL [${name}] ${label}: ${e.stack}`);await page.screenshot({path:resolve(outputDir,`${name}-edge-${label.replace(/\W+/g,'-')}.png`)}).catch(()=>{});}};
  try{
   await page.goto(`http://127.0.0.1:${server.address().port}/${entry}?mlib=1`);await page.waitForFunction(()=>window.MobileLibrary?.isOpen()&&window.MobileUI&&window.MobileExport);
   await page.addStyleTag({content:'*,*::before,*::after{transition:none!important;animation:none!important}'});

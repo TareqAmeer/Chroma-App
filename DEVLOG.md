@@ -667,3 +667,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commit `a99c40f2ace581d781c18c77f4dbe8417ecd839b` is published on `origin/main`; `git ls-remote` and ancestry verification matched. Focused worker Chromium checks covered all three profiles, persistence across reload, and unchanged exposure values; merged-source syntax/HTML checks passed.
 - CHR-272 stays In Progress for complete hidden-control reachability, responsive extremes, full default-workspace scan, and native file/workspace workflow validation.
+
+### 2026-10-08 — Windows browser-test path cleanup (repo-level maintenance)
+
+- Resolve the project root for `test/mobile_ux.mjs` and `test/mobile_edge_cases.mjs` from the test module URL through shared `test/lib/repo-paths.mjs`; make fixture, screenshot, and output paths absolute and separator-safe. `test/probe_splash_reveal.mjs` now uses the same helper. No unique Linear ticket matches this test-harness portability cleanup.
+- From `C:\Windows\Temp`, the file-URL root regression passed; the full focused Chromium mobile UX and edge-case suites passed, and the splash probe passed both native-call success/rejection states. JS syntax/diff checks passed; generated screenshots were deleted.
