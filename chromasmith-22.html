@@ -7283,7 +7283,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008K';
+const BUILD='1.1008L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -27163,6 +27163,7 @@ function csLayoutView(v){
 async function csLayoutSave(){
   const name=(await askTextModal('Save layout','Saves tool and control order/visibility, panel sizes, open sections, the gallery sidebar and dock, and the studio background.')||'').trim();if(!name)return;
   const keys={};_csLayoutKeys().forEach(k=>{try{const v=localStorage.getItem(k);if(v!=null)keys[k]=v;}catch(e){}});
+  try{if(typeof _fxSecCollapsed==='object')keys.chromasmith_fx_sec_collapsed=JSON.stringify(_fxSecCollapsed);}catch(e){}
   const list=csLayoutsList().filter(l=>l.name!==name);list.push({name,keys});
   try{localStorage.setItem('cs_layouts',JSON.stringify(list));}catch(e){toast('Could not save the layout',false);return;}
   toast(`Layout "${name}" saved`,true);
@@ -27255,7 +27256,7 @@ function csWorkspaceCustomizeOpen(){
   _csModal('Customize workspace','<p style="margin:0 0 10px;color:var(--mut);font-size:12px">Hide or reorder tools and control rows. Search the command palette (⌘K / Ctrl+K) to bring hidden controls back.</p>'
     +'<input id="cs-workspace-search" type="search" placeholder="Find a tool or control…" aria-label="Find a tool or control" style="box-sizing:border-box;width:100%;padding:8px 10px;margin-bottom:8px;background:var(--bg);color:var(--txt);border:1px solid var(--bdr);font:inherit">'
     +'<div id="cs-workspace-list" style="max-height:55vh;overflow:auto"></div>'
-    +'<div class="btn-row" style="justify-content:space-between;margin-top:12px"><button type="button" class="btn bgh" id="cs-workspace-reset">Reset control layout</button><button type="button" class="btn bpri" id="cs-workspace-close">Close</button></div>');
+    +'<div class="btn-row" style="justify-content:space-between;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn bgh" id="cs-workspace-reset">Reset control layout</button><button type="button" class="btn bgh" id="cs-workspace-reset-all">Reset default layout</button><button type="button" class="btn bpri" id="cs-workspace-close">Close</button></div>');
   const ov=document.getElementById('cs-modal-ov'),list=ov&&ov.querySelector('#cs-workspace-list'),search=ov&&ov.querySelector('#cs-workspace-search');if(!list||!search)return;
   const render=()=>{
     const state=csWorkspaceLayoutGet(),query=search.value.trim().toLowerCase(),order=_csWorkspaceOrder(state.sectionOrder,FX_SECTIONS.map(x=>x[0]));
@@ -27285,6 +27286,7 @@ function csWorkspaceCustomizeOpen(){
     }
   });
   ov.querySelector('#cs-workspace-reset').onclick=()=>{try{localStorage.removeItem(CS_WORKSPACE_LAYOUT_KEY);}catch(_){}location.reload();};
+  ov.querySelector('#cs-workspace-reset-all').onclick=()=>{ov.remove();csLayoutReset();};
   ov.querySelector('#cs-workspace-close').onclick=()=>ov.remove();render();
 }
 function csWorkspaceRevealSection(key){const state=csWorkspaceLayoutGet();if(state.hiddenSections.includes(key)){state.hiddenSections=state.hiddenSections.filter(x=>x!==key);_csWorkspaceSave(state);}}
