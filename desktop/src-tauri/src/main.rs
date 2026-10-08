@@ -2874,6 +2874,7 @@ fn main() {
             subject_rename_ref,
             ingest::list_volumes,
             ingest::scan_card,
+            ingest::ingest_preview,
             ingest::ingest_copy,
             ingest::ingest_cancel,
             ingest::eject_volume,

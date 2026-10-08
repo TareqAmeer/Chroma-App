@@ -9,8 +9,9 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     const relative = decodeURIComponent(url.pathname).replace(/^\/+/, '');
-    const file = path.join(root, relative === 'desktop/dist/library-ui.js' ? 'desktop/library-ui.js' : relative);
-    const body = await readFile(file);
+    const isAppEntry = relative === 'desktop/dist/index.html';
+    const file = path.join(root, isAppEntry ? 'chromasmith-22.html' : relative === 'desktop/dist/library-ui.js' ? 'desktop/library-ui.js' : relative);
+    let body = await readFile(file);
     const type = file.endsWith('.html') ? 'text/html' : file.endsWith('.js') ? 'text/javascript' : 'application/octet-stream';
     res.writeHead(200, { 'Content-Type': type });
     res.end(body);
@@ -30,22 +31,32 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}/desktop/dist/index.html?libtest=1`, {
     waitUntil: 'domcontentloaded', timeout: 120000,
   });
+  await page.addScriptTag({ path: path.join(root, 'desktop/library-ui.js') });
   await page.waitForFunction(() => typeof window.__libOpenImportPanel === 'function', { timeout: 20000 });
   await page.evaluate(async () => {
     window.__copiedRecipe = 'eyJleHBvc3VyZSI6MC4zfQ==';
+    window.__libtestExistingNames = {
+      '/tmp/Imports/2026-08-13/collision.RW2': true,
+      '/tmp/Imports/2026-08-13/collision (2).RW2': true,
+      '/tmp/Backup/2026-08-13/collision.RW2': true,
+    };
     window.askTextModal = async () => 'Sports Desk';
     await window.__libOpenImportPanel('/Volumes/LUMIX');
   });
   await page.locator('#imp-recipe').waitFor({ state: 'visible' });
+  await page.locator('#imp-dest').evaluate((el) => { el.value = '/tmp/Imports'; });
   await page.locator('#imp-folder').selectOption('{YYYY-MM-DD}');
   await page.locator('#imp-name').fill('{YYYY-MM-DD}_{seq}');
   await page.locator('#imp-seq-start').fill('7');
+  await page.waitForFunction(() => document.querySelector('#imp-name-preview')?.innerText.includes('/tmp/Imports/2026-08-13/2026-08-13_0007.RW2'));
   let namingPreview = await page.locator('#imp-name-preview').innerText();
   assert.match(namingPreview, /P106504\.RW2/);
   assert.match(namingPreview, /2026-08-13_0007\.RW2/);
   await page.locator('#imp-name').fill('collision');
+  await page.waitForFunction(() => document.querySelector('#imp-name-preview')?.innerText.includes('/tmp/Imports/2026-08-13/collision (3).RW2'));
   namingPreview = await page.locator('#imp-name-preview').innerText();
-  assert.match(namingPreview, /generated names collide; import will add a unique suffix/);
+  assert.match(namingPreview, /collision \(3\)\.RW2/);
+  assert.match(namingPreview, /skipped \(same name and size already imported\)/);
   await page.locator('#imp-name').fill('{YYYY-MM-DD}_{seq}');
   await page.locator('#imp-creator').fill('A. Photographer');
   await page.locator('#imp-copyright').fill('© Studio 2026');
@@ -78,6 +89,13 @@ try {
   assert.equal(await page.locator('#imp-starting-edit').evaluate((el) => el.dataset.savedRecipe), 'eyJleHBvc3VyZSI6MC4zfQ==');
   assert.equal(await page.locator('#imp-skip').isChecked(), true, 'recipe application preserves duplicate skip');
   assert.equal(await page.locator('#imp-backup').inputValue(), '', 'recipe application leaves the second-copy destination independent');
+  await page.locator('#imp-backup').evaluate((el) => { el.value = '/tmp/Backup'; });
+  await page.locator('#imp-name').fill('collision');
+  await page.waitForFunction(() => document.querySelector('#imp-name-preview')?.innerText.includes('/tmp/Backup/2026-08-13/collision (2).RW2'));
+  assert.match(await page.locator('#imp-name-preview').innerText(), /Second copy → \/tmp\/Backup\/2026-08-13\/collision \(2\)\.RW2/);
+  const duplicateScans = await page.evaluate(() => (window.__libtestCalls || []).filter(([cmd, args]) => cmd === 'ingest_preview' && args.duplicateRoot == null).length);
+  assert.equal(duplicateScans, 1, 'a new destination is indexed once, then naming edits reuse its duplicate flags');
+  await page.locator('#imp-name').fill('{YYYY-MM-DD}_{seq}');
   await page.locator('#imp-dest').evaluate((el) => { el.value = '/tmp/Imports'; });
   await page.evaluate(() => document.getElementById('imp-go').click());
   await page.waitForFunction(() => (window.__libtestCalls || []).some(([cmd]) => cmd === 'ingest_copy'));

@@ -325,6 +325,44 @@
         (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
         return new Promise((res) => setTimeout(() => res({ copied: 22, duplicates_skipped: 3, failed: [], dest_root: A.options.destRoot, bytes: 1.4e9 }), 900));
       }
+      case 'ingest_preview': {
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        const options = A.options || {};
+        const files = A.files || [];
+        const picked = options.only?.length ? files.filter((f) => options.only.includes(f.path)) : files;
+        const usedPrimary = new Set();
+        const usedBackup = new Set();
+        const unique = (root, name, used) => {
+          const folder = (options.folderTemplate || '{YYYY}/{YYYY-MM-DD}')
+            .replace('{YYYY-MM-DD}', '2026-08-13').replace('{YYYY}', '2026').replace('{MM}', '08').replace('{DD}', '13');
+          const path = `${root}/${folder}/${name}`;
+          const external = window.__libtestExistingNames || {};
+          const dot = name.lastIndexOf('.');
+          const stem = dot > 0 ? name.slice(0, dot) : name;
+          const ext = dot > 0 ? name.slice(dot) : '';
+          let candidate = path, n = 2;
+          while (external[candidate] || used.has(candidate.toLowerCase())) {
+            candidate = `${root}/${folder}/${stem} (${n++})${ext}`;
+          }
+          used.add(candidate.toLowerCase());
+          return candidate;
+        };
+        let sequence = Number(options.sequenceStart || 1);
+        return Promise.resolve(picked.map((f) => {
+          const duplicate = !!f.duplicate;
+          const skipped = !!options.skipDuplicates && duplicate;
+          if (skipped) return { sourcePath: f.path, sourceName: f.name, duplicate, skipped, primaryPath: null, backupPath: null };
+          const template = options.filenameTemplate || '';
+          const dot = f.name.lastIndexOf('.');
+          const stem = dot > 0 ? f.name.slice(0, dot) : f.name;
+          const ext = dot > 0 ? f.name.slice(dot) : '';
+          const name = template
+            ? template.replaceAll('{name}', stem).replaceAll('{seq}', String(sequence).padStart(4, '0')).replaceAll('{n}', String(sequence).padStart(4, '0')).replaceAll('{date}', f.date || '').replaceAll('{YYYY-MM-DD}', f.date || '').replaceAll('{YYYY}', '2026').replaceAll('{MM}', '08').replaceAll('{DD}', '13') + ext
+            : f.name;
+          sequence++;
+          return { sourcePath: f.path, sourceName: f.name, duplicate, skipped, primaryPath: unique(options.destRoot, name, usedPrimary), backupPath: options.backupRoot ? unique(options.backupRoot, name, usedBackup) : null };
+        }));
+      }
       case 'eject_volume': return Promise.resolve();
       case 'trash_file': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve();
       case 'duplicate_file': return Promise.resolve();
@@ -13305,6 +13343,9 @@
     back.onclick = (ev) => { if (ev.target === back && !cardState.scanning) { cancelled = true; cleanup(); } };
 
     let files = [];
+    const duplicateCache = new Map();
+    const duplicatePending = new Map();
+    const initialDuplicateRoot = prefs.dest || null;
     // scan_card now runs off the main thread and emits progress as it walks — a real card with
     // thousands of RAWs (each needing an EXIF read for its capture date) can take a while, and
     // the static "Scanning card..." label used to be the ONLY thing on screen for that whole time
@@ -13330,6 +13371,7 @@
       document.getElementById('imp-sub').textContent = 'No photos or videos found on this card.';
       return;
     }
+    if (initialDuplicateRoot) duplicateCache.set(initialDuplicateRoot, new Map(files.map((f) => [f.path, !!f.duplicate])));
 
     const dupes = files.filter((f) => f.duplicate).length;
     const dates = files.map((f) => f.date).filter(Boolean).sort();
@@ -13386,14 +13428,16 @@
     }
     const cameraLoaded = new Set();
     const cameraPending = new Set();
+    let namePreviewRequest = 0;
+    let namePreviewTimer = null;
     function updateImportRenamePreview(selFiles = files.filter((f) => selected.has(f.path))) {
+      const requestId = ++namePreviewRequest;
       const host = document.getElementById('imp-name-preview');
       const input = document.getElementById('imp-name');
       if (!host || !input) return;
       const template = input.value.trim();
-      if (!template) { host.innerHTML = '<span style="color:var(--mut)">Original filenames will be kept.</span>'; return; }
       const skipDuplicates = document.getElementById('imp-skip')?.checked;
-      const effectiveFiles = selFiles.filter((f) => !(skipDuplicates && f.duplicate));
+      const effectiveFiles = selFiles;
       if (template.includes('{camera}')) {
         const need = effectiveFiles.filter((f) => f.camera == null && !cameraLoaded.has(f.path) && !cameraPending.has(f.path));
         if (need.length) {
@@ -13415,26 +13459,58 @@
         }
         if (effectiveFiles.some((f) => cameraPending.has(f.path))) { host.textContent = 'Reading camera metadata for the selected files…'; return; }
       }
-      const ordered = [...effectiveFiles]; // scan_card's name order is also ingest_run's sequence order
+      const destRoot = document.getElementById('imp-dest')?.value.trim();
+      if (!destRoot) { host.textContent = 'Choose a destination to preview final names.'; return; }
+      host.textContent = 'Checking destination names…';
+      const backupRoot = document.getElementById('imp-backup')?.value.trim() || null;
       const sequenceStart = Math.max(0, Math.trunc(Number(document.getElementById('imp-seq-start')?.value) || 0));
-      const rows = ordered.map((f, i) => {
-        const dot = f.name.lastIndexOf('.');
-        const stem = dot > 0 ? f.name.slice(0, dot) : f.name;
-        const ext = dot > 0 ? f.name.slice(dot) : '';
-        const date = f.date || '';
-        const [yyyy = '', mm = '', dd = ''] = date.split('-');
-        const seq = String(sequenceStart + i).padStart(4, '0');
-        const tokens = { name: stem, date, camera: f.camera || '', seq, n: seq, 'YYYY-MM-DD': date, YYYY: yyyy, MM: mm, DD: dd };
-        const base = template.replace(/\{([^{}]+)\}/g, (_m, key) => Object.hasOwn(tokens, key)
-          ? String(tokens[key]).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^\.+|\.+$/g, '') : `⟪${key}?⟫`);
-        return { old: f.name, next: base + ext };
-      });
-      const counts = new Map();
-      for (const row of rows) counts.set(row.next.toLocaleLowerCase(), (counts.get(row.next.toLocaleLowerCase()) || 0) + 1);
-      const collisions = [...counts.values()].filter((n) => n > 1).reduce((a, n) => a + n, 0);
-      host.innerHTML = `${collisions ? `<div style="color:var(--acc);margin-bottom:4px">${collisions} generated names collide; import will add a unique suffix.</div>` : ''}`
-        + rows.slice(0, 6).map((row) => `<div style="display:flex;gap:8px;min-width:0"><span style="color:var(--mut);overflow:hidden;text-overflow:ellipsis">${esc(row.old)}</span><span aria-hidden="true">→</span><strong style="overflow:hidden;text-overflow:ellipsis">${esc(row.next)}</strong></div>`).join('')
-        + (rows.length > 6 ? `<div style="color:var(--mut)">and ${rows.length - 6} more…</div>` : '');
+      const options = {
+        destRoot, backupRoot,
+        folderTemplate: document.getElementById('imp-folder')?.value || '{YYYY}/{YYYY-MM-DD}',
+        filenameTemplate: template,
+        sequenceStart,
+        skipDuplicates: !!skipDuplicates,
+        only: selFiles.length === files.length ? [] : selFiles.map((f) => f.path),
+      };
+      let duplicateFlags = duplicateCache.get(destRoot);
+      if (!duplicateFlags) {
+        const updateWhenReady = () => {
+          if (requestId === namePreviewRequest && host.isConnected) updateImportRenamePreview(selFiles);
+        };
+        const pending = duplicatePending.get(destRoot);
+        if (pending) { pending.then(updateWhenReady).catch(() => {}); return; }
+        if (namePreviewTimer) clearTimeout(namePreviewTimer);
+        namePreviewTimer = setTimeout(() => {
+          const scan = invoke('ingest_preview', {
+            files,
+            options: { ...options, only: [] },
+            duplicateRoot: destRoot === initialDuplicateRoot ? initialDuplicateRoot : null,
+          }).then((rows) => {
+            duplicateCache.set(destRoot, new Map((rows || []).map((row) => [row.sourcePath, !!row.duplicate])));
+          }).finally(() => duplicatePending.delete(destRoot));
+          duplicatePending.set(destRoot, scan);
+          scan.then(updateWhenReady).catch((e) => {
+            if (requestId === namePreviewRequest && host.isConnected) host.textContent = `Could not preview destination names: ${String(e.message || e)}`;
+          });
+        }, 120);
+        return;
+      }
+      const previewFiles = selFiles.map((f) => ({ ...f, duplicate: duplicateFlags.get(f.path) ?? false }));
+      if (namePreviewTimer) clearTimeout(namePreviewTimer);
+      namePreviewTimer = setTimeout(() => {
+        invoke('ingest_preview', { files: previewFiles, options, duplicateRoot: destRoot }).then((rows) => {
+          if (requestId !== namePreviewRequest || !host.isConnected) return;
+          const shown = (rows || []).slice(0, 6);
+          host.innerHTML = shown.map((row) => {
+            if (row.skipped) return `<div style="min-width:0;color:var(--mut)"><strong>${esc(row.sourceName)}</strong> · skipped (same name and size already imported)</div>`;
+            const primary = row.primaryPath || 'Unavailable';
+            const backup = row.backupPath ? `<div style="padding-left:12px;color:var(--mut)">Second copy → ${esc(row.backupPath)}</div>` : '';
+            return `<div style="min-width:0"><div style="display:flex;gap:8px;min-width:0"><span style="color:var(--mut);overflow:hidden;text-overflow:ellipsis">${esc(row.sourceName)}</span><span aria-hidden="true">→</span><strong style="overflow:hidden;text-overflow:ellipsis">${esc(primary)}</strong></div>${backup}</div>`;
+          }).join('') + ((rows || []).length > 6 ? `<div style="color:var(--mut)">and ${rows.length - 6} more…</div>` : '');
+        }).catch((e) => {
+          if (requestId === namePreviewRequest && host.isConnected) host.textContent = `Could not preview destination names: ${String(e.message || e)}`;
+        });
+      }, 120);
     }
     function tileEl(f) {
       const path = f.path;
@@ -13644,6 +13720,9 @@
     $('imp-name').addEventListener('input', () => updateImportRenamePreview());
     $('imp-seq-start').addEventListener('input', () => updateImportRenamePreview());
     $('imp-skip').addEventListener('change', () => updateImportRenamePreview());
+    $('imp-folder').addEventListener('change', () => updateImportRenamePreview());
+    $('imp-recipe').addEventListener('change', () => setTimeout(() => updateImportRenamePreview(), 0));
+    updateImportRenamePreview();
     const updateImportMetadataPreview = () => {
       const host = $('imp-metadata-preview');
       const values = [
@@ -13667,9 +13746,9 @@
         if (chosen) target.value = Array.isArray(chosen) ? chosen[0] : chosen;
       } catch (e) { console.error('pick folder', e); }
     };
-    $('imp-dest-pick').onclick = () => pickFolder($('imp-dest'));
-    $('imp-backup-pick').onclick = () => pickFolder($('imp-backup'));
-    $('imp-backup-clear').onclick = () => { $('imp-backup').value = ''; };
+    $('imp-dest-pick').onclick = async () => { await pickFolder($('imp-dest')); updateImportRenamePreview(); };
+    $('imp-backup-pick').onclick = async () => { await pickFolder($('imp-backup')); updateImportRenamePreview(); };
+    $('imp-backup-clear').onclick = () => { $('imp-backup').value = ''; updateImportRenamePreview(); };
     $('imp-cancel').onclick = () => { if (!cardState.scanning) { cancelled = true; cleanup(); } };
 
     $('imp-go').onclick = async () => {

@@ -137,6 +137,17 @@ pub struct IngestResult {
     pub bytes: u64,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IngestNamePreview {
+    pub source_path: String,
+    pub source_name: String,
+    pub duplicate: bool,
+    pub skipped: bool,
+    pub primary_path: Option<String>,
+    pub backup_path: Option<String>,
+}
+
 const SIDECAR_EXTS: &[&str] = &["xmp", "rrdata"];
 
 /// A point-in-time observation used by watched-folder capture before handing a file to the
@@ -564,6 +575,89 @@ pub(crate) fn expand_filename(template: &str, stem: &str, date: &str, camera: &s
         .replace("{n}", &format!("{n:04}"))
 }
 
+fn generated_output_name(f: &CardFile, options: &IngestOptions, sequence: usize) -> Result<String, String> {
+    let date = f.date.as_deref().unwrap_or("");
+    let src = Path::new(&f.path);
+    let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
+    let ext = src.extension().and_then(|s| s.to_str()).unwrap_or("");
+    match options.filename_template.as_deref().filter(|t| !t.is_empty()) {
+        Some(tpl) => {
+            let base = expand_filename(tpl, stem, date, f.camera.as_deref().unwrap_or(""), sequence);
+            validate_generated_filename(&base)?;
+            Ok(if ext.is_empty() { base } else { format!("{base}.{ext}") })
+        }
+        None => Ok(f.name.clone()),
+    }
+}
+
+fn planned_unique_dest(dir: &Path, name: &str, reserved: &mut std::collections::HashSet<String>) -> PathBuf {
+    let base = Path::new(name);
+    let stem = base.file_stem().and_then(|s| s.to_str()).unwrap_or("export").to_string();
+    let ext = base.extension().and_then(|e| e.to_str()).unwrap_or("").to_string();
+    let mut dest = dir.join(name);
+    let mut n = 2;
+    loop {
+        let key = dest.to_string_lossy().to_lowercase();
+        if !dest.exists() && !reserved.contains(&key) {
+            reserved.insert(key);
+            return dest;
+        }
+        let alt = if ext.is_empty() { format!("{stem} ({n})") } else { format!("{stem} ({n}).{ext}") };
+        dest = dir.join(alt);
+        n += 1;
+    }
+}
+
+fn preview_names(files: Vec<CardFile>, options: IngestOptions, duplicate_root: Option<String>) -> Result<Vec<IngestNamePreview>, String> {
+    if let Some(template) = options.filename_template.as_deref().filter(|t| !t.is_empty()) {
+        validate_filename_template(template)?;
+    }
+    let primary_root = PathBuf::from(&options.dest_root);
+    if options.dest_root.is_empty() { return Err("no destination chosen".into()); }
+    let trust_duplicate_flags = duplicate_root.as_deref() == Some(options.dest_root.as_str());
+    let duplicate_index = if trust_duplicate_flags { None } else { Some(index_destination(&primary_root)) };
+    let backup_root = options.backup_root.clone().filter(|s| !s.is_empty()).map(PathBuf::from);
+    let folder_tpl = options.folder_template.as_deref().unwrap_or("{YYYY}/{YYYY-MM-DD}");
+    let mut primary_reserved = std::collections::HashSet::new();
+    let mut backup_reserved = std::collections::HashSet::new();
+    let selected: Vec<_> = files.into_iter()
+        .filter(|f| options.only.is_empty() || options.only.iter().any(|p| p == &f.path))
+        .collect();
+    let mut rows = Vec::with_capacity(selected.len());
+    let mut sequence = 0usize;
+    for f in selected {
+        let duplicate = if trust_duplicate_flags {
+            f.duplicate
+        } else {
+            duplicate_index.as_ref().and_then(|index| index.get(&f.name.to_lowercase())).is_some_and(|&size| size == f.size)
+        };
+        let skipped = options.skip_duplicates && duplicate;
+        if skipped {
+            rows.push(IngestNamePreview { source_path: f.path, source_name: f.name, duplicate, skipped, primary_path: None, backup_path: None });
+            continue;
+        }
+        let number = options.sequence_start.unwrap_or(1).saturating_add(sequence as u32) as usize;
+        sequence += 1;
+        let out_name = generated_output_name(&f, &options, number)?;
+        let date = f.date.as_deref().unwrap_or("0000-00-00");
+        let folder = expand_folder(folder_tpl, date);
+        let primary = planned_unique_dest(&primary_root.join(&folder), &out_name, &mut primary_reserved);
+        let backup = backup_root.as_ref().map(|root| planned_unique_dest(&root.join(&folder), &out_name, &mut backup_reserved));
+        rows.push(IngestNamePreview {
+            source_path: f.path, source_name: f.name, duplicate, skipped,
+            primary_path: Some(primary.to_string_lossy().into_owned()),
+            backup_path: backup.map(|p| p.to_string_lossy().into_owned()),
+        });
+    }
+    Ok(rows)
+}
+
+#[tauri::command]
+pub async fn ingest_preview(files: Vec<CardFile>, options: IngestOptions, duplicate_root: Option<String>) -> Result<Vec<IngestNamePreview>, String> {
+    tauri::async_runtime::spawn_blocking(move || preview_names(files, options, duplicate_root))
+        .await.map_err(|e| format!("ingest_preview task panicked: {e}"))?
+}
+
 /// Copies one file and verifies the result by size, removing a partial write so a failed copy can
 /// never leave a truncated file that later looks importable.
 fn copy_verified(src: &Path, dest: &Path) -> Result<u64, String> {
@@ -738,20 +832,8 @@ fn ingest_run_cancellable(
     // template must not leave a half-imported card merely because the invalid name came later.
     let sequence_start = options.sequence_start.unwrap_or(1);
     let out_names: Vec<String> = wanted.iter().enumerate().map(|(i, f)| {
-        let date = f.date.as_deref().unwrap_or("");
-        let src = Path::new(&f.path);
-        let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
-        let ext = src.extension().and_then(|s| s.to_str()).unwrap_or("");
-        let name = match options.filename_template.as_deref().filter(|t| !t.is_empty()) {
-            Some(tpl) => {
-                let sequence = sequence_start.saturating_add(i as u32) as usize;
-                let base = expand_filename(tpl, stem, &date, f.camera.as_deref().unwrap_or(""), sequence);
-                validate_generated_filename(&base)?;
-                if ext.is_empty() { base } else { format!("{base}.{ext}") }
-            }
-            None => f.name.clone(),
-        };
-        Ok(name)
+        let sequence = sequence_start.saturating_add(i as u32) as usize;
+        generated_output_name(f, &options, sequence)
     }).collect::<Result<_, String>>()?;
 
     let mut result = IngestResult {
@@ -1274,6 +1356,44 @@ mod tests {
             assert!(xmp.contains("<rdf:li>news</rdf:li>"), "recipe keyword missing: {xmp}");
         }
         assert!(!backup.join("2026-04-05/b.jpg").exists(), "duplicate skip must apply to the second copy too");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn preview_reserves_existing_and_in_batch_names_for_both_destinations() {
+        let root = std::env::temp_dir().join(format!("cs_ingest_preview_{}", std::process::id()));
+        let card = root.join("card");
+        let dest = root.join("primary");
+        let backup = root.join("backup");
+        let day = "2026-08-13";
+        std::fs::create_dir_all(&card).unwrap();
+        std::fs::create_dir_all(dest.join(day)).unwrap();
+        std::fs::create_dir_all(backup.join(day)).unwrap();
+        for name in ["a.jpg", "b.jpg", "duplicate.jpg"] {
+            std::fs::write(card.join(name), b"photo").unwrap();
+        }
+        std::fs::write(dest.join(day).join("collision.jpg"), b"old").unwrap();
+        std::fs::write(dest.join(day).join("collision (2).jpg"), b"old").unwrap();
+        std::fs::write(dest.join(day).join("duplicate.jpg"), b"photo").unwrap();
+        std::fs::write(backup.join(day).join("collision.jpg"), b"old").unwrap();
+        let files = ["a.jpg", "b.jpg", "duplicate.jpg"].iter().map(|name| CardFile {
+            path: card.join(name).to_string_lossy().into_owned(), name: (*name).into(), size: 5,
+            kind: "jpeg".into(), date: Some(day.into()), camera: None, duplicate: false,
+        }).collect();
+        let options = IngestOptions {
+            dest_root: dest.to_string_lossy().into_owned(),
+            backup_root: Some(backup.to_string_lossy().into_owned()),
+            folder_template: Some("{YYYY-MM-DD}".into()), filename_template: Some("collision".into()),
+            sequence_start: Some(7), skip_duplicates: true, only: Vec::new(), metadata: Default::default(),
+        };
+        let rows = preview_names(files, options, None).unwrap();
+        assert_eq!(rows.len(), 3);
+        assert!(rows[0].primary_path.as_deref().unwrap().ends_with("collision (3).jpg"));
+        assert!(rows[1].primary_path.as_deref().unwrap().ends_with("collision (4).jpg"));
+        assert!(rows[0].backup_path.as_deref().unwrap().ends_with("collision (2).jpg"));
+        assert!(rows[1].backup_path.as_deref().unwrap().ends_with("collision (3).jpg"));
+        assert!(rows[2].duplicate && rows[2].skipped);
+        assert!(rows[2].primary_path.is_none() && rows[2].backup_path.is_none());
         std::fs::remove_dir_all(&root).ok();
     }
 }
