@@ -824,6 +824,11 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - `test/import_recipes.mjs` passed in installed Chrome: naming collision preview, metadata preview, saved recipe save/reload, starting-edit IPC, and independent second-copy settings. `test/import_metadata_native.mjs` passed through native IPC/filesystem; `node --check` and `git diff --check` passed.
 - CHR-208 AC5 remains open: the native mixed-format import used the same job metadata directly in the ingest options, while saved-recipe selection was verified separately in the UI test. A single native UI-to-export saved-recipe journey is still needed. Files: `test/import_metadata_native.mjs`, `DEVLOG.md`.
 
+#### Publication verification — CHR-208 GPS export-policy follow-up
+
+- Feature/test commit `47a961085e17acd80ab63ea19bb1094f65592da9` was pushed as a fast-forward. At verification, `git ls-remote origin refs/heads/main` returned the same hash and ancestry confirmed the feature commit is contained in remote main.
+- Integrated-source Chrome recipe-preview/save/reload passed, and the focused WebView2/filesystem fixture passed with four JPEG/PNG outputs, GPS retained in JPEG and removed in PNG, metadata preserved, primary/backup XMP identical, and two duplicates skipped. CHR-208 remains In Progress; AC5 stays open for a single native saved-recipe-to-export journey.
+
 ### 2026-10-08 — CHR-272 live control reachability sweep
 
 - `test/workspace_controls.mjs` now derives its editor control set from the live DOM and drives the actual Ctrl+K palette search plus Enter for every hidden row. Current source exposed 124 unique controls across 33 sections; every result restored its original row and section. Sweep time was 9,211 ms. The existing preset, named-workspace and JSON file-flow checks also passed in Chromium.
