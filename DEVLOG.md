@@ -1023,3 +1023,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-201/CHR-202 native recovery
 
 - Feature `48791e42` integrated as `7b396b4898137be88368b643483ead245ea076f7`; fresh fetch and remote ls-remote matched and ancestry passed. Integrated native regression passed with 60 outputs, 59 unchanged hashes, real failed-write retry, destination restoration, suffix/skip and Explorer reveal-command success. CHR-202 AC5 checked; CHR-201 and CHR-202 In Review, not Done.
+
+### 2026-10-08 — CHR-205 native bundle verification and remaining scope
+
+- Focused `cargo test --locked --bin chromasmith --features tauri/custom-protocol -j1 catalog_backup::tests` passed 4/4 with real Windows Rust: live-WAL snapshot/integrity, multi-store staged bundle capture/restore, tamper/path-traversal rejection and existing-destination refusal. Generated desktop frontend and temporary `TAURI_CONFIG` excluding AI bundle resources removed the earlier build blockers; MSVC ran outside the sandbox.
+- Source audit confirms albums/subjects, native DCP LUTs, cache registries, supplied browser preferences and reachable photo XMP are captured; the test uses a two-photo catalog with one missing sidecar. It does not establish relationship/version/people/keyword semantic recovery or browser IndexedDB LUT/session asset completeness. The restore command publishes a verified separate folder; it does not activate it into a clean installed app or relink paths across machines.
+- Significant remaining work: startup activation/rollback, multi-root relinking across path-bearing stores, browser-asset inventory and a representative clean-install/cross-machine fixture. CHR-205 stays In Progress with AC1/AC4/AC5 open. Files: `DEVLOG.md` only; no additional criteria checked.
