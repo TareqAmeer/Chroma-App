@@ -7264,7 +7264,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008K';
+const BUILD='1.1008L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14379,8 +14379,8 @@ function csExportResultKeep(saved,failed,path){
     el.appendChild(list);
   }
 }
-// CHR-201/202: retry ONLY what failed. Failed saves keep their rendered bytes and are simply
-// saved again; failed renders are re-rendered alone (same recipe, same batch numbers, same
+// CHR-201/202: retry ONLY what failed. Failed saves keep their rendered bytes and original
+// recipe destination; failed renders are re-rendered alone (same recipe, batch numbers, and
 // version tag), so nothing that already succeeded is written a second time.
 async function expRetry(which){
   if(_fxExportRuns)return;
@@ -14388,8 +14388,21 @@ async function expRetry(which){
   let saved=0,path;
   const saves=pick.filter(f=>f.kind==='save');
   if(saves.length){
-    const sr=await saveFiles(saves.map(f=>({content:f.content,fname:f.fname,mime:f.mime})));
-    saves.forEach((f,i)=>{const r=Array.isArray(sr)?sr[i]:{ok:true};if(r&&r.ok){window._expFail=window._expFail.filter(x=>x!==f);saved++;path=path||r.path;}else f.err=((r&&r.err)||'save failed').slice(0,80);});
+    let restoreDest='';try{restoreDest=localStorage.getItem('cs-export-dir')||''}catch(_){}
+    const groups=new Map();saves.forEach(f=>{const dest=typeof f.dest==='string'?f.dest:restoreDest;if(!groups.has(dest))groups.set(dest,[]);groups.get(dest).push(f);});
+    try{
+      for(const [dest,fs] of groups){
+        try{
+          if(tauriNative()){await window.__TAURI__.core.invoke('set_export_dir',{path:dest});fxExportDirUI(dest);}
+          try{localStorage.setItem('cs-export-dir',dest)}catch(_){}
+          const sr=await saveFiles(fs.map(f=>({content:f.content,fname:f.fname,mime:f.mime})));
+          fs.forEach((f,i)=>{const r=Array.isArray(sr)?sr[i]:{ok:true};if(r&&r.ok){window._expFail=window._expFail.filter(x=>x!==f);saved++;path=path||r.path;}else f.err=((r&&r.err)||'save failed').slice(0,80);});
+        }catch(e){fs.forEach(f=>f.err=(e&&e.message||String(e)||'save failed').slice(0,80));}
+      }
+    }finally{
+      try{localStorage.setItem('cs-export-dir',restoreDest)}catch(_){}
+      if(tauriNative())try{await window.__TAURI__.core.invoke('set_export_dir',{path:restoreDest});fxExportDirUI(restoreDest)}catch(e){log('Could not restore the export destination after retry: '+(e&&e.message||e),'err')}
+    }
   }
   const rend=pick.filter(f=>f.kind==='render'),groups=new Map();
   rend.forEach(f=>{const k=f.recipe||'';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(f);});
@@ -24880,7 +24893,7 @@ async function _exportFXRun(){
         results.forEach((r,i)=>{
           const s=sr[i];
           if(s&&s.ok)setExportPhotoStatus(r.srcIdx,s.status==='shared'?'rendered':'saved',s.status==='shared'?'shared — save not confirmed':(s.skipped?'already exists — skipped':undefined));
-          else{saveFailed++;setExportPhotoStatus(r.srcIdx,'failed',((s&&s.err)||'save failed').slice(0,60));(window._expFail=window._expFail||[]).push({kind:'save',name:r.fname,fname:r.fname,content:r.content,mime:r.mime,err:((s&&s.err)||'save failed').slice(0,80)});}
+      else{saveFailed++;setExportPhotoStatus(r.srcIdx,'failed',((s&&s.err)||'save failed').slice(0,60));let dest='';try{dest=localStorage.getItem('cs-export-dir')||''}catch(_){};(window._expFail=window._expFail||[]).push({kind:'save',name:r.fname,fname:r.fname,content:r.content,mime:r.mime,dest,err:((s&&s.err)||'save failed').slice(0,80)});}
         });
         if(saveFailed){failed+=saveFailed;results=results.filter((r,i)=>sr[i]&&sr[i].ok);}
       }else{

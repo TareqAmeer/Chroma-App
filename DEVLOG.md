@@ -709,3 +709,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Integration commit `6abab717ba5e6f586f5e771ce9f15d5d2a40395b` is published on `origin/main`; a fresh fetch and `git ls-remote` matched the remote tip, ancestry was verified, and the shipped HTML contains the metadata-policy line.
 - The focused real-photo Chromium export regression passed again on integrated source at 1366×768, covering policy toggle visibility and dark/light styling plus collision, failed-only retry, two-recipe output routing and destination restoration. CHR-201 remains In Progress for native Tauri validation and outstanding acceptance edges.
+
+### 2026-10-08 — CHR-202 60-output recipe validation (partial)
+
+- Fixed retry routing so failed outputs are retried in their original recipe destination and the user's prior destination is restored. Added `test/export_60_output_recipes.mjs` to exercise 20 photos × 3 recipes, 60 unique PNG/JPG/WebP outputs, dimensions/naming, a single injected failed output, retry, and zero page errors.
+- Browser test passed on real app UI: all 60 outputs were verified and the failed output landed in its intended recipe folder after retry. CHR-202 remains In Progress for per-recipe metadata policy independence and native filesystem validation.
