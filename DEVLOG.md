@@ -997,3 +997,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commit `4f247d7c4e08b5ffafb48657d5b3ccdd1558b4dd` was integrated as `999764f8f880062045c4b3ca6eee399a457fc27f`. Fresh fetch and `git ls-remote` both returned `999764f8f880062045c4b3ca6eee399a457fc27f`; the integrated test source contains the Detail/Noise Reduction batch assertions.
 - `npm run library:batch-test` passed 7/7 journal unit tests and the integrated dark/light Chromium UI flow. The run recorded exact per-photo recipe preservation, unselected-photo identity, retry, exact undo, and no page/console/resource errors. AC6 is now checked in Linear; CHR-249 remains In Progress for the other open criteria.
+
+### 2026-10-08 — CHR-268 Compare pane acceptance evidence
+
+- Extended `test/library_survey.mjs` to drive a selected three-photo Compare session in Chromium: two rendered canvases, right-pane cycling, Enter promotion swapping pane photos, pane reassignment, and Tab focus switch all passed. Existing Survey capping, ratings, flags, removal, and responsive reflow also passed; browser page/console errors and failed resource responses were zero.
+- `node --check test/library_survey.mjs` and `git diff --check` passed; `node tools/scripts/build-desktop.mjs` generated the test bundle. Full `npm run editor:gates` was attempted but browser gates could not load Playwright from this worktree (dependencies unavailable; npm install failed on registry DNS); this is a test-environment blocker. Native Compare, image quality/prefetch, and remaining review acceptance were not verified.
+- Issue ID: CHR-268. Compare presentation, selection cycling, swapping/promoting, and focus behavior are now browser-tested; prefetch/no-flash and five-photo quality review remain open, so status remains In Progress. Files: `test/library_survey.mjs`, `DEVLOG.md`.

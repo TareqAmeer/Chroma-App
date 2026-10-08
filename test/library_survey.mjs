@@ -1,26 +1,35 @@
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = process.cwd();
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const server = createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).replace(/^\/+/, '');
     const sourcePath = pathname === 'desktop/dist/library-ui.js' ? 'desktop/library-ui.js' : pathname;
     const body = await readFile(path.join(root, sourcePath));
-    const type = sourcePath.endsWith('.html') ? 'text/html' : sourcePath.endsWith('.js') ? 'text/javascript' : 'application/octet-stream';
+    const type = sourcePath.endsWith('.html') ? 'text/html' : /\.m?js$/.test(sourcePath) ? 'text/javascript' : sourcePath.endsWith('.css') ? 'text/css' : 'application/octet-stream';
     res.writeHead(200, { 'Content-Type': type }); res.end(body);
   } catch { res.writeHead(404); res.end(); }
 }).listen(0, '127.0.0.1');
 await new Promise((resolve) => server.once('listening', resolve));
 
-const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {}), args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
+  const consoleErrors = [];
+  const failedResponses = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(`${message.text()} @ ${message.location().url}`); });
+  page.on('response', (response) => { if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`); });
+  await page.route('**/coi-serviceworker.min.js', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: '' }));
+  await page.route('**/favicon.ico**', (route) => route.fulfill({ status: 204, body: '' }));
+  await page.route('**/service-worker.js', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: '' }));
   await page.addInitScript(() => localStorage.setItem('chromasmith_lib_stars_enabled', '1'));
   await page.goto(`http://127.0.0.1:${server.address().port}/desktop/dist/index.html?libtest=1&libn=12`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction(() => typeof window.__libEnterSurvey === 'function' && typeof window.__libOpenFolder === 'function', { timeout: 30000 });
@@ -81,8 +90,37 @@ try {
   await page.keyboard.press('Escape');
   assert.equal(await page.evaluate(() => window.__libSurveyState().active), false);
   assert.notEqual(await page.locator('#lib-grid').evaluate((el) => getComputedStyle(el).display), 'none');
+  // Start Compare from a fresh three-photo selection, then exercise the real keyboard and pane
+  // selectors. Pane contents and backing canvases are observable without test-only state hooks.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => typeof window.__libOpenFolder === 'function', { timeout: 30000 });
+  await page.evaluate(() => window.__libOpenFolder('/test/Photos'));
+  await page.waitForFunction(() => document.querySelectorAll('#lib-grid .lib-card').length >= 3, { timeout: 30000 });
+  const comparePaths = await page.locator('#lib-grid .lib-card').evaluateAll((cards) => cards.slice(0, 3).map((card) => card.dataset.path));
+  await page.evaluate((selected) => selected.forEach((p) => window.__libSelect(p)), comparePaths);
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => document.querySelectorAll('#lib-compare.on .lib-cmp-pane').length === 2 && [...document.querySelectorAll('#lib-compare .lib-cmp-name')].every((el) => el.textContent), { timeout: 45000 });
+  const paneNames = () => page.locator('.lib-cmp-name').evaluateAll((els) => els.map((el) => el.textContent));
+  const expectedNames = comparePaths.map((p) => path.basename(p));
+  assert.deepEqual(await paneNames(), expectedNames.slice(0, 2), 'Compare opens the first two selected photos in A/B');
+  await page.waitForFunction(() => [...document.querySelectorAll('.lib-cmp-pane canvas')].length === 2 && [...document.querySelectorAll('.lib-cmp-pane canvas')].every((el) => el.width > 0 && el.height > 0), { timeout: 45000 });
+  const initialCanvasSizes = await page.locator('.lib-cmp-pane canvas').evaluateAll((els) => els.map((el) => [el.width, el.height]));
+  assert.equal(initialCanvasSizes.length, 2);
+  assert(initialCanvasSizes.every(([w, h]) => w > 0 && h > 0), `both panes should render: ${JSON.stringify(initialCanvasSizes)}`);
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction((name) => document.querySelector('.lib-cmp-name[data-pane="B"]')?.textContent === name, expectedNames[2]);
+  assert.deepEqual(await paneNames(), [expectedNames[0], expectedNames[2]], 'right arrow cycles the B pane');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction((names) => JSON.stringify([...document.querySelectorAll('.lib-cmp-name')].map((el) => el.textContent)) === JSON.stringify(names), [expectedNames[2], expectedNames[0]]);
+  assert.deepEqual(await paneNames(), [expectedNames[2], expectedNames[0]], 'Enter promotes B and swaps the two displayed photos');
+  await page.locator('.lib-cmp-photo-sel[data-pane="A"]').selectOption('0');
+  await page.waitForFunction((name) => document.querySelector('.lib-cmp-name[data-pane="A"]')?.textContent === name, expectedNames[0]);
+  await page.keyboard.press('Tab');
+  assert(await page.locator('.lib-cmp-pane[data-pane="A"]').evaluate((el) => el.classList.contains('cmp-focus')), 'Tab switches keyboard focus to pane A');
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
-  console.log('PASS: Survey shows a capped 8/10 set at 1440px, routes focused rating/flag actions, removes and reflows without repainting surviving cells, and exits cleanly.');
+  assert.deepEqual(consoleErrors, [], `console errors: ${consoleErrors.join('; ')}`);
+  assert.deepEqual(failedResponses, [], `failed resources: ${failedResponses.join('; ')}`);
+  console.log('PASS: Survey capped 8/10, rated/flagged/removed/reflowed cleanly; Compare opened two rendered panes, cycled, promoted/swapped, reassigned a pane, and switched keyboard focus with no browser errors or failed resources.');
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
