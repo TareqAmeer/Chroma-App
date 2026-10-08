@@ -36,17 +36,19 @@ try {
   await page.getByText('Paste edit',{exact:true}).click();
   await waitJournal(page,list=>list.some(b=>b.status==='completed'));
   const original=await page.evaluate(async()=>{const list=await window.libtestRecipeBatchInvoke('recipe_batch_list',{});const seed=await window.libtestRecipeBatchInvoke('recipe_batch_get',{id:(list.find(b=>b.label==='Paste edit')||list[0]).id});return {recipe:seed.items[0].recipe};});
-  await page.evaluate(() => {
+  await page.evaluate((sourcePath) => {
     const snap = getUISnapshot();
     snap.heal = [{ id:'dust', x:.3,y:.4,r:.02,sx:.5,sy:.5,mode:'heal',feather:0,opacity:1 }, {id:'object',x:.6,y:.6,r:.05,pts:[[.6,.6],[.7,.7]]}];
     window.__copiedRecipe = btoa(unescape(encodeURIComponent(JSON.stringify(snap))));
-  });
+    window.__copiedRecipeOrigin = { path: sourcePath, recipe: window.__copiedRecipe };
+  }, paths[2]);
   await cards.nth(1).click({button:'right'});
   await page.getByText('Edit (3)',{exact:true}).hover();
   await page.getByText('Sync sensor dust (review each photo)…',{exact:true}).click();
   const dialog=page.locator('#dust-sync-review');
   await dialog.waitFor();
   assert.equal(await dialog.locator('[data-spot]').count(),1,'brush object must be excluded');
+  assert.match(await dialog.locator('[data-photo]').innerText(),/DC-S9 · 2026-07-20/,'target must display its same-shoot camera/day metadata');
   await dialog.locator('[data-spot]').check();
   await page.waitForFunction(()=>{const img=document.querySelector('#dust-sync-review [data-photo] img');return img.complete&&img.naturalWidth>0;});
   const marker=await dialog.locator('[data-photo] svg').evaluate(svg=>{const e=svg.querySelector('ellipse'),r=svg.getBoundingClientRect();return {width:r.width,height:r.height,rx:Number(e.getAttribute('rx'))*r.width,ry:Number(e.getAttribute('ry'))*r.height};});
