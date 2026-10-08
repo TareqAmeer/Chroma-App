@@ -7266,7 +7266,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008O';
+const BUILD='1.1008P';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14372,7 +14372,7 @@ function toast(msg,kind){
 const _expSessionNames=new Set();
 function expCollidePolicy(){try{const v=localStorage.getItem('cs-export-collide');return v==='skip'||v==='overwrite'?v:'suffix';}catch(e){return'suffix';}}
 function expCollideSet(v){try{localStorage.setItem('cs-export-collide',v);}catch(e){}if(typeof expPlainRender==='function')expPlainRender();}
-function expDestLabel(){let d='';try{d=localStorage.getItem('cs-export-dir')||'';}catch(e){}return tauriNative()?(d?fxExportDirLabel(d):'Downloads folder'):"your browser's download folder";}
+function expDestLabel(){let d='';try{d=localStorage.getItem('cs-export-dir')||'';}catch(e){}return tauriNative()?(d||'Downloads folder'):"your browser's download folder";}
 function expPolicyLabel(){const p=expCollidePolicy();return p==='skip'?'skip existing files':p==='overwrite'?'overwrite existing files':'add a number to the name';}
 function csExportResultKeep(saved,failed,path){
   const el=document.getElementById('exp-last');if(!el)return;el.hidden=false;el.textContent='';
@@ -27728,22 +27728,29 @@ function expPlainRender(){
 function _expPreflight(edge,q,fmt){
   const all=typeof fxImages!=='undefined'?fxImages:[];if(!all.length)return[];
   const items=(typeof fxExportScope!=='undefined'&&fxExportScope==='current')||all.length===1?[fxImages[fxCurIdx]||all[0]]:all;
+  const dimsOf=it=>{let w=(it&&(it.w||it.width))||(it&&it.img&&(it.img.naturalWidth||it.img.width))||(it&&it.fullImg&&(it.fullImg.naturalWidth||it.fullImg.width))||0,h=(it&&(it.h||it.height))||(it&&it.img&&(it.img.naturalHeight||it.img.height))||(it&&it.fullImg&&(it.fullImg.naturalHeight||it.fullImg.height))||0;if(!w||!h)return null;const k=edge&&Math.max(w,h)>edge?edge/Math.max(w,h):1;return[Math.round(w*k),Math.round(h*k)];};
   const lossless=it=>it&&(it.ext==='png'||it.ext==='tif'||it.ext==='tiff'||(typeof RAW_FILE_EXT_RE!=='undefined'&&RAW_FILE_EXT_RE.test('.'+it.ext))||(typeof RUST_ONLY_RE!=='undefined'&&RUST_ONLY_RE.test('.'+it.ext)));
   const fmtOf=it=>fmt==='webp'?'WebP':fmt==='png'?'PNG':fmt==='jpg'?'JPG':(lossless(it)?'PNG':'JPG');
   const counts={};items.forEach(it=>{const f=fmtOf(it);counts[f]=(counts[f]||0)+1;});
   const fmts=Object.entries(counts).map(([f,n])=>items.length>1?`${n} ${f}`:f).join(', ');
-  const d=_expDims(edge);
+  const dimCounts=new Map();items.forEach(it=>{const d=dimsOf(it);if(d){const k=d[0]+'×'+d[1];dimCounts.set(k,(dimCounts.get(k)||0)+1);}});
   const fld=((document.getElementById('fx-fname')||{}).value||'').trim(),noVer=fld.includes('{nover}'),pat=fld.replace('{nover}','').trim();
   const single=items.length===1,it0=items[0]||{};
+  const ext=fmtOf(it0)==='WebP'?'webp':fmtOf(it0)==='PNG'?'png':'jpg';
   let base=(pat&&pat!=='photo'&&(single||pat.includes('{')))?pat.replace(/\{name\}/g,it0.name||'photo').replace(/\{seq\}/g,'1').replace(/\{date\}/g,new Date().toISOString().slice(0,10))+(!single&&!pat.includes('{name}')&&!pat.includes('{seq}')?'_1':''):(single?(fld||it0.name):it0.name);
   const ver=noVer||typeof fxVersion==='undefined'?'':'_v'+fxVersion.toFixed(1).replace('.','-');
-  const ext=fmtOf(it0)==='WebP'?'webp':fmtOf(it0)==='PNG'?'png':'jpg';
   const keepGps=document.getElementById('tg-exp-gps')?.checked!==false;
+  const recipe=window._expRecipe||((document.getElementById('sel-exp-preset')||{}).value||'');
+  const dimSummary=[...dimCounts].map(([d,n])=>n>1?`${n} × ${d}`:d).join(', ')||'dimensions unavailable';
+  const estimatedBytes=items.reduce((sum,it)=>{const d=dimsOf(it),f=fmtOf(it),e=f==='WebP'?'webp':f==='PNG'?'png':'jpg';return sum+_expBytes(d,q,e);},0);
+  const qualitySummary=items.some(it=>fmtOf(it)==='JPG'||fmtOf(it)==='WebP')?` · quality ${q}`:'';
   const lines=[`${items.length} photo${items.length>1?'s':''} · ${fmts}${fmt==='auto'?' (Auto: lossless sources stay PNG)':''}`,
-    `${d[0]}×${d[1]}${items.length>1?' (first photo)':''} · about ${_mb(_expBytes(d,q,ext))}${ext==='png'?'':' · quality '+q}`,
+    `${dimSummary} · about ${_mb(estimatedBytes)} total${qualitySummary}`,
     `Saved as ${base}${ver}.${ext}${items.length>1?' …':''}`,
+    `Export recipe: ${recipe||'Custom export settings'}`,
     `Saving to ${expDestLabel()} · if a file exists: ${expPolicyLabel()}`,
-    `Metadata: photo metadata ${keepGps?'preserved':'preserved except GPS location'}`];
+    `Metadata: photo metadata ${keepGps?'preserved':'preserved except GPS location'}`,
+    `Offline sources: unavailable originals fail individually and stay listed for retry after reconnecting.`];
   return lines;
 }
 document.addEventListener('change',e=>{if(e.target&&/^(sel-exp-size|sel-exp-fmt)$/.test(e.target.id))expPlainRender();},true);
