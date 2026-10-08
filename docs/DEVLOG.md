@@ -194,3 +194,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - The persistent Erase control now exposes `aria-pressed`, keeps its accessible/styled state in sync when toggled or rebuilt, and updates the brush cursor feedback immediately.
 - Extended `test/mask_raster.mjs`; focused Chrome raster suite passed 48/48, including an on-screen-toggle touch-pointer stroke. This simulates Pointer Events and does not validate physical touch or Apple Pencil hardware.
 - CHR-275 remains In Progress. Heal repair targeting and native input/undo validation remain open. Modified files: `chromasmith-22.html`, `test/mask_raster.mjs`.
+
+### CHR-275 — publication verified
+
+- CHR-275 toggle changes are published in `origin/main` integration commit `603bf08b9dcaa04ece04fe09e8c6b870e5839c50`; fetch, remote ref hash, and ancestry checks confirmed publication.
+- `test/mask_raster.mjs` passed 48/48 on the integration checkout. AC2 remains open because physical touch/Apple Pencil was not tested; heal behavior and the remaining undo/conflict verification also remain open. Issue stays In Progress.
