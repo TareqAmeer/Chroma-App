@@ -3290,6 +3290,7 @@ function sk2ExportBuild(){
   return sh;
 }
 function sk2ExportOpen(){
+  if(tauriNative()){let destination='';try{destination=localStorage.getItem('cs-export-dir')||'';}catch(e){}fxExportDirUI(destination);}
   const sh=sk2ExportBuild();sh.querySelectorAll('.sk2x-opts').forEach(b=>b._draw&&b._draw());
   const n=(typeof fxImages!=='undefined'&&fxImages.length)||0,scope=document.getElementById('fx-export-scope-row');
   sh.querySelector('.sk2x-btn').firstChild.textContent=n>1&&(typeof fxExportScope==='undefined'||fxExportScope!=='current')?`Export ${n} photos `:'Export ';
@@ -7284,7 +7285,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008C';
+const BUILD='1.1008D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14808,7 +14809,7 @@ function csFirstEditCoach(stage){
     ov.remove();
     if(stage==='look'){switchTab('fx');fxSection('looks');}
     else if(stage==='compare')csFirstEditCompareDemo();
-    else{switchTab('fx');fxSection('export');}
+    else{switchTab('fx');if(document.body.classList.contains('sk2')&&typeof sk2ExportOpen==='function')sk2ExportOpen();else fxSection('export');}
   };
 }
 function csFirstEditPhotoOpened(){

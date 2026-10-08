@@ -1169,3 +1169,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-08 — CHR-200 progress-warning publication verification
 - Feature d8ced7af published as f1388e82b01fc2c9893d6d446940b6e478f092e6; remote main hash and ancestry verified. Integrated seven focused history tests and native independent-warning/promotion/queued-terminal checks pass in actual dark/light laptop themes.
 - CHR-200 AC4 is supported by demonstrated warning/cancellation UI evidence; issue remains In Progress for durable adapters, interruption validity across all job types and responsiveness measurements.
+
+### 2026-10-08 — CHR-195 guide opens current native export sheet
+- Routed first-edit Show output options to the current desktop export sheet rather than the hidden legacy panel. Refresh native destination visibility when opening the sheet so late bridge initialization does not leave Save to hidden.
+- Files: chromasmith-22.html and test/onboarding_sample_native.mjs. Real WebView2 1366×768 dark/light tests use visible sheet controls, save full-size 665×448 PNG files, invoke real Explorer reveal, preserve the bundled sample and restore destination/collision preferences; only the folder-dialog selection is a controlled fixture.
+- Actual directory collision at the same export version leaves the guide at export with no success message; failed sample fetch preserves Gallery. HTML interaction validity and test syntax pass. CHR-195 remains In Progress pending native photo/folder entry cancellation, existing-user migration and accessibility checks.
