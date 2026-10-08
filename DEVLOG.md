@@ -851,3 +851,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - `node test/mask_raster.mjs` passes 29/29 in Chromium. Alt erase changes the painted sample 200→47 while persistent erase stays off; persistent erase still works; transient stroke and cursor clear on blur, hidden document, leaving paint mode, and pointercancel. Raster round-trip, undo/redo, copy separation, and render identity also pass.
 - CHR-275 remains In Progress: native WebView2 menu-bar focus was not testable without a runnable current app; rebinding depends on CHR-266 and healing on CHR-246. Touch/Pencil, same-settings/feather/density, AI Alt isolation, shortcut conflict, and one-undo stroke semantics remain open. Issue ID: CHR-275.
+
+### 2026-10-08 — CHR-270 divider regression and status correction
+
+- `node test/before_after_divider.mjs` passes in Chromium on current main: keyboard movement, limits, recentering, orientation, split clipping, and recipe isolation. This validates only the divider slice.
+- Corrected CHR-270 from In Review to In Progress because previous-step hold, named/original baselines, baseline slider values, masks/crop/film at 1:1 in both themes, and export invariance remain unverified or unimplemented. Issue ID: CHR-270.
