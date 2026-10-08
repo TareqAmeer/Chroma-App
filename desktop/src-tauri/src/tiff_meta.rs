@@ -213,7 +213,13 @@ fn write_blob(out: &mut Vec<u8>, blob: &[u8]) -> u32 {
     off
 }
 
-pub fn splice_metadata(rendered: &[u8], source: &[u8]) -> Option<Vec<u8>> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GpsExportPolicy {
+    Preserve,
+    Remove,
+}
+
+pub fn splice_metadata(rendered: &[u8], source: &[u8], gps_policy: GpsExportPolicy) -> Option<Vec<u8>> {
     let src = Reader::new(source)?;
     let src_ifd0 = src.ifd_entries(src.ifd0()?)?;
 
@@ -225,6 +231,9 @@ pub fn splice_metadata(rendered: &[u8], source: &[u8]) -> Option<Vec<u8>> {
     for e in &src_ifd0 {
         match e.tag {
             T_EXIF_IFD | T_GPS_IFD => {
+                if e.tag == T_GPS_IFD && gps_policy == GpsExportPolicy::Remove {
+                    continue;
+                }
                 if e.typ == 4 && e.count == 1 && e.value.len() == 4 {
                     let off = u32::from_le_bytes([e.value[0], e.value[1], e.value[2], e.value[3]]) as usize;
                     if let Some(subs) = src.ifd_entries(off) {
@@ -244,7 +253,9 @@ pub fn splice_metadata(rendered: &[u8], source: &[u8]) -> Option<Vec<u8>> {
             _ => {}
         }
     }
-    if exif_entries.is_empty() && gps_entries.is_empty() && xmp.is_none() && iptc.is_none() {
+    if exif_entries.is_empty() && gps_entries.is_empty() && xmp.is_none() && iptc.is_none()
+        && gps_policy == GpsExportPolicy::Preserve
+    {
         return None; // nothing to add
     }
 
@@ -258,10 +269,16 @@ pub fn splice_metadata(rendered: &[u8], source: &[u8]) -> Option<Vec<u8>> {
     // out-of-line offsets both stay valid because we never move the existing data region).
     let mut ifd0_records: Vec<[u8; 12]> = Vec::with_capacity(ren_n + 4);
     let mut existing_tags: Vec<u16> = Vec::new();
+    let mut removed_render_gps = false;
     for i in 0..ren_n {
         let off = ren_ifd0_off + 2 + i * 12;
         let rec: [u8; 12] = rendered.get(off..off + 12)?.try_into().ok()?;
-        existing_tags.push(ren.u16(off)?);
+        let tag = ren.u16(off)?;
+        if tag == T_GPS_IFD && gps_policy == GpsExportPolicy::Remove {
+            removed_render_gps = true;
+            continue;
+        }
+        existing_tags.push(tag);
         ifd0_records.push(rec);
     }
 
@@ -302,7 +319,7 @@ pub fn splice_metadata(rendered: &[u8], source: &[u8]) -> Option<Vec<u8>> {
             push_ptr(&mut ifd0_records, T_IPTC, p.typ, p.count, off);
         }
     }
-    if ifd0_records.len() == ren_n {
+    if ifd0_records.len() == ren_n && !removed_render_gps {
         return None; // nothing actually added
     }
 
@@ -351,6 +368,20 @@ mod tests {
         out
     }
 
+    fn tiny_tiff_with_gps() -> Vec<u8> {
+        let mut out = vec![b'I', b'I', 42, 0, 0, 0, 0, 0];
+        let gps_off = write_ifd(&mut out, true, vec![
+            Entry { tag: 1, typ: 2, count: 2, value: b"N\0".to_vec() },
+            Entry { tag: 3, typ: 2, count: 2, value: b"W\0".to_vec() },
+            Entry { tag: 4, typ: 5, count: 1, value: [51u32.to_le_bytes(), 0u32.to_le_bytes()].concat() },
+        ]);
+        let ifd0_off = write_ifd(&mut out, true, vec![
+            Entry { tag: T_GPS_IFD, typ: 4, count: 1, value: gps_off.to_le_bytes().to_vec() },
+        ]);
+        out[4..8].copy_from_slice(&ifd0_off.to_le_bytes());
+        out
+    }
+
     fn tiny_rendered() -> Vec<u8> {
         // A minimal valid-enough LE TIFF with an IFD0 of plain tags (no pixel data needed for
         // the splice logic itself).
@@ -369,7 +400,7 @@ mod tests {
     fn splices_exif_and_drops_makernote() {
         let source = tiny_tiff_with_exif();
         let rendered = tiny_rendered();
-        let spliced = splice_metadata(&rendered, &source).expect("splice");
+        let spliced = splice_metadata(&rendered, &source, GpsExportPolicy::Preserve).expect("splice");
 
         let r = Reader::new(&spliced).unwrap();
         let ifd0 = r.ifd_entries(r.ifd0().unwrap()).unwrap();
@@ -415,7 +446,7 @@ mod tests {
         out.extend_from_slice(&0u32.to_be_bytes());
         out[4..8].copy_from_slice(&ifd0_off.to_be_bytes());
 
-        let spliced = splice_metadata(&tiny_rendered(), &out).expect("splice");
+        let spliced = splice_metadata(&tiny_rendered(), &out, GpsExportPolicy::Preserve).expect("splice");
         let r = Reader::new(&spliced).unwrap();
         let ifd0 = r.ifd_entries(r.ifd0().unwrap()).unwrap();
         let ptr = ifd0.iter().find(|e| e.tag == T_EXIF_IFD).unwrap();
@@ -454,7 +485,7 @@ mod tests {
     #[test]
     fn splices_into_big_endian_rendered() {
         let source = tiny_tiff_with_exif(); // LE source with full EXIF
-        let spliced = splice_metadata(&tiny_rendered_be(), &source).expect("splice into MM");
+        let spliced = splice_metadata(&tiny_rendered_be(), &source, GpsExportPolicy::Preserve).expect("splice into MM");
         assert_eq!(&spliced[0..2], b"MM"); // stays big-endian
         let r = Reader::new(&spliced).unwrap();
         let ifd0 = r.ifd_entries(r.ifd0().unwrap()).unwrap();
@@ -473,6 +504,33 @@ mod tests {
 
     #[test]
     fn no_metadata_returns_none() {
-        assert!(splice_metadata(&tiny_rendered(), &tiny_rendered()).is_none());
+        assert!(splice_metadata(&tiny_rendered(), &tiny_rendered(), GpsExportPolicy::Preserve).is_none());
+    }
+
+    #[test]
+    fn gps_export_policy_preserves_or_removes_location_without_affecting_other_exif() {
+        let source = tiny_tiff_with_gps();
+        let keep = splice_metadata(&tiny_rendered(), &source, GpsExportPolicy::Preserve).expect("keep metadata");
+        let keep_reader = Reader::new(&keep).unwrap();
+        let keep_ifd0 = keep_reader.ifd_entries(keep_reader.ifd0().unwrap()).unwrap();
+        let gps_ptr = keep_ifd0.iter().find(|e| e.tag == T_GPS_IFD).expect("GPS pointer");
+        let gps_off = u32::from_le_bytes(gps_ptr.value[..4].try_into().unwrap()) as usize;
+        let gps = keep_reader.ifd_entries(gps_off).unwrap();
+        assert!(gps.iter().any(|e| e.tag == 1 && e.value == b"N\0"));
+
+        let strip = splice_metadata(&tiny_rendered(), &source, GpsExportPolicy::Remove);
+        assert!(strip.is_none(), "GPS-only source contributes no metadata when location is removed");
+        let with_exif = splice_metadata(&tiny_rendered(), &tiny_tiff_with_exif(), GpsExportPolicy::Remove)
+            .expect("non-location EXIF still survives");
+        let reader = Reader::new(&with_exif).unwrap();
+        let ifd0 = reader.ifd_entries(reader.ifd0().unwrap()).unwrap();
+        assert!(ifd0.iter().any(|e| e.tag == T_EXIF_IFD));
+        assert!(!ifd0.iter().any(|e| e.tag == T_GPS_IFD));
+
+        let rendered_with_gps = tiny_tiff_with_gps();
+        let strip_rendered = splice_metadata(&rendered_with_gps, &tiny_tiff_with_exif(), GpsExportPolicy::Remove)
+            .expect("rendered GPS pointer is removed");
+        let reader = Reader::new(&strip_rendered).unwrap();
+        assert!(!reader.ifd_entries(reader.ifd0().unwrap()).unwrap().iter().any(|e| e.tag == T_GPS_IFD));
     }
 }

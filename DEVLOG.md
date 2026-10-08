@@ -611,3 +611,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 #### Publication verification — CHR-208
 
 - Feature commit `9372c908fea945d26c1876e114e234e966260986` is integrated by `c6f449cbe9b02f09a0ae82f3f30b18d96db7e16c`. Fresh fetch and `git ls-remote origin refs/heads/main` matched the integration SHA and ancestry passed. The focused `node test/import_recipes.mjs` rerun passed on current integration staging.
+
+### 2026-10-08 — CHR-208 GPS export policy follow-up (partial)
+
+- Added a remembered “Keep location (GPS)” option for Save to Lightroom TIFF exports (default: keep); the raw and base64 IPC paths pass the same choice to the metadata splice. GPS removal omits the source GPS IFD and any GPS pointer in rendered IFD0 while retaining unrelated EXIF/XMP/IPTC. Added a focused Rust regression for keep/remove and unrelated EXIF preservation.
+- `node test/import_recipes.mjs` passed (filename collision preview, IPTC metadata preview, recipe save/reload, starting-edit IPC, duplicate-skip and independent-copy settings). `node --check desktop/library-ui.js`, editor HTML validity, Rust source parsing via `rustfmt --emit stdout`, and `git diff --check` passed. `node test/native_contract.mjs` remains red on the unrelated pre-existing `album_remove` frontend command registration mismatch.
+- Still open: the GPS Rust unit test and actual Lightroom save were not run in-app because native linking is blocked by the previously recorded MSVC LNK1106 failure; the browser fixture mixes RAW and video but does not execute a true mixed-format import → native export round trip or prove exported XMP survives that transaction. Do not mark CHR-208 complete until that round trip is validated.

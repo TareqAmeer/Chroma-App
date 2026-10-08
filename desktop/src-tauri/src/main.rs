@@ -1893,12 +1893,12 @@ fn write_file_bytes(path: String, data_b64: String) -> Result<(), String> {
 // before the write: the command overwrites its own metadata source. A splice failure never
 // blocks the save — the rendered bytes are written unmodified, same as before this existed.
 #[tauri::command(async)]
-fn write_lightroom_tiff(app: tauri::AppHandle, path: String, data_b64: String) -> Result<(), String> {
+fn write_lightroom_tiff(app: tauri::AppHandle, path: String, data_b64: String, gps_policy: Option<String>) -> Result<(), String> {
     use base64::Engine;
     let rendered = base64::engine::general_purpose::STANDARD
         .decode(data_b64)
         .map_err(|e| format!("decode base64: {e}"))?;
-    write_lightroom_tiff_impl(app, path, rendered)
+    write_lightroom_tiff_impl(app, path, rendered, gps_policy.as_deref())
 }
 
 // Raw-body twin of write_lightroom_tiff — same splice logic, but the render arrives as the
@@ -1915,20 +1915,25 @@ fn write_lightroom_tiff_raw(app: tauri::AppHandle, request: tauri::ipc::Request<
         .and_then(|v| v.to_str().ok())
         .ok_or("missing x-path header")?
         .to_string();
+    let gps_policy = request.headers().get("x-gps-policy").and_then(|v| v.to_str().ok());
     let rendered = match request.body() {
         tauri::ipc::InvokeBody::Raw(bytes) => bytes.clone(),
         _ => return Err("expected raw request body".into()),
     };
-    write_lightroom_tiff_impl(app, path, rendered)
+    write_lightroom_tiff_impl(app, path, rendered, gps_policy)
 }
 
-fn write_lightroom_tiff_impl(app: tauri::AppHandle, path: String, rendered: Vec<u8>) -> Result<(), String> {
+fn write_lightroom_tiff_impl(app: tauri::AppHandle, path: String, rendered: Vec<u8>, gps_policy: Option<&str>) -> Result<(), String> {
     // Splice outcome goes to the app's OWN log panel via an event (same pattern as
     // gphotos-download-diag) — the packaged .app has no terminal, so eprintln! alone made the
     // silent-skip bug (UTIF's big-endian output being rejected) invisible for a whole day.
     let mut diag;
     let out = match std::fs::read(&path) {
-        Ok(source) => match tiff_meta::splice_metadata(&rendered, &source) {
+        Ok(source) => match tiff_meta::splice_metadata(&rendered, &source, if gps_policy == Some("remove") {
+            tiff_meta::GpsExportPolicy::Remove
+        } else {
+            tiff_meta::GpsExportPolicy::Preserve
+        }) {
             Some(spliced) => {
                 diag = format!(
                     "metadata spliced from original ({} -> {} bytes)",

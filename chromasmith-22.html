@@ -4669,6 +4669,10 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           </div>
         </div>
         <div class="fx-sub">Export</div>
+        <label class="fx-row" style="gap:7px;align-items:center" title="Applies to Save to Lightroom TIFF handoffs. Other metadata remains unchanged.">
+          <div class="fx-label" style="width:auto;flex:1">Keep location (GPS)</div>
+          <input type="checkbox" id="tg-exp-gps" checked aria-label="Keep GPS location when saving to Lightroom">
+        </label>
         <div class="fx-row" id="fx-exportdir-row" style="display:none" title="Where exported photos are saved">
           <div class="fx-label">Save to</div>
           <button class="btn bgh" id="fx-exportdir-btn" type="button" onclick="fxChooseExportDir()" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Downloads</button>
@@ -7259,7 +7263,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008Q';
+const BUILD='1.1008R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24797,6 +24801,7 @@ async function _exportFXRun(){
         const path=editInPaths[i];
         if(!path){lrFailed++;log(`No Lightroom handoff path for rendered photo ${i+1} — skipped`,'err');continue;}
         setExportPhotoStatus(results[i].srcIdx,'saving');
+        const gpsPolicy=document.getElementById('tg-exp-gps')?.checked===false?'remove':'preserve';
         try{
           // write_lightroom_tiff_raw sends the render as a raw IPC body (no base64) so a large
           // 16-bit TIFF isn't tripled in memory (JS base64 string + btoa copy + JSON-escaped
@@ -24804,7 +24809,7 @@ async function _exportFXRun(){
           // write_lightroom_tiff (base64) then write_file_bytes for older native shells that
           // predate one command or the other; see write_lightroom_tiff_raw's comment in main.rs.
           try{
-            await window.__TAURI__.core.invoke('write_lightroom_tiff_raw',results[i].content,{headers:{'x-path':path}});
+            await window.__TAURI__.core.invoke('write_lightroom_tiff_raw',results[i].content,{headers:{'x-path':path,'x-gps-policy':gpsPolicy}});
           }catch(e){
             if(!/write_lightroom_tiff_raw/.test(e&&e.message||String(e)))throw e;
             log('Native shell predates write_lightroom_tiff_raw — falling back to base64 save (slower, more memory)','warn');
@@ -24816,7 +24821,7 @@ async function _exportFXRun(){
             // these (safeTiffMetaFrom's ASCII-only limit). Fallback for an older native shell that
             // doesn't have the command compiled in yet.
             try{
-              await window.__TAURI__.core.invoke('write_lightroom_tiff',{path,dataB64:b64}); // Tauri auto-camelCases Rust's snake_case param names for JS invoke() calls
+              await window.__TAURI__.core.invoke('write_lightroom_tiff',{path,dataB64:b64,gpsPolicy}); // Tauri auto-camelCases Rust's snake_case param names for JS invoke() calls
             }catch(e2){
               if(!/write_lightroom_tiff/.test(e2&&e2.message||String(e2)))throw e2;
               log('Native shell predates write_lightroom_tiff — saved without EXIF splice (restart the app after updating)','warn');
@@ -28695,6 +28700,12 @@ initSliderErgonomics(); // numeric entry, keyboard nudge, modified-from-default 
 loadSession();       // restore saved slider state (silent — no image loaded yet)
 styleListRefresh();  // populate the Styles list from localStorage
 exportPresetListRefresh();  // populate the Export preset dropdown from localStorage
+try{
+  const gpsExport=document.getElementById('tg-exp-gps');
+  const savedGpsPolicy=localStorage.getItem('cs.export.keepGps');
+  if(gpsExport&&savedGpsPolicy!==null)gpsExport.checked=savedGpsPolicy!=='0';
+  gpsExport?.addEventListener('change',()=>localStorage.setItem('cs.export.keepGps',gpsExport.checked?'1':'0'));
+}catch(_){/* privacy settings can be unavailable in restricted webviews */}
 setTimeout(tourMaybeShow,400); // first-run tour — after layout settles, only for a genuinely empty/new session
 initZoomPan();
 initEditableVals();
