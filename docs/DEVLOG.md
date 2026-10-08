@@ -199,3 +199,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - CHR-275 toggle changes are published in `origin/main` integration commit `603bf08b9dcaa04ece04fe09e8c6b870e5839c50`; fetch, remote ref hash, and ancestry checks confirmed publication.
 - `test/mask_raster.mjs` passed 48/48 on the integration checkout. AC2 remains open because physical touch/Apple Pencil was not tested; heal behavior and the remaining undo/conflict verification also remain open. Issue stays In Progress.
+
+### 2026-10-08 — CHR-275 independent stroke undo evidence
+
+- Extended `test/mask_raster.mjs` to drive two real brush pointer strokes through the canvas handler and verify each creates a separate history step; undo restores the first stroke, a second undo restores the blank raster, and two redos restore both strokes.
+- Focused Chrome raster suite passed 53/53; `node --check` and `git diff --check` passed. CHR-275 AC5 remains open because Alt-conflict behavior in AI scribble and color sampling still needs separate verification. Issue remains In Progress.
