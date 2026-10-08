@@ -822,7 +822,13 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Extended the real Windows WebView2 import/export fixture with source GPS coordinates. Actual JPEG export with “Keep location” enabled retained GPS; actual PNG export with it disabled removed GPS while preserving creator, copyright, caption, job, keywords, and unrelated XMP. Native primary/secondary metadata equality and duplicate skip also passed.
 - `test/import_recipes.mjs` passed in installed Chrome: naming collision preview, metadata preview, saved recipe save/reload, starting-edit IPC, and independent second-copy settings. `test/import_metadata_native.mjs` passed through native IPC/filesystem; `node --check` and `git diff --check` passed.
-- CHR-208 AC5 remains open: the native mixed-format import used the same job metadata directly in the ingest options, while saved-recipe selection was verified separately in the UI test. A single native UI-to-export saved-recipe journey is still needed. Files: `test/import_metadata_native.mjs`, `DEVLOG.md`.
+- This first follow-up still used direct ingest options for its native fixture. The saved-recipe/native UI gap was closed in the subsequent end-to-end validation below. Files: `test/import_metadata_native.mjs`, `DEVLOG.md`.
+
+### 2026-10-08 — CHR-208 saved-job recipe native end-to-end
+
+- Extended the WebView2 test harness to expose the real import-panel function from current `desktop/library-ui.js`, then saved and reselected “CHR208 Native Job” in that panel. JPEG and PNG were imported through the UI/native ingest path; both were skipped on repeat, and the saved starting-edit recipe was present in each imported sidecar.
+- Exported both imported files to JPEG with GPS enabled and PNG with GPS disabled. On-disk checks confirmed the saved edit recipe, creator/copyright/caption/job/keyword metadata, unrelated XMP, GPS keep/remove behavior, and exact primary/secondary sidecar equality. Four output files were verified.
+- CHR-208 AC5 is now demonstrated alongside the prior four criteria; `test/import_metadata_native.mjs`, `node --check`, installed-Chrome `test/import_recipes.mjs`, and `git diff --check` pass. Files: `test/import_metadata_native.mjs`, `DEVLOG.md`.
 
 #### Publication verification — CHR-208 GPS export-policy follow-up
 
