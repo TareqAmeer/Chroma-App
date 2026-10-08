@@ -704,3 +704,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - The Output preflight now states that photo metadata is preserved, with the live policy control selecting whether GPS location is preserved or removed. Toggling the existing GPS policy immediately refreshes the visible summary. Files: `chromasmith-22.html`, `test/export_collision_retry.mjs`.
 - The focused real-photo Chromium test passed at 1366×768 in dark and light themes: 2 loaded photos (512×384 current preview) showed the correct policy text in both states; collision handling, failed-only retry, 2-photo × 2-recipe routing and destination restoration also passed. `node --check` and `git diff --check` passed. `npm run editor:gates`: 22 passed, 12 baseline design-drift gates failed (inventory, responsive, wireframe-diff, snap-check, token-check, axe, icon, motion, hover/focus, surface coverage, components and catalog visual).
 - CHR-201 remains In Progress for native Tauri validation and any additional destination/result edge cases in its acceptance criteria.
+
+#### Publication verification — CHR-201 export metadata preflight
+
+- Integration commit `6abab717ba5e6f586f5e771ce9f15d5d2a40395b` is published on `origin/main`; a fresh fetch and `git ls-remote` matched the remote tip, ancestry was verified, and the shipped HTML contains the metadata-policy line.
+- The focused real-photo Chromium export regression passed again on integrated source at 1366×768, covering policy toggle visibility and dark/light styling plus collision, failed-only retry, two-recipe output routing and destination restoration. CHR-201 remains In Progress for native Tauri validation and outstanding acceptance edges.
