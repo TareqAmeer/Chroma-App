@@ -1065,3 +1065,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added `docs/photo-ticket-continuation-2026-10-08.md` with verified publication/evidence for CHR-201/202, CHR-208, CHR-275, CHR-199/268, CHR-205 and CHR-262; 201/202 In Review, all other incomplete tickets In Progress, none Done.
 - Recorded significant remaining implementation/validation boundaries for CHR-200/205/208/244/246/249/262/267/268/269/271/275/199 in the handoff and matching Linear comments. Missing model/reference/platform evidence is separate from substantial unfinished backend work; earlier general native build blockers are superseded by passing focused native runs.
 - Preserved dirty root tracked files, exact-file task commits, clean integration and remote publication verification. Old CHR-202 checkout removed only after publication/preservation checks; new worktrees and ignored evidence retained. Files: `docs/photo-ticket-continuation-2026-10-08.md`, `DEVLOG.md`.
+
+#### Publication verification — consolidated photo-ticket handoff
+
+- Handoff feature `983ac91d` is published as `d07ed5f0c18a54adc12605895a62755c0dfd463c`; fresh fetch and remote ls-remote matched. Ancestry checks confirmed CHR-208 `8af4b065`, CHR-201/202 `7b396b48`, CHR-275 `ea3a56c7` and CHR-199/268 `93c874aa` remain on main. Integration is clean; root tracked dirty state is unchanged. Validation-only app closed; retained worktrees preserve commits and ignored evidence.
