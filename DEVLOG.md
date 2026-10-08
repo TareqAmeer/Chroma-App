@@ -856,3 +856,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - `node test/before_after_divider.mjs` passes in Chromium on current main: keyboard movement, limits, recentering, orientation, split clipping, and recipe isolation. This validates only the divider slice.
 - Corrected CHR-270 from In Review to In Progress because previous-step hold, named/original baselines, baseline slider values, masks/crop/film at 1:1 in both themes, and export invariance remain unverified or unimplemented. Issue ID: CHR-270.
+
+### 2026-10-08 — CHR-195 onboarding browser revalidation and status correction
+
+- `node test/onboarding_first_edit.mjs` passes in current Chromium: actionable welcome content and sample attribution, existing photo picker action, sample load, look, original compare, explicit advanced-tools choice, and dialog fit in dark 1280×820 and light 980×720 viewports.
+- Corrected CHR-195 from In Review to In Progress. The test stubs the desktop platform for export reveal; actual native folder picker and export location/reveal, clean-profile migration, cancel/failure paths, and keyboard/focus remain unverified because no runnable current Tauri app is available. Issue ID: CHR-195.
