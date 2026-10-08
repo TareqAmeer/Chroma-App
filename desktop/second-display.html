@@ -8,13 +8,15 @@
   <style>
     *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:#111;color:#eee;font:13px system-ui,sans-serif}
     body{display:grid;grid-template-rows:auto 1fr}.bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:8px 14px;background:#191919;color:#bbb}
-    #empty,#photo{grid-area:2/1}#photo{width:100%;height:100%;object-fit:contain;min-width:0;min-height:0}#empty{place-self:center;color:#aaa}
+    .bar button{background:#292929;color:#eee;border:1px solid #555;border-radius:4px;padding:5px 10px;cursor:pointer}
+    #content{min-width:0;min-height:0;overflow:auto;display:grid;grid-template: minmax(0,1fr)/minmax(0,1fr)}#empty,#photo,#grid{grid-area:1/1}#photo{width:100%;height:100%;object-fit:contain;min-width:0;min-height:0}#empty{place-self:center;color:#aaa}
+    #grid{width:100%;height:100%;padding:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));grid-auto-rows:minmax(0,1fr);gap:10px;align-content:start}
+    .tile{min-width:0;min-height:0;display:grid;grid-template-rows:1fr auto;background:#191919;overflow:hidden}.tile img{width:100%;height:100%;object-fit:contain;min-width:0;min-height:0}.tile span{padding:5px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#bbb}
   </style>
 </head>
 <body>
-  <header class="bar"><span id="name">Second display</span><span id="size"></span></header>
-  <div id="empty">Open a still photo in the editor to display it here.</div>
-  <img id="photo" alt="Current photo preview" hidden>
+  <header class="bar"><span id="name">Second display</span><span><span id="size"></span> <button id="mode" type="button" aria-pressed="false">Show grid</button></span></header>
+  <main id="content"><div id="empty">Open a still photo in the editor to display it here.</div><img id="photo" alt="Current photo preview" hidden><section id="grid" aria-label="Selected photos" hidden></section></main>
   <script src="second-display.js"></script>
 </body>
 </html>

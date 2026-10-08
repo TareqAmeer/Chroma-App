@@ -7281,7 +7281,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008X';
+const BUILD='1.1008Y';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10497,7 +10497,7 @@ function fxPrepareExportRenderer(){
 }
 // CHR-181: a third, private renderer feeds the read-only second-display window. It owns an
 // independent WebGL context so refreshing the display never mutates live preview or export.
-let FXDisplay=null,_fxDisplayWindow=null,_fxDisplayTimer=0,_fxDisplayRevision=0,_fxDisplayReadyUnlisten=null,_fxDisplayReady=false;
+let FXDisplay=null,_fxDisplayWindow=null,_fxDisplayTimer=0,_fxDisplayRevision=0,_fxDisplayReadyUnlisten=null,_fxDisplayModeUnlisten=null,_fxDisplayReady=false,_fxDisplayMode='photo';
 function fxSecondDisplayOpen(){
   if(!window.__TAURI__||!fxWork||curItem()?.kind==='video'){toast('Open a still photo to use the second display');return;}
   const api=window.__TAURI__.webviewWindow,winApi=window.__TAURI__.window;
@@ -10506,29 +10506,47 @@ function fxSecondDisplayOpen(){
   (async()=>{
     _fxDisplayReady=false;
     _fxDisplayReadyUnlisten=await window.__TAURI__.event.listen('chromasmith-second-display-ready',()=>{_fxDisplayReady=true;fxSecondDisplayUpdate();});
+    _fxDisplayModeUnlisten=await window.__TAURI__.event.listen('chromasmith-second-display-mode',event=>{_fxDisplayMode=event?.payload?.mode==='grid'?'grid':'photo';fxSecondDisplayUpdate();});
     const monitors=await winApi.availableMonitors(),current=await winApi.getCurrentWindow().currentMonitor();
     const other=monitors.find(m=>current&&(m.name!==current.name||m.position.x!==current.position.x||m.position.y!==current.position.y));
     const scale=other?.scaleFactor||1,pos=other?.position;
     const opts={url:'second-display.html',title:'Chromasmith — Second display',width:other?Math.round(other.size.width/scale):1280,height:other?Math.round(other.size.height/scale):800,center:!other};
     if(pos){opts.x=Math.round(pos.x/scale);opts.y=Math.round(pos.y/scale);}
     const w=new api.WebviewWindow('second-display',opts);_fxDisplayWindow=w;
-    w.once('tauri://destroyed',()=>{_fxDisplayWindow=null;_fxDisplayReady=false;_fxDisplayReadyUnlisten?.();_fxDisplayReadyUnlisten=null;_fxDisplayRevision++;clearTimeout(_fxDisplayTimer);if(FXDisplay){try{FXDisplay.gl.getExtension('WEBGL_lose_context')?.loseContext();}catch(_){}FXDisplay=null;}});
-    w.once('tauri://error',e=>{_fxDisplayWindow=null;_fxDisplayReady=false;_fxDisplayReadyUnlisten?.();_fxDisplayReadyUnlisten=null;toast('Could not open second display: '+String(e?.payload||e));});
-  })().catch(e=>{_fxDisplayReadyUnlisten?.();_fxDisplayReadyUnlisten=null;toast('Could not open second display: '+String(e?.message||e));});
+    w.once('tauri://destroyed',()=>{_fxDisplayWindow=null;_fxDisplayReady=false;_fxDisplayReadyUnlisten?.();_fxDisplayReadyUnlisten=null;_fxDisplayModeUnlisten?.();_fxDisplayModeUnlisten=null;_fxDisplayRevision++;clearTimeout(_fxDisplayTimer);if(FXDisplay){try{FXDisplay.gl.getExtension('WEBGL_lose_context')?.loseContext();}catch(_){}FXDisplay=null;}});
+    w.once('tauri://error',e=>{_fxDisplayWindow=null;_fxDisplayReady=false;_fxDisplayReadyUnlisten?.();_fxDisplayReadyUnlisten=null;_fxDisplayModeUnlisten?.();_fxDisplayModeUnlisten=null;toast('Could not open second display: '+String(e?.payload||e));});
+  })().catch(e=>{_fxDisplayReadyUnlisten?.();_fxDisplayReadyUnlisten=null;_fxDisplayModeUnlisten?.();_fxDisplayModeUnlisten=null;toast('Could not open second display: '+String(e?.message||e));});
 }
 window.fxSecondDisplayOpen=fxSecondDisplayOpen;
 function fxSecondDisplayUpdate(){
-  if(!_fxDisplayWindow||!_fxDisplayReady||!fxWork||curItem()?.kind==='video')return;
+  if(!_fxDisplayWindow||!_fxDisplayReady)return;
   const revision=++_fxDisplayRevision;clearTimeout(_fxDisplayTimer);
   _fxDisplayTimer=setTimeout(()=>{
     try{
+      if(!fxWork||curItem()?.kind==='video'){
+        const frame=_fxDisplayMode==='grid'?{mode:'grid',tiles:[],total:0}:{mode:'empty',message:'Open a still photo to display it here.'};
+        if(revision===_fxDisplayRevision&&_fxDisplayWindow)window.__TAURI__.event.emitTo('second-display','chromasmith-second-display-frame',frame);
+        return;
+      }
       if(!FXDisplay){FXDisplay=new FXR(document.createElement('canvas'));if(!FXDisplay.ok)throw new Error('Could not create second-display renderer');}
-      FXDisplay.resetTextureSnapshotFrom(FX);
-      const src=fxWork,w=src.naturalWidth||src.width,h=src.naturalHeight||src.height;
-      const k=Math.min(1,6000/w,6000/h,Math.sqrt(16000000/(w*h))),rw=Math.max(1,Math.round(w*k)),rh=Math.max(1,Math.round(h*k));
-      FXDisplay.setImage(src);FXDisplay.render(getFXParams(),rw,rh,{glowScale:fxPreviewGlowScale(),scOverride:w/FXR.CAL.refWidth,showSel:-1});
-      const dataUrl=FXDisplay.cv.toDataURL('image/jpeg',0.94);
-      if(revision===_fxDisplayRevision&&_fxDisplayWindow)window.__TAURI__.event.emitTo('second-display','chromasmith-second-display-frame',{dataUrl,name:curItem()?.name||'',width:w,height:h});
+      const renderTile=(src,maxPixels)=>{
+        const w=src.naturalWidth||src.width,h=src.naturalHeight||src.height;
+        const k=Math.min(1,1800/w,1800/h,Math.sqrt(maxPixels/(w*h))),rw=Math.max(1,Math.round(w*k)),rh=Math.max(1,Math.round(h*k));
+        FXDisplay.resetTextureSnapshotFrom(FX);FXDisplay.setImage(src);FXDisplay.render(getFXParams(),rw,rh,{glowScale:fxPreviewGlowScale(),scOverride:w/FXR.CAL.refWidth,showSel:-1});
+        return{dataUrl:FXDisplay.cv.toDataURL('image/jpeg',0.88),width:w,height:h};
+      };
+      if(_fxDisplayMode==='grid'){
+        // A loaded Editor batch is the current multi-photo selection. Cap the grid at 16 entries
+        // and at 1MP per tile: the aggregate display raster can never exceed 16MP.
+        const items=fxImages.filter(it=>it?.img).slice(0,16),tiles=items.map((it,i)=>{
+          const image=renderTile(it.img,1000000),id=String(it.path||it.id||`${it.name||'photo'}:${i}`);
+          return{id,name:String(it.name||`Photo ${i+1}`),dataUrl:image.dataUrl};
+        });
+        if(revision===_fxDisplayRevision&&_fxDisplayWindow)window.__TAURI__.event.emitTo('second-display','chromasmith-second-display-frame',{mode:'grid',tiles,total:fxImages.length});
+      }else{
+        const src=fxWork,w=src.naturalWidth||src.width,h=src.naturalHeight||src.height,image=renderTile(src,16000000);
+        if(revision===_fxDisplayRevision&&_fxDisplayWindow)window.__TAURI__.event.emitTo('second-display','chromasmith-second-display-frame',{mode:'photo',dataUrl:image.dataUrl,name:curItem()?.name||'',width:w,height:h});
+      }
     }catch(e){log('Second display render failed: '+String(e?.message||e),'err');}
   },160);
 }
