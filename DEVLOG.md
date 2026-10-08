@@ -807,3 +807,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Updated `test/library_cull_delete.mjs` to confirm the selected capture-time groups before asserting the cull-only delete control. This aligns the test with the current UI's explicit group-review step; no production behavior changed.
 - `node test/library_cull_delete.mjs` passes: Survey count/cap header, group confirmation, Reject without deletion, cancel leaves rejects flagged, and confirmed delete sends only the rejected photo to `trash_file`. Current-main `library_culling.mjs` and `library_cull_50k.mjs` also pass; synthetic 50k next-page paint 98.5ms, regroup 17.3ms, 189 mounted cards after 50,000px scroll, zero errors.
 - CHR-267 stays In Progress pending the native SQLite/WebView2 path and real 45MP RAW warm-preview/100% latency targets.
+
+#### Publication verification — CHR-267 cull-delete picker test
+
+- Feature/test commit `5b3aba26836761f95d9f076901319a0eca3b36d9` was published to `origin/main`; the freshly fetched remote ref matched and the commit is an ancestor of remote main. CHR-267 stays In Progress for native SQLite/WebView2 and actual 45MP warm-preview/100% latency evidence.
