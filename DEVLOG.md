@@ -1019,3 +1019,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added `test/export_recovery_native.mjs`: actual WebView2 render and Rust filesystem writes for 20 photos x Archive/Proof/Social recipes. A directory at one explicitly-overwrite output filename causes a real write failure; 59 files succeed, the result persists after the completion pill expires, and retry after removing only that directory produces 60 files with exactly 20 per destination.
 - SHA-256 checks prove all 59 successful outputs remain byte-identical after failed-only retry; native suffix/skip preserve an existing sentinel, prior destination restoration is confirmed by a subsequent real write, and `reveal_in_finder` succeeds on the recovered file. Two focused native runs passed. No export IPC was mocked; the native validation build excluded unrelated AI resource bundles.
 - CHR-202 AC5 is now demonstrated; CHR-201 native recovery/path command blocker is resolved by this bounded test. Keep both In Review, never Done. Files: `test/export_recovery_native.mjs`, `DEVLOG.md`; no product behavior changed in this slice.
+
+#### Publication verification — CHR-201/CHR-202 native recovery
+
+- Feature `48791e42` integrated as `7b396b4898137be88368b643483ead245ea076f7`; fresh fetch and remote ls-remote matched and ancestry passed. Integrated native regression passed with 60 outputs, 59 unchanged hashes, real failed-write retry, destination restoration, suffix/skip and Explorer reveal-command success. CHR-202 AC5 checked; CHR-201 and CHR-202 In Review, not Done.
