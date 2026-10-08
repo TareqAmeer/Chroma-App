@@ -642,3 +642,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Saved export recipes now retain their destination folder; multi-recipe review lists each folder, routes every recipe to its own native destination, then restores the folder that was active before the batch. Files: `chromasmith-22.html` and `test/export_collision_retry.mjs`.
 - Focused Chromium test exported two real fixture photos for Archive and Proof, observed two writes in each distinct destination with recipe-tagged names, confirmed the prior destination was restored, and retained collision/retry/total-count checks. CHR-201 still lacks metadata/offline/collision-policy review and persistent failed-output recovery; CHR-202 still lacks independent failure reporting across 20×3 and retry-without-duplicate proof against native output.
+
+#### Publication verification — CHR-201/202 per-recipe destinations
+
+- Feature commit `35ae44f7f111f16c4700c33e32f014490d36638a` is on `origin/main`; its destination routing is present in the shipped export flow. The worker’s focused Chromium test exported 2 photos × 2 recipes to two distinct folders and restored the previous destination; merged source JS/HTML checks passed.
+- Native 20×3 output/failure/retry behavior and full preflight/result-retention criteria remain open. Both Linear issues stay In Progress.
