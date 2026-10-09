@@ -1208,3 +1208,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-09 — CHR-195 accessibility publication verification
 - Accessibility change `4cd1546ce7ddd406407778bccd18c7267303e2cd` is published to `origin/main`; `git ls-remote` matched and the refreshed `origin/main` ancestry contains the change.
 - Static syntax/whitespace checks pass. Browser E2E and native picker, migration, and live keyboard/focus checks remain open; CHR-195 stays In Progress.
+
+### 2026-10-09 — CHR-195 native onboarding completion validation
+- Extended `test/onboarding_sample_native.mjs` to cover the three welcome choices, picker-route cancellation without guide advancement, skip/replay, explicit advanced-tools choice, returning-user migration, optional cloud wording, and dialog focus/Escape handlers. Live WebView2 run on build `1.1009B` passes the complete sample → look → compare → native export → Explorer reveal flow in dark and light at 1366×768; real 665×448 PNGs were written, failed writes/fetches preserved guide state, and the bundled sample SHA-256 remained unchanged.
+- Files: `test/onboarding_sample_native.mjs`, `DEVLOG.md`; issue CHR-195. Picker dialogs were safely stubbed at their existing native entry points, and keyboard containment/Escape were exercised with synthetic DOM key events; OS-level picker cancellation and trusted physical keyboard navigation remain for user review.
