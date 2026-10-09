@@ -7285,7 +7285,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1008N';
+const BUILD='1.1009A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14588,16 +14588,29 @@ function toastProgress(msg){
 // existing dark-glass surfaces (context menu, toast) rather than pulling in new CSS classes.
 function _csModal(title,bodyHtml){
   if(window.__csShortcutCancelCapture)window.__csShortcutCancelCapture();
-  const prev=document.getElementById('cs-modal-ov');if(prev)prev.remove();
+  const prev=document.getElementById('cs-modal-ov');if(prev){if(prev.__csClose)prev.__csClose(false);else prev.remove();}
+  const returnFocus=prev?.__csReturnFocus||document.activeElement;
   const ov=document.createElement('div');ov.id='cs-modal-ov';
   ov.style.cssText='position:fixed;inset:0;z-index:var(--z-modal);background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
-  ov.onclick=e=>{if(e.target===ov){if(window.__csShortcutCancelCapture)window.__csShortcutCancelCapture();ov.remove();}};
+  ov.onclick=e=>{if(e.target===ov)ov.__csClose();};
   const panel=document.createElement('div');panel.className='cs-modal';
+  panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-labelledby','cs-modal-title');
   panel.style.cssText='max-width:560px;width:100%;max-height:80vh;overflow-y:auto;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;padding:20px;color:var(--txt);font-family:var(--sans);box-shadow:var(--lift-2)';
-  panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:16px">${title}</h2><button id="cs-modal-x" aria-label="Close" style="background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center;margin:-6px -8px -6px 0">×</button></div>${_kbdFix(bodyHtml)}`;
+  panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 id="cs-modal-title" style="margin:0;font-size:16px">${title}</h2><button id="cs-modal-x" aria-label="Close" style="background:none;border:none;color:var(--mut);font-size:20px;cursor:pointer;line-height:1;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center;margin:-6px -8px -6px 0">×</button></div>${_kbdFix(bodyHtml)}`;
   ov.appendChild(panel);document.body.appendChild(ov);
-  panel.querySelector('#cs-modal-x').onclick=()=>{if(window.__csShortcutCancelCapture)window.__csShortcutCancelCapture();ov.remove();};
-  document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){ov.remove();document.removeEventListener('keydown',esc);}});
+  const focusable=()=>[...panel.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(el=>!el.hidden&&el.getClientRects().length);
+  ov.__csReturnFocus=returnFocus;
+  ov.__csClose=(restore=true)=>{if(!ov.isConnected)return;if(window.__csShortcutCancelCapture)window.__csShortcutCancelCapture();ov.remove();if(restore&&returnFocus?.isConnected&&typeof returnFocus.focus==='function')returnFocus.focus();};
+  panel.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){e.preventDefault();ov.__csClose();return;}
+    if(e.key!=='Tab')return;
+    const items=focusable();if(!items.length){e.preventDefault();panel.tabIndex=-1;panel.focus();return;}
+    const first=items[0],last=items[items.length-1];
+    if(e.shiftKey&&(document.activeElement===first||!panel.contains(document.activeElement))){e.preventDefault();last.focus();}
+    else if(!e.shiftKey&&(document.activeElement===last||!panel.contains(document.activeElement))){e.preventDefault();first.focus();}
+  });
+  panel.querySelector('#cs-modal-x').onclick=()=>ov.__csClose();
+  (panel.querySelector('[data-tour-action="open"],[data-guide-open],[data-guide-action]')||focusable()[0]||panel).focus();
 }
 // .fx-info-i's tooltip is a plain `title` attribute, which relies on the browser's native hover
 // tooltip — that never fires on touch (mobile web, iOS/Android app shell, tablet), so tapping an
@@ -14748,7 +14761,7 @@ function tourHtml(){
 }
 function tourBind(){
   const ov=document.getElementById('cs-modal-ov');if(!ov)return;
-  const close=()=>ov.remove();
+  const close=()=>ov.__csClose?ov.__csClose():ov.remove();
   ov.querySelector('[data-tour-action="open"]').onclick=()=>{close();fxPickPhotos();};
   ov.querySelector('[data-tour-action="sample"]').onclick=()=>csTourTrySample();
   const folder=ov.querySelector('[data-tour-action="folder"]');
@@ -14761,7 +14774,7 @@ function tourBind(){
   ov.querySelector('[data-tour-action="close"]').onclick=()=>{close();csFirstEditSkip();};
 }
 async function csTourTrySample(){
-  const ov=document.getElementById('cs-modal-ov');if(ov)ov.remove();
+  const ov=document.getElementById('cs-modal-ov');if(ov){if(ov.__csClose)ov.__csClose(false);else ov.remove();}
     try{
       const url=new URL('vendor/splash/dog-sitting.webp',document.baseURI);
       const response=await fetch(url);if(!response.ok)throw new Error(`Sample photo could not be loaded (${response.status})`);
@@ -14774,7 +14787,7 @@ async function csTourTrySample(){
     }catch(e){if(typeof toast==='function')toast(`Could not open the sample photo — ${e.message||e}`,false);}
 }
 async function csTourBrowseFolder(){
-  const ov=document.getElementById('cs-modal-ov');if(ov)ov.remove();
+  const ov=document.getElementById('cs-modal-ov');if(ov){if(ov.__csClose)ov.__csClose(false);else ov.remove();}
   if(typeof window.chromasmithOpenGallery==='function'){window.chromasmithOpenGallery();return;}
   if(typeof window.chromasmithToggleLibrary!=='function'){if(typeof toast==='function')toast('Folder browsing is available in the desktop Gallery. Open a photo here instead.');return;}
   try{
@@ -14791,7 +14804,7 @@ function csFirstEditSetStage(stage){try{localStorage.setItem(_FIRST_EDIT_STAGE_K
 function csFirstEditGuideEnabled(){try{return localStorage.getItem('chromasmith-newuser-v2')==='1'||localStorage.getItem(_FIRST_EDIT_GUIDE_KEY)==='1';}catch(e){return false}}
 function csFirstEditBegin(){if(fxImages&&fxImages.length){csFirstEditPhotoOpened();return;}
   _csModal('Your first edit',`<p style="margin:0 0 14px;color:var(--mut);font-size:13px">Open a local photo or try the included sample. You can cancel either action and come back whenever you are ready.</p><div class="btn-row"><button type="button" class="btn bpri" data-guide-open>Open a photo</button><button type="button" class="btn bgh" data-guide-sample>Try a sample</button><button type="button" class="btn bgh" data-guide-skip>Skip guide</button></div>`);
-  const ov=document.getElementById('cs-modal-ov');ov.querySelector('[data-guide-open]').onclick=()=>{ov.remove();fxPickPhotos();};ov.querySelector('[data-guide-sample]').onclick=()=>csTourTrySample();ov.querySelector('[data-guide-skip]').onclick=()=>{ov.remove();csFirstEditSkip();};
+  const ov=document.getElementById('cs-modal-ov');ov.querySelector('[data-guide-open]').onclick=()=>{ov.__csClose?ov.__csClose():ov.remove();fxPickPhotos();};ov.querySelector('[data-guide-sample]').onclick=()=>csTourTrySample();ov.querySelector('[data-guide-skip]').onclick=()=>{ov.__csClose?ov.__csClose():ov.remove();csFirstEditSkip();};
 }
 function csFirstEditCoach(stage){
   const copy={
@@ -14804,9 +14817,9 @@ function csFirstEditCoach(stage){
   _csModal(`First edit · ${stage==='look'?'1':stage==='compare'?'2':'3'} of 3`,
     `<p style="margin:0 0 14px;font-size:13px;color:var(--mut)">${body}</p><div class="btn-row" style="justify-content:flex-end;gap:8px"><button type="button" class="btn bgh" data-guide-skip>Skip guide</button><button type="button" class="btn bpri" data-guide-action>${action}</button></div>`);
   const ov=document.getElementById('cs-modal-ov');
-  ov.querySelector('[data-guide-skip]').onclick=()=>{ov.remove();csFirstEditSkip();};
+  ov.querySelector('[data-guide-skip]').onclick=()=>{ov.__csClose?ov.__csClose():ov.remove();csFirstEditSkip();};
   ov.querySelector('[data-guide-action]').onclick=()=>{
-    ov.remove();
+    if(ov.__csClose)ov.__csClose(false);else ov.remove();
     if(stage==='look'){switchTab('fx');fxSection('looks');}
     else if(stage==='compare')csFirstEditCompareDemo();
     else{switchTab('fx');if(document.body.classList.contains('sk2')&&typeof sk2ExportOpen==='function')sk2ExportOpen();else fxSection('export');}

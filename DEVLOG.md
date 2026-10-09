@@ -1200,3 +1200,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-08 — CHR-195 native guide-export publication verification
 - Feature 426c3e61 published as 5207a3d650af00ce96c0dd8505a800baef67011d; remote main hash and ancestry verified. Integrated HTML validity and actual dark/light WebView2 sheet-controls/full-size PNG/failed-write/Explorer-reveal checks pass.
 - CHR-195 stays In Progress. Native OS picker interaction, returning-user migration and keyboard/focus accessibility remain open; controlled fixture folder-dialog selection is not claimed as OS picker validation.
+
+### 2026-10-09 — CHR-195 onboarding keyboard access
+- Added labeled dialog semantics, primary-action focus, a contained Tab sequence, Escape dismissal, and focus restoration to onboarding dialogs; expanded the first-edit regression for those behaviors. Files: `chromasmith-22.html`, `test/onboarding_first_edit.mjs`.
+- All 22 inline script blocks pass `node --check`; the test source passes `node --check`; `git diff --check` passes. Browser E2E could not launch because Playwright's Chromium binary is absent, and the native harness could not connect to the local CDP port. OS picker/cancel, native output, clean-profile migration, and live focus behavior remain open for an app-backed run.
