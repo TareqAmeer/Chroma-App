@@ -1074,3 +1074,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Fixed the native welcome/first-edit sample action leaving the full Gallery over a successfully loaded sample. The action now awaits loading, closes the Gallery through its public toggle, and selects Studio.
 - Files: chromasmith-22.html and test/onboarding_sample_native.mjs. Real WebView2 validation passes from full Gallery in both themes through sample visibility, look, comparison, and output navigation; failed fetch preserves Gallery/stage and the bundled sample hash stays unchanged.
 - Focused HTML validity, test syntax, and whitespace checks pass. Native picker cancellation, actual first-edit export/reveal, migration, and accessibility remain outside this regression; CHR-195 remains In Progress with acceptance boxes unchanged.
+
+### 2026-10-09 — CHR-195 onboarding keyboard access
+- Added dialog semantics, primary-action focus, a contained Tab sequence, Escape dismissal, and focus restoration to the shared onboarding modal; expanded the first-edit regression for those behaviors. Files: `chromasmith-22.html`, `test/onboarding_first_edit.mjs`.
+- All 22 inline script blocks pass `node --check`; the test source passes `node --check`; `git diff --check` passes. Browser E2E could not launch because Playwright's Chromium binary is absent, and the native harness could not connect to the local CDP port. OS picker/cancel, native output, clean-profile migration, and live focus behavior remain open for an app-backed run.
