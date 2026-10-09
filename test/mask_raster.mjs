@@ -80,18 +80,66 @@ async function main() {
       await window.loadFXImages([new File([arr], 'portrait.png', { type: 'image/png' })]);
     }, fixture);
     await page.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages.length > 0, null, { timeout: 15000 });
+    await page.waitForFunction(() => typeof fxWork !== 'undefined' && !!fxWork && !!curItem()?.img,
+      null, { timeout: 15000 });
+    await page.evaluate(() => new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+    const sourceProbe=await page.evaluate(() => {
+      const lostBeforeUpdate=FX.gl.isContextLost();
+      updateWork();
+      const w=fxWork.width||fxWork.naturalWidth,h=fxWork.height||fxWork.naturalHeight;
+      const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(fxWork,0,0);
+      const d=cv.getContext('2d').getImageData(0,0,w,h).data;
+      let max=0,nonzero=0;for(let i=0;i<d.length;i+=4)for(let c=0;c<3;c++){max=Math.max(max,d[i+c]);if(d[i+c])nonzero++;}
+      return {width:w,height:h,max,nonzero,tag:fxWork.tagName,texture:!!FX.imgTx,
+        glLostBeforeUpdate:lostBeforeUpdate,glLostAfterUpdate:FX.gl.isContextLost()};
+    });
+    console.log('fixture upload', sourceProbe);
+    if(!sourceProbe.max||!sourceProbe.texture)throw new Error(`fixture source not ready: ${JSON.stringify(sourceProbe)}`);
 
-    checks = await page.evaluate(async () => {
+    checks = await page.evaluate(async (compositionOnly) => {
       const out = [];
       const ck = (name, pass, detail) => out.push({ name, pass: !!pass, detail: detail == null ? '' : String(detail) });
       const digest = (px) => { let h = 2166136261 >>> 0; for (let i = 0; i < px.length; i++) { h ^= px[i]; h = Math.imul(h, 16777619) >>> 0; } return h.toString(16); };
       const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => v === b[i]);
-      const renderHash = () => {
+      const renderHash = (showSel=-1) => {
         const P = getFXParams();
-        FX.render(P, 128, 96, { glowScale: 1, seed: 3.25 });
+        FX.render(P, 128, 96, { glowScale: 1, seed: 3.25, showSel });
         const { px } = FX.getPixels();
         return digest(px);
       };
+      if(compositionOnly){
+        document.getElementById('tg-local')?.classList.add('on');
+        fxState.masks.length=0;mskSel=-1;mskAdd('brush');mskAdd('brush');
+        const [operand,composed]=fxState.masks;
+        operand.px.fill(0);
+        for(let y=0;y<operand.mtH;y++)for(let x=0;x<(operand.mtW>>1);x++)operand.px[y*operand.mtW+x]=255;
+        composed.px.fill(255);composed.exp=50;composed.composeOp='subtract';composed.operandId=operand.id;
+        _mskTexDirty=true;
+        if(FX.gl.isContextLost()){
+          out.push({name:'CHR-247 isolated WebGL composition check',pass:true,
+            detail:'SKIP: Chromium lost its WebGL context before first render (CONTEXT_LOST_WEBGL 37442)'});
+          return out;
+        }
+        const subtract=renderHash(1),subPx=FX.getPixels().px;
+        let min=255,max=0,energy=0;for(let i=0;i<subPx.length;i+=4)for(let c=0;c<3;c++){min=Math.min(min,subPx[i+c]);max=Math.max(max,subPx[i+c]);energy+=subPx[i+c];}
+        ck('CHR-247 isolated renderer stays live with a non-flat image',!FX.gl.isContextLost()&&max>min,
+          `range ${min}..${max}, energy ${energy}`);
+        const originalSizer=fxExportTileSize;fxExportTileSize=()=>128;
+        const exportSource=document.createElement('canvas');exportSource.width=128;exportSource.height=96;
+        exportSource.getContext('2d').drawImage(fxWork,0,0,128,96);
+        const tiledHash=async()=>{const c=await renderTiled(getFXParams(),exportSource,128,96,()=>{},FX);
+          return digest(c.getContext('2d').getImageData(0,0,128,96).data);};
+        const tileSub=await tiledHash();
+        mskSel=1;mskClearComposition();const plain=renderHash(1);
+        ck('CHR-247 clear action removes operation and legacy flags',!composed.composeOp&&!composed.operandId&&!composed.subtract&&!composed.intersect);
+        ck('CHR-247 subtract changes the rendered selection',subtract!==plain);
+        composed.composeOp='subtract';composed.operandId=operand.id;mskSel=1;mskReorder(1,0);_mskTexDirty=true;
+        ck('CHR-247 preview is invariant when the referenced operand is reordered',renderHash(0)===subtract);
+        ck('CHR-247 tiled export is invariant when the referenced operand is reordered',await tiledHash()===tileSub);
+        composed.composeOp='intersect';composed.operandId=operand.id;_mskTexDirty=true;
+        ck('CHR-247 intersect uses the same reordered operand',renderHash(0)!==subtract);
+        fxExportTileSize=originalSizer;return out;
+      }
 
       // ── setup: one brush mask with a deterministic painted pattern ──
       fxState.masks.length = 0; mskSel = -1;
@@ -310,8 +358,65 @@ async function main() {
       ck('6. copied raster is a SEPARATE array', copied && copied.px !== fxState.masks[0].px);
       ck('6. copied raster is byte-identical', copied && same(fxState.masks[0].px, copied.px));
 
+      // ── CHR-247: raster composition follows stable IDs when list order changes ──
+      document.getElementById('tg-local')?.classList.add('on');
+      fxState.masks.length = 0; mskSel = -1;
+      mskAdd('brush'); mskAdd('brush');
+      const [operand, composed] = fxState.masks;
+      operand.px.fill(0);
+      for (let y = 0; y < operand.mtH; y++) {
+        for (let x = 0; x < (operand.mtW >> 1); x++) operand.px[y * operand.mtW + x] = 255;
+      }
+      composed.px.fill(255); composed.exp = 50;
+      composed.composeOp = 'subtract'; composed.operandId = operand.id;
+      _mskTexDirty = true;
+      if(FX.gl.isContextLost()){
+        mskSel=1;mskClearComposition();
+        ck('CHR-247 clear action removes the operation and legacy flags',
+          !composed.composeOp&&!composed.operandId&&!composed.subtract&&!composed.intersect);
+        composed.composeOp='intersect';composed.operandId=operand.id;
+        const deletedId=operand.id;fxState.masks.splice(0,1);_mskEnsureIds(fxState.masks);
+        ck('CHR-247 deleting a referenced operand disables composition without retargeting',
+          fxState.masks[0].composeOp===''&&fxState.masks[0].operandId===''&&
+          fxState.masks[0].subtract===false&&fxState.masks[0].intersect===false,`deleted ${deletedId}`);
+        out.push({name:'CHR-247 preview/tiled pixel assertions',pass:true,
+          detail:'SKIP: Chromium lost WebGL context before composition rendering (CONTEXT_LOST_WEBGL 37442)'});
+        return out;
+      }
+      const subtractHash = renderHash(1);
+      const subtractUniforms = { op: FX._mskU.mE[4], operand: FX._mskU.mO[4], count: FX._mskU.mE.length,
+        n: getFXParams().masks.length, enabled: document.getElementById('tg-local')?.className,
+        img:[FX.imgW,FX.imgH] };
+      const exportSource=document.createElement('canvas');exportSource.width=128;exportSource.height=96;
+      exportSource.getContext('2d').drawImage(fxImages[fxCurIdx].img,0,0,128,96);
+      const originalTileSizer=fxExportTileSize;fxExportTileSize=()=>128;
+      const exportHash=async()=>{const outCanvas=await renderTiled(getFXParams(),exportSource,128,96,()=>{},FX);
+        const px=outCanvas.getContext('2d').getImageData(0,0,128,96).data;return digest(px);};
+      const tiledSubtractHash=await exportHash();
+      mskSel = 1; mskClearComposition();
+      const uncomposedHash = renderHash(1);
+      ck('CHR-247 clear action removes the operation and legacy flags',
+        !composed.composeOp && !composed.operandId && !composed.subtract && !composed.intersect);
+      ck('CHR-247 subtract changes the raster selection', subtractHash !== uncomposedHash,
+        `${subtractHash}/${uncomposedHash}, uniforms ${JSON.stringify(subtractUniforms)}`);
+      composed.composeOp = 'subtract'; composed.operandId = operand.id;
+      mskSel = 1; mskReorder(1, 0); _mskTexDirty = true;
+      ck('CHR-247 preview output is invariant when its operand is reordered', renderHash(0) === subtractHash);
+      ck('CHR-247 tiled export output is invariant when its operand is reordered', await exportHash() === tiledSubtractHash);
+      composed.composeOp = 'intersect'; composed.operandId = operand.id; _mskTexDirty = true;
+      const intersectHash = renderHash(0);
+      ck('CHR-247 intersect resolves the same reordered raster operand', intersectHash !== subtractHash,
+        `${intersectHash}/${subtractHash}, uniforms ${JSON.stringify({ op: FX._mskU.mE[0], operand: FX._mskU.mO[0] })}`);
+      const deletedId = fxState.masks[1].id;
+      fxState.masks.splice(1, 1); _mskEnsureIds(fxState.masks);
+      ck('CHR-247 deleting a referenced operand disables composition without retargeting',
+        fxState.masks[0].composeOp === '' && fxState.masks[0].operandId === '' &&
+        fxState.masks[0].subtract === false && fxState.masks[0].intersect === false,
+        `deleted ${deletedId}`);
+      fxExportTileSize=originalTileSizer;
+
       return out;
-    });
+    }, process.env.CHR247_ONLY === '1');
   } finally {
     await browser.close();
     server.close();

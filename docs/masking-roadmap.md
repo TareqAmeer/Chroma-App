@@ -1,0 +1,32 @@
+# Masking roadmap and usage plan — 2026-10-09
+
+Tracks CHR-247 with CHR-274, CHR-253, CHR-258, CHR-273 and CHR-277. This is a staged plan, not a claim of competitor parity.
+
+## Delivery order
+
+1. **Composition correctness (CHR-247):** stable mask IDs and operand references; Add/Subtract/Intersect over complete selections; preserve operands through reorder, save/load, duplicate and undo. Test range gates, soft weights, missing operands and cycles in the shared preview/export evaluator.
+2. **Refinement and correction (CHR-274):** extend immutable-source Feather/Edge to sky and depth, compact layout, discoverable brush correction, reset/undo/reselection. Verify crop/rotation/zoom and tile boundaries.
+3. **Portable AI masks (CHR-273/247):** persist selection intent/model version separately from raster caches; recompute each target photo on copy/sync. Report failures/cancellation per target rather than silently copying source pixels.
+4. **Selection breadth (CHR-253/247):** explicit Subject/Background/People entry points, person-specific selection and object rectangle prompts. Verify actual model tensors/coordinates before exposing capabilities. Current faceparse.rs consumes face crops and returns skin, eyes/brows, glasses, lips and hair; that does not establish whole-body skin/clothes or separate teeth/iris. Current SAM decode_points interfaces use point prompts.
+5. **Layer and overlay workflow (CHR-258/277/247):** full per-mask adjustment inventory, opacity, presets, configurable overlay colour and white-on-black, persistent overlay visibility. Preserve the visible eight-mask capacity until the renderer supports more.
+6. **Quality release gate:** labelled hair, foliage, glasses, backlit, multi-person, occluded and complex-sky fixtures. Record boundary accuracy, false-positive coverage and alpha error against labels, with tolerances fixed before evaluation. Compare preview and tiled export; inspect halos on black/white backgrounds. Synthetic tests establish math correctness, not photographic quality.
+
+Close parity requires these workflows plus measured real-photo quality and supported-platform coverage. No defensible calendar estimate is available until labelled fixtures and semantic model capability are established. Model work and dataset validation are likely larger than adding controls.
+
+Reference: [Adobe Lightroom Classic masking](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/masking.html), checked 2026-10-09. Adobe documents composition, people parts, object rectangles, overlays and target-photo AI recomputation. Capture One parity remains tracked in CHR-258; no independent current Capture One comparison was completed here.
+
+## Codex usage plan
+
+- Keep one active implementation ticket and at most two bounded Luna agents; use fresh context with only relevant paths, requirements and ownership. Reuse agents for related follow-ups.
+- Parent handles scope, review and publication decisions. Luna handles focused implementation and audits. Escalate only a demonstrated reasoning bottleneck.
+- Query Linear with small limits and selected fields; fetch full descriptions only for chosen tickets. Search narrow paths and cap tool output; avoid repository dumps and repeated exploration.
+- Run focused deterministic checks first, then required browser/export/UI gates once. Repeat only after relevant changes or unresolved failures; use reports rather than repeated screenshot interpretation.
+- Reuse one feature checkout and one clean integration checkout. Remove clean published checkouts at completion; preserve dirty/unpublished work. Share dependency caches where supported rather than installing per checkout.
+- Check account usage at start and after publication. Compare percentage consumed with delivered, verified slices; if unexpectedly high, narrow concurrent work and context before starting another slice. Do not infer a token-to-percent formula or promise a fixed runtime from a five-hour window.
+- Keep durable short handoffs: published hash, focused checks, remaining acceptance criteria and next step. Avoid copying full conversation history into subagents.
+
+Baseline account snapshot this session: five-hour window 5% used; weekly 3% used. This does not explain the earlier exhausted window; historical per-task consumption is unavailable here.
+
+Usage note: [OpenAI's official pricing guidance](https://learn.chatgpt.com/docs/pricing) says the five-hour window is an allowance window, not a runtime guarantee; Fast uses more allowance than Standard, and the allowance varies with model, context and reasoning. Prefer Standard for routine coding tasks when the user can choose the speed; there is no exact savings guarantee and the current chat speed cannot be changed silently.
+
+[Official OpenAI guidance on keeping skills and prompts concise](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra) supports reducing bloated context. The concurrency and test policy above is this repository's practical execution plan, not an official savings guarantee.

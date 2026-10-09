@@ -7285,7 +7285,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1009D';
+const BUILD='1.1010A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8312,11 +8312,12 @@ uniform vec4 mskA[8];  // radial: cx,cy,rx,ry | linear: x0,y0 -> x1,y1 (full eff
 uniform vec4 mskB[8];  // type (0 radial / 1 linear), feather 0..1, invert 0/1, isTexture 0/1
 uniform vec4 mskC[8];  // exposure (stops), contrast, temp, sat  (each -1..1-ish, pre-scaled in JS)
 uniform vec4 mskD[8];  // lumLo, lumHi (0..1 range gate), highlights, shadows (tonal, -1..1)
-uniform vec4 mskE[8];  // x: subtract-previous-mask flag (0/1) — simple "mask inside a mask"
-                        // (this mask's shape minus the shape of the mask listed just before
-                        // it), y: tint, z: hue(deg), w: Amount 0..1 — one master scale on the whole
+uniform vec4 mskE[8];  // x: composition op (0 none, 1 subtract, 2 intersect)
+                        // (this mask's shape combined with the shape resolved by mskO), y: tint,
+                        // z: hue(deg), w: Amount 0..1 — one master scale on the whole
                         // mask, so it can be dialled back without rescaling all eight sliders
-uniform vec4 mskF[8];  // x: Color-paint target hue (deg), y: Color-paint amount 0..1, z: radial rotation (rad), w unused
+uniform vec4 mskF[8];  // x: Color-paint target hue, y: amount, z: radial rotation, w: colour saturation gate
+uniform vec4 mskO[8];  // x: resolved composition operand slot (-1 disables)
 // SKIN TONE / COLOUR RANGE (see colRangeWeight + the uniformity block in the mask loop).
 // mskG gates the mask by COLOUR (which pixels), mskH/mskI say where those pixels move TO.
 uniform vec4 mskG[8];  // x: number of colour samples (0 = gate off), y: CHROMA gate range 0..1
@@ -8687,8 +8688,12 @@ float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-
 // second, drifting definition of "selected".
 float mskSelWAt(int i,vec2 gm2,vec2 uv2){
   float w=mskShapeWeight(i,gm2);
-  if(mskE[i].x>1.5&&i>0)w=min(w,mskShapeWeight(i-1,gm2));
-  else if(mskE[i].x>0.5&&i>0)w=max(0.0,w-mskShapeWeight(i-1,gm2));
+  int operand=int(mskO[i].x);
+  if(operand>=0&&operand<8&&operand!=i){
+    float ow=mskShapeWeight(operand,gm2);
+    if(mskE[i].x>1.5)w=min(w,ow);
+    else if(mskE[i].x>0.5)w=max(0.0,w-ow);
+  }
   for(int j=0;j<8;j++){
     if(float(j)>=mskN)break;
     if(j==i||mskJ[j].y<0.5)continue;
@@ -8907,10 +8912,16 @@ if(mskN>0.5){
     if(float(i)>=mskN)break;
     if(mskJ[i].y>0.5)continue;                                   // an eraser mask applies nothing itself
     float w=mskShapeWeight(i,gm);
-    // mskE[i].x: 0 none, 1 subtract-previous (legacy "mask inside a mask", kept so saved masks
-    // render unchanged), 2 intersect-previous (AND — Lightroom-style "Intersect Mask With").
-    if(mskE[i].x>1.5&&i>0)w=min(w,mskShapeWeight(i-1,gm));
-    else if(mskE[i].x>0.5&&i>0)w=max(0.0,w-mskShapeWeight(i-1,gm));
+    // mskE.x is the operation; mskO.x is the resolved operand slot. The saved operand is an ID,
+    // resolved by JS for each render, so reordering masks never changes the composition target.
+    // Operations combine source shapes; this mask's luminance/colour/depth gates are then applied
+    // below to the result, matching the established range-gate ordering.
+    int operand=int(mskO[i].x);
+    if(operand>=0&&operand<8&&operand!=i){
+      float ow=mskShapeWeight(operand,gm);
+      if(mskE[i].x>1.5)w=min(w,ow);             // Intersect
+      else if(mskE[i].x>0.5)w=max(0.0,w-ow);   // Subtract
+    }
     // Subtract EVERY mask flagged as an eraser. This is what lets several regions be excluded at
     // once (lips AND a pet AND a bystander); "subtract prev" reaches back exactly one slot, so it
     // could only ever remove one of them.
@@ -10031,8 +10042,9 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const A=P.adjust||{};
     // Local-adjust masks: pack up to 4 masks into vec4 uniform arrays; global-uv mapped via
     // uvOffL/uvScaleL (same opts mapping the comp pass uses) so tiles/loupe place them identically.
-    const MK=(P.masks&&P.masks.length)?P.masks.slice(0,MSK_MAX):[];
-    // These eleven uniform-staging arrays are allocated ONCE per renderer and zero-filled per
+    const allMasks=P.masks||[];_mskEnsureIds(allMasks);
+    const MK=allMasks.length?allMasks.slice(0,MSK_MAX):[];
+    // These uniform-staging arrays are allocated ONCE per renderer and zero-filled per
     // frame, not reallocated. render() is the hottest function in the app (every preview tick,
     // every export tile), and eleven fresh typed arrays per call was pure allocator churn for
     // buffers whose size never changes.
@@ -10043,11 +10055,12 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mS:new Float32Array(128),  // colour-gate samples: 8 masks x 8 samples x (h,s) = 32 vec4
       mJ:new Float32Array(32),   // per-mask detail: x = Texture
       mK:new Float32Array(32),   // per-mask detail: x = Noise Reduction (bilateral) strength 0..1
+      mO:new Float32Array(32),   // x = resolved composition operand slot (-1 disables)
       mDep:new Float32Array(32)});// ROADMAP R7: x = Depth Range gate on/off, y = depLo, z = depHi
-    const mA=U.mA,mB=U.mB,mC=U.mC,mD=U.mD,mE=U.mE,mF=U.mF,mG=U.mG,mH=U.mH,mI=U.mI,mS=U.mS,mJ=U.mJ,mK=U.mK,mDep=U.mDep;
+    const mA=U.mA,mB=U.mB,mC=U.mC,mD=U.mD,mE=U.mE,mF=U.mF,mG=U.mG,mH=U.mH,mI=U.mI,mS=U.mS,mJ=U.mJ,mK=U.mK,mO=U.mO,mDep=U.mDep;
     // ⚠️ MUST clear: the packing loop below only writes slots for masks that EXIST, so a stale
     // value from a previous frame with more masks would otherwise linger in an unused slot.
-    mA.fill(0);mB.fill(0);mC.fill(0);mD.fill(0);mE.fill(0);mF.fill(0);mG.fill(0);mH.fill(0);mI.fill(0);mS.fill(0);mJ.fill(0);mK.fill(0);mDep.fill(0);
+    mA.fill(0);mB.fill(0);mC.fill(0);mD.fill(0);mE.fill(0);mF.fill(0);mG.fill(0);mH.fill(0);mI.fill(0);mS.fill(0);mJ.fill(0);mK.fill(0);mO.fill(0);mDep.fill(0);
     MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
       else if(m.type==='none'){mB[o]=2;}   // shapeless: gates only (Colour/Luminance Range masks)
@@ -10061,10 +10074,14 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // just above. depOn stays false (mDep[o]=0) for every mask created before this feature and
       // for every mask that never turned it on, so this is a pure no-op for them.
       mDep[o]=m.depOn?1:0;mDep[o+1]=m.depLo!=null?m.depLo:0;mDep[o+2]=m.depHi!=null?m.depHi:1;
-      mE[o]=m.intersect?2:(m.subtract?1:0);mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
+      const op=m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':'');
+      const operand=op?MK.findIndex(x=>x.id===m.operandId):-1;
+      mE[o]=op==='intersect'?2:op==='subtract'?1:0;
+      mO[o]=operand>=0?operand:-1;
+      mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
       // Amount, default 1 => identity for masks saved before it existed. Muting rides the same
       // slot (amount 0) rather than dropping the mask from the array, because removing it would
-      // renumber the slots and silently repoint every later mask's "subtract prev".
+      // renumber shader slots and force every stored operand ID to resolve again.
       // Solo (UI-only, never persisted — see mskSolo) rides the same slot: every non-eraser mask
       // except the soloed one is zeroed, exactly like mute, so isolating a mask's contribution
       // costs nothing new in the shader.
@@ -10202,7 +10219,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       useCDL:P.cdl?1:0,cdlSlope:(P.cdlSOP||{slope:[1,1,1]}).slope,cdlOffset:(P.cdlSOP||{offset:[0,0,0]}).offset,cdlPower:(P.cdlSOP||{power:[1,1,1]}).power,
       maskTex:4,maskTex2:7,
       stockShoulderTex:8,useStockShoulder:useShoulderNow?1:0,
-      mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,
+      mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,'mskO[0]':mO,
       'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,'mskK[0]':mK,'mskDep[0]':mDep,
       mskAnyTex:MK.some(m=>m.tex)?1:0,
       mskAnyClarity:MK.some(m=>m.clarity)?1:0,
@@ -15616,6 +15633,7 @@ function _mskSkinDefaults(){return{
 // undefined into its sliders and the target resolver would see no tgtMode.
 function _mskMigrate(m){
   if(!m||typeof m!=='object')return m;
+  if(!m.id)m.id=_mskNewId();
   // tanOneWayAmt replaces the old boolean tanOneWay. Derive it from the legacy field BEFORE the
   // generic default-fill below runs (which would otherwise stamp in the default 0 first and hide
   // a saved mask's true setting).
@@ -15653,6 +15671,49 @@ function _mskMigrate(m){
   // clamping is visually a no-op — it just stops the slider reading past 100.
   if(m.feather>0.5)m.feather=0.5;
   return m;
+}
+// Stable composition identity. Legacy subtract/intersect flags are folded into an explicit
+// operation/operand pair once; IDs survive reorder, snapshots, and per-photo copies.
+function _mskNewId(){return'msk-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);}
+function _mskEnsureIds(masks){
+  const reserved=new Set();
+  // Keep every unique persisted ID before minting IDs for legacy masks. Otherwise an early
+  // missing ID could take a later mask's legitimate `legacy-mask-N` identity.
+  masks.forEach(m=>{if(m.id)reserved.add(m.id);});
+  const seen=new Set();
+  masks.forEach((m,i)=>{
+    if(!m.id||seen.has(m.id)){
+      let id='legacy-mask-'+i,n=1;
+      while(reserved.has(id)||seen.has(id))id='legacy-mask-'+i+'-'+n++;
+      m.id=id;reserved.add(id);
+    }
+    seen.add(m.id);
+  });
+  masks.forEach((m,i)=>{
+    const wasLegacy=!m.composeOp;
+    if(!m.composeOp){
+      if(m.intersect)m.composeOp='intersect';
+      else if(m.subtract)m.composeOp='subtract';
+    }
+    if(wasLegacy&&!m.operandId&&m.composeOp&&i>0)m.operandId=masks[i-1].id;
+    if(!m.composeOp||!['subtract','intersect'].includes(m.composeOp)||!m.operandId||!seen.has(m.operandId)||m.operandId===m.id){
+      m.composeOp='';m.operandId='';m.subtract=false;m.intersect=false;
+    }else{
+      m.subtract=m.composeOp==='subtract';m.intersect=m.composeOp==='intersect';
+    }
+  });
+  // Reject a cycle by clearing the edge that closes it; evaluation never follows cycles.
+  const visiting=new Set(),done=new Set(),byId=new Map(masks.map(m=>[m.id,m]));
+  function visit(m){
+    if(done.has(m.id))return;
+    visiting.add(m.id);
+    const target=m.composeOp&&byId.get(m.operandId);
+    if(target&&visiting.has(target.id)){m.composeOp='';m.operandId='';m.subtract=false;m.intersect=false;}
+    else if(target&&!done.has(target.id))visit(target);
+    visiting.delete(m.id);done.add(m.id);
+  }
+  masks.forEach(m=>{if(!done.has(m.id))visit(m);});
+  return masks;
 }
 // ── A18: one source of truth for a new mask's adjustment fields ──────────────────────────────
 // This 15-key block was written out verbatim in all six branches of mskAdd. Adding a field meant
@@ -15714,6 +15775,7 @@ function mskAdd(type){
     m={type:'brush',origin:'ai',px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,aiPoints:[],..._mskAdjustDefaults()};
   }
   Object.assign(m,_mskSkinDefaults());
+  m.id=_mskNewId();
   // Uniformity is a CONTRACTION, but each pixel moves by w*u*(target-x) — so if w varies across
   // the skin, the weight difference can outweigh the distance difference and the spread stops
   // closing, or even diverges. BOTH halves of w must therefore stay flat over the subject: the
@@ -16939,6 +17001,7 @@ function mskInvert(){const m=fxState.masks[mskSel];if(!m)return;m.invert=!m.inve
 function mskDuplicate(inverted){
   const m=fxState.masks[mskSel];if(!m)return;
   const d=_mskCloneLive(m);
+  d.id=_mskNewId(); // a duplicate is an independent operand identity
   delete d.name; // let mskAutoLabel derive a fresh "<Origin> N" rather than duplicating the name too
   if(inverted)d.invert=!d.invert;
   fxState.masks.splice(mskSel+1,0,d);
@@ -17553,8 +17616,9 @@ function mskMoreMenu(ev){
     +item(m.muted?'Unmute':'Mute','eyeOff','mskToggleMute()',m.muted)
     +item(mskSolo===mskSel?'Stop soloing':'Solo','star','mskToggleSolo()',mskSolo===mskSel)
     +item(m.isExclude?'Stop using as eraser':'Use as eraser','eraser','mskToggleExclude()',m.isExclude)
-    +(mskSel>0?item(m.subtract?'Stop subtracting previous':'Subtract previous mask','scissors','mskToggleSubtract()',m.subtract):'')
-    +(mskSel>0?item(m.intersect?'Stop intersecting previous':'Intersect with previous mask','eyedropper','mskToggleIntersect()',m.intersect):'')
+    +(m.composeOp?item('Stop '+m.composeOp+' composition','scissors','mskClearComposition()'): '')
+    +(mskSel>0&&m.composeOp!=='subtract'?item('Subtract previous mask','scissors','mskSetComposition(\'subtract\')'):'')
+    +(mskSel>0&&m.composeOp!=='intersect'?item('Intersect with previous mask','eyedropper','mskSetComposition(\'intersect\')'):'')
     +item(m.invert?'Un-invert':'Invert','compare','mskInvert()',m.invert)
     +'<div class="msk-more-sep"></div>'
     +item('Delete mask','trash','mskDelete()',false,false,true);
@@ -18355,7 +18419,7 @@ function mskRebuild(){
     label.textContent=(m.name||mskAutoLabel(m,i));
     b.appendChild(label);
     if(m.muted)b.style.opacity='0.45';
-    b.title=m.muted?'Muted — click to select, then the eye button to unmute. Drag to reorder — order matters (Subtract prev).':'Click to edit this mask. Drag to reorder — order matters (Subtract prev).';
+    b.title=m.muted?'Muted — click to select, then the eye button to unmute. Drag to reorder — composition references stay attached to their masks.':'Click to edit this mask. Drag to reorder — composition references stay attached to their masks.';
     b.onclick=()=>{mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();};
     // Drag-to-reorder: HTML5 DnD on the row buttons themselves. dragstart stashes the source
     // index (dataTransfer, not a global — a second drag started mid-drop would otherwise race a
@@ -18728,37 +18792,50 @@ function mskRebuild(){
   ctl.innerHTML=h;
   mskOverlaySync();
 }
-function mskToggleSubtract(){const m=fxState.masks[mskSel];if(!m||mskSel<1)return;m.subtract=!m.subtract;if(m.subtract)m.intersect=false;if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();}
-// Lightroom-style "Intersect Mask With" — this mask's shape ANDed with the one just before it
-// (min, not subtract), so only their overlap survives. Reuses the same single reach-back-one-
-// slot mechanism as "subtract prev" (mskE[i].x), just a different value (2 vs 1) read in the
-// shader — see mskShapeWeight's caller in the lut pass.
-function mskToggleIntersect(){const m=fxState.masks[mskSel];if(!m||mskSel<1)return;m.intersect=!m.intersect;if(m.intersect)m.subtract=false;if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();}
+function mskClearComposition(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.composeOp='';m.operandId='';m.subtract=false;m.intersect=false;
+  if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();
+}
+function mskSetComposition(op){
+  const masks=_mskEnsureIds(fxState.masks),m=masks[mskSel],operand=masks[mskSel-1];if(!m||!operand||!['subtract','intersect'].includes(op))return;
+  m.composeOp=op;m.operandId=operand.id;
+  m.subtract=m.composeOp==='subtract';m.intersect=m.composeOp==='intersect';
+  if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();
+}
+function mskToggleSubtract(){
+  const A=_mskEnsureIds(fxState.masks),m=A[mskSel],previous=A[mskSel-1];
+  if(m&&m.composeOp==='subtract'&&previous&&m.operandId===previous.id)mskClearComposition();
+  else mskSetComposition('subtract');
+}
+// Lightroom-style "Intersect Mask With" — selecting the command targets the preceding row,
+// then stores that target by ID. The shader uses min (rather than subtraction) so only overlap
+// survives; reordering afterward leaves the selected operand unchanged.
+function mskToggleIntersect(){
+  const A=_mskEnsureIds(fxState.masks),m=A[mskSel],previous=A[mskSel-1];
+  if(m&&m.composeOp==='intersect'&&previous&&m.operandId===previous.id)mskClearComposition();
+  else mskSetComposition('intersect');
+}
 // ── Mask list management: order, name, mute ──────────────────────────────────────────────────
-// Order is not cosmetic — "− Subtract prev" reads the mask immediately before this one, so a
-// wrongly-ordered pair previously had to be deleted and rebuilt. Moving a mask carries the
-// selection with it and repoints the subtract flags so the intent survives the move.
+// Composition operands are stored by stable mask ID. Reordering changes their evaluated slot,
+// while preserving the identity of the referenced mask.
 function mskMove(dir){
   const i=mskSel,j=i+dir;
   if(i<0||j<0||j>=fxState.masks.length)return;
-  const A=fxState.masks;
+  const A=_mskEnsureIds(fxState.masks);
   [A[i],A[j]]=[A[j],A[i]];
-  // A mask at index 0 has nothing before it to subtract, so that flag can't survive there.
-  if(A[0]&&A[0].subtract)A[0].subtract=false;
   mskSel=j;
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();
 }
 // Drag-and-drop reorder (mskRebuild's row ondrop): moves the mask at `from` to land at `to`,
 // splice-out-then-splice-in rather than mskMove's single swap so a drag across several rows in
-// one gesture doesn't need N adjacent swaps. Keeps mskMove's own two safety rules: index 0 can
-// never carry "subtract prev" (nothing precedes it), and the moved mask stays selected.
+// one gesture doesn't need N adjacent swaps. Stable operand IDs keep references intact.
 function mskReorder(from,to){
-  const A=fxState.masks;
+  const A=_mskEnsureIds(fxState.masks);
   if(from===to||from<0||to<0||from>=A.length||to>=A.length)return;
   const[m]=A.splice(from,1);
   A.splice(to,0,m);
-  if(A[0]&&A[0].subtract)A[0].subtract=false;
   mskSel=to;
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();fxHistoryPush();
