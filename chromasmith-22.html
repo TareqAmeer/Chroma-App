@@ -7285,7 +7285,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1010B';
+const BUILD='1.1010C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -15723,7 +15723,7 @@ function _mskEnsureIds(masks){
 // adjustment defaults live here.
 function _mskAdjustDefaults(){return{invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,
   sat:0,hue:0,hi:0,sh:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};}
-function mskAdd(type){
+function mskAdd(type,configure){
   if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks','warn');return;}
   let m;
   if(type==='skin'||type==='coat'){
@@ -15804,6 +15804,9 @@ function mskAdd(type){
   if(type==='color'){m.crOn=true;m.crRange=40;}
   if(type==='lum'){m.lumLo=0.45;m.lumHi=1;}   // a visible starting selection: the brighter half
   if(type==='depth'){m.depOn=true;m.depLo=0;m.depHi=0.5;}  // starting selection: the farther half
+  // A purpose-built workflow may configure its normal brush mask before the single history
+  // commit below. This keeps creation + starter settings together as one undoable action.
+  if(typeof configure==='function')configure(m);
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
   if(typeof hapt==='function')hapt();
@@ -15829,6 +15832,32 @@ function mskAdd(type){
     // Selection preview reflects the real gate instead of a flat "no map yet" (useDepthTx=0) frame.
     fxEnsureDepthMap().then(()=>{if(typeof renderPreview==='function')renderPreview();});
   }
+  return m;
+}
+
+// Teeth are not a face-parser class here: this is a manual Brush workflow with a restrained
+// enamel color starting point. Its selection is exactly what the user paints, so no mouth/lip
+// segmentation is presented as tooth detection. The temperature and saturation adjustments are
+// per-mask, editable, and small enough to preserve the tooth's natural shading and texture.
+function mskAddTeethWhitening(){
+  if(fxState.masks.length>=MSK_MAX){
+    if(typeof toast==='function')toast('Maximum '+MSK_MAX+' masks — delete one first',false);
+    return false;
+  }
+  const m=mskAdd('brush',mask=>{
+    mask.origin='manual-teeth';
+    mask.name='Teeth Whitening (manual)';
+    mask.temp=-0.12;
+    mask.sat=-0.12;
+  });
+  if(!m||fxState.masks[mskSel]!==m)return false;
+  mskPaintTransientReset();
+  mskPaintErase=false;mskPaintErase_sync();
+  if(!mskPaintMode)mskPaintToggle();
+  mskRebuild();
+  if(typeof renderPreview==='function')renderPreview();
+  if(typeof toast==='function')toast('Paint tooth enamel only. Use Erase around lips and gums.',true);
+  return true;
 }
 
 // ── AI brush-select: EdgeSAM multi-point-prompt segmentation, native shell only (main.rs's
@@ -17348,9 +17377,22 @@ function mskPaintToggle(){
   const b=document.getElementById('btn-msk-paint');if(b)b.classList.toggle('on',mskPaintMode);
   if(FX.cv)FX.cv.style.cursor=mskPaintMode?'none':''; // 'none': the ring cursor (msk-brush-cursor) IS the pointer now
   if(!mskPaintMode){const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');}
+  mskTeethGuideSync();
 }
 function mskPaintStop(){mskPaintMode=false;mskPaintTransientReset();const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
-  const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');}
+  const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskTeethGuideSync();}
+function mskTeethGuideSync(){
+  const m=fxState.masks[mskSel],wrap=document.getElementById('fx-zoom-wrap');
+  let guide=document.getElementById('msk-teeth-guide');
+  if(!m||m.origin!=='manual-teeth'||!mskPaintMode||!wrap){if(guide)guide.remove();return;}
+  if(!guide){
+    guide=document.createElement('div');guide.id='msk-teeth-guide';
+    guide.setAttribute('role','status');guide.setAttribute('aria-live','polite');
+    guide.style.cssText='position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:8;max-width:calc(100% - 20px);padding:7px 11px;border:1px solid var(--bdr-pill);border-radius:var(--r-pill);background:var(--scrim-b3);color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);line-height:1.35;text-align:center;pointer-events:none;';
+    wrap.appendChild(guide);
+  }
+  guide.textContent='Paint enamel only · use Erase around lips and gums';
+}
 function mskPaintErase_sync(){const b=document.getElementById('btn-msk-erase');if(b){b.classList.toggle('on',mskPaintErase);b.setAttribute('aria-pressed',String(mskPaintErase));}const c=document.getElementById('msk-brush-cursor');if(c)c.classList.toggle('erase',!!(mskPaintErase||mskBrushEraseHeld));}
 function mskPaintErase_toggle(){mskPaintErase=!mskPaintErase;mskPaintErase_sync();}
 function mskPaintClear(){const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;m.px=new Uint8ClampedArray(m.mtW*m.mtH);_mskTexDirty=true;fxUpdate();}
@@ -17562,7 +17604,7 @@ function _mskGroup(key,label,body,note){
 function mskAddMenu(ev){
   ev.stopPropagation();
   document.querySelectorAll('.msk-more-menu').forEach(e=>e.remove());
-  const item=(label,ic,type)=>'<button class="msk-more-it" onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());mskAdd(\''+type+'\')">'
+  const item=(label,ic,type,action)=>'<button class="msk-more-it" onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());'+(action||"mskAdd('"+type+"')")+'">'
     +icon(ic,15)+'<span>'+label+'</span></button>';
   const hd=(label)=>'<div class="msk-more-hd">'+label+'</div>';
   // ⚠️ Was gated on `body.deskx` — a LAYOUT class toggled purely by window WIDTH (a media query,
@@ -17579,6 +17621,7 @@ function mskAddMenu(ev){
     +hd('Shape')
     +item('Radial','local','radial')+item('Linear','linearGrad','linear')
     +'<div class="msk-more-sep"></div>'+hd('Paint')
+    +item('Teeth Whitening (manual)','brush','', 'mskAddTeethWhitening()')
     +item('Brush','brush','brush')+item('Sky','sky','sky')
     +(desktop?'<div class="msk-more-sep"></div>'+hd('AI')
       +item('Skin','wand','skin')+item('Coat','wand','coat')+item('AI Select','wand','ai'):'')
@@ -18438,6 +18481,7 @@ function mskRebuild(){
     ?'<button class="btn bgh" onclick="mskCopyToAll()" title="Copies this photo\'s mask set onto every other loaded photo, overwriting theirs">Copy masks to the other '+(fxImages.length-1)+' photo'+(fxImages.length>2?'s':'')+'</button>'
     :'';
   const m=fxState.masks[mskSel];
+  mskTeethGuideSync();
   if(!m){ctl.innerHTML=(batchBtn?'<div class="btn-row">'+batchBtn+'</div>':'')+'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:6px">Add a mask to begin — Radial for faces/subjects, Linear or Sky for skies, Brush to paint any area (e.g. lifting shadow under an eye).</div>';return;}
   let h=batchBtn?'<div class="btn-row" style="margin-bottom:8px">'+batchBtn+'</div>':'';
   // The mask's own row: name, the "..." menu, and (for raster masks) the paint tools. Everything
@@ -18451,6 +18495,7 @@ function mskRebuild(){
     +(m.intersect?'<span class="msk-tag">Intersecting</span>':'')
     +(m.invert?'<span class="msk-tag">Inverted</span>':'')
     +'<button class="db-btn msk-more" onclick="mskMoreMenu(event)" title="Rename, reorder, mute, solo, eraser, delete">'+icon('more',16)+'</button></div>'
+    +(m.origin==='manual-teeth'?'<div class="msk-hint" role="note">Manual Brush mask: paint tooth enamel only. Use <b>Erase</b> around lips and gums. The app does not detect teeth automatically.</div>':'')
     +(m.isExclude?'<div class="msk-hint">This mask only removes area from the others — its own Adjust sliders do nothing.</div>':'');
   // Declared here: the shape branches below already ask about capabilities, and `const` is not
   // hoisted — declaring it further down would be a temporal-dead-zone crash, not a style nit.
