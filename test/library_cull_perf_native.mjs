@@ -11,10 +11,13 @@ const rawPath = process.env.CULL_RAW_PATH;
 const nativeCommit = process.env.CULL_NATIVE_COMMIT;
 const expectedBuild = process.env.CULL_EXPECTED_BUILD;
 const nativeProfile = process.env.CULL_NATIVE_PROFILE;
+const nativeCatalogDir = process.env.CULL_NATIVE_CATALOG_DIR;
+const nativeCacheDir = process.env.CULL_NATIVE_CACHE_DIR;
 assert(rawPath && /\.(nef|cr3|arw|raf|rw2|dng)$/i.test(rawPath), 'supply a real camera RAW path');
 assert(nativeCommit && /^[a-f0-9]{40}$/.test(nativeCommit), 'supply the verified native source commit');
 assert(expectedBuild, 'supply the expected native BUILD stamp');
 assert(['debug', 'release'].includes(nativeProfile), 'record the native debug/release build profile');
+assert(nativeCatalogDir && nativeCacheDir, 'record the isolated native CS_CATALOG_DIR and CS_CACHE_DIR launch paths');
 const bytes = await readFile(rawPath);
 const sha256 = createHash('sha256').update(bytes).digest('hex');
 if (process.env.CULL_RAW_SHA256) assert.equal(sha256, process.env.CULL_RAW_SHA256.toLowerCase());
@@ -42,6 +45,7 @@ const report = {
   hardware: { platform: os.platform(), release: os.release(), arch: os.arch(),
     cpu: os.cpus()[0]?.model, logicalCpus: os.cpus().length, memoryBytes: os.totalmem() },
   cache: 'Source-resolution cull cells warmed explicitly in the same native process; initial disk/OS cache unspecified',
+  isolation: { nativeCatalogDir, nativeCacheDir },
   samples: [], failures: [],
 };
 const output = process.env.CULL_PERF_REPORT || 'test/output/chr267-native-perf.json';
@@ -58,10 +62,22 @@ try {
   });
   Object.assign(report, { runtime });
   assert.equal(runtime.build, expectedBuild, 'native app source/build must match the recorded build');
+  const initialCatalog = await page.evaluate(() => window.__TAURI__.core.invoke('catalog_query', { q: { limit: 3, offset: 0 } }));
+  assert(initialCatalog.total <= 2 && initialCatalog.entries.every(entry =>
+    fixturePaths.some(p => p.replaceAll('\\', '/').toLowerCase() === entry.path.replaceAll('\\', '/').toLowerCase())),
+    'use an isolated native catalog containing only this RAW fixture, never the user catalog');
+  report.isolation.initialCatalogTotal = initialCatalog.total;
+  // A failed earlier measurement may leave this disposable app in Cull. Exit through
+  // the ordinary keyboard action before requiring the folder's grid cards.
+  if (await page.locator('#lib-survey').isVisible()) await page.keyboard.press('Escape');
   await page.evaluate(async folder => {
     if (typeof csFirstEditSkip === 'function') csFirstEditSkip();
     if (!chromasmithLibraryIsOpen()) await chromasmithToggleLibrary();
-    await chromasmithOpenFolder(folder);
+    // Use the native folder-drop entry point so the folder also becomes the Library
+    // root. Calling the low-level browser adapter alone leaves root unset on a
+    // fresh profile and subsequent Library reopen paints the first-launch empty UI.
+    if (!window.__TAURI__?.event?.emit) throw Error('Native folder-drop event bridge is required');
+    await window.__TAURI__.event.emit('tauri://drag-drop', { paths: [folder], position: { x: 0, y: 0 } });
   }, folder);
   await page.waitForFunction(() => document.querySelectorAll('#lib-grid .lib-card').length === 2, undefined, { timeout: 60000 });
   const cards = page.locator('#lib-grid .lib-card');

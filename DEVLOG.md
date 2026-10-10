@@ -1351,3 +1351,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Require the native debug/release profile in `test/library_cull_perf_native.mjs` and wait for two stable fitted frames after warming before measuring input. The 100 ms and 500 ms budgets remain unchanged; actual native measurements remain pending.
 - Updated `docs/validation/chr267/raw-fixture.md` and added `docs/codex-usage-plan.md` with bounded Luna delegation, shared caches, serialized builds/publication and evidence-based acceptance updates.
 - Node syntax and diff whitespace checks pass. These preparation changes do not complete any outstanding CHR-267 acceptance criterion.
+
+### 2026-10-10 — CHR-267 native benchmark isolation safeguards
+
+- The native RAW gate now requires recorded catalog/cache override paths and refuses a catalog with unrelated photos. A WebView profile isolates preferences but not native storage; use `CS_CATALOG_DIR` and `CS_CACHE_DIR` at app launch. The setup also exits a prior Cull and uses the native folder-drop handler to establish its Library root.
+- Windows app source `b387e705f4748ac19280ca7091aaae3519ccd151`, BUILD `1.1010B`, debug profile decoded both RAW paths at 8256×5504. Attempts failed before timed samples: stale shared-target frontend, closed measurement connection, and subsequent empty-grid setup. No latency pass is claimed; real-RAW criteria remain open.
+- Modified `test/library_cull_perf_native.mjs` and `docs/validation/chr267/raw-fixture.md`; Node syntax and diff checks pass. The next run uses a fresh task-owned native catalog/cache, preserving the user's existing storage.
