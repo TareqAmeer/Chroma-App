@@ -1345,3 +1345,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - UI audit fails on existing undefined `--bg2`, narrow Library topbar fragmentation, phone Find target, and phone Studio contrast findings. The single Editor gate invocation reached a failed wireframe attempt and retry, then was interrupted without completion; it is not a passing gate. No baseline/golden regeneration was used. Native 45 MP timing proof remains pending the native build.
 
 - CHR-267 integration follow-up: the functional fit fixture initially sampled after a fixed 400 ms and failed during concurrent native/UI work. Replaced that delay with a bounded geometry-completion predicate; feature verification passes both directions at 512×384. This changes no native performance budget and does not count as native timing evidence.
+
+### 2026-10-10 — CHR-267 reproducible timing and usage preparation
+
+- Require the native debug/release profile in `test/library_cull_perf_native.mjs` and wait for two stable fitted frames after warming before measuring input. The 100 ms and 500 ms budgets remain unchanged; actual native measurements remain pending.
+- Updated `docs/validation/chr267/raw-fixture.md` and added `docs/codex-usage-plan.md` with bounded Luna delegation, shared caches, serialized builds/publication and evidence-based acceptance updates.
+- Node syntax and diff whitespace checks pass. These preparation changes do not complete any outstanding CHR-267 acceptance criterion.

@@ -10,9 +10,11 @@ import { chromium } from 'playwright';
 const rawPath = process.env.CULL_RAW_PATH;
 const nativeCommit = process.env.CULL_NATIVE_COMMIT;
 const expectedBuild = process.env.CULL_EXPECTED_BUILD;
+const nativeProfile = process.env.CULL_NATIVE_PROFILE;
 assert(rawPath && /\.(nef|cr3|arw|raf|rw2|dng)$/i.test(rawPath), 'supply a real camera RAW path');
 assert(nativeCommit && /^[a-f0-9]{40}$/.test(nativeCommit), 'supply the verified native source commit');
 assert(expectedBuild, 'supply the expected native BUILD stamp');
+assert(['debug', 'release'].includes(nativeProfile), 'record the native debug/release build profile');
 const bytes = await readFile(rawPath);
 const sha256 = createHash('sha256').update(bytes).digest('hex');
 if (process.env.CULL_RAW_SHA256) assert.equal(sha256, process.env.CULL_RAW_SHA256.toLowerCase());
@@ -33,7 +35,7 @@ const browser = await chromium.connectOverCDP(endpoint);
 const page = browser.contexts()[0].pages().find(p => !p.url().includes('devtools'));
 assert(page, 'native WebView page is missing');
 const report = {
-  issue: 'CHR-267', capturedAt: new Date().toISOString(), nativeCommit, expectedBuild,
+  issue: 'CHR-267', capturedAt: new Date().toISOString(), nativeCommit, expectedBuild, nativeProfile,
   fixture: { path: rawPath, sha256, bytes: (await stat(rawPath)).size,
     dataset: 'Two hard-linked paths of one real camera capture; not two independent photographs',
     licence: process.env.CULL_RAW_LICENSE || 'unspecified', source: process.env.CULL_RAW_SOURCE || null },
@@ -76,6 +78,21 @@ try {
   }, undefined, { timeout: 180000 });
   await page.locator('#lib-survey [data-detail="fit"]').click();
   await page.locator('.lib-survey-cell[data-survey-idx="0"]').focus();
+  // Start from an idle fitted presentation, not outstanding work from the warming controls.
+  await page.waitForFunction(() => {
+    const cells = [...document.querySelectorAll('#lib-survey .lib-survey-cell')];
+    const ready = cells.length === 2 && document.querySelector('.lib-survey-cell.cmp-focus')?.dataset.surveyIdx === '0'
+      && cells.every(el => {
+        const wrap = el.querySelector('.lib-cmp-canvas-wrap'), canvas = el.querySelector('canvas');
+        const iw = +el.dataset.sourceWidth, ih = +el.dataset.sourceHeight;
+        if (!wrap || !canvas || iw * ih < 44e6) return false;
+        const fit = Math.min(1, wrap.clientWidth / iw, wrap.clientHeight / ih), rect = canvas.getBoundingClientRect();
+        return Math.abs(rect.width - iw * fit) < 3 && Math.abs(rect.height - ih * fit) < 3
+          && canvas.width >= Math.floor(rect.width) && canvas.height >= Math.floor(rect.height);
+      });
+    window.__chr267WarmFitFrames = ready ? (window.__chr267WarmFitFrames || 0) + 1 : 0;
+    return window.__chr267WarmFitFrames >= 2;
+  }, undefined, { timeout: 15000 });
   // Install an event-clock observer without modifying app functions or accelerating any work.
   await page.evaluate(() => {
     const state = window.__chr267PresentationProbe = { pending: null, results: [] };

@@ -17,6 +17,7 @@ Run `node test/library_cull_perf_native.mjs` with the shared Playwright runtime 
 - `CULL_RAW_LICENSE`: `CC0-1.0`.
 - `CULL_NATIVE_COMMIT`: exact 40-character source commit used to build the native app.
 - `CULL_EXPECTED_BUILD`: that app's BUILD stamp.
+- `CULL_NATIVE_PROFILE`: `debug` or `release`; timings apply to the recorded build profile.
 - `NATIVE_CDP`: native WebView debugging endpoint, normally `http://127.0.0.1:9223`.
 - `CULL_PERF_REPORT`: optional output JSON path.
 
