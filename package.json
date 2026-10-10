@@ -17,6 +17,7 @@
     "mask:test": "node test/mask_raster.mjs",
     "mask:portable-copy": "node --test test/mask_portable_copy.mjs && node test/mask_portable_copy_ui.mjs",
     "mask:overlay": "node test/mask_overlay.mjs",
+    "mask:style-presets": "node --test test/mask_style_presets.mjs && node test/mask_style_presets_ui.mjs",
     "teeth:test": "node test/teeth_whitening.mjs",
     "mask:refinement-math": "node test/mask_refinement_math.mjs",
     "wireframe:test": "node test/wireframe_inventory.mjs",

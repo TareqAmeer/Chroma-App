@@ -7326,7 +7326,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1010S';
+const BUILD='1.1010T';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18120,6 +18120,7 @@ function mskMoreMenu(ev){
     +(m.composeOp&&!_mskCompositionPlan(_mskEnsureIds(fxState.masks)).valid[mskSel]
       ?'<button class="msk-more-it" disabled title="This operation has a missing or cyclic operand and selects no pixels" aria-label="Selection disabled; choose a replacement operand">'+icon('warn',15)+'<span>Selection disabled — choose a replacement</span></button>':'')
     +(fxState.masks.length>1?'<button type="button" class="msk-more-it" aria-haspopup="dialog" onclick="mskCompositionMenu(event)">'+icon('layers',15)+'<span>Compose with…</span></button>':'')
+    +item('Save as Mask Preset…','star','styleSaveCurrent(true)')
     +(mskSel>0&&m.composeOp!=='add'?item('Add previous mask','local','mskToggleAdd()'):'')
     +(mskSel>0&&m.composeOp!=='subtract'?item('Subtract previous mask','scissors','mskSetComposition(\'subtract\')'):'')
     +(mskSel>0&&m.composeOp!=='intersect'?item('Intersect with previous mask','eyedropper','mskSetComposition(\'intersect\')'):'')
@@ -21348,12 +21349,13 @@ function autoEnhance(){
 const _STYLES_KEY='chromasmith-styles-v1';
 function stylesList(){try{return JSON.parse(localStorage.getItem(_STYLES_KEY)||'[]')}catch(e){return[]}}
 function stylesSave(list){try{localStorage.setItem(_STYLES_KEY,JSON.stringify(list))}catch(e){log('Could not save styles: '+e.message,'err')}}
-async function styleSaveCurrent(){
+async function styleSaveCurrent(maskPreset=false){
   const defaults=_pasteAllFieldKeys().filter(k=>k!=='extra:geom'&&k!=='extra:heal');
-  const keys=await _pasteChooseFields('Save Style — choose included settings',_pasteSelectionGet(_pasteAllFieldKeys(),defaults),_pasteAllFieldKeys(),'Continue');
+  const initial=maskPreset?['toggle:local','extra:masks']:_pasteSelectionGet(_pasteAllFieldKeys(),defaults);
+  const keys=await _pasteChooseFields(maskPreset?'Save Mask Preset — choose included settings':'Save Style — choose included settings',initial,_pasteAllFieldKeys(),'Continue');
   if(!keys||!keys.length)return;
   // askTextModal, never window.prompt — see saveLUTToLibrary.
-  const name=(await askTextModal('Name this Style','Use "Folder/Name" to file it in a folder.')||'').trim();
+  const name=(await askTextModal(maskPreset?'Name this Mask Preset':'Name this Style','Use "Folder/Name" to file it in a folder.')||'').trim();
   if(!name)return;
   const snap=getUISnapshot(),recipe=pasteEditSelectiveApply({sliders:{},toggles:{},selects:{},colors:{}},snap,keys);
   delete recipe.adjustIndependent;
@@ -21363,7 +21365,7 @@ async function styleSaveCurrent(){
   if(existing>=0){if(!await confirmModal(`A Style named "${name}" already exists. Overwrite it?`,'Overwrite'))return;list[existing]=entry;}
   else list.push(entry);
   stylesSave(list);styleListRefresh();
-  toast(`Style "${name}" saved`,true);
+  toast(`${maskPreset?'Mask Preset':'Style'} "${name}" saved`,true);
 }
 async function styleApply(name){
   await stylePreviewCancel();
@@ -21372,12 +21374,88 @@ async function styleApply(name){
   if(!allowed.length){toast('This Style contains no applicable settings',false);return;}
   const selected=await _pasteChooseFields('Apply Style — choose settings',_pasteSelectionGet(allowed,allowed),allowed,'Apply');
   if(!selected||!selected.length)return;
-  const pre=getUISnapshot();
-  try{const post=pasteEditSelectiveApply(JSON.parse(JSON.stringify(pre)),s.recipe,selected);
+  let chosen=[...selected],preparedMasks=null,maskChoice=null;
+  const sourceMasks=Array.isArray(s.recipe.masks)?s.recipe.masks:[];
+  if(chosen.includes('extra:masks')&&!sourceMasks.length)chosen=chosen.filter(k=>k!=='extra:masks'&&k!=='toggle:local');
+  const pre=getUISnapshot(),preSignature=JSON.stringify(pre),applyItem=curItem();
+  if(chosen.includes('extra:masks')){
+    const choice=await _styleMaskApplyChoice();if(!choice)return;maskChoice=choice;
+    const targetItem=applyItem,targetSignature=_mskPortableMaskSignature(fxState.masks);
+    const result=await _stylePrepareMaskPreset(sourceMasks,fxState.masks,choice,{
+      clone:_mskCloneLive,newId:_mskNewId,compositionPlan:_mskCompositionPlan,
+      isUnsupported:_mskPortableIsUnsupported,needsReevaluation:_mskPortableNeedsReevaluation,
+      clearSourceRaster:m=>{m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;delete m._refineCache;delete m._refineSourceHash;},
+      reevaluate:_mskPortableReevaluate,target:{item:targetItem},current:()=>curItem(),
+      depthAvailable:(m,item)=>!m.depOn||m.origin!=='depth'||!!fxDepthForGeom(item&&item.img&&item.img._depthMap,item&&item.geom),
+      sourceSignature:()=>_mskPortableMaskSignature(fxState.masks),targetSignature,
+    });
+    if(!result.ok){chosen=chosen.filter(k=>k!=='extra:masks'&&k!=='toggle:local');toast('Mask Preset not applied: '+result.reason,false);}
+    else{preparedMasks=result.masks;if(result.skippedPixels)toast(`${result.skippedPixels} saved Brush mask${result.skippedPixels===1?'':'s'} skipped; choose “Include saved Brush pixels” to add them`,false);}
+  }
+  if(!chosen.length)return;
+  if(curItem()!==applyItem||JSON.stringify(getUISnapshot())!==preSignature){toast('Style not applied: photo or edits changed while masks were being prepared',false);return;}
+  try{const post=pasteEditSelectiveApply(JSON.parse(JSON.stringify(pre)),s.recipe,chosen);
+    if(preparedMasks){post.masks=preparedMasks.map(_mskToSnap);if(maskChoice.mode==='append'&&pre.masks.length)post.toggles.local=!!pre.toggles.local;}
     await applyUISnapshot(post);fxUpdate();log(`Style applied: ${name}`,'ok');
-    _styleRecent(name);_presetBlend={pre,post:getUISnapshot(),keys:selected};
+    _styleRecent(name);_presetBlend={pre,post:getUISnapshot(),keys:chosen};
     const r=document.getElementById('row-preset-str');if(r){r.style.display='';const sl=document.getElementById('sl-preset-str');sl.value=100;document.getElementById('vl-preset-str').textContent='100';}}
   catch(e){log('Could not apply style: '+e.message,'err');}
+}
+async function _styleMaskApplyChoice(){
+  _csModal('Apply mask preset',`<p style="margin:0 0 12px;color:var(--mut)">Choose how these masks should join the current photo.</p>
+    <label style="display:flex;gap:8px;align-items:center;padding:6px 0"><input type="radio" name="style-mask-mode" value="append" checked>Append to current masks</label>
+    <label style="display:flex;gap:8px;align-items:center;padding:6px 0"><input type="radio" name="style-mask-mode" value="replace">Replace current masks</label>
+    <label style="display:flex;gap:8px;align-items:center;padding:6px 0"><input type="checkbox" id="style-mask-pixels">Include saved Brush pixels</label>
+    <div class="btn-row" style="margin-top:14px;justify-content:flex-end"><button class="btn bgh" id="style-mask-cancel">Cancel</button><button class="btn bpri" id="style-mask-apply">Apply masks</button></div>`);
+  const ov=document.getElementById('cs-modal-ov');
+  return new Promise(resolve=>{
+    let settled=false;const observer=new MutationObserver(()=>{if(!ov.isConnected)finish(null);});observer.observe(document.documentElement,{childList:true,subtree:true});
+    const finish=value=>{if(settled)return;settled=true;observer.disconnect();resolve(value);};
+    ov.__csClose=((close)=>()=>{finish(null);close();})(ov.__csClose);
+    ov.querySelector('#style-mask-cancel').onclick=()=>ov.__csClose();
+    ov.querySelector('#style-mask-apply').onclick=()=>{const mode=ov.querySelector('[name="style-mask-mode"]:checked')?.value||'append';const includeSavedPixels=!!ov.querySelector('#style-mask-pixels')?.checked;finish({mode,includeSavedPixels});ov.__csClose(false);};
+  });
+}
+async function _stylePrepareMaskPreset(sourceMasks,targetMasks,choice,deps){
+  if(!Array.isArray(sourceMasks)||!sourceMasks.length)return{ok:false,reason:'the saved Style has no masks'};
+  const base=choice.mode==='replace'?[]:(targetMasks||[]).map(deps.clone);
+  const unsupported=sourceMasks.filter(deps.isUnsupported);
+  if(unsupported.length)return{ok:false,reason:'unsupported AI intent: '+unsupported.map(m=>m.name||m.origin||m.id).join(', ')};
+  const source=sourceMasks.map(deps.clone);
+  const included=source.filter(m=>deps.needsReevaluation(m)||!(m.type==='brush'||m.origin==='brush'||m.origin==='paint')||choice.includeSavedPixels);
+  if(!included.length)return{ok:false,reason:'no supported masks were selected (enable “Include saved Brush pixels” for saved brush strokes)'};
+  const missingDepth=included.filter(m=>m.origin==='depth'&&m.depOn&&!deps.depthAvailable(m,deps.target.item));
+  if(missingDepth.length)return{ok:false,reason:'the target photo has no valid depth map for '+missingDepth.map(m=>m.name||m.id).join(', ')};
+  if(new Set(source.map(m=>m.id)).size!==source.length)return{ok:false,reason:'the saved mask group contains duplicate IDs'};
+  const sourceIds=new Set(source.map(m=>m.id));
+  const includedIds=new Set(included.map(m=>m.id));
+  for(const m of included){
+    const op=m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
+    if(op&&(!sourceIds.has(m.operandId)||!includedIds.has(m.operandId)))return{ok:false,reason:`${m.name||m.id} depends on an omitted or missing mask`};
+  }
+  const sourcePlan=deps.compositionPlan(source);
+  if(sourcePlan.valid.some(v=>!v))return{ok:false,reason:'the saved mask group contains a missing or cyclic composition link'};
+  const idMap=new Map(),generatedIds=new Set(),reservedIds=new Set([...sourceIds,...base.map(m=>m.id)]);
+  for(const m of included){
+    let id='';for(let attempt=0;attempt<32;attempt++){const candidate=deps.newId();if(candidate&&!reservedIds.has(candidate)&&!generatedIds.has(candidate)){id=candidate;break;}}
+    if(!id)return{ok:false,reason:'could not assign unique IDs to the incoming masks'};
+    generatedIds.add(id);idMap.set(m.id,id);
+  }
+  const candidates=included.map(m=>{const copy=deps.clone(m);copy.id=idMap.get(m.id);if(copy.operandId&&idMap.has(copy.operandId))copy.operandId=idMap.get(copy.operandId);return copy;});
+  if(base.length+candidates.length>8)return{ok:false,reason:`the ${base.length+candidates.length} masks would exceed the 8-mask limit`};
+  const graph=deps.compositionPlan(candidates);
+  if(graph.valid.some(v=>!v))return{ok:false,reason:'the resulting mask group would contain a broken or cyclic composition link'};
+  try{
+    for(const m of candidates){
+      if(!deps.needsReevaluation(m))continue;
+      deps.clearSourceRaster(m);
+      const outcome=await deps.reevaluate(m,deps.target);
+      if(!outcome||!outcome.ok)throw new Error(outcome&&outcome.error||'selection could not be regenerated');
+    }
+  }catch(e){return{ok:false,reason:String(e&&e.message||e)}}
+  if(deps.current()!==deps.target.item)return{ok:false,reason:'the active photo changed while selections were regenerated'};
+  if(deps.sourceSignature()!==deps.targetSignature)return{ok:false,reason:'current masks changed while selections were regenerated'};
+  return{ok:true,masks:[...base,...candidates],skippedPixels:source.length-included.length};
 }
 function _styleRecipeKeys(s){
   const manifest=Array.isArray(s.keys)?_pasteExpandKeys(s.keys):_pasteAllFieldKeys();
