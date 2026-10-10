@@ -1345,3 +1345,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - UI audit fails on existing undefined `--bg2`, narrow Library topbar fragmentation, phone Find target, and phone Studio contrast findings. The single Editor gate invocation reached a failed wireframe attempt and retry, then was interrupted without completion; it is not a passing gate. No baseline/golden regeneration was used. Native 45 MP timing proof remains pending the native build.
 
 - CHR-267 integration follow-up: the functional fit fixture initially sampled after a fixed 400 ms and failed during concurrent native/UI work. Replaced that delay with a bounded geometry-completion predicate; feature verification passes both directions at 512×384. This changes no native performance budget and does not count as native timing evidence.
+
+### 2026-10-10 — CHR-267 cull refit publication verification
+
+- Published benchmark preparation and cull focus refit as integration commits `5d36344b`, `9d3ca91d`, and functional-fixture follow-up `24274c62d507b598cf07d77bdb2c2fa192cbb408`. Verified `git ls-remote` and fetched `origin/main` both equal the latter hash, with the refit commit an ancestor.
+- Integrated two-direction fit checks pass at 512×384 with zero browser errors; the existing eight-photo survey checks passed unchanged, and native-gate syntax / `git diff --check` pass. Broader audit findings and incomplete Editor gate remain recorded above. Native RAW timings, colour labels, and full Trash undo remain open on CHR-267.
