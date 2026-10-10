@@ -18,6 +18,7 @@ Run `node test/library_cull_perf_native.mjs` with the shared Playwright runtime 
 - `CULL_NATIVE_COMMIT`: exact 40-character source commit used to build the native app.
 - `CULL_EXPECTED_BUILD`: that app's BUILD stamp.
 - `CULL_NATIVE_PROFILE`: `debug` or `release`; timings apply to the recorded build profile.
+- `CULL_NATIVE_CATALOG_DIR` and `CULL_NATIVE_CACHE_DIR`: record the task-owned paths supplied as `CS_CATALOG_DIR` and `CS_CACHE_DIR` when launching the native app. A separate WebView profile alone does not isolate these. The gate refuses catalogs containing any photos other than its two RAW paths.
 - `NATIVE_CDP`: native WebView debugging endpoint, normally `http://127.0.0.1:9223`.
 - `CULL_PERF_REPORT`: optional output JSON path.
 
