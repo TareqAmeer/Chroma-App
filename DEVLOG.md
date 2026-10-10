@@ -1360,3 +1360,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Published benchmark preparation and cull focus refit as integration commits `5d36344b`, `9d3ca91d`, and functional-fixture follow-up `24274c62d507b598cf07d77bdb2c2fa192cbb408`. Verified `git ls-remote` and fetched `origin/main` both equal the latter hash, with the refit commit an ancestor.
 - Integrated two-direction fit checks pass at 512×384 with zero browser errors; the existing eight-photo survey checks passed unchanged, and native-gate syntax / `git diff --check` pass. Broader audit findings and incomplete Editor gate remain recorded above. Native RAW timings, colour labels, and full Trash undo remain open on CHR-267.
+### 2026-10-10 — CHR-267 reproducible timing and usage preparation
+
+- Require the native debug/release profile in `test/library_cull_perf_native.mjs` and wait for two stable fitted frames after warming before measuring input. The 100 ms and 500 ms budgets remain unchanged; actual native measurements remain pending.
+- Updated `docs/validation/chr267/raw-fixture.md` and added `docs/codex-usage-plan.md` with bounded Luna delegation, shared caches, serialized builds/publication and evidence-based acceptance updates.
+- Node syntax and diff whitespace checks pass. These preparation changes do not complete any outstanding CHR-267 acceptance criterion.
