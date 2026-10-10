@@ -7302,7 +7302,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1010M';
+const BUILD='1.1010N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -15628,6 +15628,7 @@ function _mskFromSnap(o){
   return _mskMigrate(m);
 }
 function _mskCloneLive(m){return _mskFromSnap(_mskToSnap(m));}
+window.chromasmithMaskToSnapshot=m=>_mskToSnap(m);
 
 // ── Copy-on-write, so undo history can share rasters instead of copying them ──────────────────
 // fxHistoryPush marks every live raster frozen (some history entry now points at that exact
@@ -15945,13 +15946,13 @@ function mskAiTapToggle(force){
 // never awaited by the UI — samRunPoints() below just checks which token is ready at query time
 // and prefers SAM 2.1 once it lands. No user-visible mode toggle, same as the RAW refine.
 let _sam2Token=null,_sam2Encoding=false;
-async function samEnsureEncoded(){
+async function samEnsureEncoded(opts={}){
   if(!window.__TAURI__||_samToken||_samEncoding)return;
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
   if(!img)return;
   _samEncoding=true;
-  const endActivity=fxPhotoActivity(typeof curItem==='function'?curItem():null,'Preparing AI Select…');
-  if(typeof toast==='function')toast('Preparing AI Select…',true);
+  const endActivity=opts.silent?()=>{}:fxPhotoActivity(typeof curItem==='function'?curItem():null,'Preparing AI Select…');
+  if(!opts.silent&&typeof toast==='function')toast('Preparing AI Select…',true);
   try{
     const{w,h}=samInputDims();
     const d=mskSourceData(w,h,img);
@@ -15963,12 +15964,12 @@ async function samEnsureEncoded(){
     // re-check identity before caching the token, or a slow encode of the OUTGOING photo would
     // land after the switch and get used for the new one.
     const stillCurrent=((typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg)===img;
-    if(stillCurrent){_samToken=token;samEnsureEncoded2(img,rgb,w,h);} // fire-and-forget — NOT awaited, see doc comment above
+    if(stillCurrent){_samToken=token;if(!opts.noBackgroundRefine)samEnsureEncoded2(img,rgb,w,h);} // fire-and-forget — NOT awaited, see doc comment above
   }catch(e){
     const msg='AI Select: could not prepare this photo — '+(e&&e.message||e);
-    log(msg,'err');_samLastError=msg;
-    if(typeof toast==='function')toast(msg);
-    if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild();
+    if(!opts.silent){log(msg,'err');_samLastError=msg;
+      if(typeof toast==='function')toast(msg);
+      if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild();}
   }finally{_samEncoding=false;endActivity();}
 }
 async function samEnsureEncoded2(img,rgb,w,h){
@@ -16080,19 +16081,31 @@ function _samRefineMask(mask,w,h){
     return out;
   }catch(e){log('AI Select: guided-filter refine skipped — '+(e&&e.message||e),'warn');return mask;}
 }
-async function samRunPoints(m){
-  if(!window.__TAURI__)return;
-  if(!m.aiPoints||!m.aiPoints.length)return;
-  const endActivity=fxPhotoActivity(curItem(),'Selecting subject…');
+async function samRunPoints(m,opts={}){
+  if(!window.__TAURI__)return{ok:false,error:'AI mask recomputation requires the desktop app'};
+  if(!m.aiPoints||!m.aiPoints.length)return{ok:false,error:'This mask has no saved AI prompts'};
+  const item=curItem();
+  // A target raster is replaced, but the user's requested Feather/Edge settings remain part of
+  // the mask's intent and are reapplied to the new photo by the normal raster builder.
+  const detachedRefinement=opts.detached?{feather:m.refineFeather,edge:m.refineEdge}:null;
+  const endActivity=opts.detached?()=>{}:fxPhotoActivity(item,'Selecting subject…');
   try{
-    await samEnsureEncoded();
+    await samEnsureEncoded({silent:!!opts.silent,noBackgroundRefine:!!opts.detached});
+    // A semantic-copy candidate is detached from live masks. If another encode was already
+    // underway, wait for this photo's token instead of treating the in-flight flag as ready.
+    if(opts.detached&&_samEncoding&&!_samToken){
+      const deadline=Date.now()+30000;
+      while(_samEncoding&&!_samToken&&curItem()===item&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));
+    }
+    if(opts.expectedItem&&curItem()!==opts.expectedItem)return{ok:false,error:'Photo changed during mask recomputation'};
     if(!_samToken){
       const msg='AI Select is not ready yet — try again in a moment';
-      toast(msg);_samLastError=msg;mskRebuild();return;
+      if(!opts.silent){toast(msg);_samLastError=msg;mskRebuild();}return{ok:false,error:msg};
     }
     const points=samSubsamplePoints(m.aiPoints).map(p=>({x:p.nx,y:p.ny,positive:p.positive}));
     const useSam2=!!_sam2Token;
     const buf=await window.__TAURI__.core.invoke(useSam2?'sam2_points':'sam_points',{token:useSam2?_sam2Token:_samToken,points});
+    if(curItem()!==item||(opts.expectedItem&&curItem()!==opts.expectedItem))return{ok:false,error:'Photo changed during mask recomputation'};
     // Response is framed: [u32 headerLen][json {width,height}][mask bytes, row-major, one per pixel]
     const dv=new DataView(buf);
     const hlen=dv.getUint32(0,true);
@@ -16100,12 +16113,14 @@ async function samRunPoints(m){
     const mask=new Uint8Array(buf,4+hlen);
     if(mask.length!==header.width*header.height){
       const msg='AI Select: mask size mismatch — try scribbling again';
-      log(msg,'err');_samLastError=msg;if(typeof toast==='function')toast(msg);mskRebuild();return;
+      if(!opts.silent){log(msg,'err');_samLastError=msg;if(typeof toast==='function')toast(msg);mskRebuild();}return{ok:false,error:msg};
     }
     const refined=_samRefineMask(mask,header.width,header.height);
     m.px=Uint8ClampedArray.from(refined);m.mtW=header.width;m.mtH=header.height;
-    m.refineFeather=0;m.refineEdge=0;delete m._refineCache;
-    _mskTexDirty=true;_samLastError=null;
+    if(opts.detached){m.refineFeather=detachedRefinement.feather;m.refineEdge=detachedRefinement.edge;}
+    else{m.refineFeather=0;m.refineEdge=0;}
+    delete m._refineCache;
+    if(!opts.detached){_mskTexDirty=true;_samLastError=null;}
     // "+ Coat" is one button making two masks: the FIRST real segmentation of a coat mask spawns
     // its paired eye-brightness mask right alongside it. Only once — re-scribbling to refine the
     // coat selection later must not keep spawning new eye masks.
@@ -16113,14 +16128,15 @@ async function samRunPoints(m){
     // why — cutting the eye's shape out of the coat's own effect via 'subtract previous'), which
     // shifts this mask's array index. Re-find it so the panel stays on the coat mask the user was
     // just actively scribbling, rather than silently jumping to the newly-inserted Eyes mask.
-    if(m.origin==='coat'&&!m._coatEyeAdded){m._coatEyeAdded=true;_mskAddCoatEyeMask(m);mskSel=fxState.masks.indexOf(m);}
-    if(typeof hapt==='function')hapt();
-    mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+    if(!opts.detached&&m.origin==='coat'&&!m._coatEyeAdded){m._coatEyeAdded=true;_mskAddCoatEyeMask(m);mskSel=fxState.masks.indexOf(m);}
+    if(!opts.detached){if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();renderPreview();fxHistoryPush();}
+    return{ok:true,width:header.width,height:header.height};
   }catch(e){
     const msg='AI Select failed — '+(e&&e.message||e);
-    log(msg,'err');_samLastError=msg;
-    if(typeof toast==='function')toast(msg);
-    mskRebuild();
+    if(!opts.silent){log(msg,'err');_samLastError=msg;
+      if(typeof toast==='function')toast(msg);
+      mskRebuild();}
+    return{ok:false,error:msg};
   }finally{
     endActivity();
   }
@@ -17105,14 +17121,247 @@ function mskDuplicate(inverted){
 // had. Masks are per-photo by default (see installFXImages/fxSelectImage) specifically so this
 // never happens silently — this button is the only path that does it, and it says so.
 function mskCopyToAll(){
+  if(_mskSemanticCopyJob)return;
   if(fxImages.length<2)return;
   fxImages[fxCurIdx].masks=fxState.masks; // persist the source photo's own array first
   // Each target photo needs its OWN raster, not a shared reference — painting on one photo must
   // not paint on the rest. _mskCloneLive round-trips through the snapshot form, which copies the
   // typed array (a JSON clone would have turned it into an object and silently lost the mask).
   for(let i=0;i<fxImages.length;i++)if(i!==fxCurIdx)fxImages[i].masks=fxState.masks.map(_mskCloneLive);
+  if(fxState.masks.some(m=>mskIsAI(m)||m.origin==='sky'))log('Static copy: AI and sky raster pixels were copied as-is from the source photo. Use “Copy + re-evaluate” to regenerate supported selections.','warn');
   if(typeof hapt==='function')hapt();
-  toast(`Copied ${fxState.masks.length} mask(s) to ${fxImages.length-1} other photo(s)`,true);
+  toast(`Copied ${fxState.masks.length} mask(s) as-is to ${fxImages.length-1} other photo(s)`,true);
+}
+
+let _mskSemanticCopyJob=null,_mskSemanticCopyUndo=null;
+function _mskPortableMaskSignature(masks){
+  return JSON.stringify((masks||[]).map(m=>{
+    const px=m&&m.px;let hash=2166136261;
+    if(px)for(let i=0;i<px.length;i++){hash^=px[i];hash=Math.imul(hash,16777619);}
+    return[_mskToSnap(m,true),m&&m.mtW||0,m&&m.mtH||0,px?px.length:0,hash>>>0];
+  }));
+}
+async function _mskPortableCopyProcess(sourceMasks,targets,deps){
+  const results=[];
+  for(let ti=0;ti<targets.length;ti++){
+    const target=targets[ti];
+    if(deps.cancelled()){
+      for(let ri=ti;ri<targets.length;ri++)results.push({item:targets[ri].item,status:'cancelled',message:'Cancelled before processing'});
+      break;
+    }
+    deps.progress(ti,target,results);
+    const unsupported=sourceMasks.filter(deps.isUnsupported);
+    if(unsupported.length){
+      results.push({item:target.item,status:'skipped',message:'Unsupported AI mask(s): '+unsupported.map(m=>m.name||m.origin||m.id).join(', ')});
+      continue;
+    }
+    try{
+      await deps.select(target);
+      if(deps.cancelled()){results.push({item:target.item,status:'cancelled',message:'Cancelled'});continue;}
+      if(deps.current()!==target.item){results.push({item:target.item,status:'stale',message:'Active photo changed before recomputation'});continue;}
+      const beforeSignature=deps.signature(target.item);
+      const candidates=sourceMasks.map(deps.clone);
+      let warning='';
+      for(const candidate of candidates){
+        if(!deps.needsReevaluation(candidate))continue;
+        deps.clearSourceRaster(candidate);
+        const outcome=await deps.reevaluate(candidate,target);
+        if(!outcome||!outcome.ok)throw new Error(outcome&&outcome.error||'Mask recomputation failed');
+        if(outcome.warning)warning+=(warning?'; ':'')+outcome.warning;
+        if(deps.cancelled())throw new Error('Cancelled while recomputing this photo');
+        if(deps.current()!==target.item)throw new Error('Active photo changed during recomputation');
+      }
+      if(deps.cancelled()){results.push({item:target.item,status:'cancelled',message:'Cancelled'});continue;}
+      if(deps.current()!==target.item)throw new Error('Active photo changed before commit');
+      if(deps.signature(target.item)!==beforeSignature)throw new Error('Target masks changed during recomputation; existing edits were preserved');
+      const committed=await deps.commit(target,candidates);
+      const messages=[warning,committed&&committed.warning].filter(Boolean);
+      results.push({item:target.item,status:'applied',message:messages.join('; ')||'Re-evaluated supported masks'});
+    }catch(e){
+      const cancelled=deps.cancelled();
+      results.push({item:target.item,status:cancelled?'cancelled':'failed',message:String(e&&e.message||e)});
+      if(cancelled){for(let ri=ti+1;ri<targets.length;ri++)results.push({item:targets[ri].item,status:'cancelled',message:'Cancelled before processing'});break;}
+    }
+  }
+  return results;
+}
+async function _mskPortableUndoProcess(entries,restoreTarget,deps){
+  const results=[],remaining=[];
+  try{
+    for(let i=0;i<entries.length;i++){
+      const entry=entries[i];
+      if(deps.cancelled()){remaining.push(...entries.slice(i));break;}
+      if(deps.signature(entry.item)!==entry.afterSignature){results.push({item:entry.item,status:'conflict',message:'Changed since copy; preserved current masks'});continue;}
+      try{
+        await deps.select(entry);
+        if(deps.cancelled()){remaining.push(...entries.slice(i));break;}
+        if(deps.current()!==entry.item||deps.signature(entry.item)!==entry.afterSignature){
+          results.push({item:entry.item,status:'conflict',message:'Changed before undo; preserved current masks'});continue;
+        }
+        await deps.restore(entry);results.push({item:entry.item,status:'undone',message:'Original masks restored'});
+      }catch(e){
+        remaining.push(entry);results.push({item:entry.item,status:'failed',message:'Undo save failed: '+String(e&&e.message||e)});
+      }
+    }
+  }finally{
+    if(deps.canRestoreFocus())await deps.restoreFocus(restoreTarget);
+  }
+  return{results,remaining};
+}
+function _mskPortablePublish(job,results,stage){
+  const done=results.length,total=job.targets.length,applied=results.filter(r=>r.status==='applied').length;
+  const failed=results.filter(r=>r.status!=='applied'&&r.status!=='cancelled').map(r=>`${r.item.name||'Photo'}: ${r.message}`);
+  const cancelled=job.cancelled||results.some(r=>r.status==='cancelled');
+  const perPhoto=results.map(r=>`${r.item.name||'Photo'}: ${r.status}${r.message&&(r.status!=='applied'||r.message!=='Re-evaluated supported masks')?` (${r.message})`:''}`).join(' · ');
+  const current=results.length?`${applied} applied · ${results.filter(r=>r.status==='skipped').length} skipped · ${results.filter(r=>r.status==='failed'||r.status==='stale').length} failed · ${results.filter(r=>r.status==='cancelled').length} cancelled${perPhoto?' — '+perPhoto:''}${stage==='working'&&job.current?' · '+job.current:''}`:job.current||'Preparing';
+  if(typeof window.libActivityJob==='function')window.libActivityJob('mask-semantic-copy',{jobId:job.id,label:'Copy + re-evaluate masks',stage,done,total,current,
+    outcome:stage==='done'?(cancelled?'cancelled':failed.length?'partial':'completed'):undefined,failed:failed.length?failed:undefined,
+    cancelFn:stage==='working'?()=>{job.cancelled=true;job.current='Cancellation requested; finishing current model call…';}:null});
+}
+async function _mskPersistPortableCurrent(masksToWrite,expectedMasks,targetItem=curItem()){
+  if(typeof window.chromasmithSaveMaskSetForCurrentPhoto==='function')return await window.chromasmithSaveMaskSetForCurrentPhoto(masksToWrite,expectedMasks,targetItem);
+  throw new Error('Per-photo mask persistence is unavailable for this target');
+}
+function _mskPortableIsUnsupported(m){
+  if(m.origin==='sky')return false;
+  return mskIsAI(m)&&!(m.origin==='ai'&&Array.isArray(m.aiPoints)&&m.aiPoints.length>0);
+}
+function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||(m.origin==='ai'&&Array.isArray(m.aiPoints)&&m.aiPoints.length>0);}
+async function _mskPortableReevaluate(m,target){
+  if(m.origin==='sky'){
+    const refinement={feather:m.refineFeather,edge:m.refineEdge};
+    mskGenerateSky(m); // Reads the currently selected target photo; never retain source pixels.
+    // Sky redetection resets derived controls by design; semantic copy carries user intent to the
+    // target raster, so restore those per-mask settings before optional SAM refinement.
+    m.refineFeather=refinement.feather;m.refineEdge=refinement.edge;
+    if(!m.px||!m.px.length)return{ok:false,error:'Sky heuristic could not read this photo'};
+    m.aiPoints=_skySeedPoints(m);
+    if(m.aiPoints.length){
+      const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item});
+      if(!result.ok)return{ok:true,warning:'Sky heuristic regenerated for target; SAM refinement unavailable ('+result.error+')'};
+    }
+    return{ok:true,warning:m.aiPoints.length?'Sky selection regenerated and SAM-refined':'Sky heuristic regenerated; no stable SAM seed points'};
+  }
+  const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item});
+  return result.ok?{ok:true}:{ok:false,error:result.error||'SAM did not return a target raster'};
+}
+async function mskCopyAndReevaluate(){
+  if(_mskSemanticCopyJob||fxImages.length<2||!fxState.masks.length)return;
+  if(!window.__TAURI__){log('Copy + re-evaluate needs the desktop app with on-device SAM. Static copy remains available.','warn');return;}
+  if(typeof window.chromasmithFlushPendingSave==='function')await window.chromasmithFlushPendingSave();
+  const sourceIndex=fxCurIdx,sourceItem=fxImages[sourceIndex],sourceSelection=mskSel;
+  const sourceMasks=fxState.masks.map(_mskCloneLive);
+  const targets=fxImages.map((item,index)=>({item,index,label:item.name||`Photo ${index+1}`,hadMasks:Object.prototype.hasOwnProperty.call(item,'masks')})).filter(t=>t.index!==sourceIndex);
+  const job={id:'mask-copy-'+Date.now()+'-'+Math.random().toString(36).slice(2),sourceIndex,sourceItem,sourceSelection,targets,
+    cancelled:false,internalSwitch:false,expectedIndex:sourceIndex,current:'Preparing'};
+  _mskSemanticCopyJob=job;mskRebuild();_mskPortablePublish(job,[],'working');
+  const undoEntries=[];
+  try{
+    const results=await _mskPortableCopyProcess(sourceMasks,targets,{
+      cancelled:()=>job.cancelled||fxCurIdx!==job.expectedIndex,
+      current:()=>curItem(),
+      signature:item=>_mskPortableMaskSignature(item===curItem()?fxState.masks:(item.masks||[])),
+      clone:_mskCloneLive,
+      isUnsupported:_mskPortableIsUnsupported,
+      needsReevaluation:_mskPortableNeedsReevaluation,
+      clearSourceRaster:m=>{m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;delete m._refineCache;delete m._refineSourceHash;},
+      select:async target=>{job.current=`Opening ${target.label}`;job.internalSwitch=true;try{fxSelectImage(target.index);job.expectedIndex=target.index;}finally{job.internalSwitch=false;}},
+      progress:(i,target,results)=>{job.current=`${i+1}/${targets.length}: ${target.label}`;_mskPortablePublish(job,results,'working');},
+      reevaluate:_mskPortableReevaluate,
+      commit:async(target,candidates)=>{
+        const hadMasks=target.hadMasks;
+        const liveBefore=target.item===curItem()?fxState.masks:(target.item.masks||[]);
+        const before=liveBefore.map(_mskCloneLive);
+        // Persist the target-only candidate before changing editor state. This keeps a failed
+        // sidecar write atomic and prevents fxUpdate/autosave from broadcasting a half-commit.
+        const saveResult=await _mskPersistPortableCurrent(candidates,before,target.item);
+        const stillBefore=target.item===curItem()?fxState.masks:(target.item.masks||[]);
+        if(_mskPortableMaskSignature(stillBefore)!==_mskPortableMaskSignature(before)){
+          const latest=stillBefore.map(_mskCloneLive),latestSignature=_mskPortableMaskSignature(latest);
+          try{await _mskPersistPortableCurrent(latest,candidates,target.item);}
+          catch(e){throw new Error('Target masks changed during save; latest sidecar recovery failed ('+String(e&&e.message||e)+')');}
+          const afterRecovery=target.item===curItem()?fxState.masks:(target.item.masks||[]);
+          if(_mskPortableMaskSignature(afterRecovery)!==latestSignature)throw new Error('Target changed again during sidecar recovery; check the latest mask edits before continuing');
+          throw new Error('Target masks changed during save; latest edits were restored to the sidecar');
+        }
+        target.item.masks=candidates;
+        if(target.item===curItem()){
+          fxState.masks=candidates;mskSel=Math.min(sourceSelection,candidates.length-1);
+          _mskTexDirty=true;mskRebuild();fxUpdate();renderPreview();
+        }
+        undoEntries.push({item:target.item,index:target.index,hadMasks,before,after:candidates,afterSignature:_mskPortableMaskSignature(candidates)});
+        const warnings=[];
+        if(saveResult&&saveResult.queued)warnings.push('Saved to the offline edit queue');
+        return warnings.length?{warning:warnings.join('; ')}:null;
+      }
+    });
+    if(undoEntries.length)_mskSemanticCopyUndo={entries:undoEntries,sourceIndex,sourceItem,sourceSelection};
+    _mskPortablePublish(job,results,'done');
+    const applied=results.filter(r=>r.status==='applied').length,skipped=results.filter(r=>r.status==='skipped').length,failed=results.filter(r=>r.status==='failed'||r.status==='stale').length;
+    results.forEach(r=>log(`${r.item.name||'Photo'}: ${r.status}${r.message?` — ${r.message}`:''}`,r.status==='applied'?'ok':r.status==='cancelled'?'info':'warn'));
+    log(`Mask re-evaluation: ${applied} applied, ${skipped} skipped, ${failed} failed${job.cancelled?' (cancelled)':''}. This batch has its own guarded Undo action in the mask panel.`,'info');
+  }catch(e){
+    if(undoEntries.length)_mskSemanticCopyUndo={entries:undoEntries,sourceIndex,sourceItem,sourceSelection};
+    const result={item:sourceItem,status:'failed',message:String(e&&e.message||e)};
+    _mskPortablePublish(job,[result],'done');log('Mask re-evaluation failed: '+result.message,'err');
+  }finally{
+    const ownsCurrent=fxCurIdx===job.expectedIndex&&(curItem()===sourceItem||curItem()===fxImages[job.expectedIndex]);
+    if(ownsCurrent&&fxImages[sourceIndex]===sourceItem){job.internalSwitch=true;try{fxSelectImage(sourceIndex);mskSel=sourceSelection;mskRebuild();fxUpdate();renderPreview();}finally{job.internalSwitch=false;}}
+    _mskSemanticCopyJob=null;mskRebuild();
+  }
+}
+async function mskUndoPortableCopy(){
+  const undo=_mskSemanticCopyUndo;if(!undo||_mskSemanticCopyJob)return;
+  // Undo focus is the photo selected when the user starts Undo, not the source photo from copy.
+  const restoreTarget={item:curItem(),index:fxCurIdx,selection:mskSel};
+  const entries=[...undo.entries];
+  const job={id:'mask-copy-undo-'+Date.now(),sourceIndex:restoreTarget.index,sourceItem:restoreTarget.item,
+    sourceSelection:restoreTarget.selection,targets:entries.map(e=>({item:e.item,index:e.index,label:e.item.name||`Photo ${e.index+1}`})),
+    cancelled:false,internalSwitch:false,expectedIndex:restoreTarget.index,current:'Undoing'};
+  _mskSemanticCopyJob=job;mskRebuild();
+  let summary;
+  try{
+    summary=await _mskPortableUndoProcess(entries,restoreTarget,{
+      cancelled:()=>job.cancelled||fxCurIdx!==job.expectedIndex,
+      current:()=>curItem(),
+      signature:item=>_mskPortableMaskSignature(item===curItem()?fxState.masks:(item.masks||[])),
+      select:async entry=>{job.internalSwitch=true;try{fxSelectImage(entry.index);job.expectedIndex=entry.index;}finally{job.internalSwitch=false;}},
+      restore:async entry=>{
+        const copied=(entry.item===curItem()?fxState.masks:(entry.item.masks||[])).map(_mskCloneLive);
+        const restored=entry.before.map(_mskCloneLive);
+        await _mskPersistPortableCurrent(restored,copied,entry.item);
+        const current=(entry.item===curItem()?fxState.masks:(entry.item.masks||[]));
+        if(_mskPortableMaskSignature(current)!==entry.afterSignature){
+          const latest=current.map(_mskCloneLive),latestSignature=_mskPortableMaskSignature(latest);
+          try{await _mskPersistPortableCurrent(latest,restored,entry.item);}
+          catch(e){throw new Error('Target masks changed during undo save; latest sidecar recovery failed ('+String(e&&e.message||e)+')');}
+          const afterRecovery=entry.item===curItem()?fxState.masks:(entry.item.masks||[]);
+          if(_mskPortableMaskSignature(afterRecovery)!==latestSignature)throw new Error('Target changed again during undo sidecar recovery; check the latest mask edits before continuing');
+          throw new Error('Target masks changed during undo save; latest edits were restored to the sidecar');
+        }
+        if(entry.hadMasks)entry.item.masks=restored;else delete entry.item.masks;
+        if(entry.item===curItem()){
+          fxState.masks=restored;mskSel=Math.min(restoreTarget.selection,restored.length-1);
+          _mskTexDirty=true;mskRebuild();fxUpdate();renderPreview();
+        }
+      },
+      canRestoreFocus:()=>fxCurIdx===job.expectedIndex&&fxImages[restoreTarget.index]===restoreTarget.item,
+      restoreFocus:async target=>{job.internalSwitch=true;try{fxSelectImage(target.index);mskSel=target.selection;mskRebuild();fxUpdate();renderPreview();}finally{job.internalSwitch=false;}}
+    });
+    _mskSemanticCopyUndo=summary.remaining.length?{...undo,entries:summary.remaining}:null;
+    const undone=summary.results.filter(r=>r.status==='undone').length;
+    const details=summary.results.filter(r=>r.status!=='undone').map(r=>`${r.item.name||'Photo'}: ${r.message}`);
+    log(`Mask re-evaluation undo: ${undone} photo(s) restored${details.length?`; ${details.join('; ')}`:''}.`,'info');
+  }finally{
+    _mskSemanticCopyJob=null;mskRebuild();
+  }
+}
+
+function mskCancelPortableCopy(){
+  if(!_mskSemanticCopyJob)return;
+  _mskSemanticCopyJob.cancelled=true;
+  _mskSemanticCopyJob.current='Cancellation requested; finishing current model call…';
+  _mskPortablePublish(_mskSemanticCopyJob,[],'working');mskRebuild();
 }
 
 // ── Painted/sky raster masks: up to 4 packed one-per-channel into a single RGBA texture,
@@ -18675,15 +18924,25 @@ function mskRebuild(){
     b.ondrop=(e)=>{e.preventDefault();const from=parseInt(e.dataTransfer.getData('text/plain'),10);if(!isNaN(from))mskReorder(from,i);};
     list.appendChild(b);
   });
-  // Masks are per-photo by default (see installFXImages/fxSelectImage) — this is the one
-  // explicit, opt-in way to share the current photo's mask set across the rest of a batch.
+  // Static transfer remains explicit. AI rasters are photo-specific; offer semantic re-evaluation
+  // only for prompted SAM and sky, and report unsupported face-derived selections per target.
+  const hasAiRaster=fxState.masks.some(m=>mskIsAI(m)||m.origin==='sky');
   const batchBtn=(fxImages.length>1&&fxState.masks.length)
-    ?'<button class="btn bgh" onclick="mskCopyToAll()" title="Copies this photo\'s mask set onto every other loaded photo, overwriting theirs">Copy masks to the other '+(fxImages.length-1)+' photo'+(fxImages.length>2?'s':'')+'</button>'
+    ?'<button class="btn bgh" onclick="mskCopyToAll()" title="Copies stored mask pixels as-is, including photo-specific AI/sky rasters; overwrites every other loaded photo">Copy masks as-is to '+(fxImages.length-1)+' photo'+(fxImages.length>2?'s':'')+'</button>'
+      +(hasAiRaster?'<button class="btn bgh" onclick="mskCopyAndReevaluate()" title="Re-evaluates prompted AI and sky selections on each target photo; unsupported AI masks leave that photo unchanged">Copy + re-evaluate AI/sky</button>':'')
     :'';
+  const batchUndo=_mskSemanticCopyUndo&&_mskSemanticCopyUndo.entries.length
+    ?'<button class="btn bgh" onclick="mskUndoPortableCopy()" title="Restores only target mask sets still matching the last copy; changed targets are preserved">Undo last re-evaluated copy ('+_mskSemanticCopyUndo.entries.length+')</button>':'';
+  const batchCancel=_mskSemanticCopyJob
+    ?'<button class="btn bgh" onclick="mskCancelPortableCopy()" title="Cancel after the current model call">Cancel re-evaluation</button>':'';
+  const batchStatus=_mskSemanticCopyJob
+    ?'<div class="msk-hint" role="status">'+String(_mskSemanticCopyJob.current||'Re-evaluating masks').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))+'</div>':'';
+  const batchActions=[batchBtn,batchUndo,batchCancel].filter(Boolean).join('');
+  const batchUI=(batchActions?'<div class="btn-row" style="margin-bottom:8px">'+batchActions+'</div>':'')+batchStatus;
   const m=fxState.masks[mskSel];
   mskTeethGuideSync();
-  if(!m){ctl.innerHTML=(batchBtn?'<div class="btn-row">'+batchBtn+'</div>':'')+'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:6px">Add a mask to begin — Radial for faces/subjects, Linear or Sky for skies, Brush to paint any area (e.g. lifting shadow under an eye).</div>';return;}
-  let h=batchBtn?'<div class="btn-row" style="margin-bottom:8px">'+batchBtn+'</div>':'';
+  if(!m){ctl.innerHTML=batchUI+'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:6px">Add a mask to begin — Radial for faces/subjects, Linear or Sky for skies, Brush to paint any area (e.g. lifting shadow under an eye).</div>';return;}
+  let h=batchUI;
   // The mask's own row: name, the "..." menu, and (for raster masks) the paint tools. Everything
   // that shapes the selection is collected into `shape` and rendered inside the Selection group
   // below, rather than free-floating above it.
@@ -23227,6 +23486,9 @@ function buildFilmstrip(){
   el.scrollLeft=_sl; // rebuild wiped scroll position -> strip jumped on every switch
 }
 function fxSelectImage(idx){
+  // A user switch while semantic mask work is awaiting SAM/save cancels the remaining targets.
+  // Let the requested switch happen; the stale callback checks this flag before committing.
+  if(_mskSemanticCopyJob&&!_mskSemanticCopyJob.internalSwitch)_mskSemanticCopyJob.cancelled=true;
   if(typeof fxSyncHdrOption==='function')setTimeout(fxSyncHdrOption,0); // HDR option depends on the SOURCE file, which changes with the photo
 
   if(typeof fxInvalidateMaskSource==='function')fxInvalidateMaskSource(); // A15: the cached photo-at-mask-resolution decode belongs to the OUTGOING photo

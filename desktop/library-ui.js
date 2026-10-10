@@ -4266,6 +4266,16 @@
   // ── base64<->JSON helpers for the edit-recipe sidecar payload (unicode-safe) ─────────────
   function snapshotToB64(snap) { return btoa(unescape(encodeURIComponent(JSON.stringify(snap)))); }
   function snapshotFromB64(b64) { return JSON.parse(decodeURIComponent(escape(atob(b64)))); }
+  function mergePhotoMaskRecipeSnapshot(snapshot, masks) {
+    // Snapshot categories belong to the target photo. Replace only its local mask list.
+    return { ...(snapshot && typeof snapshot === 'object' ? snapshot : {}), masks: masks.map(m => m) };
+  }
+  function canonicalRecipeValue(value) {
+    if (Array.isArray(value)) return value.map(canonicalRecipeValue);
+    if (!value || typeof value !== 'object') return value;
+    return Object.keys(value).sort().reduce((out, key) => { out[key] = canonicalRecipeValue(value[key]); return out; }, {});
+  }
+  function sameRecipeValue(a, b) { return JSON.stringify(canonicalRecipeValue(a)) === JSON.stringify(canonicalRecipeValue(b)); }
 
   // ── single-flight + latest-wins: without this, clicking photo A then quickly clicking
   // photo B started TWO concurrent opens with nothing stopping A's slower decode from
@@ -5229,7 +5239,7 @@
 
   let saveTimer, pendingSave = null;
   async function flushPendingSave() {
-    if (!pendingSave) return;
+    if (!pendingSave) return { ok: true, queued: false };
     clearTimeout(saveTimer);
     const { paths, snap, thumbPath } = pendingSave;
     const job = pendingSave;
@@ -5247,7 +5257,16 @@
       // made independent per photo (adjToggleScope/"This photo only") — if this photo has its
       // own override, patch its Adjust sliders + the independence flag in too, same reasoning.
       const it = fxImages[i];
+      const cur = await getSidecar(path);
       const perPhotoSnap = { ...snap };
+      // Local masks are per-photo too. Use each loaded photo's own set, including a known empty
+      // set; if this item has not materialized masks, keep the sidecar's set rather than inheriting
+      // the previewed photo's raster from the shared edit snapshot.
+      if (it) {
+        if (Array.isArray(it.masks)) perPhotoSnap.masks = it.masks.map(m =>
+          typeof window.chromasmithMaskToSnapshot === 'function' ? window.chromasmithMaskToSnapshot(m) : m);
+        else perPhotoSnap.masks = cur.recipe ? (snapshotFromB64(cur.recipe).masks || []) : [];
+      }
       if (it && it.geom) perPhotoSnap.geom = JSON.parse(JSON.stringify(it.geom));
       if (it && it.adjustOverride) {
         perPhotoSnap.sliders = { ...snap.sliders };
@@ -5257,7 +5276,6 @@
         perPhotoSnap.adjustIndependent = false;
       }
       const recipe = snapshotToB64(perPhotoSnap);
-      const cur = await getSidecar(path);
       const updated = { ...cur, edited: true, recipe };
       state.sidecars.set(path, updated);
       if (state.offlineEditPaths.has(path)) {
@@ -5277,6 +5295,7 @@
     // The live canvas only ever shows ONE photo (the currently previewed one) — refreshing
     // every batch photo's thumbnail from it would overwrite the rest with the wrong image.
     if (thumbPath) refreshCardThumbFromCanvas(thumbPath);
+    return { ok: !failed, queued };
   }
   window.chromasmithOnEdit = (snap) => {
     // FX/adjustments apply to the whole batch automatically, so a batch edit persists against
@@ -5296,6 +5315,43 @@
     saveTimer = setTimeout(flushPendingSave, 2000);
     if (window.chromasmithSaveState) window.chromasmithSaveState('pending');
   };
+  // CHR-247 semantic mask sync writes one photo's completed mask set only. Regular batch edits
+  // continue through chromasmithOnEdit/flushPendingSave; inference must not paste the active
+  // target's mask raster into every opened photo's recipe.
+  window.chromasmithSaveMaskSetForCurrentPhoto = async (masks, expectedMasks, targetItem) => {
+    // Finish pending work first, then resolve the target by its stable loaded-item identity. The
+    // caller may have switched photos while the sidecar write is in flight; never retarget it to
+    // whichever photo happens to be active after an await.
+    const pendingResult = await flushPendingSave();
+    if (pendingResult && pendingResult.ok === false) throw new Error('Pending photo edits could not be saved');
+    const index = targetItem ? fxImages.indexOf(targetItem) : fxCurIdx;
+    if (index < 0 || (targetItem && fxImages[index] !== targetItem)) throw new Error('Target photo is no longer loaded');
+    const paths = state.openedPath ? [state.openedPath] : (state.openedPaths || []);
+    const path = state.openedPath || paths[index];
+    if (!path) throw new Error('This photo has no library sidecar to save into');
+    const cur = await getSidecar(path);
+    const snap = cur.recipe ? snapshotFromB64(cur.recipe) : window.chromasmithMergeSelectiveRecipe(null, {}, []);
+    const encodedExpected = Array.isArray(expectedMasks) ? expectedMasks.map(m =>
+      typeof window.chromasmithMaskToSnapshot === 'function' ? window.chromasmithMaskToSnapshot(m) : m) : null;
+    if (encodedExpected && !sameRecipeValue(snap.masks || [], encodedExpected)) {
+      throw new Error('Target mask recipe changed before save; existing edits were preserved');
+    }
+    if (targetItem && fxImages[index] !== targetItem) throw new Error('Target photo changed during sidecar save');
+    const encodedMasks = masks.map(m => typeof window.chromasmithMaskToSnapshot === 'function'
+      ? window.chromasmithMaskToSnapshot(m) : m);
+    Object.assign(snap, mergePhotoMaskRecipeSnapshot(snap, encodedMasks));
+    const recipe = snapshotToB64(snap);
+    const queued = state.offlineEditPaths.has(path);
+    if (queued) {
+      await invoke('queue_offline_edit', { path, recipe });
+    } else {
+      await invoke('set_sidecar', { path, rating: cur.rating, label: cur.label, edited: true, recipe });
+    }
+    state.sidecars.set(path, { ...cur, edited: true, recipe });
+    markCardEdited(path);
+    return { ok: true, path, queued, durable: !queued };
+  };
+  window.chromasmithFlushPendingSave = flushPendingSave;
   // A pending write must not be silently dropped by switching photos (or quitting) inside
   // the 2s debounce window — flush it immediately whenever either happens.
   window.addEventListener('beforeunload', flushPendingSave);
