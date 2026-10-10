@@ -174,6 +174,7 @@ objc2-foundation = "0.3"
 # IFileOperation), Explorer reveal, shell-open, WIC thumbnail decode, Media Foundation video
 # posters. Official Microsoft bindings (MIT), same tier of dependency objc2 is on the macOS side.
 windows = { version = "0.58", features = [
+    "implement",
     "Win32_Foundation",
     "Win32_Storage_FileSystem",
     # CreateFileW (used by set_file_mtime's SetFileTime path) is gated behind this feature in the
@@ -204,6 +205,7 @@ windows = { version = "0.58", features = [
     # and GetDIBits (to read its pixels back into a JPEG) is GDI.
     "Win32_Graphics_Gdi",
 ] }
+windows-core = "0.58"
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 # On macOS, RunEvent::Opened (main.rs) already delivers both file-open and deep-link URLs via

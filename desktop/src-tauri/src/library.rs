@@ -3197,53 +3197,48 @@ pub fn duplicate_file(path: String) -> Result<String, String> {
     Ok(dest.to_string_lossy().into_owned())
 }
 
-/// Returns `Ok(false)` when the source file is missing (deleted elsewhere, or its drive is offline):
-/// nothing to trash, so the caller just drops the photo from the catalog.
-/// Moves a photo (and its .xmp sidecar) to macOS's Trash — never a hard delete, so it's
-/// recoverable the same way Finder's own Delete is. `~/.Trash` is normally on the same
-/// volume as the user's Documents/Pictures, so a plain rename works; falls back to
-/// copy+remove for the rare cross-volume case (e.g. an external drive).
-#[cfg(target_os = "macos")]
-#[tauri::command]
-pub fn trash_file(path: String) -> Result<bool, String> {
-    let src = Path::new(&path);
-    if !src.exists() { return Ok(false); }
-    let trash_dir = crate::platform::trash_dir().map_err(|_| "could not resolve ~/.Trash".to_string())?;
-    std::fs::create_dir_all(&trash_dir).map_err(|e| format!("create trash dir: {e}"))?;
-    let name = src.file_name().ok_or("no filename")?;
-    let mut dest = trash_dir.join(name);
-    let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
-    let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("");
-    let mut n = 1;
-    while dest.exists() {
-        n += 1;
-        let name = if ext.is_empty() { format!("{stem} {n}") } else { format!("{stem} {n}.{ext}") };
-        dest = trash_dir.join(name);
-    }
-    move_or_copy(src, &dest)?;
-    let sidecar = sidecar_path(&path);
-    if sidecar.exists() {
-        let sc_name = sidecar.file_name().ok_or("no sidecar filename")?;
-        let _ = move_or_copy(&sidecar, &trash_dir.join(sc_name));
-    }
-    Ok(true)
+fn trash_file_with_receipt(path: &str) -> Result<Option<crate::trash_undo::TrashReceipt>, String> {
+    use crate::trash_undo::TrashReceipt;
+    let src = Path::new(path);
+    if !src.exists() { return Ok(None); }
+    let mut photo_identity = crate::platform::move_to_trash_with_identity(src)?;
+    let sidecar_path = sidecar_path(path);
+    let sidecar = if sidecar_path.exists() {
+        match crate::platform::move_to_trash_with_identity(&sidecar_path) {
+            Ok(identity) => Some(crate::trash_undo::issue(sidecar_path.to_string_lossy().into_owned(), identity)),
+            Err(err) => {
+                match crate::platform::restore_from_trash(&mut photo_identity, src) {
+                    Ok(()) => return Err(format!("trash sidecar {}: {err}; photo restored to source", sidecar_path.display())),
+                    Err(rollback_err) => {
+                        return Ok(Some(crate::trash_undo::photo_only_partial(
+                            path.to_string(), photo_identity,
+                            format!("sidecar could not be moved ({err}); photo rollback also failed ({rollback_err})"),
+                        )));
+                    }
+                }
+            }
+        }
+    } else { None };
+    let photo = crate::trash_undo::issue(path.to_string(), photo_identity);
+    Ok(Some(TrashReceipt { photo, sidecar, warning: None }))
 }
 
-/// Windows has a real Recycle Bin API (unlike the macOS "move a file into ~/.Trash" convention
-/// above), so this goes straight through `IFileOperation` instead of reimplementing rename-with-
-/// numeric-suffix. The sidecar is trashed as its own item for the same reason: `IFileOperation`
-/// already handles same-named collisions in the Recycle Bin itself.
-#[cfg(windows)]
+/// Legacy-compatible Trash command; false still means the source disappeared before deletion.
 #[tauri::command]
-pub fn trash_file(path: String) -> Result<bool, String> {
-    let src = Path::new(&path);
-    if !src.exists() { return Ok(false); }
-    crate::platform::move_to_trash(src)?;
-    let sidecar = sidecar_path(&path);
-    if sidecar.exists() {
-        let _ = crate::platform::move_to_trash(&sidecar);
-    }
-    Ok(true)
+pub fn trash_file(path: String) -> Result<bool, String> { Ok(trash_file_with_receipt(&path)?.is_some()) }
+
+/// Undo-capable Library Trash operation. The receipt includes exact platform-generated identities
+/// for the photo and matching XMP, never a basename/mtime reconstruction.
+#[tauri::command]
+pub fn trash_file_with_undo(path: String) -> Result<Option<crate::trash_undo::TrashReceipt>, String> {
+    trash_file_with_receipt(&path)
+}
+
+/// Restore one exact Trash receipt entry. A missing source or newly occupied original path fails
+/// without searching Trash or overwriting user data, leaving the caller's receipt retryable.
+#[tauri::command]
+pub fn restore_trashed_entry(receipt: crate::trash_undo::TrashEntryReceipt) -> Result<(), String> {
+    crate::trash_undo::restore(&receipt)
 }
 
 /// `cache_dir()` holds two very different kinds of file: generated, regenerable cache entries
@@ -3340,7 +3335,7 @@ pub fn reveal_in_finder(path: String) -> Result<(), String> {
     crate::platform::reveal_in_file_manager(&path)
 }
 
-fn move_or_copy(src: &Path, dest: &Path) -> Result<(), String> {
+pub(crate) fn move_or_copy(src: &Path, dest: &Path) -> Result<(), String> {
     if std::fs::rename(src, dest).is_ok() {
         return Ok(());
     }

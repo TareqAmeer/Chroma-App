@@ -3,6 +3,7 @@
 //! `cargo test` is what proves that.
 
 use std::ffi::{CStr, CString};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn home_dir() -> Result<PathBuf, String> {
@@ -35,6 +36,117 @@ pub fn downloads_dir() -> Result<PathBuf, String> {
 /// `$HOME/.Trash` — the destination `trash_file` moves (or copies, cross-volume) into.
 pub fn trash_dir() -> Result<PathBuf, String> {
     Ok(home_dir()?.join(".Trash"))
+}
+
+/// Move one item to macOS Trash and return the exact destination used for this operation.
+pub fn move_to_trash_with_identity(path: &Path) -> Result<crate::trash_undo::PlatformTrashIdentity, String> {
+    let trash_dir = trash_dir()?;
+    std::fs::create_dir_all(&trash_dir).map_err(|e| format!("create Trash directory: {e}"))?;
+    let name = path.file_name().ok_or("no filename")?;
+    let mut destination = trash_dir.join(name);
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+    let mut suffix = 1;
+    loop {
+        match move_file_to_unique_trash_path(path, &destination) {
+            Ok(()) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                suffix += 1;
+                let candidate = if ext.is_empty() { format!("{stem} {suffix}") } else { format!("{stem} {suffix}.{ext}") };
+                destination = trash_dir.join(candidate);
+            }
+            Err(error) => return Err(format!("move {} into Trash: {error}", path.display())),
+        }
+    }
+    Ok(crate::trash_undo::PlatformTrashIdentity::TrashPath(destination.to_string_lossy().into_owned()))
+}
+
+/// Atomically claim the destination without replacing an item another process may have
+/// created after our name selection. Same-volume moves use a hard link plus unlink; when the
+/// filesystem does not support that, a create_new copy is used and only then is the source
+/// removed. Neither path overwrites an existing Trash item.
+fn move_file_to_unique_trash_path(source: &Path, destination: &Path) -> std::io::Result<()> {
+    match std::fs::hard_link(source, destination) {
+        Ok(()) => {
+            if let Err(error) = std::fs::remove_file(source) {
+                let _ = std::fs::remove_file(destination);
+                return Err(error);
+            }
+            return Ok(());
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => return Err(error),
+        Err(_) => {}
+    }
+
+    let mut input = std::fs::File::open(source)?;
+    let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(destination)?;
+    if let Err(error) = std::io::copy(&mut input, &mut output).and_then(|_| output.flush()) {
+        let _ = std::fs::remove_file(destination);
+        return Err(error);
+    }
+    if let Err(error) = std::fs::remove_file(source) {
+        let _ = std::fs::remove_file(destination);
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod trash_identity_tests {
+    use super::move_file_to_unique_trash_path;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn trash_move_refuses_existing_identity_and_moves_exact_source() {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("chromasmith-mac-trash-identity-{nonce}"));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("photo.jpg");
+        // Use separate folders so source and Trash destination have the same basename.
+        let trash = root.join("Trash");
+        std::fs::create_dir_all(&trash).unwrap();
+        let destination = trash.join("photo.jpg");
+        std::fs::write(&source, b"source bytes").unwrap();
+        std::fs::write(&destination, b"existing trash bytes").unwrap();
+        let error = move_file_to_unique_trash_path(&source, &destination).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(std::fs::read(&source).unwrap(), b"source bytes");
+        assert_eq!(std::fs::read(&destination).unwrap(), b"existing trash bytes");
+
+        std::fs::remove_file(&destination).unwrap();
+        move_file_to_unique_trash_path(&source, &destination).unwrap();
+        assert!(!source.exists());
+        assert_eq!(std::fs::read(&destination).unwrap(), b"source bytes");
+        let _ = std::fs::remove_dir_all(root);
+    }
+}
+
+/// Restore only the item named by the captured Trash path. The caller checks the destination
+/// first; this check is repeated here to protect against a path appearing during IPC.
+pub fn restore_from_trash(identity: &mut crate::trash_undo::PlatformTrashIdentity, destination: &Path) -> Result<(), String> {
+    if destination.exists() { return Err(format!("restore refused because the original path is occupied: {}", destination.display())); }
+    let crate::trash_undo::PlatformTrashIdentity::TrashPath(identity) = identity else { return Err("receipt identity is not a macOS Trash path".into()); };
+    let trashed = Path::new(identity);
+    if !trashed.exists() { return Err(format!("the exact Trash item is missing: {identity}")); }
+    // Create the target atomically without replacement, then remove the exact Trash source.
+    // Unlike rename(), this cannot overwrite a file created after the existence check.
+    let mut input = std::fs::File::open(trashed).map_err(|e| format!("open exact Trash item: {e}"))?;
+    let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(destination)
+        .map_err(|e| format!("restore refused without overwriting the original path: {e}"))?;
+    if let Err(e) = std::io::copy(&mut input, &mut output) {
+        let _ = std::fs::remove_file(destination);
+        return Err(format!("copy exact Trash item to original path: {e}"));
+    }
+    if let Err(e) = output.flush() {
+        drop(output);
+        let _ = std::fs::remove_file(destination);
+        return Err(format!("flush restored file: {e}"));
+    }
+    if let Err(e) = std::fs::remove_file(trashed) {
+        let _ = std::fs::remove_file(destination);
+        return Err(format!("restored copy but could not remove exact Trash item: {e}"));
+    }
+    Ok(())
 }
 
 /// Total/available bytes for the filesystem containing `path`, via `statfs(2)`. Best-effort:

@@ -6,11 +6,11 @@
 //! than living here; this file covers the platform:: surface itself.
 
 use std::path::{Path, PathBuf};
-use windows::core::{HSTRING, PCWSTR};
+use windows::core::{implement, HSTRING, PCWSTR, HRESULT};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, MAX_PATH};
 use windows::Win32::Storage::FileSystem::{
     GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives, GetVolumePathNameW, GetVolumeNameForVolumeMountPointW, CreateFileW,
-    SetFileTime, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    SetFileTime, MoveFileW, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     FILE_FLAG_BACKUP_SEMANTICS,
 };
 
@@ -23,10 +23,12 @@ use windows::Win32::System::Com::{
     CoInitializeEx, CoCreateInstance, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
 };
 use windows::Win32::UI::Shell::{
-    FileOperation, IFileOperation, IShellItem, SHCreateItemFromParsingName, SHGetKnownFolderPath,
+    FileOperation, IFileOperation, IFileOperationProgressSink, IFileOperationProgressSink_Impl, IShellItem, SHCreateItemFromParsingName, SHGetKnownFolderPath,
     FOLDERID_LocalAppData, FOLDERID_RoamingAppData, FOLDERID_Profile, FOLDERID_Downloads, FOLDERID_ProgramData,
-    FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_SILENT, KF_FLAG_DEFAULT,
+    FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_SILENT, FOF_RENAMEONCOLLISION, KF_FLAG_DEFAULT, SIGDN_DESKTOPABSOLUTEPARSING, SIGDN_FILESYSPATH,
 };
+use windows::Win32::System::Com::CoTaskMemFree;
+use std::sync::{Arc, Mutex};
 
 /// `\\?\` verbatim-prefixes an absolute path so Win32 file calls bypass the 260-char MAX_PATH
 /// limit. Cheap, and the failure mode without it ("path not found" on a perfectly real deeply
@@ -312,22 +314,31 @@ pub fn set_file_mtime(path: &Path, unix_secs: i64) -> Result<(), String> {
 /// runs the operation, and joins — never call the private `move_to_trash_sta` directly from an
 /// async context.
 pub fn move_to_trash(path: &Path) -> Result<(), String> {
+    move_to_trash_with_identity(path).map(|_| ())
+}
+
+/// Delete through the system Recycle Bin and capture the exact shell identity created by that
+/// IFileOperation. No filename/time search through existing Recycle Bin items is used.
+pub fn move_to_trash_with_identity(path: &Path) -> Result<crate::trash_undo::PlatformTrashIdentity, String> {
     let path = path.to_path_buf();
     std::thread::spawn(move || move_to_trash_sta(&path))
         .join()
         .map_err(|_| "trash worker thread panicked".to_string())?
 }
 
-fn move_to_trash_sta(path: &Path) -> Result<(), String> {
+fn move_to_trash_sta(path: &Path) -> Result<crate::trash_undo::PlatformTrashIdentity, String> {
     unsafe {
         CoInitializeEx(None, COINIT_APARTMENTTHREADED)
             .ok()
             .map_err(|e| format!("CoInitializeEx: {e}"))?;
-        let result = (|| -> Result<(), String> {
+        let result = (|| -> Result<crate::trash_undo::PlatformTrashIdentity, String> {
             let op: IFileOperation =
                 CoCreateInstance(&FileOperation, None, CLSCTX_ALL).map_err(|e| format!("CoCreateInstance(FileOperation): {e}"))?;
             op.SetOperationFlags(FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT)
                 .map_err(|e| format!("SetOperationFlags: {e}"))?;
+            let captured = Arc::new(Mutex::new(None));
+            let sink: IFileOperationProgressSink = TrashIdentitySink(captured.clone()).into();
+            let cookie = op.Advise(&sink).map_err(|e| format!("IFileOperation::Advise: {e}"))?;
             // NOT long_path(): the shell namespace API rejects a `\\?\` verbatim path outright (E_INVALIDARG,
             // 0x80070057 — verified live: trash_file failed for every file), and it also rejects `/`.
             // Plain backslash-separated is what SHCreateItemFromParsingName wants; the shell handles
@@ -337,11 +348,156 @@ fn move_to_trash_sta(path: &Path) -> Result<(), String> {
             let wide = HSTRING::from(plain.as_str());
             let item: IShellItem = SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None)
                 .map_err(|e| format!("SHCreateItemFromParsingName({}): {e}", path.display()))?;
-            op.DeleteItem(&item, None).map_err(|e| format!("IFileOperation::DeleteItem: {e}"))?;
-            op.PerformOperations().map_err(|e| format!("IFileOperation::PerformOperations: {e}"))
+            let queued = op.DeleteItem(&item, None);
+            if let Err(e) = queued { let _ = op.Unadvise(cookie); return Err(format!("IFileOperation::DeleteItem: {e}")); }
+            let performed = op.PerformOperations();
+            let aborted = op.GetAnyOperationsAborted();
+            let _ = op.Unadvise(cookie);
+            if let Some(identity) = captured.lock().unwrap().take() {
+                return Ok(crate::trash_undo::PlatformTrashIdentity::WindowsShell(identity));
+            }
+            performed.map_err(|e| format!("IFileOperation::PerformOperations: {e}"))?;
+            if aborted.map_err(|e| format!("check Recycle Bin deletion result: {e}"))?.as_bool() {
+                return Err("Windows aborted the Recycle Bin deletion".into());
+            }
+            Err("Recycle Bin did not return an undo identity for the deleted item".into())
         })();
         CoUninitialize();
         result
+    }
+}
+
+#[implement(IFileOperationProgressSink)]
+struct TrashIdentitySink(Arc<Mutex<Option<String>>>);
+
+#[allow(non_snake_case)]
+impl IFileOperationProgressSink_Impl for TrashIdentitySink_Impl {
+    fn StartOperations(&self) -> windows::core::Result<()> { Ok(()) }
+    fn FinishOperations(&self, _hrresult: HRESULT) -> windows::core::Result<()> { Ok(()) }
+    fn PreRenameItem(&self, _dwflags: u32, _psiitem: Option<&IShellItem>, _psznewname: &PCWSTR) -> windows::core::Result<()> { Ok(()) }
+    fn PostRenameItem(&self, _dwflags: u32, _psiitem: Option<&IShellItem>, _psznewname: &PCWSTR, _hrrename: HRESULT, _psinewlycreated: Option<&IShellItem>) -> windows::core::Result<()> { Ok(()) }
+    fn PreMoveItem(&self, _dwflags: u32, _psiitem: Option<&IShellItem>, _psidestinationfolder: Option<&IShellItem>, _psznewname: &PCWSTR) -> windows::core::Result<()> { Ok(()) }
+    fn PostMoveItem(&self, _dwflags: u32, _psiitem: Option<&IShellItem>, _psidestinationfolder: Option<&IShellItem>, _psznewname: &PCWSTR, hrmove: HRESULT, psinewlycreated: Option<&IShellItem>) -> windows::core::Result<()> {
+        if hrmove.is_ok() {
+            if let Some(item) = psinewlycreated {
+                let display = unsafe { item.GetDisplayName(SIGDN_FILESYSPATH)? };
+                let identity = unsafe { display.to_string().map_err(|_| windows::core::Error::from_hresult(HRESULT(0x8007000Du32 as i32)))? };
+                unsafe { CoTaskMemFree(Some(display.0 as *const _)); }
+                *self.this.0.lock().unwrap() = Some(identity);
+            }
+        }
+        Ok(())
+    }
+    fn PreCopyItem(&self, _dwflags: u32, _psiitem: Option<&IShellItem>, _psidestinationfolder: Option<&IShellItem>, _psznewname: &PCWSTR) -> windows::core::Result<()> { Ok(()) }
+    fn PostCopyItem(&self, _dwflags: u32, _psiitem: Option<&IShellItem>, _psidestinationfolder: Option<&IShellItem>, _psznewname: &PCWSTR, _hrcopy: HRESULT, _psinewlycreated: Option<&IShellItem>) -> windows::core::Result<()> { Ok(()) }
+    fn PreDeleteItem(&self, _dwflags: u32, _psiitem: Option<&IShellItem>) -> windows::core::Result<()> { Ok(()) }
+    fn PostDeleteItem(&self, _dwflags: u32, _psiitem: Option<&IShellItem>, hrdelete: HRESULT, psinewlycreated: Option<&IShellItem>) -> windows::core::Result<()> {
+        if hrdelete.is_ok() {
+            let item = psinewlycreated.ok_or_else(|| windows::core::Error::from_hresult(HRESULT(0x80004005u32 as i32)))?;
+            let display = unsafe { item.GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING)? };
+            let identity = unsafe { display.to_string().map_err(|_| windows::core::Error::from_hresult(HRESULT(0x8007000Du32 as i32)))? };
+            unsafe { CoTaskMemFree(Some(display.0 as *const _)); }
+            *self.this.0.lock().unwrap() = Some(identity);
+        }
+        Ok(())
+    }
+    fn PreNewItem(&self, _dwflags: u32, _psidestinationfolder: Option<&IShellItem>, _psznewname: &PCWSTR) -> windows::core::Result<()> { Ok(()) }
+    fn PostNewItem(&self, _dwflags: u32, _psidestinationfolder: Option<&IShellItem>, _psznewname: &PCWSTR, _psztemplatename: &PCWSTR, _dwfileattributes: u32, _hrnew: HRESULT, _psinewitem: Option<&IShellItem>) -> windows::core::Result<()> { Ok(()) }
+    fn UpdateProgress(&self, _iworktotal: u32, _iworksofar: u32) -> windows::core::Result<()> { Ok(()) }
+    fn ResetTimer(&self) -> windows::core::Result<()> { Ok(()) }
+    fn PauseTimer(&self) -> windows::core::Result<()> { Ok(()) }
+    fn ResumeTimer(&self) -> windows::core::Result<()> { Ok(()) }
+}
+
+enum RestoreFailure {
+    Operation(String),
+    Retryable(crate::trash_undo::PlatformTrashIdentity, String),
+}
+impl From<String> for RestoreFailure { fn from(value: String) -> Self { Self::Operation(value) } }
+impl From<&str> for RestoreFailure { fn from(value: &str) -> Self { Self::Operation(value.to_string()) } }
+
+/// Restore the exact Recycle Bin shell item to its original path. The shell performs the actual
+/// restore so Recycle Bin metadata is removed with the item; occupied paths are rejected first.
+pub fn restore_from_trash(identity: &mut crate::trash_undo::PlatformTrashIdentity, destination: &Path) -> Result<(), String> {
+    if destination.exists() { return Err(format!("restore refused because the original path is occupied: {}", destination.display())); }
+    if let crate::trash_undo::PlatformTrashIdentity::RestoredTemp(temp) = identity {
+        let from = HSTRING::from(temp.as_str()); let to = HSTRING::from(destination.as_os_str());
+        return unsafe { MoveFileW(PCWSTR(from.as_ptr()), PCWSTR(to.as_ptr())) }
+            .map_err(|e| format!("restore retry refused without overwriting the original path: {e}"));
+    }
+    let shell_identity = match identity {
+        crate::trash_undo::PlatformTrashIdentity::WindowsShell(value) => value.clone(),
+        _ => return Err("receipt identity is not a Windows Recycle Bin item".into()),
+    };
+    let destination = destination.to_path_buf();
+    let result = std::thread::spawn(move || unsafe {
+        if let Err(e) = CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() {
+            return Err(RestoreFailure::Operation(format!("CoInitializeEx: {e}")));
+        }
+        let result = (|| -> Result<String, RestoreFailure> {
+            let item: IShellItem = SHCreateItemFromParsingName(PCWSTR(HSTRING::from(shell_identity.as_str()).as_ptr()), None)
+                .map_err(|e| format!("Recycle Bin item is unavailable: {e}"))?;
+            let parent = destination.parent().ok_or("restore target has no parent directory")?;
+            let plain = parent.to_string_lossy().replace('/', "\\");
+            let folder: IShellItem = SHCreateItemFromParsingName(PCWSTR(HSTRING::from(plain.as_str()).as_ptr()), None)
+                .map_err(|e| format!("resolve restore folder: {e}"))?;
+            // Reserve a unique temporary name. RENAMEONCOLLISION makes the Shell choose another
+            // name if anything races this reservation; the progress sink returns the exact file.
+            let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
+            let temp_name = format!(".chromasmith-restore-{}-{nonce:x}.tmp", std::process::id());
+            let temp_placeholder = parent.join(&temp_name);
+            let capture = Arc::new(Mutex::new(None));
+            let sink: IFileOperationProgressSink = TrashIdentitySink(capture.clone()).into();
+            let op: IFileOperation = CoCreateInstance(&FileOperation, None, CLSCTX_ALL).map_err(|e| format!("CoCreateInstance(FileOperation): {e}"))?;
+            op.SetOperationFlags(FOF_NOCONFIRMATION | FOF_SILENT | FOF_RENAMEONCOLLISION).map_err(|e| format!("SetOperationFlags: {e}"))?;
+            let cookie = op.Advise(&sink).map_err(|e| format!("IFileOperation::Advise: {e}"))?;
+            std::fs::OpenOptions::new().write(true).create_new(true).open(&temp_placeholder)
+                .map_err(|e| { let _ = op.Unadvise(cookie); format!("reserve collision-safe restore name: {e}") })?;
+            let queued = op.MoveItem(&item, &folder, PCWSTR(HSTRING::from(temp_name.as_str()).as_ptr()), None);
+            if let Err(e) = queued { let _ = op.Unadvise(cookie); let _ = std::fs::remove_file(&temp_placeholder); return Err(format!("queue exact Recycle Bin restore: {e}").into()); }
+            let performed = op.PerformOperations();
+            let aborted = op.GetAnyOperationsAborted().map_err(|e| format!("check Recycle Bin restore result: {e}"));
+            let _ = op.Unadvise(cookie);
+            let performed_error = performed.err().map(|e| e.to_string());
+            let aborted_state = aborted.ok().map(|v| v.as_bool());
+            let restored = capture.lock().unwrap().take();
+            let _ = std::fs::remove_file(&temp_placeholder);
+            let restored = restored.ok_or_else(|| {
+                if let Some(e) = &performed_error { format!("perform Recycle Bin restore: {e}") }
+                else if aborted_state != Some(false) { "Windows aborted the Recycle Bin restore".into() }
+                else { "Windows did not confirm which file it restored".into() }
+            })?;
+            if performed_error.is_some() || aborted_state != Some(false) {
+                let detail = performed_error.unwrap_or_else(|| "Windows reported an aborted restore".into());
+                let (next_identity, return_detail) = match move_to_trash_sta(Path::new(&restored)) {
+                    Ok(identity) => (identity, String::new()),
+                    Err(retrash_error) => (crate::trash_undo::PlatformTrashIdentity::RestoredTemp(restored.clone()), format!("; returning item to Recycle Bin also failed: {retrash_error}")),
+                };
+                return Err(RestoreFailure::Retryable(next_identity, format!("restore operation did not complete cleanly: {detail}{return_detail}")));
+            }
+            if !Path::new(&restored).is_file() { return Err("Recycle Bin restore callback did not identify an existing file".into()); }
+            let from = HSTRING::from(restored.as_str()); let to = HSTRING::from(destination.as_os_str());
+            if let Err(e) = MoveFileW(PCWSTR(from.as_ptr()), PCWSTR(to.as_ptr())) {
+                let (next_identity, return_detail) = match move_to_trash_sta(Path::new(&restored)) {
+                    Ok(identity) => (identity, String::new()),
+                    Err(retrash_error) => (crate::trash_undo::PlatformTrashIdentity::RestoredTemp(restored.clone()), format!("; returning item to Recycle Bin also failed: {retrash_error}")),
+                };
+                return Err(RestoreFailure::Retryable(next_identity, format!("original path could not be placed without overwrite: {e}{return_detail}")));
+            }
+            Ok(restored)
+        })();
+        CoUninitialize();
+        result
+    }).join().map_err(|_| "restore worker thread panicked".to_string())?;
+    match result {
+        Ok(_) => Ok(()),
+        Err(RestoreFailure::Retryable(next_identity, detail)) => {
+            let retry_location = match &next_identity { crate::trash_undo::PlatformTrashIdentity::RestoredTemp(path) => Some(path.clone()), _ => None };
+            *identity = next_identity;
+            if let Some(path) = retry_location { Err(format!("{detail}; exact item remains available for retry at {path}")) }
+            else { Err(format!("{detail}; exact item was returned to the Recycle Bin and remains retryable")) }
+        }
+        Err(RestoreFailure::Operation(error)) => Err(error),
     }
 }
 

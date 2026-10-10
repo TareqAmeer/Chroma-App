@@ -77,8 +77,17 @@ try{
  assert.equal(bin.length,2,'original and its sidecar are recoverable system Recycle Bin entries');
  assert.equal(hash(await readFile(bin.find(f=>f.name===path.basename(rejected.path)).path)),rejected.hash);
  assert.equal(hash(await readFile(bin.find(f=>f.name===path.basename(sidecar)).path)),sidecarHash);
+ // Undo must restore the exact OS-issued photo and sidecar receipts and return the cull state.
+ await page.keyboard.press('Control+z');
+ await page.waitForFunction(()=>document.getElementById('lib-cull-del')?.textContent==='Delete rejected (1)');
+ let restoredBytes=false;const restoreDeadline=Date.now()+15000;
+ while(Date.now()<restoreDeadline){
+  try{restoredBytes=hash(await readFile(rejected.path))===rejected.hash&&hash(await readFile(sidecar))===sidecarHash;if(restoredBytes)break;}catch{}
+  await new Promise(resolve=>setTimeout(resolve,100));
+ }
+ assert.equal(restoredBytes,true,'in-app Undo restores exact original photo and XMP bytes');
  await writeFile(path.join(folder,'result.json'),JSON.stringify({rejected:rejected.path,prompt,rejectUndo:true,cancelPreserved:true,unmodifiedSurvivors:3,recycleEntries:bin,photoHash:rejected.hash,sidecarHash,autoAdvanceValidated:process.env.CULL_ADVANCE==='1'},null,2));
- console.log('PASS native reject/undo, count/name confirmation, cancelled delete, exact photo+sidecar bytes in Windows Recycle Bin and untouched survivors');
+ console.log('PASS native reject/undo, count/name confirmation, cancelled delete, exact photo+sidecar bytes in Windows Recycle Bin and byte-exact in-app Undo, untouched survivors');
 }finally{
  await page.evaluate(()=>{if(window.__nativeCullCore)__TAURI__.core=window.__nativeCullCore;if(typeof window.__nativeCullRelease==='function')window.__nativeCullRelease();}).catch(()=>{});
  if(bindings)await page.evaluate(text=>chromasmithShortcutRegistry.import(text),bindings).catch(()=>{});

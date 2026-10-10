@@ -379,7 +379,15 @@
         }));
       }
       case 'eject_volume': return Promise.resolve();
-      case 'trash_file': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve();
+      case 'trash_file': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve(true);
+      case 'trash_file_with_undo': {
+        (window.__libtestCalls = window.__libtestCalls || []).push(['trash_file', A]);
+        const receipt = { photo: { originalPath: A.path, receiptId: `libtest-trash:${A.path}` }, sidecar: null, warning: null };
+        if (window.__libtestHoldTrash) return new Promise((resolve) => (window.__libtestHeldTrash ||= []).push(() => resolve(receipt)));
+        return Promise.resolve(receipt);
+      }
+      case 'restore_trashed_entry': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve();
+      case 'release_trash_receipts': return Promise.resolve(0);
       case 'duplicate_file': return Promise.resolve();
       case 'plugin:dialog|open': return Promise.resolve((window.__libtestDialogResults || []).shift() || '/test/Pictures/2026');
       case 'lr_downloads_dir': return Promise.resolve('/test/Lightroom Download');
@@ -416,6 +424,7 @@
       }
       case 'catalog_scan': return Promise.resolve({ scanned: 0, added: 0, marked_absent: 0 });
       case 'catalog_note_deleted': return Promise.resolve((A.paths || []).length);
+      case 'catalog_note_restored': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve((A.paths || []).length);
       case 'catalog_rename_preview': case 'catalog_rename_apply': {
         const template = String(A.template || '{name}');
         const start = Math.max(0, Number(A.sequenceStart) || 0);
@@ -701,6 +710,9 @@
           libtestCatalogQueryCalls++;
           (window.__libtestFolderQueries ||= []).push(structuredClone(q.folder));
           const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
+          const folderPrefix = q.folder.relDir
+            ? (String(q.folder.relDir).startsWith('/') ? String(q.folder.relDir) : `/test/${q.folder.relDir}`)
+            : '/test/AllPhotos';
           // ?liboffline=1 exercises the disconnected-drive scenario: every entry still comes
           // back (catalog_query's own include_offline default), just flagged offline — the
           // grid must stay fully populated, not blocked.
@@ -709,8 +721,8 @@
           for (let i = 1; i <= N; i++) {
             const isVid = i % 6 === 0;
             entries.push(isVid
-              ? { id: i, name: `P_TM${6000 + i}.MP4`, path: `/test/AllPhotos/P_TM${6000 + i}.MP4`, is_dir: false, is_image: false, is_video: true, kind: 'video', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 : null, size: 90000000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: null, blurry: false, stack_n: 0, thumb_path: null }
-              : { id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 + (/[?&]libdupes=1/.test(location.search) && i === 2 ? 120 : 0) : null, size: 1000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: /[?&]libtime=1/.test(location.search) ? 100 + i * 10 : 400, blurry: false, stack_n: 0, thumb_path: null });
+              ? { id: i, name: `P_TM${6000 + i}.MP4`, path: `${folderPrefix}/P_TM${6000 + i}.MP4`, is_dir: false, is_image: false, is_video: true, kind: 'video', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 : null, size: 90000000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: null, blurry: false, stack_n: 0, thumb_path: null }
+              : { id: i, name: `IMG_${1000 + i}.RW2`, path: `${folderPrefix}/IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 + (/[?&]libdupes=1/.test(location.search) && i === 2 ? 120 : 0) : null, size: 1000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: /[?&]libtime=1/.test(location.search) ? 100 + i * 10 : 400, blurry: false, stack_n: 0, thumb_path: null });
           }
           return Promise.resolve({ total: N, capped: false, entries });
         }
@@ -3584,6 +3596,15 @@
     window.__libScrollTo = (p) => scrollLibraryToPath(p);
     window.__libClusterByHash = (pairs) => clusterByHash(pairs);
     window.__libOpenFolder = (path) => openFolder(path);
+    window.__libOpenCollectionView = (name) => openCollectionView(name);
+    window.__libOpenCatalogView = (scope) => openCatalogView(scope);
+    window.__libTrashContext = () => ({ root: state.root, folder: state.currentFolder, source: state.source, scope: state.catalogScope || null, viewMode: state.viewMode, paths: state.entries.map((entry) => entry.path) });
+    window.__libStartTrashDelete = (paths) => { window.__libPendingTrashDelete = libDeletePaths(paths, { message: 'Test move to Trash?', confirmLabel: 'Move to Trash' }); };
+    window.__libWaitTrashDelete = () => window.__libPendingTrashDelete;
+    window.__libResolveHeldTrash = () => { const resolve = window.__libtestHeldTrash?.shift(); if (resolve) resolve(); };
+    window.__libUndoLast = () => libUndoLast();
+    window.__libSetLabel = (path, label) => setLabel(path, label);
+    window.__libDeleteCullRejects = () => cullDeleteRejected();
     window.__libEnterSurvey = enterSurveyMode;
     window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), labels: surveyState.cells.map((cell) => (state.sidecars.get(cell.path) || {}).label || ''), cullLabels: surveyState.cullAllPaths.map((path) => (state.sidecars.get(path) || {}).label || ''), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && (compareState.mode === 'survey' || compareState.mode === 'cull'), mode: compareState.mode, offset: surveyState.cullOffset, cullPaths: surveyState.cullPaths.slice(), groupPicker: surveyState.cullGroupPicker, autoAdvance: cullAutoAdvanceEnabled() });
     window.__libCullTimeGroups = () => surveyState.cullGroups.map((g) => ({ label: cullGroupLabel(g), count: g.paths.length, paths: g.paths.slice(), unknown: !!g.unknown, duplicate: !!g.duplicate }));
@@ -4248,15 +4269,36 @@
   // so ⌘Z always undoes the most recent thing, whichever kind it was.
   const libMetaUndo = [];
   let libMetaGroup = null, libMetaUndoing = false;
+  function libReleaseTrashReceipts(group) {
+    const ids = (group || []).flatMap((record) => record && record.kind === 'trash_delete' ? record.entries.flatMap((entry) => [entry.receipt.photo?.receiptId, entry.receipt.sidecar?.receiptId].filter(Boolean)) : []);
+    if (ids.length) invoke('release_trash_receipts', { receiptIds: ids }).catch((e) => console.error('release expired Trash undo receipts', e));
+  }
   function libMetaRecord(rec) {
     if (libMetaUndoing) return;
     if (!libMetaGroup) {
       libMetaGroup = [];
       libMetaUndo.push(libMetaGroup);
-      if (libMetaUndo.length > 50) libMetaUndo.shift();
+      if (libMetaUndo.length > 50) libReleaseTrashReceipts(libMetaUndo.shift());
       setTimeout(() => { libMetaGroup = null; }, 0);
     }
     libMetaGroup.push(rec);
+  }
+  function libTrashOriginSnapshot() {
+    return {
+      root: state.root,
+      folder: state.currentFolder,
+      source: state.source,
+      collection: state.source === 'lr' ? (lrState.album || '') : (state.catalogScope || state.source),
+      viewMode: state.viewMode,
+      filters: {
+        search: state.search, type: state.typeFilter, camera: state.cameraFilter, lens: state.lensFilter,
+        iso: state.isoFilter, duplicates: state.dupeFilter, synced: state.syncedFilter, faces: state.facesFilter,
+        tags: state.tagFilter, rating: state.ratingFilter, includeSubfolders: !!state.includeSubfolders,
+      },
+    };
+  }
+  function libTrashOriginMatches(origin) {
+    return !!origin && JSON.stringify(origin) === JSON.stringify(libTrashOriginSnapshot());
   }
   // CHR-184: adding photos to an album (menu or drag) is undoable. Only the paths that were NOT
   // already in the album are recorded, so undo never removes a photo that was there before.
@@ -4273,6 +4315,7 @@
     if (!g || !g.length) { toast('Nothing to undo'); return; }
     if (g[0].kind === 'reset') { await libUndoLastReset(g[0].paths); return; }
     let undoFailed = false;
+    if (g[0].kind === 'trash_delete') { await libUndoTrashDelete(g[0]); return; }
     libMetaUndoing = true;
     try {
       // Reverse order so a path changed twice in one group lands on its oldest value.
@@ -4294,6 +4337,74 @@
     const n = new Set(g.map((r) => r.path)).size;
     const noun = g[0].kind === 'label' ? 'flag' : g[0].kind === 'color_label' ? 'colour label' : g[0].kind === 'keywords' ? 'keyword' : g[0].kind;
     toast(`Undid ${noun} change${n > 1 ? ` on ${n} photos` : ''}`);
+  }
+  async function libUndoTrashDelete(record) {
+    const retry = [];
+    const restored = [];
+    const errors = [];
+    for (const item of record.entries) {
+      try {
+        if (item.receipt.photo) {
+          await invoke('restore_trashed_entry', { receipt: item.receipt.photo });
+          item.receipt.photo = null;
+        }
+        if (item.receipt.sidecar) {
+          await invoke('restore_trashed_entry', { receipt: item.receipt.sidecar });
+          item.receipt.sidecar = null;
+        }
+        restored.push(item);
+      } catch (e) {
+        errors.push(`${baseName(item.path)}: ${humanizeErr('restore from Trash', e)}`);
+        retry.push(item);
+      }
+    }
+    let catalogRestoredCount = 0;
+    if (restored.length) {
+      const catalogPaths = restored.map((item) => item.path);
+      try { catalogRestoredCount = await invoke('catalog_note_restored', { paths: catalogPaths }); }
+      catch (e) {
+        errors.push(humanizeErr('update the restored Library catalog', e));
+        retry.push(...restored);
+        restored.length = 0;
+      }
+    }
+    const sameOrigin = libTrashOriginMatches(record.origin);
+    if (restored.length && sameOrigin) {
+      for (const item of restored) {
+        if (!state.entries.some((entry) => entry.path === item.path)) state.entries.push(item.entry);
+        if (item.sidecar) state.sidecars.set(item.path, item.sidecar); else state.sidecars.delete(item.path);
+        if (item.meta) state.meta.set(item.path, item.meta); else state.meta.delete(item.path);
+        imgCache.delete(item.path);
+      }
+      if (state._catalogTotal != null) state._catalogTotal += Number(catalogRestoredCount) || 0;
+      const livePaths = new Set(state.entries.map((entry) => entry.path));
+      state.selected = new Set(record.selectedBefore.filter((path) => livePaths.has(path)));
+      if (record.cullUndoState && record.origin.viewMode === 'survey' && compareState.mode !== 'cull') await enterCullMode();
+      if (record.cullUndoState && record.origin.viewMode === 'survey' && compareState.mode === 'cull') {
+        const deletedByAction = new Set(record.entries.map((item) => item.path));
+        const restoredByAction = new Set(restored.map((item) => item.path));
+        surveyState.cullPaths = record.cullUndoState.paths.filter((path) => livePaths.has(path) && (!deletedByAction.has(path) || restoredByAction.has(path)));
+        compareState.paths = surveyState.cullPaths.slice();
+        compareState.totalSelected = surveyState.cullPaths.length;
+        surveyState.cullOffset = record.cullUndoState.offset;
+        surveyState.focus = record.cullUndoState.focus;
+        await showCullPage(surveyState.cullOffset);
+        cullSyncDeleteBtn();
+      } else if (!record.cullUndoState) {
+        await refreshView();
+      }
+    } else if (restored.length) {
+      // A delete/undo can finish after the user navigates. Refresh whichever destination is
+      // current instead of injecting stale rows or reconstructing the old cull in this view.
+      await refreshView();
+    }
+    if (retry.length) {
+      record.entries = retry;
+      libMetaUndo.push([record]);
+      toast(`Restored ${restored.length}; ${retry.length} could not be restored. Undo remains available to retry. ${errors[0] || ''}`, 'err');
+      return;
+    }
+    toast(restored.length ? `Restored ${restored.length} photo${restored.length === 1 ? '' : 's'} from Trash` : 'Nothing could be restored from this delete');
   }
   async function setRating(path, rating) {
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
@@ -7194,30 +7305,47 @@
   }
   async function libDeletePaths(paths, opts = {}) {
     if (!paths.length) return [];
+    const origin = libTrashOriginSnapshot();
+    const selectedBefore = [...state.selected];
+    const entryBefore = new Map(paths.map((p) => [p, {
+      entry: state.entries.find((e) => e.path === p), sidecar: state.sidecars.get(p), meta: state.meta.get(p),
+    }]));
     const n = paths.length;
     const label = n > 1 ? `these ${n} photos` : `"${baseName(paths[0])}"`;
     if (!await window.confirmModal(opts.message || `Move ${label} to the Trash?`, opts.confirmLabel || 'Move to Trash')) return [];
-    const trashed = [];
+    const trashed = [], undoEntries = [];
     let missing = 0;
     for (const p of paths) {
       try {
         // false = file not found (deleted elsewhere / drive offline): nothing to trash, still drop it from the Library.
-        if (await invoke('trash_file', { path: p }) === false) missing++;
-        state.sidecars.delete(p); state.meta.delete(p); imgCache.delete(p);
+        const { entry, sidecar, meta } = entryBefore.get(p) || {};
+        const receipt = await invoke('trash_file_with_undo', { path: p });
+        if (!receipt) missing++;
+        else {
+          undoEntries.push({ path: p, receipt, entry: entry ? { ...entry } : { path: p }, sidecar: sidecar ? { ...sidecar } : null, meta: meta ? { ...meta } : null });
+          if (receipt.warning) toast(`Photo moved to Trash, but its sidecar needs attention: ${receipt.warning}`, 'err');
+        }
+        imgCache.delete(p);
         trashed.push(p);
       }
-      catch (e) { console.error('trash_file', p, e); toast('Could not delete ' + baseName(p)); }
+      catch (e) { console.error('trash_file_with_undo', p, e); toast('Could not delete ' + baseName(p)); }
     }
-    state.selected.clear();
     if (trashed.length) {
-      // Drop deleted rows locally and repaint at once (no folder reopen / catalog_add_root / rescan);
-      // the targeted catalog update is awaited afterwards so a later refresh can't resurrect them.
-      const gone = new Set(trashed);
-      state.entries = state.entries.filter((e) => !gone.has(e.path));
-      if (state._catalogTotal != null) state._catalogTotal = Math.max(0, state._catalogTotal - trashed.length);
-      renderGrid();
       try { await invoke('catalog_note_deleted', { paths: trashed }); } catch (e) { console.error('catalog_note_deleted', e); }
+      if (libTrashOriginMatches(origin)) {
+        // Drop deleted rows locally and repaint at once (no folder reopen / catalog_add_root / rescan);
+        // the targeted catalog update is awaited afterwards so a later refresh can't resurrect them.
+        state.selected.clear();
+        const gone = new Set(trashed);
+        state.entries = state.entries.filter((e) => !gone.has(e.path));
+        for (const p of trashed) { state.sidecars.delete(p); state.meta.delete(p); }
+        if (state._catalogTotal != null) state._catalogTotal = Math.max(0, state._catalogTotal - trashed.length);
+        renderGrid();
+      } else {
+        await refreshView();
+      }
       if (missing) toast(`Removed ${missing} missing photo${missing === 1 ? '' : 's'} from the Gallery — file${missing === 1 ? ' was' : 's were'} not found on this machine`, false);
+      if (undoEntries.length) libMetaRecord({ kind: 'trash_delete', entries: undoEntries, selectedBefore, origin, cullUndoState: opts.cullUndoState || null });
     }
     return trashed;
   }
@@ -9388,13 +9516,16 @@
   async function cullDeleteRejected(opts = {}) {
     const paths = cullRejectedPaths();
     if (!paths.length) { toast('No rejected photos in this cull'); return []; }
+    const origin = libTrashOriginSnapshot();
     const n = paths.length;
     const names = paths.slice(0, 5).map(baseName).join(', ') + (n > 5 ? `, and ${n - 5} more` : '');
+    const cullUndoState = { paths: surveyState.cullPaths.slice(), offset: surveyState.cullOffset, focus: surveyState.focus };
     const gone = await libDeletePaths(paths, {
       message: `Delete ${n} rejected photo${n === 1 ? '' : 's'}? ${names}. They are moved to the system Trash, so you can still restore them from there.`,
       confirmLabel: `Move ${n} to Trash`,
+      cullUndoState,
     });
-    if (!gone.length || opts.exiting) return gone;
+    if (!gone.length || opts.exiting || !libTrashOriginMatches(origin)) return gone;
     const goneSet = new Set(gone);
     const keepFocusAt = surveyState.cullOffset;
     surveyState.cullPaths = surveyState.cullPaths.filter((p) => !goneSet.has(p));
