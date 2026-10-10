@@ -18,7 +18,8 @@ function declaration(name) {
 const context = vm.createContext({ Date, Math, Set, Map, CR_MAX_SAMPLES: 8,
   _pxToB64: () => '', _pxFromB64: () => new Uint8ClampedArray(0) });
 vm.runInContext([
-  '_mskNewId', '_mskEnsureIds', '_mskCompositionPlan', '_mskSkinDefaults', '_mskMigrate', '_mskToSnap', '_mskFromSnap',
+  '_mskNewId', '_mskEnsureIds', '_mskCompositionPlan', '_mskCompositionCandidateCheck',
+  'mskSetComposition', 'mskClearComposition', '_mskSkinDefaults', '_mskMigrate', '_mskToSnap', '_mskFromSnap',
 ].map(declaration).join('\n'), context);
 const ensure = context._mskEnsureIds;
 
@@ -86,6 +87,57 @@ assert.deepEqual(Array.from(nestedPlan.order), [0, 1, 2], 'nested graph packs de
 assert.deepEqual(Array.from(context._mskCompositionPlan([{id:'a'},{id:'b',composeOp:'subtract',operandId:'a'}]).order),[0,1],
   'CPU packing keeps a stable, dependency-first sequence for the GPU');
 assert.notEqual(context._mskNewId(), context._mskNewId(), 'new masks receive distinct stable IDs');
+
+const candidateCycle=[
+  {id:'ca',composeOp:'subtract',operandId:'cc',compositionMigrated:true},
+  {id:'cb',compositionMigrated:true},
+  {id:'cc',compositionMigrated:true},
+];
+const cycleChoice=context._mskCompositionCandidateCheck(candidateCycle,'cc','add','ca');
+assert.equal(cycleChoice.valid,false,'candidate that points back to the active mask is rejected');
+assert.equal(cycleChoice.reason,'cycle','cycle refusal has a distinct diagnostic');
+assert.equal(candidateCycle[2].composeOp,undefined,'candidate validation does not mutate the live graph');
+const brokenTarget=[
+  {id:'ba',composeOp:'intersect',operandId:'deleted',compositionMigrated:true},
+  {id:'bb',compositionMigrated:true},
+];
+const dependencyChoice=context._mskCompositionCandidateCheck(brokenTarget,'bb','subtract','ba');
+assert.equal(dependencyChoice.valid,false,'a disabled operand chain cannot be used as a new operand');
+assert.equal(dependencyChoice.reason,'dependency','invalid operand chain is distinguished from a cycle');
+assert.equal(context._mskCompositionCandidateCheck([{id:'self'}],'self','add','self').reason,'self',
+  'active mask cannot compose with itself');
+
+const committed=[];let rebuilds=0,updates=0;
+Object.assign(context,{fxState:{masks:[{id:'ui-a',name:'Sky',compositionMigrated:true},
+  {id:'ui-b',name:'Brush',compositionMigrated:true},{id:'ui-c',name:'Subject',compositionMigrated:true}]},mskSel:2,
+  fxHistoryPush:()=>committed.push(JSON.stringify(context.fxState.masks.map(context._mskToSnap))),
+  mskRebuild:()=>rebuilds++,fxUpdate:()=>updates++,toast:message=>{context.lastToast=message;}});
+assert.equal(context.mskSetComposition('add','ui-a'),true,'Add accepts an arbitrary stable-ID operand');
+assert.equal(context.fxState.masks[2].operandId,'ui-a','Add stores the selected operand ID');
+assert.equal(committed.length,1,'one history entry is pushed for a successful composition change');
+const saveRoundTrip=context.fxState.masks.map(m=>context._mskFromSnap(JSON.parse(JSON.stringify(context._mskToSnap(m)))));
+assert.equal(saveRoundTrip[2].operandId,'ui-a','save/snapshot retains a selected non-previous operand');
+const beforeReject=JSON.stringify(context.fxState.masks.map(m=>[m.composeOp,m.operandId]));
+context.fxState.masks[0].composeOp='subtract';context.fxState.masks[0].operandId='ui-c';context.fxState.masks[0].compositionMigrated=true;
+const withCycle=JSON.stringify(context.fxState.masks.map(m=>[m.composeOp,m.operandId]));
+assert.equal(context.mskSetComposition('intersect','ui-a'),false,'cycle-producing operation is rejected before mutation');
+assert.equal(JSON.stringify(context.fxState.masks.map(m=>[m.composeOp,m.operandId])),withCycle,'rejected edit preserves all operand references');
+assert.equal(committed.length,1,'rejected composition does not create an undo entry');
+assert.match(context.lastToast,/cycle/i,'cycle refusal explains why the operation was rejected');
+context.fxState.masks[0].composeOp='';context.fxState.masks[0].operandId='deleted';context.fxState.masks[0].compositionMigrated=true;
+assert.equal(context.mskSetComposition('intersect','deleted'),false,'missing target cannot be applied');
+assert.equal(context.fxState.masks[2].operandId,'ui-a','failed repair leaves the prior broken ID intact');
+assert.equal(context.mskSetComposition('intersect','ui-b'),true,'a broken operation can be explicitly repaired with a valid target');
+assert.equal(context.fxState.masks[2].operandId,'ui-b','repair stores exactly the selected replacement ID');
+assert.equal(committed.length,2,'repair creates one history entry');
+// Reorder is ID-stable: moving the operand does not retarget the consumer.
+const rows=context.fxState.masks;[rows[0],rows[1]]=[rows[1],rows[0]];ensure(rows);
+assert.equal(rows.find(m=>m.id==='ui-c').operandId,'ui-b','reordering preserves the chosen operand identity');
+context.mskSel=rows.findIndex(m=>m.id==='ui-c');
+context.mskClearComposition();
+assert.equal(rows.find(m=>m.id==='ui-c').composeOp,'','clear composition is undoable as a single committed state');
+assert.equal(committed.length,3,'clear pushes exactly one history snapshot');
+assert.equal(rebuilds,3);assert.equal(updates,3);
 
 assert.match(html, /void mskSelectionWeights\(/, 'one shared effective-selection evaluator serves render and outline');
 assert.match(html, /'mskTopo\[0\]':mTopo/, 'renderer uploads the dependency-first order');
