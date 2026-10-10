@@ -21,17 +21,20 @@
 //
 //   node test/control_sweep.mjs [--surface=editor|library] [--depth=2] [--limit=N] [--update]
 import { chromium } from 'playwright';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { startServer } from './editor_state_harness.mjs';
-import { enumerate, fingerprint, locate } from './sweep_lib.mjs';
+import { enumerate, fingerprint, locate, alreadyAtReplayDestination } from './sweep_lib.mjs';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS } from './wireframe_diff_lib.mjs';
 
 const ROOT = process.cwd();
 const arg = (k, d) => { const a = process.argv.find((x) => x.startsWith(`--${k}=`)); return a ? a.split('=')[1] : d; };
 const DEPTH = +arg('depth', 2), LIMIT = +arg('limit', 1e9), ONLY = arg('surface', null);
 const ACCEPTED = 'test/control_sweep_accepted.json';
+const CHECKPOINT = 'test/output/control_sweep.checkpoint.json';
+const SOURCE_COMMIT = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 // Controls that leave the app or destroy the test session rather than exercising a feature.
 const SKIP = /^(quit|sign out|log out)$/i;
 
@@ -54,7 +57,14 @@ async function boot(page, port, s) {
       const f = new File([Uint8Array.from(atob(b), (c) => c.charCodeAt(0))], 'portrait.png', { type: 'image/png' });
       if (typeof window.loadFXImages === 'function') await window.loadFXImages([f]);
     }, b64);
-    await page.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages && fxImages.length > 0, { timeout: 10000 }).catch(() => {});
+    await page.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages && fxImages.length > 0, undefined, { timeout: 10000 }).catch(() => {});
+    // Loading the portrait can open the First edit coach after the pre-fixture Escape above.
+    // It covers the Gallery collection controls and makes valid targets look unreachable.
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => {
+      const overlay = document.getElementById('cs-modal-ov');
+      return !overlay || !overlay.checkVisibility();
+    }, undefined, { timeout: 3000 });
   }
   await page.waitForTimeout(400);
 }
@@ -90,6 +100,32 @@ const accepted = new Set(existsSync(ACCEPTED) ? JSON.parse(readFileSync(ACCEPTED
 const { server, port } = await startServer();
 const browser = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
 const report = {};
+await mkdir('test/output', { recursive: true });
+let activeSurface = null, activeResults = null, activeQueue = null, activeContext = null;
+
+async function saveCheckpoint(surface, results, queued, terminationReason = 'in_progress') {
+  report[surface] = Object.fromEntries(results);
+  const tmp = `${CHECKPOINT}.tmp`;
+  await writeFile(tmp, JSON.stringify({
+    meta: {
+      surface, terminationReason, traversalComplete: terminationReason === 'exhausted' && queued === 0,
+      depth: DEPTH, limit: LIMIT, completed: results.size, queued,
+      sourceCommit: SOURCE_COMMIT, capturedAt: new Date().toISOString(),
+    },
+    report,
+  }, null, 2));
+  await rename(tmp, CHECKPOINT);
+}
+
+process.once('SIGINT', async () => {
+  if (activeSurface && activeResults && activeQueue) {
+    await saveCheckpoint(activeSurface, activeResults, activeQueue.length, 'interrupted').catch(() => {});
+  }
+  await activeContext?.close().catch(() => {});
+  await browser.close().catch(() => {});
+  server.close();
+  process.exit(130);
+});
 
 for (const [name, s] of Object.entries(SURFACES)) {
   if (ONLY && ONLY !== name) continue;
@@ -107,6 +143,7 @@ for (const [name, s] of Object.entries(SURFACES)) {
   // Repeated items (grid tiles, list rows, swatches) are one control family: test 3 of each, not 5,000.
   const famCount = new Map(), FAMILY_CAP = 3;
   const results = new Map(), queue = (await page.evaluate(enumerate)).map((c) => ({ ...c, path: [] }));
+  activeSurface = name; activeResults = results; activeQueue = queue; activeContext = ctx;
   const known = new Set(queue.map((c) => c.key));
   const t0 = Date.now();
 
@@ -130,10 +167,9 @@ for (const [name, s] of Object.entries(SURFACES)) {
     await boot(page, port, s); await settle(); atBaseline = true;
     for (let i = 0; i < c.path.length; i++) {
       const sc = await find(c.path[i]); if (!sc) return null;
-      // A toggle whose on/off state already differs from when discovery clicked it is already in
-      // the state that click produced (e.g. the Gallery toggle after a fresh boot) — clicking it
-      // again would undo the step (CHR-230).
-      if (c.pathSel && sc.selected !== c.pathSel[i]) continue;
+      // Stateful controls replay toward the state captured after discovery activated them. A
+      // null destination means an ordinary action button; always replay it so dialogs still open.
+      if (alreadyAtReplayDestination(c.pathSel?.[i], sc)) continue;
       await act(page, sc); await settle(); atBaseline = false;
     }
     return find(c.key);
@@ -145,7 +181,11 @@ for (const [name, s] of Object.entries(SURFACES)) {
     const fk = c.family + '@' + c.path.length, fc = (famCount.get(fk) || 0) + 1;
     famCount.set(fk, fc); if (fc > FAMILY_CAP) continue;
     const cur = await reach(c);
-    if (!cur) { results.set(c.key, { status: 'unreach', label: c.label, path: c.path }); continue; }
+    if (!cur) {
+      results.set(c.key, { status: 'unreach', label: c.label, path: c.path });
+      if (results.size % 10 === 0) await saveCheckpoint(name, results, queue.length);
+      continue;
+    }
     errs = [];
     const before = await page.evaluate(fingerprint);
     try { await act(page, cur); } catch (e) { errs.push('act: ' + e.message.split('\n')[0]); }
@@ -159,23 +199,30 @@ for (const [name, s] of Object.entries(SURFACES)) {
     // Re-pressing the already-selected chip/tab is a correct no-op, not an inert control.
     const status = errs.length ? 'error' : after !== before ? 'changed' : cur.selected ? 'selected' : 'inert';
     results.set(c.key, { status, label: c.label, kind: c.kind, path: c.path, errors: errs.slice(0, 3) });
+    if (results.size % 10 === 0) await saveCheckpoint(name, results, queue.length);
     if (status === 'changed') {
       atBaseline = false;
       if (c.path.length < DEPTH) {
-        for (const n of await page.evaluate(enumerate).catch(() => [])) {
-          if (!known.has(n.key)) { known.add(n.key); queue.push({ ...n, path: [...c.path, c.key], pathSel: [...(c.pathSel || []), cur.selected] }); }
+          const afterControls = await page.evaluate(enumerate).catch(() => []);
+          const selectedAfter = new Map(afterControls.map((n) => [n.key, n]));
+          for (const n of afterControls) {
+          if (!known.has(n.key)) {
+            known.add(n.key);
+            const destination = selectedAfter.get(c.key);
+            const state = (cur.stateful || destination?.stateful) ? destination?.selected ?? null : null;
+            queue.push({ ...n, path: [...c.path, c.key], pathSel: [...(c.pathSel || []), state] });
+          }
         }
       }
       await page.keyboard.press('Escape').catch(() => {});
     }
     if (results.size % 25 === 0) console.log(`  ${name}: ${results.size} done, ${queue.length} queued, ${((Date.now() - t0) / 1000) | 0}s`);
   }
-  report[name] = Object.fromEntries(results);
+  await saveCheckpoint(name, results, queue.length, queue.length === 0 ? 'exhausted' : 'limit');
   await ctx.close();
 }
 await browser.close(); server.close();
 
-await mkdir('test/output', { recursive: true });
 await writeFile('test/output/control_sweep.json', JSON.stringify(report, null, 2));
 
 const inertKeys = [];
