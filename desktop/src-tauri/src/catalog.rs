@@ -24,7 +24,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // panel queried a photo_auto_tags table that was never created and every photo read as "not tagged".
 // v21: same trick for the auto_tag_breeds_v1 block (breed re-tag), which v20 catalogs skipped.
 // v22: repair schema-21 catalogs missing the offline queue; existing queued work is preserved.
-const SCHEMA_VERSION: i64 = 22;
+const SCHEMA_VERSION: i64 = 23;
 
 /// Marker file written once at a volume's root when the user first adds a catalogued folder on
 /// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
@@ -392,6 +392,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
 
             rating      INTEGER NOT NULL DEFAULT 0,
             label       TEXT    NOT NULL DEFAULT '',
+            color_label TEXT    NOT NULL DEFAULT '',
             edited      INTEGER NOT NULL DEFAULT 0,
             favorite    INTEGER NOT NULL DEFAULT 0,
             sidecar_mtime        INTEGER NOT NULL DEFAULT 0,
@@ -927,6 +928,18 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         }
     }
 
+    // v22 -> v23: colour labels are distinct from xmp:Label pick/reject flags. Existing rows
+    // start empty; do not infer colours from historic Red/Green flag values.
+    if version < 23 {
+        let has_color_label: bool = conn
+            .prepare("SELECT 1 FROM pragma_table_info('photos') WHERE name = 'color_label'")?
+            .exists([])?;
+        if !has_color_label {
+            conn.execute("ALTER TABLE photos ADD COLUMN color_label TEXT NOT NULL DEFAULT ''", [])?;
+        }
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_color_label ON photos(color_label)", [])?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -1111,14 +1124,14 @@ fn abs_path(vol_last_path: &str, _is_local: bool, rel_path: &str) -> String {
 /// ⚠️ Best-effort and silent on "not found": a photo edited via a view that never went through
 /// catalog_query (Recents/Exported/an un-registered folder) legitimately has no catalog row yet
 /// — that is not an error, just nothing to keep in sync.
-pub fn sync_sidecar_fields_run(conn: &Connection, path: &str, rating: i32, label: &str, edited: bool, favorite: bool) {
+pub fn sync_sidecar_fields_run(conn: &Connection, path: &str, rating: i32, label: &str, color_label: &str, edited: bool, favorite: bool) {
     let Some(photo_id) = find_photo_by_abs_path(conn, path) else { return };
     // Same raw value a rescan's own sidecar sync writes (see the "UPDATE photos SET rating..."
     // site in scan_run) — no extra clamping here, or this path and a rescan could disagree on
     // what a -1 (rejected) rating means for the exact same photo.
     let _ = conn.execute(
-        "UPDATE photos SET rating = ?1, label = ?2, edited = ?3, favorite = ?4 WHERE id = ?5",
-        params![rating, label, edited as i64, favorite as i64, photo_id],
+        "UPDATE photos SET rating = ?1, label = ?2, color_label = ?3, edited = ?4, favorite = ?5 WHERE id = ?6",
+        params![rating, label, color_label, edited as i64, favorite as i64, photo_id],
     );
 }
 
@@ -2420,8 +2433,8 @@ pub fn sidecar_run(
         let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
         for (id, sidecar_mtime, sc) in &read {
             tx.execute(
-                "UPDATE photos SET rating = ?1, label = ?2, edited = ?3, favorite = ?4, sidecar_parsed_mtime = ?5 WHERE id = ?6",
-                params![sc.rating, sc.label, sc.edited as i64, sc.favorite as i64, sidecar_mtime, id],
+                "UPDATE photos SET rating = ?1, label = ?2, color_label = ?3, edited = ?4, favorite = ?5, sidecar_parsed_mtime = ?6 WHERE id = ?7",
+                params![sc.rating, sc.label, sc.color_label, sc.edited as i64, sc.favorite as i64, sidecar_mtime, id],
             )
             .map_err(|e| e.to_string())?;
             // Full re-link each pass rather than a diff — the sidecar is authoritative (see the
@@ -2592,8 +2605,8 @@ pub fn sidecar_run_scoped(state: &CatalogState, progress: &mut dyn FnMut(ScanPro
             let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
             for (id, sidecar_mtime, sc) in &read {
                 tx.execute(
-                    "UPDATE photos SET rating = ?1, label = ?2, edited = ?3, favorite = ?4, sidecar_parsed_mtime = ?5 WHERE id = ?6",
-                    params![sc.rating, sc.label, sc.edited as i64, sc.favorite as i64, sidecar_mtime, id]
+                    "UPDATE photos SET rating = ?1, label = ?2, color_label = ?3, edited = ?4, favorite = ?5, sidecar_parsed_mtime = ?6 WHERE id = ?7",
+                    params![sc.rating, sc.label, sc.color_label, sc.edited as i64, sc.favorite as i64, sidecar_mtime, id]
                 )
                 .map_err(|e| e.to_string())?;
                 tx.execute("DELETE FROM photo_keywords WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
@@ -6901,6 +6914,7 @@ pub struct CatalogEntry {
     pub id: i64,
     pub offline: bool,
     pub volume: String,
+    pub color_label: String,
     pub sharpness: Option<f64>,
     pub blurry: bool,
     /// True once faces_run has scanned this photo at its CURRENT mtime — mirrors the exact
@@ -7016,6 +7030,9 @@ pub struct CatalogQuery {
     /// "Red" | "Green" — the flag/pick label, same values `set_sidecar`'s own `label` uses.
     #[serde(default)]
     pub label: Option<String>,
+    /// Chromasmith colour label, independent of the pick/reject `xmp:Label` field.
+    #[serde(default)]
+    pub color_label: Option<String>,
     /// ⚠️ rating/favorite/edited/label were NOT safe to add here until `set_sidecar`
     /// (library.rs) started calling `sync_sidecar_fields_run` on every write: before that, these
     /// four columns were only refreshed when a sidecar was re-parsed during a full scan, so
@@ -7056,7 +7073,7 @@ impl Default for CatalogQuery {
             kind: None, text: None, include_offline: true, limit: None, smart_album_id: None, year: None, month: None, day: None,
             no_date: false, blurry_only: false, expand_stack: None, keywords: Vec::new(), person_id: None, photo_ids: None,
             folder: None, camera: None, lens: None, iso: None, faces: None,
-            rating: None, favorite: None, edited: None, label: None, offset: None,
+            rating: None, favorite: None, edited: None, label: None, color_label: None, offset: None,
         }
     }
 }
@@ -7218,6 +7235,10 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             where_parts.push(format!("p.label = ?{}", values.len() + 1));
             values.push(Box::new(l.clone()));
         }
+        if let Some(color) = &q.color_label {
+            where_parts.push(format!("p.color_label = ?{}", values.len() + 1));
+            values.push(Box::new(color.clone()));
+        }
         // Date-browser scope. `month`/`day` are meaningless without `year` (there's no "every
         // March" cross-year view in this design), so they're only applied once year is set.
         if q.blurry_only {
@@ -7302,7 +7323,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
     };
     let sql = format!(
         "SELECT p.id, p.name, p.rel_path, p.kind, p.mtime, p.size, p.sidecar_mtime,
-                v.last_path, v.is_local, v.label, p.sharpness, p.blurry,
+                v.last_path, v.is_local, v.label, p.color_label, p.sharpness, p.blurry,
                 (SELECT COUNT(*) FROM photos p3 WHERE p3.stack_id = p.id AND p3.present = 1),
                 (SELECT p2.rel_path FROM photos p2 WHERE p2.stack_id = p.id AND p2.present = 1 AND p2.id != p.id
                  ORDER BY p2.mtime DESC LIMIT 1),
@@ -7336,14 +7357,15 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             let last_path: String = r.get(7)?;
             let is_local: i64 = r.get(8)?;
             let label: String = r.get(9)?;
-            let sharpness: Option<f64> = r.get(10)?;
-            let blurry: i64 = r.get(11)?;
-            let stack_n: i64 = r.get(12)?;
-            let newest_deriv_rel: Option<String> = r.get(13)?;
-            let stack_id: Option<i64> = r.get(14)?;
-            let faces_scanned_at: Option<i64> = r.get(15)?;
-            let place: Option<String> = r.get(16)?;
-            let captured: Option<i64> = r.get(17)?;
+            let color_label: String = r.get(10)?;
+            let sharpness: Option<f64> = r.get(11)?;
+            let blurry: i64 = r.get(12)?;
+            let stack_n: i64 = r.get(13)?;
+            let newest_deriv_rel: Option<String> = r.get(14)?;
+            let stack_id: Option<i64> = r.get(15)?;
+            let faces_scanned_at: Option<i64> = r.get(16)?;
+            let place: Option<String> = r.get(17)?;
+            let captured: Option<i64> = r.get(18)?;
             let is_photo = kind != "video";
             let online = is_local != 0 || {
                 let mut cache = online_cache.borrow_mut();
@@ -7364,6 +7386,7 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 id,
                 offline: !online,
                 volume: label,
+                color_label,
                 sharpness,
                 blurry: blurry != 0,
                 faces_scanned: is_photo && faces_scanned_at.map_or(false, |t| t == mtime),
@@ -12814,6 +12837,53 @@ mod tests {
         }
         assert_eq!(seen.len(), 25, "every row must be reachable across pages");
         assert_eq!(pages, 3, "25 rows at a page size of 10 must take exactly 3 pages (10, 10, 5)");
+    }
+
+    #[test]
+    fn color_label_filter_is_distinct_and_applied_before_pagination() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        for (i, (color, flag)) in [("Blue", "Green"), ("Red", "Red"), ("Blue", ""), ("", "Green")].into_iter().enumerate() {
+            conn.execute(
+                "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, label, color_label)
+                 VALUES (?1, ?2, '', ?2, ?2, 'jpg', 'jpeg', 10, ?3, 0, 1, ?4, ?5)",
+                params![vid, format!("color{i}.jpg"), i, flag, color],
+            ).unwrap();
+        }
+        let q = CatalogQuery { color_label: Some("Blue".into()), limit: Some(1), offset: Some(1), ..Default::default() };
+        let second = query_run(&conn, q).unwrap();
+        assert_eq!(second.total, 2, "total counts all matching colors, not loaded rows");
+        assert_eq!(second.entries.len(), 1);
+        assert_eq!(second.entries[0].color_label, "Blue");
+        assert!(!second.capped);
+
+        let empty = query_run(&conn, CatalogQuery { color_label: Some("".into()), ..Default::default() }).unwrap();
+        assert_eq!(empty.total, 1, "empty colour values select unlabelled rows, not flag values");
+        let picks = query_run(&conn, CatalogQuery { label: Some("Green".into()), ..Default::default() }).unwrap();
+        assert_eq!(picks.total, 2);
+        assert!(picks.entries.iter().any(|entry| entry.color_label == "Blue"));
+        assert!(picks.entries.iter().any(|entry| entry.color_label.is_empty()), "Pick/Reject rows retain their independent empty or colour metadata");
+    }
+
+    #[test]
+    fn v22_catalog_migration_adds_empty_color_without_guessing_from_flags() {
+        let conn = temp_db();
+        let vid = local_volume(&conn);
+        conn.execute(
+            "INSERT INTO photos (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime, added, present, label)
+             VALUES (?1, 'legacy.jpg', '', 'legacy.jpg', 'legacy.jpg', 'jpg', 'jpeg', 10, 1, 0, 1, 'Green')",
+            params![vid],
+        ).unwrap();
+        conn.execute("DROP INDEX ix_photos_color_label", []).unwrap();
+        conn.execute("ALTER TABLE photos DROP COLUMN color_label", []).unwrap();
+        conn.pragma_update(None, "user_version", 22i64).unwrap();
+
+        migrate(&conn).unwrap();
+        let (flag, color): (String, String) = conn.query_row(
+            "SELECT label, color_label FROM photos WHERE rel_path='legacy.jpg'", [], |row| Ok((row.get(0)?, row.get(1)?)),
+        ).unwrap();
+        assert_eq!(flag, "Green", "legacy Pick flag remains intact");
+        assert_eq!(color, "", "old flag values are never guessed to be colour labels");
     }
 
     // ── Cache budget ─────────────────────────────────────────────────────────────────────────

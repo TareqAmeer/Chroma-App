@@ -41,6 +41,14 @@ let zoomCalls=0; window.chromasmithRegisterShortcut('editor.zoom-in',()=>{zoomCa
 e=key('+',undefined,{ctrlKey:true,shiftKey:true}); assert.equal(zoomCalls,1); assert(e.defaultPrevented,'plus-key aliases retain their shifted key semantics');
 window.chromasmithLibraryIsOpen=()=>true;
 e=key('x'); assert.equal(libraryCalls,1); assert(e.defaultPrevented,'Library-only binding dispatches in its context');
+let colorCalls=0; window.chromasmithRegisterShortcut('library.color-red',()=>{colorCalls++;});
+assert(api.actions().some(a=>a.id==='library.color-red'),'colour shortcuts are listed by default');
+api.set('library.color-red','F12'); values.set('chromasmith_color_labels_enabled','0');
+assert(!api.actions().some(a=>a.id.startsWith('library.color-')),'hidden preference removes colour actions from the shortcut registry');
+e=key('F12'); assert.equal(colorCalls,0,'a hidden rebound colour shortcut cannot mutate photo metadata');
+values.set('chromasmith_color_labels_enabled','1');
+e=key('F12'); assert.equal(colorCalls,1,'visible rebound colour shortcut dispatches normally');
+api.set('library.color-red',null);
 window.chromasmithLibraryIsOpen=()=>false;
 e=key('x'); assert.equal(libraryCalls,1); assert(!e.defaultPrevented,'Library-only action does not dispatch in Editor context');
 const exported=api.export(); api.set('editor.undo','F3'); api.import(exported);

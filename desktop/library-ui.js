@@ -67,11 +67,12 @@
     window.libtestRecipeBatchFailNext = indices => { indices.forEach(i => ltBatchFailures.add(i)); };
     window.libtestRecipeBatchInvoke = (command, args) => libtestInvoke(command, args);
     window.__libtestSeedSidecar = (path, sidecar) => {
-      const value = { rating: 0, label: '', favorite: false, edited: false, recipe: '', ...(sidecar || {}) };
+      const value = { rating: 0, label: '', color_label: '', favorite: false, edited: false, recipe: '', ...(sidecar || {}) };
       ltBatchSidecars.set(path, structuredClone(value));
       state.sidecars.set(path, structuredClone(value));
     };
     window.__libtestFailNextSidecarWrite = () => { ltFailNextSidecarWrite = true; };
+    window.__libtestReadSidecar = (path) => structuredClone(ltBatchSidecars.get(path) || ltSidecars.get(path) || {});
   }
   // Undo-reset mock state — mirrors the Rust one-slot buffer (last_reset_recipe/last_reset_edited)
   // so ?libtest=1 can exercise the "Reset edit" / "Undo last reset" context-menu pair without a
@@ -163,8 +164,8 @@
         return Promise.resolve(png.buffer);
       }
       case 'read_file_bytes': return Promise.resolve(window.__libtestFileBytes?.[A.path] || png.buffer);
-      case 'get_sidecar': if (ltBatchSidecars.has(A.path)) return Promise.resolve(ltBatchSidecars.get(A.path)); return Promise.resolve({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
-      case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map((path) => ({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited, ...(ltSidecars.get(path) || {}) })));
+      case 'get_sidecar': if (ltBatchSidecars.has(A.path)) return Promise.resolve(ltBatchSidecars.get(A.path)); return Promise.resolve({ rating: 0, label: '', color_label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
+      case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map((path) => ({ rating: 0, label: '', color_label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited, ...(ltSidecars.get(path) || {}) })));
       // reset_edit/undo_reset_edit — see CLAUDE.md's Reset-edit-undo item: captures/restores the
       // one-slot undo buffer exactly like the real Rust commands, so the libtest harness can
       // click through "Reset edit" then "Undo last reset" and see the edited badge come back.
@@ -220,9 +221,19 @@
         if (ltFailNextSidecarWrite) { ltFailNextSidecarWrite = false; return Promise.reject(new Error('Simulated sidecar write failure')); }
         // Mirror the Rust command's undo-buffer-clearing rule: a genuine edit save (non-empty
         // recipe, edited:true) supersedes any pending reset-undo buffer.
-        if (ltBatchSidecars.has(A.path)) ltBatchSidecars.set(A.path, { ...ltBatchSidecars.get(A.path), ...A });
+        const current = ltBatchSidecars.get(A.path) || ltSidecars.get(A.path) || { color_label: '' };
+        const updated = { ...current, ...A };
+        if (ltBatchSidecars.has(A.path)) ltBatchSidecars.set(A.path, updated);
         if (A.edited && A.recipe) { ltRecipe = A.recipe; ltEdited = true; ltLastResetRecipe = null; ltLastResetEdited = false; }
-        ltSidecars.set(A.path, { rating: A.rating || 0, label: A.label || '', favorite: !!A.favorite });
+        ltSidecars.set(A.path, updated);
+        return Promise.resolve();
+      }
+      case 'set_color_label': {
+        if (ltFailNextSidecarWrite) { ltFailNextSidecarWrite = false; return Promise.reject(new Error('Simulated sidecar write failure')); }
+        const cur = ltBatchSidecars.get(A.path) || { rating: 0, label: '', color_label: '', favorite: false, edited: false };
+        const next = { ...cur, color_label: A.colorLabel || '' };
+        ltBatchSidecars.set(A.path, next);
+        state.sidecars.set(A.path, next);
         return Promise.resolve();
       }
       // N1a offline edit queue — mirrors catalog.rs's real conflict logic closely enough to
@@ -1010,6 +1021,7 @@
     facesFilter: 'all',    // 'all' | 'indexed' | 'pending' — face-indexing status (entry.facesScanned)
     showInfo: false,       // metadata panel for the focused photo (I) — see renderInfoPanel
     tagFilter: 'all',      // 'all' | 'red' | 'green' | 'edited' | 'noedited'
+    colorLabelFilter: 'all', // 'all' | 'none' | Red/Yellow/Green/Blue/Purple
     // ⚠️ This existed in the saved-views capture list and the filter-id map before the feature
     // did — ROADMAP claimed star ratings had shipped and they never had, so those were dead
     // references to a control that was not in the DOM and a state key that was not here.
@@ -2017,6 +2029,10 @@
     .lib-flag{cursor:pointer;font-size:11px;opacity:.55;filter:grayscale(1);transition:opacity var(--duration-press,120ms) ease;
       display:flex;align-items:center;justify-content:center;width:15px;height:15px}
     .lib-flag.on{opacity:1;filter:none}
+    .lib-color-dot{display:inline-block;width:9px;height:9px;border-radius:50%;border:1px solid rgba(255,255,255,.7);box-shadow:0 0 0 1px rgba(0,0,0,.45);flex:none}
+    body.lib-hide-color-labels .lib-color-dot,
+    body.lib-hide-color-labels .lib-cull-color-select,
+    body.lib-hide-color-labels #lib-batchbar [data-act="color-label"]{display:none!important}
     /* HANDOVER §8 item #9: was opacity:.55/grayscale for the unset flags — always drawn, just
        dimmed. Wireframe: .ratebar.has-set button:not(.set){display:none} — once a card carries
        ANY flag, the other two icons are removed entirely, not dimmed. Matches the wireframe's
@@ -2632,7 +2648,10 @@
             <span>Show Gallery + Studio together</span><input id="lib-unified-toggle" type="checkbox" aria-label="Show Gallery and Studio together">
           </label>
           <label class="fx-ovf-item lib-unified-setting" for="lib-stars-toggle" title="Show, filter and set star ratings while preserving ratings in photo sidecars">
-            <span>Show star ratings</span><input id="lib-stars-toggle" type="checkbox" aria-label="Show star ratings">
+           <span>Show star ratings</span><input id="lib-stars-toggle" type="checkbox" aria-label="Show star ratings">
+          </label>
+          <label class="fx-ovf-item lib-unified-setting" for="lib-color-labels-toggle" title="Show, edit, filter and use color labels independently from Pick and Reject">
+            <span>Show colour labels</span><input id="lib-color-labels-toggle" type="checkbox" aria-label="Show colour labels">
           </label>
           <div class="fx-ovf-sep"></div>
           <button class="fx-ovf-item opt-action" id="lib-pick" title="Choose root folder">${ic('library',15)}<span>Choose folder…</span></button>
@@ -2746,6 +2765,12 @@
         <option value="indexed">Face-scanned</option>
         <option value="pending">Not face-scanned</option>
       </select></div>
+      <div id="lib-color-label-filter-wrap" class="lib-filter-field"><label for="lib-color-label-filter">Colour label</label>
+        <select id="lib-color-label-filter" title="Filter by colour label">
+          <option value="all">Any colour label</option><option value="none">No colour label</option>
+          <option>Red</option><option>Yellow</option><option>Green</option><option>Blue</option><option>Purple</option>
+        </select>
+      </div>
       <!-- Own wrapper, deliberately: syncFilterUI() hides _rf.closest('label') || _rf.parentElement
            when STARS_ENABLED is false (it is, unconditionally, in production today), so this
            select's PARENT must be a dedicated element it alone owns — otherwise that hide call
@@ -3451,6 +3476,7 @@
       iso: state.isoFilter !== 'all' && state.isoFilter ? parseInt(state.isoFilter, 10) : null,
       faces: state.facesFilter !== 'all' ? state.facesFilter : null,
       rating: state.ratingFilter !== 'all' ? parseInt(state.ratingFilter, 10) : null,
+      colorLabel: !COLOR_LABELS_ENABLED || state.colorLabelFilter === 'all' ? null : (state.colorLabelFilter === 'none' ? '' : state.colorLabelFilter),
       favorite: state.tagFilter === 'favorite' ? true : null,
       edited: state.tagFilter === 'edited' ? true : (state.tagFilter === 'noedited' ? false : null),
       label: state.tagFilter === 'red' ? 'Red' : (state.tagFilter === 'green' ? 'Green' : null),
@@ -4164,12 +4190,33 @@
     document.getElementById('lib-offline-bar-text').textContent =
       `${label} — drive not connected · showing cached previews. Reconnect to edit or export the originals.`;
   }
-  // Reject/Pick/Favorite only — colour labels (Red/Yellow/Green/Blue/Purple dots) were removed.
-  // Reject/Pick still ride the sidecar's free-form `label` string ("Red"/"Green"), unchanged.
-  function flagsHtml(label, favorite) {
+  const COLOR_LABELS = ['Red', 'Yellow', 'Green', 'Blue', 'Purple'];
+  let COLOR_LABELS_ENABLED = localStorage.getItem('chromasmith_color_labels_enabled') !== '0';
+  function colorLabelHtml(value) {
+    if (!COLOR_LABELS_ENABLED || !COLOR_LABELS.includes(value)) return '';
+    const colors = { Red: '#e05252', Yellow: '#e0c04a', Green: '#5cb85c', Blue: '#4a90d9', Purple: '#9b6dd0' };
+    return `<span class="lib-color-dot" style="background:${colors[value]}" title="Colour label: ${value}" aria-label="Colour label: ${value}"></span>`;
+  }
+  function syncColorLabelVisibility() {
+    if (!COLOR_LABELS_ENABLED) {
+      state.colorLabelFilter = 'all';
+      const filterSelect = document.getElementById('lib-color-label-filter');
+      if (filterSelect) filterSelect.value = 'all';
+      closeContextMenu();
+    }
+    document.body.classList.toggle('lib-hide-color-labels', !COLOR_LABELS_ENABLED);
+    const filter = document.getElementById('lib-color-label-filter-wrap');
+    if (filter) filter.style.display = COLOR_LABELS_ENABLED ? '' : 'none';
+    const control = document.getElementById('lib-color-labels-toggle');
+    if (control) control.checked = COLOR_LABELS_ENABLED;
+    if (typeof window.fxUpdateColorLabelControl === 'function') window.fxUpdateColorLabelControl();
+    window.dispatchEvent(new CustomEvent('chromasmith-color-label-visibility', { detail: { enabled: COLOR_LABELS_ENABLED } }));
+  }
+  // Reject/Pick remain xmp:Label flags; the independent Chromasmith colour-label dot is a status indicator.
+  function flagsHtml(label, favorite, colorLabel) {
     return `<span class="lib-flag${label === 'Red' ? ' on' : ''}" data-flag="Red" title="Reject (X)">${FLAG_SVG_RED}</span>` +
            `<span class="lib-flag${label === 'Green' ? ' on' : ''}" data-flag="Green" title="Pick (flag)">${FLAG_SVG_GREEN}</span>` +
-           `<span class="lib-flag lib-fav${favorite ? ' on' : ''}" data-flag="Favorite" title="Favorite (F)">${HEART_SVG}</span>`;
+           `<span class="lib-flag lib-fav${favorite ? ' on' : ''}" data-flag="Favorite" title="Favorite (F)">${HEART_SVG}</span>` + colorLabelHtml(colorLabel);
   }
 
   /// Five stars, filled to `n`. Click sets that rating; clicking the current rating clears it,
@@ -4225,12 +4272,14 @@
     const g = libMetaUndo.pop();
     if (!g || !g.length) { toast('Nothing to undo'); return; }
     if (g[0].kind === 'reset') { await libUndoLastReset(g[0].paths); return; }
+    let undoFailed = false;
     libMetaUndoing = true;
     try {
       // Reverse order so a path changed twice in one group lands on its oldest value.
       for (const r of [...g].reverse()) {
         if (r.kind === 'rating') await setRating(r.path, r.prev);
         else if (r.kind === 'label') await setLabel(r.path, r.prev);
+        else if (r.kind === 'color_label') { const saved = await setColorLabel(r.path, r.prev, true); if (!saved) undoFailed = true; }
         else if (r.kind === 'favorite') await setFavorite(r.path, r.prev);
         else if (r.kind === 'keywords') await restoreKeywords(r.path, r.prev);
         else if (r.kind === 'album_add') {
@@ -4239,10 +4288,11 @@
         }
       }
     } finally { libMetaUndoing = false; }
+    if (undoFailed) { libMetaUndo.push(g); toast('Could not undo colour label yet — retry when the photo folder is writable.'); return; }
     if (state.viewMode === 'survey') surveyState.cells.forEach((cell, idx) => surveySyncCell(idx));
     if (g[0].kind === 'album_add') { toast(`Undid add to "${g[0].name}"`); return; }
     const n = new Set(g.map((r) => r.path)).size;
-    const noun = g[0].kind === 'label' ? 'flag' : g[0].kind === 'keywords' ? 'keyword' : g[0].kind;
+    const noun = g[0].kind === 'label' ? 'flag' : g[0].kind === 'color_label' ? 'colour label' : g[0].kind === 'keywords' ? 'keyword' : g[0].kind;
     toast(`Undid ${noun} change${n > 1 ? ` on ${n} photos` : ''}`);
   }
   async function setRating(path, rating) {
@@ -6025,7 +6075,7 @@
     // has nothing to show: no thumbnail, no metadata, and opening it just toasts an error. Hide
     // it from the grid/list entirely instead of rendering a broken placeholder card for it.
     if (entry.missing) return false;
-    const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
+    const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', color_label: '', edited: false };
     const m = state.meta.get(entry.path) || {};
     if (state.typeFilter !== 'all' && !state.typeFilter.split(',').includes(entry.kind)) return false;
     // Catalog-backed views already filtered camera/lens/ISO in the query, and their metadata
@@ -6056,6 +6106,8 @@
     // No backend catalog_query field for this combination; filtered client-side like the other
     // tagFilter values already are as a secondary pass over whatever the query returned.
     if (state.tagFilter === 'none' && (sc.label === 'Red' || sc.label === 'Green' || sc.favorite)) return false;
+    if (COLOR_LABELS_ENABLED && !(state._catalogPaged && (state.source === 'catalog' || state.source === 'folder')) && state.colorLabelFilter !== 'all'
+      && (sc.color_label || '') !== (state.colorLabelFilter === 'none' ? '' : state.colorLabelFilter)) return false;
     return true;
   }
 
@@ -6080,7 +6132,7 @@
       .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
     if (card) {
-      card.querySelector('.lib-flags').innerHTML = flagsHtml(label, updated.favorite);
+      card.querySelector('.lib-flags').innerHTML = flagsHtml(label, updated.favorite, updated.color_label);
       // HANDOVER §8 item #12: this optimistic patch updated the flag ICONS but never the
       // card's own lbl-red/lbl-green class — the .lbl-red rule that dims a rejected thumbnail
       // (UI_SPEC.md's deliberate black-overlay design, :1173-1183) only ever applied correctly
@@ -6101,6 +6153,27 @@
     if (path === state.openedPath && typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns();
     return saved;
   }
+  async function setColorLabel(path, colorLabel, allowWhenHidden = false) {
+    if (!COLOR_LABELS_ENABLED && !allowWhenHidden) return false;
+    if (colorLabel !== '' && !COLOR_LABELS.includes(colorLabel)) return false;
+    const cur = state.sidecars.get(path) || { rating: 0, label: '', color_label: '', edited: false };
+    const prev = cur.color_label || '';
+    if (prev === colorLabel) return true;
+    const updated = { ...cur, color_label: colorLabel };
+    state.sidecars.set(path, updated);
+    let saved = true;
+    await invoke('set_color_label', { path, colorLabel }).catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
+    if (!saved) return false;
+    libMetaRecord({ kind: 'color_label', path, prev });
+    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    if (card) {
+      const flags = card.querySelector('.lib-flags');
+      if (flags) flags.innerHTML = flagsHtml(updated.label, updated.favorite, updated.color_label);
+    }
+    if (path === state.openedPath && typeof window.fxUpdateColorLabelControl === 'function') window.fxUpdateColorLabelControl();
+    if (state.colorLabelFilter !== 'all') applyCatalogFilterChange(); else renderGrid();
+    return true;
+  }
   // Mirrors setLabel() above but for the favorite heart — same optimistic-update +
   // sidecar-write + rollback pattern, kept separate since favorite is independent of
   // (and can coexist with) a Red/Green flag.
@@ -6112,7 +6185,7 @@
     await invoke('set_sidecar', { path, rating: updated.rating, label: updated.label, edited: updated.edited, favorite })
       .catch((e) => sidecarWriteFailed(path, cur, e));
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    if (card) card.querySelector('.lib-flags').innerHTML = flagsHtml(updated.label, favorite);
+    if (card) card.querySelector('.lib-flags').innerHTML = flagsHtml(updated.label, favorite, updated.color_label);
     renderCollectionCounts();
     if (path === state.openedPath && typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns(); // E5 fix — see setLabel's comment
   }
@@ -6126,6 +6199,9 @@
     await setLabel(path, cur.label === label ? '' : label);
   };
   window.chromasmithHasOpenedPhoto = () => !!state.openedPath;
+  window.chromasmithOpenedColorLabel = () => (state.sidecars.get(state.openedPath) || {}).color_label || '';
+  window.chromasmithColorLabelsEnabled = () => COLOR_LABELS_ENABLED;
+  window.chromasmithSetColorLabel = (colorLabel) => state.openedPath ? setColorLabel(state.openedPath, colorLabel) : Promise.resolve(false);
   // A photo that reaches the Editor any other way (drag-drop, Open File) is not the Gallery photo
   // that was open before it — forget that one, or the topbar flag/favorite (and the export's
   // source-path lookups) kept acting on the previous Gallery photo. Called by loadFXImages
@@ -7407,6 +7483,11 @@
     rateMenu.subItem('Reject', () => Promise.all(paths.map((p) => setLabel(p, 'Red'))), 'X');
     rateMenu.subItem('Pick', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))), 'P');
     rateMenu.subItem('Clear flag', () => Promise.all(paths.map((p) => setLabel(p, ''))), 'U');
+    if (COLOR_LABELS_ENABLED) {
+      const colorMenu = submenu('Colour label');
+      COLOR_LABELS.forEach((color) => colorMenu.subItem(color, () => Promise.all(paths.map((p) => setColorLabel(p, color)))));
+      colorMenu.subItem('Clear colour label', () => Promise.all(paths.map((p) => setColorLabel(p, ''))));
+    }
     rateMenu.subSep();
     const allFavorited = paths.every((p) => (state.sidecars.get(p) || {}).favorite);
     rateMenu.subItem(allFavorited ? '♥ Remove from favorites' : '♡ Add to favorites',
@@ -7918,7 +7999,8 @@
     }
     list.forEach((entry, _i) => {
       const idx = offset + _i;
-      const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', edited: false };
+    const cachedSidecar = state.sidecars.get(entry.path);
+    const sc = { rating: 0, label: '', color_label: entry.color_label || '', edited: false, ...(cachedSidecar || {}) };
       const card = document.createElement('div');
       card.className = 'lib-card' + (entry.path === state.openedPath ? ' sel' : '') + (state.selected.has(entry.path) ? ' multi' : '') +
         (sc.label ? ' lbl-' + sc.label.toLowerCase() : '') + (entry.missing ? ' lib-missing' : '') + (entry._stackOf != null ? ' lib-stack-member' : '');
@@ -7962,7 +8044,7 @@
           <div class="lib-col">${esc(m.shutter)}</div>
           <div class="lib-col">${esc(m.aperture)}</div>
           <div class="lib-col">${esc(m.focal_len)}</div>
-          <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>${starsHtml(sc.rating)}
+          <div class="lib-flags">${flagsHtml(sc.label, sc.favorite, sc.color_label)}</div>${starsHtml(sc.rating)}
           <div class="lib-col">${sc.edited ? 'Yes' : ''}</div>`;
       } else {
         const stripFlag = sc.label === 'Red' ? `<span class="lib-strip-flag" style="background:#e05252"></span>`
@@ -7975,7 +8057,7 @@
         // Library grid too just duplicated chrome.
         const stripInfo = `<div class="lib-strip-info">${entry.path === state.openedPath || !state.showTitle ? '' : `<span class="lib-strip-name">${escName}${entry.missing ? ' (missing)' : ''}</span>`}${stripFlag}</div>`;
         card.innerHTML = `<div class="lib-thumb-wrap${entry.is_video ? ' lib-thumb-video' : ''}"><img loading="lazy" alt="">${metaStripHtml(entry)}${entry.kind === 'raw' && !(entry.stack_n > 1) ? '<div class="lib-type-r" title="RAW file">R</div>' : ''}
-            <div class="lib-flags">${flagsHtml(sc.label, sc.favorite)}</div>${starsHtml(sc.rating)}
+            <div class="lib-flags">${flagsHtml(sc.label, sc.favorite, sc.color_label)}</div>${starsHtml(sc.rating)}
           </div>
           ${sc.edited ? EDITED_BADGE_HTML : ''}
           ${entry.stack_n > 1 ? rawBadge : ''}
@@ -8379,13 +8461,20 @@
       + `<button class="lib-btn sk2-bb-more-btn" style="white-space:nowrap;flex:none" aria-expanded="false">More</button>`
       + `<span class="sk2-bb-more" hidden>`
       + B('cache-raw', 'Cache selected RAWs', 'Build exact full-quality studio caches for the selected RAW photos')
-      + B('clear-label', 'Clear flag') + B('deselect', 'Deselect') + `</span>`;
+      + B('clear-label', 'Clear flag')
+      + (COLOR_LABELS_ENABLED ? `<select data-act="color-label" aria-label="Colour label" title="Apply a colour label"><option value="">Colour label…</option><option value="Red">Red</option><option value="Yellow">Yellow</option><option value="Green">Green</option><option value="Blue">Blue</option><option value="Purple">Purple</option><option value="__clear">Clear colour</option></select>` : '')
+      + B('deselect', 'Deselect') + `</span>`;
     const mb = bar.querySelector('.sk2-bb-more-btn'), mo = bar.querySelector('.sk2-bb-more');
     mb.onclick = () => { mo.hidden = !mo.hidden; mb.setAttribute('aria-expanded', String(!mo.hidden)); };
     bar.querySelector('[data-act="cache-raw"]').onclick = () => cacheSelectedRaws(paths());
     bar.querySelector('[data-act="reject"]').onclick = () => paths().forEach((p) => setLabel(p, 'Red'));
     bar.querySelector('[data-act="pick"]').onclick = () => paths().forEach((p) => setLabel(p, 'Green'));
     bar.querySelector('[data-act="clear-label"]').onclick = () => paths().forEach((p) => setLabel(p, ''));
+    bar.querySelector('[data-act="color-label"]')?.addEventListener('change', (e) => {
+      const value = e.target.value;
+      if (value) paths().forEach((p) => setColorLabel(p, value === '__clear' ? '' : value));
+      e.target.value = '';
+    });
     bar.querySelector('[data-act="fav"]').onclick = () => paths().forEach((p) => setFavorite(p, true));
     bar.querySelector('[data-act="cull"]')?.addEventListener('click', enterCullMode);
     bar.querySelector('[data-act="deselect"]').onclick = () => { state.selected.clear(); renderGrid(); };
@@ -8703,7 +8792,8 @@
         <div class="lib-flag${sidecar.label === 'Green' ? ' on' : ''}" data-survey-action="pick" title="Pick (P)">${ic('flagGreen',15)}</div>
         <div class="lib-flag${sidecar.label === 'Red' ? ' on' : ''}" data-survey-action="reject" title="Reject (X)">${ic('close',12)}</div>
         <div class="lib-flag${sidecar.favorite ? ' on' : ''}" data-survey-action="favorite" title="Favorite">${ic('heart',15)}</div>
-        <span style="margin-left:auto;color:var(--mut);font-size:10px">${STARS_ENABLED && sidecar.rating ? `${sidecar.rating}★` : ''}</span>
+        ${COLOR_LABELS_ENABLED ? `<select class="lib-cull-color-select" aria-label="Colour label for ${escAttr2(baseName(cell.path))}" title="Colour label"><option value="">No colour</option>${COLOR_LABELS.map((c) => `<option${sidecar.color_label === c ? ' selected' : ''}>${c}</option>`).join('')}</select>` : ''}
+        <span class="lib-cmp-rating" style="margin-left:auto;color:var(--mut);font-size:10px">${STARS_ENABLED && sidecar.rating ? `${sidecar.rating}★` : ''}</span>
       </div>
     </section>`;
   }
@@ -8747,7 +8837,9 @@
     cell.querySelector('[data-survey-action="pick"]')?.classList.toggle('on', sidecar.label === 'Green');
     cell.querySelector('[data-survey-action="reject"]')?.classList.toggle('on', sidecar.label === 'Red');
     cell.querySelector('[data-survey-action="favorite"]')?.classList.toggle('on', !!sidecar.favorite);
-    const rating = cell.querySelector('.lib-cmp-chrome span');
+    const colorSelect = cell.querySelector('.lib-cull-color-select');
+    if (colorSelect) colorSelect.value = sidecar.color_label || '';
+    const rating = cell.querySelector('.lib-cmp-rating');
     if (rating) rating.textContent = STARS_ENABLED && sidecar.rating ? `${sidecar.rating}★` : '';
     cullSyncDeleteBtn();
   }
@@ -8791,6 +8883,15 @@
         if (compareState.mode === 'cull' && idx === surveyState.focus && nextLabel && cullAutoAdvanceEnabled()) await cullAdvance(nextLabel, cell.path);
         else await setLabel(cell.path, nextLabel);
       }
+      surveySyncCell(idx);
+    }));
+    host.querySelectorAll('.lib-cull-color-select').forEach((select) => select.addEventListener('change', async (e) => {
+      e.stopPropagation();
+      const idx = Number(select.closest('.lib-survey-cell')?.dataset.surveyIdx);
+      const cell = surveyState.cells[idx]; if (!cell) return;
+      const value = select.value;
+      if (compareState.mode === 'cull' && idx === surveyState.focus) await cullColorAndAdvance(value, cell.path);
+      else await setColorLabel(cell.path, value);
       surveySyncCell(idx);
     }));
     const delBtn = host.querySelector('#lib-cull-del');
@@ -9076,7 +9177,7 @@
   // Exactly the fields the filter popover and the sort control own. Listed explicitly rather than
   // cloned from `state`, so a future unrelated state field can never silently become part of a
   // saved view (and so an old saved view stays readable when one is added).
-  const VIEW_FIELDS = ['typeFilter','cameraFilter','lensFilter','isoFilter','dupeFilter',
+  const VIEW_FIELDS = ['typeFilter','cameraFilter','lensFilter','isoFilter','dupeFilter','colorLabelFilter',
                        'syncedFilter','facesFilter','tagFilter','ratingFilter','search','sortBy','sortDir',
                        'viewMode','thumbSize'];
   function loadViews() {
@@ -9116,7 +9217,7 @@
                   'lib-lens-filter': 'lensFilter', 'lib-iso-filter': 'isoFilter',
                   'lib-dupe-filter': 'dupeFilter', 'lib-synced-filter': 'syncedFilter',
                   'lib-faces-filter': 'facesFilter',
-                  'lib-tag-filter': 'tagFilter', 'lib-rating-filter': 'ratingFilter',
+                   'lib-tag-filter': 'tagFilter', 'lib-rating-filter': 'ratingFilter', 'lib-color-label-filter': 'colorLabelFilter',
                   'lib-sort': 'sortBy' };
     Object.entries(map).forEach(([id, key]) => {
       const el = document.getElementById(id);
@@ -9323,6 +9424,9 @@
   function cullAdvance(label = 'Green', path = surveyTargetPath()) {
     return cullCommitAndAdvance(path, () => setLabel(path, label), () => (state.sidecars.get(path) || {}).label === label);
   }
+  function cullColorAndAdvance(colorLabel, path = surveyTargetPath()) {
+    return cullCommitAndAdvance(path, () => setColorLabel(path, colorLabel), () => (state.sidecars.get(path) || {}).color_label === colorLabel);
+  }
   function cullRateAndAdvance(rating, path = surveyTargetPath()) {
     return cullCommitAndAdvance(path, () => setRating(path, rating), () => (state.sidecars.get(path) || {}).rating === rating);
   }
@@ -9407,6 +9511,21 @@
       if (typeof syncFilterUI === 'function') syncFilterUI();
     };
   }
+  const colorLabelsToggle = overlay.querySelector('#lib-color-labels-toggle');
+  syncColorLabelVisibility();
+  if (colorLabelsToggle) colorLabelsToggle.onchange = () => {
+    COLOR_LABELS_ENABLED = colorLabelsToggle.checked;
+    localStorage.setItem('chromasmith_color_labels_enabled', COLOR_LABELS_ENABLED ? '1' : '0');
+    if (!COLOR_LABELS_ENABLED) {
+      state.colorLabelFilter = 'all';
+      const select = overlay.querySelector('#lib-color-label-filter');
+      if (select) select.value = 'all';
+    }
+    syncColorLabelVisibility();
+    if (state._catalogPaged && (state.source === 'catalog' || state.source === 'folder')) applyCatalogFilterChange();
+    else renderGrid();
+    syncFilterUI();
+  };
   const storedUnifiedView = initialUnifiedPreference && document.body.classList.contains('deskx');
   // Bug #2 fix: discoverable Info-panel trigger — window.__libInfo(true) already existed and
   // worked, it just had no button anywhere pointing at it. Uses the same _kbCursor/openedPath/
@@ -9871,6 +9990,7 @@
     state.typeFilter = 'all'; state.cameraFilter = 'all'; state.lensFilter = 'all'; state.isoFilter = 'all';
     state.dupeFilter = 'all'; state.syncedFilter = 'all'; state.tagFilter = 'all'; state.facesFilter = 'all';
     state.ratingFilter = 'all'; // HANDOVER §3.9: the <select> was reset but this field wasn't
+    state.colorLabelFilter = 'all';
     const searchEl = document.getElementById('lib-search');
     if (searchEl) searchEl.value = '';
     state.search = '';
@@ -9901,6 +10021,7 @@
   overlay.querySelector('#lib-synced-filter').onchange = (e) => { state.syncedFilter = e.target.value; renderGrid(); };
   overlay.querySelector('#lib-faces-filter').onchange = (e) => { state.facesFilter = e.target.value; applyCatalogFilterChange(); };
   overlay.querySelector('#lib-tag-filter').onchange = (e) => { state.tagFilter = e.target.value; applyCatalogFilterChange(); };
+  overlay.querySelector('#lib-color-label-filter').onchange = (e) => { state.colorLabelFilter = e.target.value; applyCatalogFilterChange(); };
   if (!STARS_ENABLED) {
     // Sort option and list column are the two surfaces that are pure markup rather than a
     // starsHtml() call, so they need removing explicitly or the grid offers a sort by a value
@@ -9918,7 +10039,7 @@
     else { const row = _rf.closest('label') || _rf.parentElement; if (row) row.style.display = ''; }
   }
   // ── Filters panel: toggle button, active-filter chips, clear-all ──────────────────────
-  const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-faces-filter', 'lib-tag-filter', 'lib-rating-filter'];
+  const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-faces-filter', 'lib-tag-filter', 'lib-rating-filter', 'lib-color-label-filter'];
   // One filter state, two views: state.* is the source of truth and both the chip row and the
   // panel dropdowns are redrawn from it. A multi-type chip selection ("raw,video") gets its own
   // transient option in the type dropdown instead of the dropdown falsely reading "All types".
@@ -9927,7 +10048,7 @@
   const FILTER_STATE_KEYS = { 'lib-type-filter': 'typeFilter', 'lib-camera-filter': 'cameraFilter',
     'lib-lens-filter': 'lensFilter', 'lib-iso-filter': 'isoFilter', 'lib-dupe-filter': 'dupeFilter',
     'lib-synced-filter': 'syncedFilter', 'lib-faces-filter': 'facesFilter', 'lib-tag-filter': 'tagFilter',
-    'lib-rating-filter': 'ratingFilter' };
+    'lib-rating-filter': 'ratingFilter', 'lib-color-label-filter': 'colorLabelFilter' };
   function syncFilterSelectsFromState() {
     Object.entries(FILTER_STATE_KEYS).forEach(([id, key]) => {
       const sel = document.getElementById(id);
@@ -15184,6 +15305,16 @@
     window.chromasmithRegisterShortcut('library.reject', () => applyShortcutLabel('Red'));
     window.chromasmithRegisterShortcut('library.pick', () => applyShortcutLabel('Green'));
     window.chromasmithRegisterShortcut('library.clear-flag', () => applyShortcutLabel(''));
+    const applyShortcutColor = (colorLabel) => {
+      if (!COLOR_LABELS_ENABLED) return false;
+      const ps = withQuickLook().filter(Boolean);
+      if (!ps.length) return false;
+      if (!quicklook.active && state.viewMode === 'survey' && compareState.active && compareState.mode === 'cull') return cullColorAndAdvance(colorLabel, ps[0]);
+      if (!quicklook.active && state.viewMode === 'survey' && compareState.active) setColorLabel(ps[0], colorLabel).then(() => surveySyncPath(ps[0]));
+      else ps.forEach((p) => setColorLabel(p, colorLabel));
+    };
+    COLOR_LABELS.forEach((color, i) => window.chromasmithRegisterShortcut(`library.color-${color.toLowerCase()}`, () => applyShortcutColor(color)));
+    window.chromasmithRegisterShortcut('library.color-clear', () => applyShortcutColor(''));
     for (let rating = 0; rating <= 5; rating++) {
       window.chromasmithRegisterShortcut(`library.rate-${rating}`, () => {
         if (!STARS_ENABLED) return false;

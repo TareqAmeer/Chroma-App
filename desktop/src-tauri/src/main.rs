@@ -2843,6 +2843,7 @@ fn main() {
             library::sidecar_rename_version,
             library::sidecar_delete_version,
             library::set_sidecar,
+            library::set_color_label,
             library::set_keywords,
             library::reset_edit,
             library::undo_reset_edit,

@@ -1490,6 +1490,10 @@ fn sidecar_path(photo_path: &str) -> PathBuf {
 pub struct Sidecar {
     pub rating: i32,
     pub label: String,  // "" | "Red" | "Green" | "Star"
+    /// Chromasmith colour label, independent of Lightroom's xmp:Label flag semantics.
+    /// Empty is explicit no-colour; old sidecars without this attribute remain empty.
+    #[serde(default)]
+    pub color_label: String,
     pub edited: bool,
     /// base64 FX-snapshot JSON of the ACTIVE version, "" if none.
     ///
@@ -1677,6 +1681,9 @@ pub fn get_sidecar(path: String) -> Sidecar {
     Sidecar {
         rating: xmp_get(&text, "xmp:Rating").and_then(|v| v.parse().ok()).unwrap_or(0),
         label: xmp_get(&text, "xmp:Label").unwrap_or_default(),
+        color_label: xmp_get(&text, "chromasmith:ColorLabel")
+            .filter(|v| matches!(v.as_str(), "Red" | "Yellow" | "Green" | "Blue" | "Purple"))
+            .unwrap_or_default(),
         edited: xmp_get(&text, "chromasmith:Edited").as_deref() == Some("True"),
         recipe,
         favorite: xmp_get(&text, "chromasmith:Favorite").as_deref() == Some("True"),
@@ -1936,7 +1943,8 @@ fn set_sidecar_run_inner(
     } else {
         (existing.last_reset_recipe, existing.last_reset_edited)
     };
-    let sc = Sidecar { rating, label: label.clone(), edited, recipe, favorite, versions, active: existing.active, keywords: existing.keywords, last_reset_recipe, last_reset_edited };
+    let color_label = existing.color_label;
+    let sc = Sidecar { rating, label: label.clone(), color_label: color_label.clone(), edited, recipe, favorite, versions, active: existing.active, keywords: existing.keywords, last_reset_recipe, last_reset_edited };
     write_sidecar(&path, &sc)?;
     if update_registry {
     registry_set("edited", &path, edited);
@@ -1951,7 +1959,33 @@ fn set_sidecar_run_inner(
     // skips this — the sidecar file itself (already written above) stays the real source of
     // truth, and the next scan's own sidecar-sync pass catches up regardless.
     if let Some(conn) = catalog_conn {
-        crate::catalog::sync_sidecar_fields_run(conn, &path, rating, &label, edited, favorite);
+        crate::catalog::sync_sidecar_fields_run(conn, &path, rating, &label, &color_label, edited, favorite);
+    }
+    Ok(())
+}
+
+/// Set the Chromasmith colour label without changing Lightroom's pick/reject label or any
+/// other sidecar metadata. `None` means no change; `Some("")` explicitly clears the colour.
+#[tauri::command(async)]
+pub fn set_color_label(
+    path: String,
+    color_label: Option<String>,
+    catalog_state: tauri::State<crate::catalog::CatalogState>,
+) -> Result<(), String> {
+    let catalog_conn = catalog_state.conn.try_lock().ok();
+    set_color_label_run(&path, color_label.as_deref(), catalog_conn.as_deref())
+}
+
+fn set_color_label_run(path: &str, color_label: Option<&str>, catalog_conn: Option<&rusqlite::Connection>) -> Result<(), String> {
+    let Some(color_label) = color_label else { return Ok(()) };
+    if !color_label.is_empty() && !matches!(color_label, "Red" | "Yellow" | "Green" | "Blue" | "Purple") {
+        return Err(format!("unsupported colour label: {color_label}"));
+    }
+    let mut sc = get_sidecar(path.to_string());
+    sc.color_label = color_label.to_string();
+    write_sidecar(path, &sc)?;
+    if let Some(conn) = catalog_conn {
+        crate::catalog::sync_sidecar_fields_run(conn, path, sc.rating, &sc.label, &sc.color_label, sc.edited, sc.favorite);
     }
     Ok(())
 }
@@ -1966,6 +2000,9 @@ fn owned_attrs(sc: &Sidecar) -> String {
     let mut attrs = format!("xmp:Rating=\"{rating}\"");
     if !label.is_empty() {
         attrs.push_str(&format!(" xmp:Label=\"{label}\""));
+    }
+    if !sc.color_label.is_empty() {
+        attrs.push_str(&format!(" chromasmith:ColorLabel=\"{}\"", sc.color_label));
     }
     if edited {
         attrs.push_str(" chromasmith:Edited=\"True\"");
@@ -2318,6 +2355,7 @@ fn write_sidecar_ex(path: &str, sc: &Sidecar, people: &[PersonRegion]) -> Result
             }
             attrs = set_attr(&attrs, "xmp:Rating", Some(&sc.rating.to_string()));
             attrs = set_attr(&attrs, "xmp:Label", if sc.label.is_empty() { None } else { Some(&sc.label) });
+            attrs = set_attr(&attrs, "chromasmith:ColorLabel", if sc.color_label.is_empty() { None } else { Some(&sc.color_label) });
             attrs = set_attr(&attrs, "chromasmith:Edited", if sc.edited { Some("True") } else { None });
             attrs = set_attr(&attrs, "chromasmith:Favorite", if sc.favorite { Some("True") } else { None });
             attrs = set_attr(&attrs, "chromasmith:Recipe", if sc.recipe.is_empty() { None } else { Some(&sc.recipe) });
@@ -4264,6 +4302,33 @@ mod sidecar_preservation_tests {
         set_sidecar_run(path.clone(), 3, "Green".into(), false, None, None, None).unwrap();
         let sc = get_sidecar(path);
         assert_eq!(sc.keywords, vec!["Travel".to_string()]);
+    }
+
+    #[test]
+    fn color_label_round_trips_without_changing_existing_photo_metadata() {
+        let path = scratch("color-label-independent");
+        let _iso = isolate_cache_dir("color-label-independent");
+        set_sidecar_run(path.clone(), 4, "Green".into(), true, Some("RATING_RECIPE".into()), Some(true), None).unwrap();
+        set_color_label_run(&path, Some("Blue"), None).unwrap();
+
+        // Generic edit/preset writes must preserve the independent colour label and flags.
+        set_sidecar_run(path.clone(), 2, "Red".into(), true, Some("EDIT_RECIPE".into()), Some(false), None).unwrap();
+        let sc = get_sidecar(path.clone());
+        assert_eq!(sc.color_label, "Blue");
+        assert_eq!(sc.rating, 2);
+        assert_eq!(sc.label, "Red");
+        assert!(sc.edited);
+        assert!(!sc.favorite);
+
+        // Omitted values are a true no-op; an explicit empty value clears only the colour.
+        set_color_label_run(&path, None, None).unwrap();
+        assert_eq!(get_sidecar(path.clone()).color_label, "Blue");
+        set_color_label_run(&path, Some(""), None).unwrap();
+        let cleared = get_sidecar(path.clone());
+        assert_eq!(cleared.color_label, "");
+        assert_eq!(cleared.rating, 2);
+        assert_eq!(cleared.label, "Red");
+        assert!(!cleared.favorite);
     }
 }
 
