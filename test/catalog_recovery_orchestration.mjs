@@ -19,11 +19,14 @@ const generation = '1791668450123456789';
 const roots = [{ id: 7, added: generation, volume: 'volume-a', path: '/test/Photos' }];
 const recovery = { version: 1, roots, requestedPhases: ['stack', 'thumbnails', 'focus', 'hash', 'faces', 'embed', 'cluster', 'clip', 'autotag', 'pets'], completedPhases: ['hash', 'faces'] };
 
-async function openCase(jobId, identity = roots, phaseResult = () => undefined) {
+async function openCase(jobId, identity = roots, theme = 'dark') {
   const page = await browser.newPage();
+  await page.setViewportSize({ width: 1366, height: 768 });
   const calls = [];
-  await page.addInitScript(({ jobId, recovery, identity }) => {
+  await page.addInitScript(({ jobId, recovery, identity, theme }) => {
     localStorage.setItem('chromasmith-tour-seen-v1', '1');
+    localStorage.removeItem('chromasmith_lib_theme');
+    localStorage.setItem('csTheme', theme);
     localStorage.setItem('chromasmith-active-jobs-v1', JSON.stringify([{ id: jobId, kind: 'catalog', label: 'Indexing library', recovery, done: 0, total: 0, lastProgressAt: Date.now() }]));
     window.__libtestCatalogInvoke = command => {
       window.__recoveryCalls ||= [];
@@ -34,10 +37,15 @@ async function openCase(jobId, identity = roots, phaseResult = () => undefined) 
       return { __libtestHandled: true, result: command === 'catalog_faces_scan' || command === 'catalog_pets_scan' ? { scanned: 0 } : undefined };
     };
     window.__recoveryIdentity = identity;
-  }, { jobId, recovery, identity });
+  }, { jobId, recovery, identity, theme });
   page.on('pageerror', error => errors.push(String(error)));
   await page.goto(`http://127.0.0.1:${server.address().port}/index.html?libtest=1&libcat=1&librestoreview=1`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForTimeout(500);
+  await page.evaluate(theme => {
+    localStorage.removeItem('chromasmith_lib_theme');
+    localStorage.setItem('csTheme', theme);
+    window.chromasmithSyncLibTheme?.();
+  }, theme);
   await page.evaluate(() => {
     window.__libtestRecoveryEnabled = true;
     window.libActivityJobDone('controller-test', { jobId: 'controller-test', label: 'Harness ready', outcome: 'completed' });
@@ -50,20 +58,31 @@ async function openCase(jobId, identity = roots, phaseResult = () => undefined) 
 }
 
 try {
-  {
-    const { page, button } = await openCase('restart-retry');
-    await page.evaluate(() => { const b = document.querySelector('[data-job-index-resume-id]'); b.click(); b.click(); });
+  for (const theme of ['dark', 'light']) {
+    const { page, button } = await openCase(`restart-retry-${theme}`, roots, theme);
+    const historyId = `restart-retry-${theme}`;
+    await button.evaluate(b => { b.click(); b.click(); });
     await page.waitForFunction(() => (window.__recoveryCalls || []).includes('catalog_hash'), { timeout: 3000 }).catch(async () => console.log('retry debug', await page.evaluate(() => ({ calls: window.__recoveryCalls, enabled: window.__libtestRecoveryEnabled, btn: !!document.querySelector('[data-job-index-resume-id]'), history: localStorage.getItem('chromasmith-job-history-v1') }))));
     if (!(await page.evaluate(() => (window.__recoveryCalls || []).includes('catalog_hash')))) errors.push('History Retry click did not reach the catalog recovery controller');
-    await page.waitForFunction(() => document.querySelector('[data-job-history-id="restart-retry"]')?.textContent.includes('Partial'), { timeout: 10000 }).catch(() => {});
-    const result = await page.evaluate(() => ({ calls: window.__recoveryCalls, html: document.querySelector('[data-job-history-id="restart-retry"]')?.innerHTML || '', history: JSON.parse(localStorage.getItem('chromasmith-job-history-v1') || '[]'), active: JSON.parse(localStorage.getItem('chromasmith-active-jobs-v1') || '[]') }));
+    await page.waitForFunction(({ historyId }) => document.querySelector(`[data-job-history-id="${historyId}"]`)?.textContent.includes('Partial'), { historyId }, { timeout: 10000 }).catch(() => {});
+    const result = await page.evaluate(({ historyId }) => {
+      const overlay = document.querySelector('#lib-overlay');
+      const history = document.querySelector('.lib-act-history');
+      const row = document.querySelector(`[data-job-history-id="${historyId}"]`);
+      const detail = row?.querySelector('.lib-act-history-detail');
+      const retry = row?.querySelector('[data-job-index-resume-id]');
+      const rect = element => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
+      return { theme: localStorage.getItem('csTheme'), lightClass: overlay?.classList.contains('lib-light'), calls: window.__recoveryCalls, html: row?.innerHTML || '', historyOverflow: history ? history.scrollWidth - history.clientWidth : 999, pageOverflow: document.documentElement.scrollWidth - innerWidth, overlay: overlay && rect(overlay), history: history && rect(history), row: row && rect(row), detail: detail && rect(detail), retry: retry && rect(retry), rows: JSON.parse(localStorage.getItem('chromasmith-job-history-v1') || '[]'), active: JSON.parse(localStorage.getItem('chromasmith-active-jobs-v1') || '[]') };
+    }, { historyId });
     const phaseCommands = new Set(['catalog_hash', 'catalog_faces_scan', 'catalog_embed_faces', 'catalog_clip_embed', 'catalog_pets_scan']);
     const phaseCalls = result.calls.filter(call => phaseCommands.has(call));
-    if (result.calls.filter(call => call === 'catalog_root_identity').length !== 6) errors.push(`duplicate retry was not guarded (expected one run's 6 source checks; got ${result.calls.filter(call => call === 'catalog_root_identity').length})`);
+    if (result.calls.filter(call => call === 'catalog_root_identity').length !== 6) errors.push(`duplicate retry was not guarded for ${theme} theme (expected one run's 6 source checks; got ${result.calls.filter(call => call === 'catalog_root_identity').length})`);
     if (phaseCalls.join(',') !== 'catalog_hash,catalog_faces_scan,catalog_embed_faces,catalog_clip_embed,catalog_pets_scan') errors.push(`retry phases wrong: ${phaseCalls.join(',')}`);
-    if (result.history.find(row => row.id === 'restart-retry')?.status !== 'Partial') errors.push('unsupported requested work was not reported Partial');
-    if (!result.history.find(row => row.id === 'restart-retry')?.detail.includes('normal library scan')) errors.push('partial result omitted unsupported normal-scan work');
-    if (!result.html.includes('photo grouping') || !result.html.includes('thumbnails')) errors.push('history detail did not render the partial outcome with friendly phase names');
+    if (result.rows.find(row => row.id === historyId)?.status !== 'Partial') errors.push(`${theme} theme: unsupported requested work was not reported Partial`);
+    if (!result.rows.find(row => row.id === historyId)?.detail.includes('normal library scan')) errors.push(`${theme} theme: partial result omitted unsupported normal-scan work`);
+    if (!result.html.includes('photo grouping') || !result.html.includes('thumbnails')) errors.push(`${theme} theme: history detail did not render the partial outcome with friendly phase names`);
+    if (result.theme !== theme || result.lightClass !== (theme === 'light') || result.historyOverflow > 1 || result.pageOverflow > 1) errors.push(`${theme} theme: theme sync or horizontal layout failed at laptop viewport (${result.theme}/${result.lightClass}; ${result.historyOverflow}/${result.pageOverflow})`);
+    if (!result.overlay || !result.history || !result.row || !result.detail || !result.retry || result.retry.width < 1 || result.retry.left < result.overlay.left - 1 || result.retry.right > result.overlay.right + 1 || result.detail.left < result.history.left - 1 || result.detail.right > result.history.right + 1 || result.row.bottom > result.history.bottom + 1) errors.push(`${theme} theme: partial detail or retry control escapes its visible History bounds`);
     await page.close();
   }
   {

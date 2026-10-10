@@ -1808,6 +1808,7 @@
     .lib-act-pop-cancel:hover{color:var(--err,#e5484d)}
     .lib-act-pop-body{padding:9px 11px;display:flex;flex-direction:column;gap:7px}
     .lib-act-stage{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--mut)}
+    .lib-act-history .lib-act-stage{flex-wrap:wrap}
     .lib-act-stage.active{color:var(--txt)}
     .lib-act-stage-n{margin-left:auto;font-family:var(--mono);font-size:10px;font-variant-numeric:tabular-nums}
     .lib-act-bar{height:3px;background:var(--bdr);border-radius:2px;overflow:hidden;margin:1px 0 2px 17px}
@@ -12665,7 +12666,7 @@
   const CATALOG_RECOVERY_VERSION = 1;
   const CATALOG_RECOVERY_PHASES = ['hash', 'faces', 'embed', 'clip', 'pets'];
   const CATALOG_REQUESTED_PHASES = ['stack', 'thumbnails', 'focus', 'hash', 'faces', 'embed', 'cluster', 'clip', 'autotag', 'pets'];
-  const CATALOG_PHASE_LABELS = { stack: 'photo grouping', thumbnails: 'thumbnails', focus: 'focus previews', hash: 'file hashes', faces: 'face detection', embed: 'face embeddings', cluster: 'people grouping', clip: 'smart tags', autotag: 'automatic tags', pets: 'pet detection' };
+  const CATALOG_PHASE_LABELS = { stack: 'photo grouping', thumbnails: 'thumbnails', focus: 'focus previews', hash: 'file hashes', faces: 'face detection', embed: 'face analysis', cluster: 'people grouping', clip: 'smart tags', autotag: 'automatic tags', pets: 'pet detection' };
   function catalogPhaseNames(phases) { return phases.map(phase => CATALOG_PHASE_LABELS[phase] || phase).join(', '); }
   function catalogBackgroundStartupActions(isRecoveryRun, paused, stopped) { return { backfill: !isRecoveryRun, startHeavy: !paused && !stopped }; }
   function catalogRecoveryExecutionPlan(isRecoveryRun, recovery) {

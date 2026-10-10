@@ -85,7 +85,7 @@ test('paused normal startup still schedules stored-vector backfill without start
 
 test('recovery phase details use friendly names and saved detail is rendered in history', () => {
   const history = createHistory();
-  assert.equal(history.catalogPhaseNames(['stack', 'embed', 'autotag']), 'photo grouping, face embeddings, automatic tags');
+  assert.equal(history.catalogPhaseNames(['stack', 'embed', 'autotag']), 'photo grouping, face analysis, automatic tags');
   history.recordActivityHistory({ jobId: 'partial', kind: 'catalog', label: 'Indexing library', stage: 'done', outcome: 'partial', current: 'A normal library scan is still needed for photo grouping' });
   assert.equal(history.persisted()[0].detail, 'A normal library scan is still needed for photo grouping');
   assert.match(source, /row\.detail \? `<div class="lib-act-history-detail"/);
