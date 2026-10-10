@@ -1390,3 +1390,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Windows app source `b387e705f4748ac19280ca7091aaae3519ccd151`, BUILD `1.1010B`, debug profile decoded both RAW paths at 8256×5504. Attempts failed before timed samples: stale shared-target frontend, closed measurement connection, and subsequent empty-grid setup. No latency pass is claimed; real-RAW criteria remain open.
 - Modified `test/library_cull_perf_native.mjs` and `docs/validation/chr267/raw-fixture.md`; Node syntax and diff checks pass. The next run uses a fresh task-owned native catalog/cache, preserving the user's existing storage.
 - Publication verified: remote main matched `2f475485add57645adcf83887ef052af4ab2d265` after fast-forward integration; native-gate syntax and diff checks pass. This is a safeguard publication, not a measured performance pass.
+
+### 2026-10-10 — CHR-267 isolated RAW run outcome
+
+- Fresh native launch used task-owned `CS_CATALOG_DIR`, `CS_CACHE_DIR` and WebView profile; initial catalog had zero rows. The fixture reaches both RAW cards and now dismisses the visible first-launch Welcome with its normal Skip for now button.
+- The verified BUILD `1.1010B` / debug source `b387e705f4748ac19280ca7091aaae3519ccd151` lost its measured page/context connection during source warming again, before samples. `test/output/chr267-native-perf.json` preserves hardware, RAW provenance, isolated paths and the failure. Both timing criteria remain unchecked; renderer/target lifecycle diagnosis is outstanding.
+- The fixture-only welcome handling passes Node syntax and diff checks; no production rendering behavior or timing budget changed.
