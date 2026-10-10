@@ -26,7 +26,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { startServer } from './editor_state_harness.mjs';
-import { enumerate, fingerprint, locate, alreadyAtReplayDestination } from './sweep_lib.mjs';
+import { enumerate, fingerprint, locate, alreadyAtReplayDestination, setColorInput } from './sweep_lib.mjs';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS } from './wireframe_diff_lib.mjs';
 
 const ROOT = process.cwd();
@@ -77,6 +77,8 @@ async function act(page, c) {
       el.value = String(Math.abs(v - hi) < Math.abs(v - lo) ? lo + (hi - lo) * 0.25 : lo + (hi - lo) * 0.75);
       el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
     }, c);
+  } else if (c.kind === 'color') {
+    await page.evaluate(setColorInput, c);
   } else if (/^(text|search|number|email|url|textarea|password)$/.test(c.kind)) {
     await page.mouse.click(c.x, c.y);
     await page.keyboard.type(c.kind === 'number' ? '7' : 'sweep');
@@ -161,18 +163,44 @@ for (const [name, s] of Object.entries(SURFACES)) {
     const at = c && await page.evaluate(locate, key);
     return at ? { ...c, ...at } : null;
   };
+  // Fingerprint stability does not include CSS transform progress. Wait for the actual next
+  // path control (or final target) to become enumerable and hit-test reachable after a slide-in.
+  const waitForFind = async (key) => {
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline) {
+      const found = await find(key); if (found) return found;
+      await page.waitForTimeout(100);
+    }
+    return null;
+  };
   const reach = async (c) => {
     let cur = await find(c.key);
     if (cur) return cur; // still visible and uncovered: reuse the page instead of a 2-10s reboot
     await boot(page, port, s); await settle(); atBaseline = true;
     for (let i = 0; i < c.path.length; i++) {
       const sc = await find(c.path[i]); if (!sc) return null;
+      const nextKey = i + 1 < c.path.length ? c.path[i + 1] : c.key;
       // Stateful controls replay toward the state captured after discovery activated them. A
       // null destination means an ordinary action button; always replay it so dialogs still open.
-      if (alreadyAtReplayDestination(c.pathSel?.[i], sc)) continue;
+      if (alreadyAtReplayDestination(c.pathSel?.[i], sc)) {
+        const next = await waitForFind(nextKey); if (!next) return null;
+        continue;
+      }
       await act(page, sc); await settle(); atBaseline = false;
+      if (c.label === 'Export proof toggle' && sc.label === '#btn-export-db') {
+        await page.waitForFunction(() => {
+          const toggle = document.querySelector('#sk2-export .sk2x-proof-toggle');
+          return document.body.classList.contains('sk2-exp-open') && !!toggle && toggle.checkVisibility();
+        }, undefined, { timeout: 3000 });
+      } else if (c.label === 'Cancel' && sc.label === '#sel-crop-ar') {
+        await page.waitForFunction(() => {
+          const tools = document.getElementById('fx-crop-tools');
+          return !!tools && tools.checkVisibility() && [...tools.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Cancel' && b.checkVisibility());
+        }, undefined, { timeout: 3000 });
+      }
+      if (!await waitForFind(nextKey)) return null;
     }
-    return find(c.key);
+    return c.path.length ? find(c.key) : waitForFind(c.key);
   };
 
   while (queue.length && results.size < LIMIT) {
