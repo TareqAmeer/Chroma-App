@@ -1,0 +1,44 @@
+{
+  "issue": "CHR-267",
+  "capturedAt": "2026-10-10T19:32:48.255Z",
+  "nativeCommit": "b387e705f4748ac19280ca7091aaae3519ccd151",
+  "expectedBuild": "1.1010B",
+  "nativeProfile": "debug",
+  "fixture": {
+    "path": "C:/Users/Tareq/Documents/github/Chroma-App/.worktrees/_shared-test-runtime/fixtures/chr267/nikon-z7-2789.NEF",
+    "sha256": "e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e",
+    "bytes": 51279219,
+    "dataset": "Two hard-linked paths of one real camera capture; not two independent photographs",
+    "licence": "CC0-1.0",
+    "source": "https://raw.pixls.us/getfile.php/2789/nice/Nikon%20-%20Z%207%20-%2012bit%2012bit%20compressed%20(3%3A2).NEF"
+  },
+  "hardware": {
+    "platform": "win32",
+    "release": "10.0.26300",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 5 5600X 6-Core Processor             ",
+    "logicalCpus": 12,
+    "memoryBytes": 34226311168
+  },
+  "cache": "Source-resolution cull cells warmed explicitly in the same native process; initial disk/OS cache unspecified",
+  "isolation": {
+    "nativeCatalogDir": "C:/Users/Tareq/Documents/github/Chroma-App/.worktrees/chr267-trash-undo/test/output/chr267-isolated-catalog-20261010",
+    "nativeCacheDir": "C:/Users/Tareq/Documents/github/Chroma-App/.worktrees/chr267-trash-undo/test/output/chr267-isolated-cache-20261010",
+    "initialCatalogTotal": 2
+  },
+  "samples": [],
+  "failures": [
+    "page.waitForFunction: Target page, context or browser has been closed\n    at C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\chr267-native-perf\\test\\library_cull_perf_native.mjs:93:14"
+  ],
+  "runtime": {
+    "build": "1.1010B",
+    "url": "http://cs.localhost/index.html",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "viewport": [
+      1366,
+      672
+    ],
+    "dpr": 3,
+    "gpu": "ANGLE (AMD, AMD Radeon RX 7700 XT (0x0000747E) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  }
+}
