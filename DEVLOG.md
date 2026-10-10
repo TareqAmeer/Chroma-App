@@ -15,6 +15,11 @@
 - The two affected checks pass on current main after these fixture-only changes; `git diff --check` passes. No production behavior changed.
 
 
+### 2026-10-10 — CHR-247 verification fixture publication
+- Published fixture-fix commit `3f124514d8a5dbb0c513f1c3ca7236abfe730b46` in integration commit `15368be06bd6ea9773a5f8fce69256e6ef7dba66`, fast-forwarded from `f80a4274fffda6ceca9a5e91f61562b6e2c3974c`; `git ls-remote origin main` matched `15368be0` after push. Files: `test/mask_refinement_math.mjs`, `test/mask_style_presets_ui.mjs`, and `DEVLOG.md`; issue CHR-247.
+- The refinement-math fixture passes 28 checks. The preset browser flow passes Append, ID remap, internal references, field isolation, and the exact one-step Undo assertion after a bounded history wait. `git diff --check` passes. CHR-247 remains In Review; no production behavior changed.
+
+
 ### 2026-10-10 — CHR-247 per-mask Dehaze slice
 - Added signed -100..100 local Dehaze control backed by the existing `mskK.w` lane. It reuses Basic Adjustments' bright/desaturated heuristic and contrast/black-point/saturation stages, scales through effective mask coverage, and skips all transformations when the strength, haze gate or coverage yields zero. Files: `chromasmith-22.html`, `test/mask_local_dehaze.mjs`, `test/mask_style_presets.mjs`, `docs/masking-roadmap.md`, `DEVLOG.md`.
 - Focused GPU/UI checks pass 11/11; preset preparation 13/13. Positive/negative gray-haze probes shift −11/+11 levels, while saturated foreground, dark tones, uncovered pixels, muted/Amount-zero masks, and omitted-vs-zero remain exact. Production `processToCanvas` direct/two-tile full-buffer checks pass for radial and brush masks (max delta 1; zero pixels over delta 1). Export harness passes 35/35; all 23 decoded goldens are exact. This tests the shader/export engine, not photographic dehaze quality or live-preview parity.
