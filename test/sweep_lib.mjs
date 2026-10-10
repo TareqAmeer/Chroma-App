@@ -63,6 +63,13 @@ export function alreadyAtReplayDestination(destination, current) {
   return current.stateful && current.selected === destination;
 }
 
+// Share this action ordering between the exhaustive reach crawler and focused queued-path tests.
+// Search applies on Enter, so submitting after the generic settle interval loses its action.
+export async function replayControlAction(page, control, destination, act) {
+  await act(page, control, destination);
+  if (destination?.valueType === 'value' && control.label === '#lib-search') await page.keyboard.press('Enter');
+}
+
 // Read the discovered element's destination before a fresh enumeration discards its reference.
 // It may become hidden or leave the viewport as a direct result of activation (e.g. Library).
 export function captureReplayDestination({ key, statefulEvidence = false }) {

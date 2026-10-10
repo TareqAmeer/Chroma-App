@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { readFile } from 'node:fs/promises';
 import { startServer } from './editor_state_harness.mjs';
-import { enumerate, fingerprint, locate, alreadyAtReplayDestination, captureReplayDestination, setReplayValue } from './sweep_lib.mjs';
+import { enumerate, fingerprint, locate, alreadyAtReplayDestination, captureReplayDestination, replayControlAction, setReplayValue } from './sweep_lib.mjs';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS } from './wireframe_diff_lib.mjs';
 
 const QUERY = 'libtest=1&deskx=1';
@@ -81,11 +81,11 @@ const replay = async (steps, targetLabel) => {
     const skip = alreadyAtReplayDestination(step.destination, current);
     let next = skip ? await waitForLabel(i + 1 < steps.length ? steps[i + 1].label : targetLabel, 750) : null;
     if (!skip || (!next && step.replayIdempotent)) {
-      if (step.destination?.valueType === 'value') {
-        await page.evaluate(setReplayValue, { key: current.key, value: step.destination.value });
-        if (step.label === '#lib-search') await page.keyboard.press('Enter');
-      }
-      else await page.mouse.click(current.x, current.y);
+      const replayAct = async (activePage, control, destination) => {
+        if (destination?.valueType === 'value') await activePage.evaluate(setReplayValue, { key: control.key, value: destination.value });
+        else await activePage.mouse.click(control.x, control.y);
+      };
+      await replayControlAction(page, current, step.destination, replayAct);
       await settle();
     }
     if (!next) next = await waitForLabel(i + 1 < steps.length ? steps[i + 1].label : targetLabel);
@@ -180,6 +180,34 @@ try {
   const undoAfterAdd = await waitForLabel('#btn-undo-db', 1000);
   const beforeAfterAdd = await waitForLabel('#btn-before', 1000);
   console.log(`control:sweep:add-photo diagnostic — destination ${JSON.stringify(addPhoto.destination)}, file chooser event ${!!chooser}, Undo ${!!undoBeforeAdd} before/${!!undoAfterAdd} after, Before ${!!beforeBeforeAdd} before/${!!beforeAfterAdd} after`);
+
+  await boot(libraryQuery, false);
+  await discoverStep('Crop');
+  const emptyPhoto = await page.evaluate(() => typeof curItem === 'function' ? curItem() : 'missing');
+  assert.equal(emptyPhoto, null, 'Library fixture has no active Editor photo');
+  for (const label of ['Rotate right', 'Flip horizontal']) {
+    const control = await byLabel(label);
+    assert.ok(control, `${label} is a discovered Library-surface control`);
+    const semanticBefore = await page.evaluate(() => ({ hasItem: !!curItem(), historyLength: fxHistory.length, historyIndex: fxHistIdx, storage: JSON.stringify(Object.fromEntries(Object.entries(localStorage))) }));
+    await page.mouse.click(control.x, control.y);
+    await settle();
+    const semanticAfter = await page.evaluate(() => ({ hasItem: !!curItem(), historyLength: fxHistory.length, historyIndex: fxHistIdx, storage: JSON.stringify(Object.fromEntries(Object.entries(localStorage))) }));
+    assert.deepEqual(semanticAfter, semanticBefore, `${label} leaves photo and edit-history state unchanged when no Editor item is selected`);
+  }
+
+  await boot(libraryQuery, false);
+  await discoverStep('Settings — transform, edit settings, view, appearance');
+  await discoverStep('History');
+  const historyRange = await page.locator('#fx-settings-history-list input[type="range"]').evaluate((el) => ({ min: +el.min, max: +el.max, value: +el.value, disabled: el.disabled, historyLength: fxHistory.length }));
+  assert.equal(historyRange.min, historyRange.max, 'empty Library fixture has a single History timeline endpoint');
+  const rangeBefore = await page.evaluate(fingerprint);
+  await page.locator('#fx-settings-history-list input[type="range"]').evaluate((el) => {
+    const lo = +el.min || 0, hi = +el.max || 0, v = +el.value;
+    el.value = String(Math.abs(v - hi) < Math.abs(v - lo) ? lo + (hi - lo) * 0.25 : lo + (hi - lo) * 0.75);
+    el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  assert.equal(await page.evaluate(fingerprint), rangeBefore, 'History range cannot move when its only endpoint is selected');
+  console.log(`control:sweep:empty-fixture inert evidence — no active photo; Rotate/Flip return without item; History range ${JSON.stringify(historyRange)}`);
 
   console.log('control:sweep:paths — PASS (Library headers, Histogram clips, Manual lens, Crop Cancel, Export proof; explicit libtest desktop mock)');
 } finally { await browser.close(); server.close(); }

@@ -26,7 +26,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { startServer } from './editor_state_harness.mjs';
-import { enumerate, fingerprint, locate, alreadyAtReplayDestination, captureReplayDestination, setColorInput, setReplayValue } from './sweep_lib.mjs';
+import { enumerate, fingerprint, locate, alreadyAtReplayDestination, captureReplayDestination, replayControlAction, setColorInput, setReplayValue } from './sweep_lib.mjs';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS } from './wireframe_diff_lib.mjs';
 
 const ROOT = process.cwd();
@@ -204,8 +204,10 @@ for (const [name, s] of Object.entries(SURFACES)) {
         if (next) continue;
         if (!sc.replayIdempotent) return null;
       }
-      await act(page, sc, c.pathSel?.[i]); await settle(); atBaseline = false;
-      if (c.pathSel?.[i]?.valueType === 'value' && sc.label === '#lib-search') await page.keyboard.press('Enter');
+      // The app applies Library search on Enter. Submit immediately after restoring the exact
+      // discovered value, before the settle wait allows its input debounce to elapse.
+      await replayControlAction(page, sc, c.pathSel?.[i], act);
+      await settle(); atBaseline = false;
       if (c.label === 'Export proof toggle' && sc.label === '#btn-export-db') {
         await page.waitForFunction(() => {
           const toggle = document.querySelector('#sk2-export .sk2x-proof-toggle');
