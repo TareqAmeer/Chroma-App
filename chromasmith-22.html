@@ -524,9 +524,15 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .seg>button:hover{color:var(--txt)}
 .seg>button.on{background:var(--sur);color:var(--txt);box-shadow:inset 0 1px 0 var(--hov)}
 /* ══ MASK PANEL ══════════════════════════════════════════════════════════════════════════════ */
-.msk-rowbar{display:flex;align-items:center;gap:6px;padding:2px 0 8px;border-bottom:1px solid var(--bdr);margin-bottom:var(--sp-2)}
-.msk-rowbar-nm{font-size:var(--fs-3);font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msk-rowbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1) var(--sp-2);padding:var(--sp-1) 0 var(--sp-3);border-bottom:1px solid var(--bdr);margin-bottom:var(--sp-2)}
+.msk-rowbar-nm{flex:1 1 38%;min-width:0;font-size:var(--fs-3);font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msk-more{margin-left:auto}
+.msk-layout-toggle{min-height:28px;padding:var(--sp-1) var(--sp-2);white-space:nowrap;font-size:var(--fs-1)}
+.msk-compact .fx-row{gap:var(--sp-control-stack-compact);margin-bottom:var(--sp-1)}
+.msk-compact .fx-row>.fx-label{flex:0 0 4.25em;max-width:4.25em;overflow-wrap:anywhere}
+.msk-compact .fx-row>.fx-slider{flex:1 1 4em;width:auto;min-width:3em;min-height:28px;margin-top:0}
+@media(max-width:420px){.msk-compact .fx-row>.fx-label{flex-basis:100%;max-width:none}
+  .msk-compact .fx-row>.fx-slider{flex:1 1 100%;width:100%;min-width:0}}
 .msk-tag{font-size:var(--fs-0);color:var(--mut);background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:1px var(--sp-1);white-space:nowrap}
 .msk-tag.on{color:var(--acc);border-color:var(--tint-6);background:var(--tint-2)}
 /* Collapsible group. The chevron rotates rather than swapping glyphs, so there is one DOM shape
@@ -7285,7 +7291,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1010D';
+const BUILD='1.1010E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -15487,6 +15493,11 @@ let mskSel=-1;
 // reject sunlit limestone (bright, near-neutral) also rejected chest hair and beard (dark,
 // near-neutral), because saturation cannot tell those apart. Geometry can.
 function mskIsAI(m){return !!(m&&(m.origin==='ai'||m.ai));}
+const MSK_SLIDER_LAYOUT_KEY='cs.maskSliderLayout';
+let _mskCompactLayoutPref=(()=>{try{return localStorage.getItem(MSK_SLIDER_LAYOUT_KEY)==='compact';}catch(_){return false;}})();
+function mskCompactLayoutGet(){return _mskCompactLayoutPref;}
+function mskCompactLayoutToggle(){const next=!_mskCompactLayoutPref;_mskCompactLayoutPref=next;try{localStorage.setItem(MSK_SLIDER_LAYOUT_KEY,next?'compact':'standard');}catch(_){}
+  mskRebuild();}
 // ── A19: capability flags instead of comparing `origin` strings at each call site ─────────────
 // A mask's ORIGIN (how it was created) and its CAPABILITIES (what the UI should offer for it) are
 // different questions, and conflating them is what let `origin!=='ai'` survive in four call sites
@@ -17227,8 +17238,13 @@ function mskRefinedPixels(m){
   m._refineCache={w:m.mtW,h:m.mtH,feather,edge,src:m.px,px};
   return px;
 }
+// Sky masks are heuristic raster sources, not segmentation masks, but they use the same
+// non-destructive refinement path. Depth Range remains shapeless and is deliberately excluded.
+function mskRefinementSupported(m){return !!(m&&m.type==='brush'&&m.px&&m.px.length&&m.mtW>0&&m.mtH>0
+  &&(mskIsAI(m)||m.origin==='sky'));}
+function mskRefinementSourceReset(m){if(!m)return;m.refineFeather=0;m.refineEdge=0;delete m._refineCache;}
 function mskRefineControls(m){
-  if(!m||!mskIsAI(m)||!m.px||!m.px.length)return '';
+  if(!mskRefinementSupported(m))return '';
   const f=Math.max(0,Math.min(100,Number(m.refineFeather)||0));
   const e=Math.max(-100,Math.min(100,Number(m.refineEdge)||0));
   return '<div class="msk-refine-controls"><div class="fx-row"><div class="fx-label">Feather</div>'
@@ -17237,7 +17253,7 @@ function mskRefineControls(m){
     +'<div class="btn-row"><button class="btn bgh" onclick="mskRefinementReset()">Reset refinement</button></div></div>';
 }
 function mskRefinementSet(key,value,input){
-  const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
+  const m=fxState.masks[mskSel];if(!mskRefinementSupported(m))return;
   const n=Number(value);if(key!=='refineFeather'&&key!=='refineEdge')return;
   m[key]=Number.isFinite(n)?Math.max(key==='refineEdge'?-100:0,Math.min(100,n)):0;
   if(input&&input.nextElementSibling)input.nextElementSibling.textContent=String(m[key]);
@@ -17247,8 +17263,8 @@ function mskRefinementSet(key,value,input){
   clearTimeout(mskRefinementSet._timer);mskRefinementSet._timer=setTimeout(()=>{mskRefinementSet._timer=null;fxUpdate();},250);
 }
 function mskRefinementReset(){
-  const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
-  m.refineFeather=0;m.refineEdge=0;delete m._refineCache;_mskTexDirty=true;
+  const m=fxState.masks[mskSel];if(!mskRefinementSupported(m))return;
+  mskRefinementSourceReset(m);_mskTexDirty=true;
   fxHistoryPush();mskRebuild();fxUpdate();
 }
 function mskRefineEdges(m){
@@ -17323,6 +17339,9 @@ function _smoothstepJS(a,b,t){t=Math.max(0,Math.min(1,(t-a)/(b-a)));return t*t*(
 // and/or bright (overcast) pixels. A reasonable starting point the user then brush-refines —
 // there is no in-app subject/sky segmentation model, by design (kept fully offline/small).
 function mskGenerateSky(m){
+  // A re-detect replaces the authored source. Clear the old derived settings/cache before any
+  // early return or raster write so the newly generated source always starts at its own baseline.
+  mskRefinementSourceReset(m);
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
   if(!img){m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;return;}
   const{w,h}=mskTexDims();
@@ -17341,6 +17360,7 @@ function mskGenerateSky(m){
   }
   m.px=px;m.mtW=w;m.mtH=h;_mskTexDirty=true;
 }
+function mskSkyRedetect(m){if(!m||m.origin!=='sky')return;fxHistoryPush();mskGenerateSky(m);fxUpdate();}
 // Turns the heuristic's per-pixel score raster (m.px, already 0-255) into a handful of
 // positive/negative point prompts for SAM: a coarse grid over the top portion of the frame
 // (where sky realistically lives) picks each cell's best-scoring pixel as a positive point if
@@ -18451,7 +18471,7 @@ function fxUpdateClipInfoUI(){
 }
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
-  if(!list||!ctl)return;list.innerHTML='';
+  if(!list||!ctl)return;list.innerHTML='';ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush')mskPaintStop();
   if(mskAiTapMode&&(!fxState.masks[mskSel]||!mskIsAI(fxState.masks[mskSel])))mskAiTapToggle(false);
   fxState.masks.forEach((m,i)=>{
@@ -18494,6 +18514,7 @@ function mskRebuild(){
     +(m.subtract?'<span class="msk-tag">Subtracting</span>':'')
     +(m.intersect?'<span class="msk-tag">Intersecting</span>':'')
     +(m.invert?'<span class="msk-tag">Inverted</span>':'')
+    +'<button type="button" class="btn bgh msk-layout-toggle" aria-pressed="'+String(mskCompactLayoutGet())+'" aria-label="Compact mask slider layout" title="'+(mskCompactLayoutGet()?'Switch to standard slider layout':'Switch to compact slider layout')+'" onclick="mskCompactLayoutToggle()">Compact</button>'
     +'<button class="db-btn msk-more" onclick="mskMoreMenu(event)" title="Rename, reorder, mute, solo, eraser, delete">'+icon('more',16)+'</button></div>'
     +(m.origin==='manual-teeth'?'<div class="msk-hint" role="note">Manual Brush mask: paint tooth enamel only. Use <b>Erase</b> around lips and gums. The app does not detect teeth automatically.</div>':'')
     +(m.isExclude?'<div class="msk-hint">This mask only removes area from the others — its own Adjust sliders do nothing.</div>':'');
@@ -18565,7 +18586,7 @@ function mskRebuild(){
       +'<div class="fx-row"><div class="fx-label">Density</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushDensity+'" oninput="mskBrushDensity=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushDensity+'</div></div>'
          +mskRefineControls(m)
        +'<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()">Clear paint</button>'
-      +(caps.sky?'<button class="btn bgh" onclick="mskGenerateSky(fxState.masks['+mskSel+']);fxUpdate()">Re-detect sky</button>':'')
+      +(caps.sky?'<button class="btn bgh" onclick="mskSkyRedetect(fxState.masks['+mskSel+'])">Re-detect sky</button>':'')
       +'<button class="btn bgh" onclick="mskRefineEdges(fxState.masks['+mskSel+']);fxUpdate()" title="Snap this mask\'s soft/rough edges to real edges in the photo (a guided filter, using the photo as its own guide)">'+icon('refine',14)+' Refine edges</button></div>'
       +(caps.painterly?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px">Click Paint, then drag on the photo above to add this adjustment. Painted area is resolution-independent — matches at export and the 1:1 loupe.</div>':'');
   }
