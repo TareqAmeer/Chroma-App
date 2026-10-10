@@ -7326,7 +7326,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1010M';
+const BUILD='1.1010N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8400,7 +8400,8 @@ uniform vec4 mskK[8];     // x: Noise Reduction strength 0..1 (unipolar — see 
                           // w: local Dehaze (-1..1).
 uniform vec2 uvOffL,uvScaleL;
 // ROADMAP R7 — Depth Range gate (colRangeWeight's sibling): x: gate on 0/1, y: depLo, z: depHi
-// (0..1, same range-gate convention as mskD's lumLo/lumHi), w free. depthTx is the per-photo
+// (0..1, same range-gate convention as mskD's lumLo/lumHi); w: signed local Vibrance (-1..1).
+// depthTx is the per-photo
 // relative-depth map (0=far,1=near — see vendor/depth/README.md), uploaded ONCE per photo
 // (FXR.setDepthTex), sampled here in the same photo-space "uv" skinCol already uses (NOT the
 // masked-space "gm", since depth is a property of the pixel itself, not the mask's own space).
@@ -9065,6 +9066,15 @@ if(mskN>0.5){
           float lvDH2=dot(c.rgb,vec3(.2126,.7152,.0722));
           c.rgb=clamp(mix(vec3(lvDH2),c.rgb,1.0+0.7*amtDH),0.0,1.0);
         }
+      }
+      // Local Vibrance uses the global saturation-aware weighting on the current graded colour.
+      // It runs after this mask's local controls in the LUT pass; global Vibrance remains later,
+      // in the comp pass after print, so their ordering is intentionally not identical.
+      if(mskDep[i].w!=0.0){
+        float lvV=dot(c.rgb,vec3(.2126,.7152,.0722));
+        float mxV=max(c.r,max(c.g,c.b)),mnV=min(c.r,min(c.g,c.b)),svV=mxV>0.0?(mxV-mnV)/mxV:0.0;
+        c.rgb=mix(vec3(lvV),c.rgb,1.0+mskDep[i].w*(1.0-svV)*w);
+        if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
       }
     }
   }
@@ -10151,6 +10161,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // just above. depOn stays false (mDep[o]=0) for every mask created before this feature and
       // for every mask that never turned it on, so this is a pure no-op for them.
       mDep[o]=m.depOn&&!depthMaskSources[i]?1:0;mDep[o+1]=m.depLo!=null?m.depLo:0;mDep[o+2]=m.depHi!=null?m.depHi:1;
+      mDep[o+3]=m.vibrance||0; // local Vibrance: signed normalized saturation-aware adjustment
       const op=m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
       const operand=op?MK.findIndex(x=>x.id===m.operandId):-1;
       mE[o]=op==='add'?3:op==='intersect'?2:op==='subtract'?1:0;
@@ -15823,7 +15834,7 @@ function _mskCompositionPlan(masks){
 // (CLAUDE.md 5b). Shape/raster fields still belong to their own branch; only the shared
 // adjustment defaults live here.
 function _mskAdjustDefaults(){return{invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,
-  sat:0,hue:0,hi:0,sh:0,wh:0,bl:0,dehaze:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};}
+  sat:0,vibrance:0,hue:0,hi:0,sh:0,wh:0,bl:0,dehaze:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};}
 function mskAdd(type,configure){
   if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks','warn');return;}
   let m;
@@ -19410,6 +19421,7 @@ function mskRebuild(){
     +_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
     +_mskRow('Tint','tint',m.tint,-100,100,0.01,false)
     +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
+    +_mskRow('Vibrance','vibrance',m.vibrance||0,-100,100,0.01,false,'Raises or lowers saturation more in muted colours, with less effect on already-saturated colours. Applied before the global post-print Vibrance stage.')
     // Texture: the local detail control masks never had. Negative softens — the standard portrait
     // move of calming skin texture while eyes and hair stay sharp.
     +_mskRow('Clarity','clarity',m.clarity||0,-100,100,1,false,'Midtone contrast at a wider scale than Texture — positive builds structure, negative smooths. This is the portrait move: soften skin here while the eyes keep their Texture.')
