@@ -4346,6 +4346,20 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <div class="fx-label">Edge only</div>
             <input type="checkbox" id="ck-msk-selview-outline" onchange="mskSelViewOutlineToggle(this.checked)">
           </div>
+          <div class="fx-row" id="msk-selview-style-row" style="display:none">
+            <div class="fx-label">Selection display</div>
+            <select class="fx-select" id="msk-selview-style" aria-label="Selection display mode" onchange="mskSetSelViewStyle(this.value)">
+              <option value="legacy">Colour overlay</option><option value="photo">On image</option><option value="bw">White on black</option>
+            </select>
+          </div>
+          <div class="fx-row" id="msk-selview-color-row" style="display:none">
+            <div class="fx-label">Overlay colour</div>
+            <input type="color" id="msk-selview-color" value="#ff2626" aria-label="Selection overlay colour" onchange="mskSelViewColorInput(this.value)">
+          </div>
+          <div class="fx-row" id="msk-selview-always-row" style="display:none">
+            <div class="fx-label">Always show selection</div>
+            <input type="checkbox" id="ck-msk-selview-always" onchange="mskSelViewAlwaysInput(this.checked)">
+          </div>
           <div class="btn-row" id="local-list" style="flex-wrap:wrap;gap:4px"></div>
           <div id="local-ctl" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
@@ -7312,7 +7326,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1010Q';
+const BUILD='1.1010R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8359,9 +8373,11 @@ uniform vec4 mskG[8];  // x: number of colour samples (0 = gate off), y: CHROMA 
 uniform vec4 mskCS[32];   // 8 masks x 8 samples, 2 per vec4 => 4 vec4 per mask (mask i: i*4 .. i*4+3)
 uniform vec4 mskH[8];  // x,y,z: hue/sat/lum UNIFORMITY strength 0..1, w: "preserve modeling" 0..1 (lum only)
 uniform vec4 mskI[8];  // x,y,z: target hue 0..1 / sat 0..1 / value 0..1, w: measured mean value of the gated pixels
-uniform float mskShowSel; // >=0: render mask #n's EFFECTIVE selection weight as a red overlay instead of the photo
+uniform float mskShowSel; // >=0: render mask #n's EFFECTIVE selection weight in the preview display mode
 uniform float mskShowSelOp;      // Selection-view overlay opacity, 0.1..1.0 (UI-only, never exported)
 uniform float mskShowSelOutline; // Selection-view: >0.5 draws only the boundary of w (edge-detect), not a fill
+uniform float mskShowSelMode;    // 0 legacy grayscale/red, 1 graded-photo overlay, 2 white-on-black coverage
+uniform vec3 mskShowSelColor;    // UI-only overlay colour for modes 0 and 1
 uniform float mskAnyTex;  // 1 when any mask has a nonzero Texture, so the source high-pass is computed
 uniform float mskAnyClarity;  // same idea for per-mask Clarity, which needs a WIDER tap set
 // Quarter-res blurred luminance of this render's own source (see progs.lumdown + two blur passes).
@@ -8971,6 +8987,7 @@ if(mskN>0.5){
     if(mskShowSel>=0.0&&abs(mskShowSel-float(i))<0.5){
       float g=dot(c.rgb,vec3(.2126,.7152,.0722));
       float wv=clamp(coverage,0.0,1.0);
+      float outlineWeight=0.0;
       if(mskShowSelOutline>0.5){
         // Edge-only outline: re-evaluate the effective weight at 4 neighbouring texels and paint
         // red only where it changes sharply (the selection BOUNDARY), leaving the interior showing
@@ -8980,10 +8997,17 @@ if(mskN>0.5){
         float wR=mskSelWAt(i,gm+vec2(gs.x,0.0),uv+vec2(texSize.x,0.0));
         float wU=mskSelWAt(i,gm-vec2(0.0,gs.y),uv-vec2(0.0,texSize.y));
         float wD=mskSelWAt(i,gm+vec2(0.0,gs.y),uv+vec2(0.0,texSize.y));
-        float edge=clamp((abs(wR-wL)+abs(wD-wU))*2.0,0.0,1.0);
-        o=vec4(mix(vec3(g),vec3(1.0,0.15,0.15),edge*mskShowSelOp),1.0);
+        outlineWeight=clamp((abs(wR-wL)+abs(wD-wU))*2.0,0.0,1.0);
+      }
+      if(mskShowSelMode>1.5){
+        float displayWeight=mskShowSelOutline>0.5?outlineWeight:wv;
+        o=vec4(vec3(displayWeight),1.0);
       }else{
-        o=vec4(mix(vec3(g),vec3(1.0,0.15,0.15),wv*mskShowSelOp),1.0);
+        float displayWeight=mskShowSelOutline>0.5?outlineWeight:wv;
+        vec3 base=mskShowSelMode>0.5?c.rgb:vec3(g);
+        vec3 overlay=mskShowSelMode>0.5?mskShowSelColor:vec3(1.0,0.15,0.15);
+        if(mskShowSelMode<0.5&&any(greaterThan(abs(mskShowSelColor-vec3(1.0,0.15,0.15)),vec3(0.0001))))overlay=mskShowSelColor;
+        o=vec4(mix(base,overlay,displayWeight*mskShowSelOp),1.0);
       }
       return;
     }
@@ -10259,9 +10283,13 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // photo with no computed map yet (the common case until a user actually opens the mask
       // panel — see fxEnsureDepthMap) is byte-identical to before this feature existed.
       depthTx:9,useDepthTx:this.depthTx?1:0,
-      mskShowSel:(opts&&opts.showSel!=null)?opts.showSel:-1,
-      mskShowSelOp:(opts&&opts.showSelOpacity!=null)?opts.showSelOpacity:0.75,
-      mskShowSelOutline:(opts&&opts.showSelOutline)?1:0,
+       // Selection display is preview-only. The private token cannot be reconstructed from
+       // recipe/snapshot data, so ordinary and export/tile calls always bind the identity path.
+       mskShowSel:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSel!=null)?opts.showSel:-1,
+       mskShowSelOp:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSelOpacity!=null)?opts.showSelOpacity:0.75,
+       mskShowSelOutline:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSelOutline)?1:0,
+       mskShowSelMode:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSelMode!=null)?opts.showSelMode:0,
+       mskShowSelColor:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSelColor)?opts.showSelColor:[1,.15,.15],
       uvOffL,uvScaleL,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
       adjSh:A.shadows||0,adjWh:A.whites||0,adjBl:A.blacks||0,adjTemp:A.temp||0,
@@ -18974,6 +19002,7 @@ function fxUpdateClipInfoUI(){
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
   if(!list||!ctl)return;list.innerHTML='';ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
+  mskUpdateSelViewControls();
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush')mskPaintStop();
   if(mskAiTapMode&&(!fxState.masks[mskSel]||!mskIsAI(fxState.masks[mskSel])))mskAiTapToggle(false);
   fxState.masks.forEach((m,i)=>{
@@ -19373,6 +19402,7 @@ function mskRebuild(){
     +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false);
   h+=_mskGroup('adjust','Adjust',adjBody);
   ctl.innerHTML=h;
+  mskUpdateSelViewControls();
   mskOverlaySync();
 }
 function mskClearComposition(){
@@ -19482,20 +19512,56 @@ function mskAutoLabel(m,i){
 // lut shader to render the EFFECTIVE per-pixel weight (shape x lum gate x colour gate) — the only
 // way to tune a colour range without guessing. See mskShowSel in the shader / render().
 let mskPreviewMode='overlay'; // 'off' | 'overlay' (tinted shape) | 'isolate' (dim outside) | 'select' (shader weight)
-// Selection-view (mskPreviewMode==='select') display controls — UI-only, never persisted with the
-// mask and never applied on export (see mskShowSelIdx: export paths pass showSel:-1 unconditionally).
-let mskSelViewOpacity=0.75;   // 0.1..1.0, how strongly the red overlay mixes over the greyscale photo
+// Selection-view display settings are global UI preferences, never photo/history state. The FX
+// renderer accepts them only with a private preview token; export and tiled render calls omit it.
+let mskSelViewOpacity=0.75;   // 0.1..1.0, how strongly the selection colour mixes over the preview base
 let mskSelViewOutline=false;  // true: draw only the selection's boundary (edge-detect on w), not a filled overlay
+const MSK_SELVIEW_PREF_KEY='chromasmith.mask-selection-view.v1';
+const MSK_SELVIEW_DEFAULT_COLOR='#ff2626';
+const MSK_PREVIEW_RENDER_TOKEN=Symbol('mask preview only');
+function mskReadSelViewPrefs(){
+  try{
+    const p=JSON.parse(localStorage.getItem(MSK_SELVIEW_PREF_KEY)||'{}');
+    return {style:['legacy','photo','bw'].includes(p.style)?p.style:'legacy',color:/^#[\da-f]{6}$/i.test(p.color||'')?p.color.toLowerCase():MSK_SELVIEW_DEFAULT_COLOR,always:p.always===true};
+  }catch(_){return {style:'legacy',color:MSK_SELVIEW_DEFAULT_COLOR,always:false};}
+}
+const _mskSelViewPrefs=mskReadSelViewPrefs();
+let mskSelViewStyle=_mskSelViewPrefs.style;
+let mskSelViewColor=_mskSelViewPrefs.color;
+let mskAlwaysShowSelection=_mskSelViewPrefs.always;
+function mskSaveSelViewPrefs(){try{localStorage.setItem(MSK_SELVIEW_PREF_KEY,JSON.stringify({style:mskSelViewStyle,color:mskSelViewColor,always:mskAlwaysShowSelection}));}catch(_){} }
+function mskSelViewRgb(){
+  if(mskSelViewColor===MSK_SELVIEW_DEFAULT_COLOR)return [1,.15,.15];
+  return [1,3,5].map(i=>parseInt(mskSelViewColor.slice(i,i+2),16)/255);
+}
+function mskUpdateSelViewControls(){
+  const hasSelection=mskSel>=0&&!!fxState.masks[mskSel];
+  const show=hasSelection&&(mskPreviewMode==='select'||mskAlwaysShowSelection);
+  const showSelectionControls=hasSelection&&mskPreviewMode==='select';
+  const styleRow=document.getElementById('msk-selview-style-row'),colorRow=document.getElementById('msk-selview-color-row'),alwaysRow=document.getElementById('msk-selview-always-row');
+  const opacityRow=document.getElementById('msk-selview-opacity-row'),outlineRow=document.getElementById('msk-selview-outline-row');
+  if(styleRow)styleRow.style.display=show?'':'none';
+  if(alwaysRow)alwaysRow.style.display=show?'':'none';
+  if(colorRow)colorRow.style.display=show&&mskSelViewStyle!=='bw'?'':'none';
+  if(opacityRow)opacityRow.style.display=showSelectionControls?'':'none';
+  if(outlineRow)outlineRow.style.display=showSelectionControls?'':'none';
+  const style=document.getElementById('msk-selview-style');if(style&&style.value!==mskSelViewStyle)style.value=mskSelViewStyle;
+  const color=document.getElementById('msk-selview-color');if(color&&color.value!==mskSelViewColor)color.value=mskSelViewColor;
+  const always=document.getElementById('ck-msk-selview-always');if(always)always.checked=mskAlwaysShowSelection;
+}
 function mskSelViewOpacityInput(v){
   mskSelViewOpacity=Math.max(0.1,Math.min(1,(+v)/100));
   const lab=document.getElementById('vl-msk-selview-opacity');if(lab)lab.textContent=v;
   if(typeof fxUpdate==='function')fxUpdate();
 }
 function mskSelViewOutlineToggle(v){mskSelViewOutline=!!v;if(typeof fxUpdate==='function')fxUpdate();}
+function mskSetSelViewStyle(v){if(!['legacy','photo','bw'].includes(v))return;mskSelViewStyle=v;mskSaveSelViewPrefs();mskUpdateSelViewControls();if(typeof renderPreview==='function')renderPreview();}
+function mskSelViewColorInput(v){if(!/^#[\da-f]{6}$/i.test(v||''))return;mskSelViewColor=v.toLowerCase();mskSaveSelViewPrefs();mskUpdateSelViewControls();if(typeof renderPreview==='function')renderPreview();}
+function mskSelViewAlwaysInput(v){mskAlwaysShowSelection=!!v;mskSaveSelViewPrefs();mskUpdateSelViewControls();mskOverlaySync();if(typeof renderPreview==='function')renderPreview();}
 const MSK_PREVMODE_HINT={
   overlay:'Showing the mask SHAPE only — for a Skin mask that is the raw AI subject, hair and glasses included. Not what gets adjusted.',
   isolate:'Dimming everything outside the mask SHAPE. Same caveat as Overlay: the color range is not applied here.',
-  select:'Showing what is ACTUALLY adjusted — shape x color range x Amount. This is the one to trust.',
+  select:'Showing the effective selection — shape x range gates x composition. This is the selection that drives the adjustment.',
   off:''};
 function mskSetPreviewMode(v){mskPreviewMode=v;mskOverlaySync();
   const hint=document.getElementById('msk-prevmode-hint');
@@ -19505,14 +19571,20 @@ function mskSetPreviewMode(v){mskPreviewMode=v;mskOverlaySync();
   const showCtl=v==='select';
   if(opRow)opRow.style.display=showCtl?'':'none';
   if(edRow)edRow.style.display=showCtl?'':'none';
+  mskUpdateSelViewControls();
   if(typeof fxUpdate==='function')fxUpdate();}   // 'select' changes the RENDER, not just the overlay
 // Which mask index the shader should render as a selection map (-1 = normal photo). Gated on the
-// Local Adjustments section being on and a mask being selected, and never set during export.
+// Local Adjustments section being on and a mask being selected; preview render options carry a
+// private token so export/tile callers cannot activate this path with recipe data.
 function mskShowSelIdx(){
-  if(mskPreviewMode!=='select'||mskSel<0||!fxState.masks[mskSel])return -1;
+  if((mskPreviewMode!=='select'&&!mskAlwaysShowSelection)||mskSel<0||!fxState.masks[mskSel])return -1;
   const tg=document.getElementById('tg-local');
   if(tg&&!tg.classList.contains('on'))return -1;
   return mskSel;
+}
+function mskPreviewRenderOptions(extra={}){
+  return {...extra,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
+    showSelMode:mskSelViewStyle==='photo'?1:mskSelViewStyle==='bw'?2:0,showSelColor:mskSelViewRgb(),previewOnly:MSK_PREVIEW_RENDER_TOKEN};
 }
 function mskOverlayBox(){
   // The overlays now live INSIDE #fx-zoom-wrap as siblings of #fx-canvas (not #fx-wrap), so
@@ -19577,7 +19649,7 @@ function mskOverlaySync(){if(typeof healOverlaySync==='function')try{healOverlay
   const m=fxState.masks[mskSel];
   // 'select' renders its own map in the shader — drawing the shape overlay on top of it too would
   // just obscure the thing it exists to show, so it hides these JS overlays like 'off' does.
-  const anyShowable=cardVisible&&m&&mskPreviewMode!=='off'&&mskPreviewMode!=='select'&&!cropMode&&!fxLoupe;
+  const anyShowable=cardVisible&&m&&mskPreviewMode!=='off'&&mskPreviewMode!=='select'&&!mskAlwaysShowSelection&&!cropMode&&!fxLoupe;
   if(m&&m.type==='brush'){
     svg.classList.remove('on');svg.innerHTML='';
     if(paintCv)mskPaintOverlaySync(anyShowable?m:null,mskOverlayBox(),mskPreviewMode==='isolate');
@@ -22482,8 +22554,8 @@ function renderLoupe(){
   const P=fxCompare?fxCompareParams():getFXParams();
   const REF=FXR.CAL.refWidth;
   FX.setImage(crop);
-  FX.render(P,outW,outH,{glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),
-    uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]}); // export-scale grain & glow
+  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+    uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]})); // export-scale grain & glow
   FX.setImage(fxWork);                                              // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
   // Unscaled (fxZoom=1) footprint — the wrapper's own transform:scale(fxZoom) (see _applyZoom)
@@ -22600,8 +22672,8 @@ function renderFullResCrop(P,iw,ih,cw,ch){
   crop.getContext('2d').drawImage(src,cropX,cropY,cropW,cropH,0,0,cropW,cropH);
   const REF=FXR.CAL.refWidth;
   FX.setImage(crop);
-  FX.render(P,outW,outH,{glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),
-    uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]});
+  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+    uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]}));
   FX.setImage(fxWork);
   // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region
   // and translate it there — the zoom wrapper's own scale/translate then lands it exactly
@@ -22800,7 +22872,7 @@ function renderPreview(){
   // "before" snapshot, so the processed frame has to be drawn again afterwards. Rendering it
   // here as well meant split view paid for the graded frame TWICE on every single preview
   // update. Only render it up front when we are not about to throw it away.
-  if(fxComparePreviousSnapshot===null&&!fxSplit)FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),...seedOpt});
+  if(fxComparePreviousSnapshot===null&&!fxSplit)FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));
   const _oldFootW=_fxZoomFootprint().w;
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   // The centring offset AND the pan are derived from this footprint — re-fit at any zoom (it used
@@ -22810,16 +22882,16 @@ function renderPreview(){
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
   if(fxComparePreviousSnapshot!==null){
     const origCv=document.getElementById('fx-canvas-orig');
-    renderSnapshotTo(origCv,fxComparePreviousSnapshot,pw,ph,{showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),...seedOpt});
+    renderSnapshotTo(origCv,fxComparePreviousSnapshot,pw,ph,mskPreviewRenderOptions({gamutWarn:fxClipCode(),...seedOpt}));
     if(origCv){origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';origCv.style.clipPath='';}
-    FX.render(getFXParams(),pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),...seedOpt});
+    FX.render(getFXParams(),pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));
     const splitLine=document.getElementById('fx-split-line');if(splitLine)splitLine.style.display='none';
     FX.cv.style.clipPath='';
   }else if(fxSplit){
     const origCv=document.getElementById('fx-canvas-orig');
     renderSnapshotTo(origCv,resolveSplitSnapshot(fxSplitSrc),pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
-    FX.render(P,pw,ph,{glowScale:gs,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,gamutWarn:fxClipCode(),...seedOpt});      // re-render processed into FX.cv
+    FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));      // re-render processed into FX.cv
     _applySplitPos();
   } else {
     const orig=document.getElementById('fx-canvas-orig');

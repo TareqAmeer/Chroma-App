@@ -103,7 +103,7 @@ async function main() {
       const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => v === b[i]);
       const renderHash = (showSel=-1) => {
         const P = getFXParams();
-        FX.render(P, 128, 96, { glowScale: 1, seed: 3.25, showSel });
+        FX.render(P, 128, 96, { glowScale: 1, seed: 3.25, showSel, previewOnly: MSK_PREVIEW_RENDER_TOKEN });
         const { px } = FX.getPixels();
         return digest(px);
       };

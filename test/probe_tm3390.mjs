@@ -226,7 +226,7 @@ const out = await page.evaluate(async ({ SKIN, OTHER, PICK_FROM }) => {
   const selCv = document.createElement('canvas');
   const SW = 700, SH = Math.round(SW * H / W);
   selCv.width = SW; selCv.height = SH;
-  FX.render(window.getFXParams(), SW, SH, { glowScale: 1, showSel: 0 });
+    FX.render(window.getFXParams(), SW, SH, { glowScale: 1, showSel: 0, previewOnly: MSK_PREVIEW_RENDER_TOKEN });
   selCv.getContext('2d').drawImage(FX.cv, 0, 0, SW, SH);
 
   return { W, H, srcHsv, before, variants, selPng: selCv.toDataURL('image/png').split(',')[1] };

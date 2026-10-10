@@ -58,7 +58,7 @@ try{
     const render=(masks,showSel=-1,opts={})=>{
       const P=fxCompareParams();P.masks=masks;
       if(opts.exposure!=null)P.adjust={enabled:true,exposure:opts.exposure};
-      renderer.render(P,w,h,{glowScale:1,seed:4.25,showSel,showSelOutline:!!opts.outline});
+      renderer.render(P,w,h,{glowScale:1,seed:4.25,showSel,showSelOutline:!!opts.outline,previewOnly:MSK_PREVIEW_RENDER_TOKEN});
       return Uint8Array.from(renderer.getPixels().px);
     };
     const digest=px=>{let v=2166136261>>>0;for(let i=0;i<px.length;i++){v^=px[i];v=Math.imul(v,16777619)>>>0;}return v.toString(16);};
