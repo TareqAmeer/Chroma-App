@@ -548,6 +548,16 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .msk-group.open .msk-group-chev{transform:rotate(0)}
 .msk-group-note{margin-left:auto;font-size:var(--fs-0);letter-spacing:0;text-transform:none;color:var(--acc)}
 .msk-group-bd{padding:2px 0 var(--sp-3)}
+.msk-depth-preview-dialog{width:min(920px,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - 32px);padding:0;overflow:auto;
+  color:var(--txt);background:var(--sur);border:1px solid var(--bdr);border-radius:12px;box-shadow:var(--lift-2)}
+.msk-depth-preview-dialog::backdrop{background:rgba(0,0,0,.72)}
+.msk-depth-preview-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 18px 8px}
+.msk-depth-preview-head h2{margin:0;font-size:var(--fs-4);font-weight:600}
+.msk-depth-preview-note{margin:4px 18px 12px;color:var(--mut);font-size:var(--fs-1);line-height:var(--lh-base)}
+.msk-depth-preview-canvas{display:block;max-width:calc(100% - 36px);max-height:68vh;width:auto;height:auto;margin:0 auto;background:#111;object-fit:contain}
+.msk-depth-preview-legend{display:flex;align-items:center;gap:10px;margin:12px 18px 16px;color:var(--mut);font-size:var(--fs-1)}
+.msk-depth-preview-ramp{height:12px;flex:1;border:1px solid var(--bdr);border-radius:3px;background:linear-gradient(90deg,#000,#fff)}
+.msk-depth-preview-open{min-height:28px}
 /* Guided Skin Tone steps */
 .msk-step{display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-3) 0 var(--sp-1);font-size:var(--fs-3);font-weight:600;color:var(--txt)}
 .msk-group-bd>.msk-step:first-child{margin-top:2px}
@@ -7302,7 +7312,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1010O';
+const BUILD='1.1010P';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16862,13 +16872,76 @@ function fxDepthForGeom(map,geom){
 }
 function fxSyncDepthTexture(renderer,item){
   if(!renderer)return null;
-  if(!item){if(renderer._depthSnapshot)renderer.clearDepthTex();return null;}
+  if(!item){if(renderer._depthSnapshot)renderer.clearDepthTex();if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(item);return null;}
   const map=item.img&&item.img._depthMap;
-  if(!map){if(renderer._depthSnapshot)renderer.clearDepthTex();return null;}
+  if(!map){if(renderer._depthSnapshot)renderer.clearDepthTex();if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(item);return null;}
   const source=fxDepthForGeom(map,item.geom);
-  if(!source){if(renderer._depthSnapshot)renderer.clearDepthTex();return null;}
+  if(!source){if(renderer._depthSnapshot)renderer.clearDepthTex();if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(item);return null;}
   if(renderer._depthSourceIdentity!==source)renderer.setDepthTex(source.data,source.w,source.h,source);
+  if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(item);
   return source;
+}
+function mskDepthPreviewSource(item){
+  const it=item===undefined?((typeof curItem==='function'&&curItem())||null):item;
+  const map=it&&it.img&&it.img._depthMap,source=fxDepthForGeom(map,it&&it.geom);
+  return source&&source.data&&source.w>0&&source.h>0&&source.data.length===source.w*source.h?source:null;
+}
+function mskDepthPreviewFinish(state){
+  if(!state||state.closed)return;state.closed=true;
+  if(window.__mskDepthPreview===state)window.__mskDepthPreview=null;
+  state.canvas.width=state.canvas.height=0;state.dialog.remove();
+  // Native dialog focus restoration runs after the close event; defer ours one frame so the
+  // persistent panel trigger wins over the browser's restoration to <body>.
+  if(state.restore!==false&&state.trigger&&state.trigger.isConnected)setTimeout(()=>{if(!window.__mskDepthPreview&&state.trigger.isConnected)state.trigger.focus({preventScroll:true});},0);
+}
+function mskDepthPreviewClose(restore=true){
+  const state=window.__mskDepthPreview;if(!state)return;
+  state.restore=restore;
+  if(state.dialog.open){state.dialog.close();mskDepthPreviewFinish(state);}
+  else{state.dialog.remove();mskDepthPreviewFinish(state);}
+}
+function mskDepthPreviewOpen(trigger){
+  const item=(typeof curItem==='function'&&curItem())||null,source=mskDepthPreviewSource(item);
+  if(!item||!source)return false;
+  mskDepthPreviewClose(false);
+  const dialog=document.createElement('dialog');dialog.className='msk-depth-preview-dialog';
+  dialog.setAttribute('aria-labelledby','msk-depth-preview-title');
+  const head=document.createElement('div');head.className='msk-depth-preview-head';
+  const title=document.createElement('h2');title.id='msk-depth-preview-title';title.textContent='Depth map preview';
+  const close=document.createElement('button');close.type='button';close.className='btn bgh';close.textContent='Close';close.setAttribute('aria-label','Close depth map preview');close.style.minHeight='32px';
+  head.append(title,close);
+  const note=document.createElement('p');note.className='msk-depth-preview-note';
+  note.textContent='Model estimate · Relative depth. Darker regions are farther away; brighter regions are nearer.';
+  const canvas=document.createElement('canvas');canvas.className='msk-depth-preview-canvas';canvas.width=source.w;canvas.height=source.h;
+  canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Grayscale estimate of relative depth for the current photo');
+  const rgba=new Uint8ClampedArray(source.w*source.h*4);
+  for(let i=0;i<source.data.length;i++){const j=i*4,v=source.data[i];rgba[j]=rgba[j+1]=rgba[j+2]=v;rgba[j+3]=255;}
+  canvas.getContext('2d').putImageData(new ImageData(rgba,source.w,source.h),0,0);
+  const legend=document.createElement('div');legend.className='msk-depth-preview-legend';
+  const far=document.createElement('span');far.textContent='Farther';
+  const ramp=document.createElement('span');ramp.className='msk-depth-preview-ramp';ramp.setAttribute('aria-hidden','true');
+  const near=document.createElement('span');near.textContent='Nearer';legend.append(far,ramp,near);
+  dialog.append(head,note,canvas,legend);
+  const state={dialog,canvas,item,source,trigger:trigger||document.activeElement,restore:true,closed:false};
+  window.__mskDepthPreview=state;
+  dialog.addEventListener('close',()=>mskDepthPreviewFinish(state));
+  dialog.addEventListener('cancel',e=>{e.preventDefault();mskDepthPreviewClose(true);});
+  close.addEventListener('click',()=>dialog.close());
+  dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});
+  document.body.appendChild(dialog);
+  try{dialog.showModal();close.focus();return true;}
+  catch(e){dialog.remove();mskDepthPreviewFinish(state);return false;}
+}
+function mskDepthPreviewSync(item){
+  const state=window.__mskDepthPreview;if(!state)return;
+  const it=item===undefined?((typeof curItem==='function'&&curItem())||null):item;
+  if(!it||it!==state.item||mskDepthPreviewSource(it)!==state.source)mskDepthPreviewClose(false);
+}
+function mskDepthPreviewButton(enabled,reason){
+  return '<div class="btn-row"><button type="button" class="btn bgh msk-depth-preview-open" id="btn-msk-depth-preview"'
+    +(enabled?'':' disabled title="'+String(reason||'Depth estimate is not ready for this photo.').replace(/"/g,'&quot;')+'"')
+    +' onclick="mskDepthPreviewOpen(this)">Preview depth map</button></div>'
+    +(!enabled?'<div class="msk-hint">'+String(reason||'Depth estimate is not ready for this photo.').replace(/</g,'&lt;')+'</div>':'');
 }
 async function fxEnsureDepthMap(){
   // ⚠️ Was `if(!capNative())return null` — capNative() checks window.Capacitor (the iOS shell),
@@ -19078,15 +19151,17 @@ function mskRebuild(){
   // per CLAUDE.md §10.13 (a switched-off section reads better dimmed than vanished).
   if(window.__TAURI__){
     const hasMap=fxHasDepthMap();
+    const depthPreviewSource=m.origin==='depth'?mskDepthPreviewSource():null;
     const attemptedImg=(typeof curItem==='function'&&curItem()&&curItem().img);
     const alreadyAttempted=!!(attemptedImg&&attemptedImg._depthMapAttempted);
     const failed=!hasMap&&alreadyAttempted&&!_depthRunning;   // attempted, not still running, still no map
     selBody+='<div class="fx-row" title="Restricts this mask to a near/far band of the photo\'s estimated depth."><div class="fx-label">Depth range</div>'
       +'<input type="checkbox" '+(m.depOn?'checked':'')+(hasMap?'':' disabled')+' onchange="mskDepToggle(this)"></div>'
       +(!hasMap?'<div class="msk-hint">'+(failed?'Depth estimate unavailable for this photo.':'Computing depth map… (first use per photo takes a moment)')+'</div>'
-        :(m.depOn?_mskRow('Depth floor','depLo',m.depLo!=null?m.depLo:0,0,100,0.01,false,'0 = farthest pixel in the photo')
-          +_mskRow('Depth ceiling','depHi',m.depHi!=null?m.depHi:1,0,100,0.01,false,'100 = nearest pixel in the photo')
-          +(m.origin==='depth'?mskRefineControls(m):''):''));
+        +(m.origin==='depth'?mskDepthPreviewButton(false,failed?'No valid depth estimate is available for this photo.':'Depth preview will be available when the current photo’s estimate finishes.'):'' )
+        :((m.depOn?_mskRow('Depth floor','depLo',m.depLo!=null?m.depLo:0,0,100,0.01,false,'0 = farthest pixel in the photo')
+          +_mskRow('Depth ceiling','depHi',m.depHi!=null?m.depHi:1,0,100,0.01,false,'100 = nearest pixel in the photo'):'')
+          +(m.origin==='depth'?(m.depOn?mskRefineControls(m):'')+mskDepthPreviewButton(!!depthPreviewSource,depthPreviewSource?'':'Depth data is not valid for this photo.'):'') ));
     // ⚠️ Must ALSO gate here on alreadyAttempted, not just inside fxEnsureDepthMap(): "hasMap is
     // false" is a STABLE condition while depth_run is pending or has failed, and mskRebuild()
     // runs constantly (every mask edit). Without this check, EVERY mskRebuild() call — including
@@ -23772,6 +23847,7 @@ function geomCanvas(item){
 // Recompute the working image after any geometry change and upload it to the GL renderer.
 function updateWork(){
   const it=curItem();
+  if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(it);
   if(window.chromasmithInpaintSync)window.chromasmithInpaintSync();
   if(it&&(it._inpaintLoading||it._inpaintError)){fxWork=null;const message=it._inpaintError||'Loading accepted erase repair assets…';const status=document.getElementById('fx-no-img');if(status){status.textContent=message;status.style.display='block';}return;}
   fxWork=it?geomCanvas(it):null;
