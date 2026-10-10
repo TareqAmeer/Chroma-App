@@ -16,7 +16,7 @@ const source = extract('_mskBoxExtrema', 'mskRefinementSet')
   + extract('_mskDepthSmoothstep', 'mskBuildTex')
   + extract('mskRefinedPixels', 'mskRefinementSet')
   + html.slice(html.indexOf('function fxDepthForGeom('),html.indexOf('async function fxEnsureDepthMap('));
-const context = { Uint8ClampedArray, Uint8Array, Float32Array, Int32Array, Math, Map };
+const context = { Uint8ClampedArray, Uint8Array, Float32Array, Int32Array, Math, Map, window: {} };
 context.mskEnsureDims = () => {};
 vm.createContext(context);
 vm.runInContext(source, context);

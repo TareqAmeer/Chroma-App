@@ -91,6 +91,7 @@ try{
   await page.waitForSelector('#style-mask-apply');
   await page.locator('#style-mask-apply').click();
   await page.waitForFunction(()=>fxState.masks.length===2&&!document.getElementById('cs-modal-ov'));
+  await page.waitForFunction(index=>fxHistIdx===index,emptyBase.index+1,{timeout:3000});
   const emptyApplied=await page.evaluate(()=>({local:document.getElementById('tg-local')?.classList.contains('on'),index:fxHistIdx}));
   assert.equal(emptyApplied.local,true,'an enabled preset turns on local adjustments when no target masks exist');
   assert.equal(emptyApplied.index,emptyBase.index+1,'adding to an empty mask set creates one history entry');

@@ -10,6 +10,11 @@
 - Integrated checks pass: provenance CPU regression; portable-copy unit 12/12 and browser copy/undo sidecar provenance; preset preparation 14/14; editor HTML validity and `git diff --check`. The preset browser history assertion (`1` vs `2`) and depth-preview `window is not defined` failure were reproduced unchanged on base `0aa3fd86`; neither is attributed to this change. CHR-247 is In Review; no real SAM inference or photographic quality claim is made.
 
 
+### 2026-10-10 — CHR-247 baseline test fixture corrections
+- Added the missing `window` stub to the isolated refinement-math VM fixture and a bounded wait for the expected history index after the empty-target preset apply. The existing exact one-step history assertion remains intact. Files: `test/mask_refinement_math.mjs`, `test/mask_style_presets_ui.mjs`, `DEVLOG.md`; issue CHR-247.
+- The two affected checks pass on current main after these fixture-only changes; `git diff --check` passes. No production behavior changed.
+
+
 ### 2026-10-10 — CHR-247 per-mask Dehaze slice
 - Added signed -100..100 local Dehaze control backed by the existing `mskK.w` lane. It reuses Basic Adjustments' bright/desaturated heuristic and contrast/black-point/saturation stages, scales through effective mask coverage, and skips all transformations when the strength, haze gate or coverage yields zero. Files: `chromasmith-22.html`, `test/mask_local_dehaze.mjs`, `test/mask_style_presets.mjs`, `docs/masking-roadmap.md`, `DEVLOG.md`.
 - Focused GPU/UI checks pass 11/11; preset preparation 13/13. Positive/negative gray-haze probes shift −11/+11 levels, while saturated foreground, dark tones, uncovered pixels, muted/Amount-zero masks, and omitted-vs-zero remain exact. Production `processToCanvas` direct/two-tile full-buffer checks pass for radial and brush masks (max delta 1; zero pixels over delta 1). Export harness passes 35/35; all 23 decoded goldens are exact. This tests the shader/export engine, not photographic dehaze quality or live-preview parity.
