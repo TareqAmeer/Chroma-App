@@ -26,7 +26,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { startServer } from './editor_state_harness.mjs';
-import { enumerate, fingerprint, locate, alreadyAtReplayDestination, setColorInput } from './sweep_lib.mjs';
+import { enumerate, fingerprint, locate, alreadyAtReplayDestination, captureReplayDestination, setColorInput, setReplayValue } from './sweep_lib.mjs';
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS } from './wireframe_diff_lib.mjs';
 
 const ROOT = process.cwd();
@@ -69,7 +69,11 @@ async function boot(page, port, s) {
   await page.waitForTimeout(400);
 }
 
-async function act(page, c) {
+async function act(page, c, replayDestination = null) {
+  if (replayDestination?.valueType === 'value') {
+    await page.evaluate(setReplayValue, { key: c.key, value: replayDestination.value });
+    return;
+  }
   if (c.kind === 'range') {
     await page.evaluate(({ x, y }) => {
       const el = document.elementFromPoint(x, y)?.closest('input') || document.elementFromPoint(x, y);
@@ -183,10 +187,14 @@ for (const [name, s] of Object.entries(SURFACES)) {
       // Stateful controls replay toward the state captured after discovery activated them. A
       // null destination means an ordinary action button; always replay it so dialogs still open.
       if (alreadyAtReplayDestination(c.pathSel?.[i], sc)) {
-        const next = await waitForFind(nextKey); if (!next) return null;
-        continue;
+        // Some destination indicators survive reload while their dependent content does not
+        // (for example the Histogram tab can remain selected with its details disclosure closed).
+        // Re-assert only explicit destination setters; generic toggles remain untouched.
+        const next = await waitForFind(nextKey);
+        if (next) continue;
+        if (!sc.replayIdempotent) return null;
       }
-      await act(page, sc); await settle(); atBaseline = false;
+      await act(page, sc, c.pathSel?.[i]); await settle(); atBaseline = false;
       if (c.label === 'Export proof toggle' && sc.label === '#btn-export-db') {
         await page.waitForFunction(() => {
           const toggle = document.querySelector('#sk2-export .sk2x-proof-toggle');
@@ -220,6 +228,11 @@ for (const [name, s] of Object.entries(SURFACES)) {
     // Poll rather than one fixed wait: thumbnails, the add-photo picker and zoom settle async
     // (300ms marked them inert falsely; triage showed them changing by ~1s).
     let after = before;
+    if (c.label === 'Export proof toggle' && !errs.length) {
+      // The click schedules a full preview render; the text/canvas fingerprint changes only once
+      // that render finishes, which can exceed the generic interaction interval.
+      await page.waitForFunction(() => document.querySelector('#sk2-export .sk2x-proof canvas')?.getAttribute('aria-label')?.startsWith('Original preview'), undefined, { timeout: 12000 }).catch(() => {});
+    }
     for (let t = 0; t < 1500 && after === before; t += 150) {
       await page.waitForTimeout(150);
       try { after = await page.evaluate(fingerprint); } catch (e) { errs.push('navigated: ' + e.message.split('\n')[0]); break; }
@@ -231,13 +244,17 @@ for (const [name, s] of Object.entries(SURFACES)) {
     if (status === 'changed') {
       atBaseline = false;
       if (c.path.length < DEPTH) {
+          // Read the activated DOM node directly before enumerate() replaces its element map.
+          // Opening Library can move the toggle off-screen, but its desired state still matters
+          // when paths to the newly revealed collection headers are replayed after a reload.
+          const capturedDestination = await page.evaluate(captureReplayDestination, { key: c.key, statefulEvidence: cur.stateful }).catch(() => null);
           const afterControls = await page.evaluate(enumerate).catch(() => []);
           const selectedAfter = new Map(afterControls.map((n) => [n.key, n]));
           for (const n of afterControls) {
           if (!known.has(n.key)) {
             known.add(n.key);
             const destination = selectedAfter.get(c.key);
-            const state = (cur.stateful || destination?.stateful) ? destination?.selected ?? null : null;
+            const state = capturedDestination || ((cur.stateful || destination?.stateful) ? { stateful: true, selected: destination?.selected ?? false } : null);
             queue.push({ ...n, path: [...c.path, c.key], pathSel: [...(c.pathSel || []), state] });
           }
         }
