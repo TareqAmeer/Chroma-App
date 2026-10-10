@@ -46,7 +46,15 @@ try {
   const samples = [];
   for (const key of ['ArrowRight', 'ArrowLeft']) {
     await page.keyboard.press(key);
-    await page.waitForTimeout(400);
+    // Functional completion, independent of GPU contention. Timing is tested by the native gate.
+    await page.waitForFunction(() => {
+      const el = document.querySelector('.lib-survey-cell.cmp-focus');
+      const wrap = el?.querySelector('.lib-cmp-canvas-wrap'), rect = el?.querySelector('canvas')?.getBoundingClientRect();
+      const iw = +el?.dataset.sourceWidth, ih = +el?.dataset.sourceHeight;
+      if (!wrap || !rect || !iw || !ih) return false;
+      const fit = Math.min(1, wrap.clientWidth / iw, wrap.clientHeight / ih);
+      return Math.abs(rect.width - iw * fit) < 3 && Math.abs(rect.height - ih * fit) < 3;
+    }, undefined, { timeout: 6000 });
     const sample = await page.evaluate(() => {
       const el = document.querySelector('.lib-survey-cell.cmp-focus'), wrap = el.querySelector('.lib-cmp-canvas-wrap');
       const iw = +el.dataset.sourceWidth, ih = +el.dataset.sourceHeight;
