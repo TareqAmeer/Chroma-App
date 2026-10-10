@@ -45,7 +45,7 @@ export function enumerate() {
     const stateValue = valueControl ? ((el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value) : null;
     // These controls set an explicit destination (section/tab/form value); activating them again
     // is safe if the selected indicator survived reload but its dependent content did not.
-    const replayIdempotent = valueControl || el.id === 'cs-tog-lib' || el.id === 'cs-tog-studio' || el.matches('[role="tab"],[data-k],[data-sec],.chip-tap button');
+    const replayIdempotent = valueControl || el.id === 'cs-tog-lib' || el.id === 'cs-tog-studio' || el.matches('[role="tab"],[data-k="hist"],[data-sec],.chip-tap button');
     (window.__sweepEls = window.__sweepEls || new Map()).set(`${base}|${n}`, el);
     out.push({ family, selected, stateful, stateValue, replayIdempotent, key: `${base}|${n}`, kind: el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' ? (el.type || el.tagName.toLowerCase()) : 'click', label, x: cx, y: cy });
   }
