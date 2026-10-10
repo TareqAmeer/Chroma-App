@@ -8710,10 +8710,22 @@
 
   function surveySyncFocus() {
     const host = surveyHost(); if (!host) return;
+    const previousFocus = host.querySelector('.lib-survey-cell.cmp-focus')?.dataset.surveyIdx;
     host.querySelectorAll('.lib-survey-cell').forEach((cell, i) => {
       cell.classList.toggle('cmp-focus', i === surveyState.focus);
       cell.setAttribute('aria-label', `Photo ${i + 1} of ${surveyState.cells.length}: ${baseName(surveyState.cells[i].path)}${i === surveyState.focus ? ', focused' : ''}`);
     });
+    if (compareState.mode === 'cull' && previousFocus !== String(surveyState.focus)) {
+      // Focus changes the viewport from filmstrip to preview. Refit both affected canvases
+      // after layout, preserving their source-space zoom/pan and the existing render cache.
+      const entry = compareState.entryToken, focused = surveyState.focus;
+      requestAnimationFrame(() => {
+        if (!host.isConnected || entry !== compareState.entryToken || compareState.mode !== 'cull'
+          || focused !== surveyState.focus) return;
+        renderSurveyCell(focused);
+        if (previousFocus != null && Number(previousFocus) !== focused) renderSurveyCell(Number(previousFocus));
+      });
+    }
     const bar = host.querySelector('#lib-compare-bar');
     if (bar) {
       const info = bar.querySelector('.survey-focus-note');
