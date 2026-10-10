@@ -1,0 +1,1719 @@
+{
+  "editor": {
+    "button:button|#cs-tog-lib||1": {
+      "status": "changed",
+      "label": "#cs-tog-lib",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:button|#cs-tog-studio||1": {
+      "status": "selected",
+      "label": "#cs-tog-studio",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|#btn-fx-fullres||1": {
+      "status": "changed",
+      "label": "#btn-fx-fullres",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|#btn-zoom-out||1": {
+      "status": "changed",
+      "label": "#btn-zoom-out",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "input:range|#fx-zoom-slider||1": {
+      "status": "changed",
+      "label": "#fx-zoom-slider",
+      "kind": "range",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|#btn-zoom-in||1": {
+      "status": "changed",
+      "label": "#btn-zoom-in",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|All FX: one click adds film grain, glow and borders. Use the ▾ to choose which effects and how strong.||1": {
+      "status": "changed",
+      "label": "All FX: one click adds film grain, glow and borders. Use the ▾ to choose which effects and how strong.",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|All FX settings||1": {
+      "status": "changed",
+      "label": "All FX settings",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|#btn-export-db||1": {
+      "status": "changed",
+      "label": "#btn-export-db",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|Settings — transform, edit settings, view, appearance||1": {
+      "status": "changed",
+      "label": "Settings — transform, edit settings, view, appearance",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "div|IMG_1001.RW2|data-path=/test/AllPhotos/IMG_1001.RW2|1": {
+      "status": "changed",
+      "label": "IMG_1001.RW2",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "div|IMG_1002.RW2|data-path=/test/AllPhotos/IMG_1002.RW2|1": {
+      "status": "changed",
+      "label": "IMG_1002.RW2",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "div|IMG_1003.RW2|data-path=/test/AllPhotos/IMG_1003.RW2|1": {
+      "status": "changed",
+      "label": "IMG_1003.RW2",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|Look|data-sec=look|1": {
+      "status": "changed",
+      "label": "Look",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|Light|data-sec=light|1": {
+      "status": "changed",
+      "label": "Light",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|Colour|data-sec=colour|1": {
+      "status": "changed",
+      "label": "Colour",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|Texture|data-sec=texture|1": {
+      "status": "changed",
+      "label": "Texture",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|Crop|data-sec=output|1": {
+      "status": "changed",
+      "label": "Crop",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|#fx-panel-resizer||1": {
+      "status": "changed",
+      "label": "#fx-panel-resizer",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|#fx-rail-resizer||1": {
+      "status": "changed",
+      "label": "#fx-rail-resizer",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:button|Looks|data-k=looks|1": {
+      "status": "changed",
+      "label": "Looks",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:button|Input & Prints|data-k=inprint|1": {
+      "status": "changed",
+      "label": "Input & Prints",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:button|Film Negative|data-k=filmneg|1": {
+      "status": "changed",
+      "label": "Film Negative",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "span|Show or hide Looks||1": {
+      "status": "changed",
+      "label": "Show or hide Looks",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "span|Show or hide Input & Prints||1": {
+      "status": "changed",
+      "label": "Show or hide Input & Prints",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "span|Show or hide Film Negative||1": {
+      "status": "changed",
+      "label": "Show or hide Film Negative",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "div|#tg-filmneg|data-a11y=1|1": {
+      "status": "changed",
+      "label": "#tg-filmneg",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|Zoom out||1": {
+      "status": "changed",
+      "label": "Zoom out",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "input:range|Zoom (%)||1": {
+      "status": "changed",
+      "label": "Zoom (%)",
+      "kind": "range",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|Zoom in||1": {
+      "status": "changed",
+      "label": "Zoom in",
+      "kind": "click",
+      "path": [],
+      "errors": []
+    },
+    "button:submit|#lib-sort-btn||1": {
+      "status": "changed",
+      "label": "#lib-sort-btn",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#lib-filters-btn||1": {
+      "status": "changed",
+      "label": "#lib-filters-btn",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "input:text|#lib-search||1": {
+      "status": "changed",
+      "label": "#lib-search",
+      "kind": "text",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "button:button|#lib-zoom-out||1": {
+      "status": "changed",
+      "label": "#lib-zoom-out",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "input:range|#lib-thumbsize||1": {
+      "status": "changed",
+      "label": "#lib-thumbsize",
+      "kind": "range",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "button:button|#lib-zoom-in||1": {
+      "status": "changed",
+      "label": "#lib-zoom-in",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#lib-view-menu-btn||1": {
+      "status": "changed",
+      "label": "#lib-view-menu-btn",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "div|All Photos|data-catalog=all|1": {
+      "status": "changed",
+      "label": "All Photos",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "div|Collections|data-sec-toggle=collections|1": {
+      "status": "changed",
+      "label": "Collections",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "div|Recents|data-coll=recents|1": {
+      "status": "changed",
+      "label": "Recents",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "div|Offline Photos|data-coll=offline|1": {
+      "status": "changed",
+      "label": "Offline Photos",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "div|Favorites|data-coll=favorites|1": {
+      "status": "changed",
+      "label": "Favorites",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "div|People & Pets|data-sec-toggle=people|1": {
+      "status": "changed",
+      "label": "People & Pets",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "div|Albums+|data-sec-toggle=albums|1": {
+      "status": "changed",
+      "label": "Albums+",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "button:button|Manage||1": {
+      "status": "changed",
+      "label": "Manage",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "button:button|Show only rejected|data-fval=red|1": {
+      "status": "changed",
+      "label": "Show only rejected",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "button:button|Show only picked|data-fval=green|1": {
+      "status": "changed",
+      "label": "Show only picked",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "button:button|Show only favourites|data-fval=favorite|1": {
+      "status": "changed",
+      "label": "Show only favourites",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#btn-undo-db||1": {
+      "status": "changed",
+      "label": "#btn-undo-db",
+      "kind": "click",
+      "path": [
+        "button:submit|All FX: one click adds film grain, glow and borders. Use the ▾ to choose which effects and how strong.||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#btn-before||1": {
+      "status": "inert",
+      "label": "#btn-before",
+      "kind": "click",
+      "path": [
+        "button:submit|All FX: one click adds film grain, glow and borders. Use the ▾ to choose which effects and how strong.||1"
+      ],
+      "errors": []
+    },
+    "button:button|Undo||1": {
+      "status": "changed",
+      "label": "Undo",
+      "kind": "click",
+      "path": [
+        "button:submit|All FX: one click adds film grain, glow and borders. Use the ▾ to choose which effects and how strong.||1"
+      ],
+      "errors": []
+    },
+    "button:button|Dismiss||1": {
+      "status": "changed",
+      "label": "Dismiss",
+      "kind": "click",
+      "path": [
+        "button:submit|All FX: one click adds film grain, glow and borders. Use the ▾ to choose which effects and how strong.||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#cs-modal-x||1": {
+      "status": "changed",
+      "label": "#cs-modal-x",
+      "kind": "click",
+      "path": [
+        "button:submit|All FX settings||1"
+      ],
+      "errors": []
+    },
+    "input:checkbox|||1": {
+      "status": "changed",
+      "label": "",
+      "kind": "checkbox",
+      "path": [
+        "button:submit|All FX settings||1"
+      ],
+      "errors": []
+    },
+    "input:checkbox|||2": {
+      "status": "changed",
+      "label": "",
+      "kind": "checkbox",
+      "path": [
+        "button:submit|All FX settings||1"
+      ],
+      "errors": []
+    },
+    "input:checkbox|||3": {
+      "status": "changed",
+      "label": "",
+      "kind": "checkbox",
+      "path": [
+        "button:submit|All FX settings||1"
+      ],
+      "errors": []
+    },
+    "input:checkbox|#allfx-cur||1": {
+      "status": "changed",
+      "label": "#allfx-cur",
+      "kind": "checkbox",
+      "path": [
+        "button:submit|All FX settings||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#allfx-cancel||1": {
+      "status": "changed",
+      "label": "#allfx-cancel",
+      "kind": "click",
+      "path": [
+        "button:submit|All FX settings||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#allfx-save||1": {
+      "status": "changed",
+      "label": "#allfx-save",
+      "kind": "click",
+      "path": [
+        "button:submit|All FX settings||1"
+      ],
+      "errors": []
+    },
+    "button:button|Close export||1": {
+      "status": "changed",
+      "label": "Close export",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1"
+      ],
+      "errors": []
+    },
+    "button:button|Full size|data-v=0|1": {
+      "status": "changed",
+      "label": "Full size",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1"
+      ],
+      "errors": []
+    },
+    "button:button|4096|data-v=4096|1": {
+      "status": "changed",
+      "label": "4096",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1"
+      ],
+      "errors": []
+    },
+    "button:button|2560|data-v=2560|1": {
+      "status": "changed",
+      "label": "2560",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1"
+      ],
+      "errors": []
+    },
+    "button:button|2048|data-v=2048|1": {
+      "status": "changed",
+      "label": "2048",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1"
+      ],
+      "errors": []
+    },
+    "button:button|Match source|data-v=auto|1": {
+      "status": "changed",
+      "label": "Match source",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1"
+      ],
+      "errors": []
+    },
+    "button:button|Export proof toggle||1": {
+      "status": "changed",
+      "label": "Export proof toggle",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1"
+      ],
+      "errors": []
+    },
+    "summary|More||1": {
+      "status": "changed",
+      "label": "More",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1"
+      ],
+      "errors": []
+    },
+    "button:button|Export →||1": {
+      "status": "changed",
+      "label": "Export →",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1"
+      ],
+      "errors": []
+    },
+    "button:button|Transform|data-cat=tools|1": {
+      "status": "selected",
+      "label": "Transform",
+      "kind": "click",
+      "path": [
+        "button:submit|Settings — transform, edit settings, view, appearance||1"
+      ],
+      "errors": []
+    },
+    "button:button|Compare|data-cat=split|1": {
+      "status": "changed",
+      "label": "Compare",
+      "kind": "click",
+      "path": [
+        "button:submit|Settings — transform, edit settings, view, appearance||1"
+      ],
+      "errors": []
+    },
+    "button:button|History|data-cat=history|1": {
+      "status": "changed",
+      "label": "History",
+      "kind": "click",
+      "path": [
+        "button:submit|Settings — transform, edit settings, view, appearance||1"
+      ],
+      "errors": []
+    },
+    "button:button|Gallery|data-cat=library|1": {
+      "status": "changed",
+      "label": "Gallery",
+      "kind": "click",
+      "path": [
+        "button:submit|Settings — transform, edit settings, view, appearance||1"
+      ],
+      "errors": []
+    },
+    "button:submit|Rotate 90° CW||1": {
+      "status": "changed",
+      "label": "Rotate 90° CW",
+      "kind": "click",
+      "path": [
+        "button:submit|Settings — transform, edit settings, view, appearance||1"
+      ],
+      "errors": []
+    },
+    "button:submit|Rotate 90° CCW||1": {
+      "status": "changed",
+      "label": "Rotate 90° CCW",
+      "kind": "click",
+      "path": [
+        "button:submit|Settings — transform, edit settings, view, appearance||1"
+      ],
+      "errors": []
+    },
+    "button:submit|Flip horizontal||1": {
+      "status": "changed",
+      "label": "Flip horizontal",
+      "kind": "click",
+      "path": [
+        "button:submit|Settings — transform, edit settings, view, appearance||1"
+      ],
+      "errors": []
+    },
+    "button:button|Histogram|data-k=hist|1": {
+      "status": "changed",
+      "label": "Histogram",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:button|Light|data-k=adjust|1": {
+      "status": "changed",
+      "label": "Light",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:button|Curves|data-k=curves|1": {
+      "status": "changed",
+      "label": "Curves",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:button|Halation|data-k=hal|1": {
+      "status": "changed",
+      "label": "Halation",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "summary|Histogram||1": {
+      "status": "changed",
+      "label": "Histogram",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "span|Show or hide Light||1": {
+      "status": "changed",
+      "label": "Show or hide Light",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "div|#tg-adjust|data-a11y=1|1": {
+      "status": "changed",
+      "label": "#tg-adjust",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:submit|One-click levels and white balance from the image histogram||1": {
+      "status": "changed",
+      "label": "One-click levels and white balance from the image histogram",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-adj-exp||1": {
+      "status": "changed",
+      "label": "#sl-adj-exp",
+      "kind": "range",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-adj-con||1": {
+      "status": "changed",
+      "label": "#sl-adj-con",
+      "kind": "range",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-adj-hi||1": {
+      "status": "changed",
+      "label": "#sl-adj-hi",
+      "kind": "range",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-adj-temp||1": {
+      "status": "changed",
+      "label": "#sl-adj-temp",
+      "kind": "range",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-adj-tint||1": {
+      "status": "changed",
+      "label": "#sl-adj-tint",
+      "kind": "range",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-adj-vib||1": {
+      "status": "changed",
+      "label": "#sl-adj-vib",
+      "kind": "range",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:submit|#btn-wb-eye||1": {
+      "status": "changed",
+      "label": "#btn-wb-eye",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "span|Show or hide Curves  |All||1": {
+      "status": "changed",
+      "label": "Show or hide Curves  |All",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "div|#tg-curves|data-a11y=1|1": {
+      "status": "changed",
+      "label": "#tg-curves",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Point|data-mode=point|1": {
+      "status": "changed",
+      "label": "Point",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Parametric|data-mode=param|1": {
+      "status": "changed",
+      "label": "Parametric",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:submit|RGB|data-ch=m|1": {
+      "status": "changed",
+      "label": "RGB",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:submit|R|data-ch=r|1": {
+      "status": "changed",
+      "label": "R",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:submit|G|data-ch=g|1": {
+      "status": "changed",
+      "label": "G",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:submit|B|data-ch=b|1": {
+      "status": "changed",
+      "label": "B",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "span|Show or hide Halation||1": {
+      "status": "changed",
+      "label": "Show or hide Halation",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "div|#tg-hal|data-a11y=1|1": {
+      "status": "changed",
+      "label": "#tg-hal",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-hal-a||1": {
+      "status": "changed",
+      "label": "#sl-hal-a",
+      "kind": "range",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-hal-r||1": {
+      "status": "changed",
+      "label": "#sl-hal-r",
+      "kind": "range",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behavior.||1": {
+      "status": "changed",
+      "label": "Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behavior.",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-hal-p||1": {
+      "status": "changed",
+      "label": "#sl-hal-p",
+      "kind": "range",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Neutral white halation instead of the warm film glow — best for black-and-white photos (auto-enabled when a B&W photo is loaded).||1": {
+      "status": "changed",
+      "label": "Neutral white halation instead of the warm film glow — best for black-and-white photos (auto-enabled when a B&W photo is loaded).",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "div|#tg-hal-white|data-a11y=1|1": {
+      "status": "changed",
+      "label": "#tg-hal-white",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Film with no anti-halation backing (remjet) — much stronger, bloomier halos with a yellow→orange→red edge, calibrated to Dehancer's no-remjet look.||1": {
+      "status": "changed",
+      "label": "Film with no anti-halation backing (remjet) — much stronger, bloomier halos with a yellow→orange→red edge, calibrated to Dehancer's no-remjet look.",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "div|#tg-bloom|data-a11y=1|1": {
+      "status": "changed",
+      "label": "#tg-bloom",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1"
+      ],
+      "errors": []
+    },
+    "button:button|Colour Mixer|data-k=hsl|1": {
+      "status": "changed",
+      "label": "Colour Mixer",
+      "kind": "click",
+      "path": [
+        "button:submit|Colour|data-sec=colour|1"
+      ],
+      "errors": []
+    },
+    "button:button|Select Red||1": {
+      "status": "changed",
+      "label": "Select Red",
+      "kind": "click",
+      "path": [
+        "button:submit|Colour|data-sec=colour|1"
+      ],
+      "errors": []
+    },
+    "button:button|Select Orange||1": {
+      "status": "changed",
+      "label": "Select Orange",
+      "kind": "click",
+      "path": [
+        "button:submit|Colour|data-sec=colour|1"
+      ],
+      "errors": []
+    },
+    "button:button|Select Yellow||1": {
+      "status": "changed",
+      "label": "Select Yellow",
+      "kind": "click",
+      "path": [
+        "button:submit|Colour|data-sec=colour|1"
+      ],
+      "errors": []
+    },
+    "button:button|Select Green||1": {
+      "status": "changed",
+      "label": "Select Green",
+      "kind": "click",
+      "path": [
+        "button:submit|Colour|data-sec=colour|1"
+      ],
+      "errors": []
+    },
+    "button:button|Red|data-band=Red|1": {
+      "status": "changed",
+      "label": "Red",
+      "kind": "click",
+      "path": [
+        "button:submit|Colour|data-sec=colour|1"
+      ],
+      "errors": []
+    },
+    "button:button|Orange|data-band=Orange|1": {
+      "status": "changed",
+      "label": "Orange",
+      "kind": "click",
+      "path": [
+        "button:submit|Colour|data-sec=colour|1"
+      ],
+      "errors": []
+    },
+    "button:button|Yellow|data-band=Yellow|1": {
+      "status": "changed",
+      "label": "Yellow",
+      "kind": "click",
+      "path": [
+        "button:submit|Colour|data-sec=colour|1"
+      ],
+      "errors": []
+    },
+    "button:button|Green|data-band=Green|1": {
+      "status": "changed",
+      "label": "Green",
+      "kind": "click",
+      "path": [
+        "button:submit|Colour|data-sec=colour|1"
+      ],
+      "errors": []
+    },
+    "summary|i How this works||1": {
+      "status": "changed",
+      "label": "i How this works",
+      "kind": "click",
+      "path": [
+        "button:submit|Colour|data-sec=colour|1"
+      ],
+      "errors": []
+    },
+    "button:button|Sharpen|data-k=deconv|1": {
+      "status": "changed",
+      "label": "Sharpen",
+      "kind": "click",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "div|#tg-deconv|data-a11y=1|1": {
+      "status": "changed",
+      "label": "#tg-deconv",
+      "kind": "click",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "select:select-one|#sel-lens-manual||1": {
+      "status": "changed",
+      "label": "#sel-lens-manual",
+      "kind": "select-one",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "button:button|Heal blends the copied area into the surrounding colour. Clone copies it exactly.||1": {
+      "status": "changed",
+      "label": "Heal blends the copied area into the surrounding colour. Clone copies it exactly.",
+      "kind": "click",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Heal||1": {
+      "status": "changed",
+      "label": "Heal",
+      "kind": "click",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Clone||1": {
+      "status": "changed",
+      "label": "Clone",
+      "kind": "click",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "button:submit|#btn-heal-paint||1": {
+      "status": "changed",
+      "label": "#btn-heal-paint",
+      "kind": "click",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Overlay|data-v=overlay|1": {
+      "status": "changed",
+      "label": "Overlay",
+      "kind": "click",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Isolate|data-v=isolate|1": {
+      "status": "changed",
+      "label": "Isolate",
+      "kind": "click",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Shows the EFFECTIVE selection in red — shape combined with the luminance and colour-range gates. The Overlay/Isolate modes draw the shape only.|data-v=select|1": {
+      "status": "changed",
+      "label": "Shows the EFFECTIVE selection in red — shape combined with the luminance and colour-range gates. The Overlay/Isolate modes draw the shape only.",
+      "kind": "click",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Off|data-v=off|1": {
+      "status": "changed",
+      "label": "Off",
+      "kind": "click",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "select:select-one|#sel-redeye-mode||1": {
+      "status": "changed",
+      "label": "#sel-redeye-mode",
+      "kind": "select-one",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "button:submit|#btn-redeye-add||1": {
+      "status": "changed",
+      "label": "#btn-redeye-add",
+      "kind": "click",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "select:select-one|#sel-grain-fmt||1": {
+      "status": "changed",
+      "label": "#sel-grain-fmt",
+      "kind": "select-one",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Both||1": {
+      "status": "changed",
+      "label": "Both",
+      "kind": "click",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1"
+      ],
+      "errors": []
+    },
+    "div|Reset|data-a11y=1|1": {
+      "status": "changed",
+      "label": "Reset",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:submit|As shot||1": {
+      "status": "changed",
+      "label": "As shot",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:submit|#btn-crop||1": {
+      "status": "changed",
+      "label": "#btn-crop",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "div|Reset|data-a11y=1|2": {
+      "status": "changed",
+      "label": "Reset",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Rotate left|data-ic=rotateLeft|1": {
+      "status": "changed",
+      "label": "Rotate left",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Rotate right|data-ic=rotateRight|1": {
+      "status": "changed",
+      "label": "Rotate right",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Flip horizontal|data-ic=flipH|1": {
+      "status": "changed",
+      "label": "Flip horizontal",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:button|Inner|data-l=b1|1": {
+      "status": "changed",
+      "label": "Inner",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:button|Outer|data-l=b2|1": {
+      "status": "changed",
+      "label": "Outer",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "input:color|#cl-b1||1": {
+      "status": "changed",
+      "label": "#cl-b1",
+      "kind": "color",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:button|Fit||1": {
+      "status": "changed",
+      "label": "Fit",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:button|Post1:1||1": {
+      "status": "changed",
+      "label": "Post1:1",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:button|Portrait4:5||1": {
+      "status": "changed",
+      "label": "Portrait4:5",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:button|Story9:16||1": {
+      "status": "changed",
+      "label": "Story9:16",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Black background||1": {
+      "status": "changed",
+      "label": "Black background",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:submit|White background||1": {
+      "status": "changed",
+      "label": "White background",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Charcoal background||1": {
+      "status": "changed",
+      "label": "Charcoal background",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "input:color|#cl-canvas-bg||1": {
+      "status": "changed",
+      "label": "#cl-canvas-bg",
+      "kind": "color",
+      "path": [
+        "button:submit|Crop|data-sec=output|1"
+      ],
+      "errors": []
+    },
+    "input:search|#fx-looks-search||1": {
+      "status": "changed",
+      "label": "#fx-looks-search",
+      "kind": "search",
+      "path": [
+        "button:button|Looks|data-k=looks|1"
+      ],
+      "errors": []
+    },
+    "button:button|#phone-looks-find||1": {
+      "status": "changed",
+      "label": "#phone-looks-find",
+      "kind": "click",
+      "path": [
+        "button:button|Looks|data-k=looks|1"
+      ],
+      "errors": []
+    },
+    "button:submit|All||1": {
+      "status": "changed",
+      "label": "All",
+      "kind": "click",
+      "path": [
+        "button:button|Looks|data-k=looks|1"
+      ],
+      "errors": []
+    },
+    "div|#fx-looks||1": {
+      "status": "changed",
+      "label": "#fx-looks",
+      "kind": "click",
+      "path": [
+        "button:button|Looks|data-k=looks|1"
+      ],
+      "errors": []
+    },
+    "button:submit|All|data-fgrp=type,data-fval=all|1": {
+      "status": "selected",
+      "label": "All",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-filters-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|RAW|data-fgrp=type,data-fval=raw|1": {
+      "status": "changed",
+      "label": "RAW",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-filters-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|JPEG|data-fgrp=type,data-fval=jpeg|1": {
+      "status": "changed",
+      "label": "JPEG",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-filters-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|Video|data-fgrp=type,data-fval=video|1": {
+      "status": "changed",
+      "label": "Video",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-filters-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#lib-types-more||1": {
+      "status": "changed",
+      "label": "#lib-types-more",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-filters-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|Picked|data-fgrp=flag,data-fval=green|1": {
+      "status": "changed",
+      "label": "Picked",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-filters-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|Rejected|data-fgrp=flag,data-fval=red|1": {
+      "status": "changed",
+      "label": "Rejected",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-filters-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|Favorited|data-fgrp=flag,data-fval=favorite|1": {
+      "status": "changed",
+      "label": "Favorited",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-filters-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#lib-more-filters||1": {
+      "status": "changed",
+      "label": "#lib-more-filters",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-filters-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#lib-empty-import||1": {
+      "status": "changed",
+      "label": "#lib-empty-import",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "input:text|#lib-search||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#lib-empty-open||1": {
+      "status": "changed",
+      "label": "#lib-empty-open",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "input:text|#lib-search||1"
+      ],
+      "errors": []
+    },
+    "input:checkbox|#lib-unified-toggle||1": {
+      "status": "changed",
+      "label": "#lib-unified-toggle",
+      "kind": "checkbox",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-view-menu-btn||1"
+      ],
+      "errors": []
+    },
+    "input:checkbox|#lib-stars-toggle||1": {
+      "status": "changed",
+      "label": "#lib-stars-toggle",
+      "kind": "checkbox",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-view-menu-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#lib-pick||1": {
+      "status": "changed",
+      "label": "#lib-pick",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-view-menu-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#lib-quickstart||1": {
+      "status": "changed",
+      "label": "#lib-quickstart",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-view-menu-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#lib-gphotos||1": {
+      "status": "changed",
+      "label": "#lib-gphotos",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-view-menu-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#lib-takeout-names||1": {
+      "status": "changed",
+      "label": "#lib-takeout-names",
+      "kind": "click",
+      "path": [
+        "button:button|#cs-tog-lib||1",
+        "button:submit|#lib-view-menu-btn||1"
+      ],
+      "errors": []
+    },
+    "button:submit|#btn-redo-db||1": {
+      "status": "changed",
+      "label": "#btn-redo-db",
+      "kind": "click",
+      "path": [
+        "button:submit|All FX: one click adds film grain, glow and borders. Use the ▾ to choose which effects and how strong.||1",
+        "button:submit|#btn-undo-db||1"
+      ],
+      "errors": []
+    },
+    "span|Show or hide Output||1": {
+      "status": "changed",
+      "label": "Show or hide Output",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1",
+        "summary|More||1"
+      ],
+      "errors": []
+    },
+    "span|Show or hide Watermark||1": {
+      "status": "changed",
+      "label": "Show or hide Watermark",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1",
+        "summary|More||1"
+      ],
+      "errors": []
+    },
+    "div|#tg-exp-wm|data-a11y=1|1": {
+      "status": "changed",
+      "label": "#tg-exp-wm",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1",
+        "summary|More||1"
+      ],
+      "errors": []
+    },
+    "span|Show or hide Export Recipes||1": {
+      "status": "changed",
+      "label": "Show or hide Export Recipes",
+      "kind": "click",
+      "path": [
+        "button:submit|#btn-export-db||1",
+        "summary|More||1"
+      ],
+      "errors": []
+    },
+    "button:submit|Split before / after||1": {
+      "status": "changed",
+      "label": "Split before / after",
+      "kind": "click",
+      "path": [
+        "button:submit|Settings — transform, edit settings, view, appearance||1",
+        "button:button|Compare|data-cat=split|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Pin this photo as reference||1": {
+      "status": "changed",
+      "label": "Pin this photo as reference",
+      "kind": "click",
+      "path": [
+        "button:submit|Settings — transform, edit settings, view, appearance||1",
+        "button:button|Compare|data-cat=split|1"
+      ],
+      "errors": []
+    },
+    "input:range|||1": {
+      "status": "changed",
+      "label": "",
+      "kind": "range",
+      "path": [
+        "button:submit|Settings — transform, edit settings, view, appearance||1",
+        "button:button|History|data-cat=history|1"
+      ],
+      "errors": []
+    },
+    "button:button|History row 0: Start||1": {
+      "status": "changed",
+      "label": "History row 0: Start",
+      "kind": "click",
+      "path": [
+        "button:submit|Settings — transform, edit settings, view, appearance||1",
+        "button:button|History|data-cat=history|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Shadow clipping — click to show clipped areas on the photo||1": {
+      "status": "changed",
+      "label": "Shadow clipping — click to show clipped areas on the photo",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1",
+        "button:button|Histogram|data-k=hist|1"
+      ],
+      "errors": []
+    },
+    "button:submit|Highlight clipping — click to show clipped areas on the photo||1": {
+      "status": "changed",
+      "label": "Highlight clipping — click to show clipped areas on the photo",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1",
+        "button:button|Histogram|data-k=hist|1"
+      ],
+      "errors": []
+    },
+    "button:button|Reset this section||1": {
+      "status": "changed",
+      "label": "Reset this section",
+      "kind": "click",
+      "path": [
+        "button:submit|Light|data-sec=light|1",
+        "input:range|#sl-adj-exp||1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-crv-s||1": {
+      "status": "changed",
+      "label": "#sl-crv-s",
+      "kind": "range",
+      "path": [
+        "button:submit|Light|data-sec=light|1",
+        "button:submit|Parametric|data-mode=param|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-crv-d||1": {
+      "status": "changed",
+      "label": "#sl-crv-d",
+      "kind": "range",
+      "path": [
+        "button:submit|Light|data-sec=light|1",
+        "button:submit|Parametric|data-mode=param|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-crv-l||1": {
+      "status": "changed",
+      "label": "#sl-crv-l",
+      "kind": "range",
+      "path": [
+        "button:submit|Light|data-sec=light|1",
+        "button:submit|Parametric|data-mode=param|1"
+      ],
+      "errors": []
+    },
+    "input:number|#in-lens-manual-focal||1": {
+      "status": "changed",
+      "label": "#in-lens-manual-focal",
+      "kind": "number",
+      "path": [
+        "button:submit|Texture|data-sec=texture|1",
+        "select:select-one|#sel-lens-manual||1"
+      ],
+      "errors": []
+    },
+    "button:submit|Cancel||1": {
+      "status": "changed",
+      "label": "Cancel",
+      "kind": "click",
+      "path": [
+        "button:submit|Crop|data-sec=output|1",
+        "button:submit|As shot||1"
+      ],
+      "errors": []
+    },
+    "select:select-one|#sel-b2-type||1": {
+      "status": "changed",
+      "label": "#sel-b2-type",
+      "kind": "select-one",
+      "path": [
+        "button:submit|Crop|data-sec=output|1",
+        "button:button|Outer|data-l=b2|1"
+      ],
+      "errors": []
+    },
+    "input:color|#cl-b2||1": {
+      "status": "changed",
+      "label": "#cl-b2",
+      "kind": "color",
+      "path": [
+        "button:submit|Crop|data-sec=output|1",
+        "button:button|Outer|data-l=b2|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-b2-t||1": {
+      "status": "changed",
+      "label": "#sl-b2-t",
+      "kind": "range",
+      "path": [
+        "button:submit|Crop|data-sec=output|1",
+        "button:button|Outer|data-l=b2|1"
+      ],
+      "errors": []
+    },
+    "input:range|#sl-b2-g||1": {
+      "status": "changed",
+      "label": "#sl-b2-g",
+      "kind": "range",
+      "path": [
+        "button:submit|Crop|data-sec=output|1",
+        "button:button|Outer|data-l=b2|1"
+      ],
+      "errors": []
+    }
+  }
+}
