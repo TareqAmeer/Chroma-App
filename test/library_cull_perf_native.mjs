@@ -80,6 +80,8 @@ try {
     await window.__TAURI__.event.emit('tauri://drag-drop', { paths: [folder], position: { x: 0, y: 0 } });
   }, folder);
   await page.waitForFunction(() => document.querySelectorAll('#lib-grid .lib-card').length === 2, undefined, { timeout: 60000 });
+  const welcomeSkip = page.locator('#cs-modal-ov').getByRole('button', { name: 'Skip for now', exact: true });
+  if (await welcomeSkip.isVisible()) await welcomeSkip.click();
   const cards = page.locator('#lib-grid .lib-card');
   await cards.nth(0).click();
   await cards.nth(1).click({ modifiers: ['Control'] });
