@@ -15,6 +15,7 @@
     "lint:formats": "node test/lint_formats.mjs",
     "lint:library-content": "node test/lint_library_content.mjs",
     "mask:test": "node test/mask_raster.mjs",
+    "mask:portable-copy": "node --test test/mask_portable_copy.mjs && node test/mask_portable_copy_ui.mjs",
     "teeth:test": "node test/teeth_whitening.mjs",
     "mask:refinement-math": "node test/mask_refinement_math.mjs",
     "wireframe:test": "node test/wireframe_inventory.mjs",
