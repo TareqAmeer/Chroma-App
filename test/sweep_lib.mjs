@@ -38,10 +38,16 @@ export function enumerate() {
     const base = `${el.tagName.toLowerCase()}${el.type ? ':' + el.type : ''}|${label}|${data}`;
     const n = (seen.get(base) || 0) + 1; seen.set(base, n);
     const family = `${el.tagName}|${el.type || ''}|${el.className}|${[...el.attributes].map((a) => a.name).filter((a) => a.startsWith('data-')).sort().join(',')}`;
-    const stateful = el.classList.contains('on') || el.classList.contains('active') || el.classList.contains('lib-sel') || el.hasAttribute('aria-pressed') || el.hasAttribute('aria-selected');
-    const selected = el.classList.contains('on') || el.classList.contains('active') || el.classList.contains('lib-sel') || el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-selected') === 'true';
+    const detailsDisclosure = el.tagName === 'SUMMARY';
+    const valueControl = el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['button', 'submit', 'reset', 'file', 'image'].includes(el.type));
+    const stateful = el.classList.contains('on') || el.classList.contains('active') || el.classList.contains('lib-sel') || el.hasAttribute('aria-pressed') || el.hasAttribute('aria-selected') || el.hasAttribute('aria-expanded') || detailsDisclosure || valueControl;
+    const selected = el.classList.contains('on') || el.classList.contains('active') || el.classList.contains('lib-sel') || el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-selected') === 'true' || el.getAttribute('aria-expanded') === 'true' || (detailsDisclosure && !!el.parentElement?.open) || ((el.type === 'checkbox' || el.type === 'radio') && el.checked);
+    const stateValue = valueControl ? ((el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value) : null;
+    // These controls set an explicit destination (section/tab/form value); activating them again
+    // is safe if the selected indicator survived reload but its dependent content did not.
+    const replayIdempotent = valueControl || el.id === 'cs-tog-lib' || el.id === 'cs-tog-studio' || el.matches('[role="tab"],[data-k],[data-sec],.chip-tap button');
     (window.__sweepEls = window.__sweepEls || new Map()).set(`${base}|${n}`, el);
-    out.push({ family, selected, stateful, key: `${base}|${n}`, kind: el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' ? (el.type || el.tagName.toLowerCase()) : 'click', label, x: cx, y: cy });
+    out.push({ family, selected, stateful, stateValue, replayIdempotent, key: `${base}|${n}`, kind: el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' ? (el.type || el.tagName.toLowerCase()) : 'click', label, x: cx, y: cy });
   }
   return out;
 }
@@ -49,7 +55,38 @@ export function enumerate() {
 // Skip a replay only when a stateful control is already at its recorded destination. Ordinary
 // buttons have no destination state and must always be activated to reopen menus and dialogs.
 export function alreadyAtReplayDestination(destination, current) {
-  return destination != null && current.stateful && current.selected === destination;
+  if (destination == null) return false;
+  if (typeof destination === 'object') {
+    if (!destination.stateful) return false;
+    return destination.valueType ? current.stateValue === destination.value : current.selected === destination.selected;
+  }
+  return current.stateful && current.selected === destination;
+}
+
+// Read the discovered element's destination before a fresh enumeration discards its reference.
+// It may become hidden or leave the viewport as a direct result of activation (e.g. Library).
+export function captureReplayDestination({ key, statefulEvidence = false }) {
+  const el = window.__sweepEls && window.__sweepEls.get(key);
+  if (!el) return null;
+  const detailsDisclosure = el.tagName === 'SUMMARY';
+  const valueControl = el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['button', 'submit', 'reset', 'file', 'image'].includes(el.type));
+  const stateful = statefulEvidence || el.classList.contains('on') || el.classList.contains('active') || el.classList.contains('lib-sel') || el.hasAttribute('aria-pressed') || el.hasAttribute('aria-selected') || el.hasAttribute('aria-expanded') || detailsDisclosure || valueControl;
+  if (!stateful) return null;
+  const selected = el.classList.contains('on') || el.classList.contains('active') || el.classList.contains('lib-sel') || el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-selected') === 'true' || el.getAttribute('aria-expanded') === 'true' || (detailsDisclosure && !!el.parentElement?.open) || ((el.type === 'checkbox' || el.type === 'radio') && el.checked);
+  if (valueControl) return { stateful: true, valueType: 'value', value: (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value, selected };
+  return { stateful: true, selected };
+}
+
+// Restore a discovered form-control destination exactly instead of incrementing from whatever
+// preference survived the fixture reload. Dispatch the events the app normally observes.
+export function setReplayValue({ key, value }) {
+  const el = window.__sweepEls && window.__sweepEls.get(key);
+  if (!el || !el.isConnected) return false;
+  if (el.type === 'checkbox' || el.type === 'radio') el.checked = !!value;
+  else el.value = String(value);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
 }
 
 // Runs in the page: color inputs need a value change, not a click on their native picker.
