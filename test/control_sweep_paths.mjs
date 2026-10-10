@@ -8,7 +8,7 @@ import { enumerate, fingerprint, locate, alreadyAtReplayDestination, captureRepl
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS } from './wireframe_diff_lib.mjs';
 
 const QUERY = 'libtest=1&deskx=1';
-let storageBaseline = null;
+const storageBaselines = new Map();
 const { server, port } = await startServer();
 const browser = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
 const context = await browser.newContext({ ...DETERMINISTIC_CONTEXT_OPTIONS, viewport: { width: 1440, height: 900 } });
@@ -37,20 +37,22 @@ const waitForLabel = async (label, ms = 5000) => {
   return null;
 };
 const boot = async (query = QUERY, loadPhoto = true) => {
-  if (storageBaseline) {
-    await page.evaluate((snapshot) => { localStorage.clear(); for (const [key, value] of Object.entries(snapshot)) localStorage.setItem(key, value); }, storageBaseline).catch(() => {});
-  }
+  const fixtureKey = `${query}|photo=${loadPhoto}`;
+  const hasBaseline = storageBaselines.has(fixtureKey);
+  const storageBaseline = storageBaselines.get(fixtureKey);
+  if (hasBaseline) await page.evaluate((snapshot) => { localStorage.clear(); for (const [key, value] of Object.entries(snapshot)) localStorage.setItem(key, value); }, storageBaseline);
+  else if (page.url().startsWith(`http://127.0.0.1:${port}/`)) await page.evaluate(() => localStorage.clear());
   await page.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?${query}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForTimeout(1500);
   await page.evaluate(() => { document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); }); });
   await page.keyboard.press('Escape');
-  if (!loadPhoto) { await page.waitForTimeout(400); if (!storageBaseline) storageBaseline = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage))); return; }
+  if (!loadPhoto) { await page.waitForTimeout(400); if (!hasBaseline) storageBaselines.set(fixtureKey, await page.evaluate(() => Object.fromEntries(Object.entries(localStorage)))); return; }
   const b64 = (await readFile('test/fixtures/portrait.png')).toString('base64');
   await page.evaluate(async (b) => { const f = new File([Uint8Array.from(atob(b), (c) => c.charCodeAt(0))], 'portrait.png', { type: 'image/png' }); await loadFXImages([f]); }, b64);
   await page.waitForFunction(() => fxImages?.length > 0, undefined, { timeout: 10000 }).catch(() => {});
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.getElementById('cs-modal-ov')?.checkVisibility(), undefined, { timeout: 3000 });
-  if (!storageBaseline) storageBaseline = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage)));
+  if (!hasBaseline) storageBaselines.set(fixtureKey, await page.evaluate(() => Object.fromEntries(Object.entries(localStorage))));
 };
 const discoverStep = async (label) => {
   const c = await waitForLabel(label);

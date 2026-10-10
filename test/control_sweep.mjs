@@ -50,7 +50,7 @@ async function boot(page, port, s, storageBaseline) {
   if (storageBaseline.value) {
     await page.evaluate((snapshot) => {
       localStorage.clear(); for (const [key, value] of Object.entries(snapshot)) localStorage.setItem(key, value);
-    }, storageBaseline.value).catch(() => {});
+    }, storageBaseline.value);
   }
   for (let i = 0; ; i++) {
     try { await page.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?${s.query}`, { waitUntil: 'domcontentloaded', timeout: 60000 }); break; }
@@ -75,7 +75,7 @@ async function boot(page, port, s, storageBaseline) {
     }, undefined, { timeout: 3000 });
   }
   await page.waitForTimeout(400);
-  if (!storageBaseline.value) storageBaseline.value = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage))).catch(() => ({}));
+  if (!storageBaseline.value) storageBaseline.value = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage)));
 }
 
 async function act(page, c, replayDestination = null) {
