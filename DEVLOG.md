@@ -1365,3 +1365,4 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Require the native debug/release profile in `test/library_cull_perf_native.mjs` and wait for two stable fitted frames after warming before measuring input. The 100 ms and 500 ms budgets remain unchanged; actual native measurements remain pending.
 - Updated `docs/validation/chr267/raw-fixture.md` and added `docs/codex-usage-plan.md` with bounded Luna delegation, shared caches, serialized builds/publication and evidence-based acceptance updates.
 - Node syntax and diff whitespace checks pass. These preparation changes do not complete any outstanding CHR-267 acceptance criterion.
+- Publication verified: `b5ede61c710ef8901991ca02d38ce77f7af0bbe5` matches remote main after a fast-forward push; integrated native-gate syntax and diff checks pass. Native application source and BUILD are unchanged by this docs/test-only publication.
