@@ -7326,7 +7326,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1010A';
+const BUILD='1.1010B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8397,7 +8397,7 @@ uniform float mskAnyNR;  // 1 when any mask has nonzero Noise Reduction, so the 
 uniform vec4 mskK[8];     // x: Noise Reduction strength 0..1 (unipolar — see srcNR block in main()).
                           // Unlike Texture/Clarity there is no "negative" reading: this operator only
                           // smooths, so 0 is simply off. y: Whites (-1..1), z: Blacks (-1..1),
-                          // w free.
+                          // w: local Dehaze (-1..1).
 uniform vec2 uvOffL,uvScaleL;
 // ROADMAP R7 — Depth Range gate (colRangeWeight's sibling): x: gate on 0/1, y: depLo, z: depHi
 // (0..1, same range-gate convention as mskD's lumLo/lumHi), w free. depthTx is the per-photo
@@ -9050,6 +9050,21 @@ if(mskN>0.5){
         float tWB=(mskK[i].y*0.18*gmp(lvWB,.92,.10)+mskK[i].z*0.22*gmp(lvWB,.10,.12))*w;
         c.rgb=c.rgb+tWB;
         if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
+      }
+      // Local Dehaze follows the Basic Adjustments heuristic but scales every stage by this
+      // mask's effective coverage. Guard both the control and computed amount so haze-gate-zero
+      // pixels (for example a saturated foreground) do not get clipped or rounded needlessly.
+      if(mskK[i].w!=0.0){
+        float lvDH=dot(c.rgb,vec3(.2126,.7152,.0722));
+        float mxDH=max(c.r,max(c.g,c.b)),mnDH=min(c.r,min(c.g,c.b)),svDH=mxDH>0.0?(mxDH-mnDH)/mxDH:0.0;
+        float hazeDH=smoothstep(0.35,0.85,lvDH)*(1.0-smoothstep(0.05,0.35,svDH));
+        float amtDH=mskK[i].w*hazeDH*w;
+        if(amtDH!=0.0){
+          c.rgb=clamp((c.rgb-0.5)*(1.0+0.35*amtDH)+0.5,0.0,1.0);
+          c.rgb=clamp(c.rgb-0.22*amtDH,0.0,1.0);
+          float lvDH2=dot(c.rgb,vec3(.2126,.7152,.0722));
+          c.rgb=clamp(mix(vec3(lvDH2),c.rgb,1.0+0.7*amtDH),0.0,1.0);
+        }
       }
     }
   }
@@ -10158,6 +10173,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mK[o]=(m.nr||0)/100;    // Noise Reduction: 0..1 unipolar mix toward the bilateral-filtered source
       mK[o+1]=m.wh||0;        // Whites: signed -1..1, identity for legacy masks
       mK[o+2]=m.bl||0;        // Blacks: signed -1..1, identity for legacy masks
+      mK[o+3]=m.dehaze||0;    // Dehaze: signed -1..1, identity for legacy masks
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
       // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
@@ -15801,13 +15817,13 @@ function _mskCompositionPlan(masks){
   return{order,valid};
 }
 // ── A18: one source of truth for a new mask's adjustment fields ──────────────────────────────
-// This 15-key block was written out verbatim in all six branches of mskAdd. Adding a field meant
+// This shared block was written out verbatim in all six branches of mskAdd. Adding a field meant
 // remembering six places, and forgetting one produced a mask that rendered subtly differently
 // from its siblings — the same class of miss that let `origin!=='ai'` survive in four call sites
 // (CLAUDE.md 5b). Shape/raster fields still belong to their own branch; only the shared
 // adjustment defaults live here.
 function _mskAdjustDefaults(){return{invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,
-  sat:0,hue:0,hi:0,sh:0,wh:0,bl:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};}
+  sat:0,hue:0,hi:0,sh:0,wh:0,bl:0,dehaze:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};}
 function mskAdd(type,configure){
   if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks','warn');return;}
   let m;
@@ -19413,7 +19429,8 @@ function mskRebuild(){
     +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
     +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
     +_mskRow('Whites','wh',m.wh||0,-100,100,0.01,false,'Adjust the brightest tones inside this mask, using the same response as Basic Adjustments.')
-    +_mskRow('Blacks','bl',m.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.');
+    +_mskRow('Blacks','bl',m.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.')
+    +_mskRow('Dehaze','dehaze',m.dehaze||0,-100,100,0.01,false,'Remove haze or add it back in bright, desaturated areas covered by this mask.');
   h+=_mskGroup('adjust','Adjust',adjBody);
   ctl.innerHTML=h;
   mskUpdateSelViewControls();

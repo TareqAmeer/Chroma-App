@@ -46,12 +46,13 @@ test('append remaps every incoming ID and internal operand while preserving targ
   assert.equal(plan(result.masks).valid.every(Boolean), true);
 });
 
-test('mask presets preserve signed local Whites and Blacks scalars', async () => {
-  const source = [{ id: 'tonal', type: 'radial', wh: 0.65, bl: -0.45 }];
+test('mask presets preserve signed local Whites, Blacks and Dehaze scalars', async () => {
+  const source = [{ id: 'tonal', type: 'radial', wh: 0.65, bl: -0.45, dehaze: 0.37 }];
   const result = await prepare(source, [], { mode: 'replace', includeSavedPixels: false }, baseDeps());
   assert.equal(result.ok, true, result.reason);
   assert.equal(result.masks[0].wh, 0.65);
   assert.equal(result.masks[0].bl, -0.45);
+  assert.equal(result.masks[0].dehaze, 0.37);
 });
 
 test('generated IDs are unique even when an ID source repeats a fresh value', async () => {
