@@ -31,11 +31,18 @@ export function enumerate() {
     const base = `${el.tagName.toLowerCase()}${el.type ? ':' + el.type : ''}|${label}|${data}`;
     const n = (seen.get(base) || 0) + 1; seen.set(base, n);
     const family = `${el.tagName}|${el.type || ''}|${el.className}|${[...el.attributes].map((a) => a.name).filter((a) => a.startsWith('data-')).sort().join(',')}`;
+    const stateful = el.classList.contains('on') || el.classList.contains('active') || el.hasAttribute('aria-pressed') || el.hasAttribute('aria-selected');
     const selected = el.classList.contains('on') || el.classList.contains('active') || el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-selected') === 'true';
     (window.__sweepEls = window.__sweepEls || new Map()).set(`${base}|${n}`, el);
-    out.push({ family, selected, key: `${base}|${n}`, kind: el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' ? (el.type || el.tagName.toLowerCase()) : 'click', label, x: cx, y: cy });
+    out.push({ family, selected, stateful, key: `${base}|${n}`, kind: el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' ? (el.type || el.tagName.toLowerCase()) : 'click', label, x: cx, y: cy });
   }
   return out;
+}
+
+// Skip a replay only when a stateful control is already at its recorded destination. Ordinary
+// buttons have no destination state and must always be activated to reopen menus and dialogs.
+export function alreadyAtReplayDestination(destination, current) {
+  return destination != null && current.stateful && current.selected === destination;
 }
 
 // Runs in the page: a cheap fingerprint of everything a control could observably change.
