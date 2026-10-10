@@ -82,6 +82,7 @@ export function captureReplayDestination({ key, statefulEvidence = false }) {
 export function setReplayValue({ key, value }) {
   const el = window.__sweepEls && window.__sweepEls.get(key);
   if (!el || !el.isConnected) return false;
+  el.focus();
   if (el.type === 'checkbox' || el.type === 'radio') el.checked = !!value;
   else el.value = String(value);
   el.dispatchEvent(new Event('input', { bubbles: true }));

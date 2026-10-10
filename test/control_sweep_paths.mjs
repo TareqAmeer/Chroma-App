@@ -8,6 +8,7 @@ import { enumerate, fingerprint, locate, alreadyAtReplayDestination, captureRepl
 import { DETERMINISTIC_LAUNCH_ARGS, DETERMINISTIC_CONTEXT_OPTIONS } from './wireframe_diff_lib.mjs';
 
 const QUERY = 'libtest=1&deskx=1';
+let storageBaseline = null;
 const { server, port } = await startServer();
 const browser = await chromium.launch({ args: DETERMINISTIC_LAUNCH_ARGS });
 const context = await browser.newContext({ ...DETERMINISTIC_CONTEXT_OPTIONS, viewport: { width: 1440, height: 900 } });
@@ -35,14 +36,21 @@ const waitForLabel = async (label, ms = 5000) => {
   while (Date.now() < until) { const c = await byLabel(label); if (c) return c; await page.waitForTimeout(100); }
   return null;
 };
-const boot = async () => {
-  await page.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?${QUERY}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await page.waitForTimeout(1500); await page.keyboard.press('Escape');
+const boot = async (query = QUERY, loadPhoto = true) => {
+  if (storageBaseline) {
+    await page.evaluate((snapshot) => { localStorage.clear(); for (const [key, value] of Object.entries(snapshot)) localStorage.setItem(key, value); }, storageBaseline).catch(() => {});
+  }
+  await page.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?${query}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => { document.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Got it') b.click(); }); });
+  await page.keyboard.press('Escape');
+  if (!loadPhoto) { await page.waitForTimeout(400); if (!storageBaseline) storageBaseline = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage))); return; }
   const b64 = (await readFile('test/fixtures/portrait.png')).toString('base64');
   await page.evaluate(async (b) => { const f = new File([Uint8Array.from(atob(b), (c) => c.charCodeAt(0))], 'portrait.png', { type: 'image/png' }); await loadFXImages([f]); }, b64);
   await page.waitForFunction(() => fxImages?.length > 0, undefined, { timeout: 10000 }).catch(() => {});
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.getElementById('cs-modal-ov')?.checkVisibility(), undefined, { timeout: 3000 });
+  if (!storageBaseline) storageBaseline = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage)));
 };
 const discoverStep = async (label) => {
   const c = await waitForLabel(label);
@@ -53,6 +61,10 @@ const discoverStep = async (label) => {
       el.selectedIndex = (el.selectedIndex + 1) % el.options.length;
       el.dispatchEvent(new Event('change', { bubbles: true }));
     }, c);
+  } else if (/^(text|search|number|email|url|textarea|password)$/.test(c.kind)) {
+    await page.mouse.click(c.x, c.y);
+    await page.keyboard.type(c.kind === 'number' ? '7' : 'sweep');
+    await page.keyboard.press('Enter');
   } else await page.mouse.click(c.x, c.y);
   await settle();
   // Capture before enumeration replaces window.__sweepEls, as in the sweep's queue builder.
@@ -67,7 +79,10 @@ const replay = async (steps, targetLabel) => {
     const skip = alreadyAtReplayDestination(step.destination, current);
     let next = skip ? await waitForLabel(i + 1 < steps.length ? steps[i + 1].label : targetLabel, 750) : null;
     if (!skip || (!next && step.replayIdempotent)) {
-      if (step.destination?.valueType === 'value') await page.evaluate(setReplayValue, { key: current.key, value: step.destination.value });
+      if (step.destination?.valueType === 'value') {
+        await page.evaluate(setReplayValue, { key: current.key, value: step.destination.value });
+        if (step.label === '#lib-search') await page.keyboard.press('Enter');
+      }
       else await page.mouse.click(current.x, current.y);
       await settle();
     }
@@ -80,6 +95,29 @@ const replay = async (steps, targetLabel) => {
 try {
   await boot();
   assert.equal(await page.evaluate(() => !!window.__TAURI__), true, 'the fixture explicitly enables the desktop capability mock');
+
+  // Match the sweep's Library surface boot (libn=18, no Editor portrait) and replay the
+  // discovered collection/search chain from a fresh app load, rather than the Editor fixture.
+  const libraryQuery = 'libtest=1&libn=18&deskx=1';
+  await boot(libraryQuery, false);
+  const libraryToggle = await discoverStep('#cs-tog-lib');
+  assert.ok(await waitForLabel('Recents'), 'Library surface discovery reveals Recents');
+  const collectionsToggle = await discoverStep('Collections');
+  const storageAfterCollapse = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage)));
+  await boot(libraryQuery, false);
+  await replay([libraryToggle], 'Collections');
+  const recentsAfterReload = await waitForLabel('Recents', 750);
+  const libraryState = await page.evaluate(() => ({ bodyClass: document.body.className, galleryPressed: document.querySelector('#cs-tog-lib')?.getAttribute('aria-pressed'), collections: document.querySelector('[data-sec-toggle="collections"]')?.outerHTML.slice(0, 180), recents: document.querySelector('[data-coll="recents"]')?.outerHTML.slice(0, 180) }));
+  console.log(`control:sweep:library-state diagnostic — Collections destination ${JSON.stringify(collectionsToggle.destination)}, storage ${JSON.stringify(storageAfterCollapse)}, Recents after reload ${!!recentsAfterReload}, state ${JSON.stringify(libraryState)}`);
+  assert.ok(recentsAfterReload, 'Library replay restores Recents after a prior Collections collapse');
+  for (const label of ['Offline Photos', 'Favorites']) assert.ok(await waitForLabel(label), `Library replay restores ${label} after a prior Collections collapse`);
+  await boot(libraryQuery, false);
+  await replay([libraryToggle], 'Recents');
+  const librarySearch = await discoverStep('#lib-search');
+  await boot(libraryQuery, false);
+  await replay([libraryToggle], 'Recents');
+  assert.ok(await replay([libraryToggle, librarySearch], '#lib-empty-import'), 'Library search replay reaches empty-state Import');
+  assert.ok(await waitForLabel('#lib-empty-open'), 'Library search replay exposes empty-state Open');
 
   const libStep = await discoverStep('#cs-tog-lib');
   const recents = await waitForLabel('Recents');
@@ -123,6 +161,23 @@ try {
   await page.waitForFunction(() => document.querySelector('#sk2-export .sk2x-proof canvas')?.getAttribute('aria-label')?.startsWith('Original preview'), undefined, { timeout: 15000 });
   const after = await page.evaluate(() => document.querySelector('.sk2x-proof-toggle')?.textContent.trim());
   assert.notEqual(after, before, 'the proof toggle performs its action after animation');
+
+  await boot(libraryQuery, false);
+  const googlePicker = await discoverStep('Pick photos from your Google Photos library');
+  assert.ok(await waitForLabel('#fx-ask-cancel'), 'Google Photos picker action opens the confirmation dialog');
+  await boot(libraryQuery, false);
+  await replay([googlePicker], '#fx-ask-cancel');
+  assert.ok(await waitForLabel('#fx-ask-ok'), 'Google Photos replay exposes both dialog actions');
+
+  await boot(libraryQuery, false);
+  const undoBeforeAdd = await waitForLabel('#btn-undo-db', 1000);
+  const beforeBeforeAdd = await waitForLabel('#btn-before', 1000);
+  const chooserWait = page.waitForEvent('filechooser', { timeout: 2000 }).catch(() => null);
+  const addPhoto = await discoverStep('#fx-add-btn');
+  const chooser = await chooserWait;
+  const undoAfterAdd = await waitForLabel('#btn-undo-db', 1000);
+  const beforeAfterAdd = await waitForLabel('#btn-before', 1000);
+  console.log(`control:sweep:add-photo diagnostic — destination ${JSON.stringify(addPhoto.destination)}, file chooser event ${!!chooser}, Undo ${!!undoBeforeAdd} before/${!!undoAfterAdd} after, Before ${!!beforeBeforeAdd} before/${!!beforeAfterAdd} after`);
 
   console.log('control:sweep:paths — PASS (Library headers, Histogram clips, Manual lens, Crop Cancel, Export proof; explicit libtest desktop mock)');
 } finally { await browser.close(); server.close(); }
