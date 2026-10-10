@@ -1306,3 +1306,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Integrated focused replay and exact queued-path browser tests pass, as does Editor HTML validity and `git diff --check`. The full gate exits 1 only for unaccepted inert findings: Library Rotate right, Flip horizontal, empty History range; Editor `#btn-before`. No accepted-inert baseline change was made. Integration commit `dc16c980241d33bf88c654b0fec28bc60100b588` is published on `origin/main` and its fetched remote hash matched; CHR-230 is In Review for user testing.
 
 
+### 2026-10-10 — CHR-247 local Vibrance publication
+
+- Added signed per-mask Vibrance using the existing saturation-aware weighting and the free `mskDep.w` slot; omitted/zero values retain identity. The local response runs after local controls in the LUT pass, before global post-print Vibrance in the comp pass.
+- Focused integration checks pass: local Vibrance browser/GPU 10/10, presets 13/13, HTML validity, and `git diff --check`. Radial and brush production-wrapper exports each use two tiles with full-buffer max delta 1 and zero pixels over 1. Feature verification also passed 35/35 export renders and 23/23 decoded goldens exactly; UI audit findings and incomplete editor-gates attempt are recorded above in the feature verification.
+- Publication verification: integrated feature commit `6164c2c5` onto clean main from `668e9facc214abf1fafc42125434b5138355bff3`, retaining newer main sweep changes and build number. Remote verification pending.
