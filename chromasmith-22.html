@@ -7326,7 +7326,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1010P';
+const BUILD='1.1010Q';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -15694,6 +15694,7 @@ function _mskToSnap(m,skipRaster){
   for(const k in m){if(k==='px'||k[0]==='_')continue;o[k]=m[k];}
   o.crSamples=(m.crSamples||[]).map(p=>Object.assign({},p));
   if(m.aiPoints)o.aiPoints=m.aiPoints.map(p=>Object.assign({},p));
+  if(m.aiProvenance)o.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
   if(!skipRaster&&m.px&&m.px.length)o.pxb64=_pxToB64(m.px);
   return o;
 }
@@ -15701,6 +15702,7 @@ function _mskFromSnap(o){
   const m=Object.assign({},o);
   m.crSamples=(o.crSamples||[]).map(p=>Object.assign({},p));
   if(o.aiPoints)m.aiPoints=o.aiPoints.map(p=>Object.assign({},p));
+  if(o.aiProvenance)m.aiProvenance=_mskNormalizeAIProvenance(o.aiProvenance);
   return _mskMigrate(m);
 }
 function _mskCloneLive(m){return _mskFromSnap(_mskToSnap(m));}
@@ -15741,6 +15743,7 @@ function _mskMigrate(m){
   if(m&&m.tanOneWayAmt===undefined&&m.tanOneWay!==undefined)m.tanOneWayAmt=m.tanOneWay?100:0;
   const d=_mskSkinDefaults();
   for(const k in d)if(m[k]===undefined)m[k]=d[k];
+  if(m.aiProvenance!==undefined||m.origin==='ai'||m.origin==='sky'||m.ai)m.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
   // Raster storage normalisation. Three shapes reach here and all must end up as one:
   //   pxb64          — current serialized form
   //   plain Array    — every mask saved before the typed-array change (sessions, sidecars, XMP)
@@ -15772,6 +15775,27 @@ function _mskMigrate(m){
   // clamping is visually a no-op — it just stops the slider reading past 100.
   if(m.feather>0.5)m.feather=0.5;
   return m;
+}
+// Provenance identifies the inference path that actually produced the current semantic raster.
+// Native commands do not report a verified artifact revision or digest, so those remain null.
+const _MSK_AI_PROVENANCE_VERSION=1,_MSK_AI_PROMPT_SCHEMA_VERSION=1,_MSK_SKY_SEED_VERSION='sky-grid-v1';
+function _mskNormalizeAIProvenance(p){
+  if(!p||typeof p!=='object'||p.schemaVersion!==_MSK_AI_PROVENANCE_VERSION)return null;
+  const backend=['sam_points','sam2_points'].includes(p.backend)?p.backend:null;
+  const modelId=p.modelId==='edge-sam'||p.modelId==='sam2-hiera-tiny'?p.modelId:null;
+  const source=p.sourceLocation&&p.sourceLocation.kind==='path'&&typeof p.sourceLocation.value==='string'?{kind:'path',value:p.sourceLocation.value}:null;
+  return{schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:p.promptSchemaVersion===_MSK_AI_PROMPT_SCHEMA_VERSION?_MSK_AI_PROMPT_SCHEMA_VERSION:null,
+    backend,modelId:modelId&&((backend==='sam_points'&&modelId==='edge-sam')||(backend==='sam2_points'&&modelId==='sam2-hiera-tiny'))?modelId:null,
+    modelVersion:null,artifactDigest:null,sourceLocation:source,skySeedAlgorithmVersion:p.skySeedAlgorithmVersion===_MSK_SKY_SEED_VERSION?_MSK_SKY_SEED_VERSION:null,
+    recordedAt:typeof p.recordedAt==='string'?p.recordedAt:null};
+}
+function _mskRecordAIProvenance(m,item,backend,skySeed){
+  if(!m||!['ai','sky'].includes(m.origin))return;
+  const sourcePath=item&&typeof item.path==='string'&&item.path?item.path:null;
+  m.aiProvenance={schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:_MSK_AI_PROMPT_SCHEMA_VERSION,
+    backend:backend||null,modelId:backend==='sam_points'?'edge-sam':backend==='sam2_points'?'sam2-hiera-tiny':null,
+    modelVersion:null,artifactDigest:null,sourceLocation:sourcePath?{kind:'path',value:sourcePath}:null,
+    skySeedAlgorithmVersion:skySeed?_MSK_SKY_SEED_VERSION:null,recordedAt:new Date().toISOString()};
 }
 // Stable composition identity. Legacy flags bind to a stable preceding ID once. Broken explicit
 // references remain attached and fail closed in the renderer, so deletion/corruption never widens
@@ -16193,6 +16217,7 @@ async function samRunPoints(m,opts={}){
     }
     const refined=_samRefineMask(mask,header.width,header.height);
     m.px=Uint8ClampedArray.from(refined);m.mtW=header.width;m.mtH=header.height;
+    _mskRecordAIProvenance(m,item,useSam2?'sam2_points':'sam_points',m.origin==='sky');
     if(opts.detached){m.refineFeather=detachedRefinement.feather;m.refineEdge=detachedRefinement.edge;}
     else{m.refineFeather=0;m.refineEdge=0;}
     delete m._refineCache;
@@ -17368,6 +17393,7 @@ function _mskPortableIsUnsupported(m){
 function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||(m.origin==='ai'&&Array.isArray(m.aiPoints)&&m.aiPoints.length>0);}
 async function _mskPortableReevaluate(m,target){
   if(m.origin==='sky'){
+    if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed before sky mask recomputation'};
     const refinement={feather:m.refineFeather,edge:m.refineEdge};
     mskGenerateSky(m); // Reads the currently selected target photo; never retain source pixels.
     // Sky redetection resets derived controls by design; semantic copy carries user intent to the
@@ -17375,8 +17401,10 @@ async function _mskPortableReevaluate(m,target){
     m.refineFeather=refinement.feather;m.refineEdge=refinement.edge;
     if(!m.px||!m.px.length)return{ok:false,error:'Sky heuristic could not read this photo'};
     m.aiPoints=_skySeedPoints(m);
+    _mskRecordAIProvenance(m,target.item,null,true);
     if(m.aiPoints.length){
       const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item});
+      if(!result.ok&&/Photo changed/.test(result.error||''))return{ok:false,error:result.error};
       if(!result.ok)return{ok:true,warning:'Sky heuristic regenerated for target; SAM refinement unavailable ('+result.error+')'};
     }
     return{ok:true,warning:m.aiPoints.length?'Sky selection regenerated and SAM-refined':'Sky heuristic regenerated; no stable SAM seed points'};
@@ -17816,6 +17844,7 @@ function _smoothstepJS(a,b,t){t=Math.max(0,Math.min(1,(t-a)/(b-a)));return t*t*(
 function mskGenerateSky(m){
   // A re-detect replaces the authored source. Clear the old derived settings/cache before any
   // early return or raster write so the newly generated source always starts at its own baseline.
+  m.aiProvenance=null;
   mskRefinementSourceReset(m);
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
   if(!img){m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;return;}
@@ -17833,7 +17862,7 @@ function mskGenerateSky(m){
       px[y*w+x]=Math.max(0,Math.min(255,Math.round(score*255)));
     }
   }
-  m.px=px;m.mtW=w;m.mtH=h;_mskTexDirty=true;
+  m.px=px;m.mtW=w;m.mtH=h;_mskTexDirty=true;_mskRecordAIProvenance(m,typeof curItem==='function'?curItem():null,null,true);
 }
 function mskSkyRedetect(m){if(!m||m.origin!=='sky')return;mskGenerateSky(m);fxUpdate();fxHistoryPush();}
 // Turns the heuristic's per-pixel score raster (m.px, already 0-255) into a handful of

@@ -26,7 +26,7 @@ try{
   await page.addInitScript(()=>localStorage.setItem('chromasmith-styles-v1',JSON.stringify([{
     version:2,name:'Mask test',keys:['toggle:local','extra:masks','slider:adj-exp'],
     recipe:{sliders:{'adj-exp':'80'},toggles:{local:true},masks:[
-      {id:'preset-shape',type:'radial',cx:.5,cy:.5,rx:.3,ry:.3,feather:.5,crSamples:[],compositionMigrated:true},
+      {id:'preset-shape',type:'radial',cx:.5,cy:.5,rx:.3,ry:.3,feather:.5,crSamples:[],compositionMigrated:true,aiProvenance:{schemaVersion:1,promptSchemaVersion:1,backend:'sam2_points',modelId:'sam2-hiera-tiny',modelVersion:null,artifactDigest:null,sourceLocation:null,skySeedAlgorithmVersion:null,recordedAt:'preset-fixture'}},
       {id:'preset-cut',type:'linear',cx:.5,cy:.5,rx:.3,ry:.3,feather:.5,crSamples:[],compositionMigrated:true,composeOp:'subtract',subtract:true,operandId:'preset-shape'}
     ]}
   }])));
@@ -62,10 +62,12 @@ try{
   const resultState=await page.evaluate(()=>({count:fxState.masks.length,dialog:document.getElementById('cs-modal-ov')?.innerText||'',body:document.body.innerText.slice(-700),logs:document.getElementById('log-area')?.innerText||''}));
   assert.equal(resultState.count,3,`Append should add two preset masks: ${JSON.stringify(resultState)}`);
   assert.equal(resultState.dialog,'','preset modal closes after commit');
-  const applied=await page.evaluate(()=>({ids:fxState.masks.map(m=>m.id),op:fxState.masks[2].composeOp,operand:fxState.masks[2].operandId,
+  const applied=await page.evaluate(()=>({ids:fxState.masks.map(m=>m.id),provenance:fxState.masks[1].aiProvenance,op:fxState.masks[2].composeOp,operand:fxState.masks[2].operandId,
     local:document.getElementById('tg-local')?.classList.contains('on'),exp:document.getElementById('sl-adj-exp')?.value,
     history:fxHistory.length,index:fxHistIdx}));
   assert.equal(applied.ids[0],setup.targetId,'append preserves the target mask');
+ assert.equal(applied.provenance?.backend,'sam2_points','preset mask provenance survives browser apply');
+ assert.equal(applied.provenance?.recordedAt,'preset-fixture','preset descriptor survives its recipe snapshot');
   assert.equal(new Set(applied.ids).size,3,'preset IDs are remapped without target collisions');
   assert.equal(applied.op,'subtract');assert.equal(applied.operand,applied.ids[1],'internal composition refs follow the remapped IDs');
   assert.equal(applied.local,false,'append preserves a muted local-adjustment layer when target masks already exist');

@@ -56,6 +56,13 @@ test('mask presets preserve signed local Whites, Blacks, Dehaze and Vibrance sca
   assert.equal(result.masks[0].vibrance, -0.28);
 });
 
+test('preset preparation preserves versioned provenance without rewriting its claimed backend', async () => {
+  const aiProvenance={schemaVersion:1,promptSchemaVersion:1,backend:'sam2_points',modelId:'sam2-hiera-tiny',modelVersion:null,artifactDigest:null,sourceLocation:null,skySeedAlgorithmVersion:null,recordedAt:'fixture-time'};
+  const result=await prepare([{id:'prompted',type:'brush',origin:'ai',aiPoints:[{nx:.2,ny:.3,positive:true}],aiProvenance}],[],{mode:'replace',includeSavedPixels:false},baseDeps());
+  assert.equal(result.ok,true,result.reason);
+  assert.deepEqual(result.masks[0].aiProvenance,aiProvenance);
+});
+
 test('generated IDs are unique even when an ID source repeats a fresh value', async () => {
   const ids = ['generated-a', 'generated-a', 'generated-b'];
   const result = await prepare([{ id: 'a', type: 'radial' }, { id: 'b', type: 'linear' }], [], { mode: 'replace', includeSavedPixels: false }, baseDeps({ newId: () => ids.shift() || `fallback-${ids.length}` }));
