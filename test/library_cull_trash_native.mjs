@@ -15,6 +15,10 @@ const hash=bytes=>createHash('sha256').update(Array.isArray(bytes)?new Uint8Arra
 const files=[];
 try{
  await page.waitForFunction(()=>typeof chromasmithOpenFolder==='function');
+ const expectedBuild=process.env.CULL_EXPECTED_BUILD;
+ assert.ok(expectedBuild,'CULL_EXPECTED_BUILD must identify the native app build under test');
+ const actualBuild=await page.evaluate(()=>BUILD);
+ assert.equal(actualBuild,expectedBuild,`native app BUILD must match CULL_EXPECTED_BUILD (${expectedBuild})`);
  await page.evaluate(()=>{csFirstEditSkip();document.getElementById('cs-modal-ov')?.remove();});
  preference=await page.evaluate(()=>localStorage.getItem('chromasmith_lib_cull_auto_advance'));
  await page.evaluate(()=>localStorage.setItem('chromasmith_lib_cull_auto_advance','0'));
