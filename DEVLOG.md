@@ -1337,3 +1337,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added `test/library_cull_perf_native.mjs` to measure actual native keyboard/click input through source-resolution cull presentation, recording hardware, source commit, cache conditions and the 100 ms / 500 ms targets. Mock IPC and undersized previews cannot satisfy the gate; missing observations fail within a bounded timeout.
 - Downloaded and checksum-verified one CC0 Nikon Z 7 RAW (51,279,219 bytes) into the shared ignored fixture directory. `docs/validation/chr267/raw-fixture.md` records provenance and the limitation of two hard-linked paths of one capture; no RAW binary is committed.
 - Preparation checks: Node syntax and `git diff --check` pass. Native measurements have not run yet; CHR-267 performance acceptance criteria remain unchecked until recorded native results demonstrate them.
+
+### 2026-10-10 — CHR-267 cull preview refit
+
+- Fixed `surveySyncFocus` in `desktop/library-ui.js`: cull focus changes refit both the enlarged preview and the previous filmstrip canvas after layout, preserving zoom/pan/cache and rejecting stale entry/focus callbacks.
+- Added `test/library_cull_fit.mjs`. Before the fix it failed with a 101×76 canvas versus 512×384 expected; afterward both keyboard directions render 512×384 with zero browser errors. Existing eight-photo real-fixture survey rendering, linked/unlinked pan, flags/rating and metadata checks pass; JS syntax and `git diff --check` pass.
+- UI audit fails on existing undefined `--bg2`, narrow Library topbar fragmentation, phone Find target, and phone Studio contrast findings. The single Editor gate invocation reached a failed wireframe attempt and retry, then was interrupted without completion; it is not a passing gate. No baseline/golden regeneration was used. Native 45 MP timing proof remains pending the native build.
