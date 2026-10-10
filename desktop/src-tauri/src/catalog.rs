@@ -1164,6 +1164,12 @@ pub struct CatalogRoot {
     pub requested_rel_path: String,
 }
 
+#[derive(Serialize, Clone)]
+pub struct CatalogRootIdentity {
+    pub id: i64,
+    pub path: String,
+}
+
 /// `anc` is an ancestor of (or equal to) `desc` as path SEGMENTS, not a string prefix — a bare
 /// `desc.starts_with(anc)` would wrongly match "PHOTOS2" against "PHOTOS". "" is the volume root
 /// and is an ancestor of everything.
@@ -1322,6 +1328,24 @@ pub fn catalog_add_root(path: String, kind: Option<String>, state: tauri::State<
 pub fn catalog_remove_root(id: i64, state: tauri::State<CatalogState>) -> Result<u64, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     remove_root_run(&conn, id)
+}
+
+/// Stable, lightweight source identity for restart-safe background indexing. Keep this separate
+/// from cache_usage_by_root_run: recovery checks must not stat every generated thumbnail.
+#[tauri::command(async)]
+pub fn catalog_root_identity(state: tauri::State<CatalogState>) -> Result<Vec<CatalogRootIdentity>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT r.id, v.last_path, v.is_local, r.rel_path FROM roots r JOIN volumes v ON v.id = r.volume_id ORDER BY v.last_path, r.rel_path",
+    ).map_err(|e| e.to_string())?;
+    let roots = stmt.query_map([], |row| {
+        let id: i64 = row.get(0)?;
+        let last_path: String = row.get(1)?;
+        let is_local: i64 = row.get(2)?;
+        let rel_path: String = row.get(3)?;
+        Ok(CatalogRootIdentity { id, path: abs_path(&last_path, is_local != 0, &rel_path).replace('\\', "/").trim_end_matches('/').to_string() })
+    }).map_err(|e| e.to_string())?.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(roots)
 }
 
 /// Un-registers a root and hides its photos (`present = 0`, never DELETE — ratings/labels/keywords
@@ -10772,22 +10796,27 @@ mod tests {
         let conn = temp_db();
         let dir = scratch_photos_dir("hash");
         std::fs::write(dir.join("a.jpg"), b"hello world").unwrap();
-        std::fs::write(dir.join("b.jpg"), b"a different file").unwrap();
+        for index in 0..65 {
+            std::fs::write(dir.join(format!("photo-{index:02}.jpg")), format!("photo bytes {index}")).unwrap();
+        }
 
         let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
         let cancel = AtomicBool::new(false);
         scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
 
-        let r1 = hash_run(&conn, &mut |_| {}, &cancel).unwrap();
-        assert_eq!(r1.hashed, 2);
+        let mut interrupted = false;
+        let r1 = hash_run(&conn, &mut |_| { if !interrupted { interrupted = true; cancel.store(true, Ordering::Relaxed); } }, &cancel).unwrap();
+        assert_eq!(r1.hashed, 64, "a restart after the first committed chunk leaves only the final two rows pending");
+        cancel.store(false, Ordering::Relaxed);
+        let r2 = hash_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r2.hashed, 2, "replay hashes only rows that were not committed before interruption");
+        let r3 = hash_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r3.hashed, 0, "a completed replay must not hash any successful unchanged row again");
         let (hash_a, hashed_at_a, mtime_a): (String, i64, i64) = conn
             .query_row("SELECT content_hash, hashed_at, mtime FROM photos WHERE name='a.jpg'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
             .unwrap();
         assert_eq!(hash_a, blake3::hash(b"hello world").to_hex().to_string(), "must be a real BLAKE3 hash of the actual bytes");
         assert_eq!(hashed_at_a, mtime_a, "hashed_at baselines to the mtime the hash corresponds to");
-
-        let r2 = hash_run(&conn, &mut |_| {}, &cancel).unwrap();
-        assert_eq!(r2.hashed, 0, "nothing changed — a second pass must not re-hash anything");
 
         std::fs::remove_dir_all(&dir).ok();
     }

@@ -11,7 +11,7 @@ assert.ok(helpers, 'production library job history helpers must have extraction 
 function createHistory(seed = '[]', activeSeed = '[]') {
   const values = new Map([['chromasmith-job-history-v1', seed], ['chromasmith-active-jobs-v1', activeSeed]]);
   const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
-  const result = vm.runInNewContext(`(() => { ${helpers}\nreturn { activityIdentity, activityTerminalPatch, activityHistory, recordActivityHistory, persistActiveActivity, clearActiveActivity }; })()`, { localStorage: storage, Date });
+  const result = vm.runInNewContext(`(() => { ${helpers}\nreturn { activityIdentity, activityTerminalPatch, activityHistory, recordActivityHistory, persistActiveActivity, clearActiveActivity, normalizeCatalogRecovery, catalogRootIdentity }; })()`, { localStorage: storage, Date });
   return { ...result, persisted: () => JSON.parse(values.get('chromasmith-job-history-v1')), active: () => JSON.parse(values.get('chromasmith-active-jobs-v1')) };
 }
 
@@ -20,6 +20,21 @@ test('same-kind jobs remain distinct when callers provide stable identities', ()
   assert.equal(history.activityIdentity('export', { jobId: 'export-a' }), 'export-a');
   assert.equal(history.activityIdentity('export', { jobId: 'export-b' }), 'export-b');
   assert.equal(history.activityIdentity('export', {}), 'export');
+});
+
+test('catalog recovery stores a versioned phase plan and rejects incomplete source identity', () => {
+  const history = createHistory();
+  const recovery = history.normalizeCatalogRecovery({ version: 1, roots: [{ id: 2, path: '/Photos/B' }, { id: 1, path: '/Photos/A' }], requestedPhases: ['stack', 'hash', 'faces'], completedPhases: ['hash'] });
+  assert.deepEqual([...recovery.roots.map(root => [root.id, root.path])], [[1, '/Photos/A'], [2, '/Photos/B']]);
+  assert.deepEqual([...recovery.requestedPhases], ['stack', 'hash', 'faces']);
+  assert.deepEqual([...recovery.completedPhases], ['hash']);
+  assert.equal(history.normalizeCatalogRecovery({ version: 1, roots: [], requestedPhases: ['hash'], completedPhases: [] }), null);
+  assert.equal(history.normalizeCatalogRecovery({ version: 2, roots: [{ id: 1, path: '/Photos' }], requestedPhases: ['hash'], completedPhases: [] }), null);
+  assert.deepEqual([...history.catalogRootIdentity([{ id: 2, path: '/Photos/B/' }, { id: 1, path: '/Photos/A' }, { id: 2, path: '/Photos/B' }]).map(root => [root.id, root.path])], [[1, '/Photos/A'], [2, '/Photos/B']]);
+  history.persistActiveActivity({ jobId: 'index-a', kind: 'catalog', label: 'Indexing library', recovery });
+  assert.deepEqual([...history.active()[0].recovery.roots.map(root => root.path)], ['/Photos/A', '/Photos/B']);
+  assert.match(source, /JSON\.stringify\(current\) !== JSON\.stringify\(recovery\.roots\)/, 'resume must fail closed when registered roots changed');
+  assert.match(source, /data-job-index-resume-id=/, 'saved recoverable jobs are resumed from the existing history panel');
 });
 
 test('confirmed failures and cancellations become terminal outcomes; a stall is not a failure', () => {
@@ -94,6 +109,6 @@ test('each job ages independently and terminal jobs never trigger a warning', ()
 test('cancellation guidance explains preservation and actual restart limits',()=>{
   assert.match(progress.activityRecoveryCopy({kind:'export'}),/Restart continuation is unavailable/);
   assert.match(progress.activityRecoveryCopy({kind:'import'}),/existing files are checked for duplicates/);
-  assert.match(progress.activityRecoveryCopy({kind:'catalog'}),/results already saved/);
+  assert.match(progress.activityRecoveryCopy({kind:'catalog'}),/Cancel preserves saved hashes/);
   assert.match(progress.activityRecoveryCopy({batchId:3}),/remaining eligible photos/);
 });

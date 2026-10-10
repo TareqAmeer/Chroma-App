@@ -481,6 +481,7 @@
           { root_id: 2, volume_label: 'Archive T7', rel_path: 'Originals/2026', abs_path: '/Volumes/Archive T7/Originals/2026', photo_count: 12, offline_thumbs_bytes: 2.1 * 1024 * 1024 * 1024 },
         ]);
       }
+      case 'catalog_root_identity': return Promise.resolve([{ id: 1, path: '/test/Photos' }]);
       case 'clear_root_cache': return Promise.resolve(0);
       case 'catalog_hash': return Promise.resolve({ hashed: 0 });
       // Reached now that catalogRegisterFolder no longer short-circuits under LIBTEST (Fix 1 of
@@ -12360,6 +12361,36 @@
     }
   }
   let _catalogBgRunning = false;
+  let _catalogRecoveryChecking = false;
+  let _catalogSourceChanged = false;
+  let _catalogActiveJobId = null;
+  let _catalogActiveRecovery = null;
+  function catalogRecoverySnapshot(roots) {
+    const identity = catalogRootIdentity(roots);
+    return normalizeCatalogRecovery({ version: CATALOG_RECOVERY_VERSION, roots: identity, requestedPhases: CATALOG_REQUESTED_PHASES, completedPhases: [] });
+  }
+  async function resumeCatalogIndex(row) {
+    const recovery = normalizeCatalogRecovery(row && row.recovery);
+    if (!recovery || _catalogBgRunning || _catalogRecoveryChecking || LIBTEST) return;
+    _catalogRecoveryChecking = true;
+    try {
+      const current = catalogRootIdentity(await invoke('catalog_root_identity'));
+      if (JSON.stringify(current) !== JSON.stringify(recovery.roots)) {
+        toast('Library sources changed since this indexing job stopped. Start a new index from the current library.', 'err');
+        return;
+      }
+      _bgStopped = false;
+      const unsupported = recovery.requestedPhases.filter(phase => !CATALOG_RECOVERY_PHASES.includes(phase));
+      if (unsupported.length) toast(`Retrying saved/checkpointed phases only. A fresh library scan still needs to run ${unsupported.join(', ')}.`, false);
+      _catalogSourceChanged = false;
+      catalogRunBackgroundPhases(recovery, row.id);
+    } catch (error) {
+      toast('Could not verify the saved indexing sources. Open the original library and try again.', 'err');
+      console.error('catalog recovery source check', error);
+    } finally {
+      _catalogRecoveryChecking = false;
+    }
+  }
   // Tagging photos that ALREADY have a CLIP embedding is pure math on stored vectors (seconds, no
   // image decode), so it must not wait behind the chain below: that chain is skipped entirely
   // while background indexing is paused, and otherwise only reaches 'autotag' after CLIP has
@@ -12373,15 +12404,61 @@
       .then(() => { refreshAutoTags(); refreshCatalogCounts(); if (state.showInfo) { state.clipTags.clear(); renderInfoPanel(); } })
       .catch((e) => console.error('auto-tag backfill', e));
   }
-  function catalogRunBackgroundPhases() {
-    catalogAutoTagBackfill();
+  async function catalogRunBackgroundPhases(recovery = null, jobId = null) {
     if (LIBTEST || _catalogBgRunning || bgPaused() || _bgStopped) return;
     _catalogBgRunning = true;
+    _catalogActiveJobId = jobId || `catalog-index-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const activeJobId = _catalogActiveJobId;
+    if (!recovery) {
+      try { recovery = catalogRecoverySnapshot(await invoke('catalog_root_identity')); }
+      catch (error) { console.warn('Could not save catalog recovery sources', error); }
+    }
+    _catalogActiveRecovery = recovery;
+    activityUpdate('catalog', { jobId: activeJobId, recovery, label: 'Indexing library', stage: recovery ? 'stack' : 'working', done: 0, total: 0 });
+    if (!jobId) catalogAutoTagBackfill();
+    const phaseFailures = [];
+    const finish = () => {
+      const stopped = _bgStopped || bgPaused();
+      const outcome = _catalogSourceChanged ? 'interrupted' : stopped ? (bgPaused() ? 'interrupted' : 'cancelled') : phaseFailures.length ? 'partial' : 'completed';
+      const detail = _catalogSourceChanged ? 'Registered library sources changed; resume stopped before continuing' : stopped ? 'Saved indexing results remain valid; pending phases can resume' : phaseFailures.length ? `${phaseFailures.length} phase${phaseFailures.length === 1 ? '' : 's'} failed; saved results remain valid` : 'Indexing phases finished';
+      activityUpdate('catalog', { jobId: activeJobId, recovery: _catalogActiveRecovery, label: 'Indexing library', stage: 'done', outcome, failed: phaseFailures, current: detail });
+      _catalogBgRunning = false; _catalogActiveJobId = null; _catalogActiveRecovery = null; refreshCatalogCounts();
+    };
+    const sourceStillMatches = async () => {
+      if (!recovery) return true;
+      try {
+        const current = catalogRootIdentity(await invoke('catalog_root_identity'));
+        if (JSON.stringify(current) === JSON.stringify(recovery.roots)) return true;
+      } catch (e) {}
+      _catalogSourceChanged = true; _bgStopped = true;
+      toast('Registered library sources changed during recovery. The job stopped safely.', 'err');
+      return false;
+    };
+    if (recovery) {
+      const handlers = {
+        hash: () => invoke('catalog_hash'),
+        faces: async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_faces_scan', {}); if (!r || !r.scanned) break; } },
+        embed: () => invoke('catalog_embed_faces', {}),
+        clip: () => invoke('catalog_clip_embed', {}).then(() => refreshCatalogCounts()),
+        pets: async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_pets_scan', {}); refreshCatalogCounts(); if (!r || !r.scanned) break; } refreshPeople(); }
+      };
+      let chain = Promise.resolve();
+      recovery.requestedPhases.filter(phase => CATALOG_RECOVERY_PHASES.includes(phase) && !recovery.completedPhases.includes(phase)).forEach(phase => {
+        chain = chain.then(async () => {
+          if (_bgStopped || bgPaused() || !(await sourceStillMatches())) return;
+          activityUpdate('catalog', { jobId: activeJobId, recovery, label: 'Retrying supported index phases', stage: phase, current: 'Checking saved work markers' });
+          try { await handlers[phase](); }
+          catch (error) { phaseFailures.push(`${phase}: ${String(error && error.message || error)}`); console.error('catalog recovery phase ' + phase, error); }
+        });
+      });
+      chain.catch(error => console.error('catalog recovery phases', error)).finally(finish);
+      return;
+    }
     // ⚠️ Each phase is independently attempted. This used to be a bare .then() chain, so a
     // single rejection (e.g. catalog_stack failing) silently skipped EVERY later phase --
     // thumbnails, focus, hash -- with the error going only to the WebView console, invisible
     // from stderr. That failure mode is indistinguishable from "indexing is just slow".
-    const step = (name, fn) => fn().catch((e) => { console.error('background phase ' + name, e); });
+    const step = (name, fn) => _bgStopped || bgPaused() ? Promise.resolve() : fn().catch((e) => { phaseFailures.push(`${name}: ${String(e && e.message || e)}`); console.error('background phase ' + name, e); });
     step('stack', () => invoke('catalog_stack'))
       .then(() => step('thumbnails', () => drainCatalogThumbnails()))
       .then(() => step('focus', () => invoke('catalog_focus')))
@@ -12407,7 +12484,7 @@
       .then(() => step('autotag', () => invoke('catalog_auto_tag').then(() => { refreshAutoTags(); refreshCatalogCounts(); if (state.showInfo) { state.clipTags.clear(); renderInfoPanel(); } })))
       .then(() => step('pets', async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_pets_scan', {}); refreshCatalogCounts(); if (!r || !r.scanned) break; } refreshPeople(); }))
       .catch((e) => console.error('catalog background phases', e))
-      .finally(() => { _catalogBgRunning = false; refreshCatalogCounts(); });
+      .finally(finish);
   }
 
   // ── Guaranteed-offline tier (hq_offline): last-100-edited + last-100-added, full resolution,
@@ -12584,6 +12661,22 @@
   const ACTIVITY_HISTORY_KEY = 'chromasmith-job-history-v1';
   const ACTIVITY_ACTIVE_KEY = 'chromasmith-active-jobs-v1';
   const ACTIVITY_HISTORY_LIMIT = 40;
+  const CATALOG_RECOVERY_VERSION = 1;
+  const CATALOG_RECOVERY_PHASES = ['hash', 'faces', 'embed', 'clip', 'pets'];
+  const CATALOG_REQUESTED_PHASES = ['stack', 'thumbnails', 'focus', 'hash', 'faces', 'embed', 'cluster', 'clip', 'autotag', 'pets'];
+  function normalizeCatalogRecovery(value) {
+    if (!value || value.version !== CATALOG_RECOVERY_VERSION || !Array.isArray(value.roots) || !Array.isArray(value.requestedPhases) || !Array.isArray(value.completedPhases)) return null;
+    const roots = value.roots.filter(root => root && Number.isSafeInteger(root.id) && root.id > 0 && typeof root.path === 'string' && root.path.length).map(root => ({ id: root.id, path: root.path.replace(/\\/g, '/').replace(/\/$/, '') })).sort((a, b) => a.id - b.id || a.path.localeCompare(b.path));
+    const requestedPhases = value.requestedPhases.filter(phase => CATALOG_REQUESTED_PHASES.includes(phase));
+    const completedPhases = value.completedPhases.filter(phase => requestedPhases.includes(phase));
+    if (!roots.length || roots.length !== value.roots.length || !requestedPhases.length || requestedPhases.length !== value.requestedPhases.length || completedPhases.length !== value.completedPhases.length) return null;
+    return { version: CATALOG_RECOVERY_VERSION, roots, requestedPhases, completedPhases: [...new Set(completedPhases)] };
+  }
+  function catalogRootIdentity(rows) {
+    if (!Array.isArray(rows)) return [];
+    const roots = rows.filter(root => root && Number.isSafeInteger(root.id) && typeof root.path === 'string').map(root => ({ id: root.id, path: root.path.replace(/\\/g, '/').replace(/\/$/, '') }));
+    return [...new Map(roots.map(root => [`${root.id}:${root.path}`, root])).values()].sort((a, b) => a.id - b.id || a.path.localeCompare(b.path));
+  }
   function activityIdentity(kind, patch) { return String(patch.jobId || patch.batchId || kind); }
   function activityTerminalPatch(patch) {
     if (!['failed', 'interrupted', 'cancelled'].includes(patch.stage)) return patch;
@@ -12597,7 +12690,7 @@
     if (job.batchId) return; // SQLite recipe batches have their own authoritative restart recovery.
     const active = readActiveActivity();
     const id = String(job.jobId || job.id || job.kind || 'background-job');
-    const row = { id, kind: String(job.kind || ''), label: String(job.label || job.kind || 'Background job'), done: Number(job.done || 0), total: Number(job.total || 0), lastProgressAt: Number.isFinite(job.lastProgressAt) ? job.lastProgressAt : Date.now() };
+    const row = { id, kind: String(job.kind || ''), label: String(job.label || job.kind || 'Background job'), done: Number(job.done || 0), total: Number(job.total || 0), lastProgressAt: Number.isFinite(job.lastProgressAt) ? job.lastProgressAt : Date.now(), recovery: normalizeCatalogRecovery(job.recovery) };
     const index = active.findIndex(item => item.id === id);
     if (index >= 0) active[index] = row; else active.unshift(row);
     saveActiveActivity(active.slice(0, ACTIVITY_HISTORY_LIMIT));
@@ -12610,13 +12703,13 @@
     const status = job.outcome === 'cancelled' || job.stage === 'cancelled' ? 'Cancelled' : job.outcome === 'interrupted' || job.stage === 'interrupted' ? 'Interrupted' : job.outcome === 'partial' ? 'Partial' : job.outcome === 'failed' || job.stage === 'failed' || (job.failed && job.failed.length) ? 'Failed' : 'Completed';
     const id = String(job.jobId || job.batchId || job.id || job.kind || 'background-job');
     const failedItems = Array.isArray(job.failed) ? job.failed.filter(item => typeof item === 'string').slice(0, 20).map(item => item.slice(0, 240)) : [];
-    const row = { id, label: String(job.label || job.kind || 'Background job'), status, finishedAt: Date.now(), done: Number(job.done || 0), total: Number(job.total || 0), failedCount: Number(job.failedCount || (Array.isArray(job.failed) ? job.failed.length : 0)), failedItems, batchId: Number.isSafeInteger(Number(job.batchId)) && Number(job.batchId) > 0 ? Number(job.batchId) : null, detail: String(job.current || '').slice(0, 160), revealPath: typeof job.revealPath === 'string' ? job.revealPath : '' };
+    const row = { id, label: String(job.label || job.kind || 'Background job'), status, finishedAt: Date.now(), done: Number(job.done || 0), total: Number(job.total || 0), failedCount: Number(job.failedCount || (Array.isArray(job.failed) ? job.failed.length : 0)), failedItems, batchId: Number.isSafeInteger(Number(job.batchId)) && Number(job.batchId) > 0 ? Number(job.batchId) : null, detail: String(job.current || '').slice(0, 160), revealPath: typeof job.revealPath === 'string' ? job.revealPath : '', recovery: normalizeCatalogRecovery(job.recovery) };
     const existing = activityHistory.findIndex(item => item.id === id);
     if (existing >= 0) activityHistory.splice(existing, 1);
     activityHistory.unshift(row); activityHistory.splice(ACTIVITY_HISTORY_LIMIT); saveActivityHistory();
     clearActiveActivity(job);
   }
-  for (const prior of readActiveActivity()) recordActivityHistory({ ...prior, stage: 'interrupted', outcome: 'interrupted', current: 'App restarted; recovery depends on this job type' });
+  for (const prior of readActiveActivity()) recordActivityHistory({ ...prior, stage: 'interrupted', outcome: 'interrupted', current: prior.recovery ? 'App restarted; catalog indexing can resume after source verification' : 'App restarted; recovery depends on this job type' });
   saveActiveActivity([]);
   // END LIBRARY_JOB_HISTORY_HELPERS
   // Debug hook — `activity`/`_activityQueue` are closure-private, so a stuck "Indexing library"
@@ -12651,7 +12744,7 @@
   function activityRecoveryCopy(job) {
     if(job.batchId)return 'Cancelling a recipe batch keeps photos already applied and leaves remaining eligible photos available to resume.';
     if(job.kind==='import')return 'Cancel stops after the current file and preserves completed files in the destination. To continue after restarting, select the card and import again; existing files are checked for duplicates.';
-    if(job.kind==='catalog')return 'Cancel preserves indexing results already saved. A later scan continues work on eligible photos.';
+    if(job.kind==='catalog')return 'Cancel preserves saved hashes, face detections and embeddings, CLIP results, and pet scans. Retry supported phases checks native markers and skips unchanged completed work; stack, thumbnail, focus, grouping, and auto-tag stages continue through a normal library scan.';
     if(job.kind==='export')return 'Cancel preserves completed output files. Restart continuation is unavailable for this export; reselect the photos before trying again.';
     return 'Completed-work recovery and restart continuation depend on this job type.';
   }
@@ -12798,6 +12891,13 @@
         if (row?.batchId) recipeBatchResults(row.batchId).catch((err) => toast(humanizeErr('open batch results', err), 'err'));
       };
     });
+    el.querySelectorAll('[data-job-index-resume-id]').forEach((button) => {
+      button.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const row = activityHistory.find((item) => item.id === button.dataset.jobIndexResumeId);
+        if (row) resumeCatalogIndex(row);
+      };
+    });
     const pill = document.getElementById('lib-act-pill');
     if (pill) pill.onclick = (e) => { e.stopPropagation(); activity.expanded = !activity.expanded; renderActivity(); };
     // The pill sits near the LEFT of the bottom bar (lib-count/thumb-progress/status-labels all
@@ -12857,7 +12957,7 @@
     if (!activityHistory.length) return '';
     return `<details class="lib-act-history" aria-label="Recent job history" ${activity.visible ? 'open' : ''} style="padding:8px 11px;border-top:1px solid var(--bdr)">
       <summary style="font-size:11px;font-weight:600;margin-bottom:4px;cursor:pointer">Recent jobs (${activityHistory.length})</summary>${activityHistory.slice(0, 8).map(row =>
-        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}${row.failedItems?.length ? `<details style="margin-top:3px"><summary style="cursor:pointer">Failed items</summary>${row.failedItems.map(item => `<div style="font-size:10px;color:var(--mut);padding:1px 0;overflow-wrap:anywhere">${esc(item)}</div>`).join('')}${row.failedCount > row.failedItems.length ? `<div style="font-size:10px;color:var(--mut)">…and ${row.failedCount - row.failedItems.length} more</div>` : ''}</details>` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.batchId ? `<button type="button" class="btn bgh" data-job-batch-results-id="${esc(row.id)}">Results / resume</button>` : ''}${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
+        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}${row.failedItems?.length ? `<details style="margin-top:3px"><summary style="cursor:pointer">Failed items</summary>${row.failedItems.map(item => `<div style="font-size:10px;color:var(--mut);padding:1px 0;overflow-wrap:anywhere">${esc(item)}</div>`).join('')}${row.failedCount > row.failedItems.length ? `<div style="font-size:10px;color:var(--mut)">…and ${row.failedCount - row.failedItems.length} more</div>` : ''}</details>` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.batchId ? `<button type="button" class="btn bgh" data-job-batch-results-id="${esc(row.id)}">Results / resume</button>` : ''}${row.recovery ? `<button type="button" class="btn bgh" data-job-index-resume-id="${esc(row.id)}" title="Retries marker-backed phases only; other phases continue during a normal library scan">Retry supported phases</button>` : ''}${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
       ).join('')}</details>`;
   }
 
@@ -13050,8 +13150,8 @@
       // after 8s), reading as "the indexing panel is empty" while pending-thumbs/pending-faces
       // counts stayed nonzero and CPU sat at 0%.
       const otherStageActive = activity.visible && activity.stage !== 'done' && activity.stage !== 'hq_offline' && activity.kind === 'catalog';
-      if (p.phase !== 'thumb' && !(p.phase === 'hq_offline' && otherStageActive)) {
-        activityUpdate('catalog', { stage: p.phase, done: p.done || 0, total: p.total || 0, current: p.current || '' });
+      if (p.phase !== 'thumb' && !(p.phase === 'hq_offline' && otherStageActive) && !(p.phase === 'done' && _catalogActiveJobId)) {
+        activityUpdate('catalog', { jobId: _catalogActiveJobId || 'catalog', recovery: _catalogActiveRecovery, label: 'Indexing library', stage: p.phase, done: p.done || 0, total: p.total || 0, current: p.current || '' });
       }
       updateBootSplashProgress(p);
       if (p.phase === 'done') refreshCatalogCounts();
