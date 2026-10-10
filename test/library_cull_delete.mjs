@@ -93,6 +93,47 @@ try {
   const st = await page.evaluate(() => window.__libSurveyState());
   assert(!st.cullPaths.includes(rejectedPath) && st.paths.length === 3, 'cull continues with the survivors');
   assert.equal(await page.locator('#lib-cull-del').textContent(), 'Delete rejected (0)');
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction((p) => window.__libSurveyState().cullPaths.includes(p), rejectedPath, { timeout: 10000 });
+  const restoredState = await page.evaluate(() => window.__libSurveyState());
+  assert.equal(restoredState.cullPaths.length, 4, 'Trash undo restores the deleted reject to the exact cull path list');
+  assert.equal(restoredState.paths.length, 4, 'Trash undo restores the deleted photo to visible Library state');
+  const restoreCalls = await page.evaluate(() => (window.__libtestCalls || []).filter(([cmd]) => ['restore_trashed_entry', 'catalog_note_restored'].includes(cmd)));
+  const restoredReceiptIndex = restoreCalls.findIndex(([cmd, args]) => cmd === 'restore_trashed_entry' && args.receipt.originalPath === rejectedPath);
+  const catalogRestoreIndex = restoreCalls.findIndex(([cmd]) => cmd === 'catalog_note_restored');
+  assert(restoredReceiptIndex >= 0 && catalogRestoreIndex > restoredReceiptIndex, 'catalog visibility is restored only after the exact native receipt restore');
+  assert.deepEqual(restoreCalls[catalogRestoreIndex][1].paths, [rejectedPath]);
+
+  // All rejected items leave cull mode. Undo must refresh the current grid view instead of
+  // trying to reconstruct the old cull state after the cull surface has closed.
+  const allCullPaths = await page.evaluate(() => window.__libSurveyState().cullPaths);
+  await page.evaluate(async (list) => {
+    for (const p of list) await window.__libSetLabel(p, 'Red');
+    window.__libPendingCullDelete = window.__libDeleteCullRejects();
+  }, allCullPaths);
+  await modalButton(/^Move 4 to Trash$/).click();
+  await page.waitForFunction(() => !window.__libSurveyState().active, { timeout: 10000 });
+  await page.evaluate(() => window.__libUndoLast());
+  await page.waitForFunction((p) => window.__libTrashContext().viewMode === 'grid' && window.__libTrashContext().paths.includes(p), allCullPaths[0], { timeout: 15000 });
+  assert.equal((await page.evaluate(() => window.__libTrashContext())).folder, '/test/Photos');
+
+  // A delete started in one folder and completed after navigating must keep its original
+  // provenance. Undo may refresh the new destination, but must not inject the old row there.
+  const navPath = allCullPaths[0];
+  await page.evaluate((p) => {
+    window.__libtestHoldTrash = true;
+    window.__libStartTrashDelete([p]);
+  }, navPath);
+  await modalButton(/^Move to Trash$/).click();
+  await page.waitForFunction(() => (window.__libtestHeldTrash || []).length === 1, { timeout: 10000 });
+  await page.evaluate(async () => { await window.__libOpenFolder('/test/Other'); });
+  await page.waitForFunction(() => window.__libTrashContext().folder === '/test/Other', { timeout: 15000 });
+  await page.evaluate(() => { window.__libtestHoldTrash = false; window.__libResolveHeldTrash(); });
+  await page.evaluate(() => window.__libWaitTrashDelete());
+  await page.evaluate(() => window.__libUndoLast());
+  await page.waitForFunction((p) => window.__libTrashContext().folder === '/test/Other' && !window.__libTrashContext().paths.includes(p), navPath, { timeout: 15000 });
+  const currentContext = await page.evaluate(() => window.__libTrashContext());
+  assert(currentContext.paths.every((p) => p.startsWith('/test/Other/')), 'Undo after navigation never appends stale entries from the original folder');
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
   console.log('PASS: Delete rejected counts, confirms, cancels cleanly and trashes only the rejects; Survey header shows count vs cap.');
 } finally {

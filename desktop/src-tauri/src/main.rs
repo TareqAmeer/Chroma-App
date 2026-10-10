@@ -46,6 +46,7 @@ mod formats;
 mod still_decode;
 mod canon;
 mod library;
+mod trash_undo;
 mod raw_decode;
 mod arcface;
 mod clip;
@@ -2856,6 +2857,9 @@ fn main() {
             catalog_backup::library_backup_restore,
             library::duplicate_file,
             library::trash_file,
+            library::trash_file_with_undo,
+            library::restore_trashed_entry,
+            trash_undo::release_trash_receipts,
             library::reveal_in_finder,
             library::list_collection,
             library::list_exported,
@@ -2909,6 +2913,7 @@ fn main() {
             catalog::catalog_counts,
             catalog::catalog_date_counts,
             catalog::catalog_note_deleted,
+            catalog::catalog_note_restored,
             catalog::catalog_hash,
             catalog::catalog_verify,
             catalog::catalog_faces_scan,

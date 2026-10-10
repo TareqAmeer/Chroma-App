@@ -9376,6 +9376,20 @@ pub fn note_deleted_run(conn: &Connection, paths: &[String]) -> Result<usize, St
     Ok(updated)
 }
 
+/// Mark only already-indexed, currently-existing paths present after a receipt-backed Trash
+/// restore. The operation preserves the existing row identity and metadata; it never discovers
+/// or resurrects a different file by name.
+pub fn note_restored_run(conn: &Connection, paths: &[String]) -> Result<usize, String> {
+    let mut updated = 0;
+    for path in paths {
+        if !std::path::Path::new(path).is_file() { continue; }
+        if let Some(id) = find_photo_by_abs_path(conn, path) {
+            updated += conn.execute("UPDATE photos SET present = 1 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(updated)
+}
+
 /// `stack_id` is always the CURRENT leader's own id (see the stacking module doc comment above),
 /// so promoting a derivative to leader means re-pointing every surviving member's `stack_id` to
 /// the NEW leader — there is no separate stack-id counter to leave alone. Called right after the
@@ -9417,6 +9431,12 @@ fn promote_stack_leader(conn: &Connection, old_leader_id: i64) -> Result<(), Str
 pub fn catalog_note_deleted(paths: Vec<String>, state: tauri::State<CatalogState>) -> Result<usize, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     note_deleted_run(&conn, &paths)
+}
+
+#[tauri::command(async)]
+pub fn catalog_note_restored(paths: Vec<String>, state: tauri::State<CatalogState>) -> Result<usize, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    note_restored_run(&conn, &paths)
 }
 
 /// "Not blurry" — the dismiss action for the Needs-review surface. `reviewed = 1` survives
@@ -10407,6 +10427,26 @@ mod tests {
         assert_eq!(page.entries.len(), 1, "the deleted photo must not appear in query results");
         assert_eq!(page.entries[0].name, "b.jpg");
 
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn note_restored_marks_only_existing_indexed_path_present_and_preserves_metadata() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("restore");
+        let path = dir.join("a.jpg");
+        std::fs::write(&path, b"exact restored bytes").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let path = query_run(&conn, CatalogQuery::default()).unwrap().entries[0].path.clone();
+        conn.execute("UPDATE photos SET rating=4 WHERE name='a.jpg'", []).unwrap();
+        note_deleted_run(&conn, &[path.clone()]).unwrap();
+        assert_eq!(note_restored_run(&conn, &[path.clone(), "/unindexed/other.jpg".into()]).unwrap(), 1);
+        let (present, rating): (i64, i64) = conn.query_row("SELECT present,rating FROM photos WHERE name='a.jpg'", [], |r| Ok((r.get(0)?,r.get(1)?))).unwrap();
+        assert_eq!((present, rating), (1, 4));
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(note_restored_run(&conn, &[path]).unwrap(), 0, "missing source cannot be resurrected");
         std::fs::remove_dir_all(&dir).ok();
     }
 
