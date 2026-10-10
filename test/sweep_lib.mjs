@@ -3,7 +3,7 @@
 // self-contained: no closures over module scope.
 // Runs in the page: list visible, enabled interactive elements with stable keys.
 export function enumerate() {
-  const sel = 'button,[role=button],[role=tab],[role=menuitem],[role=switch],[role=checkbox],[role=radio],[role=option],input:not([type=hidden]),select,textarea,a[href],[onclick],[tabindex="0"]';
+  const sel = 'button,summary,[role=button],[role=tab],[role=menuitem],[role=switch],[role=checkbox],[role=radio],[role=option],input:not([type=hidden]),select,textarea,a[href],[onclick],[tabindex="0"]';
   const seen = new Map(), out = []; window.__sweepEls = new Map();
   for (const el of document.querySelectorAll(sel)) {
     if (el.disabled || el.closest('[inert],[aria-hidden=true]')) continue;
@@ -27,12 +27,19 @@ export function enumerate() {
     if (inView) { const top = document.elementFromPoint(cx, cy); if (top && top !== el && !el.contains(top) && !top.contains(el)) continue; } // covered
     const data = [...el.attributes].filter((a) => a.name.startsWith('data-') && !a.name.startsWith('data-sweep')).map((a) => `${a.name}=${a.value}`).slice(0, 3).join(',');
     // Trailing live counts ("Favorites 2") change as the sweep flags photos; keep them out of the key.
-    const label = ((el.id ? '#' + el.id : '') || el.getAttribute('aria-label') || el.title || (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40) || el.getAttribute('name') || el.getAttribute('placeholder') || '').replace(/\s+[\d,]+$/, '');
+    let label = ((el.id ? '#' + el.id : '') || el.getAttribute('aria-label') || el.title || (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40) || el.getAttribute('name') || el.getAttribute('placeholder') || '').replace(/\s+[\d,]+$/, '');
+    // These controls have live text that changes after activation or between fixture boots.
+    // Use a DOM identity/content invariant instead of their presentation label.
+    if (el.matches('.sk2x-proof-toggle')) label = 'Export proof toggle';
+    const historyList = el.closest('#fx-settings-history-list,#fx-timeline-popover');
+    if (historyList && el.tagName === 'BUTTON' && el.firstElementChild?.tagName === 'SPAN') {
+      label = `History row ${el.firstElementChild.textContent.trim()}`;
+    }
     const base = `${el.tagName.toLowerCase()}${el.type ? ':' + el.type : ''}|${label}|${data}`;
     const n = (seen.get(base) || 0) + 1; seen.set(base, n);
     const family = `${el.tagName}|${el.type || ''}|${el.className}|${[...el.attributes].map((a) => a.name).filter((a) => a.startsWith('data-')).sort().join(',')}`;
-    const stateful = el.classList.contains('on') || el.classList.contains('active') || el.hasAttribute('aria-pressed') || el.hasAttribute('aria-selected');
-    const selected = el.classList.contains('on') || el.classList.contains('active') || el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-selected') === 'true';
+    const stateful = el.classList.contains('on') || el.classList.contains('active') || el.classList.contains('lib-sel') || el.hasAttribute('aria-pressed') || el.hasAttribute('aria-selected');
+    const selected = el.classList.contains('on') || el.classList.contains('active') || el.classList.contains('lib-sel') || el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-selected') === 'true';
     (window.__sweepEls = window.__sweepEls || new Map()).set(`${base}|${n}`, el);
     out.push({ family, selected, stateful, key: `${base}|${n}`, kind: el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' ? (el.type || el.tagName.toLowerCase()) : 'click', label, x: cx, y: cy });
   }
@@ -43,6 +50,14 @@ export function enumerate() {
 // buttons have no destination state and must always be activated to reopen menus and dialogs.
 export function alreadyAtReplayDestination(destination, current) {
   return destination != null && current.stateful && current.selected === destination;
+}
+
+// Runs in the page: color inputs need a value change, not a click on their native picker.
+export function setColorInput({ x, y }) {
+  const el = document.elementFromPoint(x, y)?.closest('input[type="color"]'); if (!el) return false;
+  const next = el.value.toLowerCase() === '#ffffff' ? '#000000' : '#ffffff';
+  el.value = next; el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true })); return true;
 }
 
 // Runs in the page: a cheap fingerprint of everything a control could observably change.
