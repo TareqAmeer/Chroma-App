@@ -530,9 +530,10 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .msk-layout-toggle{min-height:28px;padding:var(--sp-1) var(--sp-2);white-space:nowrap;font-size:var(--fs-1)}
 .msk-compact .fx-row{gap:var(--sp-control-stack-compact);margin-bottom:var(--sp-1)}
 .msk-compact .fx-row>.fx-label{flex:0 0 4.25em;max-width:4.25em;overflow-wrap:anywhere}
-.msk-compact .fx-row>.fx-slider{flex:1 1 4em;width:auto;min-width:3em;min-height:28px;margin-top:0}
+.msk-compact .fx-row>.fx-slider{order:2;flex:1 1 4em;width:auto;min-width:3em;min-height:28px;margin-top:0}
+.msk-compact .fx-row>.fx-val{order:3}
 @media(max-width:420px){.msk-compact .fx-row>.fx-label{flex-basis:100%;max-width:none}
-  .msk-compact .fx-row>.fx-slider{flex:1 1 100%;width:100%;min-width:0}}
+  .msk-compact .fx-row>.fx-slider{order:3;flex:1 1 100%;width:100%;min-width:0}}
 .msk-tag{font-size:var(--fs-0);color:var(--mut);background:var(--sur2);border:1px solid var(--bdr);border-radius:4px;padding:1px var(--sp-1);white-space:nowrap}
 .msk-tag.on{color:var(--acc);border-color:var(--tint-6);background:var(--tint-2)}
 /* Collapsible group. The chevron rotates rather than swapping glyphs, so there is one DOM shape
@@ -7291,7 +7292,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1010E';
+const BUILD='1.1010F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17360,7 +17361,7 @@ function mskGenerateSky(m){
   }
   m.px=px;m.mtW=w;m.mtH=h;_mskTexDirty=true;
 }
-function mskSkyRedetect(m){if(!m||m.origin!=='sky')return;fxHistoryPush();mskGenerateSky(m);fxUpdate();}
+function mskSkyRedetect(m){if(!m||m.origin!=='sky')return;mskGenerateSky(m);fxUpdate();fxHistoryPush();}
 // Turns the heuristic's per-pixel score raster (m.px, already 0-255) into a handful of
 // positive/negative point prompts for SAM: a coarse grid over the top portion of the frame
 // (where sky realistically lives) picks each cell's best-scoring pixel as a positive point if

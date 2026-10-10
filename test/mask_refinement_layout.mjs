@@ -15,11 +15,12 @@ const extract = (name, next) => {
 
 const store = new Map();
 let rebuilds = 0;
+const history = [];
 const context = {
   Uint8ClampedArray, Float32Array, Int32Array, Math, fxState: { masks: [], adjustments: { exposure: 0.45 } }, mskSel: 0,
   localStorage: { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) },
   mskRebuild: () => rebuilds++, _mskTexDirty: false,
-  fxHistoryPush: () => { context.undoSnap = context._mskToSnap(context.fxState.masks[0]); }, fxUpdate: () => {},
+  fxHistoryPush: () => { history.push(context._mskToSnap(context.fxState.masks[0])); }, fxUpdate: () => {},
   curItem: () => ({ img: { width: 12, height: 10 } }), fxWork: null, fxImg: null,
   mskTexDims: () => ({ w: 12, h: 10 }),
   mskSourceData: (w, h) => new Uint8Array(w * h * 4).fill(180),
@@ -38,6 +39,7 @@ vm.runInContext(
   extract('mskRefinementSupported', 'mskRefineControls') +
   extract('mskRefinementSourceReset', 'mskRefineControls') +
   extract('mskGenerateSky', '_skySeedPoints') +
+  extract('mskSkyRedetect', '_skySeedPoints') +
   extract('_mskToSnap', '_mskFromSnap') +
   extract('_mskFromSnap', '_mskCloneLive'),
   context,
@@ -60,8 +62,9 @@ assert.equal('_refineCache' in sky, false, 'reset invalidates the source identit
 sky.refineFeather = 80; sky.refineEdge = 50;
 context.fxState.masks = [sky];
 const adjustmentBefore = JSON.stringify(context.fxState.adjustments);
+context.fxHistoryPush(); // the preceding committed state that Undo returns to
 context.mskSkyRedetect(sky);
-const undoSnap = context.undoSnap;
+const undoSnap = history[0];
 assert.equal(sky.refineFeather, 0, 'sky re-detection starts refinement at zero');
 assert.equal(sky.refineEdge, 0, 'sky re-detection starts edge at zero');
 assert.notEqual(sky.px, source, 'sky re-detection assigns a new source identity');
