@@ -113,6 +113,10 @@
   }
   function libtestInvoke(cmd, args) {
     const A = args || {};
+    if (LIBTEST && window.__libtestCatalogInvoke) {
+      const mocked = window.__libtestCatalogInvoke(cmd, structuredClone(A));
+      if (mocked && mocked.__libtestHandled === true) return Promise.resolve(mocked.result);
+    }
     if (LIBTEST && cmd.startsWith('recipe_batch_')) (window.__libtestRecipeBatchCalls ||= []).push({ command: cmd, args: structuredClone(A) });
     if (LIBTEST && cmd === 'reveal_in_finder') (window.__libtestRevealCalls ||= []).push({ command: cmd, args: structuredClone(A) });
     if (LT_SHAPES && (cmd === 'get_thumbnail' || cmd === 'get_thumbnail_or_offline' || cmd === 'read_file_bytes')) return ltShapePng(A.path);
@@ -12371,7 +12375,7 @@
   }
   async function resumeCatalogIndex(row) {
     const recovery = normalizeCatalogRecovery(row && row.recovery);
-    if (!recovery || _catalogBgRunning || _catalogRecoveryChecking || LIBTEST) return;
+    if (!recovery || _catalogBgRunning || _catalogRecoveryChecking || (LIBTEST && !window.__libtestRecoveryEnabled)) return;
     _catalogRecoveryChecking = true;
     try {
       const current = catalogRootIdentity(await invoke('catalog_root_identity'));
@@ -12381,7 +12385,7 @@
       }
       _bgStopped = false;
       const unsupported = recovery.requestedPhases.filter(phase => !CATALOG_RECOVERY_PHASES.includes(phase));
-      if (unsupported.length) toast(`Retrying saved/checkpointed phases only. A fresh library scan still needs to run ${unsupported.join(', ')}.`, false);
+      if (unsupported.length) toast(`Retrying saved/checkpointed phases only. A fresh library scan still needs to run ${catalogPhaseNames(unsupported)}.`, false);
       _catalogSourceChanged = false;
       catalogRunBackgroundPhases(recovery, row.id);
     } catch (error) {
@@ -12405,7 +12409,11 @@
       .catch((e) => console.error('auto-tag backfill', e));
   }
   async function catalogRunBackgroundPhases(recovery = null, jobId = null) {
-    if (LIBTEST || _catalogBgRunning || bgPaused() || _bgStopped) return;
+    const isRecoveryRun = !!recovery && !!jobId;
+    const startup = catalogBackgroundStartupActions(isRecoveryRun, bgPaused(), _bgStopped);
+    // Stored-vector backfill is independent of heavy indexing and must still run while indexing is paused.
+    if (startup.backfill) catalogAutoTagBackfill();
+    if ((LIBTEST && (!window.__libtestRecoveryEnabled || !recovery || !jobId)) || _catalogBgRunning || !startup.startHeavy) return;
     _catalogBgRunning = true;
     _catalogActiveJobId = jobId || `catalog-index-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const activeJobId = _catalogActiveJobId;
@@ -12413,14 +12421,16 @@
       try { recovery = catalogRecoverySnapshot(await invoke('catalog_root_identity')); }
       catch (error) { console.warn('Could not save catalog recovery sources', error); }
     }
-    _catalogActiveRecovery = recovery;
+    _catalogActiveRecovery = isRecoveryRun ? catalogRecoveryForRetry(recovery) : recovery;
+    if (isRecoveryRun) recovery = _catalogActiveRecovery;
     activityUpdate('catalog', { jobId: activeJobId, recovery, label: 'Indexing library', stage: recovery ? 'stack' : 'working', done: 0, total: 0 });
-    if (!jobId) catalogAutoTagBackfill();
     const phaseFailures = [];
     const finish = () => {
       const stopped = _bgStopped || bgPaused();
-      const outcome = _catalogSourceChanged ? 'interrupted' : stopped ? (bgPaused() ? 'interrupted' : 'cancelled') : phaseFailures.length ? 'partial' : 'completed';
-      const detail = _catalogSourceChanged ? 'Registered library sources changed; resume stopped before continuing' : stopped ? 'Saved indexing results remain valid; pending phases can resume' : phaseFailures.length ? `${phaseFailures.length} phase${phaseFailures.length === 1 ? '' : 's'} failed; saved results remain valid` : 'Indexing phases finished';
+      const unsupported = isRecoveryRun ? _catalogActiveRecovery.requestedPhases.filter(phase => !CATALOG_RECOVERY_PHASES.includes(phase)) : [];
+      const pendingSupported = isRecoveryRun ? _catalogActiveRecovery.requestedPhases.filter(phase => CATALOG_RECOVERY_PHASES.includes(phase) && !_catalogActiveRecovery.completedPhases.includes(phase)) : [];
+      const outcome = _catalogSourceChanged ? 'interrupted' : stopped ? (bgPaused() ? 'interrupted' : 'cancelled') : phaseFailures.length || unsupported.length || pendingSupported.length ? 'partial' : 'completed';
+      const detail = _catalogSourceChanged ? 'Registered library sources changed; resume stopped before continuing' : stopped ? 'Saved indexing results remain valid; pending phases can resume' : phaseFailures.length ? `${phaseFailures.length} phase${phaseFailures.length === 1 ? '' : 's'} failed; saved results remain valid` : unsupported.length || pendingSupported.length ? `${pendingSupported.length ? `Marker checks remain for ${catalogPhaseNames(pendingSupported)}; ` : ''}${unsupported.length ? `a normal library scan is still needed for ${catalogPhaseNames(unsupported)}` : 'retry supported phases to process remaining eligible items'}` : 'Indexing phases finished';
       activityUpdate('catalog', { jobId: activeJobId, recovery: _catalogActiveRecovery, label: 'Indexing library', stage: 'done', outcome, failed: phaseFailures, current: detail });
       _catalogBgRunning = false; _catalogActiveJobId = null; _catalogActiveRecovery = null; refreshCatalogCounts();
     };
@@ -12434,55 +12444,46 @@
       toast('Registered library sources changed during recovery. The job stopped safely.', 'err');
       return false;
     };
-    if (recovery) {
+    if (isRecoveryRun) {
       const handlers = {
-        hash: () => invoke('catalog_hash'),
-        faces: async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_faces_scan', {}); if (!r || !r.scanned) break; } },
-        embed: () => invoke('catalog_embed_faces', {}),
-        clip: () => invoke('catalog_clip_embed', {}).then(() => refreshCatalogCounts()),
-        pets: async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_pets_scan', {}); refreshCatalogCounts(); if (!r || !r.scanned) break; } refreshPeople(); }
+        hash: async () => { await invoke('catalog_hash'); return true; },
+        faces: async () => { let exhausted = false; for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_faces_scan', {}); if (!r || !r.scanned) { exhausted = true; break; } } return exhausted; },
+        embed: async () => { await invoke('catalog_embed_faces', {}); return true; },
+        clip: async () => { await invoke('catalog_clip_embed', {}); refreshCatalogCounts(); return true; },
+        pets: async () => { let exhausted = false; for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_pets_scan', {}); refreshCatalogCounts(); if (!r || !r.scanned) { exhausted = true; break; } } refreshPeople(); return exhausted; }
       };
-      let chain = Promise.resolve();
-      recovery.requestedPhases.filter(phase => CATALOG_RECOVERY_PHASES.includes(phase) && !recovery.completedPhases.includes(phase)).forEach(phase => {
-        chain = chain.then(async () => {
-          if (_bgStopped || bgPaused() || !(await sourceStillMatches())) return;
-          activityUpdate('catalog', { jobId: activeJobId, recovery, label: 'Retrying supported index phases', stage: phase, current: 'Checking saved work markers' });
-          try { await handlers[phase](); }
-          catch (error) { phaseFailures.push(`${phase}: ${String(error && error.message || error)}`); console.error('catalog recovery phase ' + phase, error); }
-        });
-      });
-      chain.catch(error => console.error('catalog recovery phases', error)).finally(finish);
+      const phases = catalogRecoveryExecutionPlan(true, recovery);
+      runCatalogPhasePlan(phases, handlers,
+        async phase => !_bgStopped && !bgPaused() && await sourceStillMatches() && (activityUpdate('catalog', { jobId: activeJobId, recovery: _catalogActiveRecovery, label: 'Retrying supported index phases', stage: phase, current: 'Checking saved work markers' }), true),
+        (phase, error) => { phaseFailures.push(`${phase}: ${String(error && error.message || error)}`); console.error('catalog recovery phase ' + phase, error); },
+        (phase, exhausted) => {
+          if (exhausted === true && !_bgStopped && !bgPaused()) {
+            _catalogActiveRecovery.completedPhases = [...new Set([..._catalogActiveRecovery.completedPhases, phase])];
+            activityUpdate('catalog', { jobId: activeJobId, recovery: _catalogActiveRecovery, label: 'Retrying supported index phases', stage: phase, current: 'Phase completed; native markers remain the recovery source of truth' });
+          }
+        }).catch(error => console.error('catalog recovery phases', error)).finally(finish);
       return;
     }
     // ⚠️ Each phase is independently attempted. This used to be a bare .then() chain, so a
     // single rejection (e.g. catalog_stack failing) silently skipped EVERY later phase --
     // thumbnails, focus, hash -- with the error going only to the WebView console, invisible
     // from stderr. That failure mode is indistinguishable from "indexing is just slow".
-    const step = (name, fn) => _bgStopped || bgPaused() ? Promise.resolve() : fn().catch((e) => { phaseFailures.push(`${name}: ${String(e && e.message || e)}`); console.error('background phase ' + name, e); });
-    step('stack', () => invoke('catalog_stack'))
-      .then(() => step('thumbnails', () => drainCatalogThumbnails()))
-      .then(() => step('focus', () => invoke('catalog_focus')))
-      // Hashing a NEW file is a bounded one-time cost (hash_run only touches unhashed/changed-
-      // mtime rows), same shape as thumbnails/focus — safe to auto-chain. Re-verifying every
-      // ALREADY-hashed file (detecting drift) is unbounded and stays a manual "Verify library"
-      // action (showVerifyMenu) — see the plan's own logged decision on this split.
-      .then(() => step('hash', () => invoke('catalog_hash')))
-      // Auto-tagging: index every photo for AI search (dog, beach, park, food…) in the
-      // background, then tag it — previously this only ran when the user found and clicked
-      // "Analyze photos", so most libraries had no tags at all. Backfill tags photos that were
-      // indexed before auto-tagging existed.
-      // People (faces -> embed -> cluster) and pets used to run ONLY from the manual "Analyze
-      // photos" action, so a library never got fully scanned on its own. Faces first (small
-      // backlog), then CLIP tagging, then pets (largest backlog) — each resumable, so a relaunch
-      // continues where it stopped.
-      // Re-run while a pass still finds work: one worker pass can end early (watchdog kill, a
-      // throttle pause) with thousands left; a relaunch used to be the only way to resume it.
-      .then(() => step('faces', async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_faces_scan', {}); if (!r || !r.scanned) break; } }))
-      .then(() => step('embed', () => invoke('catalog_embed_faces', {})))
-      .then(() => step('cluster', () => invoke('catalog_cluster_faces').then(() => refreshPeople())))
-      .then(() => step('clip', () => invoke('catalog_clip_embed', {}).then(() => { refreshCatalogCounts(); })))
-      .then(() => step('autotag', () => invoke('catalog_auto_tag').then(() => { refreshAutoTags(); refreshCatalogCounts(); if (state.showInfo) { state.clipTags.clear(); renderInfoPanel(); } })))
-      .then(() => step('pets', async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_pets_scan', {}); refreshCatalogCounts(); if (!r || !r.scanned) break; } refreshPeople(); }))
+    const handlers = {
+      stack: () => invoke('catalog_stack'),
+      thumbnails: () => drainCatalogThumbnails(),
+      focus: () => invoke('catalog_focus'),
+      hash: () => invoke('catalog_hash'),
+      faces: async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_faces_scan', {}); if (!r || !r.scanned) break; } },
+      embed: () => invoke('catalog_embed_faces', {}),
+      cluster: () => invoke('catalog_cluster_faces').then(() => refreshPeople()),
+      clip: () => invoke('catalog_clip_embed', {}).then(() => { refreshCatalogCounts(); }),
+      autotag: () => invoke('catalog_auto_tag').then(() => { refreshAutoTags(); refreshCatalogCounts(); if (state.showInfo) { state.clipTags.clear(); renderInfoPanel(); } }),
+      pets: async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_pets_scan', {}); refreshCatalogCounts(); if (!r || !r.scanned) break; } refreshPeople(); }
+    };
+    const phases = catalogRecoveryExecutionPlan(false, recovery);
+    const step = (name, fn) => fn().catch((e) => { phaseFailures.push(`${name}: ${String(e && e.message || e)}`); console.error('background phase ' + name, e); });
+    runCatalogPhasePlan(phases, Object.fromEntries(phases.map(phase => [phase, () => step(phase, handlers[phase])])),
+      async () => !_bgStopped && !bgPaused(), () => {}, () => {})
       .catch((e) => console.error('catalog background phases', e))
       .finally(finish);
   }
@@ -12664,9 +12665,30 @@
   const CATALOG_RECOVERY_VERSION = 1;
   const CATALOG_RECOVERY_PHASES = ['hash', 'faces', 'embed', 'clip', 'pets'];
   const CATALOG_REQUESTED_PHASES = ['stack', 'thumbnails', 'focus', 'hash', 'faces', 'embed', 'cluster', 'clip', 'autotag', 'pets'];
+  const CATALOG_PHASE_LABELS = { stack: 'photo grouping', thumbnails: 'thumbnails', focus: 'focus previews', hash: 'file hashes', faces: 'face detection', embed: 'face embeddings', cluster: 'people grouping', clip: 'smart tags', autotag: 'automatic tags', pets: 'pet detection' };
+  function catalogPhaseNames(phases) { return phases.map(phase => CATALOG_PHASE_LABELS[phase] || phase).join(', '); }
+  function catalogBackgroundStartupActions(isRecoveryRun, paused, stopped) { return { backfill: !isRecoveryRun, startHeavy: !paused && !stopped }; }
+  function catalogRecoveryExecutionPlan(isRecoveryRun, recovery) {
+    return isRecoveryRun
+      // Completion records are progress hints only. Sources may change after restart, so every
+      // retry must re-run native marker checks; unchanged successes are skipped there while
+      // stale rows (including faces before embeddings) are recomputed safely.
+      ? recovery.requestedPhases.filter(phase => CATALOG_RECOVERY_PHASES.includes(phase))
+      : [...CATALOG_REQUESTED_PHASES];
+  }
+  function catalogRecoveryForRetry(recovery) { return { ...recovery, completedPhases: [] }; }
+  async function runCatalogPhasePlan(phases, handlers, shouldContinue, onError, onComplete) {
+    for (const phase of phases) {
+      if (!(await shouldContinue(phase))) break;
+      try {
+        const exhausted = await handlers[phase]();
+        if (onComplete) await onComplete(phase, exhausted);
+      } catch (error) { await onError(phase, error); }
+    }
+  }
   function normalizeCatalogRecovery(value) {
     if (!value || value.version !== CATALOG_RECOVERY_VERSION || !Array.isArray(value.roots) || !Array.isArray(value.requestedPhases) || !Array.isArray(value.completedPhases)) return null;
-    const roots = value.roots.filter(root => root && Number.isSafeInteger(root.id) && root.id > 0 && typeof root.path === 'string' && root.path.length).map(root => ({ id: root.id, path: root.path.replace(/\\/g, '/').replace(/\/$/, '') })).sort((a, b) => a.id - b.id || a.path.localeCompare(b.path));
+    const roots = value.roots.filter(root => root && Number.isSafeInteger(root.id) && root.id > 0 && typeof root.added === 'string' && /^\d+$/.test(root.added) && typeof root.volume === 'string' && root.volume.length && typeof root.path === 'string' && root.path.length).map(root => ({ id: root.id, added: root.added, volume: root.volume, path: root.path.replace(/\\/g, '/').replace(/\/$/, '') })).sort((a, b) => a.id - b.id || a.path.localeCompare(b.path));
     const requestedPhases = value.requestedPhases.filter(phase => CATALOG_REQUESTED_PHASES.includes(phase));
     const completedPhases = value.completedPhases.filter(phase => requestedPhases.includes(phase));
     if (!roots.length || roots.length !== value.roots.length || !requestedPhases.length || requestedPhases.length !== value.requestedPhases.length || completedPhases.length !== value.completedPhases.length) return null;
@@ -12674,8 +12696,8 @@
   }
   function catalogRootIdentity(rows) {
     if (!Array.isArray(rows)) return [];
-    const roots = rows.filter(root => root && Number.isSafeInteger(root.id) && typeof root.path === 'string').map(root => ({ id: root.id, path: root.path.replace(/\\/g, '/').replace(/\/$/, '') }));
-    return [...new Map(roots.map(root => [`${root.id}:${root.path}`, root])).values()].sort((a, b) => a.id - b.id || a.path.localeCompare(b.path));
+    const roots = rows.filter(root => root && Number.isSafeInteger(root.id) && typeof root.added === 'string' && /^\d+$/.test(root.added) && typeof root.volume === 'string' && typeof root.path === 'string').map(root => ({ id: root.id, added: root.added, volume: root.volume, path: root.path.replace(/\\/g, '/').replace(/\/$/, '') }));
+    return [...new Map(roots.map(root => [`${root.id}:${root.added}:${root.volume}:${root.path}`, root])).values()].sort((a, b) => a.id - b.id || a.path.localeCompare(b.path));
   }
   function activityIdentity(kind, patch) { return String(patch.jobId || patch.batchId || kind); }
   function activityTerminalPatch(patch) {
@@ -12957,7 +12979,7 @@
     if (!activityHistory.length) return '';
     return `<details class="lib-act-history" aria-label="Recent job history" ${activity.visible ? 'open' : ''} style="padding:8px 11px;border-top:1px solid var(--bdr)">
       <summary style="font-size:11px;font-weight:600;margin-bottom:4px;cursor:pointer">Recent jobs (${activityHistory.length})</summary>${activityHistory.slice(0, 8).map(row =>
-        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}${row.failedItems?.length ? `<details style="margin-top:3px"><summary style="cursor:pointer">Failed items</summary>${row.failedItems.map(item => `<div style="font-size:10px;color:var(--mut);padding:1px 0;overflow-wrap:anywhere">${esc(item)}</div>`).join('')}${row.failedCount > row.failedItems.length ? `<div style="font-size:10px;color:var(--mut)">…and ${row.failedCount - row.failedItems.length} more</div>` : ''}</details>` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.batchId ? `<button type="button" class="btn bgh" data-job-batch-results-id="${esc(row.id)}">Results / resume</button>` : ''}${row.recovery ? `<button type="button" class="btn bgh" data-job-index-resume-id="${esc(row.id)}" title="Retries marker-backed phases only; other phases continue during a normal library scan">Retry supported phases</button>` : ''}${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
+        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}${row.failedItems?.length ? `<details style="margin-top:3px"><summary style="cursor:pointer">Failed items</summary>${row.failedItems.map(item => `<div style="font-size:10px;color:var(--mut);padding:1px 0;overflow-wrap:anywhere">${esc(item)}</div>`).join('')}${row.failedCount > row.failedItems.length ? `<div style="font-size:10px;color:var(--mut)">…and ${row.failedCount - row.failedItems.length} more</div>` : ''}</details>` : ''}${row.detail ? `<div class="lib-act-history-detail" style="font-size:10px;color:var(--mut);padding-top:2px">${esc(row.detail)}</div>` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.batchId ? `<button type="button" class="btn bgh" data-job-batch-results-id="${esc(row.id)}">Results / resume</button>` : ''}${row.recovery ? `<button type="button" class="btn bgh" data-job-index-resume-id="${esc(row.id)}" title="Retries marker-backed phases only; other phases continue during a normal library scan">Retry supported phases</button>` : ''}${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
       ).join('')}</details>`;
   }
 

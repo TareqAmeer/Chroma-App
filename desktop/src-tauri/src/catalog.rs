@@ -36,6 +36,10 @@ fn now_secs() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
+fn now_registration_id() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos().min(i64::MAX as u128) as i64).unwrap_or(0)
+}
+
 // ── Storage location ─────────────────────────────────────────────────────────────────────────
 
 /// Application Support (never Caches, never the SSD itself): the catalog is user work — stack
@@ -1167,6 +1171,8 @@ pub struct CatalogRoot {
 #[derive(Serialize, Clone)]
 pub struct CatalogRootIdentity {
     pub id: i64,
+    pub added: String,
+    pub volume: String,
     pub path: String,
 }
 
@@ -1265,7 +1271,9 @@ pub fn add_root_run(conn: &Connection, path: &str, kind: Option<String>) -> Resu
     conn.execute(
         "INSERT INTO roots (volume_id, rel_path, kind, added) VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT(volume_id, rel_path) DO UPDATE SET kind = excluded.kind",
-        params![volume_id, rel_path, kind, now_secs() as i64],
+        // `roots.id` may be reused after removal; the nanosecond registration token makes
+        // same-path remove/re-add distinguishable even when SQLite reuses that integer ID.
+        params![volume_id, rel_path, kind, now_registration_id()],
     )
     .map_err(|e| e.to_string())?;
     for id in descendants {
@@ -1335,15 +1343,26 @@ pub fn catalog_remove_root(id: i64, state: tauri::State<CatalogState>) -> Result
 #[tauri::command(async)]
 pub fn catalog_root_identity(state: tauri::State<CatalogState>) -> Result<Vec<CatalogRootIdentity>, String> {
     let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    catalog_root_identity_run(&conn)
+}
+
+fn catalog_root_identity_run(conn: &Connection) -> Result<Vec<CatalogRootIdentity>, String> {
     let mut stmt = conn.prepare(
-        "SELECT r.id, v.last_path, v.is_local, r.rel_path FROM roots r JOIN volumes v ON v.id = r.volume_id ORDER BY v.last_path, r.rel_path",
+        "SELECT r.id, r.added, v.uuid, v.last_path, v.is_local, r.rel_path FROM roots r JOIN volumes v ON v.id = r.volume_id ORDER BY v.last_path, r.rel_path",
     ).map_err(|e| e.to_string())?;
     let roots = stmt.query_map([], |row| {
         let id: i64 = row.get(0)?;
-        let last_path: String = row.get(1)?;
-        let is_local: i64 = row.get(2)?;
-        let rel_path: String = row.get(3)?;
-        Ok(CatalogRootIdentity { id, path: abs_path(&last_path, is_local != 0, &rel_path).replace('\\', "/").trim_end_matches('/').to_string() })
+        let added: i64 = row.get(1)?;
+        let volume: String = row.get(2)?;
+        let last_path: String = row.get(3)?;
+        let is_local: i64 = row.get(4)?;
+        let rel_path: String = row.get(5)?;
+        Ok(CatalogRootIdentity {
+            id,
+            added: added.to_string(),
+            volume,
+            path: abs_path(&last_path, is_local != 0, &rel_path).replace(char::from(92), "/").trim_end_matches('/').to_string(),
+        })
     }).map_err(|e| e.to_string())?.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
     Ok(roots)
 }
@@ -2721,7 +2740,12 @@ pub fn hash_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cance
                 .map_err(|e| e.to_string())?;
         }
         tx.commit().map_err(|e| e.to_string())?;
-        result.hashed += hashed.iter().filter(|(_, _, h)| h.is_some()).count();
+        let succeeded = hashed.iter().filter(|(_, _, h)| h.is_some()).count();
+        result.hashed += succeeded;
+        if succeeded == 0 {
+            let examples = batch.iter().take(3).map(|(_, path, _)| path.as_str()).collect::<Vec<_>>().join(", ");
+            return Err(format!("hash made no progress: {} pending file(s) are unreadable (examples: {})", hashed.len(), examples));
+        }
     }
     progress(ScanProgress { phase: "done".into(), done: result.hashed, total: result.hashed, current: String::new() });
     Ok(result)
@@ -2786,7 +2810,12 @@ pub fn hash_run_scoped(state: &CatalogState, progress: &mut dyn FnMut(ScanProgre
             }
             tx.commit().map_err(|e| e.to_string())?;
         }
-        result.hashed += hashed.iter().filter(|(_, _, h)| h.is_some()).count();
+        let succeeded = hashed.iter().filter(|(_, _, h)| h.is_some()).count();
+        result.hashed += succeeded;
+        if succeeded == 0 {
+            let examples = batch.iter().take(3).map(|(_, path, _)| path.as_str()).collect::<Vec<_>>().join(", ");
+            return Err(format!("hash made no progress: {} pending file(s) are unreadable (examples: {})", hashed.len(), examples));
+        }
         let pause = pacer.end_chunk();
         if pause > std::time::Duration::ZERO {
             std::thread::sleep(pause);
@@ -9465,6 +9494,23 @@ mod tests {
         open_and_migrate(&dir.join("catalog.db")).expect("open_and_migrate")
     }
 
+    #[test]
+    fn root_identity_changes_when_registration_is_removed_and_readded() {
+        let conn = temp_db();
+        let path = scratch_photos_dir("root_identity_generation");
+        let first = add_root_run(&conn, path.to_str().unwrap(), None).unwrap();
+        let before = catalog_root_identity_run(&conn).unwrap();
+        assert_eq!(before.len(), 1);
+        remove_root_run(&conn, first.id).unwrap();
+        let second = add_root_run(&conn, path.to_str().unwrap(), None).unwrap();
+        let after = catalog_root_identity_run(&conn).unwrap();
+        assert_eq!(first.id, second.id, "SQLite can recycle the removed highest root ID");
+        assert_eq!(before[0].volume, after[0].volume);
+        assert_eq!(before[0].path, after[0].path);
+        assert_ne!(before[0].added, after[0].added, "production registration token and DTO identity must change after remove/re-add");
+        let _ = std::fs::remove_dir_all(path);
+    }
+
     /// Regression: the person filter used to be a correlated `EXISTS (... fp.id = p.id OR
     /// fp.stack_id = p.id)` — the OR defeats every index, so it re-walked the person's whole face
     /// list for every photo in the library (measured 3m52s for a 1,826-face person on the real
@@ -11963,6 +12009,27 @@ mod tests {
         assert_eq!(result.hashed, 0);
         let content_hash: Option<String> = conn.query_row("SELECT content_hash FROM photos WHERE id = 1", [], |r| r.get(0)).unwrap();
         assert!(content_hash.is_none(), "must stay unhashed so it's retried once the volume returns");
+    }
+
+    #[test]
+    fn hash_run_reports_missing_files_after_committing_readable_successes() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("hash-unreadable");
+        std::fs::write(dir.join("readable.jpg"), b"kept hash").unwrap();
+        std::fs::write(dir.join("missing.jpg"), b"remove before hashing").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        std::fs::remove_file(dir.join("missing.jpg")).unwrap();
+
+        let error = hash_run(&conn, &mut |_| {}, &cancel).err().expect("unreadable pending file must return promptly");
+        assert!(error.contains("hash made no progress"), "unexpected error: {error}");
+        assert!(error.contains("missing.jpg"), "unreadable path should be actionable: {error}");
+        let readable: Option<String> = conn.query_row("SELECT content_hash FROM photos WHERE name='readable.jpg'", [], |r| r.get(0)).unwrap();
+        let missing: Option<String> = conn.query_row("SELECT content_hash FROM photos WHERE name='missing.jpg'", [], |r| r.get(0)).unwrap();
+        assert!(readable.is_some(), "successful work before the no-progress batch must remain committed");
+        assert!(missing.is_none(), "failed work must remain pending for a later retry");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     // ── Rebuild ──────────────────────────────────────────────────────────────────────────────

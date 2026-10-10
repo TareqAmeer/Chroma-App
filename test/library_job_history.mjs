@@ -11,7 +11,7 @@ assert.ok(helpers, 'production library job history helpers must have extraction 
 function createHistory(seed = '[]', activeSeed = '[]') {
   const values = new Map([['chromasmith-job-history-v1', seed], ['chromasmith-active-jobs-v1', activeSeed]]);
   const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
-  const result = vm.runInNewContext(`(() => { ${helpers}\nreturn { activityIdentity, activityTerminalPatch, activityHistory, recordActivityHistory, persistActiveActivity, clearActiveActivity, normalizeCatalogRecovery, catalogRootIdentity }; })()`, { localStorage: storage, Date });
+  const result = vm.runInNewContext(`(() => { ${helpers}\nreturn { activityIdentity, activityTerminalPatch, activityHistory, recordActivityHistory, persistActiveActivity, clearActiveActivity, normalizeCatalogRecovery, catalogRootIdentity, catalogRecoveryExecutionPlan, catalogRecoveryForRetry, runCatalogPhasePlan, catalogBackgroundStartupActions, catalogPhaseNames }; })()`, { localStorage: storage, Date });
   return { ...result, persisted: () => JSON.parse(values.get('chromasmith-job-history-v1')), active: () => JSON.parse(values.get('chromasmith-active-jobs-v1')) };
 }
 
@@ -24,17 +24,71 @@ test('same-kind jobs remain distinct when callers provide stable identities', ()
 
 test('catalog recovery stores a versioned phase plan and rejects incomplete source identity', () => {
   const history = createHistory();
-  const recovery = history.normalizeCatalogRecovery({ version: 1, roots: [{ id: 2, path: '/Photos/B' }, { id: 1, path: '/Photos/A' }], requestedPhases: ['stack', 'hash', 'faces'], completedPhases: ['hash'] });
-  assert.deepEqual([...recovery.roots.map(root => [root.id, root.path])], [[1, '/Photos/A'], [2, '/Photos/B']]);
+  const generation = '1791668450123456789';
+  const recovery = history.normalizeCatalogRecovery(JSON.parse(JSON.stringify({ version: 1, roots: [{ id: 2, added: '1791668450123456790', volume: 'uuid-b', path: '/Photos/B' }, { id: 1, added: generation, volume: 'uuid-a', path: '/Photos/A' }], requestedPhases: ['stack', 'hash', 'faces'], completedPhases: ['hash'] })));
+  assert.deepEqual([...recovery.roots.map(root => [root.id, root.added, root.volume, root.path])], [[1, generation, 'uuid-a', '/Photos/A'], [2, '1791668450123456790', 'uuid-b', '/Photos/B']]);
   assert.deepEqual([...recovery.requestedPhases], ['stack', 'hash', 'faces']);
   assert.deepEqual([...recovery.completedPhases], ['hash']);
   assert.equal(history.normalizeCatalogRecovery({ version: 1, roots: [], requestedPhases: ['hash'], completedPhases: [] }), null);
-  assert.equal(history.normalizeCatalogRecovery({ version: 2, roots: [{ id: 1, path: '/Photos' }], requestedPhases: ['hash'], completedPhases: [] }), null);
-  assert.deepEqual([...history.catalogRootIdentity([{ id: 2, path: '/Photos/B/' }, { id: 1, path: '/Photos/A' }, { id: 2, path: '/Photos/B' }]).map(root => [root.id, root.path])], [[1, '/Photos/A'], [2, '/Photos/B']]);
+  assert.equal(history.normalizeCatalogRecovery({ version: 1, roots: [{ id: 1, added: Number(generation), volume: 'uuid-a', path: '/Photos/A' }], requestedPhases: ['hash'], completedPhases: [] }), null, 'unsafe JSON numbers are rejected instead of rounded');
+  assert.equal(history.normalizeCatalogRecovery({ version: 2, roots: [{ id: 1, added: '1', volume: 'uuid', path: '/Photos' }], requestedPhases: ['hash'], completedPhases: [] }), null);
+  assert.deepEqual([...history.catalogRootIdentity([{ id: 2, added: '2', volume: 'uuid-b', path: '/Photos/B/' }, { id: 1, added: '1', volume: 'uuid-a', path: '/Photos/A' }, { id: 2, added: '2', volume: 'uuid-b', path: '/Photos/B' }]).map(root => [root.id, root.added, root.volume, root.path])], [[1, '1', 'uuid-a', '/Photos/A'], [2, '2', 'uuid-b', '/Photos/B']]);
+  const removedAndReadded = history.catalogRootIdentity([{ id: 1, added: '1791668450999999999', volume: 'uuid-a', path: '/Photos/A' }]);
+  assert.notDeepEqual([...removedAndReadded], [...recovery.roots.slice(0, 1)], 'same path and recycled root ID cannot match a new registration generation');
   history.persistActiveActivity({ jobId: 'index-a', kind: 'catalog', label: 'Indexing library', recovery });
   assert.deepEqual([...history.active()[0].recovery.roots.map(root => root.path)], ['/Photos/A', '/Photos/B']);
   assert.match(source, /JSON\.stringify\(current\) !== JSON\.stringify\(recovery\.roots\)/, 'resume must fail closed when registered roots changed');
   assert.match(source, /data-job-index-resume-id=/, 'saved recoverable jobs are resumed from the existing history panel');
+});
+
+test('fresh indexing executes the complete phase order; explicit retry runs supported pending phases only', async () => {
+  const history = createHistory();
+  const recovery = history.normalizeCatalogRecovery({ version: 1, roots: [{ id: 1, added: '1791668450123456789', volume: 'uuid', path: '/Photos' }], requestedPhases: ['stack', 'thumbnails', 'focus', 'hash', 'faces', 'embed', 'cluster', 'clip', 'autotag', 'pets'], completedPhases: ['hash', 'faces'] });
+  assert.deepEqual([...history.catalogRecoveryExecutionPlan(false, recovery)], ['stack', 'thumbnails', 'focus', 'hash', 'faces', 'embed', 'cluster', 'clip', 'autotag', 'pets']);
+  assert.deepEqual([...history.catalogRecoveryExecutionPlan(true, recovery)], ['hash', 'faces', 'embed', 'clip', 'pets'], 'native markers are rechecked even for phases marked complete so changed sources are detected');
+  const retryRecovery = history.catalogRecoveryForRetry(recovery);
+  assert.deepEqual([...retryRecovery.completedPhases], [], 'historical completion hints cannot make a capped stale retry appear exhausted');
+  const calls = [];
+  const handlers = Object.fromEntries(history.catalogRecoveryExecutionPlan(false, recovery).map(phase => [phase, async () => calls.push(phase)]));
+  await history.runCatalogPhasePlan(history.catalogRecoveryExecutionPlan(false, recovery), handlers, async () => true, () => {}, () => {});
+  assert.deepEqual(calls, ['stack', 'thumbnails', 'focus', 'hash', 'faces', 'embed', 'cluster', 'clip', 'autotag', 'pets']);
+  const retryCalls = [];
+  const retryHandlers = Object.fromEntries(history.catalogRecoveryExecutionPlan(true, retryRecovery).map(phase => [phase, async () => { retryCalls.push(phase); return phase !== 'pets'; }]));
+  const completed = [];
+  await history.runCatalogPhasePlan(history.catalogRecoveryExecutionPlan(true, retryRecovery), retryHandlers, async () => true, () => {}, (phase, exhausted) => { if (exhausted === true) completed.push(phase); });
+  assert.deepEqual(retryCalls, ['hash', 'faces', 'embed', 'clip', 'pets']);
+  assert.deepEqual(completed, ['hash', 'faces', 'embed', 'clip'], 'batch-capped pets remains pending until an explicit exhausted result');
+  assert.match(source, /const unsupported = isRecoveryRun \? _catalogActiveRecovery\.requestedPhases\.filter/);
+  assert.match(source, /_catalogRecoveryChecking/);
+});
+
+test('phase orchestration stops on cancellation or failed source revalidation before dispatch', async () => {
+  const history = createHistory();
+  const calls = [];
+  const phases = ['hash', 'faces', 'embed'];
+  const handlers = Object.fromEntries(phases.map(phase => [phase, async () => { calls.push(phase); }]));
+  await history.runCatalogPhasePlan(phases, handlers, async phase => phase !== 'faces', () => {}, () => {});
+  assert.deepEqual(calls, ['hash'], 'cancellation between phases leaves later phases undispatched');
+  calls.length = 0;
+  await history.runCatalogPhasePlan(phases, handlers, async () => false, () => {}, () => {});
+  assert.deepEqual(calls, [], 'root identity mismatch before the first phase prevents all dispatch');
+});
+
+test('paused normal startup still schedules stored-vector backfill without starting heavy phases', () => {
+  const history = createHistory();
+  assert.deepEqual({ ...history.catalogBackgroundStartupActions(false, true, false) }, { backfill: true, startHeavy: false });
+  assert.deepEqual({ ...history.catalogBackgroundStartupActions(false, false, true) }, { backfill: true, startHeavy: false });
+  assert.deepEqual({ ...history.catalogBackgroundStartupActions(true, true, false) }, { backfill: false, startHeavy: false }, 'explicit recovery does not run an unrelated backfill');
+  assert.match(source, /if \(startup\.backfill\) catalogAutoTagBackfill\(\)/);
+  assert.match(source, /!startup\.startHeavy/);
+});
+
+test('recovery phase details use friendly names and saved detail is rendered in history', () => {
+  const history = createHistory();
+  assert.equal(history.catalogPhaseNames(['stack', 'embed', 'autotag']), 'photo grouping, face embeddings, automatic tags');
+  history.recordActivityHistory({ jobId: 'partial', kind: 'catalog', label: 'Indexing library', stage: 'done', outcome: 'partial', current: 'A normal library scan is still needed for photo grouping' });
+  assert.equal(history.persisted()[0].detail, 'A normal library scan is still needed for photo grouping');
+  assert.match(source, /row\.detail \? `<div class="lib-act-history-detail"/);
 });
 
 test('confirmed failures and cancellations become terminal outcomes; a stall is not a failure', () => {
