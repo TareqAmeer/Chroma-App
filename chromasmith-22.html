@@ -7302,7 +7302,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1010K';
+const BUILD='1.1010L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8694,7 +8694,9 @@ float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-
   // zero everywhere. For these masks it inverts the GATES instead, in the mask loop.
   else if(B.x>1.5){w=1.0;return w;}
   else{vec2 n=A.zw-A.xy;float t=dot(gm-A.xy,n)/max(dot(n,n),1e-6);w=1.0-smoothstep(0.0,1.0,t);}
-  if(B.z>0.5)w=1.0-w;
+  // Shapeless masks invert only after every gate below (including depth). A baked depth raster
+  // uses the texture branch above, but keeps B.x>1.5 so the same combined-invert rule applies.
+  if(B.z>0.5&&B.x<1.5)w=1.0-w;
   return w;
 }
 // Compose complete shape/invert/range/depth coverage once, shared by adjustments and Selection
@@ -9927,7 +9929,7 @@ void main(){
   // (like setMaskTex), never recomputed per mask/per frame — the same "compute once, reuse many"
   // rule CLAUDE.md §5b's `srcV` uniform already follows. R8 (single channel) keeps this a quarter
   // the bytes of an RGBA upload for the same resolution.
-  setDepthTex(data,w,h){const gl=this.gl;this._depthSnapshot={data:new Uint8Array(data),w,h};if(!this.depthTx)this.depthTx=gl.createTexture();
+  setDepthTex(data,w,h,sourceIdentity=data){const gl=this.gl;const snapshot={data:new Uint8Array(data),w,h,identity:sourceIdentity,version:(this._depthMapVersion||0)+1};this._depthMapVersion=snapshot.version;this._depthSnapshot=snapshot;this._depthSourceIdentity=sourceIdentity;this._mskDepthCoverageCache=null;if(!this.depthTx)this.depthTx=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D,this.depthTx);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.R8,w,h,0,gl.RED,gl.UNSIGNED_BYTE,data);
@@ -9935,7 +9937,7 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
     this.hasDepthTx=true;}
-  clearDepthTex(){if(this.depthTx){this.gl.deleteTexture(this.depthTx);this.depthTx=null;}this._depthSnapshot=null;this.hasDepthTx=false;}
+  clearDepthTex(){if(this.depthTx){this.gl.deleteTexture(this.depthTx);this.depthTx=null;}this._depthSnapshot=null;this._depthSourceIdentity=null;this._depthMapVersion=(this._depthMapVersion||0)+1;this._mskDepthCoverageCache=null;this.hasDepthTx=false;}
   resetTextureSnapshotFrom(source){
     if(source._lutSnapshot)this.setLUT(source._lutSnapshot);
     else{if(this.lutTx)this.gl.deleteTexture(this.lutTx);this.lutTx=null;this._ensureLutTx();this._lutSnapshot=null;}
@@ -10054,6 +10056,10 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // uvOffL/uvScaleL (same opts mapping the comp pass uses) so tiles/loupe place them identically.
     const allMasks=P.masks||[];_mskEnsureIds(allMasks);
     const MK=allMasks.length?allMasks.slice(0,MSK_MAX):[];
+    const mskRef=this._maskReferenceSize,md=mskTexDims(this===FX?undefined:(mskRef&&mskRef.w||this.imgW),this===FX?undefined:(mskRef&&mskRef.h||this.imgH));
+    // Preserve the native GPU depth comparison as the exact zero-refinement baseline.
+    // Build a derived raster only when Feather/Edge actually modifies that selection.
+    const depthMaskSources=MK.map(m=>((Number(m.refineFeather)||0)||(Number(m.refineEdge)||0))?mskDepthCoverageSource(this,m,md.w,md.h):null);
     // These uniform-staging arrays are allocated ONCE per renderer and zero-filled per
     // frame, not reallocated. render() is the hottest function in the app (every preview tick,
     // every export tile), and eleven fresh typed arrays per call was pure allocator churn for
@@ -10076,7 +10082,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     composePlan.order.forEach((slot,rank)=>{mTopo[rank]=slot;});
     MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
-      else if(m.type==='none'){mB[o]=2;}   // shapeless: gates only (Colour/Luminance Range masks)
+      else if(m.type==='none'){mB[o]=2;if(depthMaskSources[i])mB[o+3]=1;} // shapeless range mask; depth source is rasterized when ready
       else if(m.type==='linear'){mA[o]=m.x0;mA[o+1]=m.y0;mA[o+2]=m.x1;mA[o+3]=m.y1;mB[o]=1;}
       else{mA[o]=m.cx;mA[o+1]=m.cy;mA[o+2]=m.rx;mA[o+3]=m.ry;mB[o]=0;}
       mB[o+1]=m.feather!=null?m.feather:0.5;mB[o+2]=m.invert?1:0;
@@ -10086,7 +10092,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // ROADMAP R7 — Depth Range gate, same on/off + floor/ceiling shape as the luminance gate
       // just above. depOn stays false (mDep[o]=0) for every mask created before this feature and
       // for every mask that never turned it on, so this is a pure no-op for them.
-      mDep[o]=m.depOn?1:0;mDep[o+1]=m.depLo!=null?m.depLo:0;mDep[o+2]=m.depHi!=null?m.depHi:1;
+      mDep[o]=m.depOn&&!depthMaskSources[i]?1:0;mDep[o+1]=m.depLo!=null?m.depLo:0;mDep[o+2]=m.depHi!=null?m.depHi:1;
       const op=m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
       const operand=op?MK.findIndex(x=>x.id===m.operandId):-1;
       mE[o]=op==='add'?3:op==='intersect'?2:op==='subtract'?1:0;
@@ -10127,7 +10133,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // Must be identical for preview, loupe and every export tile — re-measuring per tile would
       // make each tile converge to a different level and show as blocks.
       mI[o+3]=m.srcV!=null?m.srcV:tgt.v;});
-    if(MK.some(m=>m.type==='brush'))mskBuildTex(this,MK);
+    if(MK.some(m=>m.type==='brush'||(m.origin==='depth'&&m.depOn)))mskBuildTex(this,MK);
     const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
     // LENS CORRECTION: runs FIRST on the raw source into fbs.lens (manual distortion/vignette/
     // CA — see the lens shader). Chain: img -> [lens] -> [nr] -> lut, each stage conditionally
@@ -16821,6 +16827,33 @@ function fxHasDepthMap(){
   const it=(typeof curItem==='function')?curItem():null;
   return !!(it&&it.img&&it.img._depthMap);
 }
+function fxDepthForGeom(map,geom){
+  if(!map||!map.data||!map.w||!map.h||map.data.length!==map.w*map.h)return null;
+  const g=geom||{},key=JSON.stringify([g.rot||0,!!g.flipH,!!g.flipV,g.angle||0,g.crop||null]);
+  // Normally immutable per photo; fingerprint bytes to detect replacement in-place.
+  let fingerprint=2166136261;for(let i=0;i<map.data.length;i++)fingerprint=Math.imul(fingerprint^map.data[i],16777619);
+  fingerprint=(fingerprint>>>0)+':'+map.data.length+':'+map.w+'x'+map.h;
+  if(map._geomDepthCache&&map._geomDepthCache.key===key&&map._geomDepthCache.fingerprint===fingerprint)return map._geomDepthCache.source;
+  if(!g.crop&&!g.rot&&!g.flipH&&!g.flipV&&!g.angle){const source={data:map.data,w:map.w,h:map.h,identity:map,fingerprint};map._geomDepthCache={key,fingerprint,source};return source;}
+  const cv=document.createElement('canvas');cv.width=map.w;cv.height=map.h;
+  const cx=cv.getContext('2d'),rgba=new Uint8ClampedArray(map.w*map.h*4);
+  for(let i=0;i<map.data.length;i++){const j=i*4,v=map.data[i];rgba[j]=rgba[j+1]=rgba[j+2]=v;rgba[j+3]=255;}
+  cx.putImageData(new ImageData(rgba,map.w,map.h),0,0);
+  const warped=applyGeomTo(cv,g),w=warped.naturalWidth||warped.width,h=warped.naturalHeight||warped.height;
+  const pixels=warped.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data,out=new Uint8Array(w*h);
+  for(let i=0;i<out.length;i++)out[i]=pixels[i*4];
+  const source={data:out,w,h,identity:map,fingerprint,geometry:key};map._geomDepthCache={key,fingerprint,source};return source;
+}
+function fxSyncDepthTexture(renderer,item){
+  if(!renderer)return null;
+  if(!item){if(renderer._depthSnapshot)renderer.clearDepthTex();return null;}
+  const map=item.img&&item.img._depthMap;
+  if(!map){if(renderer._depthSnapshot)renderer.clearDepthTex();return null;}
+  const source=fxDepthForGeom(map,item.geom);
+  if(!source){if(renderer._depthSnapshot)renderer.clearDepthTex();return null;}
+  if(renderer._depthSourceIdentity!==source)renderer.setDepthTex(source.data,source.w,source.h,source);
+  return source;
+}
 async function fxEnsureDepthMap(){
   // ⚠️ Was `if(!capNative())return null` — capNative() checks window.Capacitor (the iOS shell),
   // but depth_run is a TAURI desktop command (main.rs/depth.rs), exactly like every other
@@ -16837,7 +16870,7 @@ async function fxEnsureDepthMap(){
   const it=(typeof curItem==='function')?curItem():null;
   const img=it&&it.img;
   if(!img)return null;
-  if(img._depthMap)return img._depthMap;
+  if(img._depthMap){if(curItem()===it&&typeof FX!=='undefined')fxSyncDepthTexture(FX,it);return img._depthMap;}
   if(img._depthMapAttempted)return null;   // already tried (and failed) for this photo — see caller
   if(_depthRunning)return null;
   _depthRunning=true;
@@ -16862,8 +16895,8 @@ async function fxEnsureDepthMap(){
       log('Depth estimate returned an unexpected size — skipping','error');
       return null;
     }
-    img._depthMap={data:body,w:dw,h:dh};
-    if(typeof FX!=='undefined'&&FX&&FX.setDepthTex)FX.setDepthTex(body,dw,dh);
+    img._depthMap={data:new Uint8Array(body),w:dw,h:dh};
+    if(curItem()===it&&typeof FX!=='undefined')fxSyncDepthTexture(FX,it);
     return img._depthMap;
   }catch(e){
     log('Depth estimate failed: '+(e&&e.message||e),'error');
@@ -17177,6 +17210,37 @@ function mskEnsureDims(m,width,height){
     for(let x=0;x<w;x++){const sx=Math.min(m.mtW-1,(x/w*m.mtW)|0);nw[y*w+x]=m.px[sy*m.mtW+sx];}}}
   m.px=nw;m.mtW=w;m.mtH=h;
 }
+function _mskDepthSmoothstep(a,b,x){const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);}
+// Bake only the depth range into a photo-local coverage raster. Luminance/colour gates and
+// shapeless inversion still run later in the shared shader evaluator, preserving their order.
+function _mskDepthCoverageData(data,sw,sh,w,h,lo,hi){
+  if(!data||sw<1||sh<1||w<1||h<1||data.length!==sw*sh)return null;
+  const out=new Uint8ClampedArray(w*h),floor=Math.max(0,Math.min(1,Number(lo)||0)),ceil=Math.max(0,Math.min(1,hi==null?1:Number(hi)));
+  for(let y=0;y<h;y++){
+    const fy=Math.max(0,Math.min(sh-1,(y+0.5)*sh/h-0.5)),y0=Math.floor(fy),y1=Math.min(sh-1,y0+1),ty=fy-y0;
+    for(let x=0;x<w;x++){
+      const fx=Math.max(0,Math.min(sw-1,(x+0.5)*sw/w-0.5)),x0=Math.floor(fx),x1=Math.min(sw-1,x0+1),tx=fx-x0;
+      const a=data[y0*sw+x0],b=data[y0*sw+x1],c=data[y1*sw+x0],d=data[y1*sw+x1];
+      const depth=((a+(b-a)*tx)*(1-ty)+(c+(d-c)*tx)*ty)/255;
+      const gate=_mskDepthSmoothstep(floor-0.06,floor+0.03,depth)*(1-_mskDepthSmoothstep(ceil-0.03,ceil+0.06,depth));
+      out[y*w+x]=Math.round(Math.max(0,Math.min(1,gate))*255);
+    }
+  }
+  return out;
+}
+function mskDepthCoverageSource(renderer,m,w,h){
+  if(!renderer||!m||m.type!=='none'||m.origin!=='depth'||!m.depOn)return null;
+  if(!(Number(m.refineFeather)||0)&&!(Number(m.refineEdge)||0))return null;
+  const snap=renderer._depthSnapshot;if(!snap||!snap.data||!snap.w||!snap.h||snap.data.length!==snap.w*snap.h)return null;
+  const lo=m.depLo!=null?Number(m.depLo):0,hi=m.depHi!=null?Number(m.depHi):1;
+  const version=snap.version||0,key=[version,snap.w,snap.h,w,h,lo,hi].join(':');
+  const entries=renderer._mskDepthCoverageCache||(renderer._mskDepthCoverageCache=new Map()),cached=entries.get(key);
+  if(cached&&cached.data===snap.data)return cached;
+  const source={px:_mskDepthCoverageData(snap.data,snap.w,snap.h,w,h,lo,hi),w,h,data:snap.data,version,key};
+  if(!source.px)return null;
+  entries.set(key,source);while(entries.size>32)entries.delete(entries.keys().next().value);
+  return source;
+}
 let _mskTexBufs=null;
 function mskBuildTex(renderer=FX,masks=fxState.masks){
   const ref=renderer._maskReferenceSize;
@@ -17190,9 +17254,10 @@ function mskBuildTex(renderer=FX,masks=fxState.masks){
   const buf=_mskTexBufs.buf,buf2=_mskTexBufs.buf2;
   buf.fill(0);buf2.fill(0);   // reused buffers must be cleared — a deleted mask's channel would otherwise persist
   masks.slice(0,MSK_MAX).forEach((m,i)=>{
-    if(m.type!=='brush')return;
-    mskEnsureDims(m,w,h);
-    const px=mskRefinedPixels(m),dst=i<4?buf:buf2,ch=i<4?i:i-4;
+    const depthSource=mskDepthCoverageSource(renderer,m,w,h);
+    if(m.type!=='brush'&&!depthSource)return;
+    if(m.type==='brush')mskEnsureDims(m,w,h);
+    const px=depthSource?mskRefinedPixels(m,depthSource):mskRefinedPixels(m),dst=i<4?buf:buf2,ch=i<4?i:i-4;
     for(let j=0;j<w*h;j++)dst[j*4+ch]=px[j];
   });
   renderer.setMaskTex(buf,w,h);
@@ -17241,25 +17306,29 @@ function _mskBlurCoverage(src,w,h,r){
   }
   return out;
 }
-function mskRefinedPixels(m){
-  mskEnsureDims(m);
+function mskRefinedPixels(m,source){
+  if(!source)mskEnsureDims(m);
+  const src=source?source.px:m.px,srcW=source?source.w:m.mtW,srcH=source?source.h:m.mtH,srcIdentity=source?source.px:m.px,sourceKey=source&&source.key;
+  if(!src||!srcW||!srcH)return new Uint8ClampedArray(0);
   const feather=Math.max(0,Math.min(100,Number(m.refineFeather)||0));
-  const edge=Math.max(-100,Math.min(100,Number(m.refineEdge)||0));
-  if(!feather&&!edge)return m.px;
-  const key=[m.mtW,m.mtH,feather,edge,m.px];
+  const edgeSign=source&&m.invert?-1:1,edge=Math.max(-100,Math.min(100,(Number(m.refineEdge)||0)*edgeSign));
+  if(!feather&&!edge)return src;
+  const key=[srcW,srcH,feather,edge,srcIdentity,source&&source.version];
   const c=m._refineCache;
-  if(c&&c.w===key[0]&&c.h===key[1]&&c.feather===feather&&c.edge===edge&&c.src===m.px)return c.px;
-  const radius=Math.max(1,Math.round(Math.max(m.mtW,m.mtH)*0.018));
-  let px=m.px;
-  if(edge){const r=Math.max(1,Math.round(radius*Math.abs(edge)/100));px=_mskBoxExtrema(px,m.mtW,m.mtH,r,edge>0);}
-  if(feather){const r=Math.max(1,Math.round(radius*feather/100));px=_mskBlurCoverage(px,m.mtW,m.mtH,r);}
-  m._refineCache={w:m.mtW,h:m.mtH,feather,edge,src:m.px,px};
+  if(c&&c.w===srcW&&c.h===srcH&&c.feather===feather&&c.edge===edge&&c.src===srcIdentity&&c.sourceKey===sourceKey&&c.version===(source&&source.version))return c.px;
+  const radius=Math.max(1,Math.round(Math.max(srcW,srcH)*0.018));
+  let px=src;
+  if(edge){const r=Math.max(1,Math.round(radius*Math.abs(edge)/100));px=_mskBoxExtrema(px,srcW,srcH,r,edge>0);}
+  if(feather){const r=Math.max(1,Math.round(radius*feather/100));px=_mskBlurCoverage(px,srcW,srcH,r);}
+  m._refineCache={w:srcW,h:srcH,feather,edge,src:srcIdentity,sourceKey,version:source&&source.version,px};
   return px;
 }
-// Sky masks are heuristic raster sources, not segmentation masks, but they use the same
-// non-destructive refinement path. Depth Range remains shapeless and is deliberately excluded.
-function mskRefinementSupported(m){return !!(m&&m.type==='brush'&&m.px&&m.px.length&&m.mtW>0&&m.mtH>0
-  &&(mskIsAI(m)||m.origin==='sky'));}
+// Sky masks and ready Depth Range sources use the same non-destructive refinement path.
+function mskRefinementSupported(m){
+  if(!m)return false;
+  if(m.type==='brush'&&m.px&&m.px.length&&m.mtW>0&&m.mtH>0)return !!(mskIsAI(m)||m.origin==='sky');
+  return m.type==='none'&&m.origin==='depth'&&m.depOn&&!!(typeof FX!=='undefined'&&FX&&FX._depthSnapshot);
+}
 function mskRefinementSourceReset(m){if(!m)return;m.refineFeather=0;m.refineEdge=0;delete m._refineCache;}
 function mskRefineControls(m){
   if(!mskRefinementSupported(m))return '';
@@ -18095,6 +18164,7 @@ function mskSlide(el){
   const m=fxState.masks[mskSel];if(!m)return;
   const v=parseFloat(el.value),sc=parseFloat(el.dataset.sc);
   m[el.dataset.k]=el.dataset.fl==='1'?1-v/100:v*sc;
+  if(m.origin==='depth'&&(el.dataset.k==='depLo'||el.dataset.k==='depHi'))delete m._refineCache; // range creates a fresh derived source; keep the user's refinement settings
   el.nextElementSibling.textContent=el.dataset.k==='colHue'?Math.round(v)+'°':Math.round(v);
   // Widening/narrowing the colour gate changes WHICH pixels are selected, so the mean value that
   // "preserve modeling" anchors to has to be re-measured (debounced — it reads back the canvas).
@@ -18458,6 +18528,7 @@ function mskDepToggle(el){
   const m=fxState.masks[mskSel];if(!m)return;
   m.depOn=!!el.checked;
   if(m.depOn&&m.depLo==null){m.depLo=0;m.depHi=1;}
+  if(m.origin==='depth')delete m._refineCache;
   mskRebuild();fxUpdate();
 }
 function mskCrDropSample(i){
@@ -18755,7 +18826,8 @@ function mskRebuild(){
       +'<input type="checkbox" '+(m.depOn?'checked':'')+(hasMap?'':' disabled')+' onchange="mskDepToggle(this)"></div>'
       +(!hasMap?'<div class="msk-hint">'+(failed?'Depth estimate unavailable for this photo.':'Computing depth map… (first use per photo takes a moment)')+'</div>'
         :(m.depOn?_mskRow('Depth floor','depLo',m.depLo!=null?m.depLo:0,0,100,0.01,false,'0 = farthest pixel in the photo')
-          +_mskRow('Depth ceiling','depHi',m.depHi!=null?m.depHi:1,0,100,0.01,false,'100 = nearest pixel in the photo'):''));
+          +_mskRow('Depth ceiling','depHi',m.depHi!=null?m.depHi:1,0,100,0.01,false,'100 = nearest pixel in the photo')
+          +(m.origin==='depth'?mskRefineControls(m):''):''));
     // ⚠️ Must ALSO gate here on alreadyAttempted, not just inside fxEnsureDepthMap(): "hasMap is
     // false" is a STABLE condition while depth_run is pending or has failed, and mskRebuild()
     // runs constantly (every mask edit). Without this check, EVERY mskRebuild() call — including
@@ -23442,6 +23514,7 @@ function updateWork(){
   if(it&&(it._inpaintLoading||it._inpaintError)){fxWork=null;const message=it._inpaintError||'Loading accepted erase repair assets…';const status=document.getElementById('fx-no-img');if(status){status.textContent=message;status.style.display='block';}return;}
   fxWork=it?geomCanvas(it):null;
   if(fxWork)FX.setImage(fxWork);
+  if(typeof fxSyncDepthTexture==='function')fxSyncDepthTexture(FX,it);
   if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // coarse full-res underlay must re-render for the new image/geometry
   fxSyncDcpProfileUI();
 }
@@ -24603,7 +24676,8 @@ function shouldTile(w,h){return isMemoryConstrained()?w*h>16e6:w*h>80e6;}
 function fxSetCapturedExportDepth(renderer,P){
   if(!Object.prototype.hasOwnProperty.call(P,'_exportDepthMap'))return;
   const d=P._exportDepthMap;
-  if(d&&d.data)renderer.setDepthTex(d.data,d.w,d.h);else renderer.clearDepthTex();
+  if(d&&d.data){const source=fxDepthForGeom(d,P.geom);if(source)renderer.setDepthTex(source.data,source.w,source.h,source);else renderer.clearDepthTex();}
+  else renderer.clearDepthTex();
 }
 async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
   const previousMaskSize=renderer._maskReferenceSize;
