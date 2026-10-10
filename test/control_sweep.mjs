@@ -43,7 +43,15 @@ const SURFACES = {
   editor: { query: 'libtest=1&deskx=1', photo: true },
 };
 
-async function boot(page, port, s) {
+async function boot(page, port, s, storageBaseline) {
+  // A prior queued path may persist panel/disclosure preferences (Library section visibility,
+  // filters) that were not part of the target's recorded action path. Restore the surface's
+  // original boot storage before each replay while preserving state within that replay.
+  if (storageBaseline.value) {
+    await page.evaluate((snapshot) => {
+      localStorage.clear(); for (const [key, value] of Object.entries(snapshot)) localStorage.setItem(key, value);
+    }, storageBaseline.value).catch(() => {});
+  }
   for (let i = 0; ; i++) {
     try { await page.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?${s.query}`, { waitUntil: 'domcontentloaded', timeout: 60000 }); break; }
     catch (e) { if (i >= 2) throw e; await page.waitForTimeout(1000); }
@@ -67,6 +75,7 @@ async function boot(page, port, s) {
     }, undefined, { timeout: 3000 });
   }
   await page.waitForTimeout(400);
+  if (!storageBaseline.value) storageBaseline.value = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage))).catch(() => ({}));
 }
 
 async function act(page, c, replayDestination = null) {
@@ -144,7 +153,8 @@ for (const [name, s] of Object.entries(SURFACES)) {
   page.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
 
-  await boot(page, port, s); errs = [];
+  const storageBaseline = { value: null };
+  await boot(page, port, s, storageBaseline); errs = [];
   let atBaseline = true;
   // Repeated items (grid tiles, list rows, swatches) are one control family: test 3 of each, not 5,000.
   const famCount = new Map(), FAMILY_CAP = 3;
@@ -180,7 +190,7 @@ for (const [name, s] of Object.entries(SURFACES)) {
   const reach = async (c) => {
     let cur = await find(c.key);
     if (cur) return cur; // still visible and uncovered: reuse the page instead of a 2-10s reboot
-    await boot(page, port, s); await settle(); atBaseline = true;
+    await boot(page, port, s, storageBaseline); await settle(); atBaseline = true;
     for (let i = 0; i < c.path.length; i++) {
       const sc = await find(c.path[i]); if (!sc) return null;
       const nextKey = i + 1 < c.path.length ? c.path[i + 1] : c.key;
@@ -195,6 +205,7 @@ for (const [name, s] of Object.entries(SURFACES)) {
         if (!sc.replayIdempotent) return null;
       }
       await act(page, sc, c.pathSel?.[i]); await settle(); atBaseline = false;
+      if (c.pathSel?.[i]?.valueType === 'value' && sc.label === '#lib-search') await page.keyboard.press('Enter');
       if (c.label === 'Export proof toggle' && sc.label === '#btn-export-db') {
         await page.waitForFunction(() => {
           const toggle = document.querySelector('#sk2-export .sk2x-proof-toggle');
