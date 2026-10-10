@@ -30,7 +30,7 @@ try{
     const P=getFXParams();P.masks=[mask];P._exportDepthMap={data:new Uint8Array(depth.data),w:depth.w,h:depth.h};P.geom=item.geom;P.redEyeOps=[];P.grain={enabled:false};P.halation={enabled:false};P.bloom={enabled:false};P.adjust={enabled:false};P.lut=null;P.print=null;P.vignette={enabled:false};fxGlowScale=()=>1;Math.random=()=>.375;
     const hash=canvas=>{const d=canvas.getContext('2d',{willReadFrequently:true}).getImageData(0,0,canvas.width,canvas.height).data;let v=2166136261;for(let i=0;i<d.length;i++){v^=d[i];v=Math.imul(v,16777619);}return v>>>0;};
     const renderer=fxPrepareExportRenderer();
-    const selectionHash=()=>{const out=document.createElement('canvas');out.width=w;out.height=h;renderer.setImage(src);fxSetCapturedExportDepth(renderer,P);renderer.render(P,w,h,{showSel:0});const{px}=renderer.getPixels();out.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),w,h),0,0);return hash(out);};
+    const selectionHash=()=>{const out=document.createElement('canvas');out.width=w;out.height=h;renderer.setImage(src);fxSetCapturedExportDepth(renderer,P);renderer.render(P,w,h,{showSel:0,previewOnly:MSK_PREVIEW_RENDER_TOKEN});const{px}=renderer.getPixels();out.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),w,h),0,0);return hash(out);};
     const selectionBase=selectionHash();
     shouldTile=()=>false;const baseline=await processToCanvas(P,src,w,h,()=>{},renderer),baselineHash=hash(baseline);
     shouldTile=()=>true;const tiledBase=await processToCanvas(P,src,w,h,()=>{},renderer),tiledBaseHash=hash(tiledBase);

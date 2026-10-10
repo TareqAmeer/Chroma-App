@@ -63,7 +63,7 @@ const out=await pg.evaluate(async()=>{
     window.fxUpdate&&window.fxUpdate();
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
     fxState.artSeed=7.7;
-    FX.render(window.getFXParams(),VW,VH,Object.assign({glowScale:1,showSel:-1},opts||{}));
+    FX.render(window.getFXParams(),VW,VH,Object.assign({glowScale:1,showSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN},opts||{}));
     const cv=document.createElement('canvas');cv.width=VW;cv.height=VH;
     cv.getContext('2d').drawImage(FX.cv,0,0);return cv;
   };
