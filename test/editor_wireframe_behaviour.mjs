@@ -810,6 +810,10 @@ test.describe('export panel — dynamic #style-list (T29)', () => {
     await expect(status).toContainText('Adjustments independent');
     await page.evaluate(() => setExportScope('current'));
     await expect(status).toContainText('Export this photo');
+    await page.evaluate(() => fxSection('grain'));
+    await expect(status).toContainText('Grain shared');
+    await page.evaluate(() => fxSection('crop'));
+    await expect(status).toContainText('Crop per photo');
   });
 
   test('Save as Style… adds an entry, deleting it removes it', async ({ editor: { page } }) => {

@@ -1730,3 +1730,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Files: `chromasmith-22.html`, `test/mask_ai_provenance.mjs`, `docs/masking-roadmap.md`. The AI provenance test passes the normal backend/provenance cases plus background soft-complement, empty/full-mask preservation, menu-action configuration and failure paths. Editor HTML validity and `git diff --check` pass. The existing GPU preview/tiled-export browser gate could not navigate to its local server (`ERR_NETWORK_ACCESS_DENIED`); no live SAM photo test or independent background model is claimed.
 - This is a derived complement of Subject selection, not independent background segmentation. CHR-247 stays In Progress with its broad selection, quality and export acceptance criteria unchecked.
 - Publication: feature commit `29284322` was integrated as `333e23848cdc381060fd863cccb40f3676d7615c`; `git ls-remote origin refs/heads/main` confirmed that hash. The build-stamp record follows separately.
+
+### 2026-10-11 — CHR-193 active-section scope status
+
+- Extended the persistent editor scope status to follow the active tool and current photo, distinguishing shared edits, photo overrides, always-per-photo masks/geometry, and export target. Added a user-facing What's New entry and bumped build `1.1011N`.
+- Extended the focused Editor behavior test for shared Grain scope and per-photo Crop scope. `node --check test/editor_wireframe_behaviour.mjs`, `node test/editor_html_validity_check.mjs`, and `git diff --check` pass. Playwright could not navigate to its local server (`ERR_NETWORK_ACCESS_DENIED`), so the new browser assertions remain unverified here.
+- CHR-193 remains In Progress. Explicit selected-subset counts and user prediction across tone, paste, crop, and export still require broader validation.

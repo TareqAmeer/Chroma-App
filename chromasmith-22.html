@@ -7340,12 +7340,15 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011M';
+const BUILD='1.1011N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
 const WHATSNEW=[
+  {date:'2026-10-11',items:[
+    'Batch scope status now follows the active tool and photo, including per-photo masks and geometry.'
+  ]},
   {date:'2026-10-11',items:[
     'The brush size ring now appears as soon as a touch or pen starts a stroke.',
     'Local masks now have a separate Sharpen control for edge contrast.'
@@ -13869,6 +13872,7 @@ function secScopeSyncUI(){
     b.title=always?`${nm} always applies to this photo only`:!canToggle?`${nm} applies to all ${n} photos`:one?`${nm}: this photo only — click to apply to all ${n} photos`:`${nm}: applies to all ${n} photos — click for this photo only`;
     b.setAttribute('aria-label',b.title);
   });
+  syncBatchScopeStatus();
 }
 // ── CHR-203: Versions panel ───────────────────────────────────────────────────────────────
 // Talks to the desktop Library through window.chromasmithVersions (library-ui.js), which wraps
@@ -25741,10 +25745,14 @@ function syncBatchScopeStatus(){
   const count=fxImages.length;
   if(!count){el.style.display='none';el.textContent='';el.removeAttribute('title');el.removeAttribute('aria-label');return;}
   const item=curItem(),index=Math.min(fxCurIdx+1,count);
-  const adjustment=item&&item.adjustOverride?'independent':'shared';
+  const activeCard=document.querySelector('.fx-ctrl.sec-active[data-fxsec]');
+  const section=activeCard&&activeCard.dataset.fxsec||'adjust';
+  const sectionName=CS_NAMES[section]||({masks:'Masks',adjustments:'Adjustments'}[section]||section);
+  const perPhoto=SEC_ALWAYS_ONE.includes(section)||(section==='adjust'?!!(item&&item.adjustOverride):!!(item&&item.secOverride&&item.secOverride[section]));
+  const scope=count===1?'this photo only':SEC_ALWAYS_ONE.includes(section)?'per photo':perPhoto?'this photo only':SEC_SCOPE_DOM.includes(section)||section==='adjust'?'shared':'all photos';
   const exportLabel=count>1?(fxExportScope==='current'?'this photo':`all ${count}`):'this photo';
-  const visible=count>1?`Photo ${index} of ${count} · Adjustments ${adjustment} · Export ${exportLabel}`:`Single photo · Export ${exportLabel}`;
-  const detail=`Photo ${index} of ${count}. Basic adjustments are ${adjustment} for this photo${adjustment==='shared'?' and follow the batch value':' and override the shared batch value'}. Other sections may use their own shared or per-photo scope controls. Masks and crop/transform are per photo; copying masks or applying geometry to all photos is explicit. Export currently targets ${exportLabel}.`;
+  const visible=count>1?`Photo ${index} of ${count} · ${sectionName} ${scope} · Export ${exportLabel}`:`Single photo · ${sectionName} ${scope} · Export ${exportLabel}`;
+  const detail=`Photo ${index} of ${count}. ${sectionName} ${scope}${perPhoto&&SEC_SCOPE_DOM.includes(section)?' and overrides the shared batch value':''}. Basic adjustments ${item&&item.adjustOverride?'override':'follow'} the shared batch value. Masks and crop/transform are per photo; copying masks or applying geometry to all photos is explicit. Export currently targets ${exportLabel}.`;
   if(el.textContent!==visible)el.textContent=visible;
   if(el.title!==detail)el.title=detail;
   if(el.getAttribute('aria-label')!==detail)el.setAttribute('aria-label',detail);
@@ -29557,6 +29565,7 @@ function fxSection(name,noSheet){
   // applied and the cells have not been laid out yet at this point in the frame.)
   if(members.includes('looks')&&typeof buildLookGallery._reseed==='function')setTimeout(buildLookGallery._reseed,0);
   if(dx&&typeof sk2SubTabs==='function')sk2SubTabs(name,jumpTo);
+  syncBatchScopeStatus();
 }
 function fxSheetClose(){
   document.body.classList.remove('sheet-open','sheet-full','sheet-peek','lk-strength');
