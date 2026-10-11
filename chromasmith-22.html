@@ -7331,12 +7331,15 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1010C';
+const BUILD='1.1011A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
 // bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
 const WHATSNEW=[
+  {date:'2026-10-11',items:[
+    'The brush size ring now appears as soon as a touch or pen starts a stroke.'
+  ]},
   {date:'2026-10-07',items:[
     'Android photos now save in Pictures/Chromasmith and survive uninstalling the app.',
     'Existing Android exports are moved to permanent photo storage after verification.'
@@ -18014,6 +18017,10 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   fxCanvasOn('pointerdown',e=>{
     if(!mskPaintMode)return;
     const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;
+    // Touch and pen can go directly from pointerenter to pointerdown without a prior
+    // pointermove. Paint the brush-size/erase ring on contact so their first stroke has
+    // the same visible feedback as a mouse already hovering over the canvas.
+    lastBrushPointer=e;updateBrushCursor(e);
     e.preventDefault();e.stopPropagation();
     try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
     _mskStroke=m;

@@ -209,10 +209,15 @@ async function main() {
       ck('CHR-275 release restores paint without changing size/flow',!mskBrushEraseHeld&&mskBrushSize===1&&mskBrushFlow===60&&mskBrushFeather===42&&mskBrushDensity===37);
             ck('CHR-275 stationary cursor returns to paint',!document.getElementById('msk-brush-cursor').classList.contains('erase'));
       const eraseButton=document.getElementById('btn-msk-erase'),touchBrushCursor=document.getElementById('msk-brush-cursor');
+      // Touch may make contact without any preceding movement; hide the hover ring to
+      // make this first-contact assertion exercise pointerdown's cursor update.
+      paintCanvas.dispatchEvent(new PointerEvent('pointerleave',{bubbles:true}));
       m.px.fill(200);eraseButton.click();
       ck('CHR-275 on-screen erase exposes pressed state',eraseButton.getAttribute('aria-pressed')==='true'&&eraseButton.classList.contains('on'));
       ck('CHR-275 on-screen erase immediately updates cursor feedback',touchBrushCursor.classList.contains('erase'));
-      pointer('pointerdown',false,'touch');pointer('pointerup',false,'touch');
+      pointer('pointerdown',false,'touch');
+      ck('CHR-275 touch contact shows the brush ring in erase state without prior motion',touchBrushCursor.classList.contains('on')&&touchBrushCursor.classList.contains('erase'));
+      pointer('pointerup',false,'touch');
       ck('CHR-275 touch pointer erases through visible toggle',m.px.some(v=>v<200));
       eraseButton.click();
       ck('CHR-275 on-screen erase returns accessible state and cursor to paint',eraseButton.getAttribute('aria-pressed')==='false'&&!eraseButton.classList.contains('on')&&!touchBrushCursor.classList.contains('erase'));
