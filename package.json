@@ -21,6 +21,7 @@
     "mask:style-presets": "node --test test/mask_style_presets.mjs && node test/mask_style_presets_ui.mjs",
     "teeth:test": "node test/teeth_whitening.mjs && node test/teeth_whitening_render.mjs",
     "teeth:preview": "node test/teeth_whitening_render.mjs --live-preview",
+    "mask:depth-preview": "node test/mask_depth_refinement_gpu.mjs --live-preview",
     "mask:refinement-math": "node test/mask_refinement_math.mjs",
     "wireframe:test": "node test/wireframe_inventory.mjs",
     "wireframe:icons": "node test/wireframe_inventory.mjs --icons-baseline",

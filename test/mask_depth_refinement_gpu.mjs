@@ -11,7 +11,14 @@ const HERE=path.dirname(fileURLToPath(import.meta.url)),ROOT=path.resolve(HERE,'
 const MIME={'.html':'text/html','.js':'text/javascript','.wasm':'application/wasm','.png':'image/png'};
 const server=createServer(async(req,res)=>{try{const pathname=decodeURIComponent(req.url.split('?')[0]);const file=path.join(ROOT,pathname==='/'?'index.html':pathname.replace(/^\/+/,''));if(!file.startsWith(ROOT)){res.writeHead(403);res.end();return;}const data=await readFile(file);res.setHeader('Cross-Origin-Opener-Policy','same-origin');res.setHeader('Cross-Origin-Embedder-Policy','require-corp');res.writeHead(200,{'Content-Type':MIME[path.extname(file)]||'application/octet-stream'});res.end(data);}catch{res.writeHead(404);res.end('not found');}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe',args:['--use-gl=swiftshader','--use-angle=swiftshader','--disable-gpu-sandbox','--disable-dev-shm-usage','--enable-unsafe-swiftshader']});
+const livePreviewMode=process.env.MASK_LIVE_PREVIEW==='1'||process.argv.includes('--live-preview');
+const browser=await chromium.launch({
+  // The optional live gate uses installed Chrome's normal GPU context so it can verify the
+  // actual zoomed editor canvas; the default keeps the established headless SwiftShader gate.
+  headless:!livePreviewMode,
+  executablePath:process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  args:livePreviewMode?[]:['--use-gl=swiftshader','--use-angle=swiftshader','--disable-gpu-sandbox','--disable-dev-shm-usage','--enable-unsafe-swiftshader']
+});
 try{
   const page=await browser.newPage({viewport:{width:1280,height:900}}),shaderErrors=[];
   await page.addInitScript(()=>{
@@ -82,7 +89,7 @@ try{
       for(let i=0;i<a.length;i+=4){for(let c=0;c<3;c++){const d=Math.abs(a[i+c]-b[i+c]);if(d)n++;if(d>max)max=d;sum+=d;samples++;}}
       return{preview:{w:preview.width,h:preview.height},source:{x:region.x,y:region.y,w:region.w,h:region.h},compared:samples,max,mean:sum/samples};
     };
-    let fitParity;const zoomParities=[];let previewSkip=null;
+    let fitParity;const lowZoomParities=[],zoomParities=[];let previewSkip=null;
     try{
       if(!FX.ok||!FX.gl||FX.gl.isContextLost()){
         const lost=window.__webglContextTrace.find(entry=>entry.event==='lost'&&entry.canvasId==='fx-canvas');
@@ -96,11 +103,36 @@ try{
       const fitPreview=document.createElement('canvas');fitPreview.width=FX.cv.width;fitPreview.height=FX.cv.height;
       fitPreview.getContext('2d').drawImage(FX.cv,0,0);
       fitParity=previewStats(fitPreview,tiled,{x:0,y:0,w,h});
-      for(const zoomValue of [2,4,8]){
-        fxZoom=zoomValue;fxPanX=fxPanY=0;_applyZoom();
+      // The fit renderer remains the source below 100%; verify several points in the lower
+      // half of the user-facing slider as well as the exact fit state.
+      for(const percent of [28,50,75,100]){
+        fxZoom=Math.max(.25,FX_FIT*percent/100);fxPanX=fxPanY=0;_applyZoom();
+        const cropsBefore=cropCalls.length;renderPreview();
+        if(cropCalls.length!==cropsBefore)throw new Error(`${percent}% slider zoom unexpectedly entered the full-resolution crop renderer`);
+        const lowPreview=document.createElement('canvas');lowPreview.width=FX.cv.width;lowPreview.height=FX.cv.height;
+        lowPreview.getContext('2d').drawImage(FX.cv,0,0);
+        const parity=previewStats(lowPreview,tiled,{x:0,y:0,w,h});parity.zoomPercent=percent;lowZoomParities.push(parity);
+      }
+      const panUnitX=FX.cv.width*.12,panUnitY=FX.cv.height*.12;
+      const zoomProbes=[
+        {percent:112,panX:0,panY:0}, // just above the FX full-resolution threshold (raw zoom 1.0)
+        {percent:125,panX:0,panY:0},
+        {percent:150,panX:-panUnitX,panY:panUnitY},
+        {percent:200,panX:0,panY:0},
+        {percent:200,panX:panUnitX,panY:-panUnitY},
+        {percent:300,panX:0,panY:0},
+        {percent:400,panX:0,panY:0},
+        {percent:400,panX:-panUnitX,panY:-panUnitY},
+        {percent:600,panX:0,panY:0},
+        {percent:800,panX:0,panY:0},
+        {percent:800,panX:panUnitX,panY:panUnitY},
+      ];
+      for(const probe of zoomProbes){
+        const zoomValue=FX_FIT*probe.percent/100;
+        fxZoom=zoomValue;fxPanX=probe.panX;fxPanY=probe.panY;_applyZoom();
         await new Promise(resolve=>setTimeout(resolve,120)); // wait for the settled zoom render
         const cropsBefore=cropCalls.length;renderPreview();
-        if(cropCalls.length<=cropsBefore)throw new Error(`settled ${zoomValue*100}% renderPreview() did not enter renderFullResCrop()`);
+        if(cropCalls.length<=cropsBefore)throw new Error(`settled ${probe.percent}% renderPreview() did not enter renderFullResCrop()`);
         const cropRender=cropCalls[cropCalls.length-1],uvOff=cropRender?.opts?.uvOff,uvScale=cropRender?.opts?.uvScale;
         if(!uvOff||!uvScale||cropRender.outW<=0||cropRender.outH<=0)throw new Error(`${zoomValue*100}% zoom crop did not provide source UV bounds and a non-empty backing store`);
         const cropX=Math.round(uvOff[0]*w),cropY=Math.round(h-(uvOff[1]+uvScale[1])*h),
@@ -108,25 +140,26 @@ try{
         const zoomPreview=document.createElement('canvas');zoomPreview.width=FX.cv.width;zoomPreview.height=FX.cv.height;
         zoomPreview.getContext('2d').drawImage(FX.cv,0,0);
         const parity=previewStats(zoomPreview,tiled,{x:cropX,y:cropY,w:cropW,h:cropH});
-        parity.zoom=zoomValue;parity.cropRender={w:cropRender.outW,h:cropRender.outH};zoomParities.push(parity);
+        parity.zoomPercent=probe.percent;parity.pan={x:probe.panX,y:probe.panY};parity.cropRender={w:cropRender.outW,h:cropRender.outH};zoomParities.push(parity);
       }
     }catch(e){if(!previewSkip)throw e;}finally{
       renderFullResCrop=originalCrop;getFXParams=oldGetFXParams;fxState.masks=oldMasks;fxWork=oldWork;
       fxFullResPreview=oldFullRes;fxZoom=oldZoom;fxPanX=oldPanX;fxPanY=oldPanY;_fxPreviewInteracting=oldInteracting;
       localToggle.classList.toggle('on',localWasOn);
     }
-    return{baselineHash,refinedHash,resetHash,tiledBaseHash,tiledHash,tiles,selectionBase,selectionRefined,baseDiff:diff(baseline,tiledBase),refinedDiff:diff(refined,tiled),previewSkip,fitParity,zoomParities,packed,transformed:{w:transformed.w,h:transformed.h},expected:{w:Math.round(depth.h*.8),h:Math.round(depth.w*.8)}};
+    return{baselineHash,refinedHash,resetHash,tiledBaseHash,tiledHash,tiles,selectionBase,selectionRefined,baseDiff:diff(baseline,tiledBase),refinedDiff:diff(refined,tiled),previewSkip,fitParity,lowZoomParities,zoomParities,packed,transformed:{w:transformed.w,h:transformed.h},expected:{w:Math.round(depth.h*.8),h:Math.round(depth.w*.8)}};
   },fixture);
   assert.notEqual(result.refinedHash,result.baselineHash,`Feather/Edge changes GPU-rendered selection: ${JSON.stringify(result)}`);
   assert.equal(result.resetHash,result.baselineHash,'reset exactly restores native GPU depth output');
   assert.equal(result.tiledHash,result.refinedHash,'preview-size and tiled export share the same derived selection');
   assert.ok(result.tiles>1,`the fixture crosses a tile boundary (${result.tiles} tiles)`);
   assert.deepEqual(result.transformed,result.expected,'export depth receives photo crop/rotation exactly once');
-  if(result.previewSkip){console.log(`SKIP preview/export parity: ${result.previewSkip}`);}
+  if(result.previewSkip){if(livePreviewMode)throw new Error(`live preview gate requires a healthy WebGL context: ${result.previewSkip}`);console.log(`SKIP preview/export parity: ${result.previewSkip}`);}
   else{
     assert.ok(result.fitParity.compared>0&&result.fitParity.mean<=4&&result.fitParity.max<=32,`fit renderPreview/export parity: ${JSON.stringify(result.fitParity)}`);
-    for(const parity of result.zoomParities)assert.ok(parity.compared>0&&parity.mean<=4&&parity.max<=32,`${parity.zoom*100}% settled full-res zoom crop/export parity: ${JSON.stringify(parity)}`);
+    for(const parity of result.lowZoomParities)assert.ok(parity.compared>0&&parity.mean<=4&&parity.max<=32,`${parity.zoomPercent}% fit-buffer/export parity: ${JSON.stringify(parity)}`);
+    for(const parity of result.zoomParities)assert.ok(parity.compared>0&&parity.mean<=4&&parity.max<=32,`${parity.zoomPercent}% panned/centered settled full-res zoom crop/export parity: ${JSON.stringify(parity)}`);
   }
   assert.equal(shaderErrors.length,0,`shader compile/link errors: ${shaderErrors.join(' | ')}`);
-  console.log(`PASS depth GPU path (${result.tiles} tiles): native/reset ${result.baselineHash}, refined/tiled ${result.refinedHash}, transformed ${result.transformed.w}×${result.transformed.h}; ${result.previewSkip?'preview parity explicitly skipped':`fit ${JSON.stringify(result.fitParity)}; settled zooms ${JSON.stringify(result.zoomParities)}`}`);
+  console.log(`PASS depth GPU path (${result.tiles} tiles): native/reset ${result.baselineHash}, refined/tiled ${result.refinedHash}, transformed ${result.transformed.w}×${result.transformed.h}; ${result.previewSkip?'preview parity explicitly skipped':`fit ${JSON.stringify(result.fitParity)}; lower zooms ${JSON.stringify(result.lowZoomParities)}; settled zooms ${JSON.stringify(result.zoomParities)}`}`);
 }finally{await browser.close();server.close();}
