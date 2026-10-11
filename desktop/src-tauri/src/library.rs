@@ -961,6 +961,29 @@ pub(crate) fn decode_cache_exists(path: &str, recipe_key: &str) -> Result<bool, 
     Ok(decode_cache_file(path, recipe_key)?.is_some())
 }
 
+/// HDR-preview marker: "this photo+recipe's scene-linear companion has NO value above the 1.05
+/// headroom threshold", so its cached SDR RGBA8 frame is byte-for-byte what an HDR-preview decode
+/// would show and the frame caches may serve it. Written next to the decode cache (same key stem,
+/// `.hdrclear`) by decode_raw_v2 / cache_raw_decode, which see the unquantized values. Without
+/// it, HDR preview forces a full native decode on EVERY open (the companion isn't cached).
+fn hdr_clear_marker_path(path: &str, recipe_key: &str) -> Result<PathBuf, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let png_key = decode_cache_key(path, mtime, meta.len(), recipe_key);
+    Ok(decode_cache_dir().join(format!("{}.hdrclear", png_key.trim_end_matches(".png"))))
+}
+
+pub(crate) fn write_hdr_clear_marker(path: &str, recipe_key: &str) {
+    if let Ok(p) = hdr_clear_marker_path(path, recipe_key) { let _ = std::fs::write(p, b"1"); }
+}
+
+/// True when a headroom-free marker AND the full-resolution cache both exist for this recipe.
+#[tauri::command(async)]
+pub fn hdr_headroom_clear(path: String, recipe_key: String) -> Result<bool, String> {
+    let marker = hdr_clear_marker_path(&path, &recipe_key)?;
+    Ok(marker.is_file() && decode_cache_exists(&path, &recipe_key)?)
+}
+
 /// Decodes the full-resolution cache (either format) to RGBA8.
 pub(crate) fn read_decode_cache_rgba(path: &str, recipe_key: &str) -> Result<image::RgbaImage, String> {
     let file = decode_cache_file(path, recipe_key)?.ok_or("no cached decode")?;
@@ -3270,7 +3293,7 @@ pub(crate) fn is_evictable_cache_file(name: &str) -> bool {
 pub(crate) fn is_evictable_decode_file(name: &str) -> bool {
     if is_evictable_cache_file(name) { return true; }
     let (stem, ext) = match name.rsplit_once('.') { Some(v) => v, None => return false };
-    if !matches!(ext, "png" | "qoi" | "jpg" | "webp") { return false; }
+    if !matches!(ext, "png" | "qoi" | "jpg" | "webp" | "hdrclear") { return false; }
     let hex = match stem.split_once(".display-") {
         Some((h, edge)) if !edge.is_empty() && edge.bytes().all(|b| b.is_ascii_digit()) => h,
         Some(_) => return false,
@@ -4553,5 +4576,19 @@ mod dng_ifd0_preview_tests {
         let (rgb, w, h) = decode_rgb8_capped(p, 640).expect("IFD0-only DNG must decode via thumbnail fallback");
         assert_eq!((w, h), (64, 48));
         assert_eq!(rgb.len(), 64 * 48 * 3);
+    }
+}
+
+#[cfg(test)]
+mod hdr_clear_marker_tests {
+    use super::*;
+
+    /// HDR-preview opens only reach the frame caches via the ".hdrclear" marker; it must be
+    /// LRU-evictable with its frame or orphans accumulate forever.
+    #[test]
+    fn hdrclear_marker_is_evictable_with_decode_cache() {
+        assert!(is_evictable_decode_file("0123456789abcdef.hdrclear"));
+        assert!(is_evictable_decode_file("0123456789abcdef.qoi"));
+        assert!(!is_evictable_decode_file("notahexstem.hdrclear"));
     }
 }

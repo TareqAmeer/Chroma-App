@@ -905,7 +905,7 @@
       case 'take_pending_open_path': return Promise.resolve([]);
       // Decode caches: the real commands return Err on a miss, which every caller already treats
       // as "decode it yourself" — a permanent miss exercises that path.
-      case 'cache_raw_decode': case 'get_cached_raw_decode': case 'get_decode_cache': case 'get_decode_cache_path':
+      case 'cache_raw_decode': case 'get_cached_raw_decode': case 'get_decode_cache': case 'get_decode_cache_path': case 'hdr_headroom_clear':
         return Promise.reject(new Error('libtest: not cached'));
       // Header sniff + fast thumbnail: answering these with the 1px stand-in PNG made every
       // Gallery -> Editor open fail ("decode failed") in libtest, because the opener trusts the
@@ -5026,9 +5026,11 @@
     if (state.expanded_view) toggleExpandedView(false);
     // HDR preview needs the scene-linear companion from a fresh native decode; an SDR
     // canvas cache entry is therefore not valid while that opt-in is enabled.
-    const hdrPreview = !!window.chromasmithHdrPreview;
+    // `let`: downgraded below once this photo+recipe is known to have NO scene-linear headroom
+    // (marker written by the native decode) — its cached SDR frame then equals the HDR decode.
+    let hdrPreview = !!window.chromasmithHdrPreview;
     const isRaw = RAW_EXT_RE.test(path);
-    const cached = hdrPreview ? null : imgCache.get(path);
+    let cached = hdrPreview ? null : imgCache.get(path);
     let photoSourceMode = state.photoSourceModes.get(path) || 'original';
     let displayOverlayPromise = Promise.resolve(() => {});
     // RAW camera-embedded previews and the Library thumbnail can carry the camera's own LUT.
@@ -5094,6 +5096,18 @@
       try { await invoke('get_decode_cache_path', { path, recipeKey: fullKey }); recipeKey = fullKey; } catch (_) {}
     }
     if (isRaw && recipeKey === rawRecipeKey(true, path)) window.__chromasmithFullCleanupPaths.add(path);
+    // HDR preview used to disable every cache (imgCache, display proxy, native/persistent frame)
+    // for every RAW, so each open and every A->B->A revisit paid a full 3-5s native decode. The
+    // companion only matters when a photo actually has headroom; ask native whether this one does.
+    if (hdrPreview && isRaw) {
+      try {
+        if (await invoke('hdr_headroom_clear', { path, recipeKey })) {
+          hdrPreview = false;
+          cached = imgCache.get(path);
+          if (cached && spin) spin.style.display = 'none';
+        }
+      } catch (_) { /* keep the full-decode behaviour */ }
+    }
     if (isRaw && !hdrPreview) displayPinnedKey = displayCacheKey(path, recipeKey);
     if (isRaw && !hdrPreview) {
       displayOverlayPromise = showDisplayProvisional(path, recipeKey);

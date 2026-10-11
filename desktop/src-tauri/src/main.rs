@@ -265,7 +265,7 @@ fn persist_decoded_rgba(path: &str, recipe_key: &str, width: u32, height: u32, r
 /// fast culling would be exactly the memory growth an 8GB Mac can't afford.
 static PERSIST_POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
 static PERSIST_PENDING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-fn persist_in_background(path: String, recipe_key: String, width: u32, height: u32, rgba: std::sync::Arc<Vec<u8>>) {
+fn persist_in_background(path: String, recipe_key: String, width: u32, height: u32, rgba: std::sync::Arc<Vec<u8>>, hdr_clear: bool) {
     use std::sync::atomic::Ordering;
     if PERSIST_PENDING.fetch_add(1, Ordering::SeqCst) >= 2 {
         PERSIST_PENDING.fetch_sub(1, Ordering::SeqCst);
@@ -281,6 +281,8 @@ fn persist_in_background(path: String, recipe_key: String, width: u32, height: u
         let mut stage_t = std::time::Instant::now();
         if let Err(e) = persist_decoded_rgba(&path, &recipe_key, width, height, &rgba, &file_name, &mut stage_t) {
             eprintln!("persist decode cache for {file_name}: {e}");
+        } else if hdr_clear {
+            library::write_hdr_clear_marker(&path, &recipe_key);
         }
         PERSIST_PENDING.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
     };
@@ -1121,6 +1123,18 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
         _ => film_negative_input(&decoded.rgb16, &json)?.iter().flat_map(|v| v.to_le_bytes()).collect(),
     };
     let body = film_negative_bw(body, effective_mode, &json);
+    // HDR preview asked for the unquantized companion, but JS only uses it when some value is
+    // measurably above white (chromasmith-22.html: any > 1.05). When none is, the RGBA8 body is
+    // the whole story: drop the companion (JS then sees "no headroom", same as before) so the
+    // frame is cacheable like any SDR decode, and leave a marker so later opens may take the
+    // cache instead of re-decoding every time (HDR preview used to bypass every cache).
+    let mut hdr_clear = false;
+    if want_ext {
+        if let Some(e) = ext.as_ref() {
+            if !e.iter().any(|v| *v > 1.05) { hdr_clear = true; }
+        }
+        if hdr_clear { ext = None; }
+    }
     // Persistent decode cache for an interactive open (desktop-native.js sends cachePath +
     // recipeKey only on the call whose pixels are FINAL, and only for a real on-disk source).
     // Only the RGBA8 display-referred body is cacheable — same shape cache_raw_decode writes; a
@@ -1135,7 +1149,7 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
                     // for promotion (imgCache fullImg), and a second 96MB-per-photo copy here was
                     // measurable extra swap on an 8GB Mac. The Arc is dropped once persisted.
                     let frame = std::sync::Arc::new(body.clone());
-                    persist_in_background(cache_path.to_string(), recipe_key.to_string(), decoded.width, decoded.height, frame);
+                    persist_in_background(cache_path.to_string(), recipe_key.to_string(), decoded.width, decoded.height, frame, hdr_clear);
                 }
             }
         }
@@ -1231,24 +1245,29 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
     // high_nr, false_color, hue_defringe, orientation, lens, native_nr — raw_decode.rs) under
     // op=decode; this coarser "decode_total" line below lets a consumer that only wants the
     // top-level breakdown skip summing those without losing them for one that wants the detail.
-    let develop = || -> Result<(raw_decode::DecodedRaw, Vec<u8>), String> {
+    let develop = || -> Result<(raw_decode::DecodedRaw, Vec<u8>, bool), String> {
         let decoded = raw_decode::decode_rw2_bytes(&bytes, auto_lens, nr,
             demosaic_algo, false, lens_override)?;
         diag::stage("cache", &file_name, "decode_total", &mut stage_t);
         let (effective_mode, _) = effective_dcp_mode(&mode, &decoded.make, (!lut_key.is_empty()).then_some(lut_key.as_str()));
+        let mut hdr_clear = false;
         let rgba = if effective_mode == "lut" {
             let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
             let lut = guard.as_ref().and_then(|m| m.get(&lut_key).cloned()).ok_or_else(|| format!("LUT '{lut_key}' not registered"))?;
             let n = ((lut.len() / 3) as f64).cbrt().round() as usize;
             drop(guard);
-            raw_decode::apply_lut_rgba(&lut_input_rgb16(&lut_key, &bytes, &decoded), &lut, n)?
+            // _ext variant: the batch frame is the SDR body either way, but the unquantized
+            // values tell us whether HDR preview could ever differ from it (hdr_headroom_clear).
+            let (rgba, e) = raw_decode::apply_lut_rgba_ext(&lut_input_rgb16(&lut_key, &bytes, &decoded), &lut, n)?;
+            hdr_clear = !e.iter().any(|v| *v > 1.05);
+            rgba
         } else { raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam) };
         diag::stage("cache", &file_name, "colour_convert", &mut stage_t);
-        Ok((decoded, rgba))
+        Ok((decoded, rgba, hdr_clear))
     };
     // Batch/full-cache work keeps its existing global-pool behavior. Only the explicitly
     // user-waiting display-only review decode and its full-frame color conversion are promoted.
-    let (decoded, rgba) = run_raw_cache_development(display_only, develop)?;
+    let (decoded, rgba, hdr_clear) = run_raw_cache_development(display_only, develop)?;
     let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba).ok_or("decoded RGBA dimensions do not match")?;
     let rgba = img.into_raw();
     if display_only {
@@ -1266,6 +1285,7 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
     // Persistent fallback for the next launch (PNG) + the display-sized proxy — the in-process
     // cache above is the fast path. Same helper the interactive open uses (decode_raw_v2).
     persist_decoded_rgba(&path, &recipe_key, decoded.width, decoded.height, &rgba, &file_name, &mut stage_t)?;
+    if hdr_clear { library::write_hdr_clear_marker(&path, &recipe_key); }
     Ok("written".into())
 }
 
@@ -2925,6 +2945,7 @@ fn main() {
             library::registry_set_many,
             library::get_decode_cache,
             library::get_decode_cache_path,
+            library::hdr_headroom_clear,
             library::get_display_decode_cache,
             library::get_display_decode_cache_path,
             library::get_lr_thumb,
