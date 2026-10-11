@@ -241,3 +241,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Published feature commit `60a74630` as integration commit `4791006fb4ff4cfa8ccc0ed9c53de0abb9950866` on `origin/main`; fetch, remote ref hash and ancestry verification passed.
 - The integrated `npm run teeth:test` passed workflow/import 38/38 and the six GPU render/export checks. Localized correction, exact neutral reset, 100% synthetic texture-contrast retention, snapshot-render equivalence and two-tile export parity (max delta 0) are covered. AC3 is checked. AC4 remains open for app-level preview validation; the tested matte is synthetic and does not establish real portrait quality. Issue remains In Progress.
+
+### CHR-246 — reproducible natural-mask quality probe
+
+- Extended `desktop/src-tauri/examples/inpaint_probe.rs` to accept dimension-matched grayscale masks (black erase, white preserve), retain the exact source and normalized mask, save all three candidate composites, and emit mask-containment/change/diversity measurements plus a pending 100% review receipt. Documented a reproducible per-case invocation and evidence limits in `desktop/src-tauri/vendor/inpainting/README.md`.
+- Rust source parsing (`rustfmt --config skip_children=true`) and `git diff --check` pass. Native `cargo check` remains unverified: this checkout lacks packaged Tauri model/runtime resources, and after a module-harness fix the next check was stopped by the disk-space safety review at ~186 MB free. No inference or visual review was run; CHR-246 AC4 and AC7 remain unchecked. Changes are local to branch `codex/chr246-mask-image`; task implementation is not yet published.

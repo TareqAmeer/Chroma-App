@@ -59,6 +59,28 @@ folder together. The earlier Session scaffold has no ZIP archive API.
 
 ## Quality limits observed during readiness
 
+### Reproducible manual quality probe
+
+The native `inpaint_probe` example accepts an optional grayscale mask image as its
+last argument. Black (`0`–`127`) marks pixels to erase; white (`128`–`255`) preserves
+them. Source and mask dimensions must match. Without this argument, the example
+retains its small built-in rectangular probe mask. For repeatable real-photo cases,
+keep the source and mask outside the repository when licensing or privacy requires
+it, and run:
+
+```text
+cargo run --offline --manifest-path desktop/src-tauri/Cargo.toml --example inpaint_probe -- <ORT-library> <model-directory> <photo> <output-directory> <mask.png>
+```
+
+The output directory contains `source.png`, the normalized binary `mask.png`, all
+three `candidate-*.png` composites, `measurements.csv`, and a `review.md` receipt.
+The probe rejects pixels written outside the mask, records changed-pixel counts,
+Blake3 hashes and pairwise mean RGB differences inside the mask, and leaves every
+human review field pending. Metrics establish containment and candidate difference;
+only a 100% visual review can assess repeated texture, colour shifts, smearing, or
+semantic damage. Preserve a separate output directory and review receipt for each
+dust, wire/pole, and person case before checking CHR-246's quality criteria.
+
 A real 1280×756 pole photograph ran on ONNX Runtime 1.30 CPU in 0.632–0.828 seconds
 per candidate after a 0.298-second load (Python native binding readiness probe).
 Three context-mask outputs differed by 20,450–21,214 channels inside the selected
