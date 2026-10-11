@@ -1576,3 +1576,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commits `78f3df310d7e33936993d276e7ccd219a51346ce` and `2810c22e542909b620c1f7082e70bd174cf0dba2` were integrated as `8eb3347634584f1a63da7efd8bdd17d2e4a70913` and pushed to `origin/main`.
 - A fresh `git ls-remote origin refs/heads/main` verified the exact remote tip. The clean integration checkout passed the 49/49 matte workflow, rendered correction/export checks (direct/tiled max delta 0), HTML validity, and whitespace checks. Full Editor gates remain unverified after the wireframe-diff retry stalled; the focused menu test confirmed scroll containment. CHR-253 remains In Progress with its broader extraction/platform/fallback/real-photo criteria open.
+
+### 2026-10-11 — CHR-273 native process recovery
+
+- Added a subprocess regression that abruptly exits after the first recipe-batch item is applied, then reopens the file-backed SQLite journal, verifies the interrupted running state and item progress, and resumes the remaining item. Feature commit: `94b3f2b3fa5ff01ea684d8215d9c43b26d02806d`. File: `desktop/src-tauri/src/recipe_batch.rs`.
+- Verification: the focused subprocess test passes; all recipe-batch Rust tests pass (9 passed, 1 ignored); recipe-batch JavaScript unit tests pass 7/7. The browser recovery UI test was not rerun in this checkout because Playwright is absent; its prior passing result is documented above.
+- Process-boundary persistence plus the existing startup-reporting UI test covers interrupted-job reporting and resume. The tests exercise native persistence and UI orchestration separately; no single Tauri GUI/native-catalog relaunch test was run. Integration and publication verification pending.
