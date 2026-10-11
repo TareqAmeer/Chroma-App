@@ -62,7 +62,7 @@
   // without a real sidecar on disk.
   let ltVersions = [], ltActive = 0;
   const ltRecipeBatches = new Map(), ltBatchSidecars = new Map(), ltBatchFailures = new Set(), ltBatchSkips = new Set();
-  let ltFailNextSidecarWrite = false;
+  let ltFailNextSidecarWrite = false, ltDelayNextSidecarWrite = false;
   if (LIBTEST) {
     window.libtestRecipeBatchFailNext = indices => { indices.forEach(i => ltBatchFailures.add(i)); };
     window.libtestRecipeBatchSkipNext = indices => { indices.forEach(i => ltBatchSkips.add(i)); };
@@ -89,6 +89,7 @@
       state.sidecars.set(path, structuredClone(value));
     };
     window.__libtestFailNextSidecarWrite = () => { ltFailNextSidecarWrite = true; };
+    window.__libtestDelayNextSidecarWrite = () => { ltDelayNextSidecarWrite = true; window.__libtestSidecarWriteStarted = false; };
     window.__libtestReadSidecar = (path) => structuredClone(ltBatchSidecars.get(path) || ltSidecars.get(path) || {});
   }
   // Undo-reset mock state — mirrors the Rust one-slot buffer (last_reset_recipe/last_reset_edited)
@@ -246,10 +247,17 @@
         // recipe, edited:true) supersedes any pending reset-undo buffer.
         const current = ltBatchSidecars.get(A.path) || ltSidecars.get(A.path) || { color_label: '' };
         const updated = { ...current, ...A };
-        if (ltBatchSidecars.has(A.path)) ltBatchSidecars.set(A.path, updated);
-        if (A.edited && A.recipe) { ltRecipe = A.recipe; ltEdited = true; ltLastResetRecipe = null; ltLastResetEdited = false; }
-        ltSidecars.set(A.path, updated);
-        return Promise.resolve();
+        const persist = () => {
+          if (ltBatchSidecars.has(A.path)) ltBatchSidecars.set(A.path, updated);
+          if (A.edited && A.recipe) { ltRecipe = A.recipe; ltEdited = true; ltLastResetRecipe = null; ltLastResetEdited = false; }
+          ltSidecars.set(A.path, updated);
+        };
+        if (ltDelayNextSidecarWrite) {
+          ltDelayNextSidecarWrite = false;
+          window.__libtestSidecarWriteStarted = true;
+          return new Promise(resolve => { window.__libtestSidecarWriteRelease = () => { persist(); resolve(); }; });
+        }
+        persist(); return Promise.resolve();
       }
       case 'set_color_label': {
         if (ltFailNextSidecarWrite) { ltFailNextSidecarWrite = false; return Promise.reject(new Error('Simulated sidecar write failure')); }
@@ -5483,8 +5491,11 @@
         await invoke('set_sidecar', { path, rating: cur.rating, label: cur.label, edited: true, recipe }).catch((e) => { failed = true; console.error('auto-save recipe', e); });
       }
     }));
-    if (failed) ss('error', () => { if (!pendingSave) pendingSave = job; flushPendingSave(); });
-    else ss(queued ? 'queued' : 'saved');
+    // A newer edit can arrive while this sidecar write is in flight. Keep its visible pending
+    // state until its own snapshot has persisted; the older write must not announce "Saved" or
+    // replace the newer job with an error/retry for stale data.
+    if (failed && !pendingSave) ss('error', () => { if (!pendingSave) pendingSave = job; flushPendingSave(); });
+    else if (!failed && !pendingSave) ss(queued ? 'queued' : 'saved');
     // The live canvas only ever shows ONE photo (the currently previewed one) — refreshing
     // every batch photo's thumbnail from it would overwrite the rest with the wrong image.
     if (thumbPath) refreshCardThumbFromCanvas(thumbPath);
