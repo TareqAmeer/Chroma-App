@@ -17,6 +17,7 @@
     "mask:test": "node test/mask_raster.mjs && node test/mask_local_dehaze.mjs && node test/mask_local_texture_clarity.mjs",
     "mask:portable-copy": "node --test test/mask_portable_copy.mjs && node test/mask_portable_copy_ui.mjs",
     "mask:ai-provenance": "node test/mask_ai_provenance.mjs",
+    "mask:chr246-fixtures": "node test/chr246_person_mask.mjs",
     "mask:overlay": "node test/mask_overlay.mjs",
     "mask:style-presets": "node --test test/mask_style_presets.mjs && node test/mask_style_presets_ui.mjs",
     "teeth:test": "node test/teeth_whitening.mjs && node test/teeth_whitening_render.mjs",

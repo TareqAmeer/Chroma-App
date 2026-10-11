@@ -1679,3 +1679,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Integration commit `b5cff7d61e8389dbeb9af4eed1e873f84e569ccf` was fast-forwarded to `origin/main` after the focused source/render browser test, desktop build, HTML validity, JavaScript syntax, and whitespace checks passed on the integration checkout.
 - `git ls-remote origin refs/heads/main` confirmed `b5cff7d61e8389dbeb9af4eed1e873f84e569ccf` immediately after publication. CHR-194 stays In Progress because its persistence-failure, delayed-render recovery, full-quality-cache, and status-placement criteria are not complete.
+
+### 2026-10-11 — CHR-246 person fixture and mask-driven probe
+
+- Added an attributed high-resolution person-removal photo and a normalized polygon evaluation mask covering the subject and cast shadow. The native probe now accepts that polygon JSON as input while retaining its rectangle mode; a fixture test checks covered subject/shadow points and untouched surrounding background.
+- Files: `desktop/src-tauri/examples/inpaint_probe.rs`, `test/fixtures/chr246-real/README.md`, `test/fixtures/chr246-real/woman-crossing.jpg`, `test/fixtures/chr246-real/woman-crossing-mask.json`, `test/chr246_person_mask.mjs`, and `package.json`. Fixture geometry test, probe formatting, and whitespace checks pass. Native inference could not run: the pinned model and ONNX Runtime are absent locally, and free disk space is below the model’s 28 MB download size. AC4/AC7 remain unchecked pending real candidate output and 100% visual review.
