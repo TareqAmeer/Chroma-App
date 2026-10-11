@@ -1802,3 +1802,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Successful local focus-job completion refreshes the current cull picker's selected catalog rows in batches of 500, updates focus-only fields and reranks automatic keepers. Manual Previous/Next choices survive; per-session tokens reject query results after reentry/exit. Files: `desktop/library-ui.js`, `test/library_culling.mjs`, `docs/plans/large-library-raw-culling.md`; issue CHR-269.
 - Focused culling test passed automatic rerank, newest scores, explicit manual preservation, delayed stale-query rejection, post-exit rejection and existing grouping/near-duplicate/keyboard/undo behavior; diff check passed. No new model/eye-warning or labelled-accuracy claim; full ticket remains incomplete.
 - Reused the existing checkout/shared browser; no install or new worktree. Removed the primary checkout's verified ignored inactive native target cache (22.42GB), preserving source, all drafts and shared Cargo target; repository remains above its 50GB target.
+
+### 2026-10-11 — CHR-269 focus refresh publication
+- Published feature `1e713f53` through clean main integration as `9f5bbc6915ea609212ef015258e069b26972c234`; integrated culling regression passed. Non-force push and ls-remote confirmed the exact remote hash.
+- CHR-269 follow-up checklist records tested refresh/manual/stale/query-bound behavior and remains In Review; original eye warnings, durable-job completeness and labelled quality criteria remain unchecked.
