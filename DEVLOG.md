@@ -1452,3 +1452,4 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Preserve each selected group’s suggested-frame reason and manual override state in the active cull review, showing an advisory only when its recommended photo is focused. Files: `desktop/library-ui.js`, `test/library_culling.mjs`.
 - Verification: `node test/library_culling.mjs` passes with recommendation reason/override, non-suggested sibling, paging, manual review, and no-label-change assertions; `node test/lint_library_content.mjs` and `git diff --check` pass. Closed-eye inference, labelled quality metrics, and durable background jobs remain open.
+- Publication verified: integration commit `9471b420038007b8464e9d94e1ac2eb54dbfb2ef` is present on `origin/main`; post-push fetch, `git ls-remote`, and ancestry check all matched that remote tip.
