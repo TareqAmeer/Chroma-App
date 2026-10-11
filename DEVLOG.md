@@ -1528,3 +1528,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commit `c64f7d2c132c36fa648f6fdfd6150e19044a5ba7` was integrated as `433e675bef291dd3619b8c983dd3747824c641a6` and pushed to `origin/main` after all focused browser, pixel, HTML, and diff checks passed in the clean integration checkout.
 - `git ls-remote origin refs/heads/main` confirmed `origin/main` at `ae8418aeb95138f00a5175fe86a306d290c93ea6`; the tip includes integration commit `433e675bef291dd3619b8c983dd3747824c641a6`. CHR-253 remains In Progress because real-photo matte quality and broader platform/catalog acceptance are still open.
+
+### 2026-10-11 — CHR-273 retry and restart browser evidence
+
+- Feature commit `13d748744da43465cca3ef4517e3d87862edc8ab` was integrated as `1f3b9a9df75e44691f7961eb8bce1d575218b4d8` and pushed to `origin/main`. The new startup recovery browser scenario and expanded dark/light batch UI flow pass; batch JS tests pass 7/7 and the focused Rust selected-skip-resume regression passes 1/1.
+- The browser now checks progress totals, failure/skip reasons, selected retry of both outcomes, and one-step undo; the restart scenario checks journal recovery and resuming pending/failed entries. CHR-273 AC1, AC2, and AC4 now have test evidence; jobs-panel responsiveness (AC7) and broader real-catalog restart/performance verification remain open. Issue stays In Progress.
+- Verify the final remote main tip after publishing this record.
