@@ -176,6 +176,51 @@ try {
     let tileMaxDelta = 0;
     for (let i = 0; i < directBytes.length; i++) tileMaxDelta = Math.max(tileMaxDelta, Math.abs(directBytes[i] - tiledBytes[i]));
     const exact = (a, b) => a.length === b.length && a.every((value, i) => value === b[i]);
+
+    // Exercise the real embedded-matte importer with a deterministic low-resolution PNG.
+    // Its left half selects enamel; the right half must remain untouched after resampling.
+    const matteWidth = 48, matteHeight = 18, matteCanvas = document.createElement('canvas');
+    matteCanvas.width = matteWidth; matteCanvas.height = matteHeight;
+    const matteContext = matteCanvas.getContext('2d'), matteImage = matteContext.createImageData(matteWidth, matteHeight);
+    for (let y = 0; y < matteHeight; y++) for (let x = 0; x < matteWidth; x++) {
+      const i = (y * matteWidth + x) * 4, value = x < matteWidth / 2 ? 255 : 0;
+      matteImage.data[i] = matteImage.data[i + 1] = matteImage.data[i + 2] = value;
+      matteImage.data[i + 3] = 255;
+    }
+    matteContext.putImageData(matteImage, 0, 0);
+    const embeddedPath = 'fixture/warm-enamel-detail.heic';
+    fxImages[fxCurIdx].path = embeddedPath;
+    window.__TAURI__ = { ...(window.__TAURI__ || {}), core: { invoke: async (command, args) => {
+      if (command !== 'extract_embedded_auxiliary' || args?.path !== embeddedPath) throw new Error('unexpected auxiliary request');
+      return [{ kind: 'teeth', width: matteWidth, height: matteHeight,
+        png_b64: matteCanvas.toDataURL('image/png').split(',')[1] }];
+    } } };
+    const embeddedImported = await mskAddEmbeddedTeethWhitening();
+    const embeddedMask = fxState.masks[mskSel];
+    const embeddedOrigin = embeddedMask?.origin === 'embedded-teeth' && embeddedMask?.sourceKind === 'teeth'
+      && embeddedMask?.sourcePath === embeddedPath;
+    const embeddedLeft = embeddedMask?.px?.[Math.floor(embeddedMask.mtH / 2) * embeddedMask.mtW + Math.floor(embeddedMask.mtW * 0.25)] || 0;
+    const embeddedRight = embeddedMask?.px?.[Math.floor(embeddedMask.mtH / 2) * embeddedMask.mtW + Math.floor(embeddedMask.mtW * 0.75)] || 0;
+    const embeddedSelection = embeddedImported && embeddedLeft > 240 && embeddedRight === 0;
+    embeddedMask.temp = 0; embeddedMask.sat = 0; mskRebuild();
+    const embeddedBaseline = await render(), embeddedBaselineBytes = bytes(embeddedBaseline);
+    embeddedMask.temp = -0.12; embeddedMask.sat = -0.12; mskRebuild();
+    const embeddedCorrected = await render(), embeddedCorrectedBytes = bytes(embeddedCorrected);
+    const embeddedInside = rgbChange(embeddedBaselineBytes, embeddedCorrectedBytes, [Math.round(iw * 0.25), Math.round(ih * 0.5)]);
+    const embeddedOutside = rgbChange(embeddedBaselineBytes, embeddedCorrectedBytes, [Math.round(iw * 0.75), Math.round(ih * 0.5)]);
+    const embeddedSnapshot = JSON.parse(JSON.stringify(getUISnapshot()));
+    await applyUISnapshot(embeddedSnapshot); mskRebuild();
+    const embeddedRestored = await render(), embeddedRestoredBytes = bytes(embeddedRestored);
+    const embeddedDirect = await processToCanvas(recipe(), img, iw, ih, () => {}, renderer);
+    let embeddedTiles = 0, embeddedTiled;
+    shouldTile = () => true;
+    try { embeddedTiled = await processToCanvas(recipe(), img, iw, ih, () => { embeddedTiles++; }, renderer); }
+    finally { shouldTile = oldShouldTile; }
+    const embeddedDirectBytes = bytes(embeddedDirect), embeddedTiledBytes = bytes(embeddedTiled);
+    let embeddedTileMaxDelta = 0;
+    for (let i = 0; i < embeddedDirectBytes.length; i++) {
+      embeddedTileMaxDelta = Math.max(embeddedTileMaxDelta, Math.abs(embeddedDirectBytes[i] - embeddedTiledBytes[i]));
+    }
     const deltaInside = rgbChange(baselineBytes, correctedBytes, inside);
     const deltaOutside = rgbChange(baselineBytes, correctedBytes, outside);
     return {
@@ -183,6 +228,13 @@ try {
       resetExact: exact(baselineBytes, resetBytes), snapshotExact: exact(correctedBytes, restoredBytes),
       detailRatio: detailBefore ? detailAfter / detailBefore : 0,
       tiles, tileMaxDelta,
+      embeddedMatte: {
+        imported: embeddedImported, origin: embeddedOrigin, selection: embeddedSelection,
+        leftCoverage: embeddedLeft, rightCoverage: embeddedRight,
+        inside: embeddedInside, outside: embeddedOutside,
+        snapshotExact: exact(embeddedCorrectedBytes, embeddedRestoredBytes),
+        tiles: embeddedTiles, tileMaxDelta: embeddedTileMaxDelta,
+      },
       previewParity,
       defaults: [fxState.masks[0].temp, fxState.masks[0].sat],
       dims: [iw, ih], detailPairs,
@@ -197,6 +249,10 @@ try {
     ['the correction retains at least 70% of the synthetic fine-detail contrast', result.detailRatio >= 0.70 && result.detailPairs > 0],
     ['save/reopen snapshot restores the identical rendered correction', result.snapshotExact],
     ['forced tiled export matches direct output within one channel value', result.tiles > 1 && result.tileMaxDelta <= 1],
+    ['embedded teeth matte imports as the expected editable selection', result.embeddedMatte.imported && result.embeddedMatte.origin && result.embeddedMatte.selection],
+    ['embedded teeth correction changes selected pixels and preserves unselected pixels', result.embeddedMatte.inside.delta.some(value => value !== 0) && result.embeddedMatte.outside.delta.every(value => value === 0)],
+    ['snapshot restores identical embedded-matte rendering', result.embeddedMatte.snapshotExact],
+    ['forced tiled export matches direct embedded-matte output within one channel value', result.embeddedMatte.tiles > 1 && result.embeddedMatte.tileMaxDelta <= 1],
     ['the live app preview matches a direct production renderer frame and is not blank', result.previewParity.appContextLostBeforeProbe ? null : result.previewParity.maxDelta <= 1 && result.previewParity.range > 0],
   ];
   for (const [label, pass] of checks) console.log(`${pass === null ? 'SKIP' : pass ? 'PASS' : 'FAIL'} ${label}${pass === null ? ' (main WebGL context was already lost)' : ''}`);
