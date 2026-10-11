@@ -7126,7 +7126,31 @@
     } catch (e) { toast(humanizeErr('continue this batch; open Results to resume', e), 'err'); }
     finally { recipeBatchRuns.delete(batch.id); }
   }
-  async function startRecipeBatch(label, paths, recipeForPhoto) {
+  async function confirmRecipeBatchTargets(label, items) {
+    const ready = items.filter(item => !item.error);
+    const failed = items.filter(item => item.error);
+    const shown = items.slice(0, 24);
+    const dialog = document.createElement('dialog');
+    dialog.id = 'recipe-batch-target-review';
+    dialog.style.cssText = 'background:var(--bg);color:var(--txt);border:1px solid var(--bdr);padding:18px;width:640px;max-width:90vw;max-height:85vh;overflow:auto';
+    dialog.setAttribute('aria-labelledby', 'recipe-batch-target-title');
+    const rows = shown.map(item => `<li style="margin:8px 0"><strong>${esc(baseName(item.path))}</strong><span style="display:block;color:var(--mut)">${item.error ? esc(item.error) : 'Ready to receive recipe'}</span></li>`).join('');
+    dialog.innerHTML = `<h2 id="recipe-batch-target-title">Review ${esc(label)} targets</h2>
+      <p>${items.length} photos selected · ${ready.length} ready · ${failed.length} unable to prepare. No edits have been written.</p>
+      <ol style="max-height:42vh;overflow:auto;padding-left:28px">${rows}</ol>
+      ${items.length > shown.length ? `<p>Showing ${shown.length} of ${items.length} photos. Apply will affect all ${items.length} listed targets.</p>` : ''}
+      <div style="display:flex;justify-content:flex-end;gap:8px"><button type="button" data-action="cancel">Cancel</button><button type="button" data-action="apply" ${ready.length ? '' : 'disabled'}>Apply to ${ready.length} ready photos</button></div>`;
+    document.body.appendChild(dialog);
+    const result = new Promise(resolve => {
+      dialog.addEventListener('close', () => { dialog.remove(); resolve(dialog.returnValue === 'apply'); }, { once: true });
+      dialog.querySelector('[data-action="cancel"]').onclick = () => dialog.close('cancel');
+      dialog.querySelector('[data-action="apply"]').onclick = () => dialog.close('apply');
+      dialog.addEventListener('cancel', event => { event.preventDefault(); dialog.close('cancel'); }, { once: true });
+    });
+    dialog.showModal();
+    return result;
+  }
+  async function startRecipeBatch(label, paths, recipeForPhoto, reviewTargets = false) {
     if (!paths.length) return;
     await flushPendingSave();
     if (state.openedPath) recipeBatchEditorBaseline.set(state.openedPath, snapshotToB64(getUISnapshot()));
@@ -7148,13 +7172,14 @@
     }
     activityUpdate('recipe-prepare', { stage: 'done', batchId: null });
     if (preparationCancelled) return;
+    if (reviewTargets && !(await confirmRecipeBatchTargets(label, items))) return;
     const batch = await invoke('recipe_batch_create', { label, items });
     await runRecipeBatch(batch);
   }
   async function libPasteEdit(paths) {
     const recipe = window.__copiedRecipe;
     if (!recipe) return;
-    try { await startRecipeBatch('Paste edit', paths, () => recipe); }
+    try { await startRecipeBatch('Paste edit', paths, () => recipe, true); }
     catch (e) { toast(humanizeErr('paste edits', e), 'err'); }
   }
   // Dust sync is deliberately separate from paste: choose spots, then approve each photo.
@@ -7749,7 +7774,7 @@
           await startRecipeBatch('Selective paste', paths, cur => {
             const base = cur.recipe ? snapshotFromB64(cur.recipe) : null;
             return snapshotToB64(window.chromasmithMergeSelectiveRecipe(base, selection.source, selection.keys));
-          });
+          }, true);
         } catch (e) { toast(humanizeErr('paste selected settings', e), 'err'); }
       });
     });

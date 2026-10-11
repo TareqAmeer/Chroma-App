@@ -1689,3 +1689,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commit `08cf509d89f3859a86f44c0036a904db51b4cff8` was fast-forwarded to `origin/main` after the fixture geometry test, native probe formatting, and whitespace checks passed in the integration checkout.
 - `git ls-remote origin refs/heads/main` confirmed `08cf509d89f3859a86f44c0036a904db51b4cff8` immediately after publication. This adds the missing person fixture and repeatable mask input; it does not claim passing person-removal quality.
+
+### 2026-10-11 — CHR-193 batch target review
+
+- Added a pre-apply target review for ordinary and selective recipe paste. It shows deduplicated target names, readiness, exact counts, and lets users cancel before any batch journal or recipe write is created.
+- Files: `desktop/library-ui.js` and `test/recipe_batch_ui.mjs`. The batch data-model, dark/light UI, cancellation/no-journal, partial outcome/retry, exact undo, and 5,000-item responsiveness checks pass. CHR-193 remains In Progress; persistent single/selected scope language and tone/crop/export predictability still need direct implementation and validation.
