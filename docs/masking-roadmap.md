@@ -39,3 +39,9 @@ Across two later publication checkpoints, observed usage moved from 1% to 28% fo
 Usage note: [OpenAI's official pricing guidance](https://learn.chatgpt.com/docs/pricing) says the five-hour window is an allowance window, not a runtime guarantee; Fast uses more allowance than Standard, and the allowance varies with model, context and reasoning. Prefer Standard for routine coding tasks when the user can choose the speed; there is no exact savings guarantee and the current chat speed cannot be changed silently.
 
 [Official OpenAI guidance on keeping skills and prompts concise](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra) supports reducing bloated context. The concurrency and test policy above is this repository's practical execution plan, not an official savings guarantee.
+
+## Select Background export regression (2026-10-11)
+
+The synthetic `FXR` regression exercises the production soft complement as a Brush raster, fail-closed empty/full subject inputs, direct rendering after rotate+crop, and forced tiled export. With the complement alone, direct and tiled pixels matched exactly (max channel delta 0); the full mask composition/export suite passed 18/18 pixel checks using installed Chrome via the file-URL mode, which avoids sandbox-denied loopback navigation. File mode suppresses only expected file-origin LUT fetch and service-worker errors; shader/page errors remain test failures.
+
+The exploratory composed case (complement brush plus a range-gated intersecting Brush mask) differed between direct and tiled output by max channel delta 32 at pixel (70,87) in a 77×96 result. It is reported as diagnostic, not a passing parity gate. Keep CHR-247 preview/tiled composition parity and labelled-photo quality unchecked until that discrepancy is explained and resolved.

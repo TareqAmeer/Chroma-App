@@ -5,7 +5,7 @@ const { chromium } = await import(process.env.CHROMASMITH_PLAYWRIGHT_MODULE || '
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const MIME={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.wasm':'application/wasm','.png':'image/png'};
@@ -19,7 +19,8 @@ function startServer(){return new Promise(resolve=>{
   server.listen(0,'127.0.0.1',()=>resolve(server));
 });}
 
-const server=await startServer();
+const fileMode=process.env.CHROMASMITH_MASK_TEST_FILE_URL==='1';
+const server=fileMode?null:await startServer();
 const browser=await chromium.launch({
   ...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{}),
   args:['--use-gl=swiftshader','--use-angle=swiftshader','--disable-gpu-sandbox','--disable-dev-shm-usage','--enable-unsafe-swiftshader'],
@@ -28,8 +29,9 @@ let result;
 try{
   const page=await browser.newPage({viewport:{width:1100,height:800}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
-  page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-  await page.goto(`http://127.0.0.1:${server.address().port}/chromasmith-22.html`,{waitUntil:'load'});
+  page.on('console',m=>{if(m.type()==='error'&&!(fileMode&&(/vendor\/luts\//.test(m.text())||/COOP\/COEP Service Worker/.test(m.text())||/net::ERR_FAILED/.test(m.text()))))errors.push(m.text());});
+  const appUrl=fileMode?pathToFileURL(path.join(ROOT,'chromasmith-22.html')).href:`http://127.0.0.1:${server.address().port}/chromasmith-22.html`;
+  await page.goto(appUrl,{waitUntil:'load'});
   await page.waitForFunction(()=>document.readyState==='complete'&&typeof FXR==='function'
     &&typeof window.loadFXImages==='function',null,{timeout:30000});
   await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
@@ -106,17 +108,58 @@ try{
     const ordinaryMs=bench(build()),composedMs=bench(masks);
     check('ordinary no-outline render benchmark completed',Number.isFinite(ordinaryMs)&&Number.isFinite(composedMs),
       `mean GPU submission ${ordinaryMs.toFixed(2)}ms ordinary / ${composedMs.toFixed(2)}ms composed, no readback`);
-    return{checks:ck,glLost:renderer.gl.isContextLost(),debug:{n:renderer._mskU?.mA?.length,
+    // Select Background is a soft complement of the successful subject raster. Exercise that
+    // production helper through a painted-mask texture and the same renderer/export path.
+    const bgRenderer=new FXR(document.createElement('canvas'));
+    const geomSrc=applyGeomTo(src,{rot:90,crop:{x:.08,y:.1,w:.8,h:.75}}),gw=geomSrc.width,gh=geomSrc.height;
+    bgRenderer.setImage(geomSrc);
+    const subject=new Uint8Array(gw*gh);
+    for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){
+      const r=Math.sqrt(((x+.5)/gw-.52)**2/.24**2+((y+.5)/gh-.48)**2/.3**2);
+      const t=Math.max(0,Math.min(1,(1.06-r)/.22));subject[y*gw+x]=Math.round(255*t*t*(3-2*t));
+    }
+    const background=_samComplementSubjectMask(subject);
+    check('subject complement keeps soft edges and includes background',!!background&&background.some(v=>v===255)&&background.some(v=>v===0)&&background.some((v,i)=>v>0&&v<255));
+    check('empty and full-frame subject masks fail closed',_samComplementSubjectMask(new Uint8Array(gw*gh))===null&&_samComplementSubjectMask(new Uint8Array(gw*gh).fill(255))===null);
+    const makeRaster=(id,px,extra={})=>({...build()[0],id,type:'brush',origin:'ai',px,mtW:gw,mtH:gh,exp:.9,...extra});
+    const backgroundMask=makeRaster('background-mask',background,{lumLo:.12,lumHi:.9});
+    const subjectMask=makeRaster('subject-mask',subject,{lumLo:.12,lumHi:.9});
+    const renderBackground=masks=>{const P=fxCompareParams();P.masks=masks;
+      bgRenderer.render(P,gw,gh,{glowScale:1,seed:4.25});return Uint8Array.from(bgRenderer.getPixels().px);};
+    const bgPixels=renderBackground([backgroundMask]),subjectPixels=renderBackground([subjectMask]),unmaskedPixels=renderBackground([]);
+    check('complement raster drives nonblank production GPU pixels',digest(bgPixels)!==digest(unmaskedPixels)&&digest(bgPixels)!==digest(subjectPixels));
+    const stripe=new Uint8Array(gw*gh);for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){
+      const d=Math.abs((x+.5)/gw-.63);stripe[y*gw+x]=Math.round(255*Math.max(0,Math.min(1,(.29-d)/.08)));
+    }
+    const rangeMask=makeRaster('range-mask',stripe,{lumLo:.3,lumHi:.72,exp:-.7,composeOp:'intersect',operandId:'background-mask'});
+    const composedBg=renderBackground([backgroundMask,rangeMask]);
+    check('range-gated mask composition changes the background result',digest(composedBg)!==digest(bgPixels));
+    const tileDeltas=async list=>{
+      const P=fxCompareParams();P.masks=list;bgRenderer._maskReferenceSize={w:gw,h:gh};
+      bgRenderer.setImage(geomSrc);bgRenderer.render(P,gw,gh,{glowScale:1,seed:4.25});const full=Uint8Array.from(bgRenderer.getPixels().px);
+      const oldTileSize=fxExportTileSize,oldShouldTile=shouldTile;let tiled;
+      try{fxExportTileSize=()=>64;shouldTile=()=>true;tiled=await processToCanvas(P,geomSrc,gw,gh,()=>{},bgRenderer);}
+      finally{fxExportTileSize=oldTileSize;shouldTile=oldShouldTile;}
+      const tile=new Uint8Array(tiled.getContext('2d').getImageData(0,0,gw,gh).data);
+      let delta=0,at=0;for(let i=0;i<full.length;i++){const d=Math.abs(full[i]-tile[i]);if(d>delta){delta=d;at=i;}}
+      return{delta,at};
+    };
+    const bgParity=await tileDeltas([backgroundMask]);
+    const composedParity=await tileDeltas([backgroundMask,rangeMask]);
+    check('background complement direct and rotated/cropped tiled pixels agree',bgParity.delta<=1,
+      `max ${bgParity.delta}; geometry ${gw}x${gh}`);
+    return{checks:ck,glLost:renderer.gl.isContextLost(),parityDiagnostic:{composedMaxDelta:composedParity.delta,composedPixel:`${Math.floor(composedParity.at/4)%gw},${Math.floor(composedParity.at/4/gw)}`,geometry:`${gw}x${gh}`},debug:{n:renderer._mskU?.mA?.length,
       e:Array.from(renderer._mskU?.mE||[]).slice(0,16),
       operands:Array.from(renderer._mskU?.mO||[]).filter((_,i)=>i%4<2).slice(0,8),
       topo:Array.from(renderer._mskU?.mTopo||[]),
       sampleDigests:[0,1,2,3].map(i=>digest(render(build(),i)))}};
   });}catch(e){throw new Error(`${e.message}\n${errors.join('\n')}`);}
   if(errors.length)throw new Error(`browser/shader errors: ${errors.join('\n')}`);
-}finally{await browser.close();server.close();}
+}finally{await browser.close();if(server)server.close();}
 if(result?.skip){console.log(`SKIP: ${result.skip}`);process.exitCode=0;}
 else{
   let fail=0;for(const c of result.checks){console.log(`  ${c.pass?'PASS':'FAIL'} ${c.name}${c.detail?` [${c.detail}]`:''}`);if(!c.pass)fail++;}
+  if(result.parityDiagnostic)console.log(`NOTE: composed background + range-gated brush max delta is ${result.parityDiagnostic.composedMaxDelta} at ${result.parityDiagnostic.composedPixel} (${result.parityDiagnostic.geometry}); this remains outside the passing single-background gate.`);
   if(result.glLost){console.log('SKIP: WebGL context was lost after composition renders; preview/export parity is inconclusive.');}
   console.log(`${result.checks.length-fail}/${result.checks.length} pixel checks PASS`);
   if(fail)process.exitCode=1;

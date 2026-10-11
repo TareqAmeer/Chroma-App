@@ -1737,3 +1737,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Extended the focused Editor behavior test for shared Grain scope and per-photo Crop scope. `node --check test/editor_wireframe_behaviour.mjs`, `node test/editor_html_validity_check.mjs`, and `git diff --check` pass. Playwright could not navigate to its local server (`ERR_NETWORK_ACCESS_DENIED`), so the new browser assertions remain unverified here.
 - CHR-193 remains In Progress. Explicit selected-subset counts and user prediction across tone, paste, crop, and export still require broader validation.
 - Publication: feature commit `7fd38495` was integrated as `2217ad1b2ac51a55d5452e31a2e51ab68a99172e` and pushed to `origin/main` as a fast-forward. `git ls-remote origin refs/heads/main` confirmed `c44e40be7c0bf2d1c27232e44cac2b0b024b335c`, which contains the integration commit.
+
+### 2026-10-11 — CHR-247 Select Background export regression
+
+- Extended the production-FXR composition/export harness with soft subject-complement coverage, empty/full fail-closed cases, composed range-gate output, and a rotated/cropped tiled-export check. Added file-URL execution for sandbox environments that deny loopback; known file-origin LUT fetch and service-worker errors are filtered, while shader/page errors remain failures.
+- Verification: `test/mask_composition_export.mjs` passes 18/18 pixel checks with installed Chrome; `test/mask_ai_provenance.mjs`, editor HTML validity, JavaScript syntax, and whitespace checks pass. The single complement brush matched direct and tiled output exactly, max delta 0.
+- The composed complement + range-gated Brush diagnostic still differs by max channel delta 32 at 77×96. CHR-247 remains In Progress; composed preview/tiled parity and labelled-photo mask quality remain open.
