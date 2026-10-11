@@ -2129,6 +2129,9 @@
     #lib-survey.lib-cull-presentation .lib-survey-cell:not(.cmp-focus) .lib-cmp-canvas-wrap{flex:1;min-width:0}
     #lib-survey.lib-cull-presentation .lib-survey-cell:not(.cmp-focus) .lib-survey-head{width:180px;flex:0 0 180px;border:0;border-right:1px solid var(--bdr)}
     #lib-survey.lib-cull-presentation .lib-survey-cell:not(.cmp-focus) .lib-cmp-chrome{display:none}
+    #lib-survey.lib-cull-presentation .lib-survey-cell:not(.cmp-focus) .lib-cull-recommendation{display:none}
+    #lib-survey.lib-cull-presentation .lib-cull-recommendation{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;border-bottom:1px solid var(--bdr);color:var(--mut);font-size:11px}
+    #lib-survey.lib-cull-presentation .lib-cull-recommendation strong{color:var(--acc)}
     .lib-survey-cell{min-height:0;outline:none}
     .lib-survey-cell:focus-visible,.lib-survey-cell.cmp-focus{outline:2px solid var(--acc2);outline-offset:-2px}
     .lib-survey-head{display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--bdr);
@@ -8722,7 +8725,7 @@
     prevViewMode: 'grid',
   };
   const surveyState = { cells: [], focus: 0, entryToken: 0, cullPaths: [], cullOffset: 0,
-    cullAllPaths: [], cullCaptureByPath: new Map(), cullEntryByPath: new Map(), cullDupeClusterByPath: new Map(), cullDupeStatus: 'idle', cullHashToken: 0, cullPreferredByGroup: new Map(), cullGapSec: 60, cullGroups: [], cullSelected: new Set(), cullGroupPage: 0, cullGroupPicker: false };
+    cullAllPaths: [], cullCaptureByPath: new Map(), cullEntryByPath: new Map(), cullDupeClusterByPath: new Map(), cullDupeStatus: 'idle', cullHashToken: 0, cullPreferredByGroup: new Map(), cullRecommendationByPath: new Map(), cullGapSec: 60, cullGroups: [], cullSelected: new Set(), cullGroupPage: 0, cullGroupPicker: false };
   const CULL_GAPS = [1, 5, 15, 30, 60, 120, 300, 600];
   function cullCaptureGroups(paths, gapSec) {
     const known = [], unknown = [];
@@ -8840,7 +8843,8 @@
     const selected = surveyState.cullGroups.flatMap((group) => {
       const included = group.paths.filter((path) => surveyState.cullSelected.has(path));
       if (!included.length) return [];
-      const preferred = cullGroupPreference(group).path;
+      const recommendation = cullGroupPreference(group), preferred = recommendation.path;
+      if (included.includes(preferred)) surveyState.cullRecommendationByPath.set(preferred, { reason: recommendation.reason, manual: recommendation.manual });
       return included.includes(preferred) ? [preferred, ...included.filter((path) => path !== preferred)] : included;
     });
     surveyState.cullGroupPicker = false; surveyState.cullPaths = selected; surveyState.cullAllPaths = selected.slice();
@@ -8913,10 +8917,12 @@
   function surveyColumns(count) { return count <= 2 ? 2 : count <= 4 ? 2 : count <= 6 ? 3 : 4; }
   function surveyCellHtml(cell, idx) {
     const sidecar = state.sidecars.get(cell.path) || { rating: 0, label: '', favorite: false };
+    const recommendation = compareState.mode === 'cull' ? surveyState.cullRecommendationByPath.get(cell.path) : null;
     return `<section class="lib-cmp-pane lib-survey-cell${idx === surveyState.focus ? ' cmp-focus' : ''}" data-survey-idx="${idx}" tabindex="0" role="group" aria-label="Photo ${idx + 1}: ${escAttr2(baseName(cell.path))}">
       <div class="lib-survey-head"><span>${idx + 1} / ${surveyState.cells.length}</span><span class="lib-survey-name">${esc2(baseName(cell.path))}</span>
         ${compareState.mode === 'cull' ? '' : `<button type="button" data-survey-remove="${idx}" aria-label="Remove ${escAttr2(baseName(cell.path))} from Survey" title="Remove from Survey">×</button>`}</div>
       <div class="lib-cmp-canvas-wrap"><canvas></canvas></div>
+      ${recommendation ? `<aside class="lib-cull-recommendation" role="note" aria-label="Culling suggestion"><strong>${recommendation.manual ? 'Manual review choice' : 'Suggested for review'}</strong><span>${esc2(recommendation.reason)}</span></aside>` : ''}
       <div class="lib-cmp-chrome">
         <div class="lib-flag${sidecar.label === 'Green' ? ' on' : ''}" data-survey-action="pick" title="Pick (P)">${ic('flagGreen',15)}</div>
         <div class="lib-flag${sidecar.label === 'Red' ? ' on' : ''}" data-survey-action="reject" title="Reject (X)">${ic('close',12)}</div>
@@ -9436,7 +9442,7 @@
     if (survey) { survey.classList.remove('on'); survey.innerHTML = ''; }
     surveyState.cells = []; surveyState.focus = 0;
     surveyState.cullPaths = []; surveyState.cullOffset = 0;
-    surveyState.cullAllPaths = []; surveyState.cullGroups = []; surveyState.cullSelected.clear(); surveyState.cullPreferredByGroup.clear(); surveyState.cullEntryByPath.clear(); surveyState.cullCaptureByPath.clear(); surveyState.cullGroupPicker = false;
+    surveyState.cullAllPaths = []; surveyState.cullGroups = []; surveyState.cullSelected.clear(); surveyState.cullPreferredByGroup.clear(); surveyState.cullRecommendationByPath.clear(); surveyState.cullEntryByPath.clear(); surveyState.cullCaptureByPath.clear(); surveyState.cullGroupPicker = false;
     state.viewMode = compareState.prevViewMode || 'grid';
     localStorage.setItem('chromasmith_lib_view', state.viewMode);
     syncViewSeg();
@@ -9478,7 +9484,7 @@
     surveyState.cullAllPaths = paths.slice(); surveyState.cullPaths = paths.slice(); surveyState.cullOffset = 0; surveyState.focus = 0;
     surveyState.cullCaptureByPath = new Map(state.entries.map((entry) => [entry.path, Number.isFinite(entry.captured) ? entry.captured : null]));
     surveyState.cullEntryByPath = new Map(state.entries.filter((entry) => selected.has(entry.path)).map((entry) => [entry.path, entry]));
-    surveyState.cullPreferredByGroup.clear();
+    surveyState.cullPreferredByGroup.clear(); surveyState.cullRecommendationByPath.clear();
     surveyState.cullDupeClusterByPath.clear(); surveyState.cullDupeStatus = 'idle'; surveyState.cullHashToken++;
     surveyState.cullGapSec = 60; surveyState.cullGroups = cullReviewGroups(paths, surveyState.cullGapSec);
     surveyState.cullSelected = new Set(paths); surveyState.cullGroupPage = 0; surveyState.cullGroupPicker = true;

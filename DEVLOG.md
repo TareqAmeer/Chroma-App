@@ -1447,3 +1447,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added an opt-in macOS menu action that imports only a teeth matte embedded in the current source photo as a provenance-tagged, editable Brush mask; manual teeth painting remains available when the matte is absent. Files: `chromasmith-22.html`, `desktop/library-ui.js`, `test/teeth_whitening.mjs`.
 - Verification: teeth-whitening browser flow 29/29, composition and refinement math suites, editor HTML validity, native-gate check, syntax checks, and whitespace validation pass. No real embedded-teeth fixture or macOS runtime was available; no automatic teeth inference or matte-quality claim is made. The unrelated baseline `native_contract` fails for existing `album_remove` registration and `read_export_sidecar` mock coverage; this change adds no new native-contract failure.
 - Publication verified: integration commit `13762bd23a896e851bdbf8199acd668931e5e2b6` contains the feature; after push, `git fetch origin main` and `git ls-remote origin refs/heads/main` both matched `origin/main` at that commit.
+
+### 2026-10-11 — CHR-269 culling recommendation context
+
+- Preserve each selected group’s suggested-frame reason and manual override state in the active cull review, showing an advisory only when its recommended photo is focused. Files: `desktop/library-ui.js`, `test/library_culling.mjs`.
+- Verification: `node test/library_culling.mjs` passes with recommendation reason/override, non-suggested sibling, paging, manual review, and no-label-change assertions; `node test/lint_library_content.mjs` and `git diff --check` pass. Closed-eye inference, labelled quality metrics, and durable background jobs remain open.

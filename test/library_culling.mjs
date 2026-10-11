@@ -88,8 +88,12 @@ try {
   await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().mode === 'cull' && !window.__libSurveyState().groupPicker, { timeout: 45000 });
   const orderedCullPaths = await page.evaluate(() => window.__libSurveyState().cullPaths);
   assert.match(orderedCullPaths[0], /IMG_1001\.RW2$/, 'confirmed culling begins with the manually preferred frame');
+  assert.ok((await page.evaluate(() => window.__libSurveyState().cullLabels)).every((label) => !label), 'entering the cull review still leaves every label unchanged');
   await page.waitForFunction(() => document.querySelectorAll('#lib-survey .lib-survey-cell').length === 4, { timeout: 45000 });
   assert.equal(await page.locator('#lib-survey .lib-survey-cell.cmp-focus').count(), 1, 'cull view has one prominent focused preview');
+  const firstSuggestion = page.locator('#lib-survey .lib-survey-cell[data-survey-idx="0"] .lib-cull-recommendation');
+  assert.match(await firstSuggestion.textContent(), /Manual review choice.*Manual override/, 'focused manual override retains its advisory reason');
+  assert.equal(await page.locator('#lib-survey .lib-survey-cell[data-survey-idx="1"] .lib-cull-recommendation').count(), 0, 'non-suggested siblings have no recommendation badge');
   assert.equal(await page.locator('#lib-survey .lib-survey-cell:not(.cmp-focus)').count(), 3, 'the remaining loaded photos form the filmstrip');
   const focusHeight = await page.locator('#lib-survey .lib-survey-cell.cmp-focus').evaluate((el) => el.getBoundingClientRect().height);
   const stripHeight = await page.locator('#lib-survey .lib-survey-cell:not(.cmp-focus)').first().evaluate((el) => el.getBoundingClientRect().height);
@@ -162,6 +166,14 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('#lib-survey .lib-survey-cell').length === 4);
   state = await page.evaluate(() => window.__libSurveyState());
   assert.deepEqual(state.paths, orderedPaths.slice(4, 8), 'next page continues through the original full selection');
+  const laterSuggestionPath = recommendations.map((item) => item.path).find((photoPath) => state.paths.includes(photoPath));
+  assert.ok(laterSuggestionPath, 'fixture has a suggested frame on the next cull page');
+  const laterSuggestionIndex = state.paths.indexOf(laterSuggestionPath);
+  await page.locator(`.lib-survey-cell[data-survey-idx="${laterSuggestionIndex}"]`).focus();
+  const laterSuggestion = page.locator(`.lib-survey-cell[data-survey-idx="${laterSuggestionIndex}"] .lib-cull-recommendation`);
+  assert.equal(await laterSuggestion.isVisible(), true, 'recommendation context survives cull paging and is shown when its frame is focused');
+  assert.match(await laterSuggestion.textContent(), /Suggested for review/, 'automatic suggestion stays advisory on later pages');
+  await page.locator('.lib-survey-cell[data-survey-idx="0"]').focus();
   assert.equal(await page.locator('#lib-survey [data-survey-remove]').count(), 0, 'Culling hides Survey removal controls to keep the full shoot paging stable');
   await page.keyboard.press('Shift+X');
   await page.waitForFunction(() => document.querySelector('.lib-survey-cell[data-survey-idx="0"] [data-survey-action="reject"]')?.classList.contains('on') && window.__libSurveyState().focus === 1);
