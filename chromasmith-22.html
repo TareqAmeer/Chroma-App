@@ -7340,7 +7340,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011E';
+const BUILD='1.1011F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16105,7 +16105,7 @@ async function mskAddEmbeddedPortraitMatte(kind){
     }
     if(curItem()!==it||curItem().path!==path)return false;
     const matte=Array.isArray(maps)?maps.find(map=>map&&map.kind===kind&&map.png_b64):null;
-    if(!matte){if(typeof toast==='function')toast('This photo has no embedded '+label+' matte. Use Brush to paint manually.',false);return false;}
+    if(!matte)return await mskEmbeddedMatteFallback(kind,label,it);
     const image=new Image();
     image.src='data:image/png;base64,'+matte.png_b64;
     await image.decode();
@@ -16146,6 +16146,61 @@ async function mskAddEmbeddedPortraitMatte(kind){
 }
 async function mskAddEmbeddedTeethWhitening(){return mskAddEmbeddedPortraitMatte('teeth');}
 async function mskAddEmbeddedHairMatte(){return mskAddEmbeddedPortraitMatte('hair');}
+
+// A missing embedded matte is an explicit fork, not a silent downgrade. Use only alternatives
+// the app can actually produce: its sky selection, or the face parser's documented face-crop
+// groups. Teeth have no model class, so that choice offers the guided manual enamel brush only.
+function mskEmbeddedMatteFallbackChoice(kind,label){
+  const faceGroup={hair:3,glasses:1,skin:4}[kind];
+  const modelLabel=kind==='sky'?'Use AI Sky selection':faceGroup!==undefined?'Use Face Parse':'';
+  const detail=faceGroup!==undefined?'Face Parse needs a rough scribble around one face; its skin result is face-crop-only.':'The app’s Sky selection starts with its built-in heuristic and refines with SAM on desktop.';
+  return new Promise(resolve=>{
+    const dlg=document.createElement('dialog');dlg.id='msk-embedded-fallback-dialog';
+    dlg.setAttribute('aria-labelledby','msk-embedded-fallback-title');
+    dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:440px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2);z-index:var(--z-system)';
+    const title=document.createElement('h2');title.id='msk-embedded-fallback-title';title.textContent='No embedded '+label+' matte';title.style.cssText='font-size:15px;margin:0 0 8px';
+    const body=document.createElement('p');body.textContent=kind==='teeth'?'This photo has no teeth matte. The app cannot detect tooth enamel automatically. Paint enamel manually and erase over lips and gums.':detail;body.style.cssText='font-size:12px;line-height:1.5;color:var(--mut);margin:0 0 14px';
+    const actions=document.createElement('div');actions.style.cssText='display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap';
+    let settled=false;
+    const finish=value=>{if(settled)return;settled=true;if(dlg.open)dlg.close();dlg.remove();resolve(value);};
+    const button=(id,text,value,primary=false)=>{const b=document.createElement('button');b.type='button';b.id=id;b.dataset.choice=value;b.className='btn '+(primary?'bpri':'bgh');b.textContent=text;b.onclick=()=>finish(value);return b;};
+    actions.append(button('msk-embedded-fallback-cancel','Cancel','cancel'));
+    actions.append(button('msk-embedded-fallback-manual',kind==='teeth'?'Paint enamel manually':'Paint with Brush','manual'));
+    if(modelLabel)actions.append(button('msk-embedded-fallback-model',modelLabel,'model',true));
+    dlg.append(title,body,actions);dlg.addEventListener('cancel',e=>{e.preventDefault();finish('cancel');});
+    document.body.appendChild(dlg);dlg.showModal();
+    (dlg.querySelector('#msk-embedded-fallback-model')||dlg.querySelector('#msk-embedded-fallback-manual')).focus();
+  });
+}
+function mskEmbeddedMatteManual(kind,label){
+  if(kind==='teeth')return mskAddTeethWhitening();
+  const m=mskAdd('brush',mask=>{mask.origin='manual-'+kind;mask.name=label[0].toUpperCase()+label.slice(1)+' (manual)';});
+  if(!m||fxState.masks[mskSel]!==m)return false;
+  mskPaintTransientReset();mskPaintErase=false;mskPaintErase_sync();if(!mskPaintMode)mskPaintToggle();
+  mskRebuild();if(typeof renderPreview==='function')renderPreview();
+  if(typeof toast==='function')toast('Paint the '+label+' selection manually. Review the mask before editing.',true);
+  return true;
+}
+async function mskEmbeddedMatteFallback(kind,label,item){
+  const choice=await mskEmbeddedMatteFallbackChoice(kind,label);
+  if(curItem()!==item)return false;
+  if(choice==='cancel')return false;
+  if(choice==='manual')return mskEmbeddedMatteManual(kind,label);
+  if(choice!=='model')return false;
+  if(kind==='sky'){
+    const m=mskAdd('sky');
+    if(!m)return false;
+    m.name='Sky (app selection)';mskRebuild();
+    if(typeof toast==='function')toast('App Sky selection added. Check its boundary before editing.',true);
+    return true;
+  }
+  const group={hair:3,glasses:1,skin:4}[kind];
+  if(group===undefined)return false;
+  const m=mskAdd('ai',mask=>{mask.name=label[0].toUpperCase()+label.slice(1)+' (Face Parse fallback)';mask.faceFallbackGroup=group;});
+  if(!m||fxState.masks[mskSel]!==m)return false;
+  if(typeof toast==='function')toast('Scribble around one person’s head. AI Select will run Face Parse for '+label+' when the selection is ready.',true);
+  return true;
+}
 
 // ── AI brush-select: EdgeSAM multi-point-prompt segmentation, native shell only (main.rs's
 // sam_encode/sam_points — see desktop/src-tauri/src/sam.rs). Encodes the CURRENT photo once
@@ -16372,6 +16427,7 @@ async function samRunPoints(m,opts={}){
     if(opts.detached){m.refineFeather=detachedRefinement.feather;m.refineEdge=detachedRefinement.edge;}
     else{m.refineFeather=0;m.refineEdge=0;}
     delete m._refineCache;
+    if(Number.isInteger(m.faceFallbackGroup))await _mskApplyFaceFallback(m,item,m.faceFallbackGroup,!!opts.silent);
     if(!opts.detached){_mskTexDirty=true;_samLastError=null;}
     // "+ Coat" is one button making two masks: the FIRST real segmentation of a coat mask spawns
     // its paired eye-brightness mask right alongside it. Only once — re-scribbling to refine the
@@ -17246,6 +17302,24 @@ function _facePlace(r,groupIdxs){
     }
   }
   return out;
+}
+async function _mskApplyFaceFallback(mask,item,group,silent){
+  if(![1,3,4].includes(group)||!window.__TAURI__)return false;
+  if(_faceparseRunning)return false;
+  _faceparseRunning=true;
+  try{
+    const parsed=await _faceparseRunLayers(mask);
+    if(curItem()!==item)return false;
+    const px=_facePlace(parsed,[group]);
+    let selected=false;for(let i=0;i<px.length;i++)if(px[i]>32){selected=true;break;}
+    if(!selected){if(!silent&&typeof toast==='function')toast('Face Parse found no '+({1:'glasses',3:'hair',4:'face skin'}[group])+' in this selection. The AI Select mask is still available to brush-correct.',false);return false;}
+    mask.px=px;mask.mtW=parsed.mtW;mask.mtH=parsed.mtH;_mskTexDirty=true;
+    if(!silent&&typeof toast==='function')toast(({1:'Glasses',3:'Hair',4:'Face skin'}[group])+' selected with Face Parse. Review and brush-correct the result.',true);
+    return true;
+  }catch(e){
+    if(!silent&&typeof toast==='function')toast('Face Parse fallback failed. The AI Select mask remains available to brush-correct.',false);
+    log('Face Parse fallback failed: '+(e&&e.message||e),'warn');return false;
+  }finally{_faceparseRunning=false;}
 }
 async function mskFaceAutoExclude(){
   if(!window.__TAURI__){log('Face-feature exclusion needs the desktop app (on-device model)','warn');return;}

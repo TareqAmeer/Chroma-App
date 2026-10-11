@@ -1703,3 +1703,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Files: `desktop/src-tauri/examples/inpaint_probe.rs`. The two deterministic metric tests, person-mask fixture test, Rust formatting check, and whitespace check pass. Native inference was not run because the pinned model and Windows ONNX Runtime are unavailable here; CHR-246 AC4/AC7 remain unchecked.
 - Feature commit `6017307e118cbbc7222352478bd1c57b75ec8031` was fast-forwarded to `origin/main` after the person-mask fixture, Rust formatting, and whitespace checks passed in the integration checkout.
 - `git ls-remote origin refs/heads/main` confirmed `6017307e118cbbc7222352478bd1c57b75ec8031` immediately after publication. Native candidate review remains necessary before checking AC4/AC7.
+
+### 2026-10-11 — CHR-253 explicit embedded-matte fallback
+
+- Missing embedded hair, skin, or glasses mattes now offer an explicit Face Parse fallback after the user scribbles around a face; missing sky data offers the existing Sky+SAM flow. The prompt also offers a manual Brush path and Cancel. Teeth remain manual because the bundled parser has no enamel class; face-parse output is applied only if the original photo is still active.
+- Files: `chromasmith-22.html`, `test/teeth_whitening.mjs`, `test/mask_embedded_fallback.mjs`, `package.json`, and `docs/masking-roadmap.md`. The deterministic fallback test (9 checks), AI provenance test, editor HTML validity, JS syntax, package JSON and whitespace checks pass. Browser interaction/model inference remains unverified: Chrome denied the test’s loopback server (`ERR_NETWORK_ACCESS_DENIED`); no live model run was claimed. CHR-253 AC4 remains unchecked until all matte types and supported platforms have truthful fallback behavior.

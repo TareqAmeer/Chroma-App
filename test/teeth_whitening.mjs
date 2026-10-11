@@ -264,11 +264,63 @@ async function main() {
       const beforeNoMatte = JSON.stringify(getUISnapshot()), nativeInvoke = window.__TAURI__.core.invoke;
       delete fxImages[0]._embeddedAuxiliaryPromise;
       window.__TAURI__.core.invoke = async (command, args) => { calls.push({ command, args }); return []; };
+      async function cancelMissingMatte(work){
+        const pending=work();
+        await new Promise(resolve=>setTimeout(resolve,0));
+        document.getElementById('msk-embedded-fallback-cancel')?.click();
+        return await pending;
+      }
       for(const kind of ['teeth','hair','skin','glasses','sky']){
         delete fxImages[0]._embeddedAuxiliaryPromise;
-        if(kind==='teeth')await mskAddEmbeddedTeethWhitening();else await mskAddEmbeddedPortraitMatte(kind);
+        if(kind==='teeth')await cancelMissingMatte(mskAddEmbeddedTeethWhitening);
+        else await cancelMissingMatte(()=>mskAddEmbeddedPortraitMatte(kind));
         eck(`missing embedded ${kind} matte leaves masks unchanged`,JSON.stringify(getUISnapshot())===beforeNoMatte);
       }
+      // A missing hair matte offers the existing, limited Face Parse model as an explicit choice.
+      // Stub only image encoding; the user must still scribble before face parsing can run.
+      const oldEnsure=samEnsureEncoded,oldTapToggle=mskAiTapToggle;
+      samEnsureEncoded=async()=>{};mskAiTapToggle=()=>{mskAiTapMode=true;};
+      delete fxImages[0]._embeddedAuxiliaryPromise;
+      const beforeFaceFallback=fxState.masks.length,faceFallbackWork=mskAddEmbeddedPortraitMatte('hair');
+      await new Promise(resolve=>setTimeout(resolve,0));
+      document.getElementById('msk-embedded-fallback-model')?.click();
+      const faceFallbackResult=await faceFallbackWork,faceFallbackMask=fxState.masks[mskSel];
+      eck('missing hair matte offers Face Parse as an explicit app-model fallback',faceFallbackResult
+        &&fxState.masks.length===beforeFaceFallback+1&&faceFallbackMask?.origin==='ai'
+        &&faceFallbackMask?.faceFallbackGroup===3&&faceFallbackMask?.name==='Hair (Face Parse fallback)');
+      const oldFaceparseRun=_faceparseRunLayers,faceFeatureMask={type:'brush',origin:'ai',ai:true,px:new Uint8Array([0]),mtW:1,mtH:1};
+      _faceparseRunLayers=async()=>({mtW:2,mtH:1,cropX0:0,cropY0:0,cropSize:2,
+        layers:[0,1,2,3,4].map(group=>new Uint8Array([group===3?180:0,group===4?220:0]))});
+      const appliedFaceFallback=await _mskApplyFaceFallback(faceFeatureMask,curItem(),3,true);
+      eck('Face Parse fallback replaces the rough selection with only the chosen face-feature layer',appliedFaceFallback
+        &&faceFeatureMask.mtW===2&&faceFeatureMask.mtH===1&&faceFeatureMask.px[0]===180&&faceFeatureMask.px[1]===0);
+      _faceparseRunLayers=oldFaceparseRun;
+      samEnsureEncoded=oldEnsure;mskAiTapToggle=oldTapToggle;
+      fxState.masks.length=0;mskSel=-1;mskPaintStop();
+      // Teeth deliberately disclose that no model can identify enamel; the chosen fallback is
+      // the guided manual workflow, never the face parser's lips/interior class.
+      delete fxImages[0]._embeddedAuxiliaryPromise;
+      const manualTeethWork=mskAddEmbeddedTeethWhitening();
+      await new Promise(resolve=>setTimeout(resolve,0));
+      eck('missing teeth dialog explicitly discloses that enamel is not model-detected',
+        document.getElementById('msk-embedded-fallback-dialog')?.textContent.includes('cannot detect tooth enamel automatically'));
+      document.getElementById('msk-embedded-fallback-manual')?.click();
+      const manualTeethResult=await manualTeethWork,manualTeeth=fxState.masks[mskSel];
+      eck('missing teeth matte offers a truthful manual enamel fallback',manualTeethResult
+        &&manualTeeth?.origin==='manual-teeth'&&manualTeeth?.name==='Teeth Whitening (manual)'
+        &&manualTeeth?.temp===-0.12&&manualTeeth?.sat===-0.12&&mskPaintMode);
+      fxState.masks.length=0;mskSel=-1;mskPaintStop();
+      // If the user changes photos while the choice dialog is open, selecting a fallback must
+      // not attach a mask to either the old or the newly selected photo.
+      delete fxImages[0]._embeddedAuxiliaryPromise;
+      await fxSelectImage(0);const staleStart0=fxState.masks.length;
+      const staleChoiceWork=mskAddEmbeddedPortraitMatte('hair');
+      await new Promise(resolve=>setTimeout(resolve,0));
+      await fxSelectImage(1);const staleStart1=fxState.masks.length;
+      document.getElementById('msk-embedded-fallback-model')?.click();
+      const staleChoiceResult=await staleChoiceWork;
+      eck('photo switch while fallback choice is open discards the old-photo choice',!staleChoiceResult
+        &&fxCurIdx===1&&fxState.masks.length===staleStart1&&fxImages[0].masks.length===staleStart0);
       delete fxImages[0]._embeddedAuxiliaryPromise;
       const emptyCanvas = document.createElement('canvas'); emptyCanvas.width = matteWidth; emptyCanvas.height = matteHeight;
       const emptyContext = emptyCanvas.getContext('2d'); emptyContext.fillStyle = '#000'; emptyContext.fillRect(0, 0, matteWidth, matteHeight);
