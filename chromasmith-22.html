@@ -7331,7 +7331,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011E';
+const BUILD='1.1011F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17778,7 +17778,7 @@ function mskRefinedPixels(m,source){
 function mskRefinementSupported(m){
   if(!m)return false;
   if(m.type==='brush'&&m.px&&m.px.length&&m.mtW>0&&m.mtH>0)return !!(mskIsAI(m)||m.origin==='sky');
-  return m.type==='none'&&m.origin==='depth'&&m.depOn&&!!(typeof FX!=='undefined'&&FX&&FX._depthSnapshot);
+  return !!(m.type==='none'&&m.origin==='depth'&&m.depOn&&typeof FX!=='undefined'&&FX&&FX._depthSnapshot);
 }
 function mskRefinementSourceReset(m){if(!m)return;m.refineFeather=0;m.refineEdge=0;delete m._refineCache;}
 function mskRefineControls(m){

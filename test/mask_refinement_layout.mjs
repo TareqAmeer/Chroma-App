@@ -22,6 +22,7 @@ const context = {
   mskRebuild: () => rebuilds++, _mskTexDirty: false,
   fxHistoryPush: () => { history.push(context._mskToSnap(context.fxState.masks[0])); }, fxUpdate: () => {},
   curItem: () => ({ img: { width: 12, height: 10 } }), fxWork: null, fxImg: null,
+  _mskRecordAIProvenance: () => {},
   mskTexDims: () => ({ w: 12, h: 10 }),
   mskSourceData: (w, h) => new Uint8Array(w * h * 4).fill(180),
   _smoothstepJS: (a, b, value) => { const t = Math.max(0, Math.min(1, (value - a) / (b - a))); return t * t * (3 - 2 * t); },
