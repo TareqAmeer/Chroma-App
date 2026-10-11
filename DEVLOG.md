@@ -1797,3 +1797,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-11 — CHR-267 RAW-first follow-up publication
 - Published feature `bf4e4689` through clean integration as `cfe5ed5244c2443d56f2e5d99f0f5b426a470055`; non-force push and remote `ls-remote` confirmed the exact main hash. Integrated RAW browser regression passed; no source conflicts or base changes during integration.
 - Matching CHR-267 navigation and developed-RAW review criteria checked; broader RAW latency/camera/RSS and FXR parity criterion stays open. Issue kept In Review. Reused the same checkout serially; unrelated prior drafts remain on their branches.
+
+### 2026-10-11 — CHR-269 completed focus-score refresh
+- Successful local focus-job completion refreshes the current cull picker's selected catalog rows in batches of 500, updates focus-only fields and reranks automatic keepers. Manual Previous/Next choices survive; per-session tokens reject query results after reentry/exit. Files: `desktop/library-ui.js`, `test/library_culling.mjs`, `docs/plans/large-library-raw-culling.md`; issue CHR-269.
+- Focused culling test passed automatic rerank, newest scores, explicit manual preservation, delayed stale-query rejection, post-exit rejection and existing grouping/near-duplicate/keyboard/undo behavior; diff check passed. No new model/eye-warning or labelled-accuracy claim; full ticket remains incomplete.
+- Reused the existing checkout/shared browser; no install or new worktree. Removed the primary checkout's verified ignored inactive native target cache (22.42GB), preserving source, all drafts and shared Cargo target; repository remains above its 50GB target.

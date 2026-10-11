@@ -69,11 +69,38 @@ try {
   let recommendations = await page.evaluate(() => window.__libCullRecommendations());
   assert.match(recommendations[0].path, /IMG_1003\.RW2$/, 'highest catalog focus score is suggested across the joined duplicate/burst group');
   assert.match(recommendations[0].reason, /Highest available focus score.*near-duplicate cluster/, 'the suggestion explains focus ranking and duplicate evidence');
+  await page.evaluate(() => { window.__libtestFocusScoreOverrides = { 1: 100000 }; });
+  assert.equal(await page.evaluate(() => window.__libRefreshCullFocusScores()), true, 'completed focus scoring refreshes the active picker');
+  recommendations = await page.evaluate(() => window.__libCullRecommendations());
+  assert.match(recommendations[0].path, /IMG_1001\.RW2$/, 'automatic keeper reranks from refreshed focus scores');
+  assert.ok((await page.evaluate(() => window.__libtestPhotoIdQueries)).length > 0, 'refresh queries selected rows by catalog photo id');
+  await page.evaluate(() => { window.__libtestFocusScoreOverrides = { 3: 100000 }; });
+  assert.equal(await page.evaluate(() => window.__libRefreshCullFocusScores()), true, 'a later focus refresh remains available');
+  recommendations = await page.evaluate(() => window.__libCullRecommendations());
+  assert.match(recommendations[0].path, /IMG_1003\.RW2$/, 'automatic keeper follows the newest best score');
+  await page.locator('details[data-time-group="0"] summary').click();
   await page.locator('[data-best-prev="0"]').click();
   recommendations = await page.evaluate(() => window.__libCullRecommendations());
   assert.match(recommendations[0].path, /IMG_1001\.RW2$/, 'reviewer can override the suggested keeper');
   assert.equal(recommendations[0].manual, true, 'override is recorded as manual');
   assert.match(recommendations[0].reason, /Manual override/, 'override reason is shown');
+  await page.evaluate(() => { window.__libtestFocusScoreOverrides = { 2: 200000 }; });
+  assert.equal(await page.evaluate(() => window.__libRefreshCullFocusScores()), true, 'focus updates can arrive after a manual choice');
+  recommendations = await page.evaluate(() => window.__libCullRecommendations());
+  assert.match(recommendations[0].path, /IMG_1001\.RW2$/, 'manual keeper choice survives a newer automatic winner');
+  assert.equal(recommendations[0].manual, true, 'surviving override remains marked manual');
+  await page.evaluate(() => {
+    window.__libtestHoldPhotoIdQuery = true;
+    window.__libStaleCullRefresh = window.__libRefreshCullFocusScores(window.__libCullSessionToken());
+  });
+  await page.waitForFunction(() => typeof window.__libtestPhotoIdQueryResolve === 'function');
+  const staleRows = await page.evaluate(() => window.__libtestCatalogEntries.filter((entry) => window.__libtestPhotoIdQueries.at(-1).includes(entry.id)));
+  await page.evaluate(() => window.__libInvalidateCullSession());
+  await page.evaluate((entries) => {
+    window.__libtestHoldPhotoIdQuery = false;
+    window.__libtestPhotoIdQueryResolve({ entries: entries.map((entry) => ({ ...entry, sharpness: 999999 })) });
+  }, staleRows);
+  assert.equal(await page.evaluate(() => window.__libStaleCullRefresh), false, 'a delayed score response is discarded after its cull session changes');
   await page.click('#lib-cull-time-start');
   await page.waitForSelector('#fx-confirm-modal[open]');
   assert.match(await page.textContent('#fx-confirm-msg'), /Start culling 10 photos/, 'confirmation shows the selected photo count');
@@ -178,6 +205,7 @@ try {
   await page.keyboard.press('Shift+X');
   await page.waitForFunction(() => document.querySelector('.lib-survey-cell[data-survey-idx="0"] [data-survey-action="reject"]')?.classList.contains('on') && window.__libSurveyState().focus === 1);
   await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => window.__libRefreshCullFocusScores()), false, 'a score refresh is rejected after culling exits');
   assert.equal(await page.evaluate(() => window.__libSurveyState().active), false, 'Escape exits Culling');
   assert.equal(await page.evaluate(() => localStorage.getItem('chromasmith_lib_cull_auto_advance')), '1', 'auto-advance preference survives cull exit');
   assert.notEqual(await page.locator('#lib-grid').evaluate((el) => getComputedStyle(el).display), 'none');

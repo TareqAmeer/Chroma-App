@@ -768,6 +768,14 @@
       case 'catalog_query': {
         const q = A.q || {};
         if (q.smartAlbumId) (window.__libtestSmartAlbumQueries ||= []).push(structuredClone(q));
+        if (q.photoIds) {
+          (window.__libtestPhotoIdQueries ||= []).push(q.photoIds.slice());
+          if (window.__libtestHoldPhotoIdQuery) return new Promise((resolve) => { window.__libtestPhotoIdQueryResolve = resolve; });
+          const entries = (window.__libtestCatalogEntries || []).filter((entry) => q.photoIds.includes(entry.id));
+          return Promise.resolve({ total: entries.length, capped: false, entries: entries.map((entry) => ({
+            ...entry, sharpness: window.__libtestFocusScoreOverrides?.[entry.id] ?? entry.sharpness,
+          })) });
+        }
         // Ordinary folder browsing's own scope (Fix 1 of the catalog-backed-grid plan) — NOT
         // gated on ?libcat=1, since this is the everyday "open a folder" path every ?libtest=1
         // page already exercises, not just the opt-in Date/Search/catalog harness. Mirrors
@@ -793,6 +801,7 @@
               ? { id: i, name: `P_TM${6000 + i}.MP4`, path: `${folderPrefix}/P_TM${6000 + i}.MP4`, is_dir: false, is_image: false, is_video: true, kind: 'video', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 : null, size: 90000000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: null, blurry: false, stack_n: 0, thumb_path: null }
               : { id: i, name: `IMG_${1000 + i}.RW2`, path: `${folderPrefix}/IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 + (/[?&]libdupes=1/.test(location.search) && i === 2 ? 120 : 0) : null, size: 1000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: /[?&]libtime=1/.test(location.search) ? 100 + i * 10 : 400, blurry: false, stack_n: 0, thumb_path: null });
           }
+          window.__libtestCatalogEntries = entries;
           return Promise.resolve({ total: N, capped: false, entries });
         }
         if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ total: 0, capped: false, entries: [] });
@@ -3721,6 +3730,9 @@
     window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), labels: surveyState.cells.map((cell) => (state.sidecars.get(cell.path) || {}).label || ''), cullLabels: surveyState.cullAllPaths.map((path) => (state.sidecars.get(path) || {}).label || ''), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && (compareState.mode === 'survey' || compareState.mode === 'cull'), mode: compareState.mode, offset: surveyState.cullOffset, cullPaths: surveyState.cullPaths.slice(), groupPicker: surveyState.cullGroupPicker, autoAdvance: cullAutoAdvanceEnabled() });
     window.__libCullTimeGroups = () => surveyState.cullGroups.map((g) => ({ label: cullGroupLabel(g), count: g.paths.length, paths: g.paths.slice(), unknown: !!g.unknown, duplicate: !!g.duplicate }));
     window.__libCullRecommendations = () => surveyState.cullGroups.map((group) => ({ key: group.key, paths: group.paths.slice(), ...cullGroupPreference(group) }));
+    window.__libRefreshCullFocusScores = (token) => refreshCullFocusScores(token === undefined ? surveyState.entryToken : token);
+    window.__libCullSessionToken = () => surveyState.entryToken;
+    window.__libInvalidateCullSession = () => ++surveyState.entryToken;
     window.__libOpenImportPanel = (path) => openImportPanel(path);
     window.__libSubfolderPreference = {
       key: folderScopeKey,
@@ -8889,7 +8901,7 @@
     prevViewMode: 'grid',
   };
   const surveyState = { cells: [], focus: 0, entryToken: 0, cullPaths: [], cullOffset: 0,
-    cullAllPaths: [], cullCaptureByPath: new Map(), cullEntryByPath: new Map(), cullDupeClusterByPath: new Map(), cullDupeStatus: 'idle', cullHashToken: 0, cullPreferredByGroup: new Map(), cullRecommendationByPath: new Map(), cullGapSec: 60, cullGroups: [], cullSelected: new Set(), cullGroupPage: 0, cullGroupPicker: false };
+    cullAllPaths: [], cullCaptureByPath: new Map(), cullEntryByPath: new Map(), cullDupeClusterByPath: new Map(), cullDupeStatus: 'idle', cullHashToken: 0, cullPreferredByGroup: new Map(), cullManualPreferenceGroups: new Set(), cullRecommendationByPath: new Map(), cullGapSec: 60, cullGroups: [], cullSelected: new Set(), cullGroupPage: 0, cullGroupPicker: false };
   const CULL_GAPS = [1, 5, 15, 30, 60, 120, 300, 600];
   function cullCaptureGroups(paths, gapSec) {
     const known = [], unknown = [];
@@ -8971,7 +8983,40 @@
     if (!group || group.paths.length < 2) return;
     const current = cullGroupPreference(group).path, index = Math.max(0, group.paths.indexOf(current));
     surveyState.cullPreferredByGroup.set(group.key, group.paths[(index + delta + group.paths.length) % group.paths.length]);
+    surveyState.cullManualPreferenceGroups.add(group.key);
     cullGroupsRender();
+  }
+  async function refreshCullFocusScores(expectedToken = surveyState.entryToken) {
+    if (expectedToken !== surveyState.entryToken || compareState.mode !== 'cull' || !surveyState.cullGroupPicker) return false;
+    const ids = [...new Set(surveyState.cullAllPaths.map((path) => surveyState.cullEntryByPath.get(path)?.id).filter(Number.isSafeInteger))];
+    if (!ids.length) return false;
+    const rows = [];
+    try {
+      // Keep photoIds queries below SQLite's bind-variable limit for large selections.
+      for (let i = 0; i < ids.length; i += 500) {
+        const page = await invoke('catalog_query', { q: { photoIds: ids.slice(i, i + 500) } });
+        rows.push(...(page.entries || []));
+        if (expectedToken !== surveyState.entryToken || compareState.mode !== 'cull' || !surveyState.cullGroupPicker) return false;
+      }
+    } catch (error) {
+      console.error('refresh culling focus scores', error);
+      return false;
+    }
+    const oldBest = new Map(surveyState.cullGroups.map((group) => [group.key, cullGroupBest(group).path]));
+    for (const row of rows) {
+      const entry = surveyState.cullEntryByPath.get(row.path);
+      if (entry) { entry.sharpness = row.sharpness; entry.blurry = row.blurry; }
+    }
+    for (const group of surveyState.cullGroups) {
+      if (surveyState.cullManualPreferenceGroups.has(group.key)) continue;
+      const preferred = surveyState.cullPreferredByGroup.get(group.key);
+      if (!preferred || preferred === oldBest.get(group.key)) {
+        surveyState.cullPreferredByGroup.set(group.key, cullGroupBest(group).path);
+      }
+    }
+    if (expectedToken !== surveyState.entryToken || compareState.mode !== 'cull' || !surveyState.cullGroupPicker) return false;
+    cullGroupsRender();
+    return true;
   }
   async function cullFindNearDuplicates() {
     if (!surveyState.cullGroupPicker || surveyState.cullDupeStatus === 'scanning') return;
@@ -9606,7 +9651,7 @@
     if (survey) { survey.classList.remove('on'); survey.innerHTML = ''; }
     surveyState.cells = []; surveyState.focus = 0;
     surveyState.cullPaths = []; surveyState.cullOffset = 0;
-    surveyState.cullAllPaths = []; surveyState.cullGroups = []; surveyState.cullSelected.clear(); surveyState.cullPreferredByGroup.clear(); surveyState.cullRecommendationByPath.clear(); surveyState.cullEntryByPath.clear(); surveyState.cullCaptureByPath.clear(); surveyState.cullGroupPicker = false;
+    surveyState.cullAllPaths = []; surveyState.cullGroups = []; surveyState.cullSelected.clear(); surveyState.cullPreferredByGroup.clear(); surveyState.cullManualPreferenceGroups.clear(); surveyState.cullRecommendationByPath.clear(); surveyState.cullEntryByPath.clear(); surveyState.cullCaptureByPath.clear(); surveyState.cullGroupPicker = false;
     state.viewMode = compareState.prevViewMode || 'grid';
     localStorage.setItem('chromasmith_lib_view', state.viewMode);
     syncViewSeg();
@@ -9640,6 +9685,7 @@
     surveyHost()?.querySelector('.lib-survey-cell')?.focus({ preventScroll: true });
   }
   async function enterCullMode() {
+    surveyState.entryToken++;
     const selected = state.selected;
     const paths = sortEntries(state.entries.filter(passesFilters)).filter((entry) => selected.has(entry.path)).map((entry) => entry.path);
     if (paths.length < 2) return;
@@ -9648,7 +9694,7 @@
     surveyState.cullAllPaths = paths.slice(); surveyState.cullPaths = paths.slice(); surveyState.cullOffset = 0; surveyState.focus = 0;
     surveyState.cullCaptureByPath = new Map(state.entries.map((entry) => [entry.path, Number.isFinite(entry.captured) ? entry.captured : null]));
     surveyState.cullEntryByPath = new Map(state.entries.filter((entry) => selected.has(entry.path)).map((entry) => [entry.path, entry]));
-    surveyState.cullPreferredByGroup.clear(); surveyState.cullRecommendationByPath.clear();
+    surveyState.cullPreferredByGroup.clear(); surveyState.cullManualPreferenceGroups.clear(); surveyState.cullRecommendationByPath.clear();
     surveyState.cullDupeClusterByPath.clear(); surveyState.cullDupeStatus = 'idle'; surveyState.cullHashToken++;
     surveyState.cullGapSec = 60; surveyState.cullGroups = cullReviewGroups(paths, surveyState.cullGapSec);
     surveyState.cullSelected = new Set(paths); surveyState.cullGroupPage = 0; surveyState.cullGroupPicker = true;
@@ -12904,7 +12950,10 @@
     const handlers = {
       stack: () => invoke('catalog_stack'),
       thumbnails: () => drainCatalogThumbnails(),
-      focus: () => invoke('catalog_focus'),
+      focus: () => invoke('catalog_focus').then(async (result) => {
+          if (result?.scored) await refreshCullFocusScores();
+          return result;
+      }),
       hash: () => invoke('catalog_hash'),
       faces: async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_faces_scan', {}); if (!r || !r.scanned) break; } },
       embed: () => invoke('catalog_embed_faces', {}),
