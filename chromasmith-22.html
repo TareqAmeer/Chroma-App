@@ -7340,7 +7340,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1012B';
+const BUILD='1.1012C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13208,8 +13208,9 @@ async function loadRw2(file,opts){
   // proxy; fxPromoteWebRaw decodes the full frame when zoom/loupe/export actually need it.
   const half=!!(opts&&opts.half)&&!window.__TAURI__;
   const filmSource=!!(opts&&opts.filmSource);
+  const privateEntry=!!(opts&&opts.privateEntry);
   const rawDecodeSettings=file&&file.__csRawDecodeSettings||null;
-  window.__pm&&window.__pm('loadRw2-enter');
+  if(!privateEntry)window.__pm&&window.__pm('loadRw2-enter');
   if(!rawSharedMemoryOk())throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
   let profile=rawDecodeSettings&&Object.prototype.hasOwnProperty.call(rawDecodeSettings,'profile')?rawDecodeSettings.profile:rawProfile();
   const LibRaw=await getLibRaw();
@@ -13230,14 +13231,15 @@ async function loadRw2(file,opts){
       const openSettings={...(profile?dcpSettings:sdrSettings),filmSource};
       if(srcPath)openSettings.sourcePath=srcPath;
       if(rawDecodeSettings)Object.assign(openSettings,rawDecodeSettings);
+      if(privateEntry)openSettings.privateEntry=true;
       await raw.open(bytes,openSettings);
-      window.__pm&&window.__pm('loadRw2-opened');
+      if(!privateEntry)window.__pm&&window.__pm('loadRw2-opened');
       m=await raw.metadata();
       // libraw-wasm names these camera_make/camera_model; everything below (and the desktop shim) reads make/model. Without this the web build found no bundled profile for ANY camera and decoded every RAW a second time.
       if(m){if(m.make==null)m.make=m.camera_make;if(m.model==null)m.model=m.camera_model;}
       if(profile)profile=rawProfileFor(m,profile);
       img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
-      window.__pm&&window.__pm('loadRw2-imagedata');
+      if(!privateEntry)window.__pm&&window.__pm('loadRw2-imagedata');
     });
   }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
   finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
@@ -13261,12 +13263,13 @@ async function loadRw2(file,opts){
       await withRawDecodeTimeout(raw2,async()=>{
         const fallbackSettings={...sdrSettings,...(rawDecodeSettings||{}),profile:'',outputColor:1,outputBps:8};
         if(srcPath)fallbackSettings.sourcePath=srcPath;
+        if(privateEntry)fallbackSettings.privateEntry=true;
         await raw2.open(srcPath?new Uint8Array(0):await fullBytes(),fallbackSettings);
         img=await raw2.imageData();
       });
     }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
     finally{try{raw2.worker.terminate()}catch(_){}}
-    log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the file's embedded colour matrix (LibRaw sRGB)`,'info');
+    if(!privateEntry)log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the file's embedded colour matrix (LibRaw sRGB)`,'info');
   }
   // Auto-enable the V-Log input transform (ROADMAP.md F2, first half) — Panasonic PhotoStyle
   // 17 means the file IS V-Log, so grading it as Standard/Rec.709 looks badly wrong (flat,
@@ -13282,7 +13285,7 @@ async function loadRw2(file,opts){
   // mixed V-Log/Standard batch, whichever V-Log file loads LAST wins for every photo — this only
   // ever sets 'vlog', never back — since a real fix needs the same per-photo `adjustOverride`
   // machinery `matchSeriesToReference` already uses, which is out of scope for this first pass.
-  if(m&&m.photoStyle===17){
+  if(!privateEntry&&m&&m.photoStyle===17){
     const selInput=document.getElementById('sel-input');
     if(selInput&&selInput.value!=='vlog'){
       selInput.value='vlog';
@@ -13336,7 +13339,7 @@ async function loadRw2(file,opts){
       // sets. The desktop app additionally reads locally-installed Adobe camera profiles.
       let lut;
       if(!camPrefix&&embDcp){
-        log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the profile embedded in the DNG`,'info');
+        if(!privateEntry)log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the profile embedded in the DNG`,'info');
         const fit=dcpFit(m.iso_speed,null);
         lut=await _cpuRun('bakeDcpLUT',[{...embDcp,gainMap:undefined},fit]);
         // CHR-162: the file's own local tone map (iPhone ProRAW) — spatial, so applied to the
@@ -13360,13 +13363,13 @@ async function loadRw2(file,opts){
     dt=Math.round(performance.now()-t0);
     c=document.createElement('canvas');c.width=w;c.height=h;
     c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
-    if(window.__TAURI__&&typeof raw.filmBase==='function'){c._filmRaw=raw;c._filmApplied=false;}
+    if(!privateEntry&&window.__TAURI__&&typeof raw.filmBase==='function'){c._filmRaw=raw;c._filmApplied=false;}
     // Stashed on the CANVAS object, not on the fxImages[] entry — installFXImages assigns
     // `img:c`, and this way the headroom data survives that indirection with zero extra
     // plumbing (mirrors the `refine()` background-swap above, which matches back on `it.img===c`
     // for the same reason). A cheap presence flag avoids scanning w*h bytes just to decide
     // whether to show the HDR toggle.
-    if(typeof hrOut!=='undefined'){
+    if(!privateEntry&&typeof hrOut!=='undefined'){
       // Full scan, not sparse sampling — a bright sky strip is a small fraction of the frame and
       // a stride could miss it entirely, which would hide the HDR toggle on a photo that
       // genuinely has headroom. A single pass over a Uint8ClampedArray is cheap regardless.
@@ -13378,7 +13381,7 @@ async function loadRw2(file,opts){
     // path (Rust) can carry `sceneLinear` without this function ever computing `hrOut` at all
     // (that's a browser/applyDcpLUT-only byte-headroom encoding used solely for gain-map HEIC
     // export), so nesting this inside `hrOut`'s presence would silently never fire on desktop.
-    if(typeof sceneLinear!=='undefined'){
+    if(!privateEntry&&typeof sceneLinear!=='undefined'){
       // A f32 scan, not the hrOut byte-threshold trick above — real values in this buffer ARE
       // the linear-ish sRGB-encoded quantity itself, so "any pixel measurably above white"
       // is a direct, honest presence test rather than a re-derived proxy.
@@ -13387,7 +13390,7 @@ async function loadRw2(file,opts){
       c._sceneLinearPresent=any;
     }
   }catch(e){throw new Error('RW2 color processing failed: '+errStr(e))}
-  log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — ${profile?'DCP profile: '+profile+' (Lightroom-matched color)':'LibRaw render, not Lightroom-matched'}`,'ok');
+  if(!privateEntry)log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — ${profile?'DCP profile: '+profile+' (Lightroom-matched color)':'LibRaw render, not Lightroom-matched'}`,'ok');
   // Two-phase decode, phase 2: the decode above intentionally skipped false-color-suppression/
   // hue-defringe/native-NR to get a photo on screen fast (see desktop-native.js's
   // NativeLibRawShim.open()). If that quality gap actually matters here (native NR is on),
@@ -13395,10 +13398,10 @@ async function loadRw2(file,opts){
   // into THIS canvas once it lands — fire-and-forget, matched back by object identity (`c`) so
   // a since-closed/replaced photo is a safe no-op instead of corrupting the wrong image.
   if(window.__TAURI__&&typeof raw.refine==='function'){
-    raw.refine().then(refined=>{
+    const applyRefinement=(refined)=>{
       if(!refined)return; // this decode didn't need refining (NR was off)
-      const owner=fxImages.find(it=>it.img===c||it.fullImg===c);
-      if(!owner)return; // user switched photos while refine was running
+      const owner=privateEntry?null:fxImages.find(it=>it.img===c||it.fullImg===c);
+      if(!privateEntry&&!owner)return; // user switched photos while refine was running
       let rgba2;
       if(refined.rgba){rgba2=refined.data;}
       else{const rgb2=refined.data,ch2=refined.colors||3;rgba2=new Uint8ClampedArray(refined.width*refined.height*4);
@@ -13412,26 +13415,29 @@ async function loadRw2(file,opts){
       // canvas now — same "absent means delete the stale one" rule as chromasmithDenoiseHigh's
       // own refresh, so a refine that DIDN'T carry extended data (e.g. NR ran but the fast pass
       // is being effectively kept) can't leave a mismatched stash from the earlier fast decode.
-      if(refined.sceneLinear){
+      if(!privateEntry&&refined.sceneLinear){
         let any=false;for(let i=0;i<refined.sceneLinear.length;i++){if(refined.sceneLinear[i]>1.05){any=true;break;}}
         c._sceneLinear={data:refined.sceneLinear,w:refined.width,h:refined.height};
         c._sceneLinearPresent=any;
       }else{
         delete c._sceneLinear;delete c._sceneLinearPresent;
       }
-      if(owner.img!==c){const w=fxDisplayTierCanvas(c);if(w)owner.img=w;if(fxImages[fxCurIdx]===owner)fxImg=owner.img;} // working copy of the refined frame
-      if(typeof updateWork==='function')updateWork();
-      if(typeof renderPreview==='function')renderPreview();
+      if(!privateEntry&&owner.img!==c){const w=fxDisplayTierCanvas(c);if(w)owner.img=w;if(fxImages[fxCurIdx]===owner)fxImg=owner.img;} // working copy of the refined frame
+      if(!privateEntry&&typeof updateWork==='function')updateWork();
+      if(!privateEntry&&typeof renderPreview==='function')renderPreview();
       // The persistent decode cache for these refined pixels is written natively by decode_raw_v2 (desktop-native.js passes cachePath/recipeKey).
-      window.__pm&&window.__pm('refine-applied');
-      log('RAW refined (noise reduction applied)','info');
-    }).catch(e=>{
+      if(!privateEntry){window.__pm&&window.__pm('refine-applied');log('RAW refined (noise reduction applied)','info');}
+    };
+    const refinement=raw.refine().then(applyRefinement).catch(e=>{
+      if(privateEntry)throw e;
       console.error('RAW background refine failed',e);
       log(`RAW background refine failed for ${file.name}: ${errStr(e)}`,'warn');
       if(typeof toast==='function')toast(`Noise reduction refine failed for ${file.name} — ${typeof friendlyRawError==='function'?friendlyRawError(e):errStr(e)}`,false);
     });
+    if(privateEntry)await refinement;
   }
-  window.__pm&&window.__pm('loadRw2-return');
+  if(privateEntry&&typeof raw.releaseDecodeBuffers==='function')raw.releaseDecodeBuffers();
+  if(!privateEntry)window.__pm&&window.__pm('loadRw2-return');
   return{canvas:c,dpi:240,ms:dt,meta:m}; // RW2 carries no resolution tags; 240 = Lightroom's export default. meta carries make/model/lens/iso (native shell) for the panel on every open path.
 }
 // Installs already-decoded entries as the active fxImages and renders — the second half of
@@ -13546,11 +13552,15 @@ function fxDisplayTierCanvas(full){
   return c;
 }
 function fxFileLoadKey(file){return`${file.__csSourcePath||file.name}:${file.size}:${file.lastModified||0}`;}
-async function loadFXImages(fileList){
-  if(!window.__csLibOpen&&typeof window.chromasmithForgetOpened==='function')window.chromasmithForgetOpened();
-  fxRememberPrevious();
-  window.__pm&&window.__pm('lfx-start');
-  fxPhotoActivityInvalidate();
+async function loadFXImages(fileList,opts){
+  opts=opts||{};
+  const privateEntries=!!opts.privateEntries;
+  if(!privateEntries){
+    if(!window.__csLibOpen&&typeof window.chromasmithForgetOpened==='function')window.chromasmithForgetOpened();
+    fxRememberPrevious();
+  }
+  if(!privateEntries)window.__pm&&window.__pm('lfx-start');
+  if(!privateEntries)fxPhotoActivityInvalidate();
   // MIME is often EMPTY, not just for TIFF/RW2: the desktop library opens files via
   // read_file_bytes and builds File objects with type:'' — a plain MIME check silently
   // dropped every PNG/JPEG opened from the library ("No images loaded"). Fall back to the
@@ -13568,11 +13578,12 @@ async function loadFXImages(fileList){
   const openable=f=>f.type.startsWith('image/')||IMG_EXT_RE.test(f.name)||isTiffFile(f)||isRw2File(f)||RUST_ONLY_RE.test(f.name);
   const files=[...fileList].filter(openable);
   const nonImageNonVideo=[...fileList].filter(f=>!openable(f)&&!videoFiles.includes(f)&&!(f.type.startsWith('video/')||VID_EXT_RE.test(f.name)));
+  if(privateEntries&&(videoFiles.length||nonImageNonVideo.length))throw new Error('Compare supports still photos only.');
   // Declared here (not down by the decode loop, where it used to live) so the partition above
   // can add to the same count — one "N file(s) failed" toast covers both unsupported-format
   // rejections and genuine decode failures, instead of two separate toasts firing.
   let _loadFailCount=0;
-  for(const f of nonImageNonVideo){log(unsupportedFormatMessage(f.name),'err');_loadFailCount++}
+  if(!privateEntries)for(const f of nonImageNonVideo){log(unsupportedFormatMessage(f.name),'err');_loadFailCount++}
   if(!files.length&&!videoFiles.length){
     if(nonImageNonVideo.length&&typeof toast==='function')toast(`${nonImageNonVideo.length} file(s) couldn't be opened — see log`,false);
     return;
@@ -13589,8 +13600,8 @@ async function loadFXImages(fileList){
   // tg-canvas — everything outside the small _ALLFX set) kept showing "enabled" (orange) on a
   // never-touched photo simply because the LAST photo had left that toggle's DOM class on.
   const loadKey=[...files,...videoFiles].map(fxFileLoadKey).sort().join('|');
-  if(loadKey!==_fxLoadKey&&_fxPristineDefault)applyUISnapshot(_fxPristineDefault,{skipRender:true});
-  window.__pm&&window.__pm('lfx-snapshot-done');
+  if(!privateEntries&&loadKey!==_fxLoadKey&&_fxPristineDefault)applyUISnapshot(_fxPristineDefault,{skipRender:true});
+  if(!privateEntries)window.__pm&&window.__pm('lfx-snapshot-done');
   const entries=[];
   for(const file of videoFiles){
     fxDeskbarTitle(file.name,'Opening video…',true);
@@ -13599,12 +13610,12 @@ async function loadFXImages(fileList){
     }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++;const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false)}
   }
   for(const file of files){
-    fxDeskbarTitle(file.name,'Opening photo…',true);
+    if(!privateEntries)fxDeskbarTitle(file.name,'Opening photo…',true);
     try{
       // A by-path RAW (desktop Library open) carries only its header: that's all the sniff needs,
       // and the native decode reads the file itself. Anything else reads the whole file as before.
       let bytes=file.__csHead?file.__csHead:new Uint8Array(await file.arrayBuffer());
-      window.__pm&&window.__pm('lfx-arraybuffer');
+      if(!privateEntries)window.__pm&&window.__pm('lfx-arraybuffer');
       let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';if(ext==='tiff')ext='tif';
       // A RAW-extension file whose bytes are actually a JPEG/PNG (see sniffRealImageKind) —
       // route it through the normal image path instead of the RAW decoder, which would
@@ -13614,7 +13625,7 @@ async function loadFXImages(fileList){
       if(sniffedKind&&file.__csHead)bytes=new Uint8Array(await file.arrayBuffer()); // not really RAW: the image path needs every byte
       if(sniffedKind){
         ext=sniffedKind;
-        log(`${file.name}: this isn't actually RAW data — the source (likely Google Photos) only had a ${sniffedKind.toUpperCase()} copy. Imported as ${sniffedKind.toUpperCase()}; RAW-only adjustments (Color NR, RAW profile) won't apply.`,'warn');
+        if(!privateEntries)log(`${file.name}: this isn't actually RAW data — the source (likely Google Photos) only had a ${sniffedKind.toUpperCase()} copy. Imported as ${sniffedKind.toUpperCase()}; RAW-only adjustments (Color NR, RAW profile) won't apply.`,'warn');
       }
       if(isTiffFile(file)){
         const{canvas,dpi,icc,tiffMeta}=await loadTiff(file);
@@ -13624,15 +13635,15 @@ async function loadFXImages(fileList){
       if(isRw2File(file)&&!sniffedKind){
         // Not DNG: ProRAW/linear DNGs are already demosaiced, so halfSize saves nothing — measured slower
         // on a 48MP iPhone DNG, and it came back at a wrong 1920px size.
-        const webHalf=!window.__TAURI__&&!file.__csSourcePath&&!/\.dng$/i.test(file.name);
-        const{canvas,dpi,meta}=await loadRw2(file,{half:webHalf});
+        const webHalf=!privateEntries&&!window.__TAURI__&&!file.__csSourcePath&&!/\.dng$/i.test(file.name);
+        const{canvas,dpi,meta}=await loadRw2(file,{half:webHalf,privateEntry:privateEntries});
         // Attach lens/camera/iso at decode time (native shell) so the metadata panel shows them
         // on EVERY open path — library-ui's get_meta refines this later on library opens.
-        const exif=meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',lensStatusUnknown:!!meta.lensStatusUnknown}:undefined;
+        const exif=meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',photoStyle:meta.photoStyle,lensStatusUnknown:!!meta.lensStatusUnknown}:undefined;
         // Desktop Library RAW (by-path): install a ~2560px working copy — uploading/analysing/
         // rendering the 24MP canvas cost ~1.2-1.6s per open — and keep the full frame as
         // `fullImg` for on-demand promotion (library-ui.js's chromasmithEnsureFullQuality).
-        const work=file.__csSourcePath?fxDisplayTierCanvas(canvas):null;
+        const work=!privateEntries&&file.__csSourcePath?fxDisplayTierCanvas(canvas):null;
         // Browser: `canvas` is already the half-size proxy. _rawHalf marks it for fxPromoteWebRaw before zoom/loupe/export.
         if(webHalf){entries.push({img:fxDisplayTierCanvas(canvas)||canvas,_rawHalf:true,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif:meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',lensStatusUnknown:!!meta.lensStatusUnknown}:undefined,fileSize:file.size});continue;}
         entries.push({img:work||canvas,fullImg:work?canvas:undefined,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif,fileSize:file.size}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
@@ -13668,20 +13679,21 @@ async function loadFXImages(fileList){
       // fileSize: without this, non-library JPEGs (drag-drop / Google Photos) showed no "Size"
       // row in the metadata panel at all — only photos opened via the desktop Library set it.
       entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength,mtime:file.lastModified||0});
-    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++;const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false)} // keep loading the rest of the batch
+    }catch(e){if(privateEntries)throw e;log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++;const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false)} // keep loading the rest of the batch
   }
+  if(privateEntries)return entries;
   if(_loadFailCount>0&&typeof toast==='function')toast(`${_loadFailCount} of ${files.length+videoFiles.length+nonImageNonVideo.length} file(s) failed to load — see log`,false);
   if(!entries.length){const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false);else fxDeskbarTitle('', '', false);log('No images loaded','err');return}
   // Must run BEFORE installFXImages (its render reflects whatever's in the slider DOM right
   // now) — was previously inline per-RW2-entry, before any render had happened; moving it
   // after the render here would apply the defaults a frame too late, requiring a manual
   // slider nudge before they'd visibly take effect.
-  window.__pm&&window.__pm('lfx-pre-defaults');
+  if(!privateEntries)window.__pm&&window.__pm('lfx-pre-defaults');
   if(entries.some(it=>RAW_FILE_EXT_RE.test('.'+it.ext)))applyRawDefaults();
-  window.__pm&&window.__pm('lfx-pre-install');
+  if(!privateEntries)window.__pm&&window.__pm('lfx-pre-install');
   installFXImages(entries,loadKey);
   if(typeof csFirstEditPhotoOpened==='function')csFirstEditPhotoOpened();
-  window.__pm&&window.__pm('lfx-installed');
+  if(!privateEntries)window.__pm&&window.__pm('lfx-installed');
   return entries[0]; // callers that must know THEIR photo (not a stale/other one) is what's installed compare against fxImages[0]
 }
 // Detect a black-and-white / monochrome photo (near-zero mean saturation) and default the
@@ -22890,7 +22902,7 @@ function computeAdjustBlock(v){
     wavelet:{fine:(v['wavelet-1']||0)/100,small:(v['wavelet-2']||0)/100,medium:(v['wavelet-3']||0)/100,residual:(v['wavelet-res']||0)/100},
     skin:(v.skin||0)/100, dehaze:(v.dehaze||0)/100};
 }
-function getFXParams(adjValsOverride){return{
+function getFXParams(adjValsOverride,contextOverride){return{
   // ROADMAP.md R1 — scene-referred highlight roll-off (default OFF, identity-gated: absent/falsy
   // reproduces today's hard clamp exactly, so every export golden stays byte-identical without
   // this key ever needing to be read at render()). No UI control yet — set via
@@ -22909,7 +22921,7 @@ function getFXParams(adjValsOverride){return{
   lut:fxState.lut,
   lutMix:fxState.lutMix!=null?fxState.lutMix:1,
   print:fxState.print,
-  input:(document.getElementById('sel-input')||{}).value||'',   // '' standard | 'vlog' V-Log source
+  input:contextOverride&&Object.prototype.hasOwnProperty.call(contextOverride,'input')?contextOverride.input:((document.getElementById('sel-input')||{}).value||''),   // '' standard | 'vlog' V-Log source
   // HLG input transform — enabled ONLY for a video whose engine delivered the frame
   // unconverted (see fxNeedsHlgTransform). Photos and correctly-converted clips get
   // enabled:false, so this is identity everywhere else and the export goldens are untouched.

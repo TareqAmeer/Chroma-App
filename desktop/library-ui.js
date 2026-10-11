@@ -3722,6 +3722,8 @@
     window.__libRenderGrid = () => renderGrid();
     window.__libToggleUnifiedView = (on) => setUnifiedView(on);
     window.__libSelect = (p) => { state.selected.add(p); };
+    window.__libCompareState = () => ({ active: compareState.active, selected: compareState.paths.slice(), loaded: [...compareState.items.keys()], loadCount: compareState.loadCount,
+      activeLoads: compareState.activeLoads, maxConcurrentLoads: compareState.maxConcurrentLoads, editorEntries: typeof fxImages !== 'undefined' ? fxImages.length : 0 });
     window.__libShowQuickLook = (p) => showQuickLook(p);
     window.__libtestOpenFaceCloseups = (path) => openPhotoPeopleEditor([path], { closeups: true });
     window.__libtestPrepareRawReviewPreviews = (paths) => prepareRawReviewPreviews(paths);
@@ -9105,6 +9107,10 @@
     mode: 'compare',
     entryToken: 0,
     paths: [],                          // the ordered selection Compare was entered with
+    items: new Map(),                   // at most the two currently visible Compare sources
+    loadCount: 0,
+    activeLoads: 0,
+    maxConcurrentLoads: 0,
     paneA: { idx: 0, srcKey: 'live' },
     paneB: { idx: 0, srcKey: 'live' },
     // Which pane flags/labels apply to. B by default because that is the pane the arrows cycle:
@@ -9602,17 +9608,52 @@
     const p=compareState[which==='A'?'paneA':'paneB'];
     const pane=compareHost()?.querySelector(`.lib-cmp-pane[data-pane="${which}"]`);
     if(!pane)return;
-    await detailRender(pane,p,p.idx,p.srcKey,comparePathForIdx(p.idx));
+    await detailRender(pane,p,p.idx,p.srcKey,comparePathForIdx(p.idx), (path, token) => ensureCompareItem(path, token));
     syncCompareChrome(which);
-    if(which==='B')detailPrefetch(p);
   }
-  function detailPrefetch(p){
-    if(!compareState.active||state.viewMode!=='compare')return;
-    const host=compareHost(),wrap=host?.querySelector('[data-pane="B"] .lib-cmp-canvas-wrap');if(!wrap)return;
-    const idx=(p.idx+1)%compareState.paths.length;if(idx===p.idx)return;
-    const el=document.createElement('div');el.style.cssText='position:absolute;left:-10000px;visibility:hidden;pointer-events:none';
-    el.innerHTML='<div class="lib-cmp-canvas-wrap"><canvas></canvas></div>';el.firstChild.style.width=wrap.clientWidth+'px';el.firstChild.style.height=wrap.clientHeight+'px';host.appendChild(el);
-    const cell={detail:{...detailView(p)}};detailRender(el,cell,idx,p.srcKey,comparePathForIdx(idx)).finally(()=>{el.querySelector('canvas').width=0;el.remove();});
+  function compareWantedPaths() {
+    return new Set([comparePathForIdx(compareState.paneA.idx), comparePathForIdx(compareState.paneB.idx)].filter(Boolean));
+  }
+  function releaseCompareItem(item) {
+    if (!item) return;
+    for (const image of [item.img, item.fullImg]) {
+      if (!image) continue;
+      try { image.width = 0; image.height = 0; } catch (_) {}
+      if (image._filmRaw) { image._filmRaw.releaseDecodeBuffers?.(); delete image._filmRaw; }
+      delete image._hdrHeadroom; delete image._sceneLinear;
+    }
+  }
+  function pruneCompareItems() {
+    const wanted = compareWantedPaths();
+    for (const [path, item] of compareState.items) if (!wanted.has(path)) {
+      compareState.items.delete(path); releaseCompareItem(item);
+    }
+  }
+  async function ensureCompareItem(path, token) {
+    if (!compareState.active || token !== compareState.entryToken || state.viewMode !== 'compare') return null;
+    const cached = compareState.items.get(path);
+    if (cached) return cached;
+    pruneCompareItems();
+    const files = await readPathsAsFiles([path], { pathBackedRaw: !!window.__TAURI__ });
+    if (!files.length) throw new Error(`Could not read ${baseName(path)}`);
+    await prepareBatchRawFiles(files, files.okPaths || [path]);
+    if (!compareState.active || token !== compareState.entryToken || state.viewMode !== 'compare' || !compareWantedPaths().has(path)) return null;
+    compareState.loadCount++;
+    compareState.activeLoads++;
+    compareState.maxConcurrentLoads = Math.max(compareState.maxConcurrentLoads, compareState.activeLoads);
+    let loaded;
+    try { loaded = await loadFXImages(files, { privateEntries: true }); }
+    finally { compareState.activeLoads--; }
+    if (!compareState.active || token !== compareState.entryToken || state.viewMode !== 'compare' || !compareWantedPaths().has(path)) {
+      for (const item of loaded || []) releaseCompareItem(item);
+      return null;
+    }
+    const item = Array.isArray(loaded) && loaded[0];
+    if (!item) throw new Error(`Could not decode ${baseName(path)} (private loader returned ${Array.isArray(loaded) ? loaded.length + ' entries' : String(loaded)})`);
+    item.path = path;
+    compareState.items.set(path, item);
+    pruneCompareItems();
+    return compareState.items.get(path) || null;
   }
   const detailState={linked:true,metadata:false,renderer:null,queue:Promise.resolve(),cache:new Map()};
   function detailView(cell){return cell.detail||(cell.detail={scale:0,cx:.5,cy:.5});}
@@ -9645,12 +9686,12 @@
     host.addEventListener('pointerup',()=>dragging=null);host.addEventListener('pointercancel',()=>dragging=null);
   }
   function setupCompareZoomPan(){detailControls(compareHost());}
-  async function detailRender(el,cell,idx,srcKey,path){
+  async function detailRender(el,cell,idx,srcKey,path,itemResolver=null){
     const revision=cell.detailRevision=(cell.detailRevision||0)+1,entry=compareState.entryToken;
     // Serialize only this viewer's renders; source reads/metadata may finish in any order.
     const job=async()=>{
       if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return;
-      const it=typeof fxImages!=='undefined'?fxImages[idx]:null;if(!it)return;
+      const it=itemResolver?await itemResolver(path,entry):(typeof fxImages!=='undefined'?fxImages[idx]:null);if(!it)return;
       if(it._rawHalf&&typeof fxPromoteWebRaw==='function')await fxPromoteWebRaw(it);
       if(typeof fnEnsureNative==='function')await fnEnsureNative(it);
       const sc=await getSidecar(path),meta=await getMeta(path);
@@ -9669,17 +9710,21 @@
       const key=JSON.stringify([path,srcKey,snap,x,y,sw,sh,ow,oh]);let rendered=detailState.cache.get(key);
       if(!rendered){
         const live=getUISnapshot(),locked=_fxHistLocked,undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null;
+        const privateBaseline=!!itemResolver&&!snap&&_fxPristineDefault;
+        const restoreUI=(snap&&snap!=='orig')||privateBaseline;
         _fxHistLocked=true;
         try{
           if(snap&&snap!=='orig')applyUISnapshot(snap);
-          const P=snap==='orig'?FX_ORIG_PARAMS:getFXParams(it.adjustOverride||undefined);
+          else if(privateBaseline){applyUISnapshot(_fxPristineDefault,{skipRender:true});if(RAW_FILE_EXT_RE.test('.'+it.ext))applyRawDefaults();}
+          const sourceOwnsVlog=it.exif?.photoStyle===17&&!(snap&&typeof snap==='object'&&snap.selects&&Object.prototype.hasOwnProperty.call(snap.selects,'sel-input'));
+          const P=snap==='orig'?{...FX_ORIG_PARAMS,...(sourceOwnsVlog?{input:'vlog'}:{})}:getFXParams(it.adjustOverride||undefined,sourceOwnsVlog?{input:'vlog'}:undefined);
           if(!detailState.renderer){detailState.renderer=new FXR(document.createElement('canvas'));if(!detailState.renderer.ok)throw new Error('Compare renderer unavailable');}
           const renderer=detailState.renderer;renderer.resetTextureSnapshotFrom(FX);
           const crop=document.createElement('canvas'),cropScale=Math.min(1,Math.sqrt(2e6/(sw*sh)),ow*2/sw,oh*2/sh);crop.width=Math.max(1,Math.round(sw*cropScale));crop.height=Math.max(1,Math.round(sh*cropScale));crop.getContext('2d').drawImage(source,x,y,sw,sh,0,0,crop.width,crop.height);
           renderer.setImage(crop);renderer.render(P,ow,oh,{glowScale:1,scOverride:iw/FXR.CAL.refWidth,uvOff:[x/iw,(ih-y-sh)/ih],uvScale:[sw/iw,sh/ih]});
           rendered=document.createElement('canvas');rendered.width=ow;rendered.height=oh;rendered.getContext('2d').drawImage(renderer.cv,0,0);crop.width=crop.height=0;
           detailState.cache.set(key,rendered);while(detailState.cache.size>4){const old=detailState.cache.keys().next().value,c=detailState.cache.get(old);detailState.cache.delete(old);c.width=c.height=0;}
-        }finally{if(snap&&snap!=='orig')applyUISnapshot(live);if(undo)undo();_fxHistLocked=locked;}
+        }finally{if(restoreUI)applyUISnapshot(live,{skipRender:true});if(undo)undo();_fxHistLocked=locked;}
       }
       if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return;
       const canvas=el.querySelector('canvas');canvas.width=ow;canvas.height=oh;canvas.getContext('2d').drawImage(rendered,0,0);canvas.style.transform='';canvas.style.width=(sw*scale)+'px';canvas.style.height=(sh*scale)+'px';
@@ -9687,7 +9732,13 @@
 
       const row=state.entries.find(e=>e.path===path);strip.textContent=[meta.shutter,meta.aperture,meta.iso?'ISO '+meta.iso:'',row?.sharpness!=null?'Focus '+Math.round(row.sharpness):''].filter(Boolean).join(' · ')||'Exposure metadata unavailable';
     };
-    detailState.queue=detailState.queue.catch(()=>{}).then(job);return detailState.queue.catch(e=>{console.error('compare detail',e);el.dataset.detailError=String(e.message||e);});
+    detailState.queue=detailState.queue.catch(()=>{}).then(job);return detailState.queue.catch(e=>{
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return;
+      console.error('compare detail',e);el.dataset.detailError=String(e.message||e);
+      const canvas=el.querySelector('canvas');if(canvas){canvas.width=canvas.height=0;}
+      let error=el.querySelector('.lib-detail-error');if(!error){error=document.createElement('div');error.className='lib-detail-error';error.style.cssText='padding:16px;color:var(--mut);font-size:12px';el.querySelector('.lib-cmp-canvas-wrap')?.appendChild(error);}
+      if(error)error.textContent=`Could not load ${baseName(path)}: ${String(e.message||e)}`;
+    });
   }
 
   function canEnterCompare() {
@@ -9833,6 +9884,8 @@
     if (state.viewMode !== 'compare' && state.viewMode !== 'survey') compareState.prevViewMode = state.viewMode;
     compareState.mode = 'compare'; compareState.totalSelected = paths.length;
     const entryToken = ++compareState.entryToken;
+    for (const item of compareState.items.values()) releaseCompareItem(item);
+    compareState.items.clear(); compareState.loadCount = 0; compareState.maxConcurrentLoads = 0;
     surveyState.entryToken++;
     surveyState.cells = [];
     compareState.paths = paths;
@@ -9844,8 +9897,6 @@
     const host = compareHost();
     const survey = surveyHost(); if (survey) { survey.classList.remove('on'); survey.innerHTML = ''; }
     if (host) { host.classList.add('on'); host.innerHTML = '<div id="lib-empty">Loading…</div>'; }
-    try { await openPathsInEditor(paths); }
-    catch (e) { if (entryToken !== compareState.entryToken) return; console.error('compare openPathsInEditor', e); if (typeof toast === 'function') toast('Could not load photos for compare', false); exitCompareMode(); return; }
     if (entryToken !== compareState.entryToken || state.viewMode !== 'compare') return;
     compareState.active = true;
     buildCompareUI();
@@ -9856,6 +9907,8 @@
   function exitCompareMode() {
     compareState.entryToken++;
     for(const c of detailState.cache.values())c.width=c.height=0;detailState.cache.clear();
+    for (const item of compareState.items.values()) releaseCompareItem(item);
+    compareState.items.clear();
     surveyState.entryToken++;
     compareState.active = false;
     const host = compareHost();

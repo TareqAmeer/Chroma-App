@@ -22,15 +22,17 @@ const globals = {
   chromasmithRawFullCleanup: false, chromasmithAutoLens: true,
   chromasmithLensOverride: 'manual lens', chromasmithLensOverrideFocal: 35,
 };
-const windowMock = { ...globals, __TAURI__: {}, __pm() {} };
+const pmEvents = [];
+const windowMock = { ...globals, __TAURI__: {}, __pm: event => pmEvents.push(event) };
 const requests = [], profiles = [], notices = [], expectedErrors = [];
-let profile = 'saved-profile', unsupported = false;
-function frame(request) {
+let profile = 'saved-profile', unsupported = false, privateRawTest = false;
+function frame(request, width = 2, height = 1) {
   const linear = request.mode === 'linear16';
-  const bytes = new ArrayBuffer(24 + (linear ? 12 : 8));
-  new Uint32Array(bytes, 0, 6).set([2, 1, 100, request.mode === 'lut' ? 1 : 0, 1, 0]);
+  const pixels = width * height;
+  const bytes = new ArrayBuffer(24 + (linear ? pixels * 6 : pixels * 4));
+  new Uint32Array(bytes, 0, 6).set([width, height, 100, request.mode === 'lut' ? 1 : 0, 1, 0]);
   if (linear) new Uint16Array(bytes, 24).fill(1000);
-  else new Uint8Array(bytes, 24).set([30, 40, 50, 255, 60, 70, 80, 255]);
+  else new Uint8Array(bytes, 24).fill(96);
   return bytes;
 }
 const context = vm.createContext({
@@ -48,14 +50,16 @@ const context = vm.createContext({
       if (args.path === paths[1]) throw Error('missing source');
       return new Uint8Array([1, 2, 3, 4]);
     }
-    if (command.startsWith('peek_raw_camera')) return { make: 'Test', model: 'Camera' };
+    if (command === 'hdr_headroom_clear') return true;
+    if (command === 'get_cached_raw_decode') throw Error('cache miss');
+    if (command.startsWith('peek_raw_camera')) return { make: 'Test', model: 'Camera', photoStyle: 17 };
     if (command === 'touch_recent') return null;
     throw Error(`unexpected IPC ${command}`);
   },
   framedInvoke: async (command, args, bytes) => {
     assert.equal(command, 'decode_raw_v2');
     requests.push({ ...args, payloadBytes: bytes.length });
-    return frame(args);
+    return frame(args, privateRawTest && args.fast === false ? 3 : 2, privateRawTest && args.fast === false ? 2 : 1);
   },
   resolveRawLut: async (identity, selected, source) => {
     profiles.push({ selected, source });
@@ -96,9 +100,10 @@ context.errStr = error => error.message;
 context.fxImages = [];
 context.ImageData = class { constructor(data, width, height) { Object.assign(this, { data, width, height }); } };
 context.document = {
-  getElementById: () => null,
-  createElement: () => ({ width: 0, height: 0, getContext: () => ({ putImageData() {} }) }),
+  getElementById: id => id === 'sel-input' ? context.inputSelect : null,
+  createElement: () => ({ width: 0, height: 0, getContext: () => ({ putImageData(image) { (context.paintCalls ||= []).push([image.width, image.height]); } }) }),
 };
+context.inputSelect = { value: 'standard' };
 vm.runInContext(between(html, 'async function loadRw2(', '// Installs already-decoded entries'), context);
 context.state = { openedPath: '', openedPaths: [], source: 'folder' };
 context.applyUISnapshot = () => assert.equal(requests.length, 2, 'shared creative recipe is applied after per-photo decoding');
@@ -163,4 +168,44 @@ assert.equal(requests.at(-1).rawNr, 'fast');
 assert.equal(requests.at(-1).demosaicAlgo, 'markesteijn3');
 assert.equal(requests.at(-1).sourcePath, paths[2]);
 assert.equal(requests.at(-1).fast, false);
+
+// Compare's private decode uses the same exact per-file settings and sRGB fallback, but cannot
+// consume Editor-owned globals, install a frame, persist another RAW cache, or return before NR.
+const privateSettings = Object.freeze({ ...files[0].__csRawDecodeSettings,
+  rawNr: 'fast', fullCleanup: true,
+  cacheTarget: Object.freeze({ path: paths[0], recipeKey: 'private-target-key' }) });
+const privateFile = new File([new Uint8Array([1, 2, 3, 4])], 'same.NEF', { type: 'application/octet-stream' });
+privateFile.__csSourcePath = paths[0]; privateFile.__csRawDecodeSettings = privateSettings;
+privateFile.arrayBuffer = () => context.invoke('read_file_bytes', { path: paths[0] });
+const persistTarget = { path: paths[0], size: 4, recipeKey: 'editor-owned-target' };
+windowMock.__chromasmithPersistTarget = persistTarget;
+windowMock.chromasmithLensApplied = 'editor-lens-status';
+windowMock.chromasmithHdrPreview = true;
+context.inputSelect.value = 'standard';
+const editorEntries = context.fxImages;
+let editorHooks = 0, releaseCalls = 0;
+context.updateWork = context.renderPreview = context.fxPhotoActivityInvalidate = context.chromasmithForgetOpened = context.csFirstEditPhotoOpened = () => { editorHooks++; };
+const releaseBuffers = context.Shim.prototype.releaseDecodeBuffers;
+context.Shim.prototype.releaseDecodeBuffers = function () { releaseCalls++; return releaseBuffers.call(this); };
+const privateStart = requests.length, pmStart = pmEvents.length;
+windowMock.chromasmithHdrPreview = true; // Private fit/detail stays RGBA even with Editor HDR enabled.
+privateRawTest = true;
+const privateResult = await context.loadRw2(privateFile, { privateEntry: true });
+privateRawTest = false;
+const privateRequests = requests.slice(privateStart);
+assert.equal(profiles.at(-1).selected, 'saved-profile');
+assert.deepEqual(privateRequests.map(request => request.mode), ['linear16', 'srgb', 'linear16'], 'DCP decline retains the per-file sRGB retry and awaits final NR refinement');
+assert.deepEqual(privateRequests.map(request => request.fast), [true, true, false]);
+assert.ok(privateRequests.every(request => request.sourcePath === paths[0] && request.rawNr === 'fast' && request.demosaicAlgo === 'ahd'), 'initial decode, fallback, and refinement share exact file settings');
+assert.ok(privateRequests.every(request => request.autoLens === true && request.lensOverride === 'manual lens' && request.lensOverrideFocal === 35), 'lens settings remain per-file');
+assert.ok(privateRequests.every(request => request.wantExt !== true && request.cachePath === undefined && request.recipeKey === undefined), 'private decode omits HDR and persistent cache writes');
+assert.deepEqual([privateResult.canvas.width, privateResult.canvas.height], [3, 2], 'private result waits for refined final dimensions');
+assert.deepEqual(context.paintCalls.slice(-2), [[2, 1], [3, 2]], 'fast pixels are refined in place before returning');
+assert.equal(releaseCalls, 1, 'private frame decode buffers are released after render pixels are finalized');
+assert.equal(windowMock.__chromasmithPersistTarget, persistTarget, 'private decode does not consume Editor persistence target');
+assert.equal(windowMock.chromasmithLensApplied, 'editor-lens-status', 'private decode does not mutate Editor lens status');
+assert.equal(context.inputSelect.value, 'standard', 'PhotoStyle V-Log metadata does not change the Editor input selector');
+assert.equal(editorHooks, 0, 'private decode skips Editor install, update, and invalidation hooks');
+assert.equal(context.fxImages, editorEntries, 'private decode leaves the Editor image collection intact');
+assert.deepEqual(pmEvents.slice(pmStart), [], 'private decode emits no Editor performance hooks');
 console.log('PASS: batch RAW source/settings alignment, native transport, sRGB fallback, full dimensions and refinement/global isolation.');

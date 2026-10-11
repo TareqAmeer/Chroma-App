@@ -1869,3 +1869,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Integrated sources match feature `5adf5044`; all three focused RAW regressions pass. Combined UI gates passed 21/33 with 12 existing failures and unchanged 879 inventory findings; current-build native memory/latency and varied-camera colour validation remain open.
 - Preserved storage cleanup evidence and branches; no new checkout, RAW copy or Cargo target was created for this slice. CHR-267 remains In Review for user testing.
 
+### 2026-10-12 — CHR-268 bounded private Compare loading
+
+- Compare retains its full path selection but decodes only the two visible photos, serializes loads, releases departed canvases and rejects stale results. Private RAW decoding carries saved settings/cache identity, awaits refinement and preserves Editor persistence/lens/input/image state. Files: `desktop/library-ui.js`, `desktop/desktop-native.js`, `chromasmith-22.html`.
+- Production RAW settings/cache/path regressions and expanded Survey/Compare browser checks pass, including two-frame bounds and one active decode. Added explicit isolated native 45MP validation harness `test/library_compare_native.mjs`; execution and broader gate results are recorded separately, without claiming native performance from mocks.
+- Twelve inactive worktrees are preserved under private recovery refs and checksum-verified shared evidence; 25 unique diagnostic dumps are losslessly compressed (7,718,299,077 bytes reclaimed). `AGENTS.md` records permanent shared dependency roots and junction checks; shared Playwright resolution and affected tests pass after migration. Primary drafts and the active CHR-195 test checkout remain preserved.
+

@@ -231,7 +231,8 @@
       // the photo that's still loading. library-ui.js's post-getMeta refresh (right after
       // showExif) is the only correct place to trigger this — this flag update just makes sure
       // that later call has fresh data to read.
-      window.chromasmithLensApplied = undefined;
+      const privateEntry = !!(settings && settings.privateEntry);
+      if (!privateEntry) window.chromasmithLensApplied = undefined;
       this._cachedPixels = null; this._cacheLensStatusUnknown = false;
       // DCP path: the whole develop (decode + PPG demosaic + baked-LUT apply) runs in Rust
       // and returns display-ready RGBA8 — the old flow shipped 145MB of u16 RGB over IPC and
@@ -249,9 +250,10 @@
       // Timing breakdown for the "RAW load takes up to 15s" report, logged into the app's own
       // log panel (not console — the packaged .app has no attached terminal for anyone to read
       // console.log from) so the actual slow stage is visible without a profiler attached.
-      window.__pm('native-open-begin');
+      if (!privateEntry) window.__pm('native-open-begin');
       const _t0 = performance.now();
-      const _lap = (label) => { window.__pm('native-lap: ' + label); if (typeof log === 'function') log(`RAW load: ${label} ${(performance.now() - _t0).toFixed(0)}ms`, 'info'); };
+      const _lap = (label) => { if (!privateEntry) { window.__pm('native-lap: ' + label); if (typeof log === 'function') log(`RAW load: ${label} ${(performance.now() - _t0).toFixed(0)}ms`, 'info'); } };
+      this._privateEntry = privateEntry;
       this._ident = { make: '', model: '', lens: '' };
       // By-path open (library-ui's makePathRawFile → loadRw2): Rust reads the file for both the
       // peek and the decode, so the RAW never crosses IPC. Everything else sends its bytes.
@@ -322,20 +324,20 @@
       // wantExt (docs/ROADMAP.md R1): only meaningful when mode is 'lut' — asks Rust for the
       // unquantized companion buffer alongside the normal RGBA8 body, so a real blown
       // highlight's headroom survives instead of being clamped away before this IPC round trip.
-      const wantHdrPreview = !!window.chromasmithHdrPreview;
+      const wantHdrPreview = !privateEntry && !!window.chromasmithHdrPreview;
       // Persistent decode cache: library-ui.js's openInEditor arms a one-shot target
       // ({path, recipeKey, size}) right before loadFXImages for a real on-disk RAW (never an
       // offline/hq-offline stand-in). Rust writes the cache from the FINAL pixels itself, so a
       // single-pass open (no refine) is cached too — it used to be written only from the refine
       // callback, which the single-pass chroma tier never reaches, so nothing was cached at all.
       // The size check keeps a dropped file (Match/Collage) from ever using a stale target.
-      const globalTarget = window.__chromasmithPersistTarget;
-      window.__chromasmithPersistTarget = null;
+      const globalTarget = privateEntry ? null : window.__chromasmithPersistTarget;
+      if (!privateEntry) window.__chromasmithPersistTarget = null;
       const hasFileTarget = !!(settings && Object.prototype.hasOwnProperty.call(settings, 'cacheTarget'));
       const pt = hasFileTarget ? settings.cacheTarget : globalTarget;
       const targetMatches = hasFileTarget ? !!(pt && sourcePath && pt.path === sourcePath)
         : !!(pt && (sourcePath ? pt.path === sourcePath : pt.size === bytes.byteLength));
-      this._persist = (targetMatches && typeof pt.recipeKey === 'string' && pt.recipeKey
+      this._persist = (!privateEntry && targetMatches && typeof pt.recipeKey === 'string' && pt.recipeKey
         && !(settings && (settings.filmSource || settings.filmNegative)))
         ? { cachePath: pt.path, recipeKey: pt.recipeKey } : null;
       const src = sourcePath ? { sourcePath } : {};
@@ -351,7 +353,7 @@
         this._mode = mode === 'linear16' ? 'srgb' : mode;
         return;
       }
-      window.__pm('native-fast-invoke');
+      if (!privateEntry) window.__pm('native-fast-invoke');
       const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...persistNow, ...src, fast: !single } : { mode, ...extra, ...persistNow, ...src, fast: !single }, bytes);
       _lap('decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at');
       // 4th header word: whether Rust actually applied the requested LUT. Rust re-checks the
@@ -366,11 +368,11 @@
       const head = new Uint32Array(buf, 0, 6);
       this._w = head[0]; this._h = head[1]; this._iso = head[2];
       const usedLut = head[3] === 1;
-      window.chromasmithLensApplied = head[4] === 1; // see the comment above open() for why this doesn't also trigger a refresh here
+      if (!privateEntry) window.chromasmithLensApplied = head[4] === 1; // only an installed Editor photo owns the shared status
       this._hasExt = head[5] === 1;
       this._mode = (mode === 'lut' && !usedLut) ? 'linear16' : mode;
       this._buf = buf;
-      if (mode === 'lut' && !usedLut && typeof log === 'function') {
+      if (!privateEntry && mode === 'lut' && !usedLut && typeof log === 'function') {
         log('Rust declined to apply the DCP profile for this camera (unexpected — the JS-side check should have caught this first). RAW Noise Reduction and geometry still apply; use Basic Adjustments to grade manually.', 'warn');
       }
     }
@@ -398,6 +400,9 @@
       const sceneLinear = this._hasExt ? new Float32Array(this._buf, 24 + bodyLen, this._w * this._h * 3) : undefined;
       return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 24, bodyLen), sceneLinear };
     }
+    // Compare/Scrub entries keep the developed canvas, not a second full native response
+    // buffer. filmBase/filmDevelop need only sourcePath + decode recipe after initial decode.
+    releaseDecodeBuffers() { this._buf = null; this._cachedPixels = null; this._bytes = null; }
     get worker() { return { terminate() {} }; }
     async filmBase(nx, ny) {
       const src = this._sourcePath ? { sourcePath: this._sourcePath } : {};
@@ -424,12 +429,12 @@
     async refine() {
       if (!this._needsRefine || (!this._bytes && !this._sourcePath)) return null;
       const { _mode: mode, _lutKey: lutKey, _extra: extra, _bytes: bytes } = this;
-      const wantHdrPreview = !!window.chromasmithHdrPreview;
-      window.__pm('native-refine-invoke');
+      const wantHdrPreview = !this._privateEntry && !!window.chromasmithHdrPreview;
+      if (!this._privateEntry) window.__pm('native-refine-invoke');
       const persist = this._persist || {};
       const src = this._sourcePath ? { sourcePath: this._sourcePath } : {};
       const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...persist, ...src, fast: false } : { mode, ...extra, ...persist, ...src, fast: false }, bytes);
-      window.__pm('native-refine-returned');
+      if (!this._privateEntry) window.__pm('native-refine-returned');
       const head = new Uint32Array(buf, 0, 6);
       const w = head[0], h = head[1];
       const usedLut = head[3] === 1;
