@@ -1464,3 +1464,6 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Added a synthetic partial-overlap panorama test that runs production similarity registration and passes its recovered transform into the pair compositor, checking transform tolerance, bounded canvas expansion, exclusive-frame placement, and overlap content. File: `desktop/src-tauri/src/merge.rs`.
 - Verification: `cargo test --offline --bin chromasmith panorama_ -j 1` passes 3/3 panorama tests; `git diff --check` passes. This is synthetic two-photo pipeline coverage; 3–20-photo stitching and real-image seam/ghosting validation remain open.
+
+- CHR-244 publication: integrated the registered partial panorama stitch pipeline test at 1a7f513d; integration verification passed cargo test --offline --bin chromasmith panorama_ -j 1 (3/3).
+- Verified origin/main at 1a7f513dbe0ef413619b95b13ce850874a4818e8; full N-way panorama acceptance remains open and the issue stays In Progress.
