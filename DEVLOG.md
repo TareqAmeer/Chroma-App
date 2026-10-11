@@ -1664,3 +1664,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Promoted Masks from the Texture group into its own labelled stage-rail destination; the existing per-photo mask controls and selection state are unchanged.
 - Added an Editor browser regression covering Gallery-to-Studio navigation, direct Masks rail access, active controls, and photo-selection preservation. The targeted test, JavaScript syntax check, `git diff --check`, and desktop build pass. The broader rail grep stopped at a generic rail test because the full Library overlay intercepted its click; no broader rail-suite pass is claimed.
 - CHR-192 remains In Progress: single photo identity/zoom, Gallery return path, all requested tools discoverable, resize/reset discoverability, and CHR-166 coordination remain broader acceptance work.
+
+### 2026-10-11 — CHR-192 Masks rail publication
+
+- Feature commit `49e8fd9f` integrated as `a199ca2b358df00335f9032b4003e1cc15164729` and fast-forwarded to `origin/main`.
+- The integration checkout passed the focused Masks rail interaction test, desktop build, JavaScript syntax check, and `git diff --check`. `git ls-remote origin refs/heads/main` matched `a199ca2b358df00335f9032b4003e1cc15164729`.
