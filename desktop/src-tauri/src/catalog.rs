@@ -8452,74 +8452,116 @@ pub struct FocusResult {
 /// score) and any photo the scan hasn't yet decoded a thumbnail for is skipped this pass — it
 /// will have one by the time this loop next runs, since thumbnail_run always runs first in the
 /// pipeline (see main.rs's chained-scan ordering).
-pub fn focus_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<FocusResult, String> {
-    // ⚠️ Still holds `conn` for its whole (chunked, resumable) sweep like the pre-fix
-    // verify_run/hash_run did — not restructured to the short-lock-per-batch shape yet (lower
-    // priority: reads already-generated thumbnail JPEGs, not full source files, so its per-item
-    // cost is smaller). QoS-marked in the meantime so it can't starve the UI thread even though
-    // it can still block other catalog writes for its full duration.
+type FocusCandidate = (i64, String, i64);
+type FocusScore = (i64, i64, Option<f64>);
+struct FocusBatch {
+    last_scanned_id: Option<i64>,
+    candidates: Vec<FocusCandidate>,
+}
+
+fn focus_load_batch(conn: &Connection, after_id: i64) -> Result<FocusBatch, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.rel_path, v.last_path, v.is_local, p.mtime
+             FROM photos p JOIN volumes v ON v.id = p.volume_id
+             WHERE p.id > ?1 AND p.present = 1 AND p.kind != 'video' AND p.thumb = 1
+               AND (p.focus_at IS NULL OR p.focus_at != p.mtime)
+             ORDER BY p.id LIMIT 64",
+        )
+        .map_err(|e| e.to_string())?;
+    let batch: Vec<(i64, Option<String>, i64)> = stmt
+        .query_map(params![after_id], |r| {
+            let id: i64 = r.get(0)?;
+            let rel_path: String = r.get(1)?;
+            let last_path: String = r.get(2)?;
+            let is_local: i64 = r.get(3)?;
+            let mtime: i64 = r.get(4)?;
+            let online = is_local != 0 || Path::new(&last_path).is_dir();
+            Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let last_scanned_id = batch.last().map(|(id, _, _)| *id);
+    let candidates = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|path| (id, path, mtime))).collect();
+    Ok(FocusBatch { last_scanned_id, candidates })
+}
+
+fn focus_persist_batch(conn: &Connection, scored: &[FocusScore]) -> Result<FocusResult, String> {
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let mut result = FocusResult::default();
+    for (id, mtime, score) in scored {
+        let Some(value) = score else { continue }; // decline now; a later scan invocation may retry
+        let blurry = if *value < FOCUS_BLUR_THRESHOLD { 1 } else { 0 };
+        // The photo may have changed or been removed while its thumbnail was being scored.
+        // Only publish a result for the exact, still-present version that produced the thumbnail.
+        let changed = tx.execute(
+            "UPDATE photos SET sharpness = ?1, blurry = ?2, focus_at = ?3, reviewed = 0
+             WHERE id = ?4 AND present = 1 AND mtime = ?3 AND thumb = 1",
+            params![value, blurry, mtime, id],
+        ).map_err(|e| e.to_string())?;
+        if changed == 0 {
+            continue;
+        }
+        result.scored += 1;
+        if blurry == 1 {
+            result.flagged += 1;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+fn focus_score_batch(batch: &[FocusCandidate]) -> Vec<FocusScore> {
+    decode_batch_pool().install(|| {
+        batch
+            .par_iter()
+            .map(|(id, path, mtime)| (*id, *mtime, thumbnail_bytes_for(path).ok().and_then(|bytes| laplacian_variance_from_jpeg(&bytes))))
+            .collect()
+    })
+}
+
+/// Runs the expensive thumbnail read/decode outside catalog locks. The two accessors are called
+/// separately for every batch so production can hold the shared connection mutex only while
+/// selecting candidates and while committing current results.
+fn focus_run_with_access(
+    mut load_batch: impl FnMut(i64) -> Result<FocusBatch, String>,
+    mut score_batch: impl FnMut(&[FocusCandidate]) -> Vec<FocusScore>,
+    mut persist_batch: impl FnMut(&[FocusScore]) -> Result<FocusResult, String>,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool,
+) -> Result<FocusResult, String> {
     crate::bgwork::mark_current_thread_background();
     let mut result = FocusResult::default();
+    let mut after_id = 0;
     loop {
         if cancel.load(Ordering::Relaxed) {
             break;
         }
-        let mut stmt = conn
-            .prepare(
-                "SELECT p.id, p.rel_path, v.last_path, v.is_local, p.mtime
-                 FROM photos p JOIN volumes v ON v.id = p.volume_id
-                 WHERE p.present = 1 AND p.kind != 'video' AND p.thumb = 1
-                   AND (p.focus_at IS NULL OR p.focus_at != p.mtime)
-                 LIMIT 64",
-            )
-            .map_err(|e| e.to_string())?;
-        let batch: Vec<(i64, Option<String>, i64)> = stmt
-            .query_map([], |r| {
-                let id: i64 = r.get(0)?;
-                let rel_path: String = r.get(1)?;
-                let last_path: String = r.get(2)?;
-                let is_local: i64 = r.get(3)?;
-                let mtime: i64 = r.get(4)?;
-                let online = is_local != 0 || Path::new(&last_path).is_dir();
-                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
-        drop(stmt);
-        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mt)| abs.map(|a| (id, a, mt))).collect();
-        if batch.is_empty() {
+        let batch = load_batch(after_id)?;
+        let Some(last_scanned_id) = batch.last_scanned_id else {
             break;
+        };
+        after_id = last_scanned_id;
+        if batch.candidates.is_empty() {
+            continue;
         }
-        progress(ScanProgress { phase: "focus".into(), done: result.scored, total: result.scored + batch.len(), current: String::new() });
+        progress(ScanProgress { phase: "focus".into(), done: result.scored, total: result.scored + batch.candidates.len(), current: String::new() });
 
-        let scored: Vec<(i64, i64, Option<f64>)> = decode_batch_pool().install(|| {
-            batch.par_iter().map(|(id, abs, mtime)| (*id, *mtime, thumbnail_bytes_for(abs).ok().and_then(|b| laplacian_variance_from_jpeg(&b)))).collect()
-        });
-
-        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-        for (id, mtime, score) in &scored {
-            let Some(v) = score else { continue }; // undecodable right now — leave focus_at unset, retried next pass
-            let blurry = if *v < FOCUS_BLUR_THRESHOLD { 1 } else { 0 };
-            // A fresh score (this row's mtime moved since it was last scored — the only reason
-            // focus_run ever revisits a row) clears any prior dismissal: the content actually
-            // changed, so whatever the user reviewed no longer necessarily applies. A row whose
-            // mtime hasn't moved is never touched here at all, so an ordinary dismissal (no
-            // re-edit) survives indefinitely, which is the whole point of the feature.
-            tx.execute(
-                "UPDATE photos SET sharpness = ?1, blurry = ?2, focus_at = ?3, reviewed = 0 WHERE id = ?4",
-                params![v, blurry, mtime, id],
-            )
-                .map_err(|e| e.to_string())?;
-            result.scored += 1;
-            if blurry == 1 {
-                result.flagged += 1;
-            }
-        }
-        tx.commit().map_err(|e| e.to_string())?;
+        // No catalog connection lock is held while reading cached JPEGs or computing Laplacian.
+        let scored = score_batch(&batch.candidates);
+        let batch_result = persist_batch(&scored)?;
+        result.scored += batch_result.scored;
+        result.flagged += batch_result.flagged;
+        // The keyset cursor advances across this batch even when scores were stale or unreadable,
+        // so later candidates are not starved. Skipped rows remain eligible on a later run.
     }
     progress(ScanProgress { phase: "done".into(), done: result.scored, total: result.scored, current: String::new() });
     Ok(result)
+}
+
+pub fn focus_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<FocusResult, String> {
+    focus_run_with_access(|after_id| focus_load_batch(conn, after_id), focus_score_batch, |scored| focus_persist_batch(conn, scored), progress, cancel)
 }
 
 #[tauri::command]
@@ -8528,8 +8570,19 @@ pub async fn catalog_focus(app: tauri::AppHandle) -> Result<FocusResult, String>
         use tauri::{Emitter, Manager};
         let state = app.state::<CatalogState>();
         state.cancel.store(false, Ordering::Relaxed);
-        let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        focus_run(&conn, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+        focus_run_with_access(
+            |after_id| {
+                let conn = state.conn.lock().map_err(|e| e.to_string())?;
+                focus_load_batch(&conn, after_id)
+            },
+            focus_score_batch,
+            |scored| {
+                let conn = state.conn.lock().map_err(|e| e.to_string())?;
+                focus_persist_batch(&conn, scored)
+            },
+            &mut |p| { let _ = app.emit("catalog-scan", p); },
+            &state.cancel,
+        )
     })
     .await
     .map_err(|e| format!("catalog_focus task panicked: {e}"))?
@@ -12435,6 +12488,116 @@ mod tests {
         let cancel = AtomicBool::new(false);
         let result = focus_run(&conn, &mut |_| {}, &cancel).unwrap();
         assert_eq!(result.scored, 0, "must wait for thumbnail_run, not attempt a second decode path");
+    }
+
+    #[test]
+    fn focus_scoring_does_not_hold_catalog_access() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let access = std::sync::Arc::new(Mutex::new(()));
+        let (scoring_tx, scoring_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+        let (write_tx, write_rx) = mpsc::channel();
+        let worker_access = access.clone();
+        let worker = std::thread::spawn(move || {
+            let cancel = AtomicBool::new(false);
+            let mut delivered = false;
+            focus_run_with_access(
+                |after_id| {
+                    let _guard = worker_access.lock().unwrap();
+                    if delivered || after_id > 0 {
+                        Ok(FocusBatch { last_scanned_id: None, candidates: Vec::new() })
+                    } else {
+                        delivered = true;
+                        Ok(FocusBatch { last_scanned_id: Some(1), candidates: vec![(1, "unused-thumbnail.jpg".into(), 1)] })
+                    }
+                },
+                |batch| {
+                    scoring_tx.send(()).unwrap();
+                    resume_rx.recv().unwrap();
+                    batch.iter().map(|(id, _, mtime)| (*id, *mtime, Some(400.0))).collect()
+                },
+                |scores| {
+                    let _guard = worker_access.lock().unwrap();
+                    Ok(FocusResult { scored: scores.len(), flagged: 0 })
+                },
+                &mut |_| {},
+                &cancel,
+            )
+        });
+
+        scoring_rx.recv_timeout(Duration::from_secs(2)).expect("focus batch reached scoring");
+        let writer_access = access.clone();
+        let writer = std::thread::spawn(move || {
+            let _guard = writer_access.lock().unwrap();
+            write_tx.send(()).unwrap();
+        });
+        let write_completed_while_scoring = write_rx.recv_timeout(Duration::from_secs(2)).is_ok();
+        resume_tx.send(()).unwrap();
+        writer.join().unwrap();
+        let result = worker.join().unwrap().unwrap();
+
+        assert!(write_completed_while_scoring, "catalog writer must proceed while focus computes image scores");
+        assert_eq!(result.scored, 1);
+    }
+
+    #[test]
+    fn focus_run_advances_after_an_unscorable_batch() {
+        let cancel = AtomicBool::new(false);
+        let mut next_id = 0;
+        let result = focus_run_with_access(
+            |after_id| {
+                next_id += 1;
+                if next_id == 1 {
+                    assert_eq!(after_id, 0);
+                    Ok(FocusBatch { last_scanned_id: Some(1), candidates: vec![(1, "bad.jpg".into(), 1)] })
+                } else if next_id == 2 {
+                    assert_eq!(after_id, 1);
+                    Ok(FocusBatch { last_scanned_id: Some(2), candidates: vec![(2, "good.jpg".into(), 1)] })
+                } else {
+                    Ok(FocusBatch { last_scanned_id: None, candidates: Vec::new() })
+                }
+            },
+            |batch| batch.iter().map(|(id, _, mtime)| (*id, *mtime, (*id == 2).then_some(400.0))).collect(),
+            |scores| {
+                if scores[0].0 == 1 {
+                    Ok(FocusResult::default()) // unreadable/stale first candidate
+                } else {
+                    Ok(FocusResult { scored: 1, flagged: 0 })
+                }
+            },
+            &mut |_| {},
+            &cancel,
+        )
+        .unwrap();
+        assert_eq!(result.scored, 1, "the bad first batch must not starve later photos");
+    }
+
+    #[test]
+    fn focus_run_advances_across_a_page_with_only_offline_photos() {
+        let cancel = AtomicBool::new(false);
+        let mut next_page = 0;
+        let result = focus_run_with_access(
+            |after_id| {
+                next_page += 1;
+                if next_page == 1 {
+                    assert_eq!(after_id, 0);
+                    Ok(FocusBatch { last_scanned_id: Some(64), candidates: Vec::new() })
+                } else if next_page == 2 {
+                    assert_eq!(after_id, 64);
+                    Ok(FocusBatch { last_scanned_id: Some(65), candidates: vec![(65, "online.jpg".into(), 1)] })
+                } else {
+                    Ok(FocusBatch { last_scanned_id: None, candidates: Vec::new() })
+                }
+            },
+            |batch| batch.iter().map(|(id, _, mtime)| (*id, *mtime, Some(400.0))).collect(),
+            |scores| Ok(FocusResult { scored: scores.len(), flagged: 0 }),
+            &mut |_| {},
+            &cancel,
+        )
+        .unwrap();
+        assert_eq!(result.scored, 1, "an offline-only page must not hide later online photos");
     }
 
     /// `blurry_only` is the query the review surface is built on — pins that it returns exactly
