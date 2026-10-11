@@ -214,6 +214,12 @@ fn on_interactive_pool<R: Send>(f: impl FnOnce() -> R + Send) -> R {
     match pool { Some(p) => p.install(f), None => f() }
 }
 
+/// RAW review is user-waiting work like an editor open, so it shares the established
+/// user-initiated pool. Full-cache batch work keeps its existing caller/global-pool placement.
+fn run_raw_cache_development<R: Send>(display_only: bool, f: impl FnOnce() -> R + Send) -> R {
+    if display_only { on_interactive_pool(f) } else { f() }
+}
+
 // The explicit RAW-cache action already pays the full decode cost. Keep that developed frame
 // in-process so reopening it in the same session does not decode the RAW again.
 struct RawEditorCacheEntry {
@@ -1225,18 +1231,24 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
     // high_nr, false_color, hue_defringe, orientation, lens, native_nr — raw_decode.rs) under
     // op=decode; this coarser "decode_total" line below lets a consumer that only wants the
     // top-level breakdown skip summing those without losing them for one that wants the detail.
-    let decoded = raw_decode::decode_rw2_bytes(&bytes, auto_lens, nr,
-        demosaic_algo, false, lens_override)?;
-    diag::stage("cache", &file_name, "decode_total", &mut stage_t);
-    let (effective_mode, _) = effective_dcp_mode(&mode, &decoded.make, (!lut_key.is_empty()).then_some(lut_key.as_str()));
-    let rgba = if effective_mode == "lut" {
-        let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
-        let lut = guard.as_ref().and_then(|m| m.get(&lut_key).cloned()).ok_or_else(|| format!("LUT '{lut_key}' not registered"))?;
-        let n = ((lut.len() / 3) as f64).cbrt().round() as usize;
-        drop(guard);
-        raw_decode::apply_lut_rgba(&lut_input_rgb16(&lut_key, &bytes, &decoded), &lut, n)?
-    } else { raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam) };
-    diag::stage("cache", &file_name, "colour_convert", &mut stage_t);
+    let develop = || -> Result<(raw_decode::DecodedRaw, Vec<u8>), String> {
+        let decoded = raw_decode::decode_rw2_bytes(&bytes, auto_lens, nr,
+            demosaic_algo, false, lens_override)?;
+        diag::stage("cache", &file_name, "decode_total", &mut stage_t);
+        let (effective_mode, _) = effective_dcp_mode(&mode, &decoded.make, (!lut_key.is_empty()).then_some(lut_key.as_str()));
+        let rgba = if effective_mode == "lut" {
+            let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
+            let lut = guard.as_ref().and_then(|m| m.get(&lut_key).cloned()).ok_or_else(|| format!("LUT '{lut_key}' not registered"))?;
+            let n = ((lut.len() / 3) as f64).cbrt().round() as usize;
+            drop(guard);
+            raw_decode::apply_lut_rgba(&lut_input_rgb16(&lut_key, &bytes, &decoded), &lut, n)?
+        } else { raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam) };
+        diag::stage("cache", &file_name, "colour_convert", &mut stage_t);
+        Ok((decoded, rgba))
+    };
+    // Batch/full-cache work keeps its existing global-pool behavior. Only the explicitly
+    // user-waiting display-only review decode and its full-frame color conversion are promoted.
+    let (decoded, rgba) = run_raw_cache_development(display_only, develop)?;
     let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba).ok_or("decoded RGBA dimensions do not match")?;
     let rgba = img.into_raw();
     if display_only {
@@ -3645,7 +3657,7 @@ mod effective_dcp_mode_tests {
 
 #[cfg(test)]
 mod raw_display_only_cache_tests {
-    use super::cache_raw_decode;
+    use super::{cache_raw_decode, run_raw_cache_development};
     use std::path::Path;
 
     fn unique_recipe(label: &str) -> String {
@@ -3663,6 +3675,23 @@ mod raw_display_only_cache_tests {
     fn cache_display_only(path: &Path, recipe_key: &str) -> String {
         cache_raw_decode(path.to_string_lossy().into_owned(), recipe_key.to_string(), "srgb".into(),
             String::new(), "off".into(), false, "ahd".into(), String::new(), 0.0, Some(true)).unwrap()
+    }
+
+    #[test]
+    fn cache_development_dispatch_promotes_only_review_work() {
+        let (pool_index, thread_name) = run_raw_cache_development(true, || (
+            rayon::current_thread_index(),
+            std::thread::current().name().unwrap_or("").to_string(),
+        ));
+        if std::env::var("CS_INTERACTIVE_POOL").as_deref() == Ok("0") {
+            assert!(pool_index.is_none(), "the documented pool-off setting must retain caller placement");
+        } else {
+            assert!(pool_index.is_some(), "review work must run inside a Rayon pool");
+            assert!(thread_name.starts_with("cs-interactive-"), "unexpected review worker: {thread_name}");
+        }
+        let caller = std::thread::current().id();
+        let batch_thread = run_raw_cache_development(false, || std::thread::current().id());
+        assert_eq!(batch_thread, caller, "full-cache batch work must keep caller placement");
     }
 
     #[test]

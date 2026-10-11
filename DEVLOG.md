@@ -1806,3 +1806,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-11 — CHR-269 focus refresh publication
 - Published feature `1e713f53` through clean main integration as `9f5bbc6915ea609212ef015258e069b26972c234`; integrated culling regression passed. Non-force push and ls-remote confirmed the exact remote hash.
 - CHR-269 follow-up checklist records tested refresh/manual/stale/query-bound behavior and remains In Review; original eye warnings, durable-job completeness and labelled quality criteria remain unchecked.
+
+### 2026-10-11 — CHR-200 RAW review scheduling
+- Display-only RAW development uses the existing interactive Rayon pool for demosaic and DCP/sRGB conversion; full persistent-cache batch work stays on its prior caller/global-pool placement. Existing pool-off A/B setting is preserved. Files: `desktop/src-tauri/src/main.rs`; issue CHR-200.
+- Offline targeted native suite passed 2 tests (review/batch dispatch and proxy-cache reuse), plus ignored Nikon Z7 45.75MP real RAW test passed in 55.81s with bounded proxy and no full/editor cache insertion. Shared target/fixture reused; diff check passed. This is scheduling groundwork, not proof of measured foreground latency under real background load or faster cold development.

@@ -11,3 +11,7 @@
 ## Limits
 
 This proves developed RAW provenance and bounded persistent fit-cache behavior, not fast cold development, multiple camera compatibility, full saved creative FXR edit parity or native 100% focus inspection. Those remain open in CHR-267/CHR-276. RAW decoding still transiently requires full sensor buffers; one active review request limits concurrency but does not establish a measured RSS ceiling. Display proxies share the existing pruned native cache tier; no new repository build/cache directory is created.
+
+## CHR-200 scheduling follow-up
+
+Display-only development now dispatches demosaic and colour conversion to the existing interactive pool; full-cache batch placement stays unchanged. Targeted offline dispatch/cache suite passed 2 tests; real Nikon fixture passed again in 55.81 s. The dispatch test also preserves CS_INTERACTIVE_POOL=0 caller fallback. No native foreground/background latency or wall-time improvement claim follows from these unit/integration test timings.
