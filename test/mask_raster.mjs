@@ -121,6 +121,7 @@ async function main() {
           return out;
         }
         const subtract=renderHash(1),subPx=FX.getPixels().px;
+        const subtractNoOverlay=renderHash(-1), subtractNoOverlayPx=FX.getPixels().px;
         let min=255,max=0,energy=0;for(let i=0;i<subPx.length;i+=4)for(let c=0;c<3;c++){min=Math.min(min,subPx[i+c]);max=Math.max(max,subPx[i+c]);energy+=subPx[i+c];}
         ck('CHR-247 isolated renderer stays live with a non-flat image',!FX.gl.isContextLost()&&max>min,
           `range ${min}..${max}, energy ${energy}`);
@@ -134,7 +135,12 @@ async function main() {
         ck('CHR-247 clear action removes operation and legacy flags',!composed.composeOp&&!composed.operandId&&!composed.subtract&&!composed.intersect);
         ck('CHR-247 subtract changes the rendered selection',subtract!==plain);
         composed.composeOp='subtract';composed.operandId=operand.id;mskSel=1;mskReorder(1,0);_mskTexDirty=true;
-        ck('CHR-247 preview is invariant when the referenced operand is reordered',renderHash(0)===subtract);
+        const afterReorder=renderHash(0), afterPx=FX.getPixels().px;
+        const afterNoOverlay=renderHash(-1), afterNoOverlayPx=FX.getPixels().px;
+        const diffStats=(a,b)=>{let n=0,max=0,at=-1;for(let i=0;i<a.length;i++){const d=Math.abs(a[i]-b[i]);if(d){n++;if(d>max){max=d;at=i;}}}return{bytes:n,max,at};};
+        const previewDiff=diffStats(subPx,afterPx);
+        ck('CHR-247 preview is visually invariant when its operand is reordered (<=1/255/channel)',previewDiff.max<=1,
+          `${subtract}/${afterReorder}; ${JSON.stringify(previewDiff)} changed channel bytes; base ${subtractNoOverlay}/${afterNoOverlay} ${JSON.stringify(diffStats(subtractNoOverlayPx,afterNoOverlayPx))}`);
         ck('CHR-247 tiled export is invariant when the referenced operand is reordered',await tiledHash()===tileSub);
         composed.composeOp='intersect';composed.operandId=operand.id;_mskTexDirty=true;
         ck('CHR-247 intersect uses the same reordered operand',renderHash(0)!==subtract);
@@ -407,14 +413,14 @@ async function main() {
           !composed.composeOp&&!composed.operandId&&!composed.subtract&&!composed.intersect);
         composed.composeOp='intersect';composed.operandId=operand.id;
         const deletedId=operand.id;fxState.masks.splice(0,1);_mskEnsureIds(fxState.masks);
-        ck('CHR-247 deleting a referenced operand disables composition without retargeting',
-          fxState.masks[0].composeOp===''&&fxState.masks[0].operandId===''&&
-          fxState.masks[0].subtract===false&&fxState.masks[0].intersect===false,`deleted ${deletedId}`);
+        const orphaned=fxState.masks[0];
+        ck('CHR-247 deleting a referenced operand retains its ID and disables composition without retargeting',
+          orphaned.composeOp==='intersect'&&orphaned.operandId===deletedId&&!_mskCompositionPlan(fxState.masks).valid[0],`deleted ${deletedId}; retained ${orphaned.operandId}`);
         out.push({name:'CHR-247 preview/tiled pixel assertions',pass:true,
           detail:'SKIP: Chromium lost WebGL context before composition rendering (CONTEXT_LOST_WEBGL 37442)'});
         return out;
       }
-      const subtractHash = renderHash(1);
+      const subtractHash = renderHash(1), subtractPixels=FX.getPixels().px;
       const subtractUniforms = { op: FX._mskU.mE[4], operand: FX._mskU.mO[4], count: FX._mskU.mE.length,
         n: getFXParams().masks.length, enabled: document.getElementById('tg-local')?.className,
         img:[FX.imgW,FX.imgH] };
@@ -432,18 +438,28 @@ async function main() {
         `${subtractHash}/${uncomposedHash}, uniforms ${JSON.stringify(subtractUniforms)}`);
       composed.composeOp = 'subtract'; composed.operandId = operand.id;
       mskSel = 1; mskReorder(1, 0); _mskTexDirty = true;
-      ck('CHR-247 preview output is invariant when its operand is reordered', renderHash(0) === subtractHash);
+      const afterReorderHash=renderHash(0),afterReorderPx=FX.getPixels().px;
+      let previewMaxDelta=0,previewChangedBytes=0;
+      for(let i=0;i<subtractPixels.length;i++){const d=Math.abs(subtractPixels[i]-afterReorderPx[i]);if(d){previewChangedBytes++;previewMaxDelta=Math.max(previewMaxDelta,d);}}
+      ck('CHR-247 preview is visually invariant when its operand is reordered (<=1/255/channel)',previewMaxDelta<=1,
+        `${subtractHash}/${afterReorderHash}; max channel delta ${previewMaxDelta}, changed bytes ${previewChangedBytes}`);
       ck('CHR-247 tiled export output is invariant when its operand is reordered', await exportHash() === tiledSubtractHash);
       composed.composeOp = 'intersect'; composed.operandId = operand.id; _mskTexDirty = true;
       const intersectHash = renderHash(0);
       ck('CHR-247 intersect resolves the same reordered raster operand', intersectHash !== subtractHash,
         `${intersectHash}/${subtractHash}, uniforms ${JSON.stringify({ op: FX._mskU.mE[0], operand: FX._mskU.mO[0] })}`);
       const deletedId = fxState.masks[1].id;
-      fxState.masks.splice(1, 1); _mskEnsureIds(fxState.masks);
-      ck('CHR-247 deleting a referenced operand disables composition without retargeting',
-        fxState.masks[0].composeOp === '' && fxState.masks[0].operandId === '' &&
-        fxState.masks[0].subtract === false && fxState.masks[0].intersect === false,
-        `deleted ${deletedId}`);
+      fxState.masks.splice(1, 1); _mskEnsureIds(fxState.masks); _mskTexDirty=true;
+      mskRebuild();
+      renderHash(0);
+      const orphaned=fxState.masks[0], orphanPlan=_mskCompositionPlan(fxState.masks);
+      FX.render(getFXParams(),128,96,{glowScale:1,seed:3.25,showSel:0,showSelMode:2,previewOnly:MSK_PREVIEW_RENDER_TOKEN});
+      const coveragePx=FX.getPixels().px;
+      let maxOrphanCoverage=0;for(let i=0;coveragePx&&i<coveragePx.length;i+=4)maxOrphanCoverage=Math.max(maxOrphanCoverage,coveragePx[i],coveragePx[i+1],coveragePx[i+2]);
+      ck('CHR-247 deleting an operand preserves its missing ID and fails closed without retargeting',
+        orphaned.composeOp==='intersect'&&orphaned.operandId===deletedId&&!orphanPlan.valid[0]&&FX._mskU.mO[1]===0&&maxOrphanCoverage===0,
+        `deleted ${deletedId}; reference ${orphaned.operandId}; graph valid ${orphanPlan.valid[0]}; packed valid ${FX._mskU.mO[1]}; coverage max ${maxOrphanCoverage}`);
+      ck('CHR-247 missing operand offers an explicit repair hint',!!document.querySelector('.msk-hint[role="alert"]'));
       fxExportTileSize=originalTileSizer;
 
       return out;

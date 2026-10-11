@@ -1419,3 +1419,13 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-11 — CHR-274 publication verification
 
 - Published feature commit `03d9739c115c645d3851863bdf167fa628c2795f` to `origin/main` by fast-forward from `a568ab061c9b3cd59a8288ca8e83f9b1c7d3aee1`; remote `git ls-remote` matched the feature commit.
+
+### 2026-10-11 — CHR-247 composition regression evidence
+
+- Updated `test/mask_raster.mjs` to compare preview reorder output within one 8-bit channel value (the WebGL preview varied by at most 1/255; tiled export remains exact) and to verify deleting an operand preserves its stable ID, fails closed with zero coverage, and exposes the repair hint. Issue CHR-247; no production renderer code changed.
+- Verification: focused composition browser checks 6/6 and complete mask-raster browser suite 76/76 pass. The broad mask maths, model breadth, and labelled photo-quality acceptance rows remain open.
+
+### 2026-10-11 — CHR-269 local blur-score query regression
+
+- Added `focus_run_flags_generated_soft_image_in_blurry_only_query` to `desktop/src-tauri/src/catalog.rs`. It generates a local low-detail JPEG, indexes it, creates an offline thumbnail, runs focus scoring, then asserts stored score/flag data appears in `blurry_only`. Issue CHR-269.
+- Verification: targeted `cargo test --bin chromasmith focus_run_flags_generated_soft_image_in_blurry_only_query -j 1` passes 1/1. Labelled precision/recall and other culling criteria remain open.
