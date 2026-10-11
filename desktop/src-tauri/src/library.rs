@@ -976,7 +976,113 @@ fn hdr_clear_marker_path(path: &str, recipe_key: &str) -> Result<PathBuf, String
 }
 
 pub(crate) fn write_hdr_clear_marker(path: &str, recipe_key: &str) {
-    if let Ok(p) = hdr_clear_marker_path(path, recipe_key) { let _ = std::fs::write(p, b"1"); }
+    if let Ok(p) = hdr_clear_marker_path(path, recipe_key) {
+        let _ = std::fs::write(&p, b"1");
+        let _ = std::fs::remove_file(p.with_extension("hdrext")); // mutually exclusive
+    }
+}
+
+// ── HDR companion cache (`<stem>.hdrext`) ────────────────────────────────────────────────────
+// A RAW WITH real highlight headroom (some scene-linear value > 1.05) cannot use the plain frame
+// cache under HDR preview, because the unquantized companion lived only in the decode response.
+// Persisted here SPARSELY: the companion equals rgba8/255 everywhere the value is <= 1.0 (the
+// u8 body is round(clamp(v)*255)), so only pixels with a channel above 1.0 are stored, as f16 —
+// exactly the precision of the RGBA16F texture the renderer uploads it into. JS rebuilds the
+// dense buffer from the cached RGBA8 frame + this overlay (no second RAM copy in native).
+// Layout (LE): "CHX1" | stem u64 | w u32 | h u32 | count u32 | idx u32*count | f16 u16*3*count.
+const HDR_EXT_MAGIC: &[u8; 4] = b"CHX1";
+const HDR_EXT_HEADER: usize = 24;
+
+fn hdr_ext_stem(path: &str, recipe_key: &str) -> Result<(PathBuf, u64), String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let png_key = decode_cache_key(path, mtime, meta.len(), recipe_key);
+    let stem = fnv1a(&[path, &mtime.to_string(), &meta.len().to_string(), recipe_key, DECODE_RENDER_VER, "hdrext"]);
+    Ok((decode_cache_dir().join(format!("{}.hdrext", png_key.trim_end_matches(".png"))), stem))
+}
+
+fn f32_to_f16_bits(v: f32) -> u16 {
+    let b = v.to_bits();
+    let sign = ((b >> 16) & 0x8000) as u16;
+    let exp = ((b >> 23) & 0xff) as i32 - 127 + 15;
+    let man = b & 0x007f_ffff;
+    if v.is_nan() { return sign | 0x7e00; }
+    if exp >= 31 { return sign | 0x7bff; } // clamp to the largest finite half
+    if exp <= 0 {
+        if exp < -10 { return sign; }
+        let m = (man | 0x0080_0000) >> (1 - exp);
+        return sign | ((m + 0x1000) >> 13) as u16;
+    }
+    let r = ((exp as u32) << 10) | (man >> 13);
+    let r = r + ((man >> 12) & 1); // round to nearest (carry may bump the exponent, which is correct)
+    sign | (r.min(0x7bff)) as u16
+}
+
+/// Sparse blob for `ext` (w*h*3 f32) or None when no value exceeds the 1.05 headroom threshold.
+pub(crate) fn build_hdr_ext_blob(path: &str, recipe_key: &str, w: u32, h: u32, ext: &[f32]) -> Option<Vec<u8>> {
+    if ext.len() != (w as usize) * (h as usize) * 3 { return None; }
+    if !ext.iter().any(|v| *v > 1.05) { return None; }
+    let (_, stem) = hdr_ext_stem(path, recipe_key).ok()?;
+    let mut idx: Vec<u32> = Vec::new();
+    let mut vals: Vec<u16> = Vec::new();
+    for (i, px) in ext.chunks_exact(3).enumerate() {
+        if px[0] > 1.0 || px[1] > 1.0 || px[2] > 1.0 {
+            idx.push(i as u32);
+            vals.extend(px.iter().map(|v| f32_to_f16_bits(*v)));
+        }
+    }
+    let mut out = Vec::with_capacity(HDR_EXT_HEADER + idx.len() * 4 + vals.len() * 2);
+    out.extend_from_slice(HDR_EXT_MAGIC);
+    out.extend_from_slice(&stem.to_le_bytes());
+    out.extend_from_slice(&w.to_le_bytes());
+    out.extend_from_slice(&h.to_le_bytes());
+    out.extend_from_slice(&(idx.len() as u32).to_le_bytes());
+    for i in &idx { out.extend_from_slice(&i.to_le_bytes()); }
+    for v in &vals { out.extend_from_slice(&v.to_le_bytes()); }
+    Some(out)
+}
+
+/// Persists the companion (atomic rename) and retires a contradicting `.hdrclear` marker.
+pub(crate) fn write_hdr_ext_blob(path: &str, recipe_key: &str, blob: &[u8]) {
+    let Ok((p, _)) = hdr_ext_stem(path, recipe_key) else { return };
+    let tmp = p.with_extension(format!("hdrext.tmp.{}", std::process::id()));
+    if std::fs::write(&tmp, blob).is_err() { return; }
+    if std::fs::rename(&tmp, &p).is_err() { let _ = std::fs::remove_file(&tmp); return; }
+    if let Ok(m) = hdr_clear_marker_path(path, recipe_key) { let _ = std::fs::remove_file(m); }
+}
+
+/// Validates a blob against the expected stem and frame size; returns the pixel count on success.
+fn validate_hdr_ext_blob(blob: &[u8], stem: u64, w: u32, h: u32) -> Result<usize, String> {
+    if blob.len() < HDR_EXT_HEADER || &blob[0..4] != HDR_EXT_MAGIC { return Err("bad hdr companion".into()); }
+    let rd = |o: usize| u32::from_le_bytes(blob[o..o + 4].try_into().unwrap());
+    if u64::from_le_bytes(blob[4..12].try_into().unwrap()) != stem { return Err("hdr companion key mismatch".into()); }
+    if rd(12) != w || rd(16) != h { return Err("hdr companion size mismatch".into()); }
+    let count = rd(20) as usize;
+    if blob.len() != HDR_EXT_HEADER + count * 10 { return Err("hdr companion truncated".into()); }
+    let total = (w as usize) * (h as usize);
+    for i in 0..count { if rd(HDR_EXT_HEADER + 4 * i) as usize >= total { return Err("hdr companion index out of range".into()); } }
+    Ok(count)
+}
+
+fn qoi_dims(file: &Path) -> Option<(u32, u32)> {
+    use std::io::Read;
+    let mut hdr = [0u8; 14];
+    std::fs::File::open(file).ok()?.read_exact(&mut hdr).ok()?;
+    if &hdr[0..4] != b"qoif" { return None; }
+    Some((u32::from_be_bytes(hdr[4..8].try_into().unwrap()), u32::from_be_bytes(hdr[8..12].try_into().unwrap())))
+}
+
+/// The validated sparse HDR companion for this photo+recipe, or Err (no cache / stale / mismatched
+/// — callers treat Err as "decode it"). Validation pins the blob to this file's path+mtime+size+
+/// recipe AND to the dimensions of the QOI frame it overlays.
+#[tauri::command(async)]
+pub fn get_hdr_companion(path: String, recipe_key: String) -> Result<tauri::ipc::Response, String> {
+    let (p, stem) = hdr_ext_stem(&path, &recipe_key)?;
+    let frame = decode_cache_file(&path, &recipe_key)?.ok_or("no cached decode")?;
+    let (w, h) = qoi_dims(&frame).ok_or("frame is not QOI")?;
+    let blob = std::fs::read(&p).map_err(|_| "no hdr companion".to_string())?;
+    validate_hdr_ext_blob(&blob, stem, w, h)?;
+    Ok(tauri::ipc::Response::new(blob))
 }
 
 /// True when a headroom-free marker AND the full-resolution cache both exist for this recipe.
@@ -3296,7 +3402,7 @@ pub(crate) fn is_evictable_cache_file(name: &str) -> bool {
 pub(crate) fn is_evictable_decode_file(name: &str) -> bool {
     if is_evictable_cache_file(name) { return true; }
     let (stem, ext) = match name.rsplit_once('.') { Some(v) => v, None => return false };
-    if !matches!(ext, "png" | "qoi" | "jpg" | "webp" | "hdrclear") { return false; }
+    if !matches!(ext, "png" | "qoi" | "jpg" | "webp" | "hdrclear" | "hdrext") { return false; }
     let hex = match stem.split_once(".display-") {
         Some((h, edge)) if !edge.is_empty() && edge.bytes().all(|b| b.is_ascii_digit()) => h,
         Some(_) => return false,
@@ -4677,6 +4783,37 @@ mod hdr_clear_marker_tests {
         assert!(is_evictable_decode_file("0123456789abcdef.hdrclear"));
         assert!(is_evictable_decode_file("0123456789abcdef.qoi"));
         assert!(!is_evictable_decode_file("notahexstem.hdrclear"));
+        assert!(is_evictable_decode_file("0123456789abcdef.hdrext"));
+        assert!(!is_evictable_decode_file("notahexstem.hdrext"));
+    }
+
+    #[test]
+    fn hdr_companion_round_trip_and_mismatch_rejection() {
+        let (w, h) = (4u32, 2u32);
+        let mut ext = vec![0.5f32; (w * h * 3) as usize];
+        ext[3 * 5] = 2.5; ext[3 * 5 + 1] = 1.25; ext[3 * 5 + 2] = 1.0; // pixel 5 has headroom
+        ext[3 * 1] = 1.02; // above 1.0 but under the 1.05 threshold; pixel 1 is stored too
+        let tmp = std::env::temp_dir().join(format!("hdrext_test_{}.rw2", std::process::id()));
+        std::fs::write(&tmp, b"x").unwrap();
+        let p = tmp.to_string_lossy().into_owned();
+        let blob = build_hdr_ext_blob(&p, "rk", w, h, &ext).expect("headroom present");
+        let (_, stem) = hdr_ext_stem(&p, "rk").unwrap();
+        assert_eq!(validate_hdr_ext_blob(&blob, stem, w, h).unwrap(), 2);
+        let f16 = |o: usize| u16::from_le_bytes([blob[o], blob[o + 1]]);
+        assert_eq!(f16(HDR_EXT_HEADER + 8 + 6), 0x4100); // pixel 5 red = 2.5 in half precision
+        // stale key, wrong frame size, truncation, out-of-range index are all rejected
+        assert!(validate_hdr_ext_blob(&blob, stem ^ 1, w, h).is_err());
+        assert!(validate_hdr_ext_blob(&blob, stem, w + 1, h).is_err());
+        assert!(validate_hdr_ext_blob(&blob[..blob.len() - 1], stem, w, h).is_err());
+        let mut bad = blob.clone(); bad[HDR_EXT_HEADER..HDR_EXT_HEADER + 4].copy_from_slice(&99u32.to_le_bytes());
+        assert!(validate_hdr_ext_blob(&bad, stem, w, h).is_err());
+        // no headroom -> nothing to persist
+        assert!(build_hdr_ext_blob(&p, "rk", w, h, &vec![0.9f32; (w * h * 3) as usize]).is_none());
+        // a different recipe/mtime yields a different stem, so an old blob can never validate
+        assert_ne!(hdr_ext_stem(&p, "other").unwrap().1, stem);
+        assert_eq!(f32_to_f16_bits(1.0), 0x3c00);
+        assert_eq!(f32_to_f16_bits(0.0), 0);
+        let _ = std::fs::remove_file(&tmp);
     }
 }
 
