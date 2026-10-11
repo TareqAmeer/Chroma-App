@@ -1780,4 +1780,4 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - CHR-192 file: `test/editor_wireframe_behaviour.mjs`. Added a Gallery ↔ Studio interaction regression that checks the current photo index and object identity survive the round trip, then confirms the Masks rail is visible and opens its controls without changing selection.
 - Verification: focused Playwright case, JavaScript syntax check, Editor HTML validity check, and `git diff --check` pass. This covers preserving the active photo through view changes; restoring a browsed folder/selection and the other navigation/layout acceptance criteria remain open.
-- Publication: pending integration and remote verification.
+- Publication: feature commit `106a81e7cb39ba063a69990e5ba74e0c381d13bd` was integrated as `2957560d755d33744093c84ba2da83f080aa65c8`, pushed to `origin/main`, and confirmed with `git ls-remote` at that exact hash.
