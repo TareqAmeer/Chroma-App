@@ -1826,3 +1826,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-11 — CHR-276 RAW rendering boundary
 - Edited RAW Quick Look now identifies developed RAW previews whose saved creative edits are omitted and directs reviewers to Editor. Unedited previews retain the plain filename; cached previews do not redevelop merely to update this caption. Files: desktop/library-ui.js, test/library_raw_quicklook.mjs, docs/plans/raw-review-recipe-parity.md; issue CHR-276.
 - Focused RAW Quick Look regression passed caption transitions, warm-cache reuse and existing settings/stale/no-fallback/Editor-isolation contracts. The renderer plan requires immutable per-photo recipes/resources and pixel-diff evidence before creative parity; original CHR-276 criteria remain open. Combined Library UI gates follow before publication.
+
+### 2026-10-11 — CHR-269 face compatibility test correction
+- Updated test/library_assisted_culling.mjs to explicitly exercise the legacy JPEG close-up and People flows using a non-RAW catalog fixture. The prior RAW fixture now correctly requires developed preview IPC; dedicated library_raw_faces.mjs covers that contract separately.
+- Focused compatibility regression passes with the canonical shared browser; diff check passes. No production behavior changed; issue CHR-269.

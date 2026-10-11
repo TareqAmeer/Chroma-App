@@ -5,10 +5,18 @@ import { chromium } from 'playwright';
 import { startServer } from './editor_state_harness.mjs';
 
 const { server, port } = await startServer();
-const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+assert.ok(process.env.PLAYWRIGHT_EXECUTABLE_PATH, 'set PLAYWRIGHT_EXECUTABLE_PATH to the canonical headless shell');
+const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH, args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = []; await page.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch {} }); // first-run welcome card would intercept clicks
+  // This regression protects the original non-RAW close-up / People behavior. RAW crops now
+  // correctly require a developed review proxy, covered by library_raw_faces.mjs.
+  await page.addInitScript(() => {
+    window.__libtestCatalogInvoke = (command, args) => command === 'catalog_query' && args.q?.folder
+      ? { __libtestHandled: true, result: { total: 1, capped: false, entries: [{ id: 1, path: '/test/Photos/Legacy.JPG', name: 'Legacy.JPG', is_dir: false, is_image: true, is_video: false, kind: 'image', ext: 'jpg', mtime: 1700000001, size: 2048, missing: false, edited_ts: 0, offline: false, sharpness: 400, blurry: false, stack_n: 0, thumb_path: null }] } }
+      : null;
+  });
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=12&deskx=1`, { waitUntil: 'load', timeout: 60000 });
   await page.waitForTimeout(500);
@@ -27,7 +35,7 @@ try {
   await page.getByText('Face close-ups…', { exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Face close-ups' });
   await dialog.waitFor({ state: 'visible' });
-  assert.match(await dialog.textContent(), /IMG_1001\.RW2/);
+  assert.match(await dialog.textContent(), /Legacy\.JPG/);
   assert.equal(await dialog.locator('.lib-face-closeup-item').count(), 2, 'show each detected face for the current photo');
   assert.match(await dialog.textContent(), /Tareq/);
   assert.match(await dialog.textContent(), /Face 2 · unnamed/);
