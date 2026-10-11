@@ -1546,3 +1546,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added `test/mask_local_texture_clarity.mjs` to `npm run mask:test`. It verifies signed local Texture/Clarity changes, mask-boundary isolation, exact zero identity, snapshot round-trip, and direct/tiled output parity on a deterministic GPU fixture. Files: `test/mask_local_texture_clarity.mjs`, `package.json`, `DEVLOG.md`.
 - Verification: full mask gate passed (raster 86/86, local Dehaze 11/11, new Texture/Clarity 7/7); focused Texture/Clarity rerun passed, tiled/full output max delta 0; JS syntax and whitespace checks pass. This is regression coverage, not Lightroom visual signoff.
 - CHR-249 AC5 and AC8 remain open pending Lightroom reference matching and five-photo 100% review; AI Denoise, Super Resolution, Raw Details, and local model delivery criteria also remain open.
+
+### 2026-10-11 — CHR-274 zoom parity harness progress
+
+- Extended `test/mask_depth_refinement_gpu.mjs` to exercise the real `renderPreview()` fit and settled 200%, 400%, and 800% zoom paths, capture the crop UVs actually used by the renderer, and compare visible preview pixels with the corresponding tiled export region. The test now emits explicit WebGL context-loss diagnostics and leaves parity unchecked when its live preview canvas is unavailable.
+- Verification: native/reset GPU output, refined/tiled output, crop/rotation dimensions, and two-tile assertions pass; `node --check` and `git diff --check` pass. In the headless SwiftShader environment the live preview context is lost before comparison, so zoom parity is skipped with trace evidence; no preview/export match is claimed. CHR-274 AC4 and labelled-photo halo AC5 remain open.
