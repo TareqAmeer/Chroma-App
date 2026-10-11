@@ -93,6 +93,23 @@ try {
   await page.evaluate(path => window.__rawQuicklookResolve[path].resolve('/test/fixtures/chart.png'), a);
   await page.waitForFunction(() => document.getElementById('lib-ql-img')?.dataset.previewSource === 'developed-raw');
 
+  await page.evaluate(path => {
+    const sc = window.__libtestReadSidecar(path);
+    window.__libtestSeedSidecar(path, { ...sc, edited: true });
+    void window.libtestShowQuickLook(path);
+  }, a);
+  await page.waitForFunction(() => document.getElementById('lib-ql-caption')?.textContent.includes('creative edits not shown'));
+  assert.match(await page.locator('#lib-ql-caption').getAttribute('title'), /Open in Editor/);
+  const editedHitCount = await page.evaluate(path => window.__rawQuicklookCalls.filter(item => item.command === 'cache_raw_decode' && item.args.path === path).length, a);
+  assert.equal(editedHitCount, countsAfterHit + 1, 'edited caption uses the same native preview after the earlier recipe invalidation');
+  await page.evaluate(path => {
+    const sc = window.__libtestReadSidecar(path);
+    window.__libtestSeedSidecar(path, { ...sc, edited: false });
+    void window.libtestShowQuickLook(path);
+  }, a);
+  await page.waitForFunction(() => document.getElementById('lib-ql-caption')?.textContent === 'A.RW2');
+  assert.equal(await page.locator('#lib-ql-caption').getAttribute('title'), '', 'unmodified RAW does not retain the edited-preview hint');
+
   await page.evaluate(path => { void window.libtestShowQuickLook(path); }, failed);
   await page.waitForFunction(path => !!window.__rawQuicklookResolve[path], failed);
   await page.evaluate(path => window.__rawQuicklookResolve[path].reject(new Error('simulated RAW cache failure')), failed);

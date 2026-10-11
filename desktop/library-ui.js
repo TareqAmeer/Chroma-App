@@ -10175,16 +10175,20 @@
     const caption = document.getElementById('lib-ql-caption');
     caption.textContent = baseName(path) + (RAW_EXT_RE.test(path) ? ' — developing RAW…' : ' — loading…');
     img.dataset.previewSource = '';
+    caption.title = '';
     img.classList.remove('loaded');
     try {
       const buf = await quicklookPreview(path);
+      const reviewSidecar = RAW_EXT_RE.test(path) ? await getSidecar(path) : null;
       if (!quicklook.active || quicklook.path !== path || generation !== quicklook.generation) return; // superseded or closed
       if (quicklook.url) URL.revokeObjectURL(quicklook.url);
       quicklook.url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
       img.src = quicklook.url;
       img.dataset.previewSource = RAW_EXT_RE.test(path) ? 'developed-raw' : 'image';
       img.classList.add('loaded');
-      caption.textContent = baseName(path);
+      const creativeEditsOmitted = RAW_EXT_RE.test(path) && !!reviewSidecar?.edited;
+      caption.textContent = baseName(path) + (creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : '');
+      caption.title = creativeEditsOmitted ? 'Open in Editor to review saved looks, masks and geometry.' : '';
       queueQuickLookNeighbors(path);
     } catch (e) {
       if (quicklook.active && quicklook.path === path && generation === quicklook.generation) caption.textContent = baseName(path) + ' — preview unavailable';
