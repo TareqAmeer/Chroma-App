@@ -253,3 +253,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added production-preview pixel comparison to the teeth render probe, copying `FX.cv` immediately after `renderPreview()` and comparing against the direct FXR render. One focused Chrome run produced exact parity (max channel delta 0), but repeat and clean-checkout runs found the app’s main WebGL context already lost before the probe starts.
 - The probe now reports `SKIP` when that context is already lost rather than treating a blank canvas as success; the other six synthetic color, mask, reset, detail, snapshot, and tiled-export checks pass. CHR-294 AC4 remains unchecked pending a healthy app-preview context and UI undo/redo evidence; no real-photo quality claim is made.
 - Modified `test/teeth_whitening_render.mjs` and `docs/DEVLOG.md`.
+
+### CHR-294 — teeth preview probe publication verified
+
+- Published feature commit `4e8a2c35` as integration commit `94883f1e0a98732116207dbf7236084058f8f5f5` on `origin/main`; fetch, remote tip, and ancestry checks confirmed publication.
+- Integrated `npm run teeth:test` passed the manual/import workflow checks 38/38 and the six deterministic render/export checks. The preview probe explicitly skipped because the app’s main WebGL context was already lost before sampling; CHR-294 AC4 remains unchecked and the issue remains In Progress.
