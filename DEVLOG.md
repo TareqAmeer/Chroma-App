@@ -1674,3 +1674,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Added a persistent top-area indicator for original availability, full-quality offline cache, reduced offline preview, and preview/full-resolution render state. Reduced offline thumbnails remain explicitly not full-quality-ready; added LIBTEST offline-source simulation and a focused browser test.
 - Files: `chromasmith-22.html`, `desktop/library-ui.js`, `test/library_source_render_status.mjs`, and `package.json`. The focused source/render browser test, desktop build, HTML validity, JavaScript syntax, and whitespace checks pass. CHR-194 remains In Progress: actionable persistence-failure and delayed-render recovery tests, full-resolution-cache validation, and CHR-166 placement coordination remain open.
+
+### 2026-10-11 — CHR-194 source and render status publication
+
+- Integration commit `b5cff7d61e8389dbeb9af4eed1e873f84e569ccf` was fast-forwarded to `origin/main` after the focused source/render browser test, desktop build, HTML validity, JavaScript syntax, and whitespace checks passed on the integration checkout.
+- `git ls-remote origin refs/heads/main` confirmed `b5cff7d61e8389dbeb9af4eed1e873f84e569ccf` immediately after publication. CHR-194 stays In Progress because its persistence-failure, delayed-render recovery, full-quality-cache, and status-placement criteria are not complete.
