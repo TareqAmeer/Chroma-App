@@ -7,19 +7,22 @@ import { fileURLToPath } from 'node:url';
 const html=await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)),'..','chromasmith-22.html'),'utf8');
 const helperStart=html.indexOf('const _MSK_AI_PROVENANCE_VERSION=');
 const helperEnd=html.indexOf('\n// Stable composition identity.',helperStart);
+const complementStart=html.indexOf('function _samComplementSubjectMask(');
+const complementEnd=html.indexOf('\nfunction _samNormalizeBox(',complementStart);
 const samStart=html.indexOf('async function samRunPoints(');
 const samEnd=html.indexOf('\n// ── Named subjects:',samStart);
-assert(helperStart>=0&&helperEnd>helperStart&&samStart>=0&&samEnd>samStart,'production provenance and inference helpers exist');
+assert(helperStart>=0&&helperEnd>helperStart&&complementStart>=0&&complementEnd>complementStart&&samStart>=0&&samEnd>samStart,'production provenance, background complement, and inference helpers exist');
 const make= new Function('window','curItem','fxPhotoActivity','samEnsureEncoded','_samEncoding','_samToken','_sam2Token','samSubsamplePoints','_samRefineMask','_mskTexDirty','_samLastError','mskRebuild','fxUpdate','renderPreview','fxHistoryPush','hapt','toast','log',
- `${html.slice(helperStart,helperEnd)}\n${html.slice(samStart,samEnd)}\nreturn{samRunPoints,_mskRecordAIProvenance,_mskNormalizeAIProvenance};`);
-function response(){const body=new Uint8Array([20,40,60,80]),header=new TextEncoder().encode(JSON.stringify({width:2,height:2})),buf=new Uint8Array(4+header.length+body.length);new DataView(buf.buffer).setUint32(0,header.length,true);buf.set(header,4);buf.set(body,4+header.length);return buf.buffer;}
-async function fixture({sam2=false,fail=false}={}){
+ `${html.slice(helperStart,helperEnd)}\n${html.slice(complementStart,complementEnd)}\n${html.slice(samStart,samEnd)}\nreturn{samRunPoints,_samComplementSubjectMask,_mskRecordAIProvenance,_mskNormalizeAIProvenance};`);
+function response(maskBytes=[20,40,60,80]){const body=new Uint8Array(maskBytes),header=new TextEncoder().encode(JSON.stringify({width:2,height:2})),buf=new Uint8Array(4+header.length+body.length);new DataView(buf.buffer).setUint32(0,header.length,true);buf.set(header,4);buf.set(body,4+header.length);return buf.buffer;}
+async function fixture({sam2=false,fail=false,background=false,maskBytes}={}){
  let item={path:'C:/photos/source.jpg'},active=item,command='';
- const m={origin:'ai',aiPoints:[{nx:.2,ny:.3,positive:true}],aiProvenance:{schemaVersion:1,backend:'sam_points',modelId:'edge-sam',recordedAt:'old'}};
- const win={__TAURI__:{core:{invoke:async(name)=>{command=name;if(fail)throw Error('fixture failure');return response();}}}};
+ const m={origin:'ai',aiSelectionMode:background?'background':undefined,aiPoints:[{nx:.2,ny:.3,positive:true}],px:new Uint8ClampedArray([9,8,7,6]),aiProvenance:{schemaVersion:1,backend:'sam_points',modelId:'edge-sam',recordedAt:'old'}};
+ const priorPixels=Uint8ClampedArray.from(m.px);
+ const win={__TAURI__:{core:{invoke:async(name)=>{command=name;if(fail)throw Error('fixture failure');return response(maskBytes);}}}};
  const fn=make(win,()=>active,()=>()=>{},async()=>{},false,{},sam2?{}:null,points=>points,mask=>mask,false,null,()=>{},()=>{},()=>{},()=>{},()=>{},()=>{});
  const result=await fn.samRunPoints(m,{silent:true});
- return{m,result,command,item};
+ return{m,result,command,item,priorPixels,fn};
 }
 for(const sam2 of [false,true]){
  const f=await fixture({sam2});assert.equal(f.result.ok,true);assert.equal(f.command,sam2?'sam2_points':'sam_points');
@@ -28,6 +31,22 @@ for(const sam2 of [false,true]){
  assert.deepEqual(f.m.aiProvenance.sourceLocation,{kind:'path',value:f.item.path});assert.match(f.m.aiProvenance.recordedAt,/^\d{4}-/);
 }
 const failed=await fixture({fail:true});assert.equal(failed.result.ok,false);assert.equal(failed.m.aiProvenance.recordedAt,'old');
+const background=await fixture({background:true});assert.equal(background.result.ok,true);assert.deepEqual([...background.m.px],[235,215,195,175]);
+assert.equal(background.m.aiSelectionMode,'background');assert.equal(background.m.aiProvenance.backend,'sam_points');
+const emptyBackground=await fixture({background:true,maskBytes:[0,0,0,0]});
+assert.equal(emptyBackground.result.ok,false);assert.match(emptyBackground.result.error,/empty or covers the entire photo/);
+assert.deepEqual([...emptyBackground.m.px],[...emptyBackground.priorPixels]);assert.equal(emptyBackground.m.aiProvenance.recordedAt,'old');
+const fullBackground=await fixture({background:true,maskBytes:[255,255,255,255]});
+assert.equal(fullBackground.result.ok,false);assert.deepEqual([...fullBackground.m.px],[...fullBackground.priorPixels]);
+assert.deepEqual([...fixtureHelper([0,128,255])],[255,127,0]);
+function fixtureHelper(mask){return make({},()=>null,()=>()=>{},async()=>{},false,null,null,x=>x,x=>x,false,null,()=>{},()=>{},()=>{},()=>{},()=>{},()=>{})._samComplementSubjectMask(mask);}
+const backgroundActionStart=html.indexOf('function mskAddBackground('),backgroundActionEnd=html.indexOf('\n// Teeth are not',backgroundActionStart);
+assert(backgroundActionStart>=0&&backgroundActionEnd>backgroundActionStart,'background menu action exists');
+let addedType='',addedMask=null;
+const addBackground=new Function('mskAdd','log',`${html.slice(backgroundActionStart,backgroundActionEnd)}\nreturn mskAddBackground;`)((type,configure)=>{addedType=type;addedMask={};configure(addedMask);return addedMask;},()=>{});
+assert.equal(addBackground(),addedMask);assert.equal(addedType,'ai');assert.equal(addedMask.aiSelectionMode,'background');assert.equal(addedMask.name,'Background');
+const menuStart=html.indexOf('function mskAddMenu('),menuEnd=html.indexOf('\nfunction mskMoreMenu(',menuStart),menuSource=html.slice(menuStart,menuEnd);
+assert(menuSource.includes("item('Select Subject'"));assert(menuSource.includes("item('Select Background'"));
 const staleMask={origin:'ai',aiPoints:[{nx:.2,ny:.3,positive:true}],aiProvenance:{schemaVersion:1,backend:'sam_points',modelId:'edge-sam',recordedAt:'old'}};
 // A photo switch during the native call must leave raster and provenance untouched.
 let current={path:'source'},calls=0;const w={__TAURI__:{core:{invoke:async()=>{calls++;current={path:'other'};return response();}}}};
@@ -64,4 +83,4 @@ assert.deepEqual(regeneratedSky.aiProvenance.sourceLocation,{kind:'path',value:'
 let skyGenerationCount=0;
 const staleSkyReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','curItem',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(()=>{skyGenerationCount++;},()=>[],async()=>({ok:true}),recordHelpers,()=>({path:'wrong-photo.jpg'}));
 assert.equal((await staleSkyReevaluate({origin:'sky',aiPoints:[]},target)).ok,false);assert.equal(skyGenerationCount,0);
-console.log('PASS AI provenance: successful EdgeSAM/SAM2 command identity, unknown model revision/digest, source path, malformed/legacy normalization, failed and stale calls preserve prior provenance');
+console.log('PASS AI provenance and Select Background: command identity, source provenance, soft complement, empty/full-subject failure preservation, menu entry, failed/stale-call preservation');
