@@ -65,14 +65,46 @@ try {
     if (localToggle && !localToggle.classList.contains('on')) toggleFX('local');
 
     const img = curItem().img, iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-    const renderer = new FXR(document.createElement('canvas'));
-    if (!renderer.ok) throw new Error('could not create the direct-render WebGL renderer');
+    const baseGetFXParams = window.getFXParams;
     const recipe = () => {
-      const p = getFXParams();
+      const p = baseGetFXParams();
       p.grain = { enabled: false }; p.halation = { enabled: false }; p.bloom = { enabled: false };
       p.adjust = { enabled: false }; p.lut = null; p.print = null; p.vignette = { enabled: false }; p.redEyeOps = [];
       return p;
     };
+    const previewParams = getFXParams;
+    window.getFXParams = recipe;
+    let preview, previewBytes, previewRange = 0, previewAttempts = 0, appContextLostBeforeProbe = false;
+    try {
+      appContextLostBeforeProbe = FX.gl?.isContextLost() || false;
+      preview = FX.cv;
+      const readPixels = canvas => {
+        const copy = document.createElement('canvas');
+        copy.width = canvas.width; copy.height = canvas.height;
+        const context = copy.getContext('2d', { willReadFrequently: true });
+        context.drawImage(canvas, 0, 0);
+        return context.getImageData(0, 0, copy.width, copy.height).data;
+      };
+      if (!appContextLostBeforeProbe) {
+        for (; previewAttempts < 8 && previewRange === 0; previewAttempts++) {
+          renderPreview();
+          // FX.cv must be copied in the same task as FX.render; once the browser composites the
+          // WebGL frame, headless Chrome may expose a cleared buffer even with preserved draws.
+          previewBytes = readPixels(preview);
+          let min = 255, max = 0;
+          for (let i = 0; i < previewBytes.length; i += 4) {
+            for (let channel = 0; channel < 3; channel++) {
+              min = Math.min(min, previewBytes[i + channel]);
+              max = Math.max(max, previewBytes[i + channel]);
+            }
+          }
+          previewRange = max - min;
+        }
+      }
+    } finally { window.getFXParams = previewParams; }
+
+    const renderer = new FXR(document.createElement('canvas'));
+    if (!renderer.ok) throw new Error('could not create the direct-render WebGL renderer');
     const render = async () => {
       renderer.setImage(img); renderer.render(recipe(), iw, ih, { glowScale: 1, seed: 4.25 });
       const { px, w, h } = renderer.getPixels(), canvas = document.createElement('canvas');
@@ -80,6 +112,19 @@ try {
       canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px), w, h), 0, 0);
       return canvas;
     };
+    renderer.setImage(img);
+    renderer.render(recipe(), preview.width, preview.height, mskPreviewRenderOptions({ glowScale: fxPreviewGlowScale(), gamutWarn: fxClipCode() }));
+    const expected = renderer.getPixels().px;
+    let maxDelta = Infinity;
+    if (previewRange > 0) {
+      maxDelta = 0;
+      for (let i = 0; i < previewBytes.length; i += 4) {
+        for (let channel = 0; channel < 3; channel++) {
+          maxDelta = Math.max(maxDelta, Math.abs(previewBytes[i + channel] - expected[i + channel]));
+        }
+      }
+    }
+    const previewParity = { maxDelta, range: previewRange, attempts: previewAttempts, width: preview.width, height: preview.height, appContextLostBeforeProbe };
     const bytes = canvas => canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, iw, ih).data;
     const sample = (data, x, y) => [...data.slice((y * iw + x) * 4, (y * iw + x) * 4 + 3)];
     mask.temp = 0; mask.sat = 0; mskRebuild();
@@ -138,6 +183,7 @@ try {
       resetExact: exact(baselineBytes, resetBytes), snapshotExact: exact(correctedBytes, restoredBytes),
       detailRatio: detailBefore ? detailAfter / detailBefore : 0,
       tiles, tileMaxDelta,
+      previewParity,
       defaults: [fxState.masks[0].temp, fxState.masks[0].sat],
       dims: [iw, ih], detailPairs,
     };
@@ -151,10 +197,11 @@ try {
     ['the correction retains at least 70% of the synthetic fine-detail contrast', result.detailRatio >= 0.70 && result.detailPairs > 0],
     ['save/reopen snapshot restores the identical rendered correction', result.snapshotExact],
     ['forced tiled export matches direct output within one channel value', result.tiles > 1 && result.tileMaxDelta <= 1],
+    ['the live app preview matches a direct production renderer frame and is not blank', result.previewParity.appContextLostBeforeProbe ? null : result.previewParity.maxDelta <= 1 && result.previewParity.range > 0],
   ];
-  for (const [label, pass] of checks) console.log(`${pass ? 'PASS' : 'FAIL'} ${label}`);
+  for (const [label, pass] of checks) console.log(`${pass === null ? 'SKIP' : pass ? 'PASS' : 'FAIL'} ${label}${pass === null ? ' (main WebGL context was already lost)' : ''}`);
   console.log(JSON.stringify(result, null, 2));
-  if (checks.some(([, pass]) => !pass)) process.exitCode = 1;
+  if (checks.some(([, pass]) => pass === false)) process.exitCode = 1;
 } finally {
   await browser.close(); server.close();
 }

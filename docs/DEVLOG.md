@@ -241,3 +241,15 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Published feature commit `60a74630` as integration commit `4791006fb4ff4cfa8ccc0ed9c53de0abb9950866` on `origin/main`; fetch, remote ref hash and ancestry verification passed.
 - The integrated `npm run teeth:test` passed workflow/import 38/38 and the six GPU render/export checks. Localized correction, exact neutral reset, 100% synthetic texture-contrast retention, snapshot-render equivalence and two-tile export parity (max delta 0) are covered. AC3 is checked. AC4 remains open for app-level preview validation; the tested matte is synthetic and does not establish real portrait quality. Issue remains In Progress.
+
+### 2026-10-11 — CHR-294 live preview parity
+
+- Extended `test/teeth_whitening_render.mjs` to read back the production app preview canvas through a 2D copy and compare it with an independent production FXR render at the preview backing-store dimensions.
+- Focused Chrome test passes 7/7 render checks. The live preview had nonzero variation and matched the direct renderer exactly (maximum RGB delta 0); synthetic-mask, exact reset/snapshot, fine-detail, and tiled-export checks also pass. This does not cover undo/redo through the UI or establish real-photo whitening quality, so CHR-294 AC4 remains unchecked.
+- Modified `test/teeth_whitening_render.mjs` and `docs/DEVLOG.md`.
+
+### 2026-10-11 — CHR-294 preview probe limitation
+
+- Added production-preview pixel comparison to the teeth render probe, copying `FX.cv` immediately after `renderPreview()` and comparing against the direct FXR render. One focused Chrome run produced exact parity (max channel delta 0), but repeat and clean-checkout runs found the app’s main WebGL context already lost before the probe starts.
+- The probe now reports `SKIP` when that context is already lost rather than treating a blank canvas as success; the other six synthetic color, mask, reset, detail, snapshot, and tiled-export checks pass. CHR-294 AC4 remains unchecked pending a healthy app-preview context and UI undo/redo evidence; no real-photo quality claim is made.
+- Modified `test/teeth_whitening_render.mjs` and `docs/DEVLOG.md`.
